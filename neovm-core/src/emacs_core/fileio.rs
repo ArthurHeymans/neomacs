@@ -5396,35 +5396,75 @@ impl DecodedFileContents {
     }
 }
 
-fn detected_default_eol_suffix(bytes: &[u8]) -> &'static str {
-    let mut saw_lf = false;
-    let mut saw_crlf = false;
-    let mut saw_lone_cr = false;
-    let mut idx = 0;
-    while idx < bytes.len() {
-        match bytes[idx] {
-            b'\n' => saw_lf = true,
-            b'\r' => {
-                if bytes.get(idx + 1) == Some(&b'\n') {
-                    saw_crlf = true;
+/// The EOL evidence GNU's `detect_eol` obtains from a file prefix.
+///
+/// `NoEvidence` is deliberately distinct from `Unix`: an empty/no-newline
+/// file must leave an undecided EOL undecided so Lisp can retain the buffer's
+/// default coding system.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DetectedFileEol {
+    NoEvidence,
+    Unix,
+    Dos,
+    Mac,
+}
+
+impl DetectedFileEol {
+    const MAX_EOLS: usize = 3;
+
+    fn detect(bytes: &[u8]) -> Self {
+        let mut detected = Self::NoEvidence;
+        let mut total = 0;
+        let mut idx = 0;
+
+        while idx < bytes.len() {
+            let found = match bytes[idx] {
+                b'\n' => Some(Self::Unix),
+                b'\r' if bytes.get(idx + 1) == Some(&b'\n') => {
                     idx += 1;
-                } else {
-                    saw_lone_cr = true;
+                    Some(Self::Dos)
                 }
+                b'\r' => Some(Self::Mac),
+                _ => None,
+            };
+            idx += 1;
+
+            let Some(found) = found else {
+                continue;
+            };
+
+            detected = match (detected, found) {
+                (Self::NoEvidence, found) => found,
+                (previous, found) if previous == found => previous,
+                // GNU treats CR and CRLF as a DOS file containing stray CRs.
+                (Self::Mac, Self::Dos) | (Self::Dos, Self::Mac) => Self::Dos,
+                // Every other mixed-EOL combination selects LF immediately.
+                _ => return Self::Unix,
+            };
+
+            total += 1;
+            if total == Self::MAX_EOLS {
+                break;
             }
-            _ => {}
         }
-        idx += 1;
+
+        detected
     }
 
-    if saw_lf {
-        "-unix"
-    } else if saw_crlf {
-        "-dos"
-    } else if saw_lone_cr {
-        "-mac"
-    } else {
-        "-unix"
+    fn suffix(self) -> Option<&'static str> {
+        match self {
+            Self::NoEvidence => None,
+            Self::Unix => Some("-unix"),
+            Self::Dos => Some("-dos"),
+            Self::Mac => Some("-mac"),
+        }
+    }
+
+    fn attach_to(self, base: &str) -> String {
+        match self.suffix() {
+            Some(suffix) => format!("{base}{suffix}"),
+            None => base.to_string(),
+        }
     }
 }
 
@@ -5445,19 +5485,22 @@ fn decode_insert_file_contents(
         ));
     }
 
-    let eol_suffix = detected_default_eol_suffix(bytes);
+    let detected_eol = DetectedFileEol::detect(bytes);
     let coding =
         match coding_system_for_read.filter(|coding| !coding.is_empty() && *coding != "nil") {
-            Some(coding) => eval
-                .coding_systems
-                .canonical_name_for_detected_eol(coding, eol_suffix)
+            Some(coding) => detected_eol
+                .suffix()
+                .and_then(|suffix| {
+                    eval.coding_systems
+                        .canonical_name_for_detected_eol(coding, suffix)
+                })
                 .unwrap_or_else(|| coding.to_string()),
             // A bare test context does not load the Lisp BOM recognizer used by
             // `set-auto-coding-function`; keep the same observable fallback.
-            None if has_utf8_signature(bytes) => format!("utf-8-with-signature{eol_suffix}"),
+            None if has_utf8_signature(bytes) => detected_eol.attach_to("utf-8-with-signature"),
             // GNU uses the ordinary undecided category engine here, including
             // while `load-with-code-conversion` binds set-auto-coding-for-load.
-            None => format!("undecided{eol_suffix}"),
+            None => detected_eol.attach_to("undecided"),
         };
 
     let decoded = crate::encoding::decode_file_bytes_in_context(eval, bytes, &coding)?;

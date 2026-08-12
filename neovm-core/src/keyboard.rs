@@ -695,6 +695,24 @@ pub(crate) struct ReadKeySequenceOptions {
     pub continue_echo: bool,
 }
 
+/// A command-loop key read either resolves one complete command or reaches a
+/// typed input boundary.  Keeping the boundary distinct from an ordinary
+/// `(empty, nil)` tuple prevents callers from accidentally dispatching macro
+/// exhaustion as an undefined key sequence.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum CommandKeySequenceRead {
+    Command { keys: Vec<Value>, binding: Value },
+    End(CommandKeySequenceEnd),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CommandKeySequenceEnd {
+    /// GNU `read_key_sequence` returned zero after `at_end_of_macro_p`.
+    KeyboardMacroIteration,
+    /// The evaluator has no command-input source left to read.
+    Input,
+}
+
 impl ReadKeySequenceOptions {
     pub(crate) fn new(
         prompt: Value,
@@ -1268,6 +1286,21 @@ impl PrefixArg {
 // Command loop state
 // ---------------------------------------------------------------------------
 
+/// Ownership of the echo-area message by GNU's keyboard echo machinery.
+///
+/// `immediate_echo` in GNU `keyboard.c` is not just a rendering preference:
+/// once the idle delay has elapsed, each subsequently read event clears the
+/// old cells and immediately rebuilds the complete pending key sequence.  A
+/// closed state keeps that lifecycle distinct from ordinary Lisp messages.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+enum KeyEchoState {
+    #[default]
+    Inactive,
+    Immediate {
+        prompt: Option<String>,
+    },
+}
+
 /// Keyboard-local state owned by the active terminal/keyboard.
 ///
 /// GNU Emacs keeps unread events, command-key history, translation maps, and
@@ -1300,6 +1333,8 @@ pub struct KBoard {
     pub raw_command_keys: Vec<Value>,
     /// Recent input history published through `recent-keys`.
     pub recent_input_events: Vec<Value>,
+    /// Whether the current echo-area message is owned by keyboard echoing.
+    key_echo_state: KeyEchoState,
     /// Terminal-local `input-decode-map`.
     input_decode_map: Value,
     /// Terminal-local `local-function-key-map`.
@@ -1378,6 +1413,7 @@ impl KBoard {
             command_keys: Vec::new(),
             raw_command_keys: Vec::new(),
             recent_input_events: Vec::new(),
+            key_echo_state: KeyEchoState::Inactive,
             input_decode_map: Value::NIL,
             local_function_key_map: Value::NIL,
             defining_kbd_macro: false,
@@ -2959,11 +2995,11 @@ impl crate::emacs_core::eval::Context {
         false
     }
 
-    fn prefix_echo_message(&self, translated_events: &[Value]) -> Option<String> {
+    fn prefix_echo_message(&mut self, translated_events: &[Value]) -> Option<LispString> {
         let key_vec = Value::vector(translated_events.to_vec());
         let desc =
             crate::emacs_core::builtins::keymaps::builtin_key_description(vec![key_vec]).ok()?;
-        let mut message = desc.as_utf8_str()?.to_string();
+        let mut message = desc.as_lisp_string()?.clone();
         if translated_events.len() == 1
             && translated_events
                 .first()
@@ -2971,30 +3007,122 @@ impl crate::emacs_core::eval::Context {
         {
             // GNU keyboard.c::echo_add_key appends this when a help event is
             // the first echoed key, while waiting for the following help-map key.
-            message.push_str(" (Type ? for further options, C-q for quick help)");
+            message = message.concat(&LispString::from_utf8(
+                " (Type ? for further options, C-q for quick help)",
+            ));
         } else {
             // GNU keyboard.c::echo_dash turns a pending prefix into a
             // mini-prompt for the next key, then help.el appends the default
             // keystroke-help hint when `echo-keystrokes-help' is enabled.
-            message.push('-');
+            message = message.concat(&LispString::from_utf8("-"));
             if self
                 .eval_symbol("echo-keystrokes-help")
                 .unwrap_or(Value::NIL)
                 .is_truthy()
             {
-                let help_char = self.eval_symbol("help-char").unwrap_or(Value::NIL);
-                if !help_char.is_nil() {
-                    let key_vec = Value::vector(vec![help_char]);
-                    if let Ok(desc) =
-                        crate::emacs_core::builtins::keymaps::builtin_key_description(vec![key_vec])
-                        && let Some(help_desc) = desc.as_utf8_str()
-                    {
-                        message.push_str(&format!(" ({} for help)", help_desc));
-                    }
+                // GNU `echo_dash` delegates this decision to Lisp.  That
+                // function walks `help-event-list` (not merely `help-char`),
+                // rejects help keys shadowed by the pending binding, and adds
+                // the `help-key-binding` face.  `read-quoted-char` dynamically
+                // binds `help-char` to nil, so this is what selects <f1>.
+                let function = Value::symbol("help--append-keystrokes-help");
+                if self.function_value_is_callable(&function)
+                    && let Ok(appended) =
+                        self.funcall_general(function, vec![Value::heap_string(message.clone())])
+                    && let Some(appended) = appended.as_lisp_string()
+                {
+                    message = appended.clone();
+                } else if let Some(help_desc) = self.first_key_echo_help_description() {
+                    message =
+                        message.concat(&LispString::from_utf8(&format!(" ({help_desc} for help)")));
                 }
             }
         }
         Some(message)
+    }
+
+    /// Source-bootstrap fallback for contexts where `help.el` has not defined
+    /// `help--append-keystrokes-help` yet. Full runtimes always take the Lisp
+    /// path above, which owns active-map filtering and text properties.
+    fn first_key_echo_help_description(&self) -> Option<String> {
+        let help_char = self.eval_symbol("help-char").unwrap_or(Value::NIL);
+        let mut events = self.eval_symbol("help-event-list").unwrap_or(Value::NIL);
+        while events.is_cons() {
+            let mut event = events.cons_car();
+            events = events.cons_cdr();
+            if event.is_symbol_named("help") {
+                event = help_char;
+            }
+            if event.is_nil() {
+                continue;
+            }
+            let desc =
+                crate::emacs_core::builtins::keymaps::builtin_key_description(vec![Value::vector(
+                    vec![event],
+                )])
+                .ok()?;
+            return desc.as_utf8_str().map(ToOwned::to_owned);
+        }
+        None
+    }
+
+    /// Publish a keyboard-owned echo message and remember enough typed state
+    /// to rebuild it when the next input event arrives.  `set_current_message`
+    /// deliberately cancels any previous keyboard ownership, so ownership is
+    /// installed only after the new message has been committed.
+    fn publish_key_echo_message(&mut self, events: &[Value], prompt: Option<String>) {
+        let Some(echo) = self.prefix_echo_message(events) else {
+            return;
+        };
+        let message = match prompt.as_deref() {
+            Some(prompt) => LispString::from_utf8(prompt).concat(&echo),
+            None => echo,
+        };
+        self.set_current_message(Some(message));
+        self.command_loop.keyboard.kboard.key_echo_state = KeyEchoState::Immediate { prompt };
+    }
+
+    /// Rebuild the complete pending keyboard echo after GNU `read_char` has
+    /// cleared the previous message and appended a newly read event.
+    fn refresh_immediate_key_echo(&mut self) {
+        let prompt = match &self.command_loop.keyboard.kboard.key_echo_state {
+            KeyEchoState::Inactive => return,
+            KeyEchoState::Immediate { prompt } => prompt.clone(),
+        };
+        let events = self.command_loop.read_command_keys().to_vec();
+        if events.is_empty() {
+            return;
+        }
+        self.publish_key_echo_message(&events, prompt);
+    }
+
+    /// Arm GNU's delayed key echo only for an unbounded interactive read that
+    /// already belongs to a command.  Timed reads, macro playback, ordinary
+    /// messages, and fast input all suppress the delayed echo exactly by
+    /// construction.
+    fn delayed_key_echo_deadline(
+        &self,
+        timeout: Option<std::time::Duration>,
+    ) -> Option<std::time::Instant> {
+        if timeout.is_some()
+            || !self.keyboard_input_is_interactive()
+            || !matches!(
+                self.command_loop.keyboard.kboard.key_echo_state,
+                KeyEchoState::Inactive
+            )
+            || self.current_message_value().is_some()
+            || self.command_loop.read_command_keys().is_empty()
+        {
+            return None;
+        }
+        let seconds = self
+            .lisp_echo_keystrokes_seconds()
+            .filter(|seconds| seconds.is_finite() && *seconds > 0.0)?;
+        std::time::Instant::now().checked_add(std::time::Duration::from_secs_f64(seconds))
+    }
+
+    pub(crate) fn cancel_key_echo_state(&mut self) {
+        self.command_loop.keyboard.kboard.key_echo_state = KeyEchoState::Inactive;
     }
 
     fn prepend_unread_post_input_method_events(
@@ -3737,6 +3865,65 @@ impl crate::emacs_core::eval::Context {
         self.read_key_sequence_with_options(ReadKeySequenceOptions::default())
     }
 
+    /// Read one command-loop key sequence, preserving GNU's typed distinction
+    /// between a command and the zero-length result that ends a macro
+    /// iteration.  Lisp-facing key readers continue to use
+    /// `read_key_sequence_with_options`, because an exhausted macro is only a
+    /// control boundary for `command_loop_1` (GNU keyboard.c/macros.c).
+    pub(crate) fn read_command_key_sequence_with_options(
+        &mut self,
+        options: ReadKeySequenceOptions,
+    ) -> Result<CommandKeySequenceRead, crate::emacs_core::error::Flow> {
+        if self.command_input_kbd_macro_iteration_is_exhausted() {
+            // GNU's `read_key_sequence` reaches its common `done` label and
+            // calls `echo_update` before returning zero.  Neomacs does not yet
+            // retain GNU's separate immediate-echo string, so the equivalent
+            // terminal-cell effect is to finish the transient echo-area
+            // message at this reader boundary.
+            self.command_loop.reset_key_sequence();
+            if !options.continue_echo {
+                self.clear_read_command_keys();
+            }
+            self.command_loop
+                .set_command_key_sequences(Vec::new(), Vec::new());
+            self.clear_key_echo_message();
+            return Ok(CommandKeySequenceRead::End(
+                CommandKeySequenceEnd::KeyboardMacroIteration,
+            ));
+        }
+
+        let (keys, binding) = self.read_key_sequence_with_options(options)?;
+        if keys.is_empty() && binding.is_nil() {
+            Ok(CommandKeySequenceRead::End(CommandKeySequenceEnd::Input))
+        } else {
+            Ok(CommandKeySequenceRead::Command { keys, binding })
+        }
+    }
+
+    fn command_input_kbd_macro_iteration_is_exhausted(&self) -> bool {
+        // GNU `at_end_of_macro_p` treats Lisp-visible
+        // `executing-kbd-macro == t` as an explicit early-termination request.
+        // Requeued events and unread selection/input-method events must drain
+        // before the macro boundary is observable.
+        let visible_macro_forces_end = self
+            .visible_variable_value_or_nil("executing-kbd-macro")
+            .is_t();
+        let runtime_macro_at_end = matches!(
+            self.command_loop.keyboard.kboard.executing_kbd_macro.as_ref(),
+            Some(events) if self.command_loop.keyboard.kboard.kbd_macro_index >= events.len()
+        );
+        let macro_at_end = visible_macro_forces_end || runtime_macro_at_end;
+        macro_at_end
+            && !self.has_pending_requeued_events()
+            && self
+                .command_loop
+                .keyboard
+                .kboard
+                .unread_selection_event
+                .is_none()
+            && self.command_loop.keyboard.kboard.unread_events.is_empty()
+    }
+
     pub(crate) fn read_key_sequence_with_options(
         &mut self,
         options: ReadKeySequenceOptions,
@@ -3783,6 +3970,9 @@ impl crate::emacs_core::eval::Context {
             && let Some(prompt) = key_sequence_prompt.as_deref()
         {
             self.set_current_message(Some(LispString::from_utf8(prompt)));
+            self.command_loop.keyboard.kboard.key_echo_state = KeyEchoState::Immediate {
+                prompt: key_sequence_prompt.clone(),
+            };
         }
 
         self.assign("this-command-keys-shift-translated", Value::NIL);
@@ -4191,13 +4381,8 @@ impl crate::emacs_core::eval::Context {
                 // scheduler for a later pass.
                 if self.keyboard_input_is_interactive()
                     && self.lisp_echo_keystrokes_seconds().is_some_and(|s| s > 0.0)
-                    && let Some(echo_msg) = self.prefix_echo_message(&translated_events)
                 {
-                    let full = match key_sequence_prompt.as_deref() {
-                        Some(prompt) => format!("{prompt}{echo_msg}"),
-                        None => echo_msg,
-                    };
-                    self.set_current_message(Some(LispString::from_utf8(&full)));
+                    self.publish_key_echo_message(&translated_events, key_sequence_prompt.clone());
                 }
                 continue;
             }
@@ -4377,7 +4562,7 @@ impl crate::emacs_core::eval::Context {
                 emacs_frame_id,
             } => {
                 self.sync_keyboard_terminal_owner_for_input_frame(emacs_frame_id);
-                self.clear_current_message();
+                self.clear_current_message_for_keyboard_input();
                 let emacs_event = Value::fixnum(i64::from(character.code()));
                 if self.event_is_quit_char(&emacs_event) {
                     self.request_quit_from_keyboard_input();
@@ -4472,7 +4657,7 @@ impl crate::emacs_core::eval::Context {
             } => {
                 self.sync_keyboard_terminal_owner_for_input_frame(emacs_frame_id);
                 tracing::debug!("read_char: received KeyPress {:?}", key);
-                self.clear_current_message();
+                self.clear_current_message_for_keyboard_input();
                 let emacs_event = key.to_emacs_event_value();
                 if self.event_is_quit_char(&emacs_event) {
                     self.request_quit_from_keyboard_input();
@@ -4487,7 +4672,7 @@ impl crate::emacs_core::eval::Context {
                 modifiers,
                 target_frame_id,
             } => {
-                self.clear_current_message();
+                self.clear_current_message_for_keyboard_input();
                 // Keyboard audit Finding 12: compute the click
                 // count for this press based on the previous
                 // click state and update `last_mouse_click` so
@@ -4513,7 +4698,7 @@ impl crate::emacs_core::eval::Context {
                 y,
                 target_frame_id,
             } => {
-                self.clear_current_message();
+                self.clear_current_message_for_keyboard_input();
                 // Use the click count recorded on the matching
                 // press so the release event carries the same
                 // double/triple modifier. Keyboard audit F12.
@@ -4741,7 +4926,7 @@ impl crate::emacs_core::eval::Context {
                 if !self.track_mouse_enabled() {
                     return Ok(None);
                 }
-                self.clear_current_message();
+                self.clear_current_message_for_keyboard_input();
                 let mut sym = String::new();
                 Self::append_modifier_prefix(&modifiers, &mut sym);
                 sym.push_str("mouse-movement");
@@ -4773,6 +4958,7 @@ impl crate::emacs_core::eval::Context {
     ) -> Result<Option<ReadCharEvent>, crate::emacs_core::error::Flow> {
         let deadline = timeout.map(|timeout| std::time::Instant::now() + timeout);
         let mut idle_auto_save_deadline = None;
+        let mut key_echo_deadline = self.delayed_key_echo_deadline(timeout);
 
         loop {
             self.sync_keyboard_terminal_owner();
@@ -4883,12 +5069,10 @@ impl crate::emacs_core::eval::Context {
                     .command_idle_auto_save_delay()
                     .and_then(|delay| std::time::Instant::now().checked_add(delay));
             }
-            let wait_deadline = match (deadline, idle_auto_save_deadline) {
-                (Some(read), Some(auto_save)) => Some(read.min(auto_save)),
-                (Some(read), None) => Some(read),
-                (None, Some(auto_save)) => Some(auto_save),
-                (None, None) => None,
-            };
+            let wait_deadline = [deadline, idle_auto_save_deadline, key_echo_deadline]
+                .into_iter()
+                .flatten()
+                .min();
             let wait_result = self.wait_for_command_input(wait_deadline);
 
             match wait_result? {
@@ -4901,6 +5085,21 @@ impl crate::emacs_core::eval::Context {
                     if deadline.is_some_and(|deadline| now >= deadline) {
                         self.timer_stop_idle();
                         return Ok(None);
+                    }
+                    if key_echo_deadline.is_some_and(|deadline| now >= deadline) {
+                        key_echo_deadline = None;
+                        if self.current_message_value().is_none()
+                            && matches!(
+                                self.command_loop.keyboard.kboard.key_echo_state,
+                                KeyEchoState::Inactive
+                            )
+                        {
+                            let events = self.command_loop.read_command_keys().to_vec();
+                            if !events.is_empty() {
+                                self.publish_key_echo_message(&events, None);
+                                self.redisplay();
+                            }
+                        }
                     }
                     if idle_auto_save_deadline.is_some_and(|deadline| now >= deadline) {
                         idle_auto_save_deadline = None;
@@ -4989,6 +5188,7 @@ impl crate::emacs_core::eval::Context {
                 }
                 CommandKeyRecording::AppendIfEmpty => {}
             }
+            self.refresh_immediate_key_echo();
         }
         Ok(Some(read_event.event))
     }

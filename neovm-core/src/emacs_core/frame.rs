@@ -1285,10 +1285,21 @@ pub(crate) fn builtin_modify_frame_parameters(
                     }
                     _ => match FrameParamKey::from_symbol_id(key) {
                         FrameParamKey::Known(FrameParam::Name) => {
-                            if let Some(name) = frame_name_parameter_value(&pair_cdr)
-                                && let Some(frame) = eval.frames.get_mut(fid)
-                            {
-                                frame.set_name_parameter_value(name);
+                            if let Some(name) = frame_name_parameter_value(&pair_cdr) {
+                                let is_tty = eval
+                                    .frames
+                                    .get(fid)
+                                    .is_some_and(|frame| frame.effective_window_system().is_none());
+                                if is_tty {
+                                    let _ = eval.frames.set_tty_frame_name_parameter(fid, name);
+                                } else if let Some(frame) = eval.frames.get_mut(fid) {
+                                    if name.is_nil() {
+                                        let current = frame.name_value();
+                                        frame.set_generated_name_value(current);
+                                    } else {
+                                        frame.set_name_value(name);
+                                    }
+                                }
                             }
                         }
                         FrameParamKey::Known(FrameParam::Title) => {

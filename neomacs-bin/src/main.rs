@@ -4044,13 +4044,27 @@ fn bootstrap_buffers(
     let bootstrap_root_scope = neovm_core::emacs_core::eval::save_scratch_gc_roots();
     neovm_core::emacs_core::eval::push_scratch_gc_root(bootstrap_font_snapshot);
     neovm_core::emacs_core::eval::push_scratch_gc_root(bootstrap_font_name);
+    if display.frontend == FrontendKind::Tty {
+        // GNU `make_initial_frame` resets its dedicated `tty_frame_count` and
+        // assigns F1.  The reused pdump surrogate's internal FrameId is not a
+        // presentation ordinal.
+        let assigned = eval
+            .frame_manager_mut()
+            .assign_initial_tty_frame_name(frame_id);
+        debug_assert!(assigned, "selected startup frame must remain live");
+    }
     if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
         // Font parameter resolution creates a FontMetricsService which
         // scans the system font database (~500ms). Skip for TTY where
         // font parameters are unused — TTY uses 1x1 character cells.
         // Reused startup frames must be normalized back to GNU's initial-frame
         // surface: generated name (e.g. "F1"), nil title, nil icon-name.
-        frame.set_generated_name_value(frame.generated_name_value());
+        if display.frontend != FrontendKind::Tty {
+            // This is likewise the one initial GUI frame, whose existing
+            // bootstrap contract is F1. Terminal F<n> allocation is owned by
+            // FrameManager's GNU-shaped tty_frame_count analogue above.
+            frame.set_generated_name_value(Value::string("F1"));
+        }
         frame.clear_title();
         frame.icon_name = Value::NIL;
         frame.initial = initial_tty_frame;
@@ -4446,7 +4460,6 @@ fn run_gnu_startup(eval: &mut Context) {
 #[cfg(test)]
 fn run_gnu_startup_inner(eval: &mut Context) {
     eval.setup_thread_locals();
-    let _ = std::fs::write("/tmp/neomacs-startup-phases.trace", "");
     maybe_install_startup_phase_trace(eval);
     eval.eval_str(
         r#"
@@ -4487,17 +4500,22 @@ fn run_gnu_startup_inner(eval: &mut Context) {
 }
 
 fn maybe_install_startup_phase_trace(eval: &mut Context) {
-    if !cfg!(test) && std::env::var("NEOMACS_TRACE_STARTUP_PHASES").unwrap_or_default() != "1" {
+    if std::env::var("NEOMACS_TRACE_STARTUP_PHASES").unwrap_or_default() != "1" {
         return;
     }
-    let source = r#"
+    let trace_dir = Path::new("tmp");
+    if let Err(err) = std::fs::create_dir_all(trace_dir) {
+        tracing::warn!("startup trace directory creation failed: {err}");
+        return;
+    }
+    let source = r##"
         (progn
           (defvar neomacs--startup-last-phase nil)
           (defvar neomacs--startup-last-call nil)
           (defvar neomacs--startup-trace-active nil)
           (with-temp-buffer
             (write-region (point-min) (point-max)
-                          "/tmp/neomacs-startup-phases.trace" nil 'silent))
+                          "./tmp/neomacs-startup-phases.trace" nil 'silent))
           (defun neomacs--startup-trace-around (name orig &rest args)
             (if neomacs--startup-trace-active
                 (apply orig args)
@@ -4507,13 +4525,13 @@ fn maybe_install_startup_phase_trace(eval: &mut Context) {
                 (with-temp-buffer
                   (insert (format "enter %S %S\n" name args))
                   (append-to-file (point-min) (point-max)
-                                  "/tmp/neomacs-startup-phases.trace"))
+                                  "./tmp/neomacs-startup-phases.trace"))
                 (prog1
                     (apply orig args)
                   (with-temp-buffer
                     (insert (format "leave %S\n" name))
                     (append-to-file (point-min) (point-max)
-                                    "/tmp/neomacs-startup-phases.trace"))))))
+                                    "./tmp/neomacs-startup-phases.trace"))))))
           (dolist (fn '(set-locale-environment
                         handle-args-function
                         x-handle-args
@@ -4540,7 +4558,7 @@ fn maybe_install_startup_phase_trace(eval: &mut Context) {
                           (eval `(lambda (orig &rest args)
                                    (apply #'neomacs--startup-trace-around
                                           ',fn orig args)))))))
-    "#;
+    "##;
     if let Err(err) = eval.eval_str(source) {
         tracing::warn!("startup trace helper install failed: {err:?}");
     }

@@ -27,9 +27,21 @@
 //! registers_bookmarks.rs / replace_sort.rs).
 
 mod support;
-use neomacs_tui_tests::{StrictGridOptions, assert_grids_strict};
+use neomacs_tui_tests::{StrictGridOptions, TuiSession, assert_grids_strict};
 use std::time::Duration;
 use support::*;
+
+/// Compare every terminal cell across the complete PTY width and height.
+/// There are deliberately no ignored rows, masks, or mismatch allowances:
+/// every divergence from the GNU oracle must fail at its exact cell.
+fn assert_pair_strict(label: &str, gnu: &TuiSession, neo: &TuiSession) {
+    assert_grids_strict(
+        label,
+        gnu.screen(),
+        neo.screen(),
+        &StrictGridOptions::default(),
+    );
+}
 
 // ── 1. Keyboard macros ─────────────────────────────────────────────────
 
@@ -63,12 +75,7 @@ fn kbd_macro_define_and_replay_with_cx_e_then_e() {
     neo.read_until(Duration::from_secs(8), replayed);
     read_both(&mut gnu, &mut neo, Duration::from_millis(400));
 
-    assert_pair_nearly_matches(
-        "kbd_macro_define_and_replay_with_cx_e_then_e",
-        &gnu,
-        &neo,
-        1,
-    );
+    assert_pair_strict("kbd_macro_define_and_replay_with_cx_e_then_e", &gnu, &neo);
 }
 
 /// A macro that *contains a read-char command*: define `M-z x` (zap-to-char x)
@@ -107,11 +114,10 @@ fn kbd_macro_containing_zap_to_char_replays_recorded_char() {
     neo.read_until(Duration::from_secs(8), after_replay);
     read_both(&mut gnu, &mut neo, Duration::from_millis(400));
 
-    assert_pair_nearly_matches(
+    assert_pair_strict(
         "kbd_macro_containing_zap_to_char_replays_recorded_char",
         &gnu,
         &neo,
-        1,
     );
 }
 
@@ -143,28 +149,32 @@ fn zap_to_char_reads_target_char() {
     neo.read_until(Duration::from_secs(8), zapped);
     read_both(&mut gnu, &mut neo, Duration::from_millis(400));
 
-    assert_pair_nearly_matches("zap_to_char_reads_target_char", &gnu, &neo, 1);
+    assert_pair_strict("zap_to_char_reads_target_char", &gnu, &neo);
 }
 
-/// `quoted-insert` (`C-q`) reading an octal code: `C-q 1 0 1` inserts the
-/// character with octal code 101 = `A`. `C-q` reads the following event(s)
-/// via `read-char` inside the command, so a stale-this-command-keys would
-/// misfire the read.
+/// `quoted-insert` (`C-q`) reading an octal code: `C-q 1 0 1 RET` inserts the
+/// character with octal code 101 = `A`. Before RET, both editors must expose
+/// the same complete delayed key echo while `read-event` is still blocked;
+/// after RET, both complete the command and render the same full screen.
 #[test]
 fn quoted_insert_octal_code_inserts_character() {
     let (mut gnu, mut neo) = boot_pair("");
 
-    // In *scratch*, C-q 101 inserts "A".
+    // GNU accepts any number of octal digits, so 101 remains a live sub-read
+    // until a non-digit terminator arrives.
     send_both(&mut gnu, &mut neo, "C-q");
     read_both(&mut gnu, &mut neo, Duration::from_millis(300));
     send_both(&mut gnu, &mut neo, "1 0 1");
+    read_both(&mut gnu, &mut neo, Duration::from_millis(400));
+    assert_pair_strict("quoted_insert_octal_code_pending_subread", &gnu, &neo);
 
-    let inserted = |grid: &[String]| grid.iter().any(|row| row.contains("A"));
+    send_both(&mut gnu, &mut neo, "RET");
+    let inserted = |grid: &[String]| grid.iter().any(|row| row.trim() == "A");
     gnu.read_until(Duration::from_secs(6), inserted);
     neo.read_until(Duration::from_secs(8), inserted);
     read_both(&mut gnu, &mut neo, Duration::from_millis(400));
 
-    assert_pair_nearly_matches("quoted_insert_octal_code_inserts_character", &gnu, &neo, 1);
+    assert_pair_strict("quoted_insert_octal_code_completed", &gnu, &neo);
 }
 
 /// `quoted-insert` of a literal control char: `C-q TAB` inserts a literal tab
@@ -182,7 +192,7 @@ fn quoted_insert_literal_tab() {
     // A literal tab between x and y renders as whitespace columns; both editors
     // must render the same. Just compare grids.
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
-    assert_pair_nearly_matches("quoted_insert_literal_tab", &gnu, &neo, 1);
+    assert_pair_strict("quoted_insert_literal_tab", &gnu, &neo);
 }
 
 // ── 3. isearch ─────────────────────────────────────────────────────────
@@ -219,7 +229,7 @@ fn isearch_forward_repeat_and_exit() {
     send_both(&mut gnu, &mut neo, "RET");
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
 
-    assert_pair_nearly_matches("isearch_forward_repeat_and_exit", &gnu, &neo, 2);
+    assert_pair_strict("isearch_forward_repeat_and_exit", &gnu, &neo);
 }
 
 /// `C-g` aborts an in-progress isearch, restoring point to where the search
@@ -260,7 +270,7 @@ fn isearch_abort_with_keyboard_quit() {
 
     // The buffer must be unchanged (no leaked "beta" self-insert), and both
     // editors must agree on the rendered grid.
-    assert_pair_nearly_matches("isearch_abort_with_keyboard_quit", &gnu, &neo, 2);
+    assert_pair_strict("isearch_abort_with_keyboard_quit", &gnu, &neo);
 }
 
 // ── 4. Recursive minibuffers ───────────────────────────────────────────
@@ -289,7 +299,7 @@ fn recursive_minibuffer_eval_then_mx() {
     read_both(&mut gnu, &mut neo, Duration::from_millis(400));
 
     // Both editors should show the nested M-x minibuffer prompt.
-    assert_pair_nearly_matches("recursive_minibuffer_eval_then_mx/nested", &gnu, &neo, 2);
+    assert_pair_strict("recursive_minibuffer_eval_then_mx/nested", &gnu, &neo);
 
     // Abort the nested M-x (one C-g), then the outer Eval (one C-g): both must
     // unwind cleanly back to *scratch*.
@@ -300,7 +310,7 @@ fn recursive_minibuffer_eval_then_mx() {
     neo.read_until(Duration::from_secs(8), scratch_ready);
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
 
-    assert_pair_nearly_matches("recursive_minibuffer_eval_then_mx/unwound", &gnu, &neo, 2);
+    assert_pair_strict("recursive_minibuffer_eval_then_mx/unwound", &gnu, &neo);
 }
 
 /// Rejecting a nested `M-x` when recursive minibuffers are disabled must be
@@ -316,7 +326,7 @@ fn rejected_nested_mx_keeps_outer_mx_usable() {
     eval_expression(
         &mut gnu,
         &mut neo,
-        r#"(progn (setq enable-recursive-minibuffers nil) (set-buffer-file-coding-system 'utf-8-unix) (set-frame-name "issue-251-frame") nil)"#,
+        r##"(progn (setq enable-recursive-minibuffers nil) nil)"##,
     );
     let recursion_disabled = |grid: &[String]| {
         grid.last()
@@ -400,7 +410,7 @@ fn prefix_arg_quoted_insert_repeats() {
     neo.read_until(Duration::from_secs(8), inserted);
     read_both(&mut gnu, &mut neo, Duration::from_millis(400));
 
-    assert_pair_nearly_matches("prefix_arg_quoted_insert_repeats", &gnu, &neo, 1);
+    assert_pair_strict("prefix_arg_quoted_insert_repeats", &gnu, &neo);
 }
 
 /// A numeric prefix to the macro-replay command: define a one-char macro, then
@@ -427,7 +437,7 @@ fn prefix_arg_repeats_kbd_macro_replay() {
     neo.read_until(Duration::from_secs(8), replayed);
     read_both(&mut gnu, &mut neo, Duration::from_millis(400));
 
-    assert_pair_nearly_matches("prefix_arg_repeats_kbd_macro_replay", &gnu, &neo, 1);
+    assert_pair_strict("prefix_arg_repeats_kbd_macro_replay", &gnu, &neo);
 }
 
 // ── 6. C-x z repeat ────────────────────────────────────────────────────
@@ -454,7 +464,7 @@ fn repeat_command_with_cx_z() {
     neo.read_until(Duration::from_secs(8), repeated);
     read_both(&mut gnu, &mut neo, Duration::from_millis(400));
 
-    assert_pair_nearly_matches("repeat_command_with_cx_z", &gnu, &neo, 1);
+    assert_pair_strict("repeat_command_with_cx_z", &gnu, &neo);
 }
 
 // ── 7. Unbound key + single C-g quitting a sub-read ────────────────────
@@ -479,12 +489,7 @@ fn unbound_key_mid_sequence_echoes_is_undefined() {
     neo.read_until(Duration::from_secs(8), undefined);
     read_both(&mut gnu, &mut neo, Duration::from_millis(400));
 
-    assert_pair_nearly_matches(
-        "unbound_key_mid_sequence_echoes_is_undefined",
-        &gnu,
-        &neo,
-        2,
-    );
+    assert_pair_strict("unbound_key_mid_sequence_echoes_is_undefined", &gnu, &neo);
 }
 
 /// A single `C-g` cleanly quits a sub-read (the `zap-to-char` minibuffer char
@@ -520,5 +525,5 @@ fn single_keyboard_quit_aborts_zap_char_read() {
     neo.read_until(Duration::from_secs(8), restored);
     read_both(&mut gnu, &mut neo, Duration::from_millis(500));
 
-    assert_pair_nearly_matches("single_keyboard_quit_aborts_zap_char_read", &gnu, &neo, 2);
+    assert_pair_strict("single_keyboard_quit_aborts_zap_char_read", &gnu, &neo);
 }

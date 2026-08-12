@@ -6161,7 +6161,7 @@ pub(crate) fn make_frame_plain(
     let mut height: u32 = 600;
     let mut requested_width = None;
     let mut requested_height = None;
-    let mut name = Value::string("F");
+    let mut requested_name = None;
     let mut all_params: Vec<(Value, Value)> = Vec::new();
     let mut parent_frame = Value::NIL;
     let mut left = 0_i64;
@@ -6197,7 +6197,7 @@ pub(crate) fn make_frame_plain(
                         }
                         "name" => {
                             if let Some(value) = frame_name_parameter_value(&pair_cdr) {
-                                name = value;
+                                requested_name = (!value.is_nil()).then_some(value);
                             }
                         }
                         "parent-frame" => {
@@ -6231,6 +6231,13 @@ pub(crate) fn make_frame_plain(
         }
     }
 
+    // GNU `Fmake_terminal_frame` consumes `frame_next_F_name` for every new
+    // terminal frame before applying an optional explicit `name` parameter.
+    // Keep that presentation sequence independent of FrameId allocation.
+    let generated_name = frames.next_generated_tty_frame_name();
+    let explicit_name = requested_name.is_some();
+    let name = requested_name.unwrap_or(generated_name);
+
     let parent_id = parent_frame.as_frame_id().map(FrameId);
     if let Some(parent_id) = parent_id {
         let metrics = frames.get(parent_id).map(|parent| {
@@ -6262,6 +6269,11 @@ pub(crate) fn make_frame_plain(
             let frame = frames
                 .get_mut(fid)
                 .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+            if explicit_name {
+                frame.set_name_value(name);
+            } else {
+                frame.set_generated_name_value(name);
+            }
             frame.parent_frame = parent_frame;
             frame.z_order = z_order;
             frame.left_pos = left;
@@ -6328,6 +6340,11 @@ pub(crate) fn make_frame_plain(
         .unwrap_or(BufferId(0));
     let fid = frames.create_frame_value(name, width, height, buf_id);
     if let Some(frame) = frames.get_mut(fid) {
+        if explicit_name {
+            frame.set_name_value(name);
+        } else {
+            frame.set_generated_name_value(name);
+        }
         for (key, value) in all_params {
             frame.set_parameter(key, value);
         }

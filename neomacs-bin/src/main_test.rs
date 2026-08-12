@@ -3001,6 +3001,39 @@ fn bootstrap_buffers_reuses_cached_surrogate_frame_when_it_is_the_only_selected_
     );
 }
 
+/// GNU `make_initial_frame` assigns the user-visible name `F1` from its
+/// dedicated `tty_frame_count`; object allocation history is irrelevant.  A
+/// pdump surrogate can therefore have a later internal frame id and still
+/// become the initial live TTY frame named `F1`.
+#[test]
+fn bootstrap_buffers_names_reused_initial_tty_frame_f1_after_surrogate_allocation() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(BOOTSTRAP_CORE_FEATURES)
+        .expect("cached bootstrap evaluator");
+    let old_buffer = eval.buffer_manager_mut().create_buffer("*old*");
+    let dump_only = eval
+        .frame_manager_mut()
+        .create_frame("dump-only", 80, 25, old_buffer);
+    let surrogate = eval
+        .frame_manager_mut()
+        .create_frame("surrogate", 80, 25, old_buffer);
+    assert!(eval.frame_manager_mut().select_frame(surrogate));
+    assert!(eval.frame_manager_mut().delete_frame(dump_only));
+
+    let _bootstrap = bootstrap_buffers(
+        &mut eval,
+        160,
+        50,
+        bootstrap_display_config(FrontendKind::Tty, Interactivity::Interactive),
+    );
+
+    let selected = eval
+        .frame_manager()
+        .selected_frame()
+        .expect("selected initial TTY frame after bootstrap");
+    assert_eq!(selected.id, surrogate);
+    assert_eq!(selected.name_runtime_string_owned(), "F1");
+}
+
 #[test]
 fn bootstrap_buffers_reuses_existing_named_buffers_in_cached_bootstrap() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
@@ -3168,8 +3201,10 @@ fn gnu_startup_keeps_bootstrap_gui_frame_instead_of_creating_replacement_frame()
          neomacs-initialized
          (get 'neo 'window-system-initialized)
          frame-initial-frame
-         neomacs--startup-last-phase
-         neomacs--startup-last-call
+         (and (boundp 'neomacs--startup-last-phase)
+              neomacs--startup-last-phase)
+         (and (boundp 'neomacs--startup-last-call)
+              neomacs--startup-last-call)
          terminal-frame
          (mapcar
           (lambda (frame)

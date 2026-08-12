@@ -190,11 +190,22 @@ fn execute_kbd_macro_events_with_runtime_state(
     result
 }
 
+fn publish_kbd_macro_status(eval: &mut super::eval::Context, message: &str) -> EvalResult {
+    super::builtins::dispatch_builtin(eval, "message", vec![Value::string(message)])
+        .expect("`message` must remain a registered builtin")
+}
+
 fn start_kbd_macro_impl(
     eval: &mut super::eval::Context,
     append: bool,
     no_exec: bool,
 ) -> EvalResult {
+    if eval.command_loop.keyboard.kboard.defining_kbd_macro {
+        return Err(signal(
+            "error",
+            vec![Value::string("Already defining kbd macro")],
+        ));
+    }
     let initial_events = if append {
         Some(last_kbd_macro_or_array_error(eval)?)
     } else {
@@ -207,6 +218,14 @@ fn start_kbd_macro_impl(
         execute_kbd_macro_events_with_runtime_state(eval, initial_events, 1, Value::NIL)?;
     }
 
+    publish_kbd_macro_status(
+        eval,
+        if append {
+            "Appending to kbd macro..."
+        } else {
+            "Defining kbd macro..."
+        },
+    )?;
     eval.start_kbd_macro_runtime(initial_events.as_deref(), append)?;
     Ok(Value::NIL)
 }
@@ -254,6 +273,7 @@ pub(crate) fn builtin_end_kbd_macro(
     };
     let loopfunc = args.get(1).copied().unwrap_or(Value::NIL);
     let recorded = eval.end_kbd_macro_runtime()?;
+    publish_kbd_macro_status(eval, "Keyboard macro defined")?;
     if repeat == 0 {
         execute_kbd_macro_events_with_runtime_state(eval, &recorded, repeat, loopfunc)?;
     } else if repeat > 1 {

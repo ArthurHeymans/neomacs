@@ -3888,6 +3888,11 @@ fn decode_insert_file_contents_defaults_to_gnu_ascii_undecided_codings() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
 
+    let without_eol = super::decode_insert_file_contents(&mut eval, b"alpha", true, None)
+        .expect("decode ascii text without EOL evidence");
+    assert_eq!(without_eol.text().as_utf8_str(), Some("alpha"));
+    assert_eq!(without_eol.coding, "undecided");
+
     let unix =
         super::decode_insert_file_contents(&mut eval, b"alpha line\nbeta line\n", true, None)
             .expect("decode ascii unix text");
@@ -3904,6 +3909,16 @@ fn decode_insert_file_contents_defaults_to_gnu_ascii_undecided_codings() {
         .expect("decode ascii mac text");
     assert_eq!(mac.text().as_utf8_str(), Some("alpha line\nbeta line\n"));
     assert_eq!(mac.coding, "undecided-mac");
+
+    let stray_cr_in_dos =
+        super::decode_insert_file_contents(&mut eval, b"alpha\rbeta\r\n", true, None)
+            .expect("decode GNU-compatible mixed CR and CRLF text");
+    assert_eq!(stray_cr_in_dos.coding, "undecided-dos");
+
+    let only_first_three_eols_are_evidence =
+        super::decode_insert_file_contents(&mut eval, b"a\r\nb\r\nc\r\nd\n", true, None)
+            .expect("decode using GNU's bounded EOL evidence window");
+    assert_eq!(only_first_three_eols_are_evidence.coding, "undecided-dos");
 }
 
 #[test]
@@ -4377,6 +4392,41 @@ fn decode_insert_file_contents_defaults_to_gnu_utf8_coding_for_non_ascii_text() 
             .expect("decode utf-8 accented text");
     assert_eq!(decoded.text().as_utf8_str(), Some("alpha caf\u{00E9}\n"));
     assert_eq!(decoded.coding, "utf-8-unix");
+}
+
+/// With no newline bytes, GNU's undecided decoder has no EOL evidence, so
+/// `after-insert-file-set-coding` leaves the new buffer's default
+/// `utf-8-unix` coding intact.  In particular, the EOL component is Unix (0),
+/// not undecided/nil; this is the third `U` in the TTY mode-line `UUU`.
+#[test]
+fn find_file_ascii_without_newline_keeps_gnu_default_utf8_unix_eol() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("ascii-without-newline.txt");
+    fs::write(&path, b"ab").expect("write no-newline ASCII fixture");
+    let path_lisp = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let mut eval = crate::test_utils::runtime_startup_context();
+
+    let result = eval
+        .eval_str(&format!(
+            r##"(progn
+                   ;; `runtime_startup_context` ends at loadup.  Startup then
+                   ;; derives UTF-8 from this test host's C.UTF-8 locale; mirror
+                   ;; that GNU `-Q` state explicitly here.
+                   (set-language-environment "UTF-8")
+                   (let ((buffer (find-file-noselect "{path_lisp}")))
+                     (with-current-buffer buffer
+                       (list (default-value 'buffer-file-coding-system)
+                             buffer-file-coding-system
+                             (coding-system-eol-type
+                              buffer-file-coding-system)))))"##
+        ))
+        .expect("visit no-newline ASCII file");
+
+    assert_eq!(format!("{result}"), "(utf-8-unix utf-8-unix 0)");
 }
 
 #[cfg(unix)]

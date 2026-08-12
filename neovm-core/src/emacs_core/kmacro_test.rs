@@ -68,6 +68,25 @@ fn keyboard_runtime_finalize_and_cancel_match_gnu_macro_boundary_shape() {
 }
 
 #[test]
+fn start_and_end_kbd_macro_publish_gnu_status_messages() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.assign("noninteractive", Value::NIL);
+
+    builtin_start_kbd_macro(&mut eval, vec![]).expect("start macro");
+    assert_eq!(
+        eval.current_message_text().as_deref(),
+        Some("Defining kbd macro...")
+    );
+
+    builtin_end_kbd_macro(&mut eval, vec![]).expect("end macro");
+    assert_eq!(
+        eval.current_message_text().as_deref(),
+        Some("Keyboard macro defined")
+    );
+}
+
+#[test]
 fn macro_ring_pushes_previous_keyboard_runtime_macro() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
@@ -517,6 +536,42 @@ fn execute_kbd_macro_tail_is_not_pending_input_for_while_no_input_like_gnu() {
         .expect("keyboard macro should execute");
 
     assert_eq!(format!("{result}"), "(ran ran ran)");
+}
+
+/// GNU ends a keyboard-macro iteration inside `read_key_sequence`, whose
+/// `done` path calls `echo_update` before it returns an empty sequence to
+/// `command_loop_1`.  Neomacs must cross the same key-reader boundary instead
+/// of returning early from the command loop: otherwise a transient sub-read
+/// echo such as "Zap to char: x" remains current and suppresses kmacro's repeat
+/// hint.
+#[test]
+fn exhausted_kbd_macro_iteration_finalizes_echo_at_key_reader_boundary() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.begin_executing_kbd_macro_runtime(Vec::new());
+    eval.eval_str(
+        r##"(progn
+              (setq neo-macro-echo-clear-hook-count 0)
+              (setq echo-area-clear-hook
+                    (list (lambda ()
+                            (setq neo-macro-echo-clear-hook-count
+                                  (1+ neo-macro-echo-clear-hook-count))))))"##,
+    )
+    .expect("install macro-boundary echo hook probe");
+    eval.set_current_message(Some(crate::heap_types::LispString::from_utf8(
+        "Zap to char: x",
+    )));
+
+    eval.execute_kbd_macro_iteration_via_command_loop()
+        .expect("empty macro iteration should end cleanly");
+
+    assert_eq!(eval.current_message_text(), None);
+    assert_eq!(
+        eval.eval_symbol("neo-macro-echo-clear-hook-count")
+            .expect("echo clear hook count"),
+        Value::fixnum(0),
+        "GNU echo_update clears through message3_nolog, not echo-area-clear-hook"
+    );
 }
 
 #[test]

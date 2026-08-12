@@ -6556,11 +6556,6 @@ impl Context {
             self.flush_pending_safe_funcalls();
             self.sync_current_buffer_to_selected_window();
 
-            if self.executing_kbd_macro_iteration_complete_for_command_loop() {
-                self.assign("this-command", Value::NIL);
-                return Ok(Value::NIL);
-            }
-
             // Save the outgoing `current-prefix-arg` into
             // `last-prefix-arg` before reading the next command.
             //
@@ -6604,12 +6599,19 @@ impl Context {
             // interruptible by C-g — the sleep-for quit fix is preserved.
             let read_specpdl_count = self.specpdl.len();
             self.specbind(intern("inhibit-quit"), Value::T);
-            let read_result = self.read_key_sequence_with_options(
+            let read_result = self.read_command_key_sequence_with_options(
                 crate::keyboard::ReadKeySequenceOptions::new(Value::NIL, false, false, true),
             );
             self.unbind_to(read_specpdl_count);
 
-            let (keys, binding) = read_result?;
+            let (keys, binding, input_end) = match read_result? {
+                crate::keyboard::CommandKeySequenceRead::Command { keys, binding } => {
+                    (keys, binding, None)
+                }
+                crate::keyboard::CommandKeySequenceRead::End(end) => {
+                    (Vec::new(), Value::NIL, Some(end))
+                }
+            };
 
             // Reconcile a quit that became pending DURING the command-loop read.
             //
@@ -6684,7 +6686,7 @@ impl Context {
 
             self.sync_current_buffer_to_selected_window();
 
-            if keys.is_empty() && binding.is_nil() {
+            if input_end.is_some() {
                 self.assign("this-command", Value::NIL);
                 return Ok(Value::NIL);
             }
@@ -6941,6 +6943,12 @@ impl Context {
                 self.finalize_kbd_macro_runtime_chars();
             }
 
+            // GNU `command_loop_1` calls `cancel_echoing` at the command
+            // boundary: the rendered key sequence remains visible, but the
+            // next ordinary input no longer treats it as keyboard-owned and
+            // cannot append another command's events to it.
+            self.cancel_key_echo_state();
+
             // Keyboard audit Finding 9: auto-save-interval check.
             // GNU `keyboard.c:1491-1506`:
             //
@@ -7153,33 +7161,6 @@ impl Context {
         let result = super::hook_runtime::safe_run_named_hook(self, hook_sym, &[]);
         self.unbind_to(specpdl_count);
         result
-    }
-
-    fn executing_kbd_macro_iteration_complete_for_command_loop(&self) -> bool {
-        // GNU `at_end_of_macro_p` (`src/macros.c`) treats Lisp-visible
-        // `executing-kbd-macro == t` as an explicit request to end the current
-        // macro.  In particular, batch callers can dynamically bind the
-        // variable to t, queue input in `unread-command-events`, and rely on
-        // `command_loop_1` returning as soon as that queue is exhausted.  The
-        // internal KBoard state only exists for macros started through
-        // `execute-kbd-macro`, so it cannot be the sole semantic authority.
-        let visible_macro_forces_end = self
-            .visible_variable_value_or_nil("executing-kbd-macro")
-            .is_t();
-        let runtime_macro_at_end = matches!(
-            self.command_loop.keyboard.kboard.executing_kbd_macro.as_ref(),
-            Some(events) if self.command_loop.keyboard.kboard.kbd_macro_index >= events.len()
-        );
-        let macro_at_end = visible_macro_forces_end || runtime_macro_at_end;
-        macro_at_end
-            && !self.has_pending_requeued_events()
-            && self
-                .command_loop
-                .keyboard
-                .kboard
-                .unread_selection_event
-                .is_none()
-            && self.command_loop.keyboard.kboard.unread_events.is_empty()
     }
 
     pub(crate) fn execute_kbd_macro_iteration_via_command_loop(&mut self) -> EvalResult {
@@ -9534,6 +9515,10 @@ impl Context {
     }
 
     pub fn set_current_message(&mut self, message: Option<crate::heap_types::LispString>) {
+        // An ordinary message takes ownership of the echo area away from the
+        // keyboard reader. Keyboard echo publication restores its typed state
+        // only after installing its own message.
+        self.cancel_key_echo_state();
         self.message_buf_print = false;
         if self.current_message != message {
             self.mirror_message_to_echo_area_buffer(message.as_ref());
@@ -9668,7 +9653,10 @@ impl Context {
         }
     }
 
-    pub(crate) fn clear_echo_area_message(&mut self) -> EchoMessageClearResult {
+    fn clear_echo_area_message_with_hook(
+        &mut self,
+        run_echo_area_clear_hook: bool,
+    ) -> EchoMessageClearResult {
         self.message_buf_print = false;
         if self
             .visible_variable_value_or_nil("inhibit-message")
@@ -9713,7 +9701,7 @@ impl Context {
             return clear_result;
         }
 
-        if had_current_message {
+        if had_current_message && run_echo_area_clear_hook {
             let hook =
                 crate::emacs_core::hook_runtime::hook_symbol_by_name(self, "echo-area-clear-hook");
             let _ = crate::emacs_core::hook_runtime::safe_run_named_hook(self, hook, &[]);
@@ -9729,7 +9717,30 @@ impl Context {
         clear_result
     }
 
+    pub(crate) fn clear_echo_area_message(&mut self) -> EchoMessageClearResult {
+        self.clear_echo_area_message_with_hook(true)
+    }
+
+    /// Clear a message produced by key echoing without running
+    /// `echo-area-clear-hook`. GNU's `echo_update` uses
+    /// `message3_nolog(nil)` -> `clear_message`, which consults
+    /// `clear-message-function` but does not run the keyboard reader's
+    /// separate echo-area-clear hook.
+    pub(crate) fn clear_key_echo_message(&mut self) {
+        self.cancel_key_echo_state();
+        let _ = self.clear_echo_area_message_with_hook(false);
+    }
+
     pub fn clear_current_message(&mut self) {
+        self.cancel_key_echo_state();
+        if self.clear_echo_area_message() == EchoMessageClearResult::PreserveEchoArea {}
+    }
+
+    /// Clear stale echo-area cells while an input event is being ingested,
+    /// without surrendering keyboard-echo ownership. GNU `read_char` clears
+    /// the old message before `echo_add_key`, then immediately rebuilds it when
+    /// `immediate_echo` is active.
+    pub(crate) fn clear_current_message_for_keyboard_input(&mut self) {
         if self.clear_echo_area_message() == EchoMessageClearResult::PreserveEchoArea {}
     }
 

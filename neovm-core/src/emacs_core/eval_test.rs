@@ -3340,6 +3340,7 @@ fn read_key_sequence_prefix_echo_matches_gnu_dash_and_help_hint() {
     let global_map = crate::emacs_core::keymap::make_sparse_list_keymap();
     install_global_map_for_test(&mut ev, global_map);
     ev.assign("help-char", Value::fixnum(8));
+    ev.assign("help-event-list", Value::list(vec![Value::symbol("help")]));
     ev.assign("echo-keystrokes", Value::fixnum(1));
     ev.assign("echo-keystrokes-help", Value::T);
     ev.eval_str(

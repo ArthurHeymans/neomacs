@@ -2466,19 +2466,6 @@ impl Frame {
             .unwrap_or_else(|| crate::heap_types::LispString::from_utf8("Neomacs"))
     }
 
-    pub fn generated_name_runtime_string(&self) -> String {
-        let ordinal = if self.id.0 >= FRAME_ID_BASE {
-            self.id.0 - FRAME_ID_BASE + 1
-        } else {
-            self.id.0
-        };
-        format!("F{ordinal}")
-    }
-
-    pub fn generated_name_value(&self) -> Value {
-        Value::string(self.generated_name_runtime_string())
-    }
-
     pub fn set_name_value(&mut self, name: Value) {
         self.explicit_name = true;
         self.name = name;
@@ -2487,14 +2474,6 @@ impl Frame {
     pub fn set_generated_name_value(&mut self, name: Value) {
         self.explicit_name = false;
         self.name = name;
-    }
-
-    pub fn set_name_parameter_value(&mut self, name: Value) {
-        if name.is_nil() {
-            self.set_generated_name_value(self.generated_name_value());
-        } else {
-            self.set_name_value(name);
-        }
     }
 
     pub fn set_title_value(&mut self, title: Value) {
@@ -3526,6 +3505,41 @@ impl Frame {
 // FrameManager
 // ---------------------------------------------------------------------------
 
+/// Sequence position for GNU's generated terminal-frame names (`F1`, `F2`,
+/// ...).  This is intentionally independent of `FrameId`: GNU keeps a
+/// dedicated `tty_frame_count`, and pdump/internal object allocation must not
+/// leak into the user-visible frame name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TtyFrameNameOrdinal(std::num::NonZeroU64);
+
+impl TtyFrameNameOrdinal {
+    const INITIAL: Self = Self(std::num::NonZeroU64::MIN);
+
+    fn next(self) -> Self {
+        let next = self
+            .0
+            .get()
+            .checked_add(1)
+            .expect("terminal frame name ordinal overflow");
+        Self(std::num::NonZeroU64::new(next).expect("increment stays nonzero"))
+    }
+
+    fn value(self) -> Value {
+        Value::string(format!("F{}", self.0))
+    }
+}
+
+fn is_generated_tty_frame_name(value: Value) -> bool {
+    value
+        .as_lisp_string()
+        .and_then(|name| name.as_utf8_str())
+        .is_some_and(|name| {
+            name.strip_prefix('F').is_some_and(|digits| {
+                !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+            })
+        })
+}
+
 /// Manages all frames and tracks the selected frame.
 pub struct FrameManager {
     frames: HashMap<FrameId, Frame>,
@@ -3536,6 +3550,7 @@ pub struct FrameManager {
     frame_init_hook: Option<fn(&mut Frame)>,
     selected: Option<FrameId>,
     next_frame_id: u64,
+    last_tty_frame_name: Option<TtyFrameNameOrdinal>,
     next_window_id: u64,
     old_selected_window: Option<WindowId>,
     deleted_windows: HashSet<WindowId>,
@@ -3550,6 +3565,7 @@ impl FrameManager {
             frame_init_hook: None,
             selected: None,
             next_frame_id: FRAME_ID_BASE,
+            last_tty_frame_name: None,
             next_window_id: 1,
             old_selected_window: None,
             deleted_windows: HashSet::new(),
@@ -3561,6 +3577,66 @@ impl FrameManager {
     /// Install the hook run on every newly created frame.
     pub fn set_frame_init_hook(&mut self, hook: fn(&mut Frame)) {
         self.frame_init_hook = Some(hook);
+    }
+
+    /// Assign GNU's special initial terminal-frame name and reset the
+    /// independent TTY name sequence to one (`make_initial_frame`, frame.c).
+    pub fn assign_initial_tty_frame_name(&mut self, frame_id: FrameId) -> bool {
+        self.last_tty_frame_name = Some(TtyFrameNameOrdinal::INITIAL);
+        let Some(frame) = self.frames.get_mut(&frame_id) else {
+            return false;
+        };
+        frame.set_generated_name_value(TtyFrameNameOrdinal::INITIAL.value());
+        true
+    }
+
+    /// Allocate GNU's next collision-free generated terminal-frame name.
+    pub fn next_generated_tty_frame_name(&mut self) -> Value {
+        loop {
+            let ordinal = self
+                .last_tty_frame_name
+                .map(TtyFrameNameOrdinal::next)
+                .unwrap_or(TtyFrameNameOrdinal::INITIAL);
+            self.last_tty_frame_name = Some(ordinal);
+            let candidate = ordinal.value();
+            let collision = self.frames.values().any(|frame| {
+                frame
+                    .name_value()
+                    .as_lisp_string()
+                    .zip(candidate.as_lisp_string())
+                    .is_some_and(|(left, right)| left == right)
+            });
+            if !collision {
+                return candidate;
+            }
+        }
+    }
+
+    /// Apply GNU `set_term_frame_name`: nil preserves an existing `F<num>`
+    /// name, otherwise it allocates from the TTY name sequence.
+    pub fn set_tty_frame_name_parameter(&mut self, frame_id: FrameId, name: Value) -> bool {
+        if !name.is_nil() {
+            let Some(frame) = self.frames.get_mut(&frame_id) else {
+                return false;
+            };
+            frame.set_name_value(name);
+            return true;
+        }
+
+        if let Some(frame) = self.frames.get_mut(&frame_id)
+            && is_generated_tty_frame_name(frame.name_value())
+        {
+            let current = frame.name_value();
+            frame.set_generated_name_value(current);
+            return true;
+        }
+
+        let generated = self.next_generated_tty_frame_name();
+        let Some(frame) = self.frames.get_mut(&frame_id) else {
+            return false;
+        };
+        frame.set_generated_name_value(generated);
+        true
     }
 
     /// Allocate a new window ID.
