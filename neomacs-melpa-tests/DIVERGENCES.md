@@ -4327,3 +4327,56 @@ three skipped, a fresh release build produces a 13,616,082-byte pdump and all
 1,651 Lisp byte-compiles, and the release TUI suite passes all 908 tests.
 
 Status: FIXED.
+
+## 83. String glyph positions and continuation tabs lost their GNU coordinate spaces -- FIXED
+
+Two frozen display-parity cases shared the same structural fault: row assembly
+reduced a source coordinate to a bare row-local number.  A string-valued
+`display` replacement emitted every glyph with the covered buffer start, so a
+three-character replacement produced `[2, 2, 2]` instead of string indices
+`[0, 1, 2]`.  Independently, a TAB on a wrapped continuation row was measured
+from that screen row's origin instead of from the accumulated physical line.
+
+GNU makes both coordinate spaces explicit.  `struct glyph` stores `charpos`
+together with its source object; the number is a buffer position for a buffer
+object and a string index for a string object
+(`src/dispextern.h:460-483`).  String production installs the string object and
+its current index (`src/xdisp.c:9459-9613`), while cursor recovery dispatches on
+the object and selects the smallest string index after bidi reordering
+(`src/xdisp.c:18589-19079`).  GNU deliberately keeps replacement coverage out
+of each glyph to keep the glyph compact (`src/xdisp.c:6759-6821`).  TAB layout
+likewise adds `continuation_lines_width` for ordinary continuation-row text,
+but measures a wrap-prefix string on the current screen row
+(`src/xdisp.c:33815-33885`); wrap transitions update that physical-line width
+at the exact restored iterator position (`src/xdisp.c:26345-26435`).
+
+The fix represents glyph origin as the exhaustive
+`GlyphProvenance::{Buffer, Str, Redisplay}` enum.  Each row owns a compact side
+table of string occurrences containing the logical string identity and, for a
+replacement, its exact covered buffer range.  A glyph carries only a niche-sized
+row token and string index, preserving the existing 80-byte glyph size bound.
+Production writers can no longer accept a bare numeric stamp.  Cursor lookup,
+fast cursor paint, word-wrap rollback, JSON transport, routed rows, and
+incremental rebasing now consume the typed provenance; string indices never
+shift as buffer positions, while occurrence coverage shifts exactly once.
+Clipped text remainders advance their typed string origin transactionally, so
+a replacement cannot silently become buffer-mapped on the next row.
+
+TAB state is now the closed
+`DisplayTabCoordinates::{ScreenLine, ContinuedPhysicalLine}` choice backed by
+an integer `TabGridPixel` domain matching GNU.  The buffer walk owns the
+physical-line accumulator, resets it only on physical line breaks or
+truncation, and subtracts wrap-prefix width from ordinary buffer TABs.  Word
+wrap and routed-row fit checkpoints carry the complete typed row position.
+Structural row-tail reconciliation may move the renderer pen but cannot erase
+the source walk's TAB coordinate space.
+
+The replacement-stamp regression failed first with `[2, 2, 2]`; continuation
+TAB, row-tail reconciliation, and clipped-string-remainder tests each failed
+at their respective untyped seam before the fixes.  The final protocol suite
+passes 624 tests, display-runtime passes 1,015 with one skipped, layout-engine
+passes 1,956 with three skipped, and the workspace all-target check succeeds.
+A fresh release build produces a 13,616,018-byte pdump and all 1,651 Lisp byte
+compiles, and the release TUI suite passes all 908 tests.
+
+Status: FIXED.
