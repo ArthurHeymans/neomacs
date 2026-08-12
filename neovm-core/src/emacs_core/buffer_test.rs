@@ -15,8 +15,10 @@ fn get_truename_buffer_finds_the_visiting_buffer_like_gnu() {
         .expect("set buffer-file-truename");
 
     assert_eq!(
-        format_eval_result(&eval.eval_str(r#"(eq (get-truename-buffer "/work/note.txt")
-                                                 (current-buffer))"#)),
+        format_eval_result(&eval.eval_str(
+            r#"(eq (get-truename-buffer "/work/note.txt")
+                                                 (current-buffer))"#
+        )),
         "OK t",
     );
     assert_eq!(

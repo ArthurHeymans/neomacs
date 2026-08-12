@@ -161,20 +161,34 @@ fn make_lock_file_name(
     filename: &LispString,
 ) -> Result<Option<PathBuf>, Flow> {
     let filename = resolve_filename_lisp_for_eval(eval, filename);
+    if !eval.obarray.fboundp("make-lock-file-name") {
+        // GNU cannot reach lock_file before loadup defines this function —
+        // filelock.c:589 bails out under will_dump_p — so it has no analogue
+        // for this state.  Use files.el's own ".#NAME" rule rather than
+        // signalling void-function out of an ordinary edit.  This is the ONLY
+        // reason to bypass the Lisp function; an error raised BY the function
+        // is the Lisp layer's answer and must be respected.
+        return Ok(fallback_make_lock_file_name(&lisp_file_name_to_path_buf(
+            &filename,
+        )));
+    }
+    // GNU uses calln here (filelock.c:558): whatever make-lock-file-name
+    // signals propagates out of Flock_file.  `?` is the whole point — a
+    // swallowed error used to leave us inventing a ".#NAME" lock the Lisp
+    // layer had just refused to name.
     let file = Value::heap_string(filename.clone());
-    match eval.apply(Value::symbol("make-lock-file-name"), vec![file]) {
-        Ok(v) if v.is_nil() => Ok(None),
-        Ok(v) if v.is_string() => Ok(Some(lisp_file_name_to_path_buf(
-            v.as_lisp_string()
+    let lock_file_name = eval.apply(Value::symbol("make-lock-file-name"), vec![file])?;
+    match lock_file_name.kind() {
+        ValueKind::Nil => Ok(None),
+        ValueKind::String => Ok(Some(lisp_file_name_to_path_buf(
+            lock_file_name
+                .as_lisp_string()
                 .expect("ValueKind::String must carry LispString payload"),
         ))),
-        Ok(other) => Err(signal(
+        _ => Err(signal(
             LispCondition::WrongTypeArgument,
-            vec![Value::symbol("stringp"), other],
+            vec![Value::symbol("stringp"), lock_file_name],
         )),
-        Err(_) => Ok(fallback_make_lock_file_name(&lisp_file_name_to_path_buf(
-            &filename,
-        ))),
     }
 }
 

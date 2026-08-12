@@ -613,6 +613,38 @@ fn supersession_threat_is_skipped_when_we_own_the_lock_like_gnu() {
     );
 }
 
+/// GNU calls make-lock-file-name with calln (filelock.c:558), so an error
+/// from it propagates out of Flock_file.  Swallowing it is worse than the
+/// lost signal alone: we then invented a ".#NAME" lock the Lisp layer had
+/// just declined to produce.
+#[cfg(unix)]
+#[test]
+fn make_lock_file_name_errors_propagate_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.set_variable("create-lockfiles", Value::T);
+    eval.eval_str(
+        r#"(fset 'make-lock-file-name
+                 (lambda (_f) (signal 'error (list "make-lock-file-name exploded"))))"#,
+    )
+    .expect("install an exploding make-lock-file-name");
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(
+            &eval.eval_str(&format!("(lock-file \"{}\")", visited.display()))
+        ),
+        "ERR (error (\"make-lock-file-name exploded\"))",
+    );
+    assert!(
+        fs::symlink_metadata(dir.path().join(".#note.txt")).is_err(),
+        "a refused lock file name must not be second-guessed with a fallback"
+    );
+}
+
 /// GNU expands FN in exactly one place: `make_lock_file_name`
 /// (filelock.c:543, `fn = Fexpand_file_name (fn, Qnil)`).  Every other
 /// consumer — Fget_truename_buffer (:603), Fverify_visited_file_modtime
