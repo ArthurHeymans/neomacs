@@ -4235,3 +4235,57 @@ produces a 13,616,018-byte pdump and all 1,651 Lisp byte-compiles, and the exact
 package oracle remains green after rebasing onto current `main`.
 
 Status: FIXED.
+
+## 81. TTY row tails lost GNU's logical-face and physical-cell semantics -- FIXED
+
+The `helm-pydoc` workflow compared raw PTY cells after opening Python source,
+moving through Helm candidates, and running actions.  Fourteen stage/row
+comparisons disagreed: Neomacs wrote ordinary spaces where GNU left erased
+cells, while the comment line needed physically written spaces despite its
+line-end filler resolving to default SGR attributes.  One action row also put
+the split-window divider immediately after short text instead of in the final
+matrix column.
+
+GNU keeps three distinctions that the old TTY grid had flattened.  First,
+`write_row` trims only trailing `CHAR_GLYPH_SPACE_P` cells and clears the rest
+of an unknown row (`src/dispnew.c:5944-6013`); termcap `in` selects the
+mutually exclusive must-write-spaces path (`src/term.c:4683`).  Second,
+`CHAR_GLYPH_SPACE_P` requires a space in the default logical face
+(`src/dispextern.h:634-639`), so a face-filtered filler can look like default
+SGR without becoming erasable.  The TTY branch of
+`extend_face_to_end_of_line` explicitly fills the remaining text cells and
+uses the default face only for an `ends_at_zv` row
+(`src/xdisp.c:24681-24758`).  Finally, frame-matrix assembly overwrites the
+last window-matrix cell with a vertical-border glyph for a non-rightmost
+window (`src/dispnew.c:2585-2601,2664-2674`).
+
+Neomacs instead forced every initially unknown nonempty row through a
+full-width write, inferred blank semantics from terminal attributes alone,
+and represented erased and written spaces as the same `TtyCell`.  Its
+synthetic right-margin area also flowed after the used text, so a short line
+moved the divider left.
+
+The fix makes both independent cell dimensions closed and explicit:
+`BlankErase::{DefaultFace, Explicit}` records logical erase eligibility and
+`CellMaterialization::{Erased, Written}` records the physical terminal state.
+Every terminal operation is exhaustively replayed into materialization before
+the desired grid becomes current.  `BlankTailMethod::{WriteSpaces,
+EraseToEol { back_color_erase }}` combines termcap `in`, the exact encodable
+`ce`, and BCE policy so contradictory capability booleans are unrepresentable.
+Rasterization now materializes GNU's line-end filler, canonicalizes stable
+presentation face IDs at the TTY-attribute boundary, preserves published face
+fills, and anchors a synthetic right-border area at the last matrix cell.
+
+The unchanged
+`helm_pydoc_real_helm_workflows_match_gnu_terminal_and_filesystem` test failed
+first with the raw-cell and divider differences and now passes all stages
+against a freshly built release binary.  Focused red/green tests pin unknown
+row trimming, termcap `in`, written interior blanks, default-looking
+non-default faces, nonzero IDs for resolved default faces, and short-text
+divider placement.  The complete display-runtime suite passes 1,015 tests,
+display-protocol passes 620, and the frontend passes 229 with one skipped.  A
+fresh release build produces a 13,616,082-byte pdump and all 1,651 Lisp byte
+compiles.  The broad core release gate passed 8,813 tests with one unrelated
+PTY status timing failure; that test passed immediately in isolation.
+
+Status: FIXED.
