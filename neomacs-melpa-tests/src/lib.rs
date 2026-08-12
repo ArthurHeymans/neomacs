@@ -2192,6 +2192,12 @@ pub const PINYINLIB_MELPA_PIN: (&str, &str) = ("pinyinlib", "20200911.1723");
 /// 0.7 from upstream commit `31e0dc62abb2d88fa765e0ea88b919d756cc0e4f`.
 pub const PIP_REQUIREMENTS_MELPA_PIN: (&str, &str) = ("pip-requirements", "20240621.2151");
 
+/// The exact Pipenv porcelain selected for practical command-process,
+/// activation, environment-file, module-opening, shell, and minor-mode parity.
+/// MELPA built this archive from upstream commit
+/// `3af159749824c03f59176aff7f66ddd6a5785a10`.
+pub const PIPENV_MELPA_PIN: (&str, &str) = ("pipenv", "20220514.123");
+
 /// The exact Pkg Info package selected for practical library-header,
 /// defining-function, installed-package, version-precedence, MELPA-recipe,
 /// HTTP/JSON lifecycle, and diagnostic parity. This MELPA version is pinned to

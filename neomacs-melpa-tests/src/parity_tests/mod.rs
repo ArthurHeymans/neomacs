@@ -564,6 +564,7 @@ mod php_mode;
 mod php_runtime;
 mod pinyinlib;
 mod pip_requirements;
+mod pipenv;
 mod pkg_info;
 mod polymode;
 mod popup;

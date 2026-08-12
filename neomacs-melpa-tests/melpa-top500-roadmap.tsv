@@ -382,7 +382,7 @@ rank	package	downloads	status
 381	python-mode	260655	covered
 382	w3m	257225	covered
 383	git-rebase-mode	255634	covered
-384	pipenv	255250	todo
+384	pipenv	255250	covered
 385	gist	254696	todo
 386	material-theme	253079	covered
 387	helm-org-rifle	250130	todo
