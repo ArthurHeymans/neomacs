@@ -526,6 +526,9 @@ fn cursor_candle_flame_defaults() {
 fn cursor_color_cycle_defaults() {
     let c = CursorColorCycleConfig::default();
     assert_eq!(c.enabled, true);
+    // The rate is what makes default-on affordable: 24 Hz, not the display
+    // rate. Raising it re-creates the idle-present cost P6.1 removed. See
+    // `default_enabled_fields_match_product_defaults` for the full history.
     assert_eq!(c.fps.get(), 24);
     assert_eq!(c.speed, 0.5);
     assert_eq!(c.saturation, 0.8);
@@ -2338,6 +2341,28 @@ fn all_opacity_defaults_are_in_zero_to_one() {
     }
 }
 
+/// The cursor color cycle is the one effect that ships enabled, and its
+/// history is why this assertion is worth reading before changing it.
+///
+/// 1. It was default-on by accident: the Rust default said `true` while
+///    `defcustom neomacs-cursor-color-cycle nil` held the real product
+///    default, and the 2026-07-19 effects-API unification (eef2b1798)
+///    deleted the defcustom without moving the default. Every GUI session
+///    then ran a standing display-cadence demand -- 60 idle presents/s.
+/// 2. P6.1 (66834c373) flipped the Rust default to `false`, restoring
+///    opt-in and taking idle presents to 1.99/s.
+/// 3. a89774d3f re-enabled it ON PURPOSE, as a product default with no
+///    Lisp defcustom behind it, and paid for the cost the accidental
+///    version could not: `fps` defaults to 24 rather than the display rate
+///    (pinned in `cursor_color_cycle_defaults`), the demand is
+///    compositor-only, and it is withdrawn while unfocused, blinked off,
+///    or hollow. Measured on a headless two-frame idle session
+///    (2026-08-12): 11.45 planned frames/s, inside the 24 Hz cap.
+///
+/// So default-on here is a decision, not a leaked default. Flipping it in
+/// either direction is a product change: change this assertion deliberately
+/// or not at all, and if a Lisp defcustom is ever reintroduced, the default
+/// must live there rather than in both places.
 #[test]
 fn default_enabled_fields_match_product_defaults() {
     let ec = EffectsConfig::default();
