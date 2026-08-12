@@ -3717,6 +3717,13 @@ a fixture containing 2-, 3- and 4-byte sequences. The 4-byte case earns its
 place: it truncated to NUL, the one corruption that also terminates C-style
 consumers.
 
+(Correction, same day: as first committed this entry and the test's own
+docstring claimed the 4-byte case was covered when the fixture held only the
+2- and 3-byte sequences. The claim was written before the fixture was, and
+nothing checked it -- the test passed either way, because it was pinning
+whatever the fixture happened to contain. The emoji was added afterwards and
+the fixture now genuinely spans all three widths.)
+
 ### Not a cluster, and that was checked rather than assumed
 
 This arrived paired with a CRLF-on-save divergence under one "coding-system

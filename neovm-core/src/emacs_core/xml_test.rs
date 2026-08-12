@@ -483,8 +483,12 @@ fn zlib_available_p_returns_true() {
 /// compressed non-ASCII payload, which is how it stayed hidden: `jka-compr'
 /// shells out to gzip and never touches this path.
 ///
-/// The fixture is "A<U+03A9>B<U+4F60>C\n" gzipped, whose plain bytes are
-/// 65 206 169 66 228 189 160 67 10.
+/// The fixture is "A<U+03A9>B<U+4F60>C<U+1F600>D\n" gzipped, whose plain bytes
+/// are 65 206 169 66 228 189 160 67 240 159 152 128 68 10 -- deliberately one
+/// 2-byte, one 3-byte and one 4-byte sequence. The 4-byte one carries its
+/// weight: U+1F600 truncated to a byte is 0x00, and a NUL in the middle of the
+/// output is the corruption most likely to be misread later as an empty or
+/// terminated result rather than as damaged data.
 #[test]
 fn zlib_decompress_region_inserts_raw_bytes_not_decoded_characters() {
     crate::test_utils::init_test_tracing();
@@ -492,14 +496,15 @@ fn zlib_decompress_region_inserts_raw_bytes_not_decoded_characters() {
         r#"(with-temp-buffer
              (set-buffer-multibyte nil)
              (dolist (byte '(31 139 8 0 0 0 0 0 2 255 115 60 183 210 233 201
-                             222 5 206 92 0 213 52 218 0 9 0 0 0))
+                             222 5 206 31 230 207 104 112 225 2 0 78 227 62
+                             114 14 0 0 0))
                (insert byte))
              (list (zlib-decompress-region (point-min) (point-max))
                    (string-to-list (buffer-string))))"#,
     );
     assert_eq!(
-        result, "OK (t (65 206 169 66 228 189 160 67 10))",
+        result, "OK (t (65 206 169 66 228 189 160 67 240 159 152 128 68 10))",
         "every decompressed byte must survive; a multibyte-decoded reading \
-         collapses 206 169 to 169 and loses the rest"
+         collapsed 206 169 to 169, 228 189 160 to 96, and 240 159 152 128 to NUL"
     );
 }
