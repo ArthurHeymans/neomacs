@@ -1943,6 +1943,12 @@ pub const IDO_VERTICAL_MODE_MELPA_PIN: (&str, &str) = ("ido-vertical-mode", "202
 /// `4bb8009c6c6a6339a8fd7b4dea4a165af3721812`.
 pub const IMPATIENT_MODE_MELPA_PIN: (&str, &str) = ("impatient-mode", "20260426.1323");
 
+/// The exact Ledger Mode package selected for practical journal editing,
+/// completion, navigation, transaction state, occur, schedules, reports, and
+/// source-navigation parity. MELPA built this archive from upstream commit
+/// `b0e71b7e9ee612ccb0b0e5f8bfefcfddb69ae861`.
+pub const LEDGER_MODE_MELPA_PIN: (&str, &str) = ("ledger-mode", "20260727.518");
+
 /// The exact Leuven Theme package selected for practical light and dark
 /// theme lifecycle, real fontified Org/Elisp/diff rendering, display-gate,
 /// and scaling-customization parity. MELPA built this archive from upstream

@@ -370,7 +370,7 @@ rank	package	downloads	status
 369	livid-mode	276850	covered
 370	parsebib	276258	covered
 371	groovy-mode	275480	covered
-372	ledger-mode	271643	todo
+372	ledger-mode	271643	covered
 373	lsp-python-ms	271010	todo
 374	blacken	267883	todo
 375	undercover	267832	todo
