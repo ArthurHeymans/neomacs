@@ -11,8 +11,10 @@ use super::value::list_to_vec;
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::expect_args;
 use base64::Engine;
+use rustls_pki_types::{CertificateDer, pem::PemObject};
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::path::PathBuf;
 use std::sync::Arc;
 use x509_parser::prelude::{FromDer, X509Certificate, parse_x509_pem};
 
@@ -33,7 +35,56 @@ pub(crate) enum GnutlsCredentialType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct GnutlsBootParameters {
     pub(crate) credential_type: GnutlsCredentialType,
+    pub(crate) client: TlsClientParameters,
+}
+
+/// Certificate roots a TLS client must use for peer verification.
+///
+/// GNU always loads system roots before adding every `:trustfiles` entry.  The
+/// two variants keep the additive nature explicit: a Lisp trust file augments
+/// the defaults instead of replacing them or disabling verification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum TlsTrustRoots {
+    Default,
+    DefaultPlusFiles(Vec<PathBuf>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct TlsClientParameters {
     pub(crate) hostname: String,
+    pub(crate) trust_roots: TlsTrustRoots,
+}
+
+impl TlsClientParameters {
+    pub(crate) fn default_roots(hostname: String) -> Self {
+        Self {
+            hostname,
+            trust_roots: TlsTrustRoots::Default,
+        }
+    }
+}
+
+fn plist_first(items: &[Value], key: &str) -> Option<Value> {
+    items
+        .chunks_exact(2)
+        .find(|pair| pair[0].as_symbol_name() == Some(key))
+        .map(|pair| pair[1])
+}
+
+fn parse_trust_files(items: &[Value]) -> Result<Vec<PathBuf>, Flow> {
+    let mut tail = plist_first(items, ":trustfiles").unwrap_or(Value::NIL);
+    let mut files = Vec::new();
+    while tail.is_cons() {
+        let trust_file = tail.cons_car();
+        let Some(filename) = trust_file.as_lisp_string() else {
+            return Err(signal("error", vec![Value::string("Invalid trustfile")]));
+        };
+        files.push(crate::emacs_core::fileio::lisp_file_name_to_path_buf(
+            filename,
+        ));
+        tail = tail.cons_cdr();
+    }
+    Ok(files)
 }
 
 pub(crate) fn parse_gnutls_boot_parameters(
@@ -71,17 +122,7 @@ pub(crate) fn parse_gnutls_boot_parameters(
         ));
     };
 
-    let mut hostname = None;
-    let mut i = 0;
-    while i + 1 < items.len() {
-        if items[i].as_symbol_name() == Some(":hostname") {
-            hostname = Some(items[i + 1]);
-            break;
-        }
-        i += 2;
-    }
-
-    let Some(hostname) = hostname.and_then(|v| {
+    let Some(hostname) = plist_first(&items, ":hostname").and_then(|v| {
         v.as_lisp_string()
             .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
     }) else {
@@ -92,10 +133,19 @@ pub(crate) fn parse_gnutls_boot_parameters(
             )],
         ));
     };
+    let trust_files = parse_trust_files(&items)?;
+    let trust_roots = if trust_files.is_empty() {
+        TlsTrustRoots::Default
+    } else {
+        TlsTrustRoots::DefaultPlusFiles(trust_files)
+    };
 
     Ok(GnutlsBootParameters {
         credential_type,
-        hostname,
+        client: TlsClientParameters {
+            hostname,
+            trust_roots,
+        },
     })
 }
 
@@ -610,6 +660,7 @@ impl Write for TlsStream {
 #[derive(Debug)]
 pub(crate) enum TlsBackendError {
     InvalidHostname(String),
+    TrustFile { path: PathBuf, reason: String },
     Connect(String),
     UnexpectedEof,
     Io(std::io::Error),
@@ -619,6 +670,9 @@ impl std::fmt::Display for TlsBackendError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::InvalidHostname(host) => write!(f, "Invalid hostname for TLS: {host}"),
+            Self::TrustFile { path, reason } => {
+                write!(f, "Invalid TLS trust file {}: {reason}", path.display())
+            }
             Self::Connect(err) => write!(f, "TLS handshake failed: {err}"),
             Self::UnexpectedEof => f.write_str("TLS handshake: unexpected EOF"),
             Self::Io(err) => write!(f, "TLS handshake: {err}"),
@@ -631,24 +685,68 @@ impl std::fmt::Display for TlsBackendError {
 /// The process layer owns backend-neutral `TlsStream` values, while each
 /// backend handles its own handshake, certificate roots, and error conversion.
 pub(crate) trait TlsClientBackend {
-    fn connect_client(tcp_stream: TcpStream, hostname: &str) -> Result<TlsStream, TlsBackendError>;
+    fn connect_client(
+        tcp_stream: TcpStream,
+        parameters: &TlsClientParameters,
+    ) -> Result<TlsStream, TlsBackendError>;
 }
 
 /// Rustls-backed TLS transport implementation.
 pub(crate) struct RustlsBackend;
 
+pub(crate) fn rustls_root_store(
+    trust_roots: &TlsTrustRoots,
+) -> Result<rustls::RootCertStore, TlsBackendError> {
+    let mut root_store =
+        rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    let TlsTrustRoots::DefaultPlusFiles(files) = trust_roots else {
+        return Ok(root_store);
+    };
+
+    for path in files {
+        let pem = std::fs::read(path).map_err(|error| TlsBackendError::TrustFile {
+            path: path.clone(),
+            reason: error.to_string(),
+        })?;
+        let certificates = CertificateDer::pem_slice_iter(&pem)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| TlsBackendError::TrustFile {
+                path: path.clone(),
+                reason: error.to_string(),
+            })?;
+        if certificates.is_empty() {
+            return Err(TlsBackendError::TrustFile {
+                path: path.clone(),
+                reason: "no PEM certificates found".to_owned(),
+            });
+        }
+        for certificate in certificates {
+            root_store
+                .add(certificate)
+                .map_err(|error| TlsBackendError::TrustFile {
+                    path: path.clone(),
+                    reason: error.to_string(),
+                })?;
+        }
+    }
+    Ok(root_store)
+}
+
 impl TlsClientBackend for RustlsBackend {
-    fn connect_client(tcp_stream: TcpStream, hostname: &str) -> Result<TlsStream, TlsBackendError> {
-        let root_store =
-            rustls::RootCertStore::from_iter(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    fn connect_client(
+        tcp_stream: TcpStream,
+        parameters: &TlsClientParameters,
+    ) -> Result<TlsStream, TlsBackendError> {
+        let root_store = rustls_root_store(&parameters.trust_roots)?;
         let config = rustls::ClientConfig::builder()
             .with_root_certificates(root_store)
             .with_no_client_auth();
 
-        let server_name: rustls_pki_types::ServerName<'_> = hostname
+        let server_name: rustls_pki_types::ServerName<'_> = parameters
+            .hostname
             .to_owned()
             .try_into()
-            .map_err(|_| TlsBackendError::InvalidHostname(hostname.to_owned()))?;
+            .map_err(|_| TlsBackendError::InvalidHostname(parameters.hostname.clone()))?;
 
         let mut tls_conn = rustls::ClientConnection::new(Arc::new(config), server_name)
             .map_err(|err| TlsBackendError::Connect(err.to_string()))?;

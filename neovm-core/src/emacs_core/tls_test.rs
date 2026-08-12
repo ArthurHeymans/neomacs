@@ -1,8 +1,8 @@
 use super::tls::{
-    GnutlsCredentialType, TlsBackendError, TlsCloseNotifyResult, TlsPeerStatus,
+    GnutlsCredentialType, TlsBackendError, TlsCloseNotifyResult, TlsPeerStatus, TlsTrustRoots,
     certificate_details_value_pem, der_certificate_to_pem, format_x509_certificate_pem,
     gnutls_available_capabilities, gnutls_close_notify_result_value, gnutls_peer_status_to_value,
-    parse_gnutls_boot_parameters, read_rustls_process_output,
+    parse_gnutls_boot_parameters, read_rustls_process_output, rustls_root_store,
 };
 use super::value::Value;
 use crate::emacs_core::builtins::gnutls::{
@@ -17,6 +17,7 @@ use rustls::{
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime, pem::PemObject};
 use std::io::{Cursor, Write};
 use std::net::{TcpListener, TcpStream};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 const TEST_CERTIFICATE_PEM: &str = concat!(
@@ -269,6 +270,14 @@ fn backend_errors_render_boundary_messages() {
         "TLS handshake failed: bad cert"
     );
     assert_eq!(
+        TlsBackendError::TrustFile {
+            path: PathBuf::from("roots.pem"),
+            reason: "no PEM certificates found".to_owned(),
+        }
+        .to_string(),
+        "Invalid TLS trust file roots.pem: no PEM certificates found"
+    );
+    assert_eq!(
         TlsBackendError::UnexpectedEof.to_string(),
         "TLS handshake: unexpected EOF"
     );
@@ -293,7 +302,66 @@ fn gnutls_boot_parameters_parse_x509_hostname() {
     )
     .expect("valid parameters");
     assert_eq!(parameters.credential_type, GnutlsCredentialType::X509Pki);
-    assert_eq!(parameters.hostname, "example.org");
+    assert_eq!(parameters.client.hostname, "example.org");
+    assert_eq!(parameters.client.trust_roots, TlsTrustRoots::Default);
+}
+
+#[test]
+fn gnutls_boot_parameters_preserve_trust_files_as_additional_roots() {
+    let parameters = parse_gnutls_boot_parameters(
+        Value::symbol("gnutls-x509pki"),
+        Value::list(vec![
+            Value::keyword(":hostname"),
+            Value::string("example.org"),
+            Value::keyword(":trustfiles"),
+            Value::list(vec![
+                Value::string("/first.pem"),
+                Value::string("/second.pem"),
+            ]),
+        ]),
+    )
+    .expect("valid trust files");
+
+    assert_eq!(
+        parameters.client.trust_roots,
+        TlsTrustRoots::DefaultPlusFiles(vec![
+            PathBuf::from("/first.pem"),
+            PathBuf::from("/second.pem"),
+        ])
+    );
+}
+
+#[test]
+fn gnutls_boot_parameters_reject_non_string_trust_file_entries() {
+    let error = parse_gnutls_boot_parameters(
+        Value::symbol("gnutls-x509pki"),
+        Value::list(vec![
+            Value::keyword(":hostname"),
+            Value::string("example.org"),
+            Value::keyword(":trustfiles"),
+            Value::list(vec![Value::fixnum(1)]),
+        ]),
+    )
+    .unwrap_err();
+
+    match error {
+        crate::emacs_core::error::Flow::Signal(signal) => {
+            assert_eq!(signal.symbol_name(), "error");
+            assert_eq!(signal.data, vec![Value::string("Invalid trustfile")]);
+        }
+        other => panic!("expected error, got {other:?}"),
+    }
+}
+
+#[test]
+fn rustls_root_store_adds_certificates_from_explicit_trust_files() {
+    let certificate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../test/lisp/net/network-stream-resources/cert.pem");
+    let default_roots = rustls_root_store(&TlsTrustRoots::Default).expect("default roots");
+    let augmented_roots = rustls_root_store(&TlsTrustRoots::DefaultPlusFiles(vec![certificate]))
+        .expect("explicit PEM root");
+
+    assert_eq!(augmented_roots.len(), default_roots.len() + 1);
 }
 
 #[test]

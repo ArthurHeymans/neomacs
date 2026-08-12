@@ -18,8 +18,8 @@
 //! **TLS**: `gnutls-boot` upgrades a network process through the Neomacs TLS
 //! facade. The `TcpStream` is moved into the backend-neutral
 //! live-I/O owner. Read/write/send automatically use the TLS layer when present.
-//! Mozilla root certificates are used by the default rustls backend for
-//! verification.
+//! The default rustls backend uses Mozilla roots and augments them with any
+//! GNU-compatible `:trustfiles` supplied by Lisp.
 
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_min_args};
@@ -45,8 +45,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use strum::{EnumString, IntoStaticStr};
 
 use super::tls::{
-    RustlsBackend, TlsBackendError, TlsClientBackend, TlsStream, gnutls_close_notify_result_value,
-    gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
+    RustlsBackend, TlsBackendError, TlsClientBackend, TlsClientParameters, TlsStream,
+    gnutls_close_notify_result_value, gnutls_peer_status_to_value, parse_gnutls_boot_parameters,
 };
 use super::wait::ProcessOutputWaitOutcome;
 
@@ -5480,7 +5480,7 @@ impl ProcessManager {
             upgrade_process_to_tls::<RustlsBackend>(
                 self,
                 id,
-                &parameters.hostname,
+                &parameters.client,
                 "make-network-process",
                 signal_gnutls_boot_error,
             )?;
@@ -9056,7 +9056,8 @@ pub(crate) fn builtin_internal_default_process_sentinel(
 /// Upgrade a network process to TLS through the GNU-compatible `gnutls-boot` API.
 /// PROCESS must be a network process with an open TCP socket.
 /// TYPE is the credential type.  PROPLIST is a keyword plist; `:hostname`
-/// supplies SNI and certificate hostname validation.
+/// supplies SNI and certificate hostname validation, while `:trustfiles`
+/// supplies additional PEM trust anchors.
 pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("gnutls-boot", &args, 3)?;
     let id = resolve_process_object_or_wrong_type_any_in_manager(&eval.processes, &args[0])?;
@@ -9064,7 +9065,7 @@ pub(crate) fn builtin_gnutls_boot(eval: &mut super::eval::Context, args: Vec<Val
     upgrade_process_to_tls::<RustlsBackend>(
         &mut eval.processes,
         id,
-        &parameters.hostname,
+        &parameters.client,
         "gnutls-boot",
         signal_gnutls_boot_error,
     )?;
@@ -9181,10 +9182,11 @@ pub(crate) fn builtin_neomacs_open_tls_stream(
         ],
     )?;
     let id = resolve_process_or_wrong_type_any_in_manager(&eval.processes, &process)?;
+    let parameters = TlsClientParameters::default_roots(host);
     upgrade_process_to_tls::<RustlsBackend>(
         &mut eval.processes,
         id,
-        &host,
+        &parameters,
         "neomacs-open-tls-stream",
         signal_neomacs_tls_error,
     )?;
@@ -9194,7 +9196,7 @@ pub(crate) fn builtin_neomacs_open_tls_stream(
 fn upgrade_process_to_tls<B: TlsClientBackend>(
     processes: &mut ProcessManager,
     id: ProcessId,
-    host: &str,
+    parameters: &TlsClientParameters,
     operation: &str,
     map_error: fn(TlsBackendError) -> Flow,
 ) -> Result<(), Flow> {
@@ -9232,7 +9234,7 @@ fn upgrade_process_to_tls<B: TlsClientBackend>(
     };
 
     proc.gnutls_initstage = GnutlsInitStage::HandshakeTried;
-    let tls_stream = B::connect_client(tcp_stream, host).map_err(map_error)?;
+    let tls_stream = B::connect_client(tcp_stream, parameters).map_err(map_error)?;
 
     // Store the TLS stream. The poller still watches the underlying fd
     // (which is the same fd that was registered for the plain socket).
@@ -9245,9 +9247,9 @@ fn upgrade_process_to_tls<B: TlsClientBackend>(
 
 fn signal_gnutls_boot_error(err: TlsBackendError) -> Flow {
     match err {
-        TlsBackendError::InvalidHostname(_) | TlsBackendError::Connect(_) => {
-            signal("error", vec![Value::string(err.to_string())])
-        }
+        TlsBackendError::InvalidHostname(_)
+        | TlsBackendError::TrustFile { .. }
+        | TlsBackendError::Connect(_) => signal("error", vec![Value::string(err.to_string())]),
         TlsBackendError::UnexpectedEof => signal(
             "gnutls-error",
             vec![
@@ -10155,7 +10157,7 @@ fn connect_network_process_at_explicit_address(
                 upgrade_process_to_tls::<RustlsBackend>(
                     &mut eval.processes,
                     id,
-                    &parameters.hostname,
+                    &parameters.client,
                     "make-network-process",
                     signal_gnutls_boot_error,
                 )?;
@@ -11317,7 +11319,7 @@ fn connect_local_socket_process(
                 upgrade_process_to_tls::<RustlsBackend>(
                     &mut eval.processes,
                     id,
-                    &parameters.hostname,
+                    &parameters.client,
                     "make-network-process",
                     signal_gnutls_boot_error,
                 )?;
@@ -11872,7 +11874,7 @@ pub(crate) fn builtin_make_network_process(
         upgrade_process_to_tls::<RustlsBackend>(
             &mut eval.processes,
             id,
-            &parameters.hostname,
+            &parameters.client,
             "make-network-process",
             signal_gnutls_boot_error,
         )?;
