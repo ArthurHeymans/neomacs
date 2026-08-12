@@ -4172,9 +4172,6 @@ pub(crate) fn builtin_default_file_modes(args: Vec<Value>) -> EvalResult {
 /// against dynamic/default `default-directory`.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_delete_file(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler_expanding(eval, "delete-file", &args, 2)? {
-        return Ok(result);
-    }
     expect_min_args("delete-file", &args, 1)?;
     if args.len() > 2 {
         return Err(signal(
@@ -4185,8 +4182,13 @@ pub(crate) fn builtin_delete_file(eval: &mut Context, args: Vec<Value>) -> EvalR
             ],
         ));
     }
-    let filename = expect_lisp_string_strict(&args[0])?;
-    let resolved = resolve_filename_lisp_for_eval(eval, &filename);
+    expect_lisp_string_strict(&args[0])?;
+    let resolved = match expand_file_operation(eval, "delete-file", &args, 2)? {
+        ExpandedFileOperation::Handled(result) => return Ok(result),
+        ExpandedFileOperation::Local { expanded_filename } => {
+            expect_lisp_filename_string_strict(&expanded_filename)?
+        }
+    };
     delete_file_compat_path(
         &lisp_file_name_to_path_buf(&resolved),
         Value::heap_string(resolved),
@@ -4769,23 +4771,28 @@ pub(crate) fn dispatch_file_handler(
     Ok(Some(result))
 }
 
-/// Like [`dispatch_file_handler`] but mirrors GNU's per-operation preamble for a
-/// single-filename op: it runs `Fexpand_file_name` on the filename first (which
-/// dispatches the expand-file-name magic handler), then invokes the operation's
-/// handler with the expanded name and the operation's full arglist padded to
-/// `arity` with nil (GNU calls handlers with all DEFUN args, optionals nil).
-fn dispatch_file_handler_expanding(
+/// Result of GNU's expand-then-dispatch preamble for a single-filename file
+/// operation.  The local arm owns the expanded filename so a caller cannot
+/// accidentally resume with its original, unresolved argument after handler
+/// lookup says no.
+pub(crate) enum ExpandedFileOperation {
+    Handled(Value),
+    Local { expanded_filename: Value },
+}
+
+/// Mirror GNU's per-operation preamble: run `Fexpand_file_name` first (which
+/// can dispatch the expand-file-name magic handler), then invoke the operation
+/// handler with the expanded name and its full DEFUN arglist padded to `arity`.
+pub(crate) fn expand_file_operation(
     eval: &mut Context,
     operation_name: &str,
     args: &[Value],
     arity: usize,
-) -> Result<Option<Value>, super::error::Flow> {
-    let Some(first) = args.first() else {
-        return Ok(None);
-    };
-    if first.as_lisp_string().is_none() {
-        return Ok(None);
-    }
+) -> Result<ExpandedFileOperation, super::error::Flow> {
+    let first = args
+        .first()
+        .expect("file operation arity must be validated before expansion");
+    debug_assert!(first.as_lisp_string().is_some());
     let expanded = builtin_expand_file_name(eval, vec![*first, Value::NIL])?;
     let mut call = Vec::with_capacity(arity.max(args.len()));
     call.push(expanded);
@@ -4793,14 +4800,19 @@ fn dispatch_file_handler_expanding(
     while call.len() < arity {
         call.push(Value::NIL);
     }
-    dispatch_file_handler(eval, operation_name, &call)
+    Ok(
+        if let Some(result) = dispatch_file_handler(eval, operation_name, &call)? {
+            ExpandedFileOperation::Handled(result)
+        } else {
+            ExpandedFileOperation::Local {
+                expanded_filename: expanded,
+            }
+        },
+    )
 }
 
 /// `(directory-files DIRECTORY &optional FULL MATCH NOSORT COUNT)`
 pub(crate) fn builtin_directory_files(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler_expanding(eval, "directory-files", &args, 5)? {
-        return Ok(result);
-    }
     expect_min_args("directory-files", &args, 1)?;
     if args.len() > 5 {
         return Err(signal(
@@ -4811,7 +4823,13 @@ pub(crate) fn builtin_directory_files(eval: &mut Context, args: Vec<Value>) -> E
             ],
         ));
     }
-    let dir = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&args[0])?);
+    expect_lisp_string_strict(&args[0])?;
+    let dir = match expand_file_operation(eval, "directory-files", &args, 5)? {
+        ExpandedFileOperation::Handled(result) => return Ok(result),
+        ExpandedFileOperation::Local { expanded_filename } => {
+            expect_lisp_filename_string_strict(&expanded_filename)?
+        }
+    };
     let full = args.get(1).is_some_and(|v| v.is_truthy());
     let match_pattern = if let Some(val) = args.get(2) {
         if val.is_truthy() {

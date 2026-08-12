@@ -474,15 +474,24 @@ fn format_mode_string(mode: u32, meta: &fs::Metadata) -> String {
 // ---------------------------------------------------------------------------
 
 /// Context-backed variant of `directory-files-and-attributes`.
-/// Resolves relative DIRECTORY against dynamic/default `default-directory`.
+/// Expands DIRECTORY through Lisp state before handler dispatch or local I/O.
 pub(crate) fn builtin_directory_files_and_attributes(
     eval: &mut Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("directory-files-and-attributes", &args, 1, 6)?;
-    let dir = expect_lisp_string("directory-files-and-attributes", &args[0])?;
-    let dir =
-        super::fileio::resolve_filename_lisp_in_state(&eval.obarray, &[], &eval.buffers, &dir);
+    expect_lisp_string("directory-files-and-attributes", &args[0])?;
+    let dir = match super::fileio::expand_file_operation(
+        eval,
+        "directory-files-and-attributes",
+        &args,
+        6,
+    )? {
+        super::fileio::ExpandedFileOperation::Handled(result) => return Ok(result),
+        super::fileio::ExpandedFileOperation::Local { expanded_filename } => {
+            expect_lisp_string("directory-files-and-attributes", &expanded_filename)?
+        }
+    };
     let time_output = LispTimeOutput::from_context(eval)?;
     let syntax = super::builtins::search::FastStringMatchSyntax::for_current_buffer(eval);
     directory_files_and_attributes_with_dir(

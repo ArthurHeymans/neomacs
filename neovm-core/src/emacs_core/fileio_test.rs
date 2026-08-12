@@ -2639,6 +2639,36 @@ fn test_builtin_directory_files_eval_respects_default_directory() {
 }
 
 #[test]
+fn directory_files_expands_tilde_from_lisp_process_environment_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let base = std::env::current_dir()
+        .expect("current directory")
+        .join("tmp")
+        .join(format!("neovm-directory-files-home-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&base);
+    fs::create_dir_all(base.join("Projects")).expect("create HOME fixture");
+    let home = base.to_string_lossy().replace('\\', "\\\\");
+
+    let results = bootstrap_eval(&format!(
+        r#"(let ((previous-home (getenv "HOME"))
+                 (abbreviated-home-dir nil))
+             (unwind-protect
+                 (progn
+                   (setenv "HOME" "{home}")
+                   (list
+                    (directory-files "~/")
+                    (mapcar #'car (directory-files-and-attributes "~/"))))
+               (setenv "HOME" previous-home)))"#
+    ));
+
+    assert_eq!(
+        results,
+        vec![r#"OK (("." ".." "Projects") ("." ".." "Projects"))"#]
+    );
+    let _ = fs::remove_dir_all(&base);
+}
+
+#[test]
 fn test_builtin_directory_files_nonexistent_signals_file_missing() {
     crate::test_utils::init_test_tracing();
     let result = call_fileio_builtin!(
