@@ -301,6 +301,7 @@ mod compat;
 mod concurrent;
 mod cond_let;
 mod consult;
+mod corfu;
 mod counsel;
 mod counsel_projectile;
 mod csv_mode;

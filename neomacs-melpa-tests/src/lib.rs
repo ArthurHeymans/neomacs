@@ -2929,6 +2929,12 @@ pub const BERT_MELPA_PIN: (&str, &str) = ("bert", "20131117.1014");
 /// parity corpus.
 pub const COMPAT_GNU_ELPA_PIN: (&str, &str) = ("compat", "31.0.0.2");
 
+/// The exact Corfu package selected for practical in-buffer completion,
+/// candidate navigation, preview, insertion, cancellation, and extension-mode
+/// parity. MELPA built this archive from upstream commit
+/// `4b440fb30ff2fff4291af676b59da7ab22130a45`.
+pub const CORFU_MELPA_PIN: (&str, &str) = ("corfu", "20260802.2028");
+
 /// The exact Clojure Mode package selected by the practical project namespace,
 /// formatting, structural refactoring, and source-navigation parity corpus.
 pub const CLOJURE_MODE_MELPA_PIN: (&str, &str) = ("clojure-mode", "20260709.952");
