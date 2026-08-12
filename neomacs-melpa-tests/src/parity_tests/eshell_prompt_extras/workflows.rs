@@ -63,17 +63,19 @@ fn user_name_and_remote_p_are_local_in_sandbox() -> ParityBatchCase {
     ParityBatchCase::value(
         "user_name_and_remote_p_are_local_in_sandbox",
         r####"
+;; `epe-date-time' returns today, so the literal value cannot be asserted --
+;; it was pinned as "2026-08-08" and both editors started failing the moment
+;; the date rolled over, agreeing with each other and disagreeing only with
+;; the snapshot. The format is what this case can actually pin, and
+;; `:date-matches' already does; the raw value only ever added rot.
 (list :remote (epe-remote-p)
       :user (epe-user-name)
       :user-string (and (stringp (epe-user-name)) t)
-      :date (epe-date-time "%Y-%m-%d")
       :date-matches (and (string-match-p "^[0-9]\\{4\\}-[0-9]\\{2\\}-[0-9]\\{2\\}$"
                                          (epe-date-time "%Y-%m-%d"))
                          t))
 "####,
-        expect![[
-            r#"OK (:remote nil :user "melpa-test" :user-string t :date "2026-08-08" :date-matches t)"#
-        ]],
+        expect![[r#"OK (:remote nil :user "melpa-test" :user-string t :date-matches t)"#]],
     )
 }
 
