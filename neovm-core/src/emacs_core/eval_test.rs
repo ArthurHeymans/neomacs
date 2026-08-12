@@ -6680,6 +6680,34 @@ fn string_operations() {
 }
 
 #[test]
+fn empty_strings_are_canonical_per_storage_kind_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    // GNU alloc.c owns one permanent empty string for each storage kind.
+    // All zero-length construction paths return the corresponding object,
+    // while the unibyte and multibyte objects remain distinct.
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 ;; Seed the multibyte singleton, then prove the allocator's
+                 ;; private cache is itself a permanent root.
+                 (make-string 0 ?x t)
+                 (garbage-collect)
+                 (let ((unibyte (make-string 0 ?x nil))
+                       (multibyte (make-string 0 ?x t)))
+                   (list (eq "" "")
+                         (eq "" unibyte)
+                         (multibyte-string-p unibyte)
+                         (multibyte-string-p multibyte)
+                         (eq unibyte multibyte)
+                         (eq unibyte (make-string 0 ?x nil))
+                         (eq multibyte (make-string 0 ?x t)))))"#,
+        ),
+        "OK (t t nil t nil t t)"
+    );
+}
+
+#[test]
 fn and_or_cond() {
     crate::test_utils::init_test_tracing();
     assert_eq!(eval_one("(and 1 2 3)"), "OK 3");

@@ -1559,7 +1559,8 @@ fn builtin_expand_file_name_empty_name_and_empty_default_dir_returns_empty() {
     assert_eq!(both_empty.as_utf8_str(), Some(""));
 
     // GNU: `(expand-file-name "")` [nil/absent dir] => "/base/dir" — falls back
-    // to `default-directory`.  Must NOT be affected by the narrow fix above.
+    // to `default-directory`.  The canonical empty-string identity must not
+    // conflate an omitted/nil directory with an explicit empty string.
     let empty_name_nil_dir = builtin_expand_file_name(&mut eval, vec![Value::string("")]).unwrap();
     assert_eq!(empty_name_nil_dir.as_utf8_str(), Some("/base/dir"));
 

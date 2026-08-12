@@ -61,6 +61,17 @@ const SIZE_BYTE_UNIBYTE_NORMAL: i64 = -1;
 const SIZE_BYTE_UNIBYTE_RODATA: i64 = -2;
 const SIZE_BYTE_UNIBYTE_IMMOVABLE: i64 = -3;
 
+/// The two GNU string storage representations.
+///
+/// Keep this distinction typed at allocation boundaries: an empty unibyte
+/// string and an empty multibyte string are different Lisp objects even though
+/// both have zero bytes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LispStringStorageKind {
+    Unibyte,
+    Multibyte,
+}
+
 // `data` always points into owned Vec storage or an immutable mapped/static
 // region. Moving the Rust owner does not move Vec allocations, and mutation
 // requires `&mut self`.
@@ -521,6 +532,14 @@ impl LispString {
     /// Whether this is a multibyte string (`size_byte >= 0`).
     pub fn is_multibyte(&self) -> bool {
         self.size_byte >= 0
+    }
+
+    pub(crate) fn storage_kind(&self) -> LispStringStorageKind {
+        if self.is_multibyte() {
+            LispStringStorageKind::Multibyte
+        } else {
+            LispStringStorageKind::Unibyte
+        }
     }
 
     /// Raw GNU `Lisp_String.u.s.size_byte` value.

@@ -34,6 +34,7 @@ use crate::emacs_core::bytecode::Op;
 use crate::emacs_core::bytecode::chunk::GnuByteOffsetMapEntry;
 use crate::emacs_core::intern::SymId;
 use crate::emacs_core::value::{HashKey, HashTableWeakness};
+use crate::heap_types::LispStringStorageKind;
 use malachite::integer::Integer;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::alloc::{self, Layout};
@@ -2811,6 +2812,92 @@ impl HandshakeStats {
 // TaggedHeap — the main GC-managed heap
 // ---------------------------------------------------------------------------
 
+#[derive(Clone, Copy)]
+enum CanonicalEmptyString {
+    Missing,
+    Owned(TaggedValue),
+    Mapped(TaggedValue),
+}
+
+impl CanonicalEmptyString {
+    fn value(self) -> Option<TaggedValue> {
+        match self {
+            Self::Missing => None,
+            Self::Owned(value) | Self::Mapped(value) => Some(value),
+        }
+    }
+
+    fn install_owned(&mut self, value: TaggedValue) -> TaggedValue {
+        match *self {
+            Self::Missing => {
+                *self = Self::Owned(value);
+                value
+            }
+            Self::Owned(existing) | Self::Mapped(existing) => existing,
+        }
+    }
+
+    fn install_mapped(&mut self, value: TaggedValue) -> TaggedValue {
+        match *self {
+            // A restored dump is authoritative over any temporary object
+            // allocated while constructing its destination Context.
+            Self::Missing | Self::Owned(_) => {
+                *self = Self::Mapped(value);
+                value
+            }
+            // A current dump contains one canonical object per storage kind.
+            // Keeping the first also makes old non-canonical dumps deterministic.
+            Self::Mapped(existing) => existing,
+        }
+    }
+}
+
+impl Default for CanonicalEmptyString {
+    fn default() -> Self {
+        Self::Missing
+    }
+}
+
+#[derive(Default)]
+struct CanonicalEmptyStrings {
+    unibyte: CanonicalEmptyString,
+    multibyte: CanonicalEmptyString,
+}
+
+impl CanonicalEmptyStrings {
+    fn slot(&self, kind: LispStringStorageKind) -> CanonicalEmptyString {
+        match kind {
+            LispStringStorageKind::Unibyte => self.unibyte,
+            LispStringStorageKind::Multibyte => self.multibyte,
+        }
+    }
+
+    fn slot_mut(&mut self, kind: LispStringStorageKind) -> &mut CanonicalEmptyString {
+        match kind {
+            LispStringStorageKind::Unibyte => &mut self.unibyte,
+            LispStringStorageKind::Multibyte => &mut self.multibyte,
+        }
+    }
+
+    fn get(&self, kind: LispStringStorageKind) -> Option<TaggedValue> {
+        self.slot(kind).value()
+    }
+
+    fn install_owned(&mut self, kind: LispStringStorageKind, value: TaggedValue) -> TaggedValue {
+        self.slot_mut(kind).install_owned(value)
+    }
+
+    fn install_mapped(&mut self, kind: LispStringStorageKind, value: TaggedValue) -> TaggedValue {
+        self.slot_mut(kind).install_mapped(value)
+    }
+
+    fn values(&self) -> impl Iterator<Item = TaggedValue> {
+        [self.unibyte.value(), self.multibyte.value()]
+            .into_iter()
+            .flatten()
+    }
+}
+
 /// The tagged pointer heap. Owns all heap-allocated Lisp objects.
 pub struct TaggedHeap {
     /// Process-unique heap identity used by side tables that carry GC-managed
@@ -2984,6 +3071,10 @@ pub struct TaggedHeap {
     /// vectors' drops (`ObjectPage: Drop` — drops live payloads in place).
     float_arena: ObjectArena<FloatObj>,
     string_arena: ObjectArena<StringObj>,
+    /// GNU `empty_unibyte_string` / `empty_multibyte_string`, modeled per heap.
+    /// These handles are permanent runtime roots and mapped dump objects replace
+    /// temporary pre-restore owned values.
+    canonical_empty_strings: CanonicalEmptyStrings,
     vector_arena: ObjectArena<VectorObj>,
     bytecode_arena: ObjectArena<ByteCodeObj>,
     /// Interpreted closures (task 03/3b): 128B class, own arena. Page
@@ -3329,6 +3420,7 @@ impl TaggedHeap {
             cons_free_list: std::ptr::null_mut(),
             float_arena: ObjectArena::new(),
             string_arena: ObjectArena::new(),
+            canonical_empty_strings: CanonicalEmptyStrings::default(),
             vector_arena: ObjectArena::new(),
             bytecode_arena: ObjectArena::new(),
             lambda_arena: ObjectArena::new(),
@@ -3736,6 +3828,13 @@ impl TaggedHeap {
             .push(MappedStringObject::new(ptr, byte_len));
         self.allocated_count = self.allocated_count.saturating_add(1);
         self.live_bytes = self.live_bytes.saturating_add(byte_len);
+
+        let string = unsafe { &(*ptr).data };
+        if string.sbytes() == 0 {
+            let value = unsafe { TaggedValue::from_string_ptr(ptr) };
+            self.canonical_empty_strings
+                .install_mapped(string.storage_kind(), value);
+        }
     }
 
     pub fn dirty_owner_count(&self) -> usize {
@@ -4420,6 +4519,11 @@ impl TaggedHeap {
     /// string reclaimer (it `drop_in_place`s dead slots, freeing the byte
     /// storage and interval table the string owns).
     pub fn alloc_string(&mut self, s: crate::heap_types::LispString) -> TaggedValue {
+        let empty_kind = (s.sbytes() == 0).then(|| s.storage_kind());
+        if let Some(value) = empty_kind.and_then(|kind| self.canonical_empty_strings.get(kind)) {
+            return value;
+        }
+
         self.add_memory_use_count(MemoryUseCountSlot::Strings, 1);
         self.add_memory_use_count(MemoryUseCountSlot::StringChars, s.sbytes() as u64);
         let ptr = self.string_arena.alloc_slot();
@@ -4441,7 +4545,12 @@ impl TaggedHeap {
         alloc_probe::record(ptr as *const GcHeader, self.non_cons_object_addrs.len());
         self.allocated_count += 1;
         self.note_allocation_bytes(unsafe { Self::string_object_bytes(&*ptr) });
-        unsafe { TaggedValue::from_string_ptr(ptr) }
+        let value = unsafe { TaggedValue::from_string_ptr(ptr) };
+        if let Some(kind) = empty_kind {
+            self.canonical_empty_strings.install_owned(kind, value)
+        } else {
+            value
+        }
     }
 
     /// Allocate a float object from the FLOAT ARENA PAGES.
@@ -6389,6 +6498,11 @@ impl TaggedHeap {
                 self.process_registry
                     .values()
                     .map(|value| (*value, "process-registry")),
+            )
+            .chain(
+                self.canonical_empty_strings
+                    .values()
+                    .map(|value| (value, "canonical-empty-string")),
             )
             // Doomed finalizer functions not yet run must survive any cycle
             // that starts before the evaluator drains them (e.g. one queued
