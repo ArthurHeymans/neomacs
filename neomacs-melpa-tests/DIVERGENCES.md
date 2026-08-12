@@ -4145,3 +4145,44 @@ a fresh release build and Lisp byte-compilation succeed, and the unchanged
 `gitattributes_mode_package_batch` oracle is green.
 
 Status: FIXED.
+
+## 79. `line-number-at-pos` counted inaccessible text beyond a narrowed buffer -- FIXED
+
+ESS built its imenu index before narrowing the buffer, leaving the
+`healthcheck` entry as a marker beyond the later `point-max`.  The parity test
+then converted that marker to a line number while the buffer was narrowed:
+
+```elisp
+(with-temp-buffer
+  (insert "zero\none\ntwo\nthree\nfour\n")
+  (let ((after (copy-marker 20)))
+    (narrow-to-region 6 14)
+    (line-number-at-pos after)))
+;; GNU     => 3
+;; Neomacs => 4                              ; before
+```
+
+GNU resolves markers and validates explicit fixnums against the full-buffer
+`BEG` and `Z` in `Fline_number_at_pos` (`src/fns.c:6698-6717`).  It then clips
+the resolved byte position to `[BEGV_BYTE, ZV_BYTE]` for non-absolute counting
+before calling `count_lines` (`src/fns.c:6719-6729`).  Neomacs did neither half
+of that sequence correctly: it rejected fixnums outside the narrowed bounds,
+while markers bypassed that check and were counted unmodified through the
+inaccessible tail.  ESS's blank line beyond `ZV` therefore added one.
+
+The fix models the complete origin-and-endpoint policy as the exhaustive
+`LineNumberScope::{Accessible, Absolute}` enum.  Each variant constructs the
+typed `EmacsByteRange` consumed by newline counting.  Accessible scope can no
+longer select `BEGV` as its origin without also clipping the endpoint, and
+numeric validation is independently expressed in full-buffer coordinates.
+
+The public Lisp regression
+`line_number_at_pos_clips_nonabsolute_positions_to_narrowing_like_gnu` failed
+first with `(1 4 :rejected :rejected 1 :rejected)` instead of GNU's
+`(1 3 1 3 1 1)`, covering markers on both sides, explicit fixnums, and the
+safe absolute-before-`BEGV` control.  All focused line-number tests pass, the
+complete `neovm-core` gate passes 8,818 tests with 51 skipped, a fresh release
+build, pdump, and all 1,515 Lisp byte-compiles succeed, and the unchanged
+`ess_package_batch` oracle is green.
+
+Status: FIXED.
