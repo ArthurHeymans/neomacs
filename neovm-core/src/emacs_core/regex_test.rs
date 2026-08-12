@@ -2372,6 +2372,33 @@ fn re_search_backward_finds_nullable_match_at_point() {
 }
 
 #[test]
+fn re_search_backward_word_begin_respects_search_origin_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.eval_str("(progn (erase-buffer) (insert \"one two three\") (goto-char 9))")
+        .expect("prepare public Lisp search fixture");
+
+    let word_begin = eval
+        .eval_str("(re-search-backward \" \\\\<\" nil t)")
+        .expect("search for a word beginning");
+    assert_eq!(word_begin.as_int(), Some(4));
+
+    eval.eval_str("(goto-char 9)")
+        .expect("restore search origin");
+    let word_boundary = eval
+        .eval_str("(re-search-backward \" \\\\b\" nil t)")
+        .expect("search for a word boundary");
+    assert_eq!(word_boundary.as_int(), Some(8));
+
+    eval.eval_str("(goto-char 9)")
+        .expect("restore search origin");
+    let symbol_begin = eval
+        .eval_str("(re-search-backward \" \\\\_<\" nil t)")
+        .expect("search for a symbol beginning");
+    assert_eq!(symbol_begin.as_int(), Some(4));
+}
+
+#[test]
 fn re_search_backward_log_line_loop_progresses() {
     crate::test_utils::init_test_tracing();
     let mut buf = make_test_buffer(

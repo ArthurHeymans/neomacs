@@ -1311,6 +1311,31 @@ fn differential_overrides_restore_nested_and_unwound_state() {
     assert!(!fastmap_force_disabled());
 }
 
+#[test]
+fn backward_syntax_assertions_share_gnu_stop_semantics_across_engines() {
+    crate::test_utils::init_test_tracing();
+    let syntax = DefaultSyntaxLookup;
+    let text = b"one two three";
+
+    for engine in [
+        RegexEngineOverride::Backtracker,
+        RegexEngineOverride::PikeVm,
+    ] {
+        for (pattern, expected_start) in [(" \\<", 3), (" \\_<", 3), (" \\b", 7)] {
+            let compiled = regex_compile(pattern, false, false).expect("compile assertion pattern");
+            assert!(
+                compiled.pike_eligible,
+                "{pattern:?} must exercise both engines"
+            );
+            let (start, registers) = with_regex_engine_override(engine, || {
+                re_search(&compiled, text, 8, -8, &syntax, 8).expect("backward match")
+            });
+            assert_eq!(start, expected_start, "{engine:?} {pattern:?}");
+            assert_eq!(registers.start[0], expected_start as i64);
+        }
+    }
+}
+
 // ---- targeted unit tests: Pike vs backtracker byte-exactness -------------
 
 /// Assert both engines agree on a concrete (pattern, text) case.

@@ -4195,6 +4195,62 @@ fn assert_sym_end(
     prev_sym && !curr_sym
 }
 
+/// Zero-width syntax assertions and their GNU match-limit protocol.
+///
+/// GNU's `wordbeg` and `symbeg` opcodes use the ordinary `PREFETCH`, so
+/// inspecting the current character fails when `d == stop`.  Boundaries and
+/// end assertions use `PREFETCH_NOLIMIT` (or only inspect the previous
+/// character).  Keeping that distinction in one exhaustive enum evaluator
+/// prevents the backtracking and Pike engines from choosing independently.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SyntaxAssertion {
+    WordBoundary,
+    NotWordBoundary,
+    WordBeginning,
+    WordEnd,
+    SymbolBeginning,
+    SymbolEnd,
+}
+
+impl SyntaxAssertion {
+    fn from_regex_op(op: RegexOp) -> Self {
+        match op {
+            RegexOp::WordBound => Self::WordBoundary,
+            RegexOp::NotWordBound => Self::NotWordBoundary,
+            RegexOp::WordBeg => Self::WordBeginning,
+            RegexOp::WordEnd => Self::WordEnd,
+            RegexOp::SymBeg => Self::SymbolBeginning,
+            RegexOp::SymEnd => Self::SymbolEnd,
+            _ => unreachable!("{op:?} is not a zero-width syntax assertion"),
+        }
+    }
+}
+
+#[inline]
+fn evaluate_syntax_assertion(
+    assertion: SyntaxAssertion,
+    text: &[u8],
+    d: usize,
+    stop: usize,
+    target_multibyte: bool,
+    syntax: &dyn SyntaxLookup,
+) -> bool {
+    match assertion {
+        SyntaxAssertion::WordBoundary => assert_word_boundary(text, d, target_multibyte, syntax),
+        SyntaxAssertion::NotWordBoundary => {
+            !assert_word_boundary(text, d, target_multibyte, syntax)
+        }
+        SyntaxAssertion::WordBeginning => {
+            d < stop && assert_word_beg(text, d, target_multibyte, syntax)
+        }
+        SyntaxAssertion::WordEnd => assert_word_end(text, d, target_multibyte, syntax),
+        SyntaxAssertion::SymbolBeginning => {
+            d < stop && assert_sym_beg(text, d, target_multibyte, syntax)
+        }
+        SyntaxAssertion::SymbolEnd => assert_sym_end(text, d, target_multibyte, syntax),
+    }
+}
+
 /// Match a compiled pattern against input text.
 ///
 /// This is the core matching function, equivalent to GNU's `re_match_2_internal`.
@@ -4681,38 +4737,20 @@ fn re_match_internal(
                 }
             }
 
-            RegexOp::WordBound => {
-                if !assert_word_boundary(text, d, target_multibyte, syntax) {
-                    try_fail!('main_loop);
-                }
-            }
-
-            RegexOp::NotWordBound => {
-                if assert_word_boundary(text, d, target_multibyte, syntax) {
-                    try_fail!('main_loop);
-                }
-            }
-
-            RegexOp::WordBeg => {
-                if !assert_word_beg(text, d, target_multibyte, syntax) {
-                    try_fail!('main_loop);
-                }
-            }
-
-            RegexOp::WordEnd => {
-                if !assert_word_end(text, d, target_multibyte, syntax) {
-                    try_fail!('main_loop);
-                }
-            }
-
-            RegexOp::SymBeg => {
-                if !assert_sym_beg(text, d, target_multibyte, syntax) {
-                    try_fail!('main_loop);
-                }
-            }
-
-            RegexOp::SymEnd => {
-                if !assert_sym_end(text, d, target_multibyte, syntax) {
+            RegexOp::WordBound
+            | RegexOp::NotWordBound
+            | RegexOp::WordBeg
+            | RegexOp::WordEnd
+            | RegexOp::SymBeg
+            | RegexOp::SymEnd => {
+                if !evaluate_syntax_assertion(
+                    SyntaxAssertion::from_regex_op(op),
+                    text,
+                    d,
+                    stop,
+                    target_multibyte,
+                    syntax,
+                ) {
                     try_fail!('main_loop);
                 }
             }
@@ -5024,6 +5062,7 @@ fn pike_add_thread(
     start_caps: PikeCaps,
     text: &[u8],
     d: usize,
+    stop: usize,
     point: usize,
     target_multibyte: bool,
     num_regs: usize,
@@ -5111,33 +5150,20 @@ fn pike_add_thread(
                 }
             }
 
-            RegexOp::WordBound => {
-                if assert_word_boundary(text, d, target_multibyte, syntax) {
-                    stack.push((pc + 1, caps));
-                }
-            }
-            RegexOp::NotWordBound => {
-                if !assert_word_boundary(text, d, target_multibyte, syntax) {
-                    stack.push((pc + 1, caps));
-                }
-            }
-            RegexOp::WordBeg => {
-                if assert_word_beg(text, d, target_multibyte, syntax) {
-                    stack.push((pc + 1, caps));
-                }
-            }
-            RegexOp::WordEnd => {
-                if assert_word_end(text, d, target_multibyte, syntax) {
-                    stack.push((pc + 1, caps));
-                }
-            }
-            RegexOp::SymBeg => {
-                if assert_sym_beg(text, d, target_multibyte, syntax) {
-                    stack.push((pc + 1, caps));
-                }
-            }
-            RegexOp::SymEnd => {
-                if assert_sym_end(text, d, target_multibyte, syntax) {
+            RegexOp::WordBound
+            | RegexOp::NotWordBound
+            | RegexOp::WordBeg
+            | RegexOp::WordEnd
+            | RegexOp::SymBeg
+            | RegexOp::SymEnd => {
+                if evaluate_syntax_assertion(
+                    SyntaxAssertion::from_regex_op(op),
+                    text,
+                    d,
+                    stop,
+                    target_multibyte,
+                    syntax,
+                ) {
                     stack.push((pc + 1, caps));
                 }
             }
@@ -5288,6 +5314,7 @@ fn pike_match_inner(
         init_caps,
         text,
         d,
+        stop,
         point,
         target_multibyte,
         num_regs,
@@ -5350,6 +5377,7 @@ fn pike_match_inner(
                     caps,
                     text,
                     next_d,
+                    stop,
                     point,
                     target_multibyte,
                     num_regs,
