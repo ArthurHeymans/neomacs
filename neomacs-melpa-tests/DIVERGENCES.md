@@ -2399,8 +2399,51 @@ out from under Magit's still-running sentinels, so the prompt and the dead-
 process error are two faces of one race between the teardown and Magit's
 cleanup. The fix belongs in the case -- let Magit finish its own reaping, or
 wait for the stderr pipe to close before tearing down -- not in a harness-level
-timeout or retry. Until then this stays a known GNU-side environmental flake,
-recorded here rather than hidden behind a retry.
+timeout or retry.
+
+**The GNU-side residue is CLOSED as of 2026-08-12** (`fe693ec6a`), and closing
+it corrected the analysis above in one place. The reason neither lever moved the
+number is that the two failure modes are not merely "two faces of one race" in
+the loose sense -- they are ordered, and the prompt runs FIRST. Magit's blame
+sentinel fires during the scenario body, long before teardown, and in batch the
+prompt reads EOF and exits 255 immediately. The session is already dead by the
+time the teardown would run. So fixing the teardown alone could not help (it was
+never reached), and removing the prompt alone could not either (it only unmasked
+the teardown race underneath). Both legs had to go together, which is exactly
+what the 6-of-10 plateau was reporting.
+
+Both legs now do, in the case:
+
+- The scenario clears `process-query-on-exit-flag` on the processes it started.
+  That is the switch GNU itself provides for this -- `process-kill-buffer-query-
+  function` (`lisp/subr.el:3542`) prompts only when the flag is set -- so the
+  prompt is answered rather than suppressed, it stays symmetric across both
+  editors, and the case can still see prompts it ought to see. This is what the
+  rejected `kill-buffer-query-functions` lever should have been.
+- Teardown settles before deleting: it waits for the scenario's processes to
+  exit AND for the sentinels those exits queued to run, deadline-bounded so a
+  genuinely stuck process fails the case instead of hanging it, and only then
+  deletes what remains.
+
+That took the rate from 7/10 to 1/10 and exposed a third mode underneath, which
+was a pre-existing bug in the case's own waiter rather than a new one. Magit
+blames in two phases -- a quickstart process whose sentinel installs a full-file
+process, whose sentinel installs the overlays and clears `magit-blame-process`
+-- and between the phases the process object is dead while the variable is not
+yet nil. Waiting on `process-live-p` could therefore return before a single
+overlay existed, tripping the case's own `blame process completed without
+deterministic overlays` guard. Cleared-to-nil is the actual completion signal;
+liveness had been standing in as a hang guard, and a deadline does that job
+without firing on a merely slow run.
+
+Rates, 10x serial under an identical 48-spinner load: 7/10 fail before, 1/10
+after the settle, 0/10 after the waiter fix. Ambient load on the host was
+falling across the sequence, so the pre-change code was re-run under the later
+conditions as a control and still failed at least 2 of 8 (partial run). Idle,
+the baseline failed 0/10 -- load is what exposes this, which is why it read as
+environmental for so long.
+
+Status: FIXED.
 
 ## 55. `default-text-properties` does not reach a buffer position whose interval says nothing — NOT A DIVERGENCE (stale)
 
@@ -3272,5 +3315,66 @@ deliberately -- unlike `normal-erase-is-backspace` no guard keys off its
 presence, and it is what an oracle-shaped bare `Context` needs to answer like a
 booted GNU session -- but it is the same invented-default family and should be
 retired the day the bootstrap stores it for real.
+
+Status: FIXED.
+
+## 70. `package-install-file` locks the file it installs, so a shared cached tar cannot be installed twice at once -- NOT A DIVERGENCE (harness defect), FIXED
+
+Recorded because the signal looks like a neomacs bug and is not one. Two
+`ac-html-*` scenarios that share a dependency raced, and the loser died in
+batch with `file-locked` on the cached `web-completion-data` tar. GNU behaves
+identically here; the defect was ours, in the harness, and the signal was
+correct.
+
+Reproduced deterministically -- 3 of 3 cold runs -- by removing the `ready`
+markers for `ac-html-angular` and `ac-html-bootstrap` and letting nextest run
+them in parallel. The backtrace leaves nothing to infer:
+
+```
+Error: file-locked (".../web-completion-data-20160318.848.tar"
+                    "melpa-test@Matrix (pid 3819635)"
+                    "Cannot resolve lock conflict in batch mode")
+  signal(file-locked ...)
+  ask-user-about-lock(".../web-completion-data-20160318.848.tar" ...)
+  lock-buffer(".../web-completion-data-20160318.848.tar")
+  set-visited-file-name(".../web-completion-data-20160318.848.tar" t)
+  package-install-file(".../web-completion-data-20160318.848.tar")
+```
+
+`package-install-file` VISITS what it installs. It calls
+`set-visited-file-name`, and `tar-mode` then touches the modified bit -- a
+consequence `package.el` documents in its own comment at
+`lisp/emacs-lisp/package.el:2316-2338` -- so Emacs takes a lock beside whatever
+path it was handed. Both plans were handed the same path inside
+`tmp/melpa/source-package-cache`, so both locked the same tar.
+
+The `file-locked` signal is correct and is NOT suppressed. It became visible
+only because the filelock work made `ask-user-about-lock` signal in batch
+instead of being swallowed (entries 63 and 68-69); the collision itself
+predates that and was previously silent.
+
+This was also not a gap in the existing harness locking, which is worth
+recording because it is the wrong place to look. `prepare_cached_source_artifact_with_tools`
+already serializes BUILDING an artifact under an `fs4` lock keyed by package,
+version, revision and tool revisions, and that lock was working. What was
+missing is that INSTALLING from an artifact also writes next to it, so a cache
+that is only safe to share for reading was being shared for writing.
+
+Fixed by staging each artifact into a private `install/` directory under the
+plan's own cache root and installing from the copy, so the shared artifact
+cache is read-only for consumers and only the builder writes it, under its
+existing lock. This removes the shared mutable path rather than scheduling
+access to it. Locking every artifact in a plan was considered and rejected:
+plans overlap partially, so that introduces a cross-plan lock ordering and a
+deadlock surface to buy nothing.
+
+Cold-race rate over the `ac-html` family: 3/3 fail before, 0/5 after, with zero
+`file-locked` signals and no lock files left behind in the shared cache. Unlike
+entry 54's magit race this one needs no load to reproduce -- both processes
+visit the same path every time.
+
+The general rule, for anyone adding a scenario: never hand
+`package-install-file` (or anything else that visits a file) a path inside a
+shared cache. Give it a private copy.
 
 Status: FIXED.
