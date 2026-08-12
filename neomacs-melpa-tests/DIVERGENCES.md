@@ -3840,6 +3840,20 @@ and then encodes the result through `encode_coding_object`, whose
 `consume_chars` still expands the newline, so the leg survives. It is now
 carried onto the base codec name in `run_coding_with_conversion_hook`.
 
+THE DECODE SIDE HAD THE SAME DEFECT, and fixing encode alone exposed it. The
+editorconfig parity case writes the file and then reads it back; with the CR
+finally being written, `utf-8-with-signature-dos` read back as `"café\15\n"`.
+Our decode collapsed CR LF in only four of the ten codec arms, and that had
+stayed invisible for exactly as long as the encode side never produced a CR to
+collapse. GNU is symmetric here too: `decode_coding` (`src/coding.c:7481`) runs
+the decoder and then calls `decode_eol` once, outside every `decode_coding_*`.
+So the decode pass is now also single, and it is placed AFTER the decoder
+rather than before it -- in UTF-16 a CR is the byte pair 0D 00, so collapsing
+CR LF in the SOURCE bytes would never find it. The name is spent up front here
+too, which matters more on this side than on the encode side: collapsing is
+NOT idempotent (`"\r\r\n\n"` collapses twice to `"\n\n"`), so a second pass is
+corruption, not a no-op.
+
 The trap in this fix is the reverse of the bug: convert up front and leave the
 old call sites in place, and the coding systems that were CORRECT start
 emitting CR CR LF. So the pin is ONE assertion over ALL 31 measured rows --
@@ -3848,6 +3862,13 @@ emitting CR CR LF. So the pin is ONE assertion over ALL 31 measured rows --
 the rows that were already right are what stops it over-applying; the `-unix`
 row stops it applying at all. Every expected value was taken by running the
 probe under GNU 31.0.90, not derived -- a derived expectation would have
-pinned our bug.
+pinned our bug. A second assertion in the same test round-trips all 19 dos/mac
+systems back through decode, which is the pin the decode half needed and did
+not have.
+
+The integration check is the editorconfig parity case
+`charset_and_crlf_rules_control_the_exact_bytes_written_on_save`, which asserts
+both halves at once: the bytes on disk (239 187 191 99 97 102 195 169 13 10)
+and the text read back ("café\n").
 
 Status: FIXED.
