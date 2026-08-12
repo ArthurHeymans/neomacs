@@ -7,6 +7,7 @@ fn snapshot_serializes_stable_json_shape() {
             presents: 100,
             scene_commits: 90,
             wakeups: 500,
+            deadline_serviced_redraws: 20,
             last_commit_to_present_us: 1200,
             max_commit_to_present_us: 8000,
             frame_p50_us: 2000,
@@ -33,6 +34,7 @@ fn snapshot_serializes_stable_json_shape() {
     assert_eq!(v["frame"]["last_commit_to_present_us"], 1200);
     assert_eq!(v["frame"]["demand_reasons"]["cursor_animation"], 12);
     assert_eq!(v["frame"]["unattributed_presents"], 0);
+    assert_eq!(v["frame"]["deadline_serviced_redraws"], 20);
     assert_eq!(v["gc"]["collections"], 7);
     assert_eq!(v["gc"]["cons_cells"], 200);
 }

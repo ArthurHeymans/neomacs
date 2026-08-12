@@ -304,7 +304,25 @@ impl RenderApp {
         // demand: a fully idle loop publishes nothing and is never woken by
         // the counters.
         super::frame_stats::publish_window_demand(self.frame_coordinator.window_demand());
-        let mut deadline = self.frame_coordinator.next_wake_deadline();
+        // Service the schedule before arming the wait. A deadline that has
+        // come due is work, not a timeout: GNU's timer_check runs every ripe
+        // timer and only then yields the pselect wait
+        // (keyboard.c:4911-4945 -> process.c:5490). Demands whose producer
+        // does not re-declare them every pass -- the bounded Expose retry
+        // finish_frame arms after a present produces nothing -- have no other
+        // path from deadline to frame, and arming an elapsed WaitUntil returns
+        // immediately, so the loop would spin at zero wait forever.
+        let service = self.frame_coordinator.service_deadlines(now);
+        for id in &service.redraw {
+            super::frame_stats::count(&super::frame_stats::DEADLINE_SERVICED_REDRAWS);
+            if let Some(window_state) = self.frame_windows.get(id.0) {
+                window_state.request_redraw();
+            }
+        }
+        let mut deadline = match service.wake {
+            super::frame_sched::LoopWake::At(at) => Some(at.instant()),
+            super::frame_sched::LoopWake::Idle => None,
+        };
 
         // GLib service wake (frame scheduling plan, invariant 1 carve-out):
         // WPE WebKit needs its thread-default GMainContext pumped for IPC,

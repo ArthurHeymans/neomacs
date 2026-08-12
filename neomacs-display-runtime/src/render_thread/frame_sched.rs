@@ -333,6 +333,49 @@ pub(crate) enum PacingAction {
     WakeAt(Instant),
 }
 
+/// An instant the loop may block until, proven strictly later than the moment
+/// the schedule was serviced.
+///
+/// The field is private and the only constructor is
+/// [`FrameCoordinator::service_deadlines`], which first turns every ripe
+/// deadline into work. That makes "arm a wait for a deadline that has already
+/// elapsed" unrepresentable rather than merely discouraged: the event loop has
+/// no way to obtain an `Instant` from the coordinator without servicing first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FutureDeadline(Instant);
+
+impl FutureDeadline {
+    pub(crate) fn instant(self) -> Instant {
+        self.0
+    }
+}
+
+/// How long the event loop may sleep once the schedule has been serviced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LoopWake {
+    /// No frame deadline: as far as frame demand is concerned the loop may
+    /// block indefinitely and wait for an external event.
+    Idle,
+    /// Wake at this instant, which is strictly in the future.
+    At(FutureDeadline),
+}
+
+/// The result of servicing the schedule for one event-loop pass: the redraw
+/// requests the ripe deadlines turned into, and the next wake.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct DeadlineService {
+    /// Windows needing exactly one platform redraw request, in window order.
+    pub redraw: Vec<NativeWindowId>,
+    /// The loop's next wake deadline.
+    pub wake: LoopWake,
+}
+
+impl Default for LoopWake {
+    fn default() -> Self {
+        LoopWake::Idle
+    }
+}
+
 /// Presentation outcome, fed back as scheduling input.
 // Interface variants/fields defined by the scheduling plan; consumed as
 // later stages migrate effects onto the coordinator.
@@ -561,6 +604,12 @@ impl FrameCoordinator {
                 Self::drive(ws)
             }
             Cadence::At(at) if at <= now => {
+                // This declaration consumes the deadline, so an earlier
+                // record of the same reason must go with it: left behind it
+                // is permanently ripe, and every pass would re-arm an
+                // already-elapsed wake. Same hazard the MaxRate
+                // expired-anchor branch below clears explicitly.
+                ws.clear_schedule(demand.reason);
                 ws.due.merge(demand.invalidation, true, demand.reason);
                 Self::drive(ws)
             }
@@ -647,29 +696,9 @@ impl FrameCoordinator {
 
         // Fold every ripe scheduled deadline into the due work. A very late
         // tick consumes the whole backlog as one plan; MaxRate anchors
-        // advance by whole periods so the phase grid survives.
-        let frame_time = tick.frame_time;
-        let mut i = 0;
-        while i < ws.scheduled.len() {
-            if ws.scheduled[i].at <= frame_time {
-                let ScheduledDemand {
-                    reason,
-                    at,
-                    invalidation,
-                    period,
-                } = ws.scheduled.swap_remove(i);
-                ws.due.merge(invalidation, true, reason);
-                if let Some(period) = period {
-                    // A scheduled record owns the phase it represents. Advance
-                    // from that deadline rather than consulting mutable anchor
-                    // state that may have been reconciled independently.
-                    let next = next_max_rate_phase(at, frame_time, period);
-                    ws.set_anchor(reason, next, period);
-                }
-            } else {
-                i += 1;
-            }
-        }
+        // advance by whole periods (from the scheduled record's own deadline,
+        // not from mutable anchor state) so the phase grid survives.
+        Self::collect_ripe(ws, tick.frame_time);
 
         if !ws.eligible() {
             // Retain demand; never present while ineligible.
@@ -868,10 +897,68 @@ impl FrameCoordinator {
         PacingAction::Sleep
     }
 
-    /// Earliest scheduled deadline across eligible windows: the event loop's
-    /// WaitUntil aggregation input. None means the loop may Wait indefinitely
-    /// as far as frame demand is concerned.
-    pub(crate) fn next_wake_deadline(&self) -> Option<Instant> {
+    /// Fold every deadline that has come due into the window's due work,
+    /// exactly as [`begin_frame`](Self::begin_frame) does for a tick.
+    fn collect_ripe(ws: &mut WindowSched, now: Instant) -> bool {
+        let mut ripe = false;
+        let mut i = 0;
+        while i < ws.scheduled.len() {
+            if ws.scheduled[i].at <= now {
+                let ScheduledDemand {
+                    reason,
+                    at,
+                    invalidation,
+                    period,
+                } = ws.scheduled.swap_remove(i);
+                ws.due.merge(invalidation, true, reason);
+                if let Some(period) = period {
+                    ws.set_anchor(reason, next_max_rate_phase(at, now, period), period);
+                }
+                ripe = true;
+            } else {
+                i += 1;
+            }
+        }
+        ripe
+    }
+
+    /// Service the schedule for one event-loop pass and report the next wake.
+    ///
+    /// Every ripe deadline becomes due work and one platform redraw request
+    /// before a wake is reported, so the returned [`LoopWake`] is either
+    /// `Idle` or an instant strictly after `now`. This is GNU's rule:
+    /// `timer_check` runs every ripe timer and loops until the next fire time
+    /// is non-zero (keyboard.c:4911-4945) before that value is handed to
+    /// `pselect` as the wait (process.c:5490). A deadline used as a timeout
+    /// without being run is a zero wait, and a zero wait every pass is a busy
+    /// spin.
+    ///
+    /// This is the only way to obtain a wake instant from the coordinator:
+    /// [`FutureDeadline`]'s field is private, so the "arm what you have not
+    /// serviced" mistake cannot be written.
+    pub(crate) fn service_deadlines(&mut self, now: Instant) -> DeadlineService {
+        let mut redraw = Vec::new();
+        for (id, ws) in &mut self.windows {
+            if Self::collect_ripe(ws, now) && Self::drive(ws) == PacingAction::RequestRedraw {
+                redraw.push(*id);
+            }
+        }
+        let wake = match self.next_wake_deadline() {
+            // Post-condition of the fold above: nothing at or before `now`
+            // survives in an eligible window's schedule.
+            Some(at) => {
+                debug_assert!(at > now, "a serviced deadline cannot still be ripe");
+                LoopWake::At(FutureDeadline(at))
+            }
+            None => LoopWake::Idle,
+        };
+        DeadlineService { redraw, wake }
+    }
+
+    /// Earliest scheduled deadline across eligible windows. Private: the event
+    /// loop reaches it only through [`service_deadlines`](Self::service_deadlines),
+    /// which guarantees the value is not already elapsed.
+    fn next_wake_deadline(&self) -> Option<Instant> {
         self.windows
             .values()
             .filter(|ws| ws.eligible())
@@ -913,6 +1000,16 @@ impl FrameCoordinator {
             .get(&id)
             .map(|ws| ws.request_pending)
             .unwrap_or(false)
+    }
+}
+
+#[cfg(test)]
+impl FrameCoordinator {
+    /// Test-only view of the raw earliest deadline. Runtime code cannot reach
+    /// it: only [`FrameCoordinator::service_deadlines`] yields a wake, and only
+    /// after the ripe deadlines have become work.
+    pub(super) fn next_wake_deadline_unserviced(&self) -> Option<Instant> {
+        self.next_wake_deadline()
     }
 }
 
