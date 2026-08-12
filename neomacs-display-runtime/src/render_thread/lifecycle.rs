@@ -299,6 +299,11 @@ impl RenderApp {
         // immediately on its first frame after idle.
         let now = std::time::Instant::now();
         self.declare_frame_demands(now);
+        // Publish per-window active demand for diagnostics (plan:
+        // Observability). Runs only on loop wakes that already reconcile
+        // demand: a fully idle loop publishes nothing and is never woken by
+        // the counters.
+        super::frame_stats::publish_window_demand(self.frame_coordinator.window_demand());
         let mut deadline = self.frame_coordinator.next_wake_deadline();
 
         // GLib service wake (frame scheduling plan, invariant 1 carve-out):

@@ -881,18 +881,29 @@ impl FrameCoordinator {
 
     /// Active demand reasons for diagnostics ("why is this window still
     /// rendering?").
-    // Exposed to the diagnostic snapshot when GUI-test tooling consumes it
-    // (plan: Observability); covered by the scheduler tests.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn active_reasons(&self, id: NativeWindowId) -> Vec<DemandReason> {
-        let Some(ws) = self.windows.get(&id) else {
-            return Vec::new();
-        };
-        let mut reasons = ws.due.reasons;
-        for s in &ws.scheduled {
-            reasons.insert(s.reason);
-        }
-        reasons.iter().collect()
+        self.window_demand()
+            .find(|(wid, _)| *wid == id)
+            .map(|(_, set)| set.iter().collect())
+            .unwrap_or_default()
+    }
+
+    /// Every tracked window with its currently-active demand reasons: due
+    /// one-shots plus standing scheduled deadlines (plan: Observability,
+    /// "active demand reasons" per native window). The render loop publishes
+    /// this into the per-window diagnostics counters after each demand
+    /// reconciliation; it is a read of existing state and schedules nothing.
+    pub(crate) fn window_demand(
+        &self,
+    ) -> impl Iterator<Item = (NativeWindowId, DemandReasonSet)> + '_ {
+        self.windows.iter().map(|(id, ws)| {
+            let mut reasons = ws.due.reasons;
+            for s in &ws.scheduled {
+                reasons.insert(s.reason);
+            }
+            (*id, reasons)
+        })
     }
 
     /// Whether a redraw request is outstanding for this window.

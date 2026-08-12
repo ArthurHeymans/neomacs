@@ -1,4 +1,4 @@
-use crate::metrics::{FrameMetrics, GcMetrics, MetricsSnapshot};
+use crate::metrics::{FrameMetrics, GcMetrics, MetricsSnapshot, WindowFrameMetrics};
 
 #[test]
 fn snapshot_serializes_stable_json_shape() {
@@ -16,6 +16,8 @@ fn snapshot_serializes_stable_json_shape() {
             retained_static_builds: 3,
             demand_reasons: [("cursor_animation".to_owned(), 12)].into_iter().collect(),
             unattributed_presents: 0,
+            active_reasons: Vec::new(),
+            windows: std::collections::BTreeMap::new(),
         },
         gc: GcMetrics {
             collections: 7,
@@ -33,6 +35,49 @@ fn snapshot_serializes_stable_json_shape() {
     assert_eq!(v["frame"]["unattributed_presents"], 0);
     assert_eq!(v["gc"]["collections"], 7);
     assert_eq!(v["gc"]["cons_cells"], 200);
+}
+
+// Schema extension (frame-scheduling plan, Observability: "counters per
+// native window and process-wide totals ... active demand reasons"): the
+// per-window map and the process-wide active-reason list are part of the
+// pinned /metrics contract alongside the cumulative process totals.
+#[test]
+fn snapshot_serializes_per_window_demand_shape() {
+    let snap = MetricsSnapshot {
+        frame: FrameMetrics {
+            active_reasons: vec!["cursor_animation".to_owned()],
+            windows: [(
+                1u64,
+                WindowFrameMetrics {
+                    active_reasons: vec!["cursor_animation".to_owned()],
+                    demand_reasons: [("cursor_animation".to_owned(), 4)].into_iter().collect(),
+                },
+            )]
+            .into_iter()
+            .collect(),
+            ..FrameMetrics::default()
+        },
+        gc: GcMetrics::default(),
+    };
+    let v: serde_json::Value = serde_json::to_value(&snap).unwrap();
+    // Process-wide union of currently-active reasons.
+    assert_eq!(
+        v["frame"]["active_reasons"],
+        serde_json::json!(["cursor_animation"])
+    );
+    // Per-native-window attribution, keyed by the scheduler's window id.
+    assert_eq!(
+        v["frame"]["windows"]["1"]["active_reasons"],
+        serde_json::json!(["cursor_animation"])
+    );
+    assert_eq!(
+        v["frame"]["windows"]["1"]["demand_reasons"]["cursor_animation"],
+        4
+    );
+    // The extension leaves the default shape present-and-empty, not absent.
+    let empty: serde_json::Value = serde_json::to_value(&MetricsSnapshot::default()).unwrap();
+    assert!(empty["frame"]["windows"].is_object());
+    assert!(empty["frame"]["active_reasons"].is_array());
 }
 
 #[test]

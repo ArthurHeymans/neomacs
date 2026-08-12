@@ -40,6 +40,28 @@ pub struct FrameMetrics {
     /// nonzero value means a present escaped attribution.
     #[serde(default)]
     pub unattributed_presents: u64,
+    /// Demand reasons currently active on any window: the process-wide union
+    /// of every window's `active_reasons` ("why is anything still
+    /// rendering?"). Empty at idle.
+    #[serde(default)]
+    pub active_reasons: Vec<String>,
+    /// Per-native-window demand attribution, keyed by the scheduler's window
+    /// id (the Emacs frame id once adopted; 0 for the primary window before
+    /// adoption). Design-doc Observability: "counters per native window and
+    /// process-wide totals ... active demand reasons".
+    #[serde(default)]
+    pub windows: BTreeMap<u64, WindowFrameMetrics>,
+}
+
+/// One native window's demand attribution.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct WindowFrameMetrics {
+    /// Demand reasons currently keeping this window rendering. Empty for an
+    /// idle window.
+    pub active_reasons: Vec<String>,
+    /// Planned frames attributed per demand reason for this window; reasons
+    /// with a zero count are omitted.
+    pub demand_reasons: BTreeMap<String, u64>,
 }
 
 /// Estimate a latency percentile from a bucketed histogram, returning the upper

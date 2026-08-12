@@ -856,3 +856,57 @@ fn an_ambient_24_hz_demand_attributes_every_frame_it_drives() {
     }
     assert_eq!(attributed, 10);
 }
+
+#[test]
+fn per_window_attribution_names_the_blinking_window_only() {
+    // Design-doc Observability: "counters per native window and process-wide
+    // totals ... active demand reasons". A window with a standing cursor-blink
+    // deadline reports cursor_animation as an active per-window reason; an
+    // idle sibling window reports none and accrues no per-window plan counts.
+    use super::super::frame_stats;
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    // Window 1: blink deadline (the shape declare_frame_demands submits).
+    c.submit_demand(
+        win(1),
+        FrameDemand {
+            invalidation: Invalidation::CompositeOnly {
+                layers: LayerMask::CURSOR_EFFECTS,
+            },
+            cadence: Cadence::At(now + ms(500)),
+            reason: DemandReason::CursorAnimation,
+        },
+        now,
+    );
+    // Window 2 exists (tracked by the coordinator) but has no demand.
+    c.set_focused(win(2), true);
+
+    frame_stats::publish_window_demand(c.window_demand());
+    let snap = frame_stats::window_snapshots();
+    let by_id = |id: u64| snap.iter().find(|w| w.window == id).unwrap();
+    assert_eq!(by_id(1).active_reasons, vec!["cursor_animation"]);
+    assert_eq!(by_id(2).active_reasons, Vec::<&str>::new());
+
+    // The blink deadline fires; the planned frame is attributed per-window.
+    let plan = c.begin_frame(win(1), tick_at(now + ms(500)));
+    assert!(plan.reasons.contains(DemandReason::CursorAnimation));
+    frame_stats::count_plan(win(1), &plan);
+    let snap = frame_stats::window_snapshots();
+    let by_id = |id: u64| snap.iter().find(|w| w.window == id).unwrap();
+    assert_eq!(
+        by_id(1).demand_reasons[DemandReason::CursorAnimation.index()],
+        1
+    );
+    assert_eq!(by_id(2).demand_reasons.iter().sum::<u64>(), 0);
+
+    // Once the demand is consumed, republishing clears the active reason.
+    frame_stats::publish_window_demand(c.window_demand());
+    let snap = frame_stats::window_snapshots();
+    assert!(snap.iter().all(|w| w.active_reasons.is_empty()));
+
+    // A removed window's per-window stats do not outlive it.
+    c.remove_window(win(2));
+    frame_stats::publish_window_demand(c.window_demand());
+    let snap = frame_stats::window_snapshots();
+    assert!(snap.iter().all(|w| w.window != 2));
+}

@@ -3199,10 +3199,34 @@ fn run_gui_evaluator_worker(
 /// Reads only process-global published atomics (frame scheduling + GC), so it
 /// is safe to call from the diagnostics thread with no VM access.
 fn build_metrics_snapshot() -> neomacs_diagnostics::MetricsSnapshot {
-    use neomacs_diagnostics::metrics::{FrameMetrics, GcMetrics};
+    use neomacs_diagnostics::metrics::{FrameMetrics, GcMetrics, WindowFrameMetrics};
 
     let f = neomacs_display_runtime::frame_metrics_snapshot();
     let g = neovm_core::emacs_core::gc_stats::snapshot();
+    // Per-native-window demand attribution plus the process-wide union of
+    // active reasons (design doc, Observability).
+    let per_window = neomacs_display_runtime::window_frame_metrics_snapshot();
+    let active_union: std::collections::BTreeSet<&str> = per_window
+        .iter()
+        .flat_map(|w| w.active_reasons.iter().copied())
+        .collect();
+    let windows = per_window
+        .iter()
+        .map(|w| {
+            (
+                w.window,
+                WindowFrameMetrics {
+                    active_reasons: w.active_reasons.iter().map(|r| (*r).to_owned()).collect(),
+                    demand_reasons: neomacs_display_runtime::DEMAND_REASON_NAMES
+                        .iter()
+                        .zip(w.demand_reasons.iter())
+                        .filter(|(_, count)| **count > 0)
+                        .map(|(name, count)| ((*name).to_owned(), *count))
+                        .collect(),
+                },
+            )
+        })
+        .collect();
 
     neomacs_diagnostics::MetricsSnapshot {
         frame: FrameMetrics {
@@ -3234,6 +3258,8 @@ fn build_metrics_snapshot() -> neomacs_diagnostics::MetricsSnapshot {
                 .map(|(name, count)| ((*name).to_owned(), *count))
                 .collect(),
             unattributed_presents: f.unattributed_present_attempts,
+            active_reasons: active_union.iter().map(|r| (*r).to_owned()).collect(),
+            windows,
         },
         gc: GcMetrics {
             collections: g.collections,

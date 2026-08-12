@@ -477,7 +477,7 @@ impl RenderApp {
                     // OS-delivered RedrawRequested for a surface the
                     // compositor is not showing.
                     if !self.frame_coordinator.is_eligible(sched_id) {
-                        super::frame_stats::count_plan(&plan);
+                        super::frame_stats::count_plan(sched_id, &plan);
                         return;
                     }
                     if !plan.should_present {
@@ -490,7 +490,7 @@ impl RenderApp {
                         // than rendered unattributed.
                         plan = self.frame_coordinator.platform_redraw_plan(sched_id, tick);
                     }
-                    super::frame_stats::count_plan(&plan);
+                    super::frame_stats::count_plan(sched_id, &plan);
                     if plan.reasons.is_empty() {
                         super::frame_stats::count(
                             &super::frame_stats::UNATTRIBUTED_PRESENT_ATTEMPTS,

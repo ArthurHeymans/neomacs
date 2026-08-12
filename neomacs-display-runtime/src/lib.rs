@@ -53,7 +53,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const CORE_BACKEND: &str = "rust";
 
 pub use render_thread::frame_stats::{
-    DEMAND_REASON_NAMES, FRAME_TIME_BUCKET_UPPER_US, FrameSchedSnapshot,
+    DEMAND_REASON_NAMES, FRAME_TIME_BUCKET_UPPER_US, FrameSchedSnapshot, WindowFrameSnapshot,
 };
 
 #[cfg(test)]
@@ -66,6 +66,16 @@ mod frame_metrics_pub_test;
 /// thread's state.
 pub fn frame_metrics_snapshot() -> FrameSchedSnapshot {
     render_thread::frame_stats::snapshot()
+}
+
+/// Read the per-native-window demand attribution (currently-active demand
+/// reasons and per-reason planned-frame counts), sorted by window id.
+///
+/// Safe to call from any thread: the render thread publishes into the shared
+/// map only on event-loop wakes it was already performing, so sampling this
+/// never wakes or blocks the render loop at idle.
+pub fn window_frame_metrics_snapshot() -> Vec<WindowFrameSnapshot> {
+    render_thread::frame_stats::window_snapshots()
 }
 
 /// Read GPU power preference from `NEOMACS_GPU` environment variable.
