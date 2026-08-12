@@ -3662,3 +3662,74 @@ which would break every ordinary wrap.
   is likely inert, but it is a real difference.
 
 Status: FIXED.
+
+## 72. `zlib-decompress-region` decoded its output instead of inserting raw bytes -- FIXED
+
+Silent data corruption in a primitive. Every multibyte sequence in a
+decompressed payload collapsed to a single truncated byte, with no error
+anywhere.
+
+Same gzip input, same buffer:
+
+```elisp
+(with-temp-buffer
+  (set-buffer-multibyte nil)
+  (insert-file-contents-literally "omega.gz")   ; "A<U+03A9>B<U+4F60>C<U+1F600>D\n"
+  (zlib-decompress-region (point-min) (point-max))
+  (string-to-list (buffer-string)))
+;; GNU     => (65 206 169 66 228 189 160 67 240 159 152 128 68 10)   14 bytes
+;; neomacs => (65 169 66 96 67 0 68 10)                               8 bytes  (before)
+```
+
+The pattern names the cause exactly: each character survives as its codepoint
+truncated to one byte. U+03A9 -> 0xA9 (169), U+4F60 -> 0x60 (96), U+1F600 ->
+0x00 (NUL). We built the replacement string with a constructor that counts
+characters as multibyte text, so a 14-byte payload became an 8-character string
+and each character was then narrowed to a byte on its way into the unibyte
+buffer.
+
+GNU does not decide anything here. `Fzlib_decompress_region` inserts with
+`insert_from_gap (decompressed, decompressed, 0, false)`
+(`src/decompress.c:311`) -- the SAME count passed as both nchars and nbytes,
+justified by its own comment a few lines up: "This is a unibyte buffer, so
+character positions and bytes are the same." The function errors out on a
+multibyte buffer before reaching that point, so bytes-as-characters is the only
+possible reading.
+
+BLAST RADIUS, which is larger than the parity case that found it: any
+in-process gzip decompression of non-ASCII content was wrong, and wrong
+QUIETLY -- no signal, no truncation error, just different bytes. It stayed
+invisible because `jka-compr` shells out to the gzip binary for
+`insert-file-contents`, so ordinary `.gz` file visiting never touched this
+path. Only callers that decompress in-process -- `url.el` fetching a
+gzip-encoded response, which is how org_cliplink tripped it -- saw the damage.
+
+Fixed at the type level rather than by correcting the call. The inflate output
+now leaves `decompress_auto` wrapped in `InflatedBytes`, whose only exit is
+`into_unibyte_string` (`neovm-core/src/emacs_core/zlib.rs`). The wrong
+constructor is no longer reachable from that value, which matters because the
+wrong reading produced no error -- a future caller reaching for a decoding
+constructor by habit would have reintroduced exactly this bug just as silently.
+
+Pinned by `zlib_decompress_region_inserts_raw_bytes_not_decoded_characters`
+(`neovm-core/src/emacs_core/xml_test.rs`), which asserts the full byte list of
+a fixture containing 2-, 3- and 4-byte sequences. The 4-byte case earns its
+place: it truncated to NUL, the one corruption that also terminates C-style
+consumers.
+
+### Not a cluster, and that was checked rather than assumed
+
+This arrived paired with a CRLF-on-save divergence under one "coding-system
+cluster" hypothesis. Tested explicitly and FALSE: that one is EOL conversion
+being skipped by the signature-prefixed and UTF-16 ENCODERS (`utf-8-dos` and
+`latin-1-dos` are correct; `utf-8-with-signature-dos` and `utf-16le-dos` drop
+the CR), which shares no code with decompression and is filed separately. This
+is the second cluster hypothesis in one day to look obvious and be wrong; the
+first was a shared stdin-EOF signature that turned out unique to one suite.
+
+Note for anyone re-running the suites: fixing this does NOT turn org_cliplink
+green. That suite has a second, unrelated failure -- a gnutls handshake
+rejecting the test server's certificate as UnknownIssuer where GNU accepts it
+-- also filed separately.
+
+Status: FIXED.

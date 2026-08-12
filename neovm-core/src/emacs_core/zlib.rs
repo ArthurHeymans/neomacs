@@ -80,7 +80,7 @@ pub(crate) fn builtin_zlib_decompress_region(
 
     match decompressed {
         Some((data, 0)) => {
-            let replacement = LispString::from_emacs_bytes(data);
+            let replacement = data.into_unibyte_string();
             let change = text_change_for_lisp_string_replacement_in_manager(
                 &ctx.buffers,
                 buffer_id,
@@ -98,7 +98,7 @@ pub(crate) fn builtin_zlib_decompress_region(
             Ok(Value::T)
         }
         Some((data, remaining)) if allow_partial => {
-            let replacement = LispString::from_emacs_bytes(data);
+            let replacement = data.into_unibyte_string();
             let change = text_change_for_lisp_string_replacement_in_manager(
                 &ctx.buffers,
                 buffer_id,
@@ -124,9 +124,33 @@ pub(crate) fn builtin_zlib_decompress_region(
     }
 }
 
+/// What inflate produced: bytes, and only bytes.
+///
+/// `zlib-decompress-region` is defined only for unibyte buffers -- GNU errors
+/// otherwise -- and inserts its output with `insert_from_gap (decompressed,
+/// decompressed, 0, false)` (src/decompress.c:311), passing the SAME count as
+/// both nchars and nbytes because, in its own words, "this is a unibyte
+/// buffer, so character positions and bytes are the same".
+///
+/// The wrapper exists because the wrong reading is silent. Handing these bytes
+/// to a constructor that counts characters as multibyte text collapses each
+/// UTF-8 sequence to one character and then narrows it to one byte: U+03A9
+/// arrives as the lone byte A9 and a four-byte emoji arrives as NUL, with no
+/// error anywhere. Keeping the payload in a type whose only exit is
+/// [`Self::into_unibyte_string`] means a future caller cannot reach for a
+/// decoding constructor by accident.
+struct InflatedBytes(Vec<u8>);
+
+impl InflatedBytes {
+    /// The only conversion: one byte in, one character out.
+    fn into_unibyte_string(self) -> LispString {
+        LispString::from_unibyte(self.0)
+    }
+}
+
 /// Auto-detect compression format and decompress.
 /// Tries gzip first (most common in Emacs), then raw zlib.
-fn decompress_auto(compressed: &[u8], allow_partial: bool) -> Option<(Vec<u8>, usize)> {
+fn decompress_auto(compressed: &[u8], allow_partial: bool) -> Option<(InflatedBytes, usize)> {
     if let Some(result) = decompress_streaming_auto(compressed, allow_partial) {
         return Some(result);
     }
@@ -136,13 +160,18 @@ fn decompress_auto(compressed: &[u8], allow_partial: bool) -> Option<(Vec<u8>, u
         && compressed[1] == 0x8b
         && let Ok(data) = decompress_gzip(compressed)
     {
-        return Some((data, 0));
+        return Some((InflatedBytes(data), 0));
     }
     // Try zlib format.
-    decompress_zlib(compressed).ok().map(|data| (data, 0))
+    decompress_zlib(compressed)
+        .ok()
+        .map(|data| (InflatedBytes(data), 0))
 }
 
-fn decompress_streaming_auto(compressed: &[u8], allow_partial: bool) -> Option<(Vec<u8>, usize)> {
+fn decompress_streaming_auto(
+    compressed: &[u8],
+    allow_partial: bool,
+) -> Option<(InflatedBytes, usize)> {
     if compressed.len() >= 2 && compressed[0] == 0x1f && compressed[1] == 0x8b {
         return None;
     }
@@ -154,14 +183,14 @@ fn decompress_streaming_auto(compressed: &[u8], allow_partial: bool) -> Option<(
         output.reserve(16 * 1024);
         match decoder.decompress_vec(compressed, &mut output, FlushDecompress::None) {
             Ok(Status::StreamEnd) => {
-                return Some((output, 0));
+                return Some((InflatedBytes(output), 0));
             }
             Ok(Status::Ok) | Ok(Status::BufError) => {
                 if decoder.total_in() == before_in && decoder.total_out() == before_out {
                     if allow_partial && !output.is_empty() {
                         let remaining =
                             compressed.len().saturating_sub(decoder.total_in() as usize);
-                        return Some((output, remaining));
+                        return Some((InflatedBytes(output), remaining));
                     }
                     return None;
                 }
@@ -169,7 +198,7 @@ fn decompress_streaming_auto(compressed: &[u8], allow_partial: bool) -> Option<(
             Err(_) => {
                 if allow_partial && !output.is_empty() {
                     let remaining = compressed.len().saturating_sub(decoder.total_in() as usize);
-                    return Some((output, remaining));
+                    return Some((InflatedBytes(output), remaining));
                 }
                 return None;
             }

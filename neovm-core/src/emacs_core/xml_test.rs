@@ -470,3 +470,36 @@ fn zlib_available_p_returns_true() {
         other => panic!("unexpected flow: {other:?}"),
     }
 }
+
+/// `zlib-decompress-region` inserts RAW BYTES, never decoded characters.
+///
+/// GNU inserts the inflate output with `insert_from_gap (decompressed,
+/// decompressed, 0, false)` (src/decompress.c:311) -- nchars EQUALS nbytes,
+/// because the function is defined only for unibyte buffers, where "character
+/// positions and bytes are the same" (its own comment). Treating the output as
+/// multibyte text collapses each multibyte sequence to a single character and
+/// then narrows it to one byte, so `Omega' (U+03A9, CE A9) arrives as the lone
+/// byte A9 and a 4-byte emoji arrives as NUL. That is silent corruption of any
+/// compressed non-ASCII payload, which is how it stayed hidden: `jka-compr'
+/// shells out to gzip and never touches this path.
+///
+/// The fixture is "A<U+03A9>B<U+4F60>C\n" gzipped, whose plain bytes are
+/// 65 206 169 66 228 189 160 67 10.
+#[test]
+fn zlib_decompress_region_inserts_raw_bytes_not_decoded_characters() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(with-temp-buffer
+             (set-buffer-multibyte nil)
+             (dolist (byte '(31 139 8 0 0 0 0 0 2 255 115 60 183 210 233 201
+                             222 5 206 92 0 213 52 218 0 9 0 0 0))
+               (insert byte))
+             (list (zlib-decompress-region (point-min) (point-max))
+                   (string-to-list (buffer-string))))"#,
+    );
+    assert_eq!(
+        result, "OK (t (65 206 169 66 228 189 160 67 10))",
+        "every decompressed byte must survive; a multibyte-decoded reading \
+         collapses 206 169 to 169 and loses the rest"
+    );
+}
