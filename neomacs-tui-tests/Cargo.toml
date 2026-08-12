@@ -16,6 +16,4 @@ publish = false
 vt100 = "0.16"
 pty-process = "0.5"
 libc = { workspace = true }
-
-[target.'cfg(unix)'.dev-dependencies]
 tempfile.workspace = true

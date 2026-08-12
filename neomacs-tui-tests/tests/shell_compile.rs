@@ -2,9 +2,7 @@
 
 mod support;
 use neomacs_tui_tests::*;
-use std::fs;
 use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
 use support::*;
 
 // ── Tests ──────────────────────────────────────────────────
@@ -258,15 +256,11 @@ fn shell_command_on_region_with_prefix_replaces_region_via_mbar() {
 
 #[test]
 fn shell_command_on_region_without_prefix_displays_output_buffer_via_mbar() {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time after unix epoch")
-        .as_nanos();
-    let path = std::env::temp_dir().join(format!(
-        "neomacs-shell-command-region-output-{}-{unique}.txt",
-        std::process::id()
-    ));
-    fs::write(&path, "alpha\nbeta\n").expect("write shell command region fixture");
+    let path = TuiTempFile::new(
+        "neomacs-shell-command-region-output-",
+        "input.txt",
+        "alpha\nbeta\n",
+    );
     let file_arg = path.display().to_string();
     let mut gnu = TuiSession::gnu_emacs(&file_arg);
     let mut neo = TuiSession::neomacs(&file_arg);
@@ -324,22 +318,20 @@ fn shell_command_on_region_without_prefix_displays_output_buffer_via_mbar() {
         &neo,
         3,
     );
-    fs::remove_file(path).expect("remove shell command region fixture");
 }
 
 #[test]
 fn shell_via_mx_runs_interactive_command_in_comint_buffer() {
-    let init = std::env::temp_dir().join("neomacs-common-usage-shell.el");
-    fs::write(
-        &init,
+    let init = TuiTempFile::new(
+        "neomacs-common-usage-shell-",
+        "init.el",
         ";;; -*- lexical-binding: t; -*-\n\
          (setq explicit-shell-file-name \"/bin/sh\"\n\
                explicit-sh-args '(\"-i\"))\n\
          (setenv \"ENV\" nil)\n\
          (setenv \"BASH_ENV\" nil)\n\
          (setenv \"PS1\" \"tui-sh> \")\n",
-    )
-    .expect("write shell init file");
+    );
     let extra_args = format!("-l {}", init.display());
     let (mut gnu, mut neo) = boot_pair(&extra_args);
 

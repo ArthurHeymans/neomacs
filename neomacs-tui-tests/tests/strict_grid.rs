@@ -72,9 +72,7 @@ const SAMPLE_EL: &str = "\
 /// allow-list — the precise, shrinking parity backlog.
 #[test]
 fn strict_font_locked_elisp_matches_gnu() {
-    let path =
-        std::env::temp_dir().join(format!("neomacs-strict-fontlock-{}.el", std::process::id()));
-    std::fs::write(&path, SAMPLE_EL).expect("write fixture .el");
+    let path = TuiTempFile::new("neomacs-strict-fontlock-", "sample.el", SAMPLE_EL);
     let path_str = path.to_str().expect("utf8 path").to_string();
 
     // Open the file at startup (`-Q <file>`): emacs-lisp-mode + font-lock.
@@ -124,8 +122,6 @@ fn strict_font_locked_elisp_matches_gnu() {
             face(neo.screen())
         );
     }
-    let _ = std::fs::remove_file(&path);
-
     // The logical-layout contract: the file must render char-for-char like GNU.
     assert_eq!(
         n_char, 0,

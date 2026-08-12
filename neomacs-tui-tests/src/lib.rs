@@ -23,8 +23,8 @@
 //!   face attributes and normalises product names.
 
 use std::io::{Read, Write};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 mod launch;
@@ -99,56 +99,138 @@ fn wait_for_pty_writable(pty: &pty_process::blocking::Pty, timeout: Duration) {
     }
 }
 
+/// A test-owned temporary directory that removes its whole tree on drop.
+///
+/// Keep this value alive for as long as any editor may access a path beneath
+/// it. Returning a bare [`PathBuf`] from a fixture constructor loses that
+/// ownership fact and leaves the directory behind after the test exits.
+pub struct TuiTempDirectory {
+    directory: tempfile::TempDir,
+}
+
+impl TuiTempDirectory {
+    /// Create an isolated fixture root with a recognizable name prefix.
+    pub fn new(prefix: &str) -> Self {
+        let directory = tempfile::Builder::new()
+            .prefix(prefix)
+            .tempdir()
+            .expect("create TUI fixture temp directory");
+        Self { directory }
+    }
+
+    pub fn path(&self) -> &Path {
+        self.directory.path()
+    }
+}
+
+impl Deref for TuiTempDirectory {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        self.path()
+    }
+}
+
+impl AsRef<Path> for TuiTempDirectory {
+    fn as_ref(&self) -> &Path {
+        self.path()
+    }
+}
+
+/// A test-owned file whose private parent directory is removed on drop.
+///
+/// The wrapper dereferences to the file path, while retaining the directory
+/// guard that makes cleanup unconditional during ordinary test unwinding.
+pub struct TuiTempFile {
+    _directory: TuiTempDirectory,
+    path: PathBuf,
+}
+
+impl TuiTempFile {
+    pub fn new(prefix: &str, file_name: impl AsRef<Path>, contents: impl AsRef<[u8]>) -> Self {
+        let directory = TuiTempDirectory::new(prefix);
+        let path = directory.join(file_name);
+        std::fs::write(&path, contents).expect("write TUI temporary fixture file");
+        Self {
+            _directory: directory,
+            path,
+        }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Deref for TuiTempFile {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        self.path()
+    }
+}
+
+impl AsRef<Path> for TuiTempFile {
+    fn as_ref(&self) -> &Path {
+        self.path()
+    }
+}
+
+/// Whether a session directory belongs to the harness or its caller.
+///
+/// The enum couples the path with its cleanup policy. An owned directory
+/// cannot be represented without its RAII guard, while a borrowed directory
+/// can never accidentally enter the cleanup path.
+enum SessionDirectory {
+    Owned(TuiTempDirectory),
+    Borrowed(PathBuf),
+}
+
+impl SessionDirectory {
+    fn for_launch(path: Option<PathBuf>, kind: &str, name: &str) -> Self {
+        match path {
+            Some(path) => Self::Borrowed(path),
+            None => {
+                let safe_name = name
+                    .chars()
+                    .map(|ch| {
+                        if ch.is_ascii_alphanumeric() {
+                            ch.to_ascii_lowercase()
+                        } else {
+                            '-'
+                        }
+                    })
+                    .collect::<String>();
+                Self::Owned(TuiTempDirectory::new(&format!(
+                    "neomacs-tui-test-{kind}-{safe_name}-"
+                )))
+            }
+        }
+    }
+
+    fn path(&self) -> &Path {
+        match self {
+            Self::Owned(directory) => directory.path(),
+            Self::Borrowed(path) => path,
+        }
+    }
+}
+
 /// A TUI editor session running inside an isolated PTY.
 pub struct TuiSession {
     pty: pty_process::blocking::Pty,
     _child: std::process::Child,
     parser: vt100::Parser,
     recent_output: Vec<u8>,
-    home: PathBuf,
-    owned_dirs: Vec<PathBuf>,
+    home: SessionDirectory,
+    // Keep TMPDIR isolated per session: interactive Org chooses one of only
+    // 1,000 babel-stable names there and cleans it from kill-emacs-hook. A
+    // shared pool makes parallel/repeated tests contend on that finite space.
+    _tmp: SessionDirectory,
     pub name: String,
 }
 
 impl TuiSession {
-    fn unique_session_dir(kind: &str, name: &str) -> PathBuf {
-        static NEXT_SESSION_ID: AtomicU64 = AtomicU64::new(1);
-
-        let session_id = NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed);
-        std::env::temp_dir().join(format!(
-            "neomacs-tui-test-{kind}-{}-{}-{}",
-            std::process::id(),
-            name.to_ascii_lowercase(),
-            session_id
-        ))
-    }
-
-    fn unique_home_dir(name: &str) -> PathBuf {
-        let home = Self::unique_session_dir("home", name);
-        let emacs_d = home.join(".emacs.d");
-        std::fs::create_dir_all(&emacs_d).expect("create isolated tui test HOME");
-        home
-    }
-
-    /// A per-session `TMPDIR`, isolated even for the sessions that keep the
-    /// real `HOME`.
-    ///
-    /// Emacs takes `temporary-file-directory` from `TMPDIR`, and some Lisp
-    /// claims a name there from a FIXED pool and never releases it: org's
-    /// `org-babel-temporary-stable-directory` (ob-core.el) draws
-    /// `(random 1000)`, retries while `babel-stable-N` exists, and leaves the
-    /// directory behind. With one shared `TMPDIR` the suite exhausts that
-    /// 1000-name pool over enough runs, and from then on the retry loop
-    /// cannot terminate: every interactive org buffer hangs until the test's
-    /// readiness deadline expires. (It is guarded by `unless noninteractive`,
-    /// so a batch probe of the same Emacs loads org fine and clears it
-    /// wrongly.) A per-session directory keeps the pool fresh.
-    fn unique_tmp_dir(name: &str) -> PathBuf {
-        let tmp = Self::unique_session_dir("tmp", name);
-        std::fs::create_dir_all(&tmp).expect("create isolated tui test TMPDIR");
-        tmp
-    }
-
     /// Spawn `cmd` (e.g. `"emacs -nw -Q"`) in a new PTY.
     pub fn spawn(cmd: &str, name: &str) -> Self {
         Self::spawn_launch(TuiLaunch::from(cmd), name)
@@ -179,18 +261,11 @@ impl TuiSession {
 
         let supplied_home = launch.environment_value("HOME").map(PathBuf::from);
         let supplied_tmp = launch.environment_value("TMPDIR").map(PathBuf::from);
-        let home = supplied_home
-            .clone()
-            .unwrap_or_else(|| Self::unique_home_dir(name));
-        let tmp = supplied_tmp
-            .clone()
-            .unwrap_or_else(|| Self::unique_tmp_dir(name));
-        let mut owned_dirs = Vec::new();
-        if supplied_home.is_none() {
-            owned_dirs.push(home.clone());
-        }
-        if supplied_tmp.is_none() {
-            owned_dirs.push(tmp.clone());
+        let home = SessionDirectory::for_launch(supplied_home, "home", name);
+        let tmp = SessionDirectory::for_launch(supplied_tmp, "tmp", name);
+        if matches!(&home, SessionDirectory::Owned(_)) {
+            std::fs::create_dir_all(home.path().join(".emacs.d"))
+                .expect("create isolated tui test HOME");
         }
 
         let TuiLaunch {
@@ -210,8 +285,8 @@ impl TuiSession {
             .env("LINES", ROWS.to_string())
             // Prevent user config from interfering while also isolating
             // concurrent TUI tests from one another.
-            .env("HOME", &home)
-            .env("TMPDIR", &tmp);
+            .env("HOME", home.path())
+            .env("TMPDIR", tmp.path());
         for var in [
             "RUST_LOG",
             "NEOMACS_LOG_FILE",
@@ -242,7 +317,7 @@ impl TuiSession {
             parser,
             recent_output: Vec::new(),
             home,
-            owned_dirs,
+            _tmp: tmp,
             name: name.to_string(),
         }
     }
@@ -501,7 +576,7 @@ impl TuiSession {
 
     /// Return the isolated HOME directory used for this session.
     pub fn home_dir(&self) -> &std::path::Path {
-        &self.home
+        self.home.path()
     }
 }
 
@@ -540,9 +615,6 @@ impl Drop for TuiSession {
         // Best-effort kill
         let _ = self._child.kill();
         let _ = self._child.wait();
-        for directory in &self.owned_dirs {
-            let _ = std::fs::remove_dir_all(directory);
-        }
     }
 }
 
@@ -642,6 +714,41 @@ mod tests {
         drop(session);
 
         assert!(sentinel.is_file(), "TUI session deleted caller-owned HOME");
+    }
+
+    #[test]
+    fn structured_launch_never_deletes_a_caller_owned_tmpdir() {
+        let external_tmp = tempfile::tempdir().expect("create caller-owned TMPDIR");
+        let sentinel = external_tmp.path().join("keep-me");
+        std::fs::write(&sentinel, "owned by caller").expect("write TMPDIR sentinel");
+        let launch = TuiLaunch::new("sh")
+            .args(["-c", "printf done"])
+            .env("TMPDIR", external_tmp.path().as_os_str());
+
+        let mut session = TuiSession::spawn_launch(launch, "EXTERNAL-TMPDIR");
+        session.read(Duration::from_secs(1));
+        drop(session);
+
+        assert!(
+            sentinel.is_file(),
+            "TUI session deleted caller-owned TMPDIR"
+        );
+    }
+
+    #[test]
+    fn structured_launch_removes_harness_owned_directories() {
+        let mut session = TuiSession::spawn_launch(
+            TuiLaunch::new("sh").args(["-c", "printf done"]),
+            "OWNED-DIRECTORIES",
+        );
+        session.read(Duration::from_secs(1));
+        let home = session.home.path().to_path_buf();
+        let tmp = session._tmp.path().to_path_buf();
+
+        drop(session);
+
+        assert!(!home.exists(), "harness-owned HOME survived session drop");
+        assert!(!tmp.exists(), "harness-owned TMPDIR survived session drop");
     }
 
     #[test]

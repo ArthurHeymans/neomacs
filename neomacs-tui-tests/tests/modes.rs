@@ -2,23 +2,21 @@
 
 mod support;
 use neomacs_tui_tests::*;
-use std::fs;
 use std::time::Duration;
 use support::*;
 
 // ── Local helpers ───────────────────────────────────────────
 
 fn boot_fido_vertical_pair() -> (TuiSession, TuiSession) {
-    let init = std::env::temp_dir().join("neomacs-common-usage-fido-vertical.el");
-    fs::write(
-        &init,
+    let init = TuiTempFile::new(
+        "neomacs-common-usage-fido-vertical-",
+        "init.el",
         ";;; -*- lexical-binding: t; -*-\n\
          (setq max-mini-window-height 8\n\
                resize-mini-windows t\n\
                icomplete-prospects-height 8)\n\
          (fido-vertical-mode 1)\n",
-    )
-    .expect("write fido vertical init file");
+    );
     let extra_args = format!("-l {}", init.display());
     boot_pair(&extra_args)
 }

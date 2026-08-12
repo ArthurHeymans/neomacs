@@ -4,26 +4,17 @@ mod support;
 use neomacs_tui_tests::*;
 use std::fs;
 use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
 use support::*;
 
 // ── Local helpers ───────────────────────────────────────────
 
-fn make_shared_dired_fixture(label: &str) -> std::path::PathBuf {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time after unix epoch")
-        .as_nanos();
-    let root = std::env::temp_dir().join(format!(
-        "neomacs-dired-root-{label}-{}-{unique}",
-        std::process::id()
-    ));
-    let dir = root.join("work");
-    fs::create_dir_all(dir.join("nested")).expect("create dired fixture directory");
-    fs::write(dir.join("alpha.txt"), "alpha body\n").expect("write alpha fixture");
-    fs::write(dir.join("beta.org"), "* beta heading\n").expect("write beta fixture");
-    fs::write(dir.join("zeta.log"), "zeta body\n").expect("write zeta fixture");
-    dir
+fn make_shared_dired_fixture(label: &str) -> TuiTempDirectory {
+    let directory = TuiTempDirectory::new(&format!("neomacs-dired-root-{label}-"));
+    fs::create_dir_all(directory.join("nested")).expect("create dired fixture directory");
+    fs::write(directory.join("alpha.txt"), "alpha body\n").expect("write alpha fixture");
+    fs::write(directory.join("beta.org"), "* beta heading\n").expect("write beta fixture");
+    fs::write(directory.join("zeta.log"), "zeta body\n").expect("write zeta fixture");
+    directory
 }
 
 fn open_shared_dired(gnu: &mut TuiSession, neo: &mut TuiSession, dir: &std::path::Path) {
@@ -360,11 +351,7 @@ fn keyboard_quit_after_find_file_ctrl_h_returns_to_scratch() {
 #[test]
 fn list_directory_via_cx_cd_lists_entries() {
     let (mut gnu, mut neo) = boot_pair("");
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time after unix epoch")
-        .as_micros();
-    let dir = std::env::temp_dir().join(format!("nmls-{}-{unique}", std::process::id()));
+    let dir = TuiTempDirectory::new("neomacs-list-directory-");
     fs::create_dir_all(dir.join("nested")).expect("create list-directory fixture");
     fs::write(dir.join("alpha.txt"), "alpha body\n").expect("write alpha fixture");
     fs::write(dir.join("beta.org"), "* beta heading\n").expect("write beta fixture");

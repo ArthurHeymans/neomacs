@@ -32,8 +32,7 @@ const CHILD_FRAME_INIT: &str = r#";;; -*- lexical-binding: t; -*-
 "#;
 
 fn boot_child_frame_pair() -> (TuiSession, TuiSession) {
-    let init = std::env::temp_dir().join("neomacs-child-frame-init.el");
-    std::fs::write(&init, CHILD_FRAME_INIT).expect("write child-frame init file");
+    let init = TuiTempFile::new("neomacs-child-frame-init-", "init.el", CHILD_FRAME_INIT);
     let extra_args = format!("-l {}", init.display());
     boot_pair(&extra_args)
 }

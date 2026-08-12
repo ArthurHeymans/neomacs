@@ -2,7 +2,7 @@
 
 use neomacs_tui_tests::*;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 /// Maximum total time for GNU Emacs to reach the startup predicate.
@@ -414,12 +414,8 @@ pub fn boot_pair_editing_a_shared_file() -> (TuiSession, TuiSession) {
 /// Write a file to a shared temp location and return its absolute path.
 /// Both GNU and Neo can open this same path, so diff headers etc. match.
 /// Uses a short directory name to avoid line-wrapping differences.
-pub fn write_shared_temp_file(name: &str, contents: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("nts-{}", std::process::id()));
-    fs::create_dir_all(&dir).expect("create shared temp dir for tui tests");
-    let path = dir.join(name);
-    fs::write(&path, contents).expect("write shared test file");
-    path
+pub fn write_shared_temp_file(name: &str, contents: &str) -> TuiTempFile {
+    TuiTempFile::new("neomacs-tui-shared-", name, contents)
 }
 
 /// Open a file at an absolute path in both sessions.
