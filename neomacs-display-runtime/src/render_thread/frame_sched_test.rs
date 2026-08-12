@@ -910,3 +910,129 @@ fn per_window_attribution_names_the_blinking_window_only() {
     let snap = frame_stats::window_snapshots();
     assert!(snap.iter().all(|w| w.window != 2));
 }
+
+#[test]
+fn an_elapsed_recovery_deadline_becomes_a_redraw_request() {
+    // GNU never uses a ripe deadline as a select timeout: timer_check runs
+    // every ripe timer and only then returns the wait (keyboard.c:4911-4945,
+    // consumed as the pselect timeout at process.c:5490). Our loop's wake
+    // deadline must obey the same rule, because a deadline nobody converts
+    // into work is armed again on the next pass -- already elapsed -- and the
+    // loop then spins at zero wait forever.
+    //
+    // A present that produced nothing schedules a bounded Expose retry, and
+    // Expose has no producer in the demand reconciliation: servicing the
+    // deadline is the only thing that can turn it into a frame.
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    c.submit_demand(win(1), composite_cursor(), now);
+    let plan = c.begin_frame(win(1), tick_at(now + ms(1)));
+    c.finish_frame(win(1), &plan, PresentResult::Timeout, now + ms(2));
+
+    let woke = now + ms(60);
+    // The state that produced the spin: an elapsed deadline sitting in the
+    // schedule with nothing to convert it into a frame.
+    assert!(
+        c.next_wake_deadline_unserviced()
+            .is_some_and(|at| at <= woke),
+        "the retry deadline has come due"
+    );
+    let service = c.service_deadlines(woke);
+    assert_eq!(
+        service.redraw,
+        vec![win(1)],
+        "the ripe retry must be driven into one platform redraw request"
+    );
+    assert_eq!(
+        service.wake,
+        LoopWake::Idle,
+        "nothing is left to wait for once the retry has been serviced"
+    );
+
+    // And the work survives to the frame that request delivers.
+    let retry = c.begin_frame(win(1), tick_at(woke));
+    assert_eq!(
+        retry.work,
+        RenderWork::CompositeOnly {
+            layers: LayerMask::CURSOR_EFFECTS,
+        }
+    );
+}
+
+#[test]
+fn servicing_never_leaves_an_elapsed_wake_deadline() {
+    // The structural invariant the busy-spin violated: whatever the loop is
+    // told to wait for is strictly in the future, so `WaitUntil` can never
+    // degenerate into a zero wait. Asserted over every deadline-bearing
+    // cadence, serviced repeatedly at times well past all of them.
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    c.submit_demand(
+        win(1),
+        FrameDemand {
+            invalidation: Invalidation::RepaintLayers {
+                layers: LayerMask::all(),
+                damage: Damage::FullLayer,
+            },
+            cadence: Cadence::At(now + ms(10)),
+            reason: DemandReason::Redisplay,
+        },
+        now,
+    );
+    c.submit_demand(
+        win(2),
+        FrameDemand {
+            invalidation: Invalidation::CompositeOnly {
+                layers: LayerMask::CURSOR_EFFECTS,
+            },
+            cadence: Cadence::MaxRate(std::num::NonZeroU16::new(60).unwrap()),
+            reason: DemandReason::CursorColorCycle,
+        },
+        now,
+    );
+    let plan = c.begin_frame(win(2), tick_at(now));
+    c.finish_frame(win(2), &plan, PresentResult::Timeout, now);
+
+    for step in [500u64, 1_000, 5_000] {
+        let woke = now + ms(step);
+        let service = c.service_deadlines(woke);
+        if let LoopWake::At(deadline) = service.wake {
+            assert!(
+                deadline.instant() > woke,
+                "a serviced wake deadline must be strictly in the future"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_ripe_at_demand_does_not_leave_its_old_deadline_behind() {
+    // Submitting Cadence::At in the future records a deadline; submitting the
+    // same reason again once that instant has passed fires it immediately.
+    // The stale record must go with it -- otherwise it stays ripe forever in
+    // the schedule and every pass re-arms an already-elapsed wake. This is the
+    // same hazard the MaxRate expired-anchor branch clears explicitly.
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    let at = now + ms(10);
+    let demand = FrameDemand {
+        invalidation: Invalidation::CompositeOnly {
+            layers: LayerMask::CURSOR_EFFECTS,
+        },
+        cadence: Cadence::At(at),
+        reason: DemandReason::CursorAnimation,
+    };
+    assert_eq!(
+        c.submit_demand(win(1), demand, now),
+        PacingAction::WakeAt(at)
+    );
+    assert_eq!(
+        c.submit_demand(win(1), demand, at + ms(1)),
+        PacingAction::RequestRedraw
+    );
+    assert_eq!(
+        c.next_wake_deadline(),
+        None,
+        "the deadline that just fired must not stay in the schedule"
+    );
+}

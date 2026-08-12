@@ -281,7 +281,7 @@ fn cursor_color_cycle_reconciliation_drives_attributed_frames_and_retracts() {
         "a blinked-off cursor must withdraw its standing deadline"
     );
     assert!(coordinator.active_reasons(id).is_empty());
-    assert_eq!(coordinator.next_wake_deadline(), None);
+    assert_eq!(coordinator.next_wake_deadline_unserviced(), None);
 
     assert_eq!(
         RenderApp::reconcile_cursor_color_cycle_demand(
@@ -323,7 +323,7 @@ fn cursor_color_cycle_reconciliation_drives_attributed_frames_and_retracts() {
         "an unfocused window must withdraw its standing deadline"
     );
     assert!(coordinator.active_reasons(id).is_empty());
-    assert_eq!(coordinator.next_wake_deadline(), None);
+    assert_eq!(coordinator.next_wake_deadline_unserviced(), None);
 }
 
 fn seal_state(mut state: FrameDisplayState) -> SealedFramePresentation {
