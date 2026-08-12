@@ -95,6 +95,47 @@ pub fn detect_tty_color_cells() -> i64 {
     8
 }
 
+// ── Erase character (GNU `init_sys_modes`, src/sysdep.c) ─────────────────
+
+/// The `tty-erase-char` value for a detected ERASE byte.
+///
+/// GNU's `init_sys_modes` (src/sysdep.c:1112) starts `Vtty_erase_char` at
+/// `Qnil` and assigns `tty.main.c_cc[VERASE]` (src/sysdep.c:1130) only once it
+/// has a live tty, so off a terminal the variable stays nil rather than
+/// becoming a number. That distinction is load-bearing:
+/// `normal-erase-is-backspace-setup-frame` (lisp/simple.el) enables the mode
+/// when `(eq tty-erase-char ?\^H)`, which then `key-translate`s C-h to DEL so
+/// Backspace deletes instead of opening the help prefix.
+pub fn tty_erase_char_value(erase: Option<u8>) -> neovm_core::emacs_core::value::Value {
+    use neovm_core::emacs_core::value::Value;
+    erase.map_or(Value::NIL, |byte| Value::fixnum(i64::from(byte)))
+}
+
+/// Read the terminal's ERASE character, as GNU does from the saved original
+/// termios (`emacs_get_tty` into `tty_out->old_tty`, then `c_cc[VERASE]`).
+///
+/// Must be called before raw mode is entered, so the answer describes the
+/// terminal the user configured with stty rather than the modes we impose.
+pub fn detect_tty_erase_char() -> Option<u8> {
+    #[cfg(unix)]
+    {
+        // SAFETY: tcgetattr only writes the termios out-parameter, and STDIN
+        // is a borrowed descriptor we do not close.
+        let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
+        let ok = unsafe { libc::tcgetattr(libc::STDIN_FILENO, termios.as_mut_ptr()) } == 0;
+        if !ok {
+            // Not a terminal (redirected stdin, batch): GNU leaves nil.
+            return None;
+        }
+        let termios = unsafe { termios.assume_init() };
+        Some(termios.c_cc[libc::VERASE])
+    }
+    #[cfg(not(unix))]
+    {
+        None
+    }
+}
+
 pub fn detect_tty_background_mode() -> &'static str {
     let Some(colorfgbg) = std::env::var("COLORFGBG").ok() else {
         return "dark";

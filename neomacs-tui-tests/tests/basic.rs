@@ -785,6 +785,37 @@ fn eval_expression_addition_via_mcolon_shows_result() {
 }
 
 #[test]
+fn tty_erase_char_reports_the_terminals_stty_erase_like_gnu() {
+    // GNU `init_sys_modes' (src/sysdep.c:1130) publishes c_cc[VERASE] from the
+    // termios it saved before touching terminal modes, and
+    // `normal-erase-is-backspace-setup-frame' (lisp/simple.el) reads it during
+    // startup: on a ^H terminal it key-translates C-h to DEL so Backspace
+    // deletes rather than opening the help prefix. Neomacs used to hardcode 0,
+    // a value GNU never reports, which left that decision permanently off.
+    // This harness's pty reports ^? (127), so both engines must say 127.
+    let (mut gnu, mut neo) = boot_pair("");
+    send_both(&mut gnu, &mut neo, "M-:");
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+    for s in [&mut gnu, &mut neo] {
+        s.send(b"tty-erase-char\r");
+    }
+
+    let ready = |grid: &[String]| grid.iter().any(|row| row.contains("127"));
+    gnu.read_until(Duration::from_secs(6), ready);
+    neo.read_until(Duration::from_secs(8), ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter().any(|row| row.contains("127")),
+            "{label} should report tty-erase-char 127 for this pty's ^? erase\n{}",
+            grid.join("\n")
+        );
+    }
+}
+
+#[test]
 fn what_cursor_position_via_cx_equals_shows_char_info() {
     let (mut gnu, mut neo) = boot_pair("");
     send_both(&mut gnu, &mut neo, "ATA");

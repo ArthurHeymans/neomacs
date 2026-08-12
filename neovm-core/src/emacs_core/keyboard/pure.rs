@@ -600,7 +600,14 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     // "built-in variable `multiple-terminals-merge-keyboards' not bound".
     obarray.set_symbol_value("multiple-terminals-merge-keyboards", Value::NIL);
     obarray.make_special("multiple-terminals-merge-keyboards");
-    obarray.set_symbol_value("tty-erase-char", Value::fixnum(0));
+    // keyboard.c:13925 DEFVAR_LISP, with the comment "This variable is set up
+    // in sysdep.c": `init_sys_modes' (src/sysdep.c:1112) starts it at Qnil and
+    // assigns c_cc[VERASE] only for a live tty (src/sysdep.c:1130). Off a
+    // terminal GNU reads nil, so a seeded 0 is a value it never has, and
+    // `normal-erase-is-backspace-setup-frame' (lisp/simple.el) compares it
+    // against ?\^H. The live value is supplied by the tty init path.
+    obarray.set_symbol_value("tty-erase-char", Value::NIL);
+    obarray.make_special("tty-erase-char");
     obarray.set_symbol_value("extra-keyboard-modifiers", Value::fixnum(0));
     obarray.set_symbol_value("inhibit-local-menu-bar-menus", Value::NIL);
     obarray.set_symbol_value("meta-prefix-char", Value::fixnum(27));

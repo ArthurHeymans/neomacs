@@ -51,3 +51,32 @@ fn basic_char_code_masks() {
     let bits = 0x123456;
     assert!(basic_char_code(bits) <= KEY_CHAR_CODE_MASK);
 }
+
+#[test]
+fn tty_erase_char_defaults_to_nil_and_is_special_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    // GNU declares this with DEFVAR_LISP in `syms_of_keyboard'
+    // (src/keyboard.c:13925) and leaves the value to `init_sys_modes'
+    // (src/sysdep.c:1112), which starts it at Qnil and only assigns
+    // c_cc[VERASE] for a live tty. A batch session therefore reads nil, not a
+    // number: `normal-erase-is-backspace-setup-frame' (lisp/simple.el) tests
+    // (eq tty-erase-char ?\^H), so a hardcoded 0 is a value GNU never has.
+    assert_eq!(
+        eval.eval_str("tty-erase-char").expect("tty-erase-char"),
+        Value::NIL,
+        "tty-erase-char starts nil, as init_sys_modes leaves it off a tty"
+    );
+
+    // DEFVAR_LISP is also what makes the symbol special, so a `let' around it
+    // in a lexical-binding file binds dynamically and callees observe it.
+    let seen = eval
+        .eval_str("(let ((tty-erase-char 8)) (funcall (lambda () tty-erase-char)))")
+        .expect("let over tty-erase-char");
+    assert_eq!(
+        seen,
+        Value::fixnum(8),
+        "a let of tty-erase-char must bind dynamically, as DEFVAR_LISP makes it special"
+    );
+}

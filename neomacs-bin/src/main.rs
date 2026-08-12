@@ -3533,6 +3533,17 @@ pub fn run(mode: RuntimeMode) {
     if tty_init::should_enable_live_tty_io(&startup) {
         reset_terminal_host();
         configure_terminal_runtime(tty_init::detect_tty_runtime(&startup));
+        // GNU `init_sys_modes' (src/sysdep.c:1130) publishes the terminal's
+        // ERASE character here, read from the termios it saved before touching
+        // the terminal modes. Do the same while stdout is still cooked and
+        // `tty_init_terminal' has not entered raw mode, so the value describes
+        // the user's stty setting. `normal-erase-is-backspace-setup-frame'
+        // (lisp/simple.el) reads it during startup to decide whether Backspace
+        // deletes or opens the help prefix.
+        evaluator.set_variable(
+            "tty-erase-char",
+            tty_init::tty_erase_char_value(tty_init::detect_tty_erase_char()),
+        );
     } else {
         reset_terminal_host();
         reset_terminal_runtime();
