@@ -35,15 +35,67 @@ fn magit_oracle() -> CachedMelpaOracle {
                        ;; ready descriptor so its pipe closes before Magit's
                        ;; main-process sentinel kills the stderr buffer.
                        (accept-process-output nil 0.05)))
-                   (defun neomacs-magit-test-wait-for-blame ()
-                     ;; The quickstart sentinel replaces the initial process
-                     ;; with a full-file blame process, then the final sentinel
-                     ;; normally clears this buffer-local variable.  Test the
-                     ;; process status too: a sentinel error must not turn a
-                     ;; dead process object into a busy loop in the harness.
-                     (while (and magit-blame-process
-                                 (process-live-p magit-blame-process))
-                       (accept-process-output nil 0.05))))"##,
+                   (defun neomacs-magit-test-new-processes (processes-before)
+                     "Every process this scenario started since PROCESSES-BEFORE."
+                     (seq-remove (lambda (process)
+                                   (memq process processes-before))
+                                 (process-list)))
+                   (defun neomacs-magit-test-disown (processes-before)
+                     "Stop this scenario's processes from querying on exit.
+Magit's blame sentinel kills the Git stderr buffer, and
+`process-kill-buffer-query-function' prompts for any attached process
+whose status is still run/stop/open/listen and whose query-on-exit flag
+is set.  Under load the stderr pipe has not always been retired by the
+time that sentinel runs, so the prompt fires -- and in batch it reads
+EOF from stdin, which kills the whole session before the case can even
+reach its teardown.  Clearing the flag is the switch GNU provides for
+exactly this, and it is symmetric across both editors."
+                     (dolist (process (neomacs-magit-test-new-processes
+                                       processes-before))
+                       (set-process-query-on-exit-flag process nil)))
+                   (defun neomacs-magit-test-wait-for-blame (processes-before)
+                     "Wait for Magit's blame pipeline to finish.
+Magit blames in two phases: a quickstart process whose sentinel installs
+a full-file process, whose sentinel installs the final overlays and then
+clears `magit-blame-process'.  Between the phases the process object is
+dead but the variable is not yet nil, so stopping at `process-live-p'
+can return before a single overlay exists -- which under load surfaces
+as the case's own \"blame process completed without deterministic
+overlays\" guard.  Cleared-to-nil is the real completion signal, so wait
+for that.  Liveness was standing in as a hang guard; a deadline is the
+right tool for that job and does not fire on a merely slow run.
+Disown on every pass, because the replacement process is born after the
+first one and would otherwise inherit a set query-on-exit flag."
+                     (let ((deadline (+ (float-time) 60)))
+                       (while (and magit-blame-process
+                                   (< (float-time) deadline))
+                         (neomacs-magit-test-disown processes-before)
+                         (accept-process-output nil 0.05)))
+                     (neomacs-magit-test-disown processes-before))
+                   (defun neomacs-magit-test-settle (processes-before)
+                     "Let Magit finish reaping before the scenario deletes anything.
+Deleting a Git process while its sentinel is still in flight leaves the
+sentinel acting on a dead process, which surfaces as \"Process git is
+not active\".  Wait for this scenario's processes to exit and for the
+sentinels those exits queued to run, then delete whatever is left.  The
+wait is bounded so a genuinely stuck process fails the case instead of
+hanging it."
+                     (let ((deadline (+ (float-time) 30)))
+                       (while (and (seq-some
+                                    #'process-live-p
+                                    (neomacs-magit-test-new-processes
+                                     processes-before))
+                                   (< (float-time) deadline))
+                         (neomacs-magit-test-disown processes-before)
+                         (accept-process-output nil 0.05))
+                       ;; Exiting only queues the sentinels; drain until no
+                       ;; descriptor has anything left to deliver.
+                       (while (and (accept-process-output nil 0.05)
+                                   (< (float-time) deadline))))
+                     (dolist (process (neomacs-magit-test-new-processes
+                                       processes-before))
+                       (set-process-query-on-exit-flag process nil)
+                       (delete-process process))))"##,
         )
         .with_timeout(MAGIT_TEST_TIMEOUT)
 }

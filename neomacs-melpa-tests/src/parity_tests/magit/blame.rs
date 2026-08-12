@@ -20,7 +20,7 @@ fn magit_blame_addition_populates_commit_details_for_a_visited_file() -> ParityB
                      (setq buffer (find-file-noselect file))
                      (switch-to-buffer buffer)
                      (magit-blame-addition nil)
-                     (neomacs-magit-test-wait-for-blame)
+                     (neomacs-magit-test-wait-for-blame processes-before)
                      (let ((display-text
                             (mapconcat
                              (lambda (overlay)
@@ -54,14 +54,12 @@ fn magit_blame_addition_populates_commit_details_for_a_visited_file() -> ParityB
                            (lambda (process)
                              (memq process processes-before))
                            (process-list)))))))
+                 (neomacs-magit-test-settle processes-before)
                  (when (buffer-live-p buffer)
                    (with-current-buffer buffer
                      (when magit-blame-mode
                        (magit-blame-quit)))
                    (kill-buffer buffer))
-                 (dolist (process (process-list))
-                   (unless (memq process processes-before)
-                     (delete-process process)))
                  (delete-directory root t)))"##,
         expect![[r#"OK (t t t "first\nsecond\n" t)"#]],
     )
@@ -99,7 +97,7 @@ fn magit_blame_cycle_style_rewrites_real_blame_details_for_every_visualization()
         (setq buffer (find-file-noselect file))
         (switch-to-buffer buffer)
         (magit-blame-addition nil)
-        (neomacs-magit-test-wait-for-blame)
+        (neomacs-magit-test-wait-for-blame processes-before)
         (unless (= (seq-count
                     (lambda (overlay)
                       (overlay-get overlay 'magit-blame-heading))
@@ -160,18 +158,13 @@ fn magit_blame_cycle_style_rewrites_real_blame_details_for_every_visualization()
                  :buffer (buffer-substring-no-properties
                           (point-min) (point-max))
                  :mode magit-blame-mode))))))
+    (neomacs-magit-test-settle processes-before)
     (when (buffer-live-p buffer)
       (with-current-buffer buffer
-        (when (process-live-p magit-blame-process)
-          (set-process-query-on-exit-flag magit-blame-process nil)
-          (delete-process magit-blame-process))
         (setq magit-blame-process nil)
         (when magit-blame-mode
           (magit-blame-mode -1)))
       (kill-buffer buffer))
-    (dolist (process (process-list))
-      (unless (memq process processes-before)
-        (delete-process process)))
     (delete-directory root t)))
 "####;
     let expect = expect![[
