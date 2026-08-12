@@ -2724,6 +2724,35 @@ fn bootstrap_cache_dir(runtime_root: &Path) -> PathBuf {
     std::env::temp_dir().join("neomacs")
 }
 
+/// How many `(stat key -> content fingerprint)` pairs the memo keeps.
+///
+/// Each entry is one distinct state of `lisp/`, so a handful covers branch
+/// switching without letting the file grow without bound.
+const BOOTSTRAP_FINGERPRINT_MEMO_ENTRIES: usize = 16;
+
+const BOOTSTRAP_FINGERPRINT_MEMO_FILE: &str = "neovm-bootstrap-fingerprint-memo-v1";
+
+/// The cheap facts about one bootstrap source file that decide whether its
+/// contents still need to be read.
+///
+/// Collecting these costs one `stat` per file; reading and hashing the
+/// contents costs three orders of magnitude more, so the fingerprint consults
+/// the stat facts first and only falls back to the contents when they move.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct BootstrapSourceStat {
+    path: PathBuf,
+    len: u64,
+    modified_secs: u64,
+    modified_nanos: u32,
+}
+
+/// Counts the calls that actually read and hash every source file, so tests can
+/// prove the memo is what answers a repeat call rather than inferring it from
+/// timing.
+#[cfg(test)]
+pub(crate) static BOOTSTRAP_CONTENT_FINGERPRINT_CALLS: std::sync::atomic::AtomicUsize =
+    std::sync::atomic::AtomicUsize::new(0);
+
 fn should_hash_bootstrap_source_file(path: &Path) -> bool {
     matches!(path.extension().and_then(OsStr::to_str), Some("el" | "elc"))
 }
@@ -2753,13 +2782,95 @@ fn collect_bootstrap_source_files(path: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// The content fingerprint that names this tree's bootstrap image.
+///
+/// The value is content-addressed: every `.el`/`.elc` file under `lisp/` is
+/// read and hashed. That makes it exact but expensive -- the tree is ~3300
+/// files and ~130 MB, which costs well over a second in a debug build -- so
+/// callers go through [`bootstrap_source_fingerprint`], which memoizes this
+/// result against the far cheaper stat key.
 fn bootstrap_source_fingerprint(runtime_root: &Path) -> String {
     let mut files = Vec::new();
     collect_bootstrap_source_files(&runtime_root.join("lisp"), &mut files);
     files.sort();
 
+    let stats = bootstrap_source_stats(&files);
+    let stat_key = bootstrap_source_stat_key(runtime_root, &stats);
+    let memo_path = bootstrap_cache_dir(runtime_root).join(BOOTSTRAP_FINGERPRINT_MEMO_FILE);
+    if let Some(fingerprint) = bootstrap_fingerprint_memo_lookup(&memo_path, &stat_key) {
+        return fingerprint;
+    }
+
+    let fingerprint = bootstrap_content_fingerprint(runtime_root, &files);
+    bootstrap_fingerprint_memo_store(&memo_path, &stat_key, &fingerprint);
+    fingerprint
+}
+
+/// Read the cheap stat facts for each already-collected source file.
+///
+/// A file whose metadata cannot be read contributes zeroed facts, which simply
+/// keeps it indistinguishable from a missing file in the stat key; the content
+/// hash remains the authority on what the tree actually contains.
+fn bootstrap_source_stats(files: &[PathBuf]) -> Vec<BootstrapSourceStat> {
+    files
+        .iter()
+        .map(|path| {
+            let (len, modified_secs, modified_nanos) = match fs::metadata(path) {
+                Ok(metadata) => {
+                    let modified = metadata
+                        .modified()
+                        .ok()
+                        .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok());
+                    (
+                        metadata.len(),
+                        modified.map_or(0, |d| d.as_secs()),
+                        modified.map_or(0, |d| d.subsec_nanos()),
+                    )
+                }
+                Err(_) => (0, 0, 0),
+            };
+            BootstrapSourceStat {
+                path: path.clone(),
+                len,
+                modified_secs,
+                modified_nanos,
+            }
+        })
+        .collect()
+}
+
+/// Hash the identity the memo is keyed on: this executable plus every source
+/// file's path, length and modification time.
+///
+/// This reads no file contents, so it costs one `stat` per file rather than a
+/// full pass over the tree. Two trees that agree on every one of these facts
+/// are taken to have the same contents -- the same assumption the executable
+/// leg of the content fingerprint already makes, and the one every build system
+/// relies on. A file edited in place without moving its length or mtime would
+/// defeat it, which is why the memo caches a content hash rather than replacing
+/// it: the stored value stays exactly what a full content pass would produce.
+fn bootstrap_source_stat_key(runtime_root: &Path, stats: &[BootstrapSourceStat]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"neomacs-bootstrap-source-fingerprint-v2\0");
+    hasher.update(b"neomacs-bootstrap-stat-key-v1\0");
+    hash_bootstrap_executable_identity(&mut hasher);
+    hasher.update([0xff]);
+    for stat in stats {
+        let rel = stat.path.strip_prefix(runtime_root).unwrap_or(&stat.path);
+        hasher.update(rel.as_os_str().as_encoded_bytes());
+        hasher.update([0]);
+        hasher.update(stat.len.to_le_bytes());
+        hasher.update(stat.modified_secs.to_le_bytes());
+        hasher.update(stat.modified_nanos.to_le_bytes());
+        hasher.update([0xff]);
+    }
+    hex_digest_prefix(hasher)
+}
+
+/// Fold the running executable's path, size and mtime into a fingerprint.
+///
+/// Shared by the content fingerprint and the stat key so a rebuilt binary
+/// invalidates both together.
+fn hash_bootstrap_executable_identity(hasher: &mut Sha256) {
     hasher.update(b"rust-executable\0");
     match std::env::current_exe().and_then(|path| {
         let metadata = fs::metadata(&path)?;
@@ -2783,12 +2894,81 @@ fn bootstrap_source_fingerprint(runtime_root: &Path) -> String {
             hasher.update(err.to_string().as_bytes());
         }
     }
+}
+
+fn hex_digest_prefix(hasher: Sha256) -> String {
+    let digest = hasher.finalize();
+    digest[..16]
+        .iter()
+        .fold(String::with_capacity(32), |mut s, b| {
+            use std::fmt::Write;
+            let _ = write!(s, "{b:02x}");
+            s
+        })
+}
+
+/// Look up a previously computed content fingerprint for this exact stat key.
+///
+/// Any unreadable or malformed memo is treated as a miss: the memo is a cache,
+/// never a source of truth, so a bad one costs time and nothing else.
+fn bootstrap_fingerprint_memo_lookup(memo_path: &Path, stat_key: &str) -> Option<String> {
+    let contents = fs::read_to_string(memo_path).ok()?;
+    contents.lines().find_map(|line| {
+        let (key, fingerprint) = line.split_once('\t')?;
+        (key == stat_key).then(|| fingerprint.to_string())
+    })
+}
+
+/// Record `stat_key -> fingerprint`, keeping the newest entries first.
+///
+/// The write is atomic (write a sibling temporary, then rename) because many
+/// test processes race here; a loser simply overwrites with its own equally
+/// valid view, and a reader only ever sees a complete file.
+fn bootstrap_fingerprint_memo_store(memo_path: &Path, stat_key: &str, fingerprint: &str) {
+    let mut lines = vec![format!("{stat_key}\t{fingerprint}")];
+    if let Ok(existing) = fs::read_to_string(memo_path) {
+        for line in existing.lines() {
+            if line
+                .split_once('\t')
+                .is_some_and(|(key, _)| key != stat_key)
+            {
+                lines.push(line.to_string());
+            }
+        }
+    }
+    lines.truncate(BOOTSTRAP_FINGERPRINT_MEMO_ENTRIES);
+    let mut body = lines.join("\n");
+    body.push('\n');
+
+    let Some(parent) = memo_path.parent() else {
+        return;
+    };
+    if fs::create_dir_all(parent).is_err() {
+        return;
+    }
+    let Ok(mut temp) = tempfile::NamedTempFile::new_in(parent) else {
+        return;
+    };
+    use std::io::Write as _;
+    if temp.write_all(body.as_bytes()).is_err() || temp.flush().is_err() {
+        return;
+    }
+    let _ = temp.persist(memo_path);
+}
+
+fn bootstrap_content_fingerprint(runtime_root: &Path, files: &[PathBuf]) -> String {
+    #[cfg(test)]
+    BOOTSTRAP_CONTENT_FINGERPRINT_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+    let mut hasher = Sha256::new();
+    hasher.update(b"neomacs-bootstrap-source-fingerprint-v2\0");
+    hash_bootstrap_executable_identity(&mut hasher);
     hasher.update([0xff]);
     for path in files {
-        let rel = path.strip_prefix(runtime_root).unwrap_or(&path);
+        let rel = path.strip_prefix(runtime_root).unwrap_or(path);
         hasher.update(rel.as_os_str().as_encoded_bytes());
         hasher.update([0]);
-        match fs::read(&path) {
+        match fs::read(path) {
             Ok(bytes) => {
                 hasher.update([1]);
                 hasher.update(bytes);
@@ -2801,14 +2981,7 @@ fn bootstrap_source_fingerprint(runtime_root: &Path) -> String {
         hasher.update([0xff]);
     }
 
-    let digest = hasher.finalize();
-    digest[..16]
-        .iter()
-        .fold(String::with_capacity(32), |mut s, b| {
-            use std::fmt::Write;
-            let _ = write!(s, "{b:02x}");
-            s
-        })
+    hex_digest_prefix(hasher)
 }
 
 fn bootstrap_dump_path(runtime_root: &Path, extra_features: &[&str]) -> PathBuf {

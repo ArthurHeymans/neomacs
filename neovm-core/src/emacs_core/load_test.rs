@@ -14499,3 +14499,175 @@ fn load_path_search_suffixes_equal_the_lisp_load_suffixes() {
         "the load-path search list must be exactly `load-suffixes`"
     );
 }
+
+/// A throwaway runtime root holding a handful of `lisp/` sources plus its own
+/// bootstrap cache directory, so fingerprint tests never touch the real tree.
+struct FingerprintTree {
+    _dir: tempfile::TempDir,
+    root: PathBuf,
+    cache: PathBuf,
+}
+
+impl FingerprintTree {
+    fn new() -> Self {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let root = dir.path().join("runtime");
+        let cache = dir.path().join("cache");
+        fs::create_dir_all(root.join("lisp/subdir")).expect("lisp tree");
+        fs::create_dir_all(&cache).expect("cache dir");
+        fs::write(root.join("lisp/alpha.el"), b"(provide 'alpha)\n").expect("alpha");
+        fs::write(root.join("lisp/subdir/beta.el"), b"(provide 'beta)\n").expect("beta");
+        // A non-Lisp sibling must stay outside the fingerprint entirely.
+        fs::write(root.join("lisp/README"), b"not lisp\n").expect("readme");
+        unsafe { std::env::set_var(BOOTSTRAP_CACHE_DIR_ENV, &cache) };
+        Self {
+            _dir: dir,
+            root,
+            cache,
+        }
+    }
+
+    fn fingerprint(&self) -> String {
+        bootstrap_source_fingerprint(&self.root)
+    }
+
+    fn content_hashes_during(&self, body: impl FnOnce()) -> usize {
+        use std::sync::atomic::Ordering;
+        let before = BOOTSTRAP_CONTENT_FINGERPRINT_CALLS.load(Ordering::Relaxed);
+        body();
+        BOOTSTRAP_CONTENT_FINGERPRINT_CALLS.load(Ordering::Relaxed) - before
+    }
+
+    fn memo_path(&self) -> PathBuf {
+        self.cache.join(BOOTSTRAP_FINGERPRINT_MEMO_FILE)
+    }
+}
+
+#[test]
+fn bootstrap_source_fingerprint_reads_every_source_only_on_the_first_call() {
+    let tree = FingerprintTree::new();
+
+    let mut first = String::new();
+    let cold = tree.content_hashes_during(|| first = tree.fingerprint());
+    assert_eq!(
+        cold, 1,
+        "the first fingerprint of an unseen tree must hash the sources"
+    );
+
+    let mut second = String::new();
+    let warm = tree.content_hashes_during(|| second = tree.fingerprint());
+    assert_eq!(
+        warm, 0,
+        "an unchanged tree must be answered from the memo without re-reading {} MB of sources",
+        130
+    );
+    assert_eq!(
+        first, second,
+        "the memoized fingerprint must equal the content fingerprint it stands in for"
+    );
+    assert!(
+        tree.memo_path().is_file(),
+        "the first call must leave a memo behind for later processes"
+    );
+}
+
+#[test]
+fn bootstrap_source_fingerprint_rehashes_when_a_source_file_changes() {
+    let tree = FingerprintTree::new();
+    let before = tree.fingerprint();
+
+    fs::write(
+        tree.root.join("lisp/alpha.el"),
+        b"(provide 'alpha) ; edited\n",
+    )
+    .expect("edit");
+
+    let mut after = String::new();
+    let hashes = tree.content_hashes_during(|| after = tree.fingerprint());
+    assert_eq!(
+        hashes, 1,
+        "an edited source file must fall through the memo to a fresh content hash"
+    );
+    assert_ne!(
+        before, after,
+        "editing a source file must change the fingerprint that names its image"
+    );
+}
+
+#[test]
+fn bootstrap_source_fingerprint_ignores_touches_that_leave_contents_alone() {
+    let tree = FingerprintTree::new();
+    let before = tree.fingerprint();
+
+    // Rewriting identical bytes under a fresh mtime is what a rebase or a
+    // checkout does. That misses the memo, but the content hash underneath must
+    // still name the same image -- otherwise every cached pdump would be
+    // stranded by an operation that changed nothing.
+    let alpha = tree.root.join("lisp/alpha.el");
+    fs::write(&alpha, b"(provide 'alpha)\n").expect("rewrite");
+    let touched = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000_000);
+    fs::File::options()
+        .write(true)
+        .open(&alpha)
+        .expect("open for touch")
+        .set_times(
+            fs::FileTimes::new()
+                .set_accessed(touched)
+                .set_modified(touched),
+        )
+        .expect("touch");
+
+    let mut after = String::new();
+    let hashes = tree.content_hashes_during(|| after = tree.fingerprint());
+    assert_eq!(hashes, 1, "a moved mtime must miss the memo");
+    assert_eq!(
+        before, after,
+        "identical contents must keep naming the same bootstrap image"
+    );
+}
+
+#[test]
+fn bootstrap_fingerprint_memo_survives_a_corrupt_file() {
+    let tree = FingerprintTree::new();
+    let expected = tree.fingerprint();
+
+    fs::write(tree.memo_path(), b"\0not a memo\nno tab here\n").expect("corrupt memo");
+
+    let mut recovered = String::new();
+    let hashes = tree.content_hashes_during(|| recovered = tree.fingerprint());
+    assert_eq!(
+        hashes, 1,
+        "a corrupt memo must read as a miss, not a failure"
+    );
+    assert_eq!(
+        expected, recovered,
+        "a corrupt memo must never change the fingerprint"
+    );
+    assert_eq!(
+        tree.content_hashes_during(|| {
+            let _ = tree.fingerprint();
+        }),
+        0,
+        "the recovered memo must be usable again"
+    );
+}
+
+#[test]
+fn bootstrap_fingerprint_memo_keeps_a_bounded_number_of_tree_states() {
+    let tree = FingerprintTree::new();
+    for generation in 0..(BOOTSTRAP_FINGERPRINT_MEMO_ENTRIES + 4) {
+        fs::write(
+            tree.root.join("lisp/alpha.el"),
+            format!("(provide 'alpha) ; {generation}\n").as_bytes(),
+        )
+        .expect("edit");
+        let _ = tree.fingerprint();
+    }
+
+    let memo = fs::read_to_string(tree.memo_path()).expect("memo");
+    let entries = memo.lines().filter(|line| !line.is_empty()).count();
+    assert!(
+        entries <= BOOTSTRAP_FINGERPRINT_MEMO_ENTRIES,
+        "the memo must stay bounded, found {entries} entries"
+    );
+}
