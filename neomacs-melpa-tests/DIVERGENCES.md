@@ -4099,3 +4099,49 @@ passes 8,815 tests with 51 skipped, a fresh release build and pdump succeed,
 and the unchanged `shrink_path_package_batch` oracle is green.
 
 Status: FIXED.
+
+## 78. Backward search let beginning assertions inspect at the match stop -- FIXED
+
+`gitattributes-mode-backward-field` searches backward with a pattern ending in
+`\<`.  Neomacs accepted the nearest field beginning even though the assertion
+was evaluated at the original point, so the command stayed on `markdown`
+instead of moving back to `text`:
+
+```elisp
+(with-temp-buffer
+  (insert "one two three")
+  (goto-char 9)
+  (re-search-backward " \\<" nil t))
+;; GNU     => 4
+;; Neomacs => 8                              ; before
+```
+
+The sibling boundary pattern `" \\b"` returned 8 in both editors.  That
+control ruled out backward candidate ordering and exposed the assertion-level
+distinction.
+
+GNU passes the original point as the `re_search_2` match stop in
+`src/search.c:1202-1211`.  Its `wordbeg` opcode uses the limit-aware `PREFETCH`
+before inspecting the character at the assertion (`src/regex-emacs.c:5007-5048`),
+and `symbeg` does the same (`src/regex-emacs.c:5093-5111`).  Word boundaries
+deliberately use `PREFETCH_NOLIMIT`, so their lookahead remains legal at the
+stop.  Neomacs passed `stop` through search and matching but its beginning
+assertion helpers read the full text without consulting it.  Both regex
+engines therefore accepted a match GNU rejects.
+
+The fix represents the six zero-width syntax assertions with an exhaustive
+`SyntaxAssertion` enum and routes both the backtracking and Pike engines
+through one stop-aware evaluator.  Pike epsilon closure now receives the
+match stop explicitly.  The type boundary centralizes GNU's intentionally
+different policies for beginnings, ends, and boundaries so a future engine
+cannot silently choose another one.
+
+The public Lisp regression
+`re_search_backward_word_begin_respects_search_origin_like_gnu` failed first
+with 8 instead of 4 and also pins `\_<` and the `\b` control.  A lower-level
+test forces the same matrix through both regex engines.  All 302 focused regex
+tests pass, the complete `neovm-core` gate passes 8,817 tests with 51 skipped,
+a fresh release build and Lisp byte-compilation succeed, and the unchanged
+`gitattributes_mode_package_batch` oracle is green.
+
+Status: FIXED.
