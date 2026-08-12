@@ -3302,6 +3302,12 @@ pub const HL_TODO_MELPA_PIN: (&str, &str) = ("hl-todo", "20260601.1508");
 /// `d8839fa42a24f7c781cd2d8c3f40eda31faa19be`.
 pub const WFNAMES_MELPA_PIN: (&str, &str) = ("wfnames", "20260706.903");
 
+/// The exact w3m package selected for practical HTML rendering, link/form
+/// navigation, history, bookmarks, and external-renderer failure/recovery
+/// parity. MELPA built this archive from upstream commit
+/// `bb01ba0329ee5b02c2ff260d8881bbc6f389d80a`.
+pub const W3M_MELPA_PIN: (&str, &str) = ("w3m", "20260811.923");
+
 /// The exact Writeroom Mode package selected for practical focused-writing
 /// buffer state, Visual Fill Column cooperation, width adjustment, mode-line,
 /// multi-buffer, frame-effect, admission, and window-layout parity. MELPA

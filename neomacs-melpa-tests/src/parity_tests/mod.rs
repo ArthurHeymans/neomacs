@@ -652,6 +652,7 @@ mod vi_tilde_fringe;
 mod visual_fill_column;
 mod volatile_highlights;
 mod vterm;
+mod w3m;
 mod web_beautify;
 mod web_completion_data;
 mod web_mode;
