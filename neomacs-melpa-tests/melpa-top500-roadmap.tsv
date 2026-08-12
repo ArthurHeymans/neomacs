@@ -372,7 +372,7 @@ rank	package	downloads	status
 371	groovy-mode	275480	covered
 372	ledger-mode	271643	covered
 373	lsp-python-ms	271010	covered
-374	blacken	267883	todo
+374	blacken	267883	covered
 375	undercover	267832	todo
 376	ein	266758	todo
 377	polymode	264721	todo

@@ -2897,6 +2897,12 @@ pub const AVY_MENU_MELPA_PIN: (&str, &str) = ("avy-menu", "20230606.1519");
 /// `85261a928ae0ec3b41e639f05291ffd6bf7c231c`.
 pub const BEACON_MELPA_PIN: (&str, &str) = ("beacon", "20220730.100");
 
+/// The exact Blacken package selected for practical Python buffer formatting,
+/// formatter-option, project save-hook, process-failure, and long-line parity.
+/// MELPA built this archive from upstream commit
+/// `a43695f9cb412df93ac8d38b55ab1515e86e217e`.
+pub const BLACKEN_MELPA_PIN: (&str, &str) = ("blacken", "20231129.654");
+
 /// The exact BERT package selected by the practical external-term fixture,
 /// RPC, signed metric, UTF-8 binary, and bulk tuple parity corpus.
 pub const BERT_MELPA_PIN: (&str, &str) = ("bert", "20131117.1014");

@@ -269,6 +269,7 @@ mod beacon;
 mod bert;
 mod bind_key;
 mod bind_map;
+mod blacken;
 mod browse_at_remote;
 mod browse_kill_ring;
 mod buffer_move;
