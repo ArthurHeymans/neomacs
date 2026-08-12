@@ -562,6 +562,7 @@ mod php_runtime;
 mod pinyinlib;
 mod pip_requirements;
 mod pkg_info;
+mod polymode;
 mod popup;
 mod popwin;
 mod pos_tip;
