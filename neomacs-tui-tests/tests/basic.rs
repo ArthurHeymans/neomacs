@@ -816,6 +816,69 @@ fn tty_erase_char_reports_the_terminals_stty_erase_like_gnu() {
 }
 
 #[test]
+// DIVERGENCES.md entry 67: neomacs decides `normal-erase-is-backspace' before
+// the terminal's ERASE character is known and the `unless' guard in
+// `normal-erase-is-backspace-setup-frame' makes that first answer permanent, so
+// Backspace opens help where GNU deletes. Everything downstream of the decision
+// already matches GNU. Kept as the reduction; drop the attribute when fixed.
+#[ignore = "DIVERGENCES.md entry 67: normal-erase-is-backspace latches off too early"]
+fn backspace_on_a_ctrl_h_erase_terminal_deletes_like_gnu() {
+    // The behaviour tty-erase-char gates, exercised end to end rather than
+    // argued. On a terminal whose stty erase is ^H,
+    // `normal-erase-is-backspace-setup-frame' (lisp/simple.el:11093) turns the
+    // mode on and it key-translates C-h to DEL (lisp/simple.el:11178), so the
+    // 0x08 the Backspace key sends DELETES a character instead of opening the
+    // help prefix. The rest of the suite runs on the pty default of ^?, where
+    // the mode stays off and both engines agree no matter what
+    // `tty-erase-char' says -- which is why a hardcoded 0 went unnoticed.
+    let (mut gnu, mut neo) = boot_pair_with_erase_char("", PtyEraseChar::Backspace);
+
+    send_both(&mut gnu, &mut neo, "C-x C-f");
+    let prompt_ready = |grid: &[String]| grid.iter().any(|row| row.contains("Find file:"));
+    gnu.read_until(Duration::from_secs(6), prompt_ready);
+    neo.read_until(Duration::from_secs(8), prompt_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_millis(300));
+
+    for session in [&mut gnu, &mut neo] {
+        session.send(b"~/erase-is-backspace-probeX");
+    }
+    // "BS" is the literal 0x08 byte a Backspace key sends (see the harness key
+    // encoder); on this terminal it must erase the X.
+    send_both(&mut gnu, &mut neo, "BS");
+
+    let erased = |grid: &[String]| {
+        grid.iter()
+            .any(|row| row.contains("~/erase-is-backspace-probe"))
+            && !grid
+                .iter()
+                .any(|row| row.contains("~/erase-is-backspace-probeX"))
+    };
+    gnu.read_until(Duration::from_secs(6), erased);
+    neo.read_until(Duration::from_secs(8), erased);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    for (label, session) in [("GNU", &gnu), ("NEO", &neo)] {
+        let grid = session.text_grid();
+        assert!(
+            grid.iter()
+                .any(|row| row.contains("~/erase-is-backspace-probe"))
+                && !grid
+                    .iter()
+                    .any(|row| row.contains("~/erase-is-backspace-probeX")),
+            "{label} should delete the previous character for Backspace on a ^H-erase terminal\n{}",
+            grid.join("\n")
+        );
+    }
+
+    assert_pair_nearly_matches(
+        "backspace_on_a_ctrl_h_erase_terminal_deletes_like_gnu",
+        &gnu,
+        &neo,
+        2,
+    );
+}
+
+#[test]
 fn what_cursor_position_via_cx_equals_shows_char_info() {
     let (mut gnu, mut neo) = boot_pair("");
     send_both(&mut gnu, &mut neo, "ATA");

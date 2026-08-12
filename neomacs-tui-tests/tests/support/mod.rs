@@ -31,8 +31,20 @@ const POLL_SLICE: Duration = Duration::from_millis(80);
 ///    limit — it keeps going until the grid is truly stable. This
 ///    absorbs late-startup display bursts without a blind `sleep`.
 pub fn boot_pair(extra_args: &str) -> (TuiSession, TuiSession) {
-    let mut gnu = TuiSession::gnu_emacs(extra_args);
-    let mut neo = TuiSession::neomacs(extra_args);
+    boot_pair_with_erase_char(extra_args, PtyEraseChar::TerminalDefault)
+}
+
+/// Boot both editors on PTYs whose ERASE character is ERASE.
+///
+/// The erase byte decides whether `normal-erase-is-backspace-mode` turns on,
+/// so this is how a case reaches the `^H`-terminal behaviour the pty default
+/// never exercises.
+pub fn boot_pair_with_erase_char(
+    extra_args: &str,
+    erase: PtyEraseChar,
+) -> (TuiSession, TuiSession) {
+    let mut gnu = TuiSession::gnu_emacs_with_erase_char(extra_args, erase);
+    let mut neo = TuiSession::neomacs_with_erase_char(extra_args, erase);
 
     let startup_ready = |grid: &[String]| {
         grid.iter().any(|row| row.contains("*scratch*"))

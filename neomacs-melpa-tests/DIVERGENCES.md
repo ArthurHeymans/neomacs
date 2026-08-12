@@ -3009,4 +3009,179 @@ Reduction: `cargo nextest run -p neomacs-melpa-tests -E 'test(vertico)'` --
 both the parity batch and the TUI case now pass.
 
 Status: FIXED (this variable). The 113 siblings above are untouched and want
-a rung of their own.
+a rung of their own. One of them, `tty-erase-char`, has since been fixed
+separately (12f923e21) because it was also carrying a wrong VALUE, not only a
+missing declaration -- see entry 66.
+
+## 65. A row going wholly blank was cleared with DCH instead of EL -- FIXED
+
+`magit_log_buffer_file_margin_columns_match_gnu_full_screen` failed 5/5 in the
+main checkout and passed 5/5 in a worktree at the same commit. One row, always
+row 44, always the full width: GNU `contents=""` against neomacs
+`contents=" "`. The test's GNU-side `expect!` pin matched byte-for-byte in both
+environments, so GNU was never the varying side.
+
+The raw PTY byte streams named the mechanism. GNU clears the row with `ESC[K`.
+Neomacs emitted `ESC[45;1H ESC[8P ESC[45;153H` plus eight literal spaces -- a
+DCH(8) and a tail fill. In the terminal model `DCH` shifts *written* blanks in
+where `EL` leaves the cells unwritten, which is exactly the `""` vs `" "` the
+harness reports, and it costs more bytes than the erase it replaced.
+
+The environment sensitivity was never in the code. The `*Warnings*` buffer
+prints `Missing 'lexical-binding' cookie in "<sandbox path>/magit-startup.el"`,
+that line wraps at column 160, and the checkout root's path length decides
+where. In the main checkout the continuation remnant on row 44 is exactly
+`tup.el".` -- eight characters, the 8 in `ESC[8P`. A worktree's longer
+`.claude/worktrees/...` path moves the wrap, the remnant stops matching a
+shift, the row takes the erase path, and the case passes. Both prior 5/5
+observations were correct readings of one path-length-sensitive planner bug.
+
+GNU reference: `update_frame_line` (src/dispnew.c:5960-6240) strips trailing
+spaces from BOTH the old (`olen`) and the new (`nlen`) row before it computes
+`begmatch`/`endmatch`, so blanks past a row's logical end never count toward
+what an insert/delete-char saves. Traced for this case: `nlen` becomes 0,
+`osp == nsp == 0`, `begmatch == 0`, `endmatch == 0`, no `delete_glyphs`,
+nothing written, and control reaches `just_erase` ->
+`clear_end_of_line`. GNU structurally cannot pick DCH here.
+
+Our `detect_row_shift` instead matched over the full PHYSICAL row width, where
+a run of default blanks trivially matches any other run of default blanks, so a
+wholly-blank desired row matched as a left shift of exactly its old content's
+width -- and the shift path is ordered before the erase-to-EOL branch, so `EL`
+never got a chance.
+
+Reduction: capture the neomacs PTY stream for the case and look for `ESC[8P` on
+the row the diff names; or, without magit, drive the planner directly --
+`neomacs-display-runtime` `rif_test.rs`
+`a_row_going_wholly_blank_erases_instead_of_shifting` sets a row to
+`tup.el".`, renders, sets it to all blanks, and asserts the second render
+contains `ESC[K` and not `ESC[8P`.
+
+Status: FIXED (65d419e79). Measure the saving over CONTENT rather than cells:
+a shift must preserve a run carrying at least one cell that is not a default
+blank (`carries_shiftable_content`), which is what GNU's trailing-space
+stripping accomplishes. A space carrying a background is real content and still
+shifts, matching GNU's `colored_spaces_p`, so genuine content shifts keep the
+ICH/DCH path and the branch order is untouched. neomacs-display-runtime
+1005/1005 with every issue-206 shift/erase pin intact; neomacs-tui-tests
+905/905. The other five melpa `tui_parity` failures were measured by stashing
+the fix and rebuilding -- six before, the same five after -- and are unrelated.
+
+## 66. `tty-erase-char` was frozen at 0 instead of the terminal's ERASE byte -- FIXED
+
+GNU splits this variable across two files. `syms_of_keyboard`
+(src/keyboard.c:13925) declares it with `DEFVAR_LISP` under the literal comment
+"This variable is set up in sysdep.c", and `init_sys_modes` supplies the value:
+`Qnil` to start (src/sysdep.c:1112), then `tty.main.c_cc[VERASE]`
+(src/sysdep.c:1130) read from the termios it saved BEFORE touching the terminal
+modes.
+
+Neomacs did neither half. `keyboard/pure.rs` seeded a plain `fixnum(0)` with
+`set_symbol_value` and never called `make_special`, so the variable was neither
+GNU's off-terminal `nil` nor any real terminal's ERASE byte, and a `let` around
+it in a lexical-binding file bound lexically -- the same missing-`DEFVAR_LISP`
+class as entry 64.
+
+The value is load-bearing rather than informational.
+`normal-erase-is-backspace-setup-frame` (lisp/simple.el:11093) enables the mode
+on a tty when `(eq tty-erase-char ?\^H)`, and the mode then
+`key-translate`s `C-h` to `DEL` (lisp/simple.el:11178) so Backspace deletes a
+character instead of opening the help prefix. Frozen at 0 that comparison could
+never be true, so on a terminal whose `stty erase` is `^H` neomacs opened help
+where GNU deletes.
+
+Reduction: `emacs -nw` and `neomacs -nw` in the same terminal, then compare
+`tty-erase-char` via `M-:`. GNU reports the byte `stty -a` calls `erase`;
+neomacs reported 0. In batch, GNU reports `nil` and neomacs reported 0.
+
+Why no existing case caught it: the TUI harness's pty reports `^?` (127), so
+`normal-erase-is-backspace-mode` stays OFF on both engines and they agree on
+every visible behaviour. `find_file_minibuffer_ctrl_h_does_not_delete_previous_character`
+pins exactly that agreement. The divergence only becomes visible on a `^H`
+terminal, which the suite never constructs.
+
+Discovered while refuting a suspected `C-h C-g` regression (task #42, NOT a
+divergence: GNU binds `g` in `help-map`, not `C-g`, so `C-h C-g` is undefined on
+both engines and the interactive sequence quits at the command loop).
+
+Status: FIXED (12f923e21). Mirror GNU's split rather than collapsing it:
+`keyboard/pure.rs` declares `nil` plus `make_special`; `neomacs-bin`'s
+`tty_init.rs` gains `detect_tty_erase_char` (a `tcgetattr` read of
+`c_cc[VERASE]` on stdin, `None` when stdin is not a terminal) and
+`tty_erase_char_value` mapping `Some(byte)` to a fixnum and `None` to `nil`;
+`main.rs` publishes it in the live-tty startup branch, which already runs before
+`tty_init_terminal` enters raw mode, so like GNU the byte describes the user's
+`stty` setting rather than the modes we impose. Red-first at three levels: the
+neovm-core declaration test, the neomacs-bin mapping test, and an end-to-end
+pty pin (`tty_erase_char_reports_the_terminals_stty_erase_like_gnu`) that read
+the variable through `M-:` and failed on the neomacs side ALONE. neovm-core
+8847/8847; neomacs-tui-tests 906/906.
+
+## 67. `normal-erase-is-backspace` latches OFF before the terminal's ERASE character is known -- OPEN
+
+Found by the `^H`-erase pin added with entry 66, which is the first case in the
+suite to run on a terminal whose `stty erase` is Backspace rather than `^?`.
+
+On such a terminal GNU deletes a character for the `0x08` the Backspace key
+sends; neomacs opens the help prefix instead, leaving the character in place.
+Measured through `M-:` on both engines, on the same pty, at the same moment:
+
+```elisp
+(list tty-erase-char
+      (terminal-parameter nil 'normal-erase-is-backspace)
+      (and (char-table-p keyboard-translate-table)
+           (aref keyboard-translate-table 8)))
+;; GNU     => (8 1 127)
+;; Neomacs => (8 0 nil)
+```
+
+`tty-erase-char` AGREES -- entry 66 fixed that. What differs is the terminal
+parameter: GNU decided 1 (mode on, `C-h` translated to `DEL`), neomacs decided
+0 and never revisited it.
+
+The decision is not wrong on its inputs; it was made too early. Every input
+`normal-erase-is-backspace-setup-frame` (lisp/simple.el:11093) consults is
+IDENTICAL across the two engines when queried at the prompt:
+
+```elisp
+(list window-system noninteractive normal-erase-is-backspace
+      (eq tty-erase-char 8) (display-symbol-keys-p))
+;; GNU     => (nil nil maybe t nil)
+;; Neomacs => (nil nil maybe t nil)
+```
+
+So on today's state the condition would enable the mode on both. The function
+is guarded by `(unless (terminal-parameter nil 'normal-erase-is-backspace)
+...)` (lisp/simple.el:11097), and a latched `0` is non-nil, so once the
+parameter exists the decision is never made again. Clearing it and re-running
+the function makes neomacs match GNU exactly:
+
+```elisp
+(progn (set-terminal-parameter nil 'normal-erase-is-backspace nil)
+       (normal-erase-is-backspace-setup-frame)
+       (list (terminal-parameter nil 'normal-erase-is-backspace)
+             (aref keyboard-translate-table 8)))
+;; GNU     => (1 127)
+;; Neomacs => (1 127)   <- identical once it is allowed to decide again
+```
+
+That isolates the fault precisely: the minor mode, `key-translate`, the
+`keyboard-translate-table` population and the input path that honours it are
+ALL correct. Only the moment of the decision is wrong -- it happens while the
+terminal's ERASE character is not yet the real one, and the guard then makes
+that first answer permanent.
+
+Still open: WHERE the premature decision happens. Clearing `terminal.params` in
+`configure_terminal_runtime` (neovm-core terminal/pure.rs) was tried and does
+NOT fix it, so the stale parameter is not reaching the live terminal through
+that path; that change was reverted rather than kept on speculation. GNU's
+ordering to match is `init_sys_modes` publishing `c_cc[VERASE]`
+(src/sysdep.c:1130) strictly before `command-line` calls
+`normal-erase-is-backspace-setup-frame` (lisp/startup.el:1638).
+
+Reduction: `cargo nextest run --release -p neomacs-tui-tests -E
+'test(backspace_on_a_ctrl_h_erase_terminal_deletes_like_gnu)'`. The case is
+committed `#[ignore]`d against this entry so the reduction is preserved without
+a red suite; remove the attribute when fixing.
+
+Status: OPEN.

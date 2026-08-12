@@ -37,6 +37,55 @@ pub use launch::TuiLaunch;
 pub const COLS: u16 = 160;
 pub const ROWS: u16 = 50;
 
+/// The ERASE character a test PTY reports to the editor it hosts.
+///
+/// This is the byte `stty -a` shows as `erase` and the one GNU publishes as
+/// `tty-erase-char` (`init_sys_modes`, src/sysdep.c:1130). It is not cosmetic:
+/// `normal-erase-is-backspace-setup-frame` (lisp/simple.el:11093) turns the
+/// mode on only when the terminal erases with `^H`, and the mode then
+/// `key-translate`s `C-h` to `DEL`. A suite that only ever runs on the pty
+/// default is blind to every behaviour that decision gates.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PtyEraseChar {
+    /// Leave the pty's own default, which on Linux is DEL (`^?`, 0x7f). Most
+    /// real terminals are configured this way, and it leaves
+    /// `normal-erase-is-backspace-mode` off.
+    TerminalDefault,
+    /// Erase with Backspace (`^H`, 0x08), the configuration under which GNU
+    /// enables `normal-erase-is-backspace-mode` so Backspace deletes a
+    /// character instead of opening the help prefix.
+    Backspace,
+}
+
+/// Apply [`PtyEraseChar`] to the pty slave before the child is spawned, so the
+/// editor's first `tcgetattr` already sees it.
+fn set_pty_erase_char(pts: &pty_process::blocking::Pts, erase: PtyEraseChar) {
+    let byte = match erase {
+        // Leaving the default untouched keeps every existing test's terminal
+        // byte-for-byte what it was before this option existed.
+        PtyEraseChar::TerminalDefault => return,
+        PtyEraseChar::Backspace => 0x08,
+    };
+    let fd = std::os::fd::AsRawFd::as_raw_fd(pts);
+    // SAFETY: `fd` is the pts we are about to hand to the child; tcgetattr
+    // only fills the termios out-parameter and tcsetattr only reads it.
+    unsafe {
+        let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
+        assert_eq!(
+            libc::tcgetattr(fd, termios.as_mut_ptr()),
+            0,
+            "tcgetattr on the test pty"
+        );
+        let mut termios = termios.assume_init();
+        termios.c_cc[libc::VERASE] = byte;
+        assert_eq!(
+            libc::tcsetattr(fd, libc::TCSANOW, &termios),
+            0,
+            "tcsetattr on the test pty"
+        );
+    }
+}
+
 fn wait_for_pty_writable(pty: &pty_process::blocking::Pty, timeout: Duration) {
     let timeout_ms = timeout.as_millis().min(50) as i32;
     let fd = std::os::fd::AsRawFd::as_raw_fd(pty);
@@ -107,9 +156,26 @@ impl TuiSession {
 
     /// Spawn a structured process description in a new PTY.
     pub fn spawn_launch(launch: TuiLaunch, name: &str) -> Self {
+        Self::spawn_launch_with_erase_char(launch, name, PtyEraseChar::TerminalDefault)
+    }
+
+    /// Spawn a structured process description in a new PTY whose ERASE
+    /// character is ERASE.
+    ///
+    /// The ERASE byte is what `stty -a` reports and what GNU reads into
+    /// `tty-erase-char` (`init_sys_modes`, src/sysdep.c:1130). It decides
+    /// whether `normal-erase-is-backspace-mode` turns on, so a terminal that
+    /// erases with `^H` exercises an entirely different key-translation path
+    /// from the pty default of `^?`.
+    pub fn spawn_launch_with_erase_char(
+        launch: TuiLaunch,
+        name: &str,
+        erase: PtyEraseChar,
+    ) -> Self {
         let (pty, pts) = pty_process::blocking::open().expect("open pty");
         pty.resize(pty_process::Size::new(ROWS, COLS))
             .expect("resize pty");
+        set_pty_erase_char(&pts, erase);
 
         let supplied_home = launch.environment_value("HOME").map(PathBuf::from);
         let supplied_tmp = launch.environment_value("TMPDIR").map(PathBuf::from);
@@ -183,6 +249,11 @@ impl TuiSession {
 
     /// Spawn GNU Emacs in TUI mode.
     pub fn gnu_emacs(extra_args: &str) -> Self {
+        Self::gnu_emacs_with_erase_char(extra_args, PtyEraseChar::TerminalDefault)
+    }
+
+    /// Spawn GNU Emacs in TUI mode on a PTY whose ERASE character is ERASE.
+    pub fn gnu_emacs_with_erase_char(extra_args: &str, erase: PtyEraseChar) -> Self {
         // Keep the GNU oracle focused on TUI behavior.  On NixOS the async
         // native compiler can fail after startup and pop *Warnings*, which
         // pollutes the rendered screen unrelated to the command under test.
@@ -190,7 +261,7 @@ impl TuiSession {
         let launch = TuiLaunch::new("emacs")
             .args(["-nw", "-Q", "-no-comp-spawn", quiet_native_comp])
             .args(extra_args.split_whitespace());
-        Self::spawn_launch(launch, "GNU")
+        Self::spawn_launch_with_erase_char(launch, "GNU", erase)
     }
 
     /// Spawn GNU Emacs in TUI mode WITHOUT `-Q`, loading the user's init
@@ -232,6 +303,11 @@ impl TuiSession {
     /// use `target/debug/neomacs`, and `cargo nextest --release` runs use
     /// `target/release/neomacs`.
     pub fn neomacs(extra_args: &str) -> Self {
+        Self::neomacs_with_erase_char(extra_args, PtyEraseChar::TerminalDefault)
+    }
+
+    /// Spawn Neomacs in TUI mode on a PTY whose ERASE character is ERASE.
+    pub fn neomacs_with_erase_char(extra_args: &str, erase: PtyEraseChar) -> Self {
         let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let workspace = manifest.parent().expect("workspace root");
         let bin = neomacs_binary_path(workspace);
@@ -244,7 +320,7 @@ impl TuiSession {
         let launch = TuiLaunch::new(bin.as_os_str())
             .args(["-nw", "-Q"])
             .args(extra_args.split_whitespace());
-        Self::spawn_launch(launch, "NEO")
+        Self::spawn_launch_with_erase_char(launch, "NEO", erase)
     }
 
     /// Read PTY output until the editor has been quiet for
