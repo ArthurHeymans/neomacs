@@ -324,8 +324,8 @@ pub const ERT_RUNNER_MELPA_PIN: (&str, &str) = ("ert-runner", "20231110.1358");
 /// OTP commit `1259612946cb36a8bf9614b289090bb32fbcbeb2`.
 pub const ERLANG_MELPA_PIN: (&str, &str) = ("erlang", "20260724.1508");
 
-/// The exact GNU ELPA let-alist dependency selected for the sage-shell-mode
-/// package graph.
+/// The exact GNU ELPA let-alist dependency selected for the flycheck-rust and
+/// sage-shell-mode package graphs.
 pub const LET_ALIST_GNU_ELPA_PIN: (&str, &str) = ("let-alist", "1.0.6");
 
 /// The exact audio-notes-mode package selected by the comprehensive
@@ -1425,6 +1425,13 @@ pub const ARDUINO_MODE_MELPA_PIN: (&str, &str) = ("arduino-mode", "20240527.1603
 /// The exact Flycheck package selected by its direct diagnostics parity
 /// corpus and by arduino-mode's optional integration coverage.
 pub const FLYCHECK_MELPA_PIN: (&str, &str) = ("flycheck", "20260728.931");
+
+/// The exact flycheck-rust package selected for practical Cargo target
+/// discovery, documented Flycheck hook setup, feature and crate-kind
+/// configuration, failure recovery, and end-to-end rust-cargo diagnostics.
+/// MELPA built this archive from upstream commit
+/// `b9db73a7a5980ca884d5dd0cbe79b3291a185972`.
+pub const FLYCHECK_RUST_MELPA_PIN: (&str, &str) = ("flycheck-rust", "20251231.1617");
 
 /// The exact flycheck-elsa package selected for practical Elsa checker setup,
 /// Cask/Eask backend command selection, enable predicates, and config-dir

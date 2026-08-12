@@ -377,7 +377,7 @@ rank	package	downloads	status
 376	ein	266758	covered
 377	polymode	264721	covered
 378	ace-jump-mode	263868	covered
-379	flycheck-rust	263623	todo
+379	flycheck-rust	263623	covered
 380	corfu	260657	todo
 381	python-mode	260655	todo
 382	w3m	257225	todo

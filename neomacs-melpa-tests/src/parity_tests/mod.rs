@@ -390,6 +390,7 @@ mod flycheck_dmd_dub;
 mod flycheck_elsa;
 mod flycheck_package;
 mod flycheck_pos_tip;
+mod flycheck_rust;
 mod flyspell_correct;
 mod forge;
 mod fringe_helper;
