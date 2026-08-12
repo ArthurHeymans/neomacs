@@ -816,12 +816,11 @@ fn tty_erase_char_reports_the_terminals_stty_erase_like_gnu() {
 }
 
 #[test]
-// DIVERGENCES.md entry 67: neomacs decides `normal-erase-is-backspace' before
-// the terminal's ERASE character is known and the `unless' guard in
-// `normal-erase-is-backspace-setup-frame' makes that first answer permanent, so
-// Backspace opens help where GNU deletes. Everything downstream of the decision
-// already matches GNU. Kept as the reduction; drop the attribute when fixed.
-#[ignore = "DIVERGENCES.md entry 67: normal-erase-is-backspace latches off too early"]
+// DIVERGENCES.md entry 67: a fabricated terminal-parameter default of 0 for
+// `normal-erase-is-backspace' made the `unless' guard in
+// `normal-erase-is-backspace-setup-frame' veto the real decision forever, so
+// Backspace opened help where GNU deletes. Fixed by deleting the invented
+// default; this is the end-to-end reduction that pins the behaviour.
 fn backspace_on_a_ctrl_h_erase_terminal_deletes_like_gnu() {
     // The behaviour tty-erase-char gates, exercised end to end rather than
     // argued. On a terminal whose stty erase is ^H,

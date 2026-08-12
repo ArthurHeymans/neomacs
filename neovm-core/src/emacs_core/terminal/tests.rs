@@ -152,12 +152,17 @@ fn terminal_parameter_defaults() {
     crate::test_utils::init_test_tracing();
     reset_terminal_thread_locals();
     let mut eval = Context::new();
+    // GNU has no terminal-parameter defaults; normal-erase-is-backspace in
+    // particular must start nil so the (unless (terminal-parameter ...))
+    // guard in normal-erase-is-backspace-setup-frame lets the real decision
+    // run during command-line (DIVERGENCES.md entry 67). A fabricated 0 here
+    // permanently latched the mode off on ^H-erase terminals.
     let normal = builtin_terminal_parameter(
         &mut eval,
         vec![Value::NIL, Value::symbol("normal-erase-is-backspace")],
     )
     .unwrap();
-    assert_eq!(normal, Value::fixnum(0));
+    assert!(normal.is_nil());
 }
 
 #[test]

@@ -509,22 +509,31 @@ pub(crate) fn expect_terminal_designator_eval(
 // Terminal parameter helpers
 // ---------------------------------------------------------------------------
 
+/// Fallback values for terminal parameters that GNU's own startup Lisp always
+/// stores before anything reads them, so a bare `Context` (no `command-line`
+/// pass) still answers like a booted GNU session.
+///
+/// GNU itself has NO terminal-parameter defaults: `terminal-parameter` is a
+/// plain assq over the terminal's alist (src/terminal.c, store_terminal_param)
+/// and every entry starts absent. In particular `normal-erase-is-backspace`
+/// must NOT appear here: `normal-erase-is-backspace-setup-frame`
+/// (lisp/simple.el:11097) is guarded by `(unless (terminal-parameter nil
+/// 'normal-erase-is-backspace) ...)`, so a fabricated 0 permanently vetoes the
+/// real decision `command-line` (lisp/startup.el:1638) makes AFTER
+/// `init_sys_modes` publishes the tty's ERASE character -- the mode's
+/// `:variable` setter stores the genuine 0/1 (DIVERGENCES.md entry 67).
 fn terminal_parameter_default_value(key: &Value) -> Option<Value> {
     match key.as_symbol_name() {
-        Some("normal-erase-is-backspace") => Some(Value::fixnum(0)),
         Some("keyboard-coding-saved-meta-mode") => Some(Value::list(vec![Value::T])),
         _ => None,
     }
 }
 
 fn terminal_parameter_default_entries() -> Vec<(Value, Value)> {
-    vec![
-        (Value::symbol("normal-erase-is-backspace"), Value::fixnum(0)),
-        (
-            Value::symbol("keyboard-coding-saved-meta-mode"),
-            Value::list(vec![Value::T]),
-        ),
-    ]
+    vec![(
+        Value::symbol("keyboard-coding-saved-meta-mode"),
+        Value::list(vec![Value::T]),
+    )]
 }
 
 fn lookup_terminal_parameter_value(params: &[(Value, Value)], key: &Value) -> Value {

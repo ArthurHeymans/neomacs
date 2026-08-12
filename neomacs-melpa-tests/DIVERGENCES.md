@@ -3180,7 +3180,7 @@ pty pin (`tty_erase_char_reports_the_terminals_stty_erase_like_gnu`) that read
 the variable through `M-:` and failed on the neomacs side ALONE. neovm-core
 8847/8847; neomacs-tui-tests 906/906.
 
-## 67. `normal-erase-is-backspace` latches OFF before the terminal's ERASE character is known -- OPEN
+## 67. `normal-erase-is-backspace` latches OFF because of an invented terminal-parameter default -- FIXED
 
 Found by the `^H`-erase pin added with entry 66, which is the first case in the
 suite to run on a terminal whose `stty erase` is Backspace rather than `^?`.
@@ -3228,23 +3228,49 @@ the function makes neomacs match GNU exactly:
 ;; Neomacs => (1 127)   <- identical once it is allowed to decide again
 ```
 
-That isolates the fault precisely: the minor mode, `key-translate`, the
-`keyboard-translate-table` population and the input path that honours it are
-ALL correct. Only the moment of the decision is wrong -- it happens while the
-terminal's ERASE character is not yet the real one, and the guard then makes
-that first answer permanent.
+That isolated the decision as the fault. Two defects produced it, and the
+second only became visible once the first was fixed.
 
-Still open: WHERE the premature decision happens. Clearing `terminal.params` in
-`configure_terminal_runtime` (neovm-core terminal/pure.rs) was tried and does
-NOT fix it, so the stale parameter is not reaching the live terminal through
-that path; that change was reverted rather than kept on speculation. GNU's
-ordering to match is `init_sys_modes` publishing `c_cc[VERASE]`
-(src/sysdep.c:1130) strictly before `command-line` calls
-`normal-erase-is-backspace-setup-frame` (lisp/startup.el:1638).
+DEFECT 1 -- an invented default vetoed the decision forever. The decision was
+never premature: nothing ran it early. `terminal_parameter_default_value`
+(neovm-core terminal/pure.rs) fabricated a compiled-in fallback of `0` for
+`normal-erase-is-backspace`, so `(terminal-parameter nil
+'normal-erase-is-backspace)` answered non-nil even though NOTHING had ever
+stored it, and the `unless` guard at lisp/simple.el:11097 refused to run the
+body at all. GNU has no terminal-parameter defaults: `Fterminal_parameter` is
+an `assq` over the terminal's alist (src/terminal.c), every entry starts
+absent, and the genuine `0`/`1` is written by the minor mode's `:variable`
+setter (lisp/simple.el:11144) during `command-line`. That also explains the
+earlier negative result: clearing `terminal.params` could not help, because the
+default re-supplied `0` on the next read. The startup ORDER was already GNU's
+-- neomacs-bin/src/main.rs publishes `tty-erase-char` at evaluator setup,
+before the frontend loop evaluates `top-level` -> `command-line` ->
+`normal-erase-is-backspace-setup-frame` (lisp/startup.el:1638) -- mirroring
+`init_sys_modes` (src/sysdep.c:1130). Deleting the invented default made both
+engines report `(8 1 127)` for the ledger probe above.
 
-Reduction: `cargo nextest run --release -p neomacs-tui-tests -E
-'test(backspace_on_a_ctrl_h_erase_terminal_deletes_like_gnu)'`. The case is
-committed `#[ignore]`d against this entry so the reduction is preserved without
-a red suite; remove the attribute when fixing.
+DEFECT 2 -- nothing consumed `keyboard-translate-table`. With the mode now
+correctly on, C-h was still not translated: `key-translate` populated the
+table and no Rust code ever read it. GNU applies it in `read_char`
+(src/keyboard.c:3149-3163), on FRESHLY read events only -- rereads from
+`unread-command-events` and keyboard macros jump past that block to
+`reread_for_input_method` (src/keyboard.c:3252). Neomacs now mirrors that in
+`translate_fresh_character_event` (neovm-core keyboard.rs), applied at the two
+host-input conversion sites (`TtyCharacter` and `KeyPress`) that correspond to
+GNU's `kbd_buffer_get_event` output, after the quit-character check (GNU
+compares `quit_char` against the raw byte when storing the event) and before
+kbd-macro recording (GNU records the translated char).
 
-Status: OPEN.
+Fixed by both changes; the reduction
+`backspace_on_a_ctrl_h_erase_terminal_deletes_like_gnu` (neomacs-tui-tests) is
+now un-`#[ignore]`d and green, with unit pins for the empty default and for
+the translation step.
+
+Sibling sweep: one fabricated terminal-parameter default remains in those
+helpers, `keyboard-coding-saved-meta-mode` => `(t)`. It is left in place
+deliberately -- unlike `normal-erase-is-backspace` no guard keys off its
+presence, and it is what an oracle-shaped bare `Context` needs to answer like a
+booted GNU session -- but it is the same invented-default family and should be
+retired the day the bootstrap stores it for real.
+
+Status: FIXED.

@@ -16,7 +16,7 @@ use crate::emacs_core::keyboard::pure::KEY_CHAR_META;
 use crate::emacs_core::keymap::{KeymapMarker, MenuItemProperty};
 use crate::emacs_core::wait::CommandInputWaitOutcome;
 // decode_storage_char_codes import removed — now using emacs_char directly
-use crate::emacs_core::value::{Value, ValueKind};
+use crate::emacs_core::value::{Value, ValueKind, VecLikeType};
 use crate::heap_types::LispString;
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -4521,6 +4521,51 @@ impl crate::emacs_core::eval::Context {
         self.request_shutdown(0, false);
     }
 
+    /// Translate a freshly read character event through
+    /// `keyboard-translate-table`.
+    ///
+    /// Mirrors GNU `read_char' (src/keyboard.c:3142-3176), the "Handle things
+    /// that only apply to characters" block: a fixnum event is looked up in
+    /// the table when the index is in range (any character for a char-table,
+    /// below the length for a string or vector), and a non-nil entry replaces
+    /// the event. GNU applies this only to events that just came out of
+    /// `kbd_buffer_get_event', not to rereads from `unread-command-events' or
+    /// a keyboard macro, which jump past this block to `reread_for_input_method'
+    /// (src/keyboard.c:3252) -- so this runs at the host-input conversion sites
+    /// only.
+    ///
+    /// This is what makes `normal-erase-is-backspace-mode' work on a ^H-erase
+    /// terminal: it `key-translate's C-h to DEL (lisp/simple.el:11178), so the
+    /// 0x08 the Backspace key sends must arrive at the key-sequence layer as
+    /// 127 (DIVERGENCES.md entry 67).
+    fn translate_fresh_character_event(&mut self, event: Value) -> Value {
+        if event.as_fixnum().is_none() {
+            return event;
+        }
+        let table = self
+            .eval_symbol("keyboard-translate-table")
+            .unwrap_or(Value::NIL);
+        let indexable = match table.kind() {
+            // A char-table is indexed by any character; GNU's guard is
+            // CHARACTERP, so modifier-bearing events (meta bit set) fall
+            // through untranslated.
+            ValueKind::Veclike(VecLikeType::CharTable) => event.is_char(),
+            // GNU also accepts a string or vector table, bounded by its
+            // length -- `aref' reports that bound by signalling, and an
+            // out-of-range event stays untranslated either way.
+            ValueKind::Veclike(VecLikeType::Vector) | ValueKind::String => true,
+            _ => false,
+        };
+        if !indexable {
+            return event;
+        }
+        match crate::emacs_core::builtins::collections::builtin_aref_2(self, table, event) {
+            // nil in keyboard-translate-table means no translation.
+            Ok(translated) if !translated.is_nil() => translated,
+            _ => event,
+        }
+    }
+
     fn handle_read_char_input_event(
         &mut self,
         event: InputEvent,
@@ -4563,10 +4608,14 @@ impl crate::emacs_core::eval::Context {
             } => {
                 self.sync_keyboard_terminal_owner_for_input_frame(emacs_frame_id);
                 self.clear_current_message_for_keyboard_input();
-                let emacs_event = Value::fixnum(i64::from(character.code()));
-                if self.event_is_quit_char(&emacs_event) {
+                let raw_event = Value::fixnum(i64::from(character.code()));
+                // GNU compares the quit character against the byte the
+                // terminal delivered (kbd_buffer_store_event, before read_char
+                // translates), so quit detection stays on the raw event.
+                if self.event_is_quit_char(&raw_event) {
                     self.request_quit_from_keyboard_input();
                 }
+                let emacs_event = self.translate_fresh_character_event(raw_event);
                 self.command_loop.store_kbd_macro_event(emacs_event);
                 Ok(Some(emacs_event))
             }
@@ -4658,10 +4707,11 @@ impl crate::emacs_core::eval::Context {
                 self.sync_keyboard_terminal_owner_for_input_frame(emacs_frame_id);
                 tracing::debug!("read_char: received KeyPress {:?}", key);
                 self.clear_current_message_for_keyboard_input();
-                let emacs_event = key.to_emacs_event_value();
-                if self.event_is_quit_char(&emacs_event) {
+                let raw_event = key.to_emacs_event_value();
+                if self.event_is_quit_char(&raw_event) {
                     self.request_quit_from_keyboard_input();
                 }
+                let emacs_event = self.translate_fresh_character_event(raw_event);
                 self.command_loop.store_kbd_macro_event(emacs_event);
                 Ok(Some(emacs_event))
             }

@@ -1160,3 +1160,52 @@ fn read_key_sequence_with_timeout_returns_nil_like_gnu() {
         crate::emacs_core::print::print_value(&result)
     );
 }
+
+#[test]
+fn fresh_character_events_go_through_keyboard_translate_table_like_gnu() {
+    // GNU `read_char' translates a freshly read character through
+    // `keyboard-translate-table' (src/keyboard.c:3149-3163) before the key
+    // sequence layer sees it. That is the mechanism
+    // `normal-erase-is-backspace-mode' uses on a ^H-erase terminal: it
+    // key-translates C-h to DEL (lisp/simple.el:11178), so the 0x08 the
+    // Backspace key sends must arrive as 127 (DIVERGENCES.md entry 67).
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+
+    // No table: the event passes through unchanged.
+    assert_eq!(
+        eval.translate_fresh_character_event(Value::fixnum(8)),
+        Value::fixnum(8)
+    );
+
+    eval.eval_str_each(
+        "(progn (setq keyboard-translate-table
+                      (make-char-table 'keyboard-translate-table nil))
+                (aset keyboard-translate-table 8 127)
+                (aset keyboard-translate-table 127 4))",
+    )
+    .pop()
+    .expect("one form")
+    .expect("table setup succeeds");
+
+    assert_eq!(
+        eval.translate_fresh_character_event(Value::fixnum(8)),
+        Value::fixnum(127),
+        "C-h must translate to DEL"
+    );
+    assert_eq!(
+        eval.translate_fresh_character_event(Value::fixnum(127)),
+        Value::fixnum(4),
+        "DEL must translate to C-d"
+    );
+    // nil entries mean no translation, and non-character events are left
+    // alone entirely.
+    assert_eq!(
+        eval.translate_fresh_character_event(Value::fixnum(i64::from(b'a'))),
+        Value::fixnum(i64::from(b'a'))
+    );
+    assert_eq!(
+        eval.translate_fresh_character_event(Value::symbol("f1")),
+        Value::symbol("f1")
+    );
+}

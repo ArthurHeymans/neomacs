@@ -222,12 +222,15 @@ fn terminal_parameter_exposes_oracle_defaults() {
     crate::test_utils::init_test_tracing();
     clear_terminal_parameters();
     let mut eval = crate::emacs_core::Context::new();
+    // normal-erase-is-backspace has NO default: GNU leaves it unset until
+    // normal-erase-is-backspace-setup-frame stores 0/1 during command-line,
+    // and a fabricated 0 vetoed that decision (DIVERGENCES.md entry 67).
     let normal = builtin_terminal_parameter(
         &mut eval,
         vec![Value::NIL, Value::symbol("normal-erase-is-backspace")],
     )
     .unwrap();
-    assert_eq!(normal, Value::fixnum(0));
+    assert!(normal.is_nil());
 
     let keyboard = builtin_terminal_parameter(
         &mut eval,
@@ -265,6 +268,8 @@ fn set_terminal_parameter_returns_previous_default_values() {
     crate::test_utils::init_test_tracing();
     clear_terminal_parameters();
     let mut eval = crate::emacs_core::Context::new();
+    // No fabricated default for normal-erase-is-backspace: the previous
+    // value of a never-set parameter is nil, as in GNU (entry 67).
     let previous_normal = builtin_set_terminal_parameter(
         &mut eval,
         vec![
@@ -274,7 +279,7 @@ fn set_terminal_parameter_returns_previous_default_values() {
         ],
     )
     .unwrap();
-    assert_eq!(previous_normal, Value::fixnum(0));
+    assert!(previous_normal.is_nil());
 
     let previous_keyboard = builtin_set_terminal_parameter(
         &mut eval,
@@ -392,11 +397,13 @@ fn terminal_parameters_lists_mutated_symbol_entries() {
 
     let params = builtin_terminal_parameters(&mut eval, vec![Value::NIL]).unwrap();
     let entries = list_to_vec(&params).expect("parameter alist");
-    assert!(entries.len() >= 4);
-    assert!(entries.iter().any(|entry| entry.is_cons() && {
-        entry.cons_car() == Value::symbol("normal-erase-is-backspace")
-            && entry.cons_cdr() == Value::fixnum(0)
-    }));
+    assert!(entries.len() >= 3);
+    // normal-erase-is-backspace must NOT be listed until Lisp stores it
+    // (entry 67): GNU's alist has no entry for a never-set parameter.
+    assert!(
+        !entries.iter().any(|entry| entry.is_cons()
+            && entry.cons_car() == Value::symbol("normal-erase-is-backspace"))
+    );
     assert!(entries.iter().any(|entry| entry.is_cons() && {
         entry.cons_car() == Value::symbol("keyboard-coding-saved-meta-mode")
             && entry.cons_cdr() == Value::list(vec![Value::T])
