@@ -3045,10 +3045,36 @@ both editors and diffing; the full list as measured on 2026-08-11:
 Reduction: `cargo nextest run -p neomacs-melpa-tests -E 'test(vertico)'` --
 both the parity batch and the TUI case now pass.
 
-Status: FIXED (this variable). The 113 siblings above are untouched and want
-a rung of their own. One of them, `tty-erase-char`, has since been fixed
+Status: FIXED (this variable). One sibling, `tty-erase-char`, was fixed
 separately (12f923e21) because it was also carrying a wrong VALUE, not only a
 missing declaration -- see entry 66.
+
+### Sweep status: ALL 112 remaining siblings FIXED
+
+Every remaining variable in the list above is now registered through
+`Obarray::define_special_variable` at its owning subsystem's bootstrap site
+(keyboard/pure.rs, xdisp.rs, frame_vars.rs, window_cmds, xfaces, fileio,
+composite, eval.rs), each with GNU's C DEFVAR initial value read from the
+`syms_of_*` source, not from recall. The per-variable audit found seven
+carrying a neomacs-invented or wrong VALUE on top of the missing declaration:
+
+- `polling-period`: fixnum 2 -> float 2.0 (keyboard.c:13869 `make_float`)
+- `debug-on-event`: nil -> `sigusr2` (keyboard.c:14358)
+- `maximum-scroll-margin`: fixnum 25 -> float 0.25 (xdisp.c:38541)
+- `tool-bar-max-label-size`: 10 -> 14 (DEFAULT_TOOL_BAR_LABEL_SIZE,
+  dispextern.h:3494)
+- `resize-mini-windows`: bootstrap `grow-only` -> nil (GNU inits nil so
+  loadup can run before window.el; lisp/loadup.el:142 then assigns
+  `grow-only`, which our loadup also does)
+- `redisplay--inhibit-bidi`: a conflicting nil seed deleted; bootstrap is t
+  (xdisp.c:39235), loadup.el flips it off after charprop loads
+- `frame-inhibit-implied-resize`: nil -> `(tab-bar-lines tool-bar-lines)`
+  (frame.c:7636, the own-drawn-tool-bar GUI branch)
+
+Pinned by the five per-subsystem tables in
+`neovm-core/src/emacs_core/gnu_defvar_special_test.rs`, which assert
+`special-variable-p` AND the GNU default for all 112, plus a let-through-callee
+behavioral pin.
 
 ## 65. A row going wholly blank was cleared with DCH instead of EL -- FIXED
 

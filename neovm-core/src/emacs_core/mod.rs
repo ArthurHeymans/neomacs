@@ -63,6 +63,8 @@ pub mod forward;
 pub mod frame;
 pub mod frame_vars;
 pub mod gc_stats;
+#[cfg(test)]
+mod gnu_defvar_special_test;
 pub mod hashtab;
 pub(crate) mod hook_runtime;
 pub mod hscroll;

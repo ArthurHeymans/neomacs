@@ -6642,11 +6642,12 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("set-auto-coding-for-load", Value::NIL);
     obarray.set_symbol_value("file-name-handler-alist", Value::NIL);
     obarray.make_special("file-name-handler-alist");
-    obarray.set_symbol_value("set-auto-coding-function", Value::NIL);
-    obarray.set_symbol_value("after-insert-file-functions", Value::NIL);
-    obarray.set_symbol_value("write-region-annotate-functions", Value::NIL);
-    obarray.set_symbol_value("write-region-post-annotation-function", Value::NIL);
-    obarray.set_symbol_value("write-region-annotations-so-far", Value::NIL);
+    // fileio.c:6856-6944 DEFVAR_LISP cluster, all initialized to nil.
+    obarray.define_special_variable("set-auto-coding-function", Value::NIL);
+    obarray.define_special_variable("after-insert-file-functions", Value::NIL);
+    obarray.define_special_variable("write-region-annotate-functions", Value::NIL);
+    obarray.define_special_variable("write-region-post-annotation-function", Value::NIL);
+    obarray.define_special_variable("write-region-annotations-so-far", Value::NIL);
     obarray.set_symbol_value("inhibit-file-name-handlers", Value::NIL);
     obarray.make_special("inhibit-file-name-handlers");
     obarray.set_symbol_value("inhibit-file-name-operation", Value::NIL);
@@ -6656,7 +6657,8 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.make_special("auto-save-list-file-name");
     obarray.set_symbol_value("auto-save-list-file-prefix", Value::NIL);
     obarray.set_symbol_value("auto-save-visited-file-name", Value::NIL);
-    obarray.set_symbol_value("auto-save-include-big-deletions", Value::NIL);
+    // fileio.c:6944 DEFVAR_LISP, init nil.
+    obarray.define_special_variable("auto-save-include-big-deletions", Value::NIL);
     obarray.set_symbol_value("small-temporary-file-directory", Value::NIL);
     obarray.set_symbol_value("write-region-inhibit-fsync", Value::T);
     obarray.make_special("write-region-inhibit-fsync");

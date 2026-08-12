@@ -580,20 +580,30 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     obarray.set_symbol_value("help-event-list", Value::NIL);
     obarray.make_special("help-event-list");
     obarray.set_symbol_value("suggest-key-bindings", Value::T);
-    obarray.set_symbol_value("timer-idle-list", Value::NIL);
-    obarray.set_symbol_value("timer-list", Value::NIL);
+    // keyboard.c:14228 / 14224 -- DEFVAR_LISP, init nil.
+    obarray.define_special_variable("timer-idle-list", Value::NIL);
+    obarray.define_special_variable("timer-list", Value::NIL);
     obarray.set_symbol_value("input-method-previous-message", Value::NIL);
     obarray.make_special("input-method-previous-message");
-    obarray.set_symbol_value("auto-save-interval", Value::fixnum(300));
-    obarray.set_symbol_value("auto-save-timeout", Value::fixnum(30));
+    // keyboard.c:13841 DEFVAR_INT, init 300.
+    obarray.define_special_variable("auto-save-interval", Value::fixnum(300));
+    // keyboard.c:13850 DEFVAR_LISP, XSETFASTINT 30.
+    obarray.define_special_variable("auto-save-timeout", Value::fixnum(30));
     obarray.set_symbol_value("echo-keystrokes", Value::fixnum(1));
     obarray.make_special("echo-keystrokes");
-    obarray.set_symbol_value("polling-period", Value::fixnum(2));
-    obarray.set_symbol_value("double-click-time", Value::fixnum(500));
-    obarray.set_symbol_value("double-click-fuzz", Value::fixnum(3));
-    obarray.set_symbol_value("num-input-keys", Value::fixnum(0));
-    obarray.set_symbol_value("num-nonmacro-input-events", Value::fixnum(0));
-    obarray.set_symbol_value("last-event-frame", Value::NIL);
+    // keyboard.c:13869 DEFVAR_LISP, make_float (2.0) -- a float, not a fixnum.
+    obarray.define_special_variable("polling-period", Value::make_float(2.0));
+    // keyboard.c:13876 DEFVAR_LISP, make_fixnum 500.
+    obarray.define_special_variable("double-click-time", Value::fixnum(500));
+    // keyboard.c:13886 DEFVAR_INT, init 3.
+    obarray.define_special_variable("double-click-fuzz", Value::fixnum(3));
+    // keyboard.c:13897 / 13903 DEFVAR_INT, init 0.
+    obarray.define_special_variable("num-input-keys", Value::fixnum(0));
+    obarray.define_special_variable("num-nonmacro-input-events", Value::fixnum(0));
+    // keyboard.c:13908 DEFVAR_LISP, init nil.
+    obarray.define_special_variable("last-event-frame", Value::NIL);
+    // keyboard.c:13913 DEFVAR_LISP, init nil.
+    obarray.define_special_variable("last-event-device", Value::NIL);
     // keyboard.c DEFVAR_BOOL (Emacs 31.1), default false. NeoMacs drives a
     // single GUI terminal so the multi-terminal keyboard-merge behavior is
     // moot, but the variable must be bound or cus-start.el signals
@@ -608,14 +618,38 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     // against ?\^H. The live value is supplied by the tty init path.
     obarray.set_symbol_value("tty-erase-char", Value::NIL);
     obarray.make_special("tty-erase-char");
-    obarray.set_symbol_value("extra-keyboard-modifiers", Value::fixnum(0));
+    // keyboard.c:13993 DEFVAR_INT, init 0.
+    obarray.define_special_variable("extra-keyboard-modifiers", Value::fixnum(0));
     obarray.set_symbol_value("inhibit-local-menu-bar-menus", Value::NIL);
-    obarray.set_symbol_value("meta-prefix-char", Value::fixnum(27));
-    obarray.set_symbol_value("enable-disabled-menus-and-buttons", Value::NIL);
+    // keyboard.c:13777 DEFVAR_LISP, XSETINT 033.
+    obarray.define_special_variable("meta-prefix-char", Value::fixnum(27));
+    // keyboard.c:14319 DEFVAR_LISP, init nil.
+    obarray.define_special_variable("enable-disabled-menus-and-buttons", Value::NIL);
     // GNU `src/keyboard.c` defines this with DEFVAR_LISP and initializes it to Qt.
     obarray.set_symbol_value("select-active-regions", Value::T);
     obarray.make_special("select-active-regions");
-    obarray.set_symbol_value("saved-region-selection", Value::NIL);
+    // keyboard.c:14340 DEFVAR_LISP, init nil.
+    obarray.define_special_variable("saved-region-selection", Value::NIL);
+    // keyboard.c:14446 DEFVAR_LISP, init nil.
+    obarray.define_special_variable("post-select-region-hook", Value::NIL);
+    // keyboard.c:14459 DEFVAR_LISP, init nil.
+    obarray.define_special_variable("current-key-remap-sequence", Value::NIL);
+    // keyboard.c:14358 DEFVAR_LISP, init Qsigusr2.
+    obarray.define_special_variable("debug-on-event", Value::symbol("sigusr2"));
+    // keyboard.c:14422 DEFVAR_LISP, init nil.
+    obarray.define_special_variable("display-monitors-changed-functions", Value::NIL);
+    // keyboard.c:14287 DEFVAR_LISP, make_fixnum 2.
+    obarray.define_special_variable("minibuffer-message-timeout", Value::fixnum(2));
+    // keyboard.c:13834 DEFVAR_LISP, init nil.
+    obarray.define_special_variable("this-original-command", Value::NIL);
+    // keyboard.c:13744 DEFVAR_LISP, zero-initialized to nil.
+    obarray.define_special_variable("last-nonmenu-event", Value::NIL);
+    // keyboard.c:13803 DEFVAR_KBOARD; kboard slots start nil. NeoVM does not
+    // yet split keyboard state per terminal, so model it as a global special.
+    obarray.define_special_variable("last-repeatable-command", Value::NIL);
+    // macros.c:427 / macros.c:442 DEFVAR_KBOARD; kboard slots start nil.
+    obarray.define_special_variable("defining-kbd-macro", Value::NIL);
+    obarray.define_special_variable("last-kbd-macro", Value::NIL);
     // GNU `src/keyboard.c` initializes this to nil and makes it buffer-local-on-set.
     obarray.set_symbol_value("deactivate-mark", Value::NIL);
     obarray.make_special("deactivate-mark");

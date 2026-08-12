@@ -18,20 +18,22 @@ use crate::face::{LFACE_VECTOR_SIZE, LFaceAttr};
 
 /// Register bootstrap variables owned by the face subsystem.
 pub fn register_bootstrap_vars(obarray: &mut Obarray) {
-    obarray.set_symbol_value("face-filters-always-match", Value::NIL);
+    // xfaces.c:7612 DEFVAR_BOOL, zero-init false.
+    obarray.define_special_variable("face-filters-always-match", Value::NIL);
     obarray.set_symbol_value(
         "face--new-frame-defaults",
         bootstrap_face_new_frame_defaults_table(),
     );
     stamp_face_id_properties(obarray);
-    obarray.set_symbol_value("face-default-stipple", Value::string("gray3"));
-    obarray.set_symbol_value("tty-defined-color-alist", Value::NIL);
+    // xfaces.c:7624-7751 DEFVAR cluster, GNU C inits.
+    obarray.define_special_variable("face-default-stipple", Value::string("gray3"));
+    obarray.define_special_variable("tty-defined-color-alist", Value::NIL);
     obarray.set_symbol_value("scalable-fonts-allowed", Value::NIL);
-    obarray.set_symbol_value("face-ignored-fonts", Value::NIL);
-    obarray.set_symbol_value("face-remapping-alist", Value::NIL);
-    obarray.set_symbol_value("face-font-rescale-alist", Value::NIL);
-    obarray.set_symbol_value("face-near-same-color-threshold", Value::fixnum(30_000));
-    obarray.set_symbol_value("face-font-lax-matched-attributes", Value::T);
+    obarray.define_special_variable("face-ignored-fonts", Value::NIL);
+    obarray.define_special_variable("face-remapping-alist", Value::NIL);
+    obarray.define_special_variable("face-font-rescale-alist", Value::NIL);
+    obarray.define_special_variable("face-near-same-color-threshold", Value::fixnum(30_000));
+    obarray.define_special_variable("face-font-lax-matched-attributes", Value::T);
 }
 
 /// Backfill xfaces-owned bootstrap variables after loading a dump or partial

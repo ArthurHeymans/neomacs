@@ -5575,7 +5575,10 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
         obarray.define_lisp_variable(name, default, LispVariableLocality::BufferLocalIfSet);
     }
 
-    obarray.set_symbol_value("redisplay--inhibit-bidi", Value::T);
+    // xdisp.c:39235 DEFVAR_BOOL, initialized to true ("we need to disable
+    // reordering until loadup.el successfully loads charprop.el"); loadup.el
+    // flips it to nil at the end of the bootstrap.
+    obarray.define_special_variable("redisplay--inhibit-bidi", Value::T);
     obarray.set_symbol_value("inhibit-redisplay", Value::NIL);
     obarray.make_special("inhibit-redisplay");
     // GNU xdisp.c `DEFVAR_LISP ("special-mirror-table", Vspecial_mirror_table)`:
@@ -5593,17 +5596,21 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("blink-matching-delay", Value::fixnum(1));
     obarray.set_symbol_value("blink-matching-paren", Value::T);
     obarray.set_symbol_value("mouse-autoselect-window", Value::NIL);
-    obarray.set_symbol_value("auto-resize-tab-bars", Value::T);
-    obarray.set_symbol_value("auto-raise-tab-bar-buttons", Value::T);
-    obarray.set_symbol_value("auto-resize-tool-bars", Value::T);
-    obarray.set_symbol_value("auto-raise-tool-bar-buttons", Value::T);
-    obarray.set_symbol_value("tab-bar-truncate", Value::NIL);
-    obarray.set_symbol_value("tab-bar-border", Value::symbol("internal-border-width"));
-    obarray.set_symbol_value("tab-bar-button-margin", Value::fixnum(1));
-    obarray.set_symbol_value("tab-bar-button-relief", Value::fixnum(1));
-    obarray.set_symbol_value("tool-bar-border", Value::symbol("internal-border-width"));
-    obarray.set_symbol_value("tool-bar-button-margin", Value::fixnum(4));
-    obarray.set_symbol_value("tool-bar-button-relief", Value::fixnum(1));
+    // xdisp.c:38695-38795 tab/tool bar DEFVARs (values are GNU's C inits:
+    // DEFAULT_TAB_BAR_BUTTON_MARGIN 1 / _RELIEF 1, DEFAULT_TOOL_BAR_BUTTON_MARGIN 4
+    // / _RELIEF 1, DEFAULT_TOOL_BAR_LABEL_SIZE 14 -- dispextern.h:3419-3499).
+    obarray.define_special_variable("auto-resize-tab-bars", Value::T);
+    obarray.define_special_variable("auto-raise-tab-bar-buttons", Value::T);
+    obarray.define_special_variable("auto-resize-tool-bars", Value::T);
+    obarray.define_special_variable("auto-raise-tool-bar-buttons", Value::T);
+    obarray.define_special_variable("tab-bar-truncate", Value::NIL);
+    obarray.define_special_variable("tab-bar-border", Value::symbol("internal-border-width"));
+    obarray.define_special_variable("tab-bar-button-margin", Value::fixnum(1));
+    obarray.define_special_variable("tab-bar-button-relief", Value::fixnum(1));
+    obarray.define_special_variable("tool-bar-border", Value::symbol("internal-border-width"));
+    obarray.define_special_variable("tool-bar-button-margin", Value::fixnum(4));
+    obarray.define_special_variable("tool-bar-button-relief", Value::fixnum(1));
+    obarray.define_special_variable("tool-bar-max-label-size", Value::fixnum(14));
     obarray.set_symbol_value("tool-bar-style", Value::NIL);
     obarray.set_symbol_value("global-font-lock-mode", Value::NIL);
     // GNU xdisp.c registers these as DEFVAR_LISP/INT/BOOL variables and
@@ -5633,22 +5640,31 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // GNU `src/dispnew.c` defines this with DEFVAR_BOOL.
     obarray.set_symbol_value("cursor-in-echo-area", Value::NIL);
     obarray.make_special("cursor-in-echo-area");
-    obarray.set_symbol_value("truncate-partial-width-windows", Value::fixnum(50));
+    // xdisp.c:38558 DEFVAR_LISP, make_fixnum (50).
+    obarray.define_special_variable("truncate-partial-width-windows", Value::fixnum(50));
     obarray.set_symbol_value("mode-line-in-non-selected-windows", Value::T);
     obarray.set_symbol_value("line-number-display-limit", Value::NIL);
     obarray.set_symbol_value("highlight-nonselected-windows", Value::NIL);
-    obarray.set_symbol_value("message-truncate-lines", Value::NIL);
-    obarray.set_symbol_value("scroll-step", Value::fixnum(0));
-    obarray.set_symbol_value("scroll-conservatively", Value::fixnum(0));
+    // xdisp.c:38898 DEFVAR_BOOL, init false.
+    obarray.define_special_variable("message-truncate-lines", Value::NIL);
+    // xdisp.c:38514 / 38521 DEFVAR_INT, init 0.
+    obarray.define_special_variable("scroll-step", Value::fixnum(0));
+    obarray.define_special_variable("scroll-conservatively", Value::fixnum(0));
     // GNU `src/xdisp.c:37835-37841` installs this as a DEFVAR_BOOL with a
     // default of true so lexical GNU Lisp can read it as a dynamic variable.
     obarray.set_symbol_value("scroll-minibuffer-conservatively", Value::T);
     obarray.make_special("scroll-minibuffer-conservatively");
-    obarray.set_symbol_value("scroll-margin", Value::fixnum(0));
-    obarray.set_symbol_value("hscroll-margin", Value::fixnum(5));
-    obarray.set_symbol_value("hscroll-step", Value::fixnum(0));
+    // xdisp.c:38535 DEFVAR_INT, init 0.
+    obarray.define_special_variable("scroll-margin", Value::fixnum(0));
+    // xdisp.c:38541 DEFVAR_LISP, make_float (0.25) -- a float, not a fixnum.
+    obarray.define_special_variable("maximum-scroll-margin", Value::make_float(0.25));
+    // xdisp.c:38875 DEFVAR_INT, init 5.
+    obarray.define_special_variable("hscroll-margin", Value::fixnum(5));
+    // xdisp.c:38880 DEFVAR_LISP, make_fixnum (0).
+    obarray.define_special_variable("hscroll-step", Value::fixnum(0));
     obarray.set_symbol_value("auto-hscroll-mode", Value::T);
-    obarray.set_symbol_value("void-text-area-pointer", Value::symbol("arrow"));
+    // xdisp.c:38479 DEFVAR_LISP, init Qarrow.
+    obarray.define_special_variable("void-text-area-pointer", Value::symbol("arrow"));
     // GNU xdisp.c registers this with DEFVAR_BOOL.  Native Boolean storage is
     // observable from Lisp: every non-nil assignment reads back as canonical
     // `t`, including dynamic bindings and their restoration.
@@ -5662,12 +5678,13 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // code that does `(boundp 'inhibit-try-cursor-movement)` or
     // `(setq inhibit-try-cursor-movement ...)` does not raise void-variable.
     // Cursor audit Finding 7 in `drafts/cursor-audit.md`.
-    obarray.set_symbol_value("inhibit-try-cursor-movement", Value::NIL);
+    obarray.define_special_variable("inhibit-try-cursor-movement", Value::NIL);
     obarray.set_symbol_value("show-trailing-whitespace", Value::NIL);
     obarray.make_special("show-trailing-whitespace");
     obarray.make_buffer_local("show-trailing-whitespace", true);
     obarray.set_symbol_value("show-paren-context-when-offscreen", Value::NIL);
-    obarray.set_symbol_value("nobreak-char-display", Value::T);
+    // xdisp.c:38443 DEFVAR_LISP, init Qt.
+    obarray.define_special_variable("nobreak-char-display", Value::T);
     // GNU inits this to `(overlay-arrow-position)` (xdisp.c: `Voverlay_arrow_variable_list
     // = list1 (intern_c_string ("overlay-arrow-position"))`), so the plain
     // `overlay-arrow-position` marker (used by e.g. gud) is scanned by redisplay.
@@ -5740,7 +5757,22 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // equals `ignore` (simple.el:7352). Initialising it to nil here made that
     // guard fail, so the driver was never installed and `pre-redisplay-functions`
     // (hl-line with sticky 'window, the region overlay, …) never ran.
-    obarray.set_symbol_value("pre-redisplay-function", Value::symbol("ignore"));
+    obarray.define_special_variable("pre-redisplay-function", Value::symbol("ignore"));
+    // xdisp.c:38835 DEFVAR_LISP: contrary to the docstring, GNU initializes
+    // this to nil so loadup.el does not try to resize windows before
+    // window.el is loaded; loadup.el:142 assigns `grow-only' right after.
+    obarray.define_special_variable("resize-mini-windows", Value::NIL);
+    // xdisp.c:38387 DEFVAR_LISP, build_string ("*Messages*").
+    obarray.define_special_variable("messages-buffer-name", Value::string("*Messages*"));
+    // xdisp.c:38602 DEFVAR_INT, init 200.
+    obarray.define_special_variable("line-number-display-limit-width", Value::fixnum(200));
+    // xdisp.c:39086 / 39092 DEFVAR_INT, init 2 / 1.
+    obarray.define_special_variable("overline-margin", Value::fixnum(2));
+    obarray.define_special_variable("underline-minimum-offset", Value::fixnum(1));
+    // xdisp.c:39108 DEFVAR_LISP, make_fixnum (DEFAULT_HOURGLASS_DELAY) = 1.
+    obarray.define_special_variable("hourglass-delay", Value::fixnum(1));
+    // xdisp.c:38827 DEFVAR_LISP, make_float (0.25).
+    obarray.define_special_variable("max-mini-window-height", Value::make_float(0.25));
     // Do NOT pre-bind the *plural* `pre-redisplay-functions`: it is a pure lisp
     // defvar (simple.el) whose default is `(redisplay--update-region-highlight)`
     // — the function that creates the active-region highlight overlay. Binding it
@@ -5771,7 +5803,8 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     use super::chartable::ct_set_single;
     ct_set_single(&auto_fill, ' ' as i64, Value::T);
     ct_set_single(&auto_fill, '\n' as i64, Value::T);
-    obarray.set_symbol_value("auto-fill-chars", auto_fill);
+    // character.c:1104 DEFVAR_LISP -- special like every C DEFVAR.
+    obarray.define_special_variable("auto-fill-chars", auto_fill);
 
     // char-width-table: a char-table for character display widths.
     // Official Emacs (character.c) creates it with default 1.
@@ -5788,8 +5821,8 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     );
 
     // translation-hash-table-vector: vector of translation hash tables.
-    // Official Emacs (ccl.c) initializes to nil.
-    obarray.set_symbol_value("translation-hash-table-vector", Value::NIL);
+    // Official Emacs (ccl.c:2382 DEFVAR_LISP) initializes to nil.
+    obarray.define_special_variable("translation-hash-table-vector", Value::NIL);
 
     // printable-chars: a char-table of printable characters.
     // Official Emacs (character.c) creates it with default t.
@@ -5799,8 +5832,8 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     );
 
     // default-process-coding-system: cons of coding systems for process I/O.
-    // Official Emacs (coding.c) initializes to nil.
-    obarray.set_symbol_value("default-process-coding-system", Value::NIL);
+    // Official Emacs (coding.c:12139 DEFVAR_LISP) initializes to nil.
+    obarray.define_special_variable("default-process-coding-system", Value::NIL);
 
     // ambiguous-width-chars: char-table for characters whose width can be 1 or 2.
     // Official Emacs (character.c) creates empty char-table; populated by characters.el.

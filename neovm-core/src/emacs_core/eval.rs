@@ -3469,7 +3469,8 @@ impl Context {
         obarray.set_symbol_value("emacs-build-number", Value::fixnum(1));
         obarray.set_symbol_value("system-type", Value::symbol(gnu_system_type()));
         obarray.make_special("system-type");
-        obarray.set_symbol_value("system-uses-terminfo", Value::T);
+        // term.c:5224 DEFVAR_BOOL, init 1 (TERMINFO builds).
+        obarray.define_special_variable("system-uses-terminfo", Value::T);
         // GNU Emacs uses unibyte for default-directory during dump because
         // the locale isn't set up yet (see init_buffer in buffer.c).
         obarray.set_symbol_value(
@@ -3538,7 +3539,8 @@ impl Context {
             "internal--top-level-message",
             Value::string("Back to top level"),
         );
-        obarray.set_symbol_value("charset-map-path", Value::NIL);
+        // charset.c:2426 DEFVAR_LISP, init nil.
+        obarray.define_special_variable("charset-map-path", Value::NIL);
         obarray.set_symbol_value("doc-directory", Value::NIL);
         // warnings.el defcustom — needed before warnings.el loads
         obarray.set_symbol_value("warning-minimum-log-level", Value::keyword(":warning"));
@@ -3712,9 +3714,10 @@ impl Context {
         obarray.set_symbol_value("text-quoting-style", Value::NIL);
         obarray.make_special("text-quoting-style");
         // GNU DEFVAR_LISP variables needed by loadup.el and early .el files.
-        obarray.set_symbol_value("char-code-property-alist", Value::NIL);
-        obarray.set_symbol_value("redisplay--inhibit-bidi", Value::NIL);
-        obarray.set_symbol_value("resize-mini-windows", Value::NIL);
+        // chartab.c:1375 DEFVAR_LISP, init nil.
+        obarray.define_special_variable("char-code-property-alist", Value::NIL);
+        // redisplay--inhibit-bidi and resize-mini-windows are registered (with
+        // GNU xdisp.c inits) by xdisp::register_bootstrap_vars.
 
         // GNU C variables checked by cus-start.el during bootstrap.
         // 178 DEFVAR_LISP/DEFVAR_INT/DEFVAR_BOOL variables extracted from
@@ -3857,33 +3860,23 @@ impl Context {
             obarray.set_symbol_value(name, Value::T);
             obarray.make_special(name);
         }
-        obarray.set_symbol_value("auto-save-interval", Value::fixnum(300));
-        obarray.set_symbol_value("auto-save-timeout", Value::fixnum(30));
+        // auto-save-interval/timeout, double-click-fuzz/time, meta-prefix-char
+        // and polling-period are registered (with GNU keyboard.c values and
+        // DEFVAR specialness) by keyboard::pure::register_bootstrap_vars.
         obarray.set_symbol_value("display-line-numbers-major-tick", Value::fixnum(0));
         obarray.set_symbol_value("display-line-numbers-minor-tick", Value::fixnum(0));
-        obarray.set_symbol_value("double-click-fuzz", Value::fixnum(3));
-        obarray.set_symbol_value("double-click-time", Value::fixnum(500));
         obarray.define_special_variable("echo-keystrokes", Value::fixnum(1));
         obarray.set_symbol_value("gc-cons-threshold", Value::fixnum(800_000));
         obarray.set_symbol_value("help-char", Value::fixnum(8));
-        obarray.set_symbol_value("hourglass-delay", Value::fixnum(1));
-        obarray.set_symbol_value("hscroll-margin", Value::fixnum(5));
-        obarray.set_symbol_value("hscroll-step", Value::fixnum(0));
-        obarray.set_symbol_value("line-number-display-limit-width", Value::fixnum(200));
-        obarray.set_symbol_value("maximum-scroll-margin", Value::fixnum(25));
-        obarray.set_symbol_value("messages-buffer-name", Value::string("*Messages*"));
+        // hourglass-delay, hscroll-margin/step, line-number-display-limit-width,
+        // maximum-scroll-margin, messages-buffer-name, scroll-* and the
+        // tool-bar label size are registered (with GNU xdisp.c values and
+        // DEFVAR specialness) by xdisp::register_bootstrap_vars.
         obarray.set_symbol_value("message-log-max", Value::fixnum(1000));
-        obarray.set_symbol_value("meta-prefix-char", Value::fixnum(27));
-        obarray.set_symbol_value("next-screen-context-lines", Value::fixnum(2));
-        obarray.set_symbol_value("overline-margin", Value::fixnum(2));
-        obarray.set_symbol_value("polling-period", Value::fixnum(2));
+        // next-screen-context-lines is registered by
+        // window_cmds::register_bootstrap_vars; overline-margin by
+        // xdisp::register_bootstrap_vars.
         obarray.set_symbol_value("process-error-pause-time", Value::fixnum(1));
-        obarray.set_symbol_value("scroll-conservatively", Value::fixnum(0));
-        obarray.set_symbol_value("scroll-margin", Value::fixnum(0));
-        obarray.set_symbol_value("scroll-step", Value::fixnum(0));
-        obarray.set_symbol_value("tool-bar-max-label-size", Value::fixnum(10));
-        obarray.set_symbol_value("truncate-partial-width-windows", Value::fixnum(50));
-        obarray.set_symbol_value("underline-minimum-offset", Value::fixnum(1));
         obarray.set_symbol_value("eol-mnemonic-dos", Value::string("\\"));
         obarray.set_symbol_value("eol-mnemonic-mac", Value::string("/"));
         obarray.set_symbol_value("eol-mnemonic-undecided", Value::string(":"));
@@ -3893,14 +3886,17 @@ impl Context {
             Value::string("bug-gnu-emacs@gnu.org"),
         );
         obarray.make_special("report-emacs-bug-address");
-        obarray.set_symbol_value("yes-or-no-prompt", Value::string("(yes or no) "));
+        // fns.c:6867 DEFVAR_LISP, build_unibyte_string ("(yes or no) ").
+        obarray.define_special_variable("yes-or-no-prompt", Value::string("(yes or no) "));
         // Float-valued C variables
         obarray.set_symbol_value("gc-cons-percentage", Value::make_float(0.1));
-        obarray.set_symbol_value("max-image-size", Value::make_float(10.0));
-        obarray.set_symbol_value("max-mini-window-height", Value::make_float(0.25));
+        // image.c:13034 DEFVAR_LISP, make_float (MAX_IMAGE_SIZE) = 10.0.
+        obarray.define_special_variable("max-image-size", Value::make_float(10.0));
+        // max-mini-window-height is registered by xdisp::register_bootstrap_vars.
         obarray.set_symbol_value("image-scaling-factor", Value::symbol("auto"));
         obarray.make_special("image-scaling-factor");
-        obarray.set_symbol_value("image-cache-eviction-delay", Value::fixnum(300));
+        // image.c:13269 DEFVAR_LISP, make_fixnum (300).
+        obarray.define_special_variable("image-cache-eviction-delay", Value::fixnum(300));
         // Display engine C variables (xdisp.c)
         obarray.define_special_variable("global-mode-string", Value::NIL);
         obarray.set_symbol_value("redisplay-adhoc-scroll-in-resize-mini-windows", Value::T);
@@ -3914,18 +3910,23 @@ impl Context {
         obarray.set_symbol_value("fringe-bitmaps", Value::NIL);
         obarray.make_special("fringe-bitmaps");
         // File loading C variables (lread.c)
-        obarray.set_symbol_value("load-in-progress", Value::NIL);
+        // lread.c:5670 DEFVAR_BOOL, zero-init false.
+        obarray.define_special_variable("load-in-progress", Value::NIL);
         // Process/daemon C variables (process.c)
         obarray.set_symbol_value("internal--daemon-sockname", Value::NIL);
         // Other missing C variables cus-start.el checks
         obarray.set_symbol_value("history-length", Value::fixnum(100));
         obarray.make_special("history-length");
-        obarray.set_symbol_value("minibuffer-follows-selected-frame", Value::T);
+        // minibuf.c:2538 DEFVAR_LISP, init Qt.
+        obarray.define_special_variable("minibuffer-follows-selected-frame", Value::T);
         obarray.set_symbol_value("recenter-redisplay", Value::symbol("tty"));
-        obarray.set_symbol_value("iconify-child-frame", Value::symbol("iconify-top-level"));
-        obarray.set_symbol_value("frame-inhibit-implied-resize", Value::NIL);
+        // frame.c:7733 DEFVAR_LISP, init Qiconify_top_level.
+        obarray.define_special_variable("iconify-child-frame", Value::symbol("iconify-top-level"));
+        // frame-inhibit-implied-resize is registered by
+        // frame_vars::register_bootstrap_vars with GNU's GUI default.
         obarray.set_symbol_value("mark-even-if-inactive", Value::T);
-        obarray.set_symbol_value("read-buffer-function", Value::NIL);
+        // minibuf.c:2533 DEFVAR_LISP, init nil.
+        obarray.define_special_variable("read-buffer-function", Value::NIL);
         obarray.set_symbol_value(
             "minibuffer-prompt-properties",
             Value::list(vec![Value::symbol("read-only"), Value::T]),
@@ -3942,7 +3943,8 @@ impl Context {
             Value::symbol("describe-prefix-bindings"),
         );
         obarray.set_symbol_value("debug-ignored-errors", Value::NIL);
-        obarray.set_symbol_value("debug-on-event", Value::NIL);
+        // debug-on-event is registered (init sigusr2, keyboard.c:14358) by
+        // keyboard::pure::register_bootstrap_vars.
         obarray.set_symbol_value("debug-on-signal", Value::NIL);
         // Remaining cus-start.el variables (general + platform stubs)
         for name in [
@@ -4066,7 +4068,9 @@ impl Context {
         obarray.make_special("debugger");
         obarray.set_symbol_value("standard-output", Value::T);
         // GNU DEFVAR_INT from dispnew.c — used by bytecomp.el
-        obarray.set_symbol_value("baud-rate", Value::fixnum(38400));
+        // dispnew.c:7488 DEFVAR_INT; the live value comes from init_baud_rate
+        // (sysdep.c) at terminal init -- 38400 is the modern-pty value.
+        obarray.define_special_variable("baud-rate", Value::fixnum(38400));
         obarray.set_symbol_value("search-slow-speed", Value::fixnum(1200));
         // GNU startup.el sets these based on --debug-init
         obarray.set_symbol_value("init-file-debug", Value::NIL);
@@ -4108,8 +4112,10 @@ impl Context {
         obarray.set_symbol_value("current-fill-column--has-warned", Value::NIL);
         obarray.set_symbol_value("current-input-method", Value::NIL);
         obarray.set_symbol_value("current-input-method-title", Value::NIL);
-        obarray.set_symbol_value("current-iso639-language", Value::NIL);
-        obarray.set_symbol_value("current-key-remap-sequence", Value::NIL);
+        // charset.c:2438 DEFVAR_LISP, init nil.
+        obarray.define_special_variable("current-iso639-language", Value::NIL);
+        // current-key-remap-sequence is registered by
+        // keyboard::pure::register_bootstrap_vars.
         // GNU's `current-language-environment` defcustom defaults to "English"
         // (mule-cmds.el:1812), and the dumped image / `-Q` keeps it there.  This
         // value matters during loadup: `set-language-info` (mule-cmds.el:1181)
@@ -4134,13 +4140,13 @@ impl Context {
         obarray.set_symbol_value("current-locale-environment", Value::string("C.UTF-8"));
         obarray.set_symbol_value("current-minibuffer-command", Value::NIL);
         obarray.make_special("current-minibuffer-command");
-        obarray.set_symbol_value("current-time-list", Value::T);
+        // timefns.c:2112 DEFVAR_BOOL, init CURRENT_TIME_LIST = true.
+        obarray.define_special_variable("current-time-list", Value::T);
         obarray.set_symbol_value("current-transient-input-method", Value::NIL);
         obarray.set_symbol_value("real-last-command", Value::NIL);
-        obarray.set_symbol_value("last-repeatable-command", Value::NIL);
-        obarray.set_symbol_value("this-original-command", Value::NIL);
+        // last-repeatable-command, this-original-command and defining-kbd-macro
+        // are registered by keyboard::pure::register_bootstrap_vars.
         obarray.set_symbol_value("prefix-arg", Value::NIL);
-        obarray.set_symbol_value("defining-kbd-macro", Value::NIL);
         obarray.set_symbol_value("executing-kbd-macro", Value::NIL);
         obarray.make_special("executing-kbd-macro");
         obarray.set_symbol_value("executing-kbd-macro-index", Value::fixnum(0));
@@ -4318,12 +4324,13 @@ impl Context {
         obarray.make_special("history-delete-duplicates");
         obarray.set_symbol_value("history-add-new-input", Value::T);
         obarray.make_special("history-add-new-input");
-        obarray.set_symbol_value("read-buffer-function", Value::NIL);
+        // read-buffer-function is registered above (minibuf.c:2533).
         obarray.set_symbol_value(
             "read-file-name-function",
             Value::symbol("read-file-name-default"),
         );
-        obarray.set_symbol_value("read-expression-history", Value::NIL);
+        // minibuf.c:2528 DEFVAR_LISP, init nil.
+        obarray.define_special_variable("read-expression-history", Value::NIL);
         obarray.set_symbol_value("read-number-history", Value::NIL);
         obarray.set_symbol_value("read-char-history", Value::NIL);
         obarray.set_symbol_value("read-answer-short", Value::symbol("auto"));
@@ -4387,7 +4394,7 @@ impl Context {
         );
         obarray.set_symbol_value("minibuffer--require-match", Value::NIL);
         obarray.set_symbol_value("minibuffer-auto-raise", Value::NIL);
-        obarray.set_symbol_value("minibuffer-follows-selected-frame", Value::T);
+        // minibuffer-follows-selected-frame is registered earlier in bootstrap.
         obarray.define_special_variable(
             "minibuffer-exit-hook",
             Value::list(vec![
@@ -4419,7 +4426,8 @@ impl Context {
         obarray.set_symbol_value("minibuffer-message-clear-timeout", Value::NIL);
         obarray.set_symbol_value("minibuffer-message-overlay", Value::NIL);
         obarray.set_symbol_value("minibuffer-message-properties", Value::NIL);
-        obarray.set_symbol_value("minibuffer-message-timeout", Value::fixnum(2));
+        // minibuffer-message-timeout is registered by
+        // keyboard::pure::register_bootstrap_vars.
         obarray.set_symbol_value("minibuffer-message-timer", Value::NIL);
         obarray.set_symbol_value("minibuffer-lazy-count-format", Value::string("%s "));
         obarray.set_symbol_value("minibuffer-text-before-history", Value::NIL);
@@ -4497,12 +4505,10 @@ impl Context {
         obarray.set_symbol_value("last-abbrev-location", Value::fixnum(0));
         obarray.set_symbol_value("last-abbrev-text", Value::NIL);
         obarray.set_symbol_value("last-command-event", Value::NIL);
-        // last-event-frame is set by keyboard::pure::register_bootstrap_vars
-        obarray.set_symbol_value("last-event-device", Value::NIL);
+        // last-event-frame, last-event-device, last-nonmenu-event and
+        // last-kbd-macro are registered by keyboard::pure::register_bootstrap_vars.
         obarray.set_symbol_value("last-input-event", Value::NIL);
-        obarray.set_symbol_value("last-nonmenu-event", Value::NIL);
         obarray.set_symbol_value("last-prefix-arg", Value::NIL);
-        obarray.set_symbol_value("last-kbd-macro", Value::NIL);
         obarray.set_symbol_value("last-code-conversion-error", Value::NIL);
         obarray.set_symbol_value("last-coding-system-specified", Value::NIL);
         obarray.set_symbol_value("last-coding-system-used", Value::symbol("undecided-unix"));
@@ -4582,12 +4588,13 @@ impl Context {
         // saved-region-selection is set by keyboard::pure::register_bootstrap_vars
         obarray.set_symbol_value("transient-mark-mode", Value::NIL);
         obarray.set_symbol_value("transient-mark-mode-hook", Value::NIL);
-        obarray.set_symbol_value("post-select-region-hook", Value::NIL);
+        // post-select-region-hook and display-monitors-changed-functions are
+        // registered by keyboard::pure::register_bootstrap_vars.
         obarray.set_symbol_value("echo-area-clear-hook", Value::NIL);
-        obarray.set_symbol_value("display-monitors-changed-functions", Value::NIL);
-        obarray.set_symbol_value("delete-terminal-functions", Value::NIL);
-        obarray.set_symbol_value("suspend-tty-functions", Value::NIL);
-        obarray.set_symbol_value("resume-tty-functions", Value::NIL);
+        // terminal.c:700 / term.c:5233 / term.c:5240 DEFVAR_LISP, init nil.
+        obarray.define_special_variable("delete-terminal-functions", Value::NIL);
+        obarray.define_special_variable("suspend-tty-functions", Value::NIL);
+        obarray.define_special_variable("resume-tty-functions", Value::NIL);
         obarray.set_symbol_value("overriding-local-map", Value::NIL);
         obarray.make_special("overriding-local-map");
         obarray.set_symbol_value("overriding-local-map-menu-flag", Value::NIL);
@@ -4598,7 +4605,9 @@ impl Context {
         // GNU uses DEFVAR_KBOARD here. NeoVM does not yet split keyboard state
         // per terminal, so model it as a dynamically scoped runtime variable.
         obarray.make_special("overriding-terminal-local-map");
-        obarray.set_symbol_value("overriding-text-conversion-style", Value::symbol("lambda"));
+        // textconv.c:2621 DEFVAR_LISP, init Qlambda.
+        obarray
+            .define_special_variable("overriding-text-conversion-style", Value::symbol("lambda"));
     }
 
     /// Core eval.c / keyboard.c DEFVAR globals plus the standard error
@@ -4611,7 +4620,8 @@ impl Context {
         obarray.make_special("max-lisp-eval-depth");
         obarray.set_symbol_value("lisp-eval-depth-reserve", Value::fixnum(200));
         obarray.make_special("lisp-eval-depth-reserve");
-        obarray.set_symbol_value("inhibit-load-charset-map", Value::NIL);
+        // charset.c:2430 DEFVAR_BOOL, init 0.
+        obarray.define_special_variable("inhibit-load-charset-map", Value::NIL);
 
         // Terminal/display variables (C-level DEFVAR in official Emacs)
         // `standard-display-table' is a DEFVAR_LISP in dispnew.c (default nil),
@@ -4631,7 +4641,9 @@ impl Context {
                 Value::symbol("data-directory"),
             ]),
         );
-        obarray.set_symbol_value("image-types", super::image::supported_image_types_value());
+        // image.c:13028 DEFVAR_LISP; GNU's define_image_type fills the list at
+        // C init, our equivalent enumerates the built-in decoders.
+        obarray.define_special_variable("image-types", super::image::supported_image_types_value());
         obarray.set_symbol_value("image-scaling-factor", Value::symbol("auto"));
         obarray.make_special("image-scaling-factor");
 
@@ -5060,7 +5072,8 @@ impl Context {
         // make-variable-buffer-local (NOT defvar_per_buffer).
         {
             let id = crate::emacs_core::intern::intern("case-symbols-as-words");
-            obarray.set_symbol_value("case-symbols-as-words", Value::NIL);
+            // DEFVAR_BOOL marks the symbol special like every C DEFVAR.
+            obarray.define_special_variable("case-symbols-as-words", Value::NIL);
             obarray.make_symbol_localized(id, Value::NIL);
             obarray.set_blv_local_if_set(id, true);
         }
@@ -5263,7 +5276,8 @@ impl Context {
         // ---- C-level bootstrap variables required by loadup.el files ----
 
         // Standard keymaps (C creates these in keyboard.c:init_kboard)
-        obarray.set_symbol_value("special-event-map", special_event_map);
+        // keyboard.c:14130 DEFVAR_LISP -- special like every C DEFVAR.
+        obarray.define_special_variable("special-event-map", special_event_map);
         obarray.set_symbol_value(
             "mode-line-window-dedicated-keymap",
             mode_line_window_dedicated_keymap,
@@ -5272,8 +5286,9 @@ impl Context {
         obarray.set_symbol_value("text-mode-map", text_mode_map);
         obarray.set_symbol_value("image-slice-map", image_slice_map);
         obarray.set_symbol_value("tool-bar-map", tool_bar_map);
-        obarray.set_symbol_value("key-translation-map", key_translation_map);
-        obarray.set_symbol_value("function-key-map", function_key_map);
+        // keyboard.c:14210 / 14202 DEFVAR_LISP -- special like every C DEFVAR.
+        obarray.define_special_variable("key-translation-map", key_translation_map);
+        obarray.define_special_variable("function-key-map", function_key_map);
         obarray.set_symbol_value("input-decode-map", input_decode_map);
         obarray.make_special("input-decode-map");
         obarray.set_symbol_value("local-function-key-map", local_function_key_map);
@@ -10382,7 +10397,10 @@ impl Context {
 
     pub(crate) fn sync_thread_runtime_bindings(&mut self) {
         if let Some(main_thread) = self.threads.thread_handle(0) {
-            self.obarray.set_symbol_value("main-thread", main_thread);
+            // thread.c:1307 DEFVAR_LISP -- GNU installs the main thread object
+            // (and DEFVAR specialness) at C init.
+            self.obarray
+                .define_special_variable("main-thread", main_thread);
         }
     }
 

@@ -7071,8 +7071,10 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("window-safe-min-height", Value::fixnum(1));
     obarray.set_symbol_value("window-safe-min-width", Value::fixnum(2));
     obarray.set_symbol_value("scroll-preserve-screen-position", Value::NIL);
-    obarray.set_symbol_value("window-point-insertion-type", Value::NIL);
-    obarray.set_symbol_value("next-screen-context-lines", Value::fixnum(2));
+    // window.c:9270 DEFVAR_LISP, init nil.
+    obarray.define_special_variable("window-point-insertion-type", Value::NIL);
+    // window.c:9247 DEFVAR_INT, init 2.
+    obarray.define_special_variable("next-screen-context-lines", Value::fixnum(2));
     obarray.set_symbol_value("fast-but-imprecise-scrolling", Value::NIL);
     obarray.set_symbol_value("scroll-error-top-bottom", Value::NIL);
     obarray.set_symbol_value(
@@ -7085,7 +7087,8 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // here would win (defcustom never overwrites an already-bound variable) and
     // shadow the .el default, so we deliberately do not seed it: neomacs's
     // window.el provides the value, matching GNU.
-    obarray.set_symbol_value("auto-window-vscroll", Value::T);
+    // window.c:9243 DEFVAR_BOOL, init true.
+    obarray.define_special_variable("auto-window-vscroll", Value::T);
 }
 /// `(window-combination-limit WINDOW)` -> nil or t.
 ///

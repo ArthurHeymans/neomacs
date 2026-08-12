@@ -950,7 +950,8 @@ pub(crate) fn builtin_composition_sort_rules(args: Vec<Value>) -> EvalResult {
 pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
     // Official Emacs leaves unicode-category-table as nil at C init time;
     // it is populated later by characters.el via unicode-property-table-internal.
-    obarray.set_symbol_value("unicode-category-table", Value::NIL);
+    // character.c:1156 DEFVAR_LISP, init nil.
+    obarray.define_special_variable("unicode-category-table", Value::NIL);
     // char-unify-table is created lazily by define_charset (charset.c:1364).
     // Initialize to nil so maybe_unify_char gracefully degrades.
     obarray.set_symbol_value("char-unify-table", Value::NIL);
@@ -959,7 +960,8 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
         "composition-function-table",
         make_char_table_value(Value::NIL, Value::NIL),
     );
-    obarray.set_symbol_value("auto-composition-mode", Value::T);
+    // composite.c:2231 DEFVAR_LISP, init Qt.
+    obarray.define_special_variable("auto-composition-mode", Value::T);
 }
 
 // ---------------------------------------------------------------------------

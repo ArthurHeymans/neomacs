@@ -5,9 +5,11 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("default-frame-alist", Value::NIL);
     // GNU frame.c exposes this as a built-in variable. GUI builds default to a
     // concrete side instead of leaving scroll-bar.el to trip over an unbound var.
-    obarray.set_symbol_value("default-frame-scroll-bars", Value::symbol("right"));
+    // frame.c:7451 DEFVAR_LISP; GUI toolkit builds (GTK/NS/W32) init Qright.
+    obarray.define_special_variable("default-frame-scroll-bars", Value::symbol("right"));
     obarray.set_symbol_value("initial-frame-alist", Value::NIL);
-    obarray.set_symbol_value("initial-window-system", Value::NIL);
+    // dispnew.c:7508 DEFVAR_LISP, zero-init nil; startup assigns the real one.
+    obarray.define_special_variable("initial-window-system", Value::NIL);
     // GNU graphical builds load term/common-win.el during loadup, which binds
     // this public display variable even for batch sessions.  Neomacs defers
     // its side-effectful GUI terminal layer until GUI startup, so preserve the
@@ -19,8 +21,11 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.define_special_variable("window-system", Value::NIL);
     obarray.set_symbol_value("handle-args-function", Value::symbol("command-line-1"));
     obarray.set_symbol_value("handle-args-function-alist", Value::NIL);
-    obarray.set_symbol_value("inhibit-x-resources", Value::NIL);
-    obarray.set_symbol_value("resize-mini-windows", Value::symbol("grow-only"));
+    // emacs.c:3597 DEFVAR_BOOL, init 0.
+    obarray.define_special_variable("inhibit-x-resources", Value::NIL);
+    // resize-mini-windows is registered by xdisp::register_bootstrap_vars with
+    // GNU's real pre-loadup init (nil); lisp/loadup.el:142 assigns `grow-only'
+    // right after window.el is loaded, exactly like GNU.
     // GNU `syms_of_xdisp` (xdisp.c:38639-38647) assigns BOTH frame-title-format
     // and icon-title-format the same structured default: `(multiple-frames "%b"
     // ("" "%b - GNU Emacs at " system-name))`, where the inner tail's last
@@ -46,16 +51,29 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
         Value::string("%b"),
         icon_title_name_format,
     ]);
-    obarray.set_symbol_value("frame-title-format", title_format);
-    obarray.set_symbol_value("icon-title-format", title_format);
+    // xdisp.c:38621 / 38629 DEFVAR_LISP -- special like every C DEFVAR.
+    obarray.define_special_variable("frame-title-format", title_format);
+    obarray.define_special_variable("icon-title-format", title_format);
     obarray.set_symbol_value("frame-resize-pixelwise", Value::NIL);
     // GNU frame.c DEFVAR_BOOL (Emacs 31.1), default t: `delete-frame' selects
     // the most recently used frame (vs. the oldest visible one). Exposed here
     // so cus-start.el does not signal "built-in variable ... not bound".
-    obarray.set_symbol_value("after-delete-frame-select-mru-frame", Value::T);
+    obarray.define_special_variable("after-delete-frame-select-mru-frame", Value::T);
     obarray.set_symbol_value("focus-follows-mouse", Value::NIL);
-    obarray.set_symbol_value("frame-inhibit-implied-resize", Value::NIL);
-    obarray.set_symbol_value("terminal-frame", Value::NIL);
+    // frame.c:7636 DEFVAR_LISP. GNU's GUI default when the tool bar is drawn
+    // by Emacs itself (not an external GTK/NS toolkit bar) is
+    // (tab-bar-lines tool-bar-lines): adding/removing those bars does not
+    // implicitly resize the frame. Neomacs draws its own bars, so it takes
+    // the same branch.
+    obarray.define_special_variable(
+        "frame-inhibit-implied-resize",
+        Value::list(vec![
+            Value::symbol("tab-bar-lines"),
+            Value::symbol("tool-bar-lines"),
+        ]),
+    );
+    // frame.c:7475 DEFVAR_LISP, zero-init nil; assigned at terminal init.
+    obarray.define_special_variable("terminal-frame", Value::NIL);
     obarray.set_symbol_value("frameset-filter-alist", Value::NIL);
     obarray.set_symbol_value("frameset-session-filter-alist", Value::NIL);
 }
