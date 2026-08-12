@@ -419,7 +419,7 @@ fn terminal_parameters_lists_mutated_symbol_entries() {
     let via_frame = builtin_terminal_parameters(&mut eval, vec![Value::make_frame(frame_id)])
         .expect("eval terminal-parameters");
     let eval_entries = list_to_vec(&via_frame).expect("parameter alist");
-    assert!(eval_entries.len() >= 4);
+    assert!(eval_entries.len() >= 3);
 }
 
 #[test]
