@@ -412,6 +412,7 @@ mod git_gutter_fringe;
 mod git_link;
 mod git_messenger;
 mod git_modes;
+mod git_rebase_mode;
 mod git_timemachine;
 mod gitattributes_mode;
 mod gitconfig_mode;

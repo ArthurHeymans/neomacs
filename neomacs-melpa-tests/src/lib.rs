@@ -3110,6 +3110,12 @@ pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 /// package with modern `git-commit`.
 pub const GIT_COMMIT_MODE_MELPA_PIN: (&str, &str) = ("git-commit-mode", "20141106.1722");
 
+/// The terminal historical git-rebase-mode package selected for practical
+/// mode, editing, external-boundary, and server-client lifecycle parity.
+/// MELPA's recipe-selected first-parent source change is upstream merge
+/// `acccc25f5207cfa93fe3faf36d315bdc1cecebfc`.
+pub const GIT_REBASE_MODE_MELPA_PIN: (&str, &str) = ("git-rebase-mode", "20150122.1914");
+
 /// The exact Git Link package selected for practical repository file, region,
 /// commit, homepage, remote-resolution, hosting-provider, and error parity.
 /// MELPA built version 0.11.0 from upstream commit
