@@ -4289,3 +4289,41 @@ compiles.  The broad core release gate passed 8,813 tests with one unrelated
 PTY status timing failure; that test passed immediately in isolation.
 
 Status: FIXED.
+
+## 82. Overlay before-strings stayed behind when their anchor word wrapped -- FIXED
+
+With word wrapping enabled, an overlay before-string at the first character of
+a word remained on the full row while the buffer word moved to its continuation
+row:
+
+```elisp
+(insert (concat (make-string 70 ?a) " bbbbbbbbbb\n"))
+(overlay-put (make-overlay 72 74) 'before-string "SS")
+;; GNU row 1/2     => no S / "SSbbbbbbbbbb"
+;; Neomacs before => "SS" / "bbbbbbbbbb"
+```
+
+GNU's `display_line` records a word-wrap candidate with `SAVE_IT` before the
+first display element after whitespace (`src/xdisp.c:26073-26103`).  That saves
+the complete iterator, including its display-string stack.  Restoring the
+candidate therefore removes the before-string from the first row and replays it
+with its anchor word.  Neomacs recorded candidates only before buffer
+characters; the producer-owned overlay-string element had already rendered by
+the time the anchor character supplied a checkpoint.
+
+The fix gives every source element one atomic candidate operation over its
+glyph checkpoint, display-point metadata, and authoritative byte/character
+position, and calls it before appending the overlay strings.  Producer rewind
+is now the exhaustive `BufferSourceRewind::{WordWrap, CharacterWrap}` choice:
+word wrap clears an insertion marker at or after the restored checkpoint so
+the string replays, while character wrap preserves an already-rendered string.
+The compiler now forces any future overflow path to choose those semantics.
+
+The end-to-end regression failed first with two S glyphs on the first row and
+now pins the GNU row placement.  Controls prove that `may_wrap` still prevents
+a candidate inside an unbroken word and that character wrapping emits the
+string only once.  The complete layout-engine suite passes 1,946 tests with
+three skipped, a fresh release build produces a 13,616,082-byte pdump and all
+1,651 Lisp byte-compiles, and the release TUI suite passes all 908 tests.
+
+Status: FIXED.
