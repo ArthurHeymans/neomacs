@@ -72,7 +72,6 @@ pub mod image_path;
 pub mod indent;
 pub mod interactive;
 pub mod intern;
-pub mod isearch;
 pub mod jit;
 pub mod json;
 pub mod kbd;

@@ -34,7 +34,6 @@ fn migrated_string_subsystems_do_not_call_generic_runtime_string_adapter_directl
         ("format.rs", include_str!("format.rs")),
         ("eval.rs", include_str!("eval.rs")),
         ("interactive.rs", include_str!("interactive.rs")),
-        ("isearch.rs", include_str!("isearch.rs")),
         ("keyboard/pure.rs", include_str!("keyboard/pure.rs")),
         ("kmacro.rs", include_str!("kmacro.rs")),
         ("load.rs", include_str!("load.rs")),
