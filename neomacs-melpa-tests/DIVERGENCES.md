@@ -3940,3 +3940,67 @@ The unchanged evil-goggles package oracle then passes all four original
 workflows with the operator-specific faces and command identities restored.
 
 Status: FIXED.
+
+## 75. Empty strings were not canonical objects, so `eq` guards fell through to prompts -- FIXED
+
+`auto-yasnippet` should reject `aya-persist-snippet` before asking for a name
+when no auto-snippet has been defined.  Its interactive form contains this
+guard:
+
+```elisp
+(if (eq aya-current "")
+    (user-error "You don't have an auto-snippet defined")
+  (list (read-string "Snippet name: ")))
+```
+
+GNU took the `user-error` branch.  Neomacs missed it, entered `read-string`,
+and batch execution ended with `(end-of-file "Error reading from stdin")`.
+The package code and the dynamically bound value were the same on both sides;
+the smallest discriminator was object identity itself:
+
+```elisp
+(list (eq "" "")
+      (eq "" (make-string 0 ?x))
+      (eq "" (substring "x" 0 0))
+      (eq "" (concat)))
+;; GNU     => (t t t t)
+;; Neomacs => (nil nil nil nil)                 before
+```
+
+GNU makes this a property of allocation, not of those four callers.
+`src/alloc.c:1519-1536` initializes permanent `empty_unibyte_string` and
+`empty_multibyte_string` objects.  `make_clear_string`
+(`src/alloc.c:2298-2307`) and `make_clear_multibyte_string`
+(`src/alloc.c:2327-2339`) return the corresponding singleton at length zero;
+the reader reaches the same allocation seam through `make_specified_string`
+(`src/lread.c:3039-3145`).  The two storage representations remain distinct:
+empty unibyte strings are `eq` to each other, empty multibyte strings are `eq`
+to each other, and an empty unibyte string is not `eq` to an empty multibyte
+string.
+
+Neomacs instead allocated a fresh arena object on every `alloc_string` call.
+One earlier symptom had already been patched locally in `expand-file-name` by
+treating two empty filename strings as identical by content.  That workaround
+fixed one consumer while leaving every ordinary Lisp `eq` guard broken.
+
+The fix puts the invariant at the shared allocator boundary.  The storage
+choice is now an exhaustive `LispStringStorageKind` enum rather than a boolean
+threaded through singleton logic.  Each heap owns a typed
+`CanonicalEmptyString` lifecycle with three states: `Missing`, `Owned`, and
+`Mapped`.  Zero-length allocation returns the existing object for its storage
+kind; newly owned objects are permanent GC roots; pdump restoration explicitly
+replaces a temporary owned handle with the authoritative mapped object.  The
+old `expand-file-name` content exception was then deleted, because its normal
+identity check now has GNU's semantics.
+
+The public Lisp regression
+`empty_strings_are_canonical_per_storage_kind_like_gnu` was run red first.  It
+seeded the multibyte object, forced a garbage collection, and observed
+`(nil nil nil t nil nil nil)` where GNU requires
+`(t t nil t nil t t)`.  It passes after the allocator change, as does the
+existing empty-name `expand-file-name` regression.  The full `neovm-core` gate
+passes 8,813 tests, a fresh release build and pdump complete successfully, the
+rebuilt dumped runtime matches GNU's constructor/storage-kind identity matrix,
+and the original `auto_yasnippet_package_batch` oracle is green.
+
+Status: FIXED.
