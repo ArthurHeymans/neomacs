@@ -2686,13 +2686,6 @@ pub(crate) fn builtin_unhandled_file_name_directory_eval(
     builtin_unhandled_file_name_directory(args)
 }
 
-/// (get-truename-buffer FILENAME) -> buffer or nil
-pub(crate) fn builtin_get_truename_buffer(args: Vec<Value>) -> EvalResult {
-    expect_args("get-truename-buffer", &args, 1)?;
-    let _filename = &args[0];
-    Ok(Value::NIL)
-}
-
 /// Context-aware variant of `make-temp-file` that honors dynamic
 /// `temporary-file-directory`.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -3111,7 +3104,11 @@ fn signal_directory_files_error(
     }
 }
 
-fn signal_file_action_error_value(err: std::io::Error, action: &str, path: Value) -> Flow {
+pub(crate) fn signal_file_action_error_value(
+    err: std::io::Error,
+    action: &str,
+    path: Value,
+) -> Flow {
     get_file_errno_data(&err, action, vec![path])
 }
 
@@ -3959,37 +3956,34 @@ pub(crate) fn builtin_set_file_times(eval: &mut Context, args: Vec<Value>) -> Ev
     Ok(Value::T)
 }
 
-fn validate_optional_buffer_arg_in_state(
+/// GNU `decode_buffer` (src/buffer.c): nil (or an omitted argument) means the
+/// current buffer, anything else must be a live buffer.
+///
+/// This returns the decided [`crate::buffer::BufferId`] rather than merely
+/// validating the argument: a validate-only signature lets a caller type-check
+/// BUF and then silently operate on the current buffer instead, which is
+/// exactly how `verify-visited-file-modtime` came to ignore its argument.
+fn decode_buffer_arg_in_state(
     buffers: &crate::buffer::BufferManager,
     arg: Option<&Value>,
-) -> Result<(), Flow> {
-    if let Some(bufferish) = arg {
-        match bufferish.kind() {
-            ValueKind::Nil => Ok(()),
-            ValueKind::Veclike(VecLikeType::Buffer) => {
-                if let Some(buf_id) = bufferish.as_buffer_id() {
-                    if buffers.get(buf_id).is_some() {
-                        Ok(())
-                    } else {
-                        Err(signal(
-                            LispCondition::WrongTypeArgument,
-                            vec![Value::symbol("bufferp"), *bufferish],
-                        ))
-                    }
-                } else {
-                    Err(signal(
-                        LispCondition::WrongTypeArgument,
-                        vec![Value::symbol("bufferp"), *bufferish],
-                    ))
-                }
-            }
-            _ => Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("bufferp"), *bufferish],
-            )),
-        }?
+) -> Result<crate::buffer::BufferId, Flow> {
+    let wrong_type = |bufferish: &Value| {
+        signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("bufferp"), *bufferish],
+        )
+    };
+    match arg {
+        None => current_buffer_id_or_error(buffers),
+        Some(bufferish) => match bufferish.kind() {
+            ValueKind::Nil => current_buffer_id_or_error(buffers),
+            ValueKind::Veclike(VecLikeType::Buffer) => bufferish
+                .as_buffer_id()
+                .filter(|id| buffers.get(*id).is_some())
+                .ok_or_else(|| wrong_type(bufferish)),
+            _ => Err(wrong_type(bufferish)),
+        },
     }
-    Ok(())
 }
 
 fn validate_set_visited_file_modtime_arg(arg: &Value) -> Result<(), Flow> {
@@ -4045,10 +4039,13 @@ pub(crate) fn builtin_verify_visited_file_modtime(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_max_args("verify-visited-file-modtime", &args, 1)?;
-    validate_optional_buffer_arg_in_state(&eval.buffers, args.first())?;
+    // GNU fileio.c:6129 `decode_buffer (buf)`: BUF, not the current buffer,
+    // is the one whose recorded modtime is compared.  filelock.c:605 passes
+    // the buffer that visits the file being locked, which need not be current.
+    let buffer_id = decode_buffer_arg_in_state(&eval.buffers, args.first())?;
     let buf = eval
         .buffers
-        .current_buffer()
+        .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let Some((ref sec, ref nsec)) = buf.modtime_sec.zip(buf.modtime_nsec) else {
         return Ok(Value::T); // unknown modtime — never complain (GNU: UNKNOWN_MODTIME_NSECS)

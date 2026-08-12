@@ -3318,6 +3318,182 @@ retired the day the bootstrap stores it for real.
 
 Status: FIXED.
 
+## 68. Editing a buffer whose file changed on disk overwrites it silently -- FIXED
+
+Sibling of entry 63, one step further along the same code path: 63 was the
+lock held by another live Emacs, this is the file changed underneath us by
+anything at all. Both were the same defect class -- neomacs asked the user
+and then discarded the answer.
+
+```elisp
+;; visit a file, change it on disk behind the buffer's back, then type
+(find-file f)
+(write-region "changed\n" nil f nil 'silent)
+(set-visited-file-modtime '(0 0))
+(condition-case e (insert "X") (error (list 'signalled e)))
+;; GNU     => (signalled (error "Cannot resolve conflict in batch mode"))
+;;            buffer-modified-p => nil, buffer-string => "hello\n"
+;; Neomacs => no-signal
+;;            buffer-modified-p => t,   buffer-string => "Xhello\n"
+```
+
+Both engines PRINTED the prompt. Only GNU acted on it. `lock_file`
+(src/filelock.c:608) calls the threat function with `calln`, so the
+`file-supersession` signal -- or userlock.el's batch-mode error
+(lisp/userlock.el:184) -- propagates out of `Flock_file`, out of
+`prepare_to_modify_buffer_1` (src/insdel.c:2174), and aborts the edit before
+any text is inserted. Our call site was `let _ = eval.apply(...)`: prompt
+shown, answer dropped, edit proceeds. The buffer then overwrites on save the
+file it was warned about, which is the data loss the check exists to prevent.
+
+Reading `filelock.c:592-608` turned up three more gate bugs in the same
+twenty lines, each of which independently suppresses the check:
+
+* `create-lockfiles` nil returned early. GNU computes `lfname` only when
+  `create_lockfiles` (:593-599) but runs the threat check regardless
+  (:601-608) -- the `lock-file` docstring says so in as many words.
+* The subject buffer was guessed as "the current buffer, if its
+  `buffer-file-name` matches". GNU uses `Fget_truename_buffer (fn)` (:603)
+  and hands THAT buffer to `Fverify_visited_file_modtime` (:605).
+* `Ffile_exists_p (fn)` (:606) and the "unless this Emacs already owns the
+  lock" clause (:607) were absent entirely.
+
+Two supporting primitives had to be made real first, and both had failed
+silently for as long as they had existed:
+
+```elisp
+(get-truename-buffer buffer-file-truename)
+;; GNU     => #<buffer tn-3031593.txt>
+;; Neomacs => nil            ; the whole builtin was a stub
+```
+
+`Fget_truename_buffer` (src/buffer.c:524-539) walks the live buffer list
+comparing `buffer-file-truename` with `Fstring_equal`. Ours ignored its
+argument and returned nil, so once `lock_file` was corrected to consult it
+the check still never fired. `verify-visited-file-modtime` likewise
+type-checked its BUF argument and then read the current buffer anyway, where
+GNU does `decode_buffer (buf)` (src/fileio.c:6129).
+
+Last, and only visible in a real session: GNU expands FN in exactly ONE
+place, `make_lock_file_name` (src/filelock.c:543). Every other consumer sees
+the caller's string verbatim. We expanded at the top of `lock_file`,
+`unlock_file`, `file_locked_p`, `sync_modified_buffer_file_lock`,
+`lock-buffer` and `unlock-buffer`. That is invisible for an absolute name --
+every unit test passed -- and fatal in practice, because `find-file` stores
+`buffer-file-truename` abbreviated: the buffer held `"~/Projects/.../f.txt"`
+while we asked `get-truename-buffer` for `"/home/exec/Projects/.../f.txt"`,
+nothing matched, and the check was skipped again. The batch probe, not the
+unit tests, caught this.
+
+Fix: `neovm-core/src/emacs_core/filelock.rs`. The `create-lockfiles` gating
+is now a three-state `LockFileTarget` enum (`LockingDisabled`,
+`FileExemptFromLocking`, `At(PathBuf)`) rather than `Option<PathBuf>` plus an
+early return. GNU's single `lfname` local is nil in two unrelated cases that
+behave differently, and collapsing them into one nil is precisely what let
+the early return eat the check; naming both states makes that collapse
+unrepresentable and the match exhaustive. `verify-visited-file-modtime`'s
+helper now returns the decided `BufferId` instead of `Result<(), Flow>`, so
+no caller can type-check BUF and then operate on a different buffer again.
+
+Auditing this module for the same defect class turned up a THIRD swallow
+site, `make-lock-file-name` itself:
+
+```elisp
+(advice-add 'make-lock-file-name :override
+            (lambda (&rest _) (error "make-lock-file-name exploded")))
+(condition-case e (lock-file f) (error (list 'signalled e)))
+;; GNU     => (signalled (error "make-lock-file-name exploded")), no lock file
+;; Neomacs => nil, and a lock file appears at .#NAME anyway
+```
+
+GNU calls it with `calln` (src/filelock.c:558). We caught the error and fell
+back to a hand-rolled `".#NAME"` -- worse than losing the signal, because we
+then created a lock at a name the Lisp layer had just refused to produce.
+The fallback is now narrowed from "any error" to "the function is not
+defined yet", which is the one state GNU has no analogue for: neomacs can
+reach this code before files.el is loaded, where GNU bails out under
+`will_dump_p` (src/filelock.c:589).
+
+Commits: `5e70c106b` (primitives), `0f905057a` (propagation and gates),
+`2dfb58742` (expansion boundary), `3934fa9f1` (make-lock-file-name errors).
+Tests:
+`supersession_threat_signal_propagates_out_of_lock_file_like_gnu`,
+`supersession_threat_aborts_the_first_text_change_like_gnu`,
+`supersession_threat_is_checked_even_when_create_lockfiles_is_nil_like_gnu`,
+`supersession_threat_is_skipped_when_we_own_the_lock_like_gnu`,
+`only_the_lock_file_name_expands_the_filename_like_gnu`,
+`make_lock_file_name_errors_propagate_like_gnu`. The batch probe
+above now diffs byte-identical against GNU, normalized only for the pid in
+the temp file name.
+
+Status: FIXED.
+
+## 69. Lock file-errors carried GNU's elements in the wrong order, and unlock-file signalled -- FIXED
+
+One probe, two divergences. Leave a lock file whose contents do not parse as
+`USER@HOST.PID:BOOT`, then ask about it:
+
+```elisp
+(file-locked-p f)
+;; GNU     => (file-error "Testing file lock" "Invalid argument" "/tmp/lk.txt")
+;; Neomacs => (file-error "Testing file lock" "/tmp/lk.txt" "Invalid argument")
+
+(unlock-file f)
+;; GNU     => nil, plus  Warning (unlock-file): Unlocking file: Invalid argument, ...
+;; Neomacs => (signalled (file-error ...))
+```
+
+GNU reports every lock failure with `report_file_errno` (src/filelock.c:648
+for "Unlocking file", :776 for "Testing file lock"), and
+`get_file_errno_data` (src/fileio.c:264-283) builds
+`(SYMBOL ACTION STRERROR . NAME)` -- errno picks the symbol
+(`file-missing` / `permission-denied` / `file-already-exists`, which
+uniquely omits ACTION), and STRERROR is the bare libc text. We hand-built
+`(ACTION FILENAME STRERROR)` and used Rust's `io::Error::to_string()`, which
+appends `(os error N)` to a string the user reads. We also tagged
+unparseable lock contents as `ErrorKind::InvalidData` rather than the EINVAL
+GNU reports, so the errno-keyed classification never saw the real code.
+
+Second half: `Funlock_file` (src/filelock.c:717-720) wraps the native path
+in `internal_condition_case_1` for `file-error` and routes the error to
+`userlock--handle-unlock-error` (lisp/userlock.el:217), which warns and
+returns nil; the file-name-handler path sits deliberately OUTSIDE that
+condition case. We propagated the error, so one bad lock file turned an
+ordinary unlock into a failure.
+
+Fix: `neovm-core/src/emacs_core/filelock.rs`. The ad-hoc constructor is
+deleted, not re-ordered -- filelock now calls the existing faithful port of
+`get_file_errno_data` in `fileio.rs`, so one place in the tree decides what
+a file-error looks like and this cannot drift again.
+
+Commit: `c267e79e1`. Tests:
+`lock_error_data_matches_gnu_report_file_errno_shape`,
+`unlock_file_routes_lock_errors_to_the_userlock_handler_like_gnu`. Batch
+probe diffs byte-identical against GNU.
+
+Status: FIXED.
+
+## Not a divergence: `inhibit-modification-hooks` and file locking
+
+Recorded because it was investigated and refuted, so nobody re-opens it. The
+suspicion was that binding `inhibit-modification-hooks` silently disables
+file locking in neomacs but not in GNU. The GNU source says the opposite:
+`prepare_to_modify_buffer_1` returns at `src/insdel.c:2167`, and the
+`Flock_file` call is at `:2174`, AFTER it. GNU skips locking too. neomacs
+does the same thing at the same point (`editfns.rs`, `signal_before_change`).
+
+```elisp
+;; visit a file, then insert under each binding
+(let ((inhibit-modification-hooks t)) (insert "X"))
+;; GNU     => (nil nil)     ; (file-locked-p f) and (file-symlink-p lockfile)
+;; Neomacs => (nil nil)
+(insert "Y")   ; plain
+;; GNU     => (t "exec@Matrix.PID:BOOT")
+;; Neomacs => (t "exec@Matrix.PID:BOOT")
+```
+
+Byte-identical across all three probed states. No fix, no entry number.
+
 ## 70. `package-install-file` locks the file it installs, so a shared cached tar cannot be installed twice at once -- NOT A DIVERGENCE (harness defect), FIXED
 
 Recorded because the signal looks like a neomacs bug and is not one. Two

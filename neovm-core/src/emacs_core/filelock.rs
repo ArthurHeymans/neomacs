@@ -19,14 +19,17 @@ use super::value::{Value, ValueKind};
 use crate::buffer::BufferId;
 use crate::heap_types::LispString;
 
+/// GNU reports a lock failure with `report_file_errno` (filelock.c:648, 776),
+/// so the DATA must be exactly what `get_file_errno_data` (fileio.c) builds:
+/// `(ACTION STRERROR FILENAME)`, with the errno choosing the condition symbol
+/// and STRERROR being the bare libc text.  Reuse that port rather than
+/// re-deriving the shape here — an ad-hoc triple got the order wrong and
+/// leaked Rust's "(os error N)" suffix.
 fn file_lock_error(context: &str, filename: &LispString, err: io::Error) -> Flow {
-    signal(
-        LispCondition::FileError,
-        vec![
-            Value::string(context),
-            Value::heap_string(filename.clone()),
-            Value::string(err.to_string()),
-        ],
+    super::fileio::signal_file_action_error_value(
+        err,
+        context,
+        Value::heap_string(filename.clone()),
     )
 }
 
@@ -125,7 +128,8 @@ enum LockOwner {
 /// USER@HOST.PID:BOOT.  `lock_file` deliberately ignores that errno (no
 /// prompt), while file-locked-p and unlock-file report it as a file-error.
 fn invalid_lock_contents_error() -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, "Invalid argument")
+    // Carry the real EINVAL so report_file_errno's strerror text matches GNU.
+    io::Error::from_raw_os_error(libc::EINVAL)
 }
 
 /// GNU's `make-lock-file-name` (files.el) prepends ".#" to the non-directory
@@ -145,24 +149,46 @@ fn fallback_make_lock_file_name(path: &Path) -> Option<PathBuf> {
     Some(out)
 }
 
+/// GNU `make_lock_file_name` (filelock.c:535-560) is the ONLY place in the
+/// lock path that expands FN: `fn = Fexpand_file_name (fn, Qnil)` at :543.
+/// Everything else — Fget_truename_buffer, Fverify_visited_file_modtime,
+/// Ffile_exists_p, the supersession calln, and the file name reported by
+/// report_file_errno — sees the caller's string verbatim.  That matters
+/// because `buffer-file-truename` is stored abbreviated ("~/..."), so
+/// expanding before the truename lookup makes it miss its own buffer.
 fn make_lock_file_name(
     eval: &mut super::eval::Context,
     filename: &LispString,
 ) -> Result<Option<PathBuf>, Flow> {
+    let filename = resolve_filename_lisp_for_eval(eval, filename);
+    if !eval.obarray.fboundp("make-lock-file-name") {
+        // GNU cannot reach lock_file before loadup defines this function —
+        // filelock.c:589 bails out under will_dump_p — so it has no analogue
+        // for this state.  Use files.el's own ".#NAME" rule rather than
+        // signalling void-function out of an ordinary edit.  This is the ONLY
+        // reason to bypass the Lisp function; an error raised BY the function
+        // is the Lisp layer's answer and must be respected.
+        return Ok(fallback_make_lock_file_name(&lisp_file_name_to_path_buf(
+            &filename,
+        )));
+    }
+    // GNU uses calln here (filelock.c:558): whatever make-lock-file-name
+    // signals propagates out of Flock_file.  `?` is the whole point — a
+    // swallowed error used to leave us inventing a ".#NAME" lock the Lisp
+    // layer had just refused to name.
     let file = Value::heap_string(filename.clone());
-    match eval.apply(Value::symbol("make-lock-file-name"), vec![file]) {
-        Ok(v) if v.is_nil() => Ok(None),
-        Ok(v) if v.is_string() => Ok(Some(lisp_file_name_to_path_buf(
-            v.as_lisp_string()
+    let lock_file_name = eval.apply(Value::symbol("make-lock-file-name"), vec![file])?;
+    match lock_file_name.kind() {
+        ValueKind::Nil => Ok(None),
+        ValueKind::String => Ok(Some(lisp_file_name_to_path_buf(
+            lock_file_name
+                .as_lisp_string()
                 .expect("ValueKind::String must carry LispString payload"),
         ))),
-        Ok(other) => Err(signal(
+        _ => Err(signal(
             LispCondition::WrongTypeArgument,
-            vec![Value::symbol("stringp"), other],
+            vec![Value::symbol("stringp"), lock_file_name],
         )),
-        Err(_) => Ok(fallback_make_lock_file_name(&lisp_file_name_to_path_buf(
-            filename,
-        ))),
     }
 }
 
@@ -398,39 +424,102 @@ fn lock_if_free(lock_path: &Path, contents: &str, host: &str) -> LockAttempt {
     }
 }
 
-fn lock_file_resolved(
+/// Where GNU's `lfname` local ends up in `lock_file` (filelock.c:592-599).
+///
+/// GNU represents all three states as one `Lisp_Object` that is nil in two
+/// unrelated cases, and the two nils behave differently: `create-lockfiles`
+/// nil skips only the lock file, while a nil from `make-lock-file-name`
+/// returns from `lock_file` immediately — before the supersession check.
+/// Naming the three states keeps that distinction impossible to collapse.
+enum LockFileTarget {
+    /// `create-lockfiles` is nil (filelock.c:593): no lock file, but the
+    /// supersession check still runs — `lock-file`'s docstring says so.
+    LockingDisabled,
+    /// `make-lock-file-name` returned nil for this file (filelock.c:597-598):
+    /// GNU returns at once, so not even the threat check happens.
+    FileExemptFromLocking,
+    /// The lock file to acquire.
+    At(PathBuf),
+}
+
+fn lock_file_target(
     eval: &mut super::eval::Context,
     filename: &LispString,
-) -> Result<Value, Flow> {
+) -> Result<LockFileTarget, Flow> {
     if !eval
         .visible_variable_value_or_nil("create-lockfiles")
         .is_truthy()
     {
+        return Ok(LockFileTarget::LockingDisabled);
+    }
+    Ok(match make_lock_file_name(eval, filename)? {
+        None => LockFileTarget::FileExemptFromLocking,
+        Some(path) => LockFileTarget::At(path),
+    })
+}
+
+/// GNU `lock_file` (filelock.c:601-608): if some live buffer visits FN and
+/// its file has changed on disk since it was visited, ask the user — unless
+/// this Emacs already owns the lock, in which case we made the change.
+///
+/// `calln` propagates whatever `userlock--ask-user-about-supersession-threat`
+/// signals (file-supersession, or the batch-mode "Cannot resolve conflict"
+/// error), which is what aborts the modification.  Never swallow it.
+fn check_supersession_threat(
+    eval: &mut super::eval::Context,
+    filename: &LispString,
+    target: &LockFileTarget,
+    host: &str,
+) -> Result<(), Flow> {
+    let file = Value::heap_string(filename.clone());
+    let subject_buf = eval.apply(Value::symbol("get-truename-buffer"), vec![file])?;
+    if subject_buf.is_nil() {
+        return Ok(());
+    }
+    if eval
+        .apply(
+            Value::symbol("verify-visited-file-modtime"),
+            vec![subject_buf],
+        )?
+        .is_truthy()
+    {
+        return Ok(());
+    }
+    if eval
+        .apply(Value::symbol("file-exists-p"), vec![file])?
+        .is_nil()
+    {
+        return Ok(());
+    }
+    if let LockFileTarget::At(lock_path) = target
+        && matches!(current_lock_owner(lock_path, host), Ok(LockOwner::Current))
+    {
+        return Ok(());
+    }
+    eval.apply(
+        Value::symbol("userlock--ask-user-about-supersession-threat"),
+        vec![file],
+    )?;
+    Ok(())
+}
+
+fn lock_file_resolved(
+    eval: &mut super::eval::Context,
+    filename: &LispString,
+) -> Result<Value, Flow> {
+    let target = lock_file_target(eval, filename)?;
+    if matches!(target, LockFileTarget::FileExemptFromLocking) {
         return Ok(Value::NIL);
     }
 
-    let Some(lock_path) = make_lock_file_name(eval, filename)? else {
+    let host = lock_host_name(eval);
+    check_supersession_threat(eval, filename, &target, &host)?;
+
+    let LockFileTarget::At(lock_path) = target else {
         return Ok(Value::NIL);
     };
-
-    // Supersession check: before locking a file-visiting buffer,
-    // verify that the file hasn't been modified on disk since we
-    // last read it.  Mirrors GNU's `lock_file` (filelock.c:603-608).
-    if eval
-        .buffers
-        .current_buffer()
-        .and_then(|b| b.file_name_value().as_lisp_string())
-        .is_some_and(|fname| fname.as_bytes() == filename.as_bytes())
-        && eval
-            .apply(Value::symbol("verify-visited-file-modtime"), vec![])
-            .is_ok_and(|v| v.is_nil())
-    {
-        let _ = eval.apply(
-            Value::symbol("userlock--ask-user-about-supersession-threat"),
-            vec![Value::heap_string(filename.clone())],
-        );
-    }
-
+    // Re-read (system-name): the threat check ran Lisp, which may have
+    // rebound it, and GNU reads it afresh inside lock_file_1.
     let host = lock_host_name(eval);
     let lock_info = current_lock_info_string(&lock_user_name(eval), &host);
     match lock_if_free(&lock_path, &lock_info, &host) {
@@ -492,12 +581,17 @@ pub(crate) fn lock_file(
         );
     }
 
-    let filename = resolve_filename_lisp_for_eval(eval, filename);
-    lock_file_resolved(eval, &filename)
+    lock_file_resolved(eval, filename)
 }
 
 /// Handler-aware `unlock-file` operation, corresponding to GNU
 /// `Funlock_file`.  GNU discards a file-name handler's return value.
+///
+/// GNU wraps the native path in `internal_condition_case_1` for `file-error`
+/// and routes any such error to `userlock--handle-unlock-error`
+/// (filelock.c:717-720, userlock.el:217), which warns and returns nil — so
+/// `unlock-file` itself never signals a file-error.  The handler path is
+/// deliberately outside that condition case, exactly as in GNU.
 pub(crate) fn unlock_file(
     eval: &mut super::eval::Context,
     filename: &LispString,
@@ -512,8 +606,32 @@ pub(crate) fn unlock_file(
         return Ok(Value::NIL);
     }
 
-    let filename = resolve_filename_lisp_for_eval(eval, filename);
-    unlock_file_resolved(eval, &filename)
+    match unlock_file_resolved(eval, filename) {
+        Err(Flow::Signal(sig))
+            if super::errors::signal_matches_condition_value_sym(
+                &eval.obarray,
+                sig.symbol,
+                &Value::symbol("file-error"),
+            ) =>
+        {
+            let error_object = Value::cons(Value::symbol(sig.symbol), signal_payload_value(&sig));
+            eval.apply(
+                Value::symbol("userlock--handle-unlock-error"),
+                vec![error_object],
+            )?;
+            Ok(Value::NIL)
+        }
+        other => other,
+    }
+}
+
+/// The `(SYMBOL . DATA)` object a `condition-case` variable would be bound to.
+fn signal_payload_value(sig: &super::error::SignalData) -> Value {
+    match &sig.raw_data {
+        Some(raw) => *raw,
+        None if sig.data.is_empty() => Value::NIL,
+        None => Value::list(sig.data.clone()),
+    }
 }
 
 /// Handler-aware `file-locked-p` operation, corresponding to GNU
@@ -529,13 +647,12 @@ fn file_locked_p(eval: &mut super::eval::Context, filename: &LispString) -> Resu
         );
     }
 
-    let filename = resolve_filename_lisp_for_eval(eval, filename);
-    let Some(lock_path) = make_lock_file_name(eval, &filename)? else {
+    let Some(lock_path) = make_lock_file_name(eval, filename)? else {
         return Ok(Value::NIL);
     };
 
     match current_lock_owner(&lock_path, &lock_host_name(eval))
-        .map_err(|err| file_lock_error("Testing file lock", &filename, err))?
+        .map_err(|err| file_lock_error("Testing file lock", filename, err))?
     {
         LockOwner::None => Ok(Value::NIL),
         LockOwner::Current => Ok(Value::T),
@@ -597,7 +714,8 @@ pub(crate) fn sync_modified_buffer_file_lock(
         return Ok(());
     };
 
-    let filename = resolve_filename_lisp_for_eval(eval, &filename);
+    // No expansion here: GNU's restore_buffer_modified_p hands
+    // BVAR (b, file_truename) to Flock_file / Funlock_file untouched.
     if !was_modified && !flag.is_nil() {
         let _ = lock_file(eval, &filename)?;
     } else if was_modified && flag.is_nil() {
@@ -636,8 +754,7 @@ pub(crate) fn builtin_lock_buffer(eval: &mut super::eval::Context, args: Vec<Val
         if filename.is_nil() {
             None
         } else {
-            let filename = super::builtins::expect_lisp_string(filename)?;
-            Some(resolve_filename_lisp_for_eval(eval, filename))
+            Some(super::builtins::expect_lisp_string(filename)?.clone())
         }
     } else {
         let current = eval
@@ -650,7 +767,6 @@ pub(crate) fn builtin_lock_buffer(eval: &mut super::eval::Context, args: Vec<Val
                 ValueKind::String => value.as_lisp_string().cloned(),
                 _ => None,
             })
-            .map(|filename| resolve_filename_lisp_for_eval(eval, &filename))
     };
 
     let modified = eval
@@ -677,8 +793,8 @@ pub(crate) fn builtin_unlock_buffer(
     {
         let filename = truename
             .as_lisp_string()
-            .expect("ValueKind::String must carry LispString payload");
-        let filename = resolve_filename_lisp_for_eval(eval, filename);
+            .expect("ValueKind::String must carry LispString payload")
+            .clone();
         let _ = unlock_file(eval, &filename)?;
     }
     Ok(Value::NIL)

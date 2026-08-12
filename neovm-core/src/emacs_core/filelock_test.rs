@@ -474,3 +474,287 @@ fn stale_boot_time_zaps_even_a_live_pid() {
         _ => panic!("previous-boot lock must be stale"),
     }
 }
+
+/// Seed the current buffer as a clean visitor of VISITED whose recorded
+/// modtime is older than the file on disk, with a batch-mode
+/// userlock--ask-user-about-supersession-threat that signals like
+/// userlock.el's does when it cannot prompt.
+#[cfg(unix)]
+fn seed_superseded_visiting_buffer(eval: &mut super::super::eval::Context, visited: &Path) {
+    visit_file_in_current_buffer(eval, visited);
+    eval.eval_str(
+        r#"(progn
+             (insert "hello\n")
+             (set-buffer-modified-p nil)
+             (set-visited-file-modtime '(0 0))
+             ;; userlock.el's (define-error 'file-supersession nil 'file-error).
+             (put 'file-supersession 'error-conditions
+                  '(file-supersession file-error error))
+             (put 'file-supersession 'error-message "File supersession")
+             (fset 'userlock--ask-user-about-supersession-threat
+                   (lambda (file)
+                     (signal 'file-supersession
+                             (list "File changed on disk" file)))))"#,
+    )
+    .expect("seed a superseded visiting buffer");
+}
+
+/// GNU lock_file (src/filelock.c:601-608) calls
+/// userlock--ask-user-about-supersession-threat with calln, so the
+/// file-supersession signal it raises propagates out of Flock_file and
+/// aborts the modification that asked for the lock.
+#[cfg(unix)]
+#[test]
+fn supersession_threat_signal_propagates_out_of_lock_file_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    seed_superseded_visiting_buffer(&mut eval, &visited);
+
+    let result = eval.eval_str(&format!("(lock-file \"{}\")", visited.display()));
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&result),
+        format!(
+            "ERR (file-supersession (\"File changed on disk\" \"{}\"))",
+            visited.display()
+        ),
+        "GNU lock_file uses calln, so the supersession signal propagates"
+    );
+}
+
+/// The same threat must abort the buffer modification that triggered the
+/// lock, leaving the buffer text untouched — GNU insdel.c:2174 calls
+/// Flock_file from prepare_to_modify_buffer_1, before any text is inserted.
+#[cfg(unix)]
+#[test]
+fn supersession_threat_aborts_the_first_text_change_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    seed_superseded_visiting_buffer(&mut eval, &visited);
+
+    let result = eval.eval_str(r#"(insert "EDIT")"#);
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&result),
+        format!(
+            "ERR (file-supersession (\"File changed on disk\" \"{}\"))",
+            visited.display()
+        ),
+    );
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str("(buffer-string)")),
+        "OK \"hello\n\"",
+        "a refused edit must not modify the buffer"
+    );
+}
+
+/// GNU computes the lock file name only when create-lockfiles is non-nil
+/// (filelock.c:593-599) but runs the supersession check unconditionally
+/// (filelock.c:601-608) — the lock-file docstring says so explicitly.
+#[cfg(unix)]
+#[test]
+fn supersession_threat_is_checked_even_when_create_lockfiles_is_nil_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    seed_superseded_visiting_buffer(&mut eval, &visited);
+    eval.eval_str("(setq create-lockfiles nil)")
+        .expect("opt out of lock files");
+
+    let result = eval.eval_str(&format!("(lock-file \"{}\")", visited.display()));
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&result),
+        format!(
+            "ERR (file-supersession (\"File changed on disk\" \"{}\"))",
+            visited.display()
+        ),
+        "create-lockfiles nil suppresses the lock file, never the threat check"
+    );
+    assert!(
+        fs::symlink_metadata(dir.path().join(".#note.txt")).is_err(),
+        "create-lockfiles nil must still suppress the lock file itself"
+    );
+}
+
+/// GNU skips the threat entirely when this Emacs already owns the lock
+/// (filelock.c:607) — the file on disk was changed by us.
+#[cfg(unix)]
+#[test]
+fn supersession_threat_is_skipped_when_we_own_the_lock_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    seed_superseded_visiting_buffer(&mut eval, &visited);
+    let host = lisp_string(&mut eval, "(system-name)");
+    std::os::unix::fs::symlink(
+        current_lock_info_string("me", &host),
+        dir.path().join(".#note.txt"),
+    )
+    .expect("symlink our own lock");
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(
+            &eval.eval_str(&format!("(lock-file \"{}\")", visited.display()))
+        ),
+        "OK nil",
+        "GNU never raises the threat for a file this Emacs already locked"
+    );
+}
+
+/// GNU calls make-lock-file-name with calln (filelock.c:558), so an error
+/// from it propagates out of Flock_file.  Swallowing it is worse than the
+/// lost signal alone: we then invented a ".#NAME" lock the Lisp layer had
+/// just declined to produce.
+#[cfg(unix)]
+#[test]
+fn make_lock_file_name_errors_propagate_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.set_variable("create-lockfiles", Value::T);
+    eval.eval_str(
+        r#"(fset 'make-lock-file-name
+                 (lambda (_f) (signal 'error (list "make-lock-file-name exploded"))))"#,
+    )
+    .expect("install an exploding make-lock-file-name");
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(
+            &eval.eval_str(&format!("(lock-file \"{}\")", visited.display()))
+        ),
+        "ERR (error (\"make-lock-file-name exploded\"))",
+    );
+    assert!(
+        fs::symlink_metadata(dir.path().join(".#note.txt")).is_err(),
+        "a refused lock file name must not be second-guessed with a fallback"
+    );
+}
+
+/// GNU expands FN in exactly one place: `make_lock_file_name`
+/// (filelock.c:543, `fn = Fexpand_file_name (fn, Qnil)`).  Every other
+/// consumer — Fget_truename_buffer (:603), Fverify_visited_file_modtime
+/// (:605), Ffile_exists_p (:606), the supersession calln (:608) — receives
+/// the caller's string verbatim.  Expanding earlier breaks the truename
+/// lookup, because find-file stores `buffer-file-truename` abbreviated
+/// ("~/..."), so the expanded name never matches its own buffer.
+#[cfg(unix)]
+#[test]
+fn only_the_lock_file_name_expands_the_filename_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.set_variable("create-lockfiles", Value::T);
+    eval.eval_str(&format!(
+        r#"(progn
+             (setq default-directory "{}/")
+             (setq neovm-lock-args nil)
+             (fset 'make-lock-file-name
+                   (lambda (f)
+                     (setq neovm-lock-args
+                           (cons (cons 'make-lock-file-name f) neovm-lock-args))
+                     (concat "{}/.#note.txt")))
+             (fset 'get-truename-buffer
+                   (lambda (f)
+                     (setq neovm-lock-args
+                           (cons (cons 'get-truename-buffer f) neovm-lock-args))
+                     nil)))"#,
+        dir.path().display(),
+        dir.path().display(),
+    ))
+    .expect("install recording stubs");
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str(r#"(lock-file "note.txt")"#)),
+        "OK nil",
+    );
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str("(reverse neovm-lock-args)")),
+        format!(
+            "OK ((make-lock-file-name . \"{}/note.txt\") (get-truename-buffer . \"note.txt\"))",
+            dir.path().display()
+        ),
+        "only make-lock-file-name sees an expanded name"
+    );
+
+    let _ = fs::remove_file(dir.path().join(".#note.txt"));
+}
+
+/// GNU reports lock failures through report_file_errno, whose DATA is
+/// (ACTION STRERROR FILENAME) — fileio.c get_file_errno_data, filelock.c:648.
+/// The bare strerror text carries no Rust "(os error N)" suffix.
+#[cfg(unix)]
+#[test]
+fn lock_error_data_matches_gnu_report_file_errno_shape() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+    fs::write(dir.path().join(".#note.txt"), b"garbage-not-a-lock").expect("write bogus lock");
+
+    let mut eval = super::super::eval::Context::new();
+    let result = eval.eval_str(&format!("(file-locked-p \"{}\")", visited.display()));
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&result),
+        format!(
+            "ERR (file-error (\"Testing file lock\" \"Invalid argument\" \"{}\"))",
+            visited.display()
+        ),
+    );
+}
+
+/// GNU Funlock_file (filelock.c:717-720) wraps unlock_file in
+/// internal_condition_case_1 for file-error and routes the error to
+/// userlock--handle-unlock-error, returning nil: unlock-file never signals.
+#[cfg(unix)]
+#[test]
+fn unlock_file_routes_lock_errors_to_the_userlock_handler_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+    fs::write(dir.path().join(".#note.txt"), b"garbage-not-a-lock").expect("write bogus lock");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.eval_str(
+        r#"(progn
+             (setq neovm-unlock-errors nil)
+             (fset 'userlock--handle-unlock-error
+                   (lambda (err)
+                     (setq neovm-unlock-errors (cons err neovm-unlock-errors)))))"#,
+    )
+    .expect("define the unlock error handler");
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(
+            &eval.eval_str(&format!("(unlock-file \"{}\")", visited.display()))
+        ),
+        "OK nil",
+        "GNU unlock-file swallows file-errors and returns nil"
+    );
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str("neovm-unlock-errors")),
+        format!(
+            "OK ((file-error \"Unlocking file\" \"Invalid argument\" \"{}\"))",
+            visited.display()
+        ),
+        "the error is handed to userlock--handle-unlock-error"
+    );
+}

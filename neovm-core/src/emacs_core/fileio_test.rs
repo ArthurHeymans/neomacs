@@ -5784,3 +5784,48 @@ fn find_file_name_handler_reads_current_buffer_syntax_table() {
         "zzz must not match \\sw+ once ?z is whitespace in the buffer table"
     );
 }
+
+/// GNU `Fverify_visited_file_modtime` (fileio.c:6129) decodes BUF and tests
+/// THAT buffer's recorded modtime.  `lock_file` (filelock.c:605) passes the
+/// buffer visiting the file being locked, which need not be the current one,
+/// so ignoring BUF and always reading the current buffer is a real divergence.
+#[test]
+fn verify_visited_file_modtime_uses_its_buffer_argument_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    std::fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = Context::new();
+    let original = eval.buffers.current_buffer_id().expect("current buffer");
+    let visitor_value = eval
+        .eval_str(r#"(get-buffer-create "visitor")"#)
+        .expect("create the visiting buffer");
+    let visitor_id = visitor_value.as_buffer_id().expect("buffer value");
+    eval.buffers
+        .set_buffer_file_name(visitor_id, Value::string(visited.to_string_lossy()))
+        .expect("set buffer-file-name");
+    eval.eval_str(r#"(set-buffer "visitor")"#)
+        .expect("select the visiting buffer");
+    eval.eval_str("(set-visited-file-modtime '(0 0))")
+        .expect("record a stale modtime");
+
+    // The visiting buffer is current and its recorded modtime is stale, so
+    // an omitted BUF answers nil...
+    let current_answer = builtin_verify_visited_file_modtime(&mut eval, vec![])
+        .expect("verify-visited-file-modtime with no BUF");
+    assert!(
+        current_answer.is_nil(),
+        "the current buffer's modtime is stale"
+    );
+    // ...while BUF naming a buffer that visits nothing answers t.  Ignoring
+    // BUF and re-reading the current buffer would answer nil here.
+    let other_answer =
+        builtin_verify_visited_file_modtime(&mut eval, vec![Value::make_buffer(original)])
+            .expect("verify-visited-file-modtime with BUF");
+    assert_eq!(
+        other_answer,
+        Value::T,
+        "BUF, not the current buffer, decides the answer"
+    );
+}
