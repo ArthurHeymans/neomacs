@@ -3648,18 +3648,28 @@ width-1, width and width+1 in one probe. The width+1 case is deliberate: it
 stops the end-of-buffer rule from degenerating into "always report zero at ZV",
 which would break every ordinary wrap.
 
-### Two side findings, unchased and cheap to verify later
+### Two side findings, rechecked and closed 2026-08-12
 
-- `backtrace-to-string` and `backtrace-frames` disagree in our build:
-  `(backtrace-to-string (backtrace-frames))` signals
-  `wrong-type-argument backtrace-frame`. One of the two does not match GNU's
-  shape.
-- GNU's `validate_interval_range` (`src/textprop.c:128`) early-returns on
-  `(EQ (*begin, *end) && begin != end)` where `begin != end` is a POINTER
-  comparison distinguishing a range call from a point call (callers at
-  `textprop.c:580` and `976` pass `&position` twice). Ours compares VALUES and
-  returns whenever they are equal. Our point paths are separate functions so it
-  is likely inert, but it is a real difference.
+- `backtrace-to-string` and `backtrace-frames` appeared to disagree in our
+  build, but `(backtrace-to-string (backtrace-frames))` signals the identical
+  `(wrong-type-argument backtrace-frame (t backtrace-frames nil nil))` on GNU.
+  These are intentionally different interfaces: `backtrace-frames` exposes
+  raw `(evald fun args flags)` tuples from `mapbacktrace`, while
+  `backtrace-to-string` accepts the `backtrace-frame` records constructed by
+  `backtrace-get-frames` (`lisp/emacs-lisp/backtrace.el:54-115,893-899`).  The
+  documented adapter path produces a frame record and a string on both
+  engines.  There is no divergence.
+- GNU's `validate_interval_range` (`src/textprop.c:128`) does early-return on
+  `(EQ (*begin, *end) && begin != end)`, where pointer identity encodes whether
+  the caller requested a range or a point.  Neomacs does not flatten that
+  operation kind: range APIs call `validate_{string,buffer}_*_range`, whose
+  equal endpoints deliberately return no interval before bounds validation,
+  while point APIs call distinct `validate_*_point*` functions that always
+  validate bounds.  Invalid empty string/buffer ranges, distinct equal markers,
+  an invalid nonempty range, invalid point queries, wrong objects, and wrong
+  position types produce a byte-identical nine-case result on both engines.
+  The Rust function boundary is the typed equivalent of GNU's pointer choice;
+  there is no behavioral divergence to fix.
 
 Status: FIXED.
 
