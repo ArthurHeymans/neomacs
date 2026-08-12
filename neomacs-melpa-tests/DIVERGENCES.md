@@ -4186,3 +4186,52 @@ build, pdump, and all 1,515 Lisp byte-compiles succeed, and the unchanged
 `ess_package_batch` oracle is green.
 
 Status: FIXED.
+
+## 80. GnuTLS `:trustfiles` were parsed by Lisp but discarded before TLS verification -- FIXED
+
+`org-cliplink` fetched a title from the package fixture's HTTPS server while
+binding `gnutls-trustfiles` to that server's self-signed certificate.  GNU
+completed the verified request and selected the exact auth-source entry after
+a wildcard entry; Neomacs failed before the HTTP or auth logic ran:
+
+```elisp
+(let ((gnutls-trustfiles (list fixture-certificate))
+      (network-security-level 'low))
+  (url-retrieve-synchronously "https://127.0.0.1:<port>/private"))
+;; GNU     => an HTTP response buffer
+;; Neomacs => (gnutls-error -1
+;;              "TLS handshake: invalid peer certificate: UnknownIssuer") ; before
+```
+
+The fixture certificate includes the matching `127.0.0.1` IP subject
+alternative name, and the test supplied it as an explicit trust anchor.  The
+failure was therefore not a reason to weaken hostname or certificate
+verification.
+
+GNU parses `:trustfiles` in `emacs_gnutls_boot` (`src/gnutls.c:2036-2044`),
+loads the system trust store (`src/gnutls.c:2124-2138`), and then adds every
+listed PEM file with `gnutls_certificate_set_x509_trust_file`
+(`src/gnutls.c:2140-2168`).  Neomacs parsed only `:hostname` from the same
+property list.  Its Rustls backend always constructed a root store containing
+only Mozilla roots, so the Lisp trust-file setting could not reach
+verification through any synchronous, deferred, or direct `gnutls-boot`
+path.
+
+The replacement makes the policy backend-neutral and closed:
+`TlsClientParameters` carries the hostname and an exhaustive
+`TlsTrustRoots::{Default, DefaultPlusFiles}` choice.  Every TLS backend call
+now requires the complete parameter object, turning any future call site that
+drops trust policy into a compile error.  The Rustls implementation begins
+with its existing Mozilla roots and adds every PEM certificate from the
+explicit files, preserving GNU's additive behavior and all normal peer
+verification.
+
+The unchanged `org_cliplink_package_batch` workflow failed first with
+`UnknownIssuer` and now completes the HTTPS and auth-source case.  Focused
+tests pin ordered trust-file parsing, GNU's invalid-entry error, PEM root-store
+augmentation, and backend errors.  All 16 TLS tests pass, the complete
+`neovm-core` gate passes 8,821 tests with 51 skipped, a fresh release build
+produces a 13,616,018-byte pdump and all 1,651 Lisp byte-compiles, and the exact
+package oracle remains green after rebasing onto current `main`.
+
+Status: FIXED.
