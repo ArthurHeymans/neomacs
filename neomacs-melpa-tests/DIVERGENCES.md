@@ -3326,13 +3326,34 @@ unrepresentable and the match exhaustive. `verify-visited-file-modtime`'s
 helper now returns the decided `BufferId` instead of `Result<(), Flow>`, so
 no caller can type-check BUF and then operate on a different buffer again.
 
+Auditing this module for the same defect class turned up a THIRD swallow
+site, `make-lock-file-name` itself:
+
+```elisp
+(advice-add 'make-lock-file-name :override
+            (lambda (&rest _) (error "make-lock-file-name exploded")))
+(condition-case e (lock-file f) (error (list 'signalled e)))
+;; GNU     => (signalled (error "make-lock-file-name exploded")), no lock file
+;; Neomacs => nil, and a lock file appears at .#NAME anyway
+```
+
+GNU calls it with `calln` (src/filelock.c:558). We caught the error and fell
+back to a hand-rolled `".#NAME"` -- worse than losing the signal, because we
+then created a lock at a name the Lisp layer had just refused to produce.
+The fallback is now narrowed from "any error" to "the function is not
+defined yet", which is the one state GNU has no analogue for: neomacs can
+reach this code before files.el is loaded, where GNU bails out under
+`will_dump_p` (src/filelock.c:589).
+
 Commits: `5e70c106b` (primitives), `0f905057a` (propagation and gates),
-`2dfb58742` (expansion boundary). Tests:
+`2dfb58742` (expansion boundary), `3934fa9f1` (make-lock-file-name errors).
+Tests:
 `supersession_threat_signal_propagates_out_of_lock_file_like_gnu`,
 `supersession_threat_aborts_the_first_text_change_like_gnu`,
 `supersession_threat_is_checked_even_when_create_lockfiles_is_nil_like_gnu`,
 `supersession_threat_is_skipped_when_we_own_the_lock_like_gnu`,
-`only_the_lock_file_name_expands_the_filename_like_gnu`. The batch probe
+`only_the_lock_file_name_expands_the_filename_like_gnu`,
+`make_lock_file_name_errors_propagate_like_gnu`. The batch probe
 above now diffs byte-identical against GNU, normalized only for the pid in
 the temp file name.
 
