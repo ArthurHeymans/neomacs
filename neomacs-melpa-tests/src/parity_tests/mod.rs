@@ -487,6 +487,7 @@ mod lsp_docker;
 mod lsp_java;
 mod lsp_mode;
 mod lsp_pyright;
+mod lsp_python_ms;
 mod lsp_treemacs;
 mod lsp_ui;
 mod lua_mode;

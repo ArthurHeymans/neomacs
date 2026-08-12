@@ -2221,6 +2221,13 @@ pub const LSP_MODE_MELPA_PIN: (&str, &str) = ("lsp-mode", "20260716.755");
 /// from upstream commit `187e08caee4e1630a9975f492274c739f325392f`.
 pub const LSP_PYRIGHT_MELPA_PIN: (&str, &str) = ("lsp-pyright", "20260507.1742");
 
+/// The exact historical Microsoft Python Language Server client selected for
+/// practical client registration, Python environment discovery,
+/// initialization, progress rendering, and installer lifecycle parity. MELPA
+/// built this archive from upstream commit
+/// `7bda327bec7b219d140c34dab4b1e1fbd41bc516`.
+pub const LSP_PYTHON_MS_MELPA_PIN: (&str, &str) = ("lsp-python-ms", "20230731.1458");
+
 /// The exact LSP UI package selected for practical hover-documentation,
 /// sideline, peek, Imenu, diagnostics, reference-navigation, and lifecycle
 /// parity. MELPA built this archive from upstream commit
