@@ -3194,6 +3194,13 @@ pub const HELPFUL_MELPA_PIN: (&str, &str) = ("helpful", "20250408.334");
 
 pub const HELM_MELPA_PIN: (&str, &str) = ("helm", "20260728.709");
 
+/// The exact Helm Org Rifle package selected for practical public search,
+/// occur, navigation, timestamp-sort compatibility, directory-discovery, and
+/// recovery coverage.
+/// MELPA built this archive from upstream merge
+/// `03a52265040b8c6510a8269213d750c451779c38`.
+pub const HELM_ORG_RIFLE_MELPA_PIN: (&str, &str) = ("helm-org-rifle", "20230821.1927");
+
 /// The exact Helm Company package selected for practical Company-backed
 /// candidate presentation, completion, cancellation, documentation, and
 /// source-location parity. MELPA built version 0.2.8 from upstream commit

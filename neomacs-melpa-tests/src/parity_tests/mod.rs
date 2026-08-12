@@ -443,6 +443,7 @@ mod helm_lsp;
 mod helm_make;
 mod helm_mode_manager;
 mod helm_org;
+mod helm_org_rifle;
 mod helm_projectile;
 mod helm_purpose;
 mod helm_swoop;

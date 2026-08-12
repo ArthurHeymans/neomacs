@@ -385,7 +385,7 @@ rank	package	downloads	status
 384	pipenv	255250	covered
 385	gist	254696	covered
 386	material-theme	253079	covered
-387	helm-org-rifle	250130	todo
+387	helm-org-rifle	250130	covered
 388	elixir-mode	249963	covered
 389	cargo	249399	todo
 390	lsp-origami	248222	todo
