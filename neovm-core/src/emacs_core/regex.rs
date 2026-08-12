@@ -390,12 +390,6 @@ impl<'a> BufferRegexpMatchContext<'a> {
     }
 }
 
-pub(crate) struct IteratedStringMatches {
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    pub capture_count: usize,
-    pub matches: Vec<Vec<Option<MatchGroup>>>,
-}
-
 /// Entry of [`SEARCH_PATTERN_CACHE`]:
 /// `(posix, case_fold, pattern_multibyte, pattern_bytes, syntax_key, compiled)`.
 type SearchPatternCacheEntry = (
@@ -838,13 +832,6 @@ impl EngineMatchData {
             .copied()
             .flatten()
             .map(MatchGroup::from_emacs_byte_range)
-    }
-
-    fn groups_snapshot(&self) -> Vec<Option<MatchGroup>> {
-        self.groups
-            .iter()
-            .map(|group| group.map(MatchGroup::from_emacs_byte_range))
-            .collect()
     }
 
     fn publish_string(self, searched_string: SearchedString) -> MatchData {
@@ -1721,94 +1708,6 @@ pub(crate) fn buffer_regexp_syntax_dependency(
         BufferRegexpSyntaxDependency::BufferSyntaxDependent
     } else {
         BufferRegexpSyntaxDependency::SyntaxIndependent
-    })
-}
-
-fn compiled_capture_count(compiled: &CompiledSearchPattern) -> usize {
-    match compiled {
-        CompiledSearchPattern::Literal(_) => 1,
-        CompiledSearchPattern::Emacs(cp) => cp.re_nsub + 1,
-    }
-}
-
-fn find_forward_match_data_compiled(
-    compiled: &CompiledSearchPattern,
-    text: &[u8],
-    start: usize,
-    limit: usize,
-    offset: usize,
-    case_fold: bool,
-) -> Option<EngineMatchData> {
-    match compiled {
-        CompiledSearchPattern::Literal(literal) => {
-            let matched = literal_find_emacs_bytes(&text[start..limit], literal, true, case_fold)?;
-            let matched = matched.shift(offset + start);
-            Some(EngineMatchData::new(gnu_single_group_vec(Some(matched))))
-        }
-        CompiledSearchPattern::Emacs(cp) => {
-            let syn = DefaultSyntaxLookup;
-            let text_bytes = text;
-            let range = (limit - start) as isize;
-            let result =
-                regex_emacs::re_search(cp, &text_bytes[..limit], start, range, &syn, start);
-            result.map(|(_pos, regs)| engine_match_data_from_registers(&regs, offset))
-        }
-    }
-}
-
-pub(crate) fn iterate_string_matches_with_case_fold(
-    pattern: &LispString,
-    string: &[u8],
-    start: usize,
-    case_fold: bool,
-) -> Result<IteratedStringMatches, String> {
-    let compiled = compile_search_pattern(pattern, case_fold)?;
-    let capture_count = compiled_capture_count(&compiled);
-    if start > string.len() {
-        return Ok(IteratedStringMatches {
-            capture_count,
-            matches: Vec::new(),
-        });
-    }
-    let mut matches = Vec::new();
-    let mut search_at = start;
-
-    while search_at <= string.len() {
-        let Some(md) = find_forward_match_data_compiled(
-            &compiled,
-            string,
-            search_at,
-            string.len(),
-            0,
-            case_fold,
-        ) else {
-            break;
-        };
-        let Some(group) = md.group(0) else {
-            break;
-        };
-        matches.push(md.groups_snapshot());
-
-        if group.end() > search_at {
-            search_at = group.end();
-            continue;
-        }
-
-        let Some(next_at) = next_search_char_boundary(string, group.end()) else {
-            break;
-        };
-        if next_at <= search_at {
-            break;
-        }
-        search_at = next_at;
-        if group.start() == group.end() && search_at > string.len() {
-            break;
-        }
-    }
-
-    Ok(IteratedStringMatches {
-        capture_count,
-        matches,
     })
 }
 
