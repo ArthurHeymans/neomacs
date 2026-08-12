@@ -3872,3 +3872,71 @@ both halves at once: the bytes on disk (239 187 191 99 97 102 195 169 13 10)
 and the text read back ("café\n").
 
 Status: FIXED.
+
+## 74. `call-interactively` leaked nested command identity out of interactive argument acquisition -- FIXED
+
+Evil operators ran the right edit under the wrong command identity.  In four
+evil-goggles workflows, GNU exposed the operator consistently while Neomacs
+kept the motion used to acquire its range:
+
+```elisp
+;; Observed from advice around the operator body while executing "dd".
+;; GNU     => (evil-delete evil-delete evil-delete)
+;; Neomacs => (next-line  evil-delete evil-delete) ; before
+;;             this-command real-this  this-original
+```
+
+That asymmetry initially pointed at the command loop, but the command loop had
+already selected the right Evil operator.  Evil's Lisp-form interactive spec
+then computes an operator range by running a nested motion; that motion changes
+the command variables temporarily.  The package-independent reproduction was:
+
+```elisp
+(setq this-command 'outer-this
+      this-original-command 'outer-original
+      real-this-command 'outer-real
+      last-command 'outer-last)
+(defun command-state (argument)
+  (interactive
+   (progn
+     (setq this-command 'inner-this
+           this-original-command 'inner-original
+           real-this-command 'inner-real
+           last-command 'inner-last)
+     (list 7)))
+  (list argument this-command this-original-command
+        real-this-command last-command))
+(list (call-interactively 'command-state)
+      this-command this-original-command real-this-command last-command)
+;; GNU => ((7 outer-this outer-original outer-real outer-last)
+;;         outer-this outer-original outer-real outer-last)
+;; Neomacs before => the same shape filled with the four inner-* values.
+```
+
+GNU makes the lifetime explicit in `Fcall_interactively`.  It snapshots
+`Vthis_command`, `Vthis_original_command`, `Vreal_this_command`, and the
+keyboard's `Vlast_command` together before acquiring arguments
+(`src/callint.c:281-284`).  After evaluating a Lisp-form spec it restores all
+four immediately before `funcall-interactively` (`src/callint.c:340-346`); the
+string-spec path does the same (`src/callint.c:796-803`).  Neomacs evaluated
+the spec through its shared call planner but had no corresponding saved state,
+so the nested motion's last assignment remained visible to the operator body
+and its advice.
+
+The fix models that protocol instead of adding four unrelated assignments.
+`CallInteractivelyCommandIdentity` captures and GC-roots the four values as one
+unit, and every `CallInteractivelyPlan` must own one.  Its invocation target is
+private until the plan is consumed by `restore_for_invocation`, which returns a
+distinct `RestoredCallInteractivelyInvocation`.  Both the evaluator and the
+bytecode VM therefore have to cross the restoration transition before this API
+will construct the final `funcall-interactively` arguments; a new planner path
+that forgets the snapshot or restores only a subset fails to compile.
+
+The GNU-derived invariant is pinned independently in both engines by
+`call_interactively_restores_command_identity_after_form_spec_evaluation` and
+`vm_call_interactively_restores_command_identity_before_invocation`.  Each
+asserts what the command body sees as well as what remains after it returns.
+The unchanged evil-goggles package oracle then passes all four original
+workflows with the operator-specific faces and command identities restored.
+
+Status: FIXED.
