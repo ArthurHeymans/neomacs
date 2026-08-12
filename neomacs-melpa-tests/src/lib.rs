@@ -3097,6 +3097,12 @@ pub const GRUVBOX_THEME_MELPA_PIN: (&str, &str) = ("gruvbox-theme", "20250117.22
 /// archive from upstream commit `b1551245d3404eac6394abaebe1a9e0b2c504235`.
 pub const GH_MELPA_PIN: (&str, &str) = ("gh", "20260210.1535");
 
+/// The historical gist.el package selected for practical public creation,
+/// listing, filtering, fetching, editing, mutation, and Dired integration
+/// parity. MELPA built this archive from upstream commit
+/// `b2712a61d04af98a05cc2556d85479803b6626be`.
+pub const GIST_MELPA_PIN: (&str, &str) = ("gist", "20171128.406");
+
 /// The exact gh-md package selected for practical GitHub Markdown API
 /// rendering, region/buffer conversion, GFM context payloads, HTML export
 /// customization, Unicode request encoding, and transport-error parity.

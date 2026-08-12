@@ -404,6 +404,7 @@ mod ggtags;
 mod gh;
 mod gh_md;
 mod ghub;
+mod gist;
 mod git;
 mod git_commit;
 mod git_commit_mode;
