@@ -3554,3 +3554,111 @@ The general rule, for anyone adding a scenario: never hand
 shared cache. Give it a private copy.
 
 Status: FIXED.
+
+## 71. `vertical-motion` counts a wrap that lands at end of buffer as a screen line moved -- FIXED
+
+Found as a CRASH in the `multi_term` parity suite and reduced to a core motion
+primitive. The suite was the messenger; `term.el` was the caller unlucky enough
+to turn a wrong integer into a dead session.
+
+The whole bug, with no packages, no processes and no terminal:
+
+```elisp
+(with-temp-buffer (insert (make-string 79 ?x)) (goto-char (point-min))
+  (vertical-motion 1))
+;; GNU     => 0   (point 80)
+;; neomacs => 1   (point 80)   (before this fix)
+```
+
+Point moves identically in both. Only the RETURN differs. GNU's contract is
+explicit (`src/indent.c`, `Fvertical_motion` docstring): it returns "number of
+screen lines moved over; that usually equals LINES, but may be closer to zero
+if beginning or end of buffer was reached". Filling the body width exactly puts
+point at ZV with nothing on a following line, so no screen line was moved over
+and the answer is zero. In batch GNU does not even use the display iterator --
+`Fvertical_motion` branches on `noninteractive` to `vmotion`, which ends in
+`compute_motion (from, from_byte, vpos, ..., ZV, vtarget, ...)`; that stops at
+ZV and reports only the lines it genuinely crossed.
+
+The boundary, measured against GNU 31.0.90 at body width 80:
+
+| buffer length | GNU | neomacs before |
+|---|---|---|
+| 78 | 0 | 0 |
+| 79 (fills the width exactly) | **0** | **1** |
+| 80 (one char on a continuation line) | 1 | 1 |
+| 81, 100, 160 | 1 | 1 |
+
+So exactly one case diverged: the wrap that lands ON end-of-buffer.
+
+HOW IT BECAME A CRASH. `term.el`'s hard-newline path
+(`lisp/term.el:3183-3188`) does `term-move-to-column 0`, `term-down 1 t`, then
+`(add-text-properties (1- (point)) (point) '(term-line-wrap t rear-nonsticky t))`.
+`term-down` accounts with `(setq down (- down (term-vertical-motion down)))` and
+only extends the buffer with `(term-insert-char ?\n down)` while `down` remains
+non-negative. GNU's 0 leaves work to do and the newline is inserted; our 1
+convinced it the move had happened, no newline was added, point stayed at 1, and
+`(1- (point))` was 0 -- below `point-min` in a 1-based buffer. That signalled
+`args-out-of-range (0 1)` inside the process filter and killed the batch session
+with exit 255.
+
+Fixed in `screen_line_motion_target`'s scanner
+(`neovm-core/src/emacs_core/builtins/symbols.rs`): the wrap branch now reports
+`counts_line: scan < point_max`, because a wrap only begins a screen line when
+something is left to put on it. Counting it also claimed a line redisplay never
+draws.
+
+### How this was found, because the route generalises
+
+**The `(0 1)` data shape did the first cut.** The signal carried exactly two
+integers. That excludes most candidates by arity alone: `Fsubstring` signals
+`args_out_of_range_3` with three elements (the string plus both indices), and
+`Faref` puts the array first. A bare pair of integers is the text-property
+validators' signature, which is what pointed at `add-text-properties` before any
+backtrace existed.
+
+**An A/B on identical input killed the leading hypothesis.** The first theory
+was that our process filter delivered a short or empty string -- GNU's
+`decoding_carryover` (`src/process.c:6243-6254`) holds an incomplete multibyte
+tail across reads, and a terminal emulator is the workload most likely to expose
+it. Instrumenting the filter in BOTH editors on the same scenario showed they
+receive the IDENTICAL 152-byte string, the same process, and the same entry
+state (term-width 79, term-height 22, point 1, point-max 1, same window,
+window-width 80). GNU completes; we signalled. That refuted the hypothesis with
+an observation rather than an argument, and it is retracted here in as many
+words: `decoding_carryover` is NOT implicated and was never needed.
+
+**WARNING -- AN ADVICE PROBE PRODUCED A CONFIDENT FALSE NEGATIVE.** Wrapping the
+text-property family with `advice-add` and a `condition-case` did NOT fire, even
+though `add-text-properties` was the signalling call. Read naively that says
+"not a text-property function", which is the opposite of the truth and nearly
+sent the diagnosis the wrong way. Only a real Lisp backtrace (custom `debugger`
+with `debug-on-signal`) named the call. **Trust the backtrace over advice
+coverage**: an instrument that silently fails to cover its target is worse than
+no instrument, because it manufactures evidence for a wrong conclusion.
+
+**Reduction was the rest of the value.** The six-case scenario was rebuilt as a
+standalone script from the Rust sources, reproducing in seconds and freely
+instrumentable, then narrowed to one case, then to one primitive, then to the
+three-line form at the top of this entry.
+
+Pinned by `vertical_motion_counts_only_screen_lines_that_are_actually_occupied`
+(`neovm-core/src/emacs_core/window_cmds/tests.rs`), which asserts all three of
+width-1, width and width+1 in one probe. The width+1 case is deliberate: it
+stops the end-of-buffer rule from degenerating into "always report zero at ZV",
+which would break every ordinary wrap.
+
+### Two side findings, unchased and cheap to verify later
+
+- `backtrace-to-string` and `backtrace-frames` disagree in our build:
+  `(backtrace-to-string (backtrace-frames))` signals
+  `wrong-type-argument backtrace-frame`. One of the two does not match GNU's
+  shape.
+- GNU's `validate_interval_range` (`src/textprop.c:128`) early-returns on
+  `(EQ (*begin, *end) && begin != end)` where `begin != end` is a POINTER
+  comparison distinguishing a range call from a point call (callers at
+  `textprop.c:580` and `976` pass `&position` twice). Ours compares VALUES and
+  returns whenever they are equal. Our point paths are separate functions so it
+  is likely inert, but it is a real difference.
+
+Status: FIXED.

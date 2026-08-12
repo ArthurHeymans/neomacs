@@ -8496,3 +8496,47 @@ fn deleting_a_window_does_not_recombine_a_sealed_promoted_child() {
         "OK (h (\"*scratch*\" 0 40) (h (\"*scratch*\" 40 60) (\"*scratch*\" 60 80)))"
     );
 }
+
+/// A wrap that lands exactly at end of buffer starts no screen line, so
+/// `vertical-motion' must report that it moved over none.
+///
+/// GNU returns the number of screen lines actually moved over, "closer to zero
+/// if beginning or end of buffer was reached" (src/indent.c, Fvertical_motion).
+/// In batch GNU answers from `vmotion' -> `compute_motion', which stops at ZV
+/// and counts only the lines it genuinely crossed. Filling the body width
+/// exactly puts point at ZV with nothing on a following line, so the count is
+/// zero even though point moves.
+///
+/// The one-past case is pinned alongside it deliberately: with a single extra
+/// character there IS an occupied continuation line, and the answer is 1. That
+/// keeps the end-of-buffer rule from degenerating into "always report zero at
+/// ZV", which would break every ordinary wrap.
+#[test]
+fn vertical_motion_counts_only_screen_lines_that_are_actually_occupied() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-vertical-motion-eob*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (let ((width (window-body-width)))
+                     (mapcar
+                      (lambda (n)
+                        (erase-buffer)
+                        (insert (make-string n ?x))
+                        (goto-char (point-min))
+                        (list n (vertical-motion 1) (point)))
+                      (list (- width 1) width (+ width 1)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    // Ground truth taken from GNU 31.0.90 on the same probe, body width 80:
+    //   ((79 0 80) (80 1 80) (81 1 80))
+    assert_eq!(
+        result, "OK ((79 0 80) (80 1 80) (81 1 80))",
+        "a wrap landing exactly at end of buffer must report no screen line \
+         moved, while one character more must still report the continuation line"
+    );
+}

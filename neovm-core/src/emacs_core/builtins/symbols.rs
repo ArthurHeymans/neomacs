@@ -2291,7 +2291,14 @@ fn next_screen_line_start_from(
             }
             return Ok(Some(ScreenLineStep {
                 next: scan,
-                counts_line: true,
+                // A wrap only begins a screen line if something is left to put
+                // on it. Filling the width with the buffer's last character
+                // moves point to the end without occupying a following line,
+                // and GNU counts screen lines actually moved over -- its batch
+                // path stops `compute_motion' at ZV, so the count stays zero
+                // there even though point moves. Counting it would also report
+                // a line that redisplay never draws.
+                counts_line: scan < point_max,
             }));
         }
     }
