@@ -475,6 +475,144 @@ fn stale_boot_time_zaps_even_a_live_pid() {
     }
 }
 
+/// Seed the current buffer as a clean visitor of VISITED whose recorded
+/// modtime is older than the file on disk, with a batch-mode
+/// userlock--ask-user-about-supersession-threat that signals like
+/// userlock.el's does when it cannot prompt.
+#[cfg(unix)]
+fn seed_superseded_visiting_buffer(eval: &mut super::super::eval::Context, visited: &Path) {
+    visit_file_in_current_buffer(eval, visited);
+    eval.eval_str(
+        r#"(progn
+             (insert "hello\n")
+             (set-buffer-modified-p nil)
+             (set-visited-file-modtime '(0 0))
+             ;; userlock.el's (define-error 'file-supersession nil 'file-error).
+             (put 'file-supersession 'error-conditions
+                  '(file-supersession file-error error))
+             (put 'file-supersession 'error-message "File supersession")
+             (fset 'userlock--ask-user-about-supersession-threat
+                   (lambda (file)
+                     (signal 'file-supersession
+                             (list "File changed on disk" file)))))"#,
+    )
+    .expect("seed a superseded visiting buffer");
+}
+
+/// GNU lock_file (src/filelock.c:601-608) calls
+/// userlock--ask-user-about-supersession-threat with calln, so the
+/// file-supersession signal it raises propagates out of Flock_file and
+/// aborts the modification that asked for the lock.
+#[cfg(unix)]
+#[test]
+fn supersession_threat_signal_propagates_out_of_lock_file_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    seed_superseded_visiting_buffer(&mut eval, &visited);
+
+    let result = eval.eval_str(&format!("(lock-file \"{}\")", visited.display()));
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&result),
+        format!(
+            "ERR (file-supersession (\"File changed on disk\" \"{}\"))",
+            visited.display()
+        ),
+        "GNU lock_file uses calln, so the supersession signal propagates"
+    );
+}
+
+/// The same threat must abort the buffer modification that triggered the
+/// lock, leaving the buffer text untouched — GNU insdel.c:2174 calls
+/// Flock_file from prepare_to_modify_buffer_1, before any text is inserted.
+#[cfg(unix)]
+#[test]
+fn supersession_threat_aborts_the_first_text_change_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    seed_superseded_visiting_buffer(&mut eval, &visited);
+
+    let result = eval.eval_str(r#"(insert "EDIT")"#);
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&result),
+        format!(
+            "ERR (file-supersession (\"File changed on disk\" \"{}\"))",
+            visited.display()
+        ),
+    );
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str("(buffer-string)")),
+        "OK \"hello\n\"",
+        "a refused edit must not modify the buffer"
+    );
+}
+
+/// GNU computes the lock file name only when create-lockfiles is non-nil
+/// (filelock.c:593-599) but runs the supersession check unconditionally
+/// (filelock.c:601-608) — the lock-file docstring says so explicitly.
+#[cfg(unix)]
+#[test]
+fn supersession_threat_is_checked_even_when_create_lockfiles_is_nil_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    seed_superseded_visiting_buffer(&mut eval, &visited);
+    eval.eval_str("(setq create-lockfiles nil)")
+        .expect("opt out of lock files");
+
+    let result = eval.eval_str(&format!("(lock-file \"{}\")", visited.display()));
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&result),
+        format!(
+            "ERR (file-supersession (\"File changed on disk\" \"{}\"))",
+            visited.display()
+        ),
+        "create-lockfiles nil suppresses the lock file, never the threat check"
+    );
+    assert!(
+        fs::symlink_metadata(dir.path().join(".#note.txt")).is_err(),
+        "create-lockfiles nil must still suppress the lock file itself"
+    );
+}
+
+/// GNU skips the threat entirely when this Emacs already owns the lock
+/// (filelock.c:607) — the file on disk was changed by us.
+#[cfg(unix)]
+#[test]
+fn supersession_threat_is_skipped_when_we_own_the_lock_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let visited = dir.path().join("note.txt");
+    fs::write(&visited, b"hello\n").expect("write visited file");
+
+    let mut eval = super::super::eval::Context::new();
+    seed_superseded_visiting_buffer(&mut eval, &visited);
+    let host = lisp_string(&mut eval, "(system-name)");
+    std::os::unix::fs::symlink(
+        current_lock_info_string("me", &host),
+        dir.path().join(".#note.txt"),
+    )
+    .expect("symlink our own lock");
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(
+            &eval.eval_str(&format!("(lock-file \"{}\")", visited.display()))
+        ),
+        "OK nil",
+        "GNU never raises the threat for a file this Emacs already locked"
+    );
+}
+
 /// GNU reports lock failures through report_file_errno, whose DATA is
 /// (ACTION STRERROR FILENAME) — fileio.c get_file_errno_data, filelock.c:648.
 /// The bare strerror text carries no Rust "(os error N)" suffix.

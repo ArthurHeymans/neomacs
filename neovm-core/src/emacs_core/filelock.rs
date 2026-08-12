@@ -402,39 +402,102 @@ fn lock_if_free(lock_path: &Path, contents: &str, host: &str) -> LockAttempt {
     }
 }
 
-fn lock_file_resolved(
+/// Where GNU's `lfname` local ends up in `lock_file` (filelock.c:592-599).
+///
+/// GNU represents all three states as one `Lisp_Object` that is nil in two
+/// unrelated cases, and the two nils behave differently: `create-lockfiles`
+/// nil skips only the lock file, while a nil from `make-lock-file-name`
+/// returns from `lock_file` immediately — before the supersession check.
+/// Naming the three states keeps that distinction impossible to collapse.
+enum LockFileTarget {
+    /// `create-lockfiles` is nil (filelock.c:593): no lock file, but the
+    /// supersession check still runs — `lock-file`'s docstring says so.
+    LockingDisabled,
+    /// `make-lock-file-name` returned nil for this file (filelock.c:597-598):
+    /// GNU returns at once, so not even the threat check happens.
+    FileExemptFromLocking,
+    /// The lock file to acquire.
+    At(PathBuf),
+}
+
+fn lock_file_target(
     eval: &mut super::eval::Context,
     filename: &LispString,
-) -> Result<Value, Flow> {
+) -> Result<LockFileTarget, Flow> {
     if !eval
         .visible_variable_value_or_nil("create-lockfiles")
         .is_truthy()
     {
+        return Ok(LockFileTarget::LockingDisabled);
+    }
+    Ok(match make_lock_file_name(eval, filename)? {
+        None => LockFileTarget::FileExemptFromLocking,
+        Some(path) => LockFileTarget::At(path),
+    })
+}
+
+/// GNU `lock_file` (filelock.c:601-608): if some live buffer visits FN and
+/// its file has changed on disk since it was visited, ask the user — unless
+/// this Emacs already owns the lock, in which case we made the change.
+///
+/// `calln` propagates whatever `userlock--ask-user-about-supersession-threat`
+/// signals (file-supersession, or the batch-mode "Cannot resolve conflict"
+/// error), which is what aborts the modification.  Never swallow it.
+fn check_supersession_threat(
+    eval: &mut super::eval::Context,
+    filename: &LispString,
+    target: &LockFileTarget,
+    host: &str,
+) -> Result<(), Flow> {
+    let file = Value::heap_string(filename.clone());
+    let subject_buf = eval.apply(Value::symbol("get-truename-buffer"), vec![file])?;
+    if subject_buf.is_nil() {
+        return Ok(());
+    }
+    if eval
+        .apply(
+            Value::symbol("verify-visited-file-modtime"),
+            vec![subject_buf],
+        )?
+        .is_truthy()
+    {
+        return Ok(());
+    }
+    if eval
+        .apply(Value::symbol("file-exists-p"), vec![file])?
+        .is_nil()
+    {
+        return Ok(());
+    }
+    if let LockFileTarget::At(lock_path) = target
+        && matches!(current_lock_owner(lock_path, host), Ok(LockOwner::Current))
+    {
+        return Ok(());
+    }
+    eval.apply(
+        Value::symbol("userlock--ask-user-about-supersession-threat"),
+        vec![file],
+    )?;
+    Ok(())
+}
+
+fn lock_file_resolved(
+    eval: &mut super::eval::Context,
+    filename: &LispString,
+) -> Result<Value, Flow> {
+    let target = lock_file_target(eval, filename)?;
+    if matches!(target, LockFileTarget::FileExemptFromLocking) {
         return Ok(Value::NIL);
     }
 
-    let Some(lock_path) = make_lock_file_name(eval, filename)? else {
+    let host = lock_host_name(eval);
+    check_supersession_threat(eval, filename, &target, &host)?;
+
+    let LockFileTarget::At(lock_path) = target else {
         return Ok(Value::NIL);
     };
-
-    // Supersession check: before locking a file-visiting buffer,
-    // verify that the file hasn't been modified on disk since we
-    // last read it.  Mirrors GNU's `lock_file` (filelock.c:603-608).
-    if eval
-        .buffers
-        .current_buffer()
-        .and_then(|b| b.file_name_value().as_lisp_string())
-        .is_some_and(|fname| fname.as_bytes() == filename.as_bytes())
-        && eval
-            .apply(Value::symbol("verify-visited-file-modtime"), vec![])
-            .is_ok_and(|v| v.is_nil())
-    {
-        let _ = eval.apply(
-            Value::symbol("userlock--ask-user-about-supersession-threat"),
-            vec![Value::heap_string(filename.clone())],
-        );
-    }
-
+    // Re-read (system-name): the threat check ran Lisp, which may have
+    // rebound it, and GNU reads it afresh inside lock_file_1.
     let host = lock_host_name(eval);
     let lock_info = current_lock_info_string(&lock_user_name(eval), &host);
     match lock_if_free(&lock_path, &lock_info, &host) {
