@@ -263,6 +263,7 @@ mod auto_shell_command;
 mod auto_sort_mode;
 mod auto_space_mode;
 mod auto_yasnippet;
+mod autothemer;
 mod avy;
 mod avy_menu;
 mod beacon;

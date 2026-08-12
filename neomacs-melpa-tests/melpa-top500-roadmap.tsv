@@ -391,7 +391,7 @@ rank	package	downloads	status
 390	lsp-origami	248222	covered
 391	racket-mode	247615	covered
 392	leaf	247063	covered
-393	autothemer	246768	todo
+393	autothemer	246768	covered
 394	helm-git-grep	246325	todo
 395	flyspell-correct-helm	243893	todo
 396	command-log-mode	243799	todo

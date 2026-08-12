@@ -3619,6 +3619,12 @@ pub const RAINBOW_DELIMITERS_MELPA_PIN: (&str, &str) = ("rainbow-delimiters", "2
 /// `f92a33dcc3b604f53ef23a538e26e1f25c4fea47`.
 pub const RACKET_MODE_MELPA_PIN: (&str, &str) = ("racket-mode", "20260726.2002");
 
+/// The exact Autothemer package selected for practical theme definition,
+/// palette reuse, interactive color insertion, conversion/sorting, JSON
+/// export, and guarded failure-recovery parity. MELPA built this archive from
+/// upstream commit `99fd9b45ef6cc931fcf030b1a6c050ca3c17ce04`.
+pub const AUTOTHEMER_MELPA_PIN: (&str, &str) = ("autothemer", "20260530.2349");
+
 /// The exact Shut Up package selected for practical output capture, cleanup,
 /// deterministic file generation, quiet loading, nested scopes, bypass, and
 /// noninteractive startup parity. MELPA built this archive from upstream
