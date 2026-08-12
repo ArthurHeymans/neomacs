@@ -4050,3 +4050,52 @@ tests, a fresh release build and pdump succeed, and the original
 `flycheck_package_package_batch` oracle is green.
 
 Status: FIXED.
+
+## 77. Directory enumeration discarded the Lisp-expanded path before local I/O -- FIXED
+
+`shrink-path` expands abbreviated fish-style paths with `f-glob`, which reaches
+the public `file-expand-wildcards` and `directory-files` primitives.  With a
+dynamically rebound `HOME`, Neomacs expanded `~` correctly in isolation but
+enumerated the process's original home directory:
+
+```elisp
+(let ((old-home (getenv "HOME")))
+  (unwind-protect
+      (progn
+        (setenv "HOME" "/path/to/fixture")
+        (directory-files "~/"))
+    (setenv "HOME" old-home)))
+;; GNU     => ("." ".." "Projects")
+;; Neomacs => entries from /home/exec                 ; before
+```
+
+An explicit absolute wildcard worked, which ruled out wildcard matching and
+isolated the first broken primitive to directory enumeration.  GNU expands
+the directory exactly once before both handler lookup and local work in
+`Fdirectory_files` (`src/dired.c:379-392`).  Its sibling
+`Fdirectory_files_and_attributes` has the identical preamble
+(`src/dired.c:421-436`).
+
+Neomacs had a helper that also expanded before handler lookup, but returned
+only `Option<Value>`.  `None` meant "no handler result" and discarded the
+expanded filename with it.  The caller then resolved the original `~/` again
+through a host-environment path helper, bypassing Lisp's dynamic
+`process-environment`.  `directory-files-and-attributes` skipped the GNU
+preamble entirely and had the same observable bug.
+
+The replacement models the protocol as the exhaustive
+`ExpandedFileOperation::{Handled, Local}` enum.  `Local` owns the expanded
+filename, so a caller cannot represent "handler absent" without also carrying
+the only path local I/O may consume.  `directory-files`,
+`directory-files-and-attributes`, and `delete-file` now validate their DEFUN
+arguments, cross that typed expansion/dispatch boundary, and pattern-match the
+result before proceeding.
+
+The public Lisp regression
+`directory_files_expands_tilde_from_lisp_process_environment_like_gnu` failed
+first for both directory primitives and now returns the synthetic fixture from
+both.  All 18 focused directory tests pass, the complete `neovm-core` gate
+passes 8,815 tests with 51 skipped, a fresh release build and pdump succeed,
+and the unchanged `shrink_path_package_batch` oracle is green.
+
+Status: FIXED.
