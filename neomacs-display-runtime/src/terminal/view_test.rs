@@ -48,6 +48,24 @@ fn reader_thread_exists(name: &str) -> bool {
         })
 }
 
+/// Naming a thread is the thread's own first act, so the `comm` entry appears
+/// some time after `spawn` returns -- on a loaded machine, long after.  Waiting
+/// for the precondition keeps the test measuring what it is about (destroy
+/// reaps) instead of how promptly the scheduler ran a new thread.  Only the
+/// precondition waits: the post-destroy check stays instantaneous, because
+/// `destroy` joins the thread and a joined thread is gone.
+#[cfg(target_os = "linux")]
+fn wait_for_reader_thread(name: &str) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        if reader_thread_exists(name) {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    reader_thread_exists(name)
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 fn destroying_terminal_reaps_child_and_joins_reader_thread() {
@@ -68,7 +86,10 @@ fn destroying_terminal_reaps_child_and_joins_reader_thread() {
     manager.terminals.insert(id, view);
 
     assert!(process_exists(pid));
-    assert!(reader_thread_exists(&thread_name));
+    assert!(
+        wait_for_reader_thread(&thread_name),
+        "reader thread {thread_name} never started"
+    );
     assert!(manager.destroy(id).expect("destroy terminal"));
 
     let process_leaked = process_exists(pid);
