@@ -50,10 +50,44 @@ pub struct CellAttrs {
 pub struct TtyCell {
     pub ch: char,
     pub attrs: CellAttrs,
+    /// Whether GNU's `CHAR_GLYPH_SPACE_P` may treat this blank as implicit.
+    /// A filtered TTY line-end face can have default SGR attributes while
+    /// retaining non-default face identity, so attributes alone cannot decide.
+    pub blank_erase: BlankErase,
+    /// How this visually blank-compatible cell exists on the real terminal.
+    /// GNU distinguishes a written space glyph from a cell produced by EL;
+    /// terminal snapshots and later insert/delete operations observe it too.
+    pub materialization: CellMaterialization,
     /// True if this is a padding cell for a wide (double-width) character.
     pub padding: bool,
     /// Grapheme-cluster extenders stacked on `ch` (None for ordinary cells).
     pub extenders: Option<Box<str>>,
+}
+
+/// Logical erase eligibility of one cell.
+///
+/// This is separate from [`CellMaterialization`]: `DefaultFace` says an EL
+/// operation is semantically allowed, while materialization records whether
+/// the real terminal cell was most recently erased or written.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BlankErase {
+    /// A default-face space: GNU may omit it from the logical row tail.
+    DefaultFace,
+    /// Nonblank content or a space carrying non-default logical face identity.
+    Explicit,
+}
+
+/// Physical provenance of a terminal cell.
+///
+/// This is deliberately an enum rather than an `explicit_space` flag: every
+/// cell has exactly one physical state, and new planner operations must choose
+/// one exhaustively when they update the screen model.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CellMaterialization {
+    /// The terminal created this cell by clearing/erasing the row.
+    Erased,
+    /// A glyph (including an ordinary space glyph) was written here.
+    Written,
 }
 
 impl Default for TtyCell {
@@ -61,6 +95,8 @@ impl Default for TtyCell {
         Self {
             ch: ' ',
             attrs: CellAttrs::default(),
+            blank_erase: BlankErase::DefaultFace,
+            materialization: CellMaterialization::Erased,
             padding: false,
             extenders: None,
         }
@@ -107,6 +143,8 @@ impl TtyGrid {
                 bg,
                 ..CellAttrs::default()
             },
+            blank_erase: BlankErase::DefaultFace,
+            materialization: CellMaterialization::Erased,
             padding: false,
             extenders: None,
         };
@@ -154,6 +192,23 @@ impl TtyGrid {
 
     /// Set a cell at (row, col). No-op if out of bounds.
     pub fn set(&mut self, row: usize, col: usize, ch: char, attrs: CellAttrs, padding: bool) {
+        let blank_erase = if ch == ' ' && !padding {
+            BlankErase::DefaultFace
+        } else {
+            BlankErase::Explicit
+        };
+        self.set_with_blank_erase(row, col, ch, attrs, padding, blank_erase);
+    }
+
+    fn set_with_blank_erase(
+        &mut self,
+        row: usize,
+        col: usize,
+        ch: char,
+        attrs: CellAttrs,
+        padding: bool,
+        blank_erase: BlankErase,
+    ) {
         if row < self.height && col < self.width {
             if let Some(written) = self.row_written.get_mut(row) {
                 *written = true;
@@ -165,6 +220,8 @@ impl TtyGrid {
             self.cells[idx] = TtyCell {
                 ch,
                 attrs,
+                blank_erase,
+                materialization: CellMaterialization::Written,
                 padding,
                 extenders: None,
             };
@@ -182,6 +239,8 @@ impl TtyGrid {
         let row_start = row * self.width;
         let blank = |cell: &mut TtyCell| {
             cell.ch = ' ';
+            cell.blank_erase = BlankErase::Explicit;
+            cell.materialization = CellMaterialization::Written;
             cell.padding = false;
             cell.extenders = None;
         };
@@ -234,6 +293,8 @@ impl TtyGrid {
             self.cells[idx] = TtyCell {
                 ch,
                 attrs,
+                blank_erase: BlankErase::Explicit,
+                materialization: CellMaterialization::Written,
                 padding,
                 extenders: ext,
             };
@@ -321,18 +382,17 @@ pub struct TermCaps {
     /// disagree with (the SU/SD-on-vt220 trap: `cs` attests DECSTBM but
     /// says nothing about CSI S/T).
     pub scroll_region: Option<RegionScrollMethod>,
-    /// Back-color-erase (terminfo `bce`): erase operations fill with the
-    /// current SGR background rather than the terminal default, which is
-    /// what makes erase-to-EOL usable under a non-default background.
-    pub back_color_erase: bool,
     /// Parameterized insert/delete character (ANSI ICH/DCH): in-line
     /// horizontal shifts for the typing-echo case. True only when the
     /// terminfo entry's own insert/delete strings ARE the ANSI forms the
     /// encoder emits, not merely present (tvi955 has `ic`, but it is not
     /// `ESC[@`).
     pub insert_delete_char: bool,
-    /// Erase to end of line with ANSI `ESC[K` (terminfo `el`).
-    pub erase_to_eol: bool,
+    /// How GNU's row updater must materialize trailing default-face blanks.
+    /// This combines termcap `in` (spaces must be written) with the exact
+    /// ANSI `ce` capability the encoder supports, so the planner cannot
+    /// accidentally claim both mutually exclusive paths.
+    pub blank_tail: BlankTailMethod,
     /// DECSET 2026 synchronized-output bracketing.
     pub synchronized_output: bool,
 }
@@ -345,9 +405,10 @@ impl Default for TermCaps {
     fn default() -> Self {
         Self {
             scroll_region: Some(RegionScrollMethod::SuSd),
-            back_color_erase: true,
             insert_delete_char: true,
-            erase_to_eol: true,
+            blank_tail: BlankTailMethod::EraseToEol {
+                back_color_erase: true,
+            },
             synchronized_output: true,
         }
     }
@@ -363,10 +424,33 @@ impl TermCaps {
     pub fn unknown_terminal() -> Self {
         Self {
             scroll_region: None,
-            back_color_erase: false,
             insert_delete_char: false,
-            erase_to_eol: false,
+            blank_tail: BlankTailMethod::WriteSpaces,
             synchronized_output: true,
+        }
+    }
+}
+
+/// How trailing default-face blanks are put on the terminal.
+///
+/// GNU derives this choice from `must_write_spaces` (`tgetflag ("in")`) and
+/// clear-to-EOL support.  Keeping it closed makes the row planner handle the
+/// two behaviors exhaustively instead of coordinating independent booleans.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlankTailMethod {
+    /// The terminal requires real space glyphs, or Neomacs cannot encode its
+    /// clear-to-EOL capability.
+    WriteSpaces,
+    /// ANSI EL (`ESC[K`) may replace a uniform blank tail.  BCE records
+    /// whether EL uses the active SGR background for colored blank tails.
+    EraseToEol { back_color_erase: bool },
+}
+
+impl BlankTailMethod {
+    fn can_erase(self, background: Option<(u8, u8, u8)>) -> bool {
+        match self {
+            Self::WriteSpaces => false,
+            Self::EraseToEol { back_color_erase } => background.is_none() || back_color_erase,
         }
     }
 }
@@ -926,6 +1010,53 @@ impl TtyRif {
         }
     }
 
+    /// Classify a resolved face for GNU's TTY trailing-space rule.
+    ///
+    /// Layout interns faces by stable presentation identity, so the resolved
+    /// default face carried by a newline is not guaranteed to retain numeric
+    /// `FaceId(0)` (the Python fixture's default newline is `FaceId(21)`). The
+    /// TTY boundary canonicalizes those identities by their terminal-facing
+    /// attributes before assigning the closed erase class.
+    fn blank_erase_for_face(&self, face_id: FaceId) -> BlankErase {
+        if self.resolve_attrs(face_id) == self.resolve_attrs(FaceId::new(0)) {
+            BlankErase::DefaultFace
+        } else {
+            BlankErase::Explicit
+        }
+    }
+
+    /// Install one logical glyph cell while preserving the real terminal's
+    /// erased/written state when GNU considers a default-face blank implicit.
+    /// Non-default blanks are always written, even when their SGR attributes
+    /// happen to equal the terminal defaults.
+    fn set_desired_glyph_cell(
+        &mut self,
+        row: usize,
+        col: usize,
+        ch: char,
+        attrs: CellAttrs,
+        padding: bool,
+        blank_erase: BlankErase,
+    ) {
+        let preserved_materialization =
+            (blank_erase == BlankErase::DefaultFace && ch == ' ' && !padding)
+                .then(|| self.current.cells.get(row * self.current.width + col))
+                .flatten()
+                .filter(|current| {
+                    current.ch == ' '
+                        && current.attrs == attrs
+                        && !current.padding
+                        && current.extenders.is_none()
+                        && current.blank_erase == BlankErase::DefaultFace
+                })
+                .map(|current| current.materialization);
+        self.desired
+            .set_with_blank_erase(row, col, ch, attrs, padding, blank_erase);
+        if let Some(materialization) = preserved_materialization {
+            self.desired.cells[row * self.desired.width + col].materialization = materialization;
+        }
+    }
+
     /// Write one grapheme into the cell at `*col` (advancing it), as a base
     /// character plus combining extenders. Zero-width format joiners/selectors
     /// (ZWJ, ZWNJ, variation selectors) that the GUI shaper would consume are
@@ -967,6 +1098,12 @@ impl TtyRif {
         self.output.extend_from_slice(b"\x1b[?25l");
 
         self.encode_ops(&ops);
+
+        // The desired grid begins as logical GNU glyph content. Reconcile the
+        // physical side effects of the chosen operations before it becomes the
+        // next current-screen model: writing an erased-looking blank makes it
+        // written, while EL makes even a previously written blank erased.
+        self.reconcile_desired_materialization(&ops);
 
         // Reset attributes after all updates.
         self.output.extend_from_slice(b"\x1b[0m");
@@ -1016,6 +1153,8 @@ impl TtyRif {
         if self.desired.width == 0 || self.desired.height == 0 {
             return ops;
         }
+
+        self.normalize_desired_blank_tails();
 
         // Vertical scroll: when a run of rows merely shifted, move them with
         // the terminal (one region scroll) instead of retransmitting every
@@ -1152,20 +1291,23 @@ impl TtyRif {
                 continue;
             }
             if self.force_full_render {
-                // GNU's initial update physically writes the complete width
-                // of every nonempty desired row.  This is observable terminal
-                // state: those trailing cells contain written spaces, while a
-                // wholly blank row is cleared by EL and contains unwritten
-                // cells.  Keep that distinction instead of treating the two
-                // states as visually interchangeable.
+                // GNU dispnew.c:5991-6013 trims trailing default-face spaces
+                // when termcap `in` is absent, writes the meaningful prefix,
+                // then clears the rest with `ce`.  The erased-vs-written
+                // distinction is observable in a raw terminal snapshot.
                 if let Some((split, bg)) = uniform_erasable_tail(desired_row, 0)
-                    && split == 0
-                    && self.caps.erase_to_eol
-                    && (bg.is_none() || self.caps.back_color_erase)
+                    && self.caps.blank_tail.can_erase(bg)
                 {
+                    if split > 0 {
+                        ops.push(TermOp::WriteRun {
+                            row: row as u16,
+                            start: 0,
+                            end: split as u16,
+                        });
+                    }
                     ops.push(TermOp::EraseToEol {
                         row: row as u16,
-                        from: 0,
+                        from: split as u16,
                         bg,
                     });
                 } else {
@@ -1178,25 +1320,24 @@ impl TtyRif {
                 continue;
             }
 
-            // A row whose entire current model is default blank was produced
-            // by EL on the initial/most recent blank repaint, so its physical
-            // terminal cells are unwritten.  GNU's update_frame_line writes
-            // through the right edge when genuinely new content first
-            // appears on such a row, establishing physical trailing spaces.
-            // Content with one consumed source row was relocated by GNU's line
-            // operations and retains its EL-produced unwritten tail, so let
-            // the usual incremental path reproduce that tail. Merely finding
-            // equal content elsewhere is insufficient: a copied/duplicate row
-            // is new content and must establish its own written-space tail.
-            let current_row_is_erased = current_row.iter().all(|cell| cell == &TtyCell::default());
-            let content_origin = current_row_is_erased
-                .then(|| classify_new_row_content(&self.current, &self.desired, row));
-            if content_origin == Some(NewRowContentOrigin::New) {
-                ops.push(TermOp::WriteRun {
-                    row: row as u16,
-                    start: first_changed as u16,
-                    end: desired_row.len() as u16,
-                });
+            // GNU dispnew.c:6067-6083 treats an enabled row whose effective
+            // old length is zero uniformly: skip implicit leading blanks and
+            // write only the meaningful desired content.  Content provenance
+            // is irrelevant; the terminal's erased tail remains erased.
+            let current_row_is_erased = current_row
+                .iter()
+                .all(|cell| cell.materialization == CellMaterialization::Erased);
+            if current_row_is_erased
+                && let Some((split, bg)) = uniform_erasable_tail(desired_row, first_changed)
+                && self.caps.blank_tail.can_erase(bg)
+            {
+                if first_changed < split {
+                    ops.push(TermOp::WriteRun {
+                        row: row as u16,
+                        start: first_changed as u16,
+                        end: split as u16,
+                    });
+                }
                 continue;
             }
 
@@ -1260,8 +1401,7 @@ impl TtyRif {
                 if let Some((split, bg)) = uniform_erasable_tail(desired_row, first_changed)
                     && desired_row.len().saturating_sub(split) >= MIN_ERASE_CELLS
                     && split <= last_changed + 1
-                    && self.caps.erase_to_eol
-                    && (bg.is_none() || self.caps.back_color_erase)
+                    && self.caps.blank_tail.can_erase(bg)
                 {
                     erase_from = Some(split);
                     last_changed = split.saturating_sub(1).max(first_changed);
@@ -1326,6 +1466,63 @@ impl TtyRif {
         }
 
         ops
+    }
+
+    /// Apply GNU's logical-row trimming to the physical desired model.
+    ///
+    /// Rasterization deliberately creates written space glyphs for the full
+    /// window-matrix slice. Only the final uniform default-face blank suffix of
+    /// the complete frame row is implicit and may remain erased.
+    fn normalize_desired_blank_tails(&mut self) {
+        if matches!(self.caps.blank_tail, BlankTailMethod::WriteSpaces) {
+            return;
+        }
+        for row in self.desired.cells.chunks_mut(self.desired.width) {
+            let Some((split, bg)) = uniform_erasable_tail(row, 0) else {
+                continue;
+            };
+            if !self.caps.blank_tail.can_erase(bg) {
+                continue;
+            }
+            for cell in &mut row[split..] {
+                cell.materialization = CellMaterialization::Erased;
+            }
+        }
+    }
+
+    /// Make the desired grid describe what the encoded operations physically
+    /// leave on the terminal. The exhaustive operation match is a compile-time
+    /// reminder to model the physical effect of every future operation.
+    fn reconcile_desired_materialization(&mut self, ops: &[TermOp]) {
+        for op in ops {
+            match *op {
+                TermOp::WriteRun { row, start, end }
+                | TermOp::ClearThenWriteRun { row, start, end } => {
+                    let row = row as usize;
+                    let start = row * self.desired.width + start as usize;
+                    let end = row * self.desired.width + end as usize;
+                    for cell in &mut self.desired.cells[start..end] {
+                        cell.materialization = CellMaterialization::Written;
+                    }
+                }
+                TermOp::EraseToEol { row, from, .. } => {
+                    let row = row as usize;
+                    let start = row * self.desired.width + from as usize;
+                    let end = (row + 1) * self.desired.width;
+                    for cell in &mut self.desired.cells[start..end] {
+                        cell.materialization = CellMaterialization::Erased;
+                    }
+                }
+                TermOp::ScrollRows { .. }
+                | TermOp::InsertCells { .. }
+                | TermOp::DeleteCells { .. } => {
+                    // Planning already replayed the move in `current` and
+                    // verified the retained cells against desired, including
+                    // their materialization. Fresh cells are covered by a
+                    // following write/erase operation.
+                }
+            }
+        }
     }
 
     /// Encode planned operations into escape bytes. The single place bytes
@@ -1517,12 +1714,13 @@ impl TtyRif {
                 if glyph.padding {
                     let attrs = self.resolve_attrs(glyph.face_id);
                     if let Some(col) = visible_cell(col, self.desired.width) {
-                        self.desired.set(
+                        self.set_desired_glyph_cell(
                             screen_row,
                             col,
                             ' ',
                             attrs,
                             preceding_wide_base_visible.take().unwrap_or(true),
+                            BlankErase::Explicit,
                         );
                     }
                     col = col.saturating_add(1);
@@ -1582,7 +1780,14 @@ impl TtyRif {
                                 break;
                             }
                             if let Some(col) = visible_cell(col, self.desired.width) {
-                                self.desired.set(screen_row, col, ' ', attrs, false);
+                                self.set_desired_glyph_cell(
+                                    screen_row,
+                                    col,
+                                    ' ',
+                                    attrs,
+                                    false,
+                                    self.blank_erase_for_face(glyph.face_id),
+                                );
                             }
                             col = col.saturating_add(1);
                         }
@@ -1600,7 +1805,14 @@ impl TtyRif {
                                 break;
                             }
                             if let Some(col) = visible_cell(col, self.desired.width) {
-                                self.desired.set(screen_row, col, ch, attrs, false);
+                                self.set_desired_glyph_cell(
+                                    screen_row,
+                                    col,
+                                    ch,
+                                    attrs,
+                                    false,
+                                    BlankErase::Explicit,
+                                );
                             }
                             col = col.saturating_add(1);
                         }
@@ -1617,7 +1829,18 @@ impl TtyRif {
                             glyph_to_char(glyph)
                         };
                         if let Some(col) = visible_cell(col, self.desired.width) {
-                            self.desired.set(screen_row, col, ch, attrs, false);
+                            self.set_desired_glyph_cell(
+                                screen_row,
+                                col,
+                                ch,
+                                attrs,
+                                false,
+                                if ch == ' ' {
+                                    self.blank_erase_for_face(glyph.face_id)
+                                } else {
+                                    BlankErase::Explicit
+                                },
+                            );
                         }
                         col = col.saturating_add(1);
 
@@ -1627,7 +1850,14 @@ impl TtyRif {
                                 .is_some_and(|next_glyph| next_glyph.padding);
                         if glyph.wide && !next_is_explicit_padding && col < screen_width {
                             if let Some(col) = visible_cell(col, self.desired.width) {
-                                self.desired.set(screen_row, col, ' ', attrs, base_visible);
+                                self.set_desired_glyph_cell(
+                                    screen_row,
+                                    col,
+                                    ' ',
+                                    attrs,
+                                    base_visible,
+                                    BlankErase::Explicit,
+                                );
                             }
                             col = col.saturating_add(1);
                         }
@@ -1635,6 +1865,69 @@ impl TtyRif {
                 }
                 preceding_wide_base_visible = glyph.wide.then_some(base_visible);
                 glyph_idx += 1;
+            }
+
+            if area == GlyphArea::Text {
+                let right_edge = if glyph_row.glyphs[GlyphArea::RightMargin.index()].is_empty() {
+                    match area_layout.placement(GlyphArea::Text) {
+                        GlyphAreaPlacement::Structural(geometry) => {
+                            frame_origin_col.saturating_add(
+                                (geometry.bounds().right() / char_width).round() as i64,
+                            )
+                        }
+                        GlyphAreaPlacement::FollowingPreviousArea => screen_width,
+                    }
+                } else {
+                    match area_layout.placement(GlyphArea::RightMargin) {
+                        GlyphAreaPlacement::Structural(geometry) => frame_origin_col
+                            .saturating_add((geometry.bounds().x / char_width).round() as i64),
+                        GlyphAreaPlacement::FollowingPreviousArea => frame_origin_col
+                            .saturating_add(
+                                (area_layout
+                                    .structural_coverage()
+                                    .map(|coverage| coverage.right())
+                                    .unwrap_or(self.desired.width as f32)
+                                    / char_width)
+                                    .round() as i64,
+                            ),
+                    }
+                };
+                if col < right_edge {
+                    // GNU's terminal branch of `extend_face_to_end_of_line`
+                    // materializes the whole remaining text area. Without an
+                    // explicit `:extend` face, its attr-filtered face LOOKS
+                    // default. It is nevertheless a non-default logical face
+                    // when the newline/source face was non-default, and thus
+                    // fails CHAR_GLYPH_SPACE_P (the font-lock comment case).
+                    let blank_erase = if glyph_row.ends_at_zv {
+                        BlankErase::DefaultFace
+                    } else {
+                        glyphs
+                            .iter()
+                            .rfind(|glyph| !glyph.padding)
+                            .map(|glyph| self.blank_erase_for_face(glyph.face_id))
+                            .unwrap_or(BlankErase::DefaultFace)
+                    };
+                    while col < right_edge && col < screen_width {
+                        if let Some(col) = visible_cell(col, self.desired.width) {
+                            // A published FaceFillItem owns the resolved
+                            // background behind this matrix slot. GNU's
+                            // default-like line filler materializes that slot;
+                            // it does not erase the fill's background.
+                            let attrs =
+                                self.desired.cells[screen_row * self.desired.width + col].attrs;
+                            self.set_desired_glyph_cell(
+                                screen_row,
+                                col,
+                                ' ',
+                                attrs,
+                                false,
+                                blank_erase,
+                            );
+                        }
+                        col = col.saturating_add(1);
+                    }
+                }
             }
         }
 
@@ -1677,6 +1970,14 @@ fn row_hash(row: &[TtyCell]) -> u64 {
                 | ((c.attrs.inverse as u8) << 3)
                 | ((c.padding as u8) << 4),
         );
+        h.write_u8(match c.blank_erase {
+            BlankErase::DefaultFace => 0,
+            BlankErase::Explicit => 1,
+        });
+        h.write_u8(match c.materialization {
+            CellMaterialization::Erased => 0,
+            CellMaterialization::Written => 1,
+        });
         h.write_u8(c.attrs.underline);
         if let Some(e) = &c.extenders {
             h.write(e.as_bytes());
@@ -1925,53 +2226,6 @@ fn detect_row_shift(
     None
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum NewRowContentOrigin {
-    New,
-    RelocatedFrom(usize),
-}
-
-/// Classify content appearing on an erased destination row.
-///
-/// A relocation has exactly one source row with the same old content, the new
-/// grid consumes that source by changing it, and exactly one destination gains
-/// that content. Any duplicate source or destination makes provenance
-/// ambiguous, so we deliberately choose `New` rather than silently preserve
-/// the wrong physical tail.
-fn classify_new_row_content(
-    current: &TtyGrid,
-    desired: &TtyGrid,
-    destination: usize,
-) -> NewRowContentOrigin {
-    let width = current.width;
-    let target = &desired.cells[destination * width..(destination + 1) * width];
-    let mut matching_sources = current
-        .cells
-        .chunks_exact(width)
-        .zip(desired.cells.chunks_exact(width))
-        .enumerate()
-        .filter(|(_, (old_row, _))| *old_row == target);
-    let source = match (matching_sources.next(), matching_sources.next()) {
-        (Some((source, (old_row, new_row))), None) if new_row != old_row => source,
-        _ => return NewRowContentOrigin::New,
-    };
-
-    let mut matching_destinations = current
-        .cells
-        .chunks_exact(width)
-        .zip(desired.cells.chunks_exact(width))
-        .enumerate()
-        .filter_map(|(candidate, (old_row, new_row))| {
-            (old_row != target && new_row == target).then_some(candidate)
-        });
-    match (matching_destinations.next(), matching_destinations.next()) {
-        (Some(candidate), None) if candidate == destination => {
-            NewRowContentOrigin::RelocatedFrom(source)
-        }
-        _ => NewRowContentOrigin::New,
-    }
-}
-
 /// A desired cell that erase-to-EOL may paint instead of writing.
 ///
 /// The erased cell a terminal produces is "space in the current background":
@@ -1982,6 +2236,7 @@ fn classify_new_row_content(
 /// fill, which the caller guarantees by grouping the tail by one uniform bg.
 fn erasable_blank(cell: &TtyCell) -> bool {
     cell.ch == ' '
+        && cell.blank_erase == BlankErase::DefaultFace
         && !cell.padding
         && cell.extenders.is_none()
         && cell.attrs.fg.is_none()
@@ -2402,11 +2657,17 @@ impl TtyRif {
     fn dump_tty_glyphs_to_log(&self) {
         tracing::info!(
             target: "neomacs_display_protocol::tty_rif",
-            "tty glyph dump: cursor_visible={} cursor_row={} cursor_col={} cursor_shape={:?}",
+            "tty glyph dump: cursor_visible={} cursor_row={} cursor_col={} cursor_shape={:?} default_bg={:?} default_face={:?} blank_tail={:?}",
             self.cursor_visible,
             self.cursor_row,
             self.cursor_col,
-            self.cursor_shape
+            self.cursor_shape,
+            self.default_bg,
+            self.faces.get(&FaceId::new(0)).map(|face| (
+                face.use_default_foreground,
+                face.use_default_background,
+            )),
+            self.caps.blank_tail,
         );
         for (row, line) in self.dump_desired().iter().enumerate() {
             tracing::info!(
@@ -2454,17 +2715,23 @@ impl TtyRif {
                 }
                 tracing::info!(
                     target: "neomacs_display_protocol::tty_rif",
-                    "tty matrix row window={} idx={} role={:?} enabled={} pixel_y={:.1} height={:.1} ascent={:.1} used=({},{},{}) text={:?}",
+                    "tty matrix row window={} idx={} role={:?} enabled={} ends_at_zv={} pixel_y={:.1} height={:.1} ascent={:.1} used=({},{},{}) last_text={:?} text={:?}",
                     entry.window_id,
                     row_idx,
                     row.role,
                     row.enabled,
+                    row.ends_at_zv,
                     row.pixel_y,
                     row.height_px,
                     row.ascent_px,
                     row.used(GlyphArea::LeftMargin),
                     row.used(GlyphArea::Text),
                     row.used(GlyphArea::RightMargin),
+                    row.glyphs[GlyphArea::Text.index()].last().map(|glyph| (
+                        glyph.face_id,
+                        glyph.charpos,
+                        &glyph.glyph_type,
+                    )),
                     glyph_row_debug_text(row)
                 );
             }

@@ -434,6 +434,161 @@ fn rasterize_places_each_right_margin_at_the_reserved_columns() {
 }
 
 #[test]
+fn rasterize_anchors_a_synthetic_right_border_after_short_text() {
+    let window = DisplayWindowId::new(1);
+    let outer = Rect::new(0.0, 0.0, 5.0, 1.0);
+    let mut state = FrameDisplayState::new(5, 1, 1.0, 1.0);
+    let mut matrix = GlyphMatrix::new(1, 5);
+    let row = neomacs_display_protocol::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
+    row.enabled = true;
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('x', FaceId::new(0), 0));
+    row.glyphs[GlyphArea::RightMargin.index()].push(Glyph::char('|', FaceId::new(0), 0));
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: window,
+        matrix,
+        pixel_bounds: outer,
+        text_pixel_bounds: outer,
+        text_clip_bounds: Some(outer),
+        selected: true,
+    });
+    state.window_infos.push(WindowInfo {
+        window_id: window,
+        buffer_id: 1,
+        window_start: 1,
+        window_end: 1,
+        buffer_size: 1,
+        bounds: outer,
+        geometry: PresentedWindowGeometry::Complete {
+            cell_origin: PresentedCellOrigin::default(),
+            regions: PresentedWindowRegions {
+                outer,
+                text_body: outer,
+                ..PresentedWindowRegions::default()
+            },
+        },
+        mode_line_height: 0.0,
+        header_line_height: 0.0,
+        tab_line_height: 0.0,
+        selected: true,
+        is_minibuffer: false,
+        char_height: 1.0,
+        buffer_name: String::new(),
+        buffer_file_name: String::new(),
+        modified: false,
+    });
+
+    let mut rif = TtyRif::new(5, 1);
+    rif.rasterize(&state);
+
+    assert_eq!(desired_char(&rif, 0, 0), 'x');
+    assert_eq!(
+        desired_char(&rif, 0, 4),
+        '|',
+        "GNU reserves the final window-matrix cell for the vertical border"
+    );
+}
+
+#[test]
+fn tty_line_end_filler_with_default_sgr_still_preserves_nondefault_face_identity() {
+    let mut state = FrameDisplayState::new(5, 1, 1.0, 1.0);
+    let mut comment = Face::new(FaceId::new(1));
+    comment.foreground = Color::from_pixel(0x00ff7f24);
+    comment.use_default_background = true;
+    let mut default_face = Face::new(FaceId::new(0));
+    default_face.use_default_foreground = true;
+    default_face.use_default_background = true;
+    state.faces.insert(FaceId::new(0), default_face);
+    state.faces.insert(FaceId::new(1), comment);
+
+    let mut matrix = GlyphMatrix::new(1, 5);
+    let row = neomacs_display_protocol::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
+    row.enabled = true;
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('#', FaceId::new(1), 0));
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char(
+        ' ',
+        FaceId::new(1),
+        neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS,
+    ));
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 5.0, 1.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 5.0, 1.0),
+        text_clip_bounds: None,
+        selected: true,
+    });
+
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(5, 1, caps);
+    rif.rasterize(&state);
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![TermOp::WriteRun {
+            row: 0,
+            start: 0,
+            end: 5,
+        }],
+        "GNU's filtered TTY line-end face looks default but is not CHAR_GLYPH_SPACE_P",
+    );
+    assert_eq!(rif.desired.cells[2].attrs, CellAttrs::default());
+}
+
+#[test]
+fn tty_line_end_filler_from_a_nonzero_default_style_face_remains_erasable() {
+    let mut state = FrameDisplayState::new(5, 1, 1.0, 1.0);
+    let mut default_face = Face::new(FaceId::new(0));
+    default_face.use_default_foreground = true;
+    default_face.use_default_background = true;
+    let mut resolved_default = Face::new(FaceId::new(21));
+    resolved_default.use_default_foreground = true;
+    resolved_default.use_default_background = true;
+    state.faces.insert(FaceId::new(0), default_face);
+    state.faces.insert(FaceId::new(21), resolved_default);
+
+    let mut matrix = GlyphMatrix::new(1, 5);
+    let row = neomacs_display_protocol::glyph_matrix::MatrixRow::make_mut(&mut matrix.rows[0]);
+    row.enabled = true;
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('x', FaceId::new(21), 0));
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char(
+        ' ',
+        FaceId::new(21),
+        neomacs_display_protocol::glyph_matrix::NO_BUFFER_POSITION_CHARPOS,
+    ));
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(1),
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 5.0, 1.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 5.0, 1.0),
+        text_clip_bounds: None,
+        selected: true,
+    });
+
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(5, 1, caps);
+    rif.rasterize(&state);
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![
+            TermOp::WriteRun {
+                row: 0,
+                start: 0,
+                end: 1,
+            },
+            TermOp::EraseToEol {
+                row: 0,
+                from: 1,
+                bg: None,
+            },
+        ],
+        "layout may intern GNU's default newline face under a nonzero stable FaceId",
+    );
+}
+
+#[test]
 fn rasterize_respects_matrix_position() {
     let mut state = FrameDisplayState::new(20, 10, 8.0, 16.0);
     state.background = Color::rgb(0.0, 0.0, 0.0);
@@ -1425,7 +1580,7 @@ fn first_diff_repaints_unknown_terminal() {
 }
 
 #[test]
-fn first_diff_writes_the_full_width_of_nonempty_rows() {
+fn first_diff_writes_content_then_erases_the_default_blank_tail() {
     let mut caps = TermCaps::default();
     caps.synchronized_output = false;
     let mut rif = TtyRif::new_with_caps(5, 1, caps);
@@ -1435,15 +1590,15 @@ fn first_diff_writes_the_full_width_of_nonempty_rows() {
     let output = rif.take_output();
 
     assert!(
-        output.windows(5).any(|bytes| bytes == b"A    "),
-        "full repaint must write the complete nonempty terminal row: {:?}",
+        output
+            .windows(b"\x1b[K".len())
+            .any(|bytes| bytes == b"\x1b[K"),
+        "GNU trims the default blank tail and erases it on an unknown row: {:?}",
         String::from_utf8_lossy(&output),
     );
     assert!(
-        !output
-            .windows(b"\x1b[K".len())
-            .any(|bytes| bytes == b"\x1b[K"),
-        "full repaint erased cells GNU writes explicitly: {:?}",
+        !output.windows(5).any(|bytes| bytes == b"A    "),
+        "screen-256color lacks termcap `in`, so GNU must not write the tail: {:?}",
         String::from_utf8_lossy(&output),
     );
 }
@@ -1469,7 +1624,12 @@ fn first_diff_erases_wholly_blank_rows_instead_of_writing_spaces() {
             TermOp::WriteRun {
                 row: 0,
                 start: 0,
-                end: 5,
+                end: 1,
+            },
+            TermOp::EraseToEol {
+                row: 0,
+                from: 1,
+                bg: None,
             },
             TermOp::EraseToEol {
                 row: 1,
@@ -1487,14 +1647,14 @@ fn first_diff_erases_wholly_blank_rows_instead_of_writing_spaces() {
 }
 
 #[test]
-fn first_content_written_into_an_erased_row_writes_its_full_tail() {
+fn first_content_written_into_an_erased_row_keeps_its_erased_tail() {
     let mut caps = TermCaps::default();
     caps.synchronized_output = false;
     let mut rif = TtyRif::new_with_caps(8, 1, caps);
 
     // The initial blank repaint uses EL, leaving the physical cells
-    // unwritten.  GNU writes the complete width when content first appears
-    // on that row, so its default trailing spaces become physical cells.
+    // unwritten. GNU dispnew.c's `!olen` path writes only the meaningful
+    // content when termcap `in` is absent, so that tail remains unwritten.
     rif.diff_and_render();
     let _ = rif.take_output();
     for (col, ch) in "NEW".chars().enumerate() {
@@ -1506,9 +1666,38 @@ fn first_content_written_into_an_erased_row_writes_its_full_tail() {
         vec![TermOp::WriteRun {
             row: 0,
             start: 0,
-            end: 8,
+            end: 3,
         }],
-        "first content on an erased row must establish GNU's written-space tail",
+        "first content on an erased row must preserve GNU's erased tail",
+    );
+}
+
+#[test]
+fn written_default_blanks_inside_a_changed_row_are_not_treated_as_erased() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(8, 1, caps);
+
+    rif.desired.set(0, 0, 'A', CellAttrs::default(), false);
+    rif.diff_and_render();
+    let _ = rif.take_output();
+
+    rif.desired = TtyGrid::new(8, 1);
+    rif.desired.set(0, 0, 'A', CellAttrs::default(), false);
+    for col in 1..4 {
+        rif.desired.set(0, col, ' ', CellAttrs::default(), false);
+    }
+    rif.desired.set(0, 4, '|', CellAttrs::default(), false);
+    rif.desired.set(0, 5, 'B', CellAttrs::default(), false);
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![TermOp::WriteRun {
+            row: 0,
+            start: 1,
+            end: 6,
+        }],
+        "GNU's filled window-matrix gap is physical content, while only the row tail is erased",
     );
 }
 
@@ -1547,7 +1736,7 @@ fn relocated_content_keeps_its_unwritten_tail_when_repainted() {
 }
 
 #[test]
-fn copied_content_is_not_mistaken_for_a_relocated_row() {
+fn copied_content_uses_the_same_erased_tail_rule() {
     let mut caps = TermCaps::default();
     caps.synchronized_output = false;
     let mut rif = TtyRif::new_with_caps(8, 3, caps);
@@ -1569,14 +1758,14 @@ fn copied_content_is_not_mistaken_for_a_relocated_row() {
         vec![TermOp::WriteRun {
             row: 0,
             start: 0,
-            end: 8,
+            end: 4,
         }],
-        "new duplicate content must establish its own written-space tail",
+        "content provenance does not change GNU's erased-tail rule",
     );
 }
 
 #[test]
-fn one_source_copied_to_two_destinations_is_not_two_relocations() {
+fn copied_content_in_two_destinations_uses_the_same_erased_tail_rule() {
     let mut caps = TermCaps::default();
     caps.synchronized_output = false;
     let mut rif = TtyRif::new_with_caps(8, 3, caps);
@@ -1599,12 +1788,12 @@ fn one_source_copied_to_two_destinations_is_not_two_relocations() {
             TermOp::WriteRun {
                 row: 0,
                 start: 0,
-                end: 8,
+                end: 4,
             },
             TermOp::WriteRun {
                 row: 1,
                 start: 0,
-                end: 8,
+                end: 4,
             },
             TermOp::EraseToEol {
                 row: 2,
@@ -1612,7 +1801,7 @@ fn one_source_copied_to_two_destinations_is_not_two_relocations() {
                 bg: None,
             },
         ],
-        "one consumed source cannot relocate into two destinations",
+        "all erased destinations use GNU's same content-only write path",
     );
 }
 
@@ -2619,9 +2808,8 @@ fn caps_without_scroll_region_never_plan_scroll_ops() {
     let mut rif = TtyRif::new(20, 10);
     rif.set_caps(TermCaps {
         scroll_region: None,
-        back_color_erase: false,
         insert_delete_char: false,
-        erase_to_eol: false,
+        blank_tail: BlankTailMethod::WriteSpaces,
         synchronized_output: false,
     });
     for r in 0..10 {
@@ -2724,7 +2912,9 @@ fn inverse_blank_tail_refuses_erase() {
 fn colored_tail_without_bce_stays_on_the_write_path() {
     let mut rif = TtyRif::new(20, 4);
     rif.set_caps(TermCaps {
-        back_color_erase: false,
+        blank_tail: BlankTailMethod::EraseToEol {
+            back_color_erase: false,
+        },
         ..TermCaps::default()
     });
     set_row(&mut rif, 1, "abcdefghijkl");

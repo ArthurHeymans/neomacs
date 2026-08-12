@@ -156,10 +156,10 @@ impl GlyphAreaGeometry {
 /// How a glyph area obtains its horizontal pen position.
 ///
 /// Real window margins are structural areas with independent GNU
-/// `window_box_left_offset` origins. `FollowingPreviousArea` is retained for
-/// unpartitioned chrome rows and the synthetic TTY right-border glyph, which
-/// deliberately flow in the row's single band rather than a configured display
-/// margin.
+/// `window_box_left_offset` origins. `FollowingPreviousArea` is retained only
+/// for unpartitioned chrome rows. Window text rows always give the right area a
+/// structural origin: a configured margin when present, otherwise the final
+/// matrix cell GNU reserves for a TTY vertical-border glyph.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum GlyphAreaPlacement {
     FollowingPreviousArea,
@@ -192,7 +192,14 @@ impl GlyphRowAreaLayout {
         text_clip: Rect,
         left_margin: Option<Rect>,
         right_margin: Option<Rect>,
+        char_width: f32,
     ) -> Self {
+        let synthetic_right_border = Rect::new(
+            (text_bounds.right() - char_width).max(text_bounds.x),
+            text_bounds.y,
+            char_width.min(text_bounds.width),
+            text_bounds.height,
+        );
         Self {
             left_margin: left_margin
                 .map(|bounds| {
@@ -200,11 +207,10 @@ impl GlyphRowAreaLayout {
                 })
                 .unwrap_or(GlyphAreaPlacement::FollowingPreviousArea),
             text: GlyphAreaPlacement::Structural(GlyphAreaGeometry::new(text_bounds, text_clip)),
-            right_margin: right_margin
-                .map(|bounds| {
-                    GlyphAreaPlacement::Structural(GlyphAreaGeometry::new(bounds, bounds))
-                })
-                .unwrap_or(GlyphAreaPlacement::FollowingPreviousArea),
+            right_margin: GlyphAreaPlacement::Structural(GlyphAreaGeometry::new(
+                right_margin.unwrap_or(synthetic_right_border),
+                right_margin.unwrap_or(text_clip),
+            )),
         }
     }
 
@@ -1312,8 +1318,13 @@ impl FrameDisplayState {
                 PresentedWindowGeometry::Skipped { .. } => None,
             }
         });
+        let char_width = if entry.matrix.ncols > 0 {
+            row_bounds.width / entry.matrix.ncols as f32
+        } else {
+            self.char_width
+        };
         let Some(regions) = regions else {
-            return GlyphRowAreaLayout::unpartitioned(row_bounds, row_clip);
+            return GlyphRowAreaLayout::window_text(row_bounds, row_clip, None, None, char_width);
         };
 
         GlyphRowAreaLayout::window_text(
@@ -1321,6 +1332,7 @@ impl FrameDisplayState {
             row_clip,
             regions.left_margin,
             regions.right_margin,
+            char_width,
         )
     }
 

@@ -205,16 +205,20 @@ fn an_absent_color_count_is_monochrome_like_gnu() {
 // bytes the encoder emits, not mere capability presence.
 // ---------------------------------------------------------------------------
 
-use neomacs_display_runtime::backend::tty::rif::RegionScrollMethod;
+use neomacs_display_runtime::backend::tty::rif::{BlankTailMethod, RegionScrollMethod};
 
 #[test]
 fn xterm_shaped_entry_resolves_every_planner_capability() {
     let mut database = FakeCapabilityDatabase::xterm_like().with_flag("ut");
     let caps = resolve_term_caps(&mut database);
     assert_eq!(caps.scroll_region, Some(RegionScrollMethod::SuSd));
-    assert!(caps.back_color_erase);
     assert!(caps.insert_delete_char);
-    assert!(caps.erase_to_eol);
+    assert_eq!(
+        caps.blank_tail,
+        BlankTailMethod::EraseToEol {
+            back_color_erase: true,
+        }
+    );
     assert!(caps.synchronized_output);
 }
 
@@ -248,15 +252,40 @@ fn non_ansi_insert_delete_strings_refuse_ich_dch() {
     let mut database = FakeCapabilityDatabase::tvi955_like();
     let caps = resolve_term_caps(&mut database);
     assert!(!caps.insert_delete_char);
-    assert!(!caps.erase_to_eol, "tvi955 ce is not ESC[K");
+    assert_eq!(
+        caps.blank_tail,
+        BlankTailMethod::WriteSpaces,
+        "tvi955 ce is not ESC[K"
+    );
 }
 
 #[test]
 fn back_color_erase_comes_from_the_ut_flag_alone() {
     let mut with_ut = FakeCapabilityDatabase::xterm_like().with_flag("ut");
     let mut without_ut = FakeCapabilityDatabase::xterm_like();
-    assert!(resolve_term_caps(&mut with_ut).back_color_erase);
-    assert!(!resolve_term_caps(&mut without_ut).back_color_erase);
+    assert_eq!(
+        resolve_term_caps(&mut with_ut).blank_tail,
+        BlankTailMethod::EraseToEol {
+            back_color_erase: true,
+        }
+    );
+    assert_eq!(
+        resolve_term_caps(&mut without_ut).blank_tail,
+        BlankTailMethod::EraseToEol {
+            back_color_erase: false,
+        }
+    );
+}
+
+#[test]
+fn insert_null_glitch_requires_written_blank_tails() {
+    let mut database = FakeCapabilityDatabase::xterm_like().with_flag("in");
+
+    assert_eq!(
+        resolve_term_caps(&mut database).blank_tail,
+        BlankTailMethod::WriteSpaces,
+        "GNU's must_write_spaces comes directly from termcap `in`"
+    );
 }
 
 #[test]

@@ -159,7 +159,7 @@ fn cap_is(database: &mut dyn TerminalCapabilityDatabase, cap: &str, expected: &[
 pub(crate) fn resolve_term_caps(
     database: &mut dyn TerminalCapabilityDatabase,
 ) -> neomacs_display_runtime::backend::tty::rif::TermCaps {
-    use neomacs_display_runtime::backend::tty::rif::RegionScrollMethod;
+    use neomacs_display_runtime::backend::tty::rif::{BlankTailMethod, RegionScrollMethod};
 
     let decstbm = cap_is(database, "cs", b"\x1b[%i%d;%dr");
     let cursor_address = cap_is(database, "cm", b"\x1b[%i%d;%dH");
@@ -187,10 +187,15 @@ pub(crate) fn resolve_term_caps(
 
     neomacs_display_runtime::backend::tty::rif::TermCaps {
         scroll_region,
-        back_color_erase: database.get_flag("ut"),
         insert_delete_char: cap_is(database, "IC", b"\x1b[%d@")
             && cap_is(database, "DC", b"\x1b[%dP"),
-        erase_to_eol: cap_is(database, "ce", b"\x1b[K"),
+        blank_tail: if !database.get_flag("in") && cap_is(database, "ce", b"\x1b[K") {
+            BlankTailMethod::EraseToEol {
+                back_color_erase: database.get_flag("ut"),
+            }
+        } else {
+            BlankTailMethod::WriteSpaces
+        },
         synchronized_output: true,
     }
 }
