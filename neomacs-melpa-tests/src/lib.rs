@@ -2808,6 +2808,12 @@ pub const BIND_KEY_GNU_ELPA_PIN: (&str, &str) = ("bind-key", "2.4.1");
 /// aurel's runtime buffer-interface dependency.
 pub const BUI_MELPA_PIN: (&str, &str) = ("bui", "20260502.730");
 
+/// The exact Cargo package selected for practical public command construction,
+/// compilation diagnostics, Rust error help, project creation, metadata/Xref,
+/// and command-recovery parity. MELPA built this archive from upstream commit
+/// `7f8466063381eed05d4e222ce822b1dd44e3bf17`.
+pub const CARGO_MELPA_PIN: (&str, &str) = ("cargo", "20231229.915");
+
 /// The exact Browse At Remote package selected for real Git repository,
 /// public browser/clipboard, remote-routing, and Gitea URL parity. MELPA
 /// built this archive from upstream commit

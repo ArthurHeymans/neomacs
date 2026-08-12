@@ -274,6 +274,7 @@ mod browse_at_remote;
 mod browse_kill_ring;
 mod buffer_move;
 mod bui;
+mod cargo;
 mod casual;
 mod ccc;
 mod cdb;
