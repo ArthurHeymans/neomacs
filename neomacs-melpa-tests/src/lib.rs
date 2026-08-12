@@ -3607,6 +3607,12 @@ pub const EXPAND_REGION_MELPA_PIN: (&str, &str) = ("expand-region", "20241217.18
 /// `7919681b0d883502155d5b26e791fec15da6aeca`.
 pub const RAINBOW_DELIMITERS_MELPA_PIN: (&str, &str) = ("rainbow-delimiters", "20210515.1254");
 
+/// The exact Racket Mode package selected for practical classic-mode,
+/// font-lock, indentation, editing, completion, Imenu, Xref, folding, and
+/// recovery parity. MELPA built this archive from upstream commit
+/// `f92a33dcc3b604f53ef23a538e26e1f25c4fea47`.
+pub const RACKET_MODE_MELPA_PIN: (&str, &str) = ("racket-mode", "20260726.2002");
+
 /// The exact Shut Up package selected for practical output capture, cleanup,
 /// deterministic file generation, quiet loading, nested scopes, bypass, and
 /// noninteractive startup parity. MELPA built this archive from upstream

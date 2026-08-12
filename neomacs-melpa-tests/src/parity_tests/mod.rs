@@ -591,6 +591,7 @@ mod quelpa;
 mod queue;
 mod quickrun;
 mod racer;
+mod racket_mode;
 mod rainbow_delimiters;
 mod reformatter;
 mod request;
