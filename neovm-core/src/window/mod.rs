@@ -69,6 +69,31 @@ pub struct RenderFrameTree {
     pub frames_bottom_to_top: Vec<RenderFrameNode>,
 }
 
+/// Which frame trees a redisplay backend intends to render.
+///
+/// Keeping this typed prevents a GUI redisplay from accidentally treating the
+/// selected frame tree as the complete set of native windows.  TTY redisplay
+/// renders one composited tree; GUI redisplay renders every top-level native
+/// window tree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RenderFrameScope {
+    TreeContaining(FrameId),
+    AllNativeWindowTrees,
+}
+
+/// Whether hidden frames participate in a frame-tree query.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RenderFrameVisibility {
+    VisibleOnly,
+    IncludeInvisible,
+}
+
+impl RenderFrameVisibility {
+    const fn includes_invisible(self) -> bool {
+        matches!(self, Self::IncludeInvisible)
+    }
+}
+
 /// Keep frame and window numeric domains disjoint while both are represented
 /// as Lisp integers.
 pub(crate) const FRAME_ID_BASE: u64 = 1 << 32;
@@ -4029,7 +4054,11 @@ impl FrameManager {
     ///
     /// The root frame is first.  Children and descendants follow according to
     /// GNU's TTY z-order rules, where ancestors sort below descendants.
-    pub fn frames_in_reverse_z_order(&self, frame: FrameId, visible_only: bool) -> Vec<FrameId> {
+    pub fn frames_in_reverse_z_order(
+        &self,
+        frame: FrameId,
+        visibility: RenderFrameVisibility,
+    ) -> Vec<FrameId> {
         let Some(root) = self.root_frame_id(frame) else {
             return Vec::new();
         };
@@ -4038,7 +4067,9 @@ impl FrameManager {
             .keys()
             .copied()
             .filter(|frame_id| self.root_frame_id(*frame_id) == Some(root))
-            .filter(|frame_id| !visible_only || self.frame_ancestors_visible_p(*frame_id))
+            .filter(|frame_id| {
+                visibility.includes_invisible() || self.frame_ancestors_visible_p(*frame_id)
+            })
             .collect();
         frames.sort_by(|a, b| self.frame_z_order_cmp(*a, *b));
         frames
@@ -4098,11 +4129,11 @@ impl FrameManager {
     pub fn render_frame_tree(
         &self,
         selected_or_root: FrameId,
-        visible_only: bool,
+        visibility: RenderFrameVisibility,
     ) -> Option<RenderFrameTree> {
         let root_id = self.root_frame_id(selected_or_root)?;
         let frames_bottom_to_top = self
-            .frames_in_reverse_z_order(root_id, visible_only)
+            .frames_in_reverse_z_order(root_id, visibility)
             .into_iter()
             .filter_map(|frame_id| {
                 let frame = self.frames.get(&frame_id)?;
@@ -4121,6 +4152,39 @@ impl FrameManager {
             root_id,
             frames_bottom_to_top,
         })
+    }
+
+    /// Return owned render trees for the requested backend scope.
+    ///
+    /// Each root appears once and owns all of its visible descendants.  Native
+    /// window roots are sorted by stable frame id so HashMap iteration order
+    /// cannot perturb presentation submission order.
+    pub fn render_frame_forest(
+        &self,
+        scope: RenderFrameScope,
+        visibility: RenderFrameVisibility,
+    ) -> Vec<RenderFrameTree> {
+        let mut roots: Vec<FrameId> = match scope {
+            RenderFrameScope::TreeContaining(frame_id) => {
+                self.root_frame_id(frame_id).into_iter().collect()
+            }
+            RenderFrameScope::AllNativeWindowTrees => self
+                .frames
+                .iter()
+                .filter_map(|(frame_id, frame)| {
+                    (self.frame_parent_id(*frame_id).is_none()
+                        && frame.effective_window_system().is_some())
+                    .then_some(*frame_id)
+                })
+                .collect(),
+        };
+        roots.sort_by_key(|frame_id| frame_id.0);
+        roots.dedup();
+        roots
+            .into_iter()
+            .filter_map(|root| self.render_frame_tree(root, visibility))
+            .filter(|tree| !tree.frames_bottom_to_top.is_empty())
+            .collect()
     }
 
     /// Split a window horizontally or vertically.

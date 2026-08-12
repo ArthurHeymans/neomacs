@@ -1348,7 +1348,9 @@ pub(crate) fn builtin_tty_frame_list_z_order(
 ) -> EvalResult {
     expect_max_args("tty-frame-list-z-order", &args, 1)?;
     let fid = resolve_frame_id(eval, args.first(), "frame-live-p")?;
-    let mut frames = eval.frames.frames_in_reverse_z_order(fid, true);
+    let mut frames = eval
+        .frames
+        .frames_in_reverse_z_order(fid, crate::window::RenderFrameVisibility::VisibleOnly);
     frames.reverse();
     Ok(Value::list(
         frames
@@ -1370,7 +1372,9 @@ pub(crate) fn builtin_tty_frame_at(
     let Some(selected) = eval.frames.selected_frame().map(|frame| frame.id) else {
         return Ok(Value::NIL);
     };
-    let mut frames = eval.frames.frames_in_reverse_z_order(selected, true);
+    let mut frames = eval
+        .frames
+        .frames_in_reverse_z_order(selected, crate::window::RenderFrameVisibility::VisibleOnly);
     frames.reverse();
     for fid in frames {
         let Some(frame) = eval.frames.get(fid) else {

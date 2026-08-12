@@ -532,6 +532,24 @@ fn timeout_backs_off_instead_of_retrying_immediately() {
 }
 
 #[test]
+fn awaiting_content_sleeps_until_a_content_producer_submits_new_demand() {
+    let mut c = FrameCoordinator::new();
+    let now = t0();
+    c.submit_demand(win(1), editor_commit(), now);
+    let plan = c.begin_frame(win(1), tick_at(now + ms(1)));
+
+    let action = c.finish_frame(win(1), &plan, PresentResult::AwaitingContent, now + ms(2));
+
+    assert_eq!(action, PacingAction::Sleep);
+    assert_eq!(c.active_reasons(win(1)), Vec::new());
+    assert_eq!(c.next_wake_deadline(), None);
+    assert_eq!(
+        c.submit_demand(win(1), editor_commit(), now + ms(3)),
+        PacingAction::RequestRedraw
+    );
+}
+
+#[test]
 fn surface_lost_requeues_full_repaint() {
     let mut c = FrameCoordinator::new();
     let now = t0();

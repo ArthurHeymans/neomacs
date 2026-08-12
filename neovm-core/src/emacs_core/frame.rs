@@ -1873,7 +1873,9 @@ pub(crate) fn mru_rooted_frame_in_state(frames: &FrameManager, hidden: FrameId) 
     let root = frames.root_frame_id(hidden).unwrap_or(hidden);
     let mut best: Option<(i64, FrameId)> = None;
 
-    for candidate in frames.frames_in_reverse_z_order(root, true) {
+    for candidate in
+        frames.frames_in_reverse_z_order(root, crate::window::RenderFrameVisibility::VisibleOnly)
+    {
         if candidate == hidden {
             continue;
         }

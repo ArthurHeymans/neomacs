@@ -451,7 +451,7 @@ impl RenderApp {
                 super::frame_stats::count(&super::frame_stats::REDRAW_EVENTS);
                 if let Some(emacs_fid) = self.frame_windows.event_frame_for_winit(window_id) {
                     use super::frame_sched::{
-                        ClockSource, FrameTick, NativeWindowId, PacingAction, PresentResult,
+                        ClockSource, FrameTick, NativeWindowId, PacingAction,
                     };
                     let sched_id = NativeWindowId(emacs_fid);
                     let now = std::time::Instant::now();
@@ -513,14 +513,7 @@ impl RenderApp {
                         plan.work,
                         super::frame_sched::RenderWork::CompositeOnly { .. }
                     );
-                    let presented = self.render_frame_window_hinted(emacs_fid, cursor_only);
-                    let result = if presented {
-                        PresentResult::Presented
-                    } else {
-                        // No frame could be produced (no committed frame yet,
-                        // surface unavailable): bounded backoff, never a spin.
-                        PresentResult::Timeout
-                    };
+                    let result = self.render_frame_window_hinted(emacs_fid, cursor_only);
                     let action = self.frame_coordinator.finish_frame(
                         sched_id,
                         &plan,

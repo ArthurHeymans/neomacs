@@ -4622,19 +4622,16 @@ fn publish_gui_frame(
         sync_live_gui_frame_titles(evaluator);
     }
 
-    let Some(selected) = evaluator
-        .frame_manager()
-        .selected_frame()
-        .map(|frame| frame.id)
-    else {
-        return;
-    };
-    let Some(tree) = evaluator.frame_manager().render_frame_tree(selected, true) else {
-        return;
-    };
+    let forest = evaluator.frame_manager().render_frame_forest(
+        neovm_core::window::RenderFrameScope::AllNativeWindowTrees,
+        neovm_core::window::RenderFrameVisibility::VisibleOnly,
+    );
 
     let mut sent_any = false;
-    for node in tree.frames_bottom_to_top {
+    for node in forest
+        .into_iter()
+        .flat_map(|tree| tree.frames_bottom_to_top)
+    {
         let prepared = frame_layout::layout_frame_display_state(
             evaluator,
             node.frame_id,

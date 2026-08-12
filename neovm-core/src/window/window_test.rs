@@ -1240,7 +1240,7 @@ fn render_frame_tree_returns_root_relative_bottom_to_top_nodes() {
     }
 
     let tree = mgr
-        .render_frame_tree(nested_id, true)
+        .render_frame_tree(nested_id, RenderFrameVisibility::VisibleOnly)
         .expect("render frame tree");
     let ids: Vec<_> = tree
         .frames_bottom_to_top
@@ -1258,6 +1258,48 @@ fn render_frame_tree_returns_root_relative_bottom_to_top_nodes() {
     assert_eq!(nested.parent_id, Some(front_id));
     assert_eq!(nested.origin_in_root_x, 33.0);
     assert_eq!(nested.origin_in_root_y, 44.0);
+}
+
+#[test]
+fn render_frame_forest_returns_each_visible_native_window_tree_once() {
+    let mut mgr = FrameManager::new();
+    let first = mgr.create_frame("first", 80, 25, BufferId(1));
+    let child = mgr.create_frame("child", 20, 10, BufferId(1));
+    let second = mgr.create_frame("second", 80, 25, BufferId(1));
+    let hidden = mgr.create_frame("hidden", 80, 25, BufferId(1));
+    let tty = mgr.create_frame("tty", 80, 25, BufferId(1));
+
+    for frame_id in [first, second, hidden] {
+        mgr.get_mut(frame_id)
+            .expect("native frame")
+            .set_window_system(Some(Value::symbol("neo")));
+    }
+    mgr.get_mut(child).expect("child").parent_frame = Value::make_frame(first.0);
+    mgr.get_mut(hidden).expect("hidden frame").visible = false;
+
+    let forest = mgr.render_frame_forest(
+        RenderFrameScope::AllNativeWindowTrees,
+        RenderFrameVisibility::VisibleOnly,
+    );
+
+    assert_eq!(
+        forest.iter().map(|tree| tree.root_id).collect::<Vec<_>>(),
+        vec![first, second]
+    );
+    assert_eq!(
+        forest[0]
+            .frames_bottom_to_top
+            .iter()
+            .map(|node| node.frame_id)
+            .collect::<Vec<_>>(),
+        vec![first, child]
+    );
+    assert!(
+        forest
+            .iter()
+            .flat_map(|tree| &tree.frames_bottom_to_top)
+            .all(|node| node.frame_id != hidden && node.frame_id != tty)
+    );
 }
 
 #[test]

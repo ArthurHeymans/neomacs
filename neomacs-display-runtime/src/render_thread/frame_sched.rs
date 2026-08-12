@@ -377,12 +377,14 @@ impl Default for LoopWake {
 }
 
 /// Presentation outcome, fed back as scheduling input.
-// Interface variants/fields defined by the scheduling plan; consumed as
-// later stages migrate effects onto the coordinator.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PresentResult {
     Presented,
+    /// The native window exists but no editor presentation has reached it yet.
+    /// Content ingestion is the producer for the next demand, so retrying an
+    /// expose here would create demand with no state change capable of
+    /// satisfying it.
+    AwaitingContent,
     /// Nothing was rendered (no surface yet, warm-up, etc.); the plan's work
     /// was not shown and is re-queued.
     Skipped,
@@ -770,6 +772,11 @@ impl FrameCoordinator {
         match result {
             PresentResult::Presented => {
                 ws.last_present_at = Some(now);
+            }
+            PresentResult::AwaitingContent => {
+                // The plan has been consumed.  A committed frame arriving on
+                // the display channel will submit Redisplay and drive the next
+                // presentation; there is nothing useful to retry before then.
             }
             PresentResult::Skipped => {
                 // The plan's work never reached the screen; re-queue it.

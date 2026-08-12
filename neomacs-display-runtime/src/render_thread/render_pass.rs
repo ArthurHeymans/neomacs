@@ -5,6 +5,7 @@
 
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorTarget;
+use super::frame_sched::PresentResult;
 use super::frame_windows::{
     FrameLifecycle, GuiFrameNativeWindowState, GuiFrameRenderState, GuiFrameWindowState,
 };
@@ -27,6 +28,34 @@ use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuGlyphAtlas, WgpuRe
 /// fns themselves to `Color` and delete this.
 fn color_rgb_tuple(color: neomacs_display_protocol::types::Color) -> (f32, f32, f32) {
     (color.r, color.g, color.b)
+}
+
+type RenderedFrameSurface = (
+    wgpu::SurfaceTexture,
+    crate::core::frame_glyphs::FrameGlyphBuffer,
+);
+
+/// Failures before a frame reaches `present`, kept distinct until the frame
+/// coordinator consumes them.  In particular, missing editor content is not a
+/// GPU timeout and must not manufacture an expose-retry loop.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FrameRenderFailure {
+    AwaitingContent,
+    WindowNotReady,
+    SurfaceLost,
+    SurfaceTimeout,
+    SurfaceOccluded,
+}
+
+impl FrameRenderFailure {
+    const fn present_result(self) -> PresentResult {
+        match self {
+            Self::AwaitingContent => PresentResult::AwaitingContent,
+            Self::WindowNotReady | Self::SurfaceTimeout => PresentResult::Timeout,
+            Self::SurfaceLost => PresentResult::SurfaceLost,
+            Self::SurfaceOccluded => PresentResult::Occluded,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -449,10 +478,7 @@ impl RenderApp {
         extra_letter_spacing: f32,
         cursor_only_hint: bool,
         device_lost: &mut super::device_loss::DeviceLossDetector,
-    ) -> Option<(
-        wgpu::SurfaceTexture,
-        crate::core::frame_glyphs::FrameGlyphBuffer,
-    )> {
+    ) -> Result<RenderedFrameSurface, FrameRenderFailure> {
         Self::render_frame_window_contents_to_acquired_surface(
             renderer,
             window_state,
@@ -481,24 +507,24 @@ impl RenderApp {
         output: Option<wgpu::SurfaceTexture>,
         cursor_only_hint: bool,
         device_lost: &mut super::device_loss::DeviceLossDetector,
-    ) -> Option<(
-        wgpu::SurfaceTexture,
-        crate::core::frame_glyphs::FrameGlyphBuffer,
-    )> {
+    ) -> Result<RenderedFrameSurface, FrameRenderFailure> {
         let render = &mut window_state.render;
         let native = match &mut window_state.lifecycle {
             FrameLifecycle::Active { native, .. } => native,
-            _ => return None,
+            _ => return Err(FrameRenderFailure::WindowNotReady),
         };
         Self::update_fps_counter(&mut render.overlays.fps);
         // Read the one bit the offscreen decision needs straight out of the
-        // retained frame, and bail the same way a missing frame did before.
+        // retained frame. Missing content has its own typed outcome: the frame
+        // channel, rather than an expose retry, is responsible for waking it.
         // Read it here, before `take_current_frame_for_render` below drains
         // the hints. The frame itself is taken once, after the surface is
         // acquired — the acquisition has several early-return paths, so
         // materializing it earlier was work thrown away outright on any
         // lost/outdated/occluded surface.
-        let frame_has_theme_transition = render.current_frame_theme_transition_hint()?;
+        let frame_has_theme_transition = render
+            .current_frame_theme_transition_hint()
+            .ok_or(FrameRenderFailure::AwaitingContent)?;
         let animated_cursor = render.cursor.animated_cursor();
         let root_animated_cursor = animated_cursor
             .filter(|cursor| cursor.frame_id == DisplayFrameId::new(render.emacs_frame_id));
@@ -535,29 +561,34 @@ impl RenderApp {
                             render.emacs_frame_id
                         );
                     }
-                    return None;
+                    return Err(FrameRenderFailure::SurfaceLost);
                 }
                 wgpu::CurrentSurfaceTexture::Outdated => {
                     tracing::info!(
                         "Skipping redraw for frame 0x{:x}: surface outdated",
                         render.emacs_frame_id
                     );
-                    return None;
+                    return Err(FrameRenderFailure::SurfaceLost);
                 }
-                wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => {
-                    return None;
+                wgpu::CurrentSurfaceTexture::Timeout => {
+                    return Err(FrameRenderFailure::SurfaceTimeout);
+                }
+                wgpu::CurrentSurfaceTexture::Occluded => {
+                    return Err(FrameRenderFailure::SurfaceOccluded);
                 }
                 wgpu::CurrentSurfaceTexture::Validation => {
                     tracing::warn!(
                         "Surface validation error for frame 0x{:x}",
                         render.emacs_frame_id
                     );
-                    return None;
+                    return Err(FrameRenderFailure::SurfaceTimeout);
                 }
             }
         };
 
-        let mut frame = render.take_current_frame_for_render()?;
+        let mut frame = render
+            .take_current_frame_for_render()
+            .ok_or(FrameRenderFailure::AwaitingContent)?;
         render.begin_presentable_render();
         if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
             Self::apply_extra_spacing(
@@ -705,7 +736,7 @@ impl RenderApp {
             render.finish_pointer_paint_render();
             renderer.set_scale_factor(old_scale_factor);
             renderer.resize(old_width, old_height);
-            return Some((output, frame));
+            return Ok((output, frame));
         }
 
         if need_offscreen {
@@ -855,7 +886,7 @@ impl RenderApp {
         render.finish_pointer_paint_render();
         renderer.set_scale_factor(old_scale_factor);
         renderer.resize(old_width, old_height);
-        Some((output, frame))
+        Ok((output, frame))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1373,9 +1404,8 @@ impl RenderApp {
         ));
     }
 
-    /// Render and present one top-level frame window. Returns whether a
-    /// frame was actually presented; false means nothing reached the screen
-    /// (no committed frame yet, window inactive, or surface unavailable).
+    /// Render and present one top-level frame window, preserving the precise
+    /// outcome for the frame coordinator.
     ///
     /// `cursor_only_hint` is set when the frame coordinator's plan is
     /// compositor-only for the cursor layer; it enables the retained-static
@@ -1385,13 +1415,17 @@ impl RenderApp {
         &mut self,
         emacs_frame_id: u64,
         cursor_only_hint: bool,
-    ) -> bool {
+    ) -> PresentResult {
         self.render_frame_window_impl(emacs_frame_id, cursor_only_hint)
     }
 
-    fn render_frame_window_impl(&mut self, emacs_frame_id: u64, cursor_only_hint: bool) -> bool {
+    fn render_frame_window_impl(
+        &mut self,
+        emacs_frame_id: u64,
+        cursor_only_hint: bool,
+    ) -> PresentResult {
         if self.lifecycle_flags.shutdown_requested {
-            return false;
+            return PresentResult::Skipped;
         }
         self.prepare_frame_state_for_render();
 
@@ -1406,10 +1440,10 @@ impl RenderApp {
 
         let is_primary_frame = self.frame_windows.is_primary_frame_id(emacs_frame_id);
         let Some(renderer) = self.renderer.as_mut() else {
-            return false;
+            return PresentResult::Timeout;
         };
         let Some(window_state) = self.frame_windows.get_mut(emacs_frame_id) else {
-            return false;
+            return PresentResult::Timeout;
         };
         window_state
             .render
@@ -1417,7 +1451,7 @@ impl RenderApp {
             .transitions
             .apply_policy(self.transition_policy);
 
-        if let Some((output, frame)) = Self::render_frame_window_contents_to_surface(
+        let rendered = Self::render_frame_window_contents_to_surface(
             renderer,
             window_state,
             bg_gradient,
@@ -1428,78 +1462,80 @@ impl RenderApp {
             self.extra_letter_spacing,
             cursor_only_hint,
             &mut self.device_lost,
-        ) {
-            if is_primary_frame {
-                let (w, h) = self
-                    .frame_windows
-                    .get(emacs_frame_id)
-                    .map(|ws| ws.native_size())
-                    .unwrap_or((0, 0));
-                surface_readback::maybe_log_first_frame_surface_readback(
-                    &mut self.debug_first_frame_readback_pending,
-                    &output.texture,
-                    renderer,
-                    &frame,
-                    w,
-                    h,
-                );
-                surface_readback::maybe_log_debug_surface_readback(
-                    &mut self.debug_surface_readback_frames_remaining,
-                    &output.texture,
-                    renderer,
-                    &frame,
-                    w,
-                    h,
-                );
-            }
-            let (child_frame_ids, removed_child_frame_ids) = self
-                .frame_windows
-                .get_mut(emacs_frame_id)
-                .map(|window_state| {
-                    let child_frame_ids = window_state
-                        .render
-                        .compositor
-                        .child_frames
-                        .sorted_for_rendering()
-                        .to_vec();
-                    let removed_child_frame_ids = std::mem::take(
-                        &mut window_state
-                            .render
-                            .compositor
-                            .pending_child_frame_removals_to_present,
-                    );
-                    (child_frame_ids, removed_child_frame_ids)
-                })
-                .unwrap_or_default();
-            if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
-                tracing::debug!(
-                    parent_frame_id = emacs_frame_id,
-                    child_frame_ids = ?child_frame_ids,
-                    removed_child_frame_ids = ?removed_child_frame_ids,
-                    "child_frame_lifecycle: present_begin"
-                );
-            }
-            // Let winit arm platform pacing (the Wayland surface frame
-            // callback) for the upcoming present; a no-op elsewhere.
-            if let Some(window) = self
+        );
+        let (output, frame) = match rendered {
+            Ok(rendered) => rendered,
+            Err(failure) => return failure.present_result(),
+        };
+        if is_primary_frame {
+            let (w, h) = self
                 .frame_windows
                 .get(emacs_frame_id)
-                .and_then(|window_state| window_state.window())
-            {
-                window.pre_present_notify();
-            }
-            renderer.queue().present(output);
-            super::frame_stats::note_present(std::time::Instant::now());
-            if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
-                tracing::debug!(
-                    parent_frame_id = emacs_frame_id,
-                    child_frame_ids = ?child_frame_ids,
-                    removed_child_frame_ids = ?removed_child_frame_ids,
-                    "child_frame_lifecycle: present_done"
-                );
-            }
-            return true;
+                .map(|ws| ws.native_size())
+                .unwrap_or((0, 0));
+            surface_readback::maybe_log_first_frame_surface_readback(
+                &mut self.debug_first_frame_readback_pending,
+                &output.texture,
+                renderer,
+                &frame,
+                w,
+                h,
+            );
+            surface_readback::maybe_log_debug_surface_readback(
+                &mut self.debug_surface_readback_frames_remaining,
+                &output.texture,
+                renderer,
+                &frame,
+                w,
+                h,
+            );
         }
-        false
+        let (child_frame_ids, removed_child_frame_ids) = self
+            .frame_windows
+            .get_mut(emacs_frame_id)
+            .map(|window_state| {
+                let child_frame_ids = window_state
+                    .render
+                    .compositor
+                    .child_frames
+                    .sorted_for_rendering()
+                    .to_vec();
+                let removed_child_frame_ids = std::mem::take(
+                    &mut window_state
+                        .render
+                        .compositor
+                        .pending_child_frame_removals_to_present,
+                );
+                (child_frame_ids, removed_child_frame_ids)
+            })
+            .unwrap_or_default();
+        if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
+            tracing::debug!(
+                parent_frame_id = emacs_frame_id,
+                child_frame_ids = ?child_frame_ids,
+                removed_child_frame_ids = ?removed_child_frame_ids,
+                "child_frame_lifecycle: present_begin"
+            );
+        }
+        // Let winit arm platform pacing (the Wayland surface frame
+        // callback) for the upcoming present; a no-op elsewhere.
+        if let Some(window) = self
+            .frame_windows
+            .get(emacs_frame_id)
+            .and_then(|window_state| window_state.window())
+        {
+            window.pre_present_notify();
+        }
+        renderer.queue().present(output);
+        super::frame_stats::note_present(std::time::Instant::now());
+        if !child_frame_ids.is_empty() || !removed_child_frame_ids.is_empty() {
+            tracing::debug!(
+                parent_frame_id = emacs_frame_id,
+                child_frame_ids = ?child_frame_ids,
+                removed_child_frame_ids = ?removed_child_frame_ids,
+                "child_frame_lifecycle: present_done"
+            );
+        }
+        PresentResult::Presented
     }
 }

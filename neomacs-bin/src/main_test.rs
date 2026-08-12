@@ -2069,6 +2069,47 @@ fn publish_gui_frame_sends_opening_frame_before_startup_lisp() {
 }
 
 #[test]
+fn publish_gui_frame_sends_every_visible_top_level_frame_tree() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
+        .expect("cached bootstrap evaluator");
+    let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
+    let selected = eval
+        .frame_manager()
+        .selected_frame()
+        .expect("selected frame after bootstrap")
+        .id;
+    configure_gnu_startup_state(&mut eval, selected, &gui_startup());
+
+    let second_buffer = eval.buffer_manager_mut().create_buffer("*second-frame*");
+    let second = eval
+        .frame_manager_mut()
+        .create_frame("second", 960, 640, second_buffer);
+    eval.frame_manager_mut()
+        .get_mut(second)
+        .expect("second frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    assert_eq!(
+        eval.frame_manager().selected_frame().map(|frame| frame.id),
+        Some(selected),
+        "creating another top-level frame must not make it selected"
+    );
+
+    LAYOUT_ENGINE.with(|engine| {
+        engine.borrow_mut().enable_cosmic_metrics();
+    });
+    let (frame_tx, frame_rx) = crossbeam_channel::unbounded();
+
+    publish_gui_frame(&mut eval, &frame_tx, None);
+
+    let mut published = frame_rx
+        .try_iter()
+        .map(|state| FrameId(state.frame_placement.frame().get()))
+        .collect::<Vec<_>>();
+    published.sort_by_key(|frame_id| frame_id.0);
+    assert_eq!(published, vec![selected, second]);
+}
+
+#[test]
 fn rejected_gui_frame_is_discarded_instead_of_becoming_active() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");

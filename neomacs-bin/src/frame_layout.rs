@@ -11,7 +11,7 @@ use neomacs_display_runtime::backend::tty::rif::TtyRif;
 use neomacs_display_runtime::layout::LayoutEngine;
 use neovm_core::emacs_core::eval::Context;
 use neovm_core::emacs_core::value::Value;
-use neovm_core::window::FrameId;
+use neovm_core::window::{FrameId, RenderFrameScope, RenderFrameVisibility};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -176,7 +176,12 @@ pub fn collect_snapshot_states(
         current_layout_frame_id(evaluator).ok_or_else(|| "no selected frame".to_string())?;
     let tree = evaluator
         .frame_manager()
-        .render_frame_tree(selected, true)
+        .render_frame_forest(
+            RenderFrameScope::TreeContaining(selected),
+            RenderFrameVisibility::VisibleOnly,
+        )
+        .into_iter()
+        .next()
         .ok_or_else(|| "no render frame tree for the selected frame".to_string())?;
 
     let mut states = Vec::new();
@@ -275,7 +280,7 @@ pub fn run_tty_layout_tree(
         .unwrap_or(selected);
     let frame_order = evaluator
         .frame_manager()
-        .frames_in_reverse_z_order(root_id, true);
+        .frames_in_reverse_z_order(root_id, RenderFrameVisibility::VisibleOnly);
 
     let root_state = layout_frame_display_state(evaluator, root_id, FrameLayoutPurpose::Redisplay)?
         .activate(evaluator)
