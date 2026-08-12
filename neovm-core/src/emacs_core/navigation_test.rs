@@ -335,6 +335,34 @@ fn test_line_number_at_pos_default() {
 }
 
 #[test]
+fn line_number_at_pos_clips_nonabsolute_positions_to_narrowing_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let actual = eval_str(
+        &mut ev,
+        r#"(progn
+  (erase-buffer)
+  (insert "zero\none\ntwo\nthree\nfour\n")
+  (let ((before (copy-marker 1))
+        (after (copy-marker 20)))
+    (narrow-to-region 6 14)
+    (list (line-number-at-pos before)
+          (line-number-at-pos after)
+          (condition-case nil (line-number-at-pos 1)
+            (args-out-of-range :rejected))
+          (condition-case nil (line-number-at-pos 20)
+            (args-out-of-range :rejected))
+          (line-number-at-pos before t)
+          (condition-case nil (line-number-at-pos 1 t)
+            (args-out-of-range :rejected)))))"#,
+    );
+    assert_eq!(
+        crate::emacs_core::print::print_value_with_buffers(&actual, &ev.buffers),
+        "(1 3 1 3 1 1)"
+    );
+}
+
+#[test]
 fn test_line_counting_on_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
     let mut ev = gnu_simple_line_eval_with_unibyte_bytes(&[0xFF, b'\n', 0x80, b'A']);

@@ -8,7 +8,10 @@ use super::intern::intern;
 use super::syntax::{SyntaxClass, SyntaxTable};
 use super::textprop::{buffer_overlay_property_at_byte_pos, lookup_buffer_text_property};
 use super::value::{Value, ValueKind, VecLikeType, lexenv_lookup};
-use crate::buffer::{BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1};
+use crate::buffer::{
+    AccessibleEmacsByteRange, BufferManager, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange,
+    LispCharPos1,
+};
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_fixnum, expect_max_args, expect_min_args};
 use malachite::integer::Integer;
@@ -662,6 +665,28 @@ pub(crate) fn builtin_line_end_position(
     )
 }
 
+/// The narrowing policy for `line-number-at-pos` newline counting.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LineNumberScope {
+    Accessible(AccessibleEmacsByteRange),
+    Absolute,
+}
+
+impl LineNumberScope {
+    /// Return the only byte range that may be counted for this scope.
+    ///
+    /// GNU `Fline_number_at_pos` clips non-absolute positions to `[BEGV, ZV]`
+    /// after resolving markers and numeric positions.  Coupling the origin and
+    /// endpoint policy prevents a caller from counting from `BEGV` to an
+    /// unclipped marker beyond `ZV`.
+    fn counting_range(self, position: EmacsBytePos) -> EmacsByteRange {
+        match self {
+            Self::Accessible(bounds) => EmacsByteRange::new(bounds.start(), bounds.clamp(position)),
+            Self::Absolute => EmacsByteRange::new(EmacsBytePos::ZERO, position),
+        }
+    }
+}
+
 /// (line-number-at-pos &optional POS ABSOLUTE)
 pub(crate) fn builtin_line_number_at_pos(
     eval: &mut super::eval::Context,
@@ -690,8 +715,8 @@ pub(crate) fn builtin_line_number_at_pos(
                 }
             }
             ValueKind::Fixnum(pos) => {
-                let beg = buf.point_min_lisp_char_pos().as_i64();
-                let z = buf.point_max_lisp_char_pos().as_i64();
+                let beg = LispCharPos1::ONE.as_i64();
+                let z = buf.z_lisp_char_pos().as_i64();
                 if pos < beg || pos > z {
                     return Err(signal(
                         LispCondition::ArgsOutOfRange,
@@ -708,14 +733,13 @@ pub(crate) fn builtin_line_number_at_pos(
             }
         }
     };
-    let _absolute = args.get(1).is_some_and(|v| v.is_truthy());
-    // Count newlines from start of buffer to byte_pos.
-    let start = if _absolute {
-        EmacsBytePos::ZERO
+    let scope = if args.get(1).is_some_and(|v| v.is_truthy()) {
+        LineNumberScope::Absolute
     } else {
-        buf.accessible_emacs_byte_region().start()
+        LineNumberScope::Accessible(buf.accessible_emacs_byte_region())
     };
-    let line_num = count_newlines(buf, start, byte_pos) + 1;
+    let range = scope.counting_range(byte_pos);
+    let line_num = count_newlines(buf, range.start(), range.end()) + 1;
     Ok(Value::fixnum(line_num as i64))
 }
 
