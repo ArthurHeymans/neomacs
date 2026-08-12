@@ -51,6 +51,7 @@ fn plan_call_interactively_for_test(
     args: &[Value],
 ) -> Result<CallInteractivelyPlan, Flow> {
     validate_call_interactively_args(args)?;
+    let command_identity = CallInteractivelyCommandIdentity::capture(eval);
     let interactive_form =
         crate::emacs_core::builtins::symbols::builtin_interactive_form(eval, vec![args[0]])?;
     plan_call_interactively_after_interactive_form_in_state(
@@ -58,6 +59,7 @@ fn plan_call_interactively_for_test(
         eval.read_command_keys(),
         args,
         interactive_form,
+        command_identity,
     )
 }
 
@@ -482,6 +484,39 @@ fn call_interactively_evaluates_registry_form_specs() {
     let result = builtin_call_interactively(&mut ev, vec![Value::symbol("registry-form-command")])
         .expect("call-interactively should evaluate registry form spec");
     assert_eq!(result, Value::fixnum(7));
+}
+
+#[test]
+fn call_interactively_restores_command_identity_after_form_spec_evaluation() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(progn
+                 (setq this-command 'outer-this
+                       this-original-command 'outer-original
+                       real-this-command 'outer-real
+                       last-command 'outer-last)
+                 (defun neovm-ci-command-state (argument)
+                   (interactive
+                    (progn
+                      (setq this-command 'inner-this
+                            this-original-command 'inner-original
+                            real-this-command 'inner-real
+                            last-command 'inner-last)
+                      (list 7)))
+                   (list argument
+                         this-command
+                         this-original-command
+                         real-this-command
+                         last-command))
+                 (list (call-interactively 'neovm-ci-command-state)
+                       this-command
+                       this-original-command
+                       real-this-command
+                       last-command))"#
+        ),
+        "OK ((7 outer-this outer-original outer-real outer-last) outer-this outer-original outer-real outer-last)"
+    );
 }
 
 #[test]

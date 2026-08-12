@@ -5254,12 +5254,17 @@ impl<'a> Vm<'a> {
 
     fn builtin_call_interactively_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::interactive::validate_call_interactively_args(args)?;
-        let interactive_form =
-            self.call_function_with_roots(Value::symbol("interactive-form"), &[args[0]])?;
+        let command_identity =
+            crate::emacs_core::interactive::CallInteractivelyCommandIdentity::capture(self.ctx);
         self.with_vm_root_scope(|vm| {
             for value in args.iter().copied() {
                 vm.push_dynamic_vm_root(value);
             }
+            for value in command_identity.values() {
+                vm.push_dynamic_vm_root(value);
+            }
+            let interactive_form = vm
+                .call_function_with_roots(Value::symbol("interactive-form"), &[args[0]])?;
             vm.push_dynamic_vm_root(interactive_form);
             let mut plan =
                 crate::emacs_core::interactive::plan_call_interactively_after_interactive_form_in_state(
@@ -5267,6 +5272,7 @@ impl<'a> Vm<'a> {
                     vm.ctx.read_command_keys(),
                     args,
                     interactive_form,
+                    command_identity,
                 )?;
             for value in plan.gc_roots() {
                 vm.push_dynamic_vm_root(value);
@@ -5279,9 +5285,8 @@ impl<'a> Vm<'a> {
             for value in call_args.iter().copied() {
                 vm.push_dynamic_vm_root(value);
             }
-            let mut funcall_args = Vec::with_capacity(call_args.len() + 1);
-            funcall_args.push(plan.invocation_function);
-            funcall_args.extend(call_args);
+            let invocation = plan.restore_for_invocation(vm.ctx);
+            let funcall_args = invocation.into_funcall_args(call_args);
             vm.call_function_with_roots(Value::symbol("funcall-interactively"), &funcall_args)
         })
     }

@@ -259,17 +259,29 @@ pub(crate) fn validate_call_interactively_args(args: &[Value]) -> Result<(), Flo
 pub(crate) fn builtin_call_interactively(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     validate_call_interactively_args(&args)?;
     let func_val = args[0];
+    // GNU Fcall_interactively snapshots command identity before even asking
+    // for the interactive form.  Argument acquisition may recursively read
+    // input or run arbitrary Lisp; none of those temporary command values
+    // belong to the command that will ultimately be invoked.
+    let command_identity = CallInteractivelyCommandIdentity::capture(eval);
+    let root_scope = eval.save_specpdl_roots();
+    command_identity.push_gc_roots(eval);
     // GNU callint.c obtains the interactive form before deciding whether the
     // function is a command.  This is observable for autoloads: loading and
     // any load error must happen before a possible `commandp` signal.
-    let interactive_form = eval.apply(Value::symbol("interactive-form"), vec![func_val])?;
-    let plan = plan_call_interactively_after_interactive_form_in_state(
-        &eval.obarray,
-        eval.read_command_keys(),
-        &args,
-        interactive_form,
-    )?;
-    finish_call_interactively_in_eval(eval, plan)
+    let result = (|| {
+        let interactive_form = eval.apply(Value::symbol("interactive-form"), vec![func_val])?;
+        let plan = plan_call_interactively_after_interactive_form_in_state(
+            &eval.obarray,
+            eval.read_command_keys(),
+            &args,
+            interactive_form,
+            command_identity,
+        )?;
+        finish_call_interactively_in_eval(eval, plan)
+    })();
+    eval.restore_specpdl_roots(root_scope);
+    result
 }
 
 /// `(interactive-p)` -> t if the calling function was called interactively.
@@ -2464,22 +2476,102 @@ fn resolve_command_target_in_state(
     }
 }
 
+/// Command identity that belongs to the caller of `call-interactively`.
+///
+/// GNU saves these four variables together in `Fcall_interactively` and
+/// restores them together after interactive argument acquisition. Keeping
+/// them in one Rust value prevents an interpreter or bytecode call path from
+/// restoring only a subset and exposing a mixed command identity.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CallInteractivelyCommandIdentity {
+    this_command: Value,
+    this_original_command: Value,
+    real_this_command: Value,
+    last_command: Value,
+}
+
+impl CallInteractivelyCommandIdentity {
+    pub(crate) fn capture(eval: &Context) -> Self {
+        Self {
+            this_command: eval.eval_symbol("this-command").unwrap_or(Value::NIL),
+            this_original_command: eval
+                .eval_symbol("this-original-command")
+                .unwrap_or(Value::NIL),
+            real_this_command: eval.eval_symbol("real-this-command").unwrap_or(Value::NIL),
+            last_command: eval.eval_symbol("last-command").unwrap_or(Value::NIL),
+        }
+    }
+
+    pub(crate) fn push_gc_roots(self, eval: &mut Context) {
+        for value in self.values() {
+            eval.push_specpdl_root(value);
+        }
+    }
+
+    pub(crate) fn values(self) -> [Value; 4] {
+        [
+            self.this_command,
+            self.this_original_command,
+            self.real_this_command,
+            self.last_command,
+        ]
+    }
+
+    fn restore(self, eval: &mut Context) {
+        eval.assign("this-command", self.this_command);
+        eval.assign("this-original-command", self.this_original_command);
+        eval.assign("real-this-command", self.real_this_command);
+        eval.assign("last-command", self.last_command);
+    }
+}
+
 pub(crate) struct CallInteractivelyPlan {
-    pub(crate) invocation_function: Value,
-    pub(crate) func: Value,
+    invocation_function: Value,
+    func: Value,
     interactive_spec: ParsedInteractiveSpec,
     context: InteractiveInvocationContext,
     record_flag: bool,
+    command_identity: CallInteractivelyCommandIdentity,
 }
 
 impl CallInteractivelyPlan {
     pub(crate) fn gc_roots(&self) -> Vec<Value> {
         let mut roots = vec![self.invocation_function, self.func];
+        roots.extend(self.command_identity.values());
         if let ParsedInteractiveSpec::Form(spec) = self.interactive_spec {
             roots.push(spec.form);
             roots.push(spec.environment.lexical_arg());
         }
         roots
+    }
+
+    /// Consume argument-acquisition state and make the command invocable.
+    ///
+    /// The invocation function remains private until this transition restores
+    /// GNU's saved command identity, so call paths outside this module cannot
+    /// accidentally invoke a command from an unrestored plan.
+    pub(crate) fn restore_for_invocation(
+        self,
+        eval: &mut Context,
+    ) -> RestoredCallInteractivelyInvocation {
+        self.command_identity.restore(eval);
+        RestoredCallInteractivelyInvocation {
+            function: self.invocation_function,
+        }
+    }
+}
+
+/// A `call-interactively` target whose caller command identity is restored.
+pub(crate) struct RestoredCallInteractivelyInvocation {
+    function: Value,
+}
+
+impl RestoredCallInteractivelyInvocation {
+    pub(crate) fn into_funcall_args(self, call_args: Vec<Value>) -> Vec<Value> {
+        let mut funcall_args = Vec::with_capacity(call_args.len() + 1);
+        funcall_args.push(self.function);
+        funcall_args.extend(call_args);
+        funcall_args
     }
 }
 
@@ -2488,6 +2580,7 @@ pub(crate) fn plan_call_interactively_after_interactive_form_in_state(
     read_command_keys: &[Value],
     args: &[Value],
     interactive_form: Value,
+    command_identity: CallInteractivelyCommandIdentity,
 ) -> Result<CallInteractivelyPlan, Flow> {
     validate_call_interactively_args(args)?;
 
@@ -2515,6 +2608,7 @@ pub(crate) fn plan_call_interactively_after_interactive_form_in_state(
         interactive_spec,
         context,
         record_flag,
+        command_identity,
     })
 }
 
@@ -2673,9 +2767,11 @@ pub(crate) fn finish_call_interactively_in_eval(
                 &call_args,
             )?;
         }
-        let mut funcall_args = Vec::with_capacity(call_args.len() + 1);
-        funcall_args.push(plan.invocation_function);
-        funcall_args.extend(call_args.iter().copied());
+        // GNU callint.c restores all four saved command variables only after
+        // argument acquisition/history recording, immediately before the
+        // target function runs (src/callint.c:340-343,796-799).
+        let invocation = plan.restore_for_invocation(eval);
+        let funcall_args = invocation.into_funcall_args(call_args);
         eval.apply(Value::symbol("funcall-interactively"), funcall_args)
     })();
     eval.restore_specpdl_roots(roots);

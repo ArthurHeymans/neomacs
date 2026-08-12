@@ -3116,6 +3116,40 @@ fn vm_call_interactively_uses_shared_runtime_planning() {
 }
 
 #[test]
+fn vm_call_interactively_restores_command_identity_before_invocation() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r#"(progn
+                 (setq this-command 'outer-this
+                       this-original-command 'outer-original
+                       real-this-command 'outer-real
+                       last-command 'outer-last)
+                 (fset 'vm-ci-command-state
+                       '(lambda (argument)
+                          (interactive
+                           (progn
+                             (setq this-command 'inner-this
+                                   this-original-command 'inner-original
+                                   real-this-command 'inner-real
+                                   last-command 'inner-last)
+                             (list 7)))
+                          (list argument
+                                this-command
+                                this-original-command
+                                real-this-command
+                                last-command)))
+                 (list (call-interactively 'vm-ci-command-state)
+                       this-command
+                       this-original-command
+                       real-this-command
+                       last-command))"#
+        ),
+        "OK ((7 outer-this outer-original outer-real outer-last) outer-this outer-original outer-real outer-last)"
+    );
+}
+
+#[test]
 fn vm_call_interactively_resolves_noninteractive_autoload_before_commandp() {
     crate::test_utils::init_test_tracing();
     let dir = tempfile::tempdir().expect("tempdir");
