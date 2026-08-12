@@ -2240,6 +2240,12 @@ pub const LSP_JAVA_MELPA_PIN: (&str, &str) = ("lsp-java", "20260510.647");
 /// `6bfc593d7b1bc0dd656f09ffce52cc085ebced05`.
 pub const LSP_MODE_MELPA_PIN: (&str, &str) = ("lsp-mode", "20260716.755");
 
+/// The exact LSP Origami package selected for practical documented-hook,
+/// capability, folding-range conversion, real Origami overlay, and mode
+/// lifecycle parity. MELPA built this archive from upstream commit
+/// `dd398afcf8e9077231dc26ea189916e6ea64c6ab`.
+pub const LSP_ORIGAMI_MELPA_PIN: (&str, &str) = ("lsp-origami", "20260507.1743");
+
 /// The exact LSP Pyright package selected for practical Python workspace
 /// startup, configuration, editing, import organization, environment
 /// discovery, and language-server failure parity. MELPA built this archive
