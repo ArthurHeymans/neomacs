@@ -367,7 +367,7 @@ rank	package	downloads	status
 366	buffer-move	282179	covered
 367	dracula-theme	281412	covered
 368	tide	279725	covered
-369	livid-mode	276850	todo
+369	livid-mode	276850	covered
 370	parsebib	276258	covered
 371	groovy-mode	275480	covered
 372	ledger-mode	271643	todo

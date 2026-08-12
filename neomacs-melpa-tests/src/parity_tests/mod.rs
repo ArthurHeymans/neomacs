@@ -477,6 +477,7 @@ mod link_hint;
 mod linum_relative;
 mod list_utils;
 mod live_py_mode;
+mod livid_mode;
 mod llama;
 mod log4e;
 mod logito;

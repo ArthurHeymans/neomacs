@@ -2862,6 +2862,12 @@ pub const LIST_UTILS_MELPA_PIN: (&str, &str) = ("list-utils", "20241106.1849");
 /// this archive from upstream commit `7655ee7a7294cd486fd02603d76061c1c773e058`.
 pub const LIVE_PY_MODE_MELPA_PIN: (&str, &str) = ("live-py-mode", "20260227.509");
 
+/// The exact Livid Mode package selected for practical automatic JavaScript
+/// evaluation, trimming, validation, pause/resume, editing, and buffer-local
+/// lifecycle parity. MELPA built this archive from upstream commit
+/// `dfe5212fa64738bc4138bfebf349fbc8bc237c26`.
+pub const LIVID_MODE_MELPA_PIN: (&str, &str) = ("livid-mode", "20131116.1344");
+
 /// The exact Lorem-Ipsum package selected for deterministic prose, list,
 /// buffer-local formatting, SGML integration, and keybinding parity.
 /// MELPA built this archive from upstream commit
