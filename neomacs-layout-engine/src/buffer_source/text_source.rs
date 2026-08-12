@@ -58,6 +58,26 @@ pub(crate) struct BufferOverlayStringsItem {
     strings: Vec<OverlayDisplayString>,
 }
 
+/// The first and last characters in one non-empty, GNU-ordered overlay-string
+/// element.  Word wrapping checks the first character before append and uses
+/// the last character to determine whether the following buffer character may
+/// open another wrap candidate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BufferOverlayStringWordWrapBoundary {
+    first: char,
+    last: char,
+}
+
+impl BufferOverlayStringWordWrapBoundary {
+    pub(crate) const fn first(self) -> char {
+        self.first
+    }
+
+    pub(crate) const fn last(self) -> char {
+        self.last
+    }
+}
+
 impl BufferOverlayStringsItem {
     pub(crate) fn anchor_charpos(&self) -> CharPos0 {
         self.anchor_charpos
@@ -65,6 +85,32 @@ impl BufferOverlayStringsItem {
 
     pub(crate) fn strings(&self) -> &[OverlayDisplayString] {
         &self.strings
+    }
+
+    /// Decode the boundary characters of the strings exactly as the display
+    /// source does.  Collection rejects empty strings, but `Option` keeps this
+    /// boundary total if another producer is added later.
+    pub(crate) fn word_wrap_boundary(&self) -> Option<BufferOverlayStringWordWrapBoundary> {
+        let mut first = None;
+        let mut last = None;
+        for entry in &self.strings {
+            let string = entry.string.as_lisp_string()?;
+            let bytes = string.as_bytes();
+            let mut offset = 0;
+            while offset < bytes.len() {
+                let (ch, len) = decode_utf8(&bytes[offset..]);
+                if len == 0 {
+                    break;
+                }
+                first.get_or_insert(ch);
+                last = Some(ch);
+                offset = offset.saturating_add(len);
+            }
+        }
+        Some(BufferOverlayStringWordWrapBoundary {
+            first: first?,
+            last: last?,
+        })
     }
 }
 
@@ -110,9 +156,10 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
     /// pushed at a position, popped when its content is exhausted, resuming at
     /// exactly the position it was pushed at.
     ///
-    /// Cleared by a row-transition retry (`clear_overlay_strings_marker`), which
-    /// reproduces today's renderer behaviour of re-running the string session
-    /// when the wrap re-steps the anchor character.
+    /// A word-wrap retry clears this marker when its checkpoint precedes the
+    /// string, replaying the complete insertion element like GNU RESTORE_IT.
+    /// A character-wrap retry preserves it because the already-drawn string is
+    /// not part of the overflowing buffer character.
     overlay_strings_produced_at: Option<CharPos0>,
     base_face: RenderFaceRef,
     replacement_strings: LispStringSourceStack,
@@ -255,6 +302,19 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     pub(crate) fn reset_to(&mut self, char_pos: CharPos0) {
         let accessible_end = self.buffer.layout_point_max_char_pos();
         self.char_pos = char_pos.min(self.end).min(accessible_end);
+    }
+
+    /// Restore a word-wrap checkpoint.  Any insertion element produced at or
+    /// after the checkpoint was also removed by the glyph checkpoint and must
+    /// be surfaced again on the continuation row.
+    pub(crate) fn rewind_for_word_wrap_to(&mut self, char_pos: CharPos0) {
+        self.reset_to(char_pos);
+        if self
+            .overlay_strings_produced_at
+            .is_some_and(|anchor| anchor >= self.char_pos)
+        {
+            self.overlay_strings_produced_at = None;
+        }
     }
 
     fn byte_pos(&self, char_pos: CharPos0) -> EmacsBytePos {

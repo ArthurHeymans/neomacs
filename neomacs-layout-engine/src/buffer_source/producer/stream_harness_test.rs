@@ -1192,7 +1192,7 @@ fn c11_hscroll_left_markers_are_absent_and_the_stream_is_position_addressable() 
     let mut driver = fixture.driver(SplitPolicy::None);
     driver
         .producer
-        .rewind_to(DisplaySourceTextPosition::new(5, 5));
+        .rewind_character_wrap_to(DisplaySourceTextPosition::new(5, 5));
     driver.position = DisplaySourceTextPosition::new(5, 5);
     let stream = driver.drain(DRAIN_LIMIT);
 

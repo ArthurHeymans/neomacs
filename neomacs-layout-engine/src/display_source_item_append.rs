@@ -17,7 +17,8 @@ use crate::display_source::{
     DisplaySourceAppendContinuation, DisplaySourceAppendItem, DisplaySourceClusterState,
     DisplaySourceItemRequest, DisplaySourceNaturalMeasurementRequest,
     DisplaySourceRenderPlanRequest, DisplaySourceSpecialDisplayKind, DisplaySourceStepChar,
-    DisplaySourceTextRange, DisplaySourceTextRequest, DisplaySpecialSourceCharRequest,
+    DisplaySourceTextPosition, DisplaySourceTextRange, DisplaySourceTextRequest,
+    DisplaySpecialSourceCharRequest,
 };
 use crate::display_source_append_plan::{
     DisplaySourceAppendMeasurementKind, DisplaySourceAppendRenderPlan,
@@ -377,19 +378,35 @@ impl DisplaySourceStepChar {
         word_wrap: &mut WordWrapRenderState,
         source_render: &TextRowSourceRenderState<'_>,
     ) {
-        if word_wrap.can_record_candidate(self.ch()) {
-            // Capture the glyph checkpoint at the SAME moment as the display-point
-            // count, so the word-wrap break truncates the row's drawn glyphs and
-            // its cursor/hit metadata back to the same word boundary. The
-            // candidate char has not yet been pushed to the row here, so this
-            // snapshots everything up to (and including) the char before the
-            // candidate (e.g. the space before `word10`).
+        word_wrap.record_source_candidate(
+            self.ch(),
+            DisplaySourceTextPosition::new(self.start_byte_idx(), self.start_charpos()),
+            source_render,
+        );
+    }
+}
+
+impl WordWrapRenderState {
+    /// Save one GNU-style word-wrap checkpoint before a source character is
+    /// appended.  Glyph output, display-point metadata, and the authoritative
+    /// buffer position are captured together so every source producer uses one
+    /// atomic boundary.
+    pub(crate) fn record_source_candidate(
+        &mut self,
+        ch: char,
+        position: DisplaySourceTextPosition,
+        source_render: &TextRowSourceRenderState<'_>,
+    ) {
+        if self.can_record_candidate(ch) {
+            // The candidate char has not yet been pushed to the row, so this
+            // snapshots everything up to (and including) the preceding
+            // whitespace.  GNU's SAVE_IT sits at this same point.
             let glyph_checkpoint = source_render.capture_glyph_checkpoint();
             let output_emitter = source_render.output_emitter_ref();
-            word_wrap.record_candidate(
-                self.ch(),
-                self.start_byte_idx(),
-                self.start_charpos(),
+            self.record_candidate(
+                ch,
+                position.byte_idx(),
+                position.charpos(),
                 output_emitter.display_point_len(),
                 output_emitter.current_row_display_positions(),
                 glyph_checkpoint,

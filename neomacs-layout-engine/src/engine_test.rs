@@ -25297,8 +25297,10 @@ fn overlay_string_shadow_emits_once_across_a_wrap_at_its_own_anchor() {
     assert_eq!(mid_row[1], "Xbbb ");
 }
 
-/// The same single-emission contract on the WORD-WRAP path, which had the same
-/// duplicate: the anchor sits on the word that the break moves down.
+/// GNU checkpoints the complete display iterator before the first glyph after
+/// whitespace.  When that glyph comes from an overlay before-string, the
+/// string travels with its anchor word to the continuation row and is emitted
+/// exactly once there.
 #[test]
 fn overlay_string_shadow_emits_once_across_a_word_wrap_break() {
     let (_eval, _buf_id, _frame_id, rows, _cw, _ch) = layout_main_text_rows_with(
@@ -25317,8 +25319,34 @@ fn overlay_string_shadow_emits_once_across_a_word_wrap_break() {
         .filter(|text| !text.is_empty())
         .collect();
     assert_eq!(texts.len(), 2);
-    assert_eq!(texts[0].matches('S').count(), 2, "one two-character string");
-    assert_eq!(texts[1], "bbbbbbbbbb ");
+    assert_eq!(texts[0].matches('S').count(), 0, "the string must travel");
+    assert_eq!(texts[1], "SSbbbbbbbbbb ");
+}
+
+/// `may_wrap` still gates the overlay-string checkpoint.  A string anchored
+/// inside an unbroken word stays on the character-wrapped row; merely being a
+/// producer-owned insertion element must not manufacture a word boundary.
+#[test]
+fn overlay_string_does_not_create_a_wrap_candidate_without_preceding_whitespace() {
+    let (_eval, _buf_id, _frame_id, rows, _cw, _ch) = layout_main_text_rows_with(
+        &format!("{}bbbbbbbbbb\n", "a".repeat(71)),
+        |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(setq truncate-lines nil)").expect("wrap");
+            eval.eval_str("(setq word-wrap t)").expect("word-wrap");
+            eval.eval_str("(overlay-put (make-overlay 72 74) 'before-string \"SS\")")
+                .expect("overlay");
+        },
+    );
+    let texts: Vec<String> = rows
+        .iter()
+        .map(|row| glyphs_logical_text(&row.glyphs[1]))
+        .filter(|text| !text.is_empty())
+        .collect();
+
+    assert_eq!(texts.len(), 2);
+    assert_eq!(texts[0].matches('S').count(), 2);
+    assert_eq!(texts[1].matches('S').count(), 0);
 }
 
 // ---------------------------------------------------------------------------

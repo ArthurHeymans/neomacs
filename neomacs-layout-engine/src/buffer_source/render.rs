@@ -95,6 +95,19 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
         strings: BufferOverlayStringsItem,
         buffer: &B,
     ) -> bool {
+        let word_wrap_boundary = strings.word_wrap_boundary();
+        if let Some(boundary) = word_wrap_boundary {
+            // GNU xdisp.c display_line saves the complete iterator BEFORE the
+            // first display element after whitespace.  The producer surfaces
+            // an overlay before-string before its anchor character, so this is
+            // the only point where source position, output metadata, and glyph
+            // counts still all describe the boundary before that string.
+            self.state.row_carryover.word_wrap.record_source_candidate(
+                boundary.first(),
+                self.state.progress.source_position(),
+                &self.state.source_render,
+            );
+        }
         let anchor_charpos = strings.anchor_charpos().get() as i64;
         let (x, col) = self.state.progress.row_progress_mut().coordinates_mut();
         let continuation = self
@@ -117,6 +130,22 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 self.state.row_carryover.line_numbers,
                 self.state.face_scan,
             );
+        if let Some(boundary) = word_wrap_boundary {
+            if continuation.should_break() {
+                self.state
+                    .row_carryover
+                    .word_wrap
+                    .reset_after_row_transition();
+            } else {
+                // The following buffer character sees the last displayed
+                // string character as its predecessor, just as GNU's iterator
+                // updates `may_wrap` while consuming the string stack.
+                self.state
+                    .row_carryover
+                    .word_wrap
+                    .allow_after_current_char(boundary.last());
+            }
+        }
         !continuation.should_break()
     }
 

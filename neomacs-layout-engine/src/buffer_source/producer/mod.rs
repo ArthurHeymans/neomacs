@@ -8,9 +8,10 @@
 //!
 //! Two rewind mechanisms exist, and they are not interchangeable:
 //!
-//! * [`BufferElementProducer::rewind_to`] reseats the producer at a published
-//!   source position. This is what the row-wrap retry uses
-//!   ([`BufferSourceWalk::rewind_source_consumption_to`](crate::buffer_source::walk::BufferSourceWalk::rewind_source_consumption_to)).
+//! * [`BufferElementProducer::rewind_word_wrap_to`] and
+//!   [`BufferElementProducer::rewind_character_wrap_to`] reseat the producer at
+//!   a published source position. The row-wrap retry selects between them
+//!   ([`BufferSourceWalk::rewind_source_consumption`](crate::buffer_source::walk::BufferSourceWalk::rewind_source_consumption)).
 //! * [`ProducerSnapshot`] saves the producer's whole seating opaquely,
 //!   mirroring GNU's `SAVE_IT` / `RESTORE_IT`. No production path calls it:
 //!   its consumers are the stream-equivalence harness and the producer unit
@@ -39,7 +40,7 @@ use neovm_core::buffer::{BufferId, CharPos0};
 /// An opaque save of the producer's whole seating. Restoring one reinstates the
 /// producer exactly, which a bare position rewind cannot express. Harness and
 /// unit-test support only — see the module docs for why the wrap retry uses
-/// [`BufferElementProducer::rewind_to`] instead.
+/// the typed position-rewind methods instead.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ProducerSnapshot {
     cursor_char_pos: CharPos0,
@@ -119,14 +120,23 @@ impl<'request, B: LayoutBufferView> BufferElementProducer<'request, B> {
         self.source_cursor.reset_to(cursor_char_pos);
     }
 
-    /// Reseat the producer at `source_position` for a row-transition retry (GNU
-    /// `RESTORE_IT` on a bare position), and resume with runs BATCHED again.
+    /// Reseat the producer at a word-wrap checkpoint and resume with runs
+    /// BATCHED again. GNU RESTORE_IT restores the complete iterator, so
+    /// insertion elements produced after the checkpoint must replay too.
     ///
     /// Dropping the batching decline here is the faithful conversion of what the
     /// pending queue's clear did at these same two call sites: the continuation
     /// row measures from a fresh pen, so the remainder of a run refused on the
     /// previous row may well fit whole and must get the chance to.
-    pub(crate) fn rewind_to(&mut self, source_position: DisplaySourceTextPosition) {
+    pub(crate) fn rewind_word_wrap_to(&mut self, source_position: DisplaySourceTextPosition) {
+        self.source_cursor.set_char_granularity_end(None);
+        self.source_cursor
+            .rewind_for_word_wrap_to(CharPos0::new(source_position.charpos().max(0) as usize));
+    }
+
+    /// Retry one overflowing buffer character without replaying insertion
+    /// elements that were already drawn before it.
+    pub(crate) fn rewind_character_wrap_to(&mut self, source_position: DisplaySourceTextPosition) {
         self.source_cursor.set_char_granularity_end(None);
         self.source_cursor
             .reset_to(CharPos0::new(source_position.charpos().max(0) as usize));

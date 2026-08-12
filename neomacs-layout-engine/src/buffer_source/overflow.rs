@@ -5,7 +5,7 @@
 //! source append pipeline.
 
 use crate::buffer_source::loop_state::BufferSourceLoopMutableState;
-use crate::buffer_source::walk::BufferSourceWalk;
+use crate::buffer_source::walk::{BufferSourceRewind, BufferSourceWalk};
 use crate::display_row::builder::DisplayRowGlyphCheckpoint;
 use crate::display_row::geometry::{
     DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
@@ -238,7 +238,8 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                 // reseat — it used to also have to drop a stale queued run
                 // remainder (candidate + 1) that would otherwise replay first and
                 // drop the candidate char from the layout.
-                source_walk.rewind_source_consumption_to(source_position);
+                source_walk
+                    .rewind_source_consumption(BufferSourceRewind::WordWrap(source_position));
                 source_walk
                     .source_position_update(source_position)
                     .apply_to_progress(&mut progress);
@@ -333,7 +334,9 @@ impl<'a> BufferSourceOverflowRenderRequest<'a> {
                     // `source_position` was just rewound to the overflowing
                     // char's start by the transition; reseat the producer to the
                     // same position so that char opens the continuation row.
-                    source_walk.rewind_source_consumption_to(source_position);
+                    source_walk.rewind_source_consumption(BufferSourceRewind::CharacterWrap(
+                        source_position,
+                    ));
                 }
                 // GNU `maybe_produce_line_number`: each wrapped continuation row
                 // reserves a blank (no-number) line-number gutter so its text

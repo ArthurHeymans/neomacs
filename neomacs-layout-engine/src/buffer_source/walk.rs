@@ -38,6 +38,19 @@ pub(crate) struct BufferSourceWalk<'request, B: LayoutBufferView> {
     append_state: DisplaySourceRowAppendState,
 }
 
+/// Why the buffer producer is being reseated at an overflowing character.
+///
+/// Word wrap restores a checkpoint taken before every source element at the
+/// boundary, so insertion elements must replay. Character wrap retries only
+/// the overflowing buffer character and must preserve already-drawn insertion
+/// elements. Keeping the distinction closed prevents a new retry call site
+/// from silently choosing the wrong overlay-string behavior.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BufferSourceRewind {
+    WordWrap(DisplaySourceTextPosition),
+    CharacterWrap(DisplaySourceTextPosition),
+}
+
 /// Apply a produced step's side effects to the row being assembled: publish the
 /// walk position when no element was produced, install the faces the resolver
 /// collected, and record `(left-fringe …)` / `(right-fringe …)` specs.
@@ -169,11 +182,13 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
 
     /// Reseat the producer at a row-wrap retry position so the current character
     /// is re-produced on the continuation row.
-    pub(crate) fn rewind_source_consumption_to(
-        &mut self,
-        source_position: DisplaySourceTextPosition,
-    ) {
-        self.producer.rewind_to(source_position);
+    pub(crate) fn rewind_source_consumption(&mut self, rewind: BufferSourceRewind) {
+        match rewind {
+            BufferSourceRewind::WordWrap(position) => self.producer.rewind_word_wrap_to(position),
+            BufferSourceRewind::CharacterWrap(position) => {
+                self.producer.rewind_character_wrap_to(position)
+            }
+        }
     }
 
     pub(crate) fn consume_source_item_for_render(

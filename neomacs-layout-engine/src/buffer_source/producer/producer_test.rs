@@ -83,7 +83,7 @@ fn walk_to_wrap_candidate<'a>(
     (producer, candidate)
 }
 
-/// `rewind_source_consumption_to` written out directly against the cursor, so
+/// `rewind_source_consumption` written out directly against the cursor, so
 /// the snapshot/restore comparison below does not run through `restore` itself.
 fn legacy_rewind<B: LayoutBufferView>(
     producer: &mut BufferElementProducer<'_, B>,
@@ -95,7 +95,7 @@ fn legacy_rewind<B: LayoutBufferView>(
 }
 
 /// The wrap retry restored from a snapshot taken AT the candidate must produce
-/// exactly the stream today's `rewind_source_consumption_to` produces (GNU
+/// exactly the stream today's `rewind_source_consumption` produces (GNU
 /// `SAVE_IT` / `RESTORE_IT`).
 fn assert_snapshot_restore_matches_rewind(text: &str, candidate: DisplaySourceTextPosition) {
     let (buffer_id, snapshot) = buffer_snapshot(text);
@@ -103,7 +103,7 @@ fn assert_snapshot_restore_matches_rewind(text: &str, candidate: DisplaySourceTe
     // The seating saved at the wrap candidate, before the overflow attempt.
     let saved = {
         let mut seated = producer(buffer_id, &snapshot);
-        seated.rewind_to(candidate);
+        seated.rewind_word_wrap_to(candidate);
         seated.snapshot()
     };
 
