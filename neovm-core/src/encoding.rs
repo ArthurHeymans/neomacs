@@ -743,8 +743,18 @@ fn expand_source_eol(
 }
 
 pub(crate) fn decode_eol_text(bytes: &[u8], coding_system: &str) -> Vec<u8> {
+    decode_eol_bytes(bytes, coding_name_eol(coding_system))
+}
+
+/// The decode-side mirror of `expand_source_eol`, keyed on the EOL type rather
+/// than on a coding-system name.
+///
+/// GNU is symmetric here: `decode_coding` (src/coding.c:7481) calls
+/// `decode_eol` AFTER the decoder has run, for every coding system, so no
+/// `decode_coding_*` decides this any more than an encoder does.
+fn decode_eol_bytes(bytes: &[u8], eol: crate::emacs_core::coding::EolType) -> Vec<u8> {
     use crate::emacs_core::coding::EolType;
-    match coding_name_eol(coding_system) {
+    match eol {
         EolType::Dos => {
             let mut out = Vec::with_capacity(bytes.len());
             let mut i = 0usize;
@@ -3546,6 +3556,30 @@ fn builtin_coding_string_in_context(
             }
         }
     }
+    // The decode-side mirror, and the same single-pass rule: GNU's
+    // `decode_coding` (src/coding.c:7481) runs the decoder and then calls
+    // `decode_eol` once, outside every `decode_coding_*`.  The pass has to be
+    // AFTER the decoder, not before it: in UTF-16 a CR is the byte pair 0D 00,
+    // so collapsing CR LF in the SOURCE bytes would never see it.  The name is
+    // spent up front so the arms and the fall-through cannot collapse a second
+    // time -- decoding is not idempotent ("\r\r\n\n" collapses twice).
+    let decoded_eol = if encode {
+        crate::emacs_core::coding::EolType::Unix
+    } else {
+        coding_name_eol(&coding)
+    };
+    if !encode
+        && matches!(
+            decoded_eol,
+            crate::emacs_core::coding::EolType::Dos | crate::emacs_core::coding::EolType::Mac
+        )
+    {
+        let spent = coding_name_with_eol_spent(&coding);
+        if spent != coding.as_str() {
+            coding = spent.into_owned();
+            args[1] = Value::symbol(&coding);
+        }
+    }
     let source_string = || {
         args[0]
             .as_lisp_string()
@@ -3611,27 +3645,43 @@ fn builtin_coding_string_in_context(
         let bytes = decode_via_ccl(&source_bytes, spec, &coding)?;
         Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
     } else if let Some((spec, _)) = &full_iso {
-        let source_bytes =
-            decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
+        let source_bytes = lisp_string_coding_source_bytes(&source_string());
         let (bytes, runs) = decode_via_iso2022(&source_bytes, spec);
         decoded_string_with_charset_runs(bytes, runs)
     } else if let Some((spec, _)) = &euc_coding {
-        let source_bytes =
-            decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
+        let source_bytes = lisp_string_coding_source_bytes(&source_string());
         let (bytes, runs) = decode_via_euc(&source_bytes, spec);
         decoded_string_with_charset_runs(bytes, runs)
     } else if let Some(charsets) = &sjis_coding {
-        let source_bytes =
-            decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
+        let source_bytes = lisp_string_coding_source_bytes(&source_string());
         let (bytes, runs) = decode_via_sjis(&source_bytes, charsets);
         decoded_string_with_charset_runs(bytes, runs)
     } else if let Some(charset_list) = &charset_coding {
-        let source_bytes =
-            decode_eol_text(&lisp_string_coding_source_bytes(&source_string()), &coding);
+        let source_bytes = lisp_string_coding_source_bytes(&source_string());
         let (bytes, runs) = decode_via_charset_list(&source_bytes, charset_list);
         decoded_string_with_charset_runs(bytes, runs)
     } else {
         builtin_decode_coding_string_with_known(args, |_| true)?
+    };
+    // The single decode-side pass (GNU `decode_coding`, src/coding.c:7481).
+    let result = match result.as_lisp_string() {
+        // Only a dos/mac coding rebuilds the string; an undecided or unix EOL
+        // is a no-op and must keep the decoded object as it is, text
+        // properties (the source-charset runs) included.
+        Some(decoded)
+            if matches!(
+                decoded_eol,
+                crate::emacs_core::coding::EolType::Dos | crate::emacs_core::coding::EolType::Mac
+            ) =>
+        {
+            let bytes = decode_eol_bytes(decoded.as_bytes(), decoded_eol);
+            if decoded.is_multibyte() {
+                Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+            } else {
+                Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+            }
+        }
+        _ => result,
     };
     let result_text = result
         .as_lisp_string()

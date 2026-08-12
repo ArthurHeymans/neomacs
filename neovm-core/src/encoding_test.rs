@@ -1786,4 +1786,61 @@ fn eol_conversion_applies_to_every_encoder_not_just_some() {
         "every encoder must see an already-converted newline; the unix row and \
          the already-correct dos/mac rows guard against double conversion"
     );
+
+    // The decode side is GNU's mirror image and has the same shape:
+    // `decode_coding` (src/coding.c:7481) runs the decoder and then calls
+    // `decode_eol` once, outside every `decode_coding_*`.  Ours collapsed CR LF
+    // only in four of the ten codec arms, which stayed invisible for as long as
+    // the encode side never wrote a CR -- fixing encode alone made
+    // `utf-8-with-signature-dos` read back as "café\r\n".  Round trip every
+    // dos/mac system: GNU 31.0.90 returns the original "a\nb" for all of them.
+    let roundtrip = crate::test_utils::runtime_startup_eval_one(
+        r#"(mapcar (lambda (cs)
+                     (list cs (string-to-list
+                               (decode-coding-string
+                                (encode-coding-string "a\nb" cs) cs))))
+                  '(utf-8-dos
+                    utf-8-mac
+                    latin-1-dos
+                    raw-text-dos
+                    utf-8-with-signature-dos
+                    utf-8-with-signature-mac
+                    utf-8-auto-dos
+                    utf-16le-dos
+                    utf-16le-mac
+                    utf-16be-dos
+                    utf-16-dos
+                    utf-7-dos
+                    chinese-hz-dos
+                    emacs-mule-dos
+                    iso-2022-jp-dos
+                    japanese-iso-8bit-dos
+                    japanese-shift-jis-dos
+                    chinese-big5-dos
+                    vietnamese-viqr-dos))"#,
+    );
+    assert_eq!(
+        roundtrip,
+        "OK ((utf-8-dos (97 10 98)) \
+             (utf-8-mac (97 10 98)) \
+             (latin-1-dos (97 10 98)) \
+             (raw-text-dos (97 10 98)) \
+             (utf-8-with-signature-dos (97 10 98)) \
+             (utf-8-with-signature-mac (97 10 98)) \
+             (utf-8-auto-dos (97 10 98)) \
+             (utf-16le-dos (97 10 98)) \
+             (utf-16le-mac (97 10 98)) \
+             (utf-16be-dos (97 10 98)) \
+             (utf-16-dos (97 10 98)) \
+             (utf-7-dos (97 10 98)) \
+             (chinese-hz-dos (97 10 98)) \
+             (emacs-mule-dos (97 10 98)) \
+             (iso-2022-jp-dos (97 10 98)) \
+             (japanese-iso-8bit-dos (97 10 98)) \
+             (japanese-shift-jis-dos (97 10 98)) \
+             (chinese-big5-dos (97 10 98)) \
+             (vietnamese-viqr-dos (97 10 98)))",
+        "decoding must undo the EOL expansion for every coding system, not for \
+         the four codec arms that happened to call decode_eol_text"
+    );
 }
