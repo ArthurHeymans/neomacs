@@ -14,8 +14,8 @@ use crate::emacs_core::emacs_char::byte_to_char_pos;
 use crate::emacs_core::intern::{NIL_SYM_ID, SymId, resolve_sym};
 use crate::emacs_core::treesit::{
     self as runtime, NODE_SLOT_PARSER, PARSER_SLOT_EMBED_LEVEL, PARSER_SLOT_LANGUAGE,
-    PARSER_SLOT_NOTIFIERS, PARSER_SLOT_TAG, ParserTagFilter, QUERY_SLOT_LANGUAGE,
-    QUERY_SLOT_SOURCE,
+    PARSER_SLOT_NOTIFIERS, PARSER_SLOT_TAG, ParserFreshness, ParserInputRevision,
+    ParserReparseKind, ParserTagFilter, QUERY_SLOT_LANGUAGE, QUERY_SLOT_SOURCE,
 };
 use crate::heap_types::LispString;
 
@@ -234,8 +234,27 @@ fn parser_deleted_error(value: Value) -> Flow {
     signal(LispCondition::TreesitParserDeleted, vec![value])
 }
 
+#[cfg(test)]
+thread_local! {
+    static TREESIT_BUFFER_SOURCE_EXTRACTIONS: std::cell::Cell<usize> = const {
+        std::cell::Cell::new(0)
+    };
+}
+
+#[cfg(test)]
+fn reset_treesit_buffer_source_extraction_count() {
+    TREESIT_BUFFER_SOURCE_EXTRACTIONS.set(0);
+}
+
+#[cfg(test)]
+fn treesit_buffer_source_extraction_count() -> usize {
+    TREESIT_BUFFER_SOURCE_EXTRACTIONS.get()
+}
+
 fn treesit_buffer_source(buffer: &crate::buffer::Buffer) -> LispString {
-    buffer.buffer_substring_lisp_string_range(buffer.accessible_emacs_byte_range())
+    #[cfg(test)]
+    TREESIT_BUFFER_SOURCE_EXTRACTIONS.with(|count| count.set(count.get() + 1));
+    buffer.buffer_substring_lisp_string_no_properties_range(buffer.accessible_emacs_byte_range())
 }
 
 fn node_outdated_error(value: Value) -> Flow {
@@ -634,7 +653,23 @@ fn byte_offset_to_lisp_pos(buf: &Buffer, source: &LispString, byte_offset: usize
     Value::fixnum(buf.accessible_char_region().start_lisp().as_i64() + char_offset)
 }
 
-fn ensure_parser_parsed(eval: &mut super::eval::Context, parser_id: u64) -> Result<(), Flow> {
+struct ParserReparseRequest {
+    parser_value: Value,
+    current_revision: ParserInputRevision,
+    kind: ParserReparseKind,
+    source: LispString,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ChangedRangeCollection {
+    Ignore,
+    Collect,
+}
+
+fn parser_reparse_request(
+    eval: &mut super::eval::Context,
+    parser_id: u64,
+) -> Result<Option<ParserReparseRequest>, Flow> {
     let (parser_value, orig_buffer_id) = {
         let parser = eval
             .treesit
@@ -646,6 +681,29 @@ fn ensure_parser_parsed(eval: &mut super::eval::Context, parser_id: u64) -> Resu
         (parser.value, parser.orig_buffer_id)
     };
 
+    let current_revision = {
+        let buffer = eval.buffers.get(orig_buffer_id).ok_or_else(|| {
+            signal(
+                "error",
+                vec![Value::string("Parser buffer has been killed")],
+            )
+        })?;
+        ParserInputRevision::for_buffer(buffer)
+    };
+
+    let reparse_kind = {
+        let parser = eval
+            .treesit
+            .parser_mut(parser_id)
+            .ok_or_else(|| signal("error", vec![Value::string("Missing tree-sitter parser")]))?;
+        if parser.tree.is_none() {
+            parser.freshness = ParserFreshness::Unparsed;
+        }
+        parser.freshness.reparse_kind(current_revision)
+    };
+    let Some(reparse_kind) = reparse_kind else {
+        return Ok(None);
+    };
     let source = {
         let buffer = eval.buffers.get(orig_buffer_id).ok_or_else(|| {
             signal(
@@ -655,30 +713,73 @@ fn ensure_parser_parsed(eval: &mut super::eval::Context, parser_id: u64) -> Resu
         })?;
         treesit_buffer_source(buffer)
     };
+    Ok(Some(ParserReparseRequest {
+        parser_value,
+        current_revision,
+        kind: reparse_kind,
+        source,
+    }))
+}
 
-    let mut reparsed = false;
-    {
+fn ensure_parser_reparsed(
+    eval: &mut super::eval::Context,
+    parser_id: u64,
+    changed_range_collection: ChangedRangeCollection,
+) -> Result<Option<Vec<runtime::SourceByteRange>>, Flow> {
+    let Some(request) = parser_reparse_request(eval, parser_id)? else {
+        return Ok(None);
+    };
+
+    let changed_ranges = {
         let parser = eval
             .treesit
             .parser_mut(parser_id)
             .ok_or_else(|| signal("error", vec![Value::string("Missing tree-sitter parser")]))?;
-        let needs_parse = parser.tree.is_none() || parser.last_source.as_ref() != Some(&source);
-        if needs_parse {
-            // Issue #131: feed the parser the exact Emacs bytes so byte offsets
-            // match the buffer and real PUA glyphs / eight-bit bytes survive.
-            let tree = parser
-                .parser
-                .parse(source.as_bytes(), parser.tree.as_ref())
-                .ok_or_else(|| treesit_parse_error(parser_value))?;
-            parser.tree = Some(tree);
-            parser.last_source = Some(source);
-            parser.generation = parser.generation.saturating_add(1);
-            reparsed = true;
+        let old_tree = match request.kind {
+            ParserReparseKind::Incremental => parser.tree.clone(),
+            ParserReparseKind::Full => None,
+        };
+        // Issue #131: feed the parser the exact Emacs bytes so byte offsets
+        // match the buffer and real PUA glyphs / eight-bit bytes survive.
+        let tree = parser
+            .parser
+            .parse(request.source.as_bytes(), old_tree.as_ref())
+            .ok_or_else(|| treesit_parse_error(request.parser_value))?;
+        let changed_ranges = match changed_range_collection {
+            ChangedRangeCollection::Ignore => Vec::new(),
+            ChangedRangeCollection::Collect => {
+                if let Some(old_tree) = old_tree.as_ref() {
+                    old_tree
+                        .changed_ranges(&tree)
+                        .map(|range| {
+                            runtime::SourceByteRange::new(range.start_byte, range.end_byte)
+                        })
+                        .collect::<Vec<_>>()
+                } else if request.source.as_bytes().is_empty() {
+                    Vec::new()
+                } else {
+                    vec![runtime::SourceByteRange::new(
+                        0,
+                        request.source.as_bytes().len(),
+                    )]
+                }
+            }
+        };
+        parser.tree = Some(tree);
+        parser.last_source = Some(request.source);
+        parser.freshness = ParserFreshness::Clean(request.current_revision);
+        parser.generation = parser.generation.saturating_add(1);
+        if changed_range_collection == ChangedRangeCollection::Collect {
+            parser.last_changed_ranges = changed_ranges.clone();
         }
-    }
-    if reparsed {
-        eval.treesit.clear_nodes_for_parser(parser_id);
-    }
+        changed_ranges
+    };
+    eval.treesit.clear_nodes_for_parser(parser_id);
+    Ok(Some(changed_ranges))
+}
+
+fn ensure_parser_parsed(eval: &mut super::eval::Context, parser_id: u64) -> Result<(), Flow> {
+    let _ = ensure_parser_reparsed(eval, parser_id, ChangedRangeCollection::Ignore)?;
     Ok(())
 }
 
@@ -719,63 +820,7 @@ fn ensure_parser_parsed_with_changes(
     eval: &mut super::eval::Context,
     parser_id: u64,
 ) -> Result<Option<Vec<runtime::SourceByteRange>>, Flow> {
-    let (parser_value, orig_buffer_id) = {
-        let parser = eval
-            .treesit
-            .parser(parser_id)
-            .ok_or_else(|| signal("error", vec![Value::string("Missing tree-sitter parser")]))?;
-        if parser.deleted {
-            return Err(parser_deleted_error(parser.value));
-        }
-        (parser.value, parser.orig_buffer_id)
-    };
-
-    let source = {
-        let buffer = eval.buffers.get(orig_buffer_id).ok_or_else(|| {
-            signal(
-                "error",
-                vec![Value::string("Parser buffer has been killed")],
-            )
-        })?;
-        treesit_buffer_source(buffer)
-    };
-
-    let (changed_ranges, reparsed) = {
-        let parser = eval
-            .treesit
-            .parser_mut(parser_id)
-            .ok_or_else(|| signal("error", vec![Value::string("Missing tree-sitter parser")]))?;
-        let needs_parse = parser.tree.is_none() || parser.last_source.as_ref() != Some(&source);
-        if !needs_parse {
-            return Ok(None);
-        }
-
-        let old_tree = parser.tree.clone();
-        // Issue #131: feed the parser the exact Emacs bytes (see above).
-        let tree = parser
-            .parser
-            .parse(source.as_bytes(), parser.tree.as_ref())
-            .ok_or_else(|| treesit_parse_error(parser_value))?;
-        let ranges = if let Some(old_tree) = old_tree.as_ref() {
-            old_tree
-                .changed_ranges(&tree)
-                .map(|range| runtime::SourceByteRange::new(range.start_byte, range.end_byte))
-                .collect::<Vec<_>>()
-        } else if source.as_bytes().is_empty() {
-            Vec::new()
-        } else {
-            vec![runtime::SourceByteRange::new(0, source.as_bytes().len())]
-        };
-        parser.tree = Some(tree);
-        parser.last_source = Some(source);
-        parser.generation = parser.generation.saturating_add(1);
-        parser.last_changed_ranges = ranges.clone();
-        (Some(ranges), true)
-    };
-    if reparsed {
-        eval.treesit.clear_nodes_for_parser(parser_id);
-    }
-    Ok(changed_ranges)
+    ensure_parser_reparsed(eval, parser_id, ChangedRangeCollection::Collect)
 }
 
 fn expand_query_string(source: &str) -> String {
@@ -2286,6 +2331,7 @@ pub(crate) fn builtin_treesit_parser_set_included_ranges(
         })?;
     parser.tree = None;
     parser.last_source = None;
+    parser.freshness = ParserFreshness::Unparsed;
     parser.last_changed_ranges.clear();
     if !args[0].set_record_slot(runtime::PARSER_SLOT_INCLUDED_RANGES, args[1]) {
         return Err(signal(
@@ -3135,32 +3181,14 @@ pub(crate) fn builtin_treesit_linecol_cache(
 }
 
 #[cfg(test)]
+#[path = "treesit_freshness_test.rs"]
+mod freshness_tests;
+
+#[cfg(test)]
 mod tests {
+    use super::freshness_tests::eval_with_json_parser;
     use super::*;
     use crate::emacs_core::error::Flow;
-
-    fn eval_with_json_parser(text: &str) -> (super::super::eval::Context, Value) {
-        let mut eval = super::super::eval::Context::new();
-        eval.buffers
-            .current_buffer_mut()
-            .expect("current buffer")
-            .insert(text);
-        let language_sym = Value::symbol("json").as_symbol_id().expect("json symbol");
-        eval.treesit.cache_loaded_language(
-            language_sym,
-            runtime::LoadedLanguage {
-                language: Language::new(tree_sitter_json::LANGUAGE),
-                filename: None,
-                _library: None,
-            },
-        );
-        let parser = builtin_treesit_parser_create(
-            &mut eval,
-            vec![Value::symbol("json"), Value::NIL, Value::T, Value::NIL],
-        )
-        .expect("json parser");
-        (eval, parser)
-    }
 
     fn json_opening_bracket_node(eval: &mut super::super::eval::Context, parser: Value) -> Value {
         let root = builtin_treesit_parser_root_node(eval, vec![parser])

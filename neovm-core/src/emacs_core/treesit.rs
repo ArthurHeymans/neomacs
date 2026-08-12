@@ -8,7 +8,7 @@ use tree_sitter::{InputEdit, Language, Parser, Point, Query, QueryError, Tree, f
 
 use super::intern::SymId;
 use super::value::Value;
-use crate::buffer::{BufferId, EmacsBytePos, EmacsByteRange};
+use crate::buffer::{Buffer, BufferId, EmacsBytePos, EmacsByteRange};
 use crate::heap_types::LispString;
 
 pub(crate) const TREESIT_PARSER_TAG: &str = "treesit-parser";
@@ -56,6 +56,79 @@ pub(crate) struct SourceByteRange {
     end: usize,
 }
 
+/// Identity of the bytes visible to a parser at one point in time.
+///
+/// Tree-sitter does not consume text properties, so GNU's `chars_modiff`
+/// rather than the broader buffer modification tick is the correct content
+/// version.  The accessible bounds are part of the identity because parsers
+/// see the narrowed buffer, not necessarily the whole backing text.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ParserInputRevision {
+    chars_modified_tick: i64,
+    accessible_start_byte: EmacsBytePos,
+    accessible_end_byte: EmacsBytePos,
+}
+
+impl ParserInputRevision {
+    pub(crate) fn for_buffer(buffer: &Buffer) -> Self {
+        let accessible = buffer.accessible_emacs_byte_range();
+        Self {
+            chars_modified_tick: buffer.chars_modified_tick(),
+            accessible_start_byte: accessible.start(),
+            accessible_end_byte: accessible.end(),
+        }
+    }
+
+    fn accessible_byte_range(self) -> EmacsByteRange {
+        EmacsByteRange::new(self.accessible_start_byte, self.accessible_end_byte)
+    }
+}
+
+/// Whether a parser's tree can be reused, incrementally reparsed, or must be
+/// rebuilt.  Keeping this separate from `generation` prevents a buffer edit
+/// revision from being confused with the generation used to invalidate Lisp
+/// node handles.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ParserFreshness {
+    Unparsed,
+    Clean(ParserInputRevision),
+    IncrementalEditPending(ParserInputRevision),
+    FullReparseRequired,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ParserReparseKind {
+    Incremental,
+    Full,
+}
+
+impl ParserFreshness {
+    pub(crate) fn reparse_kind(
+        &mut self,
+        current: ParserInputRevision,
+    ) -> Option<ParserReparseKind> {
+        match *self {
+            Self::Clean(parsed) if parsed == current => None,
+            Self::IncrementalEditPending(edited) if edited == current => {
+                Some(ParserReparseKind::Incremental)
+            }
+            Self::Unparsed => Some(ParserReparseKind::Full),
+            Self::Clean(_) | Self::IncrementalEditPending(_) | Self::FullReparseRequired => {
+                *self = Self::FullReparseRequired;
+                Some(ParserReparseKind::Full)
+            }
+        }
+    }
+
+    fn accepts_incremental_edit(self, old: ParserInputRevision) -> bool {
+        matches!(
+            self,
+            Self::Clean(revision) | Self::IncrementalEditPending(revision)
+                if revision == old
+        )
+    }
+}
+
 impl SourceByteRange {
     pub(crate) const fn new(start: usize, end: usize) -> Self {
         Self { start, end }
@@ -79,6 +152,7 @@ pub(crate) struct ParserEntry {
     pub(crate) parser: Parser,
     pub(crate) tree: Option<Tree>,
     pub(crate) last_source: Option<LispString>,
+    pub(crate) freshness: ParserFreshness,
     pub(crate) generation: u64,
     pub(crate) need_to_gc_buffer: bool,
     pub(crate) deleted: bool,
@@ -317,10 +391,86 @@ unsafe fn copy_raw_query_match(raw: &ffi::TSQueryMatch) -> RawQueryMatch {
 
 #[derive(Clone, Copy)]
 struct PendingBufferEdit {
+    old_revision: ParserInputRevision,
+    point_tracking: ParserPointTracking,
     start_byte: usize,
     old_end_byte: usize,
     start_position: Point,
     old_end_position: Point,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ParserPointTracking {
+    BytesOnly,
+    LineAndColumn,
+}
+
+impl PendingBufferEdit {
+    fn for_buffer(
+        buffer: &Buffer,
+        byte_range: EmacsByteRange,
+        point_tracking: ParserPointTracking,
+    ) -> Self {
+        let old_revision = ParserInputRevision::for_buffer(buffer);
+        let visible = old_revision.accessible_byte_range();
+        let start = byte_range.start().max(visible.start()).min(visible.end());
+        let old_end = byte_range.end().max(visible.start()).min(visible.end());
+        Self {
+            old_revision,
+            point_tracking,
+            start_byte: start.get() - visible.start().get(),
+            old_end_byte: old_end.get() - visible.start().get(),
+            start_position: parser_point_at(buffer, visible.start(), start, point_tracking),
+            old_end_position: parser_point_at(buffer, visible.start(), old_end, point_tracking),
+        }
+    }
+
+    fn finish(
+        self,
+        buffer: &Buffer,
+        new_revision: ParserInputRevision,
+        new_end: EmacsBytePos,
+    ) -> Option<InputEdit> {
+        let old_visible = self.old_revision.accessible_byte_range();
+        if new_revision.accessible_start_byte != old_visible.start() {
+            return None;
+        }
+
+        // GNU leaves NEW_END unclipped because an insertion can grow the
+        // narrowed region.  Verify that the new restriction has exactly the
+        // size implied by this edit before reusing the old tree; a simultaneous
+        // restriction change instead takes the safe full-reparse path.
+        let new_end = new_end.max(old_visible.start());
+        let new_end_byte = new_end.get() - old_visible.start().get();
+        let old_visible_len = old_visible.len().get();
+        let deleted_len = self.old_end_byte.checked_sub(self.start_byte)?;
+        let inserted_len = new_end_byte.checked_sub(self.start_byte)?;
+        let expected_visible_len = old_visible_len
+            .checked_sub(deleted_len)?
+            .checked_add(inserted_len)?;
+        if new_revision.accessible_end_byte.get()
+            != old_visible
+                .start()
+                .get()
+                .checked_add(expected_visible_len)?
+        {
+            return None;
+        }
+
+        Some(InputEdit {
+            start_byte: self.start_byte,
+            old_end_byte: self.old_end_byte,
+            new_end_byte,
+            start_position: self.start_position,
+            old_end_position: self.old_end_position,
+            new_end_position: parser_point_at(
+                buffer,
+                old_visible.start(),
+                new_end,
+                self.point_tracking,
+            ),
+        })
+    }
 }
 
 #[derive(Default)]
@@ -406,6 +556,7 @@ impl TreeSitterManager {
                 parser,
                 tree: None,
                 last_source: None,
+                freshness: ParserFreshness::Unparsed,
                 generation: 0,
                 need_to_gc_buffer: false,
                 deleted: false,
@@ -568,42 +719,37 @@ impl TreeSitterManager {
     pub(crate) fn begin_buffer_edit(
         &mut self,
         buffer_id: BufferId,
-        source: &LispString,
+        buffer: &Buffer,
         byte_range: EmacsByteRange,
     ) {
         if !self.has_editable_tree(buffer_id) {
             return;
         }
-        let start_byte = byte_range.start().get();
-        let old_end_byte = byte_range.end().get();
+        let point_tracking = if self.linecol_caches.contains_key(&buffer_id) {
+            ParserPointTracking::LineAndColumn
+        } else {
+            // GNU passes its `(1, 0)` dummy TSPoint when this buffer did not opt
+            // into line and column tracking; byte offsets are sufficient for
+            // the common parser path and make preparing a keystroke O(1).
+            ParserPointTracking::BytesOnly
+        };
         self.pending_edits.insert(
             buffer_id,
-            PendingBufferEdit {
-                start_byte,
-                old_end_byte,
-                start_position: point_for_byte(source.as_bytes(), start_byte),
-                old_end_position: point_for_byte(source.as_bytes(), old_end_byte),
-            },
+            PendingBufferEdit::for_buffer(buffer, byte_range, point_tracking),
         );
     }
 
     pub(crate) fn finish_buffer_edit(
         &mut self,
         buffer_id: BufferId,
-        source: &LispString,
-        new_end_byte: usize,
+        buffer: &Buffer,
+        new_end_byte: EmacsBytePos,
     ) {
         let Some(edit) = self.pending_edits.remove(&buffer_id) else {
             return;
         };
-        let input_edit = InputEdit {
-            start_byte: edit.start_byte,
-            old_end_byte: edit.old_end_byte,
-            new_end_byte,
-            start_position: edit.start_position,
-            old_end_position: edit.old_end_position,
-            new_end_position: point_for_byte(source.as_bytes(), new_end_byte),
-        };
+        let new_revision = ParserInputRevision::for_buffer(buffer);
+        let input_edit = edit.finish(buffer, new_revision, new_end_byte);
 
         let mut edited_parser_ids = Vec::new();
         for (parser_id, parser) in &mut self.parsers {
@@ -611,7 +757,14 @@ impl TreeSitterManager {
                 continue;
             }
             if let Some(tree) = parser.tree.as_mut() {
-                tree.edit(&input_edit);
+                if parser.freshness.accepts_incremental_edit(edit.old_revision)
+                    && let Some(input_edit) = input_edit.as_ref()
+                {
+                    tree.edit(input_edit);
+                    parser.freshness = ParserFreshness::IncrementalEditPending(new_revision);
+                } else {
+                    parser.freshness = ParserFreshness::FullReparseRequired;
+                }
                 parser.generation = parser.generation.saturating_add(1);
                 parser.last_changed_ranges.clear();
                 edited_parser_ids.push(*parser_id);
@@ -625,42 +778,28 @@ impl TreeSitterManager {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+#[path = "treesit_test.rs"]
+mod tests;
 
-    #[test]
-    fn buffer_edit_without_tree_does_not_track_pending_edit() {
-        crate::test_utils::init_test_tracing();
-        let mut manager = TreeSitterManager::new();
-        let buffer_id = BufferId(7);
-        let source = LispString::from_utf8("alpha\nbeta\ngamma\n");
-
-        manager.begin_buffer_edit(
-            buffer_id,
-            &source,
-            EmacsByteRange::new(
-                EmacsBytePos::new(source.sbytes()),
-                EmacsBytePos::new(source.sbytes()),
-            ),
-        );
-
-        assert!(manager.pending_edits.is_empty());
+fn parser_point_at(
+    buffer: &Buffer,
+    visible_start: EmacsBytePos,
+    target: EmacsBytePos,
+    tracking: ParserPointTracking,
+) -> Point {
+    if tracking == ParserPointTracking::BytesOnly {
+        // GNU `TREESIT_TS_POINT_1_0` (`treesit.c`) is deliberately distinct
+        // from the real first-byte coordinate `(0, 0)`.
+        return Point::new(1, 0);
     }
-}
-
-fn point_for_byte(source: &[u8], byte_offset: usize) -> Point {
-    let target = byte_offset.min(source.len());
-    let mut row = 0usize;
-    let mut last_newline = 0usize;
-    for (idx, byte) in source.iter().enumerate().take(target) {
-        if *byte == b'\n' {
-            row += 1;
-            last_newline = idx + 1;
-        }
-    }
+    let target = target.max(visible_start);
+    let row = buffer.count_newlines_emacs_byte(visible_start, target);
+    let line_start = buffer
+        .prev_newline_emacs_byte(target, visible_start)
+        .map_or(visible_start.get(), |newline| newline.get() + 1);
     Point {
         row,
-        column: target.saturating_sub(last_newline),
+        column: target.get().saturating_sub(line_start),
     }
 }
 

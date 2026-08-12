@@ -231,14 +231,20 @@ fn run_named_hook_without_reset(
     Ok(())
 }
 
-/// GNU `signal_before_change(beg, end)` — run `before-change-functions` and
-/// overlay `modification-hooks` before a buffer modification.
-///
-/// `byte_range` is a 0-based Emacs-byte range.  It is converted to 1-based
-/// character positions for the Lisp hooks.
-pub(crate) fn signal_before_change(
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BufferChangeKind {
+    Characters,
+    PropertiesOnly,
+}
+
+/// GNU `signal_before_change(beg, end)` plus an explicit distinction between
+/// character input consumed by Tree-sitter and property-only modifications.
+/// `byte_range` is 0-based Emacs bytes and is converted to 1-based character
+/// positions for Lisp hooks.
+fn signal_before_change_with_kind(
     ctx: &mut crate::emacs_core::eval::Context,
     byte_range: EmacsByteRange,
+    kind: BufferChangeKind,
 ) -> Result<(), Flow> {
     // GNU `prepare_to_modify_buffer_1` (insdel.c): the *first* action is
     // `Fbarf_if_buffer_read_only`, which signals `buffer-read-only` when the
@@ -290,6 +296,20 @@ pub(crate) fn signal_before_change(
         }
     }
 
+    let Some(current_id) = ctx.buffers.current_buffer_id() else {
+        return Ok(());
+    };
+    let beg = byte_range.start();
+    let end = byte_range.end();
+
+    if kind == BufferChangeKind::Characters
+        && ctx.treesit.has_editable_tree(current_id)
+        && let Some(buf) = ctx.buffers.get(current_id)
+    {
+        ctx.treesit
+            .begin_buffer_edit(current_id, buf, EmacsByteRange::ordered(beg, end));
+    }
+
     if inhibit_modification_hooks(ctx) {
         return Ok(());
     }
@@ -299,20 +319,6 @@ pub(crate) fn signal_before_change(
     // before-change-functions.  Text edits already converge here, so the lock
     // transition remains complete without being duplicated across producers.
     super::filelock::lock_current_buffer_before_change(ctx)?;
-
-    let Some(current_id) = ctx.buffers.current_buffer_id() else {
-        return Ok(());
-    };
-    let beg = byte_range.start();
-    let end = byte_range.end();
-
-    if ctx.treesit.has_editable_tree(current_id)
-        && let Some(buf) = ctx.buffers.get(current_id)
-    {
-        let source = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
-        ctx.treesit
-            .begin_buffer_edit(current_id, &source, EmacsByteRange::ordered(beg, end));
-    }
 
     crate::emacs_core::textprop::prepare_interval_modification_for_change(
         ctx, current_id, beg, end,
@@ -363,7 +369,32 @@ pub(crate) fn signal_before_text_change(
     ctx: &mut crate::emacs_core::eval::Context,
     change: TextChange,
 ) -> Result<(), Flow> {
-    signal_before_change(ctx, change.before_byte_range())?;
+    signal_before_change_with_kind(
+        ctx,
+        change.before_byte_range(),
+        BufferChangeKind::Characters,
+    )?;
+    deactivate_mark_after_preparing_change(ctx);
+    Ok(())
+}
+
+/// Run GNU's modification-hook protocol for a text-property-only change.
+/// Tree-sitter consumes characters, not properties, so this deliberately does
+/// not create an incremental parser edit.
+pub(crate) fn signal_before_property_change(
+    ctx: &mut crate::emacs_core::eval::Context,
+    change: TextChange,
+) -> Result<(), Flow> {
+    signal_before_change_with_kind(
+        ctx,
+        change.before_byte_range(),
+        BufferChangeKind::PropertiesOnly,
+    )?;
+    deactivate_mark_after_preparing_change(ctx);
+    Ok(())
+}
+
+fn deactivate_mark_after_preparing_change(ctx: &mut crate::emacs_core::eval::Context) {
     // GNU `prepare_to_modify_buffer_1` (insdel.c) unconditionally runs
     // `Fset (Qdeactivate_mark, Qt)` after signaling before-change. Because
     // `deactivate-mark` is buffer-local-when-set, this creates a buffer-local
@@ -372,7 +403,6 @@ pub(crate) fn signal_before_text_change(
         crate::emacs_core::intern::intern("deactivate-mark"),
         Value::T,
     );
-    Ok(())
 }
 
 /// GNU `signal_after_change(beg, end, old_len)` — run `after-change-functions`
@@ -384,6 +414,15 @@ pub(crate) fn signal_after_change(
     ctx: &mut crate::emacs_core::eval::Context,
     byte_range: EmacsByteRange,
     old_len: CharLen,
+) -> Result<(), Flow> {
+    signal_after_change_with_kind(ctx, byte_range, old_len, BufferChangeKind::Characters)
+}
+
+fn signal_after_change_with_kind(
+    ctx: &mut crate::emacs_core::eval::Context,
+    byte_range: EmacsByteRange,
+    old_len: CharLen,
+    kind: BufferChangeKind,
 ) -> Result<(), Flow> {
     let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Ok(());
@@ -404,11 +443,13 @@ pub(crate) fn signal_after_change(
         evaporate_emptied_overlays_at(ctx, current_id, byte_range.start());
     }
 
+    if kind == BufferChangeKind::Characters {
+        finish_treesit_after_buffer_change(ctx, current_id, byte_range.start(), byte_range.end());
+    }
+
     if inhibit_modification_hooks(ctx) {
         return Ok(());
     }
-
-    finish_treesit_after_buffer_change(ctx, current_id, byte_range.start(), byte_range.end());
 
     // GNU `signal_after_change` (insdel.c:2390) defers `after-change-functions`
     // to `combine-after-change-execute` when:
@@ -517,7 +558,24 @@ pub(crate) fn signal_after_text_change(
     ctx: &mut crate::emacs_core::eval::Context,
     change: TextChange,
 ) -> Result<(), Flow> {
-    signal_after_change(ctx, change.after_byte_range(), change.old_char_len())
+    signal_after_change_with_kind(
+        ctx,
+        change.after_byte_range(),
+        change.old_char_len(),
+        BufferChangeKind::Characters,
+    )
+}
+
+pub(crate) fn signal_after_property_change(
+    ctx: &mut crate::emacs_core::eval::Context,
+    change: TextChange,
+) -> Result<(), Flow> {
+    signal_after_change_with_kind(
+        ctx,
+        change.after_byte_range(),
+        change.old_char_len(),
+        BufferChangeKind::PropertiesOnly,
+    )
 }
 
 /// Insert process or subsystem output into BUFFER-ID as one semantic edit.
@@ -617,9 +675,7 @@ fn finish_treesit_after_buffer_change(
     if ctx.treesit.has_pending_edit(buffer_id)
         && let Some(buf) = ctx.buffers.get(buffer_id)
     {
-        let source = buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range());
-        ctx.treesit
-            .finish_buffer_edit(buffer_id, &source, end.get());
+        ctx.treesit.finish_buffer_edit(buffer_id, buf, end);
     }
 }
 

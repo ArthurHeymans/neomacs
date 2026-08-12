@@ -1285,7 +1285,7 @@ fn begin_buffer_text_property_change(
         buf_id,
         byte_range,
     )?;
-    super::editfns::signal_before_text_change(eval, change)?;
+    super::editfns::signal_before_property_change(eval, change)?;
     Ok((saved_current, change))
 }
 
@@ -1294,7 +1294,7 @@ fn finish_buffer_text_property_change(
     saved_current: Option<BufferId>,
     change: crate::buffer::TextChange,
 ) -> Result<(), Flow> {
-    let result = super::editfns::signal_after_text_change(eval, change);
+    let result = super::editfns::signal_after_property_change(eval, change);
     if let Some(saved) = saved_current {
         eval.restore_current_buffer_if_live(saved);
     }
