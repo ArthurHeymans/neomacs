@@ -5028,7 +5028,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "get-truename-buffer",
-        |_ctx, args| super::fileio::builtin_get_truename_buffer(args),
+        super::buffer::builtin_get_truename_buffer,
         1,
         Some(1),
     );

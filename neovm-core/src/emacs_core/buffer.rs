@@ -426,6 +426,41 @@ pub(crate) fn builtin_buffer_live_p(
     }
 }
 
+/// GNU `Fget_truename_buffer` (src/buffer.c:524-539): the first live buffer
+/// whose `buffer-file-truename` is `string-equal` to FILENAME, else nil.
+///
+/// GNU compares with `Fstring_equal`, which never expands or canonicalizes
+/// either side — `find-file` has already stored the truename — so this is a
+/// plain byte comparison, unlike `get-file-buffer`'s resolving search.
+pub(crate) fn builtin_get_truename_buffer(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args("get-truename-buffer", &args, 1)?;
+    for id in eval.buffers.buffer_list() {
+        let Some(buf) = eval.buffers.get(id) else {
+            continue;
+        };
+        // GNU skips buffers whose file_truename is not a string BEFORE
+        // calling Fstring_equal, so a non-string FILENAME only signals once
+        // some live buffer visits a file.
+        let Some(truename) = buf
+            .buffer_local_value("buffer-file-truename")
+            .and_then(|value| value.as_lisp_string())
+        else {
+            continue;
+        };
+        let filename = expect_lisp_string(&args[0])?;
+        if truename.schars() == filename.schars()
+            && truename.sbytes() == filename.sbytes()
+            && truename.as_bytes() == filename.as_bytes()
+        {
+            return Ok(Value::make_buffer(id));
+        }
+    }
+    Ok(Value::NIL)
+}
+
 pub(crate) fn builtin_get_file_buffer(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -5337,3 +5372,7 @@ pub(crate) fn builtin_overlay_properties_in_buffers(
         overlay.as_overlay_data().map_or(Value::NIL, |d| d.plist),
     ])
 }
+
+#[cfg(test)]
+#[path = "buffer_test.rs"]
+mod tests;
