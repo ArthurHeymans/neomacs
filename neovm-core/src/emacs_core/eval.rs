@@ -12476,7 +12476,20 @@ impl Context {
         let dedup = entry.should_deduplicate();
         let entry = entry.into_lisp_value();
         let current_load_list = self.visible_variable_value_or_nil("current-load-list");
-        if !Self::current_load_list_is_file_context(current_load_list) {
+        // GNU Frequire (fns.c) computes `from_file = load_in_progress` first
+        // and only falls back to walking Vcurrent_load_list for the last
+        // string element when no load is running (eval-buffer of a file).
+        // During a load, `load-in-progress` is specbound t exactly while
+        // `current-load-list` is bound to (filename), so the truthy check is
+        // an O(1) equivalent of the walk. Without it, every recorded entry
+        // re-walked the whole accumulated list — O(n^2) across a file with n
+        // definitions (measured ~20% of the load of an 8000-form autoload
+        // file, GNU LOADHIST_ATTACH is an unconditional O(1) prepend).
+        let in_file_context = self
+            .visible_variable_value_or_nil("load-in-progress")
+            .is_truthy()
+            || Self::current_load_list_is_file_context(current_load_list);
+        if !in_file_context {
             return;
         }
 
