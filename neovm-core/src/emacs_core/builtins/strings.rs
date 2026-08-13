@@ -13,6 +13,7 @@ use malachite::base::num::conversion::traits::{FromStringBase, RoundingFrom, ToS
 use malachite::base::rounding_modes::RoundingMode;
 use malachite::integer::Integer;
 use native_regex::Regex as NativeRegex;
+use std::sync::LazyLock;
 
 // ===========================================================================
 // String operations
@@ -515,6 +516,32 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
     })
 }
 
+struct DecimalNumberPrefixRegexes {
+    special_float: NativeRegex,
+    number: NativeRegex,
+}
+
+/// The immutable parser machinery for GNU's base-10 numeric-prefix grammar.
+///
+/// GNU `string_to_number` (`src/lread.c`) scans this grammar directly.  Keep
+/// the existing `regex` implementation, but compile its DFAs exactly once for
+/// the process instead of once per Lisp call.  M-x completion calls
+/// `string-to-number` repeatedly while filtering obsolete command versions,
+/// so per-call construction turns an otherwise linear scan into repeated regex
+/// compilation.
+fn decimal_number_prefix_regexes() -> &'static DecimalNumberPrefixRegexes {
+    static REGEXES: LazyLock<DecimalNumberPrefixRegexes> =
+        LazyLock::new(|| DecimalNumberPrefixRegexes {
+            special_float: NativeRegex::new(
+                r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)[eE]\+(?:INF|NaN)",
+            )
+            .expect("special float prefix regexp should compile"),
+            number: NativeRegex::new(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+                .expect("number prefix regexp should compile"),
+        });
+    &REGEXES
+}
+
 pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
     expect_min_args("string-to-number", &args, 1)?;
     expect_max_args("string-to-number", &args, 2)?;
@@ -534,10 +561,8 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
 
     let s = s.trim_start_matches([' ', '\t']);
     if base == 10 {
-        let special_float =
-            NativeRegex::new(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)[eE]\+(?:INF|NaN)")
-                .expect("special float prefix regexp should compile");
-        if let Some(m) = special_float.find(s)
+        let regexes = decimal_number_prefix_regexes();
+        if let Some(m) = regexes.special_float.find(s)
             && let Some(f) = crate::emacs_core::value_reader::parse_emacs_special_float(m.as_str())
         {
             return Ok(Value::make_float(f));
@@ -547,10 +572,7 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
         // A number is float if it has digits after the decimal point (TRAIL_INT)
         // OR if it has leading digits and an exponent (LEAD_INT & E_EXP).
         // "100." is integer (no trailing digits), "100.0" is float, "1e10" is float.
-        let number_prefix =
-            NativeRegex::new(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
-                .expect("number prefix regexp should compile");
-        if let Some(m) = number_prefix.find(s) {
+        if let Some(m) = regexes.number.find(s) {
             let token = m.as_str();
             // Emacs float_syntax: trail_int || (lead_int && e_exp)
             // trail_int = has digits after '.'

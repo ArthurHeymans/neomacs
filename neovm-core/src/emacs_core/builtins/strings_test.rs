@@ -12,6 +12,21 @@ fn put_string_property(
     table.put_property_in_char_range(CharRange::from_usize(start, end), name, value)
 }
 
+/// GNU `string_to_number` (`src/lread.c`) scans a numeric prefix directly;
+/// it does not rebuild parser machinery for every obsolete-command version
+/// inspected by M-x completion.  Neomacs keeps the established `regex` parser,
+/// but the two immutable patterns must have process-wide ownership so repeated
+/// calls cannot recompile their DFAs.
+#[test]
+fn string_to_number_reuses_process_wide_prefix_regexes() {
+    let first = decimal_number_prefix_regexes();
+    let second = decimal_number_prefix_regexes();
+
+    assert!(std::ptr::eq(first, second));
+    assert!(first.special_float.is_match("1.0e+INF"));
+    assert!(first.number.is_match("-12.5tail"));
+}
+
 /// GNU `styled_format` (editfns.c) replaces a SYMBOL argument with
 /// `SYMBOL_NAME (arg)` -- the symbol's actual name STRING object -- before it
 /// decides anything else, so from that point the argument IS a string and its
