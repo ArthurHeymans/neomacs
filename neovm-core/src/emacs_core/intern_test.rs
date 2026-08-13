@@ -40,6 +40,19 @@ fn dense_name_to_symbol_cache_uses_raw_u32_slots() {
 }
 
 #[test]
+fn immutable_symbol_name_resolution_reads_the_registry_once_per_thread() {
+    crate::test_utils::init_test_tracing();
+    let symbol = intern("immutable-name-cache-registry-read-probe");
+
+    reset_resolve_sym_lisp_string_registry_reads();
+    for _ in 0..64 {
+        std::hint::black_box(resolve_sym_lisp_string(symbol));
+    }
+
+    assert_eq!(resolve_sym_lisp_string_registry_reads(), 1);
+}
+
+#[test]
 fn name_to_symbol_cache_round_trips_nonzero_ids() {
     let name_id = NameId(7);
     let sym_id = SymId(11);

@@ -1759,17 +1759,17 @@ pub(crate) struct CompletionCandidate {
 
 #[derive(Clone)]
 enum CompletionText {
-    OriginalString {
+    /// An exact GC-owned Lisp string. This covers literal collection entries
+    /// and Lisp-created symbol names; both must preserve object identity,
+    /// mutation, text properties, and multibyteness like GNU.
+    LispObject {
         value: Value,
         string: crate::heap_types::LispString,
     },
-    /// Symbol name backed by the append-only global interner. Storing the
-    /// static reference avoids a per-candidate registry lock + deep string
-    /// copy — with tens of thousands of obarray symbols per try-completion
-    /// call that copying dominated imageless bootstrap.
-    Interned {
-        string: &'static crate::heap_types::LispString,
-    },
+    /// Process-lifetime atom for a symbol that genuinely has no Lisp name
+    /// object. Kept as a thin reference so ordinary obarray candidates stay
+    /// compact.
+    Atom(&'static crate::heap_types::LispString),
     Generated {
         string: crate::heap_types::LispString,
     },
@@ -1778,22 +1778,22 @@ enum CompletionText {
 impl CompletionText {
     fn lisp_string(&self) -> &crate::heap_types::LispString {
         match self {
-            Self::OriginalString { string, .. } | Self::Generated { string } => string,
-            Self::Interned { string } => string,
+            Self::LispObject { string, .. } | Self::Generated { string } => string,
+            Self::Atom(string) => string,
         }
     }
 
     fn as_result_value(&self) -> Value {
         match self {
-            Self::OriginalString { value, .. } => *value,
-            Self::Interned { string } => Value::heap_string((*string).clone()),
+            Self::LispObject { value, .. } => *value,
+            Self::Atom(string) => Value::heap_string((*string).clone()),
             Self::Generated { string } => Value::heap_string(string.clone()),
         }
     }
 
     fn substring_value(&self, end_chars: usize) -> Value {
         match self {
-            Self::OriginalString { value, string } if end_chars >= string.schars() => *value,
+            Self::LispObject { value, string } if end_chars >= string.schars() => *value,
             _ => {
                 let string = self.lisp_string();
                 let end_chars = end_chars.min(string.schars());
@@ -1812,8 +1812,8 @@ impl CompletionText {
 
     fn searched_string(&self) -> super::regex::SearchedString {
         match self {
-            Self::OriginalString { value, .. } => super::regex::SearchedString::Heap(*value),
-            Self::Interned { string } => super::regex::SearchedString::Owned((*string).clone()),
+            Self::LispObject { value, .. } => super::regex::SearchedString::Heap(*value),
+            Self::Atom(string) => super::regex::SearchedString::Owned((*string).clone()),
             Self::Generated { string } => super::regex::SearchedString::Owned(string.clone()),
         }
     }
@@ -1825,14 +1825,14 @@ fn completion_text_from_value(value: &Value) -> Option<CompletionText> {
             value
                 .as_lisp_string()
                 .cloned()
-                .map(|string| CompletionText::OriginalString {
+                .map(|string| CompletionText::LispObject {
                     value: *value,
                     string,
                 })
         }
-        ValueKind::Symbol(id) => Some(CompletionText::Interned {
-            string: crate::emacs_core::intern::resolve_sym_lisp_string(id),
-        }),
+        ValueKind::Symbol(id) => Some(completion_text_from_symbol_name(
+            crate::emacs_core::intern::resolve_lisp_visible_symbol_name(id),
+        )),
         ValueKind::Nil => Some(CompletionText::Generated {
             string: crate::heap_types::LispString::from_utf8("nil"),
         }),
@@ -1840,6 +1840,19 @@ fn completion_text_from_value(value: &Value) -> Option<CompletionText> {
             string: crate::heap_types::LispString::from_utf8("t"),
         }),
         _ => None,
+    }
+}
+
+fn completion_text_from_symbol_name(
+    name: crate::emacs_core::intern::LispVisibleSymbolName,
+) -> CompletionText {
+    match name {
+        crate::emacs_core::intern::LispVisibleSymbolName::LispObject { value, string } => {
+            CompletionText::LispObject { value, string }
+        }
+        crate::emacs_core::intern::LispVisibleSymbolName::Atom(string) => {
+            CompletionText::Atom(string)
+        }
     }
 }
 
@@ -2035,15 +2048,20 @@ fn completion_candidates_from_global_obarray_in_state(
     obarray: &Obarray,
     lisp_obarray: Value,
 ) -> Vec<CompletionCandidate> {
-    super::builtins::symbols::global_obarray_symbols_in_bucket_order(obarray, lisp_obarray)
+    let symbols =
+        super::builtins::symbols::global_obarray_symbols_in_bucket_order(obarray, lisp_obarray);
+    let names = crate::emacs_core::intern::resolve_lisp_visible_symbol_names(symbols.iter().map(
+        |symbol| {
+            symbol
+                .as_symbol_id()
+                .expect("global obarray entries are symbols")
+        },
+    ));
+    symbols
         .into_iter()
-        .map(|sym| CompletionCandidate {
-            completion: CompletionText::Interned {
-                string: crate::emacs_core::intern::resolve_sym_lisp_string(
-                    sym.as_symbol_id()
-                        .expect("global obarray entries are symbols"),
-                ),
-            },
+        .zip(names)
+        .map(|(sym, name)| CompletionCandidate {
+            completion: completion_text_from_symbol_name(name),
             predicate_arg: sym,
             predicate_extra_arg: None,
         })
@@ -2490,7 +2508,7 @@ fn completion_string_matches_regexps(
 fn completion_candidates_root_holder(candidates: &[CompletionCandidate]) -> Value {
     let mut holder = Value::NIL;
     for candidate in candidates.iter().rev() {
-        if let CompletionText::OriginalString { value, .. } = &candidate.completion {
+        if let CompletionText::LispObject { value, .. } = &candidate.completion {
             holder = Value::cons(*value, holder);
         }
         if candidate.predicate_arg.is_heap_object() {

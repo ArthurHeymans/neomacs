@@ -1,8 +1,6 @@
 use super::*;
 use crate::buffer::BufferId;
-use crate::emacs_core::intern::{
-    intern, reset_resolve_sym_lisp_string_registry_reads, resolve_sym_lisp_string_registry_reads,
-};
+use crate::emacs_core::intern::intern;
 use crate::heap_types::LispString;
 
 fn ls(text: &str) -> LispString {
@@ -1665,28 +1663,34 @@ fn value_to_string_list_from_vector() {
     assert_eq!(result, vec!["a", "b"]);
 }
 
+/// GNU `Fall_completions` converts symbol candidates with `Fsymbol_name`
+/// (`src/minibuf.c`), so completion observes the exact mutable Lisp string
+/// stored in the symbol rather than the immutable atom used for identity.
 #[test]
-fn all_completions_reuses_one_immutable_symbol_name_lookup() {
+fn symbol_completion_observes_the_lisp_visible_mutated_name() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
-    let symbol = Value::from_sym_id(intern("completion-repeated-symbol-name-work"));
-    let occurrence_count = 64;
-    let collection = Value::list(vec![symbol; occurrence_count]);
-
-    reset_resolve_sym_lisp_string_registry_reads();
-    let result = builtin_all_completions(&mut eval, vec![Value::string(""), collection])
-        .expect("all-completions");
+    let result = eval
+        .eval_str(
+            r##"(let* ((symbol (make-symbol "foo"))
+         (name (symbol-name symbol))
+         (global-name (copy-sequence "global-completion-name-probe"))
+         (global-symbol (intern global-name)))
+    (aset name 0 ?b)
+    (aset global-name 0 ?X)
+    (format "%S"
+            (list (all-completions "b" (list symbol))
+                  (try-completion "b" (list symbol))
+                  (test-completion "boo" (list symbol))
+                  (all-completions "f" (list symbol))
+                  (all-completions "Xlobal-completion-name-probe"
+                                   obarray))))"##,
+        )
+        .expect("mutable symbol-name completion program");
 
     assert_eq!(
-        crate::emacs_core::value::list_to_vec(&result)
-            .expect("completion result list")
-            .len(),
-        occurrence_count
-    );
-    assert_eq!(
-        resolve_sym_lisp_string_registry_reads(),
-        1,
-        "one immutable symbol name should require at most one registry read per thread"
+        result.as_utf8_str(),
+        Some("((\"boo\") \"boo\" t nil (\"Xlobal-completion-name-probe\"))")
     );
 }
 

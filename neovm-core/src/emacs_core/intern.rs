@@ -356,6 +356,24 @@ enum NewSymbolName {
     LispObject(SymbolNameValue),
 }
 
+/// The Lisp-visible name of a symbol, keeping GNU's two ownership cases
+/// distinct at the type boundary.
+///
+/// Lisp-created symbols retain the exact mutable string object supplied to
+/// `intern` or `make-symbol`. Symbols synthesized by the reader, dumper, or
+/// Rust bootstrap have only a process-lifetime immutable name atom. Callers
+/// must not silently substitute the atom when an object exists: GNU
+/// `symbol-name` and every primitive built on it observe later mutation of the
+/// object.
+#[derive(Clone)]
+pub(crate) enum LispVisibleSymbolName {
+    LispObject {
+        value: TaggedValue,
+        string: LispString,
+    },
+    Atom(&'static LispString),
+}
+
 impl NewSymbolName {
     /// Adopt a Lisp string object as a new symbol's name, as GNU's
     /// `Fmake_symbol (string)` does.
@@ -552,6 +570,19 @@ impl SymbolRegistry {
         (crate::tagged::gc::current_tagged_heap_identity().map(SymbolNameHeapId)
             == Some(name_value.heap_id))
         .then_some(name_value.value)
+    }
+
+    #[inline]
+    fn resolve_lisp_visible_name(&self, id: SymId) -> LispVisibleSymbolName {
+        if let Some(value) = self.resolve_name_value(id) {
+            let string = value
+                .as_lisp_string()
+                .expect("a registered symbol name object remains a string")
+                .clone();
+            LispVisibleSymbolName::LispObject { value, string }
+        } else {
+            LispVisibleSymbolName::Atom(self.resolve_lisp_string(id))
+        }
     }
 
     #[inline]
@@ -1019,6 +1050,30 @@ pub fn resolve_sym_lisp_name(id: SymId) -> &'static LispString {
     resolve_sym_name_value(id)
         .and_then(|name_value| name_value.as_lisp_string())
         .unwrap_or_else(|| resolve_sym_lisp_string(id))
+}
+
+/// Resolve one symbol name with the exact object-vs-atom distinction visible
+/// to GNU Lisp primitives.
+#[inline]
+pub(crate) fn resolve_lisp_visible_symbol_name(id: SymId) -> LispVisibleSymbolName {
+    global_symbol_registry()
+        .read()
+        .resolve_lisp_visible_name(id)
+}
+
+/// Resolve a set of Lisp-visible symbol names under one registry read lock.
+///
+/// GNU stores the name directly in each symbol, so an obarray scan performs no
+/// global lock acquisition per candidate. Keeping the lock inside this batch
+/// boundary gives Neomacs the same O(1)-lock scan shape while retaining the
+/// rare GC-owned name objects required for exact `symbol-name` semantics.
+pub(crate) fn resolve_lisp_visible_symbol_names(
+    ids: impl IntoIterator<Item = SymId>,
+) -> Vec<LispVisibleSymbolName> {
+    let registry = global_symbol_registry().read();
+    ids.into_iter()
+        .map(|id| registry.resolve_lisp_visible_name(id))
+        .collect()
 }
 
 #[inline]
