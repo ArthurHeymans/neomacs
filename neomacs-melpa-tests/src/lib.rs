@@ -2901,6 +2901,13 @@ pub const PACKAGE_LINT_MELPA_PIN: (&str, &str) = ("package-lint", "20260619.1246
 /// `8cb72fa5dcc0d98746c680043dc121edc7621e3a`.
 pub const POLYMODE_MELPA_PIN: (&str, &str) = ("polymode", "20260505.1803");
 
+/// The final standalone Csharp Mode package selected for practical automatic
+/// file activation, C# font-lock, indentation, brace editing, defun/statement
+/// navigation, compilation diagnostics, and malformed-string recovery parity.
+/// MELPA built this archive from upstream commit
+/// `d8b058c9e9d0429ea7e81d121ce19b064bd7e0f5` before the mode moved into Emacs.
+pub const CSHARP_MODE_MELPA_PIN: (&str, &str) = ("csharp-mode", "20221126.2005");
+
 /// The exact CSV Mode release selected from GNU ELPA by the practical quoted
 /// row, column editing, sorting, alignment, and transpose parity corpus.
 pub const CSV_MODE_GNU_ELPA_PIN: (&str, &str) = ("csv-mode", "1.27");

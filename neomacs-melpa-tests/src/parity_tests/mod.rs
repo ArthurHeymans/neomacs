@@ -307,6 +307,7 @@ mod consult;
 mod corfu;
 mod counsel;
 mod counsel_projectile;
+mod csharp_mode;
 mod csv_mode;
 mod ctable;
 mod cython_mode;
