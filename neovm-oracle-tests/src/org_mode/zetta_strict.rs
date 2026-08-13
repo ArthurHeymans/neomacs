@@ -11,7 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn zetta_all_deadline_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* H\nDEADLINE: <2012-03-29 Thu>\" \"* H\nDEADLINE: <2014-03-04 Tue>\" \"* H\nDEADLINE: <2012-03-29 Thu +2y>\" \"* H\n\")""#
+        r#""OK (\"* H\\nDEADLINE: <2012-03-29 Thu>\" \"* H\\nDEADLINE: <2014-03-04 Tue>\" \"* H\\nDEADLINE: <2012-03-29 Thu +2y>\" \"* H\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -43,7 +43,7 @@ fn zetta_all_deadline_combinations() {
 fn zetta_all_schedule_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* H\nSCHEDULED: <2012-03-29 Thu>\" \"* H\nSCHEDULED: <2014-03-04 Tue>\" \"* H\nSCHEDULED: <2012-03-29 Thu +2y>\" \"* H\n\")""#
+        r#""OK (\"* H\\nSCHEDULED: <2012-03-29 Thu>\" \"* H\\nSCHEDULED: <2014-03-04 Tue>\" \"* H\\nSCHEDULED: <2012-03-29 Thu +2y>\" \"* H\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -75,7 +75,7 @@ fn zetta_all_schedule_combinations() {
 fn zetta_all_set_property_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\":PROPERTIES:\n:TEST: t\n:END:\n\" \"* H\n:PROPERTIES:\n:TEST: t\n:END:\n\")""#
+        r#""OK (\":PROPERTIES:\\n:TEST: t\\n:END:\\n\" \"* H\\n:PROPERTIES:\\n:TEST: t\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -104,7 +104,7 @@ fn zetta_all_set_property_combinations() {
 fn zetta_all_delete_property_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (\"\" \":PROPERTIES:\n:TEST1: t\n:END:\" \"* H\n\")""#]];
+        expect_test::expect![[r#""OK (\"\" \":PROPERTIES:\\n:TEST1: t\\n:END:\" \"* H\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -172,7 +172,7 @@ fn zetta_all_entry_get_combinations() {
 fn zetta_all_entry_put_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#(\"* TODO H\" 0 8 (org-todo-head \"TODO\")) #(\"* H\" 0 3 (org-todo-head nil)) \"* [#A] H\" \"* H\n:PROPERTIES:\n:A:        2\n:END:\" \"* H\n:PROPERTIES:\n:A:        1\n:END:\n\")""#
+        r#""OK (#(\"* TODO H\" 0 8 (org-todo-head \"TODO\")) #(\"* H\" 0 3 (org-todo-head nil)) \"* [#A] H\" \"* H\\n:PROPERTIES:\\n:A:        2\\n:END:\" \"* H\\n:PROPERTIES:\\n:A:        1\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -252,7 +252,8 @@ fn zetta_all_clock_table_combinations() {
 #[test]
 fn zetta_all_footnote_action_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Text[fn:1]\n\n* Footnotes\n\n[fn:1] \n\" nil)""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"Text[fn:1]\\n\\n* Footnotes\\n\\n[fn:1] \\n\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -590,7 +591,7 @@ fn zetta_all_archive_subtree_combinations() {
 fn zetta_all_datetree_find_date_create_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\" \"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\")""#
+        r#""OK (\"* 2012\\n\\n** 2012-03 March\\n\\n*** 2012-03-29 Thursday\" \"* 2012\\n\\n** 2012-03 March\\n\\n*** 2012-03-29 Thursday\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

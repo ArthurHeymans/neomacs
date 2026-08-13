@@ -53,7 +53,7 @@ fn oracle_prop_interactive_form_extraction() {
     (fmakunbound 'neovm--test-if-noninteractive)))
 "#;
     let expect = expect_test::expect![[
-        r#""OK ((interactive nil) (interactive \"p\") (interactive (list 1 2)) (interactive \"sEnter: \nnNumber: \") nil (interactive nil) nil t t)""#
+        r#""OK ((interactive nil) (interactive \"p\") (interactive (list 1 2)) (interactive \"sEnter: \\nnNumber: \") nil (interactive nil) nil t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -298,7 +298,7 @@ fn oracle_prop_interactive_multi_arg_specs() {
     (fmakunbound 'neovm--test-multi4)))
 "#;
     let expect = expect_test::expect![[
-        r#""OK (t t t t (interactive \"sString: \nnNumber: \") (interactive \"nFirst: \nnSecond: \nnThird: \") (interactive \"r\nsReplace with: \") (interactive \"p\nsInput: \") (\"hello\" 42) 6 (1 10 \"replacement\") (4 \"test\"))""#
+        r#""OK (t t t t (interactive \"sString: \\nnNumber: \") (interactive \"nFirst: \\nnSecond: \\nnThird: \") (interactive \"r\\nsReplace with: \") (interactive \"p\\nsInput: \") (\"hello\" 42) 6 (1 10 \"replacement\") (4 \"test\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

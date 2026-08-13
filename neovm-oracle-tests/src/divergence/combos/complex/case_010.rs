@@ -280,7 +280,7 @@ fn div_cx10_process_filter_partial_data() {
 #[test]
 fn div_cx10_set_process_filter_to_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"FILTER:data\n\" \"nofilter\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"FILTER:data\\n\" \"nofilter\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

@@ -56,7 +56,7 @@ fn advice_member_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (#[128 \"\\304\\300\\301\u{3}#\\207\" [#[(orig x) ((funcall orig (1+ x))) (t)] #[(x) (x) (t)] :around nil apply] 5 advice] 11)""#
+        r#""OK (#[128 \"���\u{3}#�\" [#[(orig x) ((funcall orig (1+ x))) (t)] #[(x) (x) (t)] :around nil apply] 5 advice] 11)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(defun neo-adv3 (x) x)
@@ -123,7 +123,7 @@ fn method_specializers() {
 fn flush_keep_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"bar2\nbaz4\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"bar2\\nbaz4\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "foo1\nbar2\nfoo3\nbaz4\nfoo5\n")
@@ -151,7 +151,7 @@ fn how_many_count() {
 fn reverse_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"4\n3\n2\n1\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"4\\n3\\n2\\n1\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "1\n2\n3\n4\n")
@@ -165,7 +165,7 @@ fn reverse_region() {
 fn sort_fields() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"x 3\ny 2\nz 1\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"x 3\\ny 2\\nz 1\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "z 1\nx 3\ny 2\n")
@@ -179,7 +179,7 @@ fn sort_fields() {
 fn sort_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"apple\nbanana\ncherry\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"apple\\nbanana\\ncherry\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "banana\napple\ncherry\n")
@@ -193,7 +193,7 @@ fn sort_lines() {
 fn sort_numeric_fields() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"b 5\na 30\nc 200\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"b 5\\na 30\\nc 200\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "a 30\nb 5\nc 200\n")

@@ -86,7 +86,7 @@ fn oracle_prop_eval_comp_self_evaluating_forms() {
   ;; Nested self-evaluating: vector containing only self-eval forms
   (eval [1 "two" :three]))"#;
     let expect = expect_test::expect![[
-        r#""OK (0 42 -1 0 0 0.0 3.14 -2.718 15000000000.0 \"\" \"hello world\" \"line\nbreak\" [1 2 3] [] [\"a\" \"b\" \"c\"] :foo :bar-baz t nil 65 10 [1 \"two\" :three])""#
+        r#""OK (0 42 -1 0 0 0.0 3.14 -2.718 15000000000.0 \"\" \"hello world\" \"line\\nbreak\" [1 2 3] [] [\"a\" \"b\" \"c\"] :foo :bar-baz t nil 65 10 [1 \"two\" :three])""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

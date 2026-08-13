@@ -113,7 +113,7 @@ fn div_utf8_encode_coding_region_latin1() {
 #[test]
 fn div_utf8_decode_coding_region_utf8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"caf\\303\\251\" 6 5)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café\" 6 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -220,7 +220,7 @@ fn div_utf8_file_roundtrip_utf8() {
 #[test]
 fn div_utf8_file_roundtrip_latin1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"caf\\351\" 5 (99 97 102 233))""#]];
+    let expect = expect_test::expect![[r#""OK (\"caf�\" 5 (99 97 102 233))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (let ((tmp (make-temp-file "latin1-oracle-")))

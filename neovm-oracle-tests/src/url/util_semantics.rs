@@ -25,7 +25,7 @@ fn oracle_prop_url_unhex_string_newlines_plus_and_invalid_escapes() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK (\"\" \"a b+c\" \"line feed carriage\" \"line\nfeed\\rcarriage\" \"plus+is+literal\" \"%zz%4G%\")""#
+        r#""OK (\"\" \"a b+c\" \"line feed carriage\" \"line\\nfeed\\rcarriage\" \"plus+is+literal\" \"%zz%4G%\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -70,7 +70,7 @@ fn oracle_prop_url_parse_query_string_grouping_and_downcase() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK (((\"c\" \"3\") (\"b\" \"two\") (\"a\" \"1\")) ((\"a\" \"2\" \"1\")) ((\"repeat\" \"two\" \"one\") (\"missing\" \"\") (\"empty\" \"\")) ((\"space\" \"a b\") (\"plus\" \"a+b\")) ((\"line\" \"x y\")) ((\"line\" \"x\ny\")))""#
+        r#""OK (((\"c\" \"3\") (\"b\" \"two\") (\"a\" \"1\")) ((\"a\" \"2\" \"1\")) ((\"repeat\" \"two\" \"one\") (\"missing\" \"\") (\"empty\" \"\")) ((\"space\" \"a b\") (\"plus\" \"a+b\")) ((\"line\" \"x y\")) ((\"line\" \"x\\ny\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -62,7 +62,7 @@ fn divergence_print_escape_newlines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"hello\nworld\" \"\\\"hello\\\\nworld\\\"\" \"\\\"hello\nworld\\\"\")""#
+        r#""OK (\"hello\\nworld\" \"\\\"hello\\\\nworld\\\"\" \"\\\"hello\\nworld\\\"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(let ((s \"hello\\nworld\"))

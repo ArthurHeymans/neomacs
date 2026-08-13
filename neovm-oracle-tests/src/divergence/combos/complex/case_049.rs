@@ -263,7 +263,7 @@ fn div_cx49_timer_idle_list_after_run_idle_cancel() {
 fn div_cx49_undo_after_format_replace_multibyte_marker_overlay_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK ((\"CAFÉ 世界 HELLO WORLD\n\" 8 6 nil) \"\" 1 1 nil)""#]];
+        expect_test::expect![[r#""OK ((\"CAFÉ 世界 HELLO WORLD\\n\" 8 6 nil) \"\" 1 1 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

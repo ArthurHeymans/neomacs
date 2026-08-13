@@ -45,7 +45,7 @@ fn oracle_prop_gnu_process_lines_status_handler_sees_output_buffer_before_collec
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK ((\"one\" \"two\" \"status=7\") \" *temp*\" \"one\ntwo\n\" 9)""#
+        r#""OK ((\"one\" \"two\" \"status=7\") \" *temp*\" \"one\\ntwo\\n\" 9)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

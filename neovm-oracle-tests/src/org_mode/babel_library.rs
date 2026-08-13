@@ -6,7 +6,7 @@ fn org_babel_lob_ingest_call_execute_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (2 (\"add-pair\" \"decorate\") \"emacs-lisp\" \"(list :sum (+ x y) :product (* x y))\" \"replace drawer value\" \"emacs-lisp\" \"raw replace value\" \"#+CALL: add-pair(x=6,y=7) :results value drawer replace\n\n#+RESULTS:\n:results:\n| :sum | 13 | :product | 42 |\n:end:\n\nPrefix call_decorate[:results raw](label=\\\"nums\\\", values='(3 4)) nums=(3 4) suffix.\n\")""##
+        r##""OK (2 (\"add-pair\" \"decorate\") \"emacs-lisp\" \"(list :sum (+ x y) :product (* x y))\" \"replace drawer value\" \"emacs-lisp\" \"raw replace value\" \"#+CALL: add-pair(x=6,y=7) :results value drawer replace\\n\\n#+RESULTS:\\n:results:\\n| :sum | 13 | :product | 42 |\\n:end:\\n\\nPrefix call_decorate[:results raw](label=\\\"nums\\\", values='(3 4)) nums=(3 4) suffix.\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -710,7 +710,7 @@ fn org_babel_dir_default_dir_header_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"(expand-file-name \\\"probe.txt\\\")\n\" \"(princ (format \\\"default-dir=%s\\\" default-directory))\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\n(expand-file-name \\\"probe.txt\\\")\n#+end_src\n\n#+RESULTS:\n: <root>/probe.txt\n\n#+begin_src emacs-lisp :results output replace\n(princ (format \\\"default-dir=%s\\\" default-directory))\n#+end_src\n\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\n(expand-file-name \\\"probe.txt\\\")\n#+end_src\n\n#+RESULTS:\n: <root>/probe.txt\n\n#+begin_src emacs-lisp :results output replace\n(princ (format \\\"default-dir=%s\\\" default-directory))\n#+end_src\n\n#+RESULTS:\n: default-dir=[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/\n\n\")""##
+        r##""OK (\"(expand-file-name \\\"probe.txt\\\")\\n\" \"(princ (format \\\"default-dir=%s\\\" default-directory))\\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\\n(expand-file-name \\\"probe.txt\\\")\\n#+end_src\\n\\n#+RESULTS:\\n: <root>/probe.txt\\n\\n#+begin_src emacs-lisp :results output replace\\n(princ (format \\\"default-dir=%s\\\" default-directory))\\n#+end_src\\n\\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\\n(expand-file-name \\\"probe.txt\\\")\\n#+end_src\\n\\n#+RESULTS:\\n: <root>/probe.txt\\n\\n#+begin_src emacs-lisp :results output replace\\n(princ (format \\\"default-dir=%s\\\" default-directory))\\n#+end_src\\n\\n#+RESULTS:\\n: default-dir=[ORACLE-PROJECT-ROOT]/neovm-oracle-tests/\\n\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -3854,7 +3854,7 @@ fn org_babel_execute_two_table_join_sort_aggregate_deep_v3_combo() {
 fn org_babel_execute_two_table_join_sort_aggregate_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4246,7 +4246,7 @@ fn org_babel_execute_multi_block_chain_aggregate_deep_v2_combo() {
 fn org_babel_execute_multi_block_chain_table_var_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4472,7 +4472,7 @@ fn org_babel_execute_list_table_join_aggregate_deep_v2_combo() {
 fn org_babel_execute_table_column_sort_filter_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4521,7 +4521,7 @@ fn org_babel_execute_table_column_sort_filter_chain_deep_v2_combo() {
 fn org_babel_execute_mapcar_chain_table_aggregate_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4566,7 +4566,7 @@ fn org_babel_execute_mapcar_chain_table_aggregate_deep_v2_combo() {
 fn org_babel_execute_table_var_column_sort_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4612,7 +4612,7 @@ fn org_babel_execute_table_var_column_sort_chain_deep_v2_combo() {
 fn org_babel_execute_table_filter_sort_chain_deep_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4661,7 +4661,7 @@ fn org_babel_execute_table_filter_sort_chain_deep_v3_combo() {
 fn org_babel_execute_table_var_column_aggregate_deep_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|-----+-----|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|-----+-----|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4712,7 +4712,7 @@ fn org_babel_execute_table_var_column_aggregate_deep_v3_combo() {
 fn org_babel_execute_table_filter_sort_aggregate_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4760,7 +4760,7 @@ fn org_babel_execute_table_filter_sort_aggregate_chain_deep_combo() {
 fn org_babel_execute_table_column_filter_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4808,7 +4808,7 @@ fn org_babel_execute_table_column_filter_chain_deep_combo() {
 fn org_babel_execute_mapcar_table_chain_simple_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4975,7 +4975,7 @@ fn org_babel_execute_multi_table_join_sort_chain_deep_combo() {
 fn org_babel_execute_mapcar_filter_sort_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-------|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-------|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5201,7 +5201,7 @@ fn org_babel_execute_mapcar_table_column_chain_deep_v2_combo() {
 fn org_babel_execute_table_column_pivot_compute_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+---+-----|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+---+-----|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5268,7 +5268,7 @@ fn org_babel_execute_table_row_col_pivot_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect =
-        expect_test::expect![[r#""ERR (invalid-function \"|--------+---------+-----|\n\")""#]];
+        expect_test::expect![[r#""ERR (invalid-function \"|--------+---------+-----|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5334,7 +5334,8 @@ fn org_babel_execute_table_row_col_pivot_deep_state_combo() {
 fn org_babel_execute_table_column_chain_aggregate_deep_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-------+-----|\n\")""#]];
+    let expect =
+        expect_test::expect![[r#""ERR (invalid-function \"|------+-------+-----|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5524,7 +5525,7 @@ fn org_babel_execute_table_join_sort_chain_deep_combo() {
 fn org_babel_execute_table_var_column_sort_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5575,7 +5576,7 @@ fn org_babel_execute_table_var_column_sort_deep_combo() {
 fn org_babel_execute_table_var_column_filter_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+------|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+------|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5625,7 +5626,7 @@ fn org_babel_execute_table_var_column_filter_deep_combo() {
 fn org_babel_execute_table_column_compute_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5734,7 +5735,7 @@ fn org_babel_execute_list_table_join_compute_chain_deep_combo() {
 fn org_babel_execute_table_column_aggregate_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5840,7 +5841,7 @@ fn org_babel_execute_mapcar_table_assoc_chain_deep_combo() {
 fn org_babel_execute_mapcar_assoc_chain_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5892,7 +5893,7 @@ fn org_babel_execute_mapcar_assoc_chain_aggregate_deep_combo() {
 fn org_babel_execute_table_filter_sort_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5940,7 +5941,7 @@ fn org_babel_execute_table_filter_sort_aggregate_deep_combo() {
 fn org_babel_execute_table_group_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6051,7 +6052,7 @@ fn org_babel_execute_table_column_join_compute_deep_v2_combo() {
 fn org_babel_execute_table_var_chain_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|-----+-----|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|-----+-----|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6103,7 +6104,7 @@ fn org_babel_execute_table_var_chain_aggregate_deep_combo() {
 fn org_babel_execute_table_join_compute_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---------+------|\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---------+------|\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9857,7 +9858,7 @@ fn org_babel_execute_error_handling_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((30 nil nil) ((src-block \"valid\" \"(+ 10 20)\n\") (fixed-width nil \"30\") (src-block \"niler\" \"nil\n\") (src-block \"emptier\" \"'()\n\")) \"#+NAME: valid\n#+begin_src emacs-lisp :results value replace\n(+ 10 20)\n#+end_src\n\n#+RESULTS: valid\n: 30\n\n#+NAME: niler\n#+begin_src emacs-lisp :results value replace\nnil\n#+end_src\n\n#+RESULTS: niler\n\n#+NAME: emptier\n#+begin_src emacs-lisp :results value replace\n'()\n#+end_src\n\n#+RESULTS: emptier\n\n\")""##
+        r##""OK ((30 nil nil) ((src-block \"valid\" \"(+ 10 20)\\n\") (fixed-width nil \"30\") (src-block \"niler\" \"nil\\n\") (src-block \"emptier\" \"'()\\n\")) \"#+NAME: valid\\n#+begin_src emacs-lisp :results value replace\\n(+ 10 20)\\n#+end_src\\n\\n#+RESULTS: valid\\n: 30\\n\\n#+NAME: niler\\n#+begin_src emacs-lisp :results value replace\\nnil\\n#+end_src\\n\\n#+RESULTS: niler\\n\\n#+NAME: emptier\\n#+begin_src emacs-lisp :results value replace\\n'()\\n#+end_src\\n\\n#+RESULTS: emptier\\n\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

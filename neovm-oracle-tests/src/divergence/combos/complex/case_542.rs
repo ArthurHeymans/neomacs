@@ -98,7 +98,7 @@ fn div_cx542_format_percent() {
 #[test]
 fn div_cx542_format_multiline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"line1\nline2\nline3\"""#]];
+    let expect = expect_test::expect![[r#""OK \"line1\\nline2\\nline3\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(format "line1\nline2\nline3")
 "##,

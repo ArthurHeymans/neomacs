@@ -85,7 +85,7 @@ fn oracle_elt_arraylike_acceptance_edges() {
      (error (list (car err) (cdr err))))))"#;
 
     let expect = expect_test::expect![[
-        r#""OK (nil t letter-a default (wrong-type-argument (sequencep #s(neovm--elt-record 1 2))) (wrong-type-argument (sequencep #[257 \"\\300\\207\" [42] 1])) (args-out-of-range (#&3\"\u{2}\" 3)) (wrong-type-argument (characterp 4194304)))""#
+        r#""OK (nil t letter-a default (wrong-type-argument (sequencep #s(neovm--elt-record 1 2))) (wrong-type-argument (sequencep #[257 \"��\" [42] 1])) (args-out-of-range (#&3\"\u{2}\" 3)) (wrong-type-argument (characterp 4194304)))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

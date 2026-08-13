@@ -60,7 +60,7 @@ fn oracle_prop_read_print_comprehensive_prin1_all_types() {
   (prin1-to-string ?\n)
   (prin1-to-string ?\\))"##;
     let expect = expect_test::expect![[
-        r#""OK (\"42\" \"-100\" \"0\" \"3.14\" \"-0.001\" \"10000000000.0\" \"\\\"hello world\\\"\" \"\\\"line1\nline2\\\"\" \"\\\"tab\there\\\"\" \"\\\"quote\\\\\\\"inside\\\"\" \"\\\"backslash\\\\\\\\here\\\"\" \"foo\" \"nil\" \"t\" \":keyword\" \"(1 2 3)\" \"(a . b)\" \"(1 (2 (3)))\" \"nil\" \"[1 2 3]\" \"[]\" \"[a \\\"b\\\" 3]\" \"65\" \"10\" \"92\")""#
+        r#""OK (\"42\" \"-100\" \"0\" \"3.14\" \"-0.001\" \"10000000000.0\" \"\\\"hello world\\\"\" \"\\\"line1\\nline2\\\"\" \"\\\"tab\there\\\"\" \"\\\"quote\\\\\\\"inside\\\"\" \"\\\"backslash\\\\\\\\here\\\"\" \"foo\" \"nil\" \"t\" \":keyword\" \"(1 2 3)\" \"(a . b)\" \"(1 (2 (3)))\" \"nil\" \"[1 2 3]\" \"[]\" \"[a \\\"b\\\" 3]\" \"65\" \"10\" \"92\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -147,7 +147,7 @@ fn oracle_prop_read_print_comprehensive_print_escape_newlines() {
   (let ((print-escape-newlines t))
     (prin1-to-string "a\nb\tc\nd")))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"\\\"line1\\\\nline2\\\\nline3\\\"\" \"\\\"line1\nline2\\\"\" \"\\\"col1\tcol2\\\"\" \"\\\"a\\\\nb\tc\\\\nd\\\"\")""#
+        r#""OK (\"\\\"line1\\\\nline2\\\\nline3\\\"\" \"\\\"line1\\nline2\\\"\" \"\\\"col1\tcol2\\\"\" \"\\\"a\\\\nb\tc\\\\nd\\\"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

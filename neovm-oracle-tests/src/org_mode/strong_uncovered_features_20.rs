@@ -292,7 +292,7 @@ fn uf20_at_hi() {
 fn uf20_narrow_context() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (\"** H2\n*** H3\nBody\" \"** H2\n*** H3\nBody\")""#]];
+        expect_test::expect![[r#""OK (\"** H2\\n*** H3\\nBody\" \"** H2\\n*** H3\\nBody\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

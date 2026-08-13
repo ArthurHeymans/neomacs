@@ -199,7 +199,7 @@ fn uf37_table_analyze() {
 fn uf37_table_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"| a | b | c |\n| 1 | 2 |   |\n| 3 | 4 |   |\n#+TBLFM: $3=$1+$2\"""#
+        r#""OK \"| a | b | c |\\n| 1 | 2 |   |\\n| 3 | 4 |   |\\n#+TBLFM: $3=$1+$2\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -238,7 +238,8 @@ fn uf37_table_iter() {
 #[test]
 fn uf37_src_fontify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r##""OK \"#+BEGIN_SRC emacs-lisp\n(+ 1 2)\n#+END_SRC\"""##]];
+    let expect =
+        expect_test::expect![[r##""OK \"#+BEGIN_SRC emacs-lisp\\n(+ 1 2)\\n#+END_SRC\"""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -364,7 +365,7 @@ fn uf37_src_tab() {
 fn uf37_src_demarcate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+BEGIN_SRC emacs-lisp\n  (+ 1)\n#+END_SRC\n\n#+BEGIN_SRC emacs-lisp\n  (+ 2)\n  (+ 3)\n#+END_SRC\n\"""##
+        r##""OK \"#+BEGIN_SRC emacs-lisp\\n  (+ 1)\\n#+END_SRC\\n\\n#+BEGIN_SRC emacs-lisp\\n  (+ 2)\\n  (+ 3)\\n#+END_SRC\\n\"""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -446,7 +447,7 @@ fn uf37_src_params() {
 #[test]
 fn uf37_src_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"(+ 1 2)\n(+ 3 4)\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"(+ 1 2)\\n(+ 3 4)\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

@@ -111,7 +111,7 @@ fn coding_no_conversion() {
 fn coding_eol_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (0 1 2 \"a\nb\" \"a\nb\")""#]];
+    let expect = expect_test::expect![[r#""OK (0 1 2 \"a\\nb\" \"a\\nb\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (coding-system-eol-type 'utf-8-unix)
         (coding-system-eol-type 'utf-8-dos)

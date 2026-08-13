@@ -8,7 +8,7 @@ fn divergence_simulate_code_edit_session() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (#(\"(defurenamed-n my-func (arg)\n  \\\"(* X.\\\"\n  (let ((x 1))\n    (+ x arg)))\" 0 4 (type keyword) 13 19 (type function) 20 22 (type args) 29 32 (type doc) 38 41 (type keyword) 42 44 (type var) 52 53 (type var) 54 57 (type args)) #(\"(defun my-func (arg)\n  \\\"Docstring.\\\"\n  (let ((x 1))\n    (+ x arg)))\" 0 4 (type keyword) 5 11 (type function) 12 14 (type args) 21 24 (type doc) 24 32 (type doc) 35 38 (type keyword) 39 41 (type var) 49 50 (type var) 51 54 (type args)) t 1 t 22 t font-lock-doc-face t font-lock-string-face t keyword t function t args t doc t keyword t var t var t args t)""#
+        r#""OK (#(\"(defurenamed-n my-func (arg)\\n  \\\"(* X.\\\"\\n  (let ((x 1))\\n    (+ x arg)))\" 0 4 (type keyword) 13 19 (type function) 20 22 (type args) 29 32 (type doc) 38 41 (type keyword) 42 44 (type var) 52 53 (type var) 54 57 (type args)) #(\"(defun my-func (arg)\\n  \\\"Docstring.\\\"\\n  (let ((x 1))\\n    (+ x arg)))\" 0 4 (type keyword) 5 11 (type function) 12 14 (type args) 21 24 (type doc) 24 32 (type doc) 35 38 (type keyword) 39 41 (type var) 49 50 (type var) 51 54 (type args)) t 1 t 22 t font-lock-doc-face t font-lock-string-face t keyword t function t args t doc t keyword t var t var t args t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -182,7 +182,7 @@ fn divergence_simulate_indent_region_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (#(\"line1\n    line2\n    line3\nline4\" 0 4 (line 1) 10 14 (line 2) 20 24 (line 3) 26 30 (line 4)) 11 #(\"line1\nline2\nline3\nline4\" 0 4 (line 1) 6 10 (line 2) 12 16 (line 3) 18 22 (line 4)) t 7 t t t 1 t 2 t 3 t 4 t)""#
+        r#""OK (#(\"line1\\n    line2\\n    line3\\nline4\" 0 4 (line 1) 10 14 (line 2) 20 24 (line 3) 26 30 (line 4)) 11 #(\"line1\\nline2\\nline3\\nline4\" 0 4 (line 1) 6 10 (line 2) 12 16 (line 3) 18 22 (line 4)) t 7 t t t 1 t 2 t 3 t 4 t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -297,7 +297,7 @@ fn divergence_simulate_whitespace_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (#(\"hello world\n foo bar\nbaz \" 0 4 (word w1) 6 9 (word w2) 19 21 (word w5)) #(\"hello   world\n   foo    bar\nbaz   \" 0 4 (word w1) 7 8 (word w2) 8 11 (word w2) 15 17 (word w3) 22 24 (word w4) 26 28 (word w5)) t 9 nil t t w1 t w2 t)""#
+        r#""OK (#(\"hello world\\n foo bar\\nbaz \" 0 4 (word w1) 6 9 (word w2) 19 21 (word w5)) #(\"hello   world\\n   foo    bar\\nbaz   \" 0 4 (word w1) 7 8 (word w2) 8 11 (word w2) 15 17 (word w3) 22 24 (word w4) 26 28 (word w5)) t 9 nil t t w1 t w2 t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -332,7 +332,7 @@ fn divergence_simulate_duplicate_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (#(\"LINE1\nLINE\nLINE2\nLINE3\" 0 4 (lnum 1) 6 10 (lnum 2) 11 15 (lnum 2) 17 21 (lnum 3)) 12 #(\"LINE1\nLINE2\nLINE3\" 0 4 (lnum 1) 6 10 (lnum 2) 12 16 (lnum 3)) t 7 t 1 t 2 t 3 t 1 t 2 t 3 t)""#
+        r#""OK (#(\"LINE1\\nLINE\\nLINE2\\nLINE3\" 0 4 (lnum 1) 6 10 (lnum 2) 11 15 (lnum 2) 17 21 (lnum 3)) 12 #(\"LINE1\\nLINE2\\nLINE3\" 0 4 (lnum 1) 6 10 (lnum 2) 12 16 (lnum 3)) t 7 t 1 t 2 t 3 t 1 t 2 t 3 t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

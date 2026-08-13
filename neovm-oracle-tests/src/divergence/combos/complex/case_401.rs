@@ -16,7 +16,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx401_selective_display_column_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (3 3 3 17 \"aaa\nbbb\u{c}ccc\u{c}ddd\neee\")""#]];
+    let expect = expect_test::expect![[r#""OK (3 3 3 17 \"aaa\\nbbb\\fccc\\fddd\\neee\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -167,7 +167,7 @@ fn div_cx401_buffer_local_vars_overlay_active() {
 fn div_cx401_substitute_command_keys_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"\nUses keymap ‘map’, which is not currently defined.\n\"""#
+        r#""OK \"\\nUses keymap ‘map’, which is not currently defined.\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -430,7 +430,7 @@ fn div_cx401_looking_at_search_backward_casefold_greek() {
 #[test]
 fn div_cx401_line_number_selective_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 3 3 \"ne1\nline2\u{c}line3\nline4\u{c}lin\")""#]];
+    let expect = expect_test::expect![[r#""OK (1 3 3 \"ne1\\nline2\\fline3\\nline4\\flin\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

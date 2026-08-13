@@ -95,7 +95,7 @@ fn uf22_src_subtree() {
 #[test]
 fn uf22_src_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"(let ((x '1)\n      (y '2))\n(+ x y)\n)\"""#]];
+    let expect = expect_test::expect![[r#""OK \"(let ((x '1)\\n      (y '2))\\n(+ x y)\\n)\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -132,7 +132,7 @@ fn uf22_src_check() {
 fn uf22_src_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n\n#+RESULTS:\n: 42\n\"""##
+        r##""OK \"#+BEGIN_SRC emacs-lisp\\n(+ 1)\\n#+END_SRC\\n\\n#+RESULTS:\\n: 42\\n\"""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -209,7 +209,7 @@ fn uf22_src_mark() {
 fn uf22_src_demarcate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+BEGIN_SRC emacs-lisp\n  (+ 1)\n#+END_SRC\n\n#+BEGIN_SRC emacs-lisp\n  (+ 2)\n  (+ 3)\n#+END_SRC\n\"""##
+        r##""OK \"#+BEGIN_SRC emacs-lisp\\n  (+ 1)\\n#+END_SRC\\n\\n#+BEGIN_SRC emacs-lisp\\n  (+ 2)\\n  (+ 3)\\n#+END_SRC\\n\"""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -232,7 +232,7 @@ fn uf22_src_demarcate() {
 fn uf22_src_session() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r##""OK \"#+BEGIN_SRC emacs-lisp :session\n(+ 1)\n#+END_SRC\"""##]];
+        expect_test::expect![[r##""OK \"#+BEGIN_SRC emacs-lisp :session\\n(+ 1)\\n#+END_SRC\"""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -254,7 +254,7 @@ fn uf22_src_session() {
 fn uf22_src_init() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r##""OK \"#+BEGIN_SRC emacs-lisp :session\n(+ 1)\n#+END_SRC\"""##]];
+        expect_test::expect![[r##""OK \"#+BEGIN_SRC emacs-lisp :session\\n(+ 1)\\n#+END_SRC\"""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

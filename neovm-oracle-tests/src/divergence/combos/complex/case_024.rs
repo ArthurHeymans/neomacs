@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx24_process_output_to_narrowed_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"PREoutput\n\nProcess neo-cx24-pn finished\n\" \"PREoutput\n\nProcess neo-cx24-pn finished\n-\")""#
+        r#""OK (\"PREoutput\\n\\nProcess neo-cx24-pn finished\\n\" \"PREoutput\\n\\nProcess neo-cx24-pn finished\\n-\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -340,7 +340,7 @@ fn div_cx24_string_bytes_vs_length_various() {
 fn div_cx24_overlay_invisible_narrow_buffer_substring_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#(\"visible1\nhidden1\nhidden2\nv\" 9 17 (invisible t)) \"visible1\nhidden1\nhidden2\nv\" 4 nil)""#
+        r#""OK (#(\"visible1\\nhidden1\\nhidden2\\nv\" 9 17 (invisible t)) \"visible1\\nhidden1\\nhidden2\\nv\" 4 nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

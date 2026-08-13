@@ -121,7 +121,7 @@ fn div_cx138_diff_hunk_metadata() {
 #[test]
 fn div_cx138_smerge_resolve_keep_mine() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"mine\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"mine\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -142,7 +142,7 @@ fn div_cx138_smerge_resolve_keep_mine() {
 #[test]
 fn div_cx138_smerge_resolve_keep_other() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"theirs\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"theirs\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

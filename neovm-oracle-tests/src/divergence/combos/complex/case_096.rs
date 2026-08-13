@@ -121,7 +121,7 @@ fn div_cx96_text_property_search_backwards_with_value_match() {
 #[test]
 fn div_cx96_indent_rigidly_with_tabs_across_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\tline1\n\tline2\n\tline3\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"\tline1\\n\tline2\\n\tline3\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -138,7 +138,7 @@ fn div_cx96_indent_rigidly_with_tabs_across_lines() {
 #[test]
 fn div_cx96_indent_rigidly_with_spaces_across_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"      line1\n      line2\n      line3\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"      line1\\n      line2\\n      line3\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

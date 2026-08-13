@@ -24,7 +24,7 @@ fn deficiency_print_with_newline_vs_prin1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"(hello \\\"world\\\" 42 (nested list))\" \"\n(hello \\\"world\\\" 42 (nested list))\n\" t)""#
+        r#""OK (\"(hello \\\"world\\\" 42 (nested list))\" \"\\n(hello \\\"world\\\" 42 (nested list))\\n\" t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\

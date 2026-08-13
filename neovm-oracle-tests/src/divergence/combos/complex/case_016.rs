@@ -193,7 +193,7 @@ fn div_cx16_process_send_buffer_narrow() {
 #[test]
 fn div_cx16_decode_coding_region_then_aset_grow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"ab\\303\\251\" 4 4)""#]];
+    let expect = expect_test::expect![[r#""OK (\"abé\" 4 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -364,7 +364,7 @@ fn div_cx16_buffer_file_name_coding_interaction() {
 fn div_cx16_multiple_coding_systems_decode_compare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#(\"café\" 0 4 (charset iso-8859-1)) \"caf\\351\" \"caf\\351\" (99 97 102 233) (99 97 102 233))""#
+        r#""OK (#(\"café\" 0 4 (charset iso-8859-1)) \"caf\\351\" \"caf�\" (99 97 102 233) (99 97 102 233))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

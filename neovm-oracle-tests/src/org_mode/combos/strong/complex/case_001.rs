@@ -53,7 +53,7 @@ fn combo1_build_modify_reparse() {
 fn combo1_list_indent_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:init ((on \"A\") (off \"B\") (off \"C\") (on \"D\"))) (:after-indent ((nil off \"A\n  - [ ] B\n  - [ ] C\") (nil off \"B\") (nil off \"C\") (nil on \"D\"))) (:after-toggle ((nil trans) (nil on) (nil off) (nil on))))""#
+        r#""OK ((:init ((on \"A\") (off \"B\") (off \"C\") (on \"D\"))) (:after-indent ((nil off \"A\\n  - [ ] B\\n  - [ ] C\") (nil off \"B\") (nil off \"C\") (nil on \"D\"))) (:after-toggle ((nil trans) (nil on) (nil off) (nil on))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -134,7 +134,7 @@ fn combo1_table_build_formula() {
 fn combo1_planning_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:init nil) (:after-sched ((\"S\" nil))) (:after-dead ((\"S\" \"D\"))) (:content \"* TODO T\nDEADLINE: <2026-01-20 Tue> SCHEDULED: <2026-01-15 Thu>\"))""#
+        r#""OK ((:init nil) (:after-sched ((\"S\" nil))) (:after-dead ((\"S\" \"D\"))) (:content \"* TODO T\\nDEADLINE: <2026-01-20 Tue> SCHEDULED: <2026-01-15 Thu>\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -203,7 +203,7 @@ fn combo1_tags_toggle() {
 fn combo1_props_crud() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:init nil) (:after-put (\"1\" \"2\" \"3\")) (:after-update (\"1\" \"22\" \"3\")) (:after-delete (nil \"22\" \"3\")) (:content \"* T\n:PROPERTIES:\n:B:        22\n:C:        3\n:END:\n\"))""#
+        r#""OK ((:init nil) (:after-put (\"1\" \"2\" \"3\")) (:after-update (\"1\" \"22\" \"3\")) (:after-delete (nil \"22\" \"3\")) (:content \"* T\\n:PROPERTIES:\\n:B:        22\\n:C:        3\\n:END:\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -384,7 +384,7 @@ fn combo1_full_distribution() {
 fn combo1_cycle_visibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:overview \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:content \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:all \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:children \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:subtree \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\"))""#
+        r#""OK ((:overview \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\") (:content \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\") (:all \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\") (:children \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\") (:subtree \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -516,7 +516,7 @@ fn combo1_clone_subtree() {
 fn combo1_narrow_context() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:narrowed \"** H2\n*** H3\nBody\") (:context \"** H2\n*** H3\nBody\") (:widened \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\"))""#
+        r#""OK ((:narrowed \"** H2\\n*** H3\\nBody\") (:context \"** H2\\n*** H3\\nBody\") (:widened \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -584,7 +584,7 @@ fn combo1_toggle_heading() {
 fn combo1_insert_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:types nil) (:count 0) (:content \"* H\nBody\n#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n#+BEGIN_QUOTE\nQuoted\n#+END_QUOTE\n- item1\n- item2\n| a | b |\n| 1 | 2 |\"))""#
+        r#""OK ((:types nil) (:count 0) (:content \"* H\\nBody\\n#+BEGIN_SRC emacs-lisp\\n(+ 1)\\n#+END_SRC\\n#+BEGIN_QUOTE\\nQuoted\\n#+END_QUOTE\\n- item1\\n- item2\\n| a | b |\\n| 1 | 2 |\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

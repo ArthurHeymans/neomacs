@@ -188,7 +188,7 @@ fn deficiency_with_temp_buffer_format_build() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"item-1: 1\nitem-2: 4\nitem-3: 9\nitem-4: 16\nitem-5: 25\n\" 5 52)""#
+        r#""OK (\"item-1: 1\\nitem-2: 4\\nitem-3: 9\\nitem-4: 16\\nitem-5: 25\\n\" 5 52)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\

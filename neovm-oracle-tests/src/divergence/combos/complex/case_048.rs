@@ -6,7 +6,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx48_delete_duplicate_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"unique\nduplicate\nother\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"unique\\nduplicate\\nother\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -22,7 +22,7 @@ fn div_cx48_delete_duplicate_lines() {
 fn div_cx48_sort_paragraphs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"apple paragraph\n\nmango paragraph\n\nzebra paragraph\n\"""#
+        r#""OK \"apple paragraph\\n\\nmango paragraph\\n\\nzebra paragraph\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -38,7 +38,7 @@ fn div_cx48_sort_paragraphs() {
 #[test]
 fn div_cx48_sort_fields() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"1 alpha\n2 bravo\n3 charlie\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"1 alpha\\n2 bravo\\n3 charlie\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -68,8 +68,9 @@ fn div_cx48_rx_to_string_complex() {
 #[test]
 fn div_cx48_whitespace_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK \"  trailing spaces\n\t\tindented\nempty line above\n\"""#]];
+    let expect = expect_test::expect![[
+        r#""OK \"  trailing spaces\\n\t\tindented\\nempty line above\\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -105,7 +106,7 @@ fn div_cx48_ansi_color_apply_on_region() {
 fn div_cx48_fill_individual_paragraphs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"> para one is\n> long enough\n> para two also\n\"""#]];
+        expect_test::expect![[r#""OK \"> para one is\\n> long enough\\n> para two also\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -121,7 +122,7 @@ fn div_cx48_fill_individual_paragraphs() {
 #[test]
 fn div_cx48_newline_and_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"(foo\n bar)\"""#]];
+    let expect = expect_test::expect![[r#""OK \"(foo\\n bar)\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

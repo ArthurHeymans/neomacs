@@ -130,7 +130,7 @@ fn divergence_unbalanced_parens_scan_error() {
 fn divergence_beginning_end_of_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (25 45 \"(defun b (x) body2)\n\" t 1)""#]];
+    let expect = expect_test::expect![[r#""OK (25 45 \"(defun b (x) body2)\\n\" t 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(defun a () \"doc\" body)\n(defun b (x) body2)\n(defun c () body3)")

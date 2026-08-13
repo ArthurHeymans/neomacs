@@ -389,7 +389,7 @@ fn div_cx27_buffer_hash_deterministic_same_content() {
 #[test]
 fn div_cx27_process_send_string_then_query_buffer_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (26 \"exactly 30 characters....\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (26 \"exactly 30 characters....\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

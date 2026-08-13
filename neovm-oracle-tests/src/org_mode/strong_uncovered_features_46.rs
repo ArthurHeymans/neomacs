@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf46_cycle_overview() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -30,7 +30,7 @@ fn uf46_cycle_overview() {
 #[test]
 fn uf46_cycle_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -48,7 +48,7 @@ fn uf46_cycle_content() {
 #[test]
 fn uf46_cycle_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -66,7 +66,7 @@ fn uf46_cycle_all() {
 #[test]
 fn uf46_cycle_children() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -85,7 +85,7 @@ fn uf46_cycle_children() {
 #[test]
 fn uf46_cycle_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -105,7 +105,7 @@ fn uf46_cycle_subtree() {
 fn uf46_global_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:first \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:second \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:third \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\"))""#
+        r#""OK ((:first \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\") (:second \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\") (:third \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -131,7 +131,7 @@ fn uf46_global_cycle() {
 fn uf46_startup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+STARTUP: overview\n* H1\n** H2\n*** H3\nBody\n* H1b\"""##
+        r##""OK \"#+STARTUP: overview\\n* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -150,7 +150,7 @@ fn uf46_startup() {
 #[test]
 fn uf46_show_context() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -171,7 +171,7 @@ fn uf46_show_context() {
 #[test]
 fn uf46_show_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -283,7 +283,7 @@ fn uf46_hide_drawers() {
 #[test]
 fn uf46_reveal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -305,7 +305,7 @@ fn uf46_reveal() {
 #[test]
 fn uf46_show_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -324,7 +324,7 @@ fn uf46_show_all() {
 #[test]
 fn uf46_overview() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -342,7 +342,7 @@ fn uf46_overview() {
 #[test]
 fn uf46_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -361,7 +361,7 @@ fn uf46_content() {
 fn uf46_cycle_tab() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:after1 \"* H1\n** H2\n*** H3\nBody\n* H1b\") (:after2 \"* H1\n** H2\n*** H3\nBody\n* H1b\") (:after3 \"* H1\n** H2\n*** H3\nBody\n* H1b\"))""#
+        r#""OK ((:after1 \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\") (:after2 \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\") (:after3 \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -388,7 +388,7 @@ fn uf46_cycle_tab() {
 fn uf46_cycle_stab() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:after1 \"* H1\n** H2\n*** H3\nBody\n* H1b\") (:after2 \"* H1\n** H2\n*** H3\nBody\n* H1b\") (:after3 \"* H1\n** H2\n*** H3\nBody\n* H1b\"))""#
+        r#""OK ((:after1 \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\") (:after2 \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\") (:after3 \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

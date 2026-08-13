@@ -122,7 +122,7 @@ fn div_f0_string_invalid_codepoints() {
 #[test]
 fn div_f0_with_output_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"hello world\" \"\na\nb\" nil)""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello world\" \"\\na\\nb\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-output-to-string (princ "hello") (princ " world"))

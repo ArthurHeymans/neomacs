@@ -78,7 +78,7 @@ fn divergence_temp_file_write_read_props() {
 fn divergence_multi_call_process_accumulate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (7 14 \"first\nsecond\nthird\n\" t)""#]];
+    let expect = expect_test::expect![[r#""OK (7 14 \"first\\nsecond\\nthird\\n\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(with-temp-buffer
   (call-process \"echo\" nil t nil \"first\")
@@ -128,7 +128,7 @@ fn divergence_env_var_subprocess() {
 fn divergence_process_list_with_temp_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"test\n\" t nil)""#]];
+    let expect = expect_test::expect![[r#""OK (\"test\\n\" t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((before (length (process-list))))
   (with-temp-buffer
@@ -160,7 +160,7 @@ fn divergence_shell_command_output_props() {
 fn divergence_insert_file_contents_with_encoding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"café\n\" nil t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café\\n\" nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((tmp (make-temp-file \"test-enc-\")))
   (write-region \"caf\\u00e9\\n\" nil tmp nil 'silent)

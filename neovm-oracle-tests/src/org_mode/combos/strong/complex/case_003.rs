@@ -150,7 +150,7 @@ fn combo3_planning_fields() {
 fn combo3_blocks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:types (src-block quote-block center-block export-block verse-block)) (:src-value (\"(+ 1)\n\")) (:quote-content (\"Q\")) (:export-type (\"HTML\")))""#
+        r#""OK ((:types (src-block quote-block center-block export-block verse-block)) (:src-value (\"(+ 1)\\n\")) (:quote-content (\"Q\")) (:export-type (\"HTML\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

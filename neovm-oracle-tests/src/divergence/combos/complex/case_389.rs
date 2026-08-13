@@ -9,7 +9,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx389_process_filter_chunked_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 18 \"line1\nline2\nline3\")""#]];
+    let expect = expect_test::expect![[r#""OK (1 18 \"line1\\nline2\\nline3\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((collected nil)
@@ -79,7 +79,7 @@ fn div_cx389_process_coding_environment_override() {
 fn div_cx389_process_stderr_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"OUT\n\nProcess neo-cx389-stderr finished\" \"ERR\n\nProcess neo-cx389-stderr stderr finished\")""#
+        r#""OK (\"OUT\\n\\nProcess neo-cx389-stderr finished\" \"ERR\\n\\nProcess neo-cx389-stderr stderr finished\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

@@ -123,7 +123,7 @@ fn oracle_prop_rd_adv_json_tokenizer() {
     (fmakunbound 'neovm--json-tokenize)))
 "#;
     let expect = expect_test::expect![[
-        r#""OK (((number . 42)) ((number . -3.14)) ((string . \"hello\")) ((boolean . t)) ((boolean)) ((null)) ((string . \"hello\nworld\")) ((string . \"a\tb\\\\c\")) ((string . \"quote: \\\"hi\\\"\")) ((lbrace . \"{\") (string . \"key\") (colon . \":\") (string . \"value\") (rbrace . \"}\")) ((lbracket . \"[\") (number . 1) (comma . \",\") (number . 2) (comma . \",\") (number . 3) (rbracket . \"]\")) ((lbrace . \"{\") (string . \"a\") (colon . \":\") (lbracket . \"[\") (number . 1) (comma . \",\") (boolean . t) (comma . \",\") (null) (rbracket . \"]\") (rbrace . \"}\")) ((lbrace . \"{\") (string . \"x\") (colon . \":\") (number . 42) (rbrace . \"}\")) ((lbrace . \"{\") (rbrace . \"}\")) ((lbracket . \"[\") (rbracket . \"]\")))""#
+        r#""OK (((number . 42)) ((number . -3.14)) ((string . \"hello\")) ((boolean . t)) ((boolean)) ((null)) ((string . \"hello\\nworld\")) ((string . \"a\tb\\\\c\")) ((string . \"quote: \\\"hi\\\"\")) ((lbrace . \"{\") (string . \"key\") (colon . \":\") (string . \"value\") (rbrace . \"}\")) ((lbracket . \"[\") (number . 1) (comma . \",\") (number . 2) (comma . \",\") (number . 3) (rbracket . \"]\")) ((lbrace . \"{\") (string . \"a\") (colon . \":\") (lbracket . \"[\") (number . 1) (comma . \",\") (boolean . t) (comma . \",\") (null) (rbracket . \"]\") (rbrace . \"}\")) ((lbrace . \"{\") (string . \"x\") (colon . \":\") (number . 42) (rbrace . \"}\")) ((lbrace . \"{\") (rbrace . \"}\")) ((lbracket . \"[\") (rbracket . \"]\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -288,7 +288,7 @@ fn oracle_prop_rd_adv_json_parser_full() {
     (makunbound 'neovm--jp-tokens)))
 "#;
     let expect = expect_test::expect![[
-        r#""OK ((number 42) (number -3.14) (string \"hello\") (boolean t) (boolean nil) (null) (object ((\"name\" (string \"Alice\")) (\"age\" (number 30)))) (array ((number 1) (number 2) (number 3))) (object nil) (array nil) (array ((object ((\"a\" (number 1)))) (object ((\"b\" (number 2)))))) (object ((\"items\" (array ((number 10) (number 20) (number 30)))))) (object ((\"msg\" (string \"hello\nworld\")))))""#
+        r#""OK ((number 42) (number -3.14) (string \"hello\") (boolean t) (boolean nil) (null) (object ((\"name\" (string \"Alice\")) (\"age\" (number 30)))) (array ((number 1) (number 2) (number 3))) (object nil) (array nil) (array ((object ((\"a\" (number 1)))) (object ((\"b\" (number 2)))))) (object ((\"items\" (array ((number 10) (number 20) (number 30)))))) (object ((\"msg\" (string \"hello\\nworld\")))))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

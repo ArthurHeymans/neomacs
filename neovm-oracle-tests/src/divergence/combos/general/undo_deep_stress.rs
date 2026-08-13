@@ -103,7 +103,7 @@ fn divergence_overlay_before_string_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (#(\"AAAA\nXXXX\nCCCC\nYYYY\nEEEE\nZZZZ\nGGGG\nHHHH\" 0 4 (line 1) 10 14 (line 3) 20 24 (line 5) 30 34 (line 7) 35 39 (line 8)) #(\"AAAA\nBBBB\nCCCC\nDDDD\nEEEE\nFFFF\nGGGG\nHHHH\" 0 4 (line 1) 5 9 (line 2) 10 14 (line 3) 15 19 (line 4) 20 24 (line 5) 25 29 (line 6) 30 34 (line 7) 35 39 (line 8)) t t t 1 t 2 t 3 t 4 t 5 t 6 t 7 t 8 t)""#
+        r#""OK (#(\"AAAA\\nXXXX\\nCCCC\\nYYYY\\nEEEE\\nZZZZ\\nGGGG\\nHHHH\" 0 4 (line 1) 10 14 (line 3) 20 24 (line 5) 30 34 (line 7) 35 39 (line 8)) #(\"AAAA\\nBBBB\\nCCCC\\nDDDD\\nEEEE\\nFFFF\\nGGGG\\nHHHH\" 0 4 (line 1) 5 9 (line 2) 10 14 (line 3) 15 19 (line 4) 20 24 (line 5) 25 29 (line 6) 30 34 (line 7) 35 39 (line 8)) t t t 1 t 2 t 3 t 4 t 5 t 6 t 7 t 8 t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

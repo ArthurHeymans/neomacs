@@ -197,7 +197,7 @@ fn div_cx497_define_multiple_minor() {
 fn div_cx497_define_derived_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"A mode docstring\n\nThis mode runs the hook ‘neo-cx497-kw2-mode-hook’, as the final or\npenultimate step during initialization.\n\n\"""#
+        r#""OK \"A mode docstring\\n\\nThis mode runs the hook ‘neo-cx497-kw2-mode-hook’, as the final or\\npenultimate step during initialization.\\n\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

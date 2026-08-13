@@ -1089,7 +1089,7 @@ fn div_core_divergence_surface_read_only_before_change_hook_count() {
 #[test]
 fn div_core_file_temp_attributes_and_insert_file_contents_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t 5 \"a.txt\" (0 7 \"abc\ndef\" nil t))""#]];
+    let expect = expect_test::expect![[r#""OK (t t t 5 \"a.txt\" (0 7 \"abc\\ndef\" nil t))""#]];
     // Parity lock: temp file creation, file attributes, and insert-file-contents
     // without retaining volatile absolute temp names in the asserted result.
     crate::common::assert_oracle_parity_expect(
@@ -1123,7 +1123,7 @@ fn div_core_file_temp_attributes_and_insert_file_contents_combo() {
 #[test]
 fn div_core_call_process_environment_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0 \"a\nb\") (0 \"xyz\" \"xyz\"))""#]];
+    let expect = expect_test::expect![[r#""OK ((0 \"a\\nb\") (0 \"xyz\" \"xyz\"))""#]];
     // Parity lock: call-process, shell-command-switch, process-environment, and
     // getenv binding all agree in batch mode.
     crate::common::assert_oracle_parity_expect(
@@ -1245,7 +1245,7 @@ fn div_core_divergence_surface_repeating_timer_microseconds() {
 #[test]
 fn div_core_divergence_surface_message_repetition_coalescing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil \"same [3 times]\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (nil \"same [3 times]\\n\")""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (nil "same [3 times]\n")
     // Neomacs:   OK (nil "same\nsame\nsame\n")
@@ -2020,7 +2020,7 @@ fn div_core_divergence_surface_next_previous_buffer_after_bury() {
 fn div_core_divergence_surface_kill_buffer_live_process_hangup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (signal nil #<killed buffer> nil ((\"hangup\n\" signal nil)))""#
+        r#""OK (signal nil #<killed buffer> nil ((\"hangup\\n\" signal nil)))""#
     ]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (signal nil #<killed buffer> nil (("hangup\n" signal nil)))
@@ -2064,7 +2064,7 @@ fn div_core_divergence_surface_kill_buffer_live_process_hangup() {
 #[test]
 fn div_core_divergence_surface_delete_process_missing_sentinel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (signal nil ((\"killed\n\" signal)))""#]];
+    let expect = expect_test::expect![[r#""OK (signal nil ((\"killed\\n\" signal)))""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (signal nil (("killed\n" signal)))
     // Neomacs:   OK (signal nil nil)
@@ -2094,7 +2094,7 @@ fn div_core_divergence_surface_delete_process_missing_sentinel() {
 #[test]
 fn div_core_divergence_surface_interrupt_process_missing_sentinel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (signal 2 ((\"interrupt\n\" signal 2)))""#]];
+    let expect = expect_test::expect![[r#""OK (signal 2 ((\"interrupt\\n\" signal 2)))""#]];
     // Use a direct long-running child so SIGINT cannot race a shell installing
     // its trap. The probe locks the final status and sentinel delivery.
     crate::common::assert_oracle_parity_expect(
@@ -2131,7 +2131,7 @@ fn div_core_divergence_surface_interrupt_process_missing_sentinel() {
 #[test]
 fn div_core_divergence_surface_kill_process_missing_sentinel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (signal 9 ((\"killed\n\" signal 9)))""#]];
+    let expect = expect_test::expect![[r#""OK (signal 9 ((\"killed\\n\" signal 9)))""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (signal 9 (("killed\n" signal 9)))
     // Neomacs:   OK (signal 9 nil)
@@ -2169,7 +2169,8 @@ fn div_core_divergence_surface_kill_process_missing_sentinel() {
 #[test]
 fn div_core_divergence_surface_quit_process_sentinel_message() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (signal 3 ((\"quit (core dumped)\n\" signal 3)))""#]];
+    let expect =
+        expect_test::expect![[r#""OK (signal 3 ((\"quit (core dumped)\\n\" signal 3)))""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (signal 3 (("quit (core dumped)\n" signal 3)))
     // Neomacs:   OK (signal 3 (("quit\n" signal 3)))
@@ -2208,7 +2209,7 @@ fn div_core_divergence_surface_quit_process_sentinel_message() {
 fn div_core_divergence_surface_stop_continue_delete_process_sentinels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (signal 9 ((\"run\" run 0) (\"killed\n\" signal 9)))""#]];
+        expect_test::expect![[r#""OK (signal 9 ((\"run\" run 0) (\"killed\\n\" signal 9)))""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (signal 9 (("run" run 0) ("killed\n" signal 9)))
     // Neomacs:   OK (signal 9 nil)
@@ -2299,7 +2300,7 @@ fn div_core_divergence_surface_call_last_kbd_macro_from_binding() {
 fn div_core_divergence_surface_help_window_return_message_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Type C-x 1 to delete the help window, C-M-v to scroll help.\n\"""#
+        r#""OK \"Type C-x 1 to delete the help window, C-M-v to scroll help.\\n\"""#
     ]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK "Type C-x 1 to delete the help window, C-M-v to scroll help.\n"
@@ -2326,7 +2327,7 @@ fn div_core_divergence_surface_help_window_return_message_keys() {
 fn div_core_divergence_surface_help_window_selected_message_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"Type q to delete help window, C-v to scroll help.\n\"""#]];
+        expect_test::expect![[r#""OK \"Type q to delete help window, C-v to scroll help.\\n\"""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK "Type q to delete help window, C-v to scroll help.\n"
     // Neomacs:   OK #("Type q to delete help window, C-v to scroll help.\n" ...)
@@ -2578,7 +2579,7 @@ fn div_core_divergence_surface_thread_join_error_delivery() {
 fn div_core_divergence_surface_network_client_open_delete_sentinels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (listen closed ((server-sentinel \"open from 127.0.0.1\n\" open) (client-sentinel \"deleted\n\" closed)))""#
+        r#""OK (listen closed ((server-sentinel \"open from 127.0.0.1\\n\" open) (client-sentinel \"deleted\\n\" closed)))""#
     ]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (listen closed ((server-sentinel "open from 127.0.0.1\n" open)
@@ -3104,7 +3105,7 @@ fn div_core_divergence_surface_unibyte_multibyte_search_mismatch() {
 #[test]
 fn div_core_divergence_surface_signal_process_signal_name_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 signal 15 ((\"terminated\n\" signal 15)))""#]];
+    let expect = expect_test::expect![[r#""OK (0 signal 15 ((\"terminated\\n\" signal 15)))""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (0 signal 15 (("terminated\n" signal 15)))
     // Neomacs:   OK ((err "Undefined signal name TERM") run 0 nil)
@@ -3204,7 +3205,7 @@ fn div_core_divergence_surface_self_insert_command_inherits_properties() {
 fn div_core_divergence_surface_encode_coding_string_dos_eol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (\"a\\r\nb\" 4 (97 13 10 98) (120 13 10 121 13 10 122))""#]];
+        expect_test::expect![[r#""OK (\"a\\r\\nb\" 4 (97 13 10 98) (120 13 10 121 13 10 122))""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("a\r\nb" 4 (97 13 10 98) (120 13 10 121 13 10 122))
     // Neomacs:   OK ("" 0 nil (120 13 10 121 13 10 122))
@@ -3274,7 +3275,7 @@ fn div_core_divergence_surface_decode_coding_string_eol_detection() {
 #[test]
 fn div_core_divergence_surface_insert_file_contents_unix_keeps_cr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"a\nb\nc\" (97 13 10 98 13 10 99))""#]];
+    let expect = expect_test::expect![[r#""OK (\"a\\nb\\nc\" (97 13 10 98 13 10 99))""#]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK ("a\nb\nc" (97 13 10 98 13 10 99))
     // Neomacs:   OK ("a\nb\nc" (97 10 98 10 99))
@@ -3347,7 +3348,7 @@ fn div_core_divergence_surface_missing_program_error_data() {
 fn div_core_divergence_surface_start_process_missing_program_deferred() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (process exit 127 ((\"exited abnormally with code 127\n\" exit 127)))""#
+        r#""OK (process exit 127 ((\"exited abnormally with code 127\\n\" exit 127)))""#
     ]];
     // Divergence surfaced 2026-06-24:
     // GNU Emacs: OK (process exit 127 (("exited abnormally with code 127\n" exit 127)))

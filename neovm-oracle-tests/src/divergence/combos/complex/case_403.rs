@@ -385,7 +385,7 @@ fn div_cx403_next_single_char_prop_change_edge() {
 #[test]
 fn div_cx403_window_config_overlay_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 t \"visible text\nmore text\nfinal text\")""#]];
+    let expect = expect_test::expect![[r#""OK (1 t \"visible text\\nmore text\\nfinal text\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

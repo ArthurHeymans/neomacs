@@ -43,7 +43,7 @@ fn div_cx433_org_element_parse() {
 #[test]
 fn div_cx433_org_export_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"1 Hello\n=======\n\n  World\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"1 Hello\\n=======\\n\\n  World\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'ox)
   (with-temp-buffer

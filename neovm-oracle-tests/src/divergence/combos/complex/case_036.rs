@@ -64,7 +64,7 @@ fn div_cx36_subword_movement() {
 #[test]
 fn div_cx36_page_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil nil \"page3\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil \"page3\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((page-delimiter "\f"))
@@ -157,7 +157,7 @@ fn div_cx36_add_log_current_defun() {
 fn div_cx36_table_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"+-----+-----+-----+\n|     |     |     |\n+-----+-----+-----+\n|     |     |     |\n+-----+-----+-----+\n\" 21 22 (table-valign nil table-justify nil keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 22 25 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 25 26 (table-valign nil table-justify nil keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 26 27 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 27 32 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 32 33 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 33 38 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 38 39 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 61 66 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 66 67 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 67 72 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 72 73 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 73 78 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 78 79 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t))""#
+        r#""OK #(\"+-----+-----+-----+\\n|     |     |     |\\n+-----+-----+-----+\\n|     |     |     |\\n+-----+-----+-----+\\n\" 21 22 (table-valign nil table-justify nil keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 22 25 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 25 26 (table-valign nil table-justify nil keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 26 27 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 27 32 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 32 33 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 33 38 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 38 39 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 61 66 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 66 67 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 67 72 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 72 73 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t) 73 78 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) font-lock-face table-cell cursor-sensor-functions (table--point-entered/left-cell-function)) 78 79 (keymap table-cell-map table-cell t yank-handler (nil nil t nil) rear-nonsticky t))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -237,7 +237,7 @@ fn div_cx36_coding_system_decode_string_then_re_search() {
 fn div_cx36_process_output_buffer_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (3 \"header\nappended\n\nProcess neo-cx36-pm finished\n\")""#
+        r#""OK (3 \"header\\nappended\\n\\nProcess neo-cx36-pm finished\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

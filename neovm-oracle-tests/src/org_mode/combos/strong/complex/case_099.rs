@@ -41,7 +41,7 @@ fn combo99_org_babel_header_arg_aliases() {
 fn combo99_org_element_normalize_contents_min_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((paragraph nil \"line1\n  line2\nline3\") (paragraph nil \"line1\n\n  line2\n\nline3\"))""#
+        r#""OK ((paragraph nil \"line1\\n  line2\\nline3\") (paragraph nil \"line1\\n\\n  line2\\n\\nline3\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-element)

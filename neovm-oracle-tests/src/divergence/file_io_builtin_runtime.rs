@@ -122,7 +122,7 @@ fn make_temp_name() {
 fn write_region_append() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"line1\nline2\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"line1\\nline2\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((f (make-temp-file "neo-wra-")))
   (unwind-protect (progn

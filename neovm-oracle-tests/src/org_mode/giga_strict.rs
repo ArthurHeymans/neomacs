@@ -440,7 +440,7 @@ fn giga_all_export_filter_combinations() {
 fn giga_all_export_backend_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((parent) t ((lambda (h c i) (format \"CHILD: %s\n%s\" (org-element-property :raw-value h) c)) (lambda (s c i) c)))""#
+        r#""OK ((parent) t ((lambda (h c i) (format \"CHILD: %s\\n%s\" (org-element-property :raw-value h) c)) (lambda (s c i) c)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

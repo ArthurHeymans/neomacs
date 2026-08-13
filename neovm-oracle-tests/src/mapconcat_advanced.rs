@@ -25,7 +25,7 @@ fn oracle_prop_mapconcat_separators() {
   (mapconcat #'number-to-string '(1 2 3 4 5) " + ")
   (mapconcat #'number-to-string '(10 20 30) "---"))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"foo, bar, baz\" \"foo | bar | baz\" \"foo -> bar -> baz\" \"foo\nbar\nbaz\" \"foo AND bar AND baz\" \"1 + 2 + 3 + 4 + 5\" \"10---20---30\")""#
+        r#""OK (\"foo, bar, baz\" \"foo | bar | baz\" \"foo -> bar -> baz\" \"foo\\nbar\\nbaz\" \"foo AND bar AND baz\" \"1 + 2 + 3 + 4 + 5\" \"10---20---30\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -405,7 +405,7 @@ fn oracle_prop_mapconcat_path_builder() {
     (fmakunbound 'neovm--build-query)
     (fmakunbound 'neovm--build-csv-row)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"home/user/documents/file.txt\" \"\" \"root\" \"name=alice&age=30&city=nyc\" \"q=hello world\" \"Alice,30,\\\"New York, NY\\\",active\" \"simple,row,here\" \"Name,Age,City\nAlice,30,NYC\nBob,25,\\\"LA, CA\\\"\")""#
+        r#""OK (\"home/user/documents/file.txt\" \"\" \"root\" \"name=alice&age=30&city=nyc\" \"q=hello world\" \"Alice,30,\\\"New York, NY\\\",active\" \"simple,row,here\" \"Name,Age,City\\nAlice,30,NYC\\nBob,25,\\\"LA, CA\\\"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

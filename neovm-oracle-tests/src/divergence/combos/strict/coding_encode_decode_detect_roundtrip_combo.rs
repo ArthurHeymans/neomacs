@@ -22,7 +22,7 @@ fn div_v8_coding_encode_decode_roundtrip_common() {
       (encode-coding-string "a" 'utf-8))
 "##;
     let expect = expect_test::expect![[
-        r#""OK (\"héllo wörld\" #(\"café\" 0 4 (charset iso-8859-1)) \"ABCabc\" \"plain ascii\" \"\\346\\227\\245\\346\\234\\254\\350\\252\\236\" 9 \"abc\" \"abc\" \"a\")""#
+        r#""OK (\"héllo wörld\" #(\"café\" 0 4 (charset iso-8859-1)) \"ABCabc\" \"plain ascii\" \"日本語\" 9 \"abc\" \"abc\" \"a\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

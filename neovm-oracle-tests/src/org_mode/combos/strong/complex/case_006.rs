@@ -12,7 +12,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 fn combo6_heading_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:level 1) (:todo \"TODO\") (:priority 65) (:tags (\"t1\" \"t2\")) (:raw \"Heading\") (:custom-id nil) (:effort nil) (:planning ((\"S\" nil))) (:inline (\"bold\")) (:after-todo \"DONE\") (:after-tags (\"t1\" \"t2\" \"newtag\")) (:after-effort \"3h\") (:content #(\"* DONE [#A] Heading                                            :t1:t2:newtag:\nSCHEDULED: <2026-01-15>\n:PROPERTIES:\n:EFFORT:   3h\n:END:\nDEADLINE: <2026-01-20>\n:PROPERTIES:\n:CUSTOM_ID: myid\n:EFFORT: 2h\n:END:\nBody *bold* text\" 0 77 (org-todo-head \"TODO\"))))""#
+        r#""OK ((:level 1) (:todo \"TODO\") (:priority 65) (:tags (\"t1\" \"t2\")) (:raw \"Heading\") (:custom-id nil) (:effort nil) (:planning ((\"S\" nil))) (:inline (\"bold\")) (:after-todo \"DONE\") (:after-tags (\"t1\" \"t2\" \"newtag\")) (:after-effort \"3h\") (:content #(\"* DONE [#A] Heading                                            :t1:t2:newtag:\\nSCHEDULED: <2026-01-15>\\n:PROPERTIES:\\n:EFFORT:   3h\\n:END:\\nDEADLINE: <2026-01-20>\\n:PROPERTIES:\\n:CUSTOM_ID: myid\\n:EFFORT: 2h\\n:END:\\nBody *bold* text\" 0 77 (org-todo-head \"TODO\"))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

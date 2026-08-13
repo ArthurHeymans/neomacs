@@ -20,7 +20,7 @@ fn oracle_prop_shell_command_to_string_basic_output_and_status() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK (\"alpha\nbeta\n\" \"kept\" (wrong-type-argument stringp 42))""#
+        r#""OK (\"alpha\\nbeta\\n\" \"kept\" (wrong-type-argument stringp 42))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -50,6 +50,6 @@ fn oracle_prop_shell_command_to_string_uses_current_default_directory() {
    (shell-command-to-string "pwd")))
 "#;
 
-    let expect = expect_test::expect![[r#""OK (\"[SESSION-TMPDIR]/\" \"[SESSION-TMPDIR]\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"[SESSION-TMPDIR]/\" \"[SESSION-TMPDIR]\\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

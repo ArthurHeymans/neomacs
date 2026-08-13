@@ -12,7 +12,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 fn uf17_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:overview \"* H1\n** H2\n*** H3\nBody\n* H1b\") (:content \"* H1\n** H2\n*** H3\nBody\n* H1b\") (:all \"* H1\n** H2\n*** H3\nBody\n* H1b\"))""#
+        r#""OK ((:overview \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\") (:content \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\") (:all \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -62,7 +62,7 @@ fn uf17_cycle_single() {
 fn uf17_global() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:first \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:second \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\") (:third \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\"))""#
+        r#""OK ((:first \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\") (:second \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\") (:third \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -88,7 +88,7 @@ fn uf17_global() {
 fn uf17_startup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+STARTUP: overview\n* H1\n** H2\n*** H3\nBody\n* H1b\"""##
+        r##""OK \"#+STARTUP: overview\\n* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -107,7 +107,7 @@ fn uf17_startup() {
 #[test]
 fn uf17_context() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -128,7 +128,7 @@ fn uf17_context() {
 #[test]
 fn uf17_set_vis() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n*** H3\nBody\n* H1b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -397,7 +397,7 @@ fn uf17_heading_respect() {
 #[test]
 fn uf17_prop_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H\n:PROPERTIES:\n:END:\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H\\n:PROPERTIES:\\n:END:\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -416,7 +416,7 @@ fn uf17_prop_insert() {
 #[test]
 fn uf17_drawer_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H\n:MYDRAWER:\n\n:END:\n\nBody\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H\\n:MYDRAWER:\\n\\n:END:\\n\\nBody\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -436,7 +436,7 @@ fn uf17_drawer_insert() {
 #[test]
 fn uf17_comment_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r##""OK \"# \n* H\nBody\"""##]];
+    let expect = expect_test::expect![[r##""OK \"# \\n* H\\nBody\"""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -456,7 +456,7 @@ fn uf17_comment_insert() {
 #[test]
 fn uf17_src_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H\n#+begin_src \n#+end_src\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H\\n#+begin_src \\n#+end_src\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -476,7 +476,7 @@ fn uf17_src_insert() {
 fn uf17_fill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"This is a very long paragraph that\nshould be wrapped at some point because\nit exceeds the fill column width\"""#
+        r#""OK \"This is a very long paragraph that\\nshould be wrapped at some point because\\nit exceeds the fill column width\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -538,7 +538,7 @@ fn uf17_fill_heading() {
 fn uf17_auto_fill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"This is a very long paragraph that\nshould be wrapped at some point because\nit exceeds the fill column width\"""#
+        r#""OK \"This is a very long paragraph that\\nshould be wrapped at some point because\\nit exceeds the fill column width\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -577,7 +577,7 @@ fn uf17_ctrlc_src() {
 #[test]
 fn uf17_ctrlc_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"- [ ] a\n- [ ] b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- [ ] a\\n- [ ] b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -597,7 +597,7 @@ fn uf17_ctrlc_check() {
 fn uf17_ctrlc_keyword() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r##""OK #(\"#+STARTUP: overview\n* H\" 0 23 (fontified nil))""##]];
+        expect_test::expect![[r##""OK #(\"#+STARTUP: overview\\n* H\" 0 23 (fontified nil))""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

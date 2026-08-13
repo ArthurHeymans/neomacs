@@ -6,7 +6,7 @@ fn org_capture_table_line_and_plain_append_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"* Log\n| When             | Text     |\n|------------------+----------|\n| [date] | row text |\nPlain: plain text\n\"""#
+        r#""OK \"* Log\\n| When             | Text     |\\n|------------------+----------|\\n| [date] | row text |\\nPlain: plain text\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -47,7 +47,8 @@ fn org_capture_table_line_and_plain_append_combo() {
 fn org_capture_item_checkitem_prepend_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"* List\n- first\n- existing\n- done-ish\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"* List\\n- first\\n- existing\\n- done-ish\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -85,7 +86,7 @@ fn org_capture_template_expand_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"* TODO Initial text\nFrom: [[file:/tmp/source.org::*Source][Source]]\nFile: /tmp/source.org\nName: source.org\nTime: 2026-05-27\nOK\n\"""#
+        r#""OK \"* TODO Initial text\\nFrom: [[file:/tmp/source.org::*Source][Source]]\\nFile: /tmp/source.org\\nName: source.org\\nTime: 2026-05-27\\nOK\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -116,7 +117,7 @@ fn org_capture_olp_datetree_week_clock_template_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((t \"Captured body\" #<killed buffer>) nil \"* Journal\n** Work\n*** 2026\n**** 2026-W22\n***** 2026-05-27 Wednesday\n****** TODO Captured body\n:LOGBOOK:\nCLOCK: [stamp]--[stamp] => [duration]\n:END:\nCreated: [stamp]\n\")""#
+        r#""OK ((t \"Captured body\" #<killed buffer>) nil \"* Journal\\n** Work\\n*** 2026\\n**** 2026-W22\\n***** 2026-05-27 Wednesday\\n****** TODO Captured body\\n:LOGBOOK:\\nCLOCK: [stamp]--[stamp] => [duration]\\n:END:\\nCreated: [stamp]\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -169,7 +170,7 @@ fn org_capture_regexp_function_prepend_append_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (nil 9 \"* Inbox\nREGEXP:one\n:marker:\nold\n:end:\n* Tail\n** FUNCTION two\n\")""#
+        r#""OK (nil 9 \"* Inbox\\nREGEXP:one\\n:marker:\\nold\\n:end:\\n* Tail\\n** FUNCTION two\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -219,7 +220,7 @@ fn org_capture_clock_target_resume_and_links_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Clocked\" \"NOTE\" t \"Clocked\" t \"* TODO Clocked\n:LOGBOOK:\nCLOCK: [stamp]--[stamp] => [duration]\nCLOCK: [stamp]--[stamp] => [duration]\n:END:\nBody\n** NOTE \n:LOGBOOK:\nCLOCK: [stamp]--[stamp] => [duration]\n:END:\nFrom clock: Clocked\nLink: [[file:<file>::*Clocked][Clocked]]\nInitial: captured text\n* Notes\n\")""#
+        r#""OK (\"Clocked\" \"NOTE\" t \"Clocked\" t \"* TODO Clocked\\n:LOGBOOK:\\nCLOCK: [stamp]--[stamp] => [duration]\\nCLOCK: [stamp]--[stamp] => [duration]\\n:END:\\nBody\\n** NOTE \\n:LOGBOOK:\\nCLOCK: [stamp]--[stamp] => [duration]\\n:END:\\nFrom clock: Clocked\\nLink: [[file:<file>::*Clocked][Clocked]]\\nInitial: captured text\\n* Notes\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -285,7 +286,7 @@ fn org_capture_kill_finalize_goto_marker_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"CAPTURE-org-capture-life.org\" t nil \"** TODO transient body\nCaptured from \") \"* Inbox\nOld line\n* Done\n\" (\"CAPTURE-org-capture-life.org\" nil \"** TODO stored body\nCaptured from \") 18 \"org-capture-life.org\" \"** TODO stored body\" \"* Inbox\nOld line\n** TODO stored body\nCaptured from \n* Done\n\")""#
+        r#""OK ((\"CAPTURE-org-capture-life.org\" t nil \"** TODO transient body\\nCaptured from \") \"* Inbox\\nOld line\\n* Done\\n\" (\"CAPTURE-org-capture-life.org\" nil \"** TODO stored body\\nCaptured from \") 18 \"org-capture-life.org\" \"** TODO stored body\" \"* Inbox\\nOld line\\n** TODO stored body\\nCaptured from \\n* Done\\n\")""#
     ]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(
         r##"(progn
@@ -419,7 +420,7 @@ fn org_capture_finalize_hooks_stats_narrow_prompt_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((17 40 t) (\"CAPTURE-org-capture-hooks.org\" t \"*** TODO Hooked Title\nSCHEDULED: <2026-05-27 Wed>\nFrom: [[file:[ORACLE-TMPDIR]/org-capture-hooks.org::*Inbox][Inbox]]\nInitial body\n\" nil) (t 17 40 \"** Inbox\n- [ ] Existing\") (\"CAPTURE-org-capture-hooks.org\" \"- Captured checkbox\" 62) ((prompt \"Title (default Default): \" nil) (prepare \"CAPTURE-org-capture-hooks.org\" t 42 157) (before \"CAPTURE-org-capture-hooks.org\" 41 172) (after \"e\" 129 42) (check-after \"c\" 41)) nil 41 \"* Project [stamp]\n** Inbox\n- [ ] Existing\n- Captured checkbox\n\n*** TODO Hooked Title\nSCHEDULED: <2026-05-27 Wed>\nFrom: [[file:[ORACLE-TMPDIR]/org-capture-hooks.org::*Inbox][Inbox]]\nInitial body\nPrepared line\n\n** Archive\n\")""#
+        r#""OK ((17 40 t) (\"CAPTURE-org-capture-hooks.org\" t \"*** TODO Hooked Title\\nSCHEDULED: <2026-05-27 Wed>\\nFrom: [[file:[ORACLE-TMPDIR]/org-capture-hooks.org::*Inbox][Inbox]]\\nInitial body\\n\" nil) (t 17 40 \"** Inbox\\n- [ ] Existing\") (\"CAPTURE-org-capture-hooks.org\" \"- Captured checkbox\" 62) ((prompt \"Title (default Default): \" nil) (prepare \"CAPTURE-org-capture-hooks.org\" t 42 157) (before \"CAPTURE-org-capture-hooks.org\" 41 172) (after \"e\" 129 42) (check-after \"c\" 41)) nil 41 \"* Project [stamp]\\n** Inbox\\n- [ ] Existing\\n- Captured checkbox\\n\\n*** TODO Hooked Title\\nSCHEDULED: <2026-05-27 Wed>\\nFrom: [[file:[ORACLE-TMPDIR]/org-capture-hooks.org::*Inbox][Inbox]]\\nInitial body\\nPrepared line\\n\\n** Archive\\n\")""#
     ]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(
         r##"(progn
@@ -563,7 +564,7 @@ fn org_capture_refile_cross_file_marker_link_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((\"CAPTURE-org-capture-refile-inbox.org\" nil \"** TODO captured task\n:PROPERTIES:\n:Source: \n:END:\nBody: \n\") (24 \"org-capture-refile-inbox.org\") \"#+TITLE: Inbox\n* Inbox\n** TODO captured task\n:PROPERTIES:\n:Source: \n:END:\nBody: \n\" ((\"Projects\" \"org-capture-refile-projects.org\" nil) (\"Projects/Projects\" \"org-capture-refile-projects.org\" t) (\"Projects/Projects/Alpha\" \"org-capture-refile-projects.org\" t) (\"Projects/Projects/Beta\" \"org-capture-refile-projects.org\" t)) \"#+TITLE: Inbox\n* Inbox\n\" \"#+TITLE: Projects\n* Projects\n** Alpha\n** Beta\n*** TODO captured task\n:PROPERTIES:\n:Source: \n:END:\nBody: \n\" \"\" \"org-refile-last-stored\" t ((after 24 \"org-capture-refile-inbox.org\")))""##
+        r##""OK ((\"CAPTURE-org-capture-refile-inbox.org\" nil \"** TODO captured task\\n:PROPERTIES:\\n:Source: \\n:END:\\nBody: \\n\") (24 \"org-capture-refile-inbox.org\") \"#+TITLE: Inbox\\n* Inbox\\n** TODO captured task\\n:PROPERTIES:\\n:Source: \\n:END:\\nBody: \\n\" ((\"Projects\" \"org-capture-refile-projects.org\" nil) (\"Projects/Projects\" \"org-capture-refile-projects.org\" t) (\"Projects/Projects/Alpha\" \"org-capture-refile-projects.org\" t) (\"Projects/Projects/Beta\" \"org-capture-refile-projects.org\" t)) \"#+TITLE: Inbox\\n* Inbox\\n\" \"#+TITLE: Projects\\n* Projects\\n** Alpha\\n** Beta\\n*** TODO captured task\\n:PROPERTIES:\\n:Source: \\n:END:\\nBody: \\n\" \"\" \"org-refile-last-stored\" t ((after 24 \"org-capture-refile-inbox.org\")))""##
     ]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(
         r##"(progn
@@ -798,7 +799,7 @@ fn org_capture_template_expand_body_placeholders_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: \n:Created: [2026-06-15 Mon 12:00]\n:END:\nFirst task\n* Notes\n** Quick\n\" \"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: \n:Created: [2026-06-15 Mon 12:00]\n:END:\nFirst task\n* Notes\n** Quick\n- [2026-06-15 Mon 12:00] \n  \n\" \"#+TITLE: Tasks\n* Inbox\n** TODO \n:PROPERTIES:\n:Source: [src]\n:Created: [stamp]\n:END:\nFirst task\n* Notes\n** Quick\n- [2026-06-15 Mon 12:00] \n  \n\" ((headline 1 \"Inbox\" nil nil) (headline 2 \"\" nil nil) (property-drawer nil nil nil nil) (headline 1 \"Notes\" nil nil) (headline 2 \"Quick\" nil nil) (item nil nil nil nil)))""##
+        r##""OK (\"#+TITLE: Tasks\\n* Inbox\\n** TODO \\n:PROPERTIES:\\n:Source: \\n:Created: [2026-06-15 Mon 12:00]\\n:END:\\nFirst task\\n* Notes\\n** Quick\\n\" \"#+TITLE: Tasks\\n* Inbox\\n** TODO \\n:PROPERTIES:\\n:Source: \\n:Created: [2026-06-15 Mon 12:00]\\n:END:\\nFirst task\\n* Notes\\n** Quick\\n- [2026-06-15 Mon 12:00] \\n  \\n\" \"#+TITLE: Tasks\\n* Inbox\\n** TODO \\n:PROPERTIES:\\n:Source: [src]\\n:Created: [stamp]\\n:END:\\nFirst task\\n* Notes\\n** Quick\\n- [2026-06-15 Mon 12:00] \\n  \\n\" ((headline 1 \"Inbox\" nil nil) (headline 2 \"\" nil nil) (property-drawer nil nil nil nil) (headline 1 \"Notes\" nil nil) (headline 2 \"Quick\" nil nil) (item nil nil nil nil)))""##
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
@@ -931,7 +932,7 @@ fn org_capture_datetree_insert_edit_clock_refile_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"#+TITLE: Journal\n* 2026\n** 2026-06 June\n*** 2026-06-15 Monday\n**** Journal entry alpha\n[2026-06-15 Mon 12:00]\n\" \"#+TITLE: Journal\n* 2026\n** 2026-06 June\n*** 2026-06-15 Monday\n**** Journal entry alpha\n[2026-06-15 Mon 12:00]\n**** Journal entry beta\n[2026-06-15 Mon 12:00]\n\")""##
+        r##""OK (\"#+TITLE: Journal\\n* 2026\\n** 2026-06 June\\n*** 2026-06-15 Monday\\n**** Journal entry alpha\\n[2026-06-15 Mon 12:00]\\n\" \"#+TITLE: Journal\\n* 2026\\n** 2026-06 June\\n*** 2026-06-15 Monday\\n**** Journal entry alpha\\n[2026-06-15 Mon 12:00]\\n**** Journal entry beta\\n[2026-06-15 Mon 12:00]\\n\")""##
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn

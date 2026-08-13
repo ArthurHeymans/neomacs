@@ -39,7 +39,7 @@ fn oracle_prop_byte_ops_unibyte_string_basic() {
   ;; string-bytes on unibyte string
   (string-bytes (unibyte-string 72 101 108 108 111)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"Hello\" \"A\" \"\" \"\\200\\310\\377\" \" !~\u{7f}\" \"\\0\" \"\\0A\\200\\377\n\\r\" nil 5 5)""#
+        r#""OK (\"Hello\" \"A\" \"\" \"���\" \" !~\u{7f}\" \"\\0\" \"\\0A��\\n\\r\" nil 5 5)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

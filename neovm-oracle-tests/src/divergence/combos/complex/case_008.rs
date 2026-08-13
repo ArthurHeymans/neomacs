@@ -104,7 +104,7 @@ fn div_cx8_text_property_sticky_delete_merge() {
 #[test]
 fn div_cx8_process_sentinel_event_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"exited abnormally with code 3\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"exited abnormally with code 3\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (events)
@@ -136,7 +136,7 @@ fn div_cx8_process_inherit_coding_flag() {
 #[test]
 fn div_cx8_decode_coding_region_then_position_bytes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"ab\\303\\251c\" 5 1 4 5)""#]];
+    let expect = expect_test::expect![[r#""OK (\"abéc\" 5 1 4 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -283,7 +283,7 @@ fn div_cx8_mapconcat_multibyte_with_separator() {
 #[test]
 fn div_cx8_write_region_coding_preserve_eol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"line1\nline2\n\" 12)""#]];
+    let expect = expect_test::expect![[r#""OK (\"line1\\nline2\\n\" 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx8-eol-")))

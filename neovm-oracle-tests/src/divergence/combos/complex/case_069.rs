@@ -238,7 +238,7 @@ fn div_cx69_replace_match_with_backref_substitution() {
 #[test]
 fn div_cx69_replace_regexp_in_buffer_global() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"let foo = bar;\nlet baz = qux;\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"let foo = bar;\\nlet baz = qux;\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

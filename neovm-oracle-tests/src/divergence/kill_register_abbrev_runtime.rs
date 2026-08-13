@@ -37,7 +37,7 @@ fn kill_yank() {
 fn rectangle_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"XX12\nYY34\nZZ56\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"XX12\\nYY34\\nZZ56\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "12\n34\n56\n")

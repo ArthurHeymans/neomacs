@@ -95,7 +95,7 @@ fn divergence_read_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"hello world\" . 13) (\"hello \\\"world\\\"\" . 17) (\"a\nb\" . 6) (\"\t\" . 4))""#
+        r#""OK ((\"hello world\" . 13) (\"hello \\\"world\\\"\" . 17) (\"a\\nb\" . 6) (\"\t\" . 4))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list

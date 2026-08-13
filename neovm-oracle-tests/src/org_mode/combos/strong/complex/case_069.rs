@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 fn combo69_babel_results_code_org() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK (\"42\n\" (:buffer-after \"#+begin_src emacs-lisp :results code\n(setq x 42)\n#+end_src\n\n#+RESULTS:\n#+begin_src emacs-lisp\n42\n#+end_src\n\"))""##
+        r##""OK (\"42\\n\" (:buffer-after \"#+begin_src emacs-lisp :results code\\n(setq x 42)\\n#+end_src\\n\\n#+RESULTS:\\n#+begin_src emacs-lisp\\n42\\n#+end_src\\n\"))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -138,7 +138,7 @@ fn combo69_babel_prologue_epilogue_lisp() {
 fn combo69_org_timestamp_up_down() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:up-fbound t) (:down-fbound t) (:after-up \"[2024-06-15 Sat]\n\"))""#
+        r#""OK ((:up-fbound t) (:down-fbound t) (:after-up \"[2024-06-15 Sat]\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -182,7 +182,7 @@ fn combo69_org_agenda_bulk_action() {
 fn combo69_babel_with_results_verbatim() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK (\"\\\"literal output\\\"\" (:buffer \"#+begin_src emacs-lisp :results verbatim\n\\\"literal output\\\"\n#+end_src\n\n#+RESULTS:\n: \\\"literal output\\\"\n\"))""##
+        r##""OK (\"\\\"literal output\\\"\" (:buffer \"#+begin_src emacs-lisp :results verbatim\\n\\\"literal output\\\"\\n#+end_src\\n\\n#+RESULTS:\\n: \\\"literal output\\\"\\n\"))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

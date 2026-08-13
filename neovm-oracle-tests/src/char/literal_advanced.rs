@@ -128,7 +128,7 @@ fn oracle_prop_char_literal_roundtrip_char_string() {
                             ;; string-to-char of empty string is 0
                             (= (string-to-char "") 0))))"#;
     let expect = expect_test::expect![[
-        r#""OK (((97 \"a\" 97 t) (90 \"Z\" 90 t) (48 \"0\" 48 t) (33 \"!\" 33 t) (10 \"\n\" 10 t) (9 \"\t\" 9 t) (233 \"é\" 233 t) (26085 \"日\" 26085 t) (128512 \"😀\" 128512 t) (32 \" \" 32 t)) t t t)""#
+        r#""OK (((97 \"a\" 97 t) (90 \"Z\" 90 t) (48 \"0\" 48 t) (33 \"!\" 33 t) (10 \"\\n\" 10 t) (9 \"\t\" 9 t) (233 \"é\" 233 t) (26085 \"日\" 26085 t) (128512 \"😀\" 128512 t) (32 \" \" 32 t)) t t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

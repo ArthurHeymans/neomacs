@@ -82,7 +82,7 @@ fn div_cx22_outline_navigation() {
 fn div_cx22_comment_region_uncomment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\";; line one\n;; line two\n;; line t\nhree\n\" \"line one\nline two\nline t\nhree\n\")""#
+        r#""OK (\";; line one\\n;; line two\\n;; line t\\nhree\\n\" \"line one\\nline two\\nline t\\nhree\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -101,7 +101,7 @@ fn div_cx22_comment_region_uncomment() {
 #[test]
 fn div_cx22_align_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"a\t\t= 1\nfoo\t\t= 2\nlongname\t= 3\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"a\t\t= 1\\nfoo\t\t= 2\\nlongname\t= 3\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

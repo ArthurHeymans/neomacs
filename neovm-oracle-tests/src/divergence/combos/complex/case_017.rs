@@ -188,7 +188,7 @@ fn div_cx17_set_buffer_file_coding_system_effect() {
 #[test]
 fn div_cx17_process_sentinel_with_buffer_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"output\n\" 0)""#]];
+    let expect = expect_test::expect![[r#""OK (\"output\\n\" 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx17-sl*"))

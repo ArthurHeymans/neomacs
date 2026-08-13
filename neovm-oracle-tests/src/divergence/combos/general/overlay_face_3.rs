@@ -185,7 +185,7 @@ fn div_combo_point_left_hook_fires() {
 fn div_combo_line_prefix_text_property_with_fill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"alpha bravo\ncharlie delta\necho\n\" 0 11 (line-prefix \"> \") 11 12 (line-prefix \"> \") 12 25 (line-prefix \"> \") 25 26 (line-prefix \"> \") 26 31 (line-prefix \"> \"))""#
+        r#""OK #(\"alpha bravo\\ncharlie delta\\necho\\n\" 0 11 (line-prefix \"> \") 11 12 (line-prefix \"> \") 12 25 (line-prefix \"> \") 25 26 (line-prefix \"> \") 26 31 (line-prefix \"> \"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -204,7 +204,7 @@ fn div_combo_line_prefix_text_property_with_fill() {
 fn div_combo_wrap_prefix_text_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"alpha bravo\ncharlie\ndelta echo\n\" 0 11 (wrap-prefix \"  \") 11 12 (wrap-prefix \"  \") 12 19 (wrap-prefix \"  \") 19 20 (wrap-prefix \"  \") 20 31 (wrap-prefix \"  \"))""#
+        r#""OK #(\"alpha bravo\\ncharlie\\ndelta echo\\n\" 0 11 (wrap-prefix \"  \") 11 12 (wrap-prefix \"  \") 12 19 (wrap-prefix \"  \") 19 20 (wrap-prefix \"  \") 20 31 (wrap-prefix \"  \"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

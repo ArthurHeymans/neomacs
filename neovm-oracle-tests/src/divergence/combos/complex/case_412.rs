@@ -170,7 +170,7 @@ fn div_cx412_dired_mark_ops() {
 #[test]
 fn div_cx412_shell_command() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"hello\" \"line1\nline2\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello\" \"line1\\nline2\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-trim-right (shell-command-to-string "echo hello"))
@@ -231,7 +231,7 @@ fn div_cx412_next_error_func() {
 fn div_cx412_pp_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"(a (b c) d (e (f g)))\n\" \"((lambda (x) (* x 2)) 5)\n\")""#
+        r#""OK (\"(a (b c) d (e (f g)))\\n\" \"((lambda (x) (* x 2)) 5)\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

@@ -114,6 +114,6 @@ fn oracle_write_region_intersperses_annotation_hook_output() {
     (delete-file file)))
 "#;
 
-    let expect = expect_test::expect![[r#""OK \"[STAMP] line\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"[STAMP] line\\n\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

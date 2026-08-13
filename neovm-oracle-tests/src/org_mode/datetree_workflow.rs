@@ -6,7 +6,7 @@ fn org_datetree_property_subtree_timestamp_cleanup_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"* Inbox\n** Timeline\n:PROPERTIES:\n:DATE_TREE: t\n:END:\n*** 2026\n**** 2026-05 May\n\n***** 2026-05-25 Monday\n[2026-05-25 Mon]\n****** Early\n<2026-05-25 Mon>\n***** 2026-05-26 Tuesday\n[2026-05-26 Tue]\n****** LateMoved stamp <2026-05-26 Tue>\n\nBody\n***** 2026-05-27 Wednesday\n[2026-05-27 Wed]\n\n** Other\n\" 5 2)""#
+        r#""OK (\"* Inbox\\n** Timeline\\n:PROPERTIES:\\n:DATE_TREE: t\\n:END:\\n*** 2026\\n**** 2026-05 May\\n\\n***** 2026-05-25 Monday\\n[2026-05-25 Mon]\\n****** Early\\n<2026-05-25 Mon>\\n***** 2026-05-26 Tuesday\\n[2026-05-26 Tue]\\n****** LateMoved stamp <2026-05-26 Tue>\\n\\nBody\\n***** 2026-05-27 Wednesday\\n[2026-05-27 Wed]\\n\\n** Other\\n\" 5 2)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -49,7 +49,7 @@ fn org_datetree_iso_week_property_ordering_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((1 \"Weekly\") (2 \"2026\") (3 \"2026-W02\") (4 \"Earlier entry\") (4 \"2026-01-05 Monday\") (3 \"2026-W53\") (4 \"Thu entry\") (4 \"2026-12-31 Thursday\") (4 \"Fri entry\") (4 \"2027-01-01 Friday\") (1 \"Notes\")) \"* Weekly\n:PROPERTIES:\n:WEEK_TREE: t\n:END:\n** 2026\n\n*** 2026-W02\n\n**** Earlier entry\n**** 2026-01-05 Monday\n\n*** 2026-W53\n\n**** Thu entry\n**** 2026-12-31 Thursday\n\n**** Fri entry\n**** 2027-01-01 Friday\n\n* Notes\n\")""#
+        r#""OK (((1 \"Weekly\") (2 \"2026\") (3 \"2026-W02\") (4 \"Earlier entry\") (4 \"2026-01-05 Monday\") (3 \"2026-W53\") (4 \"Thu entry\") (4 \"2026-12-31 Thursday\") (4 \"Fri entry\") (4 \"2027-01-01 Friday\") (1 \"Notes\")) \"* Weekly\\n:PROPERTIES:\\n:WEEK_TREE: t\\n:END:\\n** 2026\\n\\n*** 2026-W02\\n\\n**** Earlier entry\\n**** 2026-01-05 Monday\\n\\n*** 2026-W53\\n\\n**** Thu entry\\n**** 2026-12-31 Thursday\\n\\n**** Fri entry\\n**** 2027-01-01 Friday\\n\\n* Notes\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -92,7 +92,7 @@ fn org_datetree_month_and_day_find_existing_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"* 2026\n\n*** Month note\n** 2026-05 May\n*** 2026-05-27 Wednesday\n**** Existing\n\n**** Day note\n\n** 2026-06 June\n\n**** New month day\n*** 2026-06-02 Tuesday\n\" 2 3)""#
+        r#""OK (\"* 2026\\n\\n*** Month note\\n** 2026-05 May\\n*** 2026-05-27 Wednesday\\n**** Existing\\n\\n**** Day note\\n\\n** 2026-06 June\\n\\n**** New month day\\n*** 2026-06-02 Tuesday\\n\" 2 3)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

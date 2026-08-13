@@ -69,7 +69,7 @@ fn combo61_footnote_action_delete_renumber() {
 fn combo61_babel_results_raw_org() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK (\"<p>raw html output</p>\" \"* org headline\n** subheading\" (:result-count 0) (:buffer \"#+begin_src emacs-lisp :results raw\n\\\"<p>raw html output</p>\\\"\n#+end_src\n\n#+RESULTS:\n<p>raw html output</p>\n\n#+begin_src emacs-lisp :results org\n\\\"* org headline\\\\n** subheading\\\"\n#+end_src\n\n#+RESULTS:\n#+begin_src org\n,* org headline\n,** subheading\n#+end_src\n\"))""##
+        r##""OK (\"<p>raw html output</p>\" \"* org headline\\n** subheading\" (:result-count 0) (:buffer \"#+begin_src emacs-lisp :results raw\\n\\\"<p>raw html output</p>\\\"\\n#+end_src\\n\\n#+RESULTS:\\n<p>raw html output</p>\\n\\n#+begin_src emacs-lisp :results org\\n\\\"* org headline\\\\n** subheading\\\"\\n#+end_src\\n\\n#+RESULTS:\\n#+begin_src org\\n,* org headline\\n,** subheading\\n#+end_src\\n\"))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

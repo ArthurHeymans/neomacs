@@ -62,7 +62,7 @@ fn div_face_doc_button() {
 fn div_face_doc_child_frame_border() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Basic face for the internal border of child frames.\nFor the internal border of non-child frames see ‘internal-border’.\"""#
+        r#""OK \"Basic face for the internal border of child frames.\\nFor the internal border of non-child frames see ‘internal-border’.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'child-frame-border)", expect);
 }
@@ -71,7 +71,7 @@ fn div_face_doc_child_frame_border() {
 fn div_face_doc_completions_annotations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face to use for annotations in the *Completions* buffer.\nThis face is only used if the strings used for completions\ndoesn’t already specify a face.\"""#
+        r#""OK \"Face to use for annotations in the *Completions* buffer.\\nThis face is only used if the strings used for completions\\ndoesn’t already specify a face.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'completions-annotations)",
@@ -83,7 +83,7 @@ fn div_face_doc_completions_annotations() {
 fn div_face_doc_completions_common_part() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for the parts of completions which matched the pattern.\nSee also the face ‘completions-first-difference’.\"""#
+        r#""OK \"Face for the parts of completions which matched the pattern.\\nSee also the face ‘completions-first-difference’.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'completions-common-part)",
@@ -95,7 +95,7 @@ fn div_face_doc_completions_common_part() {
 fn div_face_doc_completions_first_difference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for the first character after point in completions.\nSee also the face ‘completions-common-part’.\"""#
+        r#""OK \"Face for the first character after point in completions.\\nSee also the face ‘completions-common-part’.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'completions-first-difference)",
@@ -155,7 +155,7 @@ fn div_face_doc_confusingly_reordered() {
 fn div_face_doc_cursor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Basic face for the cursor color under X.\nCurrently, only the ‘:background’ attribute is meaningful; all\nother attributes are ignored.  The cursor foreground color is\ntaken from the background color of the underlying text.\n\nNote: Other faces cannot inherit from the cursor face.\"""#
+        r#""OK \"Basic face for the cursor color under X.\\nCurrently, only the ‘:background’ attribute is meaningful; all\\nother attributes are ignored.  The cursor foreground color is\\ntaken from the background color of the underlying text.\\n\\nNote: Other faces cannot inherit from the cursor face.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'cursor)", expect);
 }
@@ -171,7 +171,7 @@ fn div_face_doc_default() {
 fn div_face_doc_eldoc_highlight_function_argument() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face used for the argument at point in a function’s argument list.\nNote that this face has no effect unless the ‘eldoc-documentation-strategy’\nhandles it explicitly.\"""#
+        r#""OK \"Face used for the argument at point in a function’s argument list.\\nNote that this face has no effect unless the ‘eldoc-documentation-strategy’\\nhandles it explicitly.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'eldoc-highlight-function-argument)",
@@ -668,7 +668,7 @@ fn div_face_doc_file_name_shadow() {
 fn div_face_doc_fill_column_indicator() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for displaying fill column indicator.\nThis face is used when ‘display-fill-column-indicator-mode’ is\nnon-nil.\"""#
+        r#""OK \"Face for displaying fill column indicator.\\nThis face is used when ‘display-fill-column-indicator-mode’ is\\nnon-nil.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'fill-column-indicator)",
@@ -752,7 +752,7 @@ fn div_face_doc_font_lock_constant_face() {
 fn div_face_doc_font_lock_delimiter_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Font Lock mode face used to highlight delimiters.\nWhat exactly is a delimiter depends on the major mode, but usually\nthese are characters like comma, colon, and semi-colon.\"""#
+        r#""OK \"Font Lock mode face used to highlight delimiters.\\nWhat exactly is a delimiter depends on the major mode, but usually\\nthese are characters like comma, colon, and semi-colon.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'font-lock-delimiter-face)",
@@ -764,7 +764,7 @@ fn div_face_doc_font_lock_delimiter_face() {
 fn div_face_doc_font_lock_doc_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Font Lock mode face used to highlight documentation embedded in program code.\nIt is typically used for special documentation comments or strings.\"""#
+        r#""OK \"Font Lock mode face used to highlight documentation embedded in program code.\\nIt is typically used for special documentation comments or strings.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'font-lock-doc-face)", expect);
 }
@@ -773,7 +773,7 @@ fn div_face_doc_font_lock_doc_face() {
 fn div_face_doc_font_lock_doc_markup_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Font Lock mode face used to highlight embedded documentation mark-up.\nIt is meant for mark-up elements in text that uses ‘font-lock-doc-face’, such\nas the constructs of Haddock, Javadoc and similar systems.\"""#
+        r#""OK \"Font Lock mode face used to highlight embedded documentation mark-up.\\nIt is meant for mark-up elements in text that uses ‘font-lock-doc-face’, such\\nas the constructs of Haddock, Javadoc and similar systems.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'font-lock-doc-markup-face)",
@@ -888,7 +888,7 @@ fn div_face_doc_font_lock_preprocessor_face() {
 fn div_face_doc_font_lock_property_name_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Font Lock mode face used to highlight properties of an object.\nFor example, the declaration of fields in a struct.\"""#
+        r#""OK \"Font Lock mode face used to highlight properties of an object.\\nFor example, the declaration of fields in a struct.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'font-lock-property-name-face)",
@@ -900,7 +900,7 @@ fn div_face_doc_font_lock_property_name_face() {
 fn div_face_doc_font_lock_property_use_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Font Lock mode face used to highlight property references.\nFor example, property lookup of fields in a struct.\"""#
+        r#""OK \"Font Lock mode face used to highlight property references.\\nFor example, property lookup of fields in a struct.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'font-lock-property-use-face)",
@@ -1023,7 +1023,7 @@ fn div_face_doc_fringe() {
 fn div_face_doc_glyphless_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for displaying non-graphic characters (e.g. U+202A (LRE)).\nIt is used for characters of no fonts too.\"""#
+        r#""OK \"Face for displaying non-graphic characters (e.g. U+202A (LRE)).\\nIt is used for characters of no fonts too.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'glyphless-char)", expect);
 }
@@ -1039,7 +1039,7 @@ fn div_face_doc_header_line() {
 fn div_face_doc_header_line_active() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for the selected header line.\nThis inherits from the ‘header-line’ face.\"""#
+        r#""OK \"Face for the selected header line.\\nThis inherits from the ‘header-line’ face.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'header-line-active)", expect);
 }
@@ -1088,7 +1088,7 @@ fn div_face_doc_help_for_help_header() {
 fn div_face_doc_help_key_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for keybindings in *Help* buffers.\n\nThis face is added by ‘substitute-command-keys’, which see.\n\nNote that this face will also be used for key bindings in\ntooltips.  This means that, for example, changing the :height of\nthis face will increase the height of any tooltip containing key\nbindings.  See also the face ‘tooltip’.\"""#
+        r#""OK \"Face for keybindings in *Help* buffers.\\n\\nThis face is added by ‘substitute-command-keys’, which see.\\n\\nNote that this face will also be used for key bindings in\\ntooltips.  This means that, for example, changing the :height of\\nthis face will increase the height of any tooltip containing key\\nbindings.  See also the face ‘tooltip’.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'help-key-binding)", expect);
 }
@@ -1111,7 +1111,7 @@ fn div_face_doc_homoglyph() {
 fn div_face_doc_internal_border() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Basic face for the internal border.\nFor the internal border of child frames see ‘child-frame-border’.\"""#
+        r#""OK \"Basic face for the internal border.\\nFor the internal border of child frames see ‘child-frame-border’.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'internal-border)", expect);
 }
@@ -1159,7 +1159,7 @@ fn div_face_doc_italic() {
 fn div_face_doc_lazy_highlight() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for lazy highlighting of matches other than the current one.\nUsed in Isearch when ‘isearch-lazy-highlight’ is non-nil,\nand in ‘query-replace’ when ‘query-replace-lazy-highlight’ is non-nil.\"""#
+        r#""OK \"Face for lazy highlighting of matches other than the current one.\\nUsed in Isearch when ‘isearch-lazy-highlight’ is non-nil,\\nand in ‘query-replace’ when ‘query-replace-lazy-highlight’ is non-nil.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'lazy-highlight)", expect);
 }
@@ -1168,7 +1168,7 @@ fn div_face_doc_lazy_highlight() {
 fn div_face_doc_line_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for displaying line numbers.\nThis face is used when ‘display-line-numbers’ is non-nil.\n\nIf you customize the font of this face, make sure it is a\nmonospaced font, otherwise line numbers will not line up,\nand text lines might move horizontally as you move through\nthe buffer.\"""#
+        r#""OK \"Face for displaying line numbers.\\nThis face is used when ‘display-line-numbers’ is non-nil.\\n\\nIf you customize the font of this face, make sure it is a\\nmonospaced font, otherwise line numbers will not line up,\\nand text lines might move horizontally as you move through\\nthe buffer.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'line-number)", expect);
 }
@@ -1177,7 +1177,7 @@ fn div_face_doc_line_number() {
 fn div_face_doc_line_number_current_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for displaying the current line number.\nThis face is used when ‘display-line-numbers’ is non-nil.\n\nIf you customize the font of this face, make sure it is a\nmonospaced font, otherwise line numbers will not line up,\nand text lines might move horizontally as you move through\nthe buffer.  Similarly, making this face’s font different\nfrom that of the ‘line-number’ face could produce such\nunwanted effects.\"""#
+        r#""OK \"Face for displaying the current line number.\\nThis face is used when ‘display-line-numbers’ is non-nil.\\n\\nIf you customize the font of this face, make sure it is a\\nmonospaced font, otherwise line numbers will not line up,\\nand text lines might move horizontally as you move through\\nthe buffer.  Similarly, making this face’s font different\\nfrom that of the ‘line-number’ face could produce such\\nunwanted effects.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'line-number-current-line)",
@@ -1189,7 +1189,7 @@ fn div_face_doc_line_number_current_line() {
 fn div_face_doc_line_number_major_tick() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for highlighting \\\"major ticks\\\" (as in a ruler).\nWhen ‘display-line-numbers-major-tick’ is positive, highlight\nthe line numbers of lines which are a multiple of its value.\nThis face is used when ‘display-line-numbers’ is non-nil.\n\nIf you customize the font of this face, make sure it is a\nmonospaced font, otherwise line numbers will not line up,\nand text lines might move horizontally as you move through\nthe buffer.  Similarly, making this face’s font different\nfrom that of the ‘line-number’ face could produce such\nunwanted effects.\"""#
+        r#""OK \"Face for highlighting \\\"major ticks\\\" (as in a ruler).\\nWhen ‘display-line-numbers-major-tick’ is positive, highlight\\nthe line numbers of lines which are a multiple of its value.\\nThis face is used when ‘display-line-numbers’ is non-nil.\\n\\nIf you customize the font of this face, make sure it is a\\nmonospaced font, otherwise line numbers will not line up,\\nand text lines might move horizontally as you move through\\nthe buffer.  Similarly, making this face’s font different\\nfrom that of the ‘line-number’ face could produce such\\nunwanted effects.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'line-number-major-tick)",
@@ -1201,7 +1201,7 @@ fn div_face_doc_line_number_major_tick() {
 fn div_face_doc_line_number_minor_tick() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for highlighting \\\"minor ticks\\\" (as in a ruler).\nWhen ‘display-line-numbers-minor-tick’ is positive, highlight\nthe line numbers of lines which are a multiple of its value.\nThis face is used when ‘display-line-numbers’ is non-nil.\n\nIf you customize the font of this face, make sure it is a\nmonospaced font, otherwise line numbers will not line up,\nand text lines might move horizontally as you move through\nthe buffer.  Similarly, making this face’s font different\nfrom that of the ‘line-number’ face could produce such\nunwanted effects.\"""#
+        r#""OK \"Face for highlighting \\\"minor ticks\\\" (as in a ruler).\\nWhen ‘display-line-numbers-minor-tick’ is positive, highlight\\nthe line numbers of lines which are a multiple of its value.\\nThis face is used when ‘display-line-numbers’ is non-nil.\\n\\nIf you customize the font of this face, make sure it is a\\nmonospaced font, otherwise line numbers will not line up,\\nand text lines might move horizontally as you move through\\nthe buffer.  Similarly, making this face’s font different\\nfrom that of the ‘line-number’ face could produce such\\nunwanted effects.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'line-number-minor-tick)",
@@ -1227,7 +1227,7 @@ fn div_face_doc_link_visited() {
 fn div_face_doc_margin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Basic face for window margins (both left and right).\nThis face is used to customize the appearance of the margin areas.\"""#
+        r#""OK \"Basic face for window margins (both left and right).\\nThis face is used to customize the appearance of the margin areas.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'margin)", expect);
 }
@@ -1252,7 +1252,7 @@ fn div_face_doc_menu() {
 fn div_face_doc_minibuffer_nonselected() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for highlighting contents of non-selected minibuffer window.\nUsed by ‘minibuffer-nonselected-mode’ for the contents of the minibuffer\nwindow when the minibuffer remains active but its window is currently\nnot selected.\"""#
+        r#""OK \"Face for highlighting contents of non-selected minibuffer window.\\nUsed by ‘minibuffer-nonselected-mode’ for the contents of the minibuffer\\nwindow when the minibuffer remains active but its window is currently\\nnot selected.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'minibuffer-nonselected)",
@@ -1264,7 +1264,7 @@ fn div_face_doc_minibuffer_nonselected() {
 fn div_face_doc_minibuffer_prompt() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for minibuffer prompts.\nBy default, Emacs automatically adds this face to the value of\n‘minibuffer-prompt-properties’, which is a list of text properties\nused to display the prompt text.\"""#
+        r#""OK \"Face for minibuffer prompts.\\nBy default, Emacs automatically adds this face to the value of\\n‘minibuffer-prompt-properties’, which is a list of text properties\\nused to display the prompt text.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'minibuffer-prompt)", expect);
 }
@@ -1273,7 +1273,7 @@ fn div_face_doc_minibuffer_prompt() {
 fn div_face_doc_mode_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for the mode lines as well as header lines.\nSee ‘mode-line-active’ and ‘mode-line-inactive’ for the faces\nused on mode lines.\"""#
+        r#""OK \"Face for the mode lines as well as header lines.\\nSee ‘mode-line-active’ and ‘mode-line-inactive’ for the faces\\nused on mode lines.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'mode-line)", expect);
 }
@@ -1282,7 +1282,7 @@ fn div_face_doc_mode_line() {
 fn div_face_doc_mode_line_active() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for the selected mode line.\nThis inherits from the ‘mode-line’ face.\"""#
+        r#""OK \"Face for the selected mode line.\\nThis inherits from the ‘mode-line’ face.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'mode-line-active)", expect);
 }
@@ -1300,7 +1300,7 @@ fn div_face_doc_mode_line_buffer_id() {
 fn div_face_doc_mode_line_emphasis() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face used to emphasize certain mode line features.\nUse the face ‘mode-line-highlight’ for features that can be selected.\"""#
+        r#""OK \"Face used to emphasize certain mode line features.\\nUse the face ‘mode-line-highlight’ for features that can be selected.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'mode-line-emphasis)", expect);
 }
@@ -1331,7 +1331,7 @@ fn div_face_doc_mouse() {
 fn div_face_doc_mouse_drag_and_drop_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face to highlight original text during dragging.\nThis face is used by ‘mouse-drag-and-drop-region’ to temporarily\nhighlight the original region when\n‘mouse-drag-and-drop-region-show-cursor’ is non-nil.\"""#
+        r#""OK \"Face to highlight original text during dragging.\\nThis face is used by ‘mouse-drag-and-drop-region’ to temporarily\\nhighlight the original region when\\n‘mouse-drag-and-drop-region-show-cursor’ is non-nil.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'mouse-drag-and-drop-region)",
@@ -1373,7 +1373,7 @@ fn div_face_doc_nobreak_space() {
 fn div_face_doc_query_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for highlighting query replacement matches.\nUsed in ‘query-replace’ and ‘query-replace-regexp’\nwhen ‘query-replace-highlight’ is non-nil\"""#
+        r#""OK \"Face for highlighting query replacement matches.\\nUsed in ‘query-replace’ and ‘query-replace-regexp’\\nwhen ‘query-replace-highlight’ is non-nil\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'query-replace)", expect);
 }
@@ -1438,7 +1438,7 @@ fn div_face_doc_show_paren_match() {
 fn div_face_doc_show_paren_match_expression() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face used for a matching paren when highlighting the whole expression.\nThis face is used by ‘show-paren-mode’.\"""#
+        r#""OK \"Face used for a matching paren when highlighting the whole expression.\\nThis face is used by ‘show-paren-mode’.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'show-paren-match-expression)",
@@ -1531,7 +1531,7 @@ fn div_face_doc_tab_bar_tab_ungrouped() {
 fn div_face_doc_tab_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Basic tab line face.\nSee ‘tab-line-active’ and ‘tab-line-inactive’ for the faces\nused on tab lines.\"""#
+        r#""OK \"Basic tab line face.\\nSee ‘tab-line-active’ and ‘tab-line-inactive’ for the faces\\nused on tab lines.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'tab-line)", expect);
 }
@@ -1540,7 +1540,7 @@ fn div_face_doc_tab_line() {
 fn div_face_doc_tab_line_active() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for the selected tab line.\nThis inherits from the ‘tab-line’ face.\"""#
+        r#""OK \"Face for the selected tab line.\\nThis inherits from the ‘tab-line’ face.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'tab-line-active)", expect);
 }
@@ -1574,7 +1574,7 @@ fn div_face_doc_tool_bar() {
 fn div_face_doc_tooltip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Face for tooltips.\n\nWhen using the GTK toolkit, NS, or Haiku, this face will only\nbe used if ‘use-system-tooltips’ is nil.\"""#
+        r#""OK \"Face for tooltips.\\n\\nWhen using the GTK toolkit, NS, or Haiku, this face will only\\nbe used if ‘use-system-tooltips’ is nil.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'tooltip)", expect);
 }
@@ -1639,7 +1639,7 @@ fn div_face_doc_variable_pitch() {
 fn div_face_doc_variable_pitch_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"The proportional face used for longer texts.\nThis is like the ‘variable-pitch’ face, but is slightly bigger by\ndefault.\"""#
+        r#""OK \"The proportional face used for longer texts.\\nThis is like the ‘variable-pitch’ face, but is slightly bigger by\\ndefault.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'variable-pitch-text)", expect);
 }
@@ -1755,7 +1755,7 @@ fn div_face_doc_warning() {
 fn div_face_doc_window_divider() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Basic face for window dividers.\nWhen a divider is less than 3 pixels wide, it is drawn solidly\nwith the foreground of this face.  For larger dividers this face\nis used for the inner part while the first pixel line/column is\ndrawn with the ‘window-divider-first-pixel’ face and the last\npixel line/column with the ‘window-divider-last-pixel’ face.\"""#
+        r#""OK \"Basic face for window dividers.\\nWhen a divider is less than 3 pixels wide, it is drawn solidly\\nwith the foreground of this face.  For larger dividers this face\\nis used for the inner part while the first pixel line/column is\\ndrawn with the ‘window-divider-first-pixel’ face and the last\\npixel line/column with the ‘window-divider-last-pixel’ face.\"""#
     ]];
     crate::common::assert_oracle_parity_expect("(face-documentation 'window-divider)", expect);
 }
@@ -1764,7 +1764,7 @@ fn div_face_doc_window_divider() {
 fn div_face_doc_window_divider_first_pixel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Basic face for first pixel line/column of window dividers.\nWhen a divider is at least 3 pixels wide, its first pixel\nline/column is drawn with the foreground of this face.  If you do\nnot want to accentuate the first pixel line/column, set this to\nthe same as ‘window-divider’ face.\"""#
+        r#""OK \"Basic face for first pixel line/column of window dividers.\\nWhen a divider is at least 3 pixels wide, its first pixel\\nline/column is drawn with the foreground of this face.  If you do\\nnot want to accentuate the first pixel line/column, set this to\\nthe same as ‘window-divider’ face.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'window-divider-first-pixel)",
@@ -1776,7 +1776,7 @@ fn div_face_doc_window_divider_first_pixel() {
 fn div_face_doc_window_divider_last_pixel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Basic face for last pixel line/column of window dividers.\nWhen a divider is at least 3 pixels wide, its last pixel\nline/column is drawn with the foreground of this face.  If you do\nnot want to accentuate the last pixel line/column, set this to\nthe same as ‘window-divider’ face.\"""#
+        r#""OK \"Basic face for last pixel line/column of window dividers.\\nWhen a divider is at least 3 pixels wide, its last pixel\\nline/column is drawn with the foreground of this face.  If you do\\nnot want to accentuate the last pixel line/column, set this to\\nthe same as ‘window-divider’ face.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(face-documentation 'window-divider-last-pixel)",

@@ -45,7 +45,7 @@ fn oracle_prop_move_to_column_tab_stop_interactions() {
       (setq results (cons (cons 'force-split (nreverse force-results)) results)))
     (nreverse results)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((no-force (0 0 0 1) (1 8 8 2) (2 8 8 2) (3 8 8 2) (4 8 8 2) (5 8 8 2) (6 8 8 2) (7 8 8 2) (8 8 8 2) (9 9 9 3) (10 10 10 4) (11 11 11 5) (12 16 16 6) (13 16 16 6) (14 16 16 6) (15 16 16 6) (16 16 16 6) (17 17 17 7) (18 18 18 8) (19 19 19 9) (20 19 19 9)) (force-split (1 1 1 2 \" \tABC\n\") (3 3 3 4 \"   \tABC\n\") (5 5 5 6 \"     \tABC\n\") (7 7 7 8 \"       \tABC\n\")))""#
+        r#""OK ((no-force (0 0 0 1) (1 8 8 2) (2 8 8 2) (3 8 8 2) (4 8 8 2) (5 8 8 2) (6 8 8 2) (7 8 8 2) (8 8 8 2) (9 9 9 3) (10 10 10 4) (11 11 11 5) (12 16 16 6) (13 16 16 6) (14 16 16 6) (15 16 16 6) (16 16 16 6) (17 17 17 7) (18 18 18 8) (19 19 19 9) (20 19 19 9)) (force-split (1 1 1 2 \" \tABC\\n\") (3 3 3 4 \"   \tABC\\n\") (5 5 5 6 \"     \tABC\\n\") (7 7 7 8 \"       \tABC\\n\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -304,7 +304,7 @@ fn oracle_prop_move_to_column_force_then_insert() {
     (setq results (cons (list 'tab-split-2 (buffer-string)) results))
     (nreverse results)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((after-insert \"line1\t  |\nline2\t  |\nline3\t  |\n\") (checks (1 10 124) (2 10 124) (3 10 124)) (tab-split-1 \"     *\tAAA\nBB\tCCC\n\") (tab-split-2 \"     *\tAAA\nBB   *\tCCC\n\"))""#
+        r#""OK ((after-insert \"line1\t  |\\nline2\t  |\\nline3\t  |\\n\") (checks (1 10 124) (2 10 124) (3 10 124)) (tab-split-1 \"     *\tAAA\\nBB\tCCC\\n\") (tab-split-2 \"     *\tAAA\\nBB   *\tCCC\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -426,7 +426,7 @@ fn oracle_prop_move_to_column_return_value_semantics() {
                           results))))
   (nreverse results))"#;
     let expect = expect_test::expect![[
-        r#""OK ((exact 5 5) (tab-overshoot 8 8 2) (short-no-force 3 3 4) (short-force 10 10 7 \"abc\t  \n\") (force-tab-split 4 4 \"    \tX\n\") (col-zero 0 0 1))""#
+        r#""OK ((exact 5 5) (tab-overshoot 8 8 2) (short-no-force 3 3 4) (short-force 10 10 7 \"abc\t  \\n\") (force-tab-split 4 4 \"    \tX\\n\") (col-zero 0 0 1))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

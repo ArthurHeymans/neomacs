@@ -116,7 +116,7 @@ fn org_org_export_include_macro_custom_link_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"#+macro: word /$1/\n** Included\nIncluded text with /inside/.\n* Local\nMacro /local/ and [[https://tracker.example/42][org:bug]].\n\" ((2 \"Included\") (1 \"Local\")) ((\"https\" \"//tracker.example/42\" \"org:bug\")))""##
+        r##""OK (\"#+macro: word /$1/\\n** Included\\nIncluded text with /inside/.\\n* Local\\nMacro /local/ and [[https://tracker.example/42][org:bug]].\\n\" ((2 \"Included\") (1 \"Local\")) ((\"https\" \"//tracker.example/42\" \"org:bug\")))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -177,7 +177,7 @@ fn org_export_org_roundtrip_headline_link_property_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (((1 \"TODO\" \"Alpha\" (\"work\")) (2 \"DONE\" \"Beta\" nil) (2 nil \"WAIT Gamma\" nil)) ((\"https\" \"//example.org\")) nil \"#+todo: TODO WAIT | DONE\n* TODO Alpha                                                           :work:\nAlpha body with *bold* and /italic/.\n** DONE Beta\nBeta body with [[https://example.org][link]].\n** WAIT Gamma\nGamma body.\n\")""##
+        r##""OK (((1 \"TODO\" \"Alpha\" (\"work\")) (2 \"DONE\" \"Beta\" nil) (2 nil \"WAIT Gamma\" nil)) ((\"https\" \"//example.org\")) nil \"#+todo: TODO WAIT | DONE\\n* TODO Alpha                                                           :work:\\nAlpha body with *bold* and /italic/.\\n** DONE Beta\\nBeta body with [[https://example.org][link]].\\n** WAIT Gamma\\nGamma body.\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

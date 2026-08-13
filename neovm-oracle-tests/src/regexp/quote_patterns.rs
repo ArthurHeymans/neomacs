@@ -60,7 +60,7 @@ fn oracle_prop_regexp_quote_no_metacharacters() {
                     (if (string-match (regexp-quote s) s) t nil))))
           safe-strings))"#;
     let expect = expect_test::expect![[
-        r#""OK ((\"hello\" t t) (\"world\" t t) (\"abc123\" t t) (\"foobar\" t t) (\"UPPERCASE\" t t) (\"MiXeD\" t t) (\"a\" t t) (\"Z\" t t) (\"with spaces\" t t) (\"line1\nline2\" t t) (\"tab\there\" t t) (\"0123456789\" t t) (\"hyphen-ated\" t t) (\"under_scored\" t t) (\"at@sign\" t t) (\"hash#tag\" t t) (\"percent%\" t t) (\"ampersand&\" t t) (\"tilde~\" t t) (\"comma,\" t t) (\"semicolon;\" t t) (\"colon:\" t t) (\"bang!\" t t) (\"slash/\" t t) (\"equals=\" t t) (\"less<\" t t) (\"greater>\" t t) (\"quote'\" t t) (\"double\\\"\" t t))""#
+        r#""OK ((\"hello\" t t) (\"world\" t t) (\"abc123\" t t) (\"foobar\" t t) (\"UPPERCASE\" t t) (\"MiXeD\" t t) (\"a\" t t) (\"Z\" t t) (\"with spaces\" t t) (\"line1\\nline2\" t t) (\"tab\there\" t t) (\"0123456789\" t t) (\"hyphen-ated\" t t) (\"under_scored\" t t) (\"at@sign\" t t) (\"hash#tag\" t t) (\"percent%\" t t) (\"ampersand&\" t t) (\"tilde~\" t t) (\"comma,\" t t) (\"semicolon;\" t t) (\"colon:\" t t) (\"bang!\" t t) (\"slash/\" t t) (\"equals=\" t t) (\"less<\" t t) (\"greater>\" t t) (\"quote'\" t t) (\"double\\\"\" t t))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

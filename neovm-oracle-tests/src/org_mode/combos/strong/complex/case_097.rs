@@ -93,7 +93,7 @@ fn combo97_org_babel_session_async_sync() {
 fn combo97_org_footnote_fill_paragraph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:after \"A long footnote\nreference[fn:1] that should\nfill across lines.\n[fn:1] A long footnote definition that should also fill nicely.\n\")""#
+        r#""OK (:after \"A long footnote\\nreference[fn:1] that should\\nfill across lines.\\n[fn:1] A long footnote definition that should also fill nicely.\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (setq fill-column 30)

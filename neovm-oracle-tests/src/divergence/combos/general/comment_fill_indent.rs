@@ -27,7 +27,7 @@ fn divergence_indent_rigidly() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"    line1\n      line2\n\tline3\n\" \"  line1\n    line2\n      line3\n\" 0 10 0 8)""#
+        r#""OK (\"    line1\\n      line2\\n\tline3\\n\" \"  line1\\n    line2\\n      line3\\n\" 0 10 0 8)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

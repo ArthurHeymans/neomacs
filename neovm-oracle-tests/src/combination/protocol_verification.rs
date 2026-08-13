@@ -496,7 +496,7 @@ fn oracle_prop_protocol_sequence_diagram() {
           '((1 sender receiver ping))))
     (fmakunbound 'neovm--pv-sequence-diagram)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"client    server\n----------------\n  1: client -> server : syn\n  2: server -> client : syn-ack\n  3: client -> server : ack\n  4: client -> server : data\n  5: server -> client : data-ack\n  6: client -> server : fin\n  7: server -> client : fin-ack\" \"alice    bob    carol\n------------------------\n  1: alice -> bob : hello\n  2: bob -> alice : hello-back\n  3: alice -> carol : invite\n  4: carol -> alice : accept\n  5: carol -> bob : greeting\n  6: bob -> carol : greeting-back\" \"a    b\n----------------\" \"sender    receiver\n----------------\n  1: sender -> receiver : ping\")""#
+        r#""OK (\"client    server\\n----------------\\n  1: client -> server : syn\\n  2: server -> client : syn-ack\\n  3: client -> server : ack\\n  4: client -> server : data\\n  5: server -> client : data-ack\\n  6: client -> server : fin\\n  7: server -> client : fin-ack\" \"alice    bob    carol\\n------------------------\\n  1: alice -> bob : hello\\n  2: bob -> alice : hello-back\\n  3: alice -> carol : invite\\n  4: carol -> alice : accept\\n  5: carol -> bob : greeting\\n  6: bob -> carol : greeting-back\" \"a    b\\n----------------\" \"sender    receiver\\n----------------\\n  1: sender -> receiver : ping\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

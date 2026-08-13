@@ -61,7 +61,7 @@ fn regexp_quote_opt() {
 fn string_clean_fill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"a b c\" \"one two\nthree four\nfive\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"a b c\" \"one two\\nthree four\\nfive\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case e (list (string-clean-whitespace "  a   b  c  ")
         (string-fill "one two three four five" 10)) (error (cons (quote ERR) (car e))))"##,
@@ -85,7 +85,7 @@ fn string_limit() {
 fn string_pad_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"abc\" \"xxx\" \"---ab\" \"x\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"abc\" \"xxx\" \"---ab\" \"x\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (string-pad "abc" 2) (string-pad "" 3 ?x) (string-pad "ab" 5 ?- t)
         (string-chop-newline "x\n\n"))"##,

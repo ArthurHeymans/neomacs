@@ -13,7 +13,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_p9_syntax_textprop_parse_and_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (2 nil \"(defun foo ()\n  (let ((x (bar 1 2)))\n    x))\n\")""#
+        r#""OK (2 nil \"(defun foo ()\\n  (let ((x (bar 1 2)))\\n    x))\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -111,7 +111,7 @@ fn div_p9_narrow_marker_overlay_textprop_substring() {
 #[test]
 fn div_p9_process_buffer_undo_fontification_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"before output\n\" t t \"Undo\" \"before \")""#]];
+    let expect = expect_test::expect![[r#""OK (\"before output\\n\" t t \"Undo\" \"before \")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (generate-new-buffer " *probe-combo-p*")))

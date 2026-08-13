@@ -27,7 +27,7 @@ fn div_cx224_thing_at_point_word_and_symbol() {
 fn div_cx224_thing_at_point_line_and_sentence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"First sentence.\" \"First sentence.  Second sentence.  Third.\n\" (1 . 16))""#
+        r#""OK (\"First sentence.\" \"First sentence.  Second sentence.  Third.\\n\" (1 . 16))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -101,7 +101,7 @@ fn div_cx224_thing_at_point_email() {
 fn div_cx224_thing_at_point_paragraph_and_page() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (\"Para one line A.\nPara one line B.\n\" (1 . 35))""#]];
+        expect_test::expect![[r#""OK (\"Para one line A.\\nPara one line B.\\n\" (1 . 35))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

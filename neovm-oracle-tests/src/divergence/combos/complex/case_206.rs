@@ -141,7 +141,7 @@ fn div_cx206_match_data_save_restore_set() {
 fn div_cx206_occur_with_multiple_matches() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"alpha line\nbeta line\nalpha again\ngamma line\nalpha third\n\"""#
+        r#""OK \"alpha line\\nbeta line\\nalpha again\\ngamma line\\nalpha third\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

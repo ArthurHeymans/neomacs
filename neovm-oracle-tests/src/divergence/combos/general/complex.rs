@@ -76,7 +76,7 @@ fn div_cx_write_region_coding_read_back() {
 #[test]
 fn div_cx_process_filter_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"café世界\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"café世界\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (received)

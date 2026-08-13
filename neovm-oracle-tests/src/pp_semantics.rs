@@ -22,7 +22,7 @@ fn oracle_prop_pp_to_string_basic_objects_and_trailing_newline() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK (\"(alpha beta gamma)\n\" \"[1 2 (three . four)]\n\" \"'symbol\n\" t)""#
+        r#""OK (\"(alpha beta gamma)\\n\" \"[1 2 (three . four)]\\n\" \"'symbol\\n\" t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -41,7 +41,7 @@ fn oracle_prop_pp_escape_newlines_binding() {
   (list a b))
 "#;
 
-    let expect = expect_test::expect![[r#""OK (\"\\\"a\\\\nb\\\"\n\" \"\\\"a\nb\\\"\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"\\\"a\\\\nb\\\"\\n\" \"\\\"a\\nb\\\"\\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -79,6 +79,6 @@ fn oracle_prop_pp_buffer_multiple_objects_and_comments() {
     (buffer-string)))
 "#;
 
-    let expect = expect_test::expect![[r#""OK \";; first\n(a b c)\n;; second\n(d e f)\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \";; first\\n(a b c)\\n;; second\\n(d e f)\\n\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -81,7 +81,7 @@ fn div_j2_process_query_on_exit_and_delete() {
 #[test]
 fn div_j2_process_environment_option() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (generate-new-buffer " *probe-env-out*")))

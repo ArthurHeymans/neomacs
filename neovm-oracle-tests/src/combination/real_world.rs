@@ -350,7 +350,7 @@ fn oracle_prop_rw_indentation_engine() {
         (insert line "\n"))
       (list indented-lines (buffer-string)))))"#;
     let expect = expect_test::expect![[
-        r#""OK ((\"begin\" \"  x = 1\" \"  if true\" \"    y = 2\" \"    if nested\" \"      z = 3\" \"    end\" \"  end\" \"  w = 4\" \"end\") \"begin\n  x = 1\n  if true\n    y = 2\n    if nested\n      z = 3\n    end\n  end\n  w = 4\nend\n\")""#
+        r#""OK ((\"begin\" \"  x = 1\" \"  if true\" \"    y = 2\" \"    if nested\" \"      z = 3\" \"    end\" \"  end\" \"  w = 4\" \"end\") \"begin\\n  x = 1\\n  if true\\n    y = 2\\n    if nested\\n      z = 3\\n    end\\n  end\\n  w = 4\\nend\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

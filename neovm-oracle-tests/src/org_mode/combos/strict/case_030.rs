@@ -50,7 +50,7 @@ fn strict_element_type_equality() {
 #[test]
 fn strict_org_return_electric() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:after \"* H\n- item\n\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (:after \"* H\\n- item\\n\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode)
  (insert "* H\n- item\n") (goto-char (point-min)) (search-forward "item") (end-of-line)
@@ -109,7 +109,7 @@ fn strict_org_mark_element() {
 #[test]
 fn strict_org_kill_line_in_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:after \"\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (:after \"\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode)
  (insert "* TODO Task :work:\n") (goto-char (point-min))

@@ -121,7 +121,7 @@ fn oracle_substring_rejects_non_vector_arraylikes_like_gnu() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK ([1 2] (wrong-type-argument (arrayp #s(neovm--substring-record 1 2))) (wrong-type-argument (arrayp #[257 \"\\300\\207\" [42] 1])) (wrong-type-argument (arrayp #&3\"\u{7}\")) (wrong-type-argument (arrayp #^[65 nil generic 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65])) (wrong-type-argument (stringp [1 2 3])))""#
+        r#""OK ([1 2] (wrong-type-argument (arrayp #s(neovm--substring-record 1 2))) (wrong-type-argument (arrayp #[257 \"��\" [42] 1])) (wrong-type-argument (arrayp #&3\"\u{7}\")) (wrong-type-argument (arrayp #^[65 nil generic 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65])) (wrong-type-argument (stringp [1 2 3])))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

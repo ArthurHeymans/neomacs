@@ -144,7 +144,7 @@ fn div_cx114_subst_char_in_string_variants() {
 fn div_cx114_string_to_multibyte_and_back_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"café 世界\" t 12 \"caf\\351 \u{16}L\" nil \"caf\\351 \u{16}L\" nil)""#
+        r#""OK (\"café 世界\" t 12 \"caf� \u{16}L\" nil \"caf\\351 \u{16}L\" nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

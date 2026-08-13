@@ -63,7 +63,7 @@ fn oracle_prop_multi_buffer_create_switch_isolate() {
     (when (buffer-live-p buf-b) (kill-buffer buf-b))
     (when (buffer-live-p buf-c) (kill-buffer buf-c))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"Alpha content line 1\nAlpha content line 2\n\" \"Bravo: 0 1 4 9 16 \" \"Charlie\" 42 18 7 t t t)""#
+        r#""OK (\"Alpha content line 1\\nAlpha content line 2\\n\" \"Bravo: 0 1 4 9 16 \" \"Charlie\" 42 18 7 t t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

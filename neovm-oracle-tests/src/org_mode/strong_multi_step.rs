@@ -15,7 +15,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strong_insert_promote_body() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** H2\n* New heading\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** H2\\n* New heading\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -63,7 +63,7 @@ fn strong_edit_headline_add_tags() {
 fn strong_set_then_get_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"myval\" \"* H\n:PROPERTIES:\n:MYPROP:   myval\n:END:\n\")""#
+        r#""OK (\"myval\" \"* H\\n:PROPERTIES:\\n:MYPROP:   myval\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -87,7 +87,7 @@ fn strong_set_then_get_property() {
 fn strong_deadline_then_schedule() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"* H\nSCHEDULED: <2024-01-14 Sun> DEADLINE: <2024-01-15 Mon>\"""#
+        r#""OK \"* H\\nSCHEDULED: <2024-01-14 Sun> DEADLINE: <2024-01-15 Mon>\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -110,7 +110,7 @@ fn strong_deadline_then_schedule() {
 #[test]
 fn strong_toggle_checkbox_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"- item1\n- item2\n- item3\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- item1\\n- item2\\n- item3\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -163,7 +163,7 @@ fn strong_navigate_and_read() {
 fn strong_clock_in_out_duration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (closed \"0:00\" \"* Task\n:LOGBOOK:\nCLOCK: [2026-06-06 Sat 18:50]--[2026-06-06 Sat 18:50] =>  0:00\n:END:\nBody\")""#
+        r#""OK (closed \"0:00\" \"* Task\\n:LOGBOOK:\\nCLOCK: [2026-06-06 Sat 18:50]--[2026-06-06 Sat 18:50] =>  0:00\\n:END:\\nBody\")""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
@@ -242,7 +242,7 @@ fn strong_sparse_tree_then_check() {
 fn strong_fill_then_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"| a | b |\n| c | d |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table-row) 10 11 (face org-table) 11 12 (face org-table rear-nonsticky t display (space :relative-width 1)) 12 13 (face org-table) 13 14 (face org-table display (space :relative-width 1.001)) 14 15 (face org-table) 15 16 (face org-table rear-nonsticky t display (space :relative-width 1)) 16 17 (face org-table) 17 18 (face org-table display (space :relative-width 1.001)) 18 19 (face org-table) 19 20 (face org-table-row))""#
+        r#""OK #(\"| a | b |\\n| c | d |\\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table-row) 10 11 (face org-table) 11 12 (face org-table rear-nonsticky t display (space :relative-width 1)) 12 13 (face org-table) 13 14 (face org-table display (space :relative-width 1.001)) 14 15 (face org-table) 15 16 (face org-table rear-nonsticky t display (space :relative-width 1)) 16 17 (face org-table) 17 18 (face org-table display (space :relative-width 1.001)) 18 19 (face org-table) 19 20 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -287,7 +287,7 @@ fn strong_table_formula_then_check() {
 fn strong_table_transpose_then_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"| a | 1 |\n| b | 2 |\n| c | 3 |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table-row) 10 11 (face org-table) 11 12 (face org-table rear-nonsticky t display (space :relative-width 1)) 12 13 (face org-table) 13 14 (face org-table display (space :relative-width 1.001)) 14 15 (face org-table) 15 16 (face org-table rear-nonsticky t display (space :relative-width 1)) 16 17 (face org-table) 17 18 (face org-table display (space :relative-width 1.001)) 18 19 (face org-table) 19 20 (face org-table-row) 20 21 (face org-table) 21 22 (face org-table rear-nonsticky t display (space :relative-width 1)) 22 23 (face org-table) 23 24 (face org-table display (space :relative-width 1.001)) 24 25 (face org-table) 25 26 (face org-table rear-nonsticky t display (space :relative-width 1)) 26 27 (face org-table) 27 28 (face org-table display (space :relative-width 1.001)) 28 29 (face org-table) 29 30 (face org-table-row))""#
+        r#""OK #(\"| a | 1 |\\n| b | 2 |\\n| c | 3 |\\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table-row) 10 11 (face org-table) 11 12 (face org-table rear-nonsticky t display (space :relative-width 1)) 12 13 (face org-table) 13 14 (face org-table display (space :relative-width 1.001)) 14 15 (face org-table) 15 16 (face org-table rear-nonsticky t display (space :relative-width 1)) 16 17 (face org-table) 17 18 (face org-table display (space :relative-width 1.001)) 18 19 (face org-table) 19 20 (face org-table-row) 20 21 (face org-table) 21 22 (face org-table rear-nonsticky t display (space :relative-width 1)) 22 23 (face org-table) 23 24 (face org-table display (space :relative-width 1.001)) 24 25 (face org-table) 25 26 (face org-table rear-nonsticky t display (space :relative-width 1)) 26 27 (face org-table) 27 28 (face org-table display (space :relative-width 1.001)) 28 29 (face org-table) 29 30 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -381,7 +381,7 @@ fn strong_todo_cycle_then_check() {
 #[test]
 fn strong_sort_then_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\n* abc\n* def\n* xyz\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"\\n* abc\\n* def\\n* xyz\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -424,7 +424,7 @@ fn strong_move_then_check() {
 fn strong_promote_demote_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (\"** H1\n*** S1\n*** S2\" \"* H1\n** S1\n** S2\")""#]];
+        expect_test::expect![[r#""OK (\"** H1\\n*** S1\\n*** S2\" \"* H1\\n** S1\\n** S2\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -525,7 +525,7 @@ fn strong_fold_unfold_block() {
 #[test]
 fn strong_indent_then_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (2 2 \"* H\n  A\")""#]];
+    let expect = expect_test::expect![[r#""OK (2 2 \"* H\\n  A\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -549,7 +549,7 @@ fn strong_indent_then_check() {
 #[test]
 fn strong_return_then_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Para\n graph\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Para\\n graph\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -570,7 +570,7 @@ fn strong_return_then_check() {
 #[test]
 fn strong_kill_line_then_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\n123\"""#]];
+    let expect = expect_test::expect![[r#""OK \"\\n123\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -591,7 +591,7 @@ fn strong_kill_line_then_check() {
 #[test]
 fn strong_footnote_new_then_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\n\n[fn:1] \n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\\n\\n[fn:1] \\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -719,7 +719,7 @@ fn strong_protocol_parse_roundtrip_multi_step() {
 #[test]
 fn strong_capture_template_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"success!\n\" \"2026\n\" \"\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"success!\\n\" \"2026\\n\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-capture)

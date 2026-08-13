@@ -32,9 +32,7 @@ fn div_cx439_display_eightbit_overlay() {
 #[test]
 fn div_cx439_casefold_coding_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (0 \"\\316\\240\\316\\241\\316\\243\\316\\244\\316\\245\" 10)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (0 \"ΠΡΣΤΥ\" 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((case-fold-search t))
   (list (string-match "πρστυ" "ΠΡΣΤΥ")
@@ -48,7 +46,7 @@ fn div_cx439_casefold_coding_time() {
 #[test]
 fn div_cx439_multibyte_encode_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (5 5 \"\\310\\311ABC\")""#]];
+    let expect = expect_test::expect![[r#""OK (5 5 \"��ABC\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)

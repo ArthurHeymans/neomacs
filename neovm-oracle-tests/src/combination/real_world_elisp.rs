@@ -190,7 +190,7 @@ fn oracle_prop_rwe_config_generator() {
                               (cdr (assq 'debug (cdr (assq 'general config))))
                               (length config)))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"[general]\nuser = alice\nversion = 2.1\ndebug = false\n\n[network]\nhost = localhost\nport = 8080\ntimeout = 30\nssl = true\n\n[database]\ndriver = postgres\nname = mydb\npool-size = 10\n\" 8080 nil 3)""#
+        r#""OK (\"[general]\\nuser = alice\\nversion = 2.1\\ndebug = false\\n\\n[network]\\nhost = localhost\\nport = 8080\\ntimeout = 30\\nssl = true\\n\\n[database]\\ndriver = postgres\\nname = mydb\\npool-size = 10\\n\" 8080 nil 3)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

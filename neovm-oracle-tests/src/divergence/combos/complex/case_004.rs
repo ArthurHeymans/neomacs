@@ -25,7 +25,7 @@ fn div_cx4_process_environment_subprocess() {
 #[test]
 fn div_cx4_process_coding_subprocess_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"café世界\n\" 12)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café世界\\n\" 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((default-process-coding-system '(utf-8-unix . utf-8-unix)))

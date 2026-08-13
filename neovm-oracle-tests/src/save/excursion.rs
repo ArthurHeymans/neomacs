@@ -227,6 +227,6 @@ fn oracle_prop_save_excursion_restriction_combo() {
                                        (point-min) (point-max))))))
                       (list results (point)
                             (point-min) (point-max))))"#;
-    let expect = expect_test::expect![[r#""OK ((7 19 \"line2\nline3\n\") 3 1 30)""#]];
+    let expect = expect_test::expect![[r#""OK ((7 19 \"line2\\nline3\\n\") 3 1 30)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

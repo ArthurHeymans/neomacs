@@ -97,7 +97,8 @@ fn divergence_narrowed_search_replace_markers() {
 fn divergence_multiline_backref_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (2 \"start\nline1 NUM=420\nline2 NUM=990\nend\")""#]];
+    let expect =
+        expect_test::expect![[r#""OK (2 \"start\\nline1 NUM=420\\nline2 NUM=990\\nend\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"start\\nline1 VALUE=42\\nline2 VALUE=99\\nend\")

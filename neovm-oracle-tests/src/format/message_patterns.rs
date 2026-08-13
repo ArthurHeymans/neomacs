@@ -99,7 +99,7 @@ fn oracle_prop_message_complex_formatting_pipelines() {
     (fmakunbound 'neovm--fmp-format-table-row)))
 "#;
     let expect = expect_test::expect![[
-        r#""OK (\"[INFO] server: started on port 8080\" \"[WARN] db: connection pool low\" \"[ERROR] auth: invalid token\" \"Temperature        23.45 C\" \"Pressure         1013.25 hPa\" \"Humidity           67.80 %\" \"ID         Name                 Status\" \"=== Report: Monthly Summary ===\n  Total: 1523 items\n  Average: 50.8 per day\n  Peak: 89 on 2026-01-15\n=== End of report ===\")""#
+        r#""OK (\"[INFO] server: started on port 8080\" \"[WARN] db: connection pool low\" \"[ERROR] auth: invalid token\" \"Temperature        23.45 C\" \"Pressure         1013.25 hPa\" \"Humidity           67.80 %\" \"ID         Name                 Status\" \"=== Report: Monthly Summary ===\\n  Total: 1523 items\\n  Average: 50.8 per day\\n  Peak: 89 on 2026-01-15\\n=== End of report ===\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

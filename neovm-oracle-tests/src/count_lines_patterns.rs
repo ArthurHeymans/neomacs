@@ -369,7 +369,7 @@ fn oracle_prop_count_lines_patterns_paragraph_counting() {
         (nreverse results))
     (fmakunbound 'neovm--test-count-paragraphs)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((:total-paragraphs 3 :details ((1 2 \"First paragraph line\") (2 1 \"Second paragraph.\n\") (3 3 \"Third paragraph line\"))) (:total-paragraphs 1 :details ((1 3 \"This is one\ncontinuo\"))) (:total-paragraphs 3 :details ((1 1 \"Para one.\n\") (2 1 \"Para two.\n\") (3 1 \"Para three.\n\"))) (:total-paragraphs 1 :details ((1 2 \"Content here.\nMore c\"))))""#
+        r#""OK ((:total-paragraphs 3 :details ((1 2 \"First paragraph line\") (2 1 \"Second paragraph.\\n\") (3 3 \"Third paragraph line\"))) (:total-paragraphs 1 :details ((1 3 \"This is one\\ncontinuo\"))) (:total-paragraphs 3 :details ((1 1 \"Para one.\\n\") (2 1 \"Para two.\\n\") (3 1 \"Para three.\\n\"))) (:total-paragraphs 1 :details ((1 2 \"Content here.\\nMore c\"))))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

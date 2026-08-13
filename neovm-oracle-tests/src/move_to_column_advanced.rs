@@ -32,7 +32,7 @@ fn oracle_prop_move_to_column_force_tab_expansion() {
                           (list r1 c1 p1
                                 r2 (current-column) (point)
                                 (buffer-string))))))"#;
-    let expect = expect_test::expect![[r#""OK (8 8 2 3 3 4 \"   \thello\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (8 8 2 3 3 4 \"   \thello\\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -47,7 +47,7 @@ fn oracle_prop_move_to_column_force_past_eol() {
                     (let ((r (move-to-column 10 t)))
                       (list r (current-column) (point)
                             (buffer-string))))"#;
-    let expect = expect_test::expect![[r#""OK (10 10 7 \"abc\t  \ndef\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (10 10 7 \"abc\t  \\ndef\\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -235,7 +235,7 @@ fn oracle_prop_column_based_text_formatting() {
                         (list (buffer-string)
                               (nreverse col-checks)))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"Alice\t    30\t  Engineer\nBob\t    25\t  Designer\nCarol\t    35\t  Manager\nDave\t    28\t  Analyst\n\" ((12 18) (12 18) (12 18) (12 18)))""#
+        r#""OK (\"Alice\t    30\t  Engineer\\nBob\t    25\t  Designer\\nCarol\t    35\t  Manager\\nDave\t    28\t  Analyst\\n\" ((12 18) (12 18) (12 18) (12 18)))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

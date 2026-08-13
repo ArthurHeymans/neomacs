@@ -12,7 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_edt_fill_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"The quick brown fox\njumps over the lazy\ndog and keeps\nrunning on.\"""#
+        r#""OK \"The quick brown fox\\njumps over the lazy\\ndog and keeps\\nrunning on.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -29,7 +29,7 @@ fn div_edt_fill_region_basic() {
 #[test]
 fn div_edt_fill_paragraph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"aaa bbb ccc ddd\neee fff ggg hhh\niii jjj\"""#]];
+    let expect = expect_test::expect![[r#""OK \"aaa bbb ccc ddd\\neee fff ggg hhh\\niii jjj\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -46,7 +46,7 @@ fn div_edt_fill_paragraph() {
 #[test]
 fn div_edt_comment_region_uncomment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"// alpha\n// beta\n\" \"alpha\nbeta\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"// alpha\\n// beta\\n\" \"alpha\\nbeta\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -66,7 +66,7 @@ fn div_edt_comment_region_uncomment() {
 #[test]
 fn div_edt_indent_region_custom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"    foo\n    bar\n    baz\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"    foo\\n    bar\\n    baz\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -84,7 +84,7 @@ fn div_edt_indent_region_custom() {
 fn div_edt_transpose_words_and_sexps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"beta alpha gamma\n\" \"(aaa) (bbb)\n\" \"20\n10\n30\n\")""#
+        r#""OK (\"beta alpha gamma\\n\" \"(aaa) (bbb)\\n\" \"20\\n10\\n30\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -176,8 +176,9 @@ fn div_edt_forward_sentence_and_paragraph() {
 #[test]
 fn div_edt_sort_fields_and_columns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (\"1 bar\n2 baz\n3 foo\n\" \"aaa 1\nbbb 2\nccc 3\n\")""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"1 bar\\n2 baz\\n3 foo\\n\" \"aaa 1\\nbbb 2\\nccc 3\\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -197,7 +198,7 @@ fn div_edt_sort_fields_and_columns() {
 #[test]
 fn div_edt_align_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"a\t\t= 1\nfoo\t\t= 2\nlongername\t= 3\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"a\t\t= 1\\nfoo\t\t= 2\\nlongername\t= 3\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

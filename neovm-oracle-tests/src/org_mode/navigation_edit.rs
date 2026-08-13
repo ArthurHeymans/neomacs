@@ -366,7 +366,7 @@ fn org_outline_path_entry_position_level_visibility_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((1 1 \"Project\" (\"work\") \"Ada\" nil t) (6 2 \"Design\" (\"deep\") \"Ada\" nil t) (8 3 \"Frontend\" nil \"Ada\" nil t) (12 5 \"Sub component\" nil \"Ada\" nil t) (10 4 \"WAIT Component A\" nil \"Ada\" nil t) (8 3 \"Frontend\" nil \"Ada\" nil t) (14 3 \"Backend\" nil \"Ada\" nil t) 15 \"* TODO Project :work:\n:PROPERTIES:\n:Owner: Ada\n:END:\nProject body.\n** DONE Design :deep:\nDesign body.\n*** TODO Frontend\nFrontend body.\n**** WAIT Component A\nCompA body.\n***** DONE Sub component\nSub body.\n*** TODO Backend\nBackend body.\n** NEXT Testing\nTesting body.\n* Archive :archive:\nArchive body.\n\")""#
+        r#""OK ((1 1 \"Project\" (\"work\") \"Ada\" nil t) (6 2 \"Design\" (\"deep\") \"Ada\" nil t) (8 3 \"Frontend\" nil \"Ada\" nil t) (12 5 \"Sub component\" nil \"Ada\" nil t) (10 4 \"WAIT Component A\" nil \"Ada\" nil t) (8 3 \"Frontend\" nil \"Ada\" nil t) (14 3 \"Backend\" nil \"Ada\" nil t) 15 \"* TODO Project :work:\\n:PROPERTIES:\\n:Owner: Ada\\n:END:\\nProject body.\\n** DONE Design :deep:\\nDesign body.\\n*** TODO Frontend\\nFrontend body.\\n**** WAIT Component A\\nCompA body.\\n***** DONE Sub component\\nSub body.\\n*** TODO Backend\\nBackend body.\\n** NEXT Testing\\nTesting body.\\n* Archive :archive:\\nArchive body.\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1037,7 +1037,7 @@ fn org_navigate_fourteen_heading_tree_fold_edit_deep() {
 fn org_navigate_sixteen_heading_tree_fold_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""ERR (invalid-function \"*** S2C1\nBody.\n\n\")""#]];
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"*** S2C1\\nBody.\\n\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

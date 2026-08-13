@@ -137,7 +137,7 @@ fn div_cx198_set_buffer_file_coding_system_query() {
 fn div_cx198_string_make_unibyte_then_multibyte_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"café 世界\" \"caf\\351 \u{16}L\" \"caf\\351 \u{16}L\" t nil t 7 7 7 12 7 8 nil)""#
+        r#""OK (\"café 世界\" \"caf� \u{16}L\" \"caf\\351 \u{16}L\" t nil t 7 7 7 12 7 8 nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

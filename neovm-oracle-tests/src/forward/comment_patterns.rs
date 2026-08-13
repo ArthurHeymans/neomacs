@@ -314,7 +314,7 @@ fn oracle_prop_forward_comment_patterns_code_comment_separation() {
        'code-parts (nreverse code-parts)
        'comment-regions comment-count))))"####;
     let expect = expect_test::expect![[
-        r#""OK (code-parts (\"(defun foo (x)\n  \" \"(+ x 1)) \" \"(defun bar (y)\n  (* y 2))\n\") comment-regions 3)""#
+        r#""OK (code-parts (\"(defun foo (x)\\n  \" \"(+ x 1)) \" \"(defun bar (y)\\n  (* y 2))\\n\") comment-regions 3)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -403,7 +403,7 @@ fn oracle_prop_forward_comment_patterns_whitespace_interleaved() {
            (list 'big r-big p-big rest-big)
            (list 'back r-back p-back)))))))"####;
     let expect = expect_test::expect![[
-        r#""OK ((one t 20 \"\n   \t\ncode\") (big nil 26 \"code\") (back t 9))""#
+        r#""OK ((one t 20 \"\\n   \t\\ncode\") (big nil 26 \"code\") (back t 9))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

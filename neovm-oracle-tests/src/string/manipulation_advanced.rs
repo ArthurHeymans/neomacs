@@ -172,7 +172,7 @@ fn oracle_prop_string_join_advanced() {
     let expect = expect_test::expect![[r#""OK \"\"""#]];
     crate::common::assert_oracle_parity_expect(r#"(string-join nil ",")"#, expect);
 
-    let expect = expect_test::expect![[r#""OK \"line1\nline2\nline3\"""#]];
+    let expect = expect_test::expect![[r#""OK \"line1\\nline2\\nline3\"""#]];
     // Join with newline separator
     crate::common::assert_oracle_parity_expect(
         r#"(string-join '("line1" "line2" "line3") "\n")"#,

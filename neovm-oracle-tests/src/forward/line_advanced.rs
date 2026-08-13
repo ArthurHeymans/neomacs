@@ -239,7 +239,7 @@ fn oracle_prop_forward_line_with_narrowing() {
                                 results))))))
     (nreverse results)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((narrow-content \"line-C\nline-D\nline-E\n\") (traversal ((15 \"line-C\") (22 \"line-D\") (29 \"line-E\") (36 \"\")) final-ret 1 final-point 36) (back-5-in-narrow -2 15 t) (back-1-from-middle 0 15 \"line-C\"))""#
+        r#""OK ((narrow-content \"line-C\\nline-D\\nline-E\\n\") (traversal ((15 \"line-C\") (22 \"line-D\") (29 \"line-E\") (36 \"\")) final-ret 1 final-point 36) (back-5-in-narrow -2 15 t) (back-1-from-middle 0 15 \"line-C\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

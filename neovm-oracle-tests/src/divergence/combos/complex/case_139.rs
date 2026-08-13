@@ -57,7 +57,7 @@ fn div_cx139_native_comp_available_p() {
 #[test]
 fn div_cx139_byte_compile_lambda_to_byte_code() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t 257 \"\\211\u{1}_\\207\")""#]];
+    let expect = expect_test::expect![[r#""OK (t t 257 \"�\u{1}_�\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lex (let ((lexical-binding t)) (lambda (x) (* x x)))))

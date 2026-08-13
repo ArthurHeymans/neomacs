@@ -142,7 +142,7 @@ fn div_cx39_word_search_forward_subword() {
 #[test]
 fn div_cx39_electric_indent_mode_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"line one\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"line one\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -319,7 +319,7 @@ fn div_cx39_set_buffer_multibyte_raw_byte_count() {
 #[test]
 fn div_cx39_fill_paragraph_long_multibyte_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"café 非常に長い日本語の単語 end\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"café 非常に長い日本語の単語 end\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

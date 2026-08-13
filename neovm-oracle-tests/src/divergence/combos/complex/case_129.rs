@@ -189,7 +189,8 @@ fn div_cx129_prin1_to_string_with_text_properties() {
 #[test]
 fn div_cx129_print_to_buffer_temp_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\n(1 2 3)\n\n\\\"string\\\"\n\nsymbol\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"\\n(1 2 3)\\n\\n\\\"string\\\"\\n\\nsymbol\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx129-print*")))

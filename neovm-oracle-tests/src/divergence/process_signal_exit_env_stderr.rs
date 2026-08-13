@@ -69,7 +69,7 @@ fn divergence_make_process_stderr_buffer_ignored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"OUT\n\nProcess neo-se2-xxx finished\n\" \"ERR\n\nProcess neo-se2-xxx stderr finished\n\")""#
+        r#""OK (\"OUT\\n\\nProcess neo-se2-xxx finished\\n\" \"ERR\\n\\nProcess neo-se2-xxx stderr finished\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((obuf (generate-new-buffer " neo-o2-xxx")) (ebuf (generate-new-buffer " neo-e2-xxx")))

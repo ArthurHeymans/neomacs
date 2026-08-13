@@ -6,7 +6,7 @@ fn org_include_keyword_expands_file_content_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK \"#+TITLE: Main\n#+MACRO: incmacro Included $1\n* Included\nBody {{{incmacro(value)}}}\n* Local\nBody\n\"""##
+        r##""OK \"#+TITLE: Main\\n#+MACRO: incmacro Included $1\\n* Included\\nBody {{{incmacro(value)}}}\\n* Local\\nBody\\n\"""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -37,7 +37,7 @@ fn org_macro_escape_extract_replace_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"x\\\\,y,z\" (\"x,y\" \"z\") nil \"#+MACRO: count (eval (number-to-string (1+ (string-to-number $1))))\n#+MACRO: wrap [$1|$2]\nValue (eval (number-to-string (1+ (string-to-number 4)))); [a|b]; escaped [x,y|z].\n\")""##
+        r##""OK (\"x\\\\,y,z\" (\"x,y\" \"z\") nil \"#+MACRO: count (eval (number-to-string (1+ (string-to-number $1))))\\n#+MACRO: wrap [$1|$2]\\nValue (eval (number-to-string (1+ (string-to-number 4)))); [a|b]; escaped [x,y|z].\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -65,7 +65,7 @@ fn org_macro_html_export_markup_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (t \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\n<i>text</i>\n</p>\n</div>\n</div>\n\")""#
+        r#""OK (t \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\\n<p>\\n<i>text</i>\\n</p>\\n</div>\\n</div>\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -450,7 +450,7 @@ fn org_macro_expand_nested_arg_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n#+MACRO: concat $1$2\n#+MACRO: nested {{{wrap($1)}}} plus $2\n\n* Section\nGreet: {{{greet(World)}}}\nWrap: {{{wrap(important)}}}\nTwice: {{{twice(repeated)}}}\nConcat: {{{concat(foo,bar)}}}\nNested: {{{nested(bold,extra)}}}\n\" \"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n#+MACRO: concat $1$2\n#+MACRO: nested {{{wrap($1)}}} plus $2\n\n* Section\nGreet: Hello, World!\nWrap: /important/\nTwice: repeated and repeated\nConcat: foobar\nNested: /bold/ plus extra\n\" (\"author\" \"concat\" \"date\" \"email\" \"greet\" \"nested\" \"title\" \"twice\" \"wrap\") ((\"nested\" \"{{{wrap($1)}}} plus $2\") (\"concat\" \"$1$2\") (\"twice\" \"$1 and $1\") (\"wrap\" \"/$1/\") (\"greet\" \"Hello, $1!\") (\"author\" nil) (\"email\" nil) (\"title\" nil) (\"date\" nil)) (375 395))""##
+        r##""OK (\"#+MACRO: greet Hello, $1!\\n#+MACRO: wrap /$1/\\n#+MACRO: twice $1 and $1\\n#+MACRO: concat $1$2\\n#+MACRO: nested {{{wrap($1)}}} plus $2\\n\\n* Section\\nGreet: {{{greet(World)}}}\\nWrap: {{{wrap(important)}}}\\nTwice: {{{twice(repeated)}}}\\nConcat: {{{concat(foo,bar)}}}\\nNested: {{{nested(bold,extra)}}}\\n\" \"#+MACRO: greet Hello, $1!\\n#+MACRO: wrap /$1/\\n#+MACRO: twice $1 and $1\\n#+MACRO: concat $1$2\\n#+MACRO: nested {{{wrap($1)}}} plus $2\\n\\n* Section\\nGreet: Hello, World!\\nWrap: /important/\\nTwice: repeated and repeated\\nConcat: foobar\\nNested: /bold/ plus extra\\n\" (\"author\" \"concat\" \"date\" \"email\" \"greet\" \"nested\" \"title\" \"twice\" \"wrap\") ((\"nested\" \"{{{wrap($1)}}} plus $2\") (\"concat\" \"$1$2\") (\"twice\" \"$1 and $1\") (\"wrap\" \"/$1/\") (\"greet\" \"Hello, $1!\") (\"author\" nil) (\"email\" nil) (\"title\" nil) (\"date\" nil)) (375 395))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -498,7 +498,7 @@ fn org_macro_chained_nested_expansion_divergence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n\n* Section\nChained: {{{twice({{{greet(A)}}})}}}\n\" \"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n\n* Section\nChained: Hello, A and {{{greet(A!\n\")""##
+        r##""OK (\"#+MACRO: greet Hello, $1!\\n#+MACRO: wrap /$1/\\n#+MACRO: twice $1 and $1\\n\\n* Section\\nChained: {{{twice({{{greet(A)}}})}}}\\n\" \"#+MACRO: greet Hello, $1!\\n#+MACRO: wrap /$1/\\n#+MACRO: twice $1 and $1\\n\\n* Section\\nChained: Hello, A and {{{greet(A!\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

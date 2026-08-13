@@ -103,7 +103,7 @@ fn div_f7_x_display_introspection() {
 fn div_f7_category_table_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t category-table \"ASCII\nASCII graphic characters 32-126 (ISO646 IRV:1983[4/0])\" \"a\" nil)""#
+        r#""OK (t category-table \"ASCII\\nASCII graphic characters 32-126 (ISO646 IRV:1983[4/0])\" \"a\" nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

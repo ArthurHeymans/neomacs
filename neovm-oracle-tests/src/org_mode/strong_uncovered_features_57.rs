@@ -51,7 +51,7 @@ fn uf57_babel_lang() {
 #[test]
 fn uf57_babel_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"(let ((x '1)\n      (y '2))\n(+ x y)\n)\"""#]];
+    let expect = expect_test::expect![[r#""OK \"(let ((x '1)\\n      (y '2))\\n(+ x y)\\n)\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -112,7 +112,7 @@ fn uf57_babel_mark() {
 fn uf57_babel_demarcate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+BEGIN_SRC emacs-lisp\n  (+ 1)\n#+END_SRC\n\n#+BEGIN_SRC emacs-lisp\n  (+ 2)\n  (+ 3)\n#+END_SRC\n\"""##
+        r##""OK \"#+BEGIN_SRC emacs-lisp\\n  (+ 1)\\n#+END_SRC\\n\\n#+BEGIN_SRC emacs-lisp\\n  (+ 2)\\n  (+ 3)\\n#+END_SRC\\n\"""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -135,7 +135,7 @@ fn uf57_babel_demarcate() {
 fn uf57_babel_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n\n#+RESULTS:\n: 42\n\"""##
+        r##""OK \"#+BEGIN_SRC emacs-lisp\\n(+ 1)\\n#+END_SRC\\n\\n#+RESULTS:\\n: 42\\n\"""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -327,7 +327,7 @@ fn uf57_src_tab() {
 fn uf57_map_src() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"emacs-lisp\" \":results value\" \"(+ 1)\n\") (\"python\" \":results output\" \"print(1)\n\"))""#
+        r#""OK ((\"emacs-lisp\" \":results value\" \"(+ 1)\\n\") (\"python\" \":results output\" \"print(1)\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

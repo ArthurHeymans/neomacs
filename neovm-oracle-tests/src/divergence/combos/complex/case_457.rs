@@ -16,7 +16,7 @@ fn div_cx457_shell_command_sync() {
 #[test]
 fn div_cx457_shell_command_to_string_exit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"test\n\" \"\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"test\\n\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (list (shell-command-to-string "echo test")

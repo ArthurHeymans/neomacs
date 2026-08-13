@@ -15,7 +15,7 @@ fn div_v8_pp_to_string_atom_list_and_quote_form_combo() {
       (pp-to-string (make-hash-table)))
 "##;
     let expect = expect_test::expect![[
-        r##""OK (\"hello\n\" \"42\n\" \"(a b c d e f g h i j k l m n o p)\n\" \"(lambda (x y) (let ((z (+ x y))) (list x y z)))\n\" \"#s(hash-table)\n\")""##
+        r##""OK (\"hello\\n\" \"42\\n\" \"(a b c d e f g h i j k l m n o p)\\n\" \"(lambda (x y) (let ((z (+ x y))) (list x y z)))\\n\" \"#s(hash-table)\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -33,7 +33,7 @@ fn div_v8_pp_buffer_inserts_pretty_form_into_temp_buffer() {
         (buffer-live-p (current-buffer))))
 "##;
     let expect = expect_test::expect![[
-        r#""OK (\"(alpha beta (gamma delta epsilon) zeta eta theta iota kappa lambda mu)\n\" t t t)""#
+        r#""OK (\"(alpha beta (gamma delta epsilon) zeta eta theta iota kappa lambda mu)\\n\" t t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -54,6 +54,6 @@ fn div_v8_pp_with_temp_buffer_round_trip_and_fill_column_combo() {
             (bobp))
           (pp-to-string '(one two three)))))
 "##;
-    let expect = expect_test::expect![[r#""OK (274 t nil \"(one two three)\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (274 t nil \"(one two three)\\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

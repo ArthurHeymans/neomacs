@@ -244,7 +244,7 @@ fn uf50_collect_cat() {
 #[test]
 fn uf50_archive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\n** TODO T1\n* H2\n** TODO T2\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H1\\n** TODO T1\\n* H2\\n** TODO T2\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -268,7 +268,7 @@ fn uf50_archive() {
 fn uf50_archive_sibling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"* H1\n** Archive                                                          :ARCHIVE:\n*** TODO T1\n:PROPERTIES:\n:ARCHIVE_TIME: 2026-06-15 Mon 12:00\n:END:\n* Archive :archive:\n* H2\n** TODO T2\"""#
+        r#""OK \"* H1\\n** Archive                                                          :ARCHIVE:\\n*** TODO T1\\n:PROPERTIES:\\n:ARCHIVE_TIME: 2026-06-15 Mon 12:00\\n:END:\\n* Archive :archive:\\n* H2\\n** TODO T2\"""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer

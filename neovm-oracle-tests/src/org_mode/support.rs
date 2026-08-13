@@ -118,7 +118,7 @@ fn org_ctags_enable_create_visit_interactive_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (nil (\"org-ctags-find-tag\" \"org-ctags-visit-buffer-or-file\" \"org-ctags-append-topic\" \"org-ctags-fail-silently\") org-ctags-find-tag-at-point (\"Alpha\" \"Beta Tag\" \"Fresh Topic\") (\"main.org\" 3 33) nil (\"Alpha\") \"ctags --langdef=orgmode --langmap=orgmode:.org --regex-orgmode=/\\\\<\\\\<\\\\(\\\\[\\\\^\\\\<\\\\>\\\\]\\\\+\\\\)\\\\>\\\\>/\\\\\\\\1/d\\\\,definition/ -f <root>/TAGS -e -R <root>/*\" 54 \"Existing.org\" (\"Created.org\" \"* <<Created>>\nCreated body for Created.\n\n\") nil nil)""#
+        r#""OK (nil (\"org-ctags-find-tag\" \"org-ctags-visit-buffer-or-file\" \"org-ctags-append-topic\" \"org-ctags-fail-silently\") org-ctags-find-tag-at-point (\"Alpha\" \"Beta Tag\" \"Fresh Topic\") (\"main.org\" 3 33) nil (\"Alpha\") \"ctags --langdef=orgmode --langmap=orgmode:.org --regex-orgmode=/\\\\<\\\\<\\\\(\\\\[\\\\^\\\\<\\\\>\\\\]\\\\+\\\\)\\\\>\\\\>/\\\\\\\\1/d\\\\,definition/ -f <root>/TAGS -e -R <root>/*\" 54 \"Existing.org\" (\"Created.org\" \"* <<Created>>\\nCreated body for Created.\\n\\n\") nil nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -236,7 +236,7 @@ fn org_crypt_detect_encrypted_entry_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((51 109) nil \"-----BEGIN PGP MESSAGE-----\nabc\n-----END PGP MESSAGE-----\n\")""#
+        r#""OK ((51 109) nil \"-----BEGIN PGP MESSAGE-----\\nabc\\n-----END PGP MESSAGE-----\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -271,7 +271,7 @@ fn org_macs_plist_string_visibility_time_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((b 2 5) (c) (a 1 3 4)) (a c e) (:a 1 :b override :drop 9 :c nil :d 4) (:a 1 :b override :d 4) ((:alpha 1) (:beta two) (:gamma nil)) ((\"[inside]\" \"inside\" \"[inside]\" \"[inside]\") (\"\\\"quoted\\\"\" \"\\\"quoted\\\"\" \"quoted\" \"\\\"quoted\\\"\") (\"short\" \"short\" \"short\" \"short\") (\"long words break here\" \"long words break here\" \"long words break here\" \"long...\")) \"a   bb  c\" \"a\n b\nc\" ((\"one two\" \"three\" \"four five\") (\"one two three\" \"four five\")) \"alpha\n  beta\ngamma\n\" \"NR/N//TM\" \"alpha   |%a-beta|nil|alpha\" (italic highlight \"help\" italic) (\"aaBBcc\" nil \"aaBBcc\" nil) (t t nil 43 51) ((active (0 45 13 27 5 2026 nil -1 nil) (0 45 13 27 5 2026 nil -1 nil)) (range (0 45 13 27 5 2026 nil -1 nil) (0 45 13 27 5 2026 nil -1 nil))) (t t nil t nil 0))""#
+        r#""OK (((b 2 5) (c) (a 1 3 4)) (a c e) (:a 1 :b override :drop 9 :c nil :d 4) (:a 1 :b override :d 4) ((:alpha 1) (:beta two) (:gamma nil)) ((\"[inside]\" \"inside\" \"[inside]\" \"[inside]\") (\"\\\"quoted\\\"\" \"\\\"quoted\\\"\" \"quoted\" \"\\\"quoted\\\"\") (\"short\" \"short\" \"short\" \"short\") (\"long words break here\" \"long words break here\" \"long words break here\" \"long...\")) \"a   bb  c\" \"a\\n b\\nc\" ((\"one two\" \"three\" \"four five\") (\"one two three\" \"four five\")) \"alpha\\n  beta\\ngamma\\n\" \"NR/N//TM\" \"alpha   |%a-beta|nil|alpha\" (italic highlight \"help\" italic) (\"aaBBcc\" nil \"aaBBcc\" nil) (t t nil 43 51) ((active (0 45 13 27 5 2026 nil -1 nil) (0 45 13 27 5 2026 nil -1 nil)) (range (0 45 13 27 5 2026 nil -1 nil) (0 45 13 27 5 2026 nil -1 nil))) (t t nil t nil 0))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

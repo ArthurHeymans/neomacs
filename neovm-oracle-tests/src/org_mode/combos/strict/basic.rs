@@ -503,7 +503,7 @@ fn strict_map_with_affiliated() {
 #[test]
 fn strict_interpret_roundtrip_paragraph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Simple paragraph.\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Simple paragraph.\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -522,7 +522,8 @@ fn strict_interpret_roundtrip_paragraph() {
 #[test]
 fn strict_interpret_roundtrip_headlines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H1\nBody 1\n** H2\nBody 2\n* H3\nBody 3\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"* H1\\nBody 1\\n** H2\\nBody 2\\n* H3\\nBody 3\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -540,7 +541,7 @@ fn strict_interpret_roundtrip_headlines() {
 #[test]
 fn strict_interpret_roundtrip_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a | b |\n|---+---|\n| c | d |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | b |\\n|---+---|\\n| c | d |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -559,7 +560,7 @@ fn strict_interpret_roundtrip_table() {
 fn strict_interpret_roundtrip_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"- Item 1\n- Item 2\n  - Sub 2.1\n  - Sub 2.2\n- Item 3\n\"""#
+        r#""OK \"- Item 1\\n- Item 2\\n  - Sub 2.1\\n  - Sub 2.2\\n- Item 3\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -705,7 +706,7 @@ fn strict_malformed_table_no_crash() {
 fn combo_adopt_extract_set_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* Alpha\nPara 1.\n* Beta\nPara 2.\n* Gamma\nPara 3.\n\" \"* Alpha\nPara 1.\n* Gamma\nPara 3.\n\" \"* Alpha\nNew para.\n* Gamma\nPara 3.\n\" nil)""#
+        r#""OK (\"* Alpha\\nPara 1.\\n* Beta\\nPara 2.\\n* Gamma\\nPara 3.\\n\" \"* Alpha\\nPara 1.\\n* Gamma\\nPara 3.\\n\" \"* Alpha\\nNew para.\\n* Gamma\\nPara 3.\\n\" nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1103,7 +1104,7 @@ fn combo_tag_inheritance_matching() {
 fn combo_export_backend_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((parent) t ((lambda (h c i) (format \"CHILD: %s\n%s\" (org-element-property :raw-value h) c)) (lambda (s c i) c)))""#
+        r#""OK ((parent) t ((lambda (h c i) (format \"CHILD: %s\\n%s\" (org-element-property :raw-value h) c)) (lambda (s c i) c)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

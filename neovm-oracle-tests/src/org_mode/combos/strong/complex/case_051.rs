@@ -160,7 +160,7 @@ fn combo51_table_formula_error_recovery() {
 fn combo51_babel_result_type_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((1 2 3 4 5) (:after-value \"* Babel\n#+begin_src emacs-lisp :results value\n'(1 2 3 4 5)\n#+end_src\n\n#+RESULTS:\n| 1 | 2 | 3 | 4 | 5 |\n\") \"0123456789\" (:after-output \"* Babel\n#+begin_src emacs-lisp :results output\n(princ \\\"0123456789\\\")\n#+end_src\n\n#+RESULTS:\n: 0123456789\n\") (:result-count 0))""#
+        r#""OK ((1 2 3 4 5) (:after-value \"* Babel\\n#+begin_src emacs-lisp :results value\\n'(1 2 3 4 5)\\n#+end_src\\n\\n#+RESULTS:\\n| 1 | 2 | 3 | 4 | 5 |\\n\") \"0123456789\" (:after-output \"* Babel\\n#+begin_src emacs-lisp :results output\\n(princ \\\"0123456789\\\")\\n#+end_src\\n\\n#+RESULTS:\\n: 0123456789\\n\") (:result-count 0))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

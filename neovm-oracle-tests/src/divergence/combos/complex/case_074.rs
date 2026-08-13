@@ -95,8 +95,9 @@ fn div_cx74_save_excursion_after_kill_buffer_does_not_restore() {
 #[test]
 fn div_cx74_transpose_chars_words_lines_at_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (\"acbdef\" \"world hello\" \"line1\nline2\n\nline3\n\")""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"acbdef\" \"world hello\" \"line1\\nline2\\n\\nline3\\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list

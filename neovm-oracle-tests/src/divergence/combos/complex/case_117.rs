@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx117_process_filter_chunked_data_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 18 \"line1\nline2\nline3\")""#]];
+    let expect = expect_test::expect![[r#""OK (1 18 \"line1\\nline2\\nline3\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((collected nil)
@@ -55,7 +55,7 @@ fn div_cx117_process_filter_with_coding_chunk_split() {
 #[test]
 fn div_cx117_process_sentinel_runs_on_exit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((\"exited abnormally with code 7\n\") 7 exit)""#]];
+    let expect = expect_test::expect![[r#""OK ((\"exited abnormally with code 7\\n\") 7 exit)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((events nil))
@@ -76,7 +76,7 @@ fn div_cx117_process_sentinel_runs_on_exit() {
 fn div_cx117_process_send_string_to_stdin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"alpha beta gamma\n\nProcess neo-cx117-stdin finished\n\"""#
+        r#""OK \"alpha beta gamma\\n\\nProcess neo-cx117-stdin finished\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -101,7 +101,7 @@ fn div_cx117_process_send_string_to_stdin() {
 fn div_cx117_process_connection_type_pipe_vs_pty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"via-pipe\n\nProcess neo-cx117-pipe finished\n\"""#]];
+        expect_test::expect![[r#""OK \"via-pipe\\n\\nProcess neo-cx117-pipe finished\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -167,7 +167,7 @@ fn div_cx117_process_filter_no_buffer_no_filter_appends_nowhere() {
 fn div_cx117_process_stderr_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"to stderr\n\nProcess neo-cx117-err stderr finished\"""#]];
+        expect_test::expect![[r#""OK \"to stderr\\n\\nProcess neo-cx117-err stderr finished\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

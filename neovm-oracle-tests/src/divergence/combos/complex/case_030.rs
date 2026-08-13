@@ -191,7 +191,7 @@ fn div_cx30_reader_undo_after_insert_delete_text_prop_overlay_deep() {
 #[test]
 fn div_cx30_reader_process_send_string_newline_terminated() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"line1\nline2\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"line1\\nline2\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (got)

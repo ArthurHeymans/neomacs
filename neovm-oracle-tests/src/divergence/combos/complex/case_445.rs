@@ -24,7 +24,7 @@ fn div_cx445_completion_all_test() {
 #[test]
 fn div_cx445_pp_circular() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r##""OK \"#1=(1 2 3 . #1#)\n\"""##]];
+    let expect = expect_test::expect![[r##""OK \"#1=(1 2 3 . #1#)\\n\"""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(let* ((l (list 1 2 3))
        (print-circle t))
@@ -152,7 +152,7 @@ fn div_cx445_completion_hilit() {
 #[test]
 fn div_cx445_pp_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"(a (b c) d)\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"(a (b c) d)\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (condition-case e

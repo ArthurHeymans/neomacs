@@ -86,7 +86,7 @@ fn div_cx33_process_kill_query_off_then_kill_buffer() {
 #[test]
 fn div_cx33_coding_system_for_write_doesnt_propagate_to_subprocess() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"café\\r\n\" 7)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café\\r\\n\" 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((coding-system-for-write 'utf-8-dos))
@@ -221,7 +221,7 @@ fn div_cx33_window_text_height_and_body_after_split() {
 fn div_cx33_process_output_with_explicit_coding_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"café世界\n\" 1 \"02fca083f0cb33c491b610f4366f9ef1a1ef007dff6f5e6d02af4fdcf901b9eb\")""#
+        r#""OK (\"café世界\\n\" 1 \"02fca083f0cb33c491b610f4366f9ef1a1ef007dff6f5e6d02af4fdcf901b9eb\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

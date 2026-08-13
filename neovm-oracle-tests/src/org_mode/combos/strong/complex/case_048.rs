@@ -201,7 +201,7 @@ fn combo48_visibility_parse_reparse() {
 fn combo48_macro_expand_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:raw-value \"{{{name}}} Report\") (:exported \"1 Project NeoMACS Report\n========================\n\n  Version: 0.1.0.  Hello from oracle-host\n\n\n1.1 Sub-section\n~~~~~~~~~~~~~~~\n\n  More about Project NeoMACS 0.1.0.\n\") (:macro-count 3))""#
+        r#""OK ((:raw-value \"{{{name}}} Report\") (:exported \"1 Project NeoMACS Report\\n========================\\n\\n  Version: 0.1.0.  Hello from oracle-host\\n\\n\\n1.1 Sub-section\\n~~~~~~~~~~~~~~~\\n\\n  More about Project NeoMACS 0.1.0.\\n\") (:macro-count 3))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -384,7 +384,7 @@ fn combo48_mixed_list_reshape() {
 fn combo48_src_block_mutate_reexecute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (12 (:modified-src-value \"(+ 100 200 300)\n\") 600 (:result-count 0))""#
+        r#""OK (12 (:modified-src-value \"(+ 100 200 300)\\n\") 600 (:result-count 0))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -425,7 +425,7 @@ fn combo48_src_block_mutate_reexecute() {
 fn combo48_drawer_insert_populate_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:props (\"abc-123\" \"h1\")) (:drawers 1) (:prop-drawers 0) (:note-contents \":ID:       abc-123\n:CUSTOM_ID: h1\n:NOTES:\nNote line 1.\nNote line 2.\n\n\") (:buffer \"* H1\n:PROPERTIES:\n:ID:       abc-123\n:CUSTOM_ID: h1\n:NOTES:\nNote line 1.\nNote line 2.\n\n:END:\n:END:\n\"))""#
+        r#""OK ((:props (\"abc-123\" \"h1\")) (:drawers 1) (:prop-drawers 0) (:note-contents \":ID:       abc-123\\n:CUSTOM_ID: h1\\n:NOTES:\\nNote line 1.\\nNote line 2.\\n\\n\") (:buffer \"* H1\\n:PROPERTIES:\\n:ID:       abc-123\\n:CUSTOM_ID: h1\\n:NOTES:\\nNote line 1.\\nNote line 2.\\n\\n:END:\\n:END:\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

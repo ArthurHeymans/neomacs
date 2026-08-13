@@ -12,7 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_i6_python_mode_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"def foo():\nif x:\nreturn 1\nprint(x)\nfor i in r:\npass\n\"""#
+        r#""OK \"def foo():\\nif x:\\nreturn 1\\nprint(x)\\nfor i in r:\\npass\\n\"""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
@@ -31,7 +31,7 @@ fn div_i6_python_mode_indent() {
 fn div_i6_sh_mode_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"if [ $x ]; then\n    echo hi\n    for i in 1 2; do\n\techo $i\n    done\nfi\n\"""#
+        r#""OK \"if [ $x ]; then\\n    echo hi\\n    for i in 1 2; do\\n\techo $i\\n    done\\nfi\\n\"""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
@@ -49,7 +49,8 @@ fn div_i6_sh_mode_indent() {
 #[test]
 fn div_i6_ruby_mode_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"def foo\n  if x\n    return 1\n  end\nend\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"def foo\\n  if x\\n    return 1\\n  end\\nend\\n\"""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -67,7 +68,7 @@ fn div_i6_ruby_mode_indent() {
 fn div_i6_python_nested_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"class C:\ndef m(self):\nif self.x:\nreturn [i\nfor i in self.y\nif i > 0]\n\"""#
+        r#""OK \"class C:\\ndef m(self):\\nif self.x:\\nreturn [i\\nfor i in self.y\\nif i > 0]\\n\"""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"

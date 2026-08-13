@@ -228,7 +228,7 @@ fn oracle_prop_narrow_widen_point_operations() {
           (setq results (cons (list 'full-content-len (buffer-size)) results)))))
     (nreverse results)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((point-after-narrow 36 pmin 15 pmax 36) (clamped-low 15 t) (clamped-high 36 t) (bol-eol 22 22 28 \"Line-4\") (forward-line-at-end 1 36) (forward-line-at-start -1 15) (narrow-content \"Line-3\nLine-4\nLine-5\n\") (full-content-len 49))""#
+        r#""OK ((point-after-narrow 36 pmin 15 pmax 36) (clamped-low 15 t) (clamped-high 36 t) (bol-eol 22 22 28 \"Line-4\") (forward-line-at-end 1 36) (forward-line-at-start -1 15) (narrow-content \"Line-3\\nLine-4\\nLine-5\\n\") (full-content-len 49))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

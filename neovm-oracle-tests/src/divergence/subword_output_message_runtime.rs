@@ -86,7 +86,7 @@ fn sw_prin1_to_string_stream() {
 fn sw_princ_prin1_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"abc(x y)\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"abc(x y)\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (princ "abc" (current-buffer))
@@ -101,7 +101,7 @@ fn sw_princ_prin1_buffer() {
 fn sw_print_to_buffer_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"X\n\\\"inserted\\\"\nY\"""#]];
+    let expect = expect_test::expect![[r#""OK \"X\\n\\\"inserted\\\"\\nY\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "XY")

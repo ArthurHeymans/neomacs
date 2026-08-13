@@ -217,7 +217,7 @@ fn div_cx28_decode_encode_region_unicode_identity() {
 #[test]
 fn div_cx28_undo_after_format_replace_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"foo = 10\nbar = 20\nbaz = 30\n\" \"\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"foo = 10\\nbar = 20\\nbaz = 30\\n\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

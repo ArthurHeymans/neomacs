@@ -454,7 +454,7 @@ fn oracle_prop_protocol_http_response_builder() {
           (numberp has-cl)
           (numberp has-sep))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"HTTP/1.1 200 OK\\r\nContent-Type: text/html\\r\nServer: NeoVM/1.0\\r\nContent-Length: 20\\r\n\\r\n<h1>Hello World</h1>\" \"HTTP/1.1 404 Not Found\\r\nContent-Type: text/plain\\r\nContent-Length: 9\\r\n\\r\nNot Found\" \"HTTP/1.1 301 Moved Permanently\\r\nLocation: https://example.com/new-page\\r\nServer: NeoVM/1.0\\r\n\\r\n\" \"HTTP/1.1 200 OK\\r\nContent-Type: application/json\\r\nServer: NeoVM/1.0\\r\nContent-Length: 29\\r\n\\r\n{\\\"status\\\":200,\\\"data\\\":\\\"hello\\\"}\" \"HTTP/1.1 204 No Content\\r\nServer: NeoVM/1.0\\r\n\\r\n\" t t t t t)""#
+        r#""OK (\"HTTP/1.1 200 OK\\r\\nContent-Type: text/html\\r\\nServer: NeoVM/1.0\\r\\nContent-Length: 20\\r\\n\\r\\n<h1>Hello World</h1>\" \"HTTP/1.1 404 Not Found\\r\\nContent-Type: text/plain\\r\\nContent-Length: 9\\r\\n\\r\\nNot Found\" \"HTTP/1.1 301 Moved Permanently\\r\\nLocation: https://example.com/new-page\\r\\nServer: NeoVM/1.0\\r\\n\\r\\n\" \"HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nServer: NeoVM/1.0\\r\\nContent-Length: 29\\r\\n\\r\\n{\\\"status\\\":200,\\\"data\\\":\\\"hello\\\"}\" \"HTTP/1.1 204 No Content\\r\\nServer: NeoVM/1.0\\r\\n\\r\\n\" t t t t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

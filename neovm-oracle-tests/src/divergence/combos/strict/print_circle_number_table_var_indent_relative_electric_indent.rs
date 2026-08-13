@@ -77,7 +77,7 @@ fn div_v4_indent_relative_and_electric_indent() {
           (buffer-string))))
 "##;
     let expect = expect_test::expect![[
-        r#""OK (\"foo\n  bar\nbaz\" \"(defun foo ()\nb\nody)\" \"(a\n\n b\")""#
+        r#""OK (\"foo\\n  bar\\nbaz\" \"(defun foo ()\\nb\\nody)\" \"(a\\n\\n b\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

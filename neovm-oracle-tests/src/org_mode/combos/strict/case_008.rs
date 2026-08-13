@@ -474,7 +474,7 @@ fn strict_link_unescape_edges() {
 fn strict_remove_indentation_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"two spaces\n three spaces\ntwo spaces\" \"no indent\n  two spaces\n    four spaces\n  two spaces\" \"single line\" \"line1\n\nline2\" \"top level\n  nested\n  nested2\ntop again\" \"one tab\n\ttwo tabs\" \"\" \"plain text\nno indent at all\")""#
+        r#""OK (\"two spaces\\n three spaces\\ntwo spaces\" \"no indent\\n  two spaces\\n    four spaces\\n  two spaces\" \"single line\" \"line1\\n\\nline2\" \"top level\\n  nested\\n  nested2\\ntop again\" \"one tab\\n\ttwo tabs\" \"\" \"plain text\\nno indent at all\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

@@ -38,7 +38,8 @@ fn combo86_org_sparse_tree_regex_date() {
 #[test]
 fn combo86_org_update_all_statistics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:after \"* [1/2]\n- [X] one\n- [ ] two\n\"))""#]];
+    let expect =
+        expect_test::expect![[r#""OK ((:after \"* [1/2]\\n- [X] one\\n- [ ] two\\n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode)
  (insert "* [/]\n- [X] one\n- [ ] two\n")

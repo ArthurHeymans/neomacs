@@ -56,7 +56,7 @@ fn div_v8_function_documentation_arglist_help() {
         (help-function-arglist 'car)))
 "##;
     let expect = expect_test::expect![[
-        r#""OK (\"Probe with optional.\" \"Return the car of LIST.  If LIST is nil, return nil.\nError if LIST is not nil and not a cons cell.  See also ‘car-safe’.\n\nSee Info node ‘(elisp)Cons Cells’ for a discussion of related basic\nLisp concepts such as car, cdr, cons cell and list.\n\n(fn LIST)\" (a b &optional c) (1 . 1) t t (arg1))""#
+        r#""OK (\"Probe with optional.\" \"Return the car of LIST.  If LIST is nil, return nil.\\nError if LIST is not nil and not a cons cell.  See also ‘car-safe’.\\n\\nSee Info node ‘(elisp)Cons Cells’ for a discussion of related basic\\nLisp concepts such as car, cdr, cons cell and list.\\n\\n(fn LIST)\" (a b &optional c) (1 . 1) t t (arg1))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

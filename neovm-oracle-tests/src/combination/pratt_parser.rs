@@ -740,7 +740,7 @@ fn oracle_prop_pratt_parser_pretty_print() {
     (fmakunbound 'neovm--pp-ast-to-string)
     (fmakunbound 'neovm--pp-ast-tree)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"(1 + (2 * 3))\" \"((1 + 2) * 3)\" \"((-5) + 3)\" \"(2 ^ (3 ^ 2))\" \"op:+\n  1\n  op:*\n    2\n    3\n\" \"prefix:-\n  op:+\n    1\n    2\n\" (\"2 + 3 * 4\" \"(2 + (3 * 4))\" (binop \"+\" (num 2) (binop \"*\" (num 3) (num 4)))))""#
+        r#""OK (\"(1 + (2 * 3))\" \"((1 + 2) * 3)\" \"((-5) + 3)\" \"(2 ^ (3 ^ 2))\" \"op:+\\n  1\\n  op:*\\n    2\\n    3\\n\" \"prefix:-\\n  op:+\\n    1\\n    2\\n\" (\"2 + 3 * 4\" \"(2 + (3 * 4))\" (binop \"+\" (num 2) (binop \"*\" (num 3) (num 4)))))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

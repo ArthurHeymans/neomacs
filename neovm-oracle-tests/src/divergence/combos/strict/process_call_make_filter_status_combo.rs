@@ -18,7 +18,7 @@ fn div_v8_call_process_synchronous_exit_stdout() {
           (goto-char (point-min))
           (buffer-substring (line-beginning-position) (line-end-position)))))
 "##;
-    let expect = expect_test::expect![[r#""OK (0 \"line1\nline2\nline3\n\" 3 1 \"line1\")""#]];
+    let expect = expect_test::expect![[r#""OK (0 \"line1\\nline2\\nline3\\n\" 3 1 \"line1\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

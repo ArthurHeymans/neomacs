@@ -49,7 +49,7 @@ fn coding_charset_list() {
 fn decode_coding_region_dest() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"h\\303\\251llo\" 6)""#]];
+    let expect = expect_test::expect![[r#""OK (\"héllo\" 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)

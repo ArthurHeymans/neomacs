@@ -97,7 +97,7 @@ fn combo89_combined_link_timestamp_prop() {
 fn combo89_combined_checkbox_update_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:cookie \"* Task [1/3]\n:LOGBOOK:\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\n:END:\n- [X] a\n- [ ] b\n- [ ] c\n\") (:clock 1))""#
+        r#""OK ((:cookie \"* Task [1/3]\\n:LOGBOOK:\\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\\n:END:\\n- [X] a\\n- [ ] b\\n- [ ] c\\n\") (:clock 1))""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer (org-mode) (require 'org-clock)

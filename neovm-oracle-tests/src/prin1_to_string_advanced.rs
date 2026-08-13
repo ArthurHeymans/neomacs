@@ -178,7 +178,7 @@ fn oracle_prop_prin1_adv_special_char_escaping() {
   ;; Empty string
   (prin1-to-string ""))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"\\\"line1\nline2\\\"\" \"\\\"col1\tcol2\\\"\" \"\\\"she said \\\\\\\"hello\\\\\\\"\\\"\" \"\\\"path\\\\\\\\to\\\\\\\\file\\\"\" \"\\\"before\\rafter\\\"\" \"\\\"a\nb\tc\\\\\\\\d\\\\\\\"e\\\"\" \"\\\"\n\n\n\\\"\" \"\\\"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"\" \"\\\"\t\n\\\\\\\"\\\\\\\\\\\"\" \"\\\"hello\\\"\" \"\\\"\\\"\")""#
+        r#""OK (\"\\\"line1\\nline2\\\"\" \"\\\"col1\tcol2\\\"\" \"\\\"she said \\\\\\\"hello\\\\\\\"\\\"\" \"\\\"path\\\\\\\\to\\\\\\\\file\\\"\" \"\\\"before\\rafter\\\"\" \"\\\"a\\nb\tc\\\\\\\\d\\\\\\\"e\\\"\" \"\\\"\\n\\n\\n\\\"\" \"\\\"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"\" \"\\\"\t\\n\\\\\\\"\\\\\\\\\\\"\" \"\\\"hello\\\"\" \"\\\"\\\"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

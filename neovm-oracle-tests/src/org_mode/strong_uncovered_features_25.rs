@@ -306,7 +306,7 @@ fn uf25_restriction_remove() {
 #[test]
 fn uf25_prepare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H\nBody\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H\\nBody\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -344,7 +344,7 @@ fn uf25_format() {
 #[test]
 fn uf25_finalize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* TODO T1\n* DONE D1\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* TODO T1\\n* DONE D1\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -364,7 +364,7 @@ fn uf25_finalize() {
 #[test]
 fn uf25_filter_mark() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* TODO T1\n* DONE D1\n* TODO T2\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* TODO T1\\n* DONE D1\\n* TODO T2\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -384,7 +384,7 @@ fn uf25_filter_mark() {
 #[test]
 fn uf25_filter_apply() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* TODO T1\n* DONE D1\n* TODO T2\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* TODO T1\\n* DONE D1\\n* TODO T2\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -404,7 +404,7 @@ fn uf25_filter_apply() {
 #[test]
 fn uf25_redo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* TODO T1\n* DONE D1\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* TODO T1\\n* DONE D1\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

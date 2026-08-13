@@ -202,7 +202,7 @@ fn oracle_prop_save_restriction_comp_with_save_excursion() {
     (nreverse results)))
 "#;
     let expect = expect_test::expect![[
-        r#""OK ((inside-excursion 32) (after-widen 1 44 32) (after-excursion 11 1 44) (after-restriction 11 32 \"Line two.\nLine three.\"))""#
+        r#""OK ((inside-excursion 32) (after-widen 1 44 32) (after-excursion 11 1 44) (after-restriction 11 32 \"Line two.\\nLine three.\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -447,7 +447,7 @@ fn oracle_prop_save_restriction_comp_nested_narrow_with_replace() {
     (buffer-string)))
 "#;
     let expect = expect_test::expect![[
-        r#""OK \"HEADER: skip this\napple banana cherry. dog elephant fox. grape hazel ivy.\nFOOTER: skip this too\n\"""#
+        r#""OK \"HEADER: skip this\\napple banana cherry. dog elephant fox. grape hazel ivy.\\nFOOTER: skip this too\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

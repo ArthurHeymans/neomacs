@@ -178,7 +178,7 @@ fn div_cx247_process_mark_position_query() {
 fn div_cx247_send_string_and_eof_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"alpha beta gamma\n\nProcess neo-cx247-eof finished\"""#]];
+        expect_test::expect![[r#""OK \"alpha beta gamma\\n\\nProcess neo-cx247-eof finished\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx247-eof*"))

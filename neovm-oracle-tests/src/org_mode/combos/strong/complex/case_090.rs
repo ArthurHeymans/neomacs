@@ -45,7 +45,7 @@ fn combo90_combined_fixwidth_verse_comment() {
 fn combo90_combined_hlist_plain_child() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:buffer \"* Parent\n- [X] task1\n- [ ] task2\n  - [X] sub a\n  - [ ] sub b\n\") (:items 4))""#
+        r#""OK ((:buffer \"* Parent\\n- [X] task1\\n- [ ] task2\\n  - [X] sub a\\n  - [ ] sub b\\n\") (:items 4))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode)

@@ -730,7 +730,7 @@ fn oracle_prop_strparse_json_parser() {
     (makunbound 'neovm--test-jp-pos)
     (makunbound 'neovm--test-jp-input)))"#;
     let expect = expect_test::expect![[
-        r#""OK (42 -7 \"hello world\" t nil null (1 2 3) nil (\"a\" \"b\" \"c\") ((\"name\" . \"Alice\") (\"age\" . 30)) nil ((\"users\" ((\"id\" . 1) (\"name\" . \"Alice\")) ((\"id\" . 2) (\"name\" . \"Bob\")))) ((\"config\" (\"debug\" . t) (\"ports\" 80 443)) (\"version\" . 2)) \"line1\nline2\ttab\" (t nil null 0 \"\"))""#
+        r#""OK (42 -7 \"hello world\" t nil null (1 2 3) nil (\"a\" \"b\" \"c\") ((\"name\" . \"Alice\") (\"age\" . 30)) nil ((\"users\" ((\"id\" . 1) (\"name\" . \"Alice\")) ((\"id\" . 2) (\"name\" . \"Bob\")))) ((\"config\" (\"debug\" . t) (\"ports\" 80 443)) (\"version\" . 2)) \"line1\\nline2\ttab\" (t nil null 0 \"\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

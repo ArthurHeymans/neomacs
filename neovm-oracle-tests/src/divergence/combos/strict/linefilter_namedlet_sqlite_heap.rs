@@ -12,8 +12,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_n4_keep_flush_how_many_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (\"foo\nbar\nfoo\nbaz\n\" \"foo\nbar\nfoo\nbaz\n\" 3)""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"foo\\nbar\\nfoo\\nbaz\\n\" \"foo\\nbar\\nfoo\\nbaz\\n\" 3)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -35,7 +36,7 @@ fn div_n4_keep_flush_how_many_lines() {
 #[test]
 fn div_n4_delete_duplicate_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"a\nb\nc\n\" \"a\nb\na\nc\nb\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"a\\nb\\nc\\n\" \"a\\nb\\na\\nc\\nb\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer

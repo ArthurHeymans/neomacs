@@ -145,7 +145,7 @@ fn div_cx413_count_words_region() {
 #[test]
 fn div_cx413_flush_keep_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"other\nskip\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"other\\nskip\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

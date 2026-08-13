@@ -15,7 +15,7 @@ fn div_v8_shr_table_pre_render() {
     (buffer-string)))
 "##;
     let expect = expect_test::expect![[
-        r#""ERR (wrong-type-argument listp \"<html><body><table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table><pre>code line 1\ncode line 2</pre></body></html>\")""#
+        r#""ERR (wrong-type-argument listp \"<html><body><table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table><pre>code line 1\\ncode line 2</pre></body></html>\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

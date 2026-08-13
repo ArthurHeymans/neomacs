@@ -431,7 +431,7 @@ fn strong_xv_mc() {
 fn strong_xv_db() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK #(\"#+BEGIN: clocktable :maxlevel 2 :header \\\"Clock summary\\\"\nClock summary|Headline|Time|\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\" 85 86 (face org-table) 86 110 (face org-table) 110 111 (face org-table-row) 111 112 (face org-table) 112 113 (face org-table rear-nonsticky t display (space :relative-width 1)) 113 125 (org-emphasis t font-lock-multiline t face (bold org-table)) 125 126 (face org-table display (space :relative-width 1.001)) 126 127 (face org-table) 127 128 (face org-table rear-nonsticky t display (space :relative-width 1)) 128 134 (org-emphasis t font-lock-multiline t face (bold org-table)) 134 135 (face org-table display (space :relative-width 1.001)) 135 136 (face org-table) 136 137 (face org-table-row))""##
+        r##""OK #(\"#+BEGIN: clocktable :maxlevel 2 :header \\\"Clock summary\\\"\\nClock summary|Headline|Time|\\n|--------------+--------|\\n| *Total time* | *0:00* |\\n#+END:\" 85 86 (face org-table) 86 110 (face org-table) 110 111 (face org-table-row) 111 112 (face org-table) 112 113 (face org-table rear-nonsticky t display (space :relative-width 1)) 113 125 (org-emphasis t font-lock-multiline t face (bold org-table)) 125 126 (face org-table display (space :relative-width 1.001)) 126 127 (face org-table) 127 128 (face org-table rear-nonsticky t display (space :relative-width 1)) 128 134 (org-emphasis t font-lock-multiline t face (bold org-table)) 134 135 (face org-table display (space :relative-width 1.001)) 135 136 (face org-table) 136 137 (face org-table-row))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -527,7 +527,7 @@ fn strong_xv_cv() {
 fn strong_xv_er() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"\\\\alpha \\\\beta\n<<<t>>>\nSee t\" \"\\\\alpha \\\\beta\n<<<t>>>\nSee t\")""#
+        r#""OK (\"\\\\alpha \\\\beta\\n<<<t>>>\\nSee t\" \"\\\\alpha \\\\beta\\n<<<t>>>\\nSee t\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

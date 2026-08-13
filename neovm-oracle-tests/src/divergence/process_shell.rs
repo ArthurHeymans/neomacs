@@ -22,7 +22,7 @@ fn divergence_start_process_basic() {
 fn divergence_call_process_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"test-output\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"test-output\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (call-process "echo" nil t nil "test-output")
@@ -59,7 +59,7 @@ fn divergence_process_exit_failure() {
 fn divergence_shell_command_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"hello\n\" 0)""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello\\n\" 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((output (shell-command-to-string "echo hello")))
   (list output (string-match "hello" output)))"#,

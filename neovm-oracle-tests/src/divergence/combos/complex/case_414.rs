@@ -132,7 +132,7 @@ fn div_cx414_native_comp_availability() {
 fn div_cx414_documentation_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"Return the car of LIST.  If LIST is nil, return nil.\nError if LIST is not nil and not a cons cell.  See also `car-safe'.\n\nSee Info node `(elisp)Cons Cells' for a discussion of related basic\nLisp concepts such as car, cdr, cons cell and list.\n\n(fn LIST)\" nil)""#
+        r#""OK (\"Return the car of LIST.  If LIST is nil, return nil.\\nError if LIST is not nil and not a cons cell.  See also `car-safe'.\\n\\nSee Info node `(elisp)Cons Cells' for a discussion of related basic\\nLisp concepts such as car, cdr, cons cell and list.\\n\\n(fn LIST)\" nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -274,7 +274,7 @@ fn div_cx414_split_char_make_char() {
 #[test]
 fn div_cx414_string_as_unibyte_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"caf\\303\\251\" \"café\" 5 4)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café\" \"café\" 5 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "café"))

@@ -293,7 +293,7 @@ fn strong_table_move_columns() {
 fn strong_list_checkbox_toggle_hierarchy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (nil nil \"- [-] item 1\n  - [ ] sub 1\n  - [X] sub 2\n- [ ] item 2\")""#
+        r#""OK (nil nil \"- [-] item 1\\n  - [ ] sub 1\\n  - [X] sub 2\\n- [ ] item 2\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -579,7 +579,7 @@ fn strong_drawer_insert_toggle_cycle() {
 #[test]
 fn strong_babel_named_block_reference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"my-block\" \"emacs-lisp\" \"(+ 1 2)\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"my-block\" \"emacs-lisp\" \"(+ 1 2)\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -602,7 +602,7 @@ fn strong_babel_named_block_reference() {
 fn strong_dynamic_block_clocktable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+BEGIN: clocktable :maxlevel 2\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\"""##
+        r##""OK \"#+BEGIN: clocktable :maxlevel 2\\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00]\\n| Headline     | Time   |\\n|--------------+--------|\\n| *Total time* | *0:00* |\\n#+END:\"""##
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer

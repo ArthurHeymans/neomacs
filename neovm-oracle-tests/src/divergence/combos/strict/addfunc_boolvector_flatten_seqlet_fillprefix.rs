@@ -80,7 +80,7 @@ fn div_k1_seq_let_setf() {
 #[test]
 fn div_k1_fill_with_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"ab foo bar baz\nab more text\nab here\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"ab foo bar baz\\nab more text\\nab here\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

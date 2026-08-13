@@ -527,7 +527,7 @@ fn oracle_prop_markup_render_plaintext() {
     (fmakunbound 'neovm--test-mr-render-block)
     (fmakunbound 'neovm--test-mr-render-document)))"####;
     let expect = expect_test::expect![[
-        r##""OK (\"# My Title\nHello world and more\n## Section\n  * item with code\n  * plain item\" \"Just text\nAll bold\" \"# Bold Header\n  * italic item\" \"\" \"abc\")""##
+        r##""OK (\"# My Title\\nHello world and more\\n## Section\\n  * item with code\\n  * plain item\" \"Just text\\nAll bold\" \"# Bold Header\\n  * italic item\" \"\" \"abc\")""##
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -869,7 +869,7 @@ fn oracle_prop_markup_end_to_end_pipeline() {
     (fmakunbound 'neovm--test-me-upcase-transform)
     (fmakunbound 'neovm--test-me-render)))"####;
     let expect = expect_test::expect![[
-        r##""OK (5 (header paragraph header list-item list-item) \"# Welcome\nHello world today.\n## Items\n- first\n- second\" \"# WELCOME\nHELLO WORLD TODAY.\n## ITEMS\n- FIRST\n- SECOND\" t t)""##
+        r##""OK (5 (header paragraph header list-item list-item) \"# Welcome\\nHello world today.\\n## Items\\n- first\\n- second\" \"# WELCOME\\nHELLO WORLD TODAY.\\n## ITEMS\\n- FIRST\\n- SECOND\" t t)""##
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

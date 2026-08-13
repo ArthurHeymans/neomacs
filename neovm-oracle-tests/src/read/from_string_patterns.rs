@@ -51,7 +51,7 @@ fn oracle_prop_rfs_patterns_all_basic_types() {
   (car (read-from-string "?\\n"))
   (car (read-from-string "?\\t")))"####;
     let expect = expect_test::expect![[
-        r#""OK (0 1 -1 42 999999 -999999 0.0 3.14159 -2.718 10000000000.0 0.0015 -6.022e+23 \"\" \"hello world\" \"line1\nline2\" \"tab\there\" \"quote \\\"inside\\\"\" \"backslash \\\\\" foo my-variable nil t a/b :test :equal :my-keyword 97 10 9)""#
+        r#""OK (0 1 -1 42 999999 -999999 0.0 3.14159 -2.718 10000000000.0 0.0015 -6.022e+23 \"\" \"hello world\" \"line1\\nline2\" \"tab\there\" \"quote \\\"inside\\\"\" \"backslash \\\\\" foo my-variable nil t a/b :test :equal :my-keyword 97 10 9)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

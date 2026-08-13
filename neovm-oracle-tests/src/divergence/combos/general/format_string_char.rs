@@ -52,7 +52,7 @@ fn divergence_string_props_after_format() {
 fn divergence_string_multibyte_concat_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (3 t 4 nil 7 nil 7 nil \"\\303\\251\" nil)""#]];
+    let expect = expect_test::expect![[r#""OK (3 t 4 nil 7 nil 7 nil \"é\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((a "abc")

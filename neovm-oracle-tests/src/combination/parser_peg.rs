@@ -648,7 +648,7 @@ fn oracle_prop_peg_not_predicate_and_classes() {
     (fmakunbound 'neovm--peg6-parse)
     (fmakunbound 'neovm--peg6-is-not-newline)))"#;
     let expect = expect_test::expect![[
-        r#""OK (((\"//\" (\" \" \"t\" \"h\" \"i\" \"s\" \" \" \"i\" \"s\" \" \" \"a\" \" \" \"c\" \"o\" \"m\" \"m\" \"e\" \"n\" \"t\")) . \"\nnext line\") ((\"//\" nil) . \"\ncode\") nil (((t \"h\") (t \"e\") (t \"l\") (t \"l\") (t \"o\")) . \" world\") nil (t . \"normal\"))""#
+        r#""OK (((\"//\" (\" \" \"t\" \"h\" \"i\" \"s\" \" \" \"i\" \"s\" \" \" \"a\" \" \" \"c\" \"o\" \"m\" \"m\" \"e\" \"n\" \"t\")) . \"\\nnext line\") ((\"//\" nil) . \"\\ncode\") nil (((t \"h\") (t \"e\") (t \"l\") (t \"l\") (t \"o\")) . \" world\") nil (t . \"normal\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

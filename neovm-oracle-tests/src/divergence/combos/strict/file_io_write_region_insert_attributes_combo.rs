@@ -28,7 +28,7 @@ fn div_v8_file_write_read_roundtrip_multibyte() {
             (progn (delete-file file) (file-exists-p file))))))
 "##;
     let expect =
-        expect_test::expect![[r#""OK (\"line one\nline two\n日本語 café\n\" 3 34 t t t nil)""#]];
+        expect_test::expect![[r#""OK (\"line one\\nline two\\n日本語 café\\n\" 3 34 t t t nil)""#]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(form, expect);
 }
 
@@ -51,7 +51,7 @@ fn div_v8_file_append_mode_size_growth() {
               (count-lines (point-min) (point-max))
               (progn (delete-file file) (file-exists-p file)))))))
 "##;
-    let expect = expect_test::expect![[r#""OK (6 13 \"first\nsecond\n\" 2 nil)""#]];
+    let expect = expect_test::expect![[r#""OK (6 13 \"first\\nsecond\\n\" 2 nil)""#]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(form, expect);
 }
 

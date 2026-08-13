@@ -60,7 +60,7 @@ Returns (serialized deserialized equal-p)."
       ;; Cleanup
       (fmakunbound 'test--sexp-roundtrip))"#;
     let expect = expect_test::expect![[
-        r#""OK ((\"42\" 42 t) (\"-999\" -999 t) (\"3.14159\" 3.14159 t) (\"\\\"hello world\\\"\" \"hello world\" t) (\"\\\"string with \\\\\\\"quotes\\\\\\\" and \\\\\\\\backslash\\\"\" \"string with \\\"quotes\\\" and \\\\backslash\" t) (\"\\\"multi\nline\nstring\\\"\" \"multi\nline\nstring\" t) (\"some-symbol\" some-symbol t) (\":a-keyword\" :a-keyword t) (\"nil\" nil t) (\"t\" t t) (\"(1 2 3)\" (1 2 3) t) (\"(a (b (c d)) e)\" (a (b (c d)) e) t) (\"((key1 . \\\"val1\\\") (key2 . \\\"val2\\\") (key3 . 42))\" ((key1 . \"val1\") (key2 . \"val2\") (key3 . 42)) t) (\"[1 2 3]\" [1 2 3] t) (\"[a \\\"b\\\" 3 :d]\" [a \"b\" 3 :d] t) (\"(head . tail)\" (head . tail) t) (\"((name . \\\"Alice\\\") (scores . [95 87 92]) (address (city . \\\"Springfield\\\") (zip . \\\"62701\\\")))\" ((name . \"Alice\") (scores . [95 87 92]) (address (city . \"Springfield\") (zip . \"62701\"))) t))""#
+        r#""OK ((\"42\" 42 t) (\"-999\" -999 t) (\"3.14159\" 3.14159 t) (\"\\\"hello world\\\"\" \"hello world\" t) (\"\\\"string with \\\\\\\"quotes\\\\\\\" and \\\\\\\\backslash\\\"\" \"string with \\\"quotes\\\" and \\\\backslash\" t) (\"\\\"multi\\nline\\nstring\\\"\" \"multi\\nline\\nstring\" t) (\"some-symbol\" some-symbol t) (\":a-keyword\" :a-keyword t) (\"nil\" nil t) (\"t\" t t) (\"(1 2 3)\" (1 2 3) t) (\"(a (b (c d)) e)\" (a (b (c d)) e) t) (\"((key1 . \\\"val1\\\") (key2 . \\\"val2\\\") (key3 . 42))\" ((key1 . \"val1\") (key2 . \"val2\") (key3 . 42)) t) (\"[1 2 3]\" [1 2 3] t) (\"[a \\\"b\\\" 3 :d]\" [a \"b\" 3 :d] t) (\"(head . tail)\" (head . tail) t) (\"((name . \\\"Alice\\\") (scores . [95 87 92]) (address (city . \\\"Springfield\\\") (zip . \\\"62701\\\")))\" ((name . \"Alice\") (scores . [95 87 92]) (address (city . \"Springfield\") (zip . \"62701\"))) t))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -231,7 +231,7 @@ fn oracle_prop_serialization_csv_format() {
       (fmakunbound 'test--csv-serialize-table)
       (fmakunbound 'test--csv-parse-row))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"Name,City,Quote,Amount\nAlice,New York,\\\"She said \\\"\\\"hello\\\"\\\"\\\",1000\nBob,\\\"San Francisco, CA\\\",plain,2500\nCharlie,Boston,\\\"has,comma\\\",300\nDiana,London,,0\" ((\"Name\" \"City\" \"Quote\" \"Amount\") (\"Alice\" \"New York\" \"She said \\\"hello\\\"\" \"1000\") (\"Bob\" \"San Francisco, CA\" \"plain\" \"2500\") (\"Charlie\" \"Boston\" \"has,comma\" \"300\") (\"Diana\" \"London\" \"\" \"0\")) (t t t t t))""#
+        r#""OK (\"Name,City,Quote,Amount\\nAlice,New York,\\\"She said \\\"\\\"hello\\\"\\\"\\\",1000\\nBob,\\\"San Francisco, CA\\\",plain,2500\\nCharlie,Boston,\\\"has,comma\\\",300\\nDiana,London,,0\" ((\"Name\" \"City\" \"Quote\" \"Amount\") (\"Alice\" \"New York\" \"She said \\\"hello\\\"\" \"1000\") (\"Bob\" \"San Francisco, CA\" \"plain\" \"2500\") (\"Charlie\" \"Boston\" \"has,comma\" \"300\") (\"Diana\" \"London\" \"\" \"0\")) (t t t t t))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -336,7 +336,7 @@ Ignores comments (lines starting with ;) and blank lines."
       (fmakunbound 'test--ini-serialize)
       (fmakunbound 'test--ini-parse))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"[database]\nhost = localhost\nport = 5432\nname = mydb\nuser = admin\n\n[server]\nbind = 0.0.0.0\nport = 8080\nworkers = 4\ndebug = false\n\n[logging]\nlevel = info\nfile = /var/log/app.log\nrotate = daily\n\" ((\"database\" (\"host\" . \"localhost\") (\"port\" . \"5432\") (\"name\" . \"mydb\") (\"user\" . \"admin\")) (\"server\" (\"bind\" . \"0.0.0.0\") (\"port\" . \"8080\") (\"workers\" . \"4\") (\"debug\" . \"false\")) (\"logging\" (\"level\" . \"info\") (\"file\" . \"/var/log/app.log\") (\"rotate\" . \"daily\"))) t t ((\"main\" (\"key1\" . \"val1\") (\"key2\" . \"val2\"))))""#
+        r#""OK (\"[database]\\nhost = localhost\\nport = 5432\\nname = mydb\\nuser = admin\\n\\n[server]\\nbind = 0.0.0.0\\nport = 8080\\nworkers = 4\\ndebug = false\\n\\n[logging]\\nlevel = info\\nfile = /var/log/app.log\\nrotate = daily\\n\" ((\"database\" (\"host\" . \"localhost\") (\"port\" . \"5432\") (\"name\" . \"mydb\") (\"user\" . \"admin\")) (\"server\" (\"bind\" . \"0.0.0.0\") (\"port\" . \"8080\") (\"workers\" . \"4\") (\"debug\" . \"false\")) (\"logging\" (\"level\" . \"info\") (\"file\" . \"/var/log/app.log\") (\"rotate\" . \"daily\"))) t t ((\"main\" (\"key1\" . \"val1\") (\"key2\" . \"val2\"))))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

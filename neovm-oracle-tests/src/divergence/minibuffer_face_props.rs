@@ -48,7 +48,7 @@ fn div_mfp_all_completions_base_size() {
 fn div_mfp_insert_strings_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"apple\napricot\" (completion--string \"apple\" cursor-face completions-highlight mouse-face highlight))""#
+        r#""OK (\"apple\\napricot\" (completion--string \"apple\" cursor-face completions-highlight mouse-face highlight))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

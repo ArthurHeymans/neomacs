@@ -238,7 +238,7 @@ fn strong_latex_in_paragraph() {
 fn strong_latex_environment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"\\\\begin{equation}\nx^2 + y^2 = z^2\n\\\\end{equation}\")""#
+        r#""OK (\"\\\\begin{equation}\\nx^2 + y^2 = z^2\\n\\\\end{equation}\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

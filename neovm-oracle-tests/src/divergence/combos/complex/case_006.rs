@@ -38,7 +38,7 @@ fn div_cx6_encode_unencodable_multiple_chars() {
 #[test]
 fn div_cx6_set_process_coding_system_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"hello\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"hello\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

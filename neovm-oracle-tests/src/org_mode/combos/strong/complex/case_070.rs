@@ -58,7 +58,7 @@ fn combo70_babel_var_multi_named_tables() {
 fn combo70_agenda_get_progress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:get-progress-fbound t) (:after-stats \"* TODO Task [66%]\n- [X] a\n- [ ] b\n- [X] c\n\") (:checked 0))""#
+        r#""OK ((:get-progress-fbound t) (:after-stats \"* TODO Task [66%]\\n- [X] a\\n- [ ] b\\n- [X] c\\n\") (:checked 0))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

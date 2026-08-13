@@ -137,7 +137,7 @@ fn oracle_prop_delete_selective_lines() {
                                          (1+ (line-end-position)))
                         (forward-line 1)))
                     (buffer-string))"####;
-    let expect = expect_test::expect![[r#""OK \"keep this\nkeep this too\nalso keep\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"keep this\\nkeep this too\\nalso keep\\n\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -177,7 +177,7 @@ fn oracle_prop_delete_extract_restructure() {
                               footer
                               (buffer-string)))))"####;
     let expect =
-        expect_test::expect![[r#""OK (\"Title\" \"End\" \"body line 1\nbody line 2\n\")""#]];
+        expect_test::expect![[r#""OK (\"Title\" \"End\" \"body line 1\\nbody line 2\\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

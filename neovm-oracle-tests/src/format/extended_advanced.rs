@@ -122,7 +122,7 @@ fn oracle_prop_format_ext_char_comprehensive() {
                     (format "%c" 955)
                     (format "%c" 8364))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"A\" \"z\" \"0\" \"9\" \"!\" \"@\" \"~\" \" \" \"\n\" \"Hello\" \"char=A code=65 hex=41\" \"() 2+3=5\" \"λ\" \"€\")""#
+        r#""OK (\"A\" \"z\" \"0\" \"9\" \"!\" \"@\" \"~\" \" \" \"\\n\" \"Hello\" \"char=A code=65 hex=41\" \"() 2+3=5\" \"λ\" \"€\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -156,7 +156,7 @@ fn oracle_prop_format_ext_special_chars() {
                     (format "%s-%s-%s-%s-%s-%s-%s-%s"
                             "a" "b" "c" "d" "e" "f" "g" "h"))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"line1\nline2\nline3\" \"col1\tcol2\tcol3\" \"a\nb\tc\n\" \"path: C:\\\\Users\\\\test\" \"He said \\\"hello\\\"\" \"50% of 80% = 40.00%\" \"[]\" \"[          ]\" \"[          ]\" \"nil/t/symbol\" \"a-b-c-d-e-f-g-h\")""#
+        r#""OK (\"line1\\nline2\\nline3\" \"col1\tcol2\tcol3\" \"a\\nb\tc\\n\" \"path: C:\\\\Users\\\\test\" \"He said \\\"hello\\\"\" \"50% of 80% = 40.00%\" \"[]\" \"[          ]\" \"[          ]\" \"nil/t/symbol\" \"a-b-c-d-e-f-g-h\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -246,7 +246,7 @@ fn oracle_prop_format_ext_elisp_code_generation() {
                     (let ((code (format "(list %d %d %d)" 1 2 3)))
                       (eval (car (read-from-string code)))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"(setq my-var 42)\" \"(defun my-add (a b)\n  (+ a b))\" \"(let ((x 1) (y 2) (z 3))\n  (+ x y z))\" \"'(\\\"hello\\\" world 42 nil)\" (+ 10 20) (1 2 3))""#
+        r#""OK (\"(setq my-var 42)\" \"(defun my-add (a b)\\n  (+ a b))\" \"(let ((x 1) (y 2) (z 3))\\n  (+ x y z))\" \"'(\\\"hello\\\" world 42 nil)\" (+ 10 20) (1 2 3))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

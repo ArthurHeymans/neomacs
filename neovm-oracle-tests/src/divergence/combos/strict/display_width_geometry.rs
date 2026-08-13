@@ -163,7 +163,7 @@ fn div_e8_geometry_move_to_window_line() {
 fn div_e8_format_control_char_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"\u{7}\u{7}\u{7}\" \"\\\"\u{7}\u{7}\u{7}\\\"\" \"\\\"\u{7}\u{8}\\\"\" \"\t\n\\r\" \"\\\"\t\n\\r\\\"\")""#
+        r#""OK (\"\u{7}\u{7}\u{7}\" \"\\\"\u{7}\u{7}\u{7}\\\"\" \"\\\"\u{7}\u{8}\\\"\" \"\t\\n\\r\" \"\\\"\t\\n\\r\\\"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

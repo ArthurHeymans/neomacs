@@ -30,7 +30,7 @@ fn combo68_capture_finalize() {
 fn combo68_table_named_formula_cross_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK ((:after-recalc \"#+name: rates\n| item | price |\n|------+-------|\n| A    |    10 |\n| B    |    25 |\n\n#+name: orders\n| item | qty | total |\n|------+-----+-------|\n| A    |   3 |     0 |\n| B    |   2 |     0 |\n#+TBLFM: $3=$2*remote(rates,@@#$3)\n\") (:table-count 2))""##
+        r##""OK ((:after-recalc \"#+name: rates\\n| item | price |\\n|------+-------|\\n| A    |    10 |\\n| B    |    25 |\\n\\n#+name: orders\\n| item | qty | total |\\n|------+-----+-------|\\n| A    |   3 |     0 |\\n| B    |   2 |     0 |\\n#+TBLFM: $3=$2*remote(rates,@@#$3)\\n\") (:table-count 2))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -56,7 +56,7 @@ fn combo68_table_named_formula_cross_ref() {
 fn combo68_babel_results_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK (\"<b>bold</b>\" (:result-count 0) (:buffer \"#+begin_src emacs-lisp :results html\n\\\"<b>bold</b>\\\"\n#+end_src\n\n#+RESULTS:\n#+begin_export html\n<b>bold</b>\n#+end_export\n\"))""##
+        r##""OK (\"<b>bold</b>\" (:result-count 0) (:buffer \"#+begin_src emacs-lisp :results html\\n\\\"<b>bold</b>\\\"\\n#+end_src\\n\\n#+RESULTS:\\n#+begin_export html\\n<b>bold</b>\\n#+end_export\\n\"))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -142,8 +142,9 @@ fn combo68_entities_replace() {
 #[test]
 fn combo68_insert_heading_force_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK ((:after-insert \"- item 1\n- item 2\n* New heading\n\"))""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((:after-insert \"- item 1\\n- item 2\\n* New heading\\n\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

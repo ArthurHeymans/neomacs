@@ -142,7 +142,7 @@ fn div_cx272_page_break_lines_mode() {
 fn div_cx272_outline_hide_show_body() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t \"* Heading 1\nbody line one\nbody line two\n* Heading 2\nbody three\n\" \"* Heading 1\nbody line one\nbody line two\n* Heading 2\nbody three\n\")""#
+        r#""OK (t \"* Heading 1\\nbody line one\\nbody line two\\n* Heading 2\\nbody three\\n\" \"* Heading 1\\nbody line one\\nbody line two\\n* Heading 2\\nbody three\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

@@ -22,7 +22,7 @@ fn oracle_prop_insert_buffer_comp_multi_arg_types() {
       ;; Mix strings and character codes
       (insert "Hello" ?  "World" ?! ?\n "Line2" 65 66 67)
       (buffer-string))"#;
-    let expect = expect_test::expect![[r#""OK \"Hello World!\nLine2ABC\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Hello World!\\nLine2ABC\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

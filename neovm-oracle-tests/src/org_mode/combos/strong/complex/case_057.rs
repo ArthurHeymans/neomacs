@@ -209,7 +209,7 @@ fn combo57_element_cache_repeated_parse_modify() {
 fn combo57_paste_subtree_level_adjust() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:after-paste-level1 ((1 \"A\") (2 \"A1\") (1 \"B\") (1 \"A1\"))) (:after-paste-level2 ((1 \"A\") (2 \"B\") (2 \"A1\") (1 \"B\") (1 \"A1\"))) (:buffer \"* A\n** B\n** A1\nBody A1.\n* B\n* A1\nBody A1.\n\"))""#
+        r#""OK ((:after-paste-level1 ((1 \"A\") (2 \"A1\") (1 \"B\") (1 \"A1\"))) (:after-paste-level2 ((1 \"A\") (2 \"B\") (2 \"A1\") (1 \"B\") (1 \"A1\"))) (:buffer \"* A\\n** B\\n** A1\\nBody A1.\\n* B\\n* A1\\nBody A1.\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -250,7 +250,7 @@ fn combo57_paste_subtree_level_adjust() {
 fn combo57_meta_return_context_dependent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:after-heading (\"New Heading\" \"Heading\")) (:after-item (\"\" \"\" \"\")) (:buffer \"* New Heading\n* Heading\n- new item\n- item1\n- item2\n\"))""#
+        r#""OK ((:after-heading (\"New Heading\" \"Heading\")) (:after-item (\"\" \"\" \"\")) (:buffer \"* New Heading\\n* Heading\\n- new item\\n- item1\\n- item2\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

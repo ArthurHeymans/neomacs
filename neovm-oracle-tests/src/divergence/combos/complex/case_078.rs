@@ -59,7 +59,7 @@ fn div_cx78_upcase_word_downcase_word_capitalize_word_motion() {
 fn div_cx78_fill_region_with_fill_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"This is a long line of text\nthat should be wrapped at the\nfill column boundary for\ntesting purposes.\"""#
+        r#""OK \"This is a long line of text\\nthat should be wrapped at the\\nfill column boundary for\\ntesting purposes.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -77,7 +77,7 @@ fn div_cx78_fill_region_with_fill_column() {
 fn div_cx78_fill_paragraph_with_fill_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"    This is a paragraph that has a fill\n    prefix applied to it that should\n    also be wrapped properly at the\n    column boundary.\"""#
+        r#""OK \"    This is a paragraph that has a fill\\n    prefix applied to it that should\\n    also be wrapped properly at the\\n    column boundary.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -95,7 +95,7 @@ fn div_cx78_fill_paragraph_with_fill_prefix() {
 #[test]
 fn div_cx78_indent_region_with_tab_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"    line1\n    line2\n    line3\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"    line1\\n    line2\\n    line3\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

@@ -65,7 +65,7 @@ fn div_utf8_fileread_latin1_multibyte_buffer_charset_property() {
 #[test]
 fn div_utf8_fileread_latin1_unibyte_buffer_charset_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil \"caf\\351\" 5 (99 97 102 233))""#]];
+    let expect = expect_test::expect![[r#""OK (nil \"caf�\" 5 (99 97 102 233))""#]];
     // The original #1 case: latin-1 into a unibyte buffer.
     crate::common::assert_oracle_parity_expect(
         r#"

@@ -9,7 +9,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx64_process_filter_chunked_utf8_decoding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"\nProcess neo-cx64-pf finished\n\" 30 \"hello 世界\" 8)""#
+        r#""OK (\"\\nProcess neo-cx64-pf finished\\n\" 30 \"hello 世界\" 8)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -40,7 +40,7 @@ fn div_cx64_process_filter_chunked_utf8_decoding() {
 fn div_cx64_process_sentinel_exit_and_signal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (((:exit . \"exited abnormally with code 7\n\") (:sig . \"terminated\n\")) 7 exit 15 signal)""#
+        r#""OK (((:exit . \"exited abnormally with code 7\\n\") (:sig . \"terminated\\n\")) 7 exit 15 signal)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

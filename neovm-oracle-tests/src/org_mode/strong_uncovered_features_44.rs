@@ -86,7 +86,7 @@ fn uf44_ts_ud() {
 #[test]
 fn uf44_schedule() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* T\nSCHEDULED: <2026-01-15 Thu>\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* T\\nSCHEDULED: <2026-01-15 Thu>\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -105,7 +105,7 @@ fn uf44_schedule() {
 #[test]
 fn uf44_deadline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* T\nDEADLINE: <2026-01-20 Tue>\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* T\\nDEADLINE: <2026-01-20 Tue>\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

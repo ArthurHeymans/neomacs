@@ -300,7 +300,7 @@ fn oracle_prop_replace_regexp_comprehensive_params() {
         expect,
     );
 
-    let expect = expect_test::expect![[r#""OK \"X X a\nb X\"""#]];
+    let expect = expect_test::expect![[r#""OK \"X X a\\nb X\"""#]];
     // Dot matches
     crate::common::assert_oracle_parity_expect(
         r#"(replace-regexp-in-string "a.b" "X" "aXb a1b a\nb acb")"#,
@@ -430,7 +430,7 @@ fn oracle_prop_string_join_comprehensive() {
     // Default separator (no second arg)
     crate::common::assert_oracle_parity_expect(r#"(string-join '("a" "b" "c"))"#, expect);
 
-    let expect = expect_test::expect![[r#""OK \"line1\nline2\nline3\"""#]];
+    let expect = expect_test::expect![[r#""OK \"line1\\nline2\\nline3\"""#]];
     // Join with newline
     crate::common::assert_oracle_parity_expect(
         r#"(string-join '("line1" "line2" "line3") "\n")"#,
@@ -547,9 +547,9 @@ fn oracle_prop_string_chop_newline_comprehensive() {
     crate::common::assert_oracle_parity_expect(r#"(string-chop-newline "")"#, expect);
     let expect = expect_test::expect![[r#""OK \"\"""#]];
     crate::common::assert_oracle_parity_expect(r#"(string-chop-newline "\n")"#, expect);
-    let expect = expect_test::expect![[r#""OK \"hello\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"hello\\n\"""#]];
     crate::common::assert_oracle_parity_expect(r#"(string-chop-newline "hello\n\n")"#, expect);
-    let expect = expect_test::expect![[r#""OK \"\nhello\"""#]];
+    let expect = expect_test::expect![[r#""OK \"\\nhello\"""#]];
     crate::common::assert_oracle_parity_expect(r#"(string-chop-newline "\nhello\n")"#, expect);
 
     let expect = expect_test::expect![[r#""OK \"hello\\r\"""#]];

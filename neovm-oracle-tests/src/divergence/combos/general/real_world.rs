@@ -189,7 +189,7 @@ fn divergence_extract_and_restructure() {
 fn divergence_whitespace_normalization() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"hello world \n\n foo bar \n baz\" t t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello world \\n\\n foo bar \\n baz\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"  hello   world   \\n\\n   foo  bar  \\n  baz  \")
@@ -209,7 +209,7 @@ fn divergence_code_comment_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"// line1\n// line2\n// line3\" \"// line1\n// line2\n// line3\" 0 nil)""#
+        r#""OK (\"// line1\\n// line2\\n// line3\" \"// line1\\n// line2\\n// line3\" 0 nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(progn

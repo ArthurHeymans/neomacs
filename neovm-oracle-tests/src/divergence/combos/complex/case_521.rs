@@ -161,7 +161,7 @@ fn div_cx521_read_char_literal() {
 #[test]
 fn div_cx521_read_string_escape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"hello\nworld\"""#]];
+    let expect = expect_test::expect![[r#""OK \"hello\\nworld\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(car (read-from-string "\"hello\nworld\""))
 "##,

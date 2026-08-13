@@ -119,7 +119,7 @@ fn div_org_link_parse() {
 fn div_org_src_block_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
-    let expect = expect_test::expect![[r#""OK (\"emacs-lisp\" \"(+ 1 2)\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"emacs-lisp\" \"(+ 1 2)\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -140,7 +140,7 @@ fn div_org_src_block_parse() {
 fn div_org_table_align() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
-    let expect = expect_test::expect![[r#""OK \"| a | b |\n| 1 | 2 |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | b |\\n| 1 | 2 |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn

@@ -9,7 +9,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx61_line_prefix_wrap_prefix_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"L1> \" \"  \" \"L2> \" nil 8 #(\"line one\nline two\nline three\n\" 0 7 (wrap-prefix \"  \" line-prefix \"L1> \") 9 16 (line-prefix \"L2> \")))""#
+        r#""OK (\"L1> \" \"  \" \"L2> \" nil 8 #(\"line one\\nline two\\nline three\\n\" 0 7 (wrap-prefix \"  \" line-prefix \"L1> \") 9 16 (line-prefix \"L2> \")))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -307,7 +307,7 @@ fn div_cx61_window_display_table_buffer_display_table() {
 fn div_cx61_selective_display_and_invisible_text_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"visible\thidden\nvisib\" \"visible\thidden\nvisib\" \"visible\thidden\nvisible2\thidden2\n\" 0)""#
+        r#""OK (\"visible\thidden\\nvisib\" \"visible\thidden\\nvisib\" \"visible\thidden\\nvisible2\thidden2\\n\" 0)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

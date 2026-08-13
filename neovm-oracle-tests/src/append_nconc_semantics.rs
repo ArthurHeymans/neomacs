@@ -97,7 +97,7 @@ fn oracle_append_vconcat_accept_byte_code_but_concat_rejects() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK (byte-code-function 4 (257 \"\\300\\207\" [42] 1) [257 \"\\300\\207\" [42] 1] (wrong-type-argument (sequencep #[257 \"\\300\\207\" [42] 1])))""#
+        r#""OK (byte-code-function 4 (257 \"��\" [42] 1) [257 \"��\" [42] 1] (wrong-type-argument (sequencep #[257 \"��\" [42] 1])))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

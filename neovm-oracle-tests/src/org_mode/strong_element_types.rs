@@ -142,7 +142,7 @@ fn et_keyword_properties() {
 fn et_src_block_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"emacs-lisp\" \"my-block\" \"-n\" \":results value :exports both\" \"(+ x 1)\n\")""#
+        r#""OK (\"emacs-lisp\" \"my-block\" \"-n\" \":results value :exports both\" \"(+ x 1)\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -162,7 +162,7 @@ fn et_src_block_properties() {
 #[test]
 fn et_example_block_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"-n\" \"Some example\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"-n\" \"Some example\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

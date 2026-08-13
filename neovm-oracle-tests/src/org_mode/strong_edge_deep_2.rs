@@ -339,7 +339,7 @@ fn ed2_block_empty_content() {
 fn ed2_block_multiple_languages() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"python\" \"print('hello')\n\") (\"emacs-lisp\" \"(message \\\"hi\\\")\n\") (\"shell\" \"echo test\n\"))""#
+        r#""OK ((\"python\" \"print('hello')\\n\") (\"emacs-lisp\" \"(message \\\"hi\\\")\\n\") (\"shell\" \"echo test\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -662,7 +662,7 @@ fn ed2_macro_multiple_args() {
 fn ed2_dynamic_block_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK #(\"#+BEGIN: clocktable\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\" 71 72 (face org-table) 72 73 (face org-table rear-nonsticky t display (space :relative-width 1)) 73 81 (face org-table) 81 85 (face org-table) 85 86 (face org-table display (space :relative-width 1.001)) 86 87 (face org-table) 87 88 (face org-table rear-nonsticky t display (space :relative-width 1)) 88 92 (face org-table) 92 94 (face org-table) 94 95 (face org-table display (space :relative-width 1.001)) 95 96 (face org-table) 96 97 (face org-table-row) 97 98 (face org-table) 98 122 (face org-table) 122 123 (face org-table-row) 123 124 (face org-table) 124 125 (face org-table rear-nonsticky t display (space :relative-width 1)) 125 137 (org-emphasis t font-lock-multiline t face (bold org-table)) 137 138 (face org-table display (space :relative-width 1.001)) 138 139 (face org-table) 139 140 (face org-table rear-nonsticky t display (space :relative-width 1)) 140 146 (org-emphasis t font-lock-multiline t face (bold org-table)) 146 147 (face org-table display (space :relative-width 1.001)) 147 148 (face org-table) 148 149 (face org-table-row))""##
+        r##""OK #(\"#+BEGIN: clocktable\\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00]\\n| Headline     | Time   |\\n|--------------+--------|\\n| *Total time* | *0:00* |\\n#+END:\" 71 72 (face org-table) 72 73 (face org-table rear-nonsticky t display (space :relative-width 1)) 73 81 (face org-table) 81 85 (face org-table) 85 86 (face org-table display (space :relative-width 1.001)) 86 87 (face org-table) 87 88 (face org-table rear-nonsticky t display (space :relative-width 1)) 88 92 (face org-table) 92 94 (face org-table) 94 95 (face org-table display (space :relative-width 1.001)) 95 96 (face org-table) 96 97 (face org-table-row) 97 98 (face org-table) 98 122 (face org-table) 122 123 (face org-table-row) 123 124 (face org-table) 124 125 (face org-table rear-nonsticky t display (space :relative-width 1)) 125 137 (org-emphasis t font-lock-multiline t face (bold org-table)) 137 138 (face org-table display (space :relative-width 1.001)) 138 139 (face org-table) 139 140 (face org-table rear-nonsticky t display (space :relative-width 1)) 140 146 (org-emphasis t font-lock-multiline t face (bold org-table)) 146 147 (face org-table display (space :relative-width 1.001)) 147 148 (face org-table) 148 149 (face org-table-row))""##
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer
@@ -718,7 +718,7 @@ fn ed2_comment_single_line() {
 #[test]
 fn ed2_comment_multiple_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Comment 1\nComment 2\nComment 3\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"Comment 1\\nComment 2\\nComment 3\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -751,7 +751,7 @@ fn ed2_fixed_width_single() {
 #[test]
 fn ed2_fixed_width_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Line 1\nLine 2\nLine 3\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"Line 1\\nLine 2\\nLine 3\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

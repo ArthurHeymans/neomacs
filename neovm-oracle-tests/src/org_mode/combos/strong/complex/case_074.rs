@@ -101,7 +101,7 @@ fn combo74_export_insert_image_links() {
 fn combo74_clock_timestamps_adjust() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:ts-up-fbound t) (:ts-down-fbound t) (:after-up \"CLOCK: [2024-01-01 Mon 10:00]--[2024-01-01 Mon 11:00] =>  1:00\n\"))""#
+        r#""OK ((:ts-up-fbound t) (:ts-down-fbound t) (:after-up \"CLOCK: [2024-01-01 Mon 10:00]--[2024-01-01 Mon 11:00] =>  1:00\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer (org-mode) (require 'org-clock)
@@ -140,7 +140,7 @@ fn combo74_org_goto_interface() {
 fn combo74_babel_results_replace_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK (42 (:after1 \"#+begin_src emacs-lisp :results value replace\n42\n#+end_src\n\n#+RESULTS:\n: 42\n\") 99 (:after2 \"#+begin_src emacs-lisp :results value replace\n99\n#+end_src\n\n#+RESULTS:\n: 99\n\") (:result-count 0))""##
+        r##""OK (42 (:after1 \"#+begin_src emacs-lisp :results value replace\\n42\\n#+end_src\\n\\n#+RESULTS:\\n: 42\\n\") 99 (:after2 \"#+begin_src emacs-lisp :results value replace\\n99\\n#+end_src\\n\\n#+RESULTS:\\n: 99\\n\") (:result-count 0))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (require 'ob-emacs-lisp)
@@ -168,7 +168,7 @@ fn combo74_babel_results_replace_cycle() {
 fn combo74_org_comment_block_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:comment-count 1) (:para-count 1) (:comment-value \"Hidden content *bold*.\n\"))""#
+        r#""OK ((:comment-count 1) (:para-count 1) (:comment-value \"Hidden content *bold*.\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode)

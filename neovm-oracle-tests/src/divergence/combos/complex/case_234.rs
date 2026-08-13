@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx234_org_table_parsing_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t 0 \"| Name | Age | City |\n|------+-----+------|\n| Bob  | 30  | NYC  |\n| Sue  | 25  | LA   |\n\")""#
+        r#""OK (t 0 \"| Name | Age | City |\\n|------+-----+------|\\n| Bob  | 30  | NYC  |\\n| Sue  | 25  | LA   |\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -32,7 +32,7 @@ fn div_cx234_org_table_parsing_basic() {
 fn div_cx234_org_table_formula_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t \"| a | b | sum |\n|---+---+-----|\n| 1 | 2 |   3 |\n| 4 | 5 |   9 |\n\")""#
+        r#""OK (t \"| a | b | sum |\\n|---+---+-----|\\n| 1 | 2 |   3 |\\n| 4 | 5 |   9 |\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -55,7 +55,7 @@ fn div_cx234_org_table_formula_eval() {
 fn div_cx234_org_checkbox_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* Tasks\n- [ ] Task one\n- [ ] Task two\n- [X] Task three\n\")""#
+        r#""OK (\"* Tasks\\n- [ ] Task one\\n- [ ] Task two\\n- [X] Task three\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

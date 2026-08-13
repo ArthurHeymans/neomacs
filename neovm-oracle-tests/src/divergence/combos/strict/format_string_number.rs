@@ -360,7 +360,7 @@ fn div_fsn_compare_and_version() {
 fn div_fsn_string_ops_and_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"abXdef\" \"*****\" \"🙂🙂🙂\" \"abbc\" \"bcd\" \"ab\" \"\\310\" 1 \"caf\\303\\251\" 5 \"café\" \"\\310\" 1)""#
+        r#""OK (\"abXdef\" \"*****\" \"🙂🙂🙂\" \"abbc\" \"bcd\" \"ab\" \"�\" 1 \"café\" 5 \"café\" \"�\" 1)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

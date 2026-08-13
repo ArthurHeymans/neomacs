@@ -190,7 +190,7 @@ fn oracle_aref_aset_byte_code_and_validation_order() {
      (error (list (car err) (cdr err))))))"#;
 
     let expect = expect_test::expect![[
-        r#""OK (byte-code-function 4 257 [42] 1 (wrong-type-argument (fixnump not-a-fixnum)) (wrong-type-argument (arrayp #[257 \"\\300\\207\" [42] 1])) (wrong-type-argument (fixnump not-a-fixnum)) (args-out-of-range (#[257 \"\\300\\207\" [42] 1] 99)))""#
+        r#""OK (byte-code-function 4 257 [42] 1 (wrong-type-argument (fixnump not-a-fixnum)) (wrong-type-argument (arrayp #[257 \"��\" [42] 1])) (wrong-type-argument (fixnump not-a-fixnum)) (args-out-of-range (#[257 \"��\" [42] 1] 99)))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

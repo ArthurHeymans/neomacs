@@ -112,7 +112,7 @@ fn div_cx437_org_capture_deep() {
 #[test]
 fn div_cx437_org_export_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"1 HELLO\n=======\n\n  WORLD\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"1 HELLO\\n=======\\n\\n  WORLD\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'ox)
   (with-temp-buffer

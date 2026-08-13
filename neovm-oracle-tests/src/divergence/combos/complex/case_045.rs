@@ -133,7 +133,7 @@ fn div_cx45_json_encode_decode_multibyte_hash_roundtrip_mega() {
 #[test]
 fn div_cx45_process_env_coding_narrow_output_filter_hash_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"prop\" \"café世界\" \"PREoutput\n\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"prop\" \"café世界\" \"PREoutput\\n\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx45-pe*")))

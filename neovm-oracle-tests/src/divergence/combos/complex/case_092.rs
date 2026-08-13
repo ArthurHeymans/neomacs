@@ -33,7 +33,7 @@ fn div_cx92_kill_ring_push_yank_cycle() {
 fn div_cx92_kill_line_then_yank_restores() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"\nline2\nline3\n\" \"line1\" \"line1\nline2\nline3\n\")""#
+        r#""OK (\"\\nline2\\nline3\\n\" \"line1\" \"line1\\nline2\\nline3\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -55,7 +55,7 @@ fn div_cx92_kill_line_then_yank_restores() {
 #[test]
 fn div_cx92_kill_whole_line_with_multiple_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"line1\nline3\n\" \"line2\n\" 7)""#]];
+    let expect = expect_test::expect![[r#""OK (\"line1\\nline3\\n\" \"line2\\n\" 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring nil))

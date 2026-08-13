@@ -51,7 +51,7 @@ fn oracle_prop_string_trim_default_whitespace() {
   ;; Internal whitespace preserved
   (string-trim "  hello   world  "))"####;
     let expect = expect_test::expect![[
-        r#""OK (\"hello\" \"hello  \" \"  hello\" \"hello\" \"hello\t\" \"\thello\" \"hello\" \"hello\n\" \"\nhello\" \"hello\" \"hello \t\n\\r \" \" \t\n\\r hello\" \"hello\" \"hello\" \"hello\" \"\" \"\" \"\" \"\" \"\" \"\" \"hello   world\")""#
+        r#""OK (\"hello\" \"hello  \" \"  hello\" \"hello\" \"hello\t\" \"\thello\" \"hello\" \"hello\\n\" \"\\nhello\" \"hello\" \"hello \t\\n\\r \" \" \t\\n\\r hello\" \"hello\" \"hello\" \"hello\" \"\" \"\" \"\" \"\" \"\" \"\" \"hello   world\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -199,7 +199,7 @@ fn oracle_prop_string_trim_edge_cases() {
   (stringp (string-trim "  x  "))
   (stringp (string-trim "xxx" "x+")))"####;
     let expect = expect_test::expect![[
-        r#""OK (\"\" \"\" \"\" \"hello\" \"hello\" \"hello\" \"\" \"\" \"x\" \"a123b\" \"hello\nworld\" \"data\" \"hello\" \"hello\" t t)""#
+        r#""OK (\"\" \"\" \"\" \"hello\" \"hello\" \"hello\" \"\" \"\" \"x\" \"a123b\" \"hello\\nworld\" \"data\" \"hello\" \"hello\" t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -306,7 +306,7 @@ fn oracle_prop_string_trim_consistency() {
        ;; Show actual trimmed values for verification
        (mapcar (lambda (r) (list (nth 0 r) (nth 2 r))) results)))))"####;
     let expect = expect_test::expect![[
-        r#""OK (nil 6 ((\"xxxmiddlexxx\" \"middlexxx\") (\"\n\ndata\n\n\" \"data\") (\"aaabbbccc\" \"bbbccc\") (\"---text---\" \"text---\") (\"123abc456\" \"abc456\") (\"  hello  \" \"hello\")))""#
+        r#""OK (nil 6 ((\"xxxmiddlexxx\" \"middlexxx\") (\"\\n\\ndata\\n\\n\" \"data\") (\"aaabbbccc\" \"bbbccc\") (\"---text---\" \"text---\") (\"123abc456\" \"abc456\") (\"  hello  \" \"hello\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

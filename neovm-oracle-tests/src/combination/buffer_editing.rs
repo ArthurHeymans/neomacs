@@ -83,7 +83,7 @@ fn oracle_prop_bufedit_sort_lines_and_paragraphs() {
                       (fmakunbound 'neovm--test-sort-lines)
                       (fmakunbound 'neovm--test-sort-paragraphs)))"####;
     let expect = expect_test::expect![[
-        r#""OK (\"apple\nbanana\ncherry\ndate\n\" \"Apple data\nApple detail\n\nMango note\n\nZebra info\nMore zebra\n\")""#
+        r#""OK (\"apple\\nbanana\\ncherry\\ndate\\n\" \"Apple data\\nApple detail\\n\\nMango note\\n\\nZebra info\\nMore zebra\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -143,7 +143,7 @@ fn oracle_prop_bufedit_deduplicate_adjacent() {
                              (list count (buffer-string)))))
                       (fmakunbound 'neovm--test-dedup-adjacent)))"####;
     let expect = expect_test::expect![[
-        r#""OK ((4 \"aaa\nbbb\nccc\naaa\n\") (3 \"Hello\nWorld\nfoo\n\") (0 \"alpha\nbeta\ngamma\n\"))""#
+        r#""OK ((4 \"aaa\\nbbb\\nccc\\naaa\\n\") (3 \"Hello\\nWorld\\nfoo\\n\") (0 \"alpha\\nbeta\\ngamma\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -202,7 +202,7 @@ fn oracle_prop_bufedit_column_extraction() {
                             (list result1 (buffer-string))))
                       (fmakunbound 'neovm--test-extract-columns)))"####;
     let expect = expect_test::expect![[
-        r#""OK (\"Alice     |Boston\nBob       |Seattl\nCarol     |Denver\nDave      |Austin\n\" \"30  \n25  \n35  \n\")""#
+        r#""OK (\"Alice     |Boston\\nBob       |Seattl\\nCarol     |Denver\\nDave      |Austin\\n\" \"30  \\n25  \\n35  \\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -392,7 +392,7 @@ fn oracle_prop_bufedit_comment_toggle() {
                            (buffer-string)))
                       (fmakunbound 'neovm--test-toggle-comments)))"##;
     let expect = expect_test::expect![[
-        r##""OK (\"# def hello():\n    # print('hi')\n    # return True\n\" \"def hello():\n    print('hi')\n    return True\n\" \"line one\n// line two\n// line three\nline four\n\" \"  ;; normal\n  commented\n  ;; also normal\n\")""##
+        r##""OK (\"# def hello():\\n    # print('hi')\\n    # return True\\n\" \"def hello():\\n    print('hi')\\n    return True\\n\" \"line one\\n// line two\\n// line three\\nline four\\n\" \"  ;; normal\\n  commented\\n  ;; also normal\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -447,7 +447,7 @@ fn oracle_prop_bufedit_reverse_lines_in_region() {
                            (buffer-string)))
                       (fmakunbound 'neovm--test-reverse-lines-region)))"####;
     let expect = expect_test::expect![[
-        r#""OK (\"epsilon\ndelta\ngamma\nbeta\nalpha\n\" \"first\nfourth\nthird\nsecond\nfifth\n\" \"only\n\")""#
+        r#""OK (\"epsilon\\ndelta\\ngamma\\nbeta\\nalpha\\n\" \"first\\nfourth\\nthird\\nsecond\\nfifth\\n\" \"only\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -60,7 +60,7 @@ fn divergence_advice_before_after() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (21 (\"before:7\" \"fn:7\" \"after:7\") #[128 \"\\304\\301\u{2}\\\"\\304\\300\u{3}\\\"\\210\\207\" [#[(x) ((push (format \"after:%d\" x) test-advice-log-xxx)) (t)] #[128 \"\\304\\300\u{2}\\\"\\210\\304\\301\u{2}\\\"\\207\" [#[(x) ((push (format \"before:%d\" x) test-advice-log-xxx)) (t)] #[(x) ((push (format \"fn:%d\" x) test-advice-log-xxx) (* x 3)) (t)] :before nil apply] 4 advice] :after nil apply] 5 advice])""#
+        r#""OK (21 (\"before:7\" \"fn:7\" \"after:7\") #[128 \"��\u{2}\\\"��\u{3}\\\"��\" [#[(x) ((push (format \"after:%d\" x) test-advice-log-xxx)) (t)] #[128 \"��\u{2}\\\"���\u{2}\\\"�\" [#[(x) ((push (format \"before:%d\" x) test-advice-log-xxx)) (t)] #[(x) ((push (format \"fn:%d\" x) test-advice-log-xxx) (* x 3)) (t)] :before nil apply] 4 advice] :after nil apply] 5 advice])""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(progn

@@ -69,7 +69,7 @@ fn divergence_charset_operations() {
 fn divergence_string_encode_decode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"caf\\303\\251\" \"café\" t 5)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café\" \"café\" t 5)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((s \"caf\\u00e9\"))
   (list (encode-coding-string s 'utf-8)

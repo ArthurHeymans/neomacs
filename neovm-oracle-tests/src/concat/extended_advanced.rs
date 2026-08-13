@@ -376,7 +376,7 @@ fn oracle_prop_template_string_expansion() {
             "{{name}} is {{name}} is {{name}}" env)))
     (fmakunbound 'neovm--test-tmpl-expand)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"Hello, Alice!\" \"Hello, Alice! You are 30 from Wonderland.\" \"no placeholders here\" \"Alice {{unknown}}\" \"Alice30\" \"\" \"Dear Alice, welcome to Wonderland\n---\" \"Alice is Alice is Alice\")""#
+        r#""OK (\"Hello, Alice!\" \"Hello, Alice! You are 30 from Wonderland.\" \"no placeholders here\" \"Alice {{unknown}}\" \"Alice30\" \"\" \"Dear Alice, welcome to Wonderland\\n---\" \"Alice is Alice is Alice\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

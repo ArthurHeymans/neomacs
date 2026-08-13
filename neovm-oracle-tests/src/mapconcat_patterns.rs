@@ -38,7 +38,7 @@ fn oracle_prop_mapconcat_patterns_identity_separators() {
   ;; Two elements: separator appears once
   (mapconcat #'identity '("first" "second") "//"))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"a,b,c\" \"x;y;z\" \"hello world\" \"alpha :: beta :: gamma\" \"one ==> two ==> three\" \"foo AND bar\" \"line1\nline2\nline3\" \"col1\tcol2\tcol3\" \"start---end\" \"A|||B|||C|||D\" \"left <========> right\" \"solo\" \"first//second\")""#
+        r#""OK (\"a,b,c\" \"x;y;z\" \"hello world\" \"alpha :: beta :: gamma\" \"one ==> two ==> three\" \"foo AND bar\" \"line1\\nline2\\nline3\" \"col1\tcol2\tcol3\" \"start---end\" \"A|||B|||C|||D\" \"left <========> right\" \"solo\" \"first//second\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -274,7 +274,7 @@ fn oracle_prop_mapconcat_patterns_csv_tsv_builder() {
     (fmakunbound 'neovm--mc-tsv-row)
     (fmakunbound 'neovm--mc-tsv-table)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"Alice,30,NYC\" \"Bob,25,\\\"Los Angeles, CA\\\"\" \"Charlie,35,\\\"Said \\\"\\\"hello\\\"\\\"\\\"\" \"Name,Age,City\nAlice,30,NYC\nBob,25,\\\"LA, CA\\\"\nCharlie,35,Chicago\" \"Name\tAge\tCity\" \"ID\tValue\tStatus\n1\t100\tactive\n2\t200\tinactive\n3\t300\tactive\" \"\" \"H1,H2\n\" \"Only\nval1\nval2\nval3\")""#
+        r#""OK (\"Alice,30,NYC\" \"Bob,25,\\\"Los Angeles, CA\\\"\" \"Charlie,35,\\\"Said \\\"\\\"hello\\\"\\\"\\\"\" \"Name,Age,City\\nAlice,30,NYC\\nBob,25,\\\"LA, CA\\\"\\nCharlie,35,Chicago\" \"Name\tAge\tCity\" \"ID\tValue\tStatus\\n1\t100\tactive\\n2\t200\tinactive\\n3\t300\tactive\" \"\" \"H1,H2\\n\" \"Only\\nval1\\nval2\\nval3\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

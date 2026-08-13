@@ -82,7 +82,8 @@ fn divergence_occur_functions() {
 fn divergence_keep_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"apple\nbanana\ncherry\napricot\nblueberry\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"apple\\nbanana\\ncherry\\napricot\\nblueberry\"""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "apple\nbanana\ncherry\napricot\nblueberry")
@@ -96,7 +97,8 @@ fn divergence_keep_lines() {
 fn divergence_flush_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"apple\nbanana\ncherry\napricot\nblueberry\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"apple\\nbanana\\ncherry\\napricot\\nblueberry\"""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "apple\nbanana\ncherry\napricot\nblueberry")

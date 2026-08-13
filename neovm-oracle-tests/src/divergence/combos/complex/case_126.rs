@@ -125,7 +125,7 @@ fn div_cx126_add_function_before_after_combined() {
 fn div_cx126_advice_member_p_named_advices() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#[128 \"\\304\\300\u{2}\\\"\\210\\304\\301\u{2}\\\"\\207\" [#[nil (:a) (t)] #[nil (:primary) (t)] :before ((name . my-adv-1)) apply] 4 advice] #[128 \"\\304\\301\u{2}\\\"\\304\\300\u{3}\\\"\\210\\207\" [#[nil (:b) (t)] #[128 \"\\304\\300\u{2}\\\"\\210\\304\\301\u{2}\\\"\\207\" [#[nil (:a) (t)] #[nil (:primary) (t)] :before ((name . my-adv-1)) apply] 4 advice] :after ((name . my-adv-2)) apply] 5 advice] nil)""#
+        r#""OK (#[128 \"��\u{2}\\\"���\u{2}\\\"�\" [#[nil (:a) (t)] #[nil (:primary) (t)] :before ((name . my-adv-1)) apply] 4 advice] #[128 \"��\u{2}\\\"��\u{3}\\\"��\" [#[nil (:b) (t)] #[128 \"��\u{2}\\\"���\u{2}\\\"�\" [#[nil (:a) (t)] #[nil (:primary) (t)] :before ((name . my-adv-1)) apply] 4 advice] :after ((name . my-adv-2)) apply] 5 advice] nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

@@ -324,7 +324,7 @@ fn div_cx14_unwind_protect_nested_throw_catch_cleanup() {
 fn div_cx14_decode_coding_region_latin1_in_multibyte_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#(\"caf\\303\\251\\303\\242\\302\\202\\302\\254\" 0 7 (charset iso-8859-1)) (99 97 102 195 169 195 162 194 130 194 172) 12)""#
+        r#""OK (#(\"caféâ\u{82}¬\" 0 7 (charset iso-8859-1)) (99 97 102 195 169 195 162 194 130 194 172) 12)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

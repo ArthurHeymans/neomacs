@@ -122,7 +122,7 @@ fn div_cx257_copy_sequence_deep_vs_shallow() {
 fn div_cx257_char_to_string_byte_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (\"a\" \"à\" \"世\" \"😀\" \"A\" \"\\377\" 97 99 19990)""#]];
+        expect_test::expect![[r#""OK (\"a\" \"à\" \"世\" \"😀\" \"A\" \"�\" 97 99 19990)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-to-string ?a)

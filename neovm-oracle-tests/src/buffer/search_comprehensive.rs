@@ -515,7 +515,7 @@ fn oracle_prop_search_complex_pipeline() {
                (forward-line 1))
              (nreverse results)))))"#;
     let expect = expect_test::expect![[
-        r#""OK ((\"line comment\" \"sum\" \"result\") ((\"x\" . \"10\") (\"y\" . \"20\") (\"z\" . \"x + y\")) (\"/* Block comment */\" \"/* Another\n   block comment */\") (\"x\" \"y\" \"z\") \"z\" (\"int x = 10;   // line comment\" \"int z = x + y; // sum\"))""#
+        r#""OK ((\"line comment\" \"sum\" \"result\") ((\"x\" . \"10\") (\"y\" . \"20\") (\"z\" . \"x + y\")) (\"/* Block comment */\" \"/* Another\\n   block comment */\") (\"x\" \"y\" \"z\") \"z\" (\"int x = 10;   // line comment\" \"int z = x + y; // sum\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -65,8 +65,9 @@ fn div_i5_imenu_index_elisp() {
 #[test]
 fn div_i5_cc_mode_indent_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK \"int main() {\n  if (x) {\n    return 0;\n  }\n}\n\"""#]];
+    let expect = expect_test::expect![[
+        r#""OK \"int main() {\\n  if (x) {\\n    return 0;\\n  }\\n}\\n\"""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer

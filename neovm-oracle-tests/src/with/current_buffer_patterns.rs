@@ -165,7 +165,7 @@ fn oracle_prop_with_current_buffer_cross_buffer_copy() {
     (kill-buffer src)
     (kill-buffer dst)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"line-2\nline-3\nline-4\n\" \"line-1\nline-2\nline-3\nline-4\nline-5\" 5)""#
+        r#""OK (\"line-2\\nline-3\\nline-4\\n\" \"line-1\\nline-2\\nline-3\\nline-4\\nline-5\" 5)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

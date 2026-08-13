@@ -346,7 +346,7 @@ fn strict_export_info_environment_completeness() {
 fn strict_normalize_contents_more_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((paragraph nil \"First line.\n\" \"  More indented.\n\" \"    Even more.\n\" \"  Back to two.\") (paragraph nil \"Single line.\") (paragraph nil \"Line one.\n\n\nLine two.\n\nLine three.\") (paragraph nil (bold nil \"bold\") \" no indent\n   three spaces\n   three spaces\") (verse-block nil \"line 1\n line 2\n\nline 3\") (paragraph nil \"Start\n\" \"     Nested\n\" \"   End.\"))""#
+        r#""OK ((paragraph nil \"First line.\\n\" \"  More indented.\\n\" \"    Even more.\\n\" \"  Back to two.\") (paragraph nil \"Single line.\") (paragraph nil \"Line one.\\n\\n\\nLine two.\\n\\nLine three.\") (paragraph nil (bold nil \"bold\") \" no indent\\n   three spaces\\n   three spaces\") (verse-block nil \"line 1\\n line 2\\n\\nline 3\") (paragraph nil \"Start\\n\" \"     Nested\\n\" \"   End.\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

@@ -6,7 +6,7 @@ fn org_babel_src_info_expand_execute_results_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"emacs-lisp\" \"(+ x y)\" (:var x . 5) value \"calc\" \"(let ((x '5)\n      (y '7))\n(+ x y)\n)\" 12 \"#+NAME: calc\n#+begin_src emacs-lisp :var x=5 y=7 :results value replace\n(+ x y)\n#+end_src\n\n#+RESULTS: calc\n: 12\n\")""##
+        r##""OK (\"emacs-lisp\" \"(+ x y)\" (:var x . 5) value \"calc\" \"(let ((x '5)\\n      (y '7))\\n(+ x y)\\n)\" 12 \"#+NAME: calc\\n#+begin_src emacs-lisp :var x=5 y=7 :results value replace\\n(+ x y)\\n#+end_src\\n\\n#+RESULTS: calc\\n: 12\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -65,7 +65,7 @@ fn org_export_environment_and_string_html_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"Export Env\") nil (\"One\") (\"1\") t \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nText</p>\n</div>\n</div>\n\")""#
+        r#""OK ((\"Export Env\") nil (\"One\") (\"1\") t \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\\n<p>\\nText</p>\\n</div>\\n</div>\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -109,7 +109,7 @@ fn org_babel_header_result_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (((:results . \"output drawer replace\") (:exports . \"results\") (:var . \"x=1\") (:var . \"x=2\") (:cache . \"yes\")) ((:results . \"replace table output drawer\") (:exports . \"both\") (:var . \"x=2\") (:var . \"label=\\\"new\\\"\") (:cache . \"yes\")) \"emacs-lisp\" \"code\" \"replace table value\" (:var x . 3) \"(let ((x '3)\n      (label '\\\"row\\\"))\n(list (list \\\"label\\\" \\\"n\\\" \\\"square\\\") 'hline (list label x (* x x)) (list \\\"next\\\" (+ x 1) (* (+ x 1) (+ x 1))))\n)\" ((\"label\" \"n\" \"square\") hline (\"row\" 3 9) (\"next\" 4 16)) ((\"label\" \"n\" \"square\") hline (\"row\" 3 9) (\"next\" 4 16)) \"emacs-lisp\" \"replace list value\" (\"alpha\" \"beta\" \"n=4\") (\"alpha\" \"beta\" \"n=4\") (8 19) \"#+PROPERTY: header-args:emacs-lisp :exports both :results value replace\n#+HEADER: :var x=3 :var label=\\\"row\\\"\n#+NAME: table-block\n#+begin_src emacs-lisp :results value table replace\n(list (list \\\"label\\\" \\\"n\\\" \\\"square\\\") 'hline (list label x (* x x)) (list \\\"next\\\" (+ x 1) (* (+ x 1) (+ x 1))))\n#+end_src\n\n#+RESULTS: table-block\n| label | n | square |\n|-------+---+--------|\n| row   | 3 |      9 |\n| next  | 4 |     16 |\n\n#+NAME: list-block\n#+begin_src emacs-lisp :results value list replace\n(list \\\"alpha\\\" \\\"beta\\\" (format \\\"n=%s\\\" 4))\n#+end_src\n\n#+RESULTS: list-block\n- alpha\n- beta\n- n=4\n\")""##
+        r##""OK (((:results . \"output drawer replace\") (:exports . \"results\") (:var . \"x=1\") (:var . \"x=2\") (:cache . \"yes\")) ((:results . \"replace table output drawer\") (:exports . \"both\") (:var . \"x=2\") (:var . \"label=\\\"new\\\"\") (:cache . \"yes\")) \"emacs-lisp\" \"code\" \"replace table value\" (:var x . 3) \"(let ((x '3)\\n      (label '\\\"row\\\"))\\n(list (list \\\"label\\\" \\\"n\\\" \\\"square\\\") 'hline (list label x (* x x)) (list \\\"next\\\" (+ x 1) (* (+ x 1) (+ x 1))))\\n)\" ((\"label\" \"n\" \"square\") hline (\"row\" 3 9) (\"next\" 4 16)) ((\"label\" \"n\" \"square\") hline (\"row\" 3 9) (\"next\" 4 16)) \"emacs-lisp\" \"replace list value\" (\"alpha\" \"beta\" \"n=4\") (\"alpha\" \"beta\" \"n=4\") (8 19) \"#+PROPERTY: header-args:emacs-lisp :exports both :results value replace\\n#+HEADER: :var x=3 :var label=\\\"row\\\"\\n#+NAME: table-block\\n#+begin_src emacs-lisp :results value table replace\\n(list (list \\\"label\\\" \\\"n\\\" \\\"square\\\") 'hline (list label x (* x x)) (list \\\"next\\\" (+ x 1) (* (+ x 1) (+ x 1))))\\n#+end_src\\n\\n#+RESULTS: table-block\\n| label | n | square |\\n|-------+---+--------|\\n| row   | 3 |      9 |\\n| next  | 4 |     16 |\\n\\n#+NAME: list-block\\n#+begin_src emacs-lisp :results value list replace\\n(list \\\"alpha\\\" \\\"beta\\\" (format \\\"n=%s\\\" 4))\\n#+end_src\\n\\n#+RESULTS: list-block\\n- alpha\\n- beta\\n- n=4\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

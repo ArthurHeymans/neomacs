@@ -356,7 +356,7 @@ fn org_fold_indirect_buffer_decouple_edit_font_regression_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (nil nil nil \"* TODO Root\nRoot body.\n** TODO Alpha\nAlpha body.\n*** TODO Alpha child\nAlpha child body.\n**** TODO Alpha L4\nAlpha L4 body.\n***** DONE Alpha L5\n***** TODO Inserted under hidden L5\nInserted body.\n\nAlpha L5 body.\n** TODO Beta\nBeta body.\n* Tail\nTail body.\n\" \"* TODO Root\nRoot body.\n** TODO Alpha\nAlpha body.\n*** TODO Alpha child\nAlpha child body.\n**** TODO Alpha L4\nAlpha L4 body.\n***** DONE Alpha L5\n***** TODO Inserted under hidden L5\nInserted body.\n\nAlpha L5 body.\n** TODO Beta\nBeta body.\n* Tail\nTail body.\n\")""#
+        r#""OK (nil nil nil \"* TODO Root\\nRoot body.\\n** TODO Alpha\\nAlpha body.\\n*** TODO Alpha child\\nAlpha child body.\\n**** TODO Alpha L4\\nAlpha L4 body.\\n***** DONE Alpha L5\\n***** TODO Inserted under hidden L5\\nInserted body.\\n\\nAlpha L5 body.\\n** TODO Beta\\nBeta body.\\n* Tail\\nTail body.\\n\" \"* TODO Root\\nRoot body.\\n** TODO Alpha\\nAlpha body.\\n*** TODO Alpha child\\nAlpha child body.\\n**** TODO Alpha L4\\nAlpha L4 body.\\n***** DONE Alpha L5\\n***** TODO Inserted under hidden L5\\nInserted body.\\n\\nAlpha L5 body.\\n** TODO Beta\\nBeta body.\\n* Tail\\nTail body.\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

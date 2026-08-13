@@ -228,7 +228,7 @@ fn combo54_citation_complex_style_parsing() {
 fn combo54_dynamic_block_multi_type_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK ((:after-clocktable \"#+BEGIN: clocktable :maxlevel 2 :scope file\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\n* Task A\n:LOGBOOK:\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\n:END:\n** Sub A1\n:LOGBOOK:\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\n:END:\n\") (:dblock-count 1) (:table-count 1))""##
+        r##""OK ((:after-clocktable \"#+BEGIN: clocktable :maxlevel 2 :scope file\\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00]\\n| Headline     | Time   |\\n|--------------+--------|\\n| *Total time* | *0:00* |\\n#+END:\\n* Task A\\n:LOGBOOK:\\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\\n:END:\\n** Sub A1\\n:LOGBOOK:\\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\\n:END:\\n\") (:dblock-count 1) (:table-count 1))""##
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer
@@ -386,7 +386,7 @@ fn combo54_3x_parse_modify_reparse_stability() {
 fn combo54_entity_replacement_buffer_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:entities-before 5) (:latex-frags-before 0) (:buffer-after-toggle \"* Math symbols: \\\\alpha, \\\\beta, \\\\rightarrow\nLaTeX: \\\\sum_{i=1}^{n} and \\\\int_{a}^{b}f(x)dx\n\") (:export-has-alpha nil) (:export-has-beta nil) (:export-ok t))""#
+        r#""OK ((:entities-before 5) (:latex-frags-before 0) (:buffer-after-toggle \"* Math symbols: \\\\alpha, \\\\beta, \\\\rightarrow\\nLaTeX: \\\\sum_{i=1}^{n} and \\\\int_{a}^{b}f(x)dx\\n\") (:export-has-alpha nil) (:export-has-beta nil) (:export-ok t))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

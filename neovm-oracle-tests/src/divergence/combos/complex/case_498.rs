@@ -47,7 +47,7 @@ fn div_cx498_easy_mmode_nav() {
 #[test]
 fn div_cx498_pp_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"(a b c d)\n\" \"(lambda (x) (* x 2))\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"(a b c d)\\n\" \"(lambda (x) (* x 2))\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (pp-to-string '(a b c d))
       (pp-to-string '(lambda (x) (* x 2))))
@@ -59,7 +59,7 @@ fn div_cx498_pp_to_string() {
 #[test]
 fn div_cx498_pp_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"(defun a (x) x)\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"(defun a (x) x)\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "(defun a (x) x)")
@@ -73,7 +73,7 @@ fn div_cx498_pp_buffer() {
 #[test]
 fn div_cx498_indent_rigidly() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"    line1\n    line2\n    line3\"""#]];
+    let expect = expect_test::expect![[r#""OK \"    line1\\n    line2\\n    line3\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "line1\nline2\nline3")
@@ -159,7 +159,7 @@ fn div_cx498_negative_argument() {
 #[test]
 fn div_cx498_kill_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"line2\nline3\"""#]];
+    let expect = expect_test::expect![[r#""OK \"line2\\nline3\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "line1\nline2\nline3")
@@ -174,7 +174,7 @@ fn div_cx498_kill_line() {
 #[test]
 fn div_cx498_open_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"before\n\nafter\"""#]];
+    let expect = expect_test::expect![[r#""OK \"before\\n\\nafter\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "before\nafter")
@@ -189,7 +189,7 @@ fn div_cx498_open_line() {
 #[test]
 fn div_cx498_split_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"split \n      line\"""#]];
+    let expect = expect_test::expect![[r#""OK \"split \\n      line\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "split line")

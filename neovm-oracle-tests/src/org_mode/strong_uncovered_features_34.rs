@@ -356,7 +356,7 @@ fn uf34_list_apply() {
 #[test]
 fn uf34_list_send() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"- A\n  - B\n  - C\n- D\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- A\\n  - B\\n  - C\\n- D\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -378,7 +378,7 @@ fn uf34_list_send() {
 #[test]
 fn uf34_list_exchange() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"- A\n- B\n- C\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- A\\n- B\\n- C\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -418,7 +418,7 @@ fn uf34_list_write() {
 #[test]
 fn uf34_list_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"- A\n  - B\n- C\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- A\\n  - B\\n- C\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

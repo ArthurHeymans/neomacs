@@ -177,7 +177,7 @@ fn oracle_prop_format_table() {
                                          formatted-rows)
                                  "\n")))"#;
     let expect = expect_test::expect![[
-        r#""OK \"Name            Age      Score\n------------------------------\nAlice            30       95.5\nBob              25       87.2\nCarol            35       92.8\"""#
+        r#""OK \"Name            Age      Score\\n------------------------------\\nAlice            30       95.5\\nBob              25       87.2\\nCarol            35       92.8\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

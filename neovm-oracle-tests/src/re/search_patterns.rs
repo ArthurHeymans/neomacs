@@ -166,7 +166,7 @@ fn oracle_prop_re_search_multiline_patterns() {
             (length blocks)
             line-count))))"#;
     let expect =
-        expect_test::expect![[r#""OK ((\"line one\nline two\" \"alpha\nbeta\ngamma\") 1 9)""#]];
+        expect_test::expect![[r#""OK ((\"line one\\nline two\" \"alpha\\nbeta\\ngamma\") 1 9)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

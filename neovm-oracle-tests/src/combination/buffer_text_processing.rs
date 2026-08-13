@@ -57,7 +57,7 @@ fn oracle_prop_btp_line_by_line_transform() {
                             (buffer-string)))
                       (fmakunbound 'neovm--test-transform-line)))"#;
     let expect = expect_test::expect![[
-        r#""OK \"001: THE quick brown fox [19]\n002: JUMPS over [10]\n003: THE lazy dog [12]\n004: AND runs away [13]\n\"""#
+        r#""OK \"001: THE quick brown fox [19]\\n002: JUMPS over [10]\\n003: THE lazy dog [12]\\n004: AND runs away [13]\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -215,7 +215,7 @@ fn oracle_prop_btp_table_extract_reformat() {
                               (buffer-string))))
                       (fmakunbound 'neovm--test-pad-right)))"#;
     let expect = expect_test::expect![[
-        r#""OK \"Name    | Age | City         \n--------+-----+--------------\nAlice   | 30  | Boston       \nBob     | 25  | San Francisco\nCharlie | 35  | NY           \n\"""#
+        r#""OK \"Name    | Age | City         \\n--------+-----+--------------\\nAlice   | 30  | Boston       \\nBob     | 25  | San Francisco\\nCharlie | 35  | NY           \\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -340,7 +340,7 @@ fn oracle_prop_btp_comment_stripping() {
                               (list stripped lines (length lines)))))
                       (fmakunbound 'neovm--test-strip-comments)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"int x = 5; \nint y = 10; \nint z = x + y;  int w = 0;\n\" (\"int x = 5; \" \"int y = 10; \" \"int z = x + y;  int w = 0;\") 3)""#
+        r#""OK (\"int x = 5; \\nint y = 10; \\nint z = x + y;  int w = 0;\\n\" (\"int x = 5; \" \"int y = 10; \" \"int z = x + y;  int w = 0;\") 3)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -385,7 +385,7 @@ fn oracle_prop_btp_line_dedup_preserve_order() {
                                               stats)))
                           (list deduped (nreverse stats))))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"apple\nbanana\ncherry\ndate\n\" ((\"apple\" . 3) (\"banana\" . 2) (\"cherry\" . 2) (\"date\" . 1)))""#
+        r#""OK (\"apple\\nbanana\\ncherry\\ndate\\n\" ((\"apple\" . 3) (\"banana\" . 2) (\"cherry\" . 2) (\"date\" . 1)))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

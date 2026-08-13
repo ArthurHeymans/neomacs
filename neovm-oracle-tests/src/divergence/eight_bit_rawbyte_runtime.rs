@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn byte_char_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (200 65 65 \"\\310\" 1)""#]];
+    let expect = expect_test::expect![[r#""OK (200 65 65 \"�\" 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (multibyte-char-to-unibyte (unibyte-char-to-multibyte 200))
         (unibyte-char-to-multibyte 65) (multibyte-char-to-unibyte ?A)

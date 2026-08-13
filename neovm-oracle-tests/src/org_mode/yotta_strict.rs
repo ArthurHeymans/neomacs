@@ -11,7 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn yotta_all_fill_element_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK (#(\"| a |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row)) \"some \\\\\\\\\nlong text\" \"A B\" \"- A B\" \"  # A B\" \"#+BEGIN_COMMENT\nSome text\n#+END_COMMENT\")""##
+        r##""OK (#(\"| a |\\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row)) \"some \\\\\\\\\\nlong text\" \"A B\" \"- A B\" \"  # A B\" \"#+BEGIN_COMMENT\\nSome text\\n#+END_COMMENT\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -48,7 +48,7 @@ fn yotta_all_fill_element_combinations() {
 fn yotta_all_indent_line_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (0 0 2 0 t \"* H\n:PROPERTIES:\n:key:      value\n:END:\")""#
+        r#""OK (0 0 2 0 t \"* H\\n:PROPERTIES:\\n:key:      value\\n:END:\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -87,7 +87,7 @@ fn yotta_all_indent_line_combinations() {
 fn yotta_all_return_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"Para\n graph\" \"  Para\n  graph\" t \"* H :tag:\n\" \"* TODO H :tag:\n\" \"\n* h\")""#
+        r#""OK (\"Para\\n graph\" \"  Para\\n  graph\" t \"* H :tag:\\n\" \"* TODO H :tag:\\n\" \"\\n* h\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -124,7 +124,7 @@ fn yotta_all_return_combinations() {
 fn yotta_all_meta_return_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* a\" \"- \n- a\" #(\"|   |\n| a |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row) 6 7 (face org-table) 7 8 (face org-table rear-nonsticky t display (space :relative-width 1)) 8 9 (face org-table) 9 10 (face org-table display (space :relative-width 1.001)) 10 11 (face org-table) 11 12 (face org-table-row)))""#
+        r#""OK (\"* a\" \"- \\n- a\" #(\"|   |\\n| a |\\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row) 6 7 (face org-table) 7 8 (face org-table rear-nonsticky t display (space :relative-width 1)) 8 9 (face org-table) 9 10 (face org-table display (space :relative-width 1.001)) 10 11 (face org-table) 11 12 (face org-table-row)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -307,7 +307,7 @@ fn yotta_all_edit_headline_combinations() {
 fn yotta_all_insert_heading_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* \" \"* P\" \"* \n* H\" \"** H\nP\n** \" \"\n* \n\n* H1\" \"* \n* \")""#
+        r#""OK (\"* \" \"* P\" \"* \\n* H\" \"** H\\nP\\n** \" \"\\n* \\n\\n* H1\" \"* \\n* \")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -343,7 +343,7 @@ fn yotta_all_insert_heading_combinations() {
 #[test]
 fn yotta_all_kill_line_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"\" \"ab\" \"\n123\" \"* A :tag:\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"\" \"ab\" \"\\n123\" \"* A :tag:\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -374,7 +374,7 @@ fn yotta_all_kill_line_combinations() {
 fn yotta_all_sort_entries_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"\n* abc\n* def\n* xyz\n\" \"\n* xyz\n* def\n* abc\n\" \"\n* 1\n* 2\n* 10\n\" \"\n* [#A] h2\n* [#B] h3\n* [#C] h1\n\" \"\n* [#C] h1\n* [#B] h3\n* [#A] h2\n\")""#
+        r#""OK (\"\\n* abc\\n* def\\n* xyz\\n\" \"\\n* xyz\\n* def\\n* abc\\n\" \"\\n* 1\\n* 2\\n* 10\\n\" \"\\n* [#A] h2\\n* [#B] h3\\n* [#C] h1\\n\" \"\\n* [#C] h1\\n* [#B] h3\\n* [#A] h2\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -485,7 +485,7 @@ fn yotta_all_collect_keywords_combinations() {
 fn yotta_all_shiftright_heading_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#(\"* TODO a1\n** a2\n* DONE b1\n\" 0 9 (org-todo-head \"TODO\")) #(\"* TODO a1\n** a2\n* b1\n\" 0 9 (org-todo-head \"TODO\") 16 20 (org-todo-head nil)))""#
+        r#""OK (#(\"* TODO a1\\n** a2\\n* DONE b1\\n\" 0 9 (org-todo-head \"TODO\")) #(\"* TODO a1\\n** a2\\n* b1\\n\" 0 9 (org-todo-head \"TODO\") 16 20 (org-todo-head nil)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -621,7 +621,7 @@ fn yotta_all_at_property_drawer_p_combinations() {
 fn yotta_all_get_property_block_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK ((14 . 14) (14 . 23) \"* H\n:PROPERTIES:\n:END:\n\")""#]];
+        expect_test::expect![[r#""OK ((14 . 14) (14 . 23) \"* H\\n:PROPERTIES:\\n:END:\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -650,7 +650,7 @@ fn yotta_all_get_property_block_combinations() {
 fn yotta_all_insert_property_drawer_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\":PROPERTIES:\n:END:\n\" \"* H\n:PROPERTIES:\n:END:\nParagraph\" \"* H\nDEADLINE: <2014-03-04 tue.>\n:PROPERTIES:\n:END:\nParagraph\" \"* H\n  :PROPERTIES:\n  :END:\nParagraph\")""#
+        r#""OK (\":PROPERTIES:\\n:END:\\n\" \"* H\\n:PROPERTIES:\\n:END:\\nParagraph\" \"* H\\nDEADLINE: <2014-03-04 tue.>\\n:PROPERTIES:\\n:END:\\nParagraph\" \"* H\\n  :PROPERTIES:\\n  :END:\\nParagraph\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

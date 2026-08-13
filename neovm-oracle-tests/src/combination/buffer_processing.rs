@@ -276,7 +276,7 @@ fn oracle_prop_bp_narrow_accumulate() {
                             (setq starts (cdr starts)))))
                       (nreverse sections)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"section A content\n---\" \"section B content\n---\" \"section C content\")""#
+        r#""OK (\"section A content\\n---\" \"section B content\\n---\" \"section C content\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

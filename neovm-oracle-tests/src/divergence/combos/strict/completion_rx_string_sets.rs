@@ -193,7 +193,7 @@ fn div_crs_hash_table_keys_sorted() {
 #[test]
 fn div_crs_string_unibyte_multibyte_bytes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (nil t 3 6 2 6 2 \"\\303\\251\")""#]];
+    let expect = expect_test::expect![[r#""OK (nil t 3 6 2 6 2 \"é\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (multibyte-string-p "abc")

@@ -166,7 +166,7 @@ fn set_buffer_coding() {
 fn write_read_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"héllo\nwörld\n\" utf-8-unix)""#]];
+    let expect = expect_test::expect![[r#""OK (\"héllo\\nwörld\\n\" utf-8-unix)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((f (make-temp-file "neo-wc-")))
   (unwind-protect

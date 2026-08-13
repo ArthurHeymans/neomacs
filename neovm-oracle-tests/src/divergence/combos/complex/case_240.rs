@@ -153,7 +153,7 @@ fn div_cx240_read_char_syntax_variants() {
 fn div_cx240_read_string_with_all_escapes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"plain\" \"with \\\"escaped\\\"\" \"with \\\\ backslash\" \"with \t tab and \n newline\" \"with é unicode\" \"with A hex\")""#
+        r#""OK (\"plain\" \"with \\\"escaped\\\"\" \"with \\\\ backslash\" \"with \t tab and \\n newline\" \"with é unicode\" \"with A hex\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

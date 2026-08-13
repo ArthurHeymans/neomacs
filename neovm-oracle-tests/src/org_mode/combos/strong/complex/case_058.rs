@@ -295,7 +295,7 @@ fn combo58_export_metadata_extraction() {
 fn combo58_list_to_generic_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:item-count 6) (:list-count 3) (:list-types (unordered unordered ordered)) (:item-structure ((nil nil \"- item one\n  - neste\") (nil nil \"  - nested 1a\n\") (nil nil \"  - nested 1b\n\") (nil nil \"- item two\n  1. orde\") (nil nil \"  1. ordered a\n\") (nil nil \"  2. ordered b\n\"))))""#
+        r#""OK ((:item-count 6) (:list-count 3) (:list-types (unordered unordered ordered)) (:item-structure ((nil nil \"- item one\\n  - neste\") (nil nil \"  - nested 1a\\n\") (nil nil \"  - nested 1b\\n\") (nil nil \"- item two\\n  1. orde\") (nil nil \"  1. ordered a\\n\") (nil nil \"  2. ordered b\\n\"))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

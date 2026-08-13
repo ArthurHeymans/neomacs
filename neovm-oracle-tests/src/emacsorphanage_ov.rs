@@ -257,7 +257,7 @@ fn div_ov_line_spans_current_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     return_if_corpus_missing!();
 
-    let expect = expect_test::expect![[r#""OK (7 13 \"line2\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (7 13 \"line2\\n\")""#]];
     crate::common::assert_oracle_parity_with_load_root_expect(
         r#"(progn
   (require 'ov)

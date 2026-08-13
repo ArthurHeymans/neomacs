@@ -415,7 +415,7 @@ fn div_cx100_mega_hash_table_obarray_symbol_plist_marker_overlay_narrow() {
 fn div_cx100_mega_kbd_macro_register_rectangle_window_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"AAA111\nBBB222\nCCC333\n\" 5 2 10 #<marker in no buffer>) \"AAA111\nBBB222\nCCC333\n\" 5 2 10)""#
+        r#""OK ((\"AAA111\\nBBB222\\nCCC333\\n\" 5 2 10 #<marker in no buffer>) \"AAA111\\nBBB222\\nCCC333\\n\" 5 2 10)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

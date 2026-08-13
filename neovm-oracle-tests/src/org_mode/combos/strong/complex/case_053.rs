@@ -191,7 +191,7 @@ fn combo53_multi_list_full_cycle() {
 fn combo53_map_entries_mutate_inside_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:todos-before (\"A\" \"B\" \"C\")) (:all-done ((#(\"A\" 0 1 (org-todo-head \"TODO\")) #(\"DONE\" 0 4 (org-todo-head \"TODO\")) \"2024-06-15\") (#(\"B\" 0 1 (org-todo-head \"TODO\")) #(\"DONE\" 0 4 (org-todo-head \"TODO\")) \"2024-06-15\") (#(\"C\" 0 1 (org-todo-head \"TODO\")) #(\"DONE\" 0 4 (org-todo-head \"TODO\")) \"2024-06-15\") (\"D\" \"DONE\" nil))) (:done-count 4) (:buffer \"* DONE A\n:PROPERTIES:\n:CLOSED_AT: 2024-06-15\n:END:\n* DONE B\n:PROPERTIES:\n:CLOSED_AT: 2024-06-15\n:END:\n* DONE C\n:PROPERTIES:\n:CLOSED_AT: 2024-06-15\n:END:\n* DONE D\n\"))""#
+        r#""OK ((:todos-before (\"A\" \"B\" \"C\")) (:all-done ((#(\"A\" 0 1 (org-todo-head \"TODO\")) #(\"DONE\" 0 4 (org-todo-head \"TODO\")) \"2024-06-15\") (#(\"B\" 0 1 (org-todo-head \"TODO\")) #(\"DONE\" 0 4 (org-todo-head \"TODO\")) \"2024-06-15\") (#(\"C\" 0 1 (org-todo-head \"TODO\")) #(\"DONE\" 0 4 (org-todo-head \"TODO\")) \"2024-06-15\") (\"D\" \"DONE\" nil))) (:done-count 4) (:buffer \"* DONE A\\n:PROPERTIES:\\n:CLOSED_AT: 2024-06-15\\n:END:\\n* DONE B\\n:PROPERTIES:\\n:CLOSED_AT: 2024-06-15\\n:END:\\n* DONE C\\n:PROPERTIES:\\n:CLOSED_AT: 2024-06-15\\n:END:\\n* DONE D\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -418,7 +418,7 @@ fn combo53_narrow_edit_widen_renarrow() {
 fn combo53_merge_subtrees_verify_integrity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:init-headlines ((1 \"A\") (2 \"A-child1\") (2 \"A-child2\") (1 \"B\") (2 \"B-child1\"))) (:after-promote ((1 \"A\") (1 \"A-child1\") (1 \"A-child2\") (1 \"B\") (2 \"B-child1\"))) (:after-move ((1 \"A\") (1 \"A-child2\") (1 \"B\") (2 \"B-child1\") (2 \"A-child1\"))) (:buffer \"* A\nBody A.\n* A-child2\n* B\nBody B.\n** B-child1\n** A-child1\n\"))""#
+        r#""OK ((:init-headlines ((1 \"A\") (2 \"A-child1\") (2 \"A-child2\") (1 \"B\") (2 \"B-child1\"))) (:after-promote ((1 \"A\") (1 \"A-child1\") (1 \"A-child2\") (1 \"B\") (2 \"B-child1\"))) (:after-move ((1 \"A\") (1 \"A-child2\") (1 \"B\") (2 \"B-child1\") (2 \"A-child1\"))) (:buffer \"* A\\nBody A.\\n* A-child2\\n* B\\nBody B.\\n** B-child1\\n** A-child1\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

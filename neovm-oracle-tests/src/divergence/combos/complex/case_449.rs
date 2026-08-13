@@ -12,7 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx449_fill_region_paragraph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"This is a long line that should be filled at the specified column\nboundary for testing purposes\"""#
+        r#""OK \"This is a long line that should be filled at the specified column\\nboundary for testing purposes\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

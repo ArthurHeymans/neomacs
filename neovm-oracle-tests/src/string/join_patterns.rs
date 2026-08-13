@@ -126,7 +126,7 @@ fn oracle_prop_string_join_multi_char_separators() {
   ;; Repeated char separator
   (string-join '("1" "2" "3") ":::"))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"start -> middle -> end\" \"A => B => C\" \"apples, oranges, bananas\" \"line1\nline2\nline3\" \"col1\tcol2\tcol3\" \"para1<br>para2<br>para3\" \"X---separator---Y---separator---Z\" \"a & b & c\" \"1:::2:::3\")""#
+        r#""OK (\"start -> middle -> end\" \"A => B => C\" \"apples, oranges, bananas\" \"line1\\nline2\\nline3\" \"col1\tcol2\tcol3\" \"para1<br>para2<br>para3\" \"X---separator---Y---separator---Z\" \"a & b & c\" \"1:::2:::3\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -224,7 +224,7 @@ fn oracle_prop_string_join_csv_tsv_construction() {
 
   (nreverse results))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"name,age,city\" \"Alice,30,NYC\" \"Bob,25,LA\" \"id\tvalue\ttimestamp\" \"product,price,qty\nWidget,9.99,100\nGadget,19.99,50\nDoohickey,4.99,200\" \"001|005|010|042|100\" \"Name | Score | Grade\n-----+-------+------\nAlice | 95    | A    \")""#
+        r#""OK (\"name,age,city\" \"Alice,30,NYC\" \"Bob,25,LA\" \"id\tvalue\ttimestamp\" \"product,price,qty\\nWidget,9.99,100\\nGadget,19.99,50\\nDoohickey,4.99,200\" \"001|005|010|042|100\" \"Name | Score | Grade\\n-----+-------+------\\nAlice | 95    | A    \")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -280,7 +280,7 @@ fn oracle_prop_string_join_nested_2d_data() {
 
   (nreverse results))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"1,2,3\n4,5,6\n7,8,9\" \" 1  2  3\n 2  4  6\n 3  6  9\" \"host=localhost&port=5432\nuser=admin&pass=secret\" \"{\\\"name\\\": \\\"test\\\", \\\"version\\\": \\\"1.0\\\", \\\"lang\\\": \\\"elisp\\\"}\" (\"a,b;c,d;e,f\" \"a,c,e;b,d,f\"))""#
+        r#""OK (\"1,2,3\\n4,5,6\\n7,8,9\" \" 1  2  3\\n 2  4  6\\n 3  6  9\" \"host=localhost&port=5432\\nuser=admin&pass=secret\" \"{\\\"name\\\": \\\"test\\\", \\\"version\\\": \\\"1.0\\\", \\\"lang\\\": \\\"elisp\\\"}\" (\"a,b;c,d;e,f\" \"a,c,e;b,d,f\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -352,7 +352,7 @@ fn oracle_prop_string_join_separator_in_elements() {
   ;; Single character elements
   (string-join '("a" "b" "c" "d" "e" "f" "g") ""))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"a,b,c,d,e,f\" \"hello world foo bar\" \"line1\nline2\nline3\nline4\" \",a,,b,\" \",,\" \"e0,e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12,e13,e14,e15,e16,e17,e18,e19\" \"abcdefg\")""#
+        r#""OK (\"a,b,c,d,e,f\" \"hello world foo bar\" \"line1\\nline2\\nline3\\nline4\" \",a,,b,\" \",,\" \"e0,e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12,e13,e14,e15,e16,e17,e18,e19\" \"abcdefg\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

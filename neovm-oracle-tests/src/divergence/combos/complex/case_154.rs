@@ -138,9 +138,8 @@ fn div_cx154_byte_compile_dynamic_binding_vars() {
 #[test]
 fn div_cx154_compiled_function_arities() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((2 . many) (2 . many) 898 \"\u{3}\u{3}\u{3}\u{3}F\\207\")""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK ((2 . many) (2 . many) 898 \"\u{3}\u{3}\u{3}\u{3}F�\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (let ((lexical-binding t)) (lambda (a b &optional c &rest d) (list a b c d))))

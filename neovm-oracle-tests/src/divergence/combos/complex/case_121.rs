@@ -85,7 +85,7 @@ fn div_cx121_print_with_print_level_truncates_deep_nesting() {
 fn div_cx121_pp_to_string_with_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"((a . 1) (b . 2) (c sub (deep nested)))\n\" \"((a . 1) (b . 2) (c sub (deep nested)))\" 2 t)""#
+        r#""OK (\"((a . 1) (b . 2) (c sub (deep nested)))\\n\" \"((a . 1) (b . 2) (c sub (deep nested)))\" 2 t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

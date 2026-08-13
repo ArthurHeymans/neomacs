@@ -256,7 +256,7 @@ fn oracle_prop_format_multiline_table() {
                                                   (nth 2 row))))))
                     (mapconcat (lambda (l) l) lines "\n"))"####;
     let expect = expect_test::expect![[
-        r#""OK \"Name         Age    Score\n-------------------------\nAlice         30     95.5\nBob           25     87.3\nCarol         35     92.1\"""#
+        r#""OK \"Name         Age    Score\\n-------------------------\\nAlice         30     95.5\\nBob           25     87.3\\nCarol         35     92.1\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 
@@ -269,7 +269,7 @@ fn oracle_prop_format_multiline_table() {
                          (setq result (concat result row "\n"))))
                      result)"#;
     let expect = expect_test::expect![[
-        r#""OK \"   1   2   3   4\n   2   4   6   8\n   3   6   9  12\n   4   8  12  16\n\"""#
+        r#""OK \"   1   2   3   4\\n   2   4   6   8\\n   3   6   9  12\\n   4   8  12  16\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form2, expect);
 }

@@ -233,7 +233,7 @@ fn oracle_prop_upcase_initials_patterns_non_ascii() {
   (capitalize "hello\nworld")
   (upcase-initials "hello\nworld"))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"HELLO\" \"hello\" \"Hello World\" \"Hello World\" \"ABC123DEF!@#\" \"abc123def!@#\" \"PRICE: $100\" \"price: $100\" \"The Quick Brown Fox\" \"The Quick Brown Fox\" t t \"123 Hello 456 World\" \"!!! Hello ??? World\" \"The QUICK Brown FOX\" \"Hello\tWorld\" \"Hello\tWorld\" \"Hello\nWorld\" \"Hello\nWorld\")""#
+        r#""OK (\"HELLO\" \"hello\" \"Hello World\" \"Hello World\" \"ABC123DEF!@#\" \"abc123def!@#\" \"PRICE: $100\" \"price: $100\" \"The Quick Brown Fox\" \"The Quick Brown Fox\" t t \"123 Hello 456 World\" \"!!! Hello ??? World\" \"The QUICK Brown FOX\" \"Hello\tWorld\" \"Hello\tWorld\" \"Hello\\nWorld\" \"Hello\\nWorld\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

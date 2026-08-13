@@ -21,10 +21,10 @@ fn oracle_prop_format_s_vs_S_differences() {
     let expect = expect_test::expect![[r#""OK \"\\\"hello\\\"\"""#]];
     crate::common::assert_oracle_parity_expect(r#"(format "%S" "hello")"#, expect);
 
-    let expect = expect_test::expect![[r#""OK \"line1\nline2\"""#]];
+    let expect = expect_test::expect![[r#""OK \"line1\\nline2\"""#]];
     // String with special chars
     crate::common::assert_oracle_parity_expect(r#"(format "%s" "line1\nline2")"#, expect);
-    let expect = expect_test::expect![[r#""OK \"\\\"line1\nline2\\\"\"""#]];
+    let expect = expect_test::expect![[r#""OK \"\\\"line1\\nline2\\\"\"""#]];
     crate::common::assert_oracle_parity_expect(r#"(format "%S" "line1\nline2")"#, expect);
 
     let expect = expect_test::expect![[r#""OK \"nil\"""#]];
@@ -566,7 +566,7 @@ fn oracle_prop_format_edge_cases() {
     let expect = expect_test::expect![[r#""OK \"tab:\there\"""#]];
     // Format with special chars in literal parts
     crate::common::assert_oracle_parity_expect(r#"(format "tab:\there" )"#, expect);
-    let expect = expect_test::expect![[r#""OK \"newline:\n42\"""#]];
+    let expect = expect_test::expect![[r#""OK \"newline:\\n42\"""#]];
     crate::common::assert_oracle_parity_expect(r#"(format "newline:\n%d" 42)"#, expect);
 
     let expect = expect_test::expect![[r#""OK \"1 2 3 4 5\"""#]];
@@ -600,7 +600,7 @@ fn oracle_prop_format_table_alignment() {
                 lines)))
   (mapconcat #'identity (nreverse lines) "\n"))"#;
     let expect = expect_test::expect![[
-        r#""OK \"Name              Age    Score     Status\n-----------------------------------------\nAlice              30       95       pass\nBob                25       67       fail\nCarol              35       88       pass\nDave               28       72       pass\"""#
+        r#""OK \"Name              Age    Score     Status\\n-----------------------------------------\\nAlice              30       95       pass\\nBob                25       67       fail\\nCarol              35       88       pass\\nDave               28       72       pass\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

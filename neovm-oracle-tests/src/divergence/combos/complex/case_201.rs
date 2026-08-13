@@ -76,7 +76,7 @@ fn div_cx201_widget_radio_button_choice() {
 fn div_cx201_widget_menu_choice_with_items() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((default :convert-widget widget-types-convert-widget :copy widget-types-copy :format \"%[%t%]: %v\" :case-fold t :tag \"choice\" :void (item :format \"invalid (%t)\n\") :value-create widget-choice-value-create :value-get widget-child-value-get :value-inline widget-child-value-inline :default-get widget-choice-default-get :mouse-down-action widget-choice-mouse-down-action :action widget-choice-action :error \"Make a choice\" :validate widget-choice-validate :match widget-choice-match :match-inline widget-choice-match-inline) :b)""#
+        r#""OK ((default :convert-widget widget-types-convert-widget :copy widget-types-copy :format \"%[%t%]: %v\" :case-fold t :tag \"choice\" :void (item :format \"invalid (%t)\\n\") :value-create widget-choice-value-create :value-get widget-child-value-get :value-inline widget-child-value-inline :default-get widget-choice-default-get :mouse-down-action widget-choice-mouse-down-action :action widget-choice-action :error \"Make a choice\" :validate widget-choice-validate :match widget-choice-match :match-inline widget-choice-match-inline) :b)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -136,7 +136,7 @@ fn div_cx201_widget_field_constraints_and_move() {
 fn div_cx201_widget_item_with_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((default :convert-widget widget-value-convert-widget :value-create widget-item-value-create :value-delete ignore :value-get widget-value-value-get :match widget-item-match :match-inline widget-item-match-inline :action widget-item-action :format \"%t\n\") \"Static label text\")""#
+        r#""OK ((default :convert-widget widget-value-convert-widget :value-create widget-item-value-create :value-delete ignore :value-get widget-value-value-get :match widget-item-match :match-inline widget-item-match-inline :action widget-item-action :format \"%t\\n\") \"Static label text\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -155,7 +155,7 @@ fn div_cx201_widget_item_with_text() {
 fn div_cx201_widget_text_create_with_multiline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((editable-field :format \"%{%t%}: %v\" :keymap (keymap (5 . widget-end-of-line) (13 . widget-button-press) (touchscreen-begin . widget-button-click) (down-mouse-1 . widget-button-click) (down-mouse-2 . widget-button-click) (backtab . widget-backward) (S-tab . widget-backward) (27 keymap (9 . widget-backward)) (9 . widget-forward))) \"line1\nline2\nline3\" 3)""#
+        r#""OK ((editable-field :format \"%{%t%}: %v\" :keymap (keymap (5 . widget-end-of-line) (13 . widget-button-press) (touchscreen-begin . widget-button-click) (down-mouse-1 . widget-button-click) (down-mouse-2 . widget-button-click) (backtab . widget-backward) (S-tab . widget-backward) (27 keymap (9 . widget-backward)) (9 . widget-forward))) \"line1\\nline2\\nline3\" 3)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

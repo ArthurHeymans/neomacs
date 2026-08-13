@@ -231,7 +231,7 @@ fn uf19_return_list() {
 #[test]
 fn uf19_return_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a | b |\nc\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | b |\\nc\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -379,7 +379,7 @@ fn uf19_todo_done() {
 #[test]
 fn uf19_schedule() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* T\nSCHEDULED: <2026-01-15 Thu>\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* T\\nSCHEDULED: <2026-01-15 Thu>\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -398,7 +398,7 @@ fn uf19_schedule() {
 #[test]
 fn uf19_deadline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* T\nDEADLINE: <2026-01-20 Tue>\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* T\\nDEADLINE: <2026-01-20 Tue>\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -525,7 +525,7 @@ fn uf19_prio_cycle() {
 fn uf19_set_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"1\" \"2\" \"3\" \"* T\n:PROPERTIES:\n:A:        1\n:B:        2\n:C:        3\n:END:\n\")""#
+        r#""OK (\"1\" \"2\" \"3\" \"* T\\n:PROPERTIES:\\n:A:        1\\n:B:        2\\n:C:        3\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

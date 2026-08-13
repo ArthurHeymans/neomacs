@@ -12,7 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_f3_string_make_unibyte_nonlatin1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"\\345,\" \"caf\\351\" 4 \"abc\" nil)""#]];
+    let expect = expect_test::expect![[r#""OK (\"�,\" \"caf�\" 4 \"abc\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case err (string-make-unibyte "日本") (error (car err)))

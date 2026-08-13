@@ -43,7 +43,7 @@ fn combo77_agenda_redo_cycle() {
 fn combo77_babel_results_replace_raw() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK (\"**not org**\" (:buffer \"#+begin_src emacs-lisp :results replace raw\n\\\"**not org**\\\"\n#+end_src\n\n#+RESULTS:\n**not org**\n\"))""##
+        r##""OK (\"**not org**\" (:buffer \"#+begin_src emacs-lisp :results replace raw\\n\\\"**not org**\\\"\\n#+end_src\\n\\n#+RESULTS:\\n**not org**\\n\"))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (require 'ob-emacs-lisp)
@@ -96,7 +96,7 @@ fn combo77_timestamp_from_string_to_format_all() {
 fn combo77_org_list_make_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:make-subtree-fbound t) (:item-count-before 4) (:after \"* item 1\n* item 2\n** sub\n* item 3\n\") (:headline-count-after 4))""#
+        r#""OK ((:make-subtree-fbound t) (:item-count-before 4) (:after \"* item 1\\n* item 2\\n** sub\\n* item 3\\n\") (:headline-count-after 4))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode)

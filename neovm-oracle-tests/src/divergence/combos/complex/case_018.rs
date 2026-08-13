@@ -32,7 +32,7 @@ fn div_cx18_write_region_visit_arg_content() {
 #[test]
 fn div_cx18_process_exit_and_buffer_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (exit 3 \"done\n\" t)""#]];
+    let expect = expect_test::expect![[r#""OK (exit 3 \"done\\n\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx18-pe*"))

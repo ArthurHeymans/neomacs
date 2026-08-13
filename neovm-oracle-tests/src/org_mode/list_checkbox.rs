@@ -6,7 +6,7 @@ fn org_checkbox_statistics_nested_ctrl_c_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"* Project [2/3] [66%]\n- [X] One\n- [X] Two [2/2]\n  - [X] Two A\n  - [X] Two B\n- [ ] Three\n\" ((on \"One\") (on \"Two [2/2]\") (on \"Two A\") (on \"Two B\") (off \"Three\")))""#
+        r#""OK (\"* Project [2/3] [66%]\\n- [X] One\\n- [X] Two [2/2]\\n  - [X] Two A\\n  - [X] Two B\\n- [ ] Three\\n\" ((on \"One\") (on \"Two [2/2]\") (on \"Two A\") (on \"Two B\") (off \"Three\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -45,7 +45,7 @@ fn org_list_move_sort_cycle_bullet_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"- apple\n  - child b\n  - child a\n- zebra\n- mango\n\" \"- apple\n  - child b\n  - child a\n- mango\n- zebra\n\" \"1) apple\n   - child b\n   - child a\n2) mango\n3) zebra\n\" (ordered (\"apple\" (unordered (\"child b\") (\"child a\"))) (\"mango\") (\"zebra\")))""#
+        r#""OK (\"- apple\\n  - child b\\n  - child a\\n- zebra\\n- mango\\n\" \"- apple\\n  - child b\\n  - child a\\n- mango\\n- zebra\\n\" \"1) apple\\n   - child b\\n   - child a\\n2) mango\\n3) zebra\\n\" (ordered (\"apple\" (unordered (\"child b\") (\"child a\"))) (\"mango\") (\"zebra\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -83,7 +83,7 @@ fn org_list_to_generic_html_org_delete_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((ordered (\"[X] Alpha :: definition line\ncontinuation\") (\"[ ] Beta\" (ordered (\"nested one\") (\"nested two\")))) t t \"1. [X] Alpha :: definition line\n  continuation\n1. [ ] Beta\n  1. nested one\n  1. nested two\" t \"\")""#
+        r#""OK ((ordered (\"[X] Alpha :: definition line\\ncontinuation\") (\"[ ] Beta\" (ordered (\"nested one\") (\"nested two\")))) t t \"1. [X] Alpha :: definition line\\n  continuation\\n1. [ ] Beta\\n  1. nested one\\n  1. nested two\" t \"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

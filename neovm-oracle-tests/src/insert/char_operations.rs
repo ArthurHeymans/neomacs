@@ -41,7 +41,7 @@ fn oracle_prop_insert_char_with_count() {
             (buffer-size)
             (count-lines (point-min) (point-max))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"========================================\nXXXXX\n========================================\" 87 3)""#
+        r#""OK (\"========================================\\nXXXXX\\n========================================\" 87 3)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -188,7 +188,7 @@ fn oracle_prop_insert_char_build_ruler() {
         (list (buffer-string)
               (count-lines (point-min) (point-max)))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"+----------+\n|..........|\n|          |\n|..........|\n|          |\n|..........|\n+----------+\n 0123456789\n\" 8)""#
+        r#""OK (\"+----------+\\n|..........|\\n|          |\\n|..........|\\n|          |\\n|..........|\\n+----------+\\n 0123456789\\n\" 8)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

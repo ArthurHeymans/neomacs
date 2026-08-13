@@ -45,7 +45,7 @@ fn strict_agenda_file_interaction() {
 fn strict_element_normalize_obscure_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((special-block (:type \"abstract\") \"abstract\n  content\nend\") (paragraph nil \"line1\n\n\nline2\") (center-block nil \"c1\nc2\n  c3\nc4\"))""#
+        r#""OK ((special-block (:type \"abstract\") \"abstract\\n  content\\nend\") (paragraph nil \"line1\\n\\n\\nline2\") (center-block nil \"c1\\nc2\\n  c3\\nc4\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-element) (list
@@ -119,7 +119,7 @@ fn strict_multibuffer_parallel_stress() {
 fn strict_org_sort_list_with_checkboxes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:sorted \"- [X] apple\n- [ ] mango\n- [ ] zebra\n\") (:item-checkboxes (on off off)))""#
+        r#""OK ((:sorted \"- [X] apple\\n- [ ] mango\\n- [ ] zebra\\n\") (:item-checkboxes (on off off)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode)

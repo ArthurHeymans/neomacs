@@ -197,7 +197,7 @@ fn div_cx5_set_multibyte_multiple_raw_bytes_char() {
 #[test]
 fn div_cx5_process_sentinel_lifecycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"finished\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"finished\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (sentinel-fired)

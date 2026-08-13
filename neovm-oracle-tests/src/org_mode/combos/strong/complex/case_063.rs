@@ -9,7 +9,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo63_babel_python_integration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:ob-python-loaded t) \"hello from python\n\")""#]];
+    let expect = expect_test::expect![[r#""OK ((:ob-python-loaded t) \"hello from python\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

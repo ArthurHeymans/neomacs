@@ -47,7 +47,7 @@ fn org_scan_tags_sparse_tree_visibility_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((\"Alpha\" t) (\"Child A\" t) (\"Beta\" t) (\"Child B\" t) (\"Gamma\" t)) \"* TODO Alpha :work:\nBody A\n** TODO Child A :work:\nBody child A\n* TODO Beta :home:\nBody B\n** TODO Child B :work:\nBody child B\n* DONE Gamma :work:\nBody G\n\")""#
+        r#""OK (((\"Alpha\" t) (\"Child A\" t) (\"Beta\" t) (\"Child B\" t) (\"Gamma\" t)) \"* TODO Alpha :work:\\nBody A\\n** TODO Child A :work:\\nBody child A\\n* TODO Beta :home:\\nBody B\\n** TODO Child B :work:\\nBody child B\\n* DONE Gamma :work:\\nBody G\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

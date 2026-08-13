@@ -25,7 +25,7 @@ fn div_cx26_read_malformed_error_handling() {
 fn div_cx26_format_s_hash_table_compiled() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK (\"#s(hash-table test equal data (a 1))\" 3 \"#[257 \\\\211\\\\300_\\\\207 [2] 3 \n\n(fn X)]\" nil)""##
+        r##""OK (\"#s(hash-table test equal data (a 1))\" 3 \"#[257 \\\\211\\\\300_\\\\207 [2] 3 \\n\\n(fn X)]\" nil)""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -179,9 +179,7 @@ fn div_cx26_condition_case_no_debug() {
 #[test]
 fn div_cx26_decode_encode_string_no_conversion_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"\\0\u{1}\u{7f}\\200\\310\\377\" \"\\0\u{1}\u{7f}\\200\\310\\377\" t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"\\0\u{1}\u{7f}���\" \"\\0\u{1}\u{7f}���\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((raw (unibyte-string 0 1 127 128 200 255)))

@@ -184,7 +184,7 @@ fn div_cx464_format_mixed_number_types() {
 fn div_cx464_format_heavy_escape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (\"hello\nworld\ttab\\rreturn\" \"test-symbol\" \"% 3\")""#]];
+        expect_test::expect![[r#""OK (\"hello\\nworld\ttab\\rreturn\" \"test-symbol\" \"% 3\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (format "%s" "hello\nworld\ttab\rreturn")
       (format "%S" (intern "test-symbol"))

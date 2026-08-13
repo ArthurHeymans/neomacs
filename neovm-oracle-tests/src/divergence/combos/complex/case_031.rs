@@ -370,7 +370,7 @@ fn div_cx31_format_percent_c_then_aref_back() {
 #[test]
 fn div_cx31_coding_system_for_write_inhibit_eol_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"line1\nline2\n\" 12)""#]];
+    let expect = expect_test::expect![[r#""OK (\"line1\\nline2\\n\" 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx31-eol-")))

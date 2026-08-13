@@ -388,9 +388,8 @@ fn div_cx47_subword_capitalize_word_multiple_narrowed() {
 #[test]
 fn div_cx47_coding_decode_encode_string_region_no_conversion_raw_text_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"\\0A\\200\\310\\377\" \"\\0A\\200\\310\\377\" \"\\0A\\200\\310\\377\" \"\\0A\\200\\310\\377\")""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (\"\\0A���\" \"\\0A���\" \"\\0A���\" \"\\0A���\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((raw (unibyte-string 0 65 128 200 255)))

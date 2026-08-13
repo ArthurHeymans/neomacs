@@ -17,7 +17,7 @@ fn div_v8_url_hexify_unhex_roundtrip() {
       (url-unhex-string (url-hexify-string "test & roundtrip!")))
 "##;
     let expect = expect_test::expect![[
-        r#""OK (\"hello%20world%20%26%20foo%3Dbar\" \"caf%C3%A9%20%E6%97%A5%E6%9C%AC%E8%AA%9E\" \"hello world&foo=bar\" \"caf\\303\\251 \\346\\227\\245\\346\\234\\254\\350\\252\\236\" \"test & roundtrip!\")""#
+        r#""OK (\"hello%20world%20%26%20foo%3Dbar\" \"caf%C3%A9%20%E6%97%A5%E6%9C%AC%E8%AA%9E\" \"hello world&foo=bar\" \"café 日本語\" \"test & roundtrip!\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -289,7 +289,7 @@ fn divergence_fringe_mode_customization() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (t nil t 0 t (nil . 0) t (0) t (8 . 8) t nil t t ((funcall #'#[0 \"\\300\\207\" [nil] 1])) t)""#
+        r#""OK (t nil t 0 t (nil . 0) t (0) t (8 . 8) t nil t t ((funcall #'#[0 \"��\" [nil] 1])) t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

@@ -256,7 +256,7 @@ fn div_cx408_alist_get_default_remove() {
 fn div_cx408_interactive_form() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK ((interactive \"^p\") (interactive \"^p\np\") t nil)""#]];
+        expect_test::expect![[r#""OK ((interactive \"^p\") (interactive \"^p\\np\") t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (interactive-form 'forward-char)

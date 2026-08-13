@@ -250,7 +250,7 @@ fn div_cx19_char_table_subtype_and_purpose() {
 #[test]
 fn div_cx19_format_escape_backslash_in_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"café\\\\nworld\" \"\\\"café\n\t\\\"\" 7)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café\\\\nworld\" \"\\\"café\\n\t\\\"\" 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%s" "café\\nworld")

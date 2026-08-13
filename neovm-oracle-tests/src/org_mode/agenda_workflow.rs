@@ -6,7 +6,7 @@ fn org_agenda_custom_command_series_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (nil t t (t t t) \"2 days-agenda (W22):\nWednesday  27 May 2026\n 9:00...... Work:   Scheduled:  TODO Alpha                               :work:\n12:00...... Work:   Scheduled:  TODO Home                                :home:\nThursday   28 May 2026\nWork:   Deadline:   WAIT Beta                                            :work:\n\n===============================================================================\nWork tasks\nWork:   TODO Alpha                                                       :work:\n\n===============================================================================\nWaiting\n\")""#
+        r#""OK (nil t t (t t t) \"2 days-agenda (W22):\\nWednesday  27 May 2026\\n 9:00...... Work:   Scheduled:  TODO Alpha                               :work:\\n12:00...... Work:   Scheduled:  TODO Home                                :home:\\nThursday   28 May 2026\\nWork:   Deadline:   WAIT Beta                                            :work:\\n\\n===============================================================================\\nWork tasks\\nWork:   TODO Alpha                                                       :work:\\n\\n===============================================================================\\nWaiting\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -64,7 +64,7 @@ fn org_agenda_modes_filter_mutate_source_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((t t nil) t (nil nil nil) t (nil t t t t) nil (t t nil) \"Day-agenda (W22):\nWednesday  27 May 2026\n 9:00...... Modes:   0:45 Scheduled: DONE [#A] Alpha     :work:billable:review:\nModes:   2:00 Deadline:  WAIT Beta                                                                :work:internal:\n| File                       | Headline         | Time   |\n|----------------------------+------------------+--------|\n|                            | ALL *Total time* | *1:45* |\n|----------------------------+------------------+--------|\n| org-agenda-modes<tmp>.org | *File time*      | *1:45* |\n|                            | Alpha            | 0:30   |\n|                            | WAIT Beta        | 1:15   |\n\" \"#+CATEGORY: Modes\n* DONE [#A] Alpha                                      :work:billable:review:\nDEADLINE: <2026-05-29 Fri> SCHEDULED: <2026-05-28 Thu 10:15>\n:PROPERTIES:\n:Effort: 0:45\n:END:\nBody alpha line one.\nBody alpha line two.\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:30] =>  0:30\n* WAIT Beta :work:internal:\nDEADLINE: <2026-05-27 Wed>\n:PROPERTIES:\n:Effort: 2:00\n:END:\nBody beta.\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:15] =>  1:15\n* DONE Gamma :home:\nCLOSED: [2026-05-27 Wed 17:00]\n\")""##
+        r##""OK ((t t nil) t (nil nil nil) t (nil t t t t) nil (t t nil) \"Day-agenda (W22):\\nWednesday  27 May 2026\\n 9:00...... Modes:   0:45 Scheduled: DONE [#A] Alpha     :work:billable:review:\\nModes:   2:00 Deadline:  WAIT Beta                                                                :work:internal:\\n| File                       | Headline         | Time   |\\n|----------------------------+------------------+--------|\\n|                            | ALL *Total time* | *1:45* |\\n|----------------------------+------------------+--------|\\n| org-agenda-modes<tmp>.org | *File time*      | *1:45* |\\n|                            | Alpha            | 0:30   |\\n|                            | WAIT Beta        | 1:15   |\\n\" \"#+CATEGORY: Modes\\n* DONE [#A] Alpha                                      :work:billable:review:\\nDEADLINE: <2026-05-29 Fri> SCHEDULED: <2026-05-28 Thu 10:15>\\n:PROPERTIES:\\n:Effort: 0:45\\n:END:\\nBody alpha line one.\\nBody alpha line two.\\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:30] =>  0:30\\n* WAIT Beta :work:internal:\\nDEADLINE: <2026-05-27 Wed>\\n:PROPERTIES:\\n:Effort: 2:00\\n:END:\\nBody beta.\\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:15] =>  1:15\\n* DONE Gamma :home:\\nCLOSED: [2026-05-27 Wed 17:00]\\n\")""##
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
@@ -179,7 +179,7 @@ fn org_agenda_skip_done_tags_represented_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((t nil nil nil) (\"Probe\") (\"billable\" \"work\") \"Headlines with TAGS match: +work\nPress ‘C-u r’ to search again\nProbe:   0:30 TODO Keep                                         :work:billable:\n\")""#
+        r#""OK ((t nil nil nil) (\"Probe\") (\"billable\" \"work\") \"Headlines with TAGS match: +work\\nPress ‘C-u r’ to search again\\nProbe:   0:30 TODO Keep                                         :work:billable:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -229,7 +229,7 @@ fn org_agenda_log_mode_deadline_schedule_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((t t t t t) \"2 days\" \"2 days-agenda (W22):\nWednesday  27 May 2026\n 9:00...... Log:    DONE Finished                                        :work:\n10:00...... Log:    Closed:     DONE Finished                            :work:\n14:00-15:00 Log:    TODO Timed event\nThursday   28 May 2026\nLog:    Deadline:   TODO Due soon                                        :work:\n\")""#
+        r#""OK ((t t t t t) \"2 days\" \"2 days-agenda (W22):\\nWednesday  27 May 2026\\n 9:00...... Log:    DONE Finished                                        :work:\\n10:00...... Log:    Closed:     DONE Finished                            :work:\\n14:00-15:00 Log:    TODO Timed event\\nThursday   28 May 2026\\nLog:    Deadline:   TODO Due soon                                        :work:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -342,7 +342,7 @@ fn org_agenda_priority_effort_source_mutation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"Global list of TODO items of type: ALL\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\nEdit:    0:30 TODO [#A] Alpha\nEdit:    1:00 TODO Beta\n\" \"Global list of TODO items of type: ALL\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\nEdit:    0:30 TODO [#A] Alpha\nEdit:    1:00 TODO [#A] Beta\n\" \"#+CATEGORY: Edit\n* TODO [#A] Alpha\n:PROPERTIES:\n:Effort:   2:30\n:END:\n* TODO [#A] Beta\n:PROPERTIES:\n:Effort: 1:00\n:END:\n\")""##
+        r##""OK (\"Global list of TODO items of type: ALL\\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\\nEdit:    0:30 TODO [#A] Alpha\\nEdit:    1:00 TODO Beta\\n\" \"Global list of TODO items of type: ALL\\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\\nEdit:    0:30 TODO [#A] Alpha\\nEdit:    1:00 TODO [#A] Beta\\n\" \"#+CATEGORY: Edit\\n* TODO [#A] Alpha\\n:PROPERTIES:\\n:Effort:   2:30\\n:END:\\n* TODO [#A] Beta\\n:PROPERTIES:\\n:Effort: 1:00\\n:END:\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -399,7 +399,7 @@ fn org_agenda_bulk_mark_toggle_regexp_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((2 nil (\"Beta\" \"Alpha\")) (0 nil) 2 \"Global list of TODO items of type: ALL\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\nBulk:   TODO Alpha                                                       :work:\nBulk:   TODO Beta                                                        :home:\n\")""#
+        r#""OK ((2 nil (\"Beta\" \"Alpha\")) (0 nil) 2 \"Global list of TODO items of type: ALL\\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\\nBulk:   TODO Alpha                                                       :work:\\nBulk:   TODO Beta                                                        :home:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -618,7 +618,7 @@ fn org_agenda_entry_text_switch_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (nil (nil nil nil nil) t (\"Alpha\" \"* TODO Alpha :work:\") nil \"Global list of TODO items of type: ALL\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\nText:   TODO Alpha                                                       :work:\nText:   TODO Beta                                                        :home:\n\")""#
+        r#""OK (nil (nil nil nil nil) t (\"Alpha\" \"* TODO Alpha :work:\") nil \"Global list of TODO items of type: ALL\\nPress ‘N r’ (e.g. ‘0 r’) to search again: (0)[ALL] (1)DONE (2)TODO\\nText:   TODO Alpha                                                       :work:\\nText:   TODO Beta                                                        :home:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -831,7 +831,7 @@ fn org_agenda_date_shift_redo_marker_source_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((t t t nil t nil) ((\"Shift:        TODO Window                                           :work:ship:\" \"timestamp\" \"TODO\" nil nil nil \"Window\")) nil (t t t) \" 9:00...... Shift:        Scheduled: TODO Window                    :work:ship:\" \"13:00-14:00 Shift:        TODO Range                                :work:call:\" (t t t t) (t t t t nil) ((\"Shift:        TODO Window                                           :work:ship:\" \"timestamp\" \"TODO\" nil nil nil \"Window\")) \"#+CATEGORY: Shift\n* TODO Window :work:ship:\nSCHEDULED: <2026-05-29 Fri 09:00>\nDEADLINE: <2026-05-29 Fri>\n:PROPERTIES:\n:Effort: 1:00\n:END:\n* TODO Range :work:call:\n<2026-05-27 Wed 15:00-16:00>\n* WAIT Future :home:\nSCHEDULED: <2026-05-28 Thu 08:30>\n\")""##
+        r##""OK ((t t t nil t nil) ((\"Shift:        TODO Window                                           :work:ship:\" \"timestamp\" \"TODO\" nil nil nil \"Window\")) nil (t t t) \" 9:00...... Shift:        Scheduled: TODO Window                    :work:ship:\" \"13:00-14:00 Shift:        TODO Range                                :work:call:\" (t t t t) (t t t t nil) ((\"Shift:        TODO Window                                           :work:ship:\" \"timestamp\" \"TODO\" nil nil nil \"Window\")) \"#+CATEGORY: Shift\\n* TODO Window :work:ship:\\nSCHEDULED: <2026-05-29 Fri 09:00>\\nDEADLINE: <2026-05-29 Fri>\\n:PROPERTIES:\\n:Effort: 1:00\\n:END:\\n* TODO Range :work:call:\\n<2026-05-27 Wed 15:00-16:00>\\n* WAIT Future :home:\\nSCHEDULED: <2026-05-28 Thu 08:30>\\n\")""##
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
@@ -970,7 +970,7 @@ fn org_agenda_clockreport_mode_habit_consistency_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (nil nil nil \"Week-agenda (W22):\nMonday     25 May 2026 W22\nTuesday    26 May 2026\nWednesday  27 May 2026\n  Work:       Scheduled:  TODO Review code                               :work:\nThursday   28 May 2026\nFriday     29 May 2026\nSaturday   30 May 2026\nSunday     31 May 2026\n\")""#
+        r#""OK (nil nil nil \"Week-agenda (W22):\\nMonday     25 May 2026 W22\\nTuesday    26 May 2026\\nWednesday  27 May 2026\\n  Work:       Scheduled:  TODO Review code                               :work:\\nThursday   28 May 2026\\nFriday     29 May 2026\\nSaturday   30 May 2026\\nSunday     31 May 2026\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1126,7 +1126,7 @@ fn org_agenda_filter_tag_todo_match_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Day-agenda (W22):\nWednesday  27 May 2026\n  tasks:      Scheduled:  TODO Write report                       :work:urgent:\n  tasks:      Scheduled:  TODO Buy groceries                             :home:\n  tasks:      Scheduled:  WAIT Fix bug                                   :work:\n\" \"Day-agenda (W22):\nWednesday  27 May 2026\n  tasks:      Scheduled:  TODO Write report                       :work:urgent:\n  tasks:      Scheduled:  TODO Buy groceries                             :home:\n  tasks:      Scheduled:  WAIT Fix bug                                   :work:\n\" \"Day-agenda (W22):\nWednesday  27 May 2026\n  tasks:      Scheduled:  TODO Write report                       :work:urgent:\n  tasks:      Scheduled:  TODO Buy groceries                                                                         :home:\n  tasks:      Scheduled:  WAIT Fix bug                                   :work:\n\" \"Day-agenda (W22):\nWednesday  27 May 2026\n  tasks:      Scheduled:  TODO Write report                       :work:urgent:\n  tasks:      Scheduled:  TODO Buy groceries                                                                         :home:\n  tasks:      Scheduled:  WAIT Fix bug                                   :work:\n\")""#
+        r#""OK (\"Day-agenda (W22):\\nWednesday  27 May 2026\\n  tasks:      Scheduled:  TODO Write report                       :work:urgent:\\n  tasks:      Scheduled:  TODO Buy groceries                             :home:\\n  tasks:      Scheduled:  WAIT Fix bug                                   :work:\\n\" \"Day-agenda (W22):\\nWednesday  27 May 2026\\n  tasks:      Scheduled:  TODO Write report                       :work:urgent:\\n  tasks:      Scheduled:  TODO Buy groceries                             :home:\\n  tasks:      Scheduled:  WAIT Fix bug                                   :work:\\n\" \"Day-agenda (W22):\\nWednesday  27 May 2026\\n  tasks:      Scheduled:  TODO Write report                       :work:urgent:\\n  tasks:      Scheduled:  TODO Buy groceries                                                                         :home:\\n  tasks:      Scheduled:  WAIT Fix bug                                   :work:\\n\" \"Day-agenda (W22):\\nWednesday  27 May 2026\\n  tasks:      Scheduled:  TODO Write report                       :work:urgent:\\n  tasks:      Scheduled:  TODO Buy groceries                                                                         :home:\\n  tasks:      Scheduled:  WAIT Fix bug                                   :work:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1186,7 +1186,7 @@ fn org_agenda_date_shift_redo_source_mutation_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Week-agenda (W22):\nMonday     25 May 2026 W22\nTuesday    26 May 2026\nWednesday  27 May 2026\n  tasks:      Scheduled:  TODO Alpha\nThursday   28 May 2026\n  tasks:      Scheduled:  TODO Beta\nFriday     29 May 2026\n  tasks:      Deadline:   TODO Gamma\nSaturday   30 May 2026\nSunday     31 May 2026\n\" \"Week-agenda (W22):\nMonday     25 May 2026 W22\nTuesday    26 May 2026\nWednesday  27 May 2026\n  tasks:      Scheduled:  TODO Alpha                      \nThursday   28 May 2026\n  tasks:      Scheduled:  TODO Beta\nFriday     29 May 2026\n  tasks:      Deadline:   TODO Gamma\nSaturday   30 May 2026\nSunday     31 May 2026\n\" \"Week-agenda (W22):\nMonday     25 May 2026 W22\nTuesday    26 May 2026\nWednesday  27 May 2026\nThursday   28 May 2026\n  tasks:      Scheduled:  TODO Beta\nFriday     29 May 2026\n  tasks:      Deadline:   TODO Gamma\nSaturday   30 May 2026\nSunday     31 May 2026\n\" \"* TODO Alpha\nSCHEDULED: <2026-06-15 Mon>\n* TODO Beta\nSCHEDULED: <2026-05-28 Thu>\n* TODO Gamma\nDEADLINE: <2026-05-29 Fri>\n\")""#
+        r#""OK (\"Week-agenda (W22):\\nMonday     25 May 2026 W22\\nTuesday    26 May 2026\\nWednesday  27 May 2026\\n  tasks:      Scheduled:  TODO Alpha\\nThursday   28 May 2026\\n  tasks:      Scheduled:  TODO Beta\\nFriday     29 May 2026\\n  tasks:      Deadline:   TODO Gamma\\nSaturday   30 May 2026\\nSunday     31 May 2026\\n\" \"Week-agenda (W22):\\nMonday     25 May 2026 W22\\nTuesday    26 May 2026\\nWednesday  27 May 2026\\n  tasks:      Scheduled:  TODO Alpha                      \\nThursday   28 May 2026\\n  tasks:      Scheduled:  TODO Beta\\nFriday     29 May 2026\\n  tasks:      Deadline:   TODO Gamma\\nSaturday   30 May 2026\\nSunday     31 May 2026\\n\" \"Week-agenda (W22):\\nMonday     25 May 2026 W22\\nTuesday    26 May 2026\\nWednesday  27 May 2026\\nThursday   28 May 2026\\n  tasks:      Scheduled:  TODO Beta\\nFriday     29 May 2026\\n  tasks:      Deadline:   TODO Gamma\\nSaturday   30 May 2026\\nSunday     31 May 2026\\n\" \"* TODO Alpha\\nSCHEDULED: <2026-06-15 Mon>\\n* TODO Beta\\nSCHEDULED: <2026-05-28 Thu>\\n* TODO Gamma\\nDEADLINE: <2026-05-29 Fri>\\n\")""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
@@ -1482,7 +1482,7 @@ fn org_agenda_list_edit_todo_reagenda_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  TODO Alpha\n  a:          Scheduled:  DONE Beta\n  a:          Scheduled:  TODO Gamma                                     :work:\n  a:          Scheduled:  NEXT Delta\n\" \"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  DONE Alpha\n  a:          Scheduled:  DONE Beta\n  a:          Scheduled:  TODO Gamma                                     :work:\n  a:          Scheduled:  NEXT Delta\n\")""#
+        r#""OK (\"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO Alpha\\n  a:          Scheduled:  DONE Beta\\n  a:          Scheduled:  TODO Gamma                                     :work:\\n  a:          Scheduled:  NEXT Delta\\n\" \"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  DONE Alpha\\n  a:          Scheduled:  DONE Beta\\n  a:          Scheduled:  TODO Gamma                                     :work:\\n  a:          Scheduled:  NEXT Delta\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1591,7 +1591,7 @@ fn org_agenda_multi_file_edit_clock_reagenda_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  TODO Alpha                                     :work:\n  a:          Scheduled:  DONE Beta                                      :home:\n  b:          Scheduled:  NEXT Gamma                                     :work:\n  b:          Scheduled:  TODO Delta                                     :home:\n\" \"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  DONE Alpha                                     :work:\n  a:          Scheduled:  DONE Beta                                      :home:\n  b:          Scheduled:  NEXT Gamma                                     :work:\n  b:          Scheduled:  TODO Delta                                     :home:\n\")""#
+        r#""OK (\"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO Alpha                                     :work:\\n  a:          Scheduled:  DONE Beta                                      :home:\\n  b:          Scheduled:  NEXT Gamma                                     :work:\\n  b:          Scheduled:  TODO Delta                                     :home:\\n\" \"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  DONE Alpha                                     :work:\\n  a:          Scheduled:  DONE Beta                                      :home:\\n  b:          Scheduled:  NEXT Gamma                                     :work:\\n  b:          Scheduled:  TODO Delta                                     :home:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1701,7 +1701,7 @@ fn org_agenda_week_view_clock_filter_edit_reagenda_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Week-agenda (W22):\nMonday     25 May 2026 W22\n  a:          Scheduled:  TODO Alpha\nTuesday    26 May 2026\n  a:          Scheduled:  TODO Beta\nWednesday  27 May 2026\n  a:          Scheduled:  DONE Gamma\nThursday   28 May 2026\n  a:          Scheduled:  TODO Delta\nFriday     29 May 2026\n  a:          Scheduled:  NEXT Epsilon\nSaturday   30 May 2026\nSunday     31 May 2026\n\" \"Week-agenda (W22):\nMonday     25 May 2026 W22\n  a:          Scheduled:  DONE Alpha\nTuesday    26 May 2026\n  a:          Scheduled:  TODO Beta\nWednesday  27 May 2026\n  a:          Scheduled:  DONE Gamma\nThursday   28 May 2026\n  a:          Scheduled:  TODO Delta\nFriday     29 May 2026\n  a:          Scheduled:  NEXT Epsilon\nSaturday   30 May 2026\nSunday     31 May 2026\n\")""#
+        r#""OK (\"Week-agenda (W22):\\nMonday     25 May 2026 W22\\n  a:          Scheduled:  TODO Alpha\\nTuesday    26 May 2026\\n  a:          Scheduled:  TODO Beta\\nWednesday  27 May 2026\\n  a:          Scheduled:  DONE Gamma\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO Delta\\nFriday     29 May 2026\\n  a:          Scheduled:  NEXT Epsilon\\nSaturday   30 May 2026\\nSunday     31 May 2026\\n\" \"Week-agenda (W22):\\nMonday     25 May 2026 W22\\n  a:          Scheduled:  DONE Alpha\\nTuesday    26 May 2026\\n  a:          Scheduled:  TODO Beta\\nWednesday  27 May 2026\\n  a:          Scheduled:  DONE Gamma\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO Delta\\nFriday     29 May 2026\\n  a:          Scheduled:  NEXT Epsilon\\nSaturday   30 May 2026\\nSunday     31 May 2026\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1808,7 +1808,7 @@ fn org_agenda_two_day_view_edit_reschedule_multi_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"2 days-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  TODO Alpha\n  a:          Scheduled:  DONE Beta\nFriday     29 May 2026\n  a:          Scheduled:  TODO Gamma\n  a:          Scheduled:  NEXT Delta\n\" \"2 days-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  DONE Beta\nFriday     29 May 2026\n  a:          Scheduled:  TODO Gamma\n  a:          Scheduled:  NEXT Delta\n\")""#
+        r#""OK (\"2 days-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO Alpha\\n  a:          Scheduled:  DONE Beta\\nFriday     29 May 2026\\n  a:          Scheduled:  TODO Gamma\\n  a:          Scheduled:  NEXT Delta\\n\" \"2 days-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  DONE Beta\\nFriday     29 May 2026\\n  a:          Scheduled:  TODO Gamma\\n  a:          Scheduled:  NEXT Delta\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1860,7 +1860,7 @@ fn org_agenda_three_day_multi_file_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"3 days-agenda (W22):\nWednesday  27 May 2026\n  work:       Scheduled:  DONE Review\nThursday   28 May 2026\n  work:       Scheduled:  TODO Deploy\n  home:       Scheduled:  TODO Shopping\nFriday     29 May 2026\n  home:       Scheduled:  NEXT Exercise\n\" \"3 days-agenda (W22):\nWednesday  27 May 2026\n  work:       Scheduled:  DONE Review\nThursday   28 May 2026\n  work:       Scheduled:  DONE Deploy\n  home:       Scheduled:  TODO Shopping\nFriday     29 May 2026\n  home:       Scheduled:  NEXT Exercise\n\")""#
+        r#""OK (\"3 days-agenda (W22):\\nWednesday  27 May 2026\\n  work:       Scheduled:  DONE Review\\nThursday   28 May 2026\\n  work:       Scheduled:  TODO Deploy\\n  home:       Scheduled:  TODO Shopping\\nFriday     29 May 2026\\n  home:       Scheduled:  NEXT Exercise\\n\" \"3 days-agenda (W22):\\nWednesday  27 May 2026\\n  work:       Scheduled:  DONE Review\\nThursday   28 May 2026\\n  work:       Scheduled:  DONE Deploy\\n  home:       Scheduled:  TODO Shopping\\nFriday     29 May 2026\\n  home:       Scheduled:  NEXT Exercise\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1913,7 +1913,7 @@ fn org_agenda_week_view_multi_edit_todo_reagenda_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Week-agenda (W22):\nMonday     25 May 2026 W22\n  a:          Scheduled:  TODO Mon-task\nTuesday    26 May 2026\n  a:          Scheduled:  DONE Tue-task\nWednesday  27 May 2026\n  a:          Scheduled:  TODO Wed-task\nThursday   28 May 2026\n  a:          Scheduled:  NEXT Thu-task\nFriday     29 May 2026\n  a:          Scheduled:  TODO Fri-task\nSaturday   30 May 2026\nSunday     31 May 2026\n\" \"Week-agenda (W22):\nMonday     25 May 2026 W22\n  a:          Scheduled:  TODO Mon-task\nTuesday    26 May 2026\n  a:          Scheduled:  DONE Tue-task\nWednesday  27 May 2026\n  a:          Scheduled:  DONE Wed-task\nThursday   28 May 2026\n  a:          Scheduled:  NEXT Thu-task\nFriday     29 May 2026\n  a:          Scheduled:  TODO Fri-task\nSaturday   30 May 2026\nSunday     31 May 2026\n\")""#
+        r#""OK (\"Week-agenda (W22):\\nMonday     25 May 2026 W22\\n  a:          Scheduled:  TODO Mon-task\\nTuesday    26 May 2026\\n  a:          Scheduled:  DONE Tue-task\\nWednesday  27 May 2026\\n  a:          Scheduled:  TODO Wed-task\\nThursday   28 May 2026\\n  a:          Scheduled:  NEXT Thu-task\\nFriday     29 May 2026\\n  a:          Scheduled:  TODO Fri-task\\nSaturday   30 May 2026\\nSunday     31 May 2026\\n\" \"Week-agenda (W22):\\nMonday     25 May 2026 W22\\n  a:          Scheduled:  TODO Mon-task\\nTuesday    26 May 2026\\n  a:          Scheduled:  DONE Tue-task\\nWednesday  27 May 2026\\n  a:          Scheduled:  DONE Wed-task\\nThursday   28 May 2026\\n  a:          Scheduled:  NEXT Thu-task\\nFriday     29 May 2026\\n  a:          Scheduled:  TODO Fri-task\\nSaturday   30 May 2026\\nSunday     31 May 2026\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1965,7 +1965,7 @@ fn org_agenda_single_day_todo_filter_edit_reagenda_v2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  TODO Task-1\n  a:          Scheduled:  DONE Task-2\n  a:          Scheduled:  TODO Task-3\n  a:          Scheduled:  NEXT Task-4\n\" \"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  TODO Task-1\n  a:          Scheduled:  DONE Task-2\n  a:          Scheduled:  DONE Task-3\n  a:          Scheduled:  NEXT Task-4\n\")""#
+        r#""OK (\"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO Task-1\\n  a:          Scheduled:  DONE Task-2\\n  a:          Scheduled:  TODO Task-3\\n  a:          Scheduled:  NEXT Task-4\\n\" \"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO Task-1\\n  a:          Scheduled:  DONE Task-2\\n  a:          Scheduled:  DONE Task-3\\n  a:          Scheduled:  NEXT Task-4\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -2014,7 +2014,7 @@ fn org_agenda_single_day_multi_todo_edit_reagenda_v2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  TODO A1\n  a:          Scheduled:  DONE A2\n  a:          Scheduled:  TODO A3\n  a:          Scheduled:  NEXT A4\n  a:          Scheduled:  TODO A5\n\" \"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  DONE A1\n  a:          Scheduled:  DONE A2\n  a:          Scheduled:  DONE A3\n  a:          Scheduled:  NEXT A4\n  a:          Scheduled:  TODO A5\n\")""#
+        r#""OK (\"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO A1\\n  a:          Scheduled:  DONE A2\\n  a:          Scheduled:  TODO A3\\n  a:          Scheduled:  NEXT A4\\n  a:          Scheduled:  TODO A5\\n\" \"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  DONE A1\\n  a:          Scheduled:  DONE A2\\n  a:          Scheduled:  DONE A3\\n  a:          Scheduled:  NEXT A4\\n  a:          Scheduled:  TODO A5\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -2067,7 +2067,7 @@ fn org_agenda_single_day_five_tasks_multi_edit_reagenda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  TODO T1\n  a:          Scheduled:  DONE T2\n  a:          Scheduled:  TODO T3\n  a:          Scheduled:  NEXT T4\n  a:          Scheduled:  TODO T5\n\" \"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  DONE T1\n  a:          Scheduled:  DONE T2\n  a:          Scheduled:  DONE T3\n  a:          Scheduled:  NEXT T4\n  a:          Scheduled:  DONE T5\n\")""#
+        r#""OK (\"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO T1\\n  a:          Scheduled:  DONE T2\\n  a:          Scheduled:  TODO T3\\n  a:          Scheduled:  NEXT T4\\n  a:          Scheduled:  TODO T5\\n\" \"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  DONE T1\\n  a:          Scheduled:  DONE T2\\n  a:          Scheduled:  DONE T3\\n  a:          Scheduled:  NEXT T4\\n  a:          Scheduled:  DONE T5\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -2123,7 +2123,7 @@ fn org_agenda_single_day_six_tasks_multi_edit_reagenda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  TODO F1\n  a:          Scheduled:  DONE F2\n  a:          Scheduled:  TODO F3\n  a:          Scheduled:  NEXT F4\n  a:          Scheduled:  TODO F5\n  a:          Scheduled:  WAIT F6\n\" \"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  DONE F1\n  a:          Scheduled:  DONE F2\n  a:          Scheduled:  DONE F3\n  a:          Scheduled:  NEXT F4\n  a:          Scheduled:  DONE F5\n  a:          Scheduled:  WAIT F6\n\")""#
+        r#""OK (\"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO F1\\n  a:          Scheduled:  DONE F2\\n  a:          Scheduled:  TODO F3\\n  a:          Scheduled:  NEXT F4\\n  a:          Scheduled:  TODO F5\\n  a:          Scheduled:  WAIT F6\\n\" \"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  DONE F1\\n  a:          Scheduled:  DONE F2\\n  a:          Scheduled:  DONE F3\\n  a:          Scheduled:  NEXT F4\\n  a:          Scheduled:  DONE F5\\n  a:          Scheduled:  WAIT F6\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -2180,7 +2180,7 @@ fn org_agenda_single_day_seven_tasks_multi_edit_reagenda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  TODO G1\n  a:          Scheduled:  DONE G2\n  a:          Scheduled:  TODO G3\n  a:          Scheduled:  NEXT G4\n  a:          Scheduled:  TODO G5\n  a:          Scheduled:  WAIT G6\n  a:          Scheduled:  TODO G7\n\" \"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  DONE G1\n  a:          Scheduled:  DONE G2\n  a:          Scheduled:  DONE G3\n  a:          Scheduled:  NEXT G4\n  a:          Scheduled:  DONE G5\n  a:          Scheduled:  WAIT G6\n  a:          Scheduled:  DONE G7\n\")""#
+        r#""OK (\"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO G1\\n  a:          Scheduled:  DONE G2\\n  a:          Scheduled:  TODO G3\\n  a:          Scheduled:  NEXT G4\\n  a:          Scheduled:  TODO G5\\n  a:          Scheduled:  WAIT G6\\n  a:          Scheduled:  TODO G7\\n\" \"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  DONE G1\\n  a:          Scheduled:  DONE G2\\n  a:          Scheduled:  DONE G3\\n  a:          Scheduled:  NEXT G4\\n  a:          Scheduled:  DONE G5\\n  a:          Scheduled:  WAIT G6\\n  a:          Scheduled:  DONE G7\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -2241,7 +2241,7 @@ fn org_agenda_single_day_eight_tasks_multi_edit_reagenda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  TODO H1\n  a:          Scheduled:  DONE H2\n  a:          Scheduled:  TODO H3\n  a:          Scheduled:  NEXT H4\n  a:          Scheduled:  TODO H5\n  a:          Scheduled:  WAIT H6\n  a:          Scheduled:  TODO H7\n  a:          Scheduled:  DONE H8\n\" \"Day-agenda (W22):\nThursday   28 May 2026\n  a:          Scheduled:  DONE H1\n  a:          Scheduled:  DONE H2\n  a:          Scheduled:  DONE H3\n  a:          Scheduled:  NEXT H4\n  a:          Scheduled:  DONE H5\n  a:          Scheduled:  WAIT H6\n  a:          Scheduled:  DONE H7\n  a:          Scheduled:  DONE H8\n\")""#
+        r#""OK (\"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  TODO H1\\n  a:          Scheduled:  DONE H2\\n  a:          Scheduled:  TODO H3\\n  a:          Scheduled:  NEXT H4\\n  a:          Scheduled:  TODO H5\\n  a:          Scheduled:  WAIT H6\\n  a:          Scheduled:  TODO H7\\n  a:          Scheduled:  DONE H8\\n\" \"Day-agenda (W22):\\nThursday   28 May 2026\\n  a:          Scheduled:  DONE H1\\n  a:          Scheduled:  DONE H2\\n  a:          Scheduled:  DONE H3\\n  a:          Scheduled:  NEXT H4\\n  a:          Scheduled:  DONE H5\\n  a:          Scheduled:  WAIT H6\\n  a:          Scheduled:  DONE H7\\n  a:          Scheduled:  DONE H8\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

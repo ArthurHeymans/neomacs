@@ -15,7 +15,7 @@ fn combo_process_sentinel_buffer_state_after_finish() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"finished\" #(\"BEFORE-PROCESS-RUN-AFTEROUTPUT-TEXT\n\" 0 6 (sect before) 18 24 (sect after)) 7 19 t middle before)""#
+        r#""OK (\"finished\" #(\"BEFORE-PROCESS-RUN-AFTEROUTPUT-TEXT\\n\" 0 6 (sect before) 18 24 (sect after)) 7 19 t middle before)""#
     ]];
     // Process sentinel modifies buffer, markers/overlays must track.
     crate::common::assert_oracle_parity_expect(
@@ -55,7 +55,7 @@ fn combo_process_filter_insert_with_markers_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((\"1\n2\n3\n4\n5\n\" 1 6 t)) (#(\"START-END\nProcess seq-test finished\n\" 0 5 (kind init)) 1 6 t all init))""#
+        r#""OK (((\"1\\n2\\n3\\n4\\n5\\n\" 1 6 t)) (#(\"START-END\\nProcess seq-test finished\\n\" 0 5 (kind init)) 1 6 t all init))""#
     ]];
     // Process filter inserts text incrementally; markers must track.
     crate::common::assert_oracle_parity_expect(

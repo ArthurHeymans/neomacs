@@ -25,7 +25,7 @@ fn tap_line_sentence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"First sentence here. Second one too.\n\" \"First sentence here. Second one too.\")""#
+        r#""OK (\"First sentence here. Second one too.\\n\" \"First sentence here. Second one too.\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

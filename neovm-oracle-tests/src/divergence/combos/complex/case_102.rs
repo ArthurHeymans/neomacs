@@ -175,7 +175,7 @@ fn div_cx102_org_agenda_buffer_creation() {
 fn div_cx102_org_table_basic_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t 1 \"| Name | Age |\n|------+-----|\n| Bob  | 30  |\n\")""#
+        r#""OK (t 1 \"| Name | Age |\\n|------+-----|\\n| Bob  | 30  |\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

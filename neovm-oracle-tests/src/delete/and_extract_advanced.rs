@@ -54,7 +54,7 @@ fn oracle_prop_delete_and_extract_various_regions() {
                           results))))
   (nreverse results))"#;
     let expect = expect_test::expect![[
-        r#""OK ((beginning \"ABCD\" \"EFGHIJKLMNOP\" 12 13) (middle \"FGHIJ\" \"ABCDEKLMNOP\" 11) (end \"MNOP\" \"ABCDEFGHIJKL\" 12) (single-char \"H\" \"ABCDEFGIJKLMNOP\") (multiline \"line two\nline thre\" \"line one\ne\nline four\n\"))""#
+        r#""OK ((beginning \"ABCD\" \"EFGHIJKLMNOP\" 12 13) (middle \"FGHIJ\" \"ABCDEKLMNOP\" 11) (end \"MNOP\" \"ABCDEFGHIJKL\" 12) (single-char \"H\" \"ABCDEFGIJKLMNOP\") (multiline \"line two\\nline thre\" \"line one\\ne\\nline four\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -178,7 +178,7 @@ fn oracle_prop_delete_and_extract_entire_buffer() {
                                               (nreverse results))))))
     results))"#;
     let expect = expect_test::expect![[
-        r#""OK ((grab-erase \"The quick brown fox jumps over the lazy dog.\nSecond line.\n\" \"\" 0 1))""#
+        r#""OK ((grab-erase \"The quick brown fox jumps over the lazy dog.\\nSecond line.\\n\" \"\" 0 1))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -386,7 +386,7 @@ fn oracle_prop_delete_and_extract_chained_assembly() {
     (kill-buffer src)
     (kill-buffer dst)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((extracted \"Hello there!\" \"This is the main content.\" \"Goodbye!\") (source-remaining \"[INTRO][/INTRO][BODY][/BODY][FOOTER][/FOOTER]\") (destination \"=== Reversed Document ===\nGoodbye!\n---\nThis is the main content.\n---\nHello there!\n\"))""#
+        r#""OK ((extracted \"Hello there!\" \"This is the main content.\" \"Goodbye!\") (source-remaining \"[INTRO][/INTRO][BODY][/BODY][FOOTER][/FOOTER]\") (destination \"=== Reversed Document ===\\nGoodbye!\\n---\\nThis is the main content.\\n---\\nHello there!\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

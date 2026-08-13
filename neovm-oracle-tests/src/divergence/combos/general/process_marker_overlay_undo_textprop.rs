@@ -135,7 +135,7 @@ fn combo_process_filter_marker_overlay_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((\"1\n2\n3\n\" 6 6 t)) (#(\"START-END\nProcess seq-pf finished\n\" 0 5 (part start) 6 9 (part end)) 6 6 t all start))""#
+        r#""OK (((\"1\\n2\\n3\\n\" 6 6 t)) (#(\"START-END\\nProcess seq-pf finished\\n\" 0 5 (part start) 6 9 (part end)) 6 6 t all start))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

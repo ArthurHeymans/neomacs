@@ -53,7 +53,7 @@ fn oracle_prop_identity_various_types() {
   (let ((v (vector 1 2)))
     (eq v (identity v))))"#;
     let expect = expect_test::expect![[
-        r#""OK (0 42 -17 3.14159 0 0 \"\" \"hello world\" \"multi\nline\tstring\" foo bar-baz nil t nil (1 2 3) (a (b c) (d (e f))) [] [1 2 3] [a \"b\" 3] (1 . 2) 65 10 t t t)""#
+        r#""OK (0 42 -17 3.14159 0 0 \"\" \"hello world\" \"multi\\nline\tstring\" foo bar-baz nil t nil (1 2 3) (a (b c) (d (e f))) [] [1 2 3] [a \"b\" 3] (1 . 2) 65 10 t t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

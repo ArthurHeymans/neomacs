@@ -6,7 +6,7 @@ fn org_attach_copy_buffer_delete_sync_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"data/at/tach-fixed-id\" (\"payload.txt\" \"source.txt\") (\"payload.txt\") \"from source\n\" \"from buffer\n\" ((\"attachment:source.txt\" \"source.txt\")) (\"data/at/tach-fixed-id\" \"data/at/tach-fixed-id\" \"data/at/tach-fixed-id\" \"data/at/tach-fixed-id\") nil \"* Task\n:PROPERTIES:\n:ID: attach-fixed-id\n:END:\n\")""#
+        r#""OK (\"data/at/tach-fixed-id\" (\"payload.txt\" \"source.txt\") (\"payload.txt\") \"from source\\n\" \"from buffer\\n\" ((\"attachment:source.txt\" \"source.txt\")) (\"data/at/tach-fixed-id\" \"data/at/tach-fixed-id\" \"data/at/tach-fixed-id\" \"data/at/tach-fixed-id\") nil \"* Task\\n:PROPERTIES:\\n:ID: attach-fixed-id\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -74,7 +74,7 @@ fn org_attach_dir_inheritance_expand_links_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"shared\" \"shared/doc.txt\" \"attachment:doc.txt\" \"* Parent\n:PROPERTIES:\n:DIR: <root>/shared\n:END:\n** Child\n[[file:<root>/shared/doc.txt][Doc]] and [[file:<root>/shared/missing.txt]]\n\")""#
+        r#""OK (\"shared\" \"shared/doc.txt\" \"attachment:doc.txt\" \"* Parent\\n:PROPERTIES:\\n:DIR: <root>/shared\\n:END:\\n** Child\\n[[file:<root>/shared/doc.txt][Doc]] and [[file:<root>/shared/missing.txt]]\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -173,7 +173,7 @@ fn org_lint_custom_category_marker_report_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate target <<dup-target>>\" duplicate-target \"Report duplicate targets\" nil (link) 0) (#(\"2\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate target <<dup-target>>\" duplicate-target \"Report duplicate targets\" nil (link) 15) (#(\"8\" 0 1 (org-lint-marker #<marker in no buffer>)) \"high\" \"custom headline Two\" combo-custom \"new custom checker\" high (combo structure) 107) (#(\"9\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Possible incomplete drawer \\\":PROPERTIES:\\\"\" incomplete-drawer \"Report probable incomplete drawers\" low nil 113)) ((#(\"8\" 0 1 (org-lint-marker #<marker in no buffer>)) \"high\" \"custom headline Two\" combo-custom \"new custom checker\" high (combo structure) 107)) (combo-custom) \"<<dup-target>>\n<<dup-target>>\n* One\n:PROPERTIES:\n:CUSTOM_ID: same\n:END:\n[[#missing-custom]] [[dup-target]]\n* Two\n:PROPERTIES:\n:CUSTOM_ID: same\ndrawer never closes\n\")""#
+        r#""OK (((#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate target <<dup-target>>\" duplicate-target \"Report duplicate targets\" nil (link) 0) (#(\"2\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate target <<dup-target>>\" duplicate-target \"Report duplicate targets\" nil (link) 15) (#(\"8\" 0 1 (org-lint-marker #<marker in no buffer>)) \"high\" \"custom headline Two\" combo-custom \"new custom checker\" high (combo structure) 107) (#(\"9\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Possible incomplete drawer \\\":PROPERTIES:\\\"\" incomplete-drawer \"Report probable incomplete drawers\" low nil 113)) ((#(\"8\" 0 1 (org-lint-marker #<marker in no buffer>)) \"high\" \"custom headline Two\" combo-custom \"new custom checker\" high (combo structure) 107)) (combo-custom) \"<<dup-target>>\\n<<dup-target>>\\n* One\\n:PROPERTIES:\\n:CUSTOM_ID: same\\n:END:\\n[[#missing-custom]] [[dup-target]]\\n* Two\\n:PROPERTIES:\\n:CUSTOM_ID: same\\ndrawer never closes\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -331,7 +331,7 @@ fn org_attach_open_follow_hooks_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"report.txt\" \"zeta.txt\") ((\"data/op/en-fixed-id/report.txt\" in-emacs) (\"data/op/en-fixed-id/zeta.txt\" (16))) (\"data/op/en-fixed-id/report.txt\") (\"ATTACH\") \"* Open target                                                        :ATTACH:\n:PROPERTIES:\n:ID: open-fixed-id\n:END:\n[[file:<root>/data/op/en-fixed-id/report.txt][Report]]\n\")""#
+        r#""OK ((\"report.txt\" \"zeta.txt\") ((\"data/op/en-fixed-id/report.txt\" in-emacs) (\"data/op/en-fixed-id/zeta.txt\" (16))) (\"data/op/en-fixed-id/report.txt\") (\"ATTACH\") \"* Open target                                                        :ATTACH:\\n:PROPERTIES:\\n:ID: open-fixed-id\\n:END:\\n[[file:<root>/data/op/en-fixed-id/report.txt][Report]]\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -390,7 +390,7 @@ fn org_attach_archive_delete_and_sync_empty_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"ATTACH\") (\"old.txt\") nil nil (\"ATTACH\") nil nil (\"archive-dir\" \"archive-dir\" \"sync-dir\" \"sync-dir\") \"* Archive me\n:PROPERTIES:\n:DIR: <root>/archive-dir\n:END:\n* Sync me\n:PROPERTIES:\n:DIR: <root>/sync-dir\n:END:\n\")""#
+        r#""OK ((\"ATTACH\") (\"old.txt\") nil nil (\"ATTACH\") nil nil (\"archive-dir\" \"archive-dir\" \"sync-dir\" \"sync-dir\") \"* Archive me\\n:PROPERTIES:\\n:DIR: <root>/archive-dir\\n:END:\\n* Sync me\\n:PROPERTIES:\\n:DIR: <root>/sync-dir\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -562,7 +562,7 @@ fn org_lint_include_macro_planning_percent_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (((\"1\" \"low\" \"Non-existent setup file \\\"<root>/missing-setup.org\\\"\" non-existent-setupfile-parameter) (\"2\" \"low\" \"Missing value for option item \\\"missing\\\"\" unknown-options-item) (\"2\" \"low\" \"Unknown OPTIONS item \\\"missing\\\"\" unknown-options-item) (\"2\" \"low\" \"Missing value for option item \\\"bad-option\\\"\" unknown-options-item) (\"2\" \"low\" \"Unknown OPTIONS item \\\"bad-option\\\"\" unknown-options-item) (\"2\" \"low\" \"Missing value for option item \\\"toc\\\"\" unknown-options-item) (\"3\" \"low\" \"Invalid search part \\\"* Missing\\\" in INCLUDE keyword\" wrong-include-link-parameter) (\"4\" \"low\" \"Obsolete markup \\\"HTML\\\" in INCLUDE keyword.  Use \\\"export HTML\\\" instead\" obsolete-include-markup) (\"5\" \"low\" \"Missing name in MACRO keyword\" invalid-macro-argument-and-template) (\"6\" \"low\" \"Missing template in macro \\\"%s\\\"\" invalid-macro-argument-and-template) (\"7\" \"low\" \"Unused placeholders in macro \\\"pair\\\"\" invalid-macro-argument-and-template) (\"9\" \"low\" \"Different repeaters in SCHEDULED and DEADLINE timestamps.\" mismatched-planning-repeaters) (\"11\" \"low\" \"Possible indented diary-sexp\" indented-diary-sexp) (\"12\" \"low\" \"Possible incomplete block \\\"#+BEGIN_bad\\\"\" invalid-block) (\"14\" \"low\" \"Invalid block closing line \\\"#+END_bad trailing\\\"\" invalid-block) (\"15\" \"low\" \"Spurious argument in macro \\\"pair\\\": four\" invalid-macro-argument-and-template) (\"15\" \"low\" \"Undefined macro \\\"unknown\\\"\" invalid-macro-argument-and-template)) 17 (keyword keyword keyword keyword keyword keyword keyword planning link macro macro) \"#+SETUPFILE: \\\"<root>/missing-setup.org\\\"\n#+OPTIONS: toc: bad-option: missing:\n#+INCLUDE: \\\"<root>/inc.org::* Missing\\\" :lines \\\"bad\\\"\n#+INCLUDE: \\\"<root>/inc.org\\\" HTML\n#+MACRO:\n#+MACRO: empty\n#+MACRO: pair $1 $3\n* TODO Task\nSCHEDULED: <2026-05-27 Wed +1w> DEADLINE: <2026-05-28 Thu ++2d>\n[[https://example.org/a%2Fb][bad percent]]\n  %%(diary-date 5 27 2026)\n#+BEGIN_bad\nunfinished block\n#+END_bad trailing\n{{{pair(one,two,three,four)}}} {{{unknown()}}}\n\")""##
+        r##""OK (((\"1\" \"low\" \"Non-existent setup file \\\"<root>/missing-setup.org\\\"\" non-existent-setupfile-parameter) (\"2\" \"low\" \"Missing value for option item \\\"missing\\\"\" unknown-options-item) (\"2\" \"low\" \"Unknown OPTIONS item \\\"missing\\\"\" unknown-options-item) (\"2\" \"low\" \"Missing value for option item \\\"bad-option\\\"\" unknown-options-item) (\"2\" \"low\" \"Unknown OPTIONS item \\\"bad-option\\\"\" unknown-options-item) (\"2\" \"low\" \"Missing value for option item \\\"toc\\\"\" unknown-options-item) (\"3\" \"low\" \"Invalid search part \\\"* Missing\\\" in INCLUDE keyword\" wrong-include-link-parameter) (\"4\" \"low\" \"Obsolete markup \\\"HTML\\\" in INCLUDE keyword.  Use \\\"export HTML\\\" instead\" obsolete-include-markup) (\"5\" \"low\" \"Missing name in MACRO keyword\" invalid-macro-argument-and-template) (\"6\" \"low\" \"Missing template in macro \\\"%s\\\"\" invalid-macro-argument-and-template) (\"7\" \"low\" \"Unused placeholders in macro \\\"pair\\\"\" invalid-macro-argument-and-template) (\"9\" \"low\" \"Different repeaters in SCHEDULED and DEADLINE timestamps.\" mismatched-planning-repeaters) (\"11\" \"low\" \"Possible indented diary-sexp\" indented-diary-sexp) (\"12\" \"low\" \"Possible incomplete block \\\"#+BEGIN_bad\\\"\" invalid-block) (\"14\" \"low\" \"Invalid block closing line \\\"#+END_bad trailing\\\"\" invalid-block) (\"15\" \"low\" \"Spurious argument in macro \\\"pair\\\": four\" invalid-macro-argument-and-template) (\"15\" \"low\" \"Undefined macro \\\"unknown\\\"\" invalid-macro-argument-and-template)) 17 (keyword keyword keyword keyword keyword keyword keyword planning link macro macro) \"#+SETUPFILE: \\\"<root>/missing-setup.org\\\"\\n#+OPTIONS: toc: bad-option: missing:\\n#+INCLUDE: \\\"<root>/inc.org::* Missing\\\" :lines \\\"bad\\\"\\n#+INCLUDE: \\\"<root>/inc.org\\\" HTML\\n#+MACRO:\\n#+MACRO: empty\\n#+MACRO: pair $1 $3\\n* TODO Task\\nSCHEDULED: <2026-05-27 Wed +1w> DEADLINE: <2026-05-28 Thu ++2d>\\n[[https://example.org/a%2Fb][bad percent]]\\n  %%(diary-date 5 27 2026)\\n#+BEGIN_bad\\nunfinished block\\n#+END_bad trailing\\n{{{pair(one,two,three,four)}}} {{{unknown()}}}\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

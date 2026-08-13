@@ -327,7 +327,7 @@ fn div_cx38_coding_system_priority_list_count() {
 #[test]
 fn div_cx38_fill_paragraph_with_long_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"short thisisaverylongwordthatwontfit end\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"short thisisaverylongwordthatwontfit end\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

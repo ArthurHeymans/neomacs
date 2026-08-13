@@ -39,7 +39,7 @@ fn divergence_fill_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"This is a long line\nthat should be\nfilled at some point\nin the text.\"""#
+        r#""OK \"This is a long line\\nthat should be\\nfilled at some point\\nin the text.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

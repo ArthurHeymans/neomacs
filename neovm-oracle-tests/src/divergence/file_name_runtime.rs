@@ -78,7 +78,7 @@ fn file_name_split_concat() {
 fn temp_file_write_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"line1\nline2\n\" 2)""#]];
+    let expect = expect_test::expect![[r#""OK (\"line1\\nline2\\n\" 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((f (make-temp-file "neo-rw-")))
   (unwind-protect

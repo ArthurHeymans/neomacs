@@ -136,7 +136,7 @@ fn oracle_prop_subst_char_special_ascii() {
         r#"(subst-char-in-string ?\t ?\s "col1\tcol2\tcol3")"#,
         expect,
     );
-    let expect = expect_test::expect![[r#""OK \"a\nb\nc\"""#]];
+    let expect = expect_test::expect![[r#""OK \"a\\nb\\nc\"""#]];
     // Replace space with newline
     crate::common::assert_oracle_parity_expect(r#"(subst-char-in-string ?\s ?\n "a b c")"#, expect);
 }

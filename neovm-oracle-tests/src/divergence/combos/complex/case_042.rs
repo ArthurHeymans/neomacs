@@ -77,7 +77,7 @@ fn div_cx42_superword_downcase_word() {
 #[test]
 fn div_cx42_process_sentinel_make_vs_call_exit_detail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"exited abnormally with code 42\n\" 42)""#]];
+    let expect = expect_test::expect![[r#""OK (\"exited abnormally with code 42\\n\" 42)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (sentinel-ev)

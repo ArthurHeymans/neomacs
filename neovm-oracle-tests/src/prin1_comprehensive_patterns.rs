@@ -172,7 +172,7 @@ fn oracle_prop_prin1_comp_special_characters() {
   ;; Formfeed
   (prin1-to-string "\f"))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"\\\"line1\nline2\nline3\\\"\" \"\\\"col1\tcol2\tcol3\\\"\" \"\\\"she said \\\\\\\"hello\\\\\\\" and \\\\\\\"goodbye\\\\\\\"\\\"\" \"\\\"C:\\\\\\\\Users\\\\\\\\test\\\\\\\\file.txt\\\"\" \"\\\"before\\rafter\\\"\" \"\\\"null\u{c}har\\\"\" \"\\\"a\tb\nc\\\\\\\\d\\\\\\\"e\\rf\\\"\" \"\\\"\n\n\n\n\n\\\"\" \"\\\"\t\t\t\\\"\" \"\\\"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"\" \"\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\"\" \"\\\"\\\"\" \"\\\" \\\"\" \"\\\"   \\\"\" \"\\\"\u{7}\\\"\" \"\\\"\u{1b}\\\"\" \"\\\"\u{c}\\\"\")""#
+        r#""OK (\"\\\"line1\\nline2\\nline3\\\"\" \"\\\"col1\tcol2\tcol3\\\"\" \"\\\"she said \\\\\\\"hello\\\\\\\" and \\\\\\\"goodbye\\\\\\\"\\\"\" \"\\\"C:\\\\\\\\Users\\\\\\\\test\\\\\\\\file.txt\\\"\" \"\\\"before\\rafter\\\"\" \"\\\"null\\fhar\\\"\" \"\\\"a\tb\\nc\\\\\\\\d\\\\\\\"e\\rf\\\"\" \"\\\"\\n\\n\\n\\n\\n\\\"\" \"\\\"\t\t\t\\\"\" \"\\\"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"\" \"\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\"\" \"\\\"\\\"\" \"\\\" \\\"\" \"\\\"   \\\"\" \"\\\"\u{7}\\\"\" \"\\\"\u{1b}\\\"\" \"\\\"\\f\\\"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -396,7 +396,7 @@ fn oracle_prop_prin1_comp_prin1_vs_princ_vs_format() {
   (list (prin1-to-string '(a . b))
         (prin1-to-string '(a . b) t)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((\"\\\"hello\\\"\" \"hello\" \"\\\"hello\\\"\" \"hello\") (\"foo\" \"foo\" \"foo\" \"foo\") (\"42\" \"42\" \"42\" \"42\") (\"(\\\"a\\\" \\\"b\\\")\" \"(a b)\" \"(\\\"a\\\" \\\"b\\\")\" \"(a b)\") (\"nil\" \"nil\" \"nil\" \"nil\") (\"t\" \"t\" \"t\" \"t\") (\"\\\"say \\\\\\\"hi\\\\\\\"\nnewline\\\"\" \"say \\\"hi\\\"\nnewline\") (\":foo\" \":foo\" \":foo\" \":foo\") (\"[1 \\\"two\\\" three]\" \"[1 two three]\") (\"(a . b)\" \"(a . b)\"))""#
+        r#""OK ((\"\\\"hello\\\"\" \"hello\" \"\\\"hello\\\"\" \"hello\") (\"foo\" \"foo\" \"foo\" \"foo\") (\"42\" \"42\" \"42\" \"42\") (\"(\\\"a\\\" \\\"b\\\")\" \"(a b)\" \"(\\\"a\\\" \\\"b\\\")\" \"(a b)\") (\"nil\" \"nil\" \"nil\" \"nil\") (\"t\" \"t\" \"t\" \"t\") (\"\\\"say \\\\\\\"hi\\\\\\\"\\nnewline\\\"\" \"say \\\"hi\\\"\\nnewline\") (\":foo\" \":foo\" \":foo\" \":foo\") (\"[1 \\\"two\\\" three]\" \"[1 two three]\") (\"(a . b)\" \"(a . b)\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

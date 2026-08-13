@@ -6,7 +6,7 @@ fn org_schedule_deadline_priority_property_mutation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"<2026-05-27 Wed 09:30>\" \"<2026-05-28 Thu>\" \"1:15\" 2000 \"* TODO [#A] Task\nDEADLINE: <2026-05-28 Thu> SCHEDULED: <2026-05-27 Wed 09:30>\n:PROPERTIES:\n:Effort:   1:15\n:END:\n\")""#
+        r#""OK (\"<2026-05-27 Wed 09:30>\" \"<2026-05-28 Thu>\" \"1:15\" 2000 \"* TODO [#A] Task\\nDEADLINE: <2026-05-28 Thu> SCHEDULED: <2026-05-27 Wed 09:30>\\n:PROPERTIES:\\n:Effort:   1:15\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r#"(progn
@@ -35,7 +35,7 @@ fn org_clock_in_out_drawer_logbook_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (0 \"* TODO Task\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\n:END:\n\")""#
+        r#""OK (0 \"* TODO Task\\n:LOGBOOK:\\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:30] =>  1:30\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r#"(progn
@@ -60,7 +60,7 @@ fn org_promote_demote_subtree_startup_odd_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (\"#+STARTUP: odd\n* A\n* B\n** C\n\" \"#+STARTUP: odd\n* A\n** B\n*** C\n\")""##
+        r##""OK (\"#+STARTUP: odd\\n* A\\n* B\\n** C\\n\" \"#+STARTUP: odd\\n* A\\n** B\\n*** C\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -87,7 +87,7 @@ fn org_list_indent_outdent_repair_lisp_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"- one\n  - two\n  - child\n- three\n\" \"- one\n- two\n  - child\n- three\n\" (unordered (\"one\") (\"two\" (unordered (\"child\"))) (\"three\")))""#
+        r#""OK (\"- one\\n  - two\\n  - child\\n- three\\n\" \"- one\\n- two\\n  - child\\n- three\\n\" (unordered (\"one\") (\"two\" (unordered (\"child\"))) (\"three\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -116,7 +116,7 @@ fn org_texinfo_export_markup_list_table_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (t t t t t t t \"@node Intro\n@chapter Intro\n\nText with @strong{bold}@comma{} @samp{code}@comma{} and @uref{https://example.org, link}.\n@itemize\n@item\nitem one\n@item\nitem two\n@end itemize\n@multitable {a} {a}\n@item A\n@tab B\n@item 1\n@tab 2\n@end multitable\n\")""#
+        r#""OK (t t t t t t t \"@node Intro\\n@chapter Intro\\n\\nText with @strong{bold}@comma{} @samp{code}@comma{} and @uref{https://example.org, link}.\\n@itemize\\n@item\\nitem one\\n@item\\nitem two\\n@end itemize\\n@multitable {a} {a}\\n@item A\\n@tab B\\n@item 1\\n@tab 2\\n@end multitable\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -148,7 +148,7 @@ fn org_beamer_export_frame_list_alert_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (t t t t t \"\\\\section{Section}\n\\\\label{sec:org-id}\n\\\\begin{frame}[label={sec:org-id}]{Frame}\n\\\\begin{itemize}\n\\\\item item one\n\\\\item item two\n\\\\end{itemize}\nA paragraph with \\\\alert{bold}.\n\\\\end{frame}\n\")""#
+        r#""OK (t t t t t \"\\\\section{Section}\\n\\\\label{sec:org-id}\\n\\\\begin{frame}[label={sec:org-id}]{Frame}\\n\\\\begin{itemize}\\n\\\\item item one\\n\\\\item item two\\n\\\\end{itemize}\\nA paragraph with \\\\alert{bold}.\\n\\\\end{frame}\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -184,7 +184,7 @@ fn org_icalendar_export_todo_schedule_deadline_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (t t t t t t \"BEGIN:VEVENT\nDTSTAMP:<STAMP>\nUID:TS1-<uid>\nDTSTART;VALUE=DATE:20260528\nDTEND;VALUE=DATE:20260529\nSUMMARY:Event\nDESCRIPTION:DEADLINE: <2026-05-28 Thu>\nCATEGORIES:???\nEND:VEVENT\nBEGIN:VTODO\nUID:TODO-<uid>\nDTSTAMP:<STAMP>\nDTSTART:20260527T090000\nSUMMARY:Event\nDESCRIPTION:DEADLINE: <2026-05-28 Thu>\nCATEGORIES:???\nSEQUENCE:1\nPRIORITY:5\nSTATUS:NEEDS-ACTION\nEND:VTODO\n\")""#
+        r#""OK (t t t t t t \"BEGIN:VEVENT\\nDTSTAMP:<STAMP>\\nUID:TS1-<uid>\\nDTSTART;VALUE=DATE:20260528\\nDTEND;VALUE=DATE:20260529\\nSUMMARY:Event\\nDESCRIPTION:DEADLINE: <2026-05-28 Thu>\\nCATEGORIES:???\\nEND:VEVENT\\nBEGIN:VTODO\\nUID:TODO-<uid>\\nDTSTAMP:<STAMP>\\nDTSTART:20260527T090000\\nSUMMARY:Event\\nDESCRIPTION:DEADLINE: <2026-05-28 Thu>\\nCATEGORIES:???\\nSEQUENCE:1\\nPRIORITY:5\\nSTATUS:NEEDS-ACTION\\nEND:VTODO\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

@@ -253,7 +253,7 @@ fn oracle_prop_delete_region_selective_pattern() {
           (buffer-string)
           (buffer-size))))"#;
     let expect = expect_test::expect![[
-        r#""OK (4 (\"DEBUG: Loading module A\" \"DEBUG: Memory usage: 128MB\" \"DEBUG: Cache hit ratio: 0.95\" \"DEBUG: Query took 12ms\") \"INFO: Application started\nINFO: Module A ready\nWARN: Disk space low\nINFO: Processing request\nERROR: Connection refused\n\" 119)""#
+        r#""OK (4 (\"DEBUG: Loading module A\" \"DEBUG: Memory usage: 128MB\" \"DEBUG: Cache hit ratio: 0.95\" \"DEBUG: Query took 12ms\") \"INFO: Application started\\nINFO: Module A ready\\nWARN: Disk space low\\nINFO: Processing request\\nERROR: Connection refused\\n\" 119)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -343,7 +343,7 @@ fn oracle_prop_delete_region_cut_paste_simulation() {
                 (forward-line 1))
               count)))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"line-1: Alpha\nline-2: Bravo\nline-3: Charlie\nline-4: Delta\nline-5: Echo\n\" \"line-1: Alpha\nline-3: Charlie\nline-2: Bravo\nline-4: Delta\nline-5: Echo\n\" \"line-5: Echo\nline-1: Alpha\nline-3: Charlie\nline-2: Bravo\nline-4: Delta\n\" 5)""#
+        r#""OK (\"line-1: Alpha\\nline-2: Bravo\\nline-3: Charlie\\nline-4: Delta\\nline-5: Echo\\n\" \"line-1: Alpha\\nline-3: Charlie\\nline-2: Bravo\\nline-4: Delta\\nline-5: Echo\\n\" \"line-5: Echo\\nline-1: Alpha\\nline-3: Charlie\\nline-2: Bravo\\nline-4: Delta\\n\" 5)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

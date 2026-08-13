@@ -142,7 +142,7 @@ fn oracle_prop_mapcar_mapc_comp_mapconcat_separators() {
   (mapconcat (lambda (x) (format "%S" x))
              '("name" 42 3.14) ","))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"1, 2, 3, 4, 5\" \"helloworld\" \"line1\nline2\nline3\" \"[a] -> [b] -> [c]\" \"42\" \"\" \"foo | bar | baz\" \"alpha-beta-gamma\" \"\\\"name\\\",42,3.14\")""#
+        r#""OK (\"1, 2, 3, 4, 5\" \"helloworld\" \"line1\\nline2\\nline3\" \"[a] -> [b] -> [c]\" \"42\" \"\" \"foo | bar | baz\" \"alpha-beta-gamma\" \"\\\"name\\\",42,3.14\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

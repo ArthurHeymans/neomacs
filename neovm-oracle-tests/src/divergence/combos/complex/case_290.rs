@@ -139,7 +139,7 @@ fn div_cx290_boundp_makunbound_void_check() {
 fn div_cx290_function_get_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"docstring\" nil t \"Return the car of LIST.  If LIST is nil, return nil.\nError if LIST is not nil and not a cons cell.  See also ‘car-safe’.\n\nSee Info node ‘(elisp)Cons Cells’ for a discussion of related basic\nLisp concepts such as car, cdr, cons cell and list.\n\n(fn LIST)\")""#
+        r#""OK (\"docstring\" nil t \"Return the car of LIST.  If LIST is nil, return nil.\\nError if LIST is not nil and not a cons cell.  See also ‘car-safe’.\\n\\nSee Info node ‘(elisp)Cons Cells’ for a discussion of related basic\\nLisp concepts such as car, cdr, cons cell and list.\\n\\n(fn LIST)\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

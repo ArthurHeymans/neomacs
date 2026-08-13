@@ -118,7 +118,7 @@ fn oracle_prop_strfmt_box_drawing() {
             ;; Top and bottom should match
             (string= top bottom)))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"+-----------------+\n| Hello, World!   |\n| This is a box.  |\n| Multiple lines! |\n| End.            |\n+-----------------+\" (t 19) 6 t)""#
+        r#""OK (\"+-----------------+\\n| Hello, World!   |\\n| This is a box.  |\\n| Multiple lines! |\\n| End.            |\\n+-----------------+\" (t 19) 6 t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -182,7 +182,7 @@ fn oracle_prop_strfmt_tree_visualization() {
                 (length lines))))
     (fmakunbound 'neovm--test-render-tree)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"project\n|-- src\n|   |-- main.rs\n|   |-- lib.rs\n|   `-- utils\n|       |-- helpers.rs\n|       `-- math.rs\n|-- tests\n|   `-- test_main.rs\n`-- Cargo.toml\" 10)""#
+        r#""OK (\"project\\n|-- src\\n|   |-- main.rs\\n|   |-- lib.rs\\n|   `-- utils\\n|       |-- helpers.rs\\n|       `-- math.rs\\n|-- tests\\n|   `-- test_main.rs\\n`-- Cargo.toml\" 10)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -503,7 +503,7 @@ fn oracle_prop_strfmt_markdown_table() {
                                             data-lines))))
                   (apply #'= lens))))))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"| Language   | Year | Typing  | Score |\n| :--------- | ---: | :-----: | ----: |\n| Rust       | 2010 | Static  |    95 |\n| Python     | 1991 | Dynamic |    88 |\n| Haskell    | 1990 | Static  |    82 |\n| JavaScript | 1995 | Dynamic |    79 |\n| C          | 1972 | Static  |    91 |\" 5 t)""#
+        r#""OK (\"| Language   | Year | Typing  | Score |\\n| :--------- | ---: | :-----: | ----: |\\n| Rust       | 2010 | Static  |    95 |\\n| Python     | 1991 | Dynamic |    88 |\\n| Haskell    | 1990 | Static  |    82 |\\n| JavaScript | 1995 | Dynamic |    79 |\\n| C          | 1972 | Static  |    91 |\" 5 t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

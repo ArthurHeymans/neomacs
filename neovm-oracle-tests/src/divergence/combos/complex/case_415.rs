@@ -261,7 +261,7 @@ fn div_cx415_mark_word_sexp_paragraph() {
 #[test]
 fn div_cx415_narrow_to_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (1 17 \"(defun a (x) x)\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (1 17 \"(defun a (x) x)\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -314,7 +314,7 @@ fn div_cx415_up_down_list() {
 #[test]
 fn div_cx415_delete_horizontal_fixup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"a\n \t b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"a\\n \t b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

@@ -173,7 +173,7 @@ fn div_cx409_replace_regexp_subexp_count() {
 #[test]
 fn div_cx409_sort_subr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"banana\napple\ncherry\ndate\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"banana\\napple\\ncherry\\ndate\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

@@ -157,7 +157,7 @@ fn oracle_prop_subr_x_string_join() {
     ;; Join mixed empty and non-empty
     (string-join '("a" "" "b" "" "c") ",")))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"hello world\" \"a, b, c, d\" \"one-two-three\" \"abc\" \"alone\" \"\" \"helloworld\" \"foo :: bar :: baz\" \"line1\nline2\nline3\" \",,\" \"a,,b,,c\")""#
+        r#""OK (\"hello world\" \"a, b, c, d\" \"one-two-three\" \"abc\" \"alone\" \"\" \"helloworld\" \"foo :: bar :: baz\" \"line1\\nline2\\nline3\" \",,\" \"a,,b,,c\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -297,7 +297,7 @@ fn oracle_prop_subr_x_string_clean_whitespace_exact_blank_regexp() {
           (string-clean-whitespace 'symbol)
         (error (list (car err) (cadr err)))))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"alpha beta\" \"\u{b}alpha\u{c}\" \"alpha\u{b} \u{c}beta\" \"\u{b} \u{c}\" (wrong-type-argument arrayp) (wrong-type-argument sequencep))""#
+        r#""OK (\"alpha beta\" \"\u{b}alpha\\f\" \"alpha\u{b} \\fbeta\" \"\u{b} \\f\" (wrong-type-argument arrayp) (wrong-type-argument sequencep))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -331,7 +331,7 @@ fn oracle_prop_subr_x_string_fill_limit_pad() {
     (string-pad "" 5)
     (string-pad "hi" 8 ?- t)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"This is a long\nsentence that should\nbe wrapped at a\nreasonable column\nwidth\" \"short\" \"\" \"hello\" \"hello\" \"world\" \"\" \"abc\" \"hello     \" \"hello.....\" \"     hello\" \"hello\" \"     \" \"------hi\")""#
+        r#""OK (\"This is a long\\nsentence that should\\nbe wrapped at a\\nreasonable column\\nwidth\" \"short\" \"\" \"hello\" \"hello\" \"world\" \"\" \"abc\" \"hello     \" \"hello.....\" \"     hello\" \"hello\" \"     \" \"------hi\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -381,7 +381,7 @@ fn oracle_prop_subr_x_string_limit_pad_identity_errors_and_coding() {
           (string-pad pad-source 5 "x")
         (error (list (car err) (cadr err)))))))"#;
     let expect = expect_test::expect![[
-        r#""OK (t t \"\" \"\" \"he\" \"lo\" \"\" \"\\303\\251\" \"\\303\\251\" \"\\303\\251\\303\\251\" \"\\303\\251\" 2 nil t t \"pad  \" \"pad..\" \"..pad\" (wrong-type-argument natnump) (wrong-type-argument natnump) (wrong-type-argument natnump) (wrong-type-argument characterp))""#
+        r#""OK (t t \"\" \"\" \"he\" \"lo\" \"\" \"é\" \"é\" \"éé\" \"é\" 2 nil t t \"pad  \" \"pad..\" \"..pad\" (wrong-type-argument natnump) (wrong-type-argument natnump) (wrong-type-argument natnump) (wrong-type-argument characterp))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

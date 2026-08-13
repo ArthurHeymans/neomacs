@@ -160,7 +160,7 @@ fn oracle_prop_string_builder_format_directives() {
         (line2 (format "  %-12s %6d" "Oranges" 107)))
     (mapconcat #'identity (list header line1 line2) "\n")))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"42\" \"hello\" \"\\\"hello\\\"\" \"3.14\" \"ff\" \"10\" \"A\" \"100%\" \"Name: Alice, Age: 30, Score: 95.5\" \"[        42]\" \"[42        ]\" \"00042\" \"=== Report ===\n  Apples           42\n  Oranges         107\")""#
+        r#""OK (\"42\" \"hello\" \"\\\"hello\\\"\" \"3.14\" \"ff\" \"10\" \"A\" \"100%\" \"Name: Alice, Age: 30, Score: 95.5\" \"[        42]\" \"[42        ]\" \"00042\" \"=== Report ===\\n  Apples           42\\n  Oranges         107\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -196,7 +196,7 @@ fn oracle_prop_string_builder_mapconcat_joining() {
   ;; Join chars from a vector
   (mapconcat (lambda (c) (string c)) [?H ?i ?!] " "))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"a, b, c\" \"xyz\" \"line1\nline2\nline3\" \"1-2-3-4-5\" \"foo::bar::baz\" \"\" \"only\" \"a | b | c\" \"(1=#) (2=##) (3=###) (4=####)\" \"H i !\")""#
+        r#""OK (\"a, b, c\" \"xyz\" \"line1\\nline2\\nline3\" \"1-2-3-4-5\" \"foo::bar::baz\" \"\" \"only\" \"a | b | c\" \"(1=#) (2=##) (3=###) (4=####)\" \"H i !\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -300,7 +300,7 @@ fn oracle_prop_string_builder_string_join() {
      '((1 2 3) (4 5 6) (7 8 9))
      "\n")))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"foo, bar, baz\" \"alone\" \"\" \"abc\" \"alpha\nbeta\ngamma\" \".x..y.\" \"col1\tcol2\tcol3\" \"1,2,3,4,5\" \"usr/local/bin\" \"1\t2\t3\n4\t5\t6\n7\t8\t9\")""#
+        r#""OK (\"foo, bar, baz\" \"alone\" \"\" \"abc\" \"alpha\\nbeta\\ngamma\" \".x..y.\" \"col1\tcol2\tcol3\" \"1,2,3,4,5\" \"usr/local/bin\" \"1\t2\t3\\n4\t5\t6\\n7\t8\t9\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -509,7 +509,7 @@ fn oracle_prop_string_builder_combined_patterns() {
     (mapconcat (lambda (n) (format "%3d = %s" n (funcall to-binary n)))
                '(0 1 5 10 42 255) ", ")))"#;
     let expect = expect_test::expect![[
-        r#""OK (\" 65: A\n 66: B\n 67: C\n 68: D\n 69: E\n 70: F\n 71: G\n 72: H\" \"Hello, World! Welcome to Elisp.\" \"aaabbbccc\" \"  apple      x3  $4.50\n  banana     x12  $9.00\n  cherry     x1  $4.00\" \"  0 = 0,   1 = 1,   5 = 101,  10 = 1010,  42 = 101010, 255 = 11111111\")""#
+        r#""OK (\" 65: A\\n 66: B\\n 67: C\\n 68: D\\n 69: E\\n 70: F\\n 71: G\\n 72: H\" \"Hello, World! Welcome to Elisp.\" \"aaabbbccc\" \"  apple      x3  $4.50\\n  banana     x12  $9.00\\n  cherry     x1  $4.00\" \"  0 = 0,   1 = 1,   5 = 101,  10 = 1010,  42 = 101010, 255 = 11111111\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

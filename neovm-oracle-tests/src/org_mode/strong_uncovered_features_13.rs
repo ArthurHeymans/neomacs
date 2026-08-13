@@ -11,7 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf13_timer_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"- 0:00:00 :: * T\n:LOGBOOK:\n:END:\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- 0:00:00 :: * T\\n:LOGBOOK:\\n:END:\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

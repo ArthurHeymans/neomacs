@@ -189,7 +189,7 @@ fn read_special_forms() {
 fn read_string_escapes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"a\tb\nc\" 1 \"AB\" \"linecont\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"a\tb\\nc\" 1 \"AB\" \"linecont\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (read "\"a\\tb\\nc\"") (length (read "\"\\u00e9\""))
         (read "\"\\x41\\x42\"") (read "\"line\\\ncont\""))"##,

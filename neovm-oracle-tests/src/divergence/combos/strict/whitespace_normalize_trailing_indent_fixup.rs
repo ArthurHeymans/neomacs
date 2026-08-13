@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_q9_delete_trailing_whitespace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"line1\nline2\nline3\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"line1\\nline2\\nline3\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -40,7 +40,7 @@ fn div_q9_canonically_space_region() {
 #[test]
 fn div_q9_delete_indentation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"line one\n  line two\"""#]];
+    let expect = expect_test::expect![[r#""OK \"line one\\n  line two\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

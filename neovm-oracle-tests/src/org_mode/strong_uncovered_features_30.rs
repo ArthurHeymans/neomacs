@@ -226,7 +226,7 @@ fn uf30_collector_entries() {
 fn uf30_expiry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"* T\n:PROPERTIES:\n:CREATED: [2026-01-15]\n:END:\"""#]];
+        expect_test::expect![[r#""OK \"* T\\n:PROPERTIES:\\n:CREATED: [2026-01-15]\\n:END:\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -289,7 +289,7 @@ fn uf30_expiry_get() {
 fn uf30_expiry_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"* T\n:PROPERTIES:\n:CREATED: [2026-01-15]\n:END:\"""#]];
+        expect_test::expect![[r#""OK \"* T\\n:PROPERTIES:\\n:CREATED: [2026-01-15]\\n:END:\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

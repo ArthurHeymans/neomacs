@@ -153,7 +153,7 @@ fn div_cx32_cl_loop_for_hash_being_keys_filter() {
 #[test]
 fn div_cx32_coding_system_decode_string_no_conversion_vs_utf8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"caf\\303\\251\\342\\202\\254\" \"café€\" 8 5)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café€\" \"café€\" 8 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((raw (unibyte-string 99 97 102 195 169 226 130 172)))
@@ -195,7 +195,7 @@ fn div_cx32_undo_after_insert_with_text_property_sticky_boundary() {
 #[test]
 fn div_cx32_process_buffer_with_invisible_text_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK #(\"VIS1 output\n\" 0 4 (invisible t))""#]];
+    let expect = expect_test::expect![[r#""OK #(\"VIS1 output\\n\" 0 4 (invisible t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx32-it*")))

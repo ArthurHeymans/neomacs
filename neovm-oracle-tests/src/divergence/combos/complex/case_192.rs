@@ -58,7 +58,7 @@ fn div_cx192_mega_1_buflocal_undo_textprop_overlay_marker_narrow_process_timer()
 fn div_cx192_mega_2_eieio_clloop_closure_coding_charset_secure_hash_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"café 世界 😀\" \"caf\\303\\251 \\344\\270\\226\\347\\225\\214 \\360\\237\\230\\200\" \"café 世界 😀\" \"17941ef6be03a9dd6fc80b897dd78db65f774c5fb06a8a821892535f1bd2ecbc\" t 2 ((\"alpha\" . 1) (\"beta\" . 2)) 42 (if t :yes :no) ((:before 21) (:primary 21)))""#
+        r#""OK (\"café 世界 😀\" \"café 世界 😀\" \"café 世界 😀\" \"17941ef6be03a9dd6fc80b897dd78db65f774c5fb06a8a821892535f1bd2ecbc\" t 2 ((\"alpha\" . 1) (\"beta\" . 2)) 42 (if t :yes :no) ((:before 21) (:primary 21)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

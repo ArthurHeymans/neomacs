@@ -383,7 +383,7 @@ fn oracle_prop_marker_gap_tracking() {
               final-spans
               (buffer-string))))))"#;
     let expect = expect_test::expect![[
-        r#""OK (((1 9) (10 18) (19 29) (30 39)) ((1 9) (10 28) (29 29) (29 38)) \"line one\nINSERTED: line two\nline four\n\")""#
+        r#""OK (((1 9) (10 18) (19 29) (30 39)) ((1 9) (10 28) (29 29) (29 38)) \"line one\\nINSERTED: line two\\nline four\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

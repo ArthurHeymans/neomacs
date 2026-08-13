@@ -268,7 +268,7 @@ fn oracle_prop_buffer_search_replace_multipass() {
                         (replace-match "IN-PROGRESS:"))
                       (list todos dones (buffer-string))))"#;
     let expect = expect_test::expect![[
-        r#""OK (3 2 \"IN-PROGRESS: fix bug\nDONE: write tests\nIN-PROGRESS: refactor\nDONE: deploy\nIN-PROGRESS: review\n\")""#
+        r#""OK (3 2 \"IN-PROGRESS: fix bug\\nDONE: write tests\\nIN-PROGRESS: refactor\\nDONE: deploy\\nIN-PROGRESS: review\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

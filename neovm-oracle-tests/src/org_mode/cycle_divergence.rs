@@ -1059,7 +1059,7 @@ fn org_cycle_with_drawer_toggle_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" nil)) ((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" nil)) ((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) \"* TODO Alpha\n:PROPERTIES:\n:Effort: 2h\n:END:\nBody alpha.\n\n** DONE Beta\n:PROPERTIES:\n:Effort: 1h\n:END:\nBody beta.\n\n\")""#
+        r#""OK (((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" nil)) ((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" nil)) ((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) \"* TODO Alpha\\n:PROPERTIES:\\n:Effort: 2h\\n:END:\\nBody alpha.\\n\\n** DONE Beta\\n:PROPERTIES:\\n:Effort: 1h\\n:END:\\nBody beta.\\n\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -2887,7 +2887,7 @@ fn org_cycle_with_org_overview_content_all_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) \"* A\nBody A.\n\n** A1\nBody A1.\n\n* B\nBody B.\n\n\")""#
+        r#""OK (((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) \"* A\\nBody A.\\n\\n** A1\\nBody A1.\\n\\n* B\\nBody B.\\n\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -3202,7 +3202,7 @@ fn org_cycle_with_global_cycle_three_times_rapid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" nil) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" nil) (\"A1\" nil) (\"B\" nil) (\"B1\" nil)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" nil) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" nil) (\"A1\" nil) (\"B\" nil) (\"B1\" nil)) \"* A\n** A1\nBody.\n\n* B\n** B1\nBody.\n\n\")""#
+        r#""OK (((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" nil) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" nil) (\"A1\" nil) (\"B\" nil) (\"B1\" nil)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" nil) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" nil) (\"A1\" nil) (\"B\" nil) (\"B1\" nil)) \"* A\\n** A1\\nBody.\\n\\n* B\\n** B1\\nBody.\\n\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

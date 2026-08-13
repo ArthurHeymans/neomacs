@@ -108,7 +108,7 @@ fn div_cx166_byte_compile_dest_file_extension_check() {
 #[test]
 fn div_cx166_byte_compile_function_make_byte_code() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t 257 \"\\211\\300_\\207\" [2] 3 t)""#]];
+    let expect = expect_test::expect![[r#""OK (t 257 \"��_�\" [2] 3 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (lambda (x) (* x 2)))

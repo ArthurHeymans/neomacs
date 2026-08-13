@@ -142,7 +142,7 @@ fn div_cx299_make_network_process_with_filter_and_sentinel() {
 #[test]
 fn div_cx299_process_output_with_coding_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"世界\nProcess neo-cx299-cs finished\n\" 33)""#]];
+    let expect = expect_test::expect![[r#""OK (\"世界\\nProcess neo-cx299-cs finished\\n\" 33)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
   (let* ((buf (get-buffer-create " *neo-cx299-cs*"))

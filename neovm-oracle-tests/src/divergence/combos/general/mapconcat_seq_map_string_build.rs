@@ -68,7 +68,7 @@ fn deficiency_seq_map_into_string() {
 fn deficiency_build_csv_from_alist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"Alice,30,NYC\nBob,25,LA\nCarol,35,SF\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Alice,30,NYC\\nBob,25,LA\\nCarol,35,SF\"""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((rows '((\"Alice\" 30 \"NYC\")\n\
@@ -101,7 +101,7 @@ fn deficiency_with_output_to_string_build() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"Header\nLine 1\nLine 2\nLine 3\nLine 4\nLine 5\nFooter\"""#
+        r#""OK \"Header\\nLine 1\\nLine 2\\nLine 3\\nLine 4\\nLine 5\\nFooter\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
@@ -140,7 +140,7 @@ fn deficiency_format_table_with_padding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect =
-        expect_test::expect![[r#""OK \"Alice       95\nBob         87\nCharlie     92\"""#]];
+        expect_test::expect![[r#""OK \"Alice       95\\nBob         87\\nCharlie     92\"""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((data '((\"Alice\" 95) (\"Bob\" 87) (\"Charlie\" 92))))\n\
@@ -157,7 +157,7 @@ fn deficiency_build_html_like_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"<ul>\n  <li>Apple</li>\n  <li>Banana</li>\n  <li>Cherry</li>\n</ul>\"""#
+        r#""OK \"<ul>\\n  <li>Apple</li>\\n  <li>Banana</li>\\n  <li>Cherry</li>\\n</ul>\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\

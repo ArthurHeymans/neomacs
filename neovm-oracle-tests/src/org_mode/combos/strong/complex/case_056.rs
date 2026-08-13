@@ -348,7 +348,7 @@ fn combo56_document_lifecycle_create_edit_export_reedit_reexport() {
 fn combo56_clock_persistence_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:total-clocks 3) (:a-sum 0) (:b-sum 0) (:c-sum 0) (:logbooks 3) (:buffer \"* A\n:LOGBOOK:\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\n:END:\n* B\n:LOGBOOK:\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\n:END:\n* C\n:LOGBOOK:\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\n:END:\n\"))""#
+        r#""OK ((:total-clocks 3) (:a-sum 0) (:b-sum 0) (:c-sum 0) (:logbooks 3) (:buffer \"* A\\n:LOGBOOK:\\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\\n:END:\\n* B\\n:LOGBOOK:\\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\\n:END:\\n* C\\n:LOGBOOK:\\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\\n:END:\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer

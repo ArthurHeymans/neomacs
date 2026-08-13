@@ -176,9 +176,8 @@ fn div_cx35_rot13() {
 #[test]
 fn div_cx35_url_hexify_unhex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"caf%C3%A9%20world%20%26%20friends\" \"caf\\303\\251 world\" t)""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (\"caf%C3%A9%20world%20%26%20friends\" \"café world\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

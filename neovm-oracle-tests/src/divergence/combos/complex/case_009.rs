@@ -43,7 +43,7 @@ fn div_cx9_encode_region_latin1_vs_string() {
 #[test]
 fn div_cx9_process_exit_code_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"finished\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"finished\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (ev)
@@ -59,7 +59,7 @@ fn div_cx9_process_exit_code_zero() {
 #[test]
 fn div_cx9_process_exit_code_42() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"exited abnormally with code 42\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"exited abnormally with code 42\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (ev)
@@ -75,7 +75,7 @@ fn div_cx9_process_exit_code_42() {
 #[test]
 fn div_cx9_process_exit_code_255() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"exited abnormally with code 255\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"exited abnormally with code 255\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (ev)
@@ -126,7 +126,7 @@ fn div_cx9_coding_system_for_write_propagation() {
 #[test]
 fn div_cx9_decode_region_vs_string_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"é€\" \"\\303\\251\\342\\202\\254\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"é€\" \"é€\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((bytes (unibyte-string 195 169 226 130 172)))
@@ -236,7 +236,7 @@ fn div_cx9_write_region_mustbenew() {
 #[test]
 fn div_cx9_buffer_file_coding_system_write_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"café世界\n\" 12)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café世界\\n\" 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx8-bfc-")))
@@ -274,7 +274,7 @@ fn div_cx9_accept_process_output_timeout_variants() {
 #[test]
 fn div_cx9_process_mark_relocation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t 12 \"beforemark\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (t 12 \"beforemark\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

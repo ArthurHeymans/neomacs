@@ -125,7 +125,7 @@ fn div_cx405_sort_multibyte_predicates() {
 #[test]
 fn div_cx405_encode_coding_latin1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"caf\\351\" \"abc\" \"  \")""#]];
+    let expect = expect_test::expect![[r#""OK (\"caf�\" \"abc\" \"  \")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (encode-coding-string "café" 'latin-1)

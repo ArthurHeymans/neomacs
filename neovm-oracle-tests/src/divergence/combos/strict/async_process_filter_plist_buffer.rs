@@ -13,7 +13,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_j0_process_output_via_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"hello world\n\" run 0 nil)""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello world\\n\" run 0 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (collected)
@@ -55,7 +55,7 @@ fn div_j0_process_plist_get_put() {
 #[test]
 fn div_j0_process_buffer_and_mark() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t 4 \" *probe-proc-buf*\" \"hi\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (t 4 \" *probe-proc-buf*\" \"hi\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (generate-new-buffer " *probe-proc-buf*")))
@@ -103,7 +103,7 @@ fn div_j0_process_connection_type_and_contact() {
 #[test]
 fn div_j0_process_stderr_separate_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"out\n\" \"err\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"out\\n\" \"err\\n\")""#]];
     // stdout and stderr are separate process objects. Wait for both and ignore
     // their sentinels so buffer contents do not depend on pipe scheduling.
     crate::common::assert_oracle_parity_expect(

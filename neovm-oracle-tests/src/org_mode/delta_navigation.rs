@@ -190,7 +190,7 @@ fn delta_end_of_line_special_headline() {
 fn delta_fill_element_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"| a |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row))""#
+        r#""OK #(\"| a |\\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -205,7 +205,7 @@ fn delta_fill_element_table() {
 #[test]
 fn delta_fill_element_paragraph_with_line_break() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"some \\\\\\\\\nlong text\"""#]];
+    let expect = expect_test::expect![[r#""OK \"some \\\\\\\\\\nlong text\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -265,7 +265,8 @@ fn delta_fill_element_comment() {
 #[test]
 fn delta_fill_element_comment_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r##""OK \"#+BEGIN_COMMENT\nSome text\n#+END_COMMENT\"""##]];
+    let expect =
+        expect_test::expect![[r##""OK \"#+BEGIN_COMMENT\\nSome text\\n#+END_COMMENT\"""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -280,7 +281,7 @@ fn delta_fill_element_comment_block() {
 #[test]
 fn delta_fill_element_affiliated_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r##""OK \"#+NAME: para\nSome\ntext.\"""##]];
+    let expect = expect_test::expect![[r##""OK \"#+NAME: para\\nSome\\ntext.\"""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -482,7 +483,8 @@ fn indent_line_after_paragraph() {
 #[test]
 fn delta_indent_line_property_alignment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H\n:PROPERTIES:\n:key:      value\n:END:\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"* H\\n:PROPERTIES:\\n:key:      value\\n:END:\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -499,7 +501,7 @@ fn delta_indent_line_property_alignment() {
 #[test]
 fn delta_indent_line_property_empty_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H\n:PROPERTIES:\n:key:\n:END:\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H\\n:PROPERTIES:\\n:key:\\n:END:\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -520,7 +522,7 @@ fn delta_indent_line_property_empty_value() {
 #[test]
 fn delta_return_regular() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Para\n<point>graph\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Para\\n<point>graph\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -534,7 +536,7 @@ fn delta_return_regular() {
 #[test]
 fn delta_return_with_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"  Para\n  <point>graph\"""#]];
+    let expect = expect_test::expect![[r#""OK \"  Para\\n  <point>graph\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -562,7 +564,7 @@ fn delta_return_on_table() {
 #[test]
 fn delta_return_on_tags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* H :tag:\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* H :tag:\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -576,7 +578,7 @@ fn delta_return_on_tags() {
 #[test]
 fn delta_return_before_headline_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* TODO H :tag:\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* TODO H :tag:\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -590,7 +592,7 @@ fn delta_return_before_headline_text() {
 #[test]
 fn delta_return_at_bol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\n* h\"""#]];
+    let expect = expect_test::expect![[r#""OK \"\\n* h\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -622,7 +624,7 @@ fn delta_meta_return_in_paragraph() {
 #[test]
 fn delta_meta_return_in_item() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"- \n- a\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- \\n- a\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -637,7 +639,7 @@ fn delta_meta_return_in_item() {
 fn delta_meta_return_in_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"|   |\n| a |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row) 6 7 (face org-table) 7 8 (face org-table rear-nonsticky t display (space :relative-width 1)) 8 9 (face org-table) 9 10 (face org-table display (space :relative-width 1.001)) 10 11 (face org-table) 11 12 (face org-table-row))""#
+        r#""OK #(\"|   |\\n| a |\\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row) 6 7 (face org-table) 7 8 (face org-table rear-nonsticky t display (space :relative-width 1)) 8 9 (face org-table) 9 10 (face org-table display (space :relative-width 1.001)) 10 11 (face org-table) 11 12 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -973,7 +975,7 @@ fn delta_insert_heading_at_bol() {
 #[test]
 fn delta_insert_heading_at_headline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* \n* H\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* \\n* H\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -987,7 +989,7 @@ fn delta_insert_heading_at_headline() {
 #[test]
 fn delta_insert_heading_level_depends_on_above() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"** H\nP\n** \"""#]];
+    let expect = expect_test::expect![[r#""OK \"** H\\nP\\n** \"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1001,7 +1003,7 @@ fn delta_insert_heading_level_depends_on_above() {
 #[test]
 fn delta_insert_heading_with_blank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\n* \n\n* H1\"""#]];
+    let expect = expect_test::expect![[r#""OK \"\\n* \\n\\n* H1\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1017,7 +1019,7 @@ fn delta_insert_heading_with_blank() {
 #[test]
 fn delta_insert_heading_empty_headline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* \n* \"""#]];
+    let expect = expect_test::expect![[r#""OK \"* \\n* \"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1063,7 +1065,7 @@ fn delta_kill_line_in_middle() {
 #[test]
 fn delta_kill_line_no_newline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\n123\"""#]];
+    let expect = expect_test::expect![[r#""OK \"\\n123\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1097,8 +1099,9 @@ fn delta_kill_line_special_ctrl_k() {
 #[test]
 fn delta_sort_entries_alphabetical() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (\"\n* abc\n* def\n* xyz\n\" \"\n* xyz\n* def\n* abc\n\")""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"\\n* abc\\n* def\\n* xyz\\n\" \"\\n* xyz\\n* def\\n* abc\\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1115,7 +1118,7 @@ fn delta_sort_entries_alphabetical() {
 #[test]
 fn delta_sort_entries_numerical() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\n* 1\n* 2\n* 10\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"\\n* 1\\n* 2\\n* 10\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1130,7 +1133,7 @@ fn delta_sort_entries_numerical() {
 fn delta_sort_entries_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"\n* [#A] h2\n* [#B] h3\n* [#C] h1\n\" \"\n* [#C] h1\n* [#B] h3\n* [#A] h2\n\")""#
+        r#""OK (\"\\n* [#A] h2\\n* [#B] h3\\n* [#C] h1\\n\" \"\\n* [#C] h1\\n* [#B] h3\\n* [#A] h2\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1255,7 +1258,7 @@ fn delta_collect_keywords_not_in_block() {
 fn delta_shiftright_heading_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#(\"* TODO a1\n** a2\n* DONE b1\n\" 0 9 (org-todo-head \"TODO\")) #(\"* TODO a1\n** a2\n* b1\n\" 0 9 (org-todo-head \"TODO\") 16 20 (org-todo-head nil)))""#
+        r#""OK (#(\"* TODO a1\\n** a2\\n* DONE b1\\n\" 0 9 (org-todo-head \"TODO\")) #(\"* TODO a1\\n** a2\\n* b1\\n\" 0 9 (org-todo-head \"TODO\") 16 20 (org-todo-head nil)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

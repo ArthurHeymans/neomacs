@@ -79,7 +79,7 @@ fn combo4_table_formula() {
 fn combo4_full_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:todo \"TODO\") (:priority \"A\") (:tags \":tag1:tag2:\") (:custom-id \"myid\") (:effort \"2h\") (:el-level 1) (:el-todo \"TODO\") (:el-priority 65) (:el-tags (\"tag1\" \"tag2\")) (:el-raw \"Heading\") (:after-todo \"DONE\") (:after-tag (\"tag1\" \"tag2\" \"newtag\")) (:after-prop \"3h\") (:content #(\"* DONE [#A] Heading                                        :tag1:tag2:newtag:\n:PROPERTIES:\n:CUSTOM_ID: myid\n:EFFORT:   3h\n:END:\nBody text\" 0 77 (org-todo-head \"TODO\"))))""#
+        r#""OK ((:todo \"TODO\") (:priority \"A\") (:tags \":tag1:tag2:\") (:custom-id \"myid\") (:effort \"2h\") (:el-level 1) (:el-todo \"TODO\") (:el-priority 65) (:el-tags (\"tag1\" \"tag2\")) (:el-raw \"Heading\") (:after-todo \"DONE\") (:after-tag (\"tag1\" \"tag2\" \"newtag\")) (:after-prop \"3h\") (:content #(\"* DONE [#A] Heading                                        :tag1:tag2:newtag:\\n:PROPERTIES:\\n:CUSTOM_ID: myid\\n:EFFORT:   3h\\n:END:\\nBody text\" 0 77 (org-todo-head \"TODO\"))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -245,7 +245,7 @@ fn combo4_navigation() {
 fn combo4_visibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:overview \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\") (:content \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\") (:all \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\") (:narrowed \"*** H3\nBody\") (:context \"*** H3\nBody\") (:widened \"* H1\n** H2\n*** H3\nBody\n* H1b\n** H2b\nSub\"))""#
+        r#""OK ((:overview \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\\nSub\") (:content \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\\nSub\") (:all \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\\nSub\") (:narrowed \"*** H3\\nBody\") (:context \"*** H3\\nBody\") (:widened \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\\n** H2b\\nSub\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

@@ -26,7 +26,7 @@ fn div_cx134_outline_mode_availability() {
 fn div_cx134_outline_basic_hide_reveal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* Top\n** Sub1\n** Sub2\n*** SubSub1\n* Second\nbody\n\" \"* Top\n** Sub1\n** Sub2\n*** SubSub1\n* Second\nbody\n\" ((outline . t) t))""#
+        r#""OK (\"* Top\\n** Sub1\\n** Sub2\\n*** SubSub1\\n* Second\\nbody\\n\" \"* Top\\n** Sub1\\n** Sub2\\n*** SubSub1\\n* Second\\nbody\\n\" ((outline . t) t))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -51,7 +51,7 @@ fn div_cx134_outline_basic_hide_reveal() {
 fn div_cx134_outline_visible_only_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* Top\nhidden body 1\n* Second\nhidden body 2\n\" \"* Top\nhidden body 1\n* Second\nhidden body 2\n\")""#
+        r#""OK (\"* Top\\nhidden body 1\\n* Second\\nhidden body 2\\n\" \"* Top\\nhidden body 1\\n* Second\\nhidden body 2\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -124,7 +124,7 @@ fn div_cx134_hideif_availability() {
 #[test]
 fn div_cx134_page_delimiter_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"^\u{c}\" 17 33 17 112)""#]];
+    let expect = expect_test::expect![[r#""OK (\"^\\f\" 17 33 17 112)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

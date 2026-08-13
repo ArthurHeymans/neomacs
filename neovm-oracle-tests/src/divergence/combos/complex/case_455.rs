@@ -93,7 +93,7 @@ fn div_cx455_sexp_at_point() {
 #[test]
 fn div_cx455_narrow_to_defun_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (17 33 \"(defun b (y) y)\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (17 33 \"(defun b (y) y)\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (emacs-lisp-mode)

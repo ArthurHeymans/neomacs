@@ -327,7 +327,7 @@ fn uf51_at_checkbox() {
 #[test]
 fn uf51_toggle_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"- [ ] a\n- [ ] b\n- [-] c\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- [ ] a\\n- [ ] b\\n- [-] c\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -346,7 +346,7 @@ fn uf51_toggle_checkbox() {
 #[test]
 fn uf51_toggle_checkbox_univ() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"- a\n- [ ] b\n- [-] c\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- a\\n- [ ] b\\n- [-] c\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -365,7 +365,7 @@ fn uf51_toggle_checkbox_univ() {
 #[test]
 fn uf51_reset_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* T\n- [ ] a\n- [ ] b\n- [ ] c\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* T\\n- [ ] a\\n- [ ] b\\n- [ ] c\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -384,7 +384,7 @@ fn uf51_reset_checkbox() {
 #[test]
 fn uf51_update_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* T [1/2]\n- [X] a\n- [ ] b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* T [1/2]\\n- [X] a\\n- [ ] b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

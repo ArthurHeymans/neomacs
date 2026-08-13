@@ -115,7 +115,7 @@ fn oracle_prop_erase_buffer_advanced_narrowing_interaction() {
                   (list 'after-widen widened-size widened-text
                         widened-pmin widened-pmax))))))))"#;
     let expect = expect_test::expect![[
-        r#""OK ((full 53 \"HEADER-START\nline one\nline two\nline three\nFOOTER-END\n\") (narrowed 53 \"line one\nline two\nline three\n\" 14 43) (after-erase 0 \"\" 1 1 1) (after-widen 0 \"\" 1 1))""#
+        r#""OK ((full 53 \"HEADER-START\\nline one\\nline two\\nline three\\nFOOTER-END\\n\") (narrowed 53 \"line one\\nline two\\nline three\\n\" 14 43) (after-erase 0 \"\" 1 1 1) (after-widen 0 \"\" 1 1))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -206,7 +206,7 @@ fn oracle_prop_erase_buffer_advanced_insert_cycles() {
                         results))
     (nreverse results)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((0 25 26 1 26 t \"ShortShortShortShortShort\") (1 96 97 1 97 t \"Medium length string for testingMedium length string for testingMedium length string for testing\") (2 100 101 1 101 t \"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\") (3 0 1 1 1 t \"\") (4 36 37 1 37 t \"Final content with\nnewlines\nand\ttabs\") (final 0 1 t t t))""#
+        r#""OK ((0 25 26 1 26 t \"ShortShortShortShortShort\") (1 96 97 1 97 t \"Medium length string for testingMedium length string for testingMedium length string for testing\") (2 100 101 1 101 t \"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\") (3 0 1 1 1 t \"\") (4 36 37 1 37 t \"Final content with\\nnewlines\\nand\ttabs\") (final 0 1 t t t))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

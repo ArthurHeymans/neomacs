@@ -563,7 +563,7 @@ fn oracle_prop_config_serialization() {
     (fmakunbound 'neovm--test-config-parse-line)
     (fmakunbound 'neovm--test-config-deserialize)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"debug=t\nhost=\\\"example.com\\\"\nport=8080\ntags=(web api public)\nworkers=4\" t t \"\" \"x=42\")""#
+        r#""OK (\"debug=t\\nhost=\\\"example.com\\\"\\nport=8080\\ntags=(web api public)\\nworkers=4\" t t \"\" \"x=42\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

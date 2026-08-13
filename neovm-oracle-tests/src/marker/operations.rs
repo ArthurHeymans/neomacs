@@ -182,7 +182,7 @@ fn oracle_prop_marker_survive_edits() {
                           (list before after
                                 (buffer-string))))))"#;
     let expect = expect_test::expect![[
-        r#""OK ((1 7 13 19) (1 14 20 26) \"HEADER\nline1\nline2\nline3\nline4\n\")""#
+        r#""OK ((1 7 13 19) (1 14 20 26) \"HEADER\\nline1\\nline2\\nline3\\nline4\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

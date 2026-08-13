@@ -38,7 +38,7 @@ fn div_cx153_isearch_lax_whitespace() {
 fn div_cx153_occur_basic_buffer_collection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"alpha line\nbeta line\ngamma line\nalpha again\n\"""#]];
+        expect_test::expect![[r#""OK \"alpha line\\nbeta line\\ngamma line\\nalpha again\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

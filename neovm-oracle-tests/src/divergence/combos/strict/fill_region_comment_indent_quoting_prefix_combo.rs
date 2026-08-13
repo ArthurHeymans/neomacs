@@ -17,7 +17,7 @@ fn div_v8_fill_region_adaptive_fill_fill_prefix() {
     (buffer-string)))
 "##;
     let expect = expect_test::expect![[
-        r#""OK \"This is a long paragraph of\ntext that should be filled at\nthe configured fill column\nboundary and wrapped into\nmultiple lines.\n\nSecond paragraph here also\nlong enough to require\nwrapping at the boundary into\nseveral separate filled lines.\n\"""#
+        r#""OK \"This is a long paragraph of\\ntext that should be filled at\\nthe configured fill column\\nboundary and wrapped into\\nmultiple lines.\\n\\nSecond paragraph here also\\nlong enough to require\\nwrapping at the boundary into\\nseveral separate filled lines.\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -34,7 +34,7 @@ fn div_v8_fill_region_with_fill_prefix() {
   (buffer-string))
 "##;
     let expect = expect_test::expect![[
-        r#""OK \"> first line of quoted material\n> that is quite long and needs\n> wrapping second quoted line also\n> long\n\"""#
+        r#""OK \"> first line of quoted material\\n> that is quite long and needs\\n> wrapping second quoted line also\\n> long\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -55,7 +55,7 @@ fn div_v8_comment_region_uncomment_roundtrip() {
         (list commented uncommented double (list comment-start comment-end comment-add))))))
 "##;
     let expect = expect_test::expect![[
-        r#""OK (\";; line one\n;; line two\n;; line three\n\" \"; line one\n; line two\n; line three\n\" \";; ; line one\n;; ; line two\n;; ; line three\n\" (\";\" \"\" 1))""#
+        r#""OK (\";; line one\\n;; line two\\n;; line three\\n\" \"; line one\\n; line two\\n; line three\\n\" \";; ; line one\\n;; ; line two\\n;; ; line three\\n\" (\";\" \"\" 1))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -71,7 +71,7 @@ fn div_v8_indent_region_lisp_source() {
   (buffer-string))
 "##;
     let expect = expect_test::expect![[
-        r#""OK \"(defun broken-indent (a b)\n  (let ((x (+ a 1))\n\t(y (- b 2)))\n    (when (> x y)\n      (list x y (* x y)))))\n\"""#
+        r#""OK \"(defun broken-indent (a b)\\n  (let ((x (+ a 1))\\n\t(y (- b 2)))\\n    (when (> x y)\\n      (list x y (* x y)))))\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

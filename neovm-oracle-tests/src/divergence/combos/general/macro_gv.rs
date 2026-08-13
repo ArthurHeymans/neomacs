@@ -8,7 +8,7 @@ fn deficiency_defmacro_backquote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (10 nil 20 nil \"(let ((tmp ,a))\n       (setq ,a ,b)\n       (setq ,b tmp)))\" nil)""#
+        r#""OK (10 nil 20 nil \"(let ((tmp ,a))\\n       (setq ,a ,b)\\n       (setq ,b tmp)))\" nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

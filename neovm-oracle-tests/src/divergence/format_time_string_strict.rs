@@ -21,7 +21,7 @@ fn fts_misc_specs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect =
-        expect_test::expect![[r#""OK (\"20\" \"113\" \"02:32 PM\" \"14\" \" 2\" \"\n\t\")""#]];
+        expect_test::expect![[r#""OK (\"20\" \"113\" \"02:32 PM\" \"14\" \" 2\" \"\\n\t\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (format-time-string "%C" '(26150 29968) t) (format-time-string "%j" '(26150 29968) t) (format-time-string "%I:%M %p" '(26150 29968) t) (format-time-string "%k" '(26150 29968) t) (format-time-string "%l" '(26150 29968) t) (format-time-string "%n%t" '(26150 29968) t))"##,
         expect,

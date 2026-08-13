@@ -120,7 +120,7 @@ fn org_persist_file_container_gc_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (t \"one\ntwo\n\" (\"<persist-file>\" \"file-v1\" \"payload\") t nil)""#
+        r#""OK (t \"one\\ntwo\\n\" (\"<persist-file>\" \"file-v1\" \"payload\") t nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

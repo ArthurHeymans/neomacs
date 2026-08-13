@@ -25,7 +25,7 @@ fn div_v8_cl_prettyprint_to_buffer_pp_to_string() {
         (buffer-string)))
 "##;
     let expect = expect_test::expect![[
-        r#""ERR (wrong-number-of-arguments (closure (cl-struct-cl--random-state-tags t) (form) (let ((pt (point)) last) (insert \"\n\" (prin1-to-string form) \"\n\") (setq last (point)) (goto-char (1+ pt)) (while (search-forward \"(quote \" last t) (delete-char -7) (insert \"'\") (forward-sexp) (delete-char 1)) (goto-char (1+ pt)) (cl--do-prettyprint))) 2)""#
+        r#""ERR (wrong-number-of-arguments (closure (cl-struct-cl--random-state-tags t) (form) (let ((pt (point)) last) (insert \"\\n\" (prin1-to-string form) \"\\n\") (setq last (point)) (goto-char (1+ pt)) (while (search-forward \"(quote \" last t) (delete-char -7) (insert \"'\") (forward-sexp) (delete-char 1)) (goto-char (1+ pt)) (cl--do-prettyprint))) 2)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -11,7 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_proc_call_process_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"hello\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"hello\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -74,7 +74,7 @@ fn div_proc_call_process_exit_codes() {
 #[test]
 fn div_proc_shell_command_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"hi\n\" \"world\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"hi\\n\" \"world\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (shell-command-to-string "echo hi")
@@ -87,7 +87,8 @@ fn div_proc_shell_command_to_string() {
 #[test]
 fn div_proc_make_process_accept_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"output-line\n\nProcess neo-test finished\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"output-line\\n\\nProcess neo-test finished\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -187,7 +188,7 @@ fn div_proc_call_process_stderr_separate() {
 #[test]
 fn div_proc_set_process_filter_captures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"captured\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"captured\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (collected)

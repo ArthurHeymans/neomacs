@@ -82,7 +82,7 @@ fn uf52_entity_utf_multi() {
 #[test]
 fn uf52_footnote_new() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\n\n* Footnotes\n\n[fn:1] \n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\\n\\n* Footnotes\\n\\n[fn:1] \\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -168,7 +168,7 @@ fn uf52_footnote_goto() {
 #[test]
 fn uf52_footnote_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Text\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Text\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -189,7 +189,8 @@ fn uf52_footnote_delete() {
 #[test]
 fn uf52_footnote_normalize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\n\n* Footnotes\n\n[fn:1] Def\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"Text[fn:1]\\n\\n* Footnotes\\n\\n[fn:1] Def\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

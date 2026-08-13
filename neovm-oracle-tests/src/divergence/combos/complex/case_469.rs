@@ -165,7 +165,7 @@ fn div_cx469_rfc2109_cookie() {
 #[test]
 fn div_cx469_sort_fkeys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"a 1\nb 2\nc 3\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"a 1\\nb 2\\nc 3\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'sort)
   (with-temp-buffer
@@ -180,7 +180,7 @@ fn div_cx469_sort_fkeys() {
 #[test]
 fn div_cx469_sort_numeric() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"c 1\nb 2\na 10\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"c 1\\nb 2\\na 10\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'sort)
   (with-temp-buffer

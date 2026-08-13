@@ -163,7 +163,7 @@ fn uf43_entity_ascii() {
 #[test]
 fn uf43_footnote_new() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\n\n* Footnotes\n\n[fn:1] \n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\\n\\n* Footnotes\\n\\n[fn:1] \\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -252,7 +252,7 @@ fn uf43_footnote_prev() {
 #[test]
 fn uf43_footnote_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Text\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Text\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -274,7 +274,7 @@ fn uf43_footnote_delete() {
 fn uf43_footnote_renumber() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"Text[fn:a] more[fn:b]\n\n[fn:a] DefA\n[fn:b] DefB\"""#]];
+        expect_test::expect![[r#""OK \"Text[fn:a] more[fn:b]\\n\\n[fn:a] DefA\\n[fn:b] DefB\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -294,7 +294,8 @@ fn uf43_footnote_renumber() {
 #[test]
 fn uf43_footnote_normalize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\n\n* Footnotes\n\n[fn:1] Def\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"Text[fn:1]\\n\\n* Footnotes\\n\\n[fn:1] Def\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

@@ -673,7 +673,7 @@ fn oracle_prop_codegen_assembly_output() {
               full-fn))
     (fmakunbound 'neovm--asm-gen)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"    mov rax, 10\n    mov rbx, 20\n    mov rcx, rax\n    add rcx, rbx\n    mov rdx, rcx\n    shl rdx, 3\n    mov rsi, rdx\n    sub rsi, 5\ndone:\n    ret\" 10 \"my_function:\n    push rbp\n    mov rbp, rsp\n    mov rax, 10\n    mov rbx, 20\n    mov rcx, rax\n    add rcx, rbx\n    mov rdx, rcx\n    shl rdx, 3\n    mov rsi, rdx\n    sub rsi, 5\ndone:\n    ret\n    pop rbp\n    ret\")""#
+        r#""OK (\"    mov rax, 10\\n    mov rbx, 20\\n    mov rcx, rax\\n    add rcx, rbx\\n    mov rdx, rcx\\n    shl rdx, 3\\n    mov rsi, rdx\\n    sub rsi, 5\\ndone:\\n    ret\" 10 \"my_function:\\n    push rbp\\n    mov rbp, rsp\\n    mov rax, 10\\n    mov rbx, 20\\n    mov rcx, rax\\n    add rcx, rbx\\n    mov rdx, rcx\\n    shl rdx, 3\\n    mov rsi, rdx\\n    sub rsi, 5\\ndone:\\n    ret\\n    pop rbp\\n    ret\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

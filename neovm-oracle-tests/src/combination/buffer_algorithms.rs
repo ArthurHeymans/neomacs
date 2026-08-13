@@ -32,7 +32,8 @@ fn oracle_prop_bufalgo_sort_lines() {
                       (dolist (l lines)
                         (insert l "\n"))
                       (buffer-string)))"####;
-    let expect = expect_test::expect![[r#""OK \"apple\nbanana\ncherry\ndate\nelderberry\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"apple\\nbanana\\ncherry\\ndate\\nelderberry\\n\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -67,7 +68,7 @@ fn oracle_prop_bufalgo_config_roundtrip() {
                         (insert (car pair) "=" (cdr pair) "\n"))
                       (list config (buffer-string))))"####;
     let expect = expect_test::expect![[
-        r#""OK (((\"name\" . \"Alice\") (\"age\" . \"31\") (\"city\" . \"Boston\") (\"role\" . \"dev\") (\"team\" . \"core\")) \"name=Alice\nage=31\ncity=Boston\nrole=dev\nteam=core\n\")""#
+        r#""OK (((\"name\" . \"Alice\") (\"age\" . \"31\") (\"city\" . \"Boston\") (\"role\" . \"dev\") (\"team\" . \"core\")) \"name=Alice\\nage=31\\ncity=Boston\\nrole=dev\\nteam=core\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -97,7 +98,7 @@ fn oracle_prop_bufalgo_template_expand() {
                           (replace-match (cdr v) t t)))
                       (buffer-string)))"####;
     let expect = expect_test::expect![[
-        r#""OK \"Dear Alice,\n\nThank you for your order #12345.\nWe will ship 3 items to Boston.\n\nBest regards,\nACME Corp\"""#
+        r#""OK \"Dear Alice,\\n\\nThank you for your order #12345.\\nWe will ship 3 items to Boston.\\n\\nBest regards,\\nACME Corp\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -181,7 +182,7 @@ fn oracle_prop_bufalgo_markdown_toc() {
                        (nreverse toc)
                        "\n")))"####;
     let expect = expect_test::expect![[
-        r#""OK \"- Introduction (L1)\n  - Background (L5)\n  - Methods (L9)\n    - Data Collection (L11)\n    - Analysis (L13)\n  - Results (L15)\n- Conclusion (L17)\"""#
+        r#""OK \"- Introduction (L1)\\n  - Background (L5)\\n  - Methods (L9)\\n    - Data Collection (L11)\\n    - Analysis (L13)\\n  - Results (L15)\\n- Conclusion (L17)\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -232,6 +233,7 @@ fn oracle_prop_bufalgo_csv_transform() {
                         (insert (nth 0 r) "\t"
                                 (number-to-string (nth 1 r)) "\n"))
                       (buffer-string)))"####;
-    let expect = expect_test::expect![[r#""OK \"name\tage\nAlice\t30\nEve\t32\nCarol\t35\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"name\tage\\nAlice\t30\\nEve\t32\\nCarol\t35\\n\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

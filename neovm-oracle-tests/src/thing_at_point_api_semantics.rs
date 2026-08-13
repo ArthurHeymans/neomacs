@@ -31,7 +31,7 @@ fn oracle_prop_thing_at_point_word_symbol_and_line_bounds() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK (\"alpha\" \"alpha-beta\" (1 . 6) \"gamma\" \"gamma_delta\" \"second line\n\" (24 . 36))""#
+        r#""OK (\"alpha\" \"alpha-beta\" (1 . 6) \"gamma\" \"gamma_delta\" \"second line\\n\" (24 . 36))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -99,7 +99,7 @@ fn upstream_org_cycle_list_bullet_spec() {
 #[test]
 fn upstream_org_footnote_new() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Test[fn:1]\n\n[fn:1] \n\" \"Test[fn::]\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"Test[fn:1]\\n\\n[fn:1] \\n\" \"Test[fn::]\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -196,7 +196,8 @@ fn upstream_org_timer_fix_incomplete() {
 #[test]
 fn upstream_org_timer_change_times() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"\n1:31:15\n4:00:55\" \"\n-1:30:25\n0:59:15\")""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"\\n1:31:15\\n4:00:55\" \"\\n-1:30:25\\n0:59:15\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-timer)
@@ -404,7 +405,7 @@ fn upstream_org_archive_subtree() {
 fn upstream_org_datetree_find_date_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\" \"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\")""#
+        r#""OK (\"* 2012\\n\\n** 2012-03 March\\n\\n*** 2012-03-29 Thursday\" \"* 2012\\n\\n** 2012-03 March\\n\\n*** 2012-03-29 Thursday\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

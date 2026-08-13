@@ -60,7 +60,8 @@ fn div_u1_pty_vs_pipe_output() {
         (string-trim pty-out)
         (string= (string-trim pipe-out) (string-trim pty-out))))
 "##;
-    let expect = expect_test::expect![[r#""OK (\"hello\n\" \"hello\n\" \"hello\" \"hello\" t)""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"hello\\n\" \"hello\\n\" \"hello\" \"hello\" t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

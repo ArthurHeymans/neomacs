@@ -57,7 +57,7 @@ fn combo52_org_id_multi_uniqueness() {
 fn combo52_checkbox_nested_dependency_cookies() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:init \"* Tasks [/]\n- [ ] Root A\n  - [X] Child A1\n  - [ ] Child A2\n- [-] Parent B [/]\n  - [X] Child B1\n  - [ ] Child B2\n    - [X] Grand B2a\n    - [ ] Grand B2b\n\") (:after-update \"* Tasks [0/2]\n- [ ] Root A\n  - [X] Child A1\n  - [ ] Child A2\n- [-] Parent B [1/2]\n  - [X] Child B1\n  - [ ] Child B2\n    - [X] Grand B2a\n    - [ ] Grand B2b\n\") (:after-a2 \"* Tasks [1/2]\n- [X] Root A\n  - [X] Child A1\n  - [X] Child A2\n- [-] Parent B [1/2]\n  - [X] Child B1\n  - [-] Child B2\n    - [X] Grand B2a\n    - [ ] Grand B2b\n\") (:after-b2b \"* Tasks [2/2]\n- [X] Root A\n  - [X] Child A1\n  - [X] Child A2\n- [X] Parent B [2/2]\n  - [X] Child B1\n  - [X] Child B2\n    - [X] Grand B2a\n    - [X] Grand B2b\n\") (:item-count 8) (:checked-count 0) (:partial-count 0))""#
+        r#""OK ((:init \"* Tasks [/]\\n- [ ] Root A\\n  - [X] Child A1\\n  - [ ] Child A2\\n- [-] Parent B [/]\\n  - [X] Child B1\\n  - [ ] Child B2\\n    - [X] Grand B2a\\n    - [ ] Grand B2b\\n\") (:after-update \"* Tasks [0/2]\\n- [ ] Root A\\n  - [X] Child A1\\n  - [ ] Child A2\\n- [-] Parent B [1/2]\\n  - [X] Child B1\\n  - [ ] Child B2\\n    - [X] Grand B2a\\n    - [ ] Grand B2b\\n\") (:after-a2 \"* Tasks [1/2]\\n- [X] Root A\\n  - [X] Child A1\\n  - [X] Child A2\\n- [-] Parent B [1/2]\\n  - [X] Child B1\\n  - [-] Child B2\\n    - [X] Grand B2a\\n    - [ ] Grand B2b\\n\") (:after-b2b \"* Tasks [2/2]\\n- [X] Root A\\n  - [X] Child A1\\n  - [X] Child A2\\n- [X] Parent B [2/2]\\n  - [X] Child B1\\n  - [X] Child B2\\n    - [X] Grand B2a\\n    - [X] Grand B2b\\n\") (:item-count 8) (:checked-count 0) (:partial-count 0))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -241,7 +241,7 @@ fn combo52_sort_multi_criteria_chain() {
 fn combo52_drawer_property_logbook_clock_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:prop-count 1) (:prop-keys (\"CATEGORY\")) (:total-drawers 1) (:logbooks 1) (:prop-drawers-now 1) (:clock-count 1) (:status-still \"active\") (:owner-still \"alice\") (:buffer \"* Task\n:PROPERTIES:\n:STATUS:   active\n:OWNER:    alice\n:END:\n:LOGBOOK:\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\n:END:\n\"))""#
+        r#""OK ((:prop-count 1) (:prop-keys (\"CATEGORY\")) (:total-drawers 1) (:logbooks 1) (:prop-drawers-now 1) (:clock-count 1) (:status-still \"active\") (:owner-still \"alice\") (:buffer \"* Task\\n:PROPERTIES:\\n:STATUS:   active\\n:OWNER:    alice\\n:END:\\n:LOGBOOK:\\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\\n:END:\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer
@@ -330,7 +330,7 @@ fn combo52_internal_link_create_resolve_modify() {
 fn combo52_timestamp_schedule_reschedule_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:after-sched (\"scheduled\")) (:after-resched ((\"scheduled\" (timestamp (:standard-properties [20 nil nil nil 36 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-04-01 Mon>\" :year-start 2024 :month-start 4 :day-start 1 :hour-start nil :minute-start nil :year-end 2024 :month-end 4 :day-end 1 :hour-end nil :minute-end nil))))) (:after-dead ((\"S\" \"D\"))) (:after-remove-sched ((nil \"D\"))) (:after-remove-dead 0) (:buffer \"* Event\n\"))""#
+        r#""OK ((:after-sched (\"scheduled\")) (:after-resched ((\"scheduled\" (timestamp (:standard-properties [20 nil nil nil 36 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-04-01 Mon>\" :year-start 2024 :month-start 4 :day-start 1 :hour-start nil :minute-start nil :year-end 2024 :month-end 4 :day-end 1 :hour-end nil :minute-end nil))))) (:after-dead ((\"S\" \"D\"))) (:after-remove-sched ((nil \"D\"))) (:after-remove-dead 0) (:buffer \"* Event\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

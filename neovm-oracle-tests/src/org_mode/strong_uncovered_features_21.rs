@@ -12,7 +12,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 fn uf21_cycle_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:headlines 4) (:visible \"* H1\n** H2\n*** H3\nBody\n* H1b\"))""#
+        r#""OK ((:headlines 4) (:visible \"* H1\\n** H2\\n*** H3\\nBody\\n* H1b\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -97,7 +97,7 @@ fn uf21_modify_reparse() {
 fn uf21_list_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:init ((nil \"A\") (nil \"B\") (nil \"C\") (nil \"D\"))) (:indented ((nil \"A\n  - B\n  - C\") (nil \"B\") (nil \"C\") (nil \"D\"))))""#
+        r#""OK ((:init ((nil \"A\") (nil \"B\") (nil \"C\") (nil \"D\"))) (:indented ((nil \"A\\n  - B\\n  - C\") (nil \"B\") (nil \"C\") (nil \"D\"))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -132,7 +132,7 @@ fn uf21_list_indent() {
 fn uf21_table_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:rows 4) (:cells 9) (:content #(\"| a | b |   |\n|---+---+---|\n| 3 | 4 |   |\n| 1 | 2 |   |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 11 (face org-table) 11 12 (face org-table display (space :relative-width 1.001)) 12 13 (face org-table) 13 14 (face org-table-row) 14 15 (face org-table) 15 27 (face org-table) 27 28 (face org-table-row) 28 29 (face org-table) 29 30 (face org-table rear-nonsticky t display (space :relative-width 1)) 30 31 (face org-table) 31 32 (face org-table display (space :relative-width 1.001)) 32 33 (face org-table) 33 34 (face org-table rear-nonsticky t display (space :relative-width 1)) 34 35 (face org-table) 35 36 (face org-table display (space :relative-width 1.001)) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table-row) 42 43 (face org-table) 43 44 (face org-table rear-nonsticky t display (space :relative-width 1)) 44 45 (face org-table) 45 46 (face org-table display (space :relative-width 1.001)) 46 47 (face org-table) 47 48 (face org-table rear-nonsticky t display (space :relative-width 1)) 48 49 (face org-table) 49 50 (face org-table display (space :relative-width 1.001)) 50 51 (face org-table) 51 52 (face org-table rear-nonsticky t display (space :relative-width 1)) 52 53 (face org-table) 53 54 (face org-table display (space :relative-width 1.001)) 54 55 (face org-table) 55 56 (face org-table-row))))""#
+        r#""OK ((:rows 4) (:cells 9) (:content #(\"| a | b |   |\\n|---+---+---|\\n| 3 | 4 |   |\\n| 1 | 2 |   |\\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 11 (face org-table) 11 12 (face org-table display (space :relative-width 1.001)) 12 13 (face org-table) 13 14 (face org-table-row) 14 15 (face org-table) 15 27 (face org-table) 27 28 (face org-table-row) 28 29 (face org-table) 29 30 (face org-table rear-nonsticky t display (space :relative-width 1)) 30 31 (face org-table) 31 32 (face org-table display (space :relative-width 1.001)) 32 33 (face org-table) 33 34 (face org-table rear-nonsticky t display (space :relative-width 1)) 34 35 (face org-table) 35 36 (face org-table display (space :relative-width 1.001)) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table-row) 42 43 (face org-table) 43 44 (face org-table rear-nonsticky t display (space :relative-width 1)) 44 45 (face org-table) 45 46 (face org-table display (space :relative-width 1.001)) 46 47 (face org-table) 47 48 (face org-table rear-nonsticky t display (space :relative-width 1)) 48 49 (face org-table) 49 50 (face org-table display (space :relative-width 1.001)) 50 51 (face org-table) 51 52 (face org-table rear-nonsticky t display (space :relative-width 1)) 52 53 (face org-table) 53 54 (face org-table display (space :relative-width 1.001)) 54 55 (face org-table) 55 56 (face org-table-row))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

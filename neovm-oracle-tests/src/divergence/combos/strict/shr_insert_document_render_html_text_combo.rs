@@ -52,7 +52,7 @@ fn div_v8_shr_whitespace_newline_handling() {
     (buffer-string)))
 "##;
     let expect = expect_test::expect![[
-        r#""ERR (wrong-type-argument listp \"<html><body><p>multiple    spaces   and\n\nnewlines</p></body></html>\")""#
+        r#""ERR (wrong-type-argument listp \"<html><body><p>multiple    spaces   and\\n\\nnewlines</p></body></html>\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

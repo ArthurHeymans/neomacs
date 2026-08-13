@@ -10,7 +10,7 @@ fn org_combo_org_table_recalc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK #(\"| a | b | c |\n|---+---+---|\n| 1 | 2 | 3 |\n| 3 | 4 | 7 |\n#+TBLFM: $3=$1+$2\n\" 0 13 (face org-table) 13 14 (face org-table-row) 14 27 (face org-table) 27 28 (face org-table-row) 28 41 (face org-table) 41 42 (face org-table-row) 42 55 (face org-table) 55 56 (face org-table-row))""#
+        r#""OK #(\"| a | b | c |\\n|---+---+---|\\n| 1 | 2 | 3 |\\n| 3 | 4 | 7 |\\n#+TBLFM: $3=$1+$2\\n\" 0 13 (face org-table) 13 14 (face org-table-row) 14 27 (face org-table) 27 28 (face org-table-row) 28 41 (face org-table) 41 42 (face org-table-row) 42 55 (face org-table) 55 56 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
@@ -28,7 +28,7 @@ fn org_combo_org_checkbox_statistics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect =
-        expect_test::expect![[r#""OK \"* Task [1/3]\n- [ ] one\n- [X] two\n- [ ] three\n\"""#]];
+        expect_test::expect![[r#""OK \"* Task [1/3]\\n- [ ] one\\n- [X] two\\n- [ ] three\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer (org-mode)
@@ -42,7 +42,7 @@ fn org_combo_org_checkbox_statistics() {
 fn org_combo_org_sort_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"- apple\n- banana\n- cherry\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- apple\\n- banana\\n- cherry\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer (org-mode)
@@ -107,7 +107,7 @@ fn org_combo_org_timestamp_format() {
 fn org_combo_org_promote_demote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"** one\n*** two\n*** three\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"** one\\n*** two\\n*** three\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer (org-mode) (insert "* one\n** two\n*** three\n")
@@ -137,7 +137,7 @@ fn org_combo_org_ascii_export_body() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"1 Title\n=======\n\n  A paragraph with *bold* and /italic/ text.\n\"""#
+        r#""OK \"1 Title\\n=======\\n\\n  A paragraph with *bold* and /italic/ text.\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (require 'ox-ascii)
@@ -153,7 +153,7 @@ fn org_combo_org_ascii_export_body() {
 fn org_combo_org_toggle_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"- [X] a\n- [ ] b\n- [X] c\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- [X] a\\n- [ ] b\\n- [X] c\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer (org-mode) (insert "- [ ] a\n- [ ] b\n- [ ] c\n")
@@ -213,7 +213,7 @@ fn org_combo_org_babel_elisp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK \"#+begin_src emacs-lisp :results value\n(+ 1 2 3)\n#+end_src\n\n#+RESULTS:\n: 6\n\"""##
+        r##""OK \"#+begin_src emacs-lisp :results value\\n(+ 1 2 3)\\n#+end_src\\n\\n#+RESULTS:\\n: 6\\n\"""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (require 'ob-emacs-lisp)
@@ -242,8 +242,9 @@ fn org_combo_org_duration_convert() {
 fn org_combo_org_element_interpret() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK \"* Title\n\nA *bold* and /italic/ and =code= text.\n\"""#]];
+    let expect = expect_test::expect![[
+        r#""OK \"* Title\\n\\nA *bold* and /italic/ and =code= text.\\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer (org-mode)
@@ -328,7 +329,7 @@ fn org_combo_org_table_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK #(\"| a | b | c |\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n\" 0 13 (face org-table) 13 14 (face org-table-row) 14 27 (face org-table) 27 28 (face org-table-row) 28 29 (face org-table) 29 30 (face org-table rear-nonsticky t display (space :relative-width 1)) 30 31 (face org-table) 31 32 (face org-table display (space :relative-width 1.001)) 32 33 (face org-table) 33 34 (face org-table rear-nonsticky t display (space :relative-width 1)) 34 35 (face org-table) 35 36 (face org-table display (space :relative-width 1.001)) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table-row))""#
+        r#""OK #(\"| a | b | c |\\n| 1 | 2 | 3 |\\n| 4 | 5 | 6 |\\n\" 0 13 (face org-table) 13 14 (face org-table-row) 14 27 (face org-table) 27 28 (face org-table-row) 28 29 (face org-table) 29 30 (face org-table rear-nonsticky t display (space :relative-width 1)) 30 31 (face org-table) 31 32 (face org-table display (space :relative-width 1.001)) 32 33 (face org-table) 33 34 (face org-table rear-nonsticky t display (space :relative-width 1)) 34 35 (face org-table) 35 36 (face org-table display (space :relative-width 1.001)) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
@@ -344,7 +345,7 @@ fn org_combo_org_table_xref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK #(\"| 5 | 10 |\n| 7 | 22 |\n#+TBLFM: @2$2=@1$1+@1$2+@2$1\n\" 0 10 (face org-table) 10 11 (face org-table-row) 11 16 (face org-table) 16 21 (face org-table) 21 22 (face org-table-row))""#
+        r#""OK #(\"| 5 | 10 |\\n| 7 | 22 |\\n#+TBLFM: @2$2=@1$1+@1$2+@2$1\\n\" 0 10 (face org-table) 10 11 (face org-table-row) 11 16 (face org-table) 16 21 (face org-table) 21 22 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
@@ -376,7 +377,7 @@ fn org_combo_org_table_multi_tblfm() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK #(\"| 1 | 2 | 3 |  2 |\n| 3 | 4 | 7 | 12 |\n#+TBLFM: $3=$1+$2::$4=$1*$2\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 11 (face org-table) 11 12 (face org-table display (space :relative-width 1.001)) 12 13 (face org-table) 13 14 (face org-table rear-nonsticky t display (space :relative-width 1)) 14 15 (face org-table) 15 16 (face org-table) 16 17 (face org-table display (space :relative-width 1.001)) 17 18 (face org-table) 18 19 (face org-table-row) 19 37 (face org-table) 37 38 (face org-table-row))""#
+        r#""OK #(\"| 1 | 2 | 3 |  2 |\\n| 3 | 4 | 7 | 12 |\\n#+TBLFM: $3=$1+$2::$4=$1*$2\\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 11 (face org-table) 11 12 (face org-table display (space :relative-width 1.001)) 12 13 (face org-table) 13 14 (face org-table rear-nonsticky t display (space :relative-width 1)) 14 15 (face org-table) 15 16 (face org-table) 16 17 (face org-table display (space :relative-width 1.001)) 17 18 (face org-table) 18 19 (face org-table-row) 19 37 (face org-table) 37 38 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
@@ -392,7 +393,7 @@ fn org_combo_org_sort_entries_todo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"* Parent\n** TODO apple\n** TODO mango\n** DONE zebra\n\"""#
+        r#""OK \"* Parent\\n** TODO apple\\n** TODO mango\\n** DONE zebra\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)

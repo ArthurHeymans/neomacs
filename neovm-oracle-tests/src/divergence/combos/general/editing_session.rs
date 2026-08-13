@@ -8,7 +8,7 @@ fn divergence_simulated_code_edit_session() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (#(\"fn main() {\n    println!(\\\"world\\\");\n}\n\" 0 7 (syntax function) 24 26 (syntax string)) #(\"fn main()// comment\n     {\n    println!(\\\"world\\\");\n}\n\" 0 7 (syntax function) 39 41 (syntax string)) 25 32 40 47 35 #(\"fn main() {\n    println!(\\\"world\\\");\n}\n\" 0 7 (syntax function) 24 26 (syntax string)) function t)""#
+        r#""OK (#(\"fn main() {\\n    println!(\\\"world\\\");\\n}\\n\" 0 7 (syntax function) 24 26 (syntax string)) #(\"fn main()// comment\\n     {\\n    println!(\\\"world\\\");\\n}\\n\" 0 7 (syntax function) 39 41 (syntax string)) 25 32 40 47 35 #(\"fn main() {\\n    println!(\\\"world\\\");\\n}\\n\" 0 7 (syntax function) 24 26 (syntax string)) function t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

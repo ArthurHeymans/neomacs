@@ -276,7 +276,7 @@ fn uf29_checklist() {
 #[test]
 fn uf29_check_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"- a\n- [ ] b\n- [-] c\"""#]];
+    let expect = expect_test::expect![[r#""OK \"- a\\n- [ ] b\\n- [-] c\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -295,7 +295,7 @@ fn uf29_check_toggle() {
 #[test]
 fn uf29_check_reset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* T\n- [ ] a\n- [ ] b\n- [ ] c\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* T\\n- [ ] a\\n- [ ] b\\n- [ ] c\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

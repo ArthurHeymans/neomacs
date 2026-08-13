@@ -140,7 +140,7 @@ fn div_cx460_syntax_class_to_char() {
 #[test]
 fn div_cx460_unibyte_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"ABC\" \"\\310\\311\" 2)""#]];
+    let expect = expect_test::expect![[r#""OK (\"ABC\" \"��\" 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (unibyte-string 65 66 67)
       (unibyte-string 200 201)

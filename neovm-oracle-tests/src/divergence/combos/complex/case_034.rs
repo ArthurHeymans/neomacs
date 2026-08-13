@@ -111,7 +111,7 @@ fn div_cx34_read_s_with_numeric_slots() {
 fn div_cx34_line_prefix_wrap_prefix_fill_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"alpha bravo\ncharlie delta\necho\n\" 0 11 (line-prefix \"> \") 11 12 (line-prefix \"> \") 12 25 (line-prefix \"> \") 25 26 (line-prefix \"> \") 26 31 (line-prefix \"> \"))""#
+        r#""OK #(\"alpha bravo\\ncharlie delta\\necho\\n\" 0 11 (line-prefix \"> \") 11 12 (line-prefix \"> \") 12 25 (line-prefix \"> \") 25 26 (line-prefix \"> \") 26 31 (line-prefix \"> \"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -247,7 +247,7 @@ fn div_cx34_set_buffer_multibyte_then_char_after() {
 #[test]
 fn div_cx34_undo_after_format_replace_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"CAFé 世界 HELLO\n\" \"\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"CAFé 世界 HELLO\\n\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

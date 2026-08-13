@@ -37,7 +37,7 @@ fn strong_complete_document() {
 fn strong_complex_editing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* Original\nBody\" \"* Changed 1                                                            :tag1:\nBody\" #(\"* TODO [#A] Changed 1                                                  :tag1:\nBody\" 0 6 (org-todo-head \"TODO\") 11 77 (org-todo-head \"TODO\")) #(\"* TODO [#A] Changed 2                                                  :tag1:\n:PROPERTIES:\n:VAR:      val\n:END:\nBody\" 0 6 (org-todo-head \"TODO\") 11 12 (org-todo-head \"TODO\") 21 77 (org-todo-head \"TODO\")))""#
+        r#""OK (\"* Original\\nBody\" \"* Changed 1                                                            :tag1:\\nBody\" #(\"* TODO [#A] Changed 1                                                  :tag1:\\nBody\" 0 6 (org-todo-head \"TODO\") 11 77 (org-todo-head \"TODO\")) #(\"* TODO [#A] Changed 2                                                  :tag1:\\n:PROPERTIES:\\n:VAR:      val\\n:END:\\nBody\" 0 6 (org-todo-head \"TODO\") 11 12 (org-todo-head \"TODO\") 21 77 (org-todo-head \"TODO\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

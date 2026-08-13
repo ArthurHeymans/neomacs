@@ -225,7 +225,7 @@ fn div_cx51_superword_backward_word_marker_overlay_narrow_mega() {
 fn div_cx51_process_output_decode_encode_narrow_buffer_hash_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"PREcafé世界\n\" 15 \"PREcafé世界\n\" t \"995fb302062d04e724e608f29185652d\")""#
+        r#""OK (\"PREcafé世界\\n\" 15 \"PREcafé世界\\n\" t \"995fb302062d04e724e608f29185652d\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

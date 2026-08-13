@@ -121,7 +121,7 @@ fn div_cx419_auto_fill_mode() {
 #[test]
 fn div_cx419_reverse_region_sort_pages() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"a\nb\nc\"""#]];
+    let expect = expect_test::expect![[r#""OK \"a\\nb\\nc\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

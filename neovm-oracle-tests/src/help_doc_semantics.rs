@@ -30,7 +30,7 @@ fn oracle_prop_help_split_and_add_fundoc_usage() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK ((\"(neomacs-oracle-help-fn ARG &optional B)\" . \"Doc body.\") \"(neomacs-oracle-help-fn ARG &optional B)\" \"Doc body.\" nil (nil . \"No usage here\") \"Doc.\n\n(fn ARG &optional OPT &rest REST)\" \"Doc.\n\n(fn OLD)\" \"\n\n(fn X Y)\" (error \"Unrecognized usage format\"))""#
+        r#""OK ((\"(neomacs-oracle-help-fn ARG &optional B)\" . \"Doc body.\") \"(neomacs-oracle-help-fn ARG &optional B)\" \"Doc body.\" nil (nil . \"No usage here\") \"Doc.\\n\\n(fn ARG &optional OPT &rest REST)\" \"Doc.\\n\\n(fn OLD)\" \"\\n\\n(fn X Y)\" (error \"Unrecognized usage format\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

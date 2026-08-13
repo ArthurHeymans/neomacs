@@ -99,7 +99,7 @@ fn upstream_org_toggle_comment() {
 fn upstream_org_toggle_fixed_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\": A\" \"A\" \"* H\n: \" \": * Headline\" \": #+KEYWORD: value\" \"- A\n  : B\" \"A\n\nB\" \": A\n: \n: B\n: \n: C\")""#
+        r#""OK (\": A\" \"A\" \"* H\\n: \" \": * Headline\" \": #+KEYWORD: value\" \"- A\\n  : B\" \"A\\n\\nB\" \": A\\n: \\n: B\\n: \\n: C\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -918,7 +918,7 @@ fn upstream_org_move_subtree() {
 fn upstream_org_promote_demote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* Heading\" \"** Heading\" \"* H1\n** S1\n** S2\" \"** H1\n*** S1\n*** S2\")""#
+        r#""OK (\"* Heading\" \"** Heading\" \"* H1\\n** S1\\n** S2\" \"** H1\\n*** S1\\n*** S2\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

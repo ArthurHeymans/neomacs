@@ -60,7 +60,7 @@ fn oracle_prop_register_copy_delete_region_and_number_at_point() {
          deactivate-mark)))))
 "#;
 
-    let expect = expect_test::expect![[r#""OK (-42 6 \"remove\" \"  -42 tail\n keep\" t)""#]];
+    let expect = expect_test::expect![[r#""OK (-42 6 \"remove\" \"  -42 tail\\n keep\" t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -98,7 +98,7 @@ fn oracle_prop_register_insert_string_number_marker_and_rectangle() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK ((\"aTEXTb\" 2 6) (\"123\" 4 1) (\"1\" 2 1) (\"aXa\nbYZb\n\" 8 2))""#
+        r#""OK ((\"aTEXTb\" 2 6) (\"123\" 4 1) (\"1\" 2 1) (\"aXa\\nbYZb\\n\" 8 2))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

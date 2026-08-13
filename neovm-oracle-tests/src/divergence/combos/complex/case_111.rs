@@ -177,7 +177,7 @@ fn div_cx111_read_multibyte_symbols() {
 fn div_cx111_read_string_escaped_quotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"simple\" \"with \\\"escaped\\\"\" \"with \\\\ backslash\" \"with \n newline\" \"with \t tab\" \"\" \"é\")""#
+        r#""OK (\"simple\" \"with \\\"escaped\\\"\" \"with \\\\ backslash\" \"with \\n newline\" \"with \t tab\" \"\" \"é\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

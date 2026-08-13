@@ -54,7 +54,7 @@ fn upstream_org_edit_headline() {
 fn upstream_org_insert_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* \" \"* P\" \"* \n* H\" \"** H\nP\n** \" \"\n* \n\n* H1\" \"* \n* \")""#
+        r#""OK (\"* \" \"* P\" \"* \\n* H\" \"** H\\nP\\n** \" \"\\n* \\n\\n* H1\" \"* \\n* \")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -94,7 +94,7 @@ fn upstream_org_insert_heading() {
 #[test]
 fn upstream_org_kill_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"\" \"ab\" \"\n123\" \"* A :tag:\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"\" \"ab\" \"\\n123\" \"* A :tag:\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -128,7 +128,7 @@ fn upstream_org_kill_line() {
 fn upstream_org_sort_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"\n* abc\n* def\n* xyz\n\" \"\n* xyz\n* def\n* abc\n\" \"\n* 1\n* 2\n* 10\n\" \"\n* [#A] h2\n* [#B] h3\n* [#C] h1\n\" \"\n* [#C] h1\n* [#B] h3\n* [#A] h2\n\")""#
+        r#""OK (\"\\n* abc\\n* def\\n* xyz\\n\" \"\\n* xyz\\n* def\\n* abc\\n\" \"\\n* 1\\n* 2\\n* 10\\n\" \"\\n* [#A] h2\\n* [#B] h3\\n* [#C] h1\\n\" \"\\n* [#C] h1\\n* [#B] h3\\n* [#A] h2\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -197,7 +197,7 @@ fn upstream_org_toggle_heading_extended() {
 fn upstream_org_set_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\":PROPERTIES:\n:TEST: t\n:END:\n\" \"* H\n:PROPERTIES:\n:TEST: t\n:END:\n\")""#
+        r#""OK (\":PROPERTIES:\\n:TEST: t\\n:END:\\n\" \"* H\\n:PROPERTIES:\\n:TEST: t\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -226,7 +226,7 @@ fn upstream_org_set_property() {
 fn upstream_org_delete_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (\"\" \":PROPERTIES:\n:TEST1: t\n:END:\" \"* H\n\")""#]];
+        expect_test::expect![[r#""OK (\"\" \":PROPERTIES:\\n:TEST1: t\\n:END:\" \"* H\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -312,7 +312,7 @@ fn upstream_org_entry_get() {
 fn upstream_org_entry_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#(\"* TODO H\" 0 8 (org-todo-head \"TODO\")) #(\"* H\" 0 3 (org-todo-head nil)) \"* [#A] H\" \"* H\n:PROPERTIES:\n:A:        2\n:END:\" \"* H\n:PROPERTIES:\n:A:        1\n:END:\n\")""#
+        r#""OK (#(\"* TODO H\" 0 8 (org-todo-head \"TODO\")) #(\"* H\" 0 3 (org-todo-head nil)) \"* [#A] H\" \"* H\\n:PROPERTIES:\\n:A:        2\\n:END:\" \"* H\\n:PROPERTIES:\\n:A:        1\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -404,7 +404,7 @@ fn upstream_org_timestamp_to_time() {
 fn upstream_org_deadline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* H\nDEADLINE: <2012-03-29 Thu>\" \"* H\nDEADLINE: <2014-03-04 Tue>\" \"* H\nDEADLINE: <2012-03-29 Thu +2y>\" \"* H\n\")""#
+        r#""OK (\"* H\\nDEADLINE: <2012-03-29 Thu>\" \"* H\\nDEADLINE: <2014-03-04 Tue>\" \"* H\\nDEADLINE: <2012-03-29 Thu +2y>\" \"* H\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -442,7 +442,7 @@ fn upstream_org_deadline() {
 fn upstream_org_schedule() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* H\nSCHEDULED: <2012-03-29 Thu>\" \"* H\nSCHEDULED: <2014-03-04 Tue>\" \"* H\nSCHEDULED: <2012-03-29 Thu +2y>\" \"* H\n\")""#
+        r#""OK (\"* H\\nSCHEDULED: <2012-03-29 Thu>\" \"* H\\nSCHEDULED: <2014-03-04 Tue>\" \"* H\\nSCHEDULED: <2012-03-29 Thu +2y>\" \"* H\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -669,7 +669,8 @@ fn upstream_org_clock_table_basic() {
 #[test]
 fn upstream_org_footnote_action() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Text[fn:1]\n\n* Footnotes\n\n[fn:1] \n\" nil)""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"Text[fn:1]\\n\\n* Footnotes\\n\\n[fn:1] \\n\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

@@ -217,7 +217,7 @@ fn oracle_prop_format_log_message_builder() {
             entries "\n")))
     (fmakunbound 'neovm--test-format-log)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"[INFO ] 12:00:01 [net] Connection from 192.168.1.1:8080\" \"[ERROR] 12:00:02 [db] Query failed after 2.5s: timeout\" \"[DEBUG] 12:00:03 [gc] Collected 1500 objects (23.5% of heap)\" \"[WARN ] 12:00:04 [auth] Failed login attempt #3 for user \\\"admin\\\"\" \"[INFO ] 09:00 [app] Started\n[INFO ] 09:01 [db] Connected to postgres://localhost\n[WARN ] 09:05 [mem] Usage at 85%\n[ERROR] 09:10 [disk] Write failed: ENOSPC\")""#
+        r#""OK (\"[INFO ] 12:00:01 [net] Connection from 192.168.1.1:8080\" \"[ERROR] 12:00:02 [db] Query failed after 2.5s: timeout\" \"[DEBUG] 12:00:03 [gc] Collected 1500 objects (23.5% of heap)\" \"[WARN ] 12:00:04 [auth] Failed login attempt #3 for user \\\"admin\\\"\" \"[INFO ] 09:00 [app] Started\\n[INFO ] 09:01 [db] Connected to postgres://localhost\\n[WARN ] 09:05 [mem] Usage at 85%\\n[ERROR] 09:10 [disk] Write failed: ENOSPC\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -266,7 +266,7 @@ fn oracle_prop_format_aligned_table_complex() {
                           (list sep summary))
                   "\n"))"#;
     let expect = expect_test::expect![[
-        r#""OK \"  ID  Name         Score  Grade      Pct\n----------------------------------------\n   1  Alice         95.5      A    95.5%\n   2  Bob           87.2     B+    87.2%\n   3  Carol         92.8     A-    92.8%\n   4  Dave          73.1      C    73.1%\n   5  Eve          100.0     A+   100.0%\n----------------------------------------\n  Average: 89.72  |  Total: 448.6  |  Count: 5\"""#
+        r#""OK \"  ID  Name         Score  Grade      Pct\\n----------------------------------------\\n   1  Alice         95.5      A    95.5%\\n   2  Bob           87.2     B+    87.2%\\n   3  Carol         92.8     A-    92.8%\\n   4  Dave          73.1      C    73.1%\\n   5  Eve          100.0     A+   100.0%\\n----------------------------------------\\n  Average: 89.72  |  Total: 448.6  |  Count: 5\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

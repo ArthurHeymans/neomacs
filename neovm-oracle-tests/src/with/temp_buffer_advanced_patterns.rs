@@ -82,7 +82,7 @@ fn oracle_prop_with_temp_buffer_adv_interleaved_insert_search_delete() {
           (count-lines (point-min) (point-max))
           foo-pos)))"####;
     let expect = expect_test::expect![[
-        r#""OK (\"line1: foo\ninserted: NEW\nline3: BAZ!!!\nline4: qux\n\" 4 8)""#
+        r#""OK (\"line1: foo\\ninserted: NEW\\nline3: BAZ!!!\\nline4: qux\\n\" 4 8)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -243,7 +243,7 @@ fn oracle_prop_with_temp_buffer_adv_save_restriction_inside() {
       ;; After save-restriction exits, restriction is removed
       (list (point-min) (point-max) (buffer-string)))))"####;
     let expect = expect_test::expect![[
-        r#""OK (1 50 \"HEADER\nDATA LINE 1\nDATA LINE 2\nDATA LINE 3\nFOOTER\")""#
+        r#""OK (1 50 \"HEADER\\nDATA LINE 1\\nDATA LINE 2\\nDATA LINE 3\\nFOOTER\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -462,7 +462,7 @@ fn oracle_prop_with_temp_buffer_adv_string_builder() {
       (insert (format "  Total items: %d (%d types)\n" total non-zero))
       (list (buffer-string) total non-zero))))"####;
     let expect = expect_test::expect![[
-        r#""OK (\"=== INVENTORY ===\n-----------------\n  apple       :   3\n  cherry      :   7\n  date        :   1\n--------------------\n  Total items: 11 (3 types)\n\" 11 3)""#
+        r#""OK (\"=== INVENTORY ===\\n-----------------\\n  apple       :   3\\n  cherry      :   7\\n  date        :   1\\n--------------------\\n  Total items: 11 (3 types)\\n\" 11 3)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

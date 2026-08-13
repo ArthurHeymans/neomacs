@@ -376,7 +376,7 @@ fn oracle_prop_textproc_multi_buffer_merge() {
                               (length all-sections)
                               (mapcar #'car all-sections)))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"=== CSV-DATA ===\n  name,age,city\n  Alice,30,NYC\n  Bob,25,LA\n\n=== CONFIG ===\n  host: localhost\n  port: 8080\n  debug: true\n\n=== ITEMS ===\n  1: First item\n  2: Second item\n  3: Third item\n\n\" 3 (\"CSV-DATA\" \"CONFIG\" \"ITEMS\"))""#
+        r#""OK (\"=== CSV-DATA ===\\n  name,age,city\\n  Alice,30,NYC\\n  Bob,25,LA\\n\\n=== CONFIG ===\\n  host: localhost\\n  port: 8080\\n  debug: true\\n\\n=== ITEMS ===\\n  1: First item\\n  2: Second item\\n  3: Third item\\n\\n\" 3 (\"CSV-DATA\" \"CONFIG\" \"ITEMS\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

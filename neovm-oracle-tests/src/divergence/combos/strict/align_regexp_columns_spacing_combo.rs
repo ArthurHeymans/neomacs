@@ -13,7 +13,7 @@ fn div_v8_align_regexp_equals_separator() {
   (align-regexp (point-min) (point-max) "\\(\\s-*\\)=" 1 1 nil)
   (buffer-string))
 "##;
-    let expect = expect_test::expect![[r#""OK \"a\t= 1\nfoo\t= 2\nlonger\t= 3\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"a\t= 1\\nfoo\t= 2\\nlonger\t= 3\\n\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -27,7 +27,7 @@ fn div_v8_align_regrep_repeat_column_spacing() {
   (buffer-string))
 "##;
     let expect =
-        expect_test::expect![[r#""OK \"x\t:1\t:a\nfoo\t:2\t:bb\nlonger\t:333\t:ccc\n\"""#]];
+        expect_test::expect![[r#""OK \"x\t:1\t:a\\nfoo\t:2\t:bb\\nlonger\t:333\t:ccc\\n\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -40,6 +40,6 @@ fn div_v8_align_columns_numeric_padding() {
   (align (point-min) (point-max))
   (buffer-string))
 "##;
-    let expect = expect_test::expect![[r#""OK \"1 a\n20 b\n300 c\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"1 a\\n20 b\\n300 c\\n\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

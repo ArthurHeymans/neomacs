@@ -57,7 +57,7 @@ fn div_h1_ring_overflow_ops() {
 fn div_h1_pp_to_string_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"(a (b (c (d))) e)\n\" \"(1 2 3)\n\" \"((one . 1) (two . 2) (three . 3))\n\" 12)""#
+        r#""OK (\"(a (b (c (d))) e)\\n\" \"(1 2 3)\\n\" \"((one . 1) (two . 2) (three . 3))\\n\" 12)""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"

@@ -139,7 +139,7 @@ fn combo101_org_time_stamp_active_range_format() {
 fn combo101_org_fill_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:filled \"aaaa bbbb cccc dddd\neeee ffff gggg hhhh\niiii jjjj kkkk llll\nmmmm\n\")""#
+        r#""OK (:filled \"aaaa bbbb cccc dddd\\neeee ffff gggg hhhh\\niiii jjjj kkkk llll\\nmmmm\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (setq fill-column 20)

@@ -260,7 +260,7 @@ fn uf14_comment() {
 #[test]
 fn uf14_verse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Line 1\nLine 2\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"Line 1\\nLine 2\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -321,7 +321,7 @@ fn uf14_quote() {
 fn uf14_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"HTML\" \"<b>Bold</b>\n\") (\"LATEX\" \"\\\\textbf{Bold}\n\"))""#
+        r#""OK ((\"HTML\" \"<b>Bold</b>\\n\") (\"LATEX\" \"\\\\textbf{Bold}\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

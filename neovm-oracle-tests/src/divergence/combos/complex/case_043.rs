@@ -234,7 +234,7 @@ fn div_cx43_print_circle_shared_propertized_string_mega() {
 #[test]
 fn div_cx43_process_output_multibyte_narrowed_buffer_coding_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"HEAcafé世界DER\n\" 18)""#]];
+    let expect = expect_test::expect![[r#""OK (\"HEAcafé世界DER\\n\" 18)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx43-pm*")))
@@ -287,7 +287,7 @@ fn div_cx43_undo_marker_overlay_textprop_display_evaporate_mega() {
 fn div_cx43_fill_paragraph_narrow_overlay_textprop_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#(\"AAAABBBBCCCC\nlong word h\" 0 3 (face bold)) (face bold) nil 11)""#
+        r#""OK (#(\"AAAABBBBCCCC\\nlong word h\" 0 3 (face bold)) (face bold) nil 11)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

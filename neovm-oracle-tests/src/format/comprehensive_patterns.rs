@@ -323,7 +323,7 @@ fn oracle_prop_format_comprehensive_arg_count_edge_cases() {
       ;; Backslash in format string
       (format "path\\to\\file"))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"plain text\" \"\" \"1\" \"only-one\" \"hello world, no format specs here!\" \"100% done\" \"(a, b)\" \"line1\nline2\ttab\" \"path\\\\to\\\\file\")""#
+        r#""OK (\"plain text\" \"\" \"1\" \"only-one\" \"hello world, no format specs here!\" \"100% done\" \"(a, b)\" \"line1\\nline2\ttab\" \"path\\\\to\\\\file\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -385,7 +385,7 @@ fn oracle_prop_format_comprehensive_algorithmic_usage() {
     (fmakunbound 'neovm--fmt-mul-table)
     (fmakunbound 'neovm--fmt-bases)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"       1    2    3    4\n-----------------------\n  1    1    2    3    4\n  2    2    4    6    8\n  3    3    6    9   12\n  4    4    8   12   16\" \"dec=0 hex=0 oct=0 bin=0\" \"dec=1 hex=1 oct=1 bin=1\" \"dec=42 hex=2a oct=52 bin=101010\" \"dec=255 hex=ff oct=377 bin=11111111\" \"dec=1024 hex=400 oct=2000 bin=10000000000\")""#
+        r#""OK (\"       1    2    3    4\\n-----------------------\\n  1    1    2    3    4\\n  2    2    4    6    8\\n  3    3    6    9   12\\n  4    4    8   12   16\" \"dec=0 hex=0 oct=0 bin=0\" \"dec=1 hex=1 oct=1 bin=1\" \"dec=42 hex=2a oct=52 bin=101010\" \"dec=255 hex=ff oct=377 bin=11111111\" \"dec=1024 hex=400 oct=2000 bin=10000000000\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -424,7 +424,7 @@ fn oracle_prop_format_comprehensive_S_vs_s_deep() {
       (format "%s" ?A)
       (format "%S" ?A))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"hello\" \"\\\"hello\\\"\" \"line1\nline2\" \"\\\"line1\nline2\\\"\" \"((1 2) (3 4) (5 6))\" \"((1 2) (3 4) (5 6))\" \"[a b c]\" \"[a b c]\" \"(1 two three 4.0 nil t)\" \"(1 \\\"two\\\" three 4.0 nil t)\" \"(a . b)\" \"(a . b)\" \":test\" \":test\" \"65\" \"65\")""#
+        r#""OK (\"hello\" \"\\\"hello\\\"\" \"line1\\nline2\" \"\\\"line1\\nline2\\\"\" \"((1 2) (3 4) (5 6))\" \"((1 2) (3 4) (5 6))\" \"[a b c]\" \"[a b c]\" \"(1 two three 4.0 nil t)\" \"(1 \\\"two\\\" three 4.0 nil t)\" \"(a . b)\" \"(a . b)\" \":test\" \":test\" \"65\" \"65\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

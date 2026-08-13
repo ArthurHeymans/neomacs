@@ -281,7 +281,7 @@ fn div_cx428_mail_abbrevs() {
 fn div_cx428_process_filter_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"\nProcess neo-cx428-pfi finished\n[hello-from-filter\n]\"""#
+        r#""OK \"\\nProcess neo-cx428-pfi finished\\n[hello-from-filter\\n]\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

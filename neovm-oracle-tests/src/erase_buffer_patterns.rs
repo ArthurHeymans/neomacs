@@ -345,7 +345,7 @@ fn oracle_prop_erase_buffer_multi_buffer_pipeline() {
     (kill-buffer xform)
     (kill-buffer out)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"apple 3\nbanana 7\ncherry 2\ndate 5\n\" \"APPLE:9\nBANANA:49\nCHERRY:4\nDATE:25\n\" \"=== REPORT ===\nItems: 4\nTotal: 87\n--- Detail ---\nAPPLE:9\nBANANA:49\nCHERRY:4\nDATE:25\n\" 84)""#
+        r#""OK (\"apple 3\\nbanana 7\\ncherry 2\\ndate 5\\n\" \"APPLE:9\\nBANANA:49\\nCHERRY:4\\nDATE:25\\n\" \"=== REPORT ===\\nItems: 4\\nTotal: 87\\n--- Detail ---\\nAPPLE:9\\nBANANA:49\\nCHERRY:4\\nDATE:25\\n\" 84)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -188,8 +188,9 @@ fn div_cx144_org_todo_state_extraction() {
 #[test]
 fn div_cx144_org_table_alignment_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (t \"| Name | Age |\n|------+-----|\n| Bob  | 30  |\n\")""#]];
+    let expect = expect_test::expect![[
+        r#""OK (t \"| Name | Age |\\n|------+-----|\\n| Bob  | 30  |\\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -211,7 +212,7 @@ fn div_cx144_org_table_alignment_basic() {
 fn div_cx144_org_sparse_tree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t \"* Task A\n** Sub A1\ncontent alpha\n** Sub A2\ncontent beta\n* Task B\ncontent gamma\n\")""#
+        r#""OK (t \"* Task A\\n** Sub A1\\ncontent alpha\\n** Sub A2\\ncontent beta\\n* Task B\\ncontent gamma\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

@@ -220,7 +220,7 @@ fn div_combo_invisible_overlay_kill_line() {
 fn div_combo_invisible_fill_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"alpha\nbravo charlie\ndelta echo\nfoxtrot\n\" 12 19 (invisible t))""#
+        r#""OK #(\"alpha\\nbravo charlie\\ndelta echo\\nfoxtrot\\n\" 12 19 (invisible t))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

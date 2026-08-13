@@ -13,7 +13,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 fn combo47_plan_clock_replan_reparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:init (\"Task\")) (:after-schedule (\"s\")) (:after-deadline ((\"S\" \"D\"))) (:after-props (\"2:30\" \"dev\")) (:clocking-p t) (:clocking-p-after nil) (:clock-entries 1) (:after-child ((\"S\" \"D\") (\"S\" nil))) (:buffer \"* Task\nDEADLINE: <2024-03-15 Fri> SCHEDULED: <2024-03-01 Fri>\n:PROPERTIES:\n:EFFORT:   2:30\n:CATEGORY: dev\n:END:\n:LOGBOOK:\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\n:END:\n\n** Sub-task\nSCHEDULED: <2024-03-10 Sun>\n:PROPERTIES:\n:EFFORT:   1:00\n:END:\n\"))""#
+        r#""OK ((:init (\"Task\")) (:after-schedule (\"s\")) (:after-deadline ((\"S\" \"D\"))) (:after-props (\"2:30\" \"dev\")) (:clocking-p t) (:clocking-p-after nil) (:clock-entries 1) (:after-child ((\"S\" \"D\") (\"S\" nil))) (:buffer \"* Task\\nDEADLINE: <2024-03-15 Fri> SCHEDULED: <2024-03-01 Fri>\\n:PROPERTIES:\\n:EFFORT:   2:30\\n:CATEGORY: dev\\n:END:\\n:LOGBOOK:\\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\\n:END:\\n\\n** Sub-task\\nSCHEDULED: <2024-03-10 Sun>\\n:PROPERTIES:\\n:EFFORT:   1:00\\n:END:\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(with-temp-buffer
@@ -125,7 +125,7 @@ fn combo47_multitable_cascade_recalc() {
 fn combo47_edit_export_repeat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:export1 \"1 Report\n========\n\n  This is a *bold* statement about /emphasized/ topics.\n\") (:export2 \"1 Report\n========\n\n  This is a *bold* statement about /emphasized/ topics.\n\n\n1.1 Details\n~~~~~~~~~~~\n\n  More text with `code' and `verbatim'.\n   Col1  Col2 \n  ------------\n   A     B    \n\") (:export3 \"1 Report\n========\n\n  This is a **important** statement about /emphasized/ topics.\n\n\n1.1 Details\n~~~~~~~~~~~\n\n  More text with `code' and `verbatim'.\n   Col1  Col2 \n  ------------\n   A     B    \n\") (:export4 \"1 Report\n========\n\n  This is a **important** statement about /emphasized/ topics.\n\n\n1.1 Details\n~~~~~~~~~~~\n\n  More text with `code' and `verbatim'.\n   Col1  Col2 \n  ------------\n   A     B    \n\n  ,----\n  | (+ 1 2)\n  `----\n\"))""#
+        r#""OK ((:export1 \"1 Report\\n========\\n\\n  This is a *bold* statement about /emphasized/ topics.\\n\") (:export2 \"1 Report\\n========\\n\\n  This is a *bold* statement about /emphasized/ topics.\\n\\n\\n1.1 Details\\n~~~~~~~~~~~\\n\\n  More text with `code' and `verbatim'.\\n   Col1  Col2 \\n  ------------\\n   A     B    \\n\") (:export3 \"1 Report\\n========\\n\\n  This is a **important** statement about /emphasized/ topics.\\n\\n\\n1.1 Details\\n~~~~~~~~~~~\\n\\n  More text with `code' and `verbatim'.\\n   Col1  Col2 \\n  ------------\\n   A     B    \\n\") (:export4 \"1 Report\\n========\\n\\n  This is a **important** statement about /emphasized/ topics.\\n\\n\\n1.1 Details\\n~~~~~~~~~~~\\n\\n  More text with `code' and `verbatim'.\\n   Col1  Col2 \\n  ------------\\n   A     B    \\n\\n  ,----\\n  | (+ 1 2)\\n  `----\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

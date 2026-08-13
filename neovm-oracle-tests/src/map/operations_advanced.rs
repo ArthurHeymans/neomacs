@@ -785,7 +785,7 @@ fn oracle_prop_map_adv_mapconcat_complex() {
   ;; mapconcat on nil
   (mapconcat #'identity nil ","))"####;
     let expect = expect_test::expect![[
-        r#""OK (\"name,city,age\nAlice,New York,30\nBob,\\\"San Francisco, CA\\\",25\nCarol,,35\" \"name=Alice%20Smith&age=30&city=NYC\" \"root\n  a\n    a1\n    a2\n      a2x\n  b\n  c\n    c1\n    c2\n    c3\" \"a - b + c - d + e\" \"ONLY\" \"\")""#
+        r#""OK (\"name,city,age\\nAlice,New York,30\\nBob,\\\"San Francisco, CA\\\",25\\nCarol,,35\" \"name=Alice%20Smith&age=30&city=NYC\" \"root\\n  a\\n    a1\\n    a2\\n      a2x\\n  b\\n  c\\n    c1\\n    c2\\n    c3\" \"a - b + c - d + e\" \"ONLY\" \"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

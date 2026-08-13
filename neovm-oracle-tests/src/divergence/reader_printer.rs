@@ -101,7 +101,7 @@ fn divergence_print_string_escape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect =
-        expect_test::expect![[r#""OK \"\\\"hello \\\\\\\"world\\\\\\\" \n tab\there\\\"\"""#]];
+        expect_test::expect![[r#""OK \"\\\"hello \\\\\\\"world\\\\\\\" \\n tab\there\\\"\"""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(prin1-to-string "hello \"world\" \n tab\there")"#,
         expect,

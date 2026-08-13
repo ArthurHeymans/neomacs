@@ -6,7 +6,7 @@ fn org_goto_local_search_keymap_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((3 \"** TODO Deep Target :tag:\n\") (5 \"* Beta Deep Target\n\") nil ((\"q\" org-goto-quit) (\"n\" outline-next-visible-heading) (\"p\" outline-previous-visible-heading) (\"f\" outline-forward-same-level) (\"b\" outline-backward-same-level) (\"u\" outline-up-heading) (\"/\" org-occur) (\"\\r\" org-goto-ret)) t)""#
+        r#""OK ((3 \"** TODO Deep Target :tag:\\n\") (5 \"* Beta Deep Target\\n\") nil ((\"q\" org-goto-quit) (\"n\" outline-next-visible-heading) (\"p\" outline-previous-visible-heading) (\"f\" outline-forward-same-level) (\"b\" outline-backward-same-level) (\"u\" outline-up-heading) (\"/\" org-occur) (\"\\r\" org-goto-ret)) t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

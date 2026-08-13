@@ -195,7 +195,7 @@ fn oracle_prop_erase_buffer_then_reinsert() {
                              (buffer-string))))
             (list snap1 snap2 snap3 snap4 snap5)))))))"#;
     let expect = expect_test::expect![[
-        r#""OK ((13 14 \"first content\") (0 1 1 1 t t) (19 20 \"second content here\") (0 1) (17 7 \"line2\" \"line1\nline2\nline3\"))""#
+        r#""OK ((13 14 \"first content\") (0 1 1 1 t t) (19 20 \"second content here\") (0 1) (17 7 \"line2\" \"line1\\nline2\\nline3\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -238,7 +238,7 @@ fn oracle_prop_multi_buffer_copy_processing() {
                   (with-current-buffer dst (buffer-size))))))
     (kill-buffer src)
     (kill-buffer dst)))"#;
-    let expect = expect_test::expect![[r#""OK (3 \"DISK FULL\nTIMEOUT\nNETWORK\n\" 85 26)""#]];
+    let expect = expect_test::expect![[r#""OK (3 \"DISK FULL\\nTIMEOUT\\nNETWORK\\n\" 85 26)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

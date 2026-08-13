@@ -270,7 +270,7 @@ fn oracle_prop_fa_quoted_string_parser() {
         (funcall 'neovm--fa-parse-strings "broken \"string"))
     (fmakunbound 'neovm--fa-parse-strings)))"#;
     let expect = expect_test::expect![[
-        r#""OK (((\"hello\" \"world\") nil t) ((\"C:\\\\Users\\\\test\") nil t) ((\"line1\nline2\") nil t) ((\"s \") (\"unterminated string\") nil) ((\"double\" \"single\") nil t) ((\"\" \"\") nil t) ((\"he said \\\"hi\\\"\") nil t) (nil nil t) (nil (\"unterminated string\") nil))""#
+        r#""OK (((\"hello\" \"world\") nil t) ((\"C:\\\\Users\\\\test\") nil t) ((\"line1\\nline2\") nil t) ((\"s \") (\"unterminated string\") nil) ((\"double\" \"single\") nil t) ((\"\" \"\") nil t) ((\"he said \\\"hi\\\"\") nil t) (nil nil t) (nil (\"unterminated string\") nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

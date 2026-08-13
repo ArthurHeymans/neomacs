@@ -131,7 +131,7 @@ fn strong_list_checkbox_statistics_combo() {
 fn strong_footnote_create_renumber_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"Text[fn:2] more[fn:1] end\n\n[fn:1] First\n[fn:2] Second\" \"Text[fn:2] more[fn:1] end\n\n* Footnotes\n\n[fn:2] Second\n\n[fn:1] First\n\" 4)""#
+        r#""OK (\"Text[fn:2] more[fn:1] end\\n\\n[fn:1] First\\n[fn:2] Second\" \"Text[fn:2] more[fn:1] end\\n\\n* Footnotes\\n\\n[fn:2] Second\\n\\n[fn:1] First\\n\" 4)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -527,7 +527,7 @@ fn strong_colview_dynamic_columns() {
 fn strong_babel_tangle_named_blocks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"setup\" \"emacs-lisp\" \"(setq x 1)\n\") (\"compute\" \"emacs-lisp\" \"(+ x 2)\n\"))""#
+        r#""OK ((\"setup\" \"emacs-lisp\" \"(setq x 1)\\n\") (\"compute\" \"emacs-lisp\" \"(+ x 2)\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -916,7 +916,7 @@ fn strong_priority_operations_cycle() {
 fn strong_edit_headline_preserve_body() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"Changed\" \"Changed\" \"Body line 1\nBody line 2\n\" \"Body line 1\nBody line 2\n\")""#
+        r#""OK (\"Changed\" \"Changed\" \"Body line 1\\nBody line 2\\n\" \"Body line 1\\nBody line 2\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -1049,7 +1049,7 @@ fn strong_keyword_parsing_all_types() {
 fn strong_comment_fixed_width_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"This is a comment\" \"Another comment\") (\"Fixed-width\nAnother line\"))""#
+        r#""OK ((\"This is a comment\" \"Another comment\") (\"Fixed-width\\nAnother line\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

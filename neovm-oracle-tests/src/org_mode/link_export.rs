@@ -28,7 +28,7 @@ fn org_man_export_sections_markup_links_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (t t t t t t \".SH \\\"NAME\\\"\n.PP\ndemo - short description\n.SH \\\"SYNOPSIS\\\"\n.PP\n\\\\fIdemo \\\\-\\\\-help\\\\fP\n.SH \\\"DESCRIPTION\\\"\n.PP\nText with \\\\fBbold\\\\fP, \\\\fIitalic\\\\fP, and https://example.org \\\\fBat\\\\fP \\\\fIlink\\\\fP.\n\")""#
+        r#""OK (t t t t t t \".SH \\\"NAME\\\"\\n.PP\\ndemo - short description\\n.SH \\\"SYNOPSIS\\\"\\n.PP\\n\\\\fIdemo \\\\-\\\\-help\\\\fP\\n.SH \\\"DESCRIPTION\\\"\\n.PP\\nText with \\\\fBbold\\\\fP, \\\\fIitalic\\\\fP, and https://example.org \\\\fBat\\\\fP \\\\fIlink\\\\fP.\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -177,7 +177,7 @@ fn org_link_export_html_latex_structure_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""ERR (user-error \"Org export aborted.  Unable to resolve link: \\\"No match for fuzzy expression: *Heading\\\"\nSee ‘org-export-with-broken-links’\")""#
+        r#""ERR (user-error \"Org export aborted.  Unable to resolve link: \\\"No match for fuzzy expression: *Heading\\\"\\nSee ‘org-export-with-broken-links’\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -238,7 +238,7 @@ fn org_link_export_footnote_anchor_custom_id_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""ERR (user-error \"Org export aborted.  Unable to resolve link: \\\"some-id\\\"\nSee ‘org-export-with-broken-links’\")""#
+        r#""ERR (user-error \"Org export aborted.  Unable to resolve link: \\\"some-id\\\"\\nSee ‘org-export-with-broken-links’\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

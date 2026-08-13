@@ -362,7 +362,7 @@ fn oracle_prop_narrow_with_save_excursion() {
     (setq results (cons (list 'widened (buffer-string)) results))
     (nreverse results)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((narrowed \"Line-2\nLine-3\n\" 8) (excursion-at-max 22) (after-excursion 8) (after-insert \">>Line-2\nLine-3\n\" 10) (widened \"Line-1\n>>Line-2\nLine-3\nLine-4\nLine-5\n\"))""#
+        r#""OK ((narrowed \"Line-2\\nLine-3\\n\" 8) (excursion-at-max 22) (after-excursion 8) (after-insert \">>Line-2\\nLine-3\\n\" 10) (widened \"Line-1\\n>>Line-2\\nLine-3\\nLine-4\\nLine-5\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

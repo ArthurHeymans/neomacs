@@ -10,7 +10,7 @@ fn org_ascii_list_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect =
-        expect_test::expect![[r#""OK \"1. first\n2. second\n\n x  y \n------\n 9  8 \n\"""#]];
+        expect_test::expect![[r#""OK \"1. first\\n2. second\\n\\n x  y \\n------\\n 9  8 \\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (require 'ox-ascii)
   (with-temp-buffer (org-mode)
@@ -41,7 +41,7 @@ fn org_element_table_cells() {
 fn org_fill_paragraph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"aaaa bbbb cccc dddd\neeee ffff gggg hhhh\"""#]];
+    let expect = expect_test::expect![[r#""OK \"aaaa bbbb cccc dddd\\neeee ffff gggg hhhh\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer (org-mode) (setq fill-column 20)
@@ -56,7 +56,7 @@ fn org_html_inline_markup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"<p>\nSome <b>bold</b>, <i>italic</i>, <code>code</code>, <code>verbatim</code>, <del>strike</del> and a <a href=\\\"https://x.org\\\">link</a>.\n</p>\n\"""#
+        r#""OK \"<p>\\nSome <b>bold</b>, <i>italic</i>, <code>code</code>, <code>verbatim</code>, <del>strike</del> and a <a href=\\\"https://x.org\\\">link</a>.\\n</p>\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (require 'ox-html)
@@ -72,7 +72,7 @@ fn org_html_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"<ul class=\\\"org-ul\\\">\n<li>one</li>\n<li>two\n<ul class=\\\"org-ul\\\">\n<li>nested</li>\n</ul></li>\n<li>three</li>\n</ul>\n\"""#
+        r#""OK \"<ul class=\\\"org-ul\\\">\\n<li>one</li>\\n<li>two\\n<ul class=\\\"org-ul\\\">\\n<li>nested</li>\\n</ul></li>\\n<li>three</li>\\n</ul>\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (require 'ox-html)
@@ -88,7 +88,7 @@ fn org_html_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"<table border=\\\"2\\\" cellspacing=\\\"0\\\" cellpadding=\\\"6\\\" rules=\\\"groups\\\" frame=\\\"hsides\\\">\n\n\n<colgroup>\n<col  class=\\\"org-right\\\" />\n\n<col  class=\\\"org-right\\\" />\n</colgroup>\n<thead>\n<tr>\n<th scope=\\\"col\\\" class=\\\"org-right\\\">a</th>\n<th scope=\\\"col\\\" class=\\\"org-right\\\">b</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td class=\\\"org-right\\\">1</td>\n<td class=\\\"org-right\\\">2</td>\n</tr>\n</tbody>\n</table>\n\"""#
+        r#""OK \"<table border=\\\"2\\\" cellspacing=\\\"0\\\" cellpadding=\\\"6\\\" rules=\\\"groups\\\" frame=\\\"hsides\\\">\\n\\n\\n<colgroup>\\n<col  class=\\\"org-right\\\" />\\n\\n<col  class=\\\"org-right\\\" />\\n</colgroup>\\n<thead>\\n<tr>\\n<th scope=\\\"col\\\" class=\\\"org-right\\\">a</th>\\n<th scope=\\\"col\\\" class=\\\"org-right\\\">b</th>\\n</tr>\\n</thead>\\n<tbody>\\n<tr>\\n<td class=\\\"org-right\\\">1</td>\\n<td class=\\\"org-right\\\">2</td>\\n</tr>\\n</tbody>\\n</table>\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (require 'ox-html)
@@ -104,7 +104,7 @@ fn org_latex_markup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK \"Text with \\\\textbf{bold} and \\\\emph{italic} and \\\\(x^2\\\\) math.\n\"""#
+        r#""OK \"Text with \\\\textbf{bold} and \\\\emph{italic} and \\\\(x^2\\\\) math.\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org) (require 'ox-latex)

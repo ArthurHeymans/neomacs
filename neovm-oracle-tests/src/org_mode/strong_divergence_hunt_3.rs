@@ -322,7 +322,7 @@ fn dh3_table_formula_refs() {
 fn dh3_block_header_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"emacs-lisp\" \"my-block\" \":results value\" \"(+ x 1)\n\")""#
+        r#""OK (\"emacs-lisp\" \"my-block\" \":results value\" \"(+ x 1)\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -748,7 +748,7 @@ fn dh3_colview_effort() {
 #[test]
 fn dh3_block_execution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"emacs-lisp\" \"(+ 1 2)\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"emacs-lisp\" \"(+ 1 2)\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -944,7 +944,7 @@ fn dh3_pcomplete() {
 #[test]
 fn dh3_narrow_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"* H1\nBody 1\n** H2\nSub\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"* H1\\nBody 1\\n** H2\\nSub\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

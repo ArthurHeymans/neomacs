@@ -303,7 +303,7 @@ fn uf53_src_params() {
 #[test]
 fn uf53_src_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"(+ 1 2)\n(+ 3 4)\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"(+ 1 2)\\n(+ 3 4)\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

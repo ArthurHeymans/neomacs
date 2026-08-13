@@ -6,7 +6,7 @@ fn org_tags_multivalue_property_delete_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"new\") ((\"CATEGORY\" . \"???\") (\"MULTI\" . \"x y z\") (\"A\" . \"updated\")) \"* TODO Task                                                             :new:\n:PROPERTIES:\n:A:        updated\n:Multi:    x y z\n:END:\n\")""#
+        r#""OK ((\"new\") ((\"CATEGORY\" . \"???\") (\"MULTI\" . \"x y z\") (\"A\" . \"updated\")) \"* TODO Task                                                             :new:\\n:PROPERTIES:\\n:A:        updated\\n:Multi:    x y z\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -33,7 +33,7 @@ fn org_archive_tag_toggle_parse_roundtrip_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"* TODO Active\n** DONE Child                                                       :ARCHIVE:\nBody\n** TODO Keep\n\" \"* TODO Active\n** DONE Child\nBody\n** TODO Keep\n\" ((\"Active\" nil) (\"Child\" nil) (\"Keep\" nil)))""#
+        r#""OK (\"* TODO Active\\n** DONE Child                                                       :ARCHIVE:\\nBody\\n** TODO Keep\\n\" \"* TODO Active\\n** DONE Child\\nBody\\n** TODO Keep\\n\" ((\"Active\" nil) (\"Child\" nil) (\"Keep\" nil)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -63,8 +63,9 @@ fn org_archive_tag_toggle_parse_roundtrip_combo() {
 fn org_done_log_drawer_timestamp_normalized_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect =
-        expect_test::expect![[r#""OK (54 \"* DONE Task\nCLOSED: [stamp]\n:LOGBOOK:\n:END:\n\")""#]];
+    let expect = expect_test::expect![[
+        r#""OK (54 \"* DONE Task\\nCLOSED: [stamp]\\n:LOGBOOK:\\n:END:\\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
@@ -139,7 +140,7 @@ fn org_property_values_global_delete_roundtrip_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((\"Ada\" \"Bea\") (\"0:15\" \"0:30\" \"1:00\") (\"Ada\" \"Cy\") nil ((\"CATEGORY\" . \"???\") (\"OWNER\" . \"Cy\")) \"#+PROPERTY: Owner_ALL Ada Bea Cy\n* A\n:PROPERTIES:\n:Owner: Ada\n:END:\n** A1\n:PROPERTIES:\n:Owner:    Cy\n:END:\n* B\n:PROPERTIES:\n:Owner: Ada\n:END:\n\")""##
+        r##""OK ((\"Ada\" \"Bea\") (\"0:15\" \"0:30\" \"1:00\") (\"Ada\" \"Cy\") nil ((\"CATEGORY\" . \"???\") (\"OWNER\" . \"Cy\")) \"#+PROPERTY: Owner_ALL Ada Bea Cy\\n* A\\n:PROPERTIES:\\n:Owner: Ada\\n:END:\\n** A1\\n:PROPERTIES:\\n:Owner:    Cy\\n:END:\\n* B\\n:PROPERTIES:\\n:Owner: Ada\\n:END:\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -703,7 +704,7 @@ fn org_todo_tag_property_clock_state_mutation_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"Project\" (\"work\") \"5:00\" \"Ada\" \"TODO\" (\"TODO\" \"WAIT\") nil) (\"Task A\" (\"urgent\") \"1:30\" \"Ada\" \"TODO\" (\"TODO\" \"WAIT\") nil) (t) (#(\"Task A\" 0 6 (org-todo-head \"TODO\")) (\"urgent\") \"1:30\" \"Ada\" \"DONE\" nil (\"DONE\" \"CANCELED\")) (\"Sub A1\" nil \"1:30\" \"Ada\" \"TODO\" (\"TODO\" \"WAIT\") nil) (\"Task B\" (\"blocked\" \"waiting\") \"0:45\" \"Ada\" \"WAIT\" (\"WAIT\") nil) \"* TODO Project :work:\n:PROPERTIES:\n:Owner: Ada\n:Effort: 5:00\n:END:\n** DONE Task A                                                       :urgent:\nCLOSED: [stamp]\n:PROPERTIES:\n:Effort: 1:30\n:ORDERED: t\n:END:\n:LOGBOOK:\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\n:END:\nSCHEDULED: <2026-05-27 Wed>\n*** TODO Sub A1\n:PROPERTIES:\n:Priority: High\n:END:\n*** TODO Sub A2\n** WAIT Task B                                              :blocked:waiting:\n:PROPERTIES:\n:Effort: 0:45\n:END:\n* DONE Finished :work:\nCLOSED: [stamp]\n\")""#
+        r#""OK ((\"Project\" (\"work\") \"5:00\" \"Ada\" \"TODO\" (\"TODO\" \"WAIT\") nil) (\"Task A\" (\"urgent\") \"1:30\" \"Ada\" \"TODO\" (\"TODO\" \"WAIT\") nil) (t) (#(\"Task A\" 0 6 (org-todo-head \"TODO\")) (\"urgent\") \"1:30\" \"Ada\" \"DONE\" nil (\"DONE\" \"CANCELED\")) (\"Sub A1\" nil \"1:30\" \"Ada\" \"TODO\" (\"TODO\" \"WAIT\") nil) (\"Task B\" (\"blocked\" \"waiting\") \"0:45\" \"Ada\" \"WAIT\" (\"WAIT\") nil) \"* TODO Project :work:\\n:PROPERTIES:\\n:Owner: Ada\\n:Effort: 5:00\\n:END:\\n** DONE Task A                                                       :urgent:\\nCLOSED: [stamp]\\n:PROPERTIES:\\n:Effort: 1:30\\n:ORDERED: t\\n:END:\\n:LOGBOOK:\\nCLOCK: [2026-06-15 Mon 12:00]--[2026-06-15 Mon 12:00] =>  0:00\\n:END:\\nSCHEDULED: <2026-05-27 Wed>\\n*** TODO Sub A1\\n:PROPERTIES:\\n:Priority: High\\n:END:\\n*** TODO Sub A2\\n** WAIT Task B                                              :blocked:waiting:\\n:PROPERTIES:\\n:Effort: 0:45\\n:END:\\n* DONE Finished :work:\\nCLOSED: [stamp]\\n\")""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
@@ -774,7 +775,7 @@ fn org_property_inherit_set_delete_globally_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"Ada\" \"Ada\" \"main\" \"main\" \"5:00\" \"5:00\") (nil \"Ada\" \"main\" \"main\" \"2:00\" \"2:00\") (nil \"Ada\" \"main\" \"main\" nil \"2:00\") (nil \"Ada\" \"main\" \"main\" nil \"5:00\") (\"Bob\" \"Bob\" \"???\" \"???\" nil nil) ((\"CATEGORY\" . \"main\") (\"STATUS\" . \"active\") (\"EFFORT\" . \"2:00\")) nil \"* Root\n:PROPERTIES:\n:CATEGORY: main\n:Effort: 5:00\n:END:\n** Child A\n:PROPERTIES:\n:Effort: 2:00\n:Status:   active\n:END:\n*** Grandchild\n** Child B\n* Other\n\")""#
+        r#""OK ((\"Ada\" \"Ada\" \"main\" \"main\" \"5:00\" \"5:00\") (nil \"Ada\" \"main\" \"main\" \"2:00\" \"2:00\") (nil \"Ada\" \"main\" \"main\" nil \"2:00\") (nil \"Ada\" \"main\" \"main\" nil \"5:00\") (\"Bob\" \"Bob\" \"???\" \"???\" nil nil) ((\"CATEGORY\" . \"main\") (\"STATUS\" . \"active\") (\"EFFORT\" . \"2:00\")) nil \"* Root\\n:PROPERTIES:\\n:CATEGORY: main\\n:Effort: 5:00\\n:END:\\n** Child A\\n:PROPERTIES:\\n:Effort: 2:00\\n:Status:   active\\n:END:\\n*** Grandchild\\n** Child B\\n* Other\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -844,7 +845,7 @@ fn org_property_set_delete_multivalue_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"Ada\" \"Ada\" \"main\" \"main\" nil nil) (nil \"Ada\" \"main\" \"main\" \"2:00\" \"2:00\") (nil \"Ada\" \"main\" \"main\" nil \"2:00\") ((\"CATEGORY\" . \"main\") (\"STATUS\" . \"active\") (\"EFFORT\" . \"2:00\")) nil \"* Root\n:PROPERTIES:\n:CATEGORY: main\n:END:\n** Child A\n:PROPERTIES:\n:Effort: 2:00\n:Status:   active\n:END:\n*** Grandchild\n** Child B\n\")""#
+        r#""OK ((\"Ada\" \"Ada\" \"main\" \"main\" nil nil) (nil \"Ada\" \"main\" \"main\" \"2:00\" \"2:00\") (nil \"Ada\" \"main\" \"main\" nil \"2:00\") ((\"CATEGORY\" . \"main\") (\"STATUS\" . \"active\") (\"EFFORT\" . \"2:00\")) nil \"* Root\\n:PROPERTIES:\\n:CATEGORY: main\\n:END:\\n** Child A\\n:PROPERTIES:\\n:Effort: 2:00\\n:Status:   active\\n:END:\\n*** Grandchild\\n** Child B\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

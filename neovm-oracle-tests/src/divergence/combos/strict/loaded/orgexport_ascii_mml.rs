@@ -11,7 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_p0_org_export_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Table of Contents\n_________________\n\n1. Heading 1\n.. 1. Sub heading\n\n\n1 Heading 1\n===========\n\n1.1 Sub heading\n~~~~~~~~~~~~~~~\n\n  Paragraph text here.\n  - item one\n  - item two\n\"""#
+        r#""OK \"Table of Contents\\n_________________\\n\\n1. Heading 1\\n.. 1. Sub heading\\n\\n\\n1 Heading 1\\n===========\\n\\n1.1 Sub heading\\n~~~~~~~~~~~~~~~\\n\\n  Paragraph text here.\\n  - item one\\n  - item two\\n\"""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
@@ -29,7 +29,7 @@ fn div_p0_org_export_ascii() {
 fn div_p0_org_export_ascii_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Table of Contents\n_________________\n\n1. Table test\n\n\n1 Table test\n============\n\n   Name  Value \n  -------------\n   a         1 \n   b         2 \n\"""#
+        r#""OK \"Table of Contents\\n_________________\\n\\n1. Table test\\n\\n\\n1 Table test\\n============\\n\\n   Name  Value \\n  -------------\\n   a         1 \\n   b         2 \\n\"""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
@@ -47,7 +47,7 @@ fn div_p0_org_export_ascii_table() {
 fn div_p0_mml_parse_multipart() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((part (type . \"text/plain\") (disposition . \"inline\") (tag-location . 1) (contents . \"Hello body\n\")))""#
+        r#""OK ((part (type . \"text/plain\") (disposition . \"inline\") (tag-location . 1) (contents . \"Hello body\\n\")))""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"

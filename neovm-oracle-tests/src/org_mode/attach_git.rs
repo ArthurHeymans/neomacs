@@ -6,7 +6,7 @@ fn org_attach_git_default_repo_copy_delete_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"at/tach-git-default\" (\"source.txt\") (\"Synchronized attachments\" \"at/tach-git-default/source.txt\") \"\" nil (\"Synchronized attachments\" \"D\tat/tach-git-default/source.txt\") \"\" \"* Task                                                               :ATTACH:\n:PROPERTIES:\n:ID: attach-git-default\n:END:\n\")""#
+        r#""OK (\"at/tach-git-default\" (\"source.txt\") (\"Synchronized attachments\" \"at/tach-git-default/source.txt\") \"\" nil (\"Synchronized attachments\" \"D\tat/tach-git-default/source.txt\") \"\" \"* Task                                                               :ATTACH:\\n:PROPERTIES:\\n:ID: attach-git-default\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -77,7 +77,7 @@ fn org_attach_git_individual_repo_buffer_sync_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"repo\" nil (\".git\" \"payload.md\") (\"fatal: your current branch 'master' does not have any commits yet\") (\".git\") (\"fatal: your current branch 'master' does not have any commits yet\") \"\" \"* Parent                                                             :ATTACH:\n:PROPERTIES:\n:DIR: <root>/repo\n:END:\n** Child\n\")""#
+        r#""OK (\"repo\" nil (\".git\" \"payload.md\") (\"fatal: your current branch 'master' does not have any commits yet\") (\".git\") (\"fatal: your current branch 'master' does not have any commits yet\") \"\" \"* Parent                                                             :ATTACH:\\n:PROPERTIES:\\n:DIR: <root>/repo\\n:END:\\n** Child\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

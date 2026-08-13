@@ -72,7 +72,7 @@ fn div_cx37_auto_fill_mode_basic() {
 fn div_cx37_adaptive_fill_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"// comment line one\n// comment line two\nmore text here\n\"""#
+        r#""OK \"// comment line one\\n// comment line two\\nmore text here\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -193,7 +193,7 @@ fn div_cx37_abbrev_mode_case_preserving_expansion() {
 fn div_cx37_fill_paragraph_with_fill_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"> short text\n> more text that is longer than the column width\n\"""#
+        r#""OK \"> short text\\n> more text that is longer than the column width\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -229,7 +229,7 @@ fn fn_div_cx37_subword_backward_movement() {
 #[test]
 fn div_cx37_comment_inline_and_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"/* code line */\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"/* code line */\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

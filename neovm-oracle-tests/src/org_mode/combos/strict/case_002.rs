@@ -296,7 +296,7 @@ fn strict_copy_deep_vs_shallow() {
 fn strict_swap_preserves_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"A\" \"A1\" \"B\" \"B1\" \"C\") \"** A1\nBody A1 A1\nBody A1\n* B\nBody B\n** B1\nBody B1\n* C\nBody C\")""#
+        r#""OK ((\"A\" \"A1\" \"B\" \"B1\" \"C\") \"** A1\\nBody A1 A1\\nBody A1\\n* B\\nBody B\\n** B1\\nBody B1\\n* C\\nBody C\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

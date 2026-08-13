@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx68_write_read_roundtrip_text_utf8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (24 t \"Hello café 世界 😀\n\" nil)""#]];
+    let expect = expect_test::expect![[r#""OK (24 t \"Hello café 世界 😀\\n\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx68-utf8"))
@@ -31,7 +31,7 @@ fn div_cx68_write_read_roundtrip_text_utf8() {
 #[test]
 fn div_cx68_write_then_append_then_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"first part\nsecond part\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"first part\\nsecond part\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((path (make-temp-file "neo-cx68-app")))

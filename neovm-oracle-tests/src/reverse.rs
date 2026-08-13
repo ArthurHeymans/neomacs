@@ -123,7 +123,7 @@ fn oracle_reverse_copies_supported_sequences_without_mutating_originals() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK ((a (b) c) (c (b) a) nil t [a (b) c] [c (b) a] nil t \"abé\" \"éba\" nil #&4\"\u{5}\" #&4\"\n\" nil)""#
+        r#""OK ((a (b) c) (c (b) a) nil t [a (b) c] [c (b) a] nil t \"abé\" \"éba\" nil #&4\"\u{5}\" #&4\"\\n\" nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -153,7 +153,7 @@ fn oracle_nreverse_mutates_lists_vectors_and_bool_vectors_but_copies_strings() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK ((c b a) (a) t nil [c b a] [c b a] t #&4\"\n\" #&4\"\n\" t \"abé\" \"éba\" nil)""#
+        r#""OK ((c b a) (a) t nil [c b a] [c b a] t #&4\"\\n\" #&4\"\\n\" t \"abé\" \"éba\" nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

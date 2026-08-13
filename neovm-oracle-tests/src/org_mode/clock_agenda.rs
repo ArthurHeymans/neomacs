@@ -130,7 +130,7 @@ fn org_clock_report_dynamic_block_update_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"* Project\n#+BEGIN: clocktable :scope file :maxlevel 3 :block \\\"2026-05-27\\\" :link nil\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00], for Wednesday, May 27, 2026.\n| Headline     | Time   |      |\n|--------------+--------+------|\n| *Total time* | *2:00* |      |\n|--------------+--------+------|\n| Project      | 2:00   |      |\n| \\\\_  Alpha    |        | 1:15 |\n| \\\\_  Beta     |        | 0:45 |\n#+END:\n\n** TODO Alpha\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:15] =>  1:15\n** TODO Beta\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n\" \"* Project\n#+BEGIN: clocktable :scope file :maxlevel 3 :block \\\"2026-05-27\\\" :link nil\n#+BEGIN: clocktable :scope file :maxlevel 3 :block \\\"2026-05-27\\\" :link nil\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00], for Wednesday, May 27, 2026.\n| Headline     | Time   |      |\n|--------------+--------+------|\n| *Total time* | *3:30* |      |\n|--------------+--------+------|\n| Project      | 3:30   |      |\n| \\\\_  Alpha    |        | 1:15 |\n| \\\\_  Beta     |        | 0:45 |\n#+END:\n\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00], for Wednesday, May 27, 2026.\n| Headline     | Time   |      |\n|--------------+--------+------|\n| *Total time* | *2:00* |      |\n|--------------+--------+------|\n| Project      | 2:00   |      |\n| \\\\_  Alpha    |        | 1:15 |\n| \\\\_  Beta     |        | 0:45 |\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:30] =>  1:30\n\n** TODO Alpha\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:15] =>  1:15\n** TODO Beta\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\n\")""#
+        r#""OK (\"* Project\\n#+BEGIN: clocktable :scope file :maxlevel 3 :block \\\"2026-05-27\\\" :link nil\\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00], for Wednesday, May 27, 2026.\\n| Headline     | Time   |      |\\n|--------------+--------+------|\\n| *Total time* | *2:00* |      |\\n|--------------+--------+------|\\n| Project      | 2:00   |      |\\n| \\\\_  Alpha    |        | 1:15 |\\n| \\\\_  Beta     |        | 0:45 |\\n#+END:\\n\\n** TODO Alpha\\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:15] =>  1:15\\n** TODO Beta\\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\\n\" \"* Project\\n#+BEGIN: clocktable :scope file :maxlevel 3 :block \\\"2026-05-27\\\" :link nil\\n#+BEGIN: clocktable :scope file :maxlevel 3 :block \\\"2026-05-27\\\" :link nil\\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00], for Wednesday, May 27, 2026.\\n| Headline     | Time   |      |\\n|--------------+--------+------|\\n| *Total time* | *3:30* |      |\\n|--------------+--------+------|\\n| Project      | 3:30   |      |\\n| \\\\_  Alpha    |        | 1:15 |\\n| \\\\_  Beta     |        | 0:45 |\\n#+END:\\n\\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00], for Wednesday, May 27, 2026.\\n| Headline     | Time   |      |\\n|--------------+--------+------|\\n| *Total time* | *2:00* |      |\\n|--------------+--------+------|\\n| Project      | 2:00   |      |\\n| \\\\_  Alpha    |        | 1:15 |\\n| \\\\_  Beta     |        | 0:45 |\\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:30] =>  1:30\\n\\n** TODO Alpha\\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:15] =>  1:15\\n** TODO Beta\\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 11:45] =>  0:45\\n\")""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
@@ -212,7 +212,7 @@ fn org_clocktable_match_properties_inherit_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((\"clock.org\" 80 ((1 \"[[*Project][Project]]\" (\"work\") nil 80 ((\"Client\" . \"Acme\"))) (2 \"[[*Alpha][Alpha]]\" (\"work\" \"billable\") \"<2026-05-27 Wed>\" 80 ((\"Owner\" . \"Ada\") (\"Client\" . \"Acme\"))))) \"#+CATEGORY: ClockProbe\n* Project :work:\n:PROPERTIES:\n:Client: Acme\n:END:\n** TODO Alpha :billable:\nSCHEDULED: <2026-05-27 Wed>\n:PROPERTIES:\n:Owner: Ada\n:END:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:20] =>  1:20\n** TODO Beta :internal:\nDEADLINE: <2026-05-27 Wed>\n:PROPERTIES:\n:Owner: Bea\n:END:\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:00] =>  1:00\n** DONE Gamma :billable:\nCLOCK: [2026-05-28 Thu 09:00]--[2026-05-28 Thu 09:30] =>  0:30\n\")""##
+        r##""OK ((\"clock.org\" 80 ((1 \"[[*Project][Project]]\" (\"work\") nil 80 ((\"Client\" . \"Acme\"))) (2 \"[[*Alpha][Alpha]]\" (\"work\" \"billable\") \"<2026-05-27 Wed>\" 80 ((\"Owner\" . \"Ada\") (\"Client\" . \"Acme\"))))) \"#+CATEGORY: ClockProbe\\n* Project :work:\\n:PROPERTIES:\\n:Client: Acme\\n:END:\\n** TODO Alpha :billable:\\nSCHEDULED: <2026-05-27 Wed>\\n:PROPERTIES:\\n:Owner: Ada\\n:END:\\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 10:20] =>  1:20\\n** TODO Beta :internal:\\nDEADLINE: <2026-05-27 Wed>\\n:PROPERTIES:\\n:Owner: Bea\\n:END:\\nCLOCK: [2026-05-27 Wed 11:00]--[2026-05-27 Wed 12:00] =>  1:00\\n** DONE Gamma :billable:\\nCLOCK: [2026-05-28 Thu 09:00]--[2026-05-28 Thu 09:30] =>  0:30\\n\")""##
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
@@ -260,7 +260,7 @@ fn org_clock_cancel_history_goto_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((t \"Beta\" 2 t) (nil nil 2) \"Beta\" (\"Beta\" \"Alpha\") \"* TODO Alpha\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:30] =>  0:30\n:END:\n* TODO Beta\n\")""#
+        r#""OK ((t \"Beta\" 2 t) (nil nil 2) \"Beta\" (\"Beta\" \"Alpha\") \"* TODO Alpha\\n:LOGBOOK:\\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:30] =>  0:30\\n:END:\\n* TODO Beta\\n\")""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
@@ -912,7 +912,7 @@ fn org_clock_report_custom_columns_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (240 ((1 \"Project\" 240) (2 \"Task A\" 150) (2 \"Task B\" 90)) \"#+BEGIN: clocktable :maxlevel 2\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\n\")""##
+        r##""OK (240 ((1 \"Project\" 240) (2 \"Task A\" 150) (2 \"Task B\" 90)) \"#+BEGIN: clocktable :maxlevel 2\\n#+CAPTION: Clock summary at [2026-06-15 Mon 12:00]\\n| Headline     | Time   |\\n|--------------+--------|\\n| *Total time* | *0:00* |\\n#+END:\\n\")""##
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
@@ -1091,7 +1091,7 @@ fn org_clock_logbook_edit_report_table_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (240 ((1 \"Project\" 240) (2 \"Task A\" 150) (2 \"Task B\" 90)) 300 ((1 \"Project\" 300) (2 \"Task A\" 150) (2 \"Task B\" 150)) \"* Project\n** Task A\n:LOGBOOK:\nCLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 10:30] =>  1:30\nCLOCK: [2026-05-28 Wed 11:00]--[2026-05-28 Wed 12:00] =>  1:00\n:END:\n** Task B\nCLOCK: [2026-05-28 Wed 16:00]--[2026-05-28 Wed 17:00] =>  1:00\n\n:LOGBOOK:\nCLOCK: [2026-05-28 Wed 14:00]--[2026-05-28 Wed 15:30] =>  1:30\n:END:\n\")""#
+        r#""OK (240 ((1 \"Project\" 240) (2 \"Task A\" 150) (2 \"Task B\" 90)) 300 ((1 \"Project\" 300) (2 \"Task A\" 150) (2 \"Task B\" 150)) \"* Project\\n** Task A\\n:LOGBOOK:\\nCLOCK: [2026-05-28 Wed 09:00]--[2026-05-28 Wed 10:30] =>  1:30\\nCLOCK: [2026-05-28 Wed 11:00]--[2026-05-28 Wed 12:00] =>  1:00\\n:END:\\n** Task B\\nCLOCK: [2026-05-28 Wed 16:00]--[2026-05-28 Wed 17:00] =>  1:00\\n\\n:LOGBOOK:\\nCLOCK: [2026-05-28 Wed 14:00]--[2026-05-28 Wed 15:30] =>  1:30\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn

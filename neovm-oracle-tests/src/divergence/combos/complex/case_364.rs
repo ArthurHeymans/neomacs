@@ -25,7 +25,7 @@ fn div_cx364_fill_region_with_fill_column_variants() {
 fn div_cx364_fill_region_with_fill_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"    This is a paragraph with a fill\n    prefix that should be wrapped\n    at the column boundary.  Second\n    line of the same paragraph\n    continues here.\"""#
+        r#""OK \"    This is a paragraph with a fill\\n    prefix that should be wrapped\\n    at the column boundary.  Second\\n    line of the same paragraph\\n    continues here.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -59,7 +59,7 @@ fn div_cx364_auto_fill_mode_availability() {
 fn div_cx364_fill_paragraph_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"This is a paragraph that is\nlong enough to require\nwrapping at a reasonable fill\ncolumn setting like 30\ncharacters or so.\"""#
+        r#""OK \"This is a paragraph that is\\nlong enough to require\\nwrapping at a reasonable fill\\ncolumn setting like 30\\ncharacters or so.\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -77,7 +77,7 @@ fn div_cx364_fill_paragraph_basic() {
 #[test]
 fn div_cx364_justify_current_line_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"This is a paragraph of text.\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"This is a paragraph of text.\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -96,7 +96,7 @@ fn div_cx364_justify_current_line_variants() {
 #[test]
 fn div_cx364_center_line_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\t       short line\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"\t       short line\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -116,7 +116,7 @@ fn div_cx364_center_line_basic() {
 fn div_cx364_center_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"\t\tline one\n\t\tline two\n\t       line three\n\"""#]];
+        expect_test::expect![[r#""OK \"\t\tline one\\n\t\tline two\\n\t       line three\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -135,7 +135,7 @@ fn div_cx364_center_region_basic() {
 fn div_cx364_fill_individual_paragraphs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"First paragraph here\nthat is long enough\nto wrap at 20.\n\nSecond paragraph\nalso long enough to\nwrap at 20 chars.\n\"""#
+        r#""OK \"First paragraph here\\nthat is long enough\\nto wrap at 20.\\n\\nSecond paragraph\\nalso long enough to\\nwrap at 20 chars.\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

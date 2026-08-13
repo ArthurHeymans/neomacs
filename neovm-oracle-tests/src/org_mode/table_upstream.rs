@@ -171,7 +171,7 @@ fn upstream_org_table_at_table_p() {
 #[test]
 fn upstream_org_table_align() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a | b |\n| c | d |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | b |\\n| c | d |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -191,7 +191,7 @@ fn upstream_org_table_align() {
 #[test]
 fn upstream_org_table_insert_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"|   | a | b |\n|   | c | d |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"|   | a | b |\\n|   | c | d |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -211,7 +211,7 @@ fn upstream_org_table_insert_column() {
 #[test]
 fn upstream_org_table_delete_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| b | c |\n| e | f |\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| b | c |\\n| e | f |\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -232,7 +232,7 @@ fn upstream_org_table_delete_column() {
 #[test]
 fn upstream_org_table_insert_row() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"|   |   |\n| a | b |\n| c | d |\"""#]];
+    let expect = expect_test::expect![[r#""OK \"|   |   |\\n| a | b |\\n| c | d |\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -252,7 +252,7 @@ fn upstream_org_table_insert_row() {
 #[test]
 fn upstream_org_table_kill_row() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a | b |\n| e | f |\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | b |\\n| e | f |\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -305,7 +305,7 @@ fn upstream_org_table_move_column() {
 fn upstream_org_table_move_row() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (\"| b |\n| a |\n| c |\" \"| a |\n| c |\n| b |\n\")""#]];
+        expect_test::expect![[r#""OK (\"| b |\\n| a |\\n| c |\" \"| a |\\n| c |\\n| b |\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -356,7 +356,7 @@ fn upstream_org_table_sort_lines() {
 #[test]
 fn upstream_org_table_transpose() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a | c | e |\n| b | d | f |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | c | e |\\n| b | d | f |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -376,7 +376,7 @@ fn upstream_org_table_transpose() {
 #[test]
 fn upstream_org_table_convert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a | b | c |\n| d | e | f |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | b | c |\\n| d | e | f |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -397,7 +397,7 @@ fn upstream_org_table_convert() {
 fn upstream_org_table_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"|   |   |   |\n|---+---+---|\n|   |   |   |\n\"""#]];
+        expect_test::expect![[r#""OK \"|   |   |   |\\n|---+---+---|\\n|   |   |   |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -462,7 +462,7 @@ fn upstream_org_table_eval_formula() {
 fn upstream_org_table_recalculate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"| 1 | 2 | 3 |\n| 3 | 4 |   |\n#+TBLFM: $3=$1+$2\"""#]];
+        expect_test::expect![[r#""OK \"| 1 | 2 | 3 |\\n| 3 | 4 |   |\\n#+TBLFM: $3=$1+$2\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -631,8 +631,9 @@ fn upstream_org_table_get_remote_options() {
 #[test]
 fn upstream_org_table_field_formula() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK \"| 10 | 20 | 30 |\n| 30 | 40 |    |\n#+TBLFM: $3=$1+$2\"""#]];
+    let expect = expect_test::expect![[
+        r#""OK \"| 10 | 20 | 30 |\\n| 30 | 40 |    |\\n#+TBLFM: $3=$1+$2\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)

@@ -999,7 +999,7 @@ fn zeta_move_subtree() {
 fn zeta_promote_demote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* H\" \"** H\" \"* H1\n** S1\n** S2\" \"** H1\n*** S1\n*** S2\")""#
+        r#""OK (\"* H\" \"** H\" \"* H1\\n** S1\\n** S2\" \"** H1\\n*** S1\\n*** S2\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

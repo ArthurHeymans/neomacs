@@ -99,7 +99,7 @@ fn async_proc_process_contact_command() {
 fn async_proc_process_filter_default_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"XMIDY\nProcess neo-pfd-xxx finished\n\" t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"XMIDY\\nProcess neo-pfd-xxx finished\\n\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((buf (generate-new-buffer " neo-pfd-xxx")))
   (let ((proc (start-process "neo-pfd-xxx" buf "printf" "X%sY" "MID")))
@@ -166,7 +166,7 @@ fn async_proc_process_send_string_cat() {
 fn async_proc_sentinel_normal_exit_msg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"finished\n\" 0)""#]];
+    let expect = expect_test::expect![[r#""OK (\"finished\\n\" 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((msg nil))
   (let ((proc (make-process :name "neo-sn-xxx" :command '("true")
@@ -196,7 +196,7 @@ fn async_proc_shell_command_status_var() {
 fn async_proc_call_process_dest_buffer_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (0 \"PRE\nX\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (0 \"PRE\\nX\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (insert "PRE\n")
   (let ((code (call-process "printf" nil t nil "%s\n" "X")))
@@ -343,7 +343,8 @@ fn async_proc_sentinel_status_in_callback() {
 fn async_proc_start_process_shell_command() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"hi\nbye\n\nProcess neo-spsc-xxx finished\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"hi\\nbye\\n\\nProcess neo-spsc-xxx finished\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((buf (generate-new-buffer " neo-spsc-xxx")))
   (let ((proc (start-process-shell-command "neo-spsc-xxx" buf "echo hi && echo bye")))
@@ -387,7 +388,7 @@ fn async_proc_timer_list_membership() {
 fn async_proc_process_sort_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"apple\nbanana\ncherry\n\" t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"apple\\nbanana\\ncherry\\n\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((acc ""))
   (let ((proc (make-process :name "neo-sort-xxx" :command '("sort")
@@ -479,7 +480,8 @@ fn async_proc_processes_ordered_sentinels() {
 fn async_proc_call_process_region_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"keep1\nDELME\nkeep2\nkeep1\nDELME\nkeep2\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"keep1\\nDELME\\nkeep2\\nkeep1\\nDELME\\nkeep2\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (insert "keep1\nDELME\nkeep2\n")
   (call-process-region (point-min) (point-max) "cat" nil t nil) (buffer-string))"##,

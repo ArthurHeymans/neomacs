@@ -189,7 +189,7 @@ fn div_np_string_to_number_bases() {
 fn div_np_prin1_char_escapes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"\\\"a\tb\nc\\\"\" \"\\\"a\\\\\\\"b\\\"\" \"\\\"\\\\\\\\back\\\"\" \"\\\"\\0\u{1}\u{1b}\u{7f}\\\"\")""#
+        r#""OK (\"\\\"a\tb\\nc\\\"\" \"\\\"a\\\\\\\"b\\\"\" \"\\\"\\\\\\\\back\\\"\" \"\\\"\\0\u{1}\u{1b}\u{7f}\\\"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

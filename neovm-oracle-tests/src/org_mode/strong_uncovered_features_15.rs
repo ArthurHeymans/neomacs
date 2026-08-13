@@ -366,7 +366,7 @@ fn uf15_paras() {
 fn uf15_lists() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((\"- \" nil \"A\n  1. sub\n  2. sub\") (\"1. \" nil \"sub\") (\"2. \" nil \"sub\") (\"- \" nil \"B\") (\"+ \" nil \"C\") (\"- \" nil \"D\"))""#
+        r#""OK ((\"- \" nil \"A\\n  1. sub\\n  2. sub\") (\"1. \" nil \"sub\") (\"2. \" nil \"sub\") (\"- \" nil \"B\") (\"+ \" nil \"C\") (\"- \" nil \"D\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

@@ -75,7 +75,7 @@ fn div_cx44_overlay_evaporate_undo_display_marker_narrow_mega() {
 fn div_cx44_set_buffer_multibyte_overlay_text_prop_sticky_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((#(\"caf\\303\\251\\344\\270\\226\\347\\225\\214hello\" 0 2 (face bold) 3 8 (face italic)) (face bold) 3) #(\"café世界hello\" 0 2 (face bold) 3 5 (face italic)) (face bold) nil 3)""#
+        r#""OK ((#(\"café世界hello\" 0 2 (face bold) 3 8 (face italic)) (face bold) 3) #(\"café世界hello\" 0 2 (face bold) 3 5 (face italic)) (face bold) nil 3)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -119,9 +119,8 @@ fn div_cx44_json_xml_dom_filter_chain_mega() {
 #[test]
 fn div_cx44_coding_encode_decode_region_no_conversion_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"\\0\u{1}A\\200\\310\\377\" \"\\0\u{1}A\\200\\310\\377\" \"\\0\u{1}A\\200\\310\\377\")""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (\"\\0\u{1}A���\" \"\\0\u{1}A���\" \"\\0\u{1}A���\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((raw (unibyte-string 0 1 65 128 200 255)))

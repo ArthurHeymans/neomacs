@@ -96,7 +96,7 @@ fn divergence_function_documentation_builtin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (t t \"Return a newly created list with specified arguments as elements.\nAllows any number of arguments, including zero.\n\n(fn &rest OBJECTS)\")""#
+        r#""OK (t t \"Return a newly created list with specified arguments as elements.\\nAllows any number of arguments, including zero.\\n\\n(fn &rest OBJECTS)\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list

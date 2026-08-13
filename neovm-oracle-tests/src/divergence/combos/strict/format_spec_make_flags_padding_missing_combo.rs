@@ -50,7 +50,7 @@ fn div_v8_format_spec_multibyte_special_chars() {
         (format-spec "newline\nhere" spec)))
 "##;
     let expect = expect_test::expect![[
-        r#""OK (\"name=日本語 drink=café\" 3 \"café-café\" \"tab\there\" \"newline\nhere\")""#
+        r#""OK (\"name=日本語 drink=café\" 3 \"café-café\" \"tab\there\" \"newline\\nhere\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

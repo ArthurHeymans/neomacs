@@ -30,7 +30,7 @@ fn combo109_org_bookmark_set() {
 fn combo109_org_element_normalize_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((paragraph nil \"s1\n\" (bold nil \"b\") \"\ns2\") (paragraph nil \"s1\n\ns2\"))""#
+        r#""OK ((paragraph nil \"s1\\n\" (bold nil \"b\") \"\\ns2\") (paragraph nil \"s1\\n\\ns2\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn(require'org-element)(list(org-element-normalize-contents'(paragraph nil"  s1\n" (bold nil"b")"\n  s2"))(org-element-normalize-contents'(paragraph nil"  s1\n\n  s2"))))"##,

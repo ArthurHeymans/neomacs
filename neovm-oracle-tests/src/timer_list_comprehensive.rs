@@ -305,7 +305,7 @@ fn oracle_prop_time_format_composite_specifiers() {
      ;; Century
      (format-time-string "%C" t1 t))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"08\" \"AM\" \"064\" \"10\" \"09\" \"Sun Mar  5 08:05:03 2023\" \"03/05/23\" \"08:05:03\" \"2023\t03\n05\" \"20\")""#
+        r#""OK (\"08\" \"AM\" \"064\" \"10\" \"09\" \"Sun Mar  5 08:05:03 2023\" \"03/05/23\" \"08:05:03\" \"2023\t03\\n05\" \"20\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

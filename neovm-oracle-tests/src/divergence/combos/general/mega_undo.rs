@@ -139,7 +139,7 @@ fn divergence_undo_kill_rectangle_sim() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (#(\"LINE1-\nLINE2-BLINE3-CLINE4-\nLINEEE\" 0 4 (line 1) 7 11 (line 2) 14 18 (line 3) 21 25 (line 4) 28 32 (line 5)) #(\"LINE1-AAA\nLINE2-BBB\nLINE3-CCC\nLINE4-DDD\nLINE5-EEE\" 0 4 (line 1) 10 14 (line 2) 20 24 (line 3) 30 34 (line 4) 40 44 (line 5)) t t 1 t 2 t 3 t 4 t rect t)""#
+        r#""OK (#(\"LINE1-\\nLINE2-BLINE3-CLINE4-\\nLINEEE\" 0 4 (line 1) 7 11 (line 2) 14 18 (line 3) 21 25 (line 4) 28 32 (line 5)) #(\"LINE1-AAA\\nLINE2-BBB\\nLINE3-CCC\\nLINE4-DDD\\nLINE5-EEE\" 0 4 (line 1) 10 14 (line 2) 20 24 (line 3) 30 34 (line 4) 40 44 (line 5)) t t 1 t 2 t 3 t 4 t rect t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

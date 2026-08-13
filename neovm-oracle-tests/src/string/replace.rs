@@ -77,7 +77,7 @@ fn oracle_prop_string_replace_case_and_special_chars() {
   ;; Overlapping pattern: string-replace is non-greedy, left-to-right
   (string-replace "aa" "b" "aaaa"))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"hello world\" \"line1 line2 line3\" \"one\ntwo\nthree\" \"path/to/file\" \"bb\")""#
+        r#""OK (\"hello world\" \"line1 line2 line3\" \"one\\ntwo\\nthree\" \"path/to/file\" \"bb\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

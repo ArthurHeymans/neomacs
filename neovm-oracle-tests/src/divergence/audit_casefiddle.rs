@@ -155,7 +155,7 @@ fn div_ac_display_table_string_width() {
 fn div_ac_standard_category_docstring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"Latin\" \"ASCII\nASCII graphic characters 32-126 (ISO646 IRV:1983[4/0])\" \"Roman\nJapanese roman\")""#
+        r#""OK (\"Latin\" \"ASCII\\nASCII graphic characters 32-126 (ISO646 IRV:1983[4/0])\" \"Roman\\nJapanese roman\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

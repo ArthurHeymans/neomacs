@@ -13,7 +13,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx423_process_send_eof() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"hello\n\nProcess neo-cx423-eof finished\"""#]];
+    let expect = expect_test::expect![[r#""OK \"hello\\n\\nProcess neo-cx423-eof finished\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *cx423-eof*")))

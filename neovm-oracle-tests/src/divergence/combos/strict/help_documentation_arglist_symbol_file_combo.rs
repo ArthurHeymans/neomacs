@@ -19,7 +19,7 @@ fn div_v8_documentation_arglist_user_and_builtin() {
         (functionp 'probe-docd)))
 "##;
     let expect = expect_test::expect![[
-        r#""OK (\"Sum two args.\" \"Return the car of LIST.  If LIST is nil, return nil.\nError if LIST is not nil and not a cons cell.  See also ‘car-safe’.\n\nSee Info node ‘(elisp)Cons Cells’ for a discussion of related basic\nLisp concepts such as car, cdr, cons cell and list.\n\n(fn LIST)\" \"Create a new cons, give it CAR and CDR as components, and return it.\n\n(fn CAR CDR)\" (x y) (closure (t) (x y) (+ x y)) t)""#
+        r#""OK (\"Sum two args.\" \"Return the car of LIST.  If LIST is nil, return nil.\\nError if LIST is not nil and not a cons cell.  See also ‘car-safe’.\\n\\nSee Info node ‘(elisp)Cons Cells’ for a discussion of related basic\\nLisp concepts such as car, cdr, cons cell and list.\\n\\n(fn LIST)\" \"Create a new cons, give it CAR and CDR as components, and return it.\\n\\n(fn CAR CDR)\" (x y) (closure (t) (x y) (+ x y)) t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

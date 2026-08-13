@@ -86,7 +86,7 @@ fn div_cx406_defcustom_type_validation() {
 #[test]
 fn div_cx406_indent_region_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"indented\nmore\nless\"""#]];
+    let expect = expect_test::expect![[r#""OK \"indented\\nmore\\nless\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -103,7 +103,7 @@ fn div_cx406_indent_region_mode() {
 #[test]
 fn div_cx406_align_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"foo\t1\nbar\t23\nbaz\t456\"""#]];
+    let expect = expect_test::expect![[r#""OK \"foo\t1\\nbar\t23\\nbaz\t456\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -119,7 +119,7 @@ fn div_cx406_align_regexp() {
 #[test]
 fn div_cx406_sort_lines_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"alpha\ncafé\nüber\nβeta\n世界\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"alpha\\ncafé\\nüber\\nβeta\\n世界\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

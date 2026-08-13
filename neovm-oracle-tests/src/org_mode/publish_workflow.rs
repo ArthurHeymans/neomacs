@@ -6,7 +6,7 @@ fn org_publish_sitemap_recursive_sorting_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((\"alpha.html\" \"index.html\" \"notes/beta.html\" \"notes/gamma.html\") \"#+TITLE: Site Map\n\n- [[file:alpha.org][Alpha]]\n- notes\n  - [[file:notes/beta.org][Beta]]\n  - [[file:notes/gamma.org][Gamma]]\" ((\"alpha.html\" t t) (\"notes/beta.html\" t t) (\"notes/gamma.html\" t t) (\"draft.html\" nil nil) (\"index.html\" t t)))""##
+        r##""OK ((\"alpha.html\" \"index.html\" \"notes/beta.html\" \"notes/gamma.html\") \"#+TITLE: Site Map\\n\\n- [[file:alpha.org][Alpha]]\\n- notes\\n  - [[file:notes/beta.org][Beta]]\\n  - [[file:notes/gamma.org][Gamma]]\" ((\"alpha.html\" t t) (\"notes/beta.html\" t t) (\"notes/gamma.html\" t t) (\"draft.html\" nil nil) (\"index.html\" t t)))""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -391,7 +391,7 @@ fn org_publish_crossref_current_project_cache_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((\"about.org\" \"index.org\" \"sitemap.org\") \"pages\" (t nil (\"index.org\") nil nil) \"about-target\" (\"about.org\" \"index.org\" \"sitemap.org\") (\"about.html\" \"index.html\" \"sitemap.html\") \"#+TITLE: Crossrefs\n\n- [[file:about.org][About]]\n- [[file:index.org][Index]]\" ((\"index.html\" t (t t nil)) (\"about.html\" t (t t t)) (\"sitemap.html\" t (t t nil))) \"About\" nil)""##
+        r##""OK ((\"about.org\" \"index.org\" \"sitemap.org\") \"pages\" (t nil (\"index.org\") nil nil) \"about-target\" (\"about.org\" \"index.org\" \"sitemap.org\") (\"about.html\" \"index.html\" \"sitemap.html\") \"#+TITLE: Crossrefs\\n\\n- [[file:about.org][About]]\\n- [[file:index.org][Index]]\" ((\"index.html\" t (t t nil)) (\"about.html\" t (t t t)) (\"sitemap.html\" t (t t nil))) \"About\" nil)""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

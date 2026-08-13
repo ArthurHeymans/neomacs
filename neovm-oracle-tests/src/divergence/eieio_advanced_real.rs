@@ -165,7 +165,7 @@ fn divergence_cl_defgeneric_docstring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect =
-        expect_test::expect![[r#""OK (\"A documented generic function.\n\n(fn X)\" nil)""#]];
+        expect_test::expect![[r#""OK (\"A documented generic function.\\n\\n(fn X)\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (cl-defgeneric test-doc-fn-xxx (x)

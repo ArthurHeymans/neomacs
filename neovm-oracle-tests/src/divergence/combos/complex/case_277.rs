@@ -32,7 +32,8 @@ fn div_cx277_make_process_with_environment_override() {
 #[test]
 fn div_cx277_process_connection_type_pipe() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"via-pipe\n\nProcess neo-cx277-pipe finished\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"via-pipe\\n\\nProcess neo-cx277-pipe finished\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx277-pipe*"))
@@ -182,7 +183,7 @@ fn div_cx277_make_pipe_process_lifecycle() {
 fn div_cx277_process_filter_default_appends_to_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"default-filter\n\nProcess neo-cx277-defflt finished\"""#]];
+        expect_test::expect![[r#""OK \"default-filter\\n\\nProcess neo-cx277-defflt finished\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx277-defflt*"))

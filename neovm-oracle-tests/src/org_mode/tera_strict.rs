@@ -334,7 +334,7 @@ fn tera_all_org_element_property_inherited_combinations() {
 fn tera_all_org_element_normalize_contents_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((paragraph nil \"Two spaces\n Three spaces\") (paragraph nil #(\"  Two spaces\nNo space\" 0 2 (org-ind 2))) (paragraph nil \"Two spaces\n\n\nTwo spaces\") (paragraph nil \"No space\nTwo spaces\n Three spaces\") (paragraph nil \"1 space\" (line-break) \" 2 spaces\") (verse-block nil \"line 1\n\nline 2\") (paragraph nil \" Two spaces \" (bold nil \" and\nOne space\")))""#
+        r#""OK ((paragraph nil \"Two spaces\\n Three spaces\") (paragraph nil #(\"  Two spaces\\nNo space\" 0 2 (org-ind 2))) (paragraph nil \"Two spaces\\n\\n\\nTwo spaces\") (paragraph nil \"No space\\nTwo spaces\\n Three spaces\") (paragraph nil \"1 space\" (line-break) \" 2 spaces\") (verse-block nil \"line 1\\n\\nline 2\") (paragraph nil \" Two spaces \" (bold nil \" and\\nOne space\")))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -689,7 +689,7 @@ fn tera_all_org_element_context_combinations() {
 fn tera_all_org_element_interpret_data_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"Simple paragraph.\n\" \"* H1\nBody 1\n** H2\nBody 2\n\" \"| a | b |\n| c | d |\n\" \"- Item 1\n- Item 2\n  - Sub\n\")""#
+        r#""OK (\"Simple paragraph.\\n\" \"* H1\\nBody 1\\n** H2\\nBody 2\\n\" \"| a | b |\\n| c | d |\\n\" \"- Item 1\\n- Item 2\\n  - Sub\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

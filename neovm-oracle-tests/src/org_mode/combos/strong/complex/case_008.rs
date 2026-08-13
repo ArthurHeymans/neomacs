@@ -12,7 +12,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 fn combo8_heading_mods() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:init ((1 \"H\"))) (:after-todo ((1 \"H\" \"TODO\"))) (:after-prio ((1 \"H\" \"TODO\" 65))) (:after-tags ((1 \"H\" \"TODO\" 65 (\"tag1\" \"tag2\")))) (:after-prop \"myid\") (:after-sched (\"S\")) (:after-dead ((\"S\" \"D\"))) (:content #(\"* TODO [#A] H                                                     :tag1:tag2:\nDEADLINE: <2026-01-20 Tue> SCHEDULED: <2026-01-15 Thu>\n:PROPERTIES:\n:CUSTOM_ID: myid\n:END:\n\" 0 6 (org-todo-head \"TODO\") 11 104 (org-todo-head \"TODO\") 105 132 (org-todo-head \"TODO\"))))""#
+        r#""OK ((:init ((1 \"H\"))) (:after-todo ((1 \"H\" \"TODO\"))) (:after-prio ((1 \"H\" \"TODO\" 65))) (:after-tags ((1 \"H\" \"TODO\" 65 (\"tag1\" \"tag2\")))) (:after-prop \"myid\") (:after-sched (\"S\")) (:after-dead ((\"S\" \"D\"))) (:content #(\"* TODO [#A] H                                                     :tag1:tag2:\\nDEADLINE: <2026-01-20 Tue> SCHEDULED: <2026-01-15 Thu>\\n:PROPERTIES:\\n:CUSTOM_ID: myid\\n:END:\\n\" 0 6 (org-todo-head \"TODO\") 11 104 (org-todo-head \"TODO\") 105 132 (org-todo-head \"TODO\"))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

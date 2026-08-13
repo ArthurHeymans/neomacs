@@ -182,7 +182,7 @@ fn combo66_element_parse_after_cycle() {
 fn combo66_table_sort_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:after-sort #(\"| Name | Score |\n|-------+-------|\n| Alice |    95 |\n| Bob   |    82 |\n| Carol |    99 |\n\" 0 16 (face org-table) 16 17 (face org-table-row) 17 34 (face org-table) 34 35 (face org-table-row) 35 52 (face org-table) 52 53 (face org-table-row) 53 70 (face org-table) 70 71 (face org-table-row) 71 88 (face org-table) 88 89 (face org-table-row))) (:to-lisp ((#(\"Name\" 0 4 (face org-table)) #(\"Score\" 0 5 (face org-table))) hline (#(\"Alice\" 0 5 (face org-table)) #(\"95\" 0 2 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"82\" 0 2 (face org-table))) (#(\"Carol\" 0 5 (face org-table)) #(\"99\" 0 2 (face org-table))))))""#
+        r#""OK ((:after-sort #(\"| Name | Score |\\n|-------+-------|\\n| Alice |    95 |\\n| Bob   |    82 |\\n| Carol |    99 |\\n\" 0 16 (face org-table) 16 17 (face org-table-row) 17 34 (face org-table) 34 35 (face org-table-row) 35 52 (face org-table) 52 53 (face org-table-row) 53 70 (face org-table) 70 71 (face org-table-row) 71 88 (face org-table) 88 89 (face org-table-row))) (:to-lisp ((#(\"Name\" 0 4 (face org-table)) #(\"Score\" 0 5 (face org-table))) hline (#(\"Alice\" 0 5 (face org-table)) #(\"95\" 0 2 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"82\" 0 2 (face org-table))) (#(\"Carol\" 0 5 (face org-table)) #(\"99\" 0 2 (face org-table))))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

@@ -6,7 +6,7 @@ fn org_yank_image_attach_and_directory_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"* Task                                                               :ATTACH:\n:PROPERTIES:\n:ID: yank-image-id\n:END:\n[[attachment:fixed-image.png][fixed-image.png]]\" \"data/ya/nk-image-id\" t \"PNGDATA\" \"* Task                                                               :ATTACH:\n:PROPERTIES:\n:ID: yank-image-id\n:END:\n[[attachment:fixed-image.png][fixed-image.png]]\n[[file:images/fixed-image.jpeg]]\" t \"JPEGDATA\")""#
+        r#""OK (\"* Task                                                               :ATTACH:\\n:PROPERTIES:\\n:ID: yank-image-id\\n:END:\\n[[attachment:fixed-image.png][fixed-image.png]]\" \"data/ya/nk-image-id\" t \"PNGDATA\" \"* Task                                                               :ATTACH:\\n:PROPERTIES:\\n:ID: yank-image-id\\n:END:\\n[[attachment:fixed-image.png][fixed-image.png]]\\n[[file:images/fixed-image.jpeg]]\" t \"JPEGDATA\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -69,7 +69,7 @@ fn org_copied_files_dnd_file_link_and_attach_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"* Task\n:PROPERTIES:\n:ID: dnd-id\n:END:\n[[<root>/a.txt]] [[<root>/b.txt]] \" \"* Task                                                               :ATTACH:\n:PROPERTIES:\n:ID: dnd-id\n:END:\n[[<root>/a.txt]] [[<root>/b.txt]] \n[[attachment:a.txt]]\" \"data/dn/d-id\" (\"a.txt\") \"A\n\")""#
+        r#""OK (\"* Task\\n:PROPERTIES:\\n:ID: dnd-id\\n:END:\\n[[<root>/a.txt]] [[<root>/b.txt]] \" \"* Task                                                               :ATTACH:\\n:PROPERTIES:\\n:ID: dnd-id\\n:END:\\n[[<root>/a.txt]] [[<root>/b.txt]] \\n[[attachment:a.txt]]\" \"data/dn/d-id\" (\"a.txt\") \"A\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -254,7 +254,7 @@ fn org_dnd_ask_private_image_xds_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((\"What to do with file?\" ((97 \"attach\" attach) (111 \"open\" open) (102 \"insert file: link\" file-link)) file-link) (\"What to do with dropped file?\" ((97 \"attach\" attach) (111 \"open\" open) (102 \"insert file: link\" file-link)) attach) (\"What to do with dropped file?\" ((97 \"attach\" attach) (111 \"open\" open) (102 \"insert file: link\" file-link)) attach)) nil (\"File `file://<root>/plain.txt' is not readable, skipping\" \"File `file://<root>/missing.txt' is not readable, skipping\" \"File \\\"plain.txt\\\" is now an attachment\") \"* Task                                                               :ATTACH:\n:PROPERTIES:\n:ID: ask-dnd-id\n:END:\n\n[[<root>/plain.txt]]|\n[[file:images/image.png]]\n[[attachment:plain.txt]]\n[[attachment:xds.txt]]\n[[attachment:open.txt]]\" \"data/as/k-dnd-id\" (\"open.txt\" \"plain.txt\" \"xds.txt\") (\"image.png\") nil \"PNG\n\" \"PLAIN\n\")""#
+        r#""OK (((\"What to do with file?\" ((97 \"attach\" attach) (111 \"open\" open) (102 \"insert file: link\" file-link)) file-link) (\"What to do with dropped file?\" ((97 \"attach\" attach) (111 \"open\" open) (102 \"insert file: link\" file-link)) attach) (\"What to do with dropped file?\" ((97 \"attach\" attach) (111 \"open\" open) (102 \"insert file: link\" file-link)) attach)) nil (\"File `file://<root>/plain.txt' is not readable, skipping\" \"File `file://<root>/missing.txt' is not readable, skipping\" \"File \\\"plain.txt\\\" is now an attachment\") \"* Task                                                               :ATTACH:\\n:PROPERTIES:\\n:ID: ask-dnd-id\\n:END:\\n\\n[[<root>/plain.txt]]|\\n[[file:images/image.png]]\\n[[attachment:plain.txt]]\\n[[attachment:xds.txt]]\\n[[attachment:open.txt]]\" \"data/as/k-dnd-id\" (\"open.txt\" \"plain.txt\" \"xds.txt\") (\"image.png\") nil \"PNG\\n\" \"PLAIN\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

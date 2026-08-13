@@ -38,7 +38,8 @@ fn div_cx59_org_capture_template() {
 #[test]
 fn div_cx59_org_sparse_tree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"* A\n** B\n** C\n* D\n\" #<killed buffer>)""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"* A\\n** B\\n** C\\n* D\\n\" #<killed buffer>)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

@@ -117,7 +117,7 @@ fn print_special_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"\\\"a\tb\nc\\\\\\\"d\\\\\\\\e\\\"\" \"10\" \"9\" \"1\" \"foo\\\\ bar\")""#
+        r#""OK (\"\\\"a\tb\\nc\\\\\\\"d\\\\\\\\e\\\"\" \"10\" \"9\" \"1\" \"foo\\\\ bar\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (prin1-to-string "a\tb\nc\"d\\e")

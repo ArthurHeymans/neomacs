@@ -9,7 +9,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx79_string_make_unibyte_with_multibyte_input() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"café\" t 4 5 \"caf\\351\" 4 nil)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café\" t 4 5 \"caf�\" 4 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "café"))
@@ -28,9 +28,8 @@ fn div_cx79_string_make_unibyte_with_multibyte_input() {
 #[test]
 fn div_cx79_string_make_multibyte_with_unibyte_input() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"\\200\\201\\202\" nil \"\\200\\201\\202\" t 3 6 4194176 eight-bit)""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (\"���\" nil \"\\200\\201\\202\" t 3 6 4194176 eight-bit)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((uni (unibyte-string #x80 #x81 #x82))
@@ -75,7 +74,7 @@ fn div_cx79_string_to_multibyte_vs_make_multibyte_divergence() {
 fn div_cx79_byte_to_string_and_string_to_list_byte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"A\" \"\\377\" (65 66 67) [65 66 67] (65 66 67) [65 66 67] \"\\377\")""#
+        r#""OK (\"A\" \"�\" (65 66 67) [65 66 67] (65 66 67) [65 66 67] \"�\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

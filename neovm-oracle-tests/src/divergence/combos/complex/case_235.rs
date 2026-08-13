@@ -27,7 +27,7 @@ fn div_cx235_shr_availability() {
 fn div_cx235_shr_render_simple_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t t #(\"Hello\nWorld\n\" 0 1 (face shr-text shr-indentation nil) 1 5 (face shr-text) 5 6 (face nil) 6 11 (face (shr-text bold))))""#
+        r#""OK (t t #(\"Hello\\nWorld\\n\" 0 1 (face shr-text shr-indentation nil) 1 5 (face shr-text) 5 6 (face nil) 6 11 (face (shr-text bold))))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

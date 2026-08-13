@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_utf8_fill_region_ascii_baseline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"the quick\nbrown fox\njumps over\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"the quick\\nbrown fox\\njumps over\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -26,7 +26,8 @@ fn div_utf8_fill_region_ascii_baseline() {
 #[test]
 fn div_utf8_fill_region_latin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"café thé\nrésumé hello\nworld\ngreeting\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"café thé\\nrésumé hello\\nworld\\ngreeting\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -43,7 +44,7 @@ fn div_utf8_fill_region_latin() {
 fn div_utf8_fill_paragraph_cjk_display_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"你好世界 这是测试 hello world wide line here\n\"""#]];
+        expect_test::expect![[r#""OK \"你好世界 这是测试 hello world wide line here\\n\"""#]];
     // CJK fill must account for display width (each CJK char = 2 columns).
     crate::common::assert_oracle_parity_expect(
         r#"
@@ -60,7 +61,7 @@ fn div_utf8_fill_paragraph_cjk_display_width() {
 #[test]
 fn div_utf8_case_region_ops_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"café résumé straße\n\" \"Café Résumé\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"café résumé straße\\n\" \"Café Résumé\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (list
@@ -97,7 +98,7 @@ fn div_utf8_modify_category_entry() {
 #[test]
 fn div_utf8_center_line_and_tab_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"café 世界\n\t\t    \"""#]];
+    let expect = expect_test::expect![[r#""OK \"café 世界\\n\t\t    \"""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer

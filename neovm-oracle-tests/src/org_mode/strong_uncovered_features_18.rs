@@ -12,7 +12,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 fn uf18_ctrlc_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:error (user-error \"No operator defined for property A\") \"* T\n:PROPERTIES:\n:A: 1\n:END:\" \"* T\n:PROPERTIES:\n:A: 1\n:END:\")""#
+        r#""OK (:error (user-error \"No operator defined for property A\") \"* T\\n:PROPERTIES:\\n:A: 1\\n:END:\" \"* T\\n:PROPERTIES:\\n:A: 1\\n:END:\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -56,7 +56,7 @@ fn uf18_ctrlc_link() {
 #[test]
 fn uf18_ctrlc_ts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* T\nSCHEDULED: <2026-01-15 Thu>\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* T\\nSCHEDULED: <2026-01-15 Thu>\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -77,7 +77,7 @@ fn uf18_ctrlc_ts() {
 #[test]
 fn uf18_ctrlc_foot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\n\n[fn:1] Def\"""#]];
+    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\\n\\n[fn:1] Def\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -97,7 +97,7 @@ fn uf18_ctrlc_foot() {
 #[test]
 fn uf18_ctrlc_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a | b |\n|---+---|\n| 1 | 2 |\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | b |\\n|---+---|\\n| 1 | 2 |\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -138,7 +138,7 @@ fn uf18_ctrlc_plan() {
 #[test]
 fn uf18_ctrlc_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* T\nCLOCK: [2026-01-10 10:00]\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* T\\nCLOCK: [2026-01-10 10:00]\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -158,7 +158,7 @@ fn uf18_ctrlc_clock() {
 #[test]
 fn uf18_ctrlc_stat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"* T [1/2]\n- [X] a\n- [ ] b\"""#]];
+    let expect = expect_test::expect![[r#""OK \"* T [1/2]\\n- [X] a\\n- [ ] b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

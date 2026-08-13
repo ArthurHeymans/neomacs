@@ -73,7 +73,7 @@ fn strict_call_org_priority_set() {
 #[test]
 fn strict_call_org_cycle_list_bullet() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:after \"+ item\n  - sub\n\"))""#]];
+    let expect = expect_test::expect![[r#""OK ((:after \"+ item\\n  - sub\\n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (insert "- item\n  - sub\n")
  (let ((r '())) (goto-char (point-min)) (condition-case nil (progn (org-cycle-list-bullet)
@@ -84,7 +84,7 @@ fn strict_call_org_cycle_list_bullet() {
 #[test]
 fn strict_call_org_delete_indentation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:after \"* A\n** B\n\"))""#]];
+    let expect = expect_test::expect![[r#""OK ((:after \"* A\\n** B\\n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (insert "* A\n** B\n")
  (let ((r '())) (goto-char (point-min)) (condition-case nil (org-delete-indentation) (error nil))
@@ -95,7 +95,7 @@ fn strict_call_org_delete_indentation() {
 #[test]
 fn strict_call_org_transpose_words() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:after \"word2 word1\n\"))""#]];
+    let expect = expect_test::expect![[r#""OK ((:after \"word2 word1\\n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (insert "word1 word2\n")
  (let ((r '())) (goto-char (point-min)) (condition-case nil (transpose-words 1) (error nil))

@@ -178,7 +178,7 @@ fn oracle_prop_bufadv_multi_buffer_aggregation() {
                       (kill-buffer buf-a)
                       (kill-buffer buf-b)
                       (kill-buffer buf-c)))"#;
-    let expect = expect_test::expect![[r#""OK \"total=45\nmax=iota:9\ncount=9\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"total=45\\nmax=iota:9\\ncount=9\\n\"""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

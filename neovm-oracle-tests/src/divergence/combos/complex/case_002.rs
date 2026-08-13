@@ -11,7 +11,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx2_decode_coding_region_multibyte_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"caf\\303\\251\\342\\202\\254\" 8 8)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café€\" 8 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -43,7 +43,7 @@ fn div_cx2_encode_coding_region_latin1_multibyte() {
 fn div_cx2_sort_buffer_text_property_preservation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#(\"apple\nbanana\ncherry\n\" 6 12 (face bold)) nil (face bold))""#
+        r#""OK (#(\"apple\\nbanana\\ncherry\\n\" 6 12 (face bold)) nil (face bold))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -324,7 +324,7 @@ fn div_cx2_format_spec_dynamic() {
 #[test]
 fn div_cx2_process_send_receive_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"roundtrip\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"roundtrip\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (got)

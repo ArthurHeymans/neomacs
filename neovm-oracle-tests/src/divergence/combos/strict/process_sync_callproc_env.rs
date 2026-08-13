@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_f8_call_process_exit_and_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((0 \"hello\n\") (0 \"world\n\") (1 \"\"))""#]];
+    let expect = expect_test::expect![[r#""OK ((0 \"hello\\n\") (0 \"world\\n\") (1 \"\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -30,7 +30,7 @@ fn div_f8_call_process_exit_and_output() {
 #[test]
 fn div_f8_shell_command_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"hi\n\" \"abc\" 10)""#]];
+    let expect = expect_test::expect![[r#""OK (\"hi\\n\" \"abc\" 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (shell-command-to-string "echo hi")
@@ -45,7 +45,7 @@ fn div_f8_shell_command_to_string() {
 fn div_f8_call_process_stderr_and_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK ((0 \"a\nb\") (0 \"out\nerr\n\") (0 \"2\n3\n4\n\"))""#]];
+        expect_test::expect![[r#""OK ((0 \"a\\nb\") (0 \"out\\nerr\\n\") (0 \"2\\n3\\n4\\n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -100,7 +100,7 @@ fn div_f8_process_environment_length() {
 #[test]
 fn div_f8_call_process_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 \"1\n2\n3\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (0 \"1\\n2\\n3\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

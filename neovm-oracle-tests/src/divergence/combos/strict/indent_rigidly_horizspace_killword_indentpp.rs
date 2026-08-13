@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_r0_indent_rigidly_and_horiz_space() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"   line1\n   line2\n   line3\n\" \"  hello   world  \")""#
+        r#""OK (\"   line1\\n   line2\\n   line3\\n\" \"  hello   world  \")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

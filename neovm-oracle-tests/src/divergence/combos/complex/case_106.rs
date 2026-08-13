@@ -25,7 +25,7 @@ fn div_cx106_eshell_availability() {
 #[test]
 fn div_cx106_eshell_basic_command_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"hello\n\" \"hello\" t)""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello\\n\" \"hello\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -61,7 +61,7 @@ fn div_cx106_shell_command_with_input() {
 #[test]
 fn div_cx106_call_process_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (0 \"hello\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (0 \"hello\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx106-cp*")))
@@ -79,7 +79,7 @@ fn div_cx106_call_process_basic() {
 #[test]
 fn div_cx106_call_process_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"alpha\nbeta\ngamma\"""#]];
+    let expect = expect_test::expect![[r#""OK \"alpha\\nbeta\\ngamma\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx106-cpr*")))

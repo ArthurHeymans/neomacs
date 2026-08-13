@@ -8,7 +8,7 @@ fn divergence_indent_line_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (\"    line1\n\tline2\n    line3\nline4\nline5\" t t t t 1 0 t nil 4 t nil)""#
+        r#""OK (\"    line1\\n\tline2\\n    line3\\nline4\\nline5\" t t t t 1 0 t nil 4 t nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -45,7 +45,7 @@ fn divergence_fill_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (t t t 20 t t \"This is a long line that should be filled at the fill-column boundary\n when we call fill-paragraph.\")""#
+        r#""OK (t t t 20 t t \"This is a long line that should be filled at the fill-column boundary\\n when we call fill-paragraph.\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

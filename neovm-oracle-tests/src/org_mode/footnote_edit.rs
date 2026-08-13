@@ -128,7 +128,7 @@ fn org_footnote_inline_normalize_section_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"2\" \"1\") \"* Alpha\nText [fn:1] and named [fn:2].\n\n* Footnotes\n\n[fn:1] Inline *bold* note\n\n[fn:2] Named note\n\")""#
+        r#""OK ((\"2\" \"1\") \"* Alpha\\nText [fn:1] and named [fn:2].\\n\\n* Footnotes\\n\\n[fn:1] Inline *bold* note\\n\\n[fn:2] Named note\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -192,7 +192,7 @@ fn org_footnote_auto_label_inline_adjust_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"2\" \"1\") ((\"1\" #<marker in no buffer> t nil) (\"2\" #<marker in no buffer> t nil)) ((\"2\" . \"[fn:2] Definition B\") (\"1\" . \"[fn:1] Inline A\")) \"* Body\nAlpha[fn:1] sentence. Beta[fn:2] sentence.\n\n* Footnotes\n\n[fn:1] Inline A\n\n[fn:2] Definition B\n\")""#
+        r#""OK ((\"2\" \"1\") ((\"1\" #<marker in no buffer> t nil) (\"2\" #<marker in no buffer> t nil)) ((\"2\" . \"[fn:2] Definition B\") (\"1\" . \"[fn:1] Inline A\")) \"* Body\\nAlpha[fn:1] sentence. Beta[fn:2] sentence.\\n\\n* Footnotes\\n\\n[fn:1] Inline A\\n\\n[fn:2] Definition B\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -263,7 +263,7 @@ fn org_footnote_missing_duplicate_normalize_sort_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((\"4\" \"3\" \"2\" \"1\") ((\"1\" #<marker in no buffer> t nil) (\"2\" #<marker in no buffer> t nil) (\"1\" #<marker in no buffer> t nil) (\"3\" #<marker in no buffer> t nil)) ((\"4\" . \"[fn:4] Unused def\") (\"3\" . \"[fn:3] Local def\") (\"2\" . \"[fn:2] DEFINITION NOT FOUND.\") (\"1\" . \"[fn:1] First Z\")) \"* H\nFirst[fn:1] missing[fn:2] again[fn:1].\n** Local\nNested[fn:3]\n\n* Footnotes\n\n[fn:1] First Z\n\n[fn:2] DEFINITION NOT FOUND.\n\n[fn:3] Local def\n\n[fn:4] Unused def\n\")""#
+        r#""OK ((\"4\" \"3\" \"2\" \"1\") ((\"1\" #<marker in no buffer> t nil) (\"2\" #<marker in no buffer> t nil) (\"1\" #<marker in no buffer> t nil) (\"3\" #<marker in no buffer> t nil)) ((\"4\" . \"[fn:4] Unused def\") (\"3\" . \"[fn:3] Local def\") (\"2\" . \"[fn:2] DEFINITION NOT FOUND.\") (\"1\" . \"[fn:1] First Z\")) \"* H\\nFirst[fn:1] missing[fn:2] again[fn:1].\\n** Local\\nNested[fn:3]\\n\\n* Footnotes\\n\\n[fn:1] First Z\\n\\n[fn:2] DEFINITION NOT FOUND.\\n\\n[fn:3] Local def\\n\\n[fn:4] Unused def\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

@@ -167,7 +167,7 @@ fn strong_link_property_values() {
 fn strong_src_block_property_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"emacs-lisp\" \"-n -r\" \":results output :exports code\" \"(+ 1 2)\n\")""#
+        r#""OK (\"emacs-lisp\" \"-n -r\" \":results output :exports code\" \"(+ 1 2)\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -249,8 +249,9 @@ fn strong_edit_headline_changes() {
 #[test]
 fn strong_insert_heading_changes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (\"* \" \"* \n* H\" \"** H\nP\n** \" \"\n* \n\n* H1\")""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"* \" \"* \\n* H\" \"** H\\nP\\n** \" \"\\n* \\n\\n* H1\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -363,7 +364,7 @@ fn strong_navigation_forward_backward_element() {
 fn strong_deadline_insert_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* H\nDEADLINE: <2012-03-29 Thu>\" \"* H\nDEADLINE: <2014-03-04 Tue>\" \"* H\n\")""#
+        r#""OK (\"* H\\nDEADLINE: <2012-03-29 Thu>\" \"* H\\nDEADLINE: <2014-03-04 Tue>\" \"* H\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -384,7 +385,7 @@ fn strong_deadline_insert_result() {
 fn strong_schedule_insert_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* H\nSCHEDULED: <2012-03-29 Thu>\" \"* H\nSCHEDULED: <2014-03-04 Tue>\" \"* H\n\")""#
+        r#""OK (\"* H\\nSCHEDULED: <2012-03-29 Thu>\" \"* H\\nSCHEDULED: <2014-03-04 Tue>\" \"* H\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -405,7 +406,7 @@ fn strong_schedule_insert_result() {
 fn strong_property_operations_results() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"1\" \"1\" \"1 2\" \"1\" \"* H\n:PROPERTIES:\n:A:        1\n:END:\n\" \"\")""#
+        r#""OK (\"1\" \"1\" \"1 2\" \"1\" \"* H\\n:PROPERTIES:\\n:A:        1\\n:END:\\n\" \"\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -481,7 +482,7 @@ fn strong_todo_cycle_results() {
 fn strong_sort_entries_results() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"\n* abc\n* def\n* xyz\n\" \"\n* 1\n* 2\n* 10\n\" \"\n* [#A] h2\n* [#B] h3\n* [#C] h1\n\")""#
+        r#""OK (\"\\n* abc\\n* def\\n* xyz\\n\" \"\\n* 1\\n* 2\\n* 10\\n\" \"\\n* [#A] h2\\n* [#B] h3\\n* [#C] h1\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -521,7 +522,7 @@ fn strong_move_subtree_results() {
 fn strong_promote_demote_results() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* H\" \"** H\" \"* H1\n** S1\n** S2\" \"** H1\n*** S1\n*** S2\")""#
+        r#""OK (\"* H\" \"** H\" \"* H1\\n** S1\\n** S2\" \"** H1\\n*** S1\\n*** S2\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -681,7 +682,7 @@ fn strong_cycle_list_bullet_results() {
 #[test]
 fn strong_footnote_new_results() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Text[fn:1]\n\n[fn:1] \n\" \"Text[fn::]\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"Text[fn:1]\\n\\n[fn:1] \\n\" \"Text[fn::]\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -728,7 +729,7 @@ fn strong_footnote_delete_results() {
 fn strong_fill_element_results() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#(\"| a |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row)) \"A B\" \"- A B\" \"  # A B\")""#
+        r#""OK (#(\"| a |\\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row)) \"A B\" \"- A B\" \"  # A B\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -802,7 +803,7 @@ fn strong_fold_operations_results() {
 fn strong_indent_line_results() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (0 2 0 \"* H\n:PROPERTIES:\n:key:      value\n:END:\")""#]];
+        expect_test::expect![[r#""OK (0 2 0 \"* H\\n:PROPERTIES:\\n:key:      value\\n:END:\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -971,7 +972,7 @@ fn strong_archive_result() {
 fn strong_datetree_create_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\" \"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\")""#
+        r#""OK (\"* 2012\\n\\n** 2012-03 March\\n\\n*** 2012-03-29 Thursday\" \"* 2012\\n\\n** 2012-03 March\\n\\n*** 2012-03-29 Thursday\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1020,7 +1021,7 @@ fn strong_protocol_parse_results() {
 #[test]
 fn strong_capture_template_results() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"success!\n\" \"2026\n\" \"\" \"%i\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"success!\\n\" \"2026\\n\" \"\" \"%i\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-capture)

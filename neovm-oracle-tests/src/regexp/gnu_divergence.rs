@@ -68,7 +68,7 @@ fn oracle_prop_regexp_gnu_escaped_control_letters_are_literals() {
        (funcall probe "\\e" "e")
        (funcall probe "\\e" (string 27))))"#;
     let expect = expect_test::expect![[
-        r#""OK ((\"\\\\t\" \"t\" 0 \"t\") (\"\\\\t\" \"\t\" nil nil) (\"\\\\n\" \"n\" 0 \"n\") (\"\\\\n\" \"\n\" nil nil) (\"\\\\r\" \"r\" 0 \"r\") (\"\\\\r\" \"\\r\" nil nil) (\"\\\\f\" \"f\" 0 \"f\") (\"\\\\f\" \"\u{c}\" nil nil) (\"\\\\a\" \"a\" 0 \"a\") (\"\\\\a\" \"\u{7}\" nil nil) (\"\\\\e\" \"e\" 0 \"e\") (\"\\\\e\" \"\u{1b}\" nil nil))""#
+        r#""OK ((\"\\\\t\" \"t\" 0 \"t\") (\"\\\\t\" \"\t\" nil nil) (\"\\\\n\" \"n\" 0 \"n\") (\"\\\\n\" \"\\n\" nil nil) (\"\\\\r\" \"r\" 0 \"r\") (\"\\\\r\" \"\\r\" nil nil) (\"\\\\f\" \"f\" 0 \"f\") (\"\\\\f\" \"\\f\" nil nil) (\"\\\\a\" \"a\" 0 \"a\") (\"\\\\a\" \"\u{7}\" nil nil) (\"\\\\e\" \"e\" 0 \"e\") (\"\\\\e\" \"\u{1b}\" nil nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -185,7 +185,7 @@ fn oracle_prop_regexp_gnu_category_tables() {
        (funcall probe "\\c|" (string #x4e2d))
        (funcall probe "\\c6" (string #x0664))))"#;
     let expect = expect_test::expect![[
-        r#""OK ((\"\\\\ca\" \"\n\" nil nil) (\"\\\\ca\" \"\t\" nil nil) (\"\\\\ca\" \"A\" 0 \"A\") (\"\\\\c|\" \"中\" 0 \"中\") (\"\\\\c6\" \"٤\" 0 \"٤\"))""#
+        r#""OK ((\"\\\\ca\" \"\\n\" nil nil) (\"\\\\ca\" \"\t\" nil nil) (\"\\\\ca\" \"A\" 0 \"A\") (\"\\\\c|\" \"中\" 0 \"中\") (\"\\\\c6\" \"٤\" 0 \"٤\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

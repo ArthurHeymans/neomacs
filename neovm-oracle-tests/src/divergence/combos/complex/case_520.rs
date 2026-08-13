@@ -67,7 +67,7 @@ fn div_cx520_string_join_multi() {
 #[test]
 fn div_cx520_string_fill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"hello\nworld\" \"hello world\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello\\nworld\" \"hello world\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (string-fill "hello world" 5)
       (string-fill "hello world" 20))

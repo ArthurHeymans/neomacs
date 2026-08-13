@@ -327,7 +327,7 @@ fn oracle_prop_idiom_mapconcat_format() {
                (list header separator rows separator summary)
                "\n")))"#;
     let expect = expect_test::expect![[
-        r#""OK \"Name        Age  Role        \n------------------------------\nAlice        30  engineer    \nBob          25  designer    \nCarol        35  manager     \nDave         28  developer   \n------------------------------\nTotal: 4 people, avg age: 29.5\"""#
+        r#""OK \"Name        Age  Role        \\n------------------------------\\nAlice        30  engineer    \\nBob          25  designer    \\nCarol        35  manager     \\nDave         28  developer   \\n------------------------------\\nTotal: 4 people, avg age: 29.5\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

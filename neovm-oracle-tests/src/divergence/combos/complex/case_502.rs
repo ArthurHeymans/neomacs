@@ -212,7 +212,7 @@ fn div_cx502_multibyte_save_excursion_toggle() {
 #[test]
 fn div_cx502_multibyte_two_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"\\310A\"""#]];
+    let expect = expect_test::expect![[r#""OK \"�A\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((a (get-buffer-create " *cx502-a*"))
       (b (get-buffer-create " *cx502-b*")))

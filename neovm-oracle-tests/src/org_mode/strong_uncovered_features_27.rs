@@ -69,7 +69,7 @@ fn uf27_collect_cat() {
 fn uf27_plot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+PLOT: title:\\\"Test\\\" type:2d with:lines\n| x | y |\n|---+---|\n| 1 | 2 |\n| 2 | 4 |\n| 3 | 6 |\"""##
+        r##""OK \"#+PLOT: title:\\\"Test\\\" type:2d with:lines\\n| x | y |\\n|---+---|\\n| 1 | 2 |\\n| 2 | 4 |\\n| 3 | 6 |\"""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -92,7 +92,7 @@ fn uf27_plot() {
 fn uf27_plot_opts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r##""OK \"#+PLOT: title:\\\"Test\\\" type:3d with:lines set:\\\"xlabel 'X'\\\" set:\\\"ylabel 'Y'\\\"\n| x | y | z |\n|---+---+---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\"""##
+        r##""OK \"#+PLOT: title:\\\"Test\\\" type:3d with:lines set:\\\"xlabel 'X'\\\" set:\\\"ylabel 'Y'\\\"\\n| x | y | z |\\n|---+---+---|\\n| 1 | 2 | 3 |\\n| 4 | 5 | 6 |\"""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -294,7 +294,7 @@ fn uf27_table_analyze() {
 fn uf27_table_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"| a | b | c |\n| 1 | 2 |   |\n| 3 | 4 |   |\n#+TBLFM: $3=$1+$2\"""#
+        r#""OK \"| a | b | c |\\n| 1 | 2 |   |\\n| 3 | 4 |   |\\n#+TBLFM: $3=$1+$2\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -334,7 +334,7 @@ fn uf27_table_iter() {
 fn uf27_table_iter_buf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"| a | 2 a |\n| 1 |   2 |\n#+TBLFM: $2=$1*2\n\n| c | 3 c |\n| 3 |   9 |\n#+TBLFM: $2=$1*3\" 0 11 (face org-table) 11 12 (face org-table-row) 12 13 (face org-table) 13 14 (face org-table rear-nonsticky t display (space :relative-width 1)) 14 15 (face org-table) 15 16 (face org-table display (space :relative-width 1.001)) 16 17 (face org-table) 17 18 (face org-table rear-nonsticky t display (space :relative-width 1)) 18 20 (face org-table) 20 21 (face org-table) 21 22 (face org-table display (space :relative-width 1.001)) 22 23 (face org-table) 23 24 (face org-table-row) 42 47 (face org-table) 47 53 (face org-table) 53 54 (face org-table-row) 54 55 (face org-table) 55 56 (face org-table rear-nonsticky t display (space :relative-width 1)) 56 57 (face org-table) 57 58 (face org-table display (space :relative-width 1.001)) 58 59 (face org-table) 59 60 (face org-table rear-nonsticky t display (space :relative-width 1)) 60 62 (face org-table) 62 63 (face org-table) 63 64 (face org-table display (space :relative-width 1.001)) 64 65 (face org-table) 65 66 (face org-table-row))""#
+        r#""OK #(\"| a | 2 a |\\n| 1 |   2 |\\n#+TBLFM: $2=$1*2\\n\\n| c | 3 c |\\n| 3 |   9 |\\n#+TBLFM: $2=$1*3\" 0 11 (face org-table) 11 12 (face org-table-row) 12 13 (face org-table) 13 14 (face org-table rear-nonsticky t display (space :relative-width 1)) 14 15 (face org-table) 15 16 (face org-table display (space :relative-width 1.001)) 16 17 (face org-table) 17 18 (face org-table rear-nonsticky t display (space :relative-width 1)) 18 20 (face org-table) 20 21 (face org-table) 21 22 (face org-table display (space :relative-width 1.001)) 22 23 (face org-table) 23 24 (face org-table-row) 42 47 (face org-table) 47 53 (face org-table) 53 54 (face org-table-row) 54 55 (face org-table) 55 56 (face org-table rear-nonsticky t display (space :relative-width 1)) 56 57 (face org-table) 57 58 (face org-table display (space :relative-width 1.001)) 58 59 (face org-table) 59 60 (face org-table rear-nonsticky t display (space :relative-width 1)) 60 62 (face org-table) 62 63 (face org-table) 63 64 (face org-table display (space :relative-width 1.001)) 64 65 (face org-table) 65 66 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -374,7 +374,7 @@ fn uf27_table_export() {
 fn uf27_table_import() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"| a | b |\n| 1 | 2 |\n| 3 | 4 |\n\" 0 9 (face org-table) 9 10 (face org-table-row) 10 19 (face org-table) 19 20 (face org-table-row) 20 21 (face org-table) 21 22 (face org-table rear-nonsticky t display (space :relative-width 1)) 22 23 (face org-table) 23 24 (face org-table display (space :relative-width 1.001)) 24 25 (face org-table) 25 26 (face org-table rear-nonsticky t display (space :relative-width 1)) 26 27 (face org-table) 27 28 (face org-table display (space :relative-width 1.001)) 28 29 (face org-table) 29 30 (face org-table-row))""#
+        r#""OK #(\"| a | b |\\n| 1 | 2 |\\n| 3 | 4 |\\n\" 0 9 (face org-table) 9 10 (face org-table-row) 10 19 (face org-table) 19 20 (face org-table-row) 20 21 (face org-table) 21 22 (face org-table rear-nonsticky t display (space :relative-width 1)) 22 23 (face org-table) 23 24 (face org-table display (space :relative-width 1.001)) 24 25 (face org-table) 25 26 (face org-table rear-nonsticky t display (space :relative-width 1)) 26 27 (face org-table) 27 28 (face org-table display (space :relative-width 1.001)) 28 29 (face org-table) 29 30 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(
         r##"(let ((file (expand-file-name "test.csv" (getenv "NEOVM_ORACLE_TEST_TMPDIR"))))
@@ -398,7 +398,7 @@ fn uf27_table_import() {
 fn uf27_table_convert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"| a | b |\n| 1 | 2 |\n| 3 | 4 |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table-row) 10 11 (face org-table) 11 12 (face org-table rear-nonsticky t display (space :relative-width 1)) 12 13 (face org-table) 13 14 (face org-table display (space :relative-width 1.001)) 14 15 (face org-table) 15 16 (face org-table rear-nonsticky t display (space :relative-width 1)) 16 17 (face org-table) 17 18 (face org-table display (space :relative-width 1.001)) 18 19 (face org-table) 19 20 (face org-table-row) 20 21 (face org-table) 21 22 (face org-table rear-nonsticky t display (space :relative-width 1)) 22 23 (face org-table) 23 24 (face org-table display (space :relative-width 1.001)) 24 25 (face org-table) 25 26 (face org-table rear-nonsticky t display (space :relative-width 1)) 26 27 (face org-table) 27 28 (face org-table display (space :relative-width 1.001)) 28 29 (face org-table) 29 30 (face org-table-row))""#
+        r#""OK #(\"| a | b |\\n| 1 | 2 |\\n| 3 | 4 |\\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table-row) 10 11 (face org-table) 11 12 (face org-table rear-nonsticky t display (space :relative-width 1)) 12 13 (face org-table) 13 14 (face org-table display (space :relative-width 1.001)) 14 15 (face org-table) 15 16 (face org-table rear-nonsticky t display (space :relative-width 1)) 16 17 (face org-table) 17 18 (face org-table display (space :relative-width 1.001)) 18 19 (face org-table) 19 20 (face org-table-row) 20 21 (face org-table) 21 22 (face org-table rear-nonsticky t display (space :relative-width 1)) 22 23 (face org-table) 23 24 (face org-table display (space :relative-width 1.001)) 24 25 (face org-table) 25 26 (face org-table rear-nonsticky t display (space :relative-width 1)) 26 27 (face org-table) 27 28 (face org-table display (space :relative-width 1.001)) 28 29 (face org-table) 29 30 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

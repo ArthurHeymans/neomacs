@@ -10,7 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_o4_org_table_align_and_analyze() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"| a | b |\n|---+---|\n| 1 | 2 |\n\" 0 9 (face org-table) 9 10 (face org-table-row) 10 19 (face org-table) 19 20 (face org-table-row) 20 29 (face org-table) 29 30 (face org-table-row))""#
+        r#""OK #(\"| a | b |\\n|---+---|\\n| 1 | 2 |\\n\" 0 9 (face org-table) 9 10 (face org-table-row) 10 19 (face org-table) 19 20 (face org-table-row) 20 29 (face org-table) 29 30 (face org-table-row))""#
     ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"

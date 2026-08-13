@@ -319,7 +319,7 @@ fn oracle_prop_buffer_position_patterns_narrowing_arithmetic() {
               results)))
     (nreverse results)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((full 1 44 43) (narrow-range 12 33 21) (narrow-begin 12 97) (narrow-line-pos 12 22 10) (narrow-line2 23 33) (narrow-content \"abcdefghij\nKLMNOPQRST\") (narrow-lines 2) (widened 1 44) (nested-narrow 15 25 \"defghij\nKL\"))""#
+        r#""OK ((full 1 44 43) (narrow-range 12 33 21) (narrow-begin 12 97) (narrow-line-pos 12 22 10) (narrow-line2 23 33) (narrow-content \"abcdefghij\\nKLMNOPQRST\") (narrow-lines 2) (widened 1 44) (nested-narrow 15 25 \"defghij\\nKL\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -432,7 +432,7 @@ fn oracle_prop_buffer_position_patterns_manipulation_pipeline() {
             results))
     (nreverse results)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((line-starts (1 7 12 18 24)) (prefixed \"1: alpha\n2: beta\n3: gamma\n4: delta\n5: epsilon\") (lengths (8 7 8 8 10)) (narrowed-line \"3: gamma\" 18 26 8))""#
+        r#""OK ((line-starts (1 7 12 18 24)) (prefixed \"1: alpha\\n2: beta\\n3: gamma\\n4: delta\\n5: epsilon\") (lengths (8 7 8 8 10)) (narrowed-line \"3: gamma\" 18 26 8))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

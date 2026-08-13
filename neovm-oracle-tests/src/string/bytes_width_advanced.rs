@@ -320,7 +320,7 @@ fn oracle_prop_string_bytes_width_fixed_columns() {
     (fmakunbound 'neovm--sbw-format-row)
     (fmakunbound 'neovm--sbw-format-table)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"Alice      | Boston   | 100   \" \"张三       | 东京     | 88    \" \"A中文      | Mix测    | 42    \" (30 30 t) \"Name       | City     | Score \n------------------------------\nAlice      | NYC      | 95    \n张三       | 北京     | 88    \nBob        | LA       | 72    \" \"VeryLong\" \"世界你 \")""#
+        r#""OK (\"Alice      | Boston   | 100   \" \"张三       | 东京     | 88    \" \"A中文      | Mix测    | 42    \" (30 30 t) \"Name       | City     | Score \\n------------------------------\\nAlice      | NYC      | 95    \\n张三       | 北京     | 88    \\nBob        | LA       | 72    \" \"VeryLong\" \"世界你 \")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -79,7 +79,7 @@ fn combo85_call_org_sort_entries_by_todo_key() {
 #[test]
 fn combo85_call_org_self_insert_command_effect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:after \"aXbc\n\"))""#]];
+    let expect = expect_test::expect![[r#""OK ((:after \"aXbc\\n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (insert "abc\n")
  (let ((r '())) (goto-char (point-min)) (search-forward "b") (backward-char)
@@ -92,7 +92,7 @@ fn combo85_call_org_self_insert_command_effect() {
 fn combo85_call_org_fill_paragraph_in_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK ((:filled \"- aaaa bbbb cccc\n  dddd eeee ffff\n  gggg hhhh\n\"))""#
+        r#""OK ((:filled \"- aaaa bbbb cccc\\n  dddd eeee ffff\\n  gggg hhhh\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (setq fill-column 20)
@@ -119,7 +119,8 @@ fn combo85_call_org_increase_level() {
 #[test]
 fn combo85_call_org_renumber_ordered_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK ((:after \"1. first\n3. third\n2. second\n\"))""#]];
+    let expect =
+        expect_test::expect![[r#""OK ((:after \"1. first\\n3. third\\n2. second\\n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (insert "1. first\n3. third\n2. second\n")
  (let ((r '())) (goto-char (point-min)) (condition-case nil (org-renumber-ordered-list) (error nil))

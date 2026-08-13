@@ -68,8 +68,9 @@ fn div_cx148_process_query_before_exit() {
 #[test]
 fn div_cx148_process_filter_vs_buffer_append() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (\"\nProcess neo-cx148-flt finished\n\" \"via-filter\n\")""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"\\nProcess neo-cx148-flt finished\\n\" \"via-filter\\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((filter-collected nil)
@@ -93,7 +94,7 @@ fn div_cx148_process_filter_vs_buffer_append() {
 fn div_cx148_process_default_filter_appends_to_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"default-filter\n\nProcess neo-cx148-defflt finished\"""#]];
+        expect_test::expect![[r#""OK \"default-filter\\n\\nProcess neo-cx148-defflt finished\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx148-defflt*"))
@@ -114,7 +115,7 @@ fn div_cx148_process_default_filter_appends_to_buffer() {
 fn div_cx148_set_process_buffer_change_after_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (error \"Process neo-cx148-switchbuf not running: finished\n\")""#
+        r#""ERR (error \"Process neo-cx148-switchbuf not running: finished\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -144,7 +145,7 @@ fn div_cx148_set_process_buffer_change_after_creation() {
 fn div_cx148_process_stderr_separate_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"OUT\n\nProcess neo-cx148-stderr finished\" \"ERR\n\nProcess neo-cx148-stderr stderr finished\")""#
+        r#""OK (\"OUT\\n\\nProcess neo-cx148-stderr finished\" \"ERR\\n\\nProcess neo-cx148-stderr stderr finished\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

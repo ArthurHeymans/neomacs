@@ -78,7 +78,7 @@ fn div_utf8_char_after_in_rtl_region() {
 #[test]
 fn div_utf8_sort_lines_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"apple\ncafé\nzoo\n世界\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"apple\\ncafé\\nzoo\\n世界\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer

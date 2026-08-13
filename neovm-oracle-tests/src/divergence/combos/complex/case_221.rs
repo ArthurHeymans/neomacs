@@ -8,7 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx221_align_region_columns_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"a\t= 1\nbb\t= 22\nccc\t= 333\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"a\t= 1\\nbb\t= 22\\nccc\t= 333\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -57,7 +57,7 @@ fn div_cx221_comment_or_uncomment_region_toggle() {
 #[test]
 fn div_cx221_sort_lines_numeric_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"1\n2\n3\n10\n20\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"1\\n2\\n3\\n10\\n20\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -72,7 +72,8 @@ fn div_cx221_sort_lines_numeric_basic() {
 #[test]
 fn div_cx221_sort_lines_alpha() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"apple\nbanana\ncherry\ndate\nelderberry\n\"""#]];
+    let expect =
+        expect_test::expect![[r#""OK \"apple\\nbanana\\ncherry\\ndate\\nelderberry\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -87,7 +88,7 @@ fn div_cx221_sort_lines_alpha() {
 #[test]
 fn div_cx221_sort_fields_by_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"b 1 y\nc 2 z\na 3 x\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"b 1 y\\nc 2 z\\na 3 x\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -104,7 +105,7 @@ fn div_cx221_sort_fields_by_column() {
 #[test]
 fn div_cx221_sort_columns_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"bravo charlie delta\nzebra alpha mike\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"bravo charlie delta\\nzebra alpha mike\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -121,7 +122,7 @@ fn div_cx221_sort_columns_basic() {
 #[test]
 fn div_cx221_delete_duplicate_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"alpha\nbeta\ngamma\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"alpha\\nbeta\\ngamma\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

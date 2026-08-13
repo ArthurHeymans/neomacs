@@ -47,7 +47,7 @@ fn div_o2_compose_string_decompose() {
 #[test]
 fn div_o2_print_to_standard_output_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"foo bar 42\n\nlist\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"foo bar 42\\n\\nlist\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

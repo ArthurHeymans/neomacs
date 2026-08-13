@@ -79,6 +79,6 @@ fn div_v8_process_kill_then_check_buffer_output() {
           (process-live-p proc)
           (eq (process-buffer proc) buf))))
 "##;
-    let expect = expect_test::expect![[r#""OK (t \"line\n\" nil t)""#]];
+    let expect = expect_test::expect![[r#""OK (t \"line\\n\" nil t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -40,7 +40,7 @@ fn oracle_prop_read_adv_basic_types() {
   (car (read-from-string ":key"))
   (car (read-from-string ":another-key")))"####;
     let expect = expect_test::expect![[
-        r#""OK (0 42 -100 7 3.14 -0.001 2500.0 1e-05 \"hello\" \"\" \"with \\\"quotes\\\"\" \"line1\nline2\" foo my-var nil t :key :another-key)""#
+        r#""OK (0 42 -100 7 3.14 -0.001 2500.0 1e-05 \"hello\" \"\" \"with \\\"quotes\\\"\" \"line1\\nline2\" foo my-var nil t :key :another-key)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

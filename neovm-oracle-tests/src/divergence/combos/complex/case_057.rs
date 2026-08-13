@@ -64,7 +64,7 @@ fn div_cx57_electric_quote_mode() {
 #[test]
 fn div_cx57_org_table_formula() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| 1 | 2 |\n| 3 | 4 |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| 1 | 2 |\\n| 3 | 4 |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -238,7 +238,7 @@ fn div_cx57_org_src_block_execute() {
 fn div_cx57_org_export_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"Table of Contents\n_________________\n\n1. Heading\n.. 1. Sub\n\n\n1 Heading\n=========\n\n1.1 Sub\n~~~~~~~\n\n  Text here\n\"""#
+        r#""OK \"Table of Contents\\n_________________\\n\\n1. Heading\\n.. 1. Sub\\n\\n\\n1 Heading\\n=========\\n\\n1.1 Sub\\n~~~~~~~\\n\\n  Text here\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

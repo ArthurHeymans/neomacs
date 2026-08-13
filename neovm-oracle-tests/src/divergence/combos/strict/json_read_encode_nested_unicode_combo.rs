@@ -66,7 +66,7 @@ fn div_v8_json_roundtrip_unicode_escape_edge() {
           (error (cons 'other-err (car err))))))
 "##;
     let expect = expect_test::expect![[
-        r#""OK (\"é\" \"line\nbreak\ttab\" \"escaped \\\\u s l a s h\" \"{\\\"x\\\":[1,{\\\"y\\\":2}],\\\"z\\\":\\\"café\\\"}\" ((spaces . 1)) (other-err . json-end-of-file))""#
+        r#""OK (\"é\" \"line\\nbreak\ttab\" \"escaped \\\\u s l a s h\" \"{\\\"x\\\":[1,{\\\"y\\\":2}],\\\"z\\\":\\\"café\\\"}\" ((spaces . 1)) (other-err . json-end-of-file))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

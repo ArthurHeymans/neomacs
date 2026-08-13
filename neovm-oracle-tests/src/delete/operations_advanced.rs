@@ -217,7 +217,7 @@ fn oracle_prop_delete_and_extract_region_advanced() {
               (buffer-string)
               (buffer-size))))"#;
     let expect = expect_test::expect![[
-        r#""OK ((\"line-one\n\" \"line-three\n\" \"two\") \"line-\nline-four\nline-five\n\" 26)""#
+        r#""OK ((\"line-one\\n\" \"line-three\\n\" \"two\") \"line-\\nline-four\\nline-five\\n\" 26)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -284,7 +284,7 @@ fn oracle_prop_delete_matching_lines() {
     (fmakunbound 'neovm--test-del-flush-lines)
     (fmakunbound 'neovm--test-del-keep-lines)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((3 \"code line 1\ncode line 2\ncode line 3\n\") (2 \"item 42\nitem 99\n\"))""#
+        r#""OK ((3 \"code line 1\\ncode line 2\\ncode line 3\\n\") (2 \"item 42\\nitem 99\\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -356,7 +356,7 @@ fn oracle_prop_delete_editor_pipeline() {
     (fmakunbound 'neovm--test-del-to-eol)
     (fmakunbound 'neovm--test-del-whole-line)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((\"the \" \"fox\" \" brown \" \"jumps over the lazy dog\n\") \"quick brown fox\njumps over the lazy dog\nend of text\n\" \"quick brown \njumps over the lazy dog\nend of text\n\" \"quick\njumps over the lazy dog\nend of text\n\" \"quick\nend of text\n\")""#
+        r#""OK ((\"the \" \"fox\" \" brown \" \"jumps over the lazy dog\\n\") \"quick brown fox\\njumps over the lazy dog\\nend of text\\n\" \"quick brown \\njumps over the lazy dog\\nend of text\\n\" \"quick\\njumps over the lazy dog\\nend of text\\n\" \"quick\\nend of text\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -402,6 +402,6 @@ fn oracle_prop_delete_duplicate_lines() {
         (let ((count (funcall 'neovm--test-del-dedup-lines)))
           (list count (buffer-string))))
     (fmakunbound 'neovm--test-del-dedup-lines)))"#;
-    let expect = expect_test::expect![[r#""OK (4 \"apple\nbanana\ncherry\ndate\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (4 \"apple\\nbanana\\ncherry\\ndate\\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

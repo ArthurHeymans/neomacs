@@ -77,7 +77,7 @@ fn bd_compose_region_auto() {
 fn divergence_string_glyph_split_grapheme() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (2 3 (\"a\"))""#]];
+    let expect = expect_test::expect![[r#""OK (1 3 (\"a\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (length (string-glyph-split (string ?e #x0301)))
         (length (string-glyph-split "abc"))

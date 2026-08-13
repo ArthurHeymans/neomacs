@@ -12,7 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_e6_format_time_more_flags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\" 9\" \" 9\" \" 4\" \"am\" \"20\" \"07/04/25\" \"2025-07-04\" \"09:30\" \"09:30:05\" \"Jul\" \"\n\" \"\t\")""#
+        r#""OK (\" 9\" \" 9\" \" 4\" \"am\" \"20\" \"07/04/25\" \"2025-07-04\" \"09:30\" \"09:30:05\" \"Jul\" \"\\n\" \"\t\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

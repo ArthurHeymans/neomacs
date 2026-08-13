@@ -123,7 +123,7 @@ fn divergence_yank_after_kill() {
 fn divergence_kill_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"line2\nline3\" \"\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"line2\\nline3\" \"\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "line1\nline2\nline3")
@@ -208,7 +208,7 @@ fn divergence_extract_rectangle() {
 fn divergence_delete_rectangle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"AEFGHIJ\nKLMNOPQRST\nUVWXYZ1234\"""#]];
+    let expect = expect_test::expect![[r#""OK \"AEFGHIJ\\nKLMNOPQRST\\nUVWXYZ1234\"""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ\nKLMNOPQRST\nUVWXYZ1234")

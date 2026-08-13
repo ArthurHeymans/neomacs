@@ -246,7 +246,7 @@ fn divergence_table_overlays_sort_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect =
-        expect_test::expect![[r#""OK (\"a-line\nb-line\nm-line\nz-line\" 4 t (\"z-line\"))""#]];
+        expect_test::expect![[r#""OK (\"a-line\\nb-line\\nm-line\\nz-line\" 4 t (\"z-line\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "z-line\na-line\nm-line\nb-line")

@@ -119,9 +119,7 @@ fn oracle_subst_char_unibyte_to_multibyte_conversion() {
    (string-bytes r2)))
 "#;
 
-    let expect = expect_test::expect![[
-        r#""OK (nil 6 \"A\\303\\210B\\303\\210\" nil 6 \"A\\303\\210B\\303\\210\" nil 6)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (nil 6 \"AÈBÈ\" nil 6 \"AÈBÈ\" nil 6)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

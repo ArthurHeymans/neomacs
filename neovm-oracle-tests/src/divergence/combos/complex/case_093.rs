@@ -82,7 +82,7 @@ fn div_cx93_category_table_define_and_modify() {
 fn div_cx93_with_temp_buffer_window_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t \"*My Temp Buffer*\" \"content in temp window\nsecond line\")""#
+        r#""OK (t \"*My Temp Buffer*\" \"content in temp window\\nsecond line\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

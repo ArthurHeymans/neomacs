@@ -177,7 +177,7 @@ fn delete_dups_region() {
 fn fill_region_cols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"one two three\nfour five six\nseven\"""#]];
+    let expect = expect_test::expect![[r#""OK \"one two three\\nfour five six\\nseven\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (setq fill-column 15)
@@ -192,7 +192,7 @@ fn fill_region_cols() {
 fn indent_rigidly() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK \"    line1\n    line2\n    line3\"""#]];
+    let expect = expect_test::expect![[r#""OK \"    line1\\n    line2\\n    line3\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "line1\nline2\nline3")

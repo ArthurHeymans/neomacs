@@ -46,9 +46,8 @@ fn div_h4_quoted_printable_multibyte_error_message() {
 #[test]
 fn div_h4_quoted_printable_decode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"caf\\303\\251 \\346\\227\\245\\346\\234\\254\" \"no encoding here\" \"softbreak\")""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (\"café 日本\" \"no encoding here\" \"softbreak\")""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (quoted-printable-decode-string "caf=C3=A9 =E6=97=A5=E6=9C=AC")

@@ -282,7 +282,7 @@ fn oracle_prop_skd_keymap_legend_builder() {
     (fmakunbound 'neovm--skd-count-bindings)))
 "#;
     let expect = expect_test::expect![[
-        r#""OK (t 7 (\"C-s\" \"C-f\" \"C-g\" \"M-x\" \"q\" \"/\" \"n\" \"p\") 113 57 nil \"=== Editor Bindings ===\n  /             search-forward\n  C-f           find-file\n  C-g           keyboard-quit\n  C-s           save-buffer\n  n             next-line\n  p             previous-line\n  q             quit\")""#
+        r#""OK (t 7 (\"C-s\" \"C-f\" \"C-g\" \"M-x\" \"q\" \"/\" \"n\" \"p\") 113 57 nil \"=== Editor Bindings ===\\n  /             search-forward\\n  C-f           find-file\\n  C-g           keyboard-quit\\n  C-s           save-buffer\\n  n             next-line\\n  p             previous-line\\n  q             quit\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

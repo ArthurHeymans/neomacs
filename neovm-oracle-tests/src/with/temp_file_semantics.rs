@@ -44,7 +44,7 @@ fn oracle_prop_with_temp_file_writes_after_body_and_returns_body_value() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK (:body-value (nil t nil \"\" nil t \"\") t \"alpha\n(beta gamma)\")""#
+        r#""OK (:body-value (nil t nil \"\" nil t \"\") t \"alpha\\n(beta gamma)\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

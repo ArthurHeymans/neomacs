@@ -30,7 +30,7 @@ fn oracle_prop_gnu_delete_line_uses_current_line_bounds() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK (((1 1 5) 1 \"two\nthree\") ((3 1 5) 1 \"two\nthree\") ((5 5 9) 5 \"one\nthree\") ((9 9 14) 9 \"one\ntwo\n\") ((14 9 14) 9 \"one\ntwo\n\") ((1 1 7) 1 \"\") ((7 1 7) 1 \"\"))""#
+        r#""OK (((1 1 5) 1 \"two\\nthree\") ((3 1 5) 1 \"two\\nthree\") ((5 5 9) 5 \"one\\nthree\") ((9 9 14) 9 \"one\\ntwo\\n\") ((14 9 14) 9 \"one\\ntwo\\n\") ((1 1 7) 1 \"\") ((7 1 7) 1 \"\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -58,7 +58,7 @@ fn oracle_prop_gnu_ensure_empty_lines_adjusts_prefix_newlines_and_point() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK ((1 2 3 \"\n\nfoo\") (4 2 7 \"foo\n\n\n\") (5 2 7 \"foo\n\n\n\") (9 2 7 \"foo\n\n\n\") (7 0 5 \"foo\n\") (2 nil 4 \"a\n\nbc\") (1 nil 2 \"\n\n\nabc\"))""#
+        r#""OK ((1 2 3 \"\\n\\nfoo\") (4 2 7 \"foo\\n\\n\\n\") (5 2 7 \"foo\\n\\n\\n\") (9 2 7 \"foo\\n\\n\\n\") (7 0 5 \"foo\\n\") (2 nil 4 \"a\\n\\nbc\") (1 nil 2 \"\\n\\n\\nabc\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

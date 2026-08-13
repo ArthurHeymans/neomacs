@@ -204,7 +204,7 @@ fn oracle_prop_move_to_column_force_detailed() {
                                     results))))
                     (nreverse results))"#;
     let expect = expect_test::expect![[
-        r#""OK ((past-eol 8 8 5 \"abc\t\ndef\n\") (split-tab 3 3 4 \"   \thello\n\") (exact-tab 8 8 2 \"\thello\n\") (empty-line 5 5 6 \"     \n\"))""#
+        r#""OK ((past-eol 8 8 5 \"abc\t\\ndef\\n\") (split-tab 3 3 4 \"   \thello\\n\") (exact-tab 8 8 2 \"\thello\\n\") (empty-line 5 5 6 \"     \\n\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -252,7 +252,7 @@ fn oracle_prop_move_to_column_past_eol_no_force() {
                                     results)))
                       (nreverse results)))"#;
     let expect = expect_test::expect![[
-        r#""OK ((2 2 3 \"ab\ncd\n\nefghijkl\n\") (1 1 5) (0 0 7) (4 4 12))""#
+        r#""OK ((2 2 3 \"ab\\ncd\\n\\nefghijkl\\n\") (1 1 5) (0 0 7) (4 4 12))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -317,7 +317,7 @@ fn oracle_prop_column_alignment_complex() {
             (funcall 'neovm--test-format-table data))
         (fmakunbound 'neovm--test-format-table)))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"Name\t     Age  City\t   Role\nAlice\t     30\t  NYC\t   Engineer\nBob\t     25\t  SF\t   Designer\nCharlemagne  45\t  LA\t   Director\nDi\t     22\t  Chicago  Intern\n\" (0 13 18 27 37) ((0 13 18 27) (0 13 18 27) (0 13 18 27) (0 13 18 27) (0 13 18 27)))""#
+        r#""OK (\"Name\t     Age  City\t   Role\\nAlice\t     30\t  NYC\t   Engineer\\nBob\t     25\t  SF\t   Designer\\nCharlemagne  45\t  LA\t   Director\\nDi\t     22\t  Chicago  Intern\\n\" (0 13 18 27 37) ((0 13 18 27) (0 13 18 27) (0 13 18 27) (0 13 18 27) (0 13 18 27)))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

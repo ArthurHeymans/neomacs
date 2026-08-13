@@ -41,7 +41,7 @@ fn oracle_prop_with_output_to_temp_buffer_body_not_current() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK ((t t \"*scratch*\" :done) (\"alpha(1 \\\"two\\\")\nomega\n\" 1 nil nil t))""#
+        r#""OK ((t t \"*scratch*\" :done) (\"alpha(1 \\\"two\\\")\\nomega\\n\" 1 nil nil t))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -74,7 +74,7 @@ fn oracle_prop_with_output_to_temp_buffer_clears_existing_buffer() {
       (kill-buffer name))))
 "#;
 
-    let expect = expect_test::expect![[r#""OK (\"*scratch*\" (\"fresh\n\" nil t nil 1 7))""#]];
+    let expect = expect_test::expect![[r#""OK (\"*scratch*\" (\"fresh\\n\" nil t nil 1 7))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

@@ -94,7 +94,7 @@ fn strict_babel_calc_integration() {
 fn strict_timestamp_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK ((:change-fbound t) (:after-day \"<2024-06-16 Sun>\n\"))""#]];
+        expect_test::expect![[r#""OK ((:change-fbound t) (:after-day \"<2024-06-16 Sun>\\n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

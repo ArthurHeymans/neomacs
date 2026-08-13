@@ -74,7 +74,7 @@ fn div_cx305_cl_generic_method_combination_append() {
 fn div_cx305_cl_generic_with_documentation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"Documentation for the generic function.\n\n(fn OBJ)\" :str)""#
+        r#""OK (\"Documentation for the generic function.\\n\\n(fn OBJ)\" :str)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

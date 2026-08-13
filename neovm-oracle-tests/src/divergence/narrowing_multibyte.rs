@@ -105,7 +105,7 @@ fn divergence_insert_char_multibyte() {
 fn divergence_decode_encode_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"\\304\\201bc\\344\\270\\255\" \"ābc中\" 4 7)""#]];
+    let expect = expect_test::expect![[r#""OK (\"ābc中\" \"ābc中\" 4 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((s "ābc中"))
   (list (encode-coding-string s 'utf-8)

@@ -71,7 +71,7 @@ fn proc_buffer_textprop_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (#(\"X alpha beta gamma\nProcess neo-cb1-xxx finished\n\" 2 48 (face bold)) 9 bold nil)""#
+        r#""OK (#(\"X alpha beta gamma\\nProcess neo-cb1-xxx finished\\n\" 2 48 (face bold)) 9 bold nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((buf (generate-new-buffer " neo-cb1-xxx")))
@@ -98,7 +98,7 @@ fn proc_buffer_textprop_marker_undo() {
 fn proc_decode_search_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""OK (\"one\nTwo\nThree\" 3)""#]];
+    let expect = expect_test::expect![[r#""OK (\"one\\nTwo\\nThree\" 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((acc ""))
   (let ((proc (make-process :name "neo-cb4-xxx" :command '("printf" "one\\ntwo\\nthree")

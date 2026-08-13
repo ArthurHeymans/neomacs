@@ -40,7 +40,7 @@ fn div_v8_call_process_region_sort_pipeline() {
                 (with-current-buffer out (buffer-string)))))
     (kill-buffer out)))
 "##;
-    let expect = expect_test::expect![[r#""OK (0 \"1\n2\n3\n4\n5\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (0 \"1\\n2\\n3\\n4\\n5\\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -64,6 +64,6 @@ fn div_v8_process_environment_inherit_env_query() {
           (or (string-match "test-value-42" result) result)
           result)))
 "##;
-    let expect = expect_test::expect![[r#""OK (t \"\n\" \"\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (t \"\\n\" \"\\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

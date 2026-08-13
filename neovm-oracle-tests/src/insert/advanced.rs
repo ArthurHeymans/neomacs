@@ -110,7 +110,7 @@ fn oracle_prop_insert_build_table() {
                                       (length data)))
                       (buffer-string)))"#;
     let expect = expect_test::expect![[
-        r#""OK \"Name        Age City      \n----------------------------\nAlice        30 Boston    \nBob          25 NYC       \nCarol        35 London    \n----------------------------\nTotal: 3 records\n\"""#
+        r#""OK \"Name        Age City      \\n----------------------------\\nAlice        30 Boston    \\nBob          25 NYC       \\nCarol        35 London    \\n----------------------------\\nTotal: 3 records\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
@@ -134,7 +134,7 @@ fn oracle_prop_insert_incremental_assembly() {
                       (insert ")")
                       (buffer-string)))"#;
     let expect = expect_test::expect![[
-        r#""OK \"(progn\n  (defun add (a b) (+ a b))\n  (defun mul (a b) (* a b))\n  (defun sub (a b) (- a b))\n)\"""#
+        r#""OK \"(progn\\n  (defun add (a b) (+ a b))\\n  (defun mul (a b) (* a b))\\n  (defun sub (a b) (- a b))\\n)\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

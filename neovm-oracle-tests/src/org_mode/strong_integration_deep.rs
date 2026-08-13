@@ -1080,7 +1080,7 @@ fn int_colview_all() {
 fn int_entity_radio_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"\\\\alpha \\\\beta\n<<<t>>>\nSee t\" \"\\\\alpha \\\\beta\n<<<t>>>\nSee t\")""#
+        r#""OK (\"\\\\alpha \\\\beta\\n<<<t>>>\\nSee t\" \"\\\\alpha \\\\beta\\n<<<t>>>\\nSee t\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer

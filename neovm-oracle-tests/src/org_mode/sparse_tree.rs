@@ -52,7 +52,7 @@ fn org_tags_sparse_tree_property_archive_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (((\"Project\" nil) (\"Active\" nil) (\"Closed\" t) (\"Archived\" nil) (\"Old\" t) (\"Other\" nil) (\"Home\" nil)) \"* Project :work:\n** TODO Active :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n** DONE Closed :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n* Archived :work:ARCHIVE:\n** TODO Old :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n* Other :home:\n** TODO Home :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n\")""#
+        r#""OK (((\"Project\" nil) (\"Active\" nil) (\"Closed\" t) (\"Archived\" nil) (\"Old\" t) (\"Other\" nil) (\"Home\" nil)) \"* Project :work:\\n** TODO Active :urgent:\\n:PROPERTIES:\\n:Owner: Ada\\n:END:\\n** DONE Closed :urgent:\\n:PROPERTIES:\\n:Owner: Ada\\n:END:\\n* Archived :work:ARCHIVE:\\n** TODO Old :urgent:\\n:PROPERTIES:\\n:Owner: Ada\\n:END:\\n* Other :home:\\n** TODO Home :urgent:\\n:PROPERTIES:\\n:Owner: Ada\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -392,7 +392,7 @@ fn org_occur_highlight_count_visibility_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (0 \"3 matches for \\\"important\\\" in buffer:  *temp*\n      2:Alpha body with important keyword.\n      6:Sub B body with important note.\n     10:Sub C body with another important line.\n\" ((\"Alpha\" 1 nil (\"work\")) (\"Sub A\" 3 nil nil) (\"Sub B\" 5 nil (\"urgent\")) (\"Beta\" 7 nil (\"home\")) (\"Sub C\" 9 nil nil) (\"Gamma\" 11 nil nil)) ((\"Alpha\" 1 nil (\"work\")) (\"Sub A\" 3 nil nil) (\"Sub B\" 5 nil (\"urgent\")) (\"Beta\" 7 nil (\"home\")) (\"Sub C\" 9 nil nil) (\"Gamma\" 11 nil nil)) 0 \"* TODO Alpha :work:\nAlpha body with important keyword.\n** DONE Sub A\nSub A body.\n** TODO Sub B :urgent:\nSub B body with important note.\n* Beta :home:\nBeta body.\n** TODO Sub C\nSub C body with another important line.\n* DONE Gamma\nGamma body with keyword inside.\n\")""#
+        r#""OK (0 \"3 matches for \\\"important\\\" in buffer:  *temp*\\n      2:Alpha body with important keyword.\\n      6:Sub B body with important note.\\n     10:Sub C body with another important line.\\n\" ((\"Alpha\" 1 nil (\"work\")) (\"Sub A\" 3 nil nil) (\"Sub B\" 5 nil (\"urgent\")) (\"Beta\" 7 nil (\"home\")) (\"Sub C\" 9 nil nil) (\"Gamma\" 11 nil nil)) ((\"Alpha\" 1 nil (\"work\")) (\"Sub A\" 3 nil nil) (\"Sub B\" 5 nil (\"urgent\")) (\"Beta\" 7 nil (\"home\")) (\"Sub C\" 9 nil nil) (\"Gamma\" 11 nil nil)) 0 \"* TODO Alpha :work:\\nAlpha body with important keyword.\\n** DONE Sub A\\nSub A body.\\n** TODO Sub B :urgent:\\nSub B body with important note.\\n* Beta :home:\\nBeta body.\\n** TODO Sub C\\nSub C body with another important line.\\n* DONE Gamma\\nGamma body with keyword inside.\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

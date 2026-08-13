@@ -456,6 +456,6 @@ fn oracle_prop_save_excursion_widen_inside_narrow() {
               (point-min) (= (point-min) narrow-min)
               (point-max) (= (point-max) narrow-max)
               (buffer-substring (point-min) (point-max)))))"#;
-    let expect = expect_test::expect![[r#""OK (8 t 7 t 19 t \"LINE2\nLINE3\n\")""#]];
+    let expect = expect_test::expect![[r#""OK (8 t 7 t 19 t \"LINE2\\nLINE3\\n\")""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

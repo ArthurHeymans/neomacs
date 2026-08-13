@@ -32,7 +32,7 @@ fn oracle_prop_with_temp_buffer_insert_extract_multiline() {
               (buffer-substring line2-start line2-end)
               line2-start line2-end)))))"####;
     let expect = expect_test::expect![[
-        r#""OK (\"first line\nsecond line\nthird line\" 33 \"second line\" 12 23)""#
+        r#""OK (\"first line\\nsecond line\\nthird line\" 33 \"second line\" 12 23)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

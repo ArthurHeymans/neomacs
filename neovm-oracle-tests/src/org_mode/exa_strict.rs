@@ -380,7 +380,7 @@ fn exa_all_move_subtree_combinations() {
 fn exa_all_promote_demote_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* Heading\" \"** Heading\" \"* H1\n** S1\n** S2\" \"** H1\n*** S1\n*** S2\")""#
+        r#""OK (\"* Heading\" \"** Heading\" \"* H1\\n** S1\\n** S2\" \"** H1\\n*** S1\\n*** S2\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

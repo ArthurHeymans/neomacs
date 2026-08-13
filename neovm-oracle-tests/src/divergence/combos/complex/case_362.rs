@@ -9,7 +9,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx362_outline_mode_hide_show_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (t \"* Top\n** Sub1\n** Sub2\n*** SubSub1\n* Second\nbody\n\" \"* Top\n** Sub1\n** Sub2\n*** SubSub1\n* Second\nbody\n\")""#
+        r#""OK (t \"* Top\\n** Sub1\\n** Sub2\\n*** SubSub1\\n* Second\\nbody\\n\" \"* Top\\n** Sub1\\n** Sub2\\n*** SubSub1\\n* Second\\nbody\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -36,7 +36,7 @@ fn div_cx362_outline_mode_hide_show_subtree() {
 fn div_cx362_outline_hide_body_show_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* Top\nhidden body 1\n* Second\nhidden body 2\n\" \"* Top\nhidden body 1\n* Second\nhidden body 2\n\")""#
+        r#""OK (\"* Top\\nhidden body 1\\n* Second\\nhidden body 2\\n\" \"* Top\\nhidden body 1\\n* Second\\nhidden body 2\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

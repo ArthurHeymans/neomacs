@@ -463,7 +463,7 @@ fn org_cite_basic_activation_follow_completion_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((\"<root>/refs.bib\") (\"alpha2020\" \"beta2021\") nil (\"alpha2020\") ((\"alpha2020\" \"Alpha, Ann\" #(\"2020\" 0 4 (:parent nil)) #(\"Known Alpha\" 0 11 (:parent nil))) (\"beta2021\" \"Beta, Bob\" #(\"2021\" 0 4 (:parent nil)) #(\"Known Beta\" 0 10 (:parent nil)))) (((\"alpha2020\" \"beta2021\") (nil) (0 . 37)) ((\"alpah2020\" \"missing\") (nil) (0 . 27))) ((\"alpha2020\" (org-cite-key org-cite) highlight #(\"Alpha. Known Alpha, J, 2020.\" 0 28 (:parent nil)) t) (\"alpah2020\" (error org-cite) highlight \"Suggestions (mouse-1 to substitute): alpha2020\" t) (\"missing\" (error org-cite) highlight nil t)) (\"refs.bib\" \"@article{alpha2020,\") (user-error \"Cannot find citation key: \\\"alpah2020\\\"\") \"#+bibliography: <root>/refs.bib\nKnown [cite:see @alpha2020 p. 4; @beta2021] Missing [cite:@alpah2020; @missing].\n\")""##
+        r##""OK ((\"<root>/refs.bib\") (\"alpha2020\" \"beta2021\") nil (\"alpha2020\") ((\"alpha2020\" \"Alpha, Ann\" #(\"2020\" 0 4 (:parent nil)) #(\"Known Alpha\" 0 11 (:parent nil))) (\"beta2021\" \"Beta, Bob\" #(\"2021\" 0 4 (:parent nil)) #(\"Known Beta\" 0 10 (:parent nil)))) (((\"alpha2020\" \"beta2021\") (nil) (0 . 37)) ((\"alpah2020\" \"missing\") (nil) (0 . 27))) ((\"alpha2020\" (org-cite-key org-cite) highlight #(\"Alpha. Known Alpha, J, 2020.\" 0 28 (:parent nil)) t) (\"alpah2020\" (error org-cite) highlight \"Suggestions (mouse-1 to substitute): alpha2020\" t) (\"missing\" (error org-cite) highlight nil t)) (\"refs.bib\" \"@article{alpha2020,\") (user-error \"Cannot find citation key: \\\"alpah2020\\\"\") \"#+bibliography: <root>/refs.bib\\nKnown [cite:see @alpha2020 p. 4; @beta2021] Missing [cite:@alpah2020; @missing].\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -693,7 +693,7 @@ fn org_citation_parse_reference_style_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK (((nil nil (\"doe2020\")) (\"t\" nil (\"roe2021\" \"smith2022\")) (nil nil (\"solo\"))) ((\"doe2020\") (\"roe2021\") (\"smith2022\") (\"solo\")) (org-data section keyword keyword headline plain-text section paragraph plain-text citation citation-reference plain-text citation citation-reference citation-reference plain-text plain-text plain-text citation citation-reference plain-text) \"#+cite_export: basic author-year\n#+bibliography: refs.bib\n\n* Section\nText [cite:@doe2020] and [cite/t:@roe2021; see @smith2022 p. 10].\nPlain [cite:@solo].\n\n\")""##
+        r##""OK (((nil nil (\"doe2020\")) (\"t\" nil (\"roe2021\" \"smith2022\")) (nil nil (\"solo\"))) ((\"doe2020\") (\"roe2021\") (\"smith2022\") (\"solo\")) (org-data section keyword keyword headline plain-text section paragraph plain-text citation citation-reference plain-text citation citation-reference citation-reference plain-text plain-text plain-text citation citation-reference plain-text) \"#+cite_export: basic author-year\\n#+bibliography: refs.bib\\n\\n* Section\\nText [cite:@doe2020] and [cite/t:@roe2021; see @smith2022 p. 10].\\nPlain [cite:@solo].\\n\\n\")""##
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

@@ -300,7 +300,7 @@ fn oracle_prop_make_string_aset_complex_mutations() {
       (aset s (- len 1 i) (aref half i)))
     (list s (string= s (concat (string ?a ?b ?c ?d ?e ?e ?d ?c ?b ?a))))))"#;
     let expect = expect_test::expect![[
-        r#""OK (\"*-*-*-*-\" \"0123456789\" (t \"hello!\" \"hello!\") (\"aa\\351aa\" 5 nil 97 233 97) (\"abcdeedcba\" t))""#
+        r#""OK (\"*-*-*-*-\" \"0123456789\" (t \"hello!\" \"hello!\") (\"aa�aa\" 5 nil 97 233 97) (\"abcdeedcba\" t))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -242,7 +242,7 @@ fn oracle_prop_stralgos_template_engine() {
                                result t t)))
                       result))"#;
     let expect = expect_test::expect![[
-        r#""OK \"Dear Alice,\nYour order #12345 of 3 items is shipped.\nTotal: $42.99\"""#
+        r#""OK \"Dear Alice,\\nYour order #12345 of 3 items is shipped.\\nTotal: $42.99\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

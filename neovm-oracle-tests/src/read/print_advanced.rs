@@ -102,7 +102,7 @@ fn oracle_prop_prin1_to_string_special_chars() {
                            (car (read-from-string
                                   (prin1-to-string "hello\nworld")))))"####;
     let expect = expect_test::expect![[
-        r#""OK (\"\\\"hello\nworld\\\"\" \"\\\"tab\there\\\"\" \"\\\"back\\\\\\\\slash\\\"\" \"\\\"double\\\\\\\"quote\\\"\" \"\\\"null\u{b}yte\\\"\" \"\\\"mixed\n\t\\\\\\\"special\\\\\\\\\\\"\" t)""#
+        r#""OK (\"\\\"hello\\nworld\\\"\" \"\\\"tab\there\\\"\" \"\\\"back\\\\\\\\slash\\\"\" \"\\\"double\\\\\\\"quote\\\"\" \"\\\"null\u{b}yte\\\"\" \"\\\"mixed\\n\t\\\\\\\"special\\\\\\\\\\\"\" t)""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -342,7 +342,7 @@ fn divergence_visual_line_fringe_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK (nil t t nil nil t ((funcall #'#[0 \"\\300\\207\" [(nil nil)] 1])))""#
+        r#""OK (nil t t nil nil t ((funcall #'#[0 \"��\" [(nil nil)] 1])))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

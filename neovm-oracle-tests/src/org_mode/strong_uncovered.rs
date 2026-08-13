@@ -436,7 +436,7 @@ fn strong_clock_sum() {
 #[test]
 fn strong_timer_item() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"- 0:00:00 ::\n- 0:00:00 :: \"""#]];
+    let expect = expect_test::expect![[r#""OK \"- 0:00:00 ::\\n- 0:00:00 :: \"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -684,7 +684,7 @@ fn strong_export_backend_properties() {
 fn strong_babel_src_block_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"emacs-lisp\" \"my-block\" \":results value :exports both\" nil \"(+ x 1)\n\")""#
+        r#""OK (\"emacs-lisp\" \"my-block\" \":results value :exports both\" nil \"(+ x 1)\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
@@ -965,7 +965,7 @@ fn strong_mark_subtree() {
 #[test]
 fn strong_narrow_to_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"* H1\nBody 1\n** H2\nSub\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"* H1\\nBody 1\\n** H2\\nSub\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)

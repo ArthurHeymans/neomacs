@@ -79,7 +79,7 @@ fn div_cx459_visual_line_fill() {
 #[test]
 fn div_cx459_electric_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"(defun foo ()\n  \"""#]];
+    let expect = expect_test::expect![[r#""OK \"(defun foo ()\\n  \"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (emacs-lisp-mode)
@@ -155,7 +155,7 @@ fn div_cx459_whitespace_mode() {
 #[test]
 fn div_cx459_align_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"a\t1\nbb\t22\nccc\t333\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"a\t1\\nbb\t22\\nccc\t333\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "a  1\nbb 22\nccc  333\n")
@@ -168,7 +168,7 @@ fn div_cx459_align_ops() {
 #[test]
 fn div_cx459_sort_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"a 2\nb 1\nc 3\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"a 2\\nb 1\\nc 3\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "b 2\na 1\nc 3\n")

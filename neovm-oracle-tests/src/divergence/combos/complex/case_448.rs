@@ -131,7 +131,7 @@ fn div_cx448_life_column_display() {
 #[test]
 fn div_cx448_rot13_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"uryyb\" \"caf\\303\\251\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"uryyb\" \"café\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (rot13 "hello")
       (encode-coding-string "café" 'utf-8))"##,

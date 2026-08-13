@@ -124,7 +124,7 @@ fn oracle_read_from_string_empty_and_whitespace_errors() {
 "#;
 
     let expect = expect_test::expect![[
-        r#""OK ((\"\" end-of-file nil) (\"   \" end-of-file nil) (\"\n\t \" end-of-file nil))""#
+        r#""OK ((\"\" end-of-file nil) (\"   \" end-of-file nil) (\"\\n\t \" end-of-file nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

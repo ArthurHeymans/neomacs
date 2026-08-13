@@ -92,7 +92,7 @@ fn div_utf8_encode_hex_string_eightbit() {
 #[test]
 fn div_utf8_set_buffer_multibyte_toggle_with_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"caf\\303\\251\" 5 nil (99 97 102 195 169))""#]];
+    let expect = expect_test::expect![[r#""OK (\"café\" 5 nil (99 97 102 195 169))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer

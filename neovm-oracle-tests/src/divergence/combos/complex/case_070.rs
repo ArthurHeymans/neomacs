@@ -174,7 +174,7 @@ fn div_cx70_read_from_string_with_multibyte() {
 #[test]
 fn div_cx70_with_output_to_temp_buffer_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"line 1\nline 2\n(1 2 3)\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"line 1\\nline 2\\n(1 2 3)\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((temp-buffer-name "*My Temp Output*"))
@@ -195,7 +195,7 @@ fn div_cx70_with_output_to_temp_buffer_capture() {
 fn div_cx70_pp_indentation_of_nested_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"(:config (:option-a \\\"value\\\" :option-b (:nested-a 1 :nested-b 2))\n\t :option-c (1 2 3))\n\" 3)""#
+        r#""OK (\"(:config (:option-a \\\"value\\\" :option-b (:nested-a 1 :nested-b 2))\\n\t :option-c (1 2 3))\\n\" 3)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"

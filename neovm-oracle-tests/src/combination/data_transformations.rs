@@ -57,7 +57,7 @@ fn oracle_prop_dt_alist_to_xml_like() {
                                    (hobby . "chess")))))
                       (funcall to-xml data 0)))"#;
     let expect = expect_test::expect![[
-        r#""OK \"<person>\n  <name>Alice</name>\n  <age>30</age>\n  <address>\n    <city>Wonderland</city>\n    <zip>12345</zip>\n  </address>\n  <hobbies>\n    <hobby>reading</hobby>\n    <hobby>chess</hobby>\n  </hobbies>\n</person>\n\"""#
+        r#""OK \"<person>\\n  <name>Alice</name>\\n  <age>30</age>\\n  <address>\\n    <city>Wonderland</city>\\n    <zip>12345</zip>\\n  </address>\\n  <hobbies>\\n    <hobby>reading</hobby>\\n    <hobby>chess</hobby>\\n  </hobbies>\\n</person>\\n\"""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

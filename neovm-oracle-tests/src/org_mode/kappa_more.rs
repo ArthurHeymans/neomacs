@@ -104,7 +104,7 @@ fn kappa_table_formula_remote() {
 #[test]
 fn kappa_table_align() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a | b |\n| c | d |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | b |\\n| c | d |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -119,7 +119,7 @@ fn kappa_table_align() {
 #[test]
 fn kappa_table_insert_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"|   | a | b |\n|   | c | d |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"|   | a | b |\\n|   | c | d |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -134,7 +134,7 @@ fn kappa_table_insert_column() {
 #[test]
 fn kappa_table_delete_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| b | c |\n| e | f |\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| b | c |\\n| e | f |\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -149,7 +149,7 @@ fn kappa_table_delete_column() {
 #[test]
 fn kappa_table_insert_row() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"|   |   |\n| a | b |\n| c | d |\"""#]];
+    let expect = expect_test::expect![[r#""OK \"|   |   |\\n| a | b |\\n| c | d |\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -164,7 +164,7 @@ fn kappa_table_insert_row() {
 #[test]
 fn kappa_table_kill_row() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a | b |\n| e | f |\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | b |\\n| e | f |\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -209,7 +209,7 @@ fn kappa_table_move_column_left() {
 #[test]
 fn kappa_table_move_row_down() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| b |\n| a |\n| c |\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| b |\\n| a |\\n| c |\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -224,7 +224,7 @@ fn kappa_table_move_row_down() {
 #[test]
 fn kappa_table_move_row_up() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a |\n| c |\n| b |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a |\\n| c |\\n| b |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -255,7 +255,7 @@ fn kappa_table_sort() {
 #[test]
 fn kappa_table_transpose() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a | c | e |\n| b | d | f |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | c | e |\\n| b | d | f |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -270,7 +270,7 @@ fn kappa_table_transpose() {
 #[test]
 fn kappa_table_convert_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK \"| a | b | c |\n| d | e | f |\n\"""#]];
+    let expect = expect_test::expect![[r#""OK \"| a | b | c |\\n| d | e | f |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -287,7 +287,7 @@ fn kappa_table_convert_region() {
 fn kappa_table_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK \"|   |   |   |\n|---+---+---|\n|   |   |   |\n\"""#]];
+        expect_test::expect![[r#""OK \"|   |   |   |\\n|---+---+---|\\n|   |   |   |\\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -629,7 +629,7 @@ fn kappa_macro_replace_all() {
 #[test]
 fn kappa_footnote_new() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"Text[fn:1]\n\n[fn:1] \n\" \"Text[fn::]\")""#]];
+    let expect = expect_test::expect![[r#""OK (\"Text[fn:1]\\n\\n[fn:1] \\n\" \"Text[fn::]\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -701,7 +701,7 @@ fn kappa_archive_subtree() {
 fn kappa_datetree_find_date_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\" \"* 2012\n\n** 2012-03 March\n\n*** 2012-03-29 Thursday\")""#
+        r#""OK (\"* 2012\\n\\n** 2012-03 March\\n\\n*** 2012-03-29 Thursday\" \"* 2012\\n\\n** 2012-03 March\\n\\n*** 2012-03-29 Thursday\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -864,7 +864,7 @@ fn kappa_num_max_level() {
 fn kappa_capture_fill_template() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"success!\n\" \"2026\n\" \"<2026-06-15 Mon>\n\" \"[2026-06-15 Mon]\n\" \"\" \"%i\n\")""#
+        r#""OK (\"success!\\n\" \"2026\\n\" \"<2026-06-15 Mon>\\n\" \"[2026-06-15 Mon]\\n\" \"\" \"%i\\n\")""#
     ]];
     crate::common::assert_oracle_parity_frozen_time_expect(
         r##"(progn
@@ -1073,7 +1073,7 @@ fn kappa_entry_get() {
 fn kappa_entry_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#(\"* TODO H\" 0 8 (org-todo-head \"TODO\")) #(\"* H\" 0 3 (org-todo-head nil)) \"* [#A] H\" \"* H\n:PROPERTIES:\n:A:        2\n:END:\" \"* H\n:PROPERTIES:\n:A:        1\n:END:\n\")""#
+        r#""OK (#(\"* TODO H\" 0 8 (org-todo-head \"TODO\")) #(\"* H\" 0 3 (org-todo-head nil)) \"* [#A] H\" \"* H\\n:PROPERTIES:\\n:A:        2\\n:END:\" \"* H\\n:PROPERTIES:\\n:A:        1\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1102,7 +1102,8 @@ fn kappa_entry_put() {
 #[test]
 fn kappa_delete_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"\" \":PROPERTIES:\n:T1: t\n:END:\" \"* H\n\")""#]];
+    let expect =
+        expect_test::expect![[r#""OK (\"\" \":PROPERTIES:\\n:T1: t\\n:END:\" \"* H\\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1125,7 +1126,7 @@ fn kappa_delete_property() {
 fn kappa_set_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\":PROPERTIES:\n:TEST: t\n:END:\n\" \"* H\n:PROPERTIES:\n:TEST: t\n:END:\n\")""#
+        r#""OK (\":PROPERTIES:\\n:TEST: t\\n:END:\\n\" \"* H\\n:PROPERTIES:\\n:TEST: t\\n:END:\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1154,7 +1155,7 @@ fn kappa_set_property() {
 fn kappa_deadline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* H\nDEADLINE: <2012-03-29 Thu>\" \"* H\nDEADLINE: <2014-03-04 Tue>\" \"* H\nDEADLINE: <2012-03-29 Thu +2y>\" \"* H\n\")""#
+        r#""OK (\"* H\\nDEADLINE: <2012-03-29 Thu>\" \"* H\\nDEADLINE: <2014-03-04 Tue>\" \"* H\\nDEADLINE: <2012-03-29 Thu +2y>\" \"* H\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
@@ -1181,7 +1182,7 @@ fn kappa_deadline() {
 fn kappa_schedule() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"* H\nSCHEDULED: <2012-03-29 Thu>\" \"* H\nSCHEDULED: <2014-03-04 Tue>\" \"* H\nSCHEDULED: <2012-03-29 Thu +2y>\" \"* H\n\")""#
+        r#""OK (\"* H\\nSCHEDULED: <2012-03-29 Thu>\" \"* H\\nSCHEDULED: <2014-03-04 Tue>\" \"* H\\nSCHEDULED: <2012-03-29 Thu +2y>\" \"* H\\n\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn

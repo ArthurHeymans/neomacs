@@ -94,7 +94,7 @@ fn divergence_save_excursion_restriction_window_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r#""OK ((21 \"LINE-3\" \"LINE-1\nLINE-2\nLINE-3\nLINE-4\nLINE-5\") 15 8 25 \"LINE-2\nLINE-3\nLIN\")""#
+        r#""OK ((21 \"LINE-3\" \"LINE-1\\nLINE-2\\nLINE-3\\nLINE-4\\nLINE-5\") 15 8 25 \"LINE-2\\nLINE-3\\nLIN\")""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn

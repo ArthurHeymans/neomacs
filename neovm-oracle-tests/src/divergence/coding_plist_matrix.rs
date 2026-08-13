@@ -74,7 +74,7 @@ fn div_cod_plist_chinese_iso_8bit() {
 fn div_cod_plist_compound_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:ascii-compatible-p nil :category coding-category-iso-8-else :name compound-text :docstring \"Compound text based generic encoding.\nThis coding system is an extension of X's \\\"Compound Text Encoding\\\".\nIt encodes many characters using the normal ISO-2022 designation sequences,\nbut it doesn't support extended segments of CTEXT.\" :coding-type iso-2022 :mnemonic 120 :charset-list iso-2022 :designation [(ascii 94) (latin-iso8859-1 katakana-jisx0201 96) nil nil] :flags (ascii-at-eol ascii-at-cntl long-form designation locking-shift single-shift composition) :mime-charset x-ctext)""#
+        r#""OK (:ascii-compatible-p nil :category coding-category-iso-8-else :name compound-text :docstring \"Compound text based generic encoding.\\nThis coding system is an extension of X's \\\"Compound Text Encoding\\\".\\nIt encodes many characters using the normal ISO-2022 designation sequences,\\nbut it doesn't support extended segments of CTEXT.\" :coding-type iso-2022 :mnemonic 120 :charset-list iso-2022 :designation [(ascii 94) (latin-iso8859-1 katakana-jisx0201 96) nil nil] :flags (ascii-at-eol ascii-at-cntl long-form designation locking-shift single-shift composition) :mime-charset x-ctext)""#
     ]];
     crate::common::assert_oracle_parity_expect("(coding-system-plist 'compound-text)", expect);
 }
@@ -83,7 +83,7 @@ fn div_cod_plist_compound_text() {
 fn div_cod_plist_compound_text_with_extensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:ascii-compatible-p nil :category coding-category-iso-8-else :name compound-text-with-extensions :docstring \"Compound text encoding with ICCCM Extended Segment extensions.\n\nSee the variables `ctext-standard-encodings' and\n`ctext-non-standard-encodings-alist' for the detail about how\nextended segments are handled.\n\nThis coding system should be used only for X selections.  It is inappropriate\nfor decoding and encoding files, process I/O, etc.\" :coding-type iso-2022 :mnemonic 120 :charset-list iso-2022 :designation [(ascii 94) (latin-iso8859-1 katakana-jisx0201 96) nil nil] :flags (ascii-at-eol ascii-at-cntl long-form designation locking-shift single-shift) :post-read-conversion ctext-post-read-conversion :pre-write-conversion ctext-pre-write-conversion :mime-charset x-ctext)""#
+        r#""OK (:ascii-compatible-p nil :category coding-category-iso-8-else :name compound-text-with-extensions :docstring \"Compound text encoding with ICCCM Extended Segment extensions.\\n\\nSee the variables `ctext-standard-encodings' and\\n`ctext-non-standard-encodings-alist' for the detail about how\\nextended segments are handled.\\n\\nThis coding system should be used only for X selections.  It is inappropriate\\nfor decoding and encoding files, process I/O, etc.\" :coding-type iso-2022 :mnemonic 120 :charset-list iso-2022 :designation [(ascii 94) (latin-iso8859-1 katakana-jisx0201 96) nil nil] :flags (ascii-at-eol ascii-at-cntl long-form designation locking-shift single-shift) :post-read-conversion ctext-post-read-conversion :pre-write-conversion ctext-pre-write-conversion :mime-charset x-ctext)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(coding-system-plist 'compound-text-with-extensions)",
@@ -257,7 +257,7 @@ fn div_cod_plist_cp874() {
 fn div_cod_plist_ctext_no_compositions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:ascii-compatible-p nil :category coding-category-iso-8-else :name ctext-no-compositions :docstring \"Compound text based generic encoding.\n\nLike `compound-text', but does not produce escape sequences for compositions.\" :coding-type iso-2022 :mnemonic 120 :charset-list iso-2022 :designation [(ascii 94) (latin-iso8859-1 katakana-jisx0201 96) nil nil] :flags (ascii-at-eol ascii-at-cntl designation locking-shift single-shift))""#
+        r#""OK (:ascii-compatible-p nil :category coding-category-iso-8-else :name ctext-no-compositions :docstring \"Compound text based generic encoding.\\n\\nLike `compound-text', but does not produce escape sequences for compositions.\" :coding-type iso-2022 :mnemonic 120 :charset-list iso-2022 :designation [(ascii 94) (latin-iso8859-1 katakana-jisx0201 96) nil nil] :flags (ascii-at-eol ascii-at-cntl designation locking-shift single-shift))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         "(coding-system-plist 'ctext-no-compositions)",
@@ -344,7 +344,7 @@ fn div_cod_plist_euc_tw() {
 fn div_cod_plist_eucjp_ms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:ascii-compatible-p t :category coding-category-iso-8-2 :name eucjp-ms :docstring \"eucJP-ms (like EUC-JP but with CP932 extension).\neucJP-ms is defined in <http://www.opengroup.or.jp/jvc/cde/appendix.html>.\" :coding-type iso-2022 :mnemonic 69 :designation [ascii japanese-jisx0208 katakana-jisx0201 japanese-jisx0212] :flags (short ascii-at-eol ascii-at-cntl single-shift) :charset-list (ascii latin-jisx0201 japanese-jisx0208 katakana-jisx0201 japanese-jisx0212) :decode-translation-table eucjp-ms-decode :encode-translation-table eucjp-ms-encode)""#
+        r#""OK (:ascii-compatible-p t :category coding-category-iso-8-2 :name eucjp-ms :docstring \"eucJP-ms (like EUC-JP but with CP932 extension).\\neucJP-ms is defined in <http://www.opengroup.or.jp/jvc/cde/appendix.html>.\" :coding-type iso-2022 :mnemonic 69 :designation [ascii japanese-jisx0208 katakana-jisx0201 japanese-jisx0212] :flags (short ascii-at-eol ascii-at-cntl single-shift) :charset-list (ascii latin-jisx0201 japanese-jisx0208 katakana-jisx0201 japanese-jisx0212) :decode-translation-table eucjp-ms-decode :encode-translation-table eucjp-ms-encode)""#
     ]];
     crate::common::assert_oracle_parity_expect("(coding-system-plist 'eucjp-ms)", expect);
 }
@@ -638,7 +638,7 @@ fn div_cod_plist_iso_2022_kr() {
 fn div_cod_plist_iso_8859_11() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:ascii-compatible-p t :category coding-category-charset :name iso-8859-11 :docstring \"ISO/IEC 8859/11 (Latin/Thai)\nThis is the same as `thai-tis620' with the addition of no-break-space.\" :coding-type charset :mnemonic 42 :mime-charset iso-8859-11 :charset-list (iso-8859-11))""#
+        r#""OK (:ascii-compatible-p t :category coding-category-charset :name iso-8859-11 :docstring \"ISO/IEC 8859/11 (Latin/Thai)\\nThis is the same as `thai-tis620' with the addition of no-break-space.\" :coding-type charset :mnemonic 42 :mime-charset iso-8859-11 :charset-list (iso-8859-11))""#
     ]];
     crate::common::assert_oracle_parity_expect("(coding-system-plist 'iso-8859-11)", expect);
 }
@@ -869,7 +869,7 @@ fn div_cod_plist_next() {
 fn div_cod_plist_no_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:ascii-compatible-p t :category coding-category-raw-text :name no-conversion :mnemonic 61 :coding-type raw-text :ascii-compatible-p t :default-char 0 :for-unibyte t :docstring \"Do no conversion.\n\nWhen you visit a file with this coding, the file is read into a\nunibyte buffer as is, thus each byte of a file is treated as a\ncharacter.\" :eol-type unix)""#
+        r#""OK (:ascii-compatible-p t :category coding-category-raw-text :name no-conversion :mnemonic 61 :coding-type raw-text :ascii-compatible-p t :default-char 0 :for-unibyte t :docstring \"Do no conversion.\\n\\nWhen you visit a file with this coding, the file is read into a\\nunibyte buffer as is, thus each byte of a file is treated as a\\ncharacter.\" :eol-type unix)""#
     ]];
     crate::common::assert_oracle_parity_expect("(coding-system-plist 'no-conversion)", expect);
 }
@@ -890,7 +890,7 @@ fn div_cod_plist_no_conversion_multibyte() {
 fn div_cod_plist_prefer_utf_8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:ascii-compatible-p nil :category coding-category-undecided :name prefer-utf-8 :docstring \"Like `undecided' but prefer UTF-8 when appropriate.\nOn decoding, if the source contains 8-bit codes and they all\nare valid UTF-8 sequences, detect the source as UTF-8 encoding\nregardless of the coding priority.\nOn encoding, if the source contains non-ASCII characters, encode them\nby UTF-8.\" :coding-type undecided :mnemonic 45 :charset-list (emacs) :prefer-utf-8 t :inhibit-null-byte-detection 0 :inhibit-iso-escape-detection 0)""#
+        r#""OK (:ascii-compatible-p nil :category coding-category-undecided :name prefer-utf-8 :docstring \"Like `undecided' but prefer UTF-8 when appropriate.\\nOn decoding, if the source contains 8-bit codes and they all\\nare valid UTF-8 sequences, detect the source as UTF-8 encoding\\nregardless of the coding priority.\\nOn encoding, if the source contains non-ASCII characters, encode them\\nby UTF-8.\" :coding-type undecided :mnemonic 45 :charset-list (emacs) :prefer-utf-8 t :inhibit-null-byte-detection 0 :inhibit-iso-escape-detection 0)""#
     ]];
     crate::common::assert_oracle_parity_expect("(coding-system-plist 'prefer-utf-8)", expect);
 }
@@ -908,7 +908,7 @@ fn div_cod_plist_pt154() {
 fn div_cod_plist_raw_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (:ascii-compatible-p t :category coding-category-raw-text :name raw-text :docstring \"Raw text, which means text contains random 8-bit codes.\nEncoding text with this coding system produces the actual byte\nsequence of the text in buffers and strings.  An exception is made for\ncharacters from the `eight-bit' character set.  Each of them is encoded\ninto a single byte.\n\nWhen you visit a file with this coding, the file is read into a\nunibyte buffer as is (except for EOL format), thus each byte of a file\nis treated as a character.\" :coding-type raw-text :for-unibyte t :mnemonic 116)""#
+        r#""OK (:ascii-compatible-p t :category coding-category-raw-text :name raw-text :docstring \"Raw text, which means text contains random 8-bit codes.\\nEncoding text with this coding system produces the actual byte\\nsequence of the text in buffers and strings.  An exception is made for\\ncharacters from the `eight-bit' character set.  Each of them is encoded\\ninto a single byte.\\n\\nWhen you visit a file with this coding, the file is read into a\\nunibyte buffer as is (except for EOL format), thus each byte of a file\\nis treated as a character.\" :coding-type raw-text :for-unibyte t :mnemonic 116)""#
     ]];
     crate::common::assert_oracle_parity_expect("(coding-system-plist 'raw-text)", expect);
 }

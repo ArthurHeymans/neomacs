@@ -24,7 +24,7 @@ fn div_v8_secure_hash_algorithm_matrix() {
         (secure-hash 'sha1 "abc" nil nil 'binary)))
 "##;
     let expect = expect_test::expect![[
-        r#""OK (\"9e107d9d372bb6826bd81d3542a419d6\" \"2fd4e1c67a2d28fced849ee1bb76e7391b93eb12\" \"730e109bd7a8a32b1cb9d9a09aa2325d2430587ddbc0c38bad911525\" \"d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592\" \"ca737f1014a48f4c0b6dd43cb177b0afd9e5169367544c494011e3317dbf9a509cb1e5dc1e85a941bbee3d7f2afbc9b1\" \"07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6\" \"da39a3ee5e6b4b0d3255bfef95601890afd80709\" \"\\251\\231>6G\u{6}\\201j\\272>%qxP\\302l\\234\\320\\330\\235\")""#
+        r#""OK (\"9e107d9d372bb6826bd81d3542a419d6\" \"2fd4e1c67a2d28fced849ee1bb76e7391b93eb12\" \"730e109bd7a8a32b1cb9d9a09aa2325d2430587ddbc0c38bad911525\" \"d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592\" \"ca737f1014a48f4c0b6dd43cb177b0afd9e5169367544c494011e3317dbf9a509cb1e5dc1e85a941bbee3d7f2afbc9b1\" \"07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6\" \"da39a3ee5e6b4b0d3255bfef95601890afd80709\" \"��>6G\u{6}�j�>%qxP�l��؝\")""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
