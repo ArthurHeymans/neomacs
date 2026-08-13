@@ -4428,3 +4428,51 @@ owner.  All-target compilation succeeds, the complete TUI suite passes 911 of
 911 tests, and its isolated TMPDIR has zero descendants after the suite exits.
 
 Status: FIXED.
+
+## 85. Fontconfig enrichment changed GNU entity order, and named instances shared a synthetic ordinal -- FIXED
+
+The real X11 font-selection oracle diverged in 9 of 19 Noto Sans cases.  The
+first semantic difference was `semi-light`: GNU selected the variable Light
+entity (weight 300), while Neomacs selected a local static Regular face
+(weight 400).  Both were distance 50 from the requested CSS weight 350, so the
+difference exposed equal-score ordering rather than weight normalization.
+
+GNU `ftfont_list` asks `FcFontList` only for entity metadata and conditionally
+adds the charset (`src/ftfont.c:919-940`).  It skips variable-font meta patterns
+but preserves the order of every concrete named-instance pattern
+(`src/ftfont.c:190-218,1071-1077`).  `font_score` encodes four independent
+seven-bit property distances, ordered by `face-font-selection-order`
+(`src/font.c:2110-2167,2332-2356`), and `font_sort_entities` scores each entity
+independently.  Equal scores never replace the earlier entity
+(`src/font.c:2232-2322`).
+
+Neomacs asked the discovery `FcFontList` for `FC_POSTSCRIPT_NAME` and
+`FC_FONT_VARIATIONS`.  Fontconfig uses the requested projection while
+uniquifying patterns, and those two renderer-enrichment fields changed the raw
+order: static Regular became ordinal 0 and variable Light ordinal 10.  A
+second abstraction grouped all named instances sharing a family/file, retained
+the first instance's ordinal, and replaced its representative with a later
+style.  Thus a variable ExtraBold Italic entity could donate its early ordinal
+to variable Bold Italic, incorrectly outranking the earlier static Bold Italic
+entity.
+
+The fix makes discovery projection the closed
+`GnuEntityProjection::{Metadata, MetadataAndCharset}` choice and keeps it
+byte-for-byte aligned with GNU's object set.  Renderer identity is enriched
+only after shared policy selects one candidate, through `FontBackend`'s
+single-winner finalization hook; FreeType then supplies the exact named-instance
+PostScript name and variation tuple without perturbing discovery or probing
+every candidate.  Candidate grouping is removed.  The shared
+`CandidateSelectionScore` contains compatibility plus a `GnuStyleScore` whose
+derived Rust ordering declares width, size, weight, then slant; the entity's
+own discovery ordinal is an explicit final tie break.  The legacy emergency
+fallback consumes the same score type.
+
+Focused real-GUI tests failed first for semi-light and italic identity, and a
+synthetic same-variable-file test failed by selecting the donated ordinal.
+They now pass, the complete 19-case font oracle is byte-identical to GNU, the
+layout-engine suite passes 1,959 tests with three skipped, the X11 GUI suite
+passes 20 of 20 tests, and the Wayland smoke passes.  A refreshed release
+pdump was used for every real-GUI green.
+
+Status: FIXED.
