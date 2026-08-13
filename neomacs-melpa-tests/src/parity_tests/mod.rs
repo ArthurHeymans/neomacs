@@ -541,6 +541,7 @@ mod names;
 mod navi2ch;
 mod neotree;
 mod nerd_icons;
+mod nodejs_repl;
 mod open_junk_file;
 mod orderless;
 mod org_brain;

@@ -6686,6 +6686,11 @@ pub const MONOKAI_THEME_MELPA_PIN: (&str, &str) = ("monokai-theme", "20240911.10
 /// `d091865eeb97b0894e6517137dc0544560bc57fb`.
 pub const MOE_THEME_MELPA_PIN: (&str, &str) = ("moe-theme", "20260811.1919");
 
+/// The exact Node.js REPL package selected for practical live REPL startup,
+/// source submission, completion, and recovery parity. MELPA built this
+/// archive from upstream commit `77a864ca72a6c30217085f1c4db5de72e47eb4da`.
+pub const NODEJS_REPL_MELPA_PIN: (&str, &str) = ("nodejs-repl", "20240218.2357");
+
 /// The exact spacemacs-theme package selected for practical theme load and defcustom defaults.
 /// Pinned to upstream commit `cbd290dfde96f53a7b41730c7840850a8a7b8a02`.
 pub const SPACEMACS_THEME_MELPA_PIN: (&str, &str) = ("spacemacs-theme", "0.2");
