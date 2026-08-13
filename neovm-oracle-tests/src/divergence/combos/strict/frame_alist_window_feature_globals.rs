@@ -94,15 +94,14 @@ fn div_f9_featurep_and_feature_list() {
 #[test]
 fn div_f9_featurep_x() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    // Platform-inherent, not a divergence to fix: `(featurep 'x)` reports
-    // whether Emacs was built with the X11 window system. The reference GNU
-    // here is an X build (t); Neomacs is a Wayland/wgpu application and
-    // correctly does not advertise the `x' feature (nil). This asserts
-    // Neomacs's real value rather than the reference build's.
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    // The concrete value is backend-dependent: the reference GNU is built
+    // with X11, while Neomacs uses winit/WGPU.  The portable contract is that
+    // `featurep' agrees with membership in `features'.
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(featurep 'x)
+(eq (not (featurep 'x))
+    (not (memq 'x features)))
 "##,
         expect,
     );
