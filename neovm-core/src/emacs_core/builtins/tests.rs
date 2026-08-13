@@ -19,6 +19,24 @@ use malachite::integer::Integer;
 use std::fs;
 use tree_sitter::Language;
 
+/// GNU stores aliases in ordinary function cells.  Interning the same printed
+/// name in a fresh obarray does not synthesize a definition from that name:
+/// `(fboundp (intern "string<" (obarray-make)))` is nil.  Besides being
+/// observable, keeping an empty cell empty prevents M-x's `commandp` predicate
+/// from resolving the printed name of every unbound symbol in the obarray.
+#[test]
+fn empty_function_cell_does_not_synthesize_builtin_alias() {
+    crate::test_utils::init_test_tracing();
+    let mut obarray = crate::emacs_core::symbol::Obarray::new();
+    obarray.intern("string<");
+    let symbol = crate::emacs_core::intern::intern("string<");
+
+    assert_eq!(
+        super::symbols::symbol_function_cell_in_obarray(&obarray, symbol),
+        None
+    );
+}
+
 fn put_string_property(
     table: &mut crate::buffer::text_props::TextPropertyTable,
     start: usize,

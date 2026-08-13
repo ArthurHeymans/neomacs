@@ -10,9 +10,7 @@ use crate::emacs_core::eval::{
 };
 use crate::emacs_core::fontset;
 use crate::emacs_core::indent;
-use crate::emacs_core::intern::{
-    NIL_SYM_ID, T_SYM_ID, intern, is_canonical_id, resolve_sym_lisp_string,
-};
+use crate::emacs_core::intern::{NIL_SYM_ID, T_SYM_ID, intern, is_canonical_id};
 use crate::emacs_core::minibuffer;
 use crate::emacs_core::symbol::{FunctionCellSnapshot, Obarray};
 use crate::window::{DisplayRowSnapshot, WindowDisplaySnapshot, WindowId};
@@ -1377,33 +1375,11 @@ pub(crate) fn indirect_function_impl_checked(
     Ok(args[0])
 }
 
-fn pure_builtin_symbol_alias_target(name: &str) -> Option<&'static str> {
-    match name {
-        "string<" => Some("string-lessp"),
-        "string>" => Some("string-greaterp"),
-        "string=" => Some("string-equal"),
-        _ => None,
-    }
-}
-
 pub(crate) fn symbol_function_cell_in_obarray(obarray: &Obarray, symbol: SymId) -> Option<Value> {
     match obarray.function_cell_snapshot(symbol) {
-        FunctionCellSnapshot::ExplicitlyUnbound => return None,
-        FunctionCellSnapshot::Bound(function) => return Some(function),
-        FunctionCellSnapshot::Empty => {}
+        FunctionCellSnapshot::Bound(function) => Some(function),
+        FunctionCellSnapshot::ExplicitlyUnbound | FunctionCellSnapshot::Empty => None,
     }
-
-    if !is_canonical_symbol_id(symbol) {
-        return None;
-    }
-
-    let current_name = resolve_sym_lisp_string(symbol).as_utf8_str()?;
-
-    if let Some(alias_target) = pure_builtin_symbol_alias_target(current_name) {
-        return Some(Value::symbol(alias_target));
-    }
-
-    None
 }
 
 pub(crate) fn resolve_indirect_symbol_by_id_in_obarray(
