@@ -5474,6 +5474,70 @@ fn tty_batch_posn_query_coordinates(
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum PresentedFrameCoordinate {
+    Content(neomacs_display_protocol::PresentedFramePoint),
+    Expose,
+}
+
+fn protocol_geometry_query_error(
+    _error: neomacs_display_protocol::GeometryError,
+) -> crate::window::geometry::GeometryQueryError {
+    crate::window::geometry::GeometryQueryError::InvalidGeometry(
+        crate::window::geometry::GeometryError::NonFiniteCoordinate,
+    )
+}
+
+fn map_live_frame_coordinate_to_presentation(
+    frame: &crate::window::Frame,
+    publication: &crate::window::geometry::PresentationGeometry,
+    x: i64,
+    y: i64,
+) -> Result<PresentedFrameCoordinate, crate::window::geometry::GeometryQueryError> {
+    use neomacs_display_protocol::{
+        DeviceScale, GeometryPoint, LogicalPixels, PresentMapping, PresentationExtent,
+        RootSurfaceSpace, SurfaceState,
+    };
+
+    let raw_point = neomacs_display_protocol::PresentedFramePoint::from_px(x as f32, y as f32)
+        .map_err(protocol_geometry_query_error)?;
+
+    // GNU accepts -1 as a sentinel coordinate for an overflowing R2L newline.
+    // It belongs to the glyph query convention, not the native surface, so do
+    // not classify it as expose.
+    if x < 0 || y < 0 {
+        return Ok(PresentedFrameCoordinate::Content(raw_point));
+    }
+
+    // Older compatibility fixtures have no published frame extent.  Preserve
+    // their historical query behavior while every live publication uses the
+    // explicit placement constructor and therefore takes the mapping path.
+    let Some(content_size) = publication.content_extent() else {
+        return Ok(PresentedFrameCoordinate::Content(raw_point));
+    };
+    let surface = SurfaceState::from_device_size(
+        frame.width,
+        frame.height,
+        DeviceScale::new(1.0).expect("unit device scale is valid"),
+    )
+    .map_err(protocol_geometry_query_error)?;
+    let SurfaceState::Drawable(surface) = surface else {
+        return Ok(PresentedFrameCoordinate::Expose);
+    };
+    let content = PresentationExtent::new(
+        neomacs_display_protocol::PresentationId::new(publication.presentation().get()),
+        content_size,
+    );
+    let mapping = PresentMapping::top_left_clip(surface, content);
+    let surface_point =
+        GeometryPoint::<RootSurfaceSpace, LogicalPixels>::from_px(x as f32, y as f32)
+            .map_err(protocol_geometry_query_error)?;
+    Ok(match mapping.frame_from_surface(surface_point) {
+        Some(point) => PresentedFrameCoordinate::Content(point),
+        None => PresentedFrameCoordinate::Expose,
+    })
+}
+
 fn posn_at_x_y_impl(
     frames: &mut crate::window::FrameManager,
     buffers: &mut crate::buffer::BufferManager,
@@ -5518,11 +5582,16 @@ fn posn_at_x_y_impl(
                 )
             }
         } else {
+            let point = match map_live_frame_coordinate_to_presentation(frame, publication, x, y)
+                .map_err(geometry_query_flow)?
+            {
+                PresentedFrameCoordinate::Content(point) => point,
+                PresentedFrameCoordinate::Expose => return Ok(Value::NIL),
+            };
             crate::window::geometry::WindowCoordinateQuery::in_frame(
                 publication.presentation(),
                 wid,
-                x,
-                y,
+                point,
             )
         };
         return match publication.resolve(query) {

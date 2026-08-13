@@ -220,6 +220,11 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
     };
     use neomacs_display_protocol::types::Rect as TransportRect;
 
+    let frame_point = |x, y| {
+        neomacs_display_protocol::PresentedFramePoint::from_px(x as f32, y as f32)
+            .expect("valid frame point")
+    };
+
     let window_id = WindowId(11);
     let presentation = PresentationId::new(41);
     let publication = PresentationGeometry::new(
@@ -271,8 +276,7 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
             .resolve(WindowCoordinateQuery::in_frame(
                 presentation,
                 WindowId(99),
-                190,
-                80,
+                frame_point(190, 80),
             ))
             .expect_err("unknown window must not resolve"),
         GeometryQueryError::MissingWindow(WindowId(99))
@@ -297,8 +301,7 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
             .resolve(WindowCoordinateQuery::in_frame(
                 PresentationId::new(42),
                 window_id,
-                190,
-                80,
+                frame_point(190, 80),
             ))
             .expect_err("coordinate query requires materialized geometry"),
         GeometryQueryError::MissingMaterializedGeometry(window_id)
@@ -319,7 +322,7 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
     for query in [
         WindowCoordinateQuery::in_text_body(presentation, window_id, 10, 56),
         WindowCoordinateQuery::in_whole_window(presentation, window_id, 46, 56),
-        WindowCoordinateQuery::in_frame(presentation, window_id, 190, 80),
+        WindowCoordinateQuery::in_frame(presentation, window_id, frame_point(190, 80)),
     ] {
         let point = publication.resolve(query).expect("visible coordinate");
         assert_eq!(point.buffer_pos(), LispCharPos1::ONE);
@@ -331,8 +334,7 @@ fn sealed_geometry_queries_reject_stale_presentations_and_use_explicit_regions()
         .resolve(WindowCoordinateQuery::in_frame(
             PresentationId::new(40),
             window_id,
-            190,
-            80,
+            frame_point(190, 80),
         ))
         .expect_err("stale coordinate query must not resolve");
     assert_eq!(

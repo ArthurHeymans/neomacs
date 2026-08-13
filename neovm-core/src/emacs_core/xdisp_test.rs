@@ -2814,6 +2814,104 @@ fn test_posn_at_point_reports_text_area_relative_y_below_window_chrome() {
 }
 
 #[test]
+fn gui_posn_at_point_uses_next_presented_glyph_only_within_the_same_body_row() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer = eval.buffers.current_buffer().expect("buffer").id;
+    let frame_id = eval.frames.create_frame("posn-hidden", 800, 600, buffer);
+    let window_id = eval.frames.get(frame_id).expect("frame").selected_window;
+    eval.buffers
+        .get_mut(buffer)
+        .expect("buffer")
+        .insert("abcdefghijklmnopqrstuvwxyz\n");
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame
+            .prepare_and_activate_display_presentation_for_test(
+                crate::window::geometry::PresentationId::new(1),
+                vec![crate::window::WindowDisplaySnapshot {
+                    window_id,
+                    regions: crate::window::PresentedWindowRegions {
+                        outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
+                        text_body: neomacs_display_protocol::types::Rect::new(
+                            0.0, 0.0, 800.0, 600.0,
+                        ),
+                        ..Default::default()
+                    },
+                    regions_materialized: true,
+                    points: vec![
+                        crate::window::DisplayPointSnapshot {
+                            buffer_pos: crate::buffer::LispCharPos1::new(10),
+                            x: 24,
+                            y: 18,
+                            width: 8,
+                            height: 16,
+                            row: 0,
+                            col: 3,
+                        },
+                        crate::window::DisplayPointSnapshot {
+                            buffer_pos: crate::buffer::LispCharPos1::new(14),
+                            x: 56,
+                            y: 18,
+                            width: 8,
+                            height: 16,
+                            row: 0,
+                            col: 7,
+                        },
+                        crate::window::DisplayPointSnapshot {
+                            buffer_pos: crate::buffer::LispCharPos1::new(20),
+                            x: 0,
+                            y: 34,
+                            width: 8,
+                            height: 16,
+                            row: 1,
+                            col: 0,
+                        },
+                    ],
+                    body_rows: vec![
+                        crate::window::PresentedBodyRowSnapshot {
+                            output_row: 0,
+                            body_row: 0,
+                            body_y: 18,
+                        },
+                        crate::window::PresentedBodyRowSnapshot {
+                            output_row: 1,
+                            body_row: 1,
+                            body_y: 34,
+                        },
+                    ],
+                    ..Default::default()
+                }],
+            )
+            .expect("presented geometry");
+    }
+
+    let hidden_on_row = builtin_posn_at_point(
+        &mut eval,
+        vec![Value::fixnum(12), Value::make_window(window_id.0)],
+    )
+    .expect("hidden position query");
+    let gap_between_rows = builtin_posn_at_point(
+        &mut eval,
+        vec![Value::fixnum(17), Value::make_window(window_id.0)],
+    )
+    .expect("between-row position query");
+
+    assert_eq!(
+        super::super::print::print_value(&hidden_on_row),
+        format!(
+            "(#<window {}> 14 (56 . 18) 0 nil 14 (7 . 0) nil (0 . 0) (8 . 16))",
+            window_id.0
+        )
+    );
+    assert!(
+        gap_between_rows.is_nil(),
+        "a missing position between two presented rows must remain invisible"
+    );
+}
+
+#[test]
 fn tty_posn_at_x_y_uses_the_named_live_grid_approximation() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();
@@ -2937,6 +3035,81 @@ fn posn_at_x_y_uses_one_presented_transform_for_text_window_and_frame_coordinate
         )
         .is_err(),
         "GUI coordinates must not fall back to live-window approximation"
+    );
+}
+
+#[test]
+fn frame_relative_posn_at_x_y_rejects_new_surface_area_outside_stale_presentation() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer = eval.buffers.current_buffer().expect("buffer").id;
+    let frame_id = eval.frames.create_frame("posn-expose", 800, 600, buffer);
+    let window_id = eval.frames.get(frame_id).expect("frame").selected_window;
+    {
+        let frame = eval.frames.get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame
+            .prepare_and_activate_display_presentation_for_test(
+                crate::window::geometry::PresentationId::new(1),
+                vec![crate::window::WindowDisplaySnapshot {
+                    window_id,
+                    regions: crate::window::PresentedWindowRegions {
+                        outer: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 800.0, 600.0),
+                        text_body: neomacs_display_protocol::types::Rect::new(
+                            0.0, 0.0, 800.0, 600.0,
+                        ),
+                        ..Default::default()
+                    },
+                    regions_materialized: true,
+                    points: vec![crate::window::DisplayPointSnapshot {
+                        buffer_pos: crate::buffer::LispCharPos1::ONE,
+                        x: 790,
+                        y: 10,
+                        width: 8,
+                        height: 16,
+                        row: 0,
+                        col: 99,
+                    }],
+                    body_rows: vec![crate::window::PresentedBodyRowSnapshot {
+                        output_row: 0,
+                        body_row: 0,
+                        body_y: 10,
+                    }],
+                    ..Default::default()
+                }],
+            )
+            .expect("presented geometry");
+        // The native surface clock advances before evaluator redisplay publishes
+        // replacement geometry.  Presentation #1 remains 800x600.
+        frame.resize_pixelwise(1975, 1214);
+    }
+
+    let inside = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(790),
+            Value::fixnum(10),
+            Value::make_frame(frame_id.0),
+        ],
+    )
+    .expect("inside presentation query");
+    let expose = builtin_posn_at_x_y(
+        &mut eval,
+        vec![
+            Value::fixnum(1000),
+            Value::fixnum(10),
+            Value::make_frame(frame_id.0),
+        ],
+    )
+    .expect("expose query");
+
+    assert!(
+        !inside.is_nil(),
+        "old content remains authoritative inside its extent"
+    );
+    assert!(
+        expose.is_nil(),
+        "new surface area outside the active presentation is expose, not a glyph hit"
     );
 }
 

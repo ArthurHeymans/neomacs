@@ -118,6 +118,18 @@ struct PresentationCursor {
     height: i64,
 }
 
+/// Result of resolving a buffer position against one immutable presentation.
+///
+/// GNU redisplay can advance past text hidden by invisibility or a replacing
+/// `display` property.  Keep that compatibility case distinct from an exact
+/// glyph match so the row-boundary rule cannot be lost in a generic fallback.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PresentedBufferPositionMatch<'a> {
+    Exact(&'a PresentationPosition),
+    HiddenOnRow { next: &'a PresentationPosition },
+    NotVisible,
+}
+
 impl PresentationGeometry {
     pub(crate) fn new(
         frame: FrameId,
@@ -185,6 +197,19 @@ impl PresentationGeometry {
 
     pub const fn presentation(&self) -> PresentationId {
         self.presentation
+    }
+
+    /// Logical source extent captured by this immutable presentation.
+    ///
+    /// Compatibility publications built by [`Self::new`] predate explicit
+    /// frame placement and carry a zero extent.  `None` preserves that unknown
+    /// state instead of conflating it with empty content.
+    pub fn content_extent(
+        &self,
+    ) -> Option<neomacs_display_protocol::GeometrySize<neomacs_display_protocol::LogicalPixels>>
+    {
+        let outer = self.frame.placement.outer_in_parent();
+        (outer.width() > 0.0 && outer.height() > 0.0).then_some(*outer.size())
     }
 
     fn window(&self, window: WindowId) -> Option<&PresentationWindow> {
@@ -792,22 +817,20 @@ impl GeometryQuery for BufferPositionQuery {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum CoordinateScope {
-    TextBody,
-    WholeWindow,
-    Frame,
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum CoordinateInput {
+    TextBody { x: i64, y: i64 },
+    WholeWindow { x: i64, y: i64 },
+    Frame(neomacs_display_protocol::PresentedFramePoint),
 }
 
 /// Resolve one pixel coordinate against the exact immutable presentation that
 /// supplied the window regions and visible glyph positions.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct WindowCoordinateQuery {
     presentation: PresentationId,
     window: WindowId,
-    scope: CoordinateScope,
-    x: i64,
-    y: i64,
+    input: CoordinateInput,
 }
 
 impl WindowCoordinateQuery {
@@ -820,9 +843,7 @@ impl WindowCoordinateQuery {
         Self {
             presentation,
             window,
-            scope: CoordinateScope::TextBody,
-            x,
-            y: window_y,
+            input: CoordinateInput::TextBody { x, y: window_y },
         }
     }
 
@@ -835,19 +856,19 @@ impl WindowCoordinateQuery {
         Self {
             presentation,
             window,
-            scope: CoordinateScope::WholeWindow,
-            x,
-            y,
+            input: CoordinateInput::WholeWindow { x, y },
         }
     }
 
-    pub const fn in_frame(presentation: PresentationId, window: WindowId, x: i64, y: i64) -> Self {
+    pub const fn in_frame(
+        presentation: PresentationId,
+        window: WindowId,
+        point: neomacs_display_protocol::PresentedFramePoint,
+    ) -> Self {
         Self {
             presentation,
             window,
-            scope: CoordinateScope::Frame,
-            x,
-            y,
+            input: CoordinateInput::Frame(point),
         }
     }
 }
@@ -868,21 +889,27 @@ impl GeometryQuery for WindowCoordinateQuery {
         let window = geometry.resolve(WindowGeometryQuery::new(self.presentation, self.window))?;
         let body_origin = window.text_body_origin_in_window();
         let outer_origin = window.outer_in_frame().origin();
-        let (body_x, window_y) = match self.scope {
-            CoordinateScope::TextBody => (self.x, self.y),
-            CoordinateScope::WholeWindow => (self.x - body_origin.x().get() as i64, self.y),
-            CoordinateScope::Frame => (
-                self.x - outer_origin.x().get() as i64 - body_origin.x().get() as i64,
-                self.y - outer_origin.y().get() as i64,
-            ),
+        let (source_x, source_y, body_x, window_y) = match self.input {
+            CoordinateInput::TextBody { x, y } => (x, y, x, y),
+            CoordinateInput::WholeWindow { x, y } => (x, y, x - body_origin.x().get() as i64, y),
+            CoordinateInput::Frame(point) => {
+                let x = point.x() as i64;
+                let y = point.y() as i64;
+                (
+                    x,
+                    y,
+                    x - outer_origin.x().get() as i64 - body_origin.x().get() as i64,
+                    y - outer_origin.y().get() as i64,
+                )
+            }
         };
         window
             .point_at_window_coords(body_x, window_y)
             .map_err(GeometryQueryError::InvalidGeometry)?
             .ok_or(GeometryQueryError::CoordinateNotVisible {
                 window: self.window,
-                x: self.x,
-                y: self.y,
+                x: source_x,
+                y: source_y,
             })
     }
 }
@@ -1215,11 +1242,28 @@ impl<'a> SnapshotWindowGeometry<'a> {
             .window_geometry
             .positions
             .partition_point(|point| point.buffer_pos < buffer_pos);
-        let point = self
-            .window_geometry
-            .positions
-            .get(idx)
-            .filter(|point| point.buffer_pos == buffer_pos);
+        let next = self.window_geometry.positions.get(idx);
+        let previous = idx
+            .checked_sub(1)
+            .and_then(|previous| self.window_geometry.positions.get(previous));
+        let matched = match (previous, next) {
+            (_, Some(point)) if point.buffer_pos == buffer_pos => {
+                PresentedBufferPositionMatch::Exact(point)
+            }
+            (Some(previous), Some(next))
+                if previous.buffer_pos < buffer_pos
+                    && buffer_pos < next.buffer_pos
+                    && previous.body_row == next.body_row =>
+            {
+                PresentedBufferPositionMatch::HiddenOnRow { next }
+            }
+            _ => PresentedBufferPositionMatch::NotVisible,
+        };
+        let point = match matched {
+            PresentedBufferPositionMatch::Exact(point)
+            | PresentedBufferPositionMatch::HiddenOnRow { next: point } => Some(point),
+            PresentedBufferPositionMatch::NotVisible => None,
+        };
         point.map(|point| self.materialize_point(point)).transpose()
     }
 
