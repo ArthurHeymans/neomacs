@@ -443,6 +443,7 @@ mod helm_css_scss;
 mod helm_descbinds;
 mod helm_flx;
 mod helm_git_grep;
+mod helm_gtags;
 mod helm_ls_git;
 mod helm_lsp;
 mod helm_make;

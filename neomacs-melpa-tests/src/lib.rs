@@ -3291,6 +3291,13 @@ pub const HELM_FLX_MELPA_PIN: (&str, &str) = ("helm-flx", "20221020.1739");
 /// `744cea07dba6e6a5effbdba83f1b786c78fd86d3` (version 0.10.1).
 pub const HELM_GIT_GREP_MELPA_PIN: (&str, &str) = ("helm-git-grep", "20170614.1411");
 
+/// The exact Helm Gtags package selected for practical real-protocol Global
+/// database creation, definition/reference/pattern/file navigation, parse-file,
+/// update, mode lifecycle, failure, and recovery parity. MELPA built this
+/// archive from upstream commit
+/// `bfafd3d4a7f028d42f3f46c3273eaed930269ec6`.
+pub const HELM_GTAGS_MELPA_PIN: (&str, &str) = ("helm-gtags", "20260204.1753");
+
 /// The exact Helm Gitignore package selected for real interactive template
 /// lookup, single and ordered multi-selection, generated-buffer editing,
 /// saving, refresh, and HTTP failure parity. MELPA built this archive from

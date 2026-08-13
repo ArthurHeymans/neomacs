@@ -395,7 +395,7 @@ rank	package	downloads	status
 394	helm-git-grep	246325	covered
 395	flyspell-correct-helm	243893	covered
 396	command-log-mode	243799	covered
-397	helm-gtags	241393	todo
+397	helm-gtags	241393	covered
 398	csharp-mode	240019	todo
 399	format-all	237403	todo
 400	ccls	237387	todo
