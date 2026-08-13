@@ -4614,50 +4614,6 @@ pub(crate) fn builtin_innermost_minibuffer_p(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-fn value_list_to_vec(list: &Value) -> Option<Vec<Value>> {
-    let mut values = Vec::new();
-    let mut cursor = *list;
-    loop {
-        match cursor.kind() {
-            ValueKind::Nil => return Some(values),
-            ValueKind::Cons => {
-                values.push(cursor.cons_car());
-                cursor = cursor.cons_cdr();
-            }
-            _ => return None,
-        }
-    }
-}
-
-fn value_is_declare_form(value: &Value) -> bool {
-    value.is_cons() && value.cons_car().as_symbol_name() == Some("declare")
-}
-
-fn interactive_form_from_value_body(body: &[Value]) -> Option<Value> {
-    let mut index = 0;
-    if body.first().is_some_and(|value| value.is_string()) {
-        index = 1;
-    }
-    while body.get(index).is_some_and(value_is_declare_form) {
-        index += 1;
-    }
-
-    for form in &body[index..] {
-        if !form.is_cons() || form.cons_car().as_symbol_name() != Some("interactive") {
-            continue;
-        }
-        let pair_cdr = form.cons_cdr();
-        let spec = if pair_cdr.is_cons() {
-            pair_cdr.cons_car()
-        } else {
-            Value::NIL
-        };
-        return Some(Value::list(vec![Value::symbol("interactive"), spec]));
-    }
-
-    None
-}
-
 fn stored_interactive_spec_value(spec: Value) -> Value {
     if let Some(items) = spec.as_vector_data()
         && let Some(first) = items.first()
@@ -4810,21 +4766,14 @@ pub(crate) fn plan_interactive_form_in_state(
             ))
         }
         ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::Macro) => {
-            // GNU Emacs checks closure vector slot 5 first (data.c:1162-1177).
-            // Check our dedicated field first, then fall back to body scanning.
-            if let Some(iform_val) = function.closure_interactive().flatten() {
-                Ok(InteractiveFormPlan::Return(
-                    interactive_form_from_stored_closure_spec(iform_val),
-                ))
-            } else {
-                Ok(InteractiveFormPlan::Return(
-                    function
-                        .closure_body_value()
-                        .and_then(|body| value_list_to_vec(&body))
-                        .and_then(|body| interactive_form_from_value_body(&body))
-                        .unwrap_or(Value::NIL),
-                ))
-            }
+            // GNU data.c:Finteractive_form uses the observable closure slot;
+            // it does not reconstruct one by scanning a short closure's body.
+            Ok(InteractiveFormPlan::Return(
+                function
+                    .closure_interactive()
+                    .map(interactive_form_from_stored_closure_spec)
+                    .unwrap_or(Value::NIL),
+            ))
         }
         ValueKind::Veclike(VecLikeType::ByteCode) => Ok(InteractiveFormPlan::Return(
             interactive_form_from_bytecode_value(function).unwrap_or(Value::NIL),
@@ -4916,18 +4865,8 @@ pub(crate) fn builtin_interactive_form(
 
         // GNU (data.c:1162-1177): CLOSUREP — check slot 5, then genfun
         ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::Macro) => {
-            // Check LambdaData.interactive (mirrors closure vector slot 5)
-            if let Some(iform_val) = fun.closure_interactive().flatten() {
+            if let Some(iform_val) = fun.closure_interactive() {
                 return Ok(interactive_form_from_stored_closure_spec(iform_val));
-            }
-
-            // Check body for (interactive ...)
-            if let Some(body_iform) = fun
-                .closure_body_value()
-                .and_then(|body| value_list_to_vec(&body))
-                .and_then(|body| interactive_form_from_value_body(&body))
-            {
-                return Ok(body_iform);
             }
 
             // GNU (data.c:1172-1177): Check for oclosure (non-docstring doc_form)

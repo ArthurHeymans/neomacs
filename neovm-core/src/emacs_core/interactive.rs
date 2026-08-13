@@ -660,7 +660,6 @@ pub(crate) fn builtin_command_modes_impl(obarray: &Obarray, args: &[Value]) -> E
         ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::Macro) => {
             Ok(function
                 .closure_interactive()
-                .flatten()
                 .map(command_modes_from_stored_interactive_spec)
                 .unwrap_or(Value::NIL))
         }
@@ -748,22 +747,6 @@ pub(crate) fn builtin_command_remapping_impl(
     }
     let active_maps = current_active_maps_for_position_read_only(ctx, true, args.get(1))?;
     Ok(command_remapping_lookup_in_keymaps(&active_maps, command_name).unwrap_or(Value::NIL))
-}
-
-fn value_body_metadata_end(body: &[Value]) -> usize {
-    let mut body_index = 0;
-    if body.first().is_some_and(|value| value.is_string()) {
-        body_index = 1;
-    }
-    while body.get(body_index).is_some_and(value_is_declare_form) {
-        body_index += 1;
-    }
-    body_index
-}
-
-fn lambda_body_has_interactive_value(body: &[Value]) -> bool {
-    let body_index = value_body_metadata_end(body);
-    body.get(body_index).is_some_and(value_is_interactive_form)
 }
 
 fn value_list_to_vec(list: &Value) -> Option<Vec<Value>> {
@@ -877,42 +860,11 @@ fn command_object_p_in_state(
     }
 
     match value.kind() {
-        ValueKind::Veclike(VecLikeType::Lambda) => {
-            if let Some(body) = value
-                .closure_body_value()
-                .and_then(|body| value_list_to_vec(&body))
-            {
-                // GNU Emacs checks closure vector size (PVSIZE > CLOSURE_INTERACTIVE)
-                // to detect interactive closures.  We check the dedicated field first,
-                // then fall back to body scanning for closures created without
-                // the field (e.g., dynamically-scoped lambdas, pdump closures).
-                if value.closure_interactive().flatten().is_some()
-                    || lambda_body_has_interactive_value(&body)
-                {
-                    return true;
-                }
-                // GNU Emacs (eval.c:2304-2314): For closures where doc_form
-                // is not a valid docstring (i.e., an oclosure type symbol),
-                // GNU sets genfun=true and calls `(interactive-form fun)`.
-                // This handles advice wrappers and other oclosures.
-                // We can't call Elisp from _in_state, so approximate:
-                // if this is an oclosure (doc_form is a symbol), treat it
-                // as potentially interactive if the resolved symbol name
-                // is registered as interactive.
-                if value
-                    .closure_doc_form()
-                    .flatten()
-                    .is_some_and(|v| v.as_symbol_name().is_some())
-                    && let Some(symbol) = resolved_symbol
-                    && interactive.is_interactive(symbol)
-                {
-                    return true;
-                }
-                false
-            } else {
-                false
-            }
-        }
+        // GNU eval.c:Fcommandp classifies closures from their observable
+        // vector shape.  Slot 5 may contain nil; its presence is sufficient.
+        // A short closure whose body happens to contain `(interactive)` is
+        // not a command and must not trigger an O(n) body materialization.
+        ValueKind::Veclike(VecLikeType::Lambda) => value.closure_interactive().is_some(),
         ValueKind::Veclike(VecLikeType::ByteCode) => value
             .get_bytecode_data()
             .is_some_and(|bc| bc.observable_closure_slot_count() > 5),

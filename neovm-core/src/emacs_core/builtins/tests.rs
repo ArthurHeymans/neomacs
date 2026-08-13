@@ -738,7 +738,7 @@ fn make_interpreted_closure_preserves_nil_interactive_slot_presence() {
             .expect("builtin length should evaluate"),
         Value::fixnum(6)
     );
-    assert_eq!(closure.closure_interactive().flatten(), Some(Value::NIL));
+    assert_eq!(closure.closure_interactive(), Some(Value::NIL));
 
     let mut eval = crate::emacs_core::eval::Context::new();
     assert_eq!(

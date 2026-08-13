@@ -2032,8 +2032,15 @@ impl TaggedValue {
         })
     }
 
-    pub fn closure_interactive(self) -> Option<Option<Value>> {
-        self.closure_slot(CLOSURE_INTERACTIVE).map(Some)
+    /// Return GNU's `CLOSURE_INTERACTIVE` slot when it is present.
+    ///
+    /// Presence, rather than the Lisp truth of the stored value, determines
+    /// whether a closure is a command: `(interactive)` stores `nil` in this
+    /// slot and is still interactive.  `Option<Value>` represents those two
+    /// states without permitting callers to accidentally flatten away a
+    /// present `nil` slot.
+    pub fn closure_interactive(self) -> Option<Value> {
+        self.closure_slot(CLOSURE_INTERACTIVE)
     }
 
     /// Borrow the ByteCodeFunction from a ByteCode value.

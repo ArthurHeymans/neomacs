@@ -679,6 +679,18 @@ fn commandp_non_interactive() {
 }
 
 #[test]
+fn commandp_uses_closure_slot_shape_instead_of_scanning_body() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r##"(let ((f #[nil ((interactive)) nil]))
+                       (list (length f) (commandp f) (interactive-form f)))"##
+        ),
+        "OK (3 nil nil)"
+    );
+}
+
+#[test]
 fn commandp_returns_nil_for_raw_unibyte_symbol_name() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
