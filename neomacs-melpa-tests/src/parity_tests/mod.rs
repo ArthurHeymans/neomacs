@@ -642,6 +642,7 @@ mod sly;
 mod smartparens;
 mod smeargle;
 mod smex;
+mod smooth_scrolling;
 mod solarized_theme;
 mod spaceline;
 mod spaceline_all_the_icons;

@@ -2843,6 +2843,12 @@ pub const SOLARIZED_THEME_MELPA_PIN: (&str, &str) = ("solarized-theme", "2026072
 /// `55aaebe3d793c2c990b39a302eb26c184281c42c`.
 pub const SMEX_MELPA_PIN: (&str, &str) = ("smex", "20151212.2209");
 
+/// The exact Smooth Scrolling package selected for practical global-mode,
+/// cursor-motion, viewport-margin, strict/logical line, small-window, and
+/// conditional-advice lifecycle parity. MELPA built this archive from upstream
+/// commit `2462c13640aa4c75ab3ddad443fedc29acf68f84`.
+pub const SMOOTH_SCROLLING_MELPA_PIN: (&str, &str) = ("smooth-scrolling", "20161002.1949");
+
 /// The exact Smeargle package selected for practical real-Git blame,
 /// last-update-time and commit-age highlighting, rerender/clear behavior, and
 /// non-repository failure parity. MELPA built version 0.03 from upstream
