@@ -417,7 +417,7 @@ rank	package	downloads	status
 416	terraform-mode	216478	covered
 417	ido-ubiquitous	215985	covered
 418	smooth-scrolling	215912	covered
-419	rustic	215324	todo
+419	rustic	215324	covered
 420	color-theme	215309	todo
 421	json-navigator	214445	todo
 422	marshal	214403	todo

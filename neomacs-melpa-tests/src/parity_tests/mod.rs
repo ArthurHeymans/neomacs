@@ -623,6 +623,7 @@ mod robe;
 mod rspec_mode;
 mod rtags;
 mod rust_mode;
+mod rustic;
 mod s;
 mod sage_shell_mode;
 mod sass_mode;

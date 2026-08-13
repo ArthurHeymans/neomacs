@@ -475,6 +475,12 @@ pub const RTAGS_MELPA_PIN: (&str, &str) = ("rtags", "20260727.1603");
 /// upstream commit `0058837c048cc031ca1a13f598a6a6604777458b`.
 pub const RUST_MODE_MELPA_PIN: (&str, &str) = ("rust-mode", "20260725.1442");
 
+/// The exact Rustic package selected for practical mode, Cargo command,
+/// test-at-point, compilation navigation, formatting, and recovery parity.
+/// MELPA built this archive from upstream commit
+/// `b6c7e095145bb1fd0dc9cfb90ce36884e944556d`.
+pub const RUSTIC_MELPA_PIN: (&str, &str) = ("rustic", "20260407.1712");
+
 /// The exact Scala Mode package used to exercise Multi-Line's advertised
 /// Scala editing route with the real language syntax and indentation engine.
 /// MELPA built this archive from upstream commit
