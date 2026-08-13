@@ -13,6 +13,10 @@ editor operation became faster or slower:
 ```sh
 cargo xtask perf list
 cargo xtask perf run rust-lsp-typing --iterations 20
+cargo xtask perf compare rust-lsp-typing \
+  --baseline-editor target/release/neomacs \
+  --candidate-editor target/release-pgo/neomacs \
+  --samples 5 --iterations 20
 ```
 
 Every attempt writes a structured bundle below `./tmp/perf`. Measurements are

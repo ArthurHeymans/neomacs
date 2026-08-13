@@ -6,7 +6,7 @@ use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use neomacs_melpa_test_support::{
     CommandError, EmacsRuntime, MelpaSandbox, PreparedPackageSet, locked_melpa_sources,
@@ -17,8 +17,10 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
-    ArtifactFile, ArtifactKind, CorrectnessMismatch, Frontend, Measurement, MetricName, MetricUnit,
-    RunArtifact, RunVerdict, ScenarioId, scenario,
+    ArtifactFile, ArtifactKind, CorrectnessMismatch, EditorProvenance, Frontend, Measurement,
+    MetricName, MetricUnit, RunArtifact, RunVerdict, ScenarioId,
+    artifact_store::{unix_time_ms, write_json_atomically},
+    scenario,
 };
 
 const ARTIFACT_SCHEMA_VERSION: u32 = 1;
@@ -113,7 +115,7 @@ pub enum PerfError {
 
 #[derive(Clone, Debug)]
 pub struct PerfHarness {
-    workspace_root: PathBuf,
+    pub(crate) workspace_root: PathBuf,
 }
 
 impl PerfHarness {
@@ -887,15 +889,6 @@ struct InputProvenanceManifest<'a> {
 }
 
 #[derive(Serialize)]
-pub(crate) struct EditorProvenance {
-    pub(crate) path: String,
-    pub(crate) executable_sha256: String,
-    pub(crate) executable_size_bytes: u64,
-    pub(crate) pdump_fingerprint: String,
-    pub(crate) version: String,
-}
-
-#[derive(Serialize)]
 struct PackageProvenance<'a> {
     name: &'a str,
     version: &'a str,
@@ -1062,13 +1055,6 @@ fn valid_measurements(result: &RustLspTypingResult, wall_elapsed_us: u128) -> Ve
     ]
 }
 
-fn unix_time_ms() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-}
-
 fn next_run_id(scenario: ScenarioId, unix_ms: u128) -> String {
     let sequence = RUN_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     format!(
@@ -1076,17 +1062,4 @@ fn next_run_id(scenario: ScenarioId, unix_ms: u128) -> String {
         scenario.as_str(),
         std::process::id()
     )
-}
-
-fn write_json_atomically(path: &Path, artifact: &RunArtifact) -> Result<(), PerfError> {
-    let json = serde_json::to_vec_pretty(artifact).map_err(PerfError::SerializeArtifact)?;
-    let temporary = path.with_extension("json.tmp");
-    fs::write(&temporary, json).map_err(|source| PerfError::WriteArtifact {
-        path: temporary.clone(),
-        source,
-    })?;
-    fs::rename(&temporary, path).map_err(|source| PerfError::WriteArtifact {
-        path: path.to_path_buf(),
-        source,
-    })
 }

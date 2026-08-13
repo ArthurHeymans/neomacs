@@ -11,6 +11,10 @@ Run the catalogued workloads through `xtask`:
 cargo xtask perf list
 cargo xtask perf run rust-lsp-typing
 cargo xtask perf run rust-lsp-typing --iterations 20 --frontend tui
+cargo xtask perf compare rust-lsp-typing \
+  --baseline-editor target/release/neomacs \
+  --candidate-editor target/release-pgo/neomacs \
+  --samples 5 --iterations 20
 ```
 
 The default editor is `target/release/neomacs`. Use `--editor PATH` to measure
@@ -40,6 +44,26 @@ GUI compositor output, and (for TUI runs) the raw ANSI byte stream.
 `total_elapsed_us` includes preparation and collection;
 `process-wall-time` covers only the frontend process; `workload-cpu-time`
 covers the timed edit loop inside Emacs.
+
+## Comparing two builds
+
+`perf compare` runs both editors once per sample and reverses their order for
+each odd-numbered pair. This interleaving reduces time-order bias from thermal
+or background-load drift. The primary statistic is the median
+`per-edit-cpu-time`. At least three samples per editor are required. The
+artifact reports the sorted raw samples, both medians, median absolute
+deviation (MAD), candidate-to-baseline ratio, and percentage change. These are
+descriptive measurements, not a statistical-significance claim; use more than
+the default five samples for noisy or release-critical decisions.
+
+Comparison artifacts live below
+`./tmp/perf-comparisons/<comparison-id>/comparison.json` and link every
+underlying run artifact. Child measurements remain only in those linked files;
+the comparison keeps their immutable editor identity and outcome. If any run
+has a correctness mismatch, infrastructure failure, missing metric, invalid
+value, duplicate metric, wrong unit, or wrong sample identity, the comparison
+contains no statistics and the command exits nonzero. A faster incomplete or
+incorrect workload can therefore never improve the reported candidate result.
 
 ## `rust-lsp-typing`
 

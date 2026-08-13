@@ -4157,6 +4157,7 @@ fn usage_text() -> &'static str {
 Usage: cargo xtask [fresh-build] (--release | --profile NAME) [--bin-dir DIR] [--runtime-root DIR] [--dry-run] [--native-comp|--no-native-comp] [--skip-build] [--no-byte-compile] [--aot-preload]
        cargo xtask perf list
        cargo xtask perf run SCENARIO [--editor PATH] [--iterations N] [--frontend batch|tui|gui]
+       cargo xtask perf compare SCENARIO --baseline-editor PATH --candidate-editor PATH [--samples N>=3]
 
 --release (or --profile NAME) is required: fresh-build produces the runnable runtime
 binary by byte-compiling the Lisp tree with it, so it needs an optimized profile.

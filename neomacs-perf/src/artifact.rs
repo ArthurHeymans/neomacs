@@ -57,6 +57,21 @@ pub enum MetricName {
     LspDiagnosticCount,
 }
 
+impl MetricName {
+    /// The only unit in which this metric is valid in persisted artifacts.
+    pub const fn canonical_unit(self) -> MetricUnit {
+        match self {
+            Self::WorkloadCpuTime | Self::ProcessWallTime => MetricUnit::Microseconds,
+            Self::PerEditCpuTime => MetricUnit::MicrosecondsPerEdit,
+            Self::Iterations
+            | Self::Edits
+            | Self::Redisplays
+            | Self::OverlayCount
+            | Self::LspDiagnosticCount => MetricUnit::Count,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum MetricUnit {
@@ -71,6 +86,17 @@ pub struct Measurement {
     pub name: MetricName,
     pub value: f64,
     pub unit: MetricUnit,
+}
+
+/// Immutable identity of the executable and matching portable dump used by a run.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EditorProvenance {
+    pub path: String,
+    pub executable_sha256: String,
+    pub executable_size_bytes: u64,
+    pub pdump_fingerprint: String,
+    pub version: String,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
