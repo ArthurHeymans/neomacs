@@ -4524,10 +4524,7 @@ pub(crate) fn builtin_variable_binding_locus(
             SymbolRedirect::Localized => {
                 if let Some(buf) = ctx.buffers.current_buffer() {
                     let target_buf = Value::make_buffer(buf.id);
-                    if ctx
-                        .obarray
-                        .has_per_buffer_binding(resolved, target_buf, buf.local_var_alist)
-                    {
+                    if buf.has_buffer_local_by_sym_id(resolved) {
                         return Ok(target_buf);
                     }
                 }

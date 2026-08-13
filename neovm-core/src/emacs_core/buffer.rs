@@ -4852,7 +4852,7 @@ pub(crate) fn builtin_buffer_local_value(
         let target_buf = Value::make_buffer(buf.id);
         if let Some(value) =
             eval.obarray()
-                .read_localized(resolved_id, target_buf, buf.local_var_alist)
+                .read_localized(resolved_id, target_buf, buf.local_var_alist_value())
         {
             if value.is_unbound() {
                 return Err(signal(LispCondition::VoidVariable, vec![original_arg]));

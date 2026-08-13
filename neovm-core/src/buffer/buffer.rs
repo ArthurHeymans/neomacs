@@ -7,6 +7,7 @@
 #[path = "insdel.rs"]
 mod insdel;
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::sync::OnceLock;
@@ -41,6 +42,9 @@ thread_local! {
     static BUFFER_LOCAL_VALUE_LOOKUP_PROBES: std::cell::Cell<u64> = const {
         std::cell::Cell::new(0)
     };
+    static LOCAL_VAR_ALIST_ENTRY_PROBES: std::cell::Cell<u64> = const {
+        std::cell::Cell::new(0)
+    };
 }
 
 #[cfg(test)]
@@ -51,6 +55,25 @@ pub(crate) fn reset_buffer_local_value_lookup_probes() {
 #[cfg(test)]
 pub(crate) fn buffer_local_value_lookup_probes() -> u64 {
     BUFFER_LOCAL_VALUE_LOOKUP_PROBES.get()
+}
+
+#[cfg(test)]
+fn note_local_var_alist_entry_probe() {
+    LOCAL_VAR_ALIST_ENTRY_PROBES.set(LOCAL_VAR_ALIST_ENTRY_PROBES.get().saturating_add(1));
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+fn note_local_var_alist_entry_probe() {}
+
+#[cfg(test)]
+pub(crate) fn reset_local_var_alist_entry_probes() {
+    LOCAL_VAR_ALIST_ENTRY_PROBES.set(0);
+}
+
+#[cfg(test)]
+pub(crate) fn local_var_alist_entry_probes() -> u64 {
+    LOCAL_VAR_ALIST_ENTRY_PROBES.get()
 }
 
 // ---------------------------------------------------------------------------
@@ -1594,40 +1617,88 @@ impl DedicatedBufferLocal {
     }
 }
 
-/// Look up `key` in a buffer-local alist. Returns the cdr of the
-/// matching `(key . val)` pair, or `None` if absent. Mirrors GNU
-/// `assq_no_quit` (`fns.c:1520-1543`) used by `Flocal_variable_p`
-/// at `data.c:2409`.
-pub(crate) fn find_local_var_alist_entry(
-    alist: crate::emacs_core::value::Value,
-    key: crate::emacs_core::value::Value,
-) -> Option<crate::emacs_core::value::Value> {
-    let mut cursor = alist;
-    while cursor.is_cons() {
-        let entry = cursor.cons_car();
-        cursor = cursor.cons_cdr();
-        if entry.is_cons() && crate::emacs_core::value::eq_value(&entry.cons_car(), &key) {
-            return Some(entry.cons_cdr());
-        }
-    }
-    None
+/// Lisp-visible per-buffer bindings plus a derived identity index.
+///
+/// GNU keeps these bindings solely in `buffer.local_var_alist` and resolves
+/// them with `assq_no_quit` (`data.c:2409`). The Lisp alist remains Neomacs's
+/// only source of truth as well; the map only remembers each symbol's first
+/// binding cons. Reading the cons cdr preserves GNU's in-place update
+/// semantics, including the `Qunbound` marker, without copying binding values
+/// into a second store.
+///
+/// Keeping the alist private to this type makes cache coherence a compile-time
+/// property: in-place value changes retain the indexed cons, while every
+/// structural replacement invalidates the derived map.
+struct LocalVariableBindings {
+    alist: Value,
+    index: RefCell<Option<FxHashMap<SymId, Value>>>,
 }
 
-#[inline]
-pub(crate) fn find_local_var_alist_entry_by_sym_id(
-    alist: crate::emacs_core::value::Value,
-    sym_id: SymId,
-) -> Option<crate::emacs_core::value::Value> {
-    let key_bits = crate::emacs_core::value::Value::from_sym_id(sym_id).bits();
-    let mut cursor = alist;
-    while cursor.is_cons() {
-        let entry = cursor.cons_car();
-        cursor = cursor.cons_cdr();
-        if entry.is_cons() && entry.cons_car().bits() == key_bits {
-            return Some(entry.cons_cdr());
+impl Clone for LocalVariableBindings {
+    fn clone(&self) -> Self {
+        Self::from_alist(self.alist)
+    }
+}
+
+impl LocalVariableBindings {
+    fn from_alist(alist: Value) -> Self {
+        Self {
+            alist,
+            index: RefCell::new(None),
         }
     }
-    None
+
+    fn as_lisp_alist(&self) -> Value {
+        self.alist
+    }
+
+    fn replace_alist(&mut self, alist: Value) {
+        self.alist = alist;
+        *self.index.get_mut() = None;
+    }
+
+    fn binding_cons(&self, sym_id: SymId) -> Option<Value> {
+        let mut index = self.index.borrow_mut();
+        if index.is_none() {
+            let mut rebuilt = FxHashMap::default();
+            let mut cursor = self.alist;
+            while cursor.is_cons() {
+                note_local_var_alist_entry_probe();
+                let entry = cursor.cons_car();
+                cursor = cursor.cons_cdr();
+                if !entry.is_cons() {
+                    continue;
+                }
+                if let Some(id) = entry.cons_car().as_symbol_id() {
+                    // `assq` observes the first duplicate entry. Preserve that
+                    // behavior even though ordinary mutation APIs never create
+                    // duplicates.
+                    rebuilt.entry(id).or_insert(entry);
+                }
+            }
+            *index = Some(rebuilt);
+        }
+        index.as_ref()?.get(&sym_id).copied()
+    }
+
+    fn value(&self, sym_id: SymId) -> Option<Value> {
+        self.binding_cons(sym_id).map(Value::cons_cdr)
+    }
+
+    fn set(&mut self, sym_id: SymId, value: Value) {
+        let before = self.alist;
+        set_local_var_alist_entry(&mut self.alist, Value::from_sym_id(sym_id), value);
+        if self.alist.bits() != before.bits() {
+            *self.index.get_mut() = None;
+        }
+    }
+
+    fn remove(&mut self, sym_id: SymId) {
+        remove_local_var_alist_entry(&mut self.alist, Value::from_sym_id(sym_id));
+        // Removing a non-head entry leaves the head identity unchanged, so the
+        // requested symbol alone cannot prove that an existing map is valid.
+        *self.index.get_mut() = None;
+    }
 }
 
 /// Set `key` to `value` in a buffer-local alist. If `key` already
@@ -1636,7 +1707,7 @@ pub(crate) fn find_local_var_alist_entry_by_sym_id(
 /// Otherwise prepend a fresh `(key . value)` cons to the alist.
 /// Mirrors the SYMBOL_LOCALIZED arm of GNU `set_internal` at
 /// `data.c:1687-1762`.
-pub(crate) fn set_local_var_alist_entry(
+fn set_local_var_alist_entry(
     alist: &mut crate::emacs_core::value::Value,
     key: crate::emacs_core::value::Value,
     value: crate::emacs_core::value::Value,
@@ -1686,7 +1757,7 @@ pub(crate) fn clone_lisp_local_variables(
 /// Remove `key` from a buffer-local alist in place. Mirrors GNU's
 /// `Fdelq`-over-`Fassq` pattern in `Fkill_local_variable`
 /// (`data.c:2349-2378`).
-pub(crate) fn remove_local_var_alist_entry(
+fn remove_local_var_alist_entry(
     alist: &mut crate::emacs_core::value::Value,
     key: crate::emacs_core::value::Value,
 ) {
@@ -2091,7 +2162,7 @@ pub struct Buffer {
     /// the single source of truth for all Lisp-side per-buffer
     /// bindings that are not slot-backed (FORWARDED) and not the
     /// special buffer-undo-list (which has its own SharedUndoState).
-    pub(crate) local_var_alist: crate::emacs_core::value::Value,
+    local_var_alist: LocalVariableBindings,
     /// `BVAR(buffer, keymap)` — the buffer's local keymap
     /// (`buffer.h:385`). `Value::NIL` when no local keymap is set.
     pub(crate) keymap: crate::emacs_core::value::Value,
@@ -2226,7 +2297,7 @@ impl Buffer {
             last_selected_window: None,
             inhibit_buffer_hooks: false,
             state_markers: None,
-            local_var_alist: crate::emacs_core::value::Value::NIL,
+            local_var_alist: LocalVariableBindings::from_alist(Value::NIL),
             keymap: crate::emacs_core::value::Value::NIL,
             modtime_sec: None,
             modtime_nsec: None,
@@ -2271,7 +2342,7 @@ impl Buffer {
             last_selected_window: parts.last_selected_window,
             inhibit_buffer_hooks: parts.inhibit_buffer_hooks,
             state_markers: parts.state_markers,
-            local_var_alist: parts.local_var_alist,
+            local_var_alist: LocalVariableBindings::from_alist(parts.local_var_alist),
             keymap: parts.keymap,
             modtime_sec: parts.modtime_sec,
             modtime_nsec: parts.modtime_nsec,
@@ -2293,7 +2364,14 @@ impl Buffer {
     }
 
     pub fn local_var_alist_value(&self) -> Value {
-        self.local_var_alist
+        self.local_var_alist.as_lisp_alist()
+    }
+
+    /// Replace the Lisp-visible binding list and invalidate its derived index.
+    /// Structural writers outside the buffer module must use this method rather
+    /// than storing the raw alist so stale indexed cons cells are impossible.
+    pub(crate) fn replace_local_var_alist(&mut self, alist: Value) {
+        self.local_var_alist.replace_alist(alist);
     }
 
     pub fn slot_values_snapshot(&self) -> [Value; BUFFER_SLOT_COUNT] {
@@ -2342,7 +2420,7 @@ impl Buffer {
         debug_assert!(old_name.is_string());
         self.last_name = old_name;
         self.name = Value::NIL;
-        self.local_var_alist = Value::NIL;
+        self.local_var_alist.replace_alist(Value::NIL);
         self.local_flags = 0;
         self.keymap = Value::NIL;
         self.overlays.delete_all_overlays();
@@ -3674,7 +3752,7 @@ impl Buffer {
             }
             return;
         }
-        set_local_var_alist_entry(&mut self.local_var_alist, Value::from_sym_id(sym_id), value);
+        self.local_var_alist.set(sym_id, value);
     }
 
     /// Mark a per-buffer binding as void. Slot-backed names reset
@@ -3696,7 +3774,7 @@ impl Buffer {
             self.undo_state.set_recorded_first_change(false);
             return;
         }
-        remove_local_var_alist_entry(&mut self.local_var_alist, Value::from_sym_id(sym_id));
+        self.local_var_alist.remove(sym_id);
     }
 
     /// Drop a per-buffer binding. Returns the previous binding if
@@ -3710,9 +3788,8 @@ impl Buffer {
         if sym_id == buffer_undo_list_sym() {
             return None;
         }
-        let key = Value::from_sym_id(sym_id);
-        let existing = find_local_var_alist_entry(self.local_var_alist, key)?;
-        remove_local_var_alist_entry(&mut self.local_var_alist, key);
+        let existing = self.local_var_alist.value(sym_id)?;
+        self.local_var_alist.remove(sym_id);
         Some(RuntimeBindingValue::Bound(existing))
     }
 
@@ -3806,7 +3883,7 @@ impl Buffer {
             use crate::emacs_core::value::Value;
             let mut new_head = Value::NIL;
             let mut new_tail: Option<Value> = None;
-            let mut alist = self.local_var_alist;
+            let mut alist = self.local_var_alist.as_lisp_alist();
             while alist.is_cons() {
                 let next_pair = alist.cons_cdr();
                 let entry = alist.cons_car();
@@ -3864,7 +3941,7 @@ impl Buffer {
             if let Some(tail) = new_tail {
                 tail.set_cdr(Value::NIL);
             }
-            self.local_var_alist = new_head;
+            self.local_var_alist.replace_alist(new_head);
         }
 
         // GNU `reset_buffer_local_variables` also clears the
@@ -3915,14 +3992,15 @@ impl Buffer {
         if !localized {
             return None;
         }
-        // Everything else: walk `local_var_alist`. Mirrors GNU's
-        // `assq_no_quit (var, BVAR (buf, local_var_alist))` at
-        // `data.c:2409`. A `Qunbound` cdr is a "local but void"
-        // marker — report it as absent for this read-style API,
-        // since callers want a readable value. Use
-        // `get_buffer_local_binding` when the Bound/Void/absent
-        // distinction matters.
-        find_local_var_alist_entry_by_sym_id(self.local_var_alist, sym_id)
+        // Everything else: identity-lookup the binding cons derived from
+        // `local_var_alist`. This has the same first-entry semantics as GNU's
+        // `assq_no_quit (var, BVAR (buf, local_var_alist))` at `data.c:2409`,
+        // while repeated reads do not rewalk the entire list. A `Qunbound` cdr
+        // is a "local but void" marker — report it as absent for this
+        // read-style API. Use `get_buffer_local_binding` when the
+        // Bound/Void/absent distinction matters.
+        self.local_var_alist
+            .value(sym_id)
             .filter(|v| !v.is_unbound())
     }
 
@@ -3935,7 +4013,10 @@ impl Buffer {
     /// values for LOCALIZED symbols without going through the
     /// obarray's BLV swap-in.
     pub fn find_in_local_var_alist(&self, key: Value) -> Option<Value> {
-        let mut alist = self.local_var_alist;
+        if let Some(sym_id) = key.as_symbol_id() {
+            return self.local_var_alist.value(sym_id);
+        }
+        let mut alist = self.local_var_alist.as_lisp_alist();
         while alist.is_cons() {
             let entry = alist.cons_car();
             if entry.is_cons() && crate::emacs_core::value::eq_value(&entry.cons_car(), &key) {
@@ -3984,7 +4065,7 @@ impl Buffer {
         // value (Void). Mirrors GNU's `(var . Qunbound)` alist
         // entries created by `Fmake_local_variable` on a void
         // symbol at `data.c:2285-2289`.
-        find_local_var_alist_entry_by_sym_id(self.local_var_alist, sym_id).map(|v| {
+        self.local_var_alist.value(sym_id).map(|v| {
             if v.is_unbound() {
                 RuntimeBindingValue::Void
             } else {
@@ -4029,7 +4110,7 @@ impl Buffer {
         if !localized {
             return false;
         }
-        find_local_var_alist_entry_by_sym_id(self.local_var_alist, sym_id).is_some()
+        self.local_var_alist.value(sym_id).is_some()
     }
 
     pub fn local_map(&self) -> Value {
@@ -4133,7 +4214,7 @@ impl Buffer {
         // Step 1: alist entries, walked forward, used UNREVERSED so
         // that `.rev()' in the caller flips them to match GNU's
         // `buffer_lisp_local_variables' prepend-based reversal.
-        let mut cursor = self.local_var_alist;
+        let mut cursor = self.local_var_alist.as_lisp_alist();
         while cursor.is_cons() {
             let entry = cursor.cons_car();
             cursor = cursor.cons_cdr();
@@ -4665,7 +4746,11 @@ impl BufferManager {
             cloned.id = id;
             cloned.overlays.retarget_buffer(root_id, id);
             cloned.set_name_value(Value::string(name));
-            cloned.local_var_alist = clone_lisp_local_variables(root.local_var_alist);
+            cloned
+                .local_var_alist
+                .replace_alist(clone_lisp_local_variables(
+                    root.local_var_alist.as_lisp_alist(),
+                ));
             // GNU `clone_per_buffer_values` copies marker-valued per-buffer
             // slots by building fresh markers owned by the new buffer.  Raw
             // marker pointers copied from the base would make the indirect
@@ -6479,7 +6564,7 @@ impl GcTrace for BufferManager {
             // every entry's value). A single push of the alist
             // head is sufficient — the GC's reachability walk
             // follows the spine.
-            roots.push(buffer.local_var_alist);
+            roots.push(buffer.local_var_alist.as_lisp_alist());
             // `local_map` (buffer's keymap) must also be rooted.
             roots.push(buffer.keymap);
             // GNU stores the buffer mark in `BVAR (buffer, mark)`, so
@@ -6541,7 +6626,7 @@ impl GcTrace for BufferManager {
             for slot in &buffer.slots {
                 roots.push(*slot);
             }
-            roots.push(buffer.local_var_alist);
+            roots.push(buffer.local_var_alist.as_lisp_alist());
             roots.push(buffer.keymap);
         }
         // Phase 10D: `buffer_defaults` holds the global default

@@ -181,20 +181,8 @@ pub(crate) fn builtin_make_local_variable(
         if let Some(buf) = ctx.buffers.get_mut(current_id) {
             // Only seed when no entry exists yet (idempotent — calling
             // make-local-variable twice doesn't double-prepend).
-            let key = Value::from_sym_id(resolved);
-            let mut cursor = buf.local_var_alist;
-            let mut found = false;
-            while cursor.is_cons() {
-                let entry = cursor.cons_car();
-                if entry.is_cons() && super::value::eq_value(&entry.cons_car(), &key) {
-                    found = true;
-                    break;
-                }
-                cursor = cursor.cons_cdr();
-            }
-            if !found {
-                let cell = Value::cons(key, default_value);
-                buf.local_var_alist = Value::cons(cell, buf.local_var_alist);
+            if !buf.has_buffer_local_by_sym_id(resolved) {
+                buf.set_buffer_local_by_sym_id(resolved, default_value);
             }
         }
     }
@@ -249,12 +237,7 @@ pub(crate) fn builtin_local_variable_p(
     if let Some(sym_slot) = ctx.obarray.get_by_id(resolved_id)
         && sym_slot.redirect() == SymbolRedirect::Localized
     {
-        let target_buf = Value::make_buffer(b.id);
-        return Ok(Value::bool_val(ctx.obarray.has_per_buffer_binding(
-            resolved_id,
-            target_buf,
-            b.local_var_alist,
-        )));
+        return Ok(Value::bool_val(b.has_buffer_local_by_sym_id(resolved_id)));
     }
 
     Ok(Value::bool_val(b.has_buffer_local_by_sym_id(resolved_id)))
@@ -583,12 +566,7 @@ pub(crate) fn builtin_kill_local_variable_impl(
             // Walk the buffer's alist and remove any (sym . val)
             // pair. Returns whether anything was removed.
             if let Some(buf) = ctx.buffers.get_mut(buffer_id) {
-                let key = crate::emacs_core::value::Value::from_sym_id(resolved);
-                let new_alist = remove_alist_key(buf.local_var_alist, key);
-                if !crate::emacs_core::value::eq_value(&new_alist, &buf.local_var_alist) {
-                    removed = true;
-                    buf.local_var_alist = new_alist;
-                }
+                removed = buf.kill_buffer_local_by_sym_id(resolved).is_some();
             }
         } else {
             removed = ctx
@@ -611,38 +589,6 @@ pub(crate) fn builtin_kill_local_variable_impl(
 /// car is `eq` to `key` removed. Mirrors GNU `Fdelq` over an
 /// `Fassq`-matched cons. Returns the original alist if `key`
 /// is absent.
-fn remove_alist_key(
-    mut alist: crate::emacs_core::value::Value,
-    key: crate::emacs_core::value::Value,
-) -> crate::emacs_core::value::Value {
-    use crate::emacs_core::value::{Value, eq_value};
-    let mut head = alist;
-    let mut prev: Option<Value> = None;
-    while alist.is_cons() {
-        let entry = alist.cons_car();
-        let next = alist.cons_cdr();
-        if entry.is_cons() && eq_value(&entry.cons_car(), &key) {
-            // Remove this cons from the chain by relinking
-            // prev.cdr to next, or advancing head if no prev.
-            match prev {
-                Some(p) => {
-                    p.set_cdr(next);
-                }
-                None => {
-                    head = next;
-                }
-            }
-            // Continue walking in case the same key appears
-            // again (alists may have shadowed entries).
-            alist = next;
-            continue;
-        }
-        prev = Some(alist);
-        alist = next;
-    }
-    head
-}
-
 /// `(default-value SYMBOL)` -- get the default (global) value of a variable.
 pub(crate) fn builtin_default_value(
     eval: &mut super::eval::Context,

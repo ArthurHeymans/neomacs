@@ -2922,7 +2922,7 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
         // Phase 11: per-buffer alist for SYMBOL_LOCALIZED variables.
         // Mirrors GNU `BVAR(buf, local_var_alist)`. The cons cells
         // already round-trip safely via the dump heap.
-        local_var_alist: encoder.dump_value(&buf.local_var_alist),
+        local_var_alist: encoder.dump_value(&buf.local_var_alist_value()),
     }
 }
 

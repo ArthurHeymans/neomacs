@@ -2552,6 +2552,79 @@ fn buffer_local_gated_skips_alist_scan_but_keeps_slot_and_undo() {
 }
 
 #[test]
+fn repeated_buffer_local_lookup_indexes_the_lisp_alist_once() {
+    use crate::emacs_core::intern::intern;
+    crate::test_utils::init_test_tracing();
+    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let deepest = intern("neo-index-test-deepest");
+    let middle = intern("neo-index-test-middle");
+    let head = intern("neo-index-test-head");
+    buf.set_buffer_local_by_sym_id(deepest, Value::fixnum(1));
+    buf.set_buffer_local_by_sym_id(middle, Value::fixnum(2));
+    buf.set_buffer_local_by_sym_id(head, Value::fixnum(3));
+
+    reset_local_var_alist_entry_probes();
+    assert_eq!(
+        buf.get_buffer_local_by_sym_id_gated(deepest, true),
+        Some(Value::fixnum(1))
+    );
+    assert_eq!(
+        buf.get_buffer_local_by_sym_id_gated(deepest, true),
+        Some(Value::fixnum(1))
+    );
+
+    assert_eq!(
+        local_var_alist_entry_probes(),
+        3,
+        "the first lookup should build one identity index and the second should reuse it"
+    );
+}
+
+#[test]
+fn buffer_local_lookup_index_stays_coherent_across_value_and_structure_changes() {
+    use crate::emacs_core::intern::intern;
+    crate::test_utils::init_test_tracing();
+    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let first = intern("neo-index-coherence-first");
+    let second = intern("neo-index-coherence-second");
+    let third = intern("neo-index-coherence-third");
+    buf.set_buffer_local_by_sym_id(first, Value::fixnum(1));
+    buf.set_buffer_local_by_sym_id(second, Value::fixnum(2));
+
+    reset_local_var_alist_entry_probes();
+    assert_eq!(
+        buf.get_buffer_local_by_sym_id_gated(first, true),
+        Some(Value::fixnum(1))
+    );
+    assert_eq!(local_var_alist_entry_probes(), 2);
+
+    // Existing values are changed in place. The index stores the binding cons,
+    // so its cdr remains the live source of truth without a rebuild.
+    buf.set_buffer_local_by_sym_id(first, Value::fixnum(11));
+    assert_eq!(
+        buf.get_buffer_local_by_sym_id_gated(first, true),
+        Some(Value::fixnum(11))
+    );
+    assert_eq!(local_var_alist_entry_probes(), 2);
+
+    // Prepending and removing bindings are structural changes and must
+    // invalidate the index before the next lookup.
+    buf.set_buffer_local_by_sym_id(third, Value::fixnum(3));
+    assert_eq!(
+        buf.get_buffer_local_by_sym_id_gated(third, true),
+        Some(Value::fixnum(3))
+    );
+    assert_eq!(local_var_alist_entry_probes(), 5);
+
+    assert_eq!(
+        buf.kill_buffer_local_by_sym_id(second),
+        Some(RuntimeBindingValue::Bound(Value::fixnum(2)))
+    );
+    assert_eq!(buf.get_buffer_local_by_sym_id_gated(second, true), None);
+    assert_eq!(local_var_alist_entry_probes(), 7);
+}
+
+#[test]
 fn buffer_local_defaults_include_builtin_per_buffer_vars() {
     crate::test_utils::init_test_tracing();
     let buf = Buffer::new(BufferId(1), Value::string("test"));

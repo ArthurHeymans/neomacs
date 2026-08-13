@@ -10552,7 +10552,7 @@ impl Context {
         let alist = self
             .buffers
             .get(buffer_id)
-            .map(|buf| buf.local_var_alist)
+            .map(|buf| buf.local_var_alist_value())
             .unwrap_or(Value::NIL);
         let _ = self.obarray.find_symbol_value_in_buffer(
             resolved,
@@ -10604,10 +10604,11 @@ impl Context {
                 SymbolRedirect::Localized => {
                     if let Some(buf) = self.buffers.current_buffer() {
                         let target_buf = Value::make_buffer(buf.id);
-                        if let Some(value) =
-                            self.obarray
-                                .read_localized(resolved, target_buf, buf.local_var_alist)
-                        {
+                        if let Some(value) = self.obarray.read_localized(
+                            resolved,
+                            target_buf,
+                            buf.local_var_alist_value(),
+                        ) {
                             if value.is_unbound() {
                                 return Err(signal(
                                     LispCondition::VoidVariable,
@@ -15208,7 +15209,7 @@ impl Context {
             && let Some(buf_id) = self.buffers.current_buffer_id()
         {
             let (cur_val, alist) = match self.buffers.get(buf_id) {
-                Some(buf) => (Value::make_buffer(buf.id), buf.local_var_alist),
+                Some(buf) => (Value::make_buffer(buf.id), buf.local_var_alist_value()),
                 None => (Value::NIL, Value::NIL),
             };
             // Force a swap so blv.found / blv.valcell match the
@@ -15259,7 +15260,7 @@ impl Context {
                 false,
             );
             if let Some(buf) = self.buffers.get_mut(buf_id) {
-                buf.local_var_alist = new_alist;
+                buf.replace_local_var_alist(new_alist);
             }
             self.sync_cached_runtime_binding_by_id(resolved, value);
             return;
@@ -15425,7 +15426,7 @@ impl Context {
             let alist = self
                 .buffers
                 .get(buffer_id)
-                .map(|b| b.local_var_alist)
+                .map(|buf| buf.local_var_alist_value())
                 .unwrap_or(Value::NIL);
             let new_alist = self.obarray.set_internal_localized(
                 sym_id,
@@ -15436,7 +15437,7 @@ impl Context {
                 false,
             );
             if let Some(buf) = self.buffers.get_mut(buffer_id) {
-                buf.local_var_alist = new_alist;
+                buf.replace_local_var_alist(new_alist);
             }
         } else if value.is_unbound() {
             let _ = self
@@ -15636,7 +15637,7 @@ impl Context {
                                 self.obarray.has_per_buffer_binding(
                                     sym_id,
                                     buf_val,
-                                    buf.local_var_alist,
+                                    buf.local_var_alist_value(),
                                 )
                             } else {
                                 // `is_localized` is false here, so a non-slot,
@@ -15658,7 +15659,7 @@ impl Context {
                             let alist = self
                                 .buffers
                                 .get(buffer_id)
-                                .map(|b| b.local_var_alist)
+                                .map(|buf| buf.local_var_alist_value())
                                 .unwrap_or(Value::NIL);
                             let new_alist = self.obarray.set_internal_localized(
                                 sym_id,
@@ -15669,7 +15670,7 @@ impl Context {
                                 false,
                             );
                             if let Some(buf) = self.buffers.get_mut(buffer_id) {
-                                buf.local_var_alist = new_alist;
+                                buf.replace_local_var_alist(new_alist);
                             }
                         } else {
                             let _ = self
@@ -15952,7 +15953,7 @@ pub(crate) fn set_runtime_binding(
         && let Some(buf_id) = buffers.current_buffer_id()
     {
         let (cur_val, alist) = match buffers.get(buf_id) {
-            Some(buf) => (Value::make_buffer(buf.id), buf.local_var_alist),
+            Some(buf) => (Value::make_buffer(buf.id), buf.local_var_alist_value()),
             None => (Value::NIL, Value::NIL),
         };
         let let_shadows = let_shadows_buffer_binding_p_in_state(specpdl, buffers, sym_id);
@@ -15965,7 +15966,7 @@ pub(crate) fn set_runtime_binding(
             let_shadows,
         );
         if let Some(buf) = buffers.get_mut(buf_id) {
-            buf.local_var_alist = new_alist;
+            buf.replace_local_var_alist(new_alist);
         }
         return Some(buf_id);
     }
@@ -16938,10 +16939,11 @@ impl Context {
                 SymbolRedirect::Localized => {
                     if let Some(buf) = self.buffers.current_buffer() {
                         let target_buf = Value::make_buffer(buf.id);
-                        if let Some(value) =
-                            self.obarray
-                                .read_localized(resolved, target_buf, buf.local_var_alist)
-                        {
+                        if let Some(value) = self.obarray.read_localized(
+                            resolved,
+                            target_buf,
+                            buf.local_var_alist_value(),
+                        ) {
                             if value.is_unbound() {
                                 return None;
                             }

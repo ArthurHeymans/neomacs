@@ -3401,7 +3401,7 @@ impl<'a> Vm<'a> {
                 match self.ctx.buffers.current_buffer() {
                     Some(buf) => (
                         Value::make_buffer(buf.id),
-                        buf.local_var_alist,
+                        buf.local_var_alist_value(),
                         Some(&buf.slots[..] as *const [Value]),
                         Some(buf.id),
                         buf.local_flags,
@@ -3591,7 +3591,7 @@ impl<'a> Vm<'a> {
         {
             // Extract buffer state before obarray borrow.
             let (cur_val, alist) = match self.ctx.buffers.get(buf_id) {
-                Some(buf) => (Value::make_buffer(buf.id), buf.local_var_alist),
+                Some(buf) => (Value::make_buffer(buf.id), buf.local_var_alist_value()),
                 None => (Value::NIL, Value::NIL),
             };
             // GNU `eval.c:3559-3577 (let_shadows_buffer_binding_p)`
@@ -3617,7 +3617,7 @@ impl<'a> Vm<'a> {
             );
             // Store back the (possibly extended) alist.
             if let Some(buf) = self.ctx.buffers.get_mut(buf_id) {
-                buf.local_var_alist = new_alist;
+                buf.replace_local_var_alist(new_alist);
             }
             self.ctx.sync_cached_runtime_binding_by_id(resolved, value);
             // Finding 6: a LOCALIZED display variable set from
