@@ -17,6 +17,7 @@ use wait_timeout::ChildExt;
 
 mod prepared_package_set;
 mod source_lock;
+mod tree_sitter_grammar;
 
 pub use prepared_package_set::{PackageActivation, PreparedPackageSet, package_activation_elisp};
 pub use source_lock::{
@@ -24,8 +25,14 @@ pub use source_lock::{
     locked_melpa_source, locked_melpa_sources, preflight_locked_melpa_packages,
     prepare_cached_locked_melpa_package, prepare_cached_locked_package_plan,
 };
+pub use tree_sitter_grammar::{
+    prepare_cached_tree_sitter_grammar, prepare_cached_tree_sitter_grammar_from_subdirectory,
+};
 
 pub const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
+
+#[cfg(test)]
+mod tree_sitter_grammar_test;
 
 /// Resolve the checkout used by a normal Cargo run or an extracted Nextest
 /// archive.
@@ -72,13 +79,29 @@ impl MelpaSandbox {
         let xdg_cache = case_root.path().join("xdg/cache");
         let xdg_data = case_root.path().join("xdg/data");
         let xdg_state = case_root.path().join("xdg/state");
-        for directory in [&home, &tmp, &xdg_config, &xdg_cache, &xdg_data, &xdg_state] {
+        let xdg_runtime = case_root.path().join("xdg/runtime");
+        for directory in [
+            &home,
+            &tmp,
+            &xdg_config,
+            &xdg_cache,
+            &xdg_data,
+            &xdg_state,
+            &xdg_runtime,
+        ] {
             fs::create_dir_all(directory).map_err(|error| {
                 format!(
                     "failed to create MELPA sandbox directory {}: {error}",
                     directory.display()
                 )
             })?;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&xdg_runtime, fs::Permissions::from_mode(0o700)).map_err(
+                |error| format!("failed to secure isolated XDG runtime directory: {error}"),
+            )?;
         }
         fs::create_dir_all(home.join(".emacs.d"))
             .map_err(|error| format!("failed to create isolated .emacs.d: {error}"))?;
@@ -149,6 +172,10 @@ fn deterministic_process_environment(
         (
             OsString::from("XDG_STATE_HOME"),
             os_string(root.join("xdg/state").as_os_str()),
+        ),
+        (
+            OsString::from("XDG_RUNTIME_DIR"),
+            os_string(root.join("xdg/runtime").as_os_str()),
         ),
         (OsString::from("LANG"), OsString::from("C.UTF-8")),
         (OsString::from("LC_ALL"), OsString::from("C.UTF-8")),

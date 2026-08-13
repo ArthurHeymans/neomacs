@@ -1,0 +1,47 @@
+{
+  "jsonrpc": "2.0",
+  "method": "textDocument/publishDiagnostics",
+  "params": {
+    "uri": "file:///neomacs-perf/rust-lsp-typing.rs",
+    "diagnostics": [
+      {
+        "range": {
+          "start": { "line": 20, "character": 4 },
+          "end": { "line": 20, "character": 11 }
+        },
+        "severity": 1,
+        "code": "E0308",
+        "source": "rustc",
+        "message": "mismatched types"
+      },
+      {
+        "range": {
+          "start": { "line": 21, "character": 4 },
+          "end": { "line": 21, "character": 16 }
+        },
+        "severity": 2,
+        "code": "unused_variables",
+        "source": "rust-analyzer",
+        "message": "unused variable"
+      },
+      {
+        "range": {
+          "start": { "line": 23, "character": 4 },
+          "end": { "line": 23, "character": 11 }
+        },
+        "severity": 3,
+        "source": "rust-analyzer",
+        "message": "consider using a more specific type"
+      },
+      {
+        "range": {
+          "start": { "line": 24, "character": 4 },
+          "end": { "line": 24, "character": 15 }
+        },
+        "severity": 4,
+        "source": "rust-analyzer",
+        "message": "inlay hint placeholder"
+      }
+    ]
+  }
+}

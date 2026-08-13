@@ -7,6 +7,7 @@ members = [
     "neomacs-layout-engine",
     "neomacs-renderer-wgpu",
     "neomacs-diagnostics",
+    "neomacs-perf",
     "neovm-core",
     "neovm-host-abi",
     "neovm-oracle-tests",
@@ -57,6 +58,7 @@ neomacs-display-protocol = { path = "neomacs-display-protocol", default-features
 neomacs-layout-engine = { path = "neomacs-layout-engine", default-features = false }
 neomacs-renderer-wgpu = { path = "neomacs-renderer-wgpu", default-features = false }
 neomacs-diagnostics = { path = "neomacs-diagnostics", default-features = false }
+neomacs-perf = { path = "neomacs-perf" }
 neomacs-test-oracle = { path = "neomacs-test-oracle" }
 neomacs-melpa-test-support = { path = "neomacs-melpa-test-support" }
 neomacs-tui-tests = { path = "neomacs-tui-tests" }

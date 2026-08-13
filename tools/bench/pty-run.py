@@ -19,6 +19,7 @@ removes `script` from the equation to see whether it was the cause."""
 import fcntl, os, pty, select, struct, sys, termios, time, signal
 argv = sys.argv[1:]
 sentinel = os.environ.get("SENTINEL", "")
+output_path = os.environ.get("PTY_OUTPUT", "")
 timeout = float(os.environ.get("PTY_TIMEOUT", "120"))
 rows = int(os.environ.get("PTY_ROWS", "40"))
 cols = int(os.environ.get("PTY_COLS", "120"))
@@ -35,10 +36,11 @@ if pid == 0:
 # script(1) does.
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 deadline = time.time() + timeout
-out = b""
+out = bytearray()
+completion_time = None
 while time.time() < deadline:
-    if sentinel and os.path.exists(sentinel):
-        break
+    if completion_time is None and sentinel and os.path.exists(sentinel):
+        completion_time = time.time()
     # select() with the REMAINING time, so the deadline is actually
     # enforced. A bare blocking os.read() ignores it -- the runner then waits
     # for the child no matter what PTY_TIMEOUT says, which made the timeout
@@ -52,9 +54,13 @@ while time.time() < deadline:
             r = os.read(fd, 65536)
             if not r:
                 break
-            out += r
+            out.extend(r)
         except OSError:
             break
+    elif completion_time is not None and time.time() - completion_time >= 0.1:
+        # The fixture has published completion and the PTY has been quiet long
+        # enough to drain the bytes written immediately before the sentinel.
+        break
     done, _ = os.waitpid(pid, os.WNOHANG)
     if done:
         break
@@ -62,6 +68,9 @@ try:
     os.kill(pid, signal.SIGKILL)
 except ProcessLookupError:
     pass
+if output_path:
+    with open(output_path, "wb") as output_file:
+        output_file.write(out)
 # A benchmark that dies partway is the dangerous case: it still produces a
 # plausible instruction count, just for less work than asked. Treat "did not
 # finish" as an ERROR (non-zero exit), never as a quiet result -- a silently

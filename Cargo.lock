@@ -3691,6 +3691,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "neomacs-perf"
+version = "0.0.15"
+dependencies = [
+ "neomacs-melpa-test-support",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "neomacs-renderer-wgpu"
 version = "0.0.15"
 dependencies = [
@@ -8220,6 +8232,7 @@ name = "xtask"
 version = "0.0.15"
 dependencies = [
  "flate2",
+ "neomacs-perf",
  "rayon",
  "sha2",
  "strum",

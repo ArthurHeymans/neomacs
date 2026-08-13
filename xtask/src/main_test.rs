@@ -2,6 +2,15 @@ use super::*;
 use flate2::{Compression, write::GzEncoder};
 
 #[test]
+fn top_level_dispatch_routes_perf_without_parsing_fresh_build_options() {
+    run_xtask(
+        PathBuf::from("/repo"),
+        [OsString::from("perf"), OsString::from("list")],
+    )
+    .expect("perf list should not require a fresh-build profile");
+}
+
+#[test]
 fn nix_runtime_closure_includes_the_cxx_standard_library() {
     let flake = include_str!("../../flake.nix");
 

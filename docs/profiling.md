@@ -5,6 +5,22 @@ profilers. Use the Lisp profiler to attribute work to Lisp functions. Use a
 native profiler to inspect the evaluator, GC, layout, renderer, and system
 calls together.
 
+## Repeatable whole-editor workloads
+
+Use the typed performance harness when the question is whether a realistic
+editor operation became faster or slower:
+
+```sh
+cargo xtask perf list
+cargo xtask perf run rust-lsp-typing --iterations 20
+```
+
+Every attempt writes a structured bundle below `./tmp/perf`. Measurements are
+published only when the fixture's correctness invariants pass; mismatches and
+infrastructure failures are retained as failed artifacts and make the command
+exit nonzero. See [`neomacs-perf/README.md`](../neomacs-perf/README.md) for the
+workload contract, collected files, and metric definitions.
+
 ## Emacs Lisp profiler
 
 The standard commands and functions are available:
