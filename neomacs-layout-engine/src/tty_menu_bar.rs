@@ -74,7 +74,7 @@ struct MenuBarItemsCache {
     context_id: u64,
     frame_bits: u64,
     generation: u64,
-    keymap_epoch: u64,
+    keymap_epoch: neovm_core::emacs_core::keymap::KeymapMutationEpoch,
     inputs_key: u64,
     items: Vec<TtyMenuBarItem>,
 }

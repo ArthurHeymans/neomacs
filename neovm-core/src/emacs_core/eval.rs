@@ -5917,6 +5917,7 @@ impl Context {
         self.registers.trace_roots_with(visit);
         self.custom.trace_roots_with(visit);
         self.autoloads.trace_roots_with(visit);
+        self.interactive.trace_roots_with(visit);
         group("buffers");
         self.buffers.trace_roots_with(visit);
         group("ui_misc");

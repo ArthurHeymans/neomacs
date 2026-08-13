@@ -23,14 +23,14 @@ use super::keyboard::pure::{
     KEY_CHAR_SUPER, make_event_array_value,
 };
 use super::keymap::{
-    DefaultBindingMode, KeymapMarker,
+    DefaultBindingMode, KeymapMarker, KeymapMutationEpoch,
     command_remapping_command_name as keymap_command_remapping_command_name,
     command_remapping_lookup_in_keymaps as keymap_command_remapping_lookup_in_keymaps,
     command_remapping_lookup_in_lisp_keymap as keymap_command_remapping_lookup_in_lisp_keymap,
     command_remapping_normalize_target as keymap_command_remapping_normalize_target,
     current_active_maps_for_position, current_active_maps_for_position_read_only, get_keyelt,
     get_keymap_in_obarray, is_list_keymap, key_binding_apply_remap_in_active_maps,
-    key_event_to_emacs_event, list_keymap_for_each_binding,
+    key_event_to_emacs_event, keymap_mutation_epoch, list_keymap_for_each_binding,
     lookup_key_in_keymaps_in_obarray_runtime, lookup_keymap_with_partial,
     minor_mode_key_binding_in_context, resolve_active_key_binding, where_is_keymaps_in_context,
 };
@@ -111,6 +111,93 @@ impl BuiltinInteractiveSpec {
 // InteractiveRegistry — tracks which functions are interactive commands
 // ---------------------------------------------------------------------------
 
+/// The keymap state from which a reverse index was derived.
+///
+/// GNU compares the active keymap list with `equal` and separately flushes its
+/// cache at keymap mutation chokepoints. Storing both inputs makes stale reuse
+/// unrepresentable through this interface.
+struct WhereIsKeymapState {
+    mutation_epoch: KeymapMutationEpoch,
+    keymaps: Vec<Value>,
+}
+
+impl WhereIsKeymapState {
+    fn new(keymaps: &[Value]) -> Self {
+        Self {
+            mutation_epoch: keymap_mutation_epoch(),
+            keymaps: keymaps.to_vec(),
+        }
+    }
+
+    fn matches(&self, keymaps: &[Value]) -> bool {
+        self.mutation_epoch == keymap_mutation_epoch() && self.keymaps == keymaps
+    }
+}
+
+/// Definition identity used by GNU's reverse-keymap cache.
+///
+/// A symbol and its canonical subr denote the same command even though their
+/// Lisp representations differ. Other definitions retain Lisp `equal`
+/// semantics through `Value`'s `Eq`/`Hash` implementation.
+#[derive(Clone, Hash, Eq, PartialEq)]
+enum WhereIsDefinitionKey {
+    Command(SymId),
+    Equal(Value),
+}
+
+impl WhereIsDefinitionKey {
+    fn from_value(value: Value) -> Option<Self> {
+        if value.is_nil() || is_list_keymap(&value) {
+            return None;
+        }
+        if let Some(symbol) = value.as_symbol_id().or_else(|| value.as_subr_id()) {
+            return Some(Self::Command(symbol));
+        }
+        Some(Self::Equal(value))
+    }
+
+    fn trace_roots_with(&self, visit: &mut (impl FnMut(Value) + ?Sized)) {
+        if let Self::Equal(value) = self
+            && value.is_heap_object()
+        {
+            visit(*value);
+        }
+    }
+}
+
+/// Reverse lookup for every definition reachable from one active keymap set.
+///
+/// This is deliberately a complete index rather than a per-command memo: an
+/// empty M-x affixation asks about thousands of distinct commands exactly
+/// once, so per-command caching would leave its first invocation quadratic.
+struct WhereIsReverseIndex {
+    state: WhereIsKeymapState,
+    sequences_by_definition: HashMap<WhereIsDefinitionKey, Vec<Vec<Value>>>,
+}
+
+impl WhereIsReverseIndex {
+    fn sequences_for(&self, definition: Value) -> Vec<Vec<Value>> {
+        WhereIsDefinitionKey::from_value(definition)
+            .and_then(|key| self.sequences_by_definition.get(&key))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn trace_roots_with(&self, visit: &mut (impl FnMut(Value) + ?Sized)) {
+        for keymap in &self.state.keymaps {
+            visit(*keymap);
+        }
+        for (definition, sequences) in &self.sequences_by_definition {
+            definition.trace_roots_with(visit);
+            for event in sequences.iter().flatten() {
+                if event.is_heap_object() {
+                    visit(*event);
+                }
+            }
+        }
+    }
+}
+
 /// Registry for interactive command specifications.
 ///
 /// Tracks which function symbols are interactive (i.e., can be called via
@@ -120,6 +207,16 @@ pub struct InteractiveRegistry {
     specs: HashMap<SymId, InteractiveSpec>,
     /// Stack tracking whether the current function was called interactively.
     interactive_call_stack: Vec<bool>,
+    /// GNU-shaped lazy reverse-keymap index used by menu-free
+    /// `where-is-internal` lookups.
+    where_is_reverse_index: Option<WhereIsReverseIndex>,
+    /// Number of complete reverse-keymap scans performed by
+    /// `where-is-internal` in this evaluator.
+    ///
+    /// Test-only instrumentation makes the performance contract observable
+    /// without depending on wall-clock timing.
+    #[cfg(test)]
+    where_is_reverse_index_build_count: usize,
 }
 
 impl InteractiveRegistry {
@@ -127,6 +224,9 @@ impl InteractiveRegistry {
         Self {
             specs: HashMap::new(),
             interactive_call_stack: Vec::new(),
+            where_is_reverse_index: None,
+            #[cfg(test)]
+            where_is_reverse_index_build_count: 0,
         }
     }
 
@@ -172,6 +272,51 @@ impl InteractiveRegistry {
         Self {
             specs,
             interactive_call_stack: Vec::new(),
+            where_is_reverse_index: None,
+            #[cfg(test)]
+            where_is_reverse_index_build_count: 0,
+        }
+    }
+
+    #[cfg(test)]
+    fn note_where_is_reverse_index_build(&mut self) {
+        self.where_is_reverse_index_build_count += 1;
+    }
+
+    #[cfg(test)]
+    fn where_is_reverse_index_build_count(&self) -> usize {
+        self.where_is_reverse_index_build_count
+    }
+
+    fn cached_where_is_sequences(
+        &self,
+        keymaps: &[Value],
+        definition: Value,
+    ) -> Option<Vec<Vec<Value>>> {
+        self.where_is_reverse_index
+            .as_ref()
+            .filter(|index| index.state.matches(keymaps))
+            .map(|index| index.sequences_for(definition))
+    }
+
+    fn install_where_is_reverse_index(&mut self, index: WhereIsReverseIndex) {
+        self.where_is_reverse_index = Some(index);
+        #[cfg(test)]
+        self.note_where_is_reverse_index_build();
+    }
+
+    fn clear_where_is_reverse_index(&mut self) {
+        self.where_is_reverse_index = None;
+    }
+
+    pub(crate) fn trace_roots_with(&self, visit: &mut (impl FnMut(Value) + ?Sized)) {
+        for spec in self.specs.values() {
+            if spec.spec.is_heap_object() {
+                visit(spec.spec);
+            }
+        }
+        if let Some(index) = &self.where_is_reverse_index {
+            index.trace_roots_with(visit);
         }
     }
 }
@@ -3409,18 +3554,8 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
     // Collect the raw candidate sequences (longest-to-shortest, possibly
     // including raw `[remap COMMAND]` pseudo-keys, matching GNU's
     // `where_is_internal`).
-    let mut sequences = Vec::new();
-    for keymap in &keymaps {
-        collect_where_is_sequences_value(
-            eval.obarray(),
-            keymap,
-            &definition,
-            &mut sequences,
-            no_menu_bindings,
-            noindirect,
-            0,
-        );
-    }
+    let sequences =
+        where_is_raw_sequences(eval, &keymaps, definition, no_menu_bindings, noindirect);
 
     // Now mirror `Fwhere_is_internal`'s post-processing: expand `[remap COMMAND]`
     // pseudo-keys into the real key sequences that run COMMAND, and never leak
@@ -3451,18 +3586,8 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
             && !remapped
             && let Some(function) = where_is_remap_pseudo_key_command(&sequence)
         {
-            let mut seqs = Vec::new();
-            for keymap in &keymaps {
-                collect_where_is_sequences_value(
-                    eval.obarray(),
-                    keymap,
-                    &function,
-                    &mut seqs,
-                    no_menu_bindings,
-                    noindirect,
-                    0,
-                );
-            }
+            let mut seqs =
+                where_is_raw_sequences(eval, &keymaps, function, no_menu_bindings, noindirect);
             // `collect_where_is_sequences_value` already returns sequences
             // in the public `where-is-internal` order.  GNU reverses here
             // because its lower-level `where_is_internal` helper returns
@@ -3920,6 +4045,85 @@ fn collect_where_is_accessible_maps(
     }
 
     seen.pop();
+}
+
+/// Return raw reverse-lookup candidates, selecting GNU's complete lazy index
+/// only for the mode in which GNU enables it (`nomenus && !noindirect`).
+fn where_is_raw_sequences(
+    eval: &mut Context,
+    keymaps: &[Value],
+    definition: Value,
+    no_menu_bindings: bool,
+    noindirect: bool,
+) -> Vec<Vec<Value>> {
+    if no_menu_bindings && !noindirect {
+        if let Some(sequences) = eval
+            .interactive
+            .cached_where_is_sequences(keymaps, definition)
+        {
+            return sequences;
+        }
+
+        let index = build_where_is_reverse_index(eval.obarray(), keymaps);
+        let sequences = index.sequences_for(definition);
+        eval.interactive.install_where_is_reverse_index(index);
+        return sequences;
+    }
+
+    // GNU clears the shared reverse cache when asked to use a lookup mode for
+    // which the index is not semantically complete.
+    eval.interactive.clear_where_is_reverse_index();
+    let mut sequences = Vec::new();
+    for keymap in keymaps {
+        collect_where_is_sequences_value(
+            eval.obarray(),
+            keymap,
+            &definition,
+            &mut sequences,
+            no_menu_bindings,
+            noindirect,
+            0,
+        );
+    }
+    sequences
+}
+
+/// Scan every accessible binding once and group its key sequences by command.
+/// In contrast, calling `collect_where_is_sequences_value` for every M-x
+/// candidate scans the same map graph thousands of times.
+fn build_where_is_reverse_index(obarray: &Obarray, keymaps: &[Value]) -> WhereIsReverseIndex {
+    let mut sequences_by_definition: HashMap<WhereIsDefinitionKey, Vec<Vec<Value>>> =
+        HashMap::new();
+
+    for keymap in keymaps {
+        let mut maps = Vec::new();
+        let mut prefix = Vec::new();
+        let mut seen = Vec::new();
+        collect_where_is_accessible_maps(obarray, keymap, &mut prefix, &mut maps, &mut seen, 0);
+
+        for (map_prefix, map) in maps {
+            if where_is_prefix_starts_with_mouse_event(&map_prefix) {
+                continue;
+            }
+
+            list_keymap_for_each_binding(&map, Some(obarray), |event, binding| {
+                let Some(definition) = WhereIsDefinitionKey::from_value(get_keyelt(binding)) else {
+                    return;
+                };
+                let mut sequence = map_prefix.clone();
+                sequence.push(event);
+                let sequences = sequences_by_definition.entry(definition).or_default();
+                if !sequences.contains(&sequence) {
+                    sequences.push(sequence);
+                }
+            });
+        }
+    }
+
+    WhereIsReverseIndex {
+        state: WhereIsKeymapState::new(keymaps),
+        sequences_by_definition,
+    }
 }
 
 fn collect_where_is_sequences_value(

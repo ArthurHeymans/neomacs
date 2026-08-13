@@ -4916,6 +4916,76 @@ fn where_is_internal_finds_binding_in_explicit_map() {
 }
 
 #[test]
+fn where_is_internal_reuses_one_reverse_index_for_many_definitions() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_interactive_shims();
+    let results = eval_all_with(
+        &mut eval,
+        r#"(let ((m (make-sparse-keymap)))
+              (define-key m "a" 'first-command)
+              (define-key m "b" 'second-command)
+              (list (where-is-internal 'first-command (list m) t)
+                    (where-is-internal 'second-command (list m) t)))"#,
+    );
+
+    assert_eq!(results, ["OK ([97] [98])"]);
+    assert_eq!(eval.interactive.where_is_reverse_index_build_count(), 1);
+}
+
+#[test]
+fn where_is_internal_rebuilds_reverse_index_after_keymap_mutation() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_interactive_shims();
+    let results = eval_all_with(
+        &mut eval,
+        r#"(let ((m (make-sparse-keymap)))
+              (define-key m "a" 'first-command)
+              (where-is-internal 'first-command (list m) t)
+              (define-key m "b" 'second-command)
+              (list (where-is-internal 'first-command (list m) t)
+                    (where-is-internal 'second-command (list m) t)))"#,
+    );
+
+    assert_eq!(results, ["OK ([97] [98])"]);
+    assert_eq!(eval.interactive.where_is_reverse_index_build_count(), 2);
+}
+
+#[test]
+fn where_is_internal_does_not_reuse_reverse_index_for_different_keymaps() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_interactive_shims();
+    let results = eval_all_with(
+        &mut eval,
+        r#"(let ((first-map (make-sparse-keymap))
+                  (second-map (make-sparse-keymap)))
+              (define-key first-map "a" 'shared-command)
+              (define-key second-map "b" 'shared-command)
+              (list (where-is-internal 'shared-command (list first-map) t)
+                    (where-is-internal 'shared-command (list second-map) t)))"#,
+    );
+
+    assert_eq!(results, ["OK ([97] [98])"]);
+    assert_eq!(eval.interactive.where_is_reverse_index_build_count(), 2);
+}
+
+#[test]
+fn where_is_internal_uncached_mode_clears_reverse_index_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_interactive_shims();
+    let results = eval_all_with(
+        &mut eval,
+        r#"(let ((m (make-sparse-keymap)))
+              (define-key m "a" 'shared-command)
+              (where-is-internal 'shared-command (list m) t)
+              (where-is-internal 'shared-command (list m))
+              (where-is-internal 'shared-command (list m) t))"#,
+    );
+
+    assert_eq!(results, ["OK [97]"]);
+    assert_eq!(eval.interactive.where_is_reverse_index_build_count(), 2);
+}
+
+#[test]
 fn where_is_internal_does_not_duplicate_nested_sparse_binding() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(

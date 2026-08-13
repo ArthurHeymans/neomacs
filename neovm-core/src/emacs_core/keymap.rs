@@ -43,9 +43,17 @@ use strum::{EnumString, IntoStaticStr};
 /// BOTH.
 static KEYMAP_MUTATION_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Generation of keymap contents observed by a derived-data cache.
+///
+/// Keeping this distinct from unrelated counters prevents a cache from being
+/// accidentally keyed by (for example) a redisplay generation merely because
+/// both happen to be represented by `u64`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct KeymapMutationEpoch(u64);
+
 /// Current keymap mutation epoch (see [`KEYMAP_MUTATION_EPOCH`]).
-pub fn keymap_mutation_epoch() -> u64 {
-    KEYMAP_MUTATION_EPOCH.load(std::sync::atomic::Ordering::Relaxed)
+pub fn keymap_mutation_epoch() -> KeymapMutationEpoch {
+    KeymapMutationEpoch(KEYMAP_MUTATION_EPOCH.load(std::sync::atomic::Ordering::Relaxed))
 }
 
 /// Record a keymap content mutation. Over-invalidation is harmless, so
