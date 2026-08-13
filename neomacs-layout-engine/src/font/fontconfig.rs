@@ -453,21 +453,37 @@ pub fn find_font_for_spec(
         &query_langs,
     );
 
-    select_find_font_candidate(candidates, &spec).map(|candidate| SpecFontMatch {
-        family: candidate.matched.family,
-        foundry: candidate.foundry,
-        registry: Some("iso10646-1".to_string()),
-        file: candidate.matched.file,
-        face_index: candidate.matched.face_index,
-        variation_coords: candidate.matched.variation_coords,
-        weight: candidate
-            .weight_css
-            .or_else(|| style_weight(&candidate.style)),
-        slant: candidate.matched.slant,
-        width: candidate.width,
-        spacing: candidate.spacing,
-        postscript_name: candidate.matched.postscript_name,
+    select_find_font_candidate(candidates, &spec).map(|mut candidate| {
+        enrich_selected_font_match(&mut candidate.matched);
+        SpecFontMatch {
+            family: candidate.matched.family,
+            foundry: candidate.foundry,
+            registry: Some("iso10646-1".to_string()),
+            file: candidate.matched.file,
+            face_index: candidate.matched.face_index,
+            variation_coords: candidate.matched.variation_coords,
+            weight: candidate
+                .weight_css
+                .or_else(|| style_weight(&candidate.style)),
+            slant: candidate.matched.slant,
+            width: candidate.width,
+            spacing: candidate.spacing,
+            postscript_name: candidate.matched.postscript_name,
+        }
     })
+}
+
+fn enrich_selected_font_match(matched: &mut FontMatch) {
+    let Some(file) = matched.file.as_deref() else {
+        return;
+    };
+    if matched.variation_coords.is_empty() && (matched.face_index >> 16) & 0x7fff != 0 {
+        matched.variation_coords =
+            crate::font::probe::named_instance_variation_coords(file, matched.face_index);
+    }
+    if matched.postscript_name.is_none() {
+        matched.postscript_name = crate::font::probe::postscript_name(file, matched.face_index);
+    }
 }
 
 fn select_find_font_candidate(
@@ -1097,13 +1113,25 @@ fn pattern_family(pattern: &Pattern<'_>) -> Option<String> {
 }
 
 #[cfg(unix)]
-fn build_candidate_object_set(include_charset: bool) -> Option<FcObjectSetGuard> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GnuEntityProjection {
+    Metadata,
+    MetadataAndCharset,
+}
+
+#[cfg(unix)]
+fn build_candidate_object_set(projection: GnuEntityProjection) -> Option<FcObjectSetGuard> {
     let object_set = unsafe { fontconfig_sys::FcObjectSetCreate() };
     if object_set.is_null() {
         return None;
     }
     let guard = FcObjectSetGuard(object_set);
-    let keys: [&CStr; 17] = [
+    // Keep this projection identical to GNU Emacs `ftfont_list`.  Fontconfig
+    // uses the object set while uniquifying/listing patterns, so asking for
+    // renderer-enrichment fields here changes entity order and therefore
+    // changes GNU's equal-score tie behavior.  Exact variation coordinates
+    // are enriched from the named-instance face index after selection.
+    let keys: [&CStr; 15] = [
         fontconfig::FC_FOUNDRY,
         fontconfig::FC_FAMILY,
         fontconfig::FC_WEIGHT,
@@ -1115,12 +1143,10 @@ fn build_candidate_object_set(include_charset: bool) -> Option<FcObjectSetGuard>
         fontconfig::FC_STYLE,
         fontconfig::FC_FILE,
         fontconfig::FC_INDEX,
-        fontconfig::FC_POSTSCRIPT_NAME,
         fontconfig_sys::constants::FC_CAPABILITY,
         fontconfig::FC_FONTFORMAT,
         fontconfig::FC_COLOR,
         fontconfig::FC_VARIABLE,
-        fontconfig_sys::constants::FC_FONT_VARIATIONS,
     ];
     for key in keys {
         let ok = unsafe { fontconfig_sys::FcObjectSetAdd(object_set, key.as_ptr()) };
@@ -1128,7 +1154,7 @@ fn build_candidate_object_set(include_charset: bool) -> Option<FcObjectSetGuard>
             return None;
         }
     }
-    if include_charset {
+    if projection == GnuEntityProjection::MetadataAndCharset {
         let ok =
             unsafe { fontconfig_sys::FcObjectSetAdd(object_set, fontconfig::FC_CHARSET.as_ptr()) };
         if ok == 0 {
@@ -1468,8 +1494,12 @@ pub(crate) fn fc_list_candidates(
         };
         let _keep_charset_alive = query_charset;
         let _keep_langset_alive = query_langset;
-        let include_charset = required_char.is_some() && query_charset_ranges.is_empty();
-        let Some(object_set) = build_candidate_object_set(include_charset) else {
+        let projection = if required_char.is_some() && query_charset_ranges.is_empty() {
+            GnuEntityProjection::MetadataAndCharset
+        } else {
+            GnuEntityProjection::Metadata
+        };
+        let Some(object_set) = build_candidate_object_set(projection) else {
             continue;
         };
         let fontset = unsafe {

@@ -81,12 +81,8 @@ pub struct PlatformFontMatch {
 }
 
 impl PlatformFontMatch {
-    fn from_fontconfig(mut matched: crate::font::fontconfig::FontMatch) -> Option<Self> {
+    fn from_fontconfig(matched: crate::font::fontconfig::FontMatch) -> Option<Self> {
         let file = matched.file.as_deref()?;
-        if matched.variation_coords.is_empty() && (matched.face_index >> 16) & 0x7fff != 0 {
-            matched.variation_coords =
-                crate::font::probe::named_instance_variation_coords(file, matched.face_index);
-        }
         let weight = matched
             .variation_coords
             .iter()
@@ -108,6 +104,40 @@ impl PlatformFontMatch {
                 design_metrics: None,
             },
         })
+    }
+
+    fn finalize_fontconfig(mut self) -> Self {
+        let Some(file) = self.identity.file_path.clone() else {
+            return self;
+        };
+        let Some(face_selector) = self.identity.freetype_selector() else {
+            return self;
+        };
+        let variation_coords =
+            if self.identity.variation_coords.is_empty() && (face_selector >> 16) & 0x7fff != 0 {
+                crate::font::probe::named_instance_variation_coords(&file, face_selector)
+            } else {
+                self.identity.variation_coords.clone()
+            };
+        let postscript_name = self
+            .identity
+            .postscript_name
+            .clone()
+            .or_else(|| crate::font::probe::postscript_name(&file, face_selector));
+        if let Some(weight) = variation_coords
+            .iter()
+            .find(|coord| coord.tag == u32::from_be_bytes(*b"wght"))
+            .map(|coord| coord.value().round().clamp(1.0, 1000.0) as u16)
+        {
+            self.metadata.weight = Some(weight);
+        }
+        self.identity = ResolvedFontIdentity::from_file_with_variations(
+            &file,
+            face_selector,
+            postscript_name,
+            variation_coords,
+        );
+        self
     }
 
     pub fn file_path(&self) -> Option<&str> {
@@ -220,6 +250,16 @@ pub trait FontBackend: Send {
     /// [`crate::font::resolver::FontResolver`]'s responsibility.
     fn list_candidates(&self, query: &FontCandidateQuery) -> Vec<FontCandidate>;
 
+    /// Enrich the selected candidate into an exact renderer identity.
+    ///
+    /// Discovery deliberately asks only for policy-relevant metadata because
+    /// Fontconfig changes enumeration order when renderer metadata is included
+    /// in `FcFontList`.  This hook runs once after shared policy chooses a
+    /// candidate, never while candidates are being scored.
+    fn finalize_match(&self, matched: PlatformFontMatch) -> PlatformFontMatch {
+        matched
+    }
+
     /// Native metrics for the already selected exact candidate.
     ///
     /// Called once on a resolver cache miss, never for every enumerated
@@ -262,6 +302,10 @@ impl FontBackend for FontconfigBackend {
             })
         })
         .collect()
+    }
+
+    fn finalize_match(&self, matched: PlatformFontMatch) -> PlatformFontMatch {
+        matched.finalize_fontconfig()
     }
 }
 

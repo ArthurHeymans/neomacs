@@ -172,6 +172,19 @@ std::cfg_select! {
             }
         }
 
+        /// PostScript name of the exact FreeType face or named instance.
+        ///
+        /// `face_selector` intentionally keeps Fontconfig's high named-instance
+        /// bits; opening that selector is what makes FreeType report names such
+        /// as `NotoSans-Bold` instead of the variable file's default name.
+        pub fn postscript_name(file: &str, face_selector: u32) -> Option<String> {
+            let library = Library::init().ok()?;
+            library
+                .new_face(file, face_selector as isize)
+                .ok()?
+                .postscript_name()
+        }
+
         /// Set the `wght` design axis (OT axis units == CSS weight), leaving
         /// all other axes at their defaults. No-op for non-variable fonts.
         fn apply_wght_axis(library: &Library, face: &mut freetype::Face, wght: f32) {
@@ -285,6 +298,10 @@ std::cfg_select! {
             _face_selector: u32,
         ) -> Vec<FontVariationCoord> {
             Vec::new()
+        }
+
+        pub fn postscript_name(_file: &str, _face_selector: u32) -> Option<String> {
+            None
         }
     }
 }

@@ -102,6 +102,15 @@ fn real_gui_smoke_generates_surface_readback_png() {
 
 #[test]
 fn real_gui_font_selection_oracle_matches_gnu_emacs_result_structure() {
+    run_font_selection_oracle(None);
+}
+
+#[test]
+fn real_gui_font_selection_semi_light_tie_matches_gnu_emacs() {
+    run_font_selection_oracle(Some("noto-sans-weight-semi-light-h150-s12"));
+}
+
+fn run_font_selection_oracle(case_filter: Option<&str>) {
     if !cfg!(target_os = "linux") {
         eprintln!("skipping real GUI font selection oracle; X11 comparator is Linux-only");
         return;
@@ -124,8 +133,11 @@ fn real_gui_font_selection_oracle_matches_gnu_emacs_result_structure() {
     let session = DisplayHarness::for_backend(backend)
         .start_session(&artifact_root)
         .expect("display session should start");
+    let scenario_name = case_filter
+        .map(|case| format!("font-selection-{case}"))
+        .unwrap_or_else(|| "font-selection-noto-bold".to_string());
     let scenario = GuiScenario::new(
-        "font-selection-noto-bold",
+        scenario_name,
         workspace_root.join("neomacs-gui-tests/fixtures/font-selection-noto-bold.el"),
     );
     let artifacts = neomacs_gui_tests::GuiArtifactSet::new(&artifact_root, backend, &scenario.name);
@@ -137,7 +149,13 @@ fn real_gui_font_selection_oracle_matches_gnu_emacs_result_structure() {
     let mut gnu_runner = ProcessGuiCommandRunner;
     let gnu_output = gnu_runner
         .run(
-            &gnu_font_oracle_command(&gnu_emacs, &scenario.script, &artifacts, session.env()),
+            &gnu_font_oracle_command(
+                &gnu_emacs,
+                &scenario.script,
+                &artifacts,
+                session.env(),
+                case_filter,
+            ),
             &artifacts,
             &GuiRunOptions::with_timeout(Duration::from_secs(12)),
         )
@@ -159,6 +177,9 @@ fn real_gui_font_selection_oracle_matches_gnu_emacs_result_structure() {
             "RUST_LOG",
             "info,neomacs_renderer_wgpu::glyph_atlas=debug,neomacs::font_at=debug",
         );
+    if let Some(case_filter) = case_filter {
+        plan = plan.with_env("NEOMACS_GUI_FONT_SELECTION_CASE", case_filter);
+    }
     for (key, value) in session.env() {
         plan = plan.with_env(key.clone(), value.clone());
     }
@@ -357,6 +378,7 @@ fn gnu_font_oracle_command(
     script: &std::path::Path,
     artifacts: &neomacs_gui_tests::GuiArtifactSet,
     display_env: &[(String, String)],
+    case_filter: Option<&str>,
 ) -> CommandSpec {
     let mut env = vec![
         (
@@ -365,6 +387,12 @@ fn gnu_font_oracle_command(
         ),
         ("GDK_BACKEND".to_string(), "x11".to_string()),
     ];
+    if let Some(case_filter) = case_filter {
+        env.push((
+            "NEOMACS_GUI_FONT_SELECTION_CASE".to_string(),
+            case_filter.to_string(),
+        ));
+    }
     env.extend(display_env.iter().cloned());
     CommandSpec {
         program: program.to_path_buf(),

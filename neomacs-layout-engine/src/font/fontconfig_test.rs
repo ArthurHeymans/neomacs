@@ -1,11 +1,11 @@
 use super::{
     FONT_SPACING_MONO, FONT_SPACING_PROPORTIONAL, FcCharSetGuard, FcFontSetGuard, FcLangSetGuard,
-    FcPatternGuard, ListedFont, SpacingClass, build_candidate_object_set, candidate_score,
-    combined_query_langs, fallback_frame_res_y, family_affinity_score, family_search_order,
-    fc_list_candidates, fontconfig_handle, listed_font_from_raw_pattern, normalize_spacing,
-    parse_fontconfig_weight, points_to_pixels_for_dpi, query_charset_ranges, registry_hint,
-    registry_query_chars, representative_char_for_spec, select_find_font_candidate, spacing_score,
-    style_weight, wildcard_casefold_match,
+    FcPatternGuard, GnuEntityProjection, ListedFont, SpacingClass, build_candidate_object_set,
+    candidate_score, combined_query_langs, fallback_frame_res_y, family_affinity_score,
+    family_search_order, fc_list_candidates, fontconfig_handle, listed_font_from_raw_pattern,
+    normalize_spacing, parse_fontconfig_weight, points_to_pixels_for_dpi, query_charset_ranges,
+    registry_hint, registry_query_chars, representative_char_for_spec, select_find_font_candidate,
+    spacing_score, style_weight, wildcard_casefold_match,
 };
 use neovm_core::emacs_core::fontset::{FontRepertory, StoredFontSpec};
 use neovm_core::emacs_core::intern::{intern, resolve_sym};
@@ -164,7 +164,8 @@ fn gb2312_registry_pattern() -> (
 #[test]
 fn registry_charset_queries_keep_gnu_fontconfig_candidate_order() {
     let (pattern, _charset, _langset, langs, ranges) = gb2312_registry_pattern();
-    let object_set = build_candidate_object_set(false).expect("gnu object set");
+    let object_set =
+        build_candidate_object_set(GnuEntityProjection::Metadata).expect("gnu object set");
     let fontset = unsafe { fontconfig_sys::FcFontList(ptr::null_mut(), pattern.0, object_set.0) };
     assert!(!fontset.is_null());
     let fontset = FcFontSetGuard(fontset);

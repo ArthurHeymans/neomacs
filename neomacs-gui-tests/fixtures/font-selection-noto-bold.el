@@ -83,6 +83,17 @@
            neomacs-font-selection-size-candidates))
   "Font-selection requests compared between GNU Emacs and NEO Emacs.")
 
+(defconst neomacs-font-selection-selected-cases
+  (let ((requested-id (getenv "NEOMACS_GUI_FONT_SELECTION_CASE")))
+    (if (not requested-id)
+        neomacs-font-selection-cases
+      (let ((requested-symbol (intern requested-id)))
+        (delq nil
+              (mapcar (lambda (case)
+                        (and (eq (plist-get case :id) requested-symbol) case))
+                      neomacs-font-selection-cases)))))
+  "Oracle cases selected by the optional test-harness case filter.")
+
 (defun neomacs-font-selection-label (case)
   (format "axis=%s family=%s weight=%s slant=%s height=%s size=%s"
           (plist-get case :axis)
@@ -107,7 +118,7 @@
 (erase-buffer)
 
 (insert "Font selection oracle matrix\n\n")
-(dolist (case neomacs-font-selection-cases)
+(dolist (case neomacs-font-selection-selected-cases)
   (let* ((label (neomacs-font-selection-label case))
          (text (plist-get case :text))
          (start nil))
@@ -155,7 +166,7 @@
 (defun neomacs-font-selection-result ()
   (list :cases
         (mapcar #'neomacs-font-selection-case-result
-                neomacs-font-selection-cases)))
+                neomacs-font-selection-selected-cases)))
 
 (defun neomacs-font-selection-write-oracle-result ()
   (let ((path (getenv "NEOMACS_GUI_FONT_SELECTION_RESULT")))

@@ -93,6 +93,7 @@ impl FontResolver {
                 queried_family: Some(&family),
             },
         )
+        .map(|matched| self.backend.finalize_match(matched))
         .map(|matched| self.with_native_metrics(matched));
         if let Ok(mut cache) = self.primary_cache.lock() {
             cache.insert(key, selected.clone());
@@ -171,7 +172,9 @@ impl FontResolver {
                 },
             );
         }
-        selected = selected.map(|matched| self.with_native_metrics(matched));
+        selected = selected
+            .map(|matched| self.backend.finalize_match(matched))
+            .map(|matched| self.with_native_metrics(matched));
         if let Ok(mut cache) = self.char_cache.lock() {
             cache.insert(key, selected.clone());
         }
