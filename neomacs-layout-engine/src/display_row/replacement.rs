@@ -20,15 +20,17 @@ use crate::display_row::geometry::{DisplayRowGeometryState, DisplayRowTextPositi
 use crate::display_row::lisp_string::LispStringSourceId;
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::render_policy::{DisplayRowRenderClipBehavior, DisplayRowRenderPolicy};
+use crate::display_row::render_state::DisplayRowRenderStop;
 use crate::display_row::source_append::SingleDisplayItemAppendContext;
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_row::source_state::DisplayRowSourceState;
 use crate::display_source::{
-    BufferDisplayReplacementStringRequest, DisplayItemOnceSource, DisplayMarginEmission,
-    DisplayNonTextAreaEmission, DisplayPropertyReplacementCursorPolicy,
-    DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
-    DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
-    DisplayReplacementStretchSourceItem, DisplayReplacementStringSourceItem,
+    BufferDisplayReplacementStringRequest, BufferDisplayReplacementStringSource,
+    DisplayItemOnceSource, DisplayMarginEmission, DisplayNonTextAreaEmission,
+    DisplayPropertyReplacementCursorPolicy, DisplayPropertyReplacementSourceItem,
+    DisplayReplacementMediaSourceItem, DisplayReplacementMediaSourceResolution,
+    DisplayReplacementSourceMappedTextItem, DisplayReplacementStretchSourceItem,
+    DisplayReplacementStringSourceItem, LispStringSourceCursor,
 };
 use crate::display_source_append_plan::NaturalDisplayRowAppendRenderPolicy;
 use crate::display_source_resolver::{
@@ -97,94 +99,116 @@ impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
 
     fn clipped_behavior(&mut self, item: &DisplayItem) -> DisplayRowRenderClipBehavior {
         if matches!(item.kind, DisplayItemKind::SourceMappedText(_)) {
-            DisplayRowRenderClipBehavior::Stop
+            // A display string is a pushed GNU iterator frame, not an atomic
+            // row decoration.  Preserve the unrendered suffix so a wrapping
+            // caller can resume the same typed source on the next glyph row.
+            DisplayRowRenderClipBehavior::PreserveRemainderAndStop
         } else {
             DisplayRowRenderClipBehavior::Continue
         }
     }
 }
 
-#[derive(Clone, Debug)]
-struct DisplayReplacementStringSourceAppendRequest {
-    position: DisplayRowPosition,
-    source: BufferDisplayReplacementStringRequest,
+/// Why one pass of a display-property string session stopped.
+///
+/// Keeping these cases closed prevents a caller from treating a clipped
+/// (therefore resumable) string as exhausted and silently losing its suffix.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DisplayReplacementStringRowStop {
+    SourceExhausted,
+    Clipped,
+    RowBreak,
 }
 
-impl DisplayReplacementStringSourceAppendRequest {
-    fn new(position: DisplayRowPosition, source: BufferDisplayReplacementStringRequest) -> Self {
-        Self { position, source }
+pub(crate) struct DisplayReplacementStringRowOutcome {
+    stop: DisplayReplacementStringRowStop,
+    end_position: DisplayRowPosition,
+}
+
+impl DisplayReplacementStringRowOutcome {
+    pub(crate) fn stop(&self) -> DisplayReplacementStringRowStop {
+        self.stop
     }
 
-    fn position(&self) -> DisplayRowPosition {
-        self.position
+    pub(crate) fn end_position(&self) -> DisplayRowPosition {
+        self.end_position
+    }
+}
+
+/// A pushed display-string iterator that can outlive one glyph row.
+///
+/// GNU stores this state in `struct it` across `display_line` calls.  The
+/// source cursor and its pending clipped item are deliberately owned together
+/// here, so Rust makes it impossible to resume one without the other.
+pub(crate) struct DisplayReplacementStringRowSession {
+    source: BufferDisplayReplacementStringSource<LispStringSourceCursor>,
+    source_state: DisplayRowSourceState,
+    base_face: DisplayStringBaseFace,
+    item_policy: DisplayReplacementStringItemMeasurer,
+}
+
+impl DisplayReplacementStringRowSession {
+    fn new(
+        request: DisplayReplacementStringAppendRequest,
+        replacement_source: BufferDisplayReplacementSource,
+        pointer_appearance: Option<DisplayPointerAppearance>,
+    ) -> Option<Self> {
+        let source = request
+            .source_request(replacement_source, pointer_appearance)
+            .into_source(request.replacement_base_face.as_ref()?.face_id())?;
+        let item_policy = request.string_item_measurer();
+        let base_face = request.replacement_base_face?;
+        Some(Self {
+            source,
+            source_state: DisplayRowSourceState::default(),
+            base_face,
+            item_policy,
+        })
     }
 
-    fn render_to_text_row_and_emit(
-        self,
+    pub(crate) fn render_to_text_row_and_emit(
+        &mut self,
+        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
         state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceAttempt,
-        append_context: &DisplayReplacementAppendContext<'_>,
-        item_policy: &mut impl DisplayRowRenderPolicy,
-    ) -> DisplayReplacementAppendResult {
-        let position = self.position();
-        let Some(source) = self
-            .source
-            .into_source(append_context.single_item.face_id())
-        else {
-            return DisplayReplacementAppendResult::without_row_break(position);
-        };
+        row_geometry: &mut DisplayRowGeometryState,
+        position: DisplayRowPosition,
+    ) -> Option<DisplayReplacementStringRowOutcome> {
+        let append_context = DisplayReplacementAppendContext::new(
+            self.base_face.face_id(),
+            self.base_face.face(),
+            replacement_append_context.full_text_width_active_face_frame(),
+        );
         let mut render_policy = DisplayReplacementStringRenderPolicy {
-            item_policy,
+            item_policy: &mut self.item_policy,
             produced_row_break: false,
         };
-        let mut source = source;
-        let mut source_state = DisplayRowSourceState::default();
-        let Some(outcome) = append_context.single_item.render_source_with_policy(
+        let outcome = append_context.single_item.render_source_with_policy(
             state,
             face_ids,
-            &mut source,
-            &mut source_state,
+            &mut self.source,
+            &mut self.source_state,
             position,
             DisplayRowAppendKind::DisplayReplacementString,
             &mut render_policy,
-            append_context.single_item.face_id(),
-        ) else {
-            return DisplayReplacementAppendResult::new(position, render_policy.produced_row_break);
+            self.base_face.face_id(),
+        )?;
+        outcome.include_vertical_metrics(row_geometry);
+        let stop = if render_policy.produced_row_break {
+            DisplayReplacementStringRowStop::RowBreak
+        } else {
+            match outcome.stop() {
+                DisplayRowRenderStop::SourceExhausted => {
+                    DisplayReplacementStringRowStop::SourceExhausted
+                }
+                DisplayRowRenderStop::Clipped => DisplayReplacementStringRowStop::Clipped,
+                DisplayRowRenderStop::RowBreak(_) => DisplayReplacementStringRowStop::RowBreak,
+            }
         };
-        DisplayReplacementAppendResult::new(
-            outcome.end_position(),
-            render_policy.produced_row_break,
-        )
-    }
-}
-
-/// Result of appending a display-property replacement onto a text row: the
-/// position after the appended content plus whether the replacement's content
-/// (a `display` string) contained a newline that must terminate the row.
-#[derive(Clone, Copy)]
-pub(crate) struct DisplayReplacementAppendResult {
-    position: DisplayRowPosition,
-    produced_row_break: bool,
-}
-
-impl DisplayReplacementAppendResult {
-    fn new(position: DisplayRowPosition, produced_row_break: bool) -> Self {
-        Self {
-            position,
-            produced_row_break,
-        }
-    }
-
-    fn without_row_break(position: DisplayRowPosition) -> Self {
-        Self::new(position, false)
-    }
-
-    fn position(self) -> DisplayRowPosition {
-        self.position
-    }
-
-    fn produced_row_break(self) -> bool {
-        self.produced_row_break
+        Some(DisplayReplacementStringRowOutcome {
+            stop,
+            end_position: outcome.end_position(),
+        })
     }
 }
 
@@ -287,54 +311,17 @@ impl DisplayReplacementStringAppendRequest {
         }
     }
 
-    fn source_append_request(
+    fn source_request(
         &self,
         replacement_source: BufferDisplayReplacementSource,
-        position: DisplayRowPosition,
         pointer_appearance: Option<DisplayPointerAppearance>,
-    ) -> DisplayReplacementStringSourceAppendRequest {
-        DisplayReplacementStringSourceAppendRequest::new(
-            position,
-            BufferDisplayReplacementStringRequest::new(
-                self.item.source_id(),
-                self.item.value(),
-                replacement_source,
-            )
-            .with_pointer_appearance(pointer_appearance),
+    ) -> BufferDisplayReplacementStringRequest {
+        BufferDisplayReplacementStringRequest::new(
+            self.item.source_id(),
+            self.item.value(),
+            replacement_source,
         )
-    }
-
-    fn append_to_text_row(
-        self,
-        replacement_append_context: DisplayReplacementRowAppendContext<'_>,
-        state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceAttempt,
-        position: DisplayRowPosition,
-        pointer_appearance: Option<DisplayPointerAppearance>,
-    ) -> DisplayReplacementAppendResult {
-        if self.item.is_empty() {
-            return DisplayReplacementAppendResult::without_row_break(position);
-        }
-        let Some(ref replacement_base_face) = self.replacement_base_face else {
-            debug_assert!(false, "display string replacement missing base face");
-            return DisplayReplacementAppendResult::without_row_break(position);
-        };
-        let source_request = self.source_append_request(
-            replacement_append_context.replacement_source,
-            position,
-            pointer_appearance,
-        );
-        let mut item_policy = self.string_item_measurer();
-        let append_context = replacement_append_context.full_text_width_active_face(
-            replacement_base_face.face_id(),
-            replacement_base_face.face(),
-        );
-        source_request.render_to_text_row_and_emit(
-            state,
-            face_ids,
-            &append_context,
-            &mut item_policy,
-        )
+        .with_pointer_appearance(pointer_appearance)
     }
 }
 
@@ -640,10 +627,6 @@ impl DisplayPropertyReplacementAppendRequest {
         ))
     }
 
-    fn start_position(&self) -> DisplayRowPosition {
-        self.start_position
-    }
-
     fn into_plan<B: LayoutBufferView>(
         self,
         buffer: &B,
@@ -665,33 +648,6 @@ impl DisplayPropertyReplacementAppendRequest {
             start_position: self.start_position,
             pointer_appearance: self.pointer_appearance,
         }
-    }
-
-    fn append_to_text_row<B: LayoutBufferView>(
-        self,
-        buffer: &B,
-        state: &mut TextRowSourceRenderState<'_>,
-        face_ids: &mut FrameFaceAttempt,
-        append_surface: &DisplayRowAppendSurface,
-        row_geometry: &mut DisplayRowGeometryState,
-        active_face_state: &DisplayRowActiveFaceState,
-    ) -> DisplayPropertyReplacementAppendOutcome {
-        let start_position = self.start_position();
-        let cursor_policy = self.cursor_policy();
-        let plan = self.into_plan(buffer, state, active_face_state, face_ids);
-        let append_result = plan.append_to_text_row(
-            state,
-            face_ids,
-            append_surface,
-            row_geometry,
-            active_face_state,
-        );
-        DisplayPropertyReplacementAppendOutcome::new(
-            start_position,
-            append_result.position(),
-            cursor_policy,
-            append_result.produced_row_break(),
-        )
     }
 }
 
@@ -769,7 +725,7 @@ impl DisplayPropertyReplacementRowRenderRequest {
 
     #[cfg(test)]
     pub(crate) fn start_position(&self) -> DisplayRowPosition {
-        self.append_request.start_position()
+        self.append_request.start_position
     }
 
     #[cfg(test)]
@@ -790,7 +746,7 @@ impl DisplayPropertyReplacementRowRenderRequest {
             .string_plan_snapshot()
     }
 
-    pub(crate) fn render_to_text_row<B: LayoutBufferView>(
+    pub(crate) fn begin_render_to_text_rows<B: LayoutBufferView>(
         self,
         buffer: &B,
         state: &mut TextRowSourceRenderState<'_>,
@@ -798,15 +754,18 @@ impl DisplayPropertyReplacementRowRenderRequest {
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
         active_face_state: &DisplayRowActiveFaceState,
-    ) -> DisplayPropertyReplacementAppendOutcome {
-        self.append_request.append_to_text_row(
-            buffer,
-            state,
-            face_ids,
-            append_surface,
-            row_geometry,
-            active_face_state,
-        )
+    ) -> DisplayPropertyReplacementRowRender {
+        let cursor_policy = self.append_request.cursor_policy();
+        self.append_request
+            .into_plan(buffer, state, active_face_state, face_ids)
+            .begin_render_to_text_rows(
+                state,
+                face_ids,
+                append_surface,
+                row_geometry,
+                active_face_state,
+                cursor_policy,
+            )
     }
 }
 
@@ -815,7 +774,6 @@ pub(crate) struct DisplayPropertyReplacementAppendOutcome {
     start_position: DisplayRowPosition,
     end_position: DisplayRowPosition,
     cursor_policy: DisplayPropertyReplacementCursorPolicy,
-    produced_row_break: bool,
 }
 
 impl DisplayPropertyReplacementAppendOutcome {
@@ -823,13 +781,11 @@ impl DisplayPropertyReplacementAppendOutcome {
         start_position: DisplayRowPosition,
         end_position: DisplayRowPosition,
         cursor_policy: DisplayPropertyReplacementCursorPolicy,
-        produced_row_break: bool,
     ) -> Self {
         Self {
             start_position,
             end_position,
             cursor_policy,
-            produced_row_break,
         }
     }
 
@@ -839,13 +795,6 @@ impl DisplayPropertyReplacementAppendOutcome {
 
     pub(crate) fn end_position(self) -> DisplayRowPosition {
         self.end_position
-    }
-
-    /// Whether the replacement's `display` string contained a newline that must
-    /// terminate the current row (GNU treats display-string '\n' as a row
-    /// break; see xdisp.c `display_line`).
-    pub(crate) fn produced_row_break(self) -> bool {
-        self.produced_row_break
     }
 
     pub(crate) fn cursor_info(
@@ -859,6 +808,70 @@ impl DisplayPropertyReplacementAppendOutcome {
             active_face_state,
             position,
             preceding_charpos,
+        )
+    }
+}
+
+/// A replacement either completed atomically on the current row or opened a
+/// stateful string iterator.  Callers must handle both variants explicitly;
+/// there is no lossy "append and forget a clipped suffix" representation.
+pub(crate) enum DisplayPropertyReplacementRowRender {
+    Applied(DisplayPropertyReplacementAppendOutcome),
+    String(DisplayPropertyReplacementStringRender),
+}
+
+pub(crate) struct DisplayPropertyReplacementStringRender {
+    session: DisplayReplacementStringRowSession,
+    replacement_source: BufferDisplayReplacementSource,
+    glyph_y_offset: f32,
+    fallback_metrics: DisplayRowFallbackMetrics,
+    start_position: DisplayRowPosition,
+    cursor_policy: DisplayPropertyReplacementCursorPolicy,
+}
+
+impl DisplayPropertyReplacementStringRender {
+    pub(crate) fn opening_slot(&self) -> DisplayPropertyReplacementAppendOutcome {
+        DisplayPropertyReplacementAppendOutcome::new(
+            self.start_position,
+            self.start_position,
+            self.cursor_policy,
+        )
+    }
+
+    pub(crate) fn render_next_row(
+        &mut self,
+        state: &mut TextRowSourceRenderState<'_>,
+        face_ids: &mut FrameFaceAttempt,
+        append_surface: &DisplayRowAppendSurface,
+        row_geometry: &mut DisplayRowGeometryState,
+        active_face_state: &DisplayRowActiveFaceState,
+        position: DisplayRowPosition,
+    ) -> Option<DisplayReplacementStringRowOutcome> {
+        let append_context = DisplayReplacementRowAppendContext::new(
+            self.replacement_source,
+            append_surface,
+            row_geometry,
+            active_face_state,
+            self.glyph_y_offset,
+            self.fallback_metrics,
+        );
+        self.session.render_to_text_row_and_emit(
+            append_context,
+            state,
+            face_ids,
+            row_geometry,
+            position,
+        )
+    }
+
+    pub(crate) fn finish(
+        self,
+        end_position: DisplayRowPosition,
+    ) -> DisplayPropertyReplacementAppendOutcome {
+        DisplayPropertyReplacementAppendOutcome::new(
+            self.start_position,
+            end_position,
+            self.cursor_policy,
         )
     }
 }
@@ -883,31 +896,75 @@ impl DisplayPropertyReplacementAppendPlan {
         }
     }
 
-    pub(crate) fn append_to_text_row(
+    fn begin_render_to_text_rows(
         self,
         state: &mut TextRowSourceRenderState<'_>,
         face_ids: &mut FrameFaceAttempt,
         append_surface: &DisplayRowAppendSurface,
         row_geometry: &mut DisplayRowGeometryState,
         active_face_state: &DisplayRowActiveFaceState,
-    ) -> DisplayReplacementAppendResult {
-        let position = self.start_position;
-        let replacement_append_context = DisplayReplacementRowAppendContext::new(
-            self.replacement_source,
-            append_surface,
-            row_geometry,
-            active_face_state,
-            self.glyph_y_offset,
-            self.fallback_metrics,
-        );
-        self.item.append_to_text_row(
-            replacement_append_context,
-            row_geometry,
-            state,
-            face_ids,
-            position,
-            self.pointer_appearance,
-        )
+        cursor_policy: DisplayPropertyReplacementCursorPolicy,
+    ) -> DisplayPropertyReplacementRowRender {
+        let Self {
+            replacement_source,
+            item,
+            glyph_y_offset,
+            fallback_metrics,
+            start_position,
+            pointer_appearance,
+        } = self;
+        match item {
+            DisplayPropertyReplacementAppendPlanItem::String(request) => {
+                let Some(session) = DisplayReplacementStringRowSession::new(
+                    request,
+                    replacement_source,
+                    pointer_appearance,
+                ) else {
+                    return DisplayPropertyReplacementRowRender::Applied(
+                        DisplayPropertyReplacementAppendOutcome::new(
+                            start_position,
+                            start_position,
+                            cursor_policy,
+                        ),
+                    );
+                };
+                DisplayPropertyReplacementRowRender::String(
+                    DisplayPropertyReplacementStringRender {
+                        session,
+                        replacement_source,
+                        glyph_y_offset,
+                        fallback_metrics,
+                        start_position,
+                        cursor_policy,
+                    },
+                )
+            }
+            DisplayPropertyReplacementAppendPlanItem::Atomic(item) => {
+                let append_context = DisplayReplacementRowAppendContext::new(
+                    replacement_source,
+                    append_surface,
+                    row_geometry,
+                    active_face_state,
+                    glyph_y_offset,
+                    fallback_metrics,
+                );
+                let end_position = item.append_to_text_row(
+                    append_context,
+                    row_geometry,
+                    state,
+                    face_ids,
+                    start_position,
+                    pointer_appearance,
+                );
+                DisplayPropertyReplacementRowRender::Applied(
+                    DisplayPropertyReplacementAppendOutcome::new(
+                        start_position,
+                        end_position,
+                        cursor_policy,
+                    ),
+                )
+            }
+        }
     }
 }
 
@@ -915,9 +972,14 @@ impl DisplayPropertyReplacementAppendPlan {
 // Large payload variant; boxing is a perf hint deferred out of the lint gate.
 #[allow(clippy::large_enum_variant)]
 enum DisplayPropertyReplacementAppendPlanItem {
+    String(DisplayReplacementStringAppendRequest),
+    Atomic(DisplayPropertyReplacementAtomicAppendPlanItem),
+}
+
+#[derive(Clone)]
+enum DisplayPropertyReplacementAtomicAppendPlanItem {
     Empty,
     Margin(DisplayMarginEmission),
-    String(DisplayReplacementStringAppendRequest),
     Item(DisplayReplacementItemAppendTemplate),
 }
 
@@ -939,10 +1001,14 @@ impl DisplayPropertyReplacementAppendPlanItemRequest {
     ) -> DisplayPropertyReplacementAppendPlanItem {
         match self.item {
             DisplayPropertyReplacementSourceItem::Empty => {
-                DisplayPropertyReplacementAppendPlanItem::Empty
+                DisplayPropertyReplacementAppendPlanItem::Atomic(
+                    DisplayPropertyReplacementAtomicAppendPlanItem::Empty,
+                )
             }
             DisplayPropertyReplacementSourceItem::Margin(emission) => {
-                DisplayPropertyReplacementAppendPlanItem::Margin(emission)
+                DisplayPropertyReplacementAppendPlanItem::Atomic(
+                    DisplayPropertyReplacementAtomicAppendPlanItem::Margin(emission),
+                )
             }
             DisplayPropertyReplacementSourceItem::String(item) => {
                 let replacement_base_face = (!item.is_empty()).then(|| {
@@ -962,20 +1028,23 @@ impl DisplayPropertyReplacementAppendPlanItemRequest {
                 )
             }
             DisplayPropertyReplacementSourceItem::Stretch(item) => {
-                DisplayReplacementItemAppendTemplate::from_stretch(item)
-                    .map(DisplayPropertyReplacementAppendPlanItem::Item)
-                    .unwrap_or(DisplayPropertyReplacementAppendPlanItem::Empty)
+                let item = DisplayReplacementItemAppendTemplate::from_stretch(item)
+                    .map(DisplayPropertyReplacementAtomicAppendPlanItem::Item)
+                    .unwrap_or(DisplayPropertyReplacementAtomicAppendPlanItem::Empty);
+                DisplayPropertyReplacementAppendPlanItem::Atomic(item)
             }
             DisplayPropertyReplacementSourceItem::Media(item) => {
-                DisplayPropertyReplacementAppendPlanItem::Item(
-                    DisplayReplacementItemAppendTemplate::from_media_resolution(item),
+                DisplayPropertyReplacementAppendPlanItem::Atomic(
+                    DisplayPropertyReplacementAtomicAppendPlanItem::Item(
+                        DisplayReplacementItemAppendTemplate::from_media_resolution(item),
+                    ),
                 )
             }
         }
     }
 }
 
-impl DisplayPropertyReplacementAppendPlanItem {
+impl DisplayPropertyReplacementAtomicAppendPlanItem {
     fn append_to_text_row(
         self,
         replacement_append_context: DisplayReplacementRowAppendContext<'_>,
@@ -984,9 +1053,9 @@ impl DisplayPropertyReplacementAppendPlanItem {
         face_ids: &mut FrameFaceAttempt,
         position: DisplayRowPosition,
         pointer_appearance: Option<DisplayPointerAppearance>,
-    ) -> DisplayReplacementAppendResult {
+    ) -> DisplayRowPosition {
         match self {
-            Self::Empty => DisplayReplacementAppendResult::without_row_break(position),
+            Self::Empty => position,
             Self::Margin(emission) => {
                 let face_id = replacement_append_context.active_face.face_id();
                 let frame = replacement_append_context.active_face_frame();
@@ -1001,25 +1070,16 @@ impl DisplayPropertyReplacementAppendPlanItem {
                         crate::display_row::source_render::DisplayStructuralAreaOrder::AfterExisting
                     },
                 );
-                DisplayReplacementAppendResult::without_row_break(position)
+                position
             }
-            Self::String(request) => request.append_to_text_row(
+            Self::Item(item) => item.append_to_text_row(
                 replacement_append_context,
+                row_geometry,
                 state,
                 face_ids,
                 position,
                 pointer_appearance,
             ),
-            Self::Item(item) => {
-                DisplayReplacementAppendResult::without_row_break(item.append_to_text_row(
-                    replacement_append_context,
-                    row_geometry,
-                    state,
-                    face_ids,
-                    position,
-                    pointer_appearance,
-                ))
-            }
         }
     }
 }
@@ -1125,18 +1185,6 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
         base_face: &'a ResolvedFace,
     ) -> DisplayReplacementAppendContext<'a> {
         DisplayReplacementAppendContext::new(face_id, base_face, self.active_face_frame())
-    }
-
-    fn full_text_width_active_face(
-        self,
-        face_id: FaceId,
-        base_face: &'a ResolvedFace,
-    ) -> DisplayReplacementAppendContext<'a> {
-        DisplayReplacementAppendContext::new(
-            face_id,
-            base_face,
-            self.full_text_width_active_face_frame(),
-        )
     }
 
     fn display_box(
@@ -1285,11 +1333,29 @@ impl<'a> DisplayReplacementAppendContext<'a> {
         position: DisplayRowPosition,
         item_policy: &mut impl DisplayRowRenderPolicy,
     ) -> DisplayRowPosition {
-        DisplayReplacementStringSourceAppendRequest::new(
-            position,
-            BufferDisplayReplacementStringRequest::new(source_id.raw(), value, replacement_source),
-        )
-        .render_to_text_row_and_emit(state, face_ids, self, item_policy)
-        .position()
+        let Some(mut source) =
+            BufferDisplayReplacementStringRequest::new(source_id.raw(), value, replacement_source)
+                .into_source(self.single_item.face_id())
+        else {
+            return position;
+        };
+        let mut source_state = DisplayRowSourceState::default();
+        let mut render_policy = DisplayReplacementStringRenderPolicy {
+            item_policy,
+            produced_row_break: false,
+        };
+        self.single_item
+            .render_source_with_policy(
+                state,
+                face_ids,
+                &mut source,
+                &mut source_state,
+                position,
+                DisplayRowAppendKind::DisplayReplacementString,
+                &mut render_policy,
+                self.single_item.face_id(),
+            )
+            .map(|outcome| outcome.end_position())
+            .unwrap_or(position)
     }
 }

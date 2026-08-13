@@ -10013,6 +10013,138 @@ fn layout_frame_rust_emits_display_string_replacement_glyphs() {
     assert_eq!(rendered, "dir: (287 GiB available)");
 }
 
+/// GNU `display_line` keeps a pushed display-string iterator alive when the
+/// current glyph row fills (xdisp.c `row->continued_p`): the next visual row
+/// resumes inside that string before returning to the covered buffer range.
+/// Dired's first-line free-space annotation exercises exactly this shape.
+#[test]
+fn display_replacement_string_resumes_on_a_wrapped_row() {
+    let prefix = "a".repeat(74);
+    let text = format!("{prefix}:\nnext\n");
+    let replacement_start = prefix.len();
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with(&text, move |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(setq truncate-lines nil)").expect("wrap");
+            let form = format!(
+                r##"(put-text-property {} {} 'display ": (47 GiB available)")"##,
+                replacement_start + 1,
+                replacement_start + 2,
+            );
+            eval.eval_str(&form).expect("display string replacement");
+        });
+
+    let rendered: Vec<_> = rows
+        .iter()
+        .map(|row| glyphs_logical_text(&row.glyphs[1]))
+        .collect();
+    let annotation_row = rendered
+        .iter()
+        .position(|row| row.contains("available)"))
+        .unwrap_or_else(|| panic!("replacement suffix must survive wrapping, rows={rendered:?}"));
+    let following_buffer_row = rendered
+        .iter()
+        .position(|row| row.contains("next"))
+        .unwrap_or_else(|| panic!("following buffer line must render, rows={rendered:?}"));
+
+    assert!(
+        rendered[0].ends_with('\\'),
+        "the over-wide display string must carry the TTY continuation marker: {rendered:?}"
+    );
+    assert!(
+        annotation_row < following_buffer_row,
+        "the replacement must finish before the covered buffer walk resumes: {rendered:?}"
+    );
+}
+
+#[test]
+fn display_replacement_string_resumes_after_internal_newline() {
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with("qxC\n", |eval, buf_id| {
+            let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+            assert!(buf.put_text_property(1, 2, Value::symbol("display"), Value::string("A\nB"),));
+        });
+    let rendered: Vec<_> = rows
+        .iter()
+        .map(|row| glyphs_logical_text(&row.glyphs[1]))
+        .collect();
+
+    assert_eq!(rendered[0].trim_end(), "qA", "rows={rendered:?}");
+    assert_eq!(rendered[1].trim_end(), "BC", "rows={rendered:?}");
+}
+
+/// A point inside covered buffer text belongs to the display replacement's
+/// opening slot.  Finishing the pushed string iterator on a later visual row
+/// must not move that cursor capture to the iterator's final row.
+#[test]
+fn wrapped_display_replacement_cursor_stays_at_opening_slot() {
+    let prefix = "a".repeat(74);
+    let text = format!("{prefix}:\nnext\n");
+    let replacement_start = prefix.len();
+    let point_pos = replacement_start + 1;
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(&text);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(replacement_start));
+        buf.put_text_property(
+            replacement_start,
+            replacement_start + 1,
+            Value::symbol("display"),
+            Value::string(": (47 GiB available)"),
+        );
+    }
+    eval.buffer_manager_mut().set_current(buf_id);
+    eval.eval_str("(setq truncate-lines nil)").expect("wrap");
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-wrapped-display-cursor", 640, 160, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf {
+            window_start,
+            point,
+            ..
+        } = window
+        {
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(point_pos);
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .redisplay_snapshot(selected_window)
+        .expect("display snapshot");
+    let cursor = snapshot.phys_cursor.as_ref().expect("cursor");
+    let preceding = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(point_pos - 1))
+        .expect("preceding prefix glyph");
+
+    assert_eq!(
+        cursor.row, preceding.row,
+        "the covered point belongs to the replacement's opening row"
+    );
+    assert_eq!(cursor.x, preceding.x + preceding.width);
+}
+
 #[test]
 fn layout_frame_rust_renders_display_replacement_tabs_as_stretches() {
     let mut eval = Context::new();

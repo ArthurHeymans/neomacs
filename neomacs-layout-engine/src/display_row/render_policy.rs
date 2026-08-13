@@ -6,7 +6,6 @@ use neomacs_display_protocol::types::FaceId;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowRenderClipBehavior {
     PreserveRemainderAndStop,
-    Stop,
     Continue,
 }
 

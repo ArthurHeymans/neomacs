@@ -1090,9 +1090,6 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                             state.remember_pending_item(render_item.clipped_remainder(&progress));
                             break DisplayRowRenderStop::Clipped;
                         }
-                        DisplayRowRenderClipBehavior::Stop => {
-                            break DisplayRowRenderStop::Clipped;
-                        }
                         DisplayRowRenderClipBehavior::Continue => {}
                     }
                 }

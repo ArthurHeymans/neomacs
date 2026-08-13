@@ -7,7 +7,8 @@ use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::geometry::{DisplayRowGeometryState, DisplayRowTextPosition};
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::replacement::{
-    DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementRowRenderRequest,
+    DisplayPropertyReplacementAppendOutcome, DisplayPropertyReplacementRowRender,
+    DisplayPropertyReplacementRowRenderRequest, DisplayPropertyReplacementStringRender,
 };
 use crate::display_row::source_render::TextRowSourceRenderState;
 use crate::display_source::DisplaySourceTextPosition;
@@ -21,10 +22,6 @@ use crate::types::WindowParams;
 pub(crate) struct BufferDisplayPropertyTextReplacementOutcome {
     pub(crate) replacement: DisplayPropertyReplacementAppendOutcome,
     pub(crate) skip_to: i64,
-    /// The replacement's `display` string ended a display line with a newline;
-    /// the walk must emit a row break so the following buffer text starts on a
-    /// fresh row (GNU xdisp.c treats display-string '\n' as a line terminator).
-    pub(crate) produced_row_break: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -38,6 +35,7 @@ pub(crate) struct BufferDisplayPropertyTextReplacementWalkUpdate {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
     Rendered(BufferDisplayPropertyTextReplacementOutcome),
+    String(DisplayPropertyReplacementStringRender),
     Fallback(DisplaySourceStepItem),
     Stop,
 }
@@ -45,7 +43,8 @@ pub(crate) enum BufferDisplayPropertyTextReplacementRenderOutcome {
 // Large payload variant; boxing is a perf hint deferred out of the lint gate.
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum BufferDisplayPropertyTextReplacementApplyOutcome {
-    Applied { produced_row_break: bool },
+    Applied,
+    String(DisplayPropertyReplacementStringRender),
     Fallback(DisplaySourceStepItem),
     Stop,
 }
@@ -146,7 +145,6 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderContext<'a, 'face> {
             self.start_position,
         ) {
             BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(outcome) => {
-                let produced_row_break = outcome.produced_row_break;
                 self.apply_rendered_outcome(
                     outcome,
                     progress,
@@ -154,7 +152,22 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderContext<'a, 'face> {
                     state.row_geometry,
                     point_charpos,
                 );
-                BufferDisplayPropertyTextReplacementApplyOutcome::Applied { produced_row_break }
+                BufferDisplayPropertyTextReplacementApplyOutcome::Applied
+            }
+            BufferDisplayPropertyTextReplacementRenderOutcome::String(session) => {
+                BufferDisplayPropertyTextReplacementOutcome {
+                    replacement: session.opening_slot(),
+                    skip_to: self.request.replacement.descriptor().resume_charpos(),
+                }
+                .capture_cursor_info_if_point(
+                    cursor_info,
+                    self.request.active_face_state,
+                    state.row_geometry,
+                    point_charpos,
+                    self.start_charpos,
+                    progress.byte_idx(),
+                );
+                BufferDisplayPropertyTextReplacementApplyOutcome::String(session)
             }
             BufferDisplayPropertyTextReplacementRenderOutcome::Fallback(source_item) => {
                 BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(source_item)
@@ -182,6 +195,18 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderContext<'a, 'face> {
             point_charpos,
             self.start_charpos,
         );
+    }
+
+    pub(crate) fn apply_completed_string(
+        &self,
+        replacement: DisplayPropertyReplacementAppendOutcome,
+        progress: &mut DisplaySourceProgressState<'_>,
+    ) {
+        BufferDisplayPropertyTextReplacementOutcome {
+            replacement,
+            skip_to: self.request.replacement.descriptor().resume_charpos(),
+        }
+        .apply_to_progress(self.request.text, progress);
     }
 }
 
@@ -225,19 +250,26 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
         append_request: DisplayPropertyReplacementRowRenderRequest,
         buffer: &B,
         state: &mut BufferDisplayPropertyTextReplacementRenderState<'_>,
-    ) -> BufferDisplayPropertyTextReplacementOutcome {
-        let outcome = append_request.render_to_text_row(
+    ) -> BufferDisplayPropertyTextReplacementRenderOutcome {
+        match append_request.begin_render_to_text_rows(
             buffer,
             &mut state.source_render.reborrow(),
             state.face_ids,
             state.append_surface,
             state.row_geometry,
             state.active_face_state,
-        );
-        BufferDisplayPropertyTextReplacementOutcome {
-            replacement: outcome,
-            skip_to: self.replacement.descriptor().resume_charpos(),
-            produced_row_break: outcome.produced_row_break(),
+        ) {
+            DisplayPropertyReplacementRowRender::Applied(outcome) => {
+                BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(
+                    BufferDisplayPropertyTextReplacementOutcome {
+                        replacement: outcome,
+                        skip_to: self.replacement.descriptor().resume_charpos(),
+                    },
+                )
+            }
+            DisplayPropertyReplacementRowRender::String(session) => {
+                BufferDisplayPropertyTextReplacementRenderOutcome::String(session)
+            }
         }
     }
 
@@ -288,9 +320,7 @@ impl<'a, 'face> BufferDisplayPropertyTextReplacementRenderRequest<'a, 'face> {
                 start_position,
             );
         match append_request {
-            Some(request) => BufferDisplayPropertyTextReplacementRenderOutcome::Rendered(
-                self.render_append_request(request, buffer, state),
-            ),
+            Some(request) => self.render_append_request(request, buffer, state),
             None => {
                 let Some(source_item) = self.fallback_render_item() else {
                     return BufferDisplayPropertyTextReplacementRenderOutcome::Stop;
@@ -393,6 +423,10 @@ impl BufferDisplayPropertyTextReplacementOutcome {
             start_charpos,
             progress.byte_idx(),
         );
+        self.apply_to_progress(text, progress);
+    }
+
+    fn apply_to_progress(self, text: &[u8], progress: &mut DisplaySourceProgressState<'_>) {
         let walk_update = self.walk_update(text, progress.source_position());
         progress.apply_row_position(walk_update.row_position());
         progress.apply_source_position(walk_update.source_position());

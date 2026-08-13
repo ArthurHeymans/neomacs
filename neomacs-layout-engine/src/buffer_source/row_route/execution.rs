@@ -719,6 +719,7 @@ impl<'rows, 'emit, 'surface>
                     BufferDisplayPropertyTextReplacementRenderContext,
                     BufferDisplayPropertyTextReplacementRenderState,
                 };
+                use crate::display_row::replacement::DisplayReplacementStringRowStop;
                 let start_byte_pos = buffer.layout_char_pos_to_emacs_byte_pos(segment.start);
                 let end_byte_pos = buffer.layout_char_pos_to_emacs_byte_pos(segment.end);
                 let replacement_item =
@@ -762,18 +763,32 @@ impl<'rows, 'emit, 'surface>
                     self.cursor_info,
                     loop_context.point_charpos(),
                 ) {
-                    BufferDisplayPropertyTextReplacementApplyOutcome::Applied {
-                        produced_row_break,
-                    } => {
-                        // A routed replacement string contains no newline
-                        // (classifier), so the session never breaks the row.
-                        debug_assert!(
-                            !produced_row_break,
-                            "routed replacement strings are single-line"
-                        );
-                        if produced_row_break {
+                    BufferDisplayPropertyTextReplacementApplyOutcome::Applied => {
+                        render_position = self.progress.row_position();
+                    }
+                    BufferDisplayPropertyTextReplacementApplyOutcome::String(mut session) => {
+                        let Some(outcome) = session.render_next_row(
+                            &mut self.source_render.reborrow(),
+                            self.face_ids,
+                            self.surface.append_surface,
+                            self.row_build.row_geometry,
+                            active_face_state,
+                            self.progress.row_position(),
+                        ) else {
+                            return note_route_stopped(PlainRowRouteOutcome::Stopped);
+                        };
+                        self.progress.apply_row_position(outcome.end_position());
+                        if outcome.stop() != DisplayReplacementStringRowStop::SourceExhausted {
+                            debug_assert!(
+                                false,
+                                "the routed-row fit proof must exclude clipped or multiline display strings"
+                            );
                             return note_route_stopped(PlainRowRouteOutcome::Stopped);
                         }
+                        replacement_context.apply_completed_string(
+                            session.finish(outcome.end_position()),
+                            &mut self.progress,
+                        );
                         render_position = self.progress.row_position();
                     }
                     BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(_) => {

@@ -11,14 +11,94 @@ use crate::buffer_source::face_resolution::BufferSourceItemLayoutResolutionConte
 use crate::buffer_source::item_render::BufferSourceItemRenderRequest;
 use crate::buffer_source::loop_context::BufferSourceLoopRequestContext;
 use crate::buffer_source::loop_state::BufferSourceLoopMutableState;
+use crate::buffer_source::row_prelude::BufferSourceRowPreludeRequestContext;
 use crate::buffer_source::text_source::BufferOverlayStringsItem;
 use crate::buffer_source::walk::BufferSourceWalk;
 use crate::display_item::BufferDisplayPropertyReplacementItem;
 use crate::display_row::face_state::DisplayRowActiveFaceState;
+use crate::display_row::replacement::{
+    DisplayPropertyReplacementStringRender, DisplayReplacementStringRowStop,
+};
+use crate::display_row::transition::{
+    DisplayRowOverflowTransitionPlan, DisplayRowTextWindowEmitContext,
+    DisplayRowTransitionContinuation,
+};
+use crate::display_row::walk_state::TextRowTransitionStatePolicy;
 use crate::display_source::DisplaySourceStepChar;
 use crate::display_source::DisplaySourceStepItem;
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
+
+fn emit_display_string_visual_wrap(
+    loop_context: BufferSourceLoopRequestContext,
+    active_face_state: &DisplayRowActiveFaceState,
+    state: BufferSourceLoopMutableState<'_, '_, '_>,
+) -> DisplayRowTransitionContinuation {
+    let BufferSourceLoopMutableState {
+        mut progress,
+        mut source_render,
+        row_build,
+        mut row_carryover,
+        hit_capture,
+        face_scan,
+        row_y_positions,
+        surface,
+        ..
+    } = state;
+    let row_end_x = progress.row_progress().x();
+    progress.continue_physical_line_after_visual_row(row_end_x, loop_context.content_x());
+    {
+        let metrics = active_face_state.metrics();
+        source_render.extend_face_to_end_of_line(
+            row_build.row_extend,
+            row_build.row_geometry,
+            row_end_x,
+            surface.append_surface.right_edge(),
+            loop_context.frame_background(),
+            false,
+            metrics.row_height(),
+            metrics.ascent(),
+            metrics.char_width(),
+        );
+    }
+    *progress.row_progress_mut().x_mut() = loop_context.content_x();
+    row_build.row_extend.clear();
+
+    let charpos = progress.charpos();
+    let hit_range = hit_capture.hit_row_range.range_to(charpos);
+    let transition =
+        DisplayRowOverflowTransitionPlan::visual_wrap(TextRowTransitionStatePolicy::visual_wrap());
+    let row_position = progress.row_position();
+    let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
+        loop_context.row_geometry_defaults(),
+        loop_context.display_text_row_base(),
+        row_y_positions,
+        loop_context.max_rows(),
+        row_build.row_geometry,
+        row_build.row_flags,
+        loop_context.row_limit(),
+        hit_capture.hit_rows,
+        &mut source_render,
+    )
+    .emit_overflow_then_row_start(
+        transition,
+        hit_range,
+        row_position,
+        row_carryover.render_state(loop_context.has_prefix()),
+        progress.row_progress_mut().col_mut(),
+    );
+    if row_transition.is_exhausted() {
+        return DisplayRowTransitionContinuation::Exhausted;
+    }
+
+    hit_capture.hit_row_range.advance_to(charpos);
+    face_scan.invalidate();
+    DisplayRowTransitionContinuation::after_visible_row_transition(
+        row_transition,
+        row_build.row_geometry,
+        loop_context.row_visibility_limit(),
+    )
+}
 
 pub(crate) struct BufferSourceRenderRequest<'rows, 'request, 'emit, 'surface, 'face> {
     loop_context: BufferSourceLoopRequestContext,
@@ -26,6 +106,7 @@ pub(crate) struct BufferSourceRenderRequest<'rows, 'request, 'emit, 'surface, 'f
     params: &'request WindowParams,
     active_face_state: &'face DisplayRowActiveFaceState,
     state: BufferSourceLoopMutableState<'rows, 'emit, 'surface>,
+    row_prelude_context: Option<BufferSourceRowPreludeRequestContext>,
 }
 
 impl<'rows, 'request, 'emit, 'surface, 'face>
@@ -44,7 +125,16 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             params,
             active_face_state,
             state,
+            row_prelude_context: None,
         }
+    }
+
+    pub(crate) fn with_row_prelude_context(
+        mut self,
+        row_prelude_context: BufferSourceRowPreludeRequestContext,
+    ) -> Self {
+        self.row_prelude_context = Some(row_prelude_context);
+        self
     }
 
     pub(crate) fn render_next_and_apply<B: LayoutBufferView>(
@@ -185,17 +275,92 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
             self.state.cursor_info,
             self.loop_context.point_charpos(),
         ) {
-            BufferDisplayPropertyTextReplacementApplyOutcome::Applied { produced_row_break } => {
-                if produced_row_break {
-                    self.emit_display_string_row_break(source_walk, buffer)
-                } else {
-                    true
-                }
-            }
+            BufferDisplayPropertyTextReplacementApplyOutcome::Applied => true,
+            BufferDisplayPropertyTextReplacementApplyOutcome::String(session) => self
+                .render_display_string_session(source_walk, buffer, &replacement_context, session),
             BufferDisplayPropertyTextReplacementApplyOutcome::Fallback(source_item) => {
                 self.render_source_item(source_walk, layout_resolution_context, source_item, buffer)
             }
             BufferDisplayPropertyTextReplacementApplyOutcome::Stop => false,
+        }
+    }
+
+    fn render_display_string_session<B: LayoutBufferView>(
+        &mut self,
+        source_walk: &mut BufferSourceWalk<'request, B>,
+        buffer: &B,
+        replacement_context: &BufferDisplayPropertyTextReplacementRenderContext<'_, '_>,
+        mut session: DisplayPropertyReplacementStringRender,
+    ) -> bool
+    where
+        'surface: 'request,
+    {
+        loop {
+            let Some(outcome) = session.render_next_row(
+                &mut self.state.source_render.reborrow(),
+                self.state.face_ids,
+                self.state.surface.append_surface,
+                self.state.row_build.row_geometry,
+                self.active_face_state,
+                self.state.progress.row_position(),
+            ) else {
+                return false;
+            };
+            self.state
+                .progress
+                .apply_row_position(outcome.end_position());
+
+            match outcome.stop() {
+                DisplayReplacementStringRowStop::SourceExhausted => {
+                    replacement_context.apply_completed_string(
+                        session.finish(outcome.end_position()),
+                        &mut self.state.progress,
+                    );
+                    return true;
+                }
+                DisplayReplacementStringRowStop::Clipped
+                    if self.params.wrap_mode == crate::types::LineWrapMode::Truncate =>
+                {
+                    replacement_context.apply_completed_string(
+                        session.finish(outcome.end_position()),
+                        &mut self.state.progress,
+                    );
+                    return true;
+                }
+                DisplayReplacementStringRowStop::Clipped => {
+                    if self.emit_display_string_visual_wrap(buffer).should_break() {
+                        return false;
+                    }
+                }
+                DisplayReplacementStringRowStop::RowBreak => {
+                    if !self.emit_display_string_row_break(source_walk, buffer) {
+                        return false;
+                    }
+                    self.render_pending_row_prelude(buffer);
+                }
+            }
+        }
+    }
+
+    fn emit_display_string_visual_wrap<B: LayoutBufferView>(
+        &mut self,
+        buffer: &B,
+    ) -> DisplayRowTransitionContinuation {
+        let continuation = emit_display_string_visual_wrap(
+            self.loop_context,
+            self.active_face_state,
+            self.state.reborrow(),
+        );
+        if !continuation.should_break() {
+            self.render_pending_row_prelude(buffer);
+        }
+        continuation
+    }
+
+    fn render_pending_row_prelude<B: LayoutBufferView>(&mut self, buffer: &B) {
+        if let Some(context) = self.row_prelude_context {
+            self.state
+                .render_row_prelude(context, self.params, self.active_face_state, buffer);
         }
     }
 

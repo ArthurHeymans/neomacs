@@ -105,6 +105,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
                 active_face_state,
                 self.reborrow(),
             )
+            .with_row_prelude_context(row_prelude_context)
             .render_next_and_apply(source_walk, face_resolution_context, buffer)
             {
                 break;
@@ -129,7 +130,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         }
     }
 
-    fn render_row_prelude<B: LayoutBufferView>(
+    pub(crate) fn render_row_prelude<B: LayoutBufferView>(
         &mut self,
         context: BufferSourceRowPreludeRequestContext,
         params: &WindowParams,

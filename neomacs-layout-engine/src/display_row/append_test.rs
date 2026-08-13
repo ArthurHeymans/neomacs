@@ -10206,10 +10206,8 @@ fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
             DisplayRowPosition::new(4.0, 1),
             DisplayRowPosition::new(12.0, 2),
             DisplayPropertyReplacementCursorPolicy::FaceChar,
-            false,
         ),
         skip_to: 4,
-        produced_row_break: false,
     };
     let mut byte_idx = "a".len();
     let mut charpos = 1;
@@ -10318,7 +10316,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
         DisplayRowPosition::new(24.0, 4),
     )
     .expect("display replacement row render request");
-    let outcome = request.render_to_text_row(
+    let outcome = request.begin_render_to_text_rows(
         &buffer,
         &mut text_row_source_render_state(
             &mut builder,
@@ -10332,6 +10330,9 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
         &mut geometry,
         &active_face,
     );
+    let DisplayPropertyReplacementRowRender::Applied(outcome) = outcome else {
+        panic!("stretch replacement must complete atomically")
+    };
 
     assert_eq!(outcome.start_position(), DisplayRowPosition::new(24.0, 4));
     assert_eq!(outcome.end_position(), DisplayRowPosition::new(40.0, 6));
