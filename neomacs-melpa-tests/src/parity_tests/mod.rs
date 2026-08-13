@@ -395,6 +395,7 @@ mod flycheck_package;
 mod flycheck_pos_tip;
 mod flycheck_rust;
 mod flyspell_correct;
+mod flyspell_correct_helm;
 mod forge;
 mod fringe_helper;
 mod frozen_packages;

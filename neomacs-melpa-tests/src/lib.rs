@@ -1451,6 +1451,12 @@ pub const FLYCHECK_ELSA_MELPA_PIN: (&str, &str) = ("flycheck-elsa", "20230217.16
 /// commit `a5a41c0f3a7881bd3eba07bee424ecb7c7d5061e`.
 pub const FLYSPELL_CORRECT_MELPA_PIN: (&str, &str) = ("flyspell-correct", "20260106.955");
 
+/// The exact Flyspell Correct Helm adapter selected for practical suggestion,
+/// action, dictionary, abort, and interface-registration parity. MELPA built
+/// this archive from upstream commit
+/// `a5a41c0f3a7881bd3eba07bee424ecb7c7d5061e`.
+pub const FLYSPELL_CORRECT_HELM_MELPA_PIN: (&str, &str) = ("flyspell-correct-helm", "20260106.955");
+
 /// The exact flycheck-dmd-dub package selected by the practical DUB project
 /// discovery, metadata, subprocess, cache, and buffer-local flag parity corpus.
 /// MELPA built this archive from upstream commit
