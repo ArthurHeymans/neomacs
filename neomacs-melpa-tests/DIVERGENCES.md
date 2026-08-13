@@ -4477,7 +4477,7 @@ pdump was used for every real-GUI green.
 
 Status: FIXED.
 
-## 86. Inserted padding does not inherit the surrounding text property
+## 86. Inserted padding does not inherit the surrounding text property -- FIXED
 
 Command Log Mode inserts a propertized key description and then uses
 `move-to-column` to pad the command name to a fixed column.  GNU gives the
@@ -4503,7 +4503,30 @@ commands and records both merged and unmerged repetitions.  The visible log
 text is identical, but every timestamp property run ends before the padding in
 Neomacs.
 
-Status: LIVE (measured 2026-08-12).
+GNU `Findent_to` inserts both tabs and spaces through
+`Finsert_char(..., INHERIT=t)` (`src/indent.c:943-982`).  The tab-splitting
+branch of `Fmove_to_column` uses the same inheriting insertion, and its
+short-line branch delegates back to `Findent_to`
+(`src/indent.c:1158-1177`).  Neomacs instead had two direct calls to its raw
+buffer insertion method in `move-to-column`; both bypassed the typed property
+policy already used by `indent-to`.
+
+The fix puts all indentation text through one
+`insert_inheriting_indentation` helper.  Its interface deliberately exposes no
+plain-insertion option, while the lower insertion boundary requires the closed
+`InsertPiecePropertyMode::InheritAdjoining` enum independently of marker
+placement.  Tab splitting calls that helper; short-line padding now follows
+GNU's call graph by delegating to `indent-to`, removing its duplicate tab/space
+construction.
+
+Separate failed-first GNU-parity regressions cover short-line padding and tab
+splitting.  Both now pass, as do all 43 `move-to-column` oracle cases, all 53
+focused indentation tests, and the complete `neovm-core` gate (8,823 passed,
+51 skipped).  A fresh release binary and pdump pass the live oracle.  The real
+Command Log Mode workflow now agrees on every timestamp-property range and
+fails only on the independent write annotation recorded in entry 87.
+
+Status: FIXED.
 
 ## 87. `write-region` ignores `write-region-annotate-functions`
 
