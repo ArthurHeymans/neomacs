@@ -11,6 +11,55 @@ use crate::emacs_core::eval::{
 };
 use crate::emacs_core::value::{Value, eq_value, eq_value_swp};
 
+#[cfg(test)]
+thread_local! {
+    static SYMBOL_WITH_POS_PLIST_COMPARISONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn note_symbol_with_pos_plist_comparison() {
+    SYMBOL_WITH_POS_PLIST_COMPARISONS.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(test)]
+pub(crate) fn reset_symbol_with_pos_plist_comparisons() {
+    SYMBOL_WITH_POS_PLIST_COMPARISONS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn symbol_with_pos_plist_comparisons() -> usize {
+    SYMBOL_WITH_POS_PLIST_COMPARISONS.with(std::cell::Cell::get)
+}
+
+/// Compile-time key-comparison policy for a plist walk.
+///
+/// GNU's ordinary `plist_get` is an identity-only loop. Position-symbol
+/// transparency is a separate runtime mode; selecting a monomorphized policy
+/// before walking keeps that mode check out of every plist entry comparison.
+trait PlistKeyComparison {
+    fn matches(left: &Value, right: &Value) -> bool;
+}
+
+struct ExactIdentity;
+
+impl PlistKeyComparison for ExactIdentity {
+    #[inline]
+    fn matches(left: &Value, right: &Value) -> bool {
+        eq_value(left, right)
+    }
+}
+
+struct SymbolWithPositionTransparent;
+
+impl PlistKeyComparison for SymbolWithPositionTransparent {
+    #[inline]
+    fn matches(left: &Value, right: &Value) -> bool {
+        #[cfg(test)]
+        note_symbol_with_pos_plist_comparison();
+        eq_value_swp(left, right, true)
+    }
+}
+
 fn plist_entry(prop: Value, value: Value, tail: Value) -> Value {
     let saved = save_scratch_gc_roots();
     push_scratch_gc_root(prop);
@@ -62,12 +111,21 @@ impl SafeTailGuard {
 /// Walk `plist` looking for `prop`. Returns the associated value or None.
 /// Matches GNU `Fplist_get` when keys compare by eq.
 pub fn plist_get(plist: Value, prop: &Value) -> Option<Value> {
-    plist_get_swp(plist, prop, false)
+    plist_get_with::<ExactIdentity>(plist, prop)
 }
 
 /// Walk `plist` looking for `prop`, using GNU's symbol-with-position aware
 /// `EQ` semantics when `symbols_with_pos_enabled` is true.
 pub fn plist_get_swp(plist: Value, prop: &Value, symbols_with_pos_enabled: bool) -> Option<Value> {
+    if symbols_with_pos_enabled {
+        plist_get_with::<SymbolWithPositionTransparent>(plist, prop)
+    } else {
+        plist_get_with::<ExactIdentity>(plist, prop)
+    }
+}
+
+#[inline]
+fn plist_get_with<Comparison: PlistKeyComparison>(plist: Value, prop: &Value) -> Option<Value> {
     let mut tail = plist;
     let mut safe_tail = SafeTailGuard::new(tail);
     while tail.is_cons() {
@@ -76,7 +134,7 @@ pub fn plist_get_swp(plist: Value, prop: &Value, symbols_with_pos_enabled: bool)
         if !rest.is_cons() {
             return None;
         }
-        if eq_value_swp(&key, prop, symbols_with_pos_enabled) {
+        if Comparison::matches(&key, prop) {
             return Some(rest.cons_car());
         }
         tail = rest.cons_cdr();

@@ -47,6 +47,39 @@ fn plist_get_missing_returns_nil() {
 }
 
 #[test]
+fn ordinary_plist_get_does_not_enter_symbol_with_position_comparison_loop() {
+    crate::test_utils::init_test_tracing();
+    let plist = Value::list(vec![
+        Value::symbol("first-property"),
+        Value::fixnum(1),
+        Value::symbol("target-property"),
+        Value::fixnum(2),
+    ]);
+
+    crate::emacs_core::plist::reset_symbol_with_pos_plist_comparisons();
+    assert_eq!(
+        crate::emacs_core::plist::plist_get_swp(plist, &Value::symbol("target-property"), false,),
+        Some(Value::fixnum(2))
+    );
+    assert_eq!(
+        crate::emacs_core::plist::symbol_with_pos_plist_comparisons(),
+        0,
+        "ordinary GNU EQ plist lookup must select its identity-only loop before walking entries"
+    );
+
+    crate::emacs_core::plist::reset_symbol_with_pos_plist_comparisons();
+    assert_eq!(
+        crate::emacs_core::plist::plist_get_swp(plist, &Value::symbol("target-property"), true,),
+        Some(Value::fixnum(2))
+    );
+    assert_eq!(
+        crate::emacs_core::plist::symbol_with_pos_plist_comparisons(),
+        2,
+        "symbol-position transparency must select the compatibility comparison loop"
+    );
+}
+
+#[test]
 fn plist_insertion_order_preserved() {
     // GNU: (a 1 b 2 c 3). HashMap iteration order is arbitrary — fails today.
     crate::test_utils::init_test_tracing();
