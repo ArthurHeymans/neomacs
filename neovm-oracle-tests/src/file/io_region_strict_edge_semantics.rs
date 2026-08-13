@@ -94,3 +94,26 @@ fn oracle_write_region_insert_file_contents_and_append_edges() {
     let expect = expect_test::expect![[r#""ERR (void-function cl-labels)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
+
+#[test]
+fn oracle_write_region_intersperses_annotation_hook_output() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((file (make-temp-file "neomacs-write-region-annotation-")))
+  (unwind-protect
+      (with-temp-buffer
+        (insert "line\n")
+        (let ((write-region-annotate-functions
+               (list (lambda (start _end)
+                       (list (cons start "[STAMP] "))))))
+          (write-region (point-min) (point-max) file nil 'silent))
+        (with-temp-buffer
+          (insert-file-contents file)
+          (buffer-string)))
+    (delete-file file)))
+"#;
+
+    let expect = expect_test::expect![[r#""OK \"[STAMP] line\n\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}

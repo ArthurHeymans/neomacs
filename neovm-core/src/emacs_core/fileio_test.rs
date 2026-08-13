@@ -4159,6 +4159,143 @@ fn write_region_honors_dynamic_coding_system_for_write() {
 }
 
 #[test]
+fn write_region_annotation_plan_intersperses_sorted_text_and_runs_post_cleanup() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("annotations.txt");
+    let path_lisp = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let results = bootstrap_eval(&format!(
+        r#"(let (first-saw second-saw post-ran)
+             (with-temp-buffer
+               (insert "éZ")
+               (let ((write-region-annotate-functions
+                      (list
+                       (lambda (start end)
+                         (setq first-saw
+                               (list start end
+                                     (copy-tree write-region-annotations-so-far)))
+                         (list (cons start "<A>") (cons end "<END1>")))
+                       (lambda (start end)
+                         (setq second-saw
+                               (list start end
+                                     (copy-tree write-region-annotations-so-far)))
+                         (list (cons 2 "<B>") (cons end "<END2>")))))
+                     (write-region-post-annotation-function
+                      (lambda () (setq post-ran t))))
+                 (write-region (point-min) (point-max)
+                               "{path_lisp}" nil 'silent)))
+             (list first-saw second-saw post-ran))"#
+    ));
+
+    assert_eq!(
+        results[0],
+        "OK ((1 3 nil) (1 3 ((1 . \"<A>\") (3 . \"<END1>\"))) t)"
+    );
+    assert_eq!(
+        std::fs::read(&path).expect("read annotated output"),
+        "<A>é<B>Z<END2><END1>".as_bytes()
+    );
+}
+
+#[test]
+fn write_region_annotation_plan_preserves_order_within_equal_position_batches() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("equal-position-annotations.txt");
+    let path_lisp = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let results = bootstrap_eval(&format!(
+        r#"(with-temp-buffer
+             (insert "x")
+             (let ((write-region-annotate-functions
+                    (list
+                     (lambda (start _end)
+                       (list (cons start "<A1>") (cons start "<A2>")))
+                     (lambda (start _end)
+                       (list (cons start "<B1>") (cons start "<B2>"))))))
+               (write-region (point-min) (point-max)
+                             "{path_lisp}" nil 'silent)))"#
+    ));
+
+    assert_eq!(results[0], "OK nil");
+    assert_eq!(
+        std::fs::read(&path).expect("read equal-position output"),
+        b"<B1><B2><A1><A2>x"
+    );
+}
+
+#[test]
+fn write_region_literal_source_skips_annotations_but_runs_post_cleanup() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("literal.txt");
+    let path_lisp = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let results = bootstrap_eval(&format!(
+        r#"(let (annotation-ran post-ran)
+             (with-temp-buffer
+               (let ((write-region-annotate-functions
+                      (list (lambda (&rest _)
+                              (setq annotation-ran t)
+                              (list (cons 1 "BAD")))))
+                     (write-region-post-annotation-function
+                      (lambda () (setq post-ran t))))
+                 (write-region "raw" nil "{path_lisp}" nil 'silent)))
+             (list annotation-ran post-ran))"#
+    ));
+
+    assert_eq!(results[0], "OK (nil t)");
+    assert_eq!(std::fs::read(&path).expect("read literal output"), b"raw");
+}
+
+#[test]
+fn write_region_annotation_buffer_switch_replaces_source_and_cleans_up_in_gnu_order() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("replacement.txt");
+    let path_lisp = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let results = bootstrap_eval(&format!(
+        r#"(let (replacement cleanup)
+             (unwind-protect
+                 (with-temp-buffer
+                   (insert "old")
+                   (let ((write-region-annotate-functions
+                          (list (lambda (_start _end)
+                                  (setq replacement (generate-new-buffer " *replacement*"))
+                                  (set-buffer replacement)
+                                  (insert "new")
+                                  nil)))
+                         (write-region-post-annotation-function
+                          (lambda () (push (buffer-string) cleanup))))
+                     (write-region (point-min) (point-max)
+                                   "{path_lisp}" nil 'silent))
+                   (list (nreverse cleanup) (buffer-string)))
+               (when (buffer-live-p replacement)
+                 (kill-buffer replacement))))"#
+    ));
+
+    assert_eq!(results[0], "OK ((\"new\" \"old\") \"old\")");
+    assert_eq!(
+        std::fs::read(&path).expect("read replacement output"),
+        b"new"
+    );
+}
+
+#[test]
 fn write_region_honors_buffer_coding_cookie_over_default_dos_eol() {
     crate::test_utils::init_test_tracing();
 

@@ -18,8 +18,8 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::buffer::{
-    CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, TextPositionAnchor,
-    text_props::TextPropertyTable,
+    BufferId, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
+    TextPositionAnchor, text_props::TextPropertyTable,
 };
 use crate::heap_types::LispString;
 
@@ -5351,33 +5351,352 @@ fn run_after_insert_file_pipeline(
     pipeline_result
 }
 
-fn write_region_content_in_state(
-    buffers: &crate::buffer::BufferManager,
-    current_id: crate::buffer::BufferId,
-    start: &Value,
-    end: Option<&Value>,
-) -> Result<crate::heap_types::LispString, Flow> {
-    if start.is_string() {
-        return start.as_lisp_string().cloned().ok_or_else(|| {
+/// A position in the character stream consumed by GNU's `a_write`.
+///
+/// Keeping this distinct from byte offsets prevents multibyte annotations from
+/// being placed using storage coordinates.  GNU annotation positions are
+/// 1-based buffer character positions, including the region end boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct WriteAnnotationPosition(LispCharPos1);
+
+/// The callback result that contributed an annotation.  GNU merges a newer
+/// callback's whole list before an older list when their positions tie.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct WriteAnnotationBatch(usize);
+
+/// Stable order inside one callback result.  This is intentionally a distinct
+/// type from `WriteAnnotationBatch`: reversing batches must never reverse the
+/// annotations within a batch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct WriteAnnotationBatchIndex(usize);
+
+#[derive(Clone)]
+enum WriteAnnotationPayload {
+    Text(LispString),
+    /// GNU consumes a non-string annotation at its position but emits no text
+    /// (`a_write`, src/fileio.c:6013-6021).
+    NoText,
+}
+
+#[derive(Clone)]
+struct WriteAnnotation {
+    position: WriteAnnotationPosition,
+    payload: WriteAnnotationPayload,
+    batch: WriteAnnotationBatch,
+    batch_index: WriteAnnotationBatchIndex,
+    original_pair: Value,
+}
+
+#[derive(Default)]
+struct WriteAnnotationStream {
+    entries: Vec<WriteAnnotation>,
+    next_batch: usize,
+}
+
+impl WriteAnnotationStream {
+    fn clear(&mut self) {
+        self.entries.clear();
+    }
+
+    fn as_lisp_list(&self) -> Value {
+        let pairs: Vec<Value> = self
+            .entries
+            .iter()
+            .map(|annotation| annotation.original_pair)
+            .collect();
+        Value::list(pairs)
+    }
+
+    fn merge_callback_result(&mut self, result: Value) -> Result<(), Flow> {
+        let pairs = list_to_vec(&result).ok_or_else(|| {
             signal(
                 LispCondition::WrongTypeArgument,
-                vec![Value::symbol("stringp"), *start],
+                vec![Value::symbol("listp"), result],
             )
+        })?;
+
+        let batch = WriteAnnotationBatch(self.next_batch);
+        self.next_batch += 1;
+        for (batch_index, pair) in pairs.into_iter().enumerate() {
+            if !pair.is_cons() {
+                return Err(signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("consp"), pair],
+                ));
+            }
+            let position_value = pair.cons_car();
+            let position = position_value.as_fixnum().ok_or_else(|| {
+                signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("integerp"), position_value],
+                )
+            })?;
+            let payload_value = pair.cons_cdr();
+            let payload = payload_value
+                .as_lisp_string()
+                .cloned()
+                .map(WriteAnnotationPayload::Text)
+                .unwrap_or(WriteAnnotationPayload::NoText);
+            self.entries.push(WriteAnnotation {
+                position: WriteAnnotationPosition(LispCharPos1::new(position)),
+                payload,
+                batch,
+                batch_index: WriteAnnotationBatchIndex(batch_index),
+                original_pair: pair,
+            });
+        }
+
+        self.entries.sort_by(|left, right| {
+            left.position
+                .cmp(&right.position)
+                .then_with(|| right.batch.cmp(&left.batch))
+                .then_with(|| left.batch_index.cmp(&right.batch_index))
+        });
+        Ok(())
+    }
+
+    fn intersperse(
+        &self,
+        source: &LispString,
+        source_start: LispCharPos1,
+        source_end: LispCharPos1,
+    ) -> LispString {
+        let mut output = source
+            .slice(0, 0)
+            .expect("an empty Lisp string prefix is always in bounds");
+        let mut source_char_cursor = 0usize;
+        let source_start = source_start.as_i64();
+        let source_end = source_end.as_i64();
+
+        for annotation in &self.entries {
+            let position = annotation.position.0.as_i64();
+            if position < source_start || position > source_end {
+                continue;
+            }
+            let annotation_char_offset = usize::try_from(position - source_start)
+                .expect("an in-range annotation offset is nonnegative")
+                .min(source.schars());
+            let byte_start = source.char_to_byte_pos(source_char_cursor);
+            let byte_end = source.char_to_byte_pos(annotation_char_offset);
+            let source_piece = source
+                .slice(byte_start, byte_end)
+                .expect("character-derived Lisp string slice is in bounds");
+            output = output.concat(&source_piece);
+            if let WriteAnnotationPayload::Text(text) = &annotation.payload {
+                output = output.concat(text);
+            }
+            source_char_cursor = annotation_char_offset;
+        }
+
+        let byte_start = source.char_to_byte_pos(source_char_cursor);
+        let source_tail = source
+            .slice(byte_start, source.sbytes())
+            .expect("Lisp string tail is in bounds");
+        output.concat(&source_tail)
+    }
+}
+
+/// The mutually exclusive sources accepted by `write-region`.
+///
+/// GNU intentionally skips annotation callbacks when START is a string.  This
+/// enum makes that rule exhaustive: only `BufferRegion` can enter annotation
+/// collection, while `Literal` carries its already-complete content.
+enum WriteRegionSource {
+    Literal {
+        content: LispString,
+        coding_buffer: BufferId,
+    },
+    BufferRegion {
+        buffer: BufferId,
+        start: LispCharPos1,
+        end: LispCharPos1,
+    },
+}
+
+impl WriteRegionSource {
+    fn buffer_region(
+        buffers: &crate::buffer::BufferManager,
+        buffer: BufferId,
+        start: Value,
+        end: Value,
+    ) -> Result<Self, Flow> {
+        let buf = buffers
+            .get(buffer)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let byte_range = if start.is_nil() {
+            buf.accessible_emacs_byte_range()
+        } else {
+            super::position::LispRegionArgs::from_values(buffers, start, end)?
+                .accessible_byte_range(buf)?
+        };
+        Ok(Self::BufferRegion {
+            buffer,
+            start: buf.emacs_byte_pos_to_lisp_char_pos(byte_range.start()),
+            end: buf.emacs_byte_pos_to_lisp_char_pos(byte_range.end()),
+        })
+    }
+
+    fn whole_accessible_buffer(
+        buffers: &crate::buffer::BufferManager,
+        buffer: BufferId,
+    ) -> Result<Self, Flow> {
+        let buf = buffers
+            .get(buffer)
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        Ok(Self::BufferRegion {
+            buffer,
+            start: buf.point_min_lisp_char_pos(),
+            end: buf.point_max_lisp_char_pos(),
+        })
+    }
+
+    fn content(&self, buffers: &crate::buffer::BufferManager) -> Result<LispString, Flow> {
+        match self {
+            Self::Literal { content, .. } => Ok(content.clone()),
+            Self::BufferRegion { buffer, start, end } => {
+                let buf = buffers
+                    .get(*buffer)
+                    .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+                Ok(buf.buffer_substring_lisp_string_range(EmacsByteRange::new(
+                    buf.lisp_pos_to_accessible_emacs_byte_pos(*start),
+                    buf.lisp_pos_to_accessible_emacs_byte_pos(*end),
+                )))
+            }
+        }
+    }
+
+    fn coding_buffer(&self) -> BufferId {
+        match self {
+            Self::Literal { coding_buffer, .. } => *coding_buffer,
+            Self::BufferRegion { buffer, .. } => *buffer,
+        }
+    }
+
+    fn coding_bounds(&self) -> (Value, Value) {
+        match self {
+            Self::Literal { content, .. } => (Value::heap_string(content.clone()), Value::NIL),
+            Self::BufferRegion { start, end, .. } => {
+                (Value::fixnum(start.as_i64()), Value::fixnum(end.as_i64()))
+            }
+        }
+    }
+
+    fn apply_annotations(
+        &self,
+        buffers: &crate::buffer::BufferManager,
+        annotations: &WriteAnnotationStream,
+    ) -> Result<LispString, Flow> {
+        let content = self.content(buffers)?;
+        match self {
+            Self::Literal { .. } => Ok(content),
+            Self::BufferRegion { start, end, .. } => {
+                Ok(annotations.intersperse(&content, *start, *end))
+            }
+        }
+    }
+}
+
+struct PreparedWriteRegion {
+    content: LispString,
+    source: WriteRegionSource,
+    original_buffer: BufferId,
+    annotation_buffers: Vec<BufferId>,
+}
+
+impl PreparedWriteRegion {
+    fn run_post_annotation_functions(&self, eval: &mut super::eval::Context) -> Result<(), Flow> {
+        let result = (|| {
+            // GNU conses each newly selected annotation buffer onto the front,
+            // so cleanup visits the most recent buffer first and the original
+            // buffer last (`src/fileio.c:5804-5819`).
+            for buffer in self.annotation_buffers.iter().rev().copied() {
+                if eval.buffers.get(buffer).is_none() {
+                    continue;
+                }
+                eval.switch_current_buffer(buffer)?;
+                let function =
+                    eval.visible_variable_value_or_nil("write-region-post-annotation-function");
+                if super::builtins::value_is_function(eval, function) {
+                    let _ = eval.apply(function, vec![])?;
+                }
+            }
+            Ok(())
+        })();
+        eval.restore_current_buffer_if_live(self.original_buffer);
+        result
+    }
+}
+
+fn prepare_write_region(
+    eval: &mut super::eval::Context,
+    original_buffer: BufferId,
+    start: Value,
+    end: Value,
+) -> Result<PreparedWriteRegion, Flow> {
+    let mut annotation_buffers = vec![original_buffer];
+    if let Some(content) = start.as_lisp_string().cloned() {
+        return Ok(PreparedWriteRegion {
+            content: content.clone(),
+            source: WriteRegionSource::Literal {
+                content,
+                coding_buffer: original_buffer,
+            },
+            original_buffer,
+            annotation_buffers,
         });
     }
 
-    let buf = buffers
-        .get(current_id)
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let mut source = WriteRegionSource::buffer_region(&eval.buffers, original_buffer, start, end)?;
+    let mut callback_start = start;
+    let mut callback_end = end;
+    let hook_sym = intern("write-region-annotate-functions");
+    let hook_value = eval.visible_variable_value_or_nil("write-region-annotate-functions");
+    let functions = crate::emacs_core::hook_runtime::collect_hook_functions_in_state(
+        eval, hook_sym, hook_value, true,
+    );
+    let root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(Value::list(functions.clone()));
+    let mut annotations = WriteAnnotationStream::default();
 
-    if start.is_nil() {
-        return Ok(buf.buffer_substring_lisp_string_range(buf.accessible_emacs_byte_range()));
+    let collection_result = (|| -> Result<(), Flow> {
+        for function in functions {
+            eval.set_variable(
+                "write-region-annotations-so-far",
+                annotations.as_lisp_list(),
+            );
+            let buffer_before = current_buffer_id_or_error(&eval.buffers)?;
+            let result = eval.apply(function, vec![callback_start, callback_end])?;
+            eval.push_specpdl_root(result);
+            let buffer_after = current_buffer_id_or_error(&eval.buffers)?;
+            if buffer_after != buffer_before {
+                annotation_buffers.push(buffer_after);
+                source = WriteRegionSource::whole_accessible_buffer(&eval.buffers, buffer_after)?;
+                let buf = eval
+                    .buffers
+                    .get(buffer_after)
+                    .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+                callback_start = Value::fixnum(buf.point_min_lisp_char_pos().as_i64());
+                callback_end = Value::fixnum(buf.point_max_lisp_char_pos().as_i64());
+                annotations.clear();
+            }
+            annotations.merge_callback_result(result)?;
+        }
+        Ok(())
+    })();
+    if let Err(error) = collection_result {
+        eval.restore_specpdl_roots(root_scope);
+        eval.restore_current_buffer_if_live(original_buffer);
+        return Err(error);
     }
+    let content = source.apply_annotations(&eval.buffers, &annotations)?;
+    eval.restore_specpdl_roots(root_scope);
 
-    let end = *end.unwrap_or(&Value::NIL);
-    let byte_range = super::position::LispRegionArgs::from_values(buffers, *start, end)?
-        .accessible_byte_range(buf)?;
-    Ok(buf.buffer_substring_lisp_string_range(byte_range))
+    Ok(PreparedWriteRegion {
+        content,
+        source,
+        original_buffer,
+        annotation_buffers,
+    })
 }
 
 struct DecodedFileContents {
@@ -6156,7 +6475,16 @@ pub(crate) fn builtin_write_region(
         }
     }
 
-    let content = write_region_content_in_state(&eval.buffers, current_id, &args[0], args.get(1))?;
+    // GNU builds annotations before coding-system selection and before opening
+    // the destination (`src/fileio.c:5596-5627`).  The resulting plan owns the
+    // exact source choice and already-interspersed character stream.
+    let prepared = prepare_write_region(
+        eval,
+        current_id,
+        args[0],
+        args.get(1).copied().unwrap_or(Value::NIL),
+    )?;
+    let content = prepared.content.clone();
 
     // GNU `Fwrite_region` runs the chosen coding system through
     // `Fcheck_coding_system`; an explicit but unknown `coding-system-for-write`
@@ -6174,23 +6502,14 @@ pub(crate) fn builtin_write_region(
         ));
     }
 
-    let (coding_from, coding_to) = if args[0].is_string() {
-        (args[0], Value::NIL)
-    } else if args[0].is_nil() {
-        (
-            super::buffer::builtin_point_min_0(eval)?,
-            super::buffer::builtin_point_max_0(eval)?,
-        )
-    } else {
-        (args[0], args.get(1).copied().unwrap_or(Value::NIL))
-    };
+    let (coding_from, coding_to) = prepared.source.coding_bounds();
 
     // --- Encode using GNU's complete write-coding selection protocol. ---
     // The Lisp selector detects content declarations such as the
     // `utf-8-emacs-unix` trailer emitted for generated Lisp files.
     let coding_system = select_write_region_coding_system(
         eval,
-        current_id,
+        prepared.source.coding_buffer(),
         coding_from,
         coding_to,
         Value::heap_string(resolved.clone()),
@@ -6271,13 +6590,25 @@ pub(crate) fn builtin_write_region(
         Ok::<_, Flow>(visiting_modtime)
     })();
 
-    // Always attempt the matching unlock, including open/write/fsync errors.
-    // Preserve the primary write error if cleanup also fails.
+    // GNU runs the post-annotation callback after the native write and before
+    // unwinding back to the original buffer (`src/fileio.c:5804-5823`).  An
+    // open error occurs before that phase and therefore skips the callback.
+    let post_annotation_result = if write_result.is_ok() {
+        prepared.run_post_annotation_functions(eval)
+    } else {
+        eval.restore_current_buffer_if_live(current_id);
+        Ok(())
+    };
+
+    // Always attempt the matching unlock, including write and annotation
+    // cleanup errors. Preserve the primary write error first, then the post
+    // annotation error, if cleanup also fails.
     let unlock_result = super::filelock::unlock_file(eval, &lock_name);
-    let visiting_modtime = match (write_result, unlock_result) {
-        (Err(write_error), _) => return Err(write_error),
-        (Ok(_), Err(unlock_error)) => return Err(unlock_error),
-        (Ok(visiting_modtime), Ok(_)) => visiting_modtime,
+    let visiting_modtime = match (write_result, post_annotation_result, unlock_result) {
+        (Err(write_error), _, _) => return Err(write_error),
+        (Ok(_), Err(annotation_error), _) => return Err(annotation_error),
+        (Ok(_), Ok(_), Err(unlock_error)) => return Err(unlock_error),
+        (Ok(visiting_modtime), Ok(_), Ok(_)) => visiting_modtime,
     };
 
     let wrote_message_path = visit_file.clone();
