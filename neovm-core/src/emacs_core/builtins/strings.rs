@@ -28,27 +28,78 @@ fn string_char_range(start: usize, end: usize) -> CharRange {
 
 typed_subr! {
     pub(crate) fn builtin_string_equal_2(_eval, a: StringDesignator, b: StringDesignator) -> EvalResult {
-        string_equal_designators(&a.0, &b.0)
+        string_equal_designators(a.0, b.0)
     }
 }
 
-/// Decode a comparison operand to its character codes. Multibyte strings decode
-/// Emacs chars (eight-bit chars are 0x3FFF00+); a unibyte string's bytes are its
-/// characters (0..=255). Unlike compare-strings, string=/string</string> keep a
-/// unibyte raw byte distinct from the multibyte eight-bit char, matching GNU.
-fn string_comparison_codes(value: &crate::heap_types::LispString) -> Vec<u32> {
-    let bytes = value.as_bytes();
-    if value.is_multibyte() {
-        let mut codes = Vec::new();
-        let mut pos = 0;
-        while pos < bytes.len() {
-            let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
-            codes.push(code);
-            pos += len.max(1);
+/// The two storage modes GNU's `string_cmp` can compare.
+///
+/// `OneByteChars` covers both unibyte strings and ASCII-only multibyte
+/// strings (`SCHARS == SBYTES`): in either case each stored byte is the
+/// character code.  A genuinely multibyte string must be decoded so Emacs raw
+/// eight-bit characters retain their 0x3FFF00+ ordering.  Keeping that choice
+/// in an enum makes all four encoding pairs explicit and prevents an owned
+/// character-code buffer from entering this hot path.
+enum StringOrderingView<'a> {
+    OneByteChars(&'a [u8]),
+    MultibyteChars(EmacsMultibyteChars<'a>),
+}
+
+impl<'a> StringOrderingView<'a> {
+    fn new(value: &'a crate::heap_types::LispString) -> Self {
+        if !value.is_multibyte() || value.schars() == value.sbytes() {
+            Self::OneByteChars(value.as_bytes())
+        } else {
+            Self::MultibyteChars(EmacsMultibyteChars::new(value.as_bytes()))
         }
-        codes
-    } else {
-        bytes.iter().map(|&b| b as u32).collect()
+    }
+}
+
+struct EmacsMultibyteChars<'a> {
+    bytes: &'a [u8],
+    position: usize,
+}
+
+impl<'a> EmacsMultibyteChars<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, position: 0 }
+    }
+}
+
+impl Iterator for EmacsMultibyteChars<'_> {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.position == self.bytes.len() {
+            return None;
+        }
+        let (code, length) =
+            crate::emacs_core::emacs_char::string_char(&self.bytes[self.position..]);
+        self.position += length.max(1);
+        Some(code)
+    }
+}
+
+fn string_ordering(
+    left: &crate::heap_types::LispString,
+    right: &crate::heap_types::LispString,
+) -> std::cmp::Ordering {
+    match (
+        StringOrderingView::new(left),
+        StringOrderingView::new(right),
+    ) {
+        (StringOrderingView::OneByteChars(left), StringOrderingView::OneByteChars(right)) => {
+            left.cmp(right)
+        }
+        (StringOrderingView::OneByteChars(left), StringOrderingView::MultibyteChars(right)) => {
+            left.iter().copied().map(u32::from).cmp(right)
+        }
+        (StringOrderingView::MultibyteChars(left), StringOrderingView::OneByteChars(right)) => {
+            left.cmp(right.iter().copied().map(u32::from))
+        }
+        (StringOrderingView::MultibyteChars(left), StringOrderingView::MultibyteChars(right)) => {
+            left.cmp(right)
+        }
     }
 }
 
@@ -70,17 +121,13 @@ fn string_equal_designators(
 
 typed_subr! {
     pub(crate) fn builtin_string_lessp_2(_eval, a: StringDesignator, b: StringDesignator) -> EvalResult {
-        Ok(Value::bool_val(
-            string_comparison_codes(&a.0) < string_comparison_codes(&b.0),
-        ))
+        Ok(Value::bool_val(string_ordering(a.0, b.0).is_lt()))
     }
 }
 
 typed_subr! {
     pub(crate) fn builtin_string_greaterp_2(_eval, a: StringDesignator, b: StringDesignator) -> EvalResult {
-        Ok(Value::bool_val(
-            string_comparison_codes(&a.0) > string_comparison_codes(&b.0),
-        ))
+        Ok(Value::bool_val(string_ordering(a.0, b.0).is_gt()))
     }
 }
 

@@ -156,10 +156,25 @@ fn fixnum_wholenum_character_code_predicates() {
 fn string_designator_accepts_symbols() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
-    let from_string = StringDesignator::from_value(&mut eval, Value::string("abc")).unwrap();
+    let string = Value::string("abc");
+    let string_storage = string.as_lisp_string().expect("string value has storage");
+    let from_string = StringDesignator::from_value(&mut eval, string).unwrap();
     assert_eq!(from_string.0.as_bytes(), b"abc");
-    let from_symbol = StringDesignator::from_value(&mut eval, Value::symbol("abc")).unwrap();
+    assert!(
+        std::ptr::eq(from_string.0, string_storage),
+        "GNU compares the original string object instead of cloning its storage"
+    );
+
+    let symbol = Value::symbol("abc");
+    let symbol_name = crate::emacs_core::intern::resolve_sym_lisp_name(
+        symbol.as_symbol_id().expect("symbol value has an id"),
+    );
+    let from_symbol = StringDesignator::from_value(&mut eval, symbol).unwrap();
     assert_eq!(from_symbol.0.as_bytes(), b"abc");
+    assert!(
+        std::ptr::eq(from_symbol.0, symbol_name),
+        "GNU compares the symbol's existing name string instead of rebuilding it"
+    );
     let bad = Value::fixnum(1);
     assert_wrong_type(
         StringDesignator::from_value(&mut eval, bad).unwrap_err(),

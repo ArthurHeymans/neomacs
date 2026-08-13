@@ -492,17 +492,18 @@ pub(super) fn expect_string_lossy(value: &Value) -> Result<String, Flow> {
     expect_lisp_string(value).map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
 }
 
+/// Borrow GNU's exact comparison operand: a string passes through unchanged,
+/// while a symbol contributes its existing `SYMBOL_NAME` string object.
 pub(super) fn expect_string_comparison_operand(
     value: &Value,
-) -> Result<crate::heap_types::LispString, Flow> {
+) -> Result<&'static crate::heap_types::LispString, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
             .as_lisp_string()
-            .expect("ValueKind::String must carry LispString payload")
-            .clone()),
+            .expect("ValueKind::String must carry LispString payload")),
         _ => value
-            .as_symbol_name()
-            .map(crate::heap_types::LispString::from_utf8)
+            .as_symbol_id()
+            .map(crate::emacs_core::intern::resolve_sym_lisp_name)
             .ok_or_else(|| {
                 signal(
                     LispCondition::WrongTypeArgument,

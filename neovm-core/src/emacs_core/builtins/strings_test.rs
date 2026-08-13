@@ -27,6 +27,86 @@ fn string_to_number_reuses_process_wide_prefix_regexes() {
     assert!(first.number.is_match("-12.5tail"));
 }
 
+/// GNU `string_cmp` (`src/fns.c`) compares borrowed string storage in place.
+/// M-x completion sorts thousands of command names with `string-lessp`, so the
+/// comparison views must borrow both one-byte and multibyte representations.
+#[test]
+fn string_ordering_views_borrow_string_storage() {
+    let one_byte = LispString::from_unibyte(b"alpha".to_vec());
+    let multibyte = LispString::from_utf8("α");
+
+    match StringOrderingView::new(&one_byte) {
+        StringOrderingView::OneByteChars(bytes) => {
+            assert!(std::ptr::eq(bytes, one_byte.as_bytes()));
+        }
+        StringOrderingView::MultibyteChars(_) => panic!("unibyte storage must stay one-byte"),
+    }
+    match StringOrderingView::new(&multibyte) {
+        StringOrderingView::MultibyteChars(chars) => {
+            assert!(std::ptr::eq(chars.bytes, multibyte.as_bytes()));
+            assert_eq!(chars.position, 0);
+        }
+        StringOrderingView::OneByteChars(_) => panic!("non-ASCII storage must be decoded lazily"),
+    }
+}
+
+/// GNU compares one-byte strings by byte value, but decodes genuinely
+/// multibyte strings before comparing.  In particular, unibyte 0x80 sorts
+/// before the multibyte raw-byte character made from 0x80 (character
+/// 0x3FFF80), while ordinary Unicode U+00E9 sorts before unibyte 0xFF.
+#[test]
+fn string_ordering_preserves_gnu_mixed_encoding_order() {
+    use std::cmp::Ordering;
+
+    let ascii_unibyte = LispString::from_unibyte(b"a".to_vec());
+    let ascii_multibyte = LispString::from_utf8("a");
+    let unibyte_80 = LispString::from_unibyte(vec![0x80]);
+    let multibyte_raw_80 = LispString::from_emacs_bytes(vec![0xc0, 0x80]);
+    let unicode_e_acute = LispString::from_utf8("é");
+    let unibyte_ff = LispString::from_unibyte(vec![0xff]);
+
+    assert_eq!(
+        string_ordering(&ascii_unibyte, &ascii_multibyte),
+        Ordering::Equal
+    );
+    assert_eq!(
+        string_ordering(&unibyte_80, &multibyte_raw_80),
+        Ordering::Less
+    );
+    assert_eq!(
+        string_ordering(&multibyte_raw_80, &unibyte_80),
+        Ordering::Greater
+    );
+    assert_eq!(
+        string_ordering(&unicode_e_acute, &unibyte_ff),
+        Ordering::Less
+    );
+}
+
+/// GNU's `SYMBOL_NAME` supplies the original Lisp string object even when its
+/// bytes are not UTF-8.  Comparison must not round-trip a symbol name through
+/// Rust `str` while resolving the string designator.
+#[test]
+fn string_ordering_accepts_raw_unibyte_symbol_names_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let result = eval
+        .eval_str(
+            r#"(let* ((name (unibyte-string 255))
+                      (sym (intern name)))
+                 (list (eq name (symbol-name sym))
+                       (string-lessp sym (unibyte-string 255))
+                       (string-lessp (unibyte-string 254) sym)
+                       (string-greaterp sym (unibyte-string 254))))"#,
+        )
+        .expect("raw unibyte symbol names remain valid string designators");
+
+    assert_eq!(
+        crate::emacs_core::print::print_value(&result),
+        "(t nil t t)"
+    );
+}
+
 /// GNU `styled_format` (editfns.c) replaces a SYMBOL argument with
 /// `SYMBOL_NAME (arg)` -- the symbol's actual name STRING object -- before it
 /// decides anything else, so from that point the argument IS a string and its
