@@ -983,6 +983,11 @@ fn hidden_internal_interpreter_environment_symbol() -> SymId {
     *HIDDEN_SYMBOL.get_or_init(|| intern_uninterned("internal-interpreter-environment"))
 }
 
+fn hidden_load_read_stream_token() -> LoadReadStreamToken {
+    static HIDDEN_SYMBOL: OnceLock<LoadReadStreamToken> = OnceLock::new();
+    *HIDDEN_SYMBOL.get_or_init(|| LoadReadStreamToken(intern_uninterned("get-file-char")))
+}
+
 fn default_directory_symbol() -> SymId {
     static SYMBOL: OnceLock<SymId> = OnceLock::new();
     *SYMBOL.get_or_init(|| intern("default-directory"))
@@ -1085,6 +1090,7 @@ fn cons_head_symbol_id(value: &Value) -> Option<SymId> {
 
 struct CoreEvalSymbols {
     internal_interpreter_environment_symbol: SymId,
+    load_read_stream_token: LoadReadStreamToken,
     compiler_function_overrides_symbol: SymId,
     quit_flag_symbol: SymId,
     inhibit_quit_symbol: SymId,
@@ -1100,6 +1106,7 @@ fn install_core_eval_symbols(obarray: &mut Obarray, reset_runtime_values: bool) 
     let internal_interpreter_environment_symbol = hidden_internal_interpreter_environment_symbol();
     obarray.set_symbol_value_id(internal_interpreter_environment_symbol, Value::NIL);
     obarray.make_special_id(internal_interpreter_environment_symbol);
+    let load_read_stream_token = hidden_load_read_stream_token();
 
     let compiler_function_overrides_symbol = internal_compiler_function_overrides_sym();
 
@@ -1128,6 +1135,7 @@ fn install_core_eval_symbols(obarray: &mut Obarray, reset_runtime_values: bool) 
 
     CoreEvalSymbols {
         internal_interpreter_environment_symbol,
+        load_read_stream_token,
         compiler_function_overrides_symbol,
         quit_flag_symbol,
         inhibit_quit_symbol,
@@ -1785,21 +1793,30 @@ pub(crate) struct BcFrame {
 /// the eval thread" seam — no diagnostics-specific type enters `neovm-core`.
 pub type EvalThreadTask = Box<dyn FnOnce(&mut Context) + Send + 'static>;
 
-/// Symbol `standard-input` is bound to during a `load`/`eval-buffer`
-/// readevalloop so `(read)` reads from the *same* stream the loader is
-/// consuming.  This mirrors GNU's `specbind (Qstandard_input, readcharfun)`
-/// (lread.c `readevalloop`), where `readcharfun` for a file load is the
-/// `get-file-char` reader over the currently-loading file.  When
-/// [`builtin_read`](super::reader::builtin_read) sees this symbol as its
-/// stream it reads the next top-level form from the active
-/// [`Context::load_read_cursors`] entry, advancing the shared cursor so the
-/// loader resumes *after* the consumed form (chemacs2's profile probe relies
-/// on this).
-pub(crate) const LOAD_READ_STREAM_SYMBOL: &str = "internal--load-read-stream";
+/// Opaque identity bound to `standard-input` during a `load`/`eval-buffer`
+/// readevalloop so `(read)` consumes the same stream as the loader.
+///
+/// GNU removes `Qget_file_char` from the obarray and recognizes it with
+/// `BASE_EQ`, so Lisp cannot manufacture the internal stream by interning its
+/// printed name.  Keep the `SymId` private behind a distinct Rust type for the
+/// same reason: call sites can bind or recognize this token, but cannot
+/// accidentally compare an arbitrary stream by symbol name.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct LoadReadStreamToken(SymId);
+
+impl LoadReadStreamToken {
+    pub(crate) fn as_lisp_value(self) -> Value {
+        Value::from_sym_id(self.0)
+    }
+
+    pub(crate) fn identifies(self, symbol: SymId) -> bool {
+        self.0 == symbol
+    }
+}
 
 /// One active load-read cursor: the heap `LispString` being read plus a byte
 /// offset into it that BOTH the readevalloop and `(read)` advance.  See
-/// [`LOAD_READ_STREAM_SYMBOL`] and [`Context::load_read_cursors`].
+/// [`LoadReadStreamToken`] and [`Context::load_read_cursors`].
 pub(crate) struct LoadReadCursor {
     /// Heap `LispString` Value being read.  Rooted for the cursor's lifetime
     /// via `push_specpdl_root` when the cursor is pushed.
@@ -1882,6 +1899,8 @@ pub struct Context {
     pub(crate) require_stack: Vec<SymId>,
     /// Files currently being loaded (mirrors `Vloads_in_progress` in lread.c).
     pub(crate) loads_in_progress: Vec<crate::heap_types::LispString>,
+    /// Uninterned, identity-only Lisp token for the active load stream.
+    pub(crate) load_read_stream_token: LoadReadStreamToken,
     /// Stack of active load-read cursors (nested loads).  Each entry pairs the
     /// heap `LispString` being read with a byte offset that BOTH the
     /// readevalloop AND `(read STREAM=standard-input)` advance — mirroring GNU's
@@ -5390,6 +5409,7 @@ impl Context {
             lexenv: Value::NIL,
             internal_interpreter_environment_symbol: core_eval_symbols
                 .internal_interpreter_environment_symbol,
+            load_read_stream_token: core_eval_symbols.load_read_stream_token,
             quit_flag_symbol: core_eval_symbols.quit_flag_symbol,
             inhibit_quit_symbol: core_eval_symbols.inhibit_quit_symbol,
             throw_on_input_symbol: core_eval_symbols.throw_on_input_symbol,
@@ -5583,6 +5603,7 @@ impl Context {
             lexenv,
             internal_interpreter_environment_symbol: core_eval_symbols
                 .internal_interpreter_environment_symbol,
+            load_read_stream_token: core_eval_symbols.load_read_stream_token,
             quit_flag_symbol: core_eval_symbols.quit_flag_symbol,
             inhibit_quit_symbol: core_eval_symbols.inhibit_quit_symbol,
             throw_on_input_symbol: core_eval_symbols.throw_on_input_symbol,

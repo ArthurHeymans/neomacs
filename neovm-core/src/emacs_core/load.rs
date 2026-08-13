@@ -1814,7 +1814,7 @@ fn streaming_readevalloop_lisp_source(
     eval.push_specpdl_root(eof_source);
     eval.specbind(
         intern("standard-input"),
-        Value::symbol(super::eval::LOAD_READ_STREAM_SYMBOL),
+        eval.load_read_stream_token.as_lisp_value(),
     );
     eval.load_read_cursors.push(super::eval::LoadReadCursor {
         source: content_value,
@@ -1885,10 +1885,7 @@ fn streaming_readevalloop_lisp_source(
             let (form, next_pos) = match read_hook {
                 Some(hook) => {
                     let hooked = eval
-                        .funcall_general(
-                            hook,
-                            vec![Value::symbol(super::eval::LOAD_READ_STREAM_SYMBOL)],
-                        )
+                        .funcall_general(hook, vec![eval.load_read_stream_token.as_lisp_value()])
                         .map_err(map_flow)?;
                     let advanced = eval
                         .load_read_cursors

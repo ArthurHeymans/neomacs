@@ -2,7 +2,9 @@
 //! format-spec, and various interactive-input stubs.
 
 use super::error::{EvalResult, Flow, signal};
-use super::intern::{SymId, intern, resolve_sym};
+#[cfg(test)]
+use super::intern::resolve_sym;
+use super::intern::{SymId, intern};
 use super::minibuffer::{MinibufferEntryRejection, RecursiveMinibufferPolicy};
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
@@ -896,7 +898,7 @@ pub(crate) fn end_of_file_error_for_source(source: Option<Value>) -> Flow {
 
 /// Read the next top-level form from the active load-read cursor — the stream
 /// `standard-input` is bound to during a `load`/`eval-buffer` readevalloop
-/// (see [`crate::emacs_core::eval::LOAD_READ_STREAM_SYMBOL`]).  Advancing the
+/// (see [`crate::emacs_core::eval::LoadReadStreamToken`]).  Advancing the
 /// shared byte cursor makes the enclosing loop resume *after* this form,
 /// exactly like GNU's shared `readcharfun` (lread.c `readevalloop`): a file
 /// that calls `(read)` mid-load consumes its next top-level form.
@@ -1151,6 +1153,45 @@ pub fn builtin_read(ctx: &mut crate::emacs_core::eval::Context, args: Vec<Value>
     builtin_read_impl(ctx, args, false)
 }
 
+/// Closed dispatch plan for Lisp reader streams after nil has resolved through
+/// `standard-input`.  Keeping the opaque load token as its own variant makes
+/// that privileged route identity-only; an ordinary symbol can never reach it
+/// merely because its printed name happens to match.
+#[derive(Clone, Copy, Debug)]
+enum ResolvedReadStream {
+    Empty,
+    String(Value),
+    Marker(Value),
+    Buffer(crate::buffer::BufferId),
+    ActiveLoadCursor,
+    Minibuffer,
+    FunctionSymbol(Value),
+    Unsupported(Value),
+}
+
+impl ResolvedReadStream {
+    fn classify(stream: Value, load_token: crate::emacs_core::eval::LoadReadStreamToken) -> Self {
+        match stream.kind() {
+            ValueKind::Nil => Self::Empty,
+            ValueKind::T => Self::Minibuffer,
+            ValueKind::String => Self::String(stream),
+            ValueKind::Symbol(symbol) if load_token.identifies(symbol) => Self::ActiveLoadCursor,
+            ValueKind::Symbol(_) => Self::FunctionSymbol(stream),
+            ValueKind::Veclike(VecLikeType::Marker) => Self::Marker(stream),
+            ValueKind::Veclike(VecLikeType::Buffer) => {
+                Self::Buffer(stream.as_buffer_id().expect("buffer value kind"))
+            }
+            ValueKind::Fixnum(_)
+            | ValueKind::Cons
+            | ValueKind::Float
+            | ValueKind::Subr(_)
+            | ValueKind::Veclike(_)
+            | ValueKind::Unbound
+            | ValueKind::Unknown => Self::Unsupported(stream),
+        }
+    }
+}
+
 /// Shared implementation for `read` and `read-positioning-symbols`.
 /// When `locate_syms` is true, every interned symbol (except nil) is
 /// wrapped in a `symbol-with-pos` object carrying its source byte offset.
@@ -1170,17 +1211,16 @@ pub fn builtin_read_impl(
         args[0]
     };
 
-    if stream.is_nil() {
-        // In batch/non-interactive runs, stdin-backed read signals EOF.
-        return Err(signal(
-            LispCondition::EndOfFile,
-            vec![Value::string("End of file during parsing")],
-        ));
-    }
-
     let shorthands = current_read_symbol_shorthands(ctx);
-    match stream.kind() {
-        ValueKind::String => {
+    match ResolvedReadStream::classify(stream, ctx.load_read_stream_token) {
+        ResolvedReadStream::Empty => {
+            // In batch/non-interactive runs, stdin-backed read signals EOF.
+            Err(signal(
+                LispCondition::EndOfFile,
+                vec![Value::string("End of file during parsing")],
+            ))
+        }
+        ResolvedReadStream::String(stream) => {
             // Read from string
             let result = read_from_string_impl_inner(
                 &ctx.obarray,
@@ -1198,7 +1238,7 @@ pub fn builtin_read_impl(
                 _ => Ok(result),
             }
         }
-        ValueKind::Veclike(VecLikeType::Marker) => {
+        ResolvedReadStream::Marker(stream) => {
             let Some((Some(buf_id), Some(position), _)) =
                 super::marker::marker_logical_fields(&stream)
             else {
@@ -1257,8 +1297,7 @@ pub fn builtin_read_impl(
             ctx.obarray_mut().materialize_read_symbols(value);
             Ok(value)
         }
-        ValueKind::Veclike(VecLikeType::Buffer) => {
-            let buf_id = stream.as_buffer_id().unwrap();
+        ResolvedReadStream::Buffer(buf_id) => {
             let (maybe_value, new_pt) = {
                 let buf = ctx
                     .buffers
@@ -1292,16 +1331,11 @@ pub fn builtin_read_impl(
             ctx.obarray_mut().materialize_read_symbols(value);
             Ok(value)
         }
-        ValueKind::Symbol(id)
-            if resolve_sym(id) == crate::emacs_core::eval::LOAD_READ_STREAM_SYMBOL =>
-        {
-            read_from_active_load_cursor(ctx, locate_syms)
+        ResolvedReadStream::ActiveLoadCursor => read_from_active_load_cursor(ctx, locate_syms),
+        ResolvedReadStream::FunctionSymbol(stream) => {
+            Err(signal(LispCondition::VoidFunction, vec![stream]))
         }
-        ValueKind::Symbol(id) => Err(signal(
-            LispCondition::VoidFunction,
-            vec![Value::symbol(resolve_sym(id))],
-        )),
-        ValueKind::T => {
+        ResolvedReadStream::Minibuffer => {
             // GNU `Fread` (lread.c): a `t` stream -- including the batch default
             // `standard-input` = t reached by `(read)` with no argument -- maps
             // to `(read-minibuffer "Lisp expression: ")`: read one line (from the
@@ -1326,7 +1360,7 @@ pub fn builtin_read_impl(
                 _ => Ok(result),
             }
         }
-        _ => {
+        ResolvedReadStream::Unsupported(stream) => {
             // Unsupported stream source type for read-char function protocol.
             Err(signal(LispCondition::InvalidFunction, vec![stream]))
         }

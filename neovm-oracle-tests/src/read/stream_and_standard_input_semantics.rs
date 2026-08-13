@@ -125,6 +125,26 @@ fn oracle_prop_read_end_of_file_boundaries() {
     assert_oracle_parity(form);
 }
 
+#[test]
+fn oracle_prop_internal_load_stream_name_is_not_forgeable() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    // GNU removes its internal `get-file-char` symbol from the obarray and
+    // recognizes it by object identity.  Ordinary interned symbols bearing
+    // either GNU's printed name or neomacs's former sentinel name must remain
+    // ordinary function streams, not acquire access to loader state.
+    let form = r##"
+(mapcar
+ (lambda (stream)
+   (let ((standard-input stream))
+     (condition-case e
+         (list 'value (read))
+       (error (list 'error (car e) (cdr e))))))
+ '(internal--load-read-stream get-file-char))
+"##;
+    assert_oracle_parity(form);
+}
+
 // ---------------------------------------------------------------------------
 // read-from-string START/END and the returned index
 // ---------------------------------------------------------------------------

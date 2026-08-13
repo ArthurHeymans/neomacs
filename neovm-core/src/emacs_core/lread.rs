@@ -133,7 +133,7 @@ fn eval_forms_from_lisp_source_streaming(
     eval.push_specpdl_root(source_value);
     eval.specbind(
         intern("standard-input"),
-        Value::symbol(super::eval::LOAD_READ_STREAM_SYMBOL),
+        eval.load_read_stream_token.as_lisp_value(),
     );
     eval.load_read_cursors.push(super::eval::LoadReadCursor {
         source: source_value,
