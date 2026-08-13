@@ -418,6 +418,7 @@ mod git_commit;
 mod git_commit_mode;
 mod git_gutter;
 mod git_gutter_fringe;
+mod git_gutter_plus;
 mod git_link;
 mod git_messenger;
 mod git_modes;

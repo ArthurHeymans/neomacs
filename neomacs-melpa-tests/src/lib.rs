@@ -3189,6 +3189,17 @@ pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
 /// package with modern `git-commit`.
 pub const GIT_COMMIT_MODE_MELPA_PIN: (&str, &str) = ("git-commit-mode", "20141106.1722");
 
+/// The terminal standalone Git-Commit package required by the retired
+/// Git-Gutter+ archive. MELPA built it from Magit commit
+/// `b8133ab8c9be47139019d97ccace49d807cac17a` before folding it into Magit.
+pub const GIT_COMMIT_STANDALONE_MELPA_PIN: (&str, &str) = ("git-commit", "20180607.906");
+
+/// The terminal Git-Gutter+ package selected for practical diff rendering,
+/// hunk navigation, staging, reverting, commit-failure, and recovery parity.
+/// MELPA built version 0.4 from upstream commit
+/// `b7726997806d9a2da9fe84ff00ecf21d62b6f975`.
+pub const GIT_GUTTER_PLUS_MELPA_PIN: (&str, &str) = ("git-gutter+", "20151204.923");
+
 /// The terminal historical git-rebase-mode package selected for practical
 /// mode, editing, external-boundary, and server-client lifecycle parity.
 /// MELPA's recipe-selected first-parent source change is upstream merge

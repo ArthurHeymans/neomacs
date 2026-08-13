@@ -327,9 +327,9 @@ fn locked_package_catalog() -> Result<&'static LockedPackageCatalog, String> {
 
 fn safe_package_name(name: &str) -> bool {
     !name.is_empty()
-        && name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '@'))
+        && name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '+' | '@')
+        })
 }
 
 fn safe_package_pin(name: &str, version: &str) -> bool {

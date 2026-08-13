@@ -410,7 +410,7 @@ rank	package	downloads	status
 409	racer	224478	covered
 410	ivy-hydra	222056	covered
 411	tree-sitter-langs	220685	covered
-412	git-gutter+	220600	todo
+412	git-gutter+	220600	covered
 413	buttercup	218857	todo
 414	clj-refactor	217884	todo
 415	el-mock	217206	todo
