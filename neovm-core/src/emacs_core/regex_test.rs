@@ -886,6 +886,29 @@ fn string_match_open_interval_quantifier_matches_gnu_semantics() {
     assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(0, 3)));
 }
 
+/// GNU `regex-emacs.c` keeps capture-register writes made by the final
+/// successful repetition.  In particular, the failure point for a zero-minimum
+/// interval must not restore the capture written by a later enclosing
+/// repetition unless matching actually backtracks through that point.
+#[test]
+fn zero_minimum_interval_keeps_capture_from_final_outer_repetition() {
+    crate::test_utils::init_test_tracing();
+    let mut md = None;
+    let result = string_match_full_with_case_fold(
+        "\\(\\(\\)\\{0,1\\}.+?\\)\\{2\\}",
+        "/a",
+        0,
+        false,
+        &mut md,
+    );
+
+    assert_eq!(result, Ok(Some(0)));
+    let md = md.expect("match data");
+    assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(0, 2)));
+    assert_eq!(match_group(md.group(1)), Some(MatchGroup::new(1, 2)));
+    assert_eq!(match_group(md.group(2)), Some(MatchGroup::new(1, 1)));
+}
+
 #[test]
 fn string_match_large_open_interval_failure_matches_gnu() {
     crate::test_utils::init_test_tracing();

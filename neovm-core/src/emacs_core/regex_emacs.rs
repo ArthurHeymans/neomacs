@@ -625,12 +625,35 @@ struct FailFrame {
     /// `undo.len()` at push time — POP replays undo entries above this.
     undo_mark: usize,
 
-    /// Position in the bytecode to resume at.
-    pattern_pos: usize,
+    /// Opcode that created this choice point.  GNU stores this as
+    /// `FAILURE_PAT`; empty-loop detection compares this identity, not the
+    /// address at which matching will resume.
+    origin: FailureOrigin,
 
-    /// Position in the input text to resume at.
-    /// None means "keep current string position" (OnFailureKeepStringJump).
-    string_pos: Option<usize>,
+    /// Position in the bytecode to resume at when this choice is popped.
+    resume: FailureResume,
+
+    /// What popping this choice does to the input cursor.
+    input: FailureInput,
+}
+
+/// Bytecode identity used only for GNU's empty-loop cycle detection.
+///
+/// This is deliberately a different type from [`FailureResume`]: two distinct
+/// choice-point opcodes may jump to the same continuation, which must not make
+/// them the same loop for `CHECK_INFINITE_LOOP`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FailureOrigin(usize);
+
+/// Bytecode continuation restored by a backtrack.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct FailureResume(usize);
+
+/// Input-cursor policy stored in a GNU regexp failure point.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FailureInput {
+    Restore(usize),
+    KeepCurrent,
 }
 
 /// One delta-undo entry (GNU `PUSH_FAILURE_REG` / `PUSH_NUMBER`).
@@ -4472,15 +4495,16 @@ fn re_match_internal(
     // matcher".  We flag the thread-local and return no-match; the
     // front-end promotes the flag to the same error.
     macro_rules! push_failure_point {
-        ($pattern_pos:expr, $string_pos:expr) => {
+        ($origin:expr, $resume:expr, $input:expr) => {
             if frames.len() + undo.len() >= FAIL_STACK_ENTRY_LIMIT {
                 set_matcher_overflow();
                 return None;
             }
             frames.push(FailFrame {
                 undo_mark: undo.len(),
-                pattern_pos: $pattern_pos,
-                string_pos: $string_pos,
+                origin: FailureOrigin($origin),
+                resume: FailureResume($resume),
+                input: $input,
             });
         };
     }
@@ -4538,6 +4562,7 @@ fn re_match_internal(
             break 'main_loop;
         }
 
+        let op_pc = pc;
         let op_byte = bytecode[pc];
         let Some(op) = RegexOp::from_byte(op_byte) else {
             // Invalid opcode — treat as match failure
@@ -4841,14 +4866,14 @@ fn re_match_internal(
                 let offset = extract_number(bytecode, pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
-                push_failure_point!(fail_pc, Some(d));
+                push_failure_point!(op_pc, fail_pc, FailureInput::Restore(d));
             }
 
             RegexOp::OnFailureKeepStringJump => {
                 let offset = extract_number(bytecode, pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
-                push_failure_point!(fail_pc, None); // Don't restore string position
+                push_failure_point!(op_pc, fail_pc, FailureInput::KeepCurrent);
             }
 
             RegexOp::OnFailureJumpLoop => {
@@ -4856,11 +4881,11 @@ fn re_match_internal(
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
                 // Check for infinite loop (empty match detection).
-                if check_infinite_loop(frames, fail_pc, d) {
+                if check_infinite_loop(frames, FailureOrigin(op_pc), d) {
                     // Would loop forever on empty match — skip the loop
                     pc = fail_pc;
                 } else {
-                    push_failure_point!(fail_pc, Some(d));
+                    push_failure_point!(op_pc, fail_pc, FailureInput::Restore(d));
                 }
             }
 
@@ -4869,7 +4894,7 @@ fn re_match_internal(
                 let offset = extract_number(bytecode, pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
-                push_failure_point!(fail_pc, Some(d));
+                push_failure_point!(op_pc, fail_pc, FailureInput::Restore(d));
             }
 
             RegexOp::OnFailureJumpSmart => {
@@ -4881,7 +4906,7 @@ fn re_match_internal(
                 let offset = extract_number(bytecode, pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
-                push_failure_point!(fail_pc, Some(d));
+                push_failure_point!(op_pc, fail_pc, FailureInput::Restore(d));
             }
 
             RegexOp::SucceedN => {
@@ -4911,10 +4936,10 @@ fn re_match_internal(
                     let fail_pc = ((pc as i64) + (offset as i64)) as usize;
                     pc += 2; // skip the counter field
                     // Infinite-loop detection (same as OnFailureJumpLoop)
-                    if check_infinite_loop(frames, fail_pc, d) {
+                    if check_infinite_loop(frames, FailureOrigin(op_pc), d) {
                         pc = fail_pc;
                     } else {
-                        push_failure_point!(fail_pc, Some(d));
+                        push_failure_point!(op_pc, fail_pc, FailureInput::Restore(d));
                     }
                 }
             }
@@ -5538,15 +5563,15 @@ fn pike_match_inner(
 
 /// GNU `CHECK_INFINITE_LOOP` (regex-emacs.c:1049-1069): walk down the
 /// failure stack while the recorded string position equals the current
-/// one (or was a keep-string `None`); a frame with the same resume
-/// pattern position means the loop has made no progress since it was
+/// one (or has keep-current input policy); a frame created by the same
+/// failure opcode means the loop has made no progress since it was
 /// last here — an empty-match cycle.
-fn check_infinite_loop(frames: &[FailFrame], fail_pc: usize, d: usize) -> bool {
+fn check_infinite_loop(frames: &[FailFrame], origin: FailureOrigin, d: usize) -> bool {
     for frame in frames.iter().rev() {
-        match frame.string_pos {
-            Some(sp) if sp != d => return false,
+        match frame.input {
+            FailureInput::Restore(sp) if sp != d => return false,
             _ => {
-                if frame.pattern_pos == fail_pc {
+                if frame.origin == origin {
                     return true;
                 }
             }
@@ -5592,9 +5617,9 @@ fn goto_fail(
             FailUndo::Counter { pos, val } => set_counter(counters, pos, val),
         }
     }
-    *pc = frame.pattern_pos;
-    if let Some(sp) = frame.string_pos {
-        *d = sp;
+    *pc = frame.resume.0;
+    if let FailureInput::Restore(position) = frame.input {
+        *d = position;
     }
     Some(())
 }
