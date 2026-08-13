@@ -143,6 +143,33 @@ fn direct_log_observation_uses_canonical_elisp_string_syntax() {
     );
 }
 
+#[test]
+#[cfg(unix)]
+fn direct_log_observation_discards_ascii_whitespace_only_terminal_noise() {
+    let sandbox = MelpaSandbox::new("direct-log-whitespace-noise")
+        .expect("create workspace-local direct-log sandbox");
+    assert_eq!(
+        wrap_direct_probe_logs(
+            EvalOutcome::Value("ok".to_string()),
+            " \t\n\u{b}".to_string(),
+            "\r\n\u{c}".to_string(),
+            &sandbox,
+        ),
+        EvalOutcome::Value(r#"(:value ok :stdout "" :stderr "")"#.to_string())
+    );
+    assert_eq!(
+        wrap_direct_probe_logs(
+            EvalOutcome::Value("ok".to_string()),
+            " \tvisible\n".to_string(),
+            "\nwarning\r".to_string(),
+            &sandbox,
+        ),
+        EvalOutcome::Value(
+            r#"(:value ok :stdout " \11visible\n" :stderr "\nwarning\15")"#.to_string()
+        )
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn direct_wrapped_logs_round_trip_through_gnu_reader_without_byte_loss() {

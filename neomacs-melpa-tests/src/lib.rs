@@ -3079,6 +3079,11 @@ pub const COND_LET_MELPA_PIN: (&str, &str) = ("cond-let", "20260701.1237");
 /// buffer-navigation workflow parity corpus.
 pub const CONSULT_MELPA_PIN: (&str, &str) = ("consult", "20260716.1105");
 
+/// The exact Embark Consult package selected for practical location and grep
+/// export, navigation, and buffer table-of-contents parity. MELPA built this
+/// archive from upstream commit `ec5dd1475595277ef908567d0a18d32f1c40bc91`.
+pub const EMBARK_CONSULT_MELPA_PIN: (&str, &str) = ("embark-consult", "20260503.118");
+
 /// The exact Counsel package selected for practical command-palette, file and
 /// Git navigation, kill-ring recovery, structural navigation, and project
 /// compilation parity. MELPA built this archive from upstream commit
@@ -5296,8 +5301,23 @@ fn wrap_direct_probe_logs(
             )
     }
 
-    let stdout = direct_log_elisp_string(&normalize_known_paths(stdout, sandbox));
-    let stderr = direct_log_elisp_string(&normalize_known_paths(stderr, sandbox));
+    fn normalize_empty_terminal_noise(value: String) -> String {
+        if value
+            .bytes()
+            .all(|byte| matches!(byte, b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r'))
+        {
+            String::new()
+        } else {
+            value
+        }
+    }
+
+    let stdout = direct_log_elisp_string(&normalize_empty_terminal_noise(normalize_known_paths(
+        stdout, sandbox,
+    )));
+    let stderr = direct_log_elisp_string(&normalize_empty_terminal_noise(normalize_known_paths(
+        stderr, sandbox,
+    )));
     match outcome {
         EvalOutcome::Value(value) => EvalOutcome::Value(format!(
             "(:value {value} :stdout {stdout} :stderr {stderr})"

@@ -344,6 +344,7 @@ mod elpy;
 mod emacsql;
 mod emacsql_sqlite;
 mod embark;
+mod embark_consult;
 mod emmet_mode;
 mod emr;
 mod epc;
