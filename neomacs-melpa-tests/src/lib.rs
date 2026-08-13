@@ -3273,6 +3273,12 @@ pub const HELM_DESCBINDS_MELPA_PIN: (&str, &str) = ("helm-descbinds", "20250705.
 /// commit `5220099e695a3586dba2d59640217fe378e66310`.
 pub const HELM_FLX_MELPA_PIN: (&str, &str) = ("helm-flx", "20221020.1739");
 
+/// The exact final Helm Git Grep source selected for practical real-Git
+/// search, result navigation, option reruns, pathspec listing, saved-result,
+/// and recovery parity. The final upstream release is commit
+/// `744cea07dba6e6a5effbdba83f1b786c78fd86d3` (version 0.10.1).
+pub const HELM_GIT_GREP_MELPA_PIN: (&str, &str) = ("helm-git-grep", "20170614.1411");
+
 /// The exact Helm Gitignore package selected for real interactive template
 /// lookup, single and ordered multi-selection, generated-buffer editing,
 /// saving, refresh, and HTTP failure parity. MELPA built this archive from

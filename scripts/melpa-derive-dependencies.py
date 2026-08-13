@@ -12,12 +12,14 @@ requirement that is not pinned is either built into Emacs (`cl-lib`, `json`,
 `flymake`, `seq`) or is something the suite never installs, and in both cases
 package.el resolves it without our help.
 
-The retired `git-commit-mode` archive predates its operational dependency
-metadata.  Its frozen source has no `Package-Requires` header but does contain
-hard top-level `require` forms for Dash and With-Editor.  For that one named
-historical package, derive requirements from those source forms and apply the
-same pinned-package filter.  This keeps the exception source-backed and avoids
-silently treating arbitrary metadata-less packages as dependency declarations.
+Two retired archives have source-backed dependency exceptions.  The frozen
+`git-commit-mode` source has no `Package-Requires` header but hard-requires Dash
+and With-Editor.  The frozen `helm-git-grep` header names Helm Core, but its
+top-level forms additionally require `helm` and `helm-files`; the latter is a
+feature shipped by the separately pinned Helm archive.  For only those named
+historical packages, derive the relevant top-level requirements and apply the
+same pinned-package filter.  This avoids silently treating arbitrary source
+forms as dependency declarations.
 
 Usage:
     scripts/melpa-derive-dependencies.py            # report differences
@@ -58,6 +60,7 @@ TOP_LEVEL_REQUIRE = re.compile(
     r"^\(require\s+'([A-Za-z0-9@_.+-]+)(?:\s+[^)]*)?\)\s*(?:;.*)?$", re.M
 )
 SOURCE_BACKED_REQUIRE_PACKAGES = frozenset({"git-commit-mode"})
+SOURCE_BACKED_ADDITIONAL_REQUIRE_PACKAGES = frozenset({"helm-git-grep"})
 
 
 def read_manifest(
@@ -122,12 +125,15 @@ def package_requirements(path: pathlib.Path) -> list[str]:
 
 
 def source_requirements(package: str, path: pathlib.Path) -> list[str]:
-    """Return declared requirements, plus the one frozen legacy exception."""
+    """Return declared requirements plus named, source-backed exceptions."""
     requirements = package_requirements(path)
-    if requirements or package not in SOURCE_BACKED_REQUIRE_PACKAGES:
-        return requirements
-    text = path.read_text(encoding="utf-8", errors="replace")
-    return TOP_LEVEL_REQUIRE.findall(text)
+    if package in SOURCE_BACKED_REQUIRE_PACKAGES and not requirements:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        return TOP_LEVEL_REQUIRE.findall(text)
+    if package in SOURCE_BACKED_ADDITIONAL_REQUIRE_PACKAGES:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        requirements.extend(TOP_LEVEL_REQUIRE.findall(text))
+    return requirements
 
 
 def derived_edges(
