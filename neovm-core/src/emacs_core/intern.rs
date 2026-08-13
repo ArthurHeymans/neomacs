@@ -971,8 +971,17 @@ pub fn resolve_sym(id: SymId) -> &'static str {
 /// symbol registry.
 #[inline]
 pub fn resolve_sym_lisp_string(id: SymId) -> &'static LispString {
+    ensure_thread_local_cache_epoch_current();
+    if let Some(name) = thread_local_resolve_lisp_string(id) {
+        return name;
+    }
+    #[cfg(test)]
+    note_resolve_sym_lisp_string_registry_read();
     let registry = global_symbol_registry().read();
-    registry.resolve_lisp_string(id)
+    let name = registry.resolve_lisp_string(id);
+    drop(registry);
+    thread_local_record_name(id, name);
+    name
 }
 
 /// Remove ID from the process-global canonical name map.
@@ -1071,6 +1080,26 @@ thread_local! {
     static NAME_CANONICAL_SYMBOL_CACHE: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
 }
 
+#[cfg(test)]
+thread_local! {
+    static RESOLVE_SYM_LISP_STRING_REGISTRY_READS: RefCell<usize> = const { RefCell::new(0) };
+}
+
+#[cfg(test)]
+fn note_resolve_sym_lisp_string_registry_read() {
+    RESOLVE_SYM_LISP_STRING_REGISTRY_READS.with(|reads| *reads.borrow_mut() += 1);
+}
+
+#[cfg(test)]
+pub(crate) fn reset_resolve_sym_lisp_string_registry_reads() {
+    RESOLVE_SYM_LISP_STRING_REGISTRY_READS.with(|reads| *reads.borrow_mut() = 0);
+}
+
+#[cfg(test)]
+pub(crate) fn resolve_sym_lisp_string_registry_reads() -> usize {
+    RESOLVE_SYM_LISP_STRING_REGISTRY_READS.with(|reads| *reads.borrow())
+}
+
 fn ensure_thread_local_cache_epoch_current() {
     let current = symbol_registry_epoch().load(Ordering::Acquire);
     THREAD_CACHE_EPOCH.with(|epoch| {
@@ -1099,15 +1128,17 @@ fn thread_local_record_interned_str(s: &'static str, id: SymId) {
 
 #[inline]
 fn thread_local_resolve(id: SymId) -> Option<&'static str> {
+    thread_local_resolve_lisp_string(id).map(|name| {
+        name.as_utf8_str()
+            .expect("only UTF-8 symbol names enter the resolution cache")
+    })
+}
+
+#[inline]
+fn thread_local_resolve_lisp_string(id: SymId) -> Option<&'static LispString> {
     SYMBOL_CACHE.with(|cache| {
         let cache = cache.borrow();
-        cache
-            .get(id.0 as usize)
-            .and_then(|entry| entry.name)
-            .map(|name| {
-                name.as_utf8_str()
-                    .expect("only UTF-8 symbol names enter the resolution cache")
-            })
+        cache.get(id.0 as usize).and_then(|entry| entry.name)
     })
 }
 
