@@ -8,7 +8,12 @@
 //! whether adjacent interval plists are semantically equal.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+};
+
+use rustc_hash::FxHashSet;
 
 use super::{CharLen, CharPos0, CharRange};
 use crate::emacs_core::eval::{
@@ -1755,6 +1760,115 @@ pub(crate) enum PropertyPlistApplication {
     PreserveSuppliedOrder,
 }
 
+/// Conservative answer to whether a text-property name can occur in a table.
+///
+/// `DefinitelyAbsent` is proof and may be used to skip an interval-tree walk.
+/// `PossiblyPresent` is not proof of presence: removals deliberately need not
+/// recount the whole tree, so it can remain positive after the last occurrence
+/// is removed.  Making the asymmetry an enum prevents a plain `bool` from
+/// inviting callers to infer more than the index guarantees.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use]
+pub enum PropertyNamePresence {
+    DefinitelyAbsent,
+    PossiblyPresent,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct PropertyNameIdentity(usize);
+
+impl From<Value> for PropertyNameIdentity {
+    fn from(value: Value) -> Self {
+        Self(value.bits())
+    }
+}
+
+/// Property names known to have been assigned since the last exact rebuild.
+///
+/// Identities are raw tagged bits rather than `Value`s so a stale conservative
+/// entry is not a GC root.  While a name is live in an interval its plist is the
+/// real root; after removal, identity reuse can only cause a harmless false
+/// positive (`PossiblyPresent`), never a false `DefinitelyAbsent`.
+#[derive(Clone, Debug, Default)]
+enum ConservativePropertyNames {
+    /// The common no-properties case has no heap allocation.
+    #[default]
+    Empty,
+    /// Snapshots share the summary in O(1); the next mutation detaches it.
+    Assigned(Arc<FxHashSet<PropertyNameIdentity>>),
+}
+
+impl ConservativePropertyNames {
+    fn from_runs(runs: &[IntervalRun]) -> Self {
+        let mut names = Self::default();
+        for run in runs {
+            names.observe_plist(run.plist);
+        }
+        names
+    }
+
+    fn observe(&mut self, name: Value) {
+        let identity = name.into();
+        match self {
+            Self::Empty => {
+                let mut assigned = FxHashSet::default();
+                assigned.insert(identity);
+                *self = Self::Assigned(Arc::new(assigned));
+            }
+            Self::Assigned(assigned) => {
+                Arc::make_mut(assigned).insert(identity);
+            }
+        }
+    }
+
+    fn observe_plist(&mut self, mut plist: Value) {
+        while plist.is_cons() {
+            let name = plist.cons_car();
+            let rest = plist.cons_cdr();
+            if !rest.is_cons() {
+                break;
+            }
+            self.observe(name);
+            plist = rest.cons_cdr();
+        }
+    }
+
+    fn include(&mut self, other: &Self) {
+        let Self::Assigned(other) = other else {
+            return;
+        };
+        match self {
+            Self::Empty => *self = Self::Assigned(Arc::clone(other)),
+            Self::Assigned(assigned) if !Arc::ptr_eq(assigned, other) => {
+                Arc::make_mut(assigned).extend(other.iter().copied());
+            }
+            Self::Assigned(_) => {}
+        }
+    }
+
+    fn presence(&self, name: Value) -> PropertyNamePresence {
+        let is_known = match self {
+            Self::Empty => false,
+            Self::Assigned(assigned) => assigned.contains(&name.into()),
+        };
+        if is_known {
+            PropertyNamePresence::PossiblyPresent
+        } else {
+            PropertyNamePresence::DefinitelyAbsent
+        }
+    }
+}
+
+/// Effect a wholesale interval-tree replacement can have on property names.
+///
+/// Requiring this at the replacement boundary makes a mutation that can add
+/// names declare its source.  Pure structural rewrites retain the shared
+/// summary without an O(intervals) recount.
+enum ReplacementPropertyNames<'a> {
+    Preserve,
+    Include(&'a ConservativePropertyNames),
+}
+
 /// Text-property interval storage.
 ///
 /// The backing store is a GNU-shaped augmented interval tree.  Callers still
@@ -1763,13 +1877,21 @@ pub(crate) enum PropertyPlistApplication {
 #[derive(Clone, Debug)]
 pub struct TextPropertyTable {
     intervals: IntervalTree,
+    property_names: ConservativePropertyNames,
 }
 
 impl TextPropertyTable {
     pub fn new() -> Self {
         Self {
             intervals: IntervalTree::new(),
+            property_names: ConservativePropertyNames::default(),
         }
+    }
+
+    /// Return the conservative presence state for `name` without descending the
+    /// interval tree.
+    pub fn property_name_presence(&self, name: Value) -> PropertyNamePresence {
+        self.property_names.presence(name)
     }
 
     /// Copy interval nodes and plist cons spines, while preserving plist
@@ -1878,18 +2000,30 @@ impl TextPropertyTable {
     }
 
     fn from_interval_runs(runs: Vec<IntervalRun>) -> Self {
+        let property_names = ConservativePropertyNames::from_runs(&runs);
         Self {
             intervals: IntervalTree::from_runs(runs),
+            property_names,
         }
     }
 
     fn from_interval_runs_preserving_shape(runs: Vec<IntervalRun>) -> Self {
+        let property_names = ConservativePropertyNames::from_runs(&runs);
         Self {
             intervals: IntervalTree::from_runs_preserving_shape(runs),
+            property_names,
         }
     }
 
-    fn replace_runs_preserving_shape(&mut self, runs: Vec<IntervalRun>) {
+    fn replace_runs_preserving_shape(
+        &mut self,
+        runs: Vec<IntervalRun>,
+        property_names: ReplacementPropertyNames<'_>,
+    ) {
+        match property_names {
+            ReplacementPropertyNames::Preserve => {}
+            ReplacementPropertyNames::Include(names) => self.property_names.include(names),
+        }
         self.intervals = IntervalTree::from_runs_preserving_shape(runs);
     }
 
@@ -1938,6 +2072,7 @@ impl TextPropertyTable {
         if range.is_empty() {
             return false;
         }
+        self.property_names.observe(name);
         let mut changed = false;
 
         let affected = self.intervals.intervals_overlapping_after_splits(range);
@@ -1992,6 +2127,7 @@ impl TextPropertyTable {
         if range.is_empty() {
             return false;
         }
+        self.property_names.observe(name);
 
         self.intervals
             .ensure_cover(CharPos0::ZERO.add_len(object_len).max(range.end()));
@@ -2034,6 +2170,9 @@ impl TextPropertyTable {
     }
 
     fn get_property_raw(&self, pos: CharPos0, name: Value) -> Option<Value> {
+        if self.property_name_presence(name) == PropertyNamePresence::DefinitelyAbsent {
+            return None;
+        }
         let (_, node) = self.find_interval(pos)?;
         plist_value_get(node.plist, name)
     }
@@ -2333,6 +2472,9 @@ impl TextPropertyTable {
         if plist.is_empty() && self.intervals.is_empty() {
             return;
         }
+        for (name, _) in &plist {
+            self.property_names.observe(*name);
+        }
 
         self.intervals.ensure_cover(range.end());
         self.intervals.split_at(range.start());
@@ -2385,6 +2527,9 @@ impl TextPropertyTable {
         if plist.is_empty() && self.intervals.is_empty() {
             return;
         }
+        for (name, _) in &plist {
+            self.property_names.observe(*name);
+        }
 
         self.intervals
             .ensure_cover(CharPos0::ZERO.add_len(object_len).max(range.end()));
@@ -2426,6 +2571,9 @@ impl TextPropertyTable {
         pos: CharPos0,
         name: Value,
     ) -> Option<CharPos0> {
+        if self.property_name_presence(name) == PropertyNamePresence::DefinitelyAbsent {
+            return None;
+        }
         self.next_single_property_change_after_char_pos_limited(pos, name, None)
     }
 
@@ -2515,6 +2663,9 @@ impl TextPropertyTable {
         pos: CharPos0,
         name: Value,
     ) -> Option<CharPos0> {
+        if self.property_name_presence(name) == PropertyNamePresence::DefinitelyAbsent {
+            return None;
+        }
         // Backward mirror of next_single_property_change_after_char_pos. `current`
         // is `name`'s value at pos (nil past the tree end); `boundary` is the start
         // of the run of `current` reached so far. We step the intervals STRICTLY
@@ -2925,6 +3076,7 @@ impl TextPropertyTable {
         // from the buffer and never mutated in place by a later
         // `put-text-property'.  Mirror both copies here.
         for run in other.intervals.runs() {
+            self.property_names.observe_plist(run.plist);
             let start = run.start().add_len(offset);
             let end = run.end().add_len(offset);
             if start >= end {
@@ -3018,7 +3170,10 @@ impl TextPropertyTable {
                 }
             }
         }
-        self.replace_runs_preserving_shape(target_runs);
+        self.replace_runs_preserving_shape(
+            target_runs,
+            ReplacementPropertyNames::Include(&other.property_names),
+        );
     }
 
     pub fn merge_adjacent_equal_properties_around_char_range(&mut self, range: CharRange) {
@@ -3064,7 +3219,7 @@ impl TextPropertyTable {
                 break;
             }
         }
-        self.replace_runs_preserving_shape(runs);
+        self.replace_runs_preserving_shape(runs, ReplacementPropertyNames::Preserve);
     }
 
     pub(crate) fn dump_intervals(&self) -> Vec<PropertyInterval> {

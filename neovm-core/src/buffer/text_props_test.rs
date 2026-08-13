@@ -614,6 +614,136 @@ fn next_single_property_change_ignores_other_properties() {
 }
 
 #[test]
+fn property_name_presence_never_turns_a_possible_property_into_an_absent_one() {
+    let face = Value::symbol("face");
+    let category = Value::symbol("category");
+    let mut table = TextPropertyTable::new();
+
+    assert_eq!(
+        table.property_name_presence(face),
+        PropertyNamePresence::DefinitelyAbsent
+    );
+
+    put_chars(&mut table, 0, 10, face, Value::symbol("bold"));
+    assert_eq!(
+        table.property_name_presence(face),
+        PropertyNamePresence::PossiblyPresent
+    );
+    assert_eq!(
+        table.property_name_presence(category),
+        PropertyNamePresence::DefinitelyAbsent
+    );
+
+    // Removal deliberately does not require an O(intervals) recount.  The
+    // conservative answer may remain positive, but it must never become a
+    // false `DefinitelyAbsent` while a property exists.
+    assert!(remove_chars(&mut table, 0, 10, face));
+    assert_eq!(
+        table.property_name_presence(face),
+        PropertyNamePresence::PossiblyPresent
+    );
+
+    let mut source = TextPropertyTable::new();
+    put_chars(
+        &mut source,
+        0,
+        5,
+        category,
+        Value::symbol("display-category"),
+    );
+    table.append_shifted_at_char_offset(&source, char_len(10));
+    assert_eq!(
+        table.property_name_presence(category),
+        PropertyNamePresence::PossiblyPresent
+    );
+
+    let help_echo = Value::symbol("help-echo");
+    set_chars(&mut table, 20, 25, vec![(help_echo, Value::string("help"))]);
+    assert_eq!(
+        table.property_name_presence(help_echo),
+        PropertyNamePresence::PossiblyPresent
+    );
+
+    let slice = table.slice_char_range(char_range(10, 25));
+    assert_eq!(
+        slice.property_name_presence(category),
+        PropertyNamePresence::PossiblyPresent
+    );
+    assert_eq!(
+        slice.property_name_presence(help_echo),
+        PropertyNamePresence::PossiblyPresent
+    );
+
+    let snapshot = table.clone();
+    let (
+        ConservativePropertyNames::Assigned(live_names),
+        ConservativePropertyNames::Assigned(snapshot_names),
+    ) = (&table.property_names, &snapshot.property_names)
+    else {
+        panic!("a table with properties must carry an assigned-name summary");
+    };
+    assert!(
+        Arc::ptr_eq(live_names, snapshot_names),
+        "snapshot clones must share the immutable summary"
+    );
+
+    let keymap = Value::symbol("keymap");
+    put_chars(&mut table, 0, 1, keymap, Value::symbol("map"));
+    assert_eq!(
+        snapshot.property_name_presence(keymap),
+        PropertyNamePresence::DefinitelyAbsent,
+        "the next mutation must detach a shared summary"
+    );
+}
+
+#[test]
+fn merging_equal_intervals_preserves_the_shared_property_name_summary() {
+    let face = Value::symbol("face");
+    let bold = Value::symbol("bold");
+    let mut table = TextPropertyTable::new();
+    put_chars(&mut table, 0, 5, face, bold);
+    put_chars(&mut table, 5, 10, face, bold);
+
+    let ConservativePropertyNames::Assigned(before) = &table.property_names else {
+        panic!("a table with properties must carry an assigned-name summary");
+    };
+    let before = Arc::clone(before);
+
+    table.merge_adjacent_equal_properties_around_char_range(char_range(0, 10));
+
+    let ConservativePropertyNames::Assigned(after) = &table.property_names else {
+        panic!("merging intervals must preserve the property-name summary");
+    };
+    assert!(
+        Arc::ptr_eq(&before, after),
+        "a merge that cannot add names must not rebuild or detach the summary"
+    );
+}
+
+#[test]
+fn merging_missing_properties_includes_the_source_name_summary() {
+    let face = Value::symbol("face");
+    let category = Value::symbol("category");
+    let mut target = TextPropertyTable::new();
+    put_chars(&mut target, 0, 10, face, Value::symbol("bold"));
+    let mut source = TextPropertyTable::new();
+    put_chars(
+        &mut source,
+        0,
+        10,
+        category,
+        Value::symbol("display-category"),
+    );
+
+    target.merge_missing_shifted_at_char_offset(&source, CharLen::ZERO);
+
+    assert_eq!(
+        target.property_name_presence(category),
+        PropertyNamePresence::PossiblyPresent
+    );
+}
+
+#[test]
 fn previous_single_property_change_ignores_other_properties() {
     let mut table = TextPropertyTable::new();
     put_chars(
@@ -2024,6 +2154,16 @@ fn find_id_memo_never_disagrees_with_fresh_descent() {
                 table.intervals.find_id_uncached(pos),
                 "find_id memo disagreed with fresh descent at {pos:?} (hi={hi})"
             );
+        }
+
+        for run in table.intervals.runs() {
+            for (name, _) in plist_pairs(run.plist) {
+                assert_eq!(
+                    table.property_name_presence(name),
+                    PropertyNamePresence::PossiblyPresent,
+                    "presence index lost a live property after a randomized mutation"
+                );
+            }
         }
     }
 }
