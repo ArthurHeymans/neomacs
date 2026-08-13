@@ -655,6 +655,7 @@ mod symon;
 mod tablist;
 mod tagedit;
 mod tern;
+mod terraform_mode;
 mod tide;
 mod tinysegmenter;
 mod toc_org;

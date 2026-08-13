@@ -414,7 +414,7 @@ rank	package	downloads	status
 413	buttercup	218857	covered
 414	clj-refactor	217884	covered
 415	el-mock	217206	covered
-416	terraform-mode	216478	todo
+416	terraform-mode	216478	covered
 417	ido-ubiquitous	215985	todo
 418	smooth-scrolling	215912	todo
 419	rustic	215324	todo

@@ -557,6 +557,12 @@ pub const TABLIST_MELPA_PIN: (&str, &str) = ("tablist", "20260623.1855");
 /// `fab80daebd798b233a9a40d5a8b99359ace63b5e`.
 pub const TERN_MELPA_PIN: (&str, &str) = ("tern", "20260514.1348");
 
+/// The exact Terraform Mode package selected for practical mode, font-lock,
+/// indentation, Imenu, outline, documentation, formatting, and save lifecycle
+/// parity. MELPA built this archive from upstream commit
+/// `01635df3625c0cec2bb4613a6f920b8569d41009`.
+pub const TERRAFORM_MODE_MELPA_PIN: (&str, &str) = ("terraform-mode", "20251115.2210");
+
 /// The exact Tide package selected for practical JavaScript setup, external
 /// TypeScript-server lifecycle, Eldoc/Imenu/Xref navigation, references,
 /// Flycheck diagnostics, code edits, rename, framing, and recovery parity.
