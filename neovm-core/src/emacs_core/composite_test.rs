@@ -311,6 +311,63 @@ fn find_composition_internal_returns_nil_when_no_composition() {
     assert!(result.unwrap().is_nil());
 }
 
+/// GNU's default `composition-function-table' rule for a combining mark looks
+/// back one character and composes the base plus following marks.  This is the
+/// path used by `string-glyph-split' for decomposed graphemes.
+#[test]
+fn find_composition_internal_finds_automatic_combining_sequence_in_string() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+    let current_buffer = eval
+        .buffers
+        .current_buffer_id()
+        .expect("current buffer for automatic composition");
+    eval.frames
+        .create_frame("automatic-composition", 80, 24, current_buffer);
+    let table = eval.visible_variable_value_or_nil("composition-function-table");
+    let combining_rule = Value::vector(vec![
+        Value::string("\\c.\\c^+"),
+        Value::fixnum(1),
+        Value::symbol("compose-gstring-for-graphic"),
+    ]);
+    crate::emacs_core::chartable::builtin_set_char_table_range(
+        vec![
+            table,
+            Value::fixnum(0x0301),
+            Value::list(vec![combining_rule]),
+        ],
+        Some(&eval.obarray),
+    )
+    .expect("install combining composition rule");
+    let string = Value::string("e\u{0301}");
+
+    let found = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(0), Value::fixnum(1), string, Value::NIL],
+    )
+    .expect("find automatic composition");
+    let items = list_to_vec(&found).expect("composition result");
+
+    assert_eq!(items[0].as_fixnum(), Some(0));
+    assert_eq!(items[1].as_fixnum(), Some(2));
+    assert!(
+        items[2].is_vector(),
+        "automatic composition returns a gstring"
+    );
+
+    eval.obarray
+        .set_symbol_value("auto-composition-mode", Value::NIL);
+    let inhibited = builtin_find_composition_internal(
+        &mut eval,
+        vec![Value::fixnum(0), Value::fixnum(1), string, Value::NIL],
+    )
+    .expect("inhibited automatic composition lookup");
+    assert!(
+        inhibited.is_nil(),
+        "auto-composition-mode nil must expose the two characters separately"
+    );
+}
+
 #[test]
 fn find_composition_internal_reports_composed_region() {
     crate::test_utils::init_test_tracing();
