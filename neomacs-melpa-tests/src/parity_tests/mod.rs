@@ -278,6 +278,7 @@ mod bui;
 mod cargo;
 mod casual;
 mod ccc;
+mod ccls;
 mod cdb;
 mod centered_cursor_mode;
 mod cfrs;

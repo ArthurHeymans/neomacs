@@ -398,7 +398,7 @@ rank	package	downloads	status
 397	helm-gtags	241393	covered
 398	csharp-mode	240019	covered
 399	format-all	237403	covered
-400	ccls	237387	todo
+400	ccls	237387	covered
 401	ivy-rich	237181	covered
 402	gptel	233704	todo
 403	org-brain	233197	todo

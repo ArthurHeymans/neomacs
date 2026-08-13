@@ -2868,6 +2868,12 @@ pub const CCC_MELPA_PIN: (&str, &str) = ("ccc", "20260322.1316");
 /// binary payload, enumeration, and cached-reader lifecycle parity corpus.
 pub const CDB_MELPA_PIN: (&str, &str) = ("cdb", "20230318.2152");
 
+/// The exact Ccls client package selected for practical LSP extension,
+/// preprocessing, semantic-highlight, code-lens, and hierarchy parity. MELPA
+/// built this archive from upstream commit
+/// `f728c92e33844f1da54cb47ecb4e44160f2042a8`.
+pub const CCLS_MELPA_PIN: (&str, &str) = ("ccls", "20260507.1746");
+
 /// The exact Centered Cursor Mode package selected for practical local and
 /// global mode lifecycle, real-window recentering, ignored-command, EOF,
 /// viewport adjustment, paging, and multi-window parity. MELPA built this
