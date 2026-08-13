@@ -5472,6 +5472,63 @@ fn where_is_internal_firstonly_uses_where_is_preferred_modifier() {
     assert_eq!(result, "OK t");
 }
 
+/// GNU snapshots `Vwhere_is_preferred_modifier` once at
+/// `Fwhere_is_internal` entry, then passes the parsed C modifier mask through
+/// every candidate comparison.  Candidate selection must not return to the
+/// Lisp variable name (and therefore to the global interner) per sequence.
+#[test]
+fn where_is_preference_reuses_one_predeclared_snapshot() {
+    crate::test_utils::init_test_tracing();
+    let mut obarray = test_ob();
+    obarray.set_symbol_value("where-is-preferred-modifier", Value::symbol("control"));
+    let sequences = vec![
+        vec![Value::fixnum(KEY_CHAR_META | i64::from(b'q'))],
+        vec![Value::fixnum(KEY_CHAR_CTRL | i64::from(b'c'))],
+    ];
+
+    let preferred_modifier = WhereIsPreferredModifier::snapshot(&obarray);
+    crate::emacs_core::intern::reset_intern_calls();
+    let selected = select_where_is_preferred_sequence(preferred_modifier, &sequences);
+
+    assert_eq!(selected, &sequences[1]);
+    assert_eq!(
+        crate::emacs_core::intern::intern_calls(),
+        0,
+        "candidate selection must use one predeclared preferred-modifier snapshot"
+    );
+}
+
+/// `where-is-preferred-modifier` uses GNU `parse_solitary_modifier`, whose
+/// symbol domain includes the customary one-letter spellings as well as the
+/// long names.  Keep that accepted domain explicit when parsing the snapshot.
+#[test]
+fn where_is_preferred_modifier_accepts_gnu_solitary_names() {
+    crate::test_utils::init_test_tracing();
+    let mut obarray = test_ob();
+    for (name, expected) in [
+        ("C", KEY_CHAR_CTRL),
+        ("ctrl", KEY_CHAR_CTRL),
+        ("control", KEY_CHAR_CTRL),
+        ("M", KEY_CHAR_META),
+        ("meta", KEY_CHAR_META),
+        ("S", KEY_CHAR_SHIFT),
+        ("shift", KEY_CHAR_SHIFT),
+        ("s", KEY_CHAR_SUPER),
+        ("super", KEY_CHAR_SUPER),
+        ("H", KEY_CHAR_HYPER),
+        ("hyper", KEY_CHAR_HYPER),
+        ("A", KEY_CHAR_ALT),
+        ("alt", KEY_CHAR_ALT),
+    ] {
+        obarray.set_symbol_value("where-is-preferred-modifier", Value::symbol(name));
+        assert_eq!(
+            WhereIsPreferredModifier::snapshot(&obarray).mask(),
+            expected,
+            "GNU solitary modifier spelling {name}"
+        );
+    }
+}
+
 // `where-is-internal` command-remapping handling, mirroring GNU keymap.c
 // `Fwhere_is_internal`: (a) a DEFINITION that is itself remapped resolves to its
 // remap target's keys, (b) keys for commands remapped TO DEFINITION are folded

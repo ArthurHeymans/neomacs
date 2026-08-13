@@ -3603,6 +3603,11 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
     expect_min_args("where-is-internal", &args, 1)?;
     expect_max_args("where-is-internal", &args, 5)?;
 
+    // GNU `Fwhere_is_internal` parses `Vwhere_is_preferred_modifier` into its
+    // C-side mask exactly once, before keymap discovery or menu-item filters
+    // can run Lisp.  Carry the typed snapshot through candidate selection so
+    // its identity and timing cannot drift into the inner sequence loop.
+    let preferred_modifier = WhereIsPreferredModifier::snapshot(eval.obarray());
     let mut definition = args[0];
     let first_only = args.get(2).is_some_and(|v| !v.is_nil());
     let first_only_non_ascii = args
@@ -3716,7 +3721,7 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
         // Convert Vec<Value> events to a vector value
         if prefer_single_binding {
             return Ok(Value::vector(
-                select_where_is_preferred_sequence(eval.obarray(), &found).clone(),
+                select_where_is_preferred_sequence(preferred_modifier, &found).clone(),
             ));
         }
         return Ok(Value::vector(found[0].clone()));
@@ -3972,34 +3977,85 @@ fn menu_item_command(binding: &Value) -> Option<Value> {
     }
 }
 
-fn where_is_preferred_modifier_mask(obarray: &Obarray) -> i64 {
-    match obarray
-        .symbol_value("where-is-preferred-modifier")
-        .and_then(|value| value.as_symbol_name())
-    {
-        Some("control") => KEY_CHAR_CTRL,
-        Some("meta") => KEY_CHAR_META,
-        Some("shift") => KEY_CHAR_SHIFT,
-        Some("super") => KEY_CHAR_SUPER,
-        Some("hyper") => KEY_CHAR_HYPER,
-        Some("alt") => KEY_CHAR_ALT,
-        _ => 0,
+/// Parsed, immutable form of GNU's `Vwhere_is_preferred_modifier`.
+///
+/// The Lisp variable accepts GNU `parse_solitary_modifier` spellings, but the
+/// selection algorithm needs only this closed subset.  Keeping the parsed
+/// state in an enum prevents arbitrary integers or a fresh Lisp lookup from
+/// entering the candidate loop.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WhereIsPreferredModifier {
+    Unspecified,
+    Control,
+    Meta,
+    Shift,
+    Super,
+    Hyper,
+    Alt,
+}
+
+impl WhereIsPreferredModifier {
+    fn snapshot(obarray: &Obarray) -> Self {
+        static VARIABLE: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+        let variable = *VARIABLE.get_or_init(|| intern("where-is-preferred-modifier"));
+        match obarray
+            .symbol_value_id_copied(variable)
+            .and_then(Value::as_symbol_name)
+        {
+            Some("C" | "ctrl" | "control") => Self::Control,
+            Some("M" | "meta") => Self::Meta,
+            Some("S" | "shift") => Self::Shift,
+            Some("s" | "super") => Self::Super,
+            Some("H" | "hyper") => Self::Hyper,
+            Some("A" | "alt") => Self::Alt,
+            _ => Self::Unspecified,
+        }
+    }
+
+    const fn mask(self) -> i64 {
+        match self {
+            Self::Unspecified => 0,
+            Self::Control => KEY_CHAR_CTRL,
+            Self::Meta => KEY_CHAR_META,
+            Self::Shift => KEY_CHAR_SHIFT,
+            Self::Super => KEY_CHAR_SUPER,
+            Self::Hyper => KEY_CHAR_HYPER,
+            Self::Alt => KEY_CHAR_ALT,
+        }
+    }
+
+    const fn is_specified(self) -> bool {
+        !matches!(self, Self::Unspecified)
     }
 }
 
-fn where_is_sequence_preference(obarray: &Obarray, seq: &[Value]) -> i32 {
-    let preferred_modifier = where_is_preferred_modifier_mask(obarray);
-    let mut result = 1;
+/// Result of applying GNU `preferred_sequence_p` to one candidate.
+///
+/// GNU represents these states as 0/1/2.  The enum makes it impossible to
+/// confuse a rejected sequence with a usable fallback at Rust call sites.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WhereIsSequencePreference {
+    Rejected,
+    Acceptable,
+    Preferred,
+}
+
+fn where_is_sequence_preference(
+    preferred_modifier: WhereIsPreferredModifier,
+    seq: &[Value],
+) -> WhereIsSequencePreference {
+    let preferred_mask = preferred_modifier.mask();
+    let mut result = WhereIsSequencePreference::Acceptable;
 
     for event in seq {
         let Some(code) = event.as_fixnum() else {
-            return 0;
+            return WhereIsSequencePreference::Rejected;
         };
         let modifiers = code & (KEY_CHAR_MOD_MASK & !KEY_CHAR_META);
-        if modifiers == preferred_modifier {
-            result = 2;
+        if modifiers == preferred_mask {
+            result = WhereIsSequencePreference::Preferred;
         } else if modifiers != 0 {
-            return 0;
+            return WhereIsSequencePreference::Rejected;
         }
     }
 
@@ -4007,21 +4063,21 @@ fn where_is_sequence_preference(obarray: &Obarray, seq: &[Value]) -> i32 {
 }
 
 fn select_where_is_preferred_sequence<'a>(
-    obarray: &Obarray,
+    preferred_modifier: WhereIsPreferredModifier,
     sequences: &'a [Vec<Value>],
 ) -> &'a Vec<Value> {
-    let preferred_modifier = where_is_preferred_modifier_mask(obarray);
-
-    if let Some(seq) = sequences
-        .iter()
-        .find(|seq| where_is_sequence_preference(obarray, seq) == 2)
-    {
+    if let Some(seq) = sequences.iter().find(|seq| {
+        where_is_sequence_preference(preferred_modifier, seq)
+            == WhereIsSequencePreference::Preferred
+    }) {
         return seq;
     }
 
-    if preferred_modifier != 0 {
+    if preferred_modifier.is_specified() {
         for seq in sequences {
-            if where_is_sequence_preference(obarray, seq) != 0 {
+            if where_is_sequence_preference(preferred_modifier, seq)
+                != WhereIsSequencePreference::Rejected
+            {
                 return seq;
             }
         }
