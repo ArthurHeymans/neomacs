@@ -4476,3 +4476,63 @@ passes 20 of 20 tests, and the Wayland smoke passes.  A refreshed release
 pdump was used for every real-GUI green.
 
 Status: FIXED.
+
+## 86. Inserted padding does not inherit the surrounding text property
+
+Command Log Mode inserts a propertized key description and then uses
+`move-to-column` to pad the command name to a fixed column.  GNU gives the
+inserted padding the key description's `:time` property; Neomacs stops the
+property at the original last character:
+
+```elisp
+(with-temp-buffer
+  (insert (propertize "x" :time "STAMP"))
+  (move-to-column 5 t)
+  (list (buffer-string)
+        (mapcar (lambda (position)
+                  (get-text-property position :time))
+                (number-sequence (point-min) (1- (point-max))))))
+;; GNU     => (#("x    " 0 5 (:time "STAMP"))
+;;             ("STAMP" "STAMP" "STAMP" "STAMP" "STAMP"))
+;; Neomacs => (#("x    " 0 1 (:time "STAMP"))
+;;             ("STAMP" nil nil nil nil))
+```
+
+The rank-396 `command-log-mode` corpus reaches this through real keyboard
+commands and records both merged and unmerged repetitions.  The visible log
+text is identical, but every timestamp property run ends before the padding in
+Neomacs.
+
+Status: LIVE (measured 2026-08-12).
+
+## 87. `write-region` ignores `write-region-annotate-functions`
+
+Command Log Mode saves each logged command with a timestamp prefix by
+dynamically binding `write-region-annotate-functions`.  GNU calls the
+annotation function; Neomacs writes only the buffer bytes:
+
+```elisp
+(defun divergence-annotation (start _end)
+  (list (cons start "[STAMP] ")))
+(let ((file (make-temp-file "annotation")))
+  (unwind-protect
+      (with-temp-buffer
+        (insert "line\n")
+        (let ((write-region-annotate-functions
+               '(divergence-annotation)))
+          (write-region (point-min) (point-max) file nil 'silent))
+        (with-temp-buffer
+          (insert-file-contents file)
+          (buffer-string)))
+    (delete-file file)))
+;; GNU     => "[STAMP] line\n"
+;; Neomacs => "line\n"
+```
+
+The variable is already registered as special in Neomacs; the dynamic binding
+is visible.  The missing behavior is in the write path itself.  The rank-396
+recovery case first proves a failed save retains the log, then creates its
+owned directory and performs the real public save.  Both editors clear the log
+afterward, while only GNU writes the timestamp annotation.
+
+Status: LIVE (measured 2026-08-12).

@@ -1457,6 +1457,12 @@ pub const FLYSPELL_CORRECT_MELPA_PIN: (&str, &str) = ("flyspell-correct", "20260
 /// `a5a41c0f3a7881bd3eba07bee424ecb7c7d5061e`.
 pub const FLYSPELL_CORRECT_HELM_MELPA_PIN: (&str, &str) = ("flyspell-correct-helm", "20260106.955");
 
+/// The exact Command Log Mode package selected for practical command/text,
+/// repetition, window-toggle, local/global lifecycle, clear, and save parity.
+/// MELPA built this archive from upstream commit
+/// `af600e6b4129c8115f464af576505ea8e789db27`.
+pub const COMMAND_LOG_MODE_MELPA_PIN: (&str, &str) = ("command-log-mode", "20160413.447");
+
 /// The exact flycheck-dmd-dub package selected by the practical DUB project
 /// discovery, metadata, subprocess, cache, and buffer-local flag parity corpus.
 /// MELPA built this archive from upstream commit
