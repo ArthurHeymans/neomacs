@@ -1463,33 +1463,17 @@ fn interactive_args_from_string_code_in_vm_runtime(
                 InteractiveControlLetter::ExistingBuffer => {
                     let default = interactive_current_buffer_default(&shared.buffers);
                     let letter_args = [Value::heap_string(prompt.clone()), default, Value::T];
-                    super::minibuffer::builtin_read_buffer_in_runtime(shared, &letter_args)?;
-                    let completing_args = {
-                        super::minibuffer::read_buffer_completing_args(
-                            &shared.obarray,
-                            &shared.buffers,
-                            &letter_args,
-                        )
-                    };
-                    args.push(super::reader::finish_completing_read_in_vm_runtime(
+                    args.push(super::minibuffer::finish_read_buffer_in_vm_runtime(
                         shared,
-                        &completing_args,
+                        &letter_args,
                     )?);
                 }
                 InteractiveControlLetter::Buffer => {
                     let default = interactive_other_buffer_default(&mut shared.buffers);
                     let letter_args = [Value::heap_string(prompt.clone()), default, Value::NIL];
-                    super::minibuffer::builtin_read_buffer_in_runtime(shared, &letter_args)?;
-                    let completing_args = {
-                        super::minibuffer::read_buffer_completing_args(
-                            &shared.obarray,
-                            &shared.buffers,
-                            &letter_args,
-                        )
-                    };
-                    args.push(super::reader::finish_completing_read_in_vm_runtime(
+                    args.push(super::minibuffer::finish_read_buffer_in_vm_runtime(
                         shared,
-                        &completing_args,
+                        &letter_args,
                     )?);
                 }
                 InteractiveControlLetter::Character => {

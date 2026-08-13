@@ -5022,6 +5022,39 @@ fn vm_minibuffer_reader_frontends_use_shared_runtime_batch_eof_path() {
 }
 
 #[test]
+fn vm_read_buffer_delegates_to_read_buffer_function() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r#"(let ((target (get-buffer-create "rbf-target")))
+                 (unwind-protect
+                     (let ((read-buffer-function
+                            (lambda (&rest args) args)))
+                       (read-buffer "Buffer: " target t))
+                   (kill-buffer target)))"#
+        ),
+        r#"OK ("Buffer: " "rbf-target" t)"#
+    );
+}
+
+#[test]
+fn vm_read_buffer_override_receives_predicate_and_completion_case_binding() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r#"(let ((completion-ignore-case nil)
+                     (read-buffer-completion-ignore-case t)
+                     (read-buffer-function
+                      (lambda (&rest args)
+                        (list args completion-ignore-case))))
+                 (list (read-buffer "Buffer: " nil nil 'identity)
+                       completion-ignore-case))"#
+        ),
+        r#"OK ((("Buffer: " nil nil identity) t) nil)"#
+    );
+}
+
+#[test]
 fn vm_completing_read_calls_completing_read_function() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

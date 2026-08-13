@@ -1048,19 +1048,82 @@ pub(crate) fn finish_read_directory_name_in_vm_runtime(
 /// Read a buffer name from the minibuffer with completion.
 /// In interactive mode, delegates to completing-read with buffer name candidates.
 pub(crate) fn builtin_read_buffer(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_read_buffer_in_runtime(eval, &args)?;
-    finish_read_buffer_in_eval(eval, &args)
+    execute_read_buffer_plan(eval, &args, |eval, completing_args| {
+        super::reader::builtin_completing_read(eval, completing_args.to_vec())
+    })
 }
 
-pub(crate) fn finish_read_buffer_in_eval(
+/// The two GNU `Fread_buffer` dispatch paths.
+///
+/// Keeping this choice explicit prevents callers such as interactive control
+/// letters from bypassing `read-buffer-function` by constructing completion
+/// arguments directly.
+#[derive(Clone, Debug)]
+pub(crate) enum ReadBufferPlan {
+    Override {
+        function: Value,
+        arguments: Vec<Value>,
+    },
+    Complete {
+        arguments: [Value; 7],
+    },
+}
+
+fn plan_read_buffer(eval: &mut super::eval::Context, args: &[Value]) -> ReadBufferPlan {
+    let default = normalize_buffer_reader_default(
+        eval.buffer_manager(),
+        args.get(1).copied().unwrap_or(Value::NIL),
+    );
+    let function = eval.visible_variable_value_or_nil("read-buffer-function");
+    if !function.is_nil() {
+        let require_match = args.get(2).copied().unwrap_or(Value::NIL);
+        let predicate = args.get(3).copied().unwrap_or(Value::NIL);
+        let mut arguments = vec![args[0], default, require_match];
+        // GNU keeps backward compatibility with older three-argument reader
+        // functions when no predicate was supplied.
+        if !predicate.is_nil() {
+            arguments.push(predicate);
+        }
+        ReadBufferPlan::Override {
+            function,
+            arguments,
+        }
+    } else {
+        ReadBufferPlan::Complete {
+            arguments: read_buffer_completing_args(eval.obarray(), eval.buffer_manager(), args),
+        }
+    }
+}
+
+fn execute_read_buffer_plan(
+    eval: &mut super::eval::Context,
+    args: &[Value],
+    complete: impl FnOnce(&mut super::eval::Context, &[Value]) -> EvalResult,
+) -> EvalResult {
+    builtin_read_buffer_in_runtime(eval, args)?;
+
+    // GNU binds this around both the override and completion paths.
+    let specpdl_count = eval.specpdl.len();
+    let ignore_case = eval.visible_variable_value_or_nil("read-buffer-completion-ignore-case");
+    eval.specbind(super::intern::intern("completion-ignore-case"), ignore_case);
+
+    let result = match plan_read_buffer(eval, args) {
+        ReadBufferPlan::Override {
+            function,
+            arguments,
+        } => eval.funcall_general(function, arguments),
+        ReadBufferPlan::Complete { arguments } => complete(eval, &arguments),
+    };
+    eval.unbind_to_with_result(specpdl_count, result)
+}
+
+pub(crate) fn finish_read_buffer_in_vm_runtime(
     eval: &mut super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
-    let completing_args = read_buffer_completing_args(eval.obarray(), eval.buffer_manager(), args);
-    // Route through the full `completing-read` entry so the (already
-    // default-formatted) prompt is emitted in batch mode, matching GNU's
-    // `Fread_buffer` -> `Fcompleting_read` -> `read_minibuf_noninteractive`.
-    super::reader::builtin_completing_read(eval, completing_args.to_vec())
+    execute_read_buffer_plan(eval, args, |eval, completing_args| {
+        super::reader::finish_completing_read_in_vm_runtime(eval, completing_args)
+    })
 }
 
 pub(crate) fn builtin_read_buffer_in_runtime(
