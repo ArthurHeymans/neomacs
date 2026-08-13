@@ -694,6 +694,52 @@ fn commandp_non_interactive() {
     assert!(result.unwrap().is_nil());
 }
 
+/// GNU `indirect_function` (`src/eval.c:Fcommandp`) reads `SYMBOL_FUNC` once
+/// per symbol alias hop. A function-cell lookup is one logical operation in
+/// Neomacs as well; splitting its unbound and value states into independent
+/// `Obarray::slot` probes multiplies the dominant M-x completion loop.
+#[test]
+fn commandp_reads_each_function_cell_once() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let command = intern("forward-char");
+
+    ev.obarray.reset_symbol_slot_read_count();
+    assert_eq!(
+        classify_command_designator_in_state(
+            &ev.obarray,
+            &ev.interactive,
+            &Value::from_sym_id(command),
+            false,
+        ),
+        CommandpClassification::Interactive
+    );
+    assert_eq!(
+        ev.obarray.symbol_slot_read_count(),
+        1,
+        "one symbol alias hop must take one typed function-cell snapshot"
+    );
+
+    let alias = intern("neo-commandp-function-cell-snapshot-alias");
+    ev.obarray
+        .set_symbol_function_id(alias, Value::from_sym_id(command));
+    ev.obarray.reset_symbol_slot_read_count();
+    assert_eq!(
+        classify_command_designator_in_state(
+            &ev.obarray,
+            &ev.interactive,
+            &Value::from_sym_id(alias),
+            false,
+        ),
+        CommandpClassification::Interactive
+    );
+    assert_eq!(
+        ev.obarray.symbol_slot_read_count(),
+        2,
+        "a two-symbol alias chain must take exactly two typed snapshots"
+    );
+}
+
 #[test]
 fn commandp_uses_closure_slot_shape_instead_of_scanning_body() {
     crate::test_utils::init_test_tracing();

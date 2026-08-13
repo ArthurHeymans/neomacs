@@ -1030,9 +1030,6 @@ fn classify_command_designator_in_state(
     for_call_interactively: bool,
 ) -> CommandpClassification {
     if let Some(symbol) = designator.as_symbol_id() {
-        if obarray.is_function_unbound_id(symbol) {
-            return CommandpClassification::Reject;
-        }
         if let Some((resolved_symbol, resolved_value)) =
             resolve_function_designator_symbol_in_state(obarray, symbol)
         {

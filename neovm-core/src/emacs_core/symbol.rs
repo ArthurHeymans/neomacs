@@ -676,6 +676,10 @@ impl Clone for LispSymbol {
 /// heap allocations.
 pub struct Obarray {
     symbols: SymbolChunks,
+    /// Test-only visibility into logical symbol-table access. Kept per
+    /// obarray so parallel tests cannot contaminate one another's counts.
+    #[cfg(test)]
+    symbol_slot_read_count: std::sync::atomic::AtomicUsize,
     global_member_count: usize,
     function_epoch: u64,
     value_epoch: u64,
@@ -692,6 +696,20 @@ pub struct Obarray {
     /// is a `Box::into_raw` pointer; freed in [`Obarray::drop`]. The
     /// pool is append-only — we never reuse a slot.
     blvs: Vec<*mut LispBufferLocalValue>,
+}
+
+/// One logical read of a symbol's complete function-cell state.
+///
+/// `ExplicitlyUnbound` is distinct from `Empty`: GNU `fmakunbound` suppresses
+/// Neomacs's lazily materialized canonical builtin fallback, while an ordinary
+/// empty cell may still use that fallback. Keeping the states closed prevents
+/// callers from re-reading the symbol slot to recover information discarded by
+/// an `Option<Value>`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum FunctionCellSnapshot {
+    ExplicitlyUnbound,
+    Empty,
+    Bound(Value),
 }
 
 /// See [`Obarray::completion_order_cache`].
@@ -1106,6 +1124,8 @@ impl Clone for Obarray {
         }
         Self {
             symbols,
+            #[cfg(test)]
+            symbol_slot_read_count: std::sync::atomic::AtomicUsize::new(0),
             global_member_count: self.global_member_count,
             function_epoch: self.function_epoch,
             value_epoch: self.value_epoch,
@@ -1141,8 +1161,23 @@ impl Obarray {
 
     #[inline(always)]
     fn slot(&self, id: SymId) -> Option<&LispSymbol> {
+        #[cfg(test)]
+        self.symbol_slot_read_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // `get` already folds presence (empty slots read as `None`).
         self.symbols.get(Self::slot_index(id))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reset_symbol_slot_read_count(&self) {
+        self.symbol_slot_read_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn symbol_slot_read_count(&self) -> usize {
+        self.symbol_slot_read_count
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     #[inline(always)]
@@ -1322,6 +1357,8 @@ impl Obarray {
     pub fn new() -> Self {
         let mut ob = Self {
             symbols: SymbolChunks::new(),
+            #[cfg(test)]
+            symbol_slot_read_count: std::sync::atomic::AtomicUsize::new(0),
             global_member_count: 0,
             function_epoch: 0,
             value_epoch: 0,
@@ -2433,11 +2470,25 @@ impl Obarray {
 
     /// Get the function cell of a symbol by identity.
     pub fn symbol_function_id(&self, id: SymId) -> Option<Value> {
-        let sym = self.slot(id)?;
-        if sym.function_unbound || sym.function.is_nil() {
-            return None;
+        match self.function_cell_snapshot(id) {
+            FunctionCellSnapshot::Bound(function) => Some(function),
+            FunctionCellSnapshot::ExplicitlyUnbound | FunctionCellSnapshot::Empty => None,
         }
-        Some(sym.function)
+    }
+
+    /// Snapshot the complete function-cell state with one symbol-slot read.
+    #[inline(always)]
+    pub(crate) fn function_cell_snapshot(&self, id: SymId) -> FunctionCellSnapshot {
+        let Some(symbol) = self.slot(id) else {
+            return FunctionCellSnapshot::Empty;
+        };
+        if symbol.function_unbound {
+            FunctionCellSnapshot::ExplicitlyUnbound
+        } else if symbol.function.is_nil() {
+            FunctionCellSnapshot::Empty
+        } else {
+            FunctionCellSnapshot::Bound(symbol.function)
+        }
     }
 
     /// Get the function cell of a symbol from its Value representation.
@@ -3237,6 +3288,8 @@ impl Obarray {
 
         let mut ob = Self {
             symbols: slots,
+            #[cfg(test)]
+            symbol_slot_read_count: std::sync::atomic::AtomicUsize::new(0),
             global_member_count: 0,
             function_epoch,
             value_epoch: 0,

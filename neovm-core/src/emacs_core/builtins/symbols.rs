@@ -14,7 +14,7 @@ use crate::emacs_core::intern::{
     NIL_SYM_ID, T_SYM_ID, intern, is_canonical_id, resolve_sym_lisp_string,
 };
 use crate::emacs_core::minibuffer;
-use crate::emacs_core::symbol::Obarray;
+use crate::emacs_core::symbol::{FunctionCellSnapshot, Obarray};
 use crate::window::{DisplayRowSnapshot, WindowDisplaySnapshot, WindowId};
 use malachite::integer::Integer;
 use std::collections::VecDeque;
@@ -1387,12 +1387,10 @@ fn pure_builtin_symbol_alias_target(name: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn symbol_function_cell_in_obarray(obarray: &Obarray, symbol: SymId) -> Option<Value> {
-    if obarray.is_function_unbound_id(symbol) {
-        return None;
-    }
-
-    if let Some(function) = obarray.symbol_function_id(symbol) {
-        return Some(function);
+    match obarray.function_cell_snapshot(symbol) {
+        FunctionCellSnapshot::ExplicitlyUnbound => return None,
+        FunctionCellSnapshot::Bound(function) => return Some(function),
+        FunctionCellSnapshot::Empty => {}
     }
 
     if !is_canonical_symbol_id(symbol) {
