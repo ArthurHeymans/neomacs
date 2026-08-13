@@ -5007,6 +5007,30 @@ fn where_is_internal_reuses_one_reverse_index_for_many_definitions() {
 }
 
 #[test]
+fn where_is_internal_answers_many_command_remappings_from_reverse_index() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_interactive_shims();
+    let results = eval_all_with(
+        &mut eval,
+        r##"(let ((m (make-sparse-keymap)))
+              (define-key m [remap first-command] 'first-target)
+              (define-key m [remap second-command] 'second-target)
+              (define-key m "a" 'first-target)
+              (define-key m "b" 'second-target)
+              (list (where-is-internal 'first-command (list m) t)
+                    (where-is-internal 'second-command (list m) t)))"##,
+    );
+
+    assert_eq!(results, ["OK ([97] [98])"]);
+    assert_eq!(eval.interactive.where_is_reverse_index_build_count(), 1);
+    assert_eq!(
+        eval.interactive
+            .where_is_reverse_index_remapping_lookup_count(),
+        2
+    );
+}
+
+#[test]
 fn where_is_internal_rebuilds_reverse_index_after_keymap_mutation() {
     crate::test_utils::init_test_tracing();
     let mut eval = eval_with_interactive_shims();
@@ -5021,6 +5045,25 @@ fn where_is_internal_rebuilds_reverse_index_after_keymap_mutation() {
     );
 
     assert_eq!(results, ["OK ([97] [98])"]);
+    assert_eq!(eval.interactive.where_is_reverse_index_build_count(), 2);
+}
+
+#[test]
+fn where_is_internal_rebuilds_indexed_remapping_after_keymap_mutation() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_interactive_shims();
+    let results = eval_all_with(
+        &mut eval,
+        r##"(let ((m (make-sparse-keymap)))
+              (define-key m [remap source-command] 'first-target)
+              (define-key m "a" 'first-target)
+              (where-is-internal 'source-command (list m) t)
+              (define-key m [remap source-command] 'second-target)
+              (define-key m "b" 'second-target)
+              (where-is-internal 'source-command (list m) t))"##,
+    );
+
+    assert_eq!(results, ["OK [98]"]);
     assert_eq!(eval.interactive.where_is_reverse_index_build_count(), 2);
 }
 

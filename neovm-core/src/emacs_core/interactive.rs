@@ -173,6 +173,7 @@ impl WhereIsDefinitionKey {
 struct WhereIsReverseIndex {
     state: WhereIsKeymapState,
     sequences_by_definition: HashMap<WhereIsDefinitionKey, Vec<Vec<Value>>>,
+    remapping_by_command: HashMap<SymId, Value>,
 }
 
 impl WhereIsReverseIndex {
@@ -181,6 +182,10 @@ impl WhereIsReverseIndex {
             .and_then(|key| self.sequences_by_definition.get(&key))
             .cloned()
             .unwrap_or_default()
+    }
+
+    fn remapping_for(&self, command: SymId) -> Option<Value> {
+        self.remapping_by_command.get(&command).copied()
     }
 
     fn trace_roots_with(&self, visit: &mut (impl FnMut(Value) + ?Sized)) {
@@ -193,6 +198,11 @@ impl WhereIsReverseIndex {
                 if event.is_heap_object() {
                     visit(*event);
                 }
+            }
+        }
+        for remapping in self.remapping_by_command.values() {
+            if remapping.is_heap_object() {
+                visit(*remapping);
             }
         }
     }
@@ -217,6 +227,9 @@ pub struct InteractiveRegistry {
     /// without depending on wall-clock timing.
     #[cfg(test)]
     where_is_reverse_index_build_count: usize,
+    /// Number of command-remapping queries answered by the reverse index.
+    #[cfg(test)]
+    where_is_reverse_index_remapping_lookup_count: usize,
 }
 
 impl InteractiveRegistry {
@@ -227,6 +240,8 @@ impl InteractiveRegistry {
             where_is_reverse_index: None,
             #[cfg(test)]
             where_is_reverse_index_build_count: 0,
+            #[cfg(test)]
+            where_is_reverse_index_remapping_lookup_count: 0,
         }
     }
 
@@ -275,6 +290,8 @@ impl InteractiveRegistry {
             where_is_reverse_index: None,
             #[cfg(test)]
             where_is_reverse_index_build_count: 0,
+            #[cfg(test)]
+            where_is_reverse_index_remapping_lookup_count: 0,
         }
     }
 
@@ -288,15 +305,24 @@ impl InteractiveRegistry {
         self.where_is_reverse_index_build_count
     }
 
+    #[cfg(test)]
+    fn where_is_reverse_index_remapping_lookup_count(&self) -> usize {
+        self.where_is_reverse_index_remapping_lookup_count
+    }
+
     fn cached_where_is_sequences(
         &self,
         keymaps: &[Value],
         definition: Value,
     ) -> Option<Vec<Vec<Value>>> {
+        self.cached_where_is_reverse_index(keymaps)
+            .map(|index| index.sequences_for(definition))
+    }
+
+    fn cached_where_is_reverse_index(&self, keymaps: &[Value]) -> Option<&WhereIsReverseIndex> {
         self.where_is_reverse_index
             .as_ref()
             .filter(|index| index.state.matches(keymaps))
-            .map(|index| index.sequences_for(definition))
     }
 
     fn install_where_is_reverse_index(&mut self, index: WhereIsReverseIndex) {
@@ -307,6 +333,11 @@ impl InteractiveRegistry {
 
     fn clear_where_is_reverse_index(&mut self) {
         self.where_is_reverse_index = None;
+    }
+
+    #[cfg(test)]
+    fn note_where_is_reverse_index_remapping_lookup(&mut self) {
+        self.where_is_reverse_index_remapping_lookup_count += 1;
     }
 
     pub(crate) fn trace_roots_with(&self, visit: &mut (impl FnMut(Value) + ?Sized)) {
@@ -3569,12 +3600,15 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
     // other command, search for the keys bound to that remap target instead.
     // (keymap.c: `tem = Fcommand_remapping (definition, Qnil, keymaps); if
     // (NILP (no_remap) && !NILP (tem)) definition = tem;`)
-    if !no_remap
-        && let Some(command_name) = command_remapping_command_name(&definition)
-        && let Some(target) = command_remapping_lookup_in_keymaps(&keymaps, command_name)
-        && !target.is_nil()
-    {
-        definition = target;
+    if !no_remap && let Some(command_name) = command_remapping_command_name(&definition) {
+        let target = if no_menu_bindings && !noindirect {
+            where_is_indexed_command_remapping(eval, &keymaps, command_name)
+        } else {
+            command_remapping_lookup_in_keymaps(&keymaps, command_name)
+        };
+        if let Some(target) = target.filter(|target| !target.is_nil()) {
+            definition = target;
+        }
     }
 
     // Collect the raw candidate sequences (longest-to-shortest, possibly
@@ -4083,17 +4117,11 @@ fn where_is_raw_sequences(
     noindirect: bool,
 ) -> Vec<Vec<Value>> {
     if no_menu_bindings && !noindirect {
-        if let Some(sequences) = eval
+        ensure_where_is_reverse_index(eval, keymaps);
+        return eval
             .interactive
             .cached_where_is_sequences(keymaps, definition)
-        {
-            return sequences;
-        }
-
-        let index = build_where_is_reverse_index(eval.obarray(), keymaps);
-        let sequences = index.sequences_for(definition);
-        eval.interactive.install_where_is_reverse_index(index);
-        return sequences;
+            .expect("where-is reverse index was just ensured");
     }
 
     // GNU clears the shared reverse cache when asked to use a lookup mode for
@@ -4114,12 +4142,41 @@ fn where_is_raw_sequences(
     sequences
 }
 
+fn ensure_where_is_reverse_index(eval: &mut Context, keymaps: &[Value]) {
+    if eval
+        .interactive
+        .cached_where_is_reverse_index(keymaps)
+        .is_some()
+    {
+        return;
+    }
+
+    let index = build_where_is_reverse_index(eval.obarray(), keymaps);
+    eval.interactive.install_where_is_reverse_index(index);
+}
+
+fn where_is_indexed_command_remapping(
+    eval: &mut Context,
+    keymaps: &[Value],
+    command: SymId,
+) -> Option<Value> {
+    ensure_where_is_reverse_index(eval, keymaps);
+    #[cfg(test)]
+    eval.interactive
+        .note_where_is_reverse_index_remapping_lookup();
+    eval.interactive
+        .cached_where_is_reverse_index(keymaps)
+        .expect("where-is reverse index was just ensured")
+        .remapping_for(command)
+}
+
 /// Scan every accessible binding once and group its key sequences by command.
 /// In contrast, calling `collect_where_is_sequences_value` for every M-x
 /// candidate scans the same map graph thousands of times.
 fn build_where_is_reverse_index(obarray: &Obarray, keymaps: &[Value]) -> WhereIsReverseIndex {
     let mut sequences_by_definition: HashMap<WhereIsDefinitionKey, Vec<Vec<Value>>> =
         HashMap::new();
+    let mut remapping_by_command = HashMap::new();
 
     for keymap in keymaps {
         let mut maps = Vec::new();
@@ -4133,11 +4190,18 @@ fn build_where_is_reverse_index(obarray: &Obarray, keymaps: &[Value]) -> WhereIs
             }
 
             list_keymap_for_each_binding(&map, Some(obarray), |event, binding| {
+                let mut sequence = map_prefix.clone();
+                sequence.push(event);
+                if let Some(command) = where_is_remap_pseudo_key_command(&sequence)
+                    .and_then(|command| command.as_symbol_id())
+                {
+                    remapping_by_command
+                        .entry(command)
+                        .or_insert_with(|| command_remapping_normalize_target(binding));
+                }
                 let Some(definition) = WhereIsDefinitionKey::from_value(get_keyelt(binding)) else {
                     return;
                 };
-                let mut sequence = map_prefix.clone();
-                sequence.push(event);
                 let sequences = sequences_by_definition.entry(definition).or_default();
                 if !sequences.contains(&sequence) {
                     sequences.push(sequence);
@@ -4149,6 +4213,7 @@ fn build_where_is_reverse_index(obarray: &Obarray, keymaps: &[Value]) -> WhereIs
     WhereIsReverseIndex {
         state: WhereIsKeymapState::new(keymaps),
         sequences_by_definition,
+        remapping_by_command,
     }
 }
 
