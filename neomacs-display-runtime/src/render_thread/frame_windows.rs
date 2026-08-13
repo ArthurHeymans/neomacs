@@ -30,7 +30,8 @@ use neomacs_display_protocol::effect_config::IdleDimConfig;
 #[cfg(feature = "wpe-webkit")]
 use neomacs_display_protocol::scene::FloatingWebKit;
 use neomacs_display_protocol::{
-    FrameRect, PresentationId, PresentedHit, PresentedHitError, PresentedHitQuery,
+    DeviceScale, FrameRect, GeometrySize, LogicalPixels, PresentMapping, PresentationExtent,
+    PresentationId, PresentedHit, PresentedHitError, PresentedHitQuery, SurfaceState,
 };
 use neomacs_renderer_wgpu::{
     PopupMenuState, RendererFrameEffects, TooltipState, WgpuGlyphAtlas, WgpuRenderer,
@@ -112,6 +113,9 @@ pub(crate) struct GuiFrameRenderState {
     pub emacs_frame_id: u64,
     /// Chromeless glyph composition and rendering state.
     pub compositor: FrameCompositor,
+    /// The one resolved relationship between the live root surface and the
+    /// immutable root presentation. Updated only at surface/presentation edges.
+    present_state: GuiFramePresentState,
     /// GUI chrome (menu bar, tool bar, compact bar) for this frame window.
     pub chrome: ChromeState,
     /// Snapshot-qualified visual state selected from displayed pointer maps.
@@ -146,6 +150,18 @@ pub(crate) struct GuiFrameRenderState {
     /// Floating WebKit overlays rendered on this frame window.
     #[cfg(feature = "wpe-webkit")]
     pub floating_webkits: Vec<FloatingWebKit>,
+}
+
+/// Compile-time separation of a suspended surface from drawable geometry.
+/// A drawable surface may await its first presentation, but it can never carry
+/// a mapping resolved for a different surface.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum GuiFramePresentState {
+    Suspended,
+    Drawable {
+        surface: neomacs_display_protocol::DrawableSurface,
+        mapping: Option<PresentMapping>,
+    },
 }
 
 /// GUI chrome state for a frame window.
@@ -370,6 +386,7 @@ impl GuiFrameRenderState {
                 transitions: TransitionState::default(),
                 retained_static: None,
             },
+            present_state: GuiFramePresentState::Suspended,
             chrome: ChromeState::default(),
             pointer_appearance: PointerAppearanceState::default(),
             presented_press: None,
@@ -416,6 +433,7 @@ impl GuiFrameRenderState {
                 transitions: TransitionState::default(),
                 retained_static: None,
             },
+            present_state: GuiFramePresentState::Suspended,
             chrome: ChromeState::default(),
             pointer_appearance: PointerAppearanceState::default(),
             presented_press: None,
@@ -448,6 +466,46 @@ impl GuiFrameRenderState {
         if self.compositor.glyph_atlas.is_none() {
             self.compositor.glyph_atlas =
                 Some(WgpuGlyphAtlas::new_with_scale(device, scale_factor as f32));
+        }
+    }
+
+    fn mapping_for_current_frame(
+        &self,
+        surface: neomacs_display_protocol::DrawableSurface,
+    ) -> Option<PresentMapping> {
+        let frame = self.compositor.current_frame.as_ref()?;
+        let logical_size =
+            GeometrySize::<LogicalPixels>::from_px(frame.width, frame.height).ok()?;
+        Some(PresentMapping::top_left_clip(
+            surface,
+            PresentationExtent::new(frame.presentation_id, logical_size),
+        ))
+    }
+
+    pub(super) fn set_surface_state(&mut self, state: SurfaceState) {
+        self.present_state = match state {
+            SurfaceState::Suspended => GuiFramePresentState::Suspended,
+            SurfaceState::Drawable(surface) => GuiFramePresentState::Drawable {
+                surface,
+                mapping: self.mapping_for_current_frame(surface),
+            },
+        };
+    }
+
+    fn refresh_present_mapping(&mut self) {
+        let GuiFramePresentState::Drawable { surface, .. } = self.present_state else {
+            return;
+        };
+        self.present_state = GuiFramePresentState::Drawable {
+            surface,
+            mapping: self.mapping_for_current_frame(surface),
+        };
+    }
+
+    pub(super) const fn present_mapping(&self) -> Option<PresentMapping> {
+        match self.present_state {
+            GuiFramePresentState::Suspended => None,
+            GuiFramePresentState::Drawable { mapping, .. } => mapping,
         }
     }
 
@@ -981,6 +1039,7 @@ impl GuiFrameRenderState {
         });
         self.compositor.child_frames.set_root_frame(frame.as_ref());
         self.compositor.current_frame = frame;
+        self.refresh_present_mapping();
         let appearance_changed = if let Some(previous) = previous_presentation
             && Some(previous) != next_presentation
         {
@@ -1509,7 +1568,12 @@ impl FrameLifecycle {
 
 impl GuiFrameWindowState {
     pub fn handle_resize(&mut self, device: &wgpu::Device, width: u32, height: u32) {
-        if width == 0 || height == 0 {
+        let scale = DeviceScale::new(self.lifecycle.scale_factor() as f32)
+            .expect("effective window scale is finite and positive");
+        let surface_state = SurfaceState::from_device_size(width, height, scale)
+            .expect("wgpu surface dimensions have finite logical extents");
+        self.render.set_surface_state(surface_state);
+        if matches!(surface_state, SurfaceState::Suspended) {
             return;
         }
         match &mut self.lifecycle {
@@ -1549,6 +1613,12 @@ impl GuiFrameWindowState {
                 *sf = effective_scale;
             }
         }
+        let (width, height) = self.lifecycle.native_size();
+        let scale = DeviceScale::new(effective_scale as f32)
+            .expect("effective window scale is finite and positive");
+        let surface_state = SurfaceState::from_device_size(width, height, scale)
+            .expect("native surface dimensions have finite logical extents");
+        self.render.set_surface_state(surface_state);
     }
 
     pub(super) fn set_title(&mut self, title: String) {
@@ -1950,6 +2020,13 @@ impl GuiFrameWindowManager {
         let key = self.primary_frame_key();
         if let Some(window_state) = self.windows.get_mut(&key) {
             let winit_id = native.window.id();
+            let surface_state = SurfaceState::from_device_size(
+                native.width,
+                native.height,
+                DeviceScale::new(native.scale_factor as f32)
+                    .expect("effective window scale is finite and positive"),
+            )
+            .expect("native surface dimensions have finite logical extents");
             self.primary_winit_id = Some(winit_id);
             window_state.lifecycle = FrameLifecycle::Active {
                 native,
@@ -1957,6 +2034,7 @@ impl GuiFrameWindowManager {
                 ime_enabled: window_state.lifecycle.ime_enabled(),
                 last_ime_cursor_area: window_state.lifecycle.last_ime_cursor_area(),
             };
+            window_state.render.set_surface_state(surface_state);
             self.sync_primary_mapping();
         }
     }
@@ -2110,6 +2188,21 @@ impl GuiFrameWindowManager {
                         last_titlebar_click: Instant::now(),
                         ..self.chrome_defaults.clone()
                     };
+                    let mut render = GuiFrameRenderState::new(
+                        req.emacs_frame_id,
+                        device,
+                        scale_factor,
+                        self.fps_enabled,
+                    );
+                    render.set_surface_state(
+                        SurfaceState::from_device_size(
+                            phys.width,
+                            phys.height,
+                            DeviceScale::new(scale_factor as f32)
+                                .expect("effective window scale is finite and positive"),
+                        )
+                        .expect("native surface dimensions have finite logical extents"),
+                    );
                     self.windows.insert(
                         FrameKey::Adopted(req.emacs_frame_id),
                         GuiFrameWindowState {
@@ -2127,12 +2220,7 @@ impl GuiFrameWindowManager {
                                 ime_enabled: false,
                                 last_ime_cursor_area: None,
                             },
-                            render: GuiFrameRenderState::new(
-                                req.emacs_frame_id,
-                                device,
-                                scale_factor,
-                                self.fps_enabled,
-                            ),
+                            render,
                         },
                     );
                 }

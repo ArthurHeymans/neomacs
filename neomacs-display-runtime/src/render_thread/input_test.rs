@@ -75,6 +75,34 @@ fn make_test_device() -> Option<wgpu::Device> {
     Some(device)
 }
 
+fn test_present_mapping(
+    frame: &FrameGlyphBuffer,
+    width: u32,
+    height: u32,
+) -> neomacs_display_protocol::PresentMapping {
+    let neomacs_display_protocol::SurfaceState::Drawable(surface) =
+        neomacs_display_protocol::SurfaceState::from_device_size(
+            width,
+            height,
+            neomacs_display_protocol::DeviceScale::new(1.0).unwrap(),
+        )
+        .unwrap()
+    else {
+        unreachable!("test render target is drawable")
+    };
+    neomacs_display_protocol::PresentMapping::top_left_clip(
+        surface,
+        neomacs_display_protocol::PresentationExtent::new(
+            frame.presentation_id,
+            neomacs_display_protocol::GeometrySize::<neomacs_display_protocol::LogicalPixels>::from_px(
+                frame.width,
+                frame.height,
+            )
+            .unwrap(),
+        ),
+    )
+}
+
 fn appearance_key(presentation: u64, appearance: usize) -> PresentedAppearanceKey {
     PresentedAppearanceKey::new(
         PresentationId::new(presentation),
@@ -374,8 +402,7 @@ fn presented_pointer_integration_runtime_motion_drives_same_frame_mouse_face_pix
         &harness.view,
         &frame,
         &mut harness.atlas,
-        140,
-        24,
+        test_present_mapping(&frame, 140, 24),
         false,
         None,
         (84.0, 10.0),
@@ -391,8 +418,7 @@ fn presented_pointer_integration_runtime_motion_drives_same_frame_mouse_face_pix
         &harness.view,
         &frame,
         &mut harness.atlas,
-        140,
-        24,
+        test_present_mapping(&frame, 140, 24),
         false,
         None,
         (84.0, 10.0),
@@ -424,8 +450,7 @@ fn presented_pointer_integration_runtime_motion_drives_same_frame_mouse_face_pix
         &harness.view,
         &frame,
         &mut harness.atlas,
-        140,
-        24,
+        test_present_mapping(&frame, 140, 24),
         false,
         None,
         (130.0, 20.0),

@@ -15,10 +15,11 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::types::{Color, DisplayWindowId, FaceId};
 use neomacs_display_protocol::{
-    BoxType, FaceAttributes, FrameRect, PointerAppearanceId, PointerAppearancePhase,
-    PointerAppearanceSelection, PointerDrawMode, PointerImageRelief, PointerReliefCornerErase,
-    PointerReliefEdges, PointerReliefMargins, PresentedPaintSpan, PresentedPointerAppearance,
-    PresentedPointerRegion, PresentedPrimitiveKind,
+    BoxType, DeviceScale, FaceAttributes, FrameRect, GeometrySize, LogicalPixels,
+    PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection, PointerDrawMode,
+    PointerImageRelief, PointerReliefCornerErase, PointerReliefEdges, PointerReliefMargins,
+    PresentMapping, PresentationExtent, PresentedPaintSpan, PresentedPointerAppearance,
+    PresentedPointerRegion, PresentedPrimitiveKind, SurfaceState,
 };
 use neomacs_renderer_wgpu::types::SubpixelRequest;
 use neomacs_renderer_wgpu::{WgpuGlyphAtlas, WgpuRenderer};
@@ -60,6 +61,21 @@ fn try_harness() -> Option<Harness> {
         target,
         view,
     })
+}
+
+fn mapping_for(frame: &FrameGlyphBuffer, width: u32, height: u32) -> PresentMapping {
+    let SurfaceState::Drawable(surface) =
+        SurfaceState::from_device_size(width, height, DeviceScale::new(1.0).unwrap()).unwrap()
+    else {
+        unreachable!("offscreen targets are drawable")
+    };
+    PresentMapping::top_left_clip(
+        surface,
+        PresentationExtent::new(
+            frame.presentation_id,
+            GeometrySize::<LogicalPixels>::from_px(frame.width, frame.height).unwrap(),
+        ),
+    )
 }
 
 fn frame_with_cursor(cursor_color: Color) -> FrameGlyphBuffer {
@@ -165,8 +181,7 @@ fn offscreen_frame_renders_background_and_cursor() {
         &h.view,
         &frame,
         &mut h.atlas,
-        W,
-        H,
+        mapping_for(&frame, W, H),
         true,
         None,
         (0.0, 0.0),
@@ -196,6 +211,67 @@ fn offscreen_frame_renders_background_and_cursor() {
 }
 
 #[test]
+fn stale_presentation_is_clipped_at_native_scale_after_surface_growth() {
+    let Some(mut h) = try_harness() else {
+        eprintln!("SKIP: no GPU adapter");
+        return;
+    };
+    let mut frame = FrameGlyphBuffer::with_size((W / 2) as f32, H as f32);
+    frame.presentation_id = PresentationId::new(501);
+    frame.background = Color::BLACK;
+    frame.set_face(
+        FaceId::new(1),
+        Color::WHITE,
+        Some(Color::RED),
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
+    frame.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
+    frame.add_stretch(
+        0.0,
+        0.0,
+        (W / 2) as f32,
+        H as f32,
+        Color::RED,
+        FaceId::new(1),
+        false,
+    );
+
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        mapping_for(&frame, W, H),
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+        None,
+    );
+    let buf = read_back(&h);
+
+    let old_content = px(&buf, W / 4, H / 2);
+    assert!(
+        old_content[0] > 180 && old_content[1] < 80 && old_content[2] < 80,
+        "the stale presentation must remain at its original size: {old_content:?}"
+    );
+    let newly_exposed_surface = px(&buf, W * 3 / 4, H / 2);
+    assert!(
+        newly_exposed_surface[0] < 40
+            && newly_exposed_surface[1] < 40
+            && newly_exposed_surface[2] < 40,
+        "new surface area must expose background, not stretched stale pixels: {newly_exposed_surface:?}"
+    );
+}
+
+#[test]
 fn ime_preedit_cjk_background_covers_the_shaped_run() {
     let Some(mut h) = try_harness() else {
         return;
@@ -206,8 +282,7 @@ fn ime_preedit_cjk_background_covers_the_shaped_run() {
         &h.view,
         &frame,
         &mut h.atlas,
-        W,
-        H,
+        mapping_for(&frame, W, H),
         false,
         None,
         (0.0, 0.0),
@@ -299,8 +374,7 @@ fn negative_box_line_width_paints_an_inset_border() {
         &h.view,
         &frame,
         &mut h.atlas,
-        W,
-        H,
+        mapping_for(&frame, W, H),
         false,
         None,
         (0.0, 0.0),
@@ -367,8 +441,7 @@ fn negative_box_border_does_not_cover_a_one_cell_glyph() {
         &h.view,
         &frame,
         &mut h.atlas,
-        W,
-        H,
+        mapping_for(&frame, W, H),
         false,
         None,
         (0.0, 0.0),
@@ -420,8 +493,7 @@ fn cursor_visible_false_suppresses_cursor() {
         &h.view,
         &frame,
         &mut h.atlas,
-        W,
-        H,
+        mapping_for(&frame, W, H),
         false,
         None,
         (0.0, 0.0),
@@ -527,8 +599,7 @@ fn presented_pointer_integration_image_relief_flips_edge_polarity_without_moving
             &h.view,
             &frame,
             &mut h.atlas,
-            W,
-            H,
+            mapping_for(&frame, W, H),
             false,
             None,
             (36.0, 32.0),
@@ -678,8 +749,7 @@ fn composite_matches_full_render() {
         &va,
         &frame,
         &mut h.atlas,
-        W,
-        H,
+        mapping_for(&frame, W, H),
         true,
         None,
         (0.0, 0.0),
@@ -695,8 +765,7 @@ fn composite_matches_full_render() {
         &vs,
         &frame,
         &mut h.atlas,
-        W,
-        H,
+        mapping_for(&frame, W, H),
         false,
         None,
         (0.0, 0.0),
@@ -707,8 +776,14 @@ fn composite_matches_full_render() {
     let (tc, vc) = make_tex(&h.renderer, "composite");
     let bg = h.renderer.create_texture_bind_group(&vs);
     h.renderer.blit_texture_to_view(&bg, &vc, W, H);
-    h.renderer
-        .render_cursor_only(&vc, &frame, W, H, true, None, (0.0, 0.0));
+    h.renderer.render_cursor_only(
+        &vc,
+        &frame,
+        mapping_for(&frame, W, H),
+        true,
+        None,
+        (0.0, 0.0),
+    );
     let comp = read_tex(&h.renderer, &tc);
 
     // Compare: allow tiny per-channel tolerance for the sRGB blit round-trip.
@@ -759,8 +834,7 @@ fn retained_static_reused_across_cursor_colors() {
         &vs,
         &frame_a,
         &mut h.atlas,
-        W,
-        H,
+        mapping_for(&frame_a, W, H),
         false,
         None,
         (0.0, 0.0),
@@ -773,14 +847,26 @@ fn retained_static_reused_across_cursor_colors() {
     // Composite the SAME retained scene with the red then blue cursor.
     let (tr, vr) = make_tex(&h.renderer, "comp-red");
     h.renderer.blit_texture_to_view(&bg, &vr, W, H);
-    h.renderer
-        .render_cursor_only(&vr, &frame_a, W, H, true, None, (0.0, 0.0));
+    h.renderer.render_cursor_only(
+        &vr,
+        &frame_a,
+        mapping_for(&frame_a, W, H),
+        true,
+        None,
+        (0.0, 0.0),
+    );
     let red = read_tex(&h.renderer, &tr);
 
     let (tb, vb) = make_tex(&h.renderer, "comp-blue");
     h.renderer.blit_texture_to_view(&bg, &vb, W, H);
-    h.renderer
-        .render_cursor_only(&vb, &frame_b, W, H, true, None, (0.0, 0.0));
+    h.renderer.render_cursor_only(
+        &vb,
+        &frame_b,
+        mapping_for(&frame_b, W, H),
+        true,
+        None,
+        (0.0, 0.0),
+    );
     let blue = read_tex(&h.renderer, &tb);
 
     // Outside the cursor slot (x>=16), the two composites are bit-identical.
@@ -874,8 +960,7 @@ fn filled_box_composite_matches_full_render() {
         &va,
         &frame,
         &mut h.atlas,
-        W,
-        H,
+        mapping_for(&frame, W, H),
         true,
         None,
         (0.0, 0.0),
@@ -891,8 +976,7 @@ fn filled_box_composite_matches_full_render() {
         &vs,
         &frame,
         &mut h.atlas,
-        W,
-        H,
+        mapping_for(&frame, W, H),
         false,
         None,
         (0.0, 0.0),
@@ -905,15 +989,20 @@ fn filled_box_composite_matches_full_render() {
     h.renderer.blit_texture_to_view(&bg, &vc, W, H);
     // Match the runtime sequence exactly: render_cursor_only draws the box
     // (cursor_bg) unscissored, then the scissored cell redraw adds box + char.
-    h.renderer
-        .render_cursor_only(&vc, &frame, W, H, true, None, (0.0, 0.0));
+    h.renderer.render_cursor_only(
+        &vc,
+        &frame,
+        mapping_for(&frame, W, H),
+        true,
+        None,
+        (0.0, 0.0),
+    );
     // cursor cell = the glyph cell (20,16,10,18)
     h.renderer.render_frame_cell_loaded(
         &vc,
         &frame,
         &mut h.atlas,
-        W,
-        H,
+        mapping_for(&frame, W, H),
         true,
         None,
         (0.0, 0.0),
@@ -959,8 +1048,7 @@ fn filled_box_cell_redraw_ignores_stale_cell_below_resized_surface() {
         &view,
         &frame,
         &mut h.atlas,
-        W,
-        8,
+        mapping_for(&frame, W, 8),
         true,
         None,
         (0.0, 0.0),

@@ -586,6 +586,9 @@ impl RenderApp {
             }
         };
 
+        let present_mapping = render
+            .present_mapping()
+            .ok_or(FrameRenderFailure::AwaitingContent)?;
         let mut frame = render
             .take_current_frame_for_render()
             .ok_or(FrameRenderFailure::AwaitingContent)?;
@@ -669,6 +672,7 @@ impl RenderApp {
                     render,
                     &retained_view,
                     &frame,
+                    present_mapping,
                     false,
                     root_animated_cursor,
                     animated_cursor,
@@ -700,8 +704,7 @@ impl RenderApp {
             renderer.render_cursor_only(
                 &composition_view,
                 &frame,
-                native.width,
-                native.height,
+                present_mapping,
                 cursor_visible,
                 animated_cursor,
                 mouse_pos,
@@ -717,8 +720,7 @@ impl RenderApp {
                     renderer,
                     render,
                     &composition_view,
-                    native.width,
-                    native.height,
+                    present_mapping,
                     animated_cursor,
                     mouse_pos,
                 );
@@ -772,6 +774,7 @@ impl RenderApp {
                     render,
                     &current_view,
                     &frame,
+                    present_mapping,
                     cursor_visible,
                     root_animated_cursor,
                     animated_cursor,
@@ -851,6 +854,7 @@ impl RenderApp {
                 render,
                 &composition_view,
                 &frame,
+                present_mapping,
                 cursor_visible,
                 root_animated_cursor,
                 animated_cursor,
@@ -1032,10 +1036,10 @@ impl RenderApp {
     #[allow(clippy::too_many_arguments)]
     fn render_frame_root_glyphs(
         renderer: &mut WgpuRenderer,
-        native: &GuiFrameNativeWindowState,
         render: &mut GuiFrameRenderState,
         surface_view: &wgpu::TextureView,
         frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        present_mapping: neomacs_display_protocol::PresentMapping,
         cursor_visible: bool,
         root_animated_cursor: Option<crate::core::types::AnimatedCursor>,
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
@@ -1051,8 +1055,7 @@ impl RenderApp {
                 surface_view,
                 frame,
                 render.compositor.glyph_atlas.as_mut().unwrap(),
-                native.width,
-                native.height,
+                present_mapping,
                 cursor_visible,
                 root_animated_cursor,
                 render.mouse_pos,
@@ -1164,6 +1167,7 @@ impl RenderApp {
         render: &mut GuiFrameRenderState,
         surface_view: &wgpu::TextureView,
         frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
+        present_mapping: neomacs_display_protocol::PresentMapping,
         cursor_visible: bool,
         root_animated_cursor: Option<crate::core::types::AnimatedCursor>,
         animated_cursor: Option<crate::core::types::AnimatedCursor>,
@@ -1175,10 +1179,10 @@ impl RenderApp {
     ) {
         Self::render_frame_root_glyphs(
             renderer,
-            native,
             render,
             surface_view,
             frame,
+            present_mapping,
             cursor_visible,
             root_animated_cursor,
             bg_gradient,
@@ -1228,6 +1232,7 @@ impl RenderApp {
                 continue;
             }
             let mut mini = FrameGlyphBuffer::with_size(frame.width, frame.height);
+            mini.presentation_id = frame.presentation_id;
             mini.fonts = frame.fonts.clone();
             mini.char_fonts = frame.char_fonts.clone();
             mini.shaped_clusters = frame.shaped_clusters.clone();
@@ -1284,8 +1289,7 @@ impl RenderApp {
         renderer: &mut WgpuRenderer,
         render: &mut GuiFrameRenderState,
         surface_view: &wgpu::TextureView,
-        width: u32,
-        height: u32,
+        present_mapping: neomacs_display_protocol::PresentMapping,
         animated_cursor: Option<crate::core::types::AnimatedCursor>,
         mouse_pos: (f32, f32),
     ) {
@@ -1305,8 +1309,7 @@ impl RenderApp {
                 surface_view,
                 &cell.mini,
                 atlas,
-                width,
-                height,
+                present_mapping,
                 true,
                 animated_cursor,
                 mouse_pos,

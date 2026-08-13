@@ -56,6 +56,57 @@ fn make_frame(frame_id: u64, parent_id: u64) -> FrameGlyphBuffer {
     buf
 }
 
+#[test]
+fn root_present_mapping_refreshes_on_surface_and_presentation_edges() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    let initial_surface =
+        SurfaceState::from_device_size(1162, 1194, DeviceScale::new(1.75).unwrap()).unwrap();
+    render.set_surface_state(initial_surface);
+    assert!(render.present_mapping().is_none());
+
+    let mut stale = FrameGlyphBuffer::with_size(664.0, 682.0);
+    stale.presentation_id = PresentationId::new(5);
+    render.set_current_frame(Some(stale), None);
+    let initial = render.present_mapping().unwrap();
+    assert_eq!(initial.presentation(), PresentationId::new(5));
+    assert_eq!(initial.surface_logical_size().width(), 664.0);
+
+    let maximized =
+        SurfaceState::from_device_size(3456, 2125, DeviceScale::new(1.75).unwrap()).unwrap();
+    render.set_surface_state(maximized);
+    let stale_on_maximized = render.present_mapping().unwrap();
+    assert_eq!(stale_on_maximized.presentation(), PresentationId::new(5));
+    assert!((stale_on_maximized.surface_logical_size().width() - 1974.8572).abs() < 0.001);
+    assert_eq!(
+        stale_on_maximized.visible_content_rect().unwrap().width(),
+        664.0
+    );
+
+    let mut fresh = FrameGlyphBuffer::with_size(1974.8572, 1214.2858);
+    fresh.presentation_id = PresentationId::new(6);
+    render.set_current_frame(Some(fresh), None);
+    let fresh_on_maximized = render.present_mapping().unwrap();
+    assert_eq!(fresh_on_maximized.presentation(), PresentationId::new(6));
+    assert!((fresh_on_maximized.visible_content_rect().unwrap().width() - 1974.8572).abs() < 0.001);
+}
+
+#[test]
+fn suspended_surface_cannot_retain_a_drawable_present_mapping() {
+    let mut render = GuiFrameRenderState::new_without_device(0x42, false);
+    let mut frame = FrameGlyphBuffer::with_size(800.0, 600.0);
+    frame.presentation_id = PresentationId::new(7);
+    render.set_current_frame(Some(frame), None);
+    render.set_surface_state(
+        SurfaceState::from_device_size(800, 600, DeviceScale::new(1.0).unwrap()).unwrap(),
+    );
+    assert!(render.present_mapping().is_some());
+
+    render.set_surface_state(
+        SurfaceState::from_device_size(0, 600, DeviceScale::new(1.0).unwrap()).unwrap(),
+    );
+    assert!(render.present_mapping().is_none());
+}
+
 fn set_parent_offset(frame: &mut FrameGlyphBuffer, x: f32, y: f32) {
     let placement = frame.frame_placement;
     frame.frame_placement = neomacs_display_protocol::PresentedFramePlacement::new(

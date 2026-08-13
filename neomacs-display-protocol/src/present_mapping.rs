@@ -201,6 +201,11 @@ impl PresentMapping {
     }
 
     #[must_use]
+    pub const fn content_logical_size(self) -> GeometrySize<LogicalPixels> {
+        self.content.logical_size()
+    }
+
+    #[must_use]
     pub const fn surface(self) -> DrawableSurface {
         self.surface
     }

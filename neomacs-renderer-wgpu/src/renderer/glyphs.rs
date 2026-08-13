@@ -1164,8 +1164,7 @@ impl WgpuRenderer {
         view: &wgpu::TextureView,
         frame_glyphs: &FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,
-        surface_width: u32,
-        surface_height: u32,
+        mapping: neomacs_display_protocol::PresentMapping,
         cursor_visible: bool,
         animated_cursor: Option<AnimatedCursor>,
         mouse_pos: (f32, f32),
@@ -1177,8 +1176,7 @@ impl WgpuRenderer {
             view,
             frame_glyphs,
             glyph_atlas,
-            surface_width,
-            surface_height,
+            mapping,
             cursor_visible,
             animated_cursor,
             mouse_pos,
@@ -1201,8 +1199,7 @@ impl WgpuRenderer {
         view: &wgpu::TextureView,
         frame_glyphs: &FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,
-        surface_width: u32,
-        surface_height: u32,
+        mapping: neomacs_display_protocol::PresentMapping,
         cursor_visible: bool,
         animated_cursor: Option<AnimatedCursor>,
         mouse_pos: (f32, f32),
@@ -1212,8 +1209,7 @@ impl WgpuRenderer {
             view,
             frame_glyphs,
             glyph_atlas,
-            surface_width,
-            surface_height,
+            mapping,
             cursor_visible,
             animated_cursor,
             mouse_pos,
@@ -1234,8 +1230,7 @@ impl WgpuRenderer {
         view: &wgpu::TextureView,
         frame_glyphs: &FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,
-        surface_width: u32,
-        surface_height: u32,
+        mapping: neomacs_display_protocol::PresentMapping,
         cursor_visible: bool,
         animated_cursor: Option<AnimatedCursor>,
         mouse_pos: (f32, f32),
@@ -1245,6 +1240,12 @@ impl WgpuRenderer {
         load_existing: bool,
         scissor: Option<(u32, u32, u32, u32)>,
     ) {
+        debug_assert_eq!(mapping.presentation(), frame_glyphs.presentation_id);
+        debug_assert_eq!(mapping.content_logical_size().width(), frame_glyphs.width);
+        debug_assert_eq!(mapping.content_logical_size().height(), frame_glyphs.height);
+        let surface = mapping.surface();
+        let surface_width = surface.device_width().get();
+        let surface_height = surface.device_height().get();
         let scissor = match scissor {
             Some(scissor) => {
                 let Some(scissor) =
@@ -1304,8 +1305,7 @@ impl WgpuRenderer {
             );
         }
 
-        let (logical_w, logical_h) =
-            self.prepare_frame_uniforms(frame_glyphs, surface_width, surface_height);
+        let (logical_w, logical_h) = self.prepare_frame_uniforms(mapping);
         if trace_face_debug_enabled() {
             tracing::info!(
                 "face-debug call={} milestone=after_prepare_uniforms logical=({:.1},{:.1})",
@@ -1436,8 +1436,8 @@ impl WgpuRenderer {
                 surface_height,
                 aurora_start: self.ambient.aurora_start,
                 scale_factor: self.scale_factor,
-                logical_w: frame_glyphs.width,
-                logical_h: frame_glyphs.height,
+                logical_w,
+                logical_h,
                 renderer_width: self.width as f32,
                 renderer_height: self.height as f32,
             };
@@ -1504,14 +1504,15 @@ impl WgpuRenderer {
         &mut self,
         view: &wgpu::TextureView,
         frame_glyphs: &FrameGlyphBuffer,
-        surface_width: u32,
-        surface_height: u32,
+        mapping: neomacs_display_protocol::PresentMapping,
         cursor_visible: bool,
         animated_cursor: Option<AnimatedCursor>,
         mouse_pos: (f32, f32),
     ) {
-        let (logical_w, logical_h) =
-            self.prepare_frame_uniforms(frame_glyphs, surface_width, surface_height);
+        debug_assert_eq!(mapping.presentation(), frame_glyphs.presentation_id);
+        debug_assert_eq!(mapping.content_logical_size().width(), frame_glyphs.width);
+        debug_assert_eq!(mapping.content_logical_size().height(), frame_glyphs.height);
+        let (logical_w, logical_h) = self.prepare_frame_uniforms(mapping);
         let params = FrameParams {
             frame_glyphs,
             pointer_override: super::pointer_override::PointerOverrideResolver::new(
@@ -1707,24 +1708,15 @@ impl WgpuRenderer {
 
     fn prepare_frame_uniforms(
         &mut self,
-        frame_glyphs: &FrameGlyphBuffer,
-        surface_width: u32,
-        surface_height: u32,
+        mapping: neomacs_display_protocol::PresentMapping,
     ) -> (f32, f32) {
-        // Use the frame's own logical dimensions for coordinate transformation.
-        // Emacs may round up the frame size to char grid boundaries, so the frame
-        // can be slightly larger than the window surface. Using the frame dimensions
-        // ensures glyph positions (which are relative to the frame) map correctly.
-        let logical_w = if frame_glyphs.width > 0.0 {
-            frame_glyphs.width
-        } else {
-            surface_width as f32 / self.scale_factor
-        };
-        let logical_h = if frame_glyphs.height > 0.0 {
-            frame_glyphs.height
-        } else {
-            surface_height as f32 / self.scale_factor
-        };
+        // The swapchain is the destination and the immutable glyph presentation
+        // is the source. Their sizes deliberately advance on different clocks.
+        // Projection therefore follows the resolved mapping's live-surface
+        // extent; using source bounds here non-uniformly stretches stale text.
+        let logical_size = mapping.surface_logical_size();
+        let logical_w = logical_size.width();
+        let logical_h = logical_size.height();
         let elapsed = self.ambient.render_start_time.elapsed().as_secs_f32();
         let uniforms = Uniforms {
             screen_size: [logical_w, logical_h],
