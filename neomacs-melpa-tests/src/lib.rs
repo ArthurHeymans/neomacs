@@ -2869,6 +2869,12 @@ pub const BROWSE_KILL_RING_MELPA_PIN: (&str, &str) = ("browse-kill-ring", "20260
 /// `e7800b3ab1bd76ee475ef35507ec51ecd5a3f065`.
 pub const BUFFER_MOVE_MELPA_PIN: (&str, &str) = ("buffer-move", "20220512.755");
 
+/// The exact Buttercup package selected for practical suite lifecycle,
+/// expectations, failure recovery, spies, and test-discovery parity. MELPA
+/// built this archive from upstream commit
+/// `39c8e762408a166a5afa03b8e79dd8d1a0de5caa`.
+pub const BUTTERCUP_MELPA_PIN: (&str, &str) = ("buttercup", "20260512.2141");
+
 /// The exact Casual package selected by the practical EditKit, Elisp, CSV,
 /// Dired, and Ibuffer menu-command parity corpus.
 pub const CASUAL_MELPA_PIN: (&str, &str) = ("casual", "20260718.1803");
