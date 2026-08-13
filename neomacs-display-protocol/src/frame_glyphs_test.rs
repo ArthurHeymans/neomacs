@@ -941,6 +941,14 @@ fn derive_transition_hint_buffer_switch_crossfade() {
 }
 
 #[test]
+fn derive_transition_hint_skips_window_geometry_change() {
+    let prev = make_window_info(1, 100, 10, Rect::new(0.0, 0.0, 664.0, 646.0));
+    let curr = make_window_info(1, 100, 10, Rect::new(0.0, 0.0, 1100.0, 760.0));
+
+    assert_eq!(derive_window_transition_hint(&prev, &curr), None);
+}
+
+#[test]
 fn derive_transition_hint_scroll_slide() {
     let prev = make_window_info(1, 100, 10, Rect::new(0.0, 0.0, 800.0, 600.0));
     let curr = make_window_info(1, 100, 42, Rect::new(0.0, 0.0, 800.0, 600.0));

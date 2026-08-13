@@ -1014,10 +1014,68 @@ pub struct FrameGlyphBuffer {
     pub fringe_bitmaps: HashMap<u16, FringeBitmapData>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WindowPresentationDelta {
+    GeometryChanged,
+    BufferChanged,
+    ViewportScrolled { direction: ScrollDirection },
+    TextMetricsChanged,
+    Unchanged,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScrollDirection {
+    TowardBufferStart,
+    TowardBufferEnd,
+}
+
+impl ScrollDirection {
+    const fn render_sign(self) -> i32 {
+        match self {
+            Self::TowardBufferStart => -1,
+            Self::TowardBufferEnd => 1,
+        }
+    }
+}
+
+fn classify_window_presentation_delta(
+    prev: &WindowInfo,
+    curr: &WindowInfo,
+) -> WindowPresentationDelta {
+    let bounds_changed = (prev.bounds.x - curr.bounds.x).abs() > 2.0
+        || (prev.bounds.y - curr.bounds.y).abs() > 2.0
+        || (prev.bounds.width - curr.bounds.width).abs() > 2.0
+        || (prev.bounds.height - curr.bounds.height).abs() > 2.0;
+    if bounds_changed {
+        return WindowPresentationDelta::GeometryChanged;
+    }
+
+    if prev.buffer_id != 0 && curr.buffer_id != 0 && prev.buffer_id != curr.buffer_id {
+        return WindowPresentationDelta::BufferChanged;
+    }
+
+    if prev.window_start != curr.window_start {
+        let direction = if curr.window_start > prev.window_start {
+            ScrollDirection::TowardBufferEnd
+        } else {
+            ScrollDirection::TowardBufferStart
+        };
+        return WindowPresentationDelta::ViewportScrolled { direction };
+    }
+
+    if (prev.char_height - curr.char_height).abs() > 1.0 {
+        return WindowPresentationDelta::TextMetricsChanged;
+    }
+
+    WindowPresentationDelta::Unchanged
+}
+
 /// Derive a transition hint by comparing previous/current window metadata.
 ///
 /// This centralizes transition geometry decisions outside any concrete glyph
-/// buffer materialization path.
+/// buffer materialization path. Geometry deltas are deliberately non-animating:
+/// retained pixels from different presentation extents are not compatible
+/// transition inputs.
 pub fn derive_window_transition_hint(
     prev: &WindowInfo,
     curr: &WindowInfo,
@@ -1026,68 +1084,49 @@ pub fn derive_window_transition_hint(
         return None;
     }
 
-    if prev.buffer_id != 0 && curr.buffer_id != 0 && prev.buffer_id != curr.buffer_id {
-        return Some(WindowTransitionHint {
-            window_id: curr.window_id,
-            bounds: curr.bounds,
-            kind: WindowTransitionKind::Crossfade,
-            effect: None,
-            easing: None,
-        });
-    }
-
-    if prev.window_start != curr.window_start {
-        let top_chrome = curr.tab_line_height + curr.header_line_height;
-        let content_height = curr.bounds.height - curr.mode_line_height - top_chrome;
-        if content_height < 50.0 {
-            return None;
+    match classify_window_presentation_delta(prev, curr) {
+        WindowPresentationDelta::GeometryChanged | WindowPresentationDelta::Unchanged => None,
+        WindowPresentationDelta::BufferChanged | WindowPresentationDelta::TextMetricsChanged => {
+            Some(WindowTransitionHint {
+                window_id: curr.window_id,
+                bounds: curr.bounds,
+                kind: WindowTransitionKind::Crossfade,
+                effect: None,
+                easing: None,
+            })
         }
+        WindowPresentationDelta::ViewportScrolled { direction } => {
+            let top_chrome = curr.tab_line_height + curr.header_line_height;
+            let content_height = curr.bounds.height - curr.mode_line_height - top_chrome;
+            if content_height < 50.0 {
+                return None;
+            }
 
-        let direction = if curr.window_start > prev.window_start {
-            1
-        } else {
-            -1
-        };
+            let content_bounds = Rect::new(
+                curr.bounds.x,
+                curr.bounds.y + top_chrome,
+                curr.bounds.width,
+                content_height,
+            );
 
-        let content_bounds = Rect::new(
-            curr.bounds.x,
-            curr.bounds.y + top_chrome,
-            curr.bounds.width,
-            content_height,
-        );
+            // Keep legacy estimate shape to preserve current feel.
+            let cols = (curr.bounds.width / curr.char_height).max(1.0);
+            let char_delta = (curr.window_start - prev.window_start).unsigned_abs() as f32;
+            let est_lines = (char_delta / cols).max(1.0);
+            let scroll_px = (est_lines * curr.char_height).min(content_height);
 
-        // Keep legacy estimate shape to preserve current feel.
-        let cols = (curr.bounds.width / curr.char_height).max(1.0);
-        let char_delta = (curr.window_start - prev.window_start).unsigned_abs() as f32;
-        let est_lines = (char_delta / cols).max(1.0);
-        let scroll_px = (est_lines * curr.char_height).min(content_height);
-
-        return Some(WindowTransitionHint {
-            window_id: curr.window_id,
-            bounds: content_bounds,
-            kind: WindowTransitionKind::ScrollSlide {
-                direction,
-                scroll_distance: scroll_px,
-            },
-            effect: None,
-            easing: None,
-        });
+            Some(WindowTransitionHint {
+                window_id: curr.window_id,
+                bounds: content_bounds,
+                kind: WindowTransitionKind::ScrollSlide {
+                    direction: direction.render_sign(),
+                    scroll_distance: scroll_px,
+                },
+                effect: None,
+                easing: None,
+            })
+        }
     }
-
-    if (prev.char_height - curr.char_height).abs() > 1.0
-        || (prev.bounds.width - curr.bounds.width).abs() > 2.0
-        || (prev.bounds.height - curr.bounds.height).abs() > 2.0
-    {
-        return Some(WindowTransitionHint {
-            window_id: curr.window_id,
-            bounds: curr.bounds,
-            kind: WindowTransitionKind::Crossfade,
-            effect: None,
-            easing: None,
-        });
-    }
-
-    None
 }
 
 impl FrameGlyphBuffer {
