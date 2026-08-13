@@ -906,9 +906,8 @@ pub(crate) fn assert_oracle_parity_with_case_workdir_expect(
     form: &str,
     expected: expect_test::Expect,
 ) {
-    let sandbox = oracle_sandbox(form, &[], &project_lisp_dir())
-        .expose_case_root_as_test_tmpdir()
-        .with_case_working_dir();
+    let sandbox =
+        oracle_sandbox(form, &[], &project_lisp_dir()).with_case_working_directory_and_tmpdir();
     assert_oracle_parity_expect_with_sandbox(form, expected, &sandbox, EvalProgram::Normalized);
 }
 

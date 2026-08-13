@@ -42,9 +42,21 @@ pub(crate) struct OracleSandbox {
     load_root: PathBuf,
     load_files: Vec<PathBuf>,
     project_root: PathBuf,
-    expose_case_root: bool,
-    use_case_working_dir: bool,
+    case_filesystem: CaseFilesystemPolicy,
     extra_env: Vec<(OsString, OsString)>,
+}
+
+/// How a child process may use the per-case directory.
+///
+/// The working-directory variant deliberately includes `TMPDIR`: relative OS
+/// paths and Lisp file operations must resolve inside the same case root, or a
+/// GNU run can leave state that poisons the following Neomacs run.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum CaseFilesystemPolicy {
+    #[default]
+    Private,
+    ExposedAsTestTempDirectory,
+    WorkingDirectoryAndTempDirectory,
 }
 
 impl OracleSandbox {
@@ -71,19 +83,20 @@ impl OracleSandbox {
             load_root: load_root.to_path_buf(),
             load_files,
             project_root,
-            expose_case_root: false,
-            use_case_working_dir: false,
+            case_filesystem: CaseFilesystemPolicy::Private,
             extra_env: Vec::new(),
         })
     }
 
     pub(crate) fn expose_case_root_as_test_tmpdir(mut self) -> Self {
-        self.expose_case_root = true;
+        if self.case_filesystem == CaseFilesystemPolicy::Private {
+            self.case_filesystem = CaseFilesystemPolicy::ExposedAsTestTempDirectory;
+        }
         self
     }
 
-    pub(crate) fn with_case_working_dir(mut self) -> Self {
-        self.use_case_working_dir = true;
+    pub(crate) fn with_case_working_directory_and_tmpdir(mut self) -> Self {
+        self.case_filesystem = CaseFilesystemPolicy::WorkingDirectoryAndTempDirectory;
         self
     }
 
@@ -117,13 +130,21 @@ impl OracleSandbox {
         }
 
         let scratch_root = self.case_root.path();
-        let session_tmpdir = self
+        let explicit_tmpdir = self
             .extra_env
             .iter()
             .rev()
             .find(|(name, _)| name.as_os_str() == OsStr::new("TMPDIR"))
-            .map(|(_, value)| value.clone())
-            .or_else(|| std::env::var_os("TMPDIR"));
+            .map(|(_, value)| value.clone());
+        let session_tmpdir = match self.case_filesystem {
+            CaseFilesystemPolicy::WorkingDirectoryAndTempDirectory => {
+                command.env("TMPDIR", scratch_root);
+                Some(scratch_root.as_os_str().to_os_string())
+            }
+            CaseFilesystemPolicy::Private | CaseFilesystemPolicy::ExposedAsTestTempDirectory => {
+                explicit_tmpdir.or_else(|| std::env::var_os("TMPDIR"))
+            }
+        };
         let load_files = self
             .load_files
             .iter()
@@ -144,14 +165,17 @@ impl OracleSandbox {
             command.env_remove("NEOVM_ORACLE_SESSION_TMPDIR");
         }
 
-        if self.use_case_working_dir {
-            command.current_dir(scratch_root);
-        }
-
-        if self.expose_case_root {
-            command.env("NEOVM_ORACLE_TEST_TMPDIR", scratch_root);
-        } else {
-            command.env_remove("NEOVM_ORACLE_TEST_TMPDIR");
+        match self.case_filesystem {
+            CaseFilesystemPolicy::Private => {
+                command.env_remove("NEOVM_ORACLE_TEST_TMPDIR");
+            }
+            CaseFilesystemPolicy::ExposedAsTestTempDirectory => {
+                command.env("NEOVM_ORACLE_TEST_TMPDIR", scratch_root);
+            }
+            CaseFilesystemPolicy::WorkingDirectoryAndTempDirectory => {
+                command.current_dir(scratch_root);
+                command.env("NEOVM_ORACLE_TEST_TMPDIR", scratch_root);
+            }
         }
     }
 

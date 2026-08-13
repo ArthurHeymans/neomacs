@@ -45,6 +45,25 @@ fn oracle_sandbox_preserves_explicit_child_tmpdir() {
 }
 
 #[test]
+fn oracle_case_workdir_is_also_the_implicit_child_tmpdir() {
+    let project_root = crate::common::oracle_sandbox::project_root();
+    let sandbox =
+        crate::common::oracle_sandbox::OracleSandbox::new("nil", &[], &project_root.join("lisp"))
+            .expect("oracle sandbox")
+            .with_case_working_directory_and_tmpdir();
+    let mut command = std::process::Command::new("emacs");
+    sandbox.configure(&mut command);
+
+    let case_workdir = command.get_current_dir().expect("case working directory");
+    let child_tmpdir = command
+        .get_envs()
+        .find_map(|(name, value)| (name == "TMPDIR").then_some(value).flatten())
+        .expect("isolated child TMPDIR");
+
+    assert_eq!(child_tmpdir, case_workdir.as_os_str());
+}
+
+#[test]
 fn oracle_sandbox_pins_snapshot_locale() {
     let expect = expect_test::expect![[r#""OK (\"en_US.UTF-8\" \"en_US.UTF-8\")""#]];
 
