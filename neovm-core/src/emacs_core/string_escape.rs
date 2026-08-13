@@ -607,7 +607,11 @@ fn push_octal_escape_contextual(out: &mut Vec<u8>, byte: u8, next_char: Option<c
 
 /// Like `push_octal_escape_contextual` but uses a `u32` Emacs character code
 /// for the "next character" peek (avoids requiring Rust `char`).
-fn push_octal_escape_contextual_u32(out: &mut Vec<u8>, byte: u8, next_code: Option<u32>) {
+pub(super) fn push_octal_escape_contextual_u32(
+    out: &mut Vec<u8>,
+    byte: u8,
+    next_code: Option<u32>,
+) {
     let need_three_digits =
         byte > 0o77 || next_code.is_some_and(|nc| nc < 0x80 && (b'0'..=b'7').contains(&(nc as u8)));
     let need_two_digits = byte > 0o7;

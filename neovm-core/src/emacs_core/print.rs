@@ -987,7 +987,7 @@ fn write_value_stateful_inner(
         }
         ValueKind::Veclike(VecLikeType::Vector) => {
             if let Some(nbits) = bool_vector_length(value) {
-                out.push_str(&format_bool_vector(value, nbits as usize));
+                out.push_str(&format_bool_vector(value, nbits as usize, state.options));
                 return;
             }
             if let Some(slots) = char_table_external_slots(value) {
@@ -1947,7 +1947,7 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
         }
         ValueKind::Veclike(VecLikeType::Vector) => {
             if let Some(nbits) = bool_vector_length(value) {
-                append_bool_vector_bytes(value, nbits as usize, out);
+                append_bool_vector_bytes(value, nbits as usize, out, options);
                 return;
             }
             if append_bytes_cycle_ref_if_any(value, out) {
@@ -2722,55 +2722,100 @@ fn print_cons_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOptions) {
 }
 // -- Bool-vector printing ---------------------------------------------------
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BoolVectorByteSyntax {
+    Literal,
+    Quoted,
+    NamedEscape(u8),
+    Octal,
+}
+
+fn bool_vector_byte_syntax(byte: u8, options: PrintOptions) -> BoolVectorByteSyntax {
+    match byte {
+        b'\n' if options.print_escape_newlines => BoolVectorByteSyntax::NamedEscape(b'n'),
+        b'\x0c' if options.print_escape_newlines => BoolVectorByteSyntax::NamedEscape(b'f'),
+        b if b > 0x7f || (options.print_escape_control_characters && (b < 0x20 || b == 0x7f)) => {
+            BoolVectorByteSyntax::Octal
+        }
+        b'"' | b'\\' => BoolVectorByteSyntax::Quoted,
+        _ => BoolVectorByteSyntax::Literal,
+    }
+}
+
+fn bool_vector_packed_bytes(value: &Value, nbits: usize) -> Vec<u8> {
+    let items = match value.kind() {
+        ValueKind::Veclike(VecLikeType::Vector) => value.as_vector_data().unwrap().clone(),
+        _ => return Vec::new(),
+    };
+
+    (0..nbits.div_ceil(8))
+        .map(|byte_idx| {
+            let mut byte = 0_u8;
+            for bit_idx in 0..8 {
+                let overall_bit = byte_idx * 8 + bit_idx;
+                if overall_bit >= nbits {
+                    break;
+                }
+                let is_set = match items.get(2 + overall_bit) {
+                    Some(value) => match value.kind() {
+                        ValueKind::Fixnum(n) => n != 0,
+                        _ => value.is_truthy(),
+                    },
+                    None => false,
+                };
+                if is_set {
+                    byte |= 1 << bit_idx;
+                }
+            }
+            byte
+        })
+        .collect()
+}
+
 /// Format a bool-vector as `#&N"..."`.
-fn format_bool_vector(value: &Value, nbits: usize) -> String {
+fn format_bool_vector(value: &Value, nbits: usize, options: PrintOptions) -> String {
     let mut out = Vec::new();
-    append_bool_vector_bytes(value, nbits, &mut out);
+    append_bool_vector_bytes(value, nbits, &mut out, options);
     String::from_utf8_lossy(&out).into_owned()
 }
 
 /// Append bool-vector bytes as `#&N"..."`.
-fn append_bool_vector_bytes(value: &Value, nbits: usize, out: &mut Vec<u8>) {
-    let items = match value.kind() {
-        ValueKind::Veclike(VecLikeType::Vector) => value.as_vector_data().unwrap().clone(),
-        _ => return,
-    };
-    // items[0] = tag, items[1] = size, items[2..] = individual bit values
-    let nbytes = nbits.div_ceil(8);
-
+fn append_bool_vector_bytes(value: &Value, nbits: usize, out: &mut Vec<u8>, options: PrintOptions) {
+    let packed = bool_vector_packed_bytes(value, nbits);
     out.extend_from_slice(b"#&");
     out.extend_from_slice(nbits.to_string().as_bytes());
     out.push(b'"');
 
-    for byte_idx in 0..nbytes {
-        let mut byte_val: u8 = 0;
-        for bit_idx in 0..8 {
-            let overall_bit = byte_idx * 8 + bit_idx;
-            if overall_bit >= nbits {
-                break;
+    let printed_len = options
+        .print_length
+        .and_then(|length| usize::try_from(length).ok())
+        .map_or(packed.len(), |length| length.min(packed.len()));
+    let printed = &packed[..printed_len];
+
+    for (index, &byte) in printed.iter().enumerate() {
+        match bool_vector_byte_syntax(byte, options) {
+            BoolVectorByteSyntax::Literal => out.push(byte),
+            BoolVectorByteSyntax::Quoted => {
+                out.push(b'\\');
+                out.push(byte);
             }
-            let is_set = match items.get(2 + overall_bit) {
-                Some(v) => match v.kind() {
-                    ValueKind::Fixnum(n) => n != 0,
-                    _ => v.is_truthy(),
-                },
-                None => false,
-            };
-            if is_set {
-                byte_val |= 1 << bit_idx; // LSB first
+            BoolVectorByteSyntax::NamedEscape(name) => {
+                out.push(b'\\');
+                out.push(name);
             }
-        }
-        match byte_val {
-            b'"' => out.extend_from_slice(b"\\\""),
-            b'\\' => out.extend_from_slice(b"\\\\"),
-            b if b > 0x7F => {
-                // Octal escape for high bytes, matching GNU Emacs
-                out.extend_from_slice(format!("\\{:03o}", b).as_bytes());
+            BoolVectorByteSyntax::Octal => {
+                super::string_escape::push_octal_escape_contextual_u32(
+                    out,
+                    byte,
+                    printed.get(index + 1).map(|next| u32::from(*next)),
+                );
             }
-            _ => out.push(byte_val),
         }
     }
 
+    if printed_len < packed.len() {
+        out.extend_from_slice(b" ...");
+    }
     out.push(b'"');
 }
 

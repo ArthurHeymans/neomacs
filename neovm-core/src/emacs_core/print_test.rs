@@ -714,6 +714,38 @@ fn print_eval_one(src: &str) -> String {
 }
 
 #[test]
+fn bool_vector_printing_honors_gnu_byte_escape_and_length_options() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        print_eval_one(
+            "(let ((print-escape-newlines t)) \
+               (prin1-to-string \
+                 (bool-vector nil t nil t nil nil nil nil nil nil t t)))"
+        ),
+        r##"OK "#&12\"\\n\\f\"""##,
+    );
+    assert_eq!(
+        print_eval_one(
+            "(let ((print-escape-control-characters t)) \
+               (prin1-to-string \
+                 (bool-vector t nil nil nil nil nil nil nil \
+                              t t t nil t t nil nil)))"
+        ),
+        r##"OK "#&16\"\\0017\"""##,
+    );
+    assert_eq!(
+        print_eval_one(
+            "(let ((print-length 1)) \
+               (prin1-to-string \
+                 (bool-vector nil t nil t nil nil nil nil nil nil t t)))"
+        ),
+        r##"OK "#&12\"
+ ...\"""##,
+    );
+}
+
+#[test]
 fn print_integers_as_characters_uses_char_syntax_like_gnu() {
     crate::test_utils::init_test_tracing();
     // GNU: (?A ?\t). Letters print via graphic_base_p; tab via named_escape.
