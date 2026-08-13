@@ -18,6 +18,7 @@ pub mod glyph_matrix;
 pub mod gradient;
 pub mod image;
 pub mod popup_placement;
+pub mod present_mapping;
 pub mod presented_frame;
 pub mod presented_pointer;
 pub mod scene;
@@ -40,6 +41,7 @@ pub use geometry::*;
 pub use gradient::*;
 pub use image::*;
 pub use popup_placement::*;
+pub use present_mapping::*;
 pub use presented_frame::*;
 pub use presented_pointer::*;
 pub use scene::*;
@@ -65,6 +67,10 @@ mod popup_placement_test;
 #[cfg(test)]
 #[path = "geometry_test.rs"]
 mod geometry_test;
+
+#[cfg(test)]
+#[path = "present_mapping_test.rs"]
+mod present_mapping_test;
 
 #[cfg(test)]
 #[path = "sealed_frame_presentation_test.rs"]
