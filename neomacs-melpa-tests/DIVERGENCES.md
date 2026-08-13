@@ -4536,3 +4536,42 @@ owned directory and performs the real public save.  Both editors clear the log
 afterward, while only GNU writes the timestamp annotation.
 
 Status: LIVE (measured 2026-08-12).
+
+## 88. Shared unique-symbol names multiplied the GC root set -- FIXED
+
+The exhaustive minimax tic-tac-toe oracle took more than 120 seconds under
+Neomacs while GNU completed the same probe in 18.3 seconds.  A profile assigned
+57.7% of Neomacs samples to `Context::seed_all_context_roots`; GC tracing then
+showed one `symbol-name-thread-local` class containing about 1.47 million roots
+and being scanned twice per collection.
+
+GNU's `Fmake_symbol` creates a new symbol but stores the exact supplied name
+string in it (`src/alloc.c:3662-3708`), and the reader passes that object
+directly to `Fmake_symbol` (`src/lread.c:4705-4708`).  Recursive macro
+expansion can therefore create many unique symbols that all share one name
+object.  Neomacs correctly retained a name per symbol, but its process-global
+registry also indexed GC roots by symbol ID, appending the shared string once
+for every unique symbol.
+
+The failed-first regression creates two unique symbols with the same exact
+name object and observed two roots where GNU's object graph has one.  Its
+second control uses equal-content but separately allocated strings: those must
+remain two roots.  That distinction rules out a structural `HashSet`, because
+`TaggedValue` equality and hashing are value-based for strings.
+
+The fix introduces separate `SymbolNameHeapId` and `SymbolNameObjectId`
+newtypes and a `SymbolNameRootIndex` keyed first by heap identity and then by
+the name object's tagged bits.  Per-symbol name storage remains unchanged, so
+unique-symbol semantics are preserved, while the root index represents exact
+object identity once.  The types prevent heap IDs, symbol IDs, and object IDs
+from being mixed at compile time.  The long-term model remains GC-managed
+uninterned symbol objects; this bounded refactor fixes root cardinality without
+coupling that representation migration to the bug.
+
+The regression failed with two roots and now passes both identity controls.
+The formerly timing-out Neomacs snapshot completes in 17.7 seconds, live
+GNU/Neomacs parity completes in 33.9 seconds, and the complete `neovm-core`
+gate passes 8,822 tests with 51 skipped.  Formatting, the fresh release build,
+and the release pdump fingerprint gate also pass.
+
+Status: FIXED.
