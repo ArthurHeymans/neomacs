@@ -10,6 +10,7 @@ use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use strum::IntoStaticStr;
 
 use crate::buffer::{BufferId, BufferManager, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::heap_types::LispString;
@@ -20,6 +21,38 @@ use super::intern::{SymId, resolve_sym};
 use super::reader::{KeyboardInputRuntime, MinibufferInputSource};
 use super::symbol::Obarray;
 use super::value::{Value, ValueKind, VecLikeType};
+
+/// GNU completion state held in predeclared C variables/symbols rather than
+/// rediscovered by name at every completion operation.
+///
+/// The closed enum makes the hot state domain exhaustive: adding another
+/// variable requires assigning it a dedicated cache slot instead of silently
+/// reintroducing runtime string interning.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum CompletionStateVariable {
+    CompletionIgnoreCase,
+    CompletionRegexpList,
+}
+
+impl CompletionStateVariable {
+    #[inline(always)]
+    fn symbol_id(self) -> SymId {
+        use std::sync::OnceLock;
+
+        static COMPLETION_IGNORE_CASE: OnceLock<SymId> = OnceLock::new();
+        static COMPLETION_REGEXP_LIST: OnceLock<SymId> = OnceLock::new();
+        let name: &'static str = self.into();
+        match self {
+            Self::CompletionIgnoreCase => {
+                *COMPLETION_IGNORE_CASE.get_or_init(|| super::intern::intern(name))
+            }
+            Self::CompletionRegexpList => {
+                *COMPLETION_REGEXP_LIST.get_or_init(|| super::intern::intern(name))
+            }
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Argument helpers (local copies, same pattern as builtins.rs / builtins_extra.rs)
@@ -1105,7 +1138,10 @@ fn execute_read_buffer_plan(
     // GNU binds this around both the override and completion paths.
     let specpdl_count = eval.specpdl.len();
     let ignore_case = eval.visible_variable_value_or_nil("read-buffer-completion-ignore-case");
-    eval.specbind(super::intern::intern("completion-ignore-case"), ignore_case);
+    eval.specbind(
+        CompletionStateVariable::CompletionIgnoreCase.symbol_id(),
+        ignore_case,
+    );
 
     let result = match plan_read_buffer(eval, args) {
         ReadBufferPlan::Override {
@@ -2442,14 +2478,16 @@ fn completion_candidates_from_hash_table(collection: Value) -> Vec<CompletionCan
 /// Read the `completion-ignore-case` symbol from the obarray.
 fn completion_ignore_case(obarray: &Obarray) -> bool {
     obarray
-        .symbol_value("completion-ignore-case")
+        .symbol_value_id_copied(CompletionStateVariable::CompletionIgnoreCase.symbol_id())
         .is_some_and(|v| v.is_truthy())
 }
 
 pub(crate) fn completion_regexp_lisp_list_from_obarray(
     obarray: &Obarray,
 ) -> Vec<crate::heap_types::LispString> {
-    let Some(val) = obarray.symbol_value("completion-regexp-list").copied() else {
+    let Some(val) =
+        obarray.symbol_value_id_copied(CompletionStateVariable::CompletionRegexpList.symbol_id())
+    else {
         return Vec::new();
     };
     let Some(items) = super::value::list_to_vec(&val) else {

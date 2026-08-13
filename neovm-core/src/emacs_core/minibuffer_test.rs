@@ -1715,6 +1715,40 @@ fn global_obarray_completion_has_no_pre_candidate_staging_collections() {
     );
 }
 
+/// GNU keeps these hot completion controls in predeclared
+/// `completion_ignore_case` / `Vcompletion_regexp_list` C state. Reading them
+/// for every TAB must use their cached symbol identities rather than returning
+/// to the global string interner.
+#[test]
+fn completion_state_reads_use_predeclared_symbols() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.obarray
+        .set_symbol_value("completion-ignore-case", Value::T);
+    eval.obarray.set_symbol_value(
+        "completion-regexp-list",
+        Value::list(vec![Value::string("neo")]),
+    );
+
+    assert!(completion_ignore_case(&eval.obarray));
+    assert_eq!(
+        completion_regexp_lisp_list_from_obarray(&eval.obarray),
+        vec![LispString::from_unibyte(b"neo".to_vec())]
+    );
+
+    crate::emacs_core::intern::reset_intern_calls();
+    assert!(completion_ignore_case(&eval.obarray));
+    assert_eq!(
+        completion_regexp_lisp_list_from_obarray(&eval.obarray),
+        vec![LispString::from_unibyte(b"neo".to_vec())]
+    );
+    assert_eq!(
+        crate::emacs_core::intern::intern_calls(),
+        0,
+        "completion state reads must use GNU-shaped predeclared identities"
+    );
+}
+
 /// GNU `Ftry_completion` / `Fall_completions` compare the predicate with the
 /// predeclared `Qcommandp` and call `Fcommandp` directly.  This is observable,
 /// not merely an optimization: rebinding the symbol's function cell does not
