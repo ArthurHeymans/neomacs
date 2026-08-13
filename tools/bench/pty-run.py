@@ -29,13 +29,16 @@ rows = int(os.environ.get("PTY_ROWS", "40"))
 cols = int(os.environ.get("PTY_COLS", "120"))
 perf_record = os.environ.get("PTY_PERF_RECORD", "")
 if perf_record:
-    argv = [
+    perf_argv = [
         "perf", "record", "--quiet", "--no-buildid-cache",
         "--event", os.environ.get("PTY_PERF_EVENT", "cycles:u"),
         "--freq", os.environ.get("PTY_PERF_FREQUENCY", "999"),
         "--call-graph", os.environ.get("PTY_PERF_CALL_GRAPH", "lbr"),
-        "--output", perf_record, "--",
-    ] + argv
+    ]
+    perf_control = os.environ.get("PTY_PERF_CONTROL", "")
+    if perf_control:
+        perf_argv += ["--delay=-1", "--control=" + perf_control]
+    argv = perf_argv + ["--output", perf_record, "--"] + argv
 if sentinel and os.path.exists(sentinel):
     os.unlink(sentinel)
 pid, fd = pty.fork()
@@ -50,10 +53,9 @@ if pid == 0:
 fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 deadline = time.time() + timeout
 out = bytearray()
-completion_time = None
+child_status = None
+pty_open = True
 while time.time() < deadline:
-    if completion_time is None and sentinel and os.path.exists(sentinel):
-        completion_time = time.time()
     # select() with the REMAINING time, so the deadline is actually
     # enforced. A bare blocking os.read() ignores it -- the runner then waits
     # for the child no matter what PTY_TIMEOUT says, which made the timeout
@@ -61,28 +63,35 @@ while time.time() < deadline:
     remaining = deadline - time.time()
     if remaining <= 0:
         break
-    ready, _, _ = select.select([fd], [], [], min(remaining, 0.25))
+    ready, _, _ = select.select([fd] if pty_open else [], [], [],
+                                min(remaining, 0.25))
     if ready:
         try:
             r = os.read(fd, 65536)
             if not r:
-                break
-            out.extend(r)
+                pty_open = False
+            else:
+                out.extend(r)
         except OSError:
-            break
-    elif completion_time is not None and time.time() - completion_time >= 0.1:
-        # The fixture has published completion and the PTY has been quiet long
-        # enough to drain the bytes written immediately before the sentinel.
-        break
-    done, _ = os.waitpid(pid, os.WNOHANG)
+            pty_open = False
+    done, status = os.waitpid(pid, os.WNOHANG)
     if done:
+        child_status = status
         break
-try:
-    # pty.fork makes the child a new session and process-group leader. Kill
-    # that complete group so a profiler cannot leave its editor child alive.
-    os.killpg(pid, signal.SIGKILL)
-except ProcessLookupError:
-    pass
+
+timed_out = child_status is None
+if timed_out:
+    try:
+        # pty.fork makes the child a new session and process-group leader. Kill
+        # that complete group only on timeout; after the fixture sentinel, perf
+        # still needs to finalize its mmap-backed data file before it exits.
+        os.killpg(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        _, child_status = os.waitpid(pid, 0)
+    except ChildProcessError:
+        child_status = None
 if output_path:
     with open(output_path, "wb") as output_file:
         output_file.write(out)
@@ -91,9 +100,13 @@ if output_path:
 # finish" as an ERROR (non-zero exit), never as a quiet result -- a silently
 # truncated baseline once looked like a convincing +16% regression that did
 # not exist.
-ok = bool(sentinel) and os.path.exists(sentinel)
+exit_code = (os.waitstatus_to_exitcode(child_status)
+             if child_status is not None else None)
+ok = (bool(sentinel) and os.path.exists(sentinel)
+      and not timed_out and exit_code == 0)
 if not ok:
-    print("PTY-RUN-INCOMPLETE: sentinel %r never appeared within %gs"
-          % (sentinel, timeout), file=sys.stderr)
+    print("PTY-RUN-INCOMPLETE: sentinel=%r present=%s timed_out=%s exit_code=%r"
+          % (sentinel, os.path.exists(sentinel), timed_out, exit_code),
+          file=sys.stderr)
     sys.exit(2)
 print("SENTINEL_WRITTEN")

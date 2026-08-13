@@ -9,6 +9,54 @@
   (or (getenv name)
       (error "required performance environment variable %s is absent" name)))
 
+(defvar neomacs-perf--profile-gate-process nil)
+(defvar neomacs-perf--profile-gate-response "")
+
+(defun neomacs-perf--profile-gate-filter (_process output)
+  (setq neomacs-perf--profile-gate-response
+        (concat neomacs-perf--profile-gate-response output)))
+
+(defun neomacs-perf--profile-gate-connect ()
+  (let* ((port-text (getenv "NEOMACS_PERF_GATE_PORT"))
+         (port (and port-text (string-to-number port-text))))
+    (when (and port-text (not (> port 0)))
+      (error "invalid edit-loop profile gate port %S" port-text))
+    (when (and port-text
+               (not (process-live-p neomacs-perf--profile-gate-process)))
+      (setq neomacs-perf--profile-gate-process
+            (make-network-process
+             :name "neomacs-perf-gate"
+             :family 'ipv4
+             :host "127.0.0.1"
+             :service port
+             :coding 'binary
+             :noquery t
+             :filter #'neomacs-perf--profile-gate-filter)))
+    neomacs-perf--profile-gate-process))
+
+(defun neomacs-perf--sampling-command (command)
+  (let ((process (neomacs-perf--profile-gate-connect)))
+    (when process
+      (setq neomacs-perf--profile-gate-response "")
+      (process-send-string process (concat command "\n"))
+      (let ((deadline (+ (float-time) 30.0)))
+        (while (and (not (and (> (length neomacs-perf--profile-gate-response) 0)
+                              (= (aref neomacs-perf--profile-gate-response
+                                       (1- (length neomacs-perf--profile-gate-response)))
+                                 ?\n)))
+                    (< (float-time) deadline))
+          (unless (process-live-p process)
+            (error "edit-loop profile gate disconnected during %s" command))
+          (accept-process-output process 0.05))
+        (unless (equal neomacs-perf--profile-gate-response "ack\n")
+          (error "edit-loop profile gate rejected %s: %S"
+                 command neomacs-perf--profile-gate-response))))))
+
+(defun neomacs-perf--close-profile-gate ()
+  (when (processp neomacs-perf--profile-gate-process)
+    (delete-process neomacs-perf--profile-gate-process)
+    (setq neomacs-perf--profile-gate-process nil)))
+
 (defun neomacs-perf--json-boolean (value)
   (if value t :json-false))
 
@@ -149,19 +197,26 @@
                      (initial-point (point)))
                  (neomacs-perf--apply-diagnostic-replay workspace replay-json)
                  (redisplay t)
-                 (let ((started (car (current-cpu-time))))
-                   (dotimes (_ iterations)
-                     (self-insert-command 1 ?j)
-                     (neomacs-perf--apply-diagnostic-replay workspace replay-json)
-                     (font-lock-ensure (line-beginning-position)
-                                       (line-end-position))
-                     (redisplay t)
-                     (delete-char -1)
-                     (neomacs-perf--apply-diagnostic-replay workspace replay-json)
-                     (font-lock-ensure (line-beginning-position)
-                                       (line-end-position))
-                     (redisplay t))
-                   (setq elapsed-us (- (car (current-cpu-time)) started)))
+                 (let ((sampling-enabled nil))
+                   (neomacs-perf--sampling-command "enable")
+                   (setq sampling-enabled t)
+                   (unwind-protect
+                       (let ((started (car (current-cpu-time))))
+                         (dotimes (_ iterations)
+                           (self-insert-command 1 ?j)
+                           (neomacs-perf--apply-diagnostic-replay workspace replay-json)
+                           (font-lock-ensure (line-beginning-position)
+                                             (line-end-position))
+                           (redisplay t)
+                           (delete-char -1)
+                           (neomacs-perf--apply-diagnostic-replay workspace replay-json)
+                           (font-lock-ensure (line-beginning-position)
+                                             (line-end-position))
+                           (redisplay t))
+                         (setq elapsed-us
+                               (- (car (current-cpu-time)) started)))
+                     (when sampling-enabled
+                       (neomacs-perf--sampling-command "disable"))))
                  (setq major-mode-name (symbol-name major-mode)
                        parser-language
                        (symbol-name
@@ -175,8 +230,9 @@
            (setq status "ok"
                  exit-code 0)))
        (error
-        (setq error-message (error-message-string error-data))
-        (message "rust-lsp-typing failed: %s" error-message)))
+       (setq error-message (error-message-string error-data))
+       (message "rust-lsp-typing failed: %s" error-message)))
+     (neomacs-perf--close-profile-gate)
      (neomacs-perf--write-result
       result-path status iterations elapsed-us major-mode-name parser-language
       text-unchanged point-unchanged overlay-count lsp-diagnostic-count

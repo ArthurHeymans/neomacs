@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use super::{
-    ComparisonSampleCount, Frontend, NativeProfiler, PerfCommand, ScenarioId, parse_perf_command,
+    ComparisonSampleCount, Frontend, NativeProfiler, PerfCommand, ProfileScope, ScenarioId,
+    parse_perf_command,
 };
 
 fn parse(args: &[&str]) -> Result<PerfCommand, super::PerfCliError> {
@@ -136,6 +137,7 @@ fn profile_command_selects_native_sampling_without_becoming_a_comparison() {
         PerfCommand::Profile {
             scenario: ScenarioId::RustLspTyping,
             profiler: NativeProfiler::Perf,
+            scope: ProfileScope::EditLoop,
             editor: Some(PathBuf::from("target/profiling/neomacs")),
             iterations: NonZeroU32::new(40).expect("non-zero literal"),
             frontend: Some(Frontend::Tui {
@@ -145,6 +147,14 @@ fn profile_command_selects_native_sampling_without_becoming_a_comparison() {
             timeout: Duration::from_secs(180),
         }
     );
+
+    let PerfCommand::Profile { scope, .. } =
+        parse(&["profile", "rust-lsp-typing", "--scope", "whole-process"])
+            .expect("parse explicit whole-process profile")
+    else {
+        panic!("profile command must remain typed")
+    };
+    assert_eq!(scope, ProfileScope::WholeProcess);
 }
 
 #[test]
@@ -161,4 +171,5 @@ fn list_and_help_are_explicit_commands() {
     };
     assert!(rendered.contains("Usage: cargo xtask perf profile [OPTIONS] <SCENARIO>"));
     assert!(rendered.contains("--profiler <PROFILER>"));
+    assert!(rendered.contains("--scope <SCOPE>"));
 }

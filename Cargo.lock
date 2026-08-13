@@ -3812,6 +3812,7 @@ dependencies = [
  "clap",
  "linux-perf-data",
  "neomacs-melpa-test-support",
+ "rustix 1.1.4",
  "serde",
  "serde_json",
  "sha2",

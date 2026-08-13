@@ -17,7 +17,7 @@ cargo xtask perf compare rust-lsp-typing \
   --samples 5 --iterations 20
 cargo xtask perf profile rust-lsp-typing \
   --profiler perf --editor target/profiling/neomacs \
-  --iterations 100 --frontend tui
+  --iterations 100 --frontend tui --scope edit-loop
 ```
 
 The default editor is `target/release/neomacs`. Use `--editor PATH` to measure
@@ -71,9 +71,12 @@ incorrect workload can therefore never improve the reported candidate result.
 ## Finding native hotspots
 
 `perf profile` runs the same scenario under Linux `perf record`, using a
-999 Hz user-space CPU-clock event and 16 KiB DWARF call stacks. It writes a
-typed `profile.json`, the linked instrumented scenario `artifact.json`, raw
-`perf.data`, and a self-overhead call-graph report below
+999 Hz user-space CPU-clock event and 16 KiB DWARF call stacks. The default
+`--scope edit-loop` starts perf disabled, then uses acknowledged sampling
+boundaries around only the repeated editing operation. Use
+`--scope whole-process` when startup and fixture loading are the subject. It
+writes a typed `profile.json`, the linked instrumented scenario
+`artifact.json`, raw `perf.data`, and a self-overhead call-graph report below
 `./tmp/perf-profiles/<profile-id>`. A captured verdict requires a correct
 scenario, successful report generation, and a nonzero reported sample count.
 
@@ -91,11 +94,13 @@ cannot consume profile artifacts. The linked scenario run still records its
 instrumented timing for diagnosis, but that timing is not comparable to a
 normal run.
 
-The native profile starts with the editor process and covers editor startup,
-fixture loading, and the edit loop. Package, grammar, and input preparation
-finish before sampling begins. Use the raw call graph to separate startup-only
-work from repeated editing work. `perf` must be installed and permitted by the
-host's `perf_event_paranoid` policy. TUI profiling uses an app-only hook inside
+For edit-loop profiles, package preparation, editor startup, fixture loading,
+and the initial redisplay finish before sampling begins. A Rust gate forwards
+the fixture's `enable` and `disable` boundaries to perf and replies only after
+perf acknowledges each transition; an invalid transition, missing
+acknowledgement, or incomplete sequence rejects the profile as an
+infrastructure failure. `perf` must be installed and permitted by the host's
+`perf_event_paranoid` policy. TUI profiling uses an app-only hook inside
 the harness's private PTY and does not attach to an existing tmux session. GUI
 profiling likewise uses the GUI runner's app-only hook, so Weston and retry
 bookkeeping do not pollute Neomacs attribution.

@@ -14,12 +14,23 @@ pub enum NativeProfiler {
     Perf,
 }
 
+/// Portion of a scenario whose native stacks are sampled.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProfileScope {
+    /// Sample only the scenario's repeated editing operation.
+    EditLoop,
+    /// Sample editor startup, fixture loading, and the editing operation.
+    WholeProcess,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProfileRequest {
     pub(crate) scenario: ScenarioId,
     pub(crate) editor: PathBuf,
     pub(crate) iterations: NonZeroU32,
     pub(crate) profiler: NativeProfiler,
+    pub(crate) scope: ProfileScope,
     pub(crate) frontend: Option<Frontend>,
     pub(crate) timeout: Duration,
 }
@@ -36,6 +47,7 @@ impl ProfileRequest {
             editor: editor.into(),
             iterations,
             profiler,
+            scope: ProfileScope::EditLoop,
             frontend: None,
             timeout: Duration::from_secs(300),
         }
@@ -48,6 +60,11 @@ impl ProfileRequest {
 
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
+        self
+    }
+
+    pub fn with_scope(mut self, scope: ProfileScope) -> Self {
+        self.scope = scope;
         self
     }
 
@@ -92,9 +109,13 @@ impl PerfCaptureConfiguration {
         }
     }
 
-    pub(crate) fn record_arguments(self, output: &Path) -> Vec<OsString> {
+    pub(crate) fn record_arguments(
+        self,
+        output: &Path,
+        control: Option<(&Path, &Path)>,
+    ) -> Vec<OsString> {
         let PerfCallGraph::Dwarf { stack_size_bytes } = self.call_graph;
-        vec![
+        let mut arguments = vec![
             OsString::from("record"),
             OsString::from("--quiet"),
             OsString::from("--no-buildid-cache"),
@@ -104,10 +125,21 @@ impl PerfCaptureConfiguration {
             OsString::from(self.frequency_hz.get().to_string()),
             OsString::from("--call-graph"),
             OsString::from(format!("dwarf,{}", stack_size_bytes.get())),
+        ];
+        if let Some((command, acknowledgement)) = control {
+            arguments.push(OsString::from("--delay=-1"));
+            arguments.push(OsString::from(format!(
+                "--control=fifo:{},{}",
+                command.display(),
+                acknowledgement.display()
+            )));
+        }
+        arguments.extend([
             OsString::from("--output"),
             output.as_os_str().to_os_string(),
             OsString::from("--"),
-        ]
+        ]);
+        arguments
     }
 
     pub(crate) fn adapter_record_environment(
@@ -204,13 +236,14 @@ pub struct ProfileArtifact {
     pub editor: PathBuf,
     pub iterations: NonZeroU32,
     pub profiler: NativeProfiler,
+    pub scope: ProfileScope,
     pub configuration: PerfCaptureConfiguration,
     pub run_artifact_path: PathBuf,
     pub verdict: ProfileVerdict,
 }
 
 impl ProfileArtifact {
-    pub const SCHEMA_VERSION: u32 = 1;
+    pub const SCHEMA_VERSION: u32 = 2;
 }
 
 #[derive(Clone, Debug, PartialEq)]

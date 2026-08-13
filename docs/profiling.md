@@ -19,7 +19,7 @@ cargo xtask perf compare rust-lsp-typing \
   --samples 5 --iterations 20
 cargo xtask perf profile rust-lsp-typing \
   --profiler perf --editor target/profiling/neomacs \
-  --iterations 100 --frontend tui
+  --iterations 100 --frontend tui --scope edit-loop
 ```
 
 Every attempt writes a structured bundle below `./tmp/perf`. Measurements are
@@ -41,10 +41,12 @@ cargo xtask fresh-build --profile profiling
 Profile runs are deliberately diagnostic: instrumentation changes timing, so
 their metadata carries no comparable measurements and cannot be fed into
 `perf compare`. The linked scenario artifact still proves the same correctness
-invariants passed. Sampling starts with the editor process and covers editor
-startup, fixture loading, and the edit loop; package, grammar, and input
-preparation finish before sampling begins. Consult the call graph when
-distinguishing startup work from steady editing work.
+invariants passed. The default `--scope edit-loop` starts perf disabled and
+uses acknowledged boundaries around only the repeated editing operation, after
+package preparation, editor startup, fixture loading, and initial redisplay.
+Use `--scope whole-process` when those startup phases are the investigation
+target. Missing acknowledgements and invalid boundary sequences reject the
+profile instead of silently widening its scope.
 
 ## Emacs Lisp profiler
 

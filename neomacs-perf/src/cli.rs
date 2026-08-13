@@ -8,7 +8,8 @@ use thiserror::Error;
 
 use crate::{
     ComparisonRequest, ComparisonSampleCount, ComparisonVerdict, Frontend, NativeProfiler,
-    PerfError, PerfHarness, ProfileRequest, ProfileVerdict, RunRequest, ScenarioId, scenarios,
+    PerfError, PerfHarness, ProfileRequest, ProfileScope, ProfileVerdict, RunRequest, ScenarioId,
+    scenarios,
 };
 
 const DEFAULT_ITERATIONS: NonZeroU32 = NonZeroU32::new(100).expect("100 is non-zero");
@@ -38,6 +39,7 @@ pub enum PerfCommand {
     Profile {
         scenario: ScenarioId,
         profiler: NativeProfiler,
+        scope: ProfileScope,
         editor: Option<PathBuf>,
         iterations: NonZeroU32,
         frontend: Option<Frontend>,
@@ -106,6 +108,9 @@ struct ProfileArgs {
     /// Native sampling backend.
     #[arg(long, value_enum, default_value_t = NativeProfilerArg::Perf)]
     profiler: NativeProfilerArg,
+    /// Portion of the scenario sampled by the native profiler.
+    #[arg(long, value_enum, default_value_t = ProfileScopeArg::EditLoop)]
+    scope: ProfileScopeArg,
     /// Editor executable (defaults to target/profiling/neomacs).
     #[arg(long)]
     editor: Option<PathBuf>,
@@ -162,6 +167,21 @@ impl From<FrontendArg> for Frontend {
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum NativeProfilerArg {
     Perf,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ProfileScopeArg {
+    EditLoop,
+    WholeProcess,
+}
+
+impl From<ProfileScopeArg> for ProfileScope {
+    fn from(scope: ProfileScopeArg) -> Self {
+        match scope {
+            ProfileScopeArg::EditLoop => Self::EditLoop,
+            ProfileScopeArg::WholeProcess => Self::WholeProcess,
+        }
+    }
 }
 
 impl From<NativeProfilerArg> for NativeProfiler {
@@ -239,6 +259,7 @@ impl From<PerfSubcommand> for PerfCommand {
                 Self::Profile {
                     scenario: arguments.scenario,
                     profiler: arguments.profiler.into(),
+                    scope: arguments.scope.into(),
                     editor: arguments.editor,
                     iterations,
                     frontend,
@@ -338,14 +359,16 @@ pub fn run_cli(
         PerfCommand::Profile {
             scenario,
             profiler,
+            scope,
             editor,
             iterations,
             frontend,
             timeout,
         } => {
             let editor = editor.unwrap_or_else(|| workspace_root.join("target/profiling/neomacs"));
-            let mut request =
-                ProfileRequest::new(scenario, editor, iterations, profiler).with_timeout(timeout);
+            let mut request = ProfileRequest::new(scenario, editor, iterations, profiler)
+                .with_scope(scope)
+                .with_timeout(timeout);
             if let Some(frontend) = frontend {
                 request = request.with_frontend(frontend);
             }

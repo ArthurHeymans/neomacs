@@ -52,10 +52,15 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     GUI_PERF_EVENT=${GUI_PERF_EVENT:-cycles:u}
     GUI_PERF_FREQUENCY=${GUI_PERF_FREQUENCY:-999}
     GUI_PERF_CALL_GRAPH=${GUI_PERF_CALL_GRAPH:-lbr}
+    PERF_CONTROL_ARGS=()
+    if [ -n "${GUI_PERF_CONTROL:-}" ]; then
+      PERF_CONTROL_ARGS=(--delay=-1 --control="$GUI_PERF_CONTROL")
+    fi
     WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT" \
       perf record --quiet --no-buildid-cache \
         --event "$GUI_PERF_EVENT" --freq "$GUI_PERF_FREQUENCY" \
         --call-graph "$GUI_PERF_CALL_GRAPH" \
+        "${PERF_CONTROL_ARGS[@]}" \
         --output "$GUI_PERF_RECORD" -- \
         "$BIN" "$@" >"$GUI_APP_LOG" 2>&1
   elif [ -n "${GUI_PERF_OUT:-}" ]; then

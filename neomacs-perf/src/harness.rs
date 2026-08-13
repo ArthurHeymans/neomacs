@@ -20,8 +20,10 @@ use thiserror::Error;
 use crate::{
     ArtifactFile, ArtifactKind, CorrectnessMismatch, EditorProvenance, Frontend, Measurement,
     MetricName, MetricUnit, PerfCaptureConfiguration, ProfileArtifact, ProfileRejection,
-    ProfileReport, ProfileRequest, ProfileVerdict, RunArtifact, RunVerdict, ScenarioId,
+    ProfileReport, ProfileRequest, ProfileScope, ProfileVerdict, RunArtifact, RunVerdict,
+    ScenarioId,
     artifact_store::{unix_time_ms, write_json_atomically},
+    profile_gate::ProfileGate,
     scenario,
 };
 
@@ -160,9 +162,13 @@ impl PerfHarness {
                 Vec::new(),
             )?
         } else {
-            let capture =
-                PerfCapture::new(&context.directory, request.profiler.capture_configuration());
-            self.run_prepared_scenario(&run_request, context, Some(&capture))?
+            let mut capture = PerfCapture::new(
+                &context.directory,
+                request.profiler.capture_configuration(),
+                request.scope,
+                request.timeout,
+            );
+            self.run_prepared_scenario(&run_request, context, Some(&mut capture))?
         };
         self.publish_profile(request, run, platform_rejection)
     }
@@ -185,6 +191,7 @@ impl PerfHarness {
             editor: request.editor.clone(),
             iterations: request.iterations,
             profiler: request.profiler,
+            scope: request.scope,
             configuration: request.profiler.capture_configuration(),
             run_artifact_path: PathBuf::from("artifact.json"),
             verdict,
@@ -244,7 +251,7 @@ impl PerfHarness {
         &self,
         request: &RunRequest,
         context: RunContext,
-        profile: Option<&PerfCapture>,
+        mut profile: Option<&mut PerfCapture>,
     ) -> Result<RunReport, PerfError> {
         let mut files = Vec::new();
         let prepared = match self.prepare_rust_lsp_typing(request, &context.directory) {
@@ -256,18 +263,24 @@ impl PerfHarness {
         files.extend(prepared.input_artifacts());
 
         let frontend = frontend_command(request, &self.workspace_root, &prepared);
-        let mut command = match profile {
-            Some(profile) => profile.wrap(frontend, request.frontend()),
+        let mut command = match profile.as_deref_mut() {
+            Some(profile) => match profile.wrap(frontend, request.frontend()) {
+                Ok(command) => command,
+                Err(message) => return context.infrastructure_failure(message, files),
+            },
             None => frontend,
         };
         let process_started = Instant::now();
-        let execution = match profile {
+        let execution = match profile.as_deref() {
             Some(_) => group_output_with_timeout(&mut command, request.timeout),
             None => output_with_timeout(&mut command, request.timeout),
         };
         let output = match execution {
             Ok(output) => output,
             Err(error) => {
+                if let Some(profile) = profile.as_deref_mut() {
+                    profile.cancel_gate();
+                }
                 let (message, output) = command_error_details(error, request.timeout);
                 if let Some(output) = output {
                     files.extend(write_process_output(&context.directory, &output)?);
@@ -280,6 +293,9 @@ impl PerfHarness {
         files.extend(write_process_output(&context.directory, &output)?);
         files.extend(frontend_artifacts_if_present(&prepared));
         if let Some(profile) = profile {
+            if let Err(message) = profile.finish_gate() {
+                return context.infrastructure_failure(message, files);
+            }
             match profile.collect() {
                 Ok(profile_files) => files.extend(profile_files),
                 Err(error) => {
@@ -555,7 +571,7 @@ impl ArtifactNamespace {
     }
 }
 
-fn profile_verdict(run: &RunReport) -> ProfileVerdict {
+pub(crate) fn profile_verdict(run: &RunReport) -> ProfileVerdict {
     match &run.artifact.verdict {
         RunVerdict::CorrectnessMismatch { .. } => ProfileVerdict::Rejected {
             reason: ProfileRejection::CorrectnessMismatch,
@@ -640,18 +656,41 @@ pub(crate) struct PerfCapture {
     configuration: PerfCaptureConfiguration,
     data: PathBuf,
     report: PathBuf,
+    scope: ProfileScope,
+    timeout: Duration,
+    gate: Option<ProfileGate>,
 }
 
 impl PerfCapture {
-    pub(crate) fn new(directory: &Path, configuration: PerfCaptureConfiguration) -> Self {
+    pub(crate) fn new(
+        directory: &Path,
+        configuration: PerfCaptureConfiguration,
+        scope: ProfileScope,
+        timeout: Duration,
+    ) -> Self {
         Self {
             configuration,
             data: directory.join("perf.data"),
             report: directory.join("perf-report.txt"),
+            scope,
+            timeout,
+            gate: None,
         }
     }
 
-    pub(crate) fn wrap(&self, mut command: Command, frontend: Frontend) -> Command {
+    pub(crate) fn wrap(
+        &mut self,
+        mut command: Command,
+        frontend: Frontend,
+    ) -> Result<Command, String> {
+        if self.scope == ProfileScope::EditLoop {
+            self.gate = Some(ProfileGate::start(
+                self.data
+                    .parent()
+                    .expect("profile data has a parent directory"),
+                self.timeout,
+            )?);
+        }
         let adapter_prefix = match frontend {
             Frontend::Tui { .. } => Some("PTY"),
             Frontend::Gui { .. } => Some("GUI"),
@@ -662,11 +701,16 @@ impl PerfCapture {
             for (name, value) in self.configuration.adapter_record_environment(prefix) {
                 command.env(name, value);
             }
-            return command;
+            self.configure_gate_environment(&mut command, Some(prefix));
+            return Ok(command);
         }
 
         let mut profiled = Command::new("perf");
-        profiled.args(self.configuration.record_arguments(&self.data));
+        let control = self.gate.as_ref().map(|gate| {
+            let paths = gate.control_paths();
+            (paths.command.as_path(), paths.acknowledgement.as_path())
+        });
+        profiled.args(self.configuration.record_arguments(&self.data, control));
         profiled.arg(command.get_program());
         profiled.args(command.get_args());
         if let Some(directory) = command.get_current_dir() {
@@ -683,7 +727,37 @@ impl PerfCapture {
                 }
             }
         }
-        profiled
+        self.configure_gate_environment(&mut profiled, None);
+        Ok(profiled)
+    }
+
+    fn configure_gate_environment(&self, command: &mut Command, adapter_prefix: Option<&str>) {
+        let Some(gate) = &self.gate else {
+            return;
+        };
+        command.env("NEOMACS_PERF_GATE_PORT", gate.endpoint().port().to_string());
+        if let Some(prefix) = adapter_prefix {
+            let paths = gate.control_paths();
+            command.env(
+                format!("{prefix}_PERF_CONTROL"),
+                format!(
+                    "fifo:{},{}",
+                    paths.command.display(),
+                    paths.acknowledgement.display()
+                ),
+            );
+        }
+    }
+
+    fn finish_gate(&mut self) -> Result<(), String> {
+        match &mut self.gate {
+            Some(gate) => gate.finish(),
+            None => Ok(()),
+        }
+    }
+
+    fn cancel_gate(&mut self) {
+        self.gate.take();
     }
 
     fn collect(&self) -> Result<Vec<ArtifactFile>, ProfileCaptureError> {

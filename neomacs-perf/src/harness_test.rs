@@ -268,6 +268,48 @@ fn pty_runner_publishes_the_raw_terminal_byte_stream() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn pty_runner_allows_a_profile_wrapper_to_finalize_after_the_sentinel() {
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("crate is a workspace member")
+        .to_path_buf();
+    let scratch_root = workspace_root.join("tmp");
+    fs::create_dir_all(&scratch_root).expect("create workspace-local test scratch root");
+    let scratch = tempfile::Builder::new()
+        .prefix("neomacs-perf-pty-finalize-test-")
+        .tempdir_in(&scratch_root)
+        .expect("create workspace-local PTY test directory");
+    let sentinel = scratch.path().join("done");
+    let finalized = scratch.path().join("profile-finalized");
+
+    let output = Command::new("python3")
+        .arg(workspace_root.join("tools/bench/pty-run.py"))
+        .args([
+            "sh",
+            "-c",
+            r##": > "$SENTINEL"; sleep 1; : > "$FINALIZED""##,
+        ])
+        .current_dir(&workspace_root)
+        .env("SENTINEL", &sentinel)
+        .env("FINALIZED", &finalized)
+        .env("PTY_TIMEOUT", "5")
+        .output()
+        .expect("run PTY adapter around a finalizing wrapper");
+
+    assert!(
+        output.status.success(),
+        "PTY adapter failed:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        finalized.is_file(),
+        "PTY adapter killed the wrapper before profile finalization"
+    );
+}
+
 #[test]
 fn gui_runner_keeps_logs_workspace_local_and_owns_its_viewport_size() {
     let runner = include_str!("../../tools/bench/gui-run.sh");
