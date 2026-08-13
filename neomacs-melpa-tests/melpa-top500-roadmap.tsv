@@ -401,7 +401,7 @@ rank	package	downloads	status
 400	ccls	237387	covered
 401	ivy-rich	237181	covered
 402	gptel	233704	covered
-403	org-brain	233197	todo
+403	org-brain	233197	covered
 404	moe-theme	229420	todo
 405	nodejs-repl	228729	todo
 406	org-rich-yank	227783	todo

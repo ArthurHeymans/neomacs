@@ -542,6 +542,7 @@ mod neotree;
 mod nerd_icons;
 mod open_junk_file;
 mod orderless;
+mod org_brain;
 mod org_bullets;
 mod org_category_capture;
 mod org_cliplink;
