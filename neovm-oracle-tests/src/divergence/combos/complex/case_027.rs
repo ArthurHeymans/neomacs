@@ -271,32 +271,24 @@ fn div_cx27_undo_redo_multiple_boundaries_precise() {
 fn div_cx27_process_buffer_string_after_multiple_writes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect =
-        expect_test::expect![[r#""OK (\"hello\nworld\nProcess neo-cx27-pb finished\n\" 3)""#]];
+        expect_test::expect![[r#""OK (\"hello\\nworld\\nProcess neo-cx27-pb finished\\n\" 3)""#]];
     let form = r##"
 (let ((buf (get-buffer-create " *neo-cx27-pb*")))
   (with-current-buffer buf (erase-buffer))
   (let ((p (make-process :name "neo-cx27-pb" :command '("printf" "%s" "hello\nworld")
                          :buffer buf)))
     (set-process-query-on-exit-flag p nil)
-    (let ((i 0))
-      (while (and (memq (process-status p) '(run open listen connect stop))
-                  (< i 20))
-        (accept-process-output p 0.05)
-        (setq i (1+ i)))))
+    (neovm--oracle-settle-process p))
   (prog1 (with-current-buffer buf
            (list (buffer-string) (count-lines 1 (point-max))))
     (kill-buffer buf)))
 "##;
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
-    let with_status = "OK (\"hello\nworld\nProcess neo-cx27-pb finished\n\" 3)";
-    let without_status = "OK (\"hello\nworld\" 2)";
-    // GNU `wait_reading_process_output` can return after draining the pipe
-    // bytes before `status_notify` runs the default sentinel.  Under different
-    // scheduler load the same GNU form observes either buffer string.
+    let with_status = r##"OK ("hello\nworld\nProcess neo-cx27-pb finished\n" 3)"##;
     for (label, value) in [("GNU", oracle.as_str()), ("Neomacs", neovm.as_str())] {
-        assert!(
-            value == with_status || value == without_status,
-            "{label} returned unexpected process buffer contents: {value:?}"
+        assert_eq!(
+            value, with_status,
+            "{label} did not settle the process buffer"
         );
     }
 }

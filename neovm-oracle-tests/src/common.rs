@@ -273,7 +273,9 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
         (princ "\n" 'external-debugging-output)
         (princ "NEOVM-ORACLE-OUTCOME:" 'external-debugging-output)
         (princ kind 'external-debugging-output)
-        (prin1 value 'external-debugging-output)
+        (let ((print-escape-newlines t)
+              (print-escape-control-characters t))
+          (prin1 value 'external-debugging-output))
         (terpri 'external-debugging-output))
       (defun neovm--oracle-normalize-1 (v seen)
         (cond
@@ -526,7 +528,9 @@ const EVAL_PROGRAM_RAW: &str = r#"(condition-case err
         (princ "\n" 'external-debugging-output)
         (princ "NEOVM-ORACLE-OUTCOME:" 'external-debugging-output)
         (princ kind 'external-debugging-output)
-        (prin1 value 'external-debugging-output)
+        (let ((print-escape-newlines t)
+              (print-escape-control-characters t))
+          (prin1 value 'external-debugging-output))
         (terpri 'external-debugging-output))
       (let* ((coding-system-for-read 'utf-8-unix)
              (coding-system-for-write 'utf-8-unix)
@@ -573,6 +577,25 @@ const EVAL_PROGRAM_RAW: &str = r#"(condition-case err
 
 const NATIVE_COMP_SUPPRESSION_PRELUDE: &str = "(setq native-comp-jit-compilation nil inhibit-automatic-native-compilation t native-comp-enable-subr-trampolines nil)";
 
+// `accept-process-output' is edge-triggered: GNU can return after reading any
+// bytes, and observing a terminal process status does not imply that the final
+// pipe bytes or default sentinel have been delivered yet.  Process probes use
+// this helper when their assertion is about the settled process buffer rather
+// than an intermediate event-loop state.
+const ORACLE_TEST_SUPPORT_PRELUDE: &str = r#"(progn
+  (defun neovm--oracle-settle-process (process &optional attempts)
+    (let ((remaining (or attempts 20)))
+      (while (and (> remaining 0) (process-live-p process))
+        (setq remaining (1- remaining))
+        (accept-process-output process 0.05))
+      ;; GNU process.c drains an already-terminal process and runs its sentinel
+      ;; on this subsequent observation.  This call is deliberately outside
+      ;; the live-status loop.
+      (accept-process-output process 0)
+      (when (process-live-p process)
+        (error "Oracle process did not settle after %d attempts" (or attempts 20)))
+      (process-status process))))"#;
+
 #[derive(Clone, Copy)]
 enum EvalProgram {
     Normalized,
@@ -585,6 +608,19 @@ impl EvalProgram {
             Self::Normalized => EVAL_PROGRAM_WITH_NORMALIZER,
             Self::Raw => EVAL_PROGRAM_RAW,
         }
+    }
+
+    fn configure_command(self, command: &mut Command) {
+        command.args([
+            "--batch",
+            "-Q",
+            "--eval",
+            NATIVE_COMP_SUPPRESSION_PRELUDE,
+            "--eval",
+            ORACLE_TEST_SUPPORT_PRELUDE,
+            "--eval",
+            self.source(),
+        ]);
     }
 }
 
@@ -601,14 +637,8 @@ fn run_oracle_eval_with_sandbox(
     let mem_limit = oracle_mem_limit_bytes();
     let mut cmd = Command::new(&oracle_bin);
     sandbox.configure(&mut cmd);
-    cmd.env("EMACSNATIVELOADPATH", "/dev/null").args([
-        "--batch",
-        "-Q",
-        "--eval",
-        NATIVE_COMP_SUPPRESSION_PRELUDE,
-        "--eval",
-        eval_program.source(),
-    ]);
+    cmd.env("EMACSNATIVELOADPATH", "/dev/null");
+    eval_program.configure_command(&mut cmd);
 
     apply_virtual_memory_limit(&mut cmd, mem_limit);
 
@@ -716,14 +746,7 @@ fn run_neomacs_binary_eval_with_sandbox(
 
     let mut cmd = Command::new(&neomacs_bin);
     sandbox.configure(&mut cmd);
-    cmd.args([
-        "--batch",
-        "-Q",
-        "--eval",
-        NATIVE_COMP_SUPPRESSION_PRELUDE,
-        "--eval",
-        eval_program.source(),
-    ]);
+    eval_program.configure_command(&mut cmd);
 
     if let Some(mem_limit) = neomacs_binary_mem_limit_bytes() {
         apply_virtual_memory_limit(&mut cmd, mem_limit);

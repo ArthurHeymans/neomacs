@@ -246,7 +246,7 @@ fn div_cx11_process_kill_buffer_cleanup() {
   (with-current-buffer buf (insert "preexisting"))
   (let ((p (make-process :name "neo-cx11-pkb" :command '("echo" "process-output")
                          :buffer buf)))
-    (accept-process-output p 1))
+    (neovm--oracle-settle-process p))
   (prog1 (with-current-buffer buf (buffer-string))
     (kill-buffer buf)))
 "##,
