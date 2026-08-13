@@ -4528,7 +4528,7 @@ fails only on the independent write annotation recorded in entry 87.
 
 Status: FIXED.
 
-## 87. `write-region` ignores `write-region-annotate-functions`
+## 87. `write-region` ignores `write-region-annotate-functions` -- FIXED
 
 Command Log Mode saves each logged command with a timestamp prefix by
 dynamically binding `write-region-annotate-functions`.  GNU calls the
@@ -4553,12 +4553,46 @@ annotation function; Neomacs writes only the buffer bytes:
 ```
 
 The variable is already registered as special in Neomacs; the dynamic binding
-is visible.  The missing behavior is in the write path itself.  The rank-396
-recovery case first proves a failed save retains the log, then creates its
-owned directory and performs the real public save.  Both editors clear the log
-afterward, while only GNU writes the timestamp annotation.
+is visible.  The missing behavior was in the write path itself.  Neomacs
+extracted a buffer region and immediately selected a coding system and encoded
+it; no phase consumed the hook, its returned annotations, a hook-selected
+replacement buffer, or the post-annotation callback.
 
-Status: LIVE (measured 2026-08-12).
+GNU removes restrictions for a nil START, builds annotations before coding
+selection and destination opening, and lets a callback-selected buffer replace
+the source (`src/fileio.c:5584-5627`).  `build_annotations` exposes earlier
+results through `write-region-annotations-so-far`, discards them after a buffer
+switch, and destructively merges each newer sorted list with the accumulated
+list (`src/fileio.c:5880-5960`).  At equal positions, this puts the newer
+callback's list first while preserving order inside each list.  `a_write`
+intersperses string payloads at 1-based **character** positions, including the
+end boundary, through the same coding stream as the source; non-string payloads
+are consumed without output (`src/fileio.c:5966-6025`).  Literal string START
+values skip annotation collection, but successful writes still run the post
+callback for each participating live buffer, newest replacement first and the
+original last (`src/fileio.c:5804-5823`).
+
+The fix introduces the exhaustive `WriteRegionSource::{Literal, BufferRegion}`
+choice, so a literal cannot accidentally enter hook collection.  A
+`PreparedWriteRegion` owns source selection and cleanup.  Annotation positions
+use `LispCharPos1` rather than storage offsets, payloads are the closed
+`WriteAnnotationPayload::{Text, NoText}` choice, and distinct
+`WriteAnnotationBatch`/`WriteAnnotationBatchIndex` types make GNU's two-level
+equal-position order explicit and prevent the two coordinates from being
+mixed.  The prepared character stream is encoded once, preserving stateful and
+multibyte coding behavior across annotation boundaries.
+
+The original live oracle failed first with `"line\n"` instead of
+`"[STAMP] line\n"`.  A second failed-first regression caught an initially
+over-broad reverse tie break: GNU produced
+`<B1><B2><A1><A2>x`, while the first implementation reversed each callback's
+own list.  Regressions also cover multibyte character positions, end-boundary
+ordering, `write-region-annotations-so-far`, literal-source bypass, replacement
+buffer selection, and post-cleanup order.  All 199 focused file-I/O tests pass,
+the fresh release build and final pdump succeed, the live oracle is green, and
+the rank-396 Command Log Mode workflow now matches GNU completely.
+
+Status: FIXED.
 
 ## 88. Shared unique-symbol names multiplied the GC root set -- FIXED
 
