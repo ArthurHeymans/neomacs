@@ -3365,7 +3365,7 @@ pub(crate) fn apply_inherited_text_properties(
         .get(current_id)
         .map(|buf| {
             super::builtins::misc_eval::inherited_text_properties_for_inserted_range_in_state(
-                obarray, dynamic, buf, old_pt, text_len,
+                obarray, dynamic, buffers, buf, old_pt, text_len,
             )
         })
         .unwrap_or_default();

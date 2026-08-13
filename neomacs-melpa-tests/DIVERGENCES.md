@@ -4632,3 +4632,43 @@ gate passes 8,822 tests with 51 skipped.  Formatting, the fresh release build,
 and the release pdump fingerprint gate also pass.
 
 Status: FIXED.
+
+## 89. Category-inherited `rear-nonsticky` did not bound inserted text -- FIXED
+
+Org Brain renders entries as text-property buttons and uses `picture-mode`
+column padding to lay out its relationship graph.  The default button category
+declares `rear-nonsticky t`, so GNU leaves padding outside the button.  Neomacs
+instead copied the button category, action, keymap, and identifier across the
+padding, creating extra buttons whose labels consisted of newlines and spaces.
+
+The package workflow exposed the difference in a real rendered map.  This
+package-free reduction isolates the insertion rule:
+
+```elisp
+(with-temp-buffer
+  (put 'padding-boundary 'rear-nonsticky t)
+  (insert (propertize "x" 'category 'padding-boundary 'probe t))
+  (let ((indent-tabs-mode nil))
+    (move-to-column 3 t))
+  (list (buffer-substring-no-properties (point-min) (point-max))
+        (get-text-property 1 'probe)
+        (get-text-property 2 'probe)
+        (get-text-property 2 'category)))
+;; GNU                => ("x  " t nil nil)
+;; Neomacs before fix => ("x  " t t padding-boundary)
+```
+
+GNU's `adjust_intervals_for_insertion` obtains `front-sticky` and
+`rear-nonsticky` with `textget` (`src/intervals.c:844-853,1034-1037`).
+`textget` resolves a missing direct property through the interval's category
+symbol (`src/intervals.c:1706-1735`).  Neomacs' insertion merge implemented
+the direct-plist and default-nonsticky rules but read these four meta-properties
+only from the direct interval map, so it never saw a button category's
+nonstickiness.
+
+The fix routes left/right front/rear stickiness through the existing effective
+text-property resolver before the merge.  The focused regression covers the
+category boundary, while the Org Brain visualization workflow locks the
+original multi-line button topology.
+
+Status: FIXED.

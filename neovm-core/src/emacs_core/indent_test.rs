@@ -736,6 +736,29 @@ fn eval_move_to_column_force_inherits_text_properties_in_both_insertion_branches
 }
 
 #[test]
+fn eval_move_to_column_force_honors_category_rear_nonsticky() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let value = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                  (put 'padding-boundary 'rear-nonsticky t)
+                  (insert (propertize "x" 'category 'padding-boundary 'probe t))
+                  (let ((indent-tabs-mode nil))
+                    (move-to-column 3 t))
+                  (list (buffer-substring-no-properties (point-min) (point-max))
+                        (get-text-property 1 'probe)
+                        (get-text-property 2 'probe)
+                        (get-text-property 2 'category)))"#,
+        )
+        .expect("move-to-column category rear-nonsticky boundary");
+    assert_eq!(
+        super::super::print::print_value(&value),
+        r#"("x  " t nil nil)"#
+    );
+}
+
+#[test]
 fn eval_indent_to_rejects_non_fixnump_minimum() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::test_utils::runtime_startup_context();

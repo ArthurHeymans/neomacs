@@ -854,6 +854,7 @@ fn text_property_stickiness_in_state(
 pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     obarray: &crate::emacs_core::symbol::Obarray,
     _dynamic: &[OrderedRuntimeBindingMap],
+    buffers: &crate::buffer::BufferManager,
     buf: &crate::buffer::Buffer,
     insert_start: usize,
     insert_len: usize,
@@ -884,22 +885,23 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
 
     let left_map: HashMap<Value, Value> = left_props.iter().cloned().collect();
     let right_map: HashMap<Value, Value> = right_props.iter().cloned().collect();
-    let left_front = left_map
-        .get(&Value::symbol("front-sticky"))
-        .copied()
-        .unwrap_or(Value::NIL);
-    let left_rear = left_map
-        .get(&Value::symbol("rear-nonsticky"))
-        .copied()
-        .unwrap_or(Value::NIL);
-    let right_front = right_map
-        .get(&Value::symbol("front-sticky"))
-        .copied()
-        .unwrap_or(Value::NIL);
-    let right_rear = right_map
-        .get(&Value::symbol("rear-nonsticky"))
-        .copied()
-        .unwrap_or(Value::NIL);
+    // GNU `adjust_intervals_for_insertion` reads stickiness with `textget`,
+    // not direct plist lookup.  In particular, text buttons carry
+    // `rear-nonsticky t` on their category symbol rather than on every
+    // interval.  Resolve these meta-properties through the same effective
+    // text-property path used by GNU before deciding what padding inherits.
+    let effective_stickiness = |props: &[(Value, Value)], name: &str| {
+        super::textprop::lookup_text_property_from_plist_slice(
+            obarray,
+            buffers,
+            props,
+            Value::symbol(name),
+        )
+    };
+    let left_front = effective_stickiness(&left_props, "front-sticky");
+    let left_rear = effective_stickiness(&left_props, "rear-nonsticky");
+    let right_front = effective_stickiness(&right_props, "front-sticky");
+    let right_rear = effective_stickiness(&right_props, "rear-nonsticky");
     let default_nonsticky =
         buffer_local_or_global_symbol_value(obarray, buf, "text-property-default-nonsticky");
 
