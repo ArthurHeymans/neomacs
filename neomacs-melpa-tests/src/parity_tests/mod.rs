@@ -474,6 +474,7 @@ mod ht;
 mod htmlize;
 mod hungry_delete;
 mod hydra;
+mod ido_ubiquitous;
 mod ido_vertical_mode;
 mod iedit;
 mod imenu_anywhere;

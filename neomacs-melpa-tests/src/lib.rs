@@ -1964,6 +1964,13 @@ pub const HIGHLIGHT_NUMBERS_MELPA_PIN: (&str, &str) = ("highlight-numbers", "201
 pub const HIGHLIGHT_PARENTHESES_MELPA_PIN: (&str, &str) =
     ("highlight-parentheses", "20240408.1126");
 
+/// The exact Ido Completing Read+ package selected for practical ubiquitous
+/// mode, transformed collections/defaults, caller policy, dynamic collection,
+/// fallback, and minibuffer-hook lifecycle parity. This is the current archive
+/// containing the formerly separate `ido-ubiquitous` package. MELPA built it
+/// from upstream commit `1609049c0a9b3f674ffff3083adc8f5359746fa9`.
+pub const IDO_UBIQUITOUS_MELPA_PIN: (&str, &str) = ("ido-completing-read+", "20240130.30");
+
 /// The exact Indent Guide package selected for practical space, tab, blank
 /// line, recursive, live-editing, mode-lifecycle, and debounce parity. MELPA
 /// built this archive from upstream commit

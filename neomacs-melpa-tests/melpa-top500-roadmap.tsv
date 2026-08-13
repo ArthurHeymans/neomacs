@@ -415,7 +415,7 @@ rank	package	downloads	status
 414	clj-refactor	217884	covered
 415	el-mock	217206	covered
 416	terraform-mode	216478	covered
-417	ido-ubiquitous	215985	todo
+417	ido-ubiquitous	215985	covered
 418	smooth-scrolling	215912	todo
 419	rustic	215324	todo
 420	color-theme	215309	todo
