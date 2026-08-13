@@ -3724,6 +3724,14 @@ fn regex_char_to_unibyte(code: u32) -> Option<u8> {
     }
 }
 
+fn gnu_alphabetic_char(code: u32) -> bool {
+    emacs_char::char_general_category(code).is_some_and(emacs_char::alphabeticp)
+}
+
+fn gnu_alphanumeric_char(code: u32) -> bool {
+    emacs_char::char_general_category(code).is_some_and(emacs_char::alphanumericp)
+}
+
 /// Runtime POSIX character-class membership for charset `class_bits`.
 ///
 /// Mirrors GNU `re_iswctype` (regex-emacs.c) as consulted by
@@ -3733,11 +3741,41 @@ fn regex_char_to_unibyte(code: u32) -> Option<u8> {
 /// a fixed predicate.  Shared by the matcher (per-character class test)
 /// and `compile_fastmap` (baking the ASCII members of a leading class
 /// into the fastmap).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PosixClassCaseMode {
+    Sensitive,
+    Folded,
+}
+
+impl PosixClassCaseMode {
+    fn from_translation(translate: Option<&CaseTranslation>) -> Self {
+        match translate {
+            Some(_) => Self::Folded,
+            None => Self::Sensitive,
+        }
+    }
+
+    fn matches_lower(self, ch: char) -> bool {
+        match self {
+            Self::Sensitive => ch.is_lowercase(),
+            Self::Folded => ch.is_lowercase() || ch.is_uppercase(),
+        }
+    }
+
+    fn matches_upper(self, ch: char) -> bool {
+        match self {
+            Self::Sensitive => ch.is_uppercase(),
+            Self::Folded => ch.is_uppercase() || ch.is_lowercase(),
+        }
+    }
+}
+
 fn posix_class_matches(
     code: u32,
     bits: u32,
     input_pos: Option<usize>,
     syntax: &dyn SyntaxLookup,
+    case_mode: PosixClassCaseMode,
 ) -> bool {
     let byte = regex_char_to_unibyte(code);
     let ch = regex_syntax_char(code);
@@ -3755,13 +3793,13 @@ fn posix_class_matches(
         && if is_real_ascii {
             ascii_alnum(code as u8)
         } else {
-            ch.is_alphanumeric()
+            gnu_alphanumeric_char(code)
         })
         || (bits & CHARSET_CLASS_BIT_ALPHA != 0
             && if is_real_ascii {
                 ascii_alpha(code as u8)
             } else {
-                ch.is_alphabetic()
+                gnu_alphabetic_char(code)
             })
         || (bits & CHARSET_CLASS_BIT_BLANK != 0
             && if is_real_ascii {
@@ -3776,7 +3814,7 @@ fn posix_class_matches(
                 || unicode_graphic_char(ch),
                 |b| b > b' ' && !(0x7f..=0xa0).contains(&b),
             ))
-        || (bits & CHARSET_CLASS_BIT_LOWER != 0 && ch.is_lowercase())
+        || (bits & CHARSET_CLASS_BIT_LOWER != 0 && case_mode.matches_lower(ch))
         || (bits & CHARSET_CLASS_BIT_PRINT != 0
             && byte.map_or_else(
                 || unicode_printable_char(ch),
@@ -3790,7 +3828,7 @@ fn posix_class_matches(
                 char_syntax() != SyntaxClass::Word
             })
         || (bits & CHARSET_CLASS_BIT_SPACE != 0 && char_syntax() == SyntaxClass::Whitespace)
-        || (bits & CHARSET_CLASS_BIT_UPPER != 0 && ch.is_uppercase())
+        || (bits & CHARSET_CLASS_BIT_UPPER != 0 && case_mode.matches_upper(ch))
         || (bits & CHARSET_CLASS_BIT_XDIGIT != 0
             && is_real_ascii
             && (code as u8).is_ascii_hexdigit())
@@ -3947,6 +3985,7 @@ fn match_charset_at(
     let negate = bytecode[charset_op_pos] == RegexOp::CharsetNot as u8;
     let bitmap_len = bytecode[charset_op_pos + 1] as usize & 0x7F;
     let bitmap_start = charset_op_pos + 2;
+    let class_case_mode = PosixClassCaseMode::from_translation(translate.as_ref());
 
     if d >= stop {
         return None;
@@ -3989,7 +4028,9 @@ fn match_charset_at(
                     .charset_class_bits
                     .get(&charset_op_pos)
                     .copied()
-                    .map(|bits| posix_class_matches(orig_ch, bits, Some(d), syntax))
+                    .map(|bits| {
+                        posix_class_matches(orig_ch, bits, Some(d), syntax, class_case_mode)
+                    })
                     .unwrap_or(false))
     } else {
         let range_hit = pattern
@@ -4005,7 +4046,7 @@ fn match_charset_at(
                 .charset_class_bits
                 .get(&charset_op_pos)
                 .copied()
-                .map(|bits| posix_class_matches(orig_ch, bits, Some(d), syntax))
+                .map(|bits| posix_class_matches(orig_ch, bits, Some(d), syntax, class_case_mode))
                 .unwrap_or(false)
     };
 
@@ -6438,7 +6479,13 @@ fn compile_fastmap(pattern: &mut CompiledPattern, syntax: &dyn SyntaxLookup) {
                     // any multibyte characters" (analyze_first).
                     if let Some(&bits) = pattern.charset_class_bits.get(&charset_op_pos) {
                         for c in 0u8..0x80 {
-                            if posix_class_matches(c as u32, bits, None, syntax) {
+                            if posix_class_matches(
+                                c as u32,
+                                bits,
+                                None,
+                                syntax,
+                                PosixClassCaseMode::Sensitive,
+                            ) {
                                 pattern.fastmap[c as usize] = true;
                                 if let Some(table) = &pattern.translate {
                                     pattern.fastmap[table.translate_byte(c) as usize] = true;

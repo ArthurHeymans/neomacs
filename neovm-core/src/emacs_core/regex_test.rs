@@ -1007,6 +1007,38 @@ fn string_match_posix_upper_class_folds_to_alpha_on_lisp_string() {
     assert_eq!(match_group(md.group(0)), Some(MatchGroup::new(0, 13)));
 }
 
+#[test]
+fn string_match_posix_case_classes_fold_multibyte_opposite_case() {
+    crate::test_utils::init_test_tracing();
+
+    for (pattern, input) in [("[[:lower:]]+", "Σa"), ("[[:upper:]]+", "σA")] {
+        let mut md = None;
+        let result = string_match_full_with_case_fold(pattern, input, 0, true, &mut md);
+        assert_eq!(result, Ok(Some(0)), "pattern {pattern:?} on {input:?}");
+        assert_eq!(
+            match_group(md.expect("match data").group(0)),
+            Some(MatchGroup::new(0, 2)),
+            "pattern {pattern:?} on {input:?}"
+        );
+    }
+}
+
+#[test]
+fn string_match_posix_alpha_and_alnum_include_unicode_marks() {
+    crate::test_utils::init_test_tracing();
+
+    for pattern in ["[[:alpha:]]+", "[[:alnum:]]+"] {
+        let mut md = None;
+        let result = string_match_full_with_case_fold(pattern, "\u{301}a", 0, false, &mut md);
+        assert_eq!(result, Ok(Some(0)), "pattern {pattern:?}");
+        assert_eq!(
+            match_group(md.expect("match data").group(0)),
+            Some(MatchGroup::new(0, 2)),
+            "pattern {pattern:?}"
+        );
+    }
+}
+
 // Regex audit #7: the 4 previously missing POSIX classes
 // (word, nonascii, unibyte, multibyte) and the space/blank and
 // print/graph splits must match GNU `regex-emacs.c:1525-1630`
