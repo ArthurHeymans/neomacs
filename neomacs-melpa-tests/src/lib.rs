@@ -2915,6 +2915,11 @@ pub const CIDER_MELPA_PIN: (&str, &str) = ("cider", "20260729.1056");
 /// upstream commit `2805bd5f505fdb199a8c5a25fca398ec9c161e5b`.
 pub const CLJ_REFACTOR_MELPA_PIN: (&str, &str) = ("clj-refactor", "20260716.1545");
 
+/// The exact El Mock package selected for practical stub, mock, verification,
+/// failure, teardown, and mixed `mocklet` parity. MELPA built this archive from
+/// upstream commit `6cfbc9de8f1927295dca6864907fe4156bd71910`.
+pub const EL_MOCK_MELPA_PIN: (&str, &str) = ("el-mock", "20220625.1949");
+
 /// The exact Google Translate package selected by the practical request,
 /// response, dictionary, suggestion, speech, language-selection, editing, and
 /// backend-dispatch parity corpus. MELPA built this archive from upstream
