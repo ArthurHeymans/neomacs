@@ -412,7 +412,7 @@ rank	package	downloads	status
 411	tree-sitter-langs	220685	covered
 412	git-gutter+	220600	covered
 413	buttercup	218857	covered
-414	clj-refactor	217884	todo
+414	clj-refactor	217884	covered
 415	el-mock	217206	todo
 416	terraform-mode	216478	todo
 417	ido-ubiquitous	215985	todo

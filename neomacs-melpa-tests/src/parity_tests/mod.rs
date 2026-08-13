@@ -287,6 +287,7 @@ mod chinese_word_at_point;
 mod cider;
 mod clang_format;
 mod clean_aindent_mode;
+mod clj_refactor;
 mod clojure_mode;
 mod closql;
 mod cmake_mode;

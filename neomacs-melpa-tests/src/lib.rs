@@ -2909,6 +2909,12 @@ pub const CHINESE_WORD_AT_POINT_MELPA_PIN: (&str, &str) = ("chinese-word-at-poin
 /// commit `567503cec96bf463e031eef6e0d258ba87b17188`.
 pub const CIDER_MELPA_PIN: (&str, &str) = ("cider", "20260729.1056");
 
+/// The exact clj-refactor package selected for practical mode/keybinding,
+/// local structural edit, namespace cleanup, project dependency sorting, and
+/// unavailable-middleware recovery parity. MELPA built this archive from
+/// upstream commit `2805bd5f505fdb199a8c5a25fca398ec9c161e5b`.
+pub const CLJ_REFACTOR_MELPA_PIN: (&str, &str) = ("clj-refactor", "20260716.1545");
+
 /// The exact Google Translate package selected by the practical request,
 /// response, dictionary, suggestion, speech, language-selection, editing, and
 /// backend-dispatch parity corpus. MELPA built this archive from upstream
