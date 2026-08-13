@@ -3155,6 +3155,12 @@ pub const CTABLE_MELPA_PIN: (&str, &str) = ("ctable", "20210128.629");
 /// `3e4790559d3168fe992cf2aa62f01423038cedb5`.
 pub const CYTHON_MODE_MELPA_PIN: (&str, &str) = ("cython-mode", "20221130.1257");
 
+/// The exact obsolete Color Theme package selected for practical warning,
+/// selection-buffer, installation, history, snapshot, and recovery parity.
+/// MELPA built this archive from upstream commit
+/// `3a2f6b615f5e2401e30d93a3e0adc210bbb4b7aa`.
+pub const COLOR_THEME_MELPA_PIN: (&str, &str) = ("color-theme", "20190220.1115");
+
 /// The exact Sanityinc Tomorrow theme package selected for five-variant palette,
 /// wrapper-command, source fontification, diff/ANSI integration, lifecycle,
 /// registry, and color-helper parity. MELPA built this archive from upstream
