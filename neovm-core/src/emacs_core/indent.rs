@@ -946,31 +946,51 @@ fn spaces_to_column(column: usize, target: usize) -> String {
     " ".repeat(target.saturating_sub(column))
 }
 
-fn indent_to_column_string(
-    mut column: usize,
-    target: usize,
-    tab_width: usize,
-    indent_tabs_mode: bool,
-) -> String {
-    let mut out = String::new();
-    let tab = tab_width.max(1);
-
-    if indent_tabs_mode {
-        let ntabs = target / tab - column / tab;
-        for _ in 0..ntabs {
-            out.push('\t');
-        }
-        if ntabs > 0 {
-            column = (target / tab) * tab;
-        }
+/// Insert indentation with GNU `Finsert_char(..., INHERIT=t)` semantics.
+///
+/// Keeping the property policy out of the signature makes it impossible for
+/// an indentation caller to select plain insertion accidentally.  The closed
+/// `InsertPiecePropertyMode` choice remains explicit at the lower insertion
+/// boundary, independently of marker placement.
+fn insert_inheriting_indentation(
+    ctx: &mut crate::emacs_core::eval::Context,
+    indentation: String,
+) -> Result<(), Flow> {
+    if indentation.is_empty() {
+        return Ok(());
     }
+    debug_assert!(indentation.bytes().all(|byte| matches!(byte, b' ' | b'\t')));
 
-    while column < target {
-        out.push(' ');
-        column += 1;
-    }
-
-    out
+    let current_id = ctx
+        .buffers
+        .current_buffer_id()
+        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+    let insert_pos = ctx
+        .buffers
+        .get(current_id)
+        .map(Buffer::point_emacs_byte_pos)
+        .unwrap_or(EmacsBytePos::ZERO);
+    let indentation_len = indentation.len();
+    let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
+        &ctx.buffers,
+        current_id,
+        insert_pos,
+        TextExtent::new(
+            CharLen::new(indentation_len),
+            EmacsByteLen::new(indentation_len),
+        ),
+    )?;
+    super::editfns::signal_before_text_change(ctx, change)?;
+    super::builtins::insert_string_value_in_current_buffer(
+        &ctx.obarray,
+        &[],
+        &mut ctx.buffers,
+        Value::string(indentation),
+        super::builtins::InsertPieceMarkerPlacement::AfterMarkers,
+        super::builtins::InsertPiecePropertyMode::InheritAdjoining,
+    )?;
+    super::editfns::signal_after_text_change(ctx, change)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1080,7 +1100,6 @@ pub(crate) fn builtin_move_to_column(
     let Some(buf) = ctx.buffers.get(current_id) else {
         return Ok(Value::fixnum(0));
     };
-    let tabw = tab_width_in_state(&ctx.obarray, &[], Some(buf));
     let read_only = super::editfns::buffer_read_only_active_in_state(&ctx.obarray, &[], buf);
     let pt = buf
         .accessible_emacs_byte_region()
@@ -1117,15 +1136,7 @@ pub(crate) fn builtin_move_to_column(
         let pad = spaces_to_column(col_before_tab, target);
         let insert_pos = tab_byte;
         let pad_len = pad.len();
-        let pad_change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
-            &ctx.buffers,
-            current_id,
-            insert_pos,
-            TextExtent::new(CharLen::new(pad_len), EmacsByteLen::new(pad_len)),
-        )?;
-        super::editfns::signal_before_text_change(ctx, pad_change)?;
-        let _ = ctx.buffers.insert_into_buffer(current_id, &pad);
-        super::editfns::signal_after_text_change(ctx, pad_change)?;
+        insert_inheriting_indentation(ctx, pad)?;
         let tab_after_pad = insert_pos.add_len(EmacsByteLen::new(pad_len));
         let delete_range = super::editfns::buffer_edit_range_for_byte_range_in_manager(
             &ctx.buffers,
@@ -1157,23 +1168,10 @@ pub(crate) fn builtin_move_to_column(
         if read_only {
             return Err(signal(LispCondition::BufferReadOnly, vec![buffer_name]));
         }
-        let use_tabs = indent_tabs_mode_in_state(&ctx.obarray, &[], ctx.buffers.get(current_id));
-        let pad = indent_to_column_string(reached, target, tabw, use_tabs);
-        let insert_pos = ctx
-            .buffers
-            .get(current_id)
-            .map(|b| b.point_emacs_byte_pos())
-            .unwrap_or(EmacsBytePos::ZERO);
-        let pad_len = pad.len();
-        let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
-            &ctx.buffers,
-            current_id,
-            insert_pos,
-            TextExtent::new(CharLen::new(pad_len), EmacsByteLen::new(pad_len)),
-        )?;
-        super::editfns::signal_before_text_change(ctx, change)?;
-        let _ = ctx.buffers.insert_into_buffer(current_id, &pad);
-        super::editfns::signal_after_text_change(ctx, change)?;
+        // GNU Fmove_to_column delegates short-line padding to Findent_to
+        // (src/indent.c:1176-1177), keeping indentation construction and
+        // inheriting insertion in one path.
+        let _ = builtin_indent_to(ctx, vec![Value::fixnum(target as i64), Value::NIL])?;
         reached = target;
     }
 
@@ -1247,30 +1245,7 @@ pub(crate) fn builtin_indent_to(
         col += 1;
     }
 
-    let insert_pos = ctx
-        .buffers
-        .get(current_id)
-        .map(|b| b.point_emacs_byte_pos())
-        .unwrap_or(EmacsBytePos::ZERO);
-    let indent_len = indent.len();
-    if indent_len > 0 {
-        let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
-            &ctx.buffers,
-            current_id,
-            insert_pos,
-            TextExtent::new(CharLen::new(indent_len), EmacsByteLen::new(indent_len)),
-        )?;
-        super::editfns::signal_before_text_change(ctx, change)?;
-        super::builtins::insert_string_value_in_current_buffer(
-            &ctx.obarray,
-            &[],
-            &mut ctx.buffers,
-            Value::string(indent),
-            super::builtins::InsertPieceMarkerPlacement::AfterMarkers,
-            super::builtins::InsertPiecePropertyMode::InheritAdjoining,
-        )?;
-        super::editfns::signal_after_text_change(ctx, change)?;
-    }
+    insert_inheriting_indentation(ctx, indent)?;
 
     // GNU `Findent_to` caches the resulting column at the new point/MODIFF so a
     // following `current-column' returns it without rescanning (src/indent.c:

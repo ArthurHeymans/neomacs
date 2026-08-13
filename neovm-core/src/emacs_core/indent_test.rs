@@ -711,6 +711,31 @@ fn eval_indent_to_inherits_text_properties() {
 }
 
 #[test]
+fn eval_move_to_column_force_inherits_text_properties_in_both_insertion_branches() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let value = ev
+        .eval_str(
+            r#"(list
+                 (with-temp-buffer
+                   (insert (propertize "x" :time "STAMP"))
+                   (move-to-column 5 t)
+                   (buffer-string))
+                 (with-temp-buffer
+                   (let ((indent-tabs-mode nil))
+                     (insert (propertize "x" :time "STAMP") "\tz")
+                     (goto-char (point-min))
+                     (move-to-column 5 t)
+                     (buffer-string))))"#,
+        )
+        .expect("move-to-column force property inheritance");
+    assert_eq!(
+        super::super::print::print_value(&value),
+        r#"(#("x    " 0 5 (:time "STAMP")) #("x       z" 0 8 (:time "STAMP")))"#
+    );
+}
+
+#[test]
 fn eval_indent_to_rejects_non_fixnump_minimum() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::test_utils::runtime_startup_context();

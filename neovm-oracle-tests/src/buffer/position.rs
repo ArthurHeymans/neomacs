@@ -197,6 +197,44 @@ fn oracle_prop_move_to_column_past_end() {
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
+#[test]
+fn oracle_prop_move_to_column_force_padding_inherits_text_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(with-temp-buffer
+                    (insert (propertize "x" :time "STAMP"))
+                    (move-to-column 5 t)
+                    (list (buffer-string)
+                          (mapcar (lambda (position)
+                                    (get-text-property position :time))
+                                  (number-sequence (point-min)
+                                                   (1- (point-max))))))"#;
+    let expect = expect_test::expect![
+        r#""OK (#(\"x    \" 0 5 (:time \"STAMP\")) (\"STAMP\" \"STAMP\" \"STAMP\" \"STAMP\" \"STAMP\"))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+#[test]
+fn oracle_prop_move_to_column_force_tab_split_inherits_text_properties() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"(with-temp-buffer
+                    (let ((indent-tabs-mode nil))
+                      (insert (propertize "x" :time "STAMP") "\tz")
+                      (goto-char (point-min))
+                      (move-to-column 5 t)
+                      (list (buffer-string)
+                            (mapcar (lambda (position)
+                                      (get-text-property position :time))
+                                    (number-sequence (point-min)
+                                                     (1- (point-max)))))))"#;
+    let expect = expect_test::expect![
+        r#""OK (#(\"x       z\" 0 8 (:time \"STAMP\")) (\"STAMP\" \"STAMP\" \"STAMP\" \"STAMP\" \"STAMP\" \"STAMP\" \"STAMP\" \"STAMP\" nil))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
 // ---------------------------------------------------------------------------
 // Complex: column-based text alignment
 // ---------------------------------------------------------------------------
