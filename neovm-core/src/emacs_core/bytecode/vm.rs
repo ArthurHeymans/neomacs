@@ -5261,8 +5261,10 @@ impl<'a> Vm<'a> {
             for value in command_identity.values() {
                 vm.push_dynamic_vm_root(value);
             }
-            let interactive_form = vm
-                .call_function_with_roots(Value::symbol("interactive-form"), &[args[0]])?;
+            let interactive_form = vm.call_function_with_roots(
+                crate::emacs_core::interactive::InteractiveFormSymbol::value(),
+                &[args[0]],
+            )?;
             vm.push_dynamic_vm_root(interactive_form);
             let mut plan =
                 crate::emacs_core::interactive::plan_call_interactively_after_interactive_form_in_state(

@@ -1366,6 +1366,27 @@ fn commandp_false_for_noninteractive_builtin() {
     assert!(result.unwrap().is_nil());
 }
 
+/// GNU `Fcommandp` compares symbol properties against its predeclared
+/// `Qinteractive_form`; it never re-interns the property name while filtering
+/// an obarray. Empty-prefix M-x completion calls this once per candidate.
+#[test]
+fn commandp_uses_predeclared_interactive_form_symbol() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let function = Value::symbol("car");
+    let _ = InteractiveFormSymbol::id();
+
+    crate::emacs_core::intern::reset_intern_calls();
+    let result = builtin_commandp_interactive(&mut ev, &[function]).expect("commandp car");
+
+    assert!(result.is_nil());
+    assert_eq!(
+        crate::emacs_core::intern::intern_calls(),
+        0,
+        "commandp must use the cached Qinteractive_form identity"
+    );
+}
+
 #[test]
 fn commandp_rejects_overflow_arity() {
     crate::test_utils::init_test_tracing();

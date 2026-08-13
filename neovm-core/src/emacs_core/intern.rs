@@ -809,6 +809,8 @@ pub(crate) fn restore_runtime_interner(
 /// Intern a string using the global runtime symbol registry.
 #[inline]
 pub fn intern(s: &str) -> SymId {
+    #[cfg(test)]
+    INTERN_CALLS.set(INTERN_CALLS.get() + 1);
     ensure_thread_local_cache_epoch_current();
     if let Some(sym_id) = thread_local_interned_str(s) {
         return sym_id;
@@ -1143,6 +1145,7 @@ thread_local! {
 #[cfg(test)]
 thread_local! {
     static RESOLVE_SYM_LISP_STRING_REGISTRY_READS: RefCell<usize> = const { RefCell::new(0) };
+    static INTERN_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -1158,6 +1161,16 @@ pub(crate) fn reset_resolve_sym_lisp_string_registry_reads() {
 #[cfg(test)]
 pub(crate) fn resolve_sym_lisp_string_registry_reads() -> usize {
     RESOLVE_SYM_LISP_STRING_REGISTRY_READS.with(|reads| *reads.borrow())
+}
+
+#[cfg(test)]
+pub(crate) fn reset_intern_calls() {
+    INTERN_CALLS.set(0);
+}
+
+#[cfg(test)]
+pub(crate) fn intern_calls() -> usize {
+    INTERN_CALLS.get()
 }
 
 fn ensure_thread_local_cache_epoch_current() {

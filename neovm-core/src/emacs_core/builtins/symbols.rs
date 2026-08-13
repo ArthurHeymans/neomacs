@@ -4769,7 +4769,10 @@ pub(crate) fn plan_interactive_form_in_state(
 
         loop {
             if let Some(property) = obarray
-                .get_property_id(current, intern("interactive-form"))
+                .get_property_id(
+                    current,
+                    crate::emacs_core::interactive::InteractiveFormSymbol::id(),
+                )
                 .filter(|value| !value.is_nil())
             {
                 return Ok(InteractiveFormPlan::Return(property));
@@ -4855,7 +4858,10 @@ pub(crate) fn builtin_interactive_form(
     while let Some(symbol) = fun.as_symbol_id() {
         if let Some(prop) = eval
             .obarray
-            .get_property_id(symbol, intern("interactive-form"))
+            .get_property_id(
+                symbol,
+                crate::emacs_core::interactive::InteractiveFormSymbol::id(),
+            )
             .filter(|value| !value.is_nil())
         {
             return Ok(prop);

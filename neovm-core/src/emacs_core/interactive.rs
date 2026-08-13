@@ -39,6 +39,32 @@ use super::value::*;
 use crate::buffer::EmacsBytePos;
 use crate::emacs_core::SymId;
 
+/// GNU's predeclared `Qinteractive_form` identity.
+///
+/// Both the `interactive-form` property key and the function designator are
+/// the same canonical symbol. Keeping that fact behind a zero-sized type
+/// prevents hot command classification from falling back to string interning,
+/// while `id` versus `value` makes the required representation explicit at
+/// each call site.
+pub(crate) struct InteractiveFormSymbol;
+
+impl InteractiveFormSymbol {
+    #[inline(always)]
+    pub(crate) fn id() -> SymId {
+        static SYMBOL: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+        if let Some(id) = SYMBOL.get() {
+            *id
+        } else {
+            *SYMBOL.get_or_init(|| intern("interactive-form"))
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn value() -> Value {
+        Value::from_sym_id(Self::id())
+    }
+}
+
 // ---------------------------------------------------------------------------
 // InteractiveSpec — describes how a command reads its arguments
 // ---------------------------------------------------------------------------
@@ -446,7 +472,7 @@ pub(crate) fn builtin_call_interactively(eval: &mut Context, args: Vec<Value>) -
     // function is a command.  This is observable for autoloads: loading and
     // any load error must happen before a possible `commandp` signal.
     let result = (|| {
-        let interactive_form = eval.apply(Value::symbol("interactive-form"), vec![func_val])?;
+        let interactive_form = eval.apply(InteractiveFormSymbol::value(), vec![func_val])?;
         let plan = plan_call_interactively_after_interactive_form_in_state(
             &eval.obarray,
             eval.read_command_keys(),
@@ -532,7 +558,7 @@ pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: &[Value]) -
     while let Some(symbol) = fun.as_symbol_id() {
         if eval
             .obarray
-            .get_property_id(symbol, intern("interactive-form"))
+            .get_property_id(symbol, InteractiveFormSymbol::id())
             .is_some_and(|value| !value.is_nil())
         {
             return Err(signal(
@@ -552,7 +578,7 @@ pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: &[Value]) -
     // GNU only calls `interactive-form' here for the generic-function path
     // selected while classifying an invalid closure doc slot.
     if let InteractiveFormFallback::GenericDispatch(resolved_function) = fallback {
-        let iform = eval.apply(Value::symbol("interactive-form"), vec![resolved_function])?;
+        let iform = eval.apply(InteractiveFormSymbol::value(), vec![resolved_function])?;
         if !iform.is_nil() {
             return Ok(Value::T);
         }
