@@ -6691,6 +6691,11 @@ pub const MOE_THEME_MELPA_PIN: (&str, &str) = ("moe-theme", "20260811.1919");
 /// archive from upstream commit `77a864ca72a6c30217085f1c4db5de72e47eb4da`.
 pub const NODEJS_REPL_MELPA_PIN: (&str, &str) = ("nodejs-repl", "20240218.2357");
 
+/// The exact Org Rich Yank package selected for practical source, Org block,
+/// clipboard-link, formatting, and advice lifecycle parity. MELPA built this
+/// archive from upstream commit `fe2ba1c9d9f1f7943d8f76879a1b2b9b15928147`.
+pub const ORG_RICH_YANK_MELPA_PIN: (&str, &str) = ("org-rich-yank", "20250923.919");
+
 /// The exact spacemacs-theme package selected for practical theme load and defcustom defaults.
 /// Pinned to upstream commit `cbd290dfde96f53a7b41730c7840850a8a7b8a02`.
 pub const SPACEMACS_THEME_MELPA_PIN: (&str, &str) = ("spacemacs-theme", "0.2");

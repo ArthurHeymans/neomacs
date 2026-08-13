@@ -404,7 +404,7 @@ rank	package	downloads	status
 403	org-brain	233197	covered
 404	moe-theme	229420	covered
 405	nodejs-repl	228729	covered
-406	org-rich-yank	227783	todo
+406	org-rich-yank	227783	covered
 407	pippel	226083	todo
 408	embark-consult	225494	todo
 409	racer	224478	covered
