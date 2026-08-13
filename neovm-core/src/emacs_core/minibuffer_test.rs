@@ -1715,6 +1715,38 @@ fn global_obarray_completion_has_no_pre_candidate_staging_collections() {
     );
 }
 
+/// GNU `Ftry_completion` / `Fall_completions` compare the predicate with the
+/// predeclared `Qcommandp` and call `Fcommandp` directly.  This is observable,
+/// not merely an optimization: rebinding the symbol's function cell does not
+/// replace the primitive predicate used for an obarray completion.  In
+/// contrast, `Ftest_completion` has no such special case and must keep ordinary
+/// Lisp function dispatch.  GNU 31 returns `(nil nil t)` for this probe.
+#[test]
+fn obarray_completion_uses_gnu_commandp_primitive_dispatch() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let result = eval
+        .eval_str(
+            r##"(let ((old (symbol-function 'commandp))
+         (table (obarray-make)))
+    (intern "not-a-command" table)
+    (unwind-protect
+        (progn
+          (fset 'commandp (lambda (_) t))
+          (list (try-completion "" table 'commandp)
+                (all-completions "" table 'commandp)
+                (test-completion "not-a-command" table 'commandp)))
+      (fset 'commandp old)))"##,
+        )
+        .expect("commandp completion dispatch");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::NIL, Value::NIL, Value::T]),
+        "only GNU's scanning completion primitives bypass commandp's rebound function cell"
+    );
+}
+
 /// Task #26: GNU filters completion candidates against
 /// `completion-regexp-list` through `fast_string_match_internal`
 /// (`src/minibuf.c:1592` `match_regexps`, `Ftry_completion`), which arms

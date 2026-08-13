@@ -2093,7 +2093,7 @@ fn completion_candidates_from_collection(
     completion_candidates_from_collection_in_state(eval, collection)
 }
 
-fn completion_predicate_matches_with(
+fn ordinary_completion_predicate_matches_with(
     predicate: Value,
     candidate: &CompletionCandidate,
     mut apply: impl FnMut(Value, Vec<Value>) -> EvalResult,
@@ -2108,6 +2108,53 @@ fn completion_predicate_matches_with(
     Ok(result.is_truthy())
 }
 
+/// Predicate dispatch used only by GNU's scanning completion primitives,
+/// `try-completion` and `all-completions`.
+///
+/// GNU `minibuf.c` recognizes the canonical `Qcommandp` identity and calls
+/// `Fcommandp` directly for every obarray candidate.  The closed enum snapshots
+/// that decision once per completion scan, preventing the hot loop from
+/// repeatedly resolving and invoking the symbol's function cell.  Other Lisp
+/// predicates retain ordinary callable dispatch.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ScanningCompletionPredicate {
+    AcceptAll,
+    CommandpPrimitive,
+    Callable(Value),
+}
+
+impl ScanningCompletionPredicate {
+    fn classify(predicate: Value) -> Self {
+        if predicate.is_nil() {
+            Self::AcceptAll
+        } else if predicate.as_symbol_id() == Some(super::interactive::CommandpSymbol::id()) {
+            Self::CommandpPrimitive
+        } else {
+            Self::Callable(predicate)
+        }
+    }
+
+    fn matches(
+        self,
+        eval: &mut super::eval::Context,
+        candidate: &CompletionCandidate,
+    ) -> Result<bool, Flow> {
+        match self {
+            Self::AcceptAll => Ok(true),
+            Self::CommandpPrimitive => super::interactive::builtin_commandp_interactive(
+                eval,
+                std::slice::from_ref(&candidate.predicate_arg),
+            )
+            .map(|result| result.is_truthy()),
+            Self::Callable(function) => ordinary_completion_predicate_matches_with(
+                function,
+                candidate,
+                |function, call_args| eval.apply(function, call_args),
+            ),
+        }
+    }
+}
+
 pub(crate) fn builtin_try_completion_with_candidates(
     eval: &mut super::eval::Context,
     args: &[Value],
@@ -2119,11 +2166,12 @@ pub(crate) fn builtin_try_completion_with_candidates(
     expect_min_args("try-completion", args, 2)?;
     expect_max_args("try-completion", args, 3)?;
     let string = expect_lisp_string(&args[0])?;
-    let predicate = args.get(2).copied().unwrap_or(Value::NIL);
+    let predicate_value = args.get(2).copied().unwrap_or(Value::NIL);
+    let predicate = ScanningCompletionPredicate::classify(predicate_value);
     let collection = args[1];
 
     let Some(candidates) = candidates else {
-        return eval.apply(collection, vec![args[0], predicate, Value::NIL]);
+        return eval.apply(collection, vec![args[0], predicate_value, Value::NIL]);
     };
 
     // Faithful port of GNU `Ftry_completion` (src/minibuf.c).  We iterate over
@@ -2155,9 +2203,7 @@ pub(crate) fn builtin_try_completion_with_candidates(
         {
             continue;
         }
-        if !completion_predicate_matches_with(predicate, candidate, &mut |function, call_args| {
-            eval.apply(function, call_args)
-        })? {
+        if !predicate.matches(eval, candidate)? {
             continue;
         }
 
@@ -2256,11 +2302,12 @@ pub(crate) fn builtin_all_completions_with_candidates(
     expect_min_args("all-completions", args, 2)?;
     expect_max_args("all-completions", args, 4)?;
     let string = expect_lisp_string(&args[0])?;
-    let predicate = args.get(2).copied().unwrap_or(Value::NIL);
+    let predicate_value = args.get(2).copied().unwrap_or(Value::NIL);
+    let predicate = ScanningCompletionPredicate::classify(predicate_value);
     let collection = args[1];
 
     let Some(candidates) = candidates else {
-        return eval.apply(collection, vec![args[0], predicate, Value::T]);
+        return eval.apply(collection, vec![args[0], predicate_value, Value::T]);
     };
 
     // Two-pass approach: first filter candidates using the predicate
@@ -2285,9 +2332,7 @@ pub(crate) fn builtin_all_completions_with_candidates(
         {
             continue;
         }
-        if completion_predicate_matches_with(predicate, candidate, &mut |function, call_args| {
-            eval.apply(function, call_args)
-        })? {
+        if predicate.matches(eval, candidate)? {
             matching_completions.push(candidate.completion.clone());
         }
     }
@@ -2337,9 +2382,11 @@ pub(crate) fn builtin_test_completion_with_candidates(
         {
             continue;
         }
-        if completion_predicate_matches_with(predicate, candidate, &mut |function, call_args| {
-            eval.apply(function, call_args)
-        })? {
+        if ordinary_completion_predicate_matches_with(
+            predicate,
+            candidate,
+            |function, call_args| eval.apply(function, call_args),
+        )? {
             return Ok(Value::T);
         }
     }

@@ -65,6 +65,26 @@ impl InteractiveFormSymbol {
     }
 }
 
+/// GNU's predeclared `Qcommandp` identity.
+///
+/// Completion compares its predicate with this exact symbol before consulting
+/// the symbol's function cell.  Exposing the identity through a zero-sized
+/// type keeps that primitive dispatch distinct from an arbitrary callable
+/// whose printed name happens to be `commandp`.
+pub(crate) struct CommandpSymbol;
+
+impl CommandpSymbol {
+    #[inline(always)]
+    pub(crate) fn id() -> SymId {
+        static SYMBOL: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+        if let Some(id) = SYMBOL.get() {
+            *id
+        } else {
+            *SYMBOL.get_or_init(|| intern("commandp"))
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // InteractiveSpec — describes how a command reads its arguments
 // ---------------------------------------------------------------------------
