@@ -3692,7 +3692,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(3),
     );
-    ctx.defsubr(
+    ctx.defsubr_slice(
         "commandp",
         super::interactive::builtin_commandp_interactive,
         1,

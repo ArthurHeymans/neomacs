@@ -670,11 +670,27 @@ fn mode_definition_macros_start_as_gnu_autoloads() {
 // -------------------------------------------------------------------
 
 #[test]
+fn commandp_borrows_subr_arguments_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let _eval = Context::new();
+    let entry = crate::emacs_core::eval::lookup_global_subr_entry(intern("commandp"))
+        .expect("commandp should be registered as a builtin subr");
+
+    assert!(
+        matches!(
+            entry.function,
+            Some(crate::tagged::header::SubrFn::ManySlice(_))
+        ),
+        "GNU Fcommandp receives Lisp_Object arguments directly; Neomacs must not allocate an owned Vec for each command candidate"
+    );
+}
+
+#[test]
 fn commandp_non_interactive() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     eval_all_with(&mut ev, r#"(defalias 'my-plain-fn #'(lambda () 42))"#);
-    let result = builtin_commandp_interactive(&mut ev, vec![Value::symbol("my-plain-fn")]);
+    let result = builtin_commandp_interactive(&mut ev, &[Value::symbol("my-plain-fn")]);
     assert!(result.unwrap().is_nil());
 }
 
@@ -734,7 +750,7 @@ fn commandp_returns_nil_for_raw_unibyte_symbol_name() {
         .apply(Value::symbol("intern"), vec![raw_name])
         .expect("intern raw unibyte symbol");
 
-    let result = builtin_commandp_interactive(&mut ev, vec![raw_symbol]).unwrap();
+    let result = builtin_commandp_interactive(&mut ev, &[raw_symbol]).unwrap();
 
     assert_eq!(result, Value::NIL);
 }
@@ -790,7 +806,7 @@ fn commandp_only_checks_interactive_form_property_for_gnu_fallback_classes() {
 fn commandp_true_for_builtin_ignore() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let result = builtin_commandp_interactive(&mut ev, vec![Value::symbol("ignore")]);
+    let result = builtin_commandp_interactive(&mut ev, &[Value::symbol("ignore")]);
     assert!(result.unwrap().is_truthy());
 }
 
@@ -816,7 +832,7 @@ fn eval_expression_is_real_lisp_function_after_bootstrap() {
         .symbol_function("eval-expression")
         .expect("missing eval-expression bootstrapped function cell");
     assert!(!crate::emacs_core::autoload::is_autoload_value(&function));
-    let result = builtin_commandp_interactive(&mut ev, vec![Value::symbol("eval-expression")])
+    let result = builtin_commandp_interactive(&mut ev, &[Value::symbol("eval-expression")])
         .expect("commandp should accept eval-expression");
     assert!(result.is_truthy());
 }
@@ -841,7 +857,7 @@ fn commandp_true_for_defun_with_declare_before_interactive() {
 fn commandp_true_for_builtin_forward_char() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let result = builtin_commandp_interactive(&mut ev, vec![Value::symbol("forward-char")]);
+    let result = builtin_commandp_interactive(&mut ev, &[Value::symbol("forward-char")]);
     assert!(result.unwrap().is_truthy());
 }
 
@@ -860,30 +876,27 @@ fn commandp_handles_keyboard_macros_and_bytecode_interactive_slots() {
     .expect("make-byte-code should build commandp fixture");
 
     assert!(
-        builtin_commandp_interactive(&mut ev, vec![Value::string("abc")])
+        builtin_commandp_interactive(&mut ev, &[Value::string("abc")])
             .expect("string keyboard macro should be accepted")
             .is_truthy()
     );
     assert!(
-        builtin_commandp_interactive(&mut ev, vec![Value::vector(vec![Value::fixnum(1)])])
+        builtin_commandp_interactive(&mut ev, &[Value::vector(vec![Value::fixnum(1)])])
             .expect("vector keyboard macro should be accepted")
             .is_truthy()
     );
     assert!(
-        builtin_commandp_interactive(&mut ev, vec![Value::string("abc"), Value::T])
+        builtin_commandp_interactive(&mut ev, &[Value::string("abc"), Value::T])
             .expect("FOR-CALL-INTERACTIVELY should reject strings")
             .is_nil()
     );
     assert!(
-        builtin_commandp_interactive(
-            &mut ev,
-            vec![Value::vector(vec![Value::fixnum(1)]), Value::T]
-        )
-        .expect("FOR-CALL-INTERACTIVELY should reject vectors")
-        .is_nil()
+        builtin_commandp_interactive(&mut ev, &[Value::vector(vec![Value::fixnum(1)]), Value::T])
+            .expect("FOR-CALL-INTERACTIVELY should reject vectors")
+            .is_nil()
     );
     assert!(
-        builtin_commandp_interactive(&mut ev, vec![bytecode])
+        builtin_commandp_interactive(&mut ev, &[bytecode])
             .expect("bytecode with interactive slot should be a command")
             .is_truthy()
     );
@@ -916,8 +929,8 @@ fn commandp_true_for_registered_rust_editing_commands() {
                 .is_some_and(|function| function.is_subr()),
             "{name} must be a registered Rust subr"
         );
-        let result = builtin_commandp_interactive(&mut ev, vec![Value::symbol(name)])
-            .expect("commandp call");
+        let result =
+            builtin_commandp_interactive(&mut ev, &[Value::symbol(name)]).expect("commandp call");
         assert!(result.is_truthy(), "expected commandp true for {name}");
     }
 }
@@ -932,7 +945,7 @@ fn abbrev_mode_is_real_lisp_function_after_bootstrap() {
         .symbol_function("abbrev-mode")
         .expect("missing abbrev-mode bootstrapped function cell");
     assert!(!crate::emacs_core::autoload::is_autoload_value(&function));
-    let command = builtin_commandp_interactive(&mut ev, vec![Value::symbol("abbrev-mode")])
+    let command = builtin_commandp_interactive(&mut ev, &[Value::symbol("abbrev-mode")])
         .expect("commandp should accept abbrev-mode");
     assert!(command.is_truthy());
 }
@@ -1004,7 +1017,7 @@ fn simple_commands_are_real_lisp_functions_after_bootstrap() {
             !crate::emacs_core::autoload::is_autoload_value(&function),
             "expected {name} startup function cell to be loaded, not an autoload"
         );
-        let command = builtin_commandp_interactive(&mut ev, vec![Value::symbol(name)])
+        let command = builtin_commandp_interactive(&mut ev, &[Value::symbol(name)])
             .unwrap_or_else(|err| panic!("commandp should accept {name}: {err:?}"));
         assert!(command.is_truthy(), "expected commandp true for {name}");
     }
@@ -1032,7 +1045,7 @@ fn replace_commands_are_real_lisp_functions_after_bootstrap() {
             !crate::emacs_core::autoload::is_autoload_value(&function),
             "expected {name} startup function cell to be loaded, not an autoload"
         );
-        let command = builtin_commandp_interactive(&mut ev, vec![Value::symbol(name)])
+        let command = builtin_commandp_interactive(&mut ev, &[Value::symbol(name)])
             .unwrap_or_else(|err| panic!("commandp should accept {name}: {err:?}"));
         assert!(command.is_truthy(), "expected commandp true for {name}");
     }
@@ -1056,7 +1069,7 @@ fn subr_key_binding_commands_are_real_lisp_functions_after_bootstrap() {
             !function.is_subr(),
             "expected {name} startup function cell to be a GNU Lisp function, not a Rust subr"
         );
-        let command = builtin_commandp_interactive(&mut ev, vec![Value::symbol(name)])
+        let command = builtin_commandp_interactive(&mut ev, &[Value::symbol(name)])
             .unwrap_or_else(|err| panic!("commandp should accept {name}: {err:?}"));
         assert!(command.is_truthy(), "expected commandp true for {name}");
     }
@@ -1072,7 +1085,7 @@ fn env_command_is_real_lisp_function_after_bootstrap() {
         .symbol_function("setenv")
         .expect("missing setenv bootstrapped function cell");
     assert!(!crate::emacs_core::autoload::is_autoload_value(&function));
-    let command = builtin_commandp_interactive(&mut ev, vec![Value::symbol("setenv")])
+    let command = builtin_commandp_interactive(&mut ev, &[Value::symbol("setenv")])
         .expect("commandp should accept setenv");
     assert!(command.is_truthy());
 }
@@ -1087,7 +1100,7 @@ fn files_command_is_real_lisp_function_after_bootstrap() {
         .symbol_function("load-file")
         .expect("missing load-file bootstrapped function cell");
     assert!(!crate::emacs_core::autoload::is_autoload_value(&function));
-    let command = builtin_commandp_interactive(&mut ev, vec![Value::symbol("load-file")])
+    let command = builtin_commandp_interactive(&mut ev, &[Value::symbol("load-file")])
         .expect("commandp should accept load-file");
     assert!(command.is_truthy());
 }
@@ -1136,7 +1149,7 @@ fn mode_and_mark_commands_are_real_lisp_functions_after_bootstrap() {
             !crate::emacs_core::autoload::is_autoload_value(&function),
             "expected {name} startup function cell to be loaded, not an autoload"
         );
-        let command = builtin_commandp_interactive(&mut ev, vec![Value::symbol(name)])
+        let command = builtin_commandp_interactive(&mut ev, &[Value::symbol(name)])
             .unwrap_or_else(|err| panic!("commandp should accept {name}: {err:?}"));
         assert!(command.is_truthy(), "expected commandp true for {name}");
     }
@@ -1152,7 +1165,7 @@ fn count_matches_is_real_lisp_function_after_bootstrap() {
         .symbol_function("count-matches")
         .expect("missing count-matches bootstrapped function cell");
     assert!(!crate::emacs_core::autoload::is_autoload_value(&function));
-    let command = builtin_commandp_interactive(&mut ev, vec![Value::symbol("count-matches")])
+    let command = builtin_commandp_interactive(&mut ev, &[Value::symbol("count-matches")])
         .expect("commandp call");
     assert!(command.is_truthy());
 }
@@ -1173,9 +1186,8 @@ fn kmacro_name_last_macro_startup_is_autoloaded() {
         crate::emacs_core::autoload::is_autoload_value(&function),
         "expected kmacro-name-last-macro startup function cell to be a GNU autoload"
     );
-    let command =
-        builtin_commandp_interactive(&mut ev, vec![Value::symbol("kmacro-name-last-macro")])
-            .expect("commandp should accept kmacro-name-last-macro");
+    let command = builtin_commandp_interactive(&mut ev, &[Value::symbol("kmacro-name-last-macro")])
+        .expect("commandp should accept kmacro-name-last-macro");
     assert!(
         command.is_truthy(),
         "expected commandp true for kmacro-name-last-macro"
@@ -1285,8 +1297,8 @@ fn commandp_true_for_additional_registered_rust_commands() {
                 .is_some_and(|function| function.is_subr()),
             "{name} must be a registered Rust subr"
         );
-        let result = builtin_commandp_interactive(&mut ev, vec![Value::symbol(name)])
-            .expect("commandp call");
+        let result =
+            builtin_commandp_interactive(&mut ev, &[Value::symbol(name)]).expect("commandp call");
         assert!(result.is_truthy(), "expected commandp true for {name}");
     }
 }
@@ -1340,8 +1352,8 @@ fn commandp_true_for_loaded_lisp_commands_after_bootstrap() {
             !function.is_subr(),
             "expected {name} startup function cell to remain a GNU Lisp command"
         );
-        let result = builtin_commandp_interactive(&mut ev, vec![Value::symbol(name)])
-            .expect("commandp call");
+        let result =
+            builtin_commandp_interactive(&mut ev, &[Value::symbol(name)]).expect("commandp call");
         assert!(result.is_truthy(), "expected commandp true for {name}");
     }
 }
@@ -1350,7 +1362,7 @@ fn commandp_true_for_loaded_lisp_commands_after_bootstrap() {
 fn commandp_false_for_noninteractive_builtin() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let result = builtin_commandp_interactive(&mut ev, vec![Value::symbol("car")]);
+    let result = builtin_commandp_interactive(&mut ev, &[Value::symbol("car")]);
     assert!(result.unwrap().is_nil());
 }
 
@@ -1358,11 +1370,9 @@ fn commandp_false_for_noninteractive_builtin() {
 fn commandp_rejects_overflow_arity() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let result = builtin_commandp_interactive(
-        &mut ev,
-        vec![Value::symbol("ignore"), Value::NIL, Value::NIL],
-    )
-    .expect_err("commandp should reject more than two arguments");
+    let result =
+        builtin_commandp_interactive(&mut ev, &[Value::symbol("ignore"), Value::NIL, Value::NIL])
+            .expect_err("commandp should reject more than two arguments");
     match result {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("unexpected flow: {other:?}"),
@@ -1388,16 +1398,15 @@ fn commandp_resolves_aliases_and_symbol_designators() {
         Value::keyword(":vm-command-alias-keyword"),
     );
 
-    let t_result = builtin_commandp_interactive(&mut ev, vec![Value::T]);
+    let t_result = builtin_commandp_interactive(&mut ev, &[Value::T]);
     assert!(t_result.unwrap().is_truthy());
     let keyword_result =
-        builtin_commandp_interactive(&mut ev, vec![Value::keyword(":vm-command-alias-keyword")]);
+        builtin_commandp_interactive(&mut ev, &[Value::keyword(":vm-command-alias-keyword")]);
     assert!(keyword_result.unwrap().is_truthy());
-    let alias_result =
-        builtin_commandp_interactive(&mut ev, vec![Value::symbol("vm-command-alias")]);
+    let alias_result = builtin_commandp_interactive(&mut ev, &[Value::symbol("vm-command-alias")]);
     assert!(alias_result.unwrap().is_truthy());
     let keyword_alias_result =
-        builtin_commandp_interactive(&mut ev, vec![Value::symbol("vm-command-alias-keyword")]);
+        builtin_commandp_interactive(&mut ev, &[Value::symbol("vm-command-alias-keyword")]);
     assert!(keyword_alias_result.unwrap().is_truthy());
 }
 
@@ -1410,7 +1419,7 @@ fn commandp_true_for_lambda_with_interactive_form() {
         .eval_str("(lambda () (interactive) 1)")
         .expect("lambda form should evaluate");
     assert_eq!(lambda[0], "OK #[nil (1) nil nil nil nil]");
-    let result = builtin_commandp_interactive(&mut ev, vec![value]);
+    let result = builtin_commandp_interactive(&mut ev, &[value]);
     assert!(result.unwrap().is_truthy());
 }
 
@@ -1421,7 +1430,7 @@ fn commandp_true_for_quoted_lambda_with_interactive_form() {
     let quoted_lambda = ev
         .eval_str("'(lambda () \"doc\" (interactive) 1)")
         .expect("quoted lambda should evaluate");
-    let result = builtin_commandp_interactive(&mut ev, vec![quoted_lambda]);
+    let result = builtin_commandp_interactive(&mut ev, &[quoted_lambda]);
     assert!(result.unwrap().is_truthy());
 }
 

@@ -507,9 +507,9 @@ pub(crate) fn builtin_called_interactively_p(eval: &mut Context, args: Vec<Value
 /// Matches GNU Emacs eval.c:Fcommandp. Resolves a symbol designator once, then
 /// classifies whether GNU returns immediately, checks the original symbol
 /// chain's property, or performs generic interactive-form dispatch.
-pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_min_args("commandp", &args, 1)?;
-    expect_max_args("commandp", &args, 2)?;
+pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: &[Value]) -> EvalResult {
+    expect_min_args("commandp", args, 1)?;
+    expect_max_args("commandp", args, 2)?;
     let for_call_interactively = args.get(1).is_some_and(|value| !value.is_nil());
 
     let classification = classify_command_designator_in_state(
