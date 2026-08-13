@@ -36,6 +36,23 @@ use crate::gc_trace::GcTrace;
 use crate::window::WindowId;
 use rustc_hash::FxHashMap;
 
+#[cfg(test)]
+thread_local! {
+    static BUFFER_LOCAL_VALUE_LOOKUP_PROBES: std::cell::Cell<u64> = const {
+        std::cell::Cell::new(0)
+    };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_buffer_local_value_lookup_probes() {
+    BUFFER_LOCAL_VALUE_LOOKUP_PROBES.set(0);
+}
+
+#[cfg(test)]
+pub(crate) fn buffer_local_value_lookup_probes() -> u64 {
+    BUFFER_LOCAL_VALUE_LOOKUP_PROBES.get()
+}
+
 // ---------------------------------------------------------------------------
 // BUFFER_SLOT_COUNT — sized to mirror GNU's `MAX_PER_BUFFER_VARS = 50`.
 // ---------------------------------------------------------------------------
@@ -1547,6 +1564,34 @@ pub(crate) const BUFFER_UNDO_LIST_NAME: &str = "buffer-undo-list";
 fn buffer_undo_list_sym() -> SymId {
     static SYM: OnceLock<SymId> = OnceLock::new();
     *SYM.get_or_init(|| intern(BUFFER_UNDO_LIST_NAME))
+}
+
+/// A Lisp-visible buffer local whose backing store is neither a generic
+/// `Buffer::slots` entry nor `local_var_alist`.
+///
+/// GNU represents `buffer-undo-list` as a `DEFVAR_PER_BUFFER` forwarder. In
+/// Neomacs its value must instead live in [`SharedUndoState`] so indirect
+/// buffers share one undo history. Keeping that exception in a closed enum
+/// lets hot variable-read paths distinguish it by symbol identity without
+/// probing every ordinary nil-valued global through the generic buffer-local
+/// lookup machinery.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum DedicatedBufferLocal {
+    UndoList,
+}
+
+impl DedicatedBufferLocal {
+    #[inline]
+    pub(crate) fn from_sym_id(sym_id: SymId) -> Option<Self> {
+        (sym_id == buffer_undo_list_sym()).then_some(Self::UndoList)
+    }
+
+    #[inline]
+    pub(crate) fn read(self, buffer: &Buffer) -> Value {
+        match self {
+            Self::UndoList => buffer.get_undo_list(),
+        }
+    }
 }
 
 /// Look up `key` in a buffer-local alist. Returns the cdr of the
@@ -3848,6 +3893,9 @@ impl Buffer {
         sym_id: SymId,
         localized: bool,
     ) -> Option<Value> {
+        #[cfg(test)]
+        BUFFER_LOCAL_VALUE_LOOKUP_PROBES
+            .set(BUFFER_LOCAL_VALUE_LOOKUP_PROBES.get().saturating_add(1));
         // Slot-backed names resolve to the live slot value, mirroring
         // GNU's `BVAR(buf, …)` accessor. Conditional slots only
         // report a per-buffer binding when the local-flags bit is
@@ -3861,8 +3909,8 @@ impl Buffer {
         }
         // `buffer-undo-list` reads through `SharedUndoState` so
         // indirect buffers see the root buffer's undo state.
-        if sym_id == buffer_undo_list_sym() {
-            return Some(self.get_undo_list());
+        if let Some(dedicated) = DedicatedBufferLocal::from_sym_id(sym_id) {
+            return Some(dedicated.read(self));
         }
         if !localized {
             return None;
@@ -3925,8 +3973,8 @@ impl Buffer {
             }
             return Some(RuntimeBindingValue::Bound(self.slots[info.offset.index()]));
         }
-        if sym_id == buffer_undo_list_sym() {
-            return Some(RuntimeBindingValue::Bound(self.get_undo_list()));
+        if let Some(dedicated) = DedicatedBufferLocal::from_sym_id(sym_id) {
+            return Some(RuntimeBindingValue::Bound(dedicated.read(self)));
         }
         if !localized {
             return None;

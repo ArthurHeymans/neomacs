@@ -3355,19 +3355,20 @@ impl<'a> Vm<'a> {
             // SAFETY: redirect() already confirmed Plainval, so val.plain is active
             let val = unsafe { sym.val.plain };
             if !val.is_unbound() {
-                // For variables like `buffer-undo-list`: the obarray
-                // default is nil but the buffer-local value (via
-                // SharedUndoState / local_var_alist) is the live value.
-                // Check buffer-local when the Plainval is nil.
+                // GNU installs `buffer-undo-list` as a DEFVAR_PER_BUFFER
+                // forwarder. Neomacs keeps its value in SharedUndoState so
+                // indirect buffers share one history, but classifies that
+                // one dedicated local by symbol identity. Ordinary nil-valued
+                // globals stay on this direct PLAINVAL path instead of all
+                // paying a generic buffer-local probe.
                 if !val.is_nil() {
                     return Ok(val);
                 }
-                let name_localized = self.ctx.obarray.is_localized(name_id);
-                if let Some(buf) = self.ctx.buffers.current_buffer()
-                    && let Some(blv) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized)
-                    && !blv.is_nil()
+                if let Some(dedicated) =
+                    crate::buffer::buffer::DedicatedBufferLocal::from_sym_id(name_id)
+                    && let Some(buf) = self.ctx.buffers.current_buffer()
                 {
-                    return Ok(blv);
+                    return Ok(dedicated.read(buf));
                 }
                 return Ok(val);
             }
@@ -5016,10 +5017,10 @@ impl<'a> Vm<'a> {
                 if !val.is_nil() {
                     return (VR_PLAIN, false);
                 }
-                let name_localized = self.ctx.obarray.is_localized(name_id);
-                if let Some(buf) = self.ctx.buffers.current_buffer()
-                    && let Some(blv) = buf.get_buffer_local_by_sym_id_gated(name_id, name_localized)
-                    && !blv.is_nil()
+                if let Some(dedicated) =
+                    crate::buffer::buffer::DedicatedBufferLocal::from_sym_id(name_id)
+                    && let Some(buf) = self.ctx.buffers.current_buffer()
+                    && !dedicated.read(buf).is_nil()
                 {
                     return (VR_PLAIN_NIL_BLV, false);
                 }

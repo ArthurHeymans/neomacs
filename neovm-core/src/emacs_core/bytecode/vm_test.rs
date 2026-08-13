@@ -9396,6 +9396,26 @@ fn vm_setq_buffer_undo_list_reads_shared_undo_state() {
 }
 
 #[test]
+fn vm_plain_nil_varref_does_not_probe_buffer_local_storage() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_vm_runtime_harness();
+    let ordinary_nil = intern("vm-ordinary-nil-global");
+    eval.obarray.set_symbol_value_id(ordinary_nil, Value::NIL);
+
+    crate::buffer::buffer::reset_buffer_local_value_lookup_probes();
+    let value = new_vm(&mut eval)
+        .fast_path_var_ref(ordinary_nil)
+        .expect("a bound plain nil variable should be readable");
+
+    assert_eq!(value, Value::NIL);
+    assert_eq!(
+        crate::buffer::buffer::buffer_local_value_lookup_probes(),
+        0,
+        "ordinary nil globals must not pay the buffer-undo-list compatibility probe"
+    );
+}
+
+#[test]
 fn vm_syntax_table_accessors_use_shared_current_buffer_state() {
     crate::test_utils::init_test_tracing();
     // syntax-after is defined in subr.el → bootstrap context required.
