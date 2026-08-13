@@ -233,8 +233,21 @@ impl PresentMapping {
     #[must_use]
     pub fn frame_from_device(self, point: DeviceSurfacePoint) -> Option<PresentedFramePoint> {
         let scale = self.surface.device_scale().get();
-        let x = point.x() / scale;
-        let y = point.y() / scale;
+        let surface_point = GeometryPoint::<RootSurfaceSpace, LogicalPixels>::from_px(
+            point.x() / scale,
+            point.y() / scale,
+        )
+        .ok()?;
+        self.frame_from_surface(surface_point)
+    }
+
+    #[must_use]
+    pub fn frame_from_surface(
+        self,
+        point: GeometryPoint<RootSurfaceSpace, LogicalPixels>,
+    ) -> Option<PresentedFramePoint> {
+        let x = point.x();
+        let y = point.y();
         let visible = self.visible_content?;
         if x < visible.x()
             || y < visible.y()

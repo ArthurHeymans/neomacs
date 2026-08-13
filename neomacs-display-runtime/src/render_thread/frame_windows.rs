@@ -509,6 +509,17 @@ impl GuiFrameRenderState {
         }
     }
 
+    pub(super) fn root_frame_point_from_surface(&self, x: f32, y: f32) -> Option<(f32, f32)> {
+        let surface_point = neomacs_display_protocol::GeometryPoint::<
+            neomacs_display_protocol::RootSurfaceSpace,
+            LogicalPixels,
+        >::from_px(x, y)
+        .ok()?;
+        self.present_mapping()?
+            .frame_from_surface(surface_point)
+            .map(|point| (point.x(), point.y()))
+    }
+
     // Retained for focused render-state tests; production callers inspect the
     // retained frame through narrower accessors.
     #[allow(dead_code)]

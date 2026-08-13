@@ -15,17 +15,42 @@ use winit::window::WindowId;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) enum PointerOwner {
     Popup,
-    Child { frame_id: u64, x: f32, y: f32 },
-    Root { frame_id: u64, x: f32, y: f32 },
+    Child {
+        frame_id: u64,
+        x: f32,
+        y: f32,
+    },
+    Root {
+        frame_id: u64,
+        x: f32,
+        y: f32,
+    },
+    /// Live surface area not covered by the immutable root presentation.
+    Expose {
+        frame_id: u64,
+        x: f32,
+        y: f32,
+    },
 }
 
 impl PointerOwner {
     pub(super) fn target(self) -> Option<(f32, f32, u64)> {
         match self {
-            Self::Popup => None,
+            Self::Popup | Self::Expose { .. } => None,
             Self::Child { frame_id, x, y } | Self::Root { frame_id, x, y } => {
                 Some((x, y, frame_id))
             }
+        }
+    }
+
+    /// Raw evaluator input still names the live frame in expose area, while
+    /// presentation-qualified hit testing must not.
+    pub(super) fn raw_target(self) -> Option<(f32, f32, u64)> {
+        match self {
+            Self::Popup => None,
+            Self::Child { frame_id, x, y }
+            | Self::Root { frame_id, x, y }
+            | Self::Expose { frame_id, x, y } => Some((x, y, frame_id)),
         }
     }
 
@@ -37,6 +62,10 @@ impl PointerOwner {
 
     pub(super) fn owns_root_hover(self) -> bool {
         matches!(self, Self::Root { .. })
+    }
+
+    pub(super) fn permits_native_chrome(self) -> bool {
+        matches!(self, Self::Root { .. } | Self::Expose { .. })
     }
 }
 
@@ -139,8 +168,19 @@ impl RenderApp {
         if window_state.render.overlays.popup_menu.is_some() {
             return PointerOwner::Popup;
         }
-        if let Some((frame_id, local_x, local_y)) =
-            window_state.render.compositor.child_frames.hit_test(x, y)
+        let Some((frame_x, frame_y)) = window_state.render.root_frame_point_from_surface(x, y)
+        else {
+            return PointerOwner::Expose {
+                frame_id: window_state.render.emacs_frame_id,
+                x,
+                y,
+            };
+        };
+        if let Some((frame_id, local_x, local_y)) = window_state
+            .render
+            .compositor
+            .child_frames
+            .hit_test(frame_x, frame_y)
         {
             PointerOwner::Child {
                 frame_id,
@@ -150,8 +190,8 @@ impl RenderApp {
         } else {
             PointerOwner::Root {
                 frame_id: window_state.render.emacs_frame_id,
-                x,
-                y,
+                x: frame_x,
+                y: frame_y,
             }
         }
     }
@@ -927,11 +967,14 @@ impl RenderApp {
                         MouseButton::Forward => 5,
                         MouseButton::Other(n) => n as u32,
                     };
-                    let (ev_x, ev_y, target_fid) = Self::pointer_target_for_frame_window(
-                        window_state,
-                        window_state.render.mouse_pos.0,
-                        window_state.render.mouse_pos.1,
-                    );
+                    let (ev_x, ev_y, target_fid) =
+                        pointer_owner.raw_target().unwrap_or_else(|| {
+                            Self::pointer_target_for_frame_window(
+                                window_state,
+                                window_state.render.mouse_pos.0,
+                                window_state.render.mouse_pos.1,
+                            )
+                        });
                     let (wk_id, wk_rx, wk_ry) = if state == ElementState::Pressed {
                         Self::webkit_target_for_frame_window(window_state, target_fid, ev_x, ev_y)
                     } else {
@@ -1060,7 +1103,7 @@ impl RenderApp {
             }
 
             if !window_state.chrome().decorations_enabled {
-                let new_hover = if pointer_owner.owns_root_hover() {
+                let new_hover = if pointer_owner.permits_native_chrome() {
                     Self::frame_window_titlebar_hit_test(window_state, lx, ly)
                 } else {
                     0
@@ -1199,8 +1242,9 @@ impl RenderApp {
 
             window_state.set_mouse_hidden_for_typing(false);
 
-            let (ev_x, ev_y, target_fid) =
-                Self::pointer_target_for_frame_window(window_state, lx, ly);
+            let (ev_x, ev_y, target_fid) = pointer_owner
+                .raw_target()
+                .unwrap_or_else(|| Self::pointer_target_for_frame_window(window_state, lx, ly));
             let appearance_target = pointer_owner
                 .target()
                 .map(|(x, y, frame_id)| (frame_id, x, y));
@@ -1217,15 +1261,12 @@ impl RenderApp {
                     modifiers,
                     target_frame_id: target_fid,
                 };
-                match Self::pair_presented_region_with_raw_input(
-                    Self::presented_region_input_event(
-                        &window_state.render,
-                        target_fid,
-                        ev_x,
-                        ev_y,
-                    ),
-                    raw,
-                ) {
+                let observation = if pointer_owner.target().is_some() {
+                    Self::presented_region_input_event(&window_state.render, target_fid, ev_x, ev_y)
+                } else {
+                    Ok(None)
+                };
+                match Self::pair_presented_region_with_raw_input(observation, raw) {
                     Ok((observation, raw)) => {
                         if let Some(observation) = observation {
                             self.comms.send_input(observation);
@@ -1264,11 +1305,18 @@ impl RenderApp {
                     ((pos.x / scale) as f32, (pos.y / scale) as f32, true)
                 }
             };
-            let (ev_x, ev_y, target_fid) = Self::pointer_target_for_frame_window(
+            let pointer_owner = Self::pointer_owner(
                 window_state,
                 window_state.render.mouse_pos.0,
                 window_state.render.mouse_pos.1,
             );
+            let (ev_x, ev_y, target_fid) = pointer_owner.raw_target().unwrap_or_else(|| {
+                Self::pointer_target_for_frame_window(
+                    window_state,
+                    window_state.render.mouse_pos.0,
+                    window_state.render.mouse_pos.1,
+                )
+            });
             let (wk_id, wk_rx, wk_ry) =
                 Self::webkit_target_for_frame_window(window_state, target_fid, ev_x, ev_y);
             self.comms.send_input(InputEvent::MouseScroll {

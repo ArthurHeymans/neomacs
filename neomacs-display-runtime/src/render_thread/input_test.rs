@@ -52,8 +52,50 @@ fn make_test_app(width: u32, height: u32, scale_factor: f64) -> RenderApp {
         {
             *sf = scale_factor;
         }
+        primary.render.set_surface_state(
+            neomacs_display_protocol::SurfaceState::from_device_size(
+                width,
+                height,
+                neomacs_display_protocol::DeviceScale::new(scale_factor as f32).unwrap(),
+            )
+            .unwrap(),
+        );
     }
     app
+}
+
+#[test]
+fn stale_root_presentation_does_not_own_newly_exposed_surface_area() {
+    let mut app = make_test_app(200, 100, 1.0);
+    let window = app.frame_windows.primary_window_mut().unwrap();
+    window.render.set_surface_state(
+        neomacs_display_protocol::SurfaceState::from_device_size(
+            200,
+            100,
+            neomacs_display_protocol::DeviceScale::new(1.0).unwrap(),
+        )
+        .unwrap(),
+    );
+    let mut stale = FrameGlyphBuffer::with_size(100.0, 50.0);
+    stale.presentation_id = PresentationId::new(88);
+    window.render.set_current_frame(Some(stale), None);
+
+    assert_eq!(
+        RenderApp::pointer_owner(window, 150.0, 25.0),
+        PointerOwner::Expose {
+            frame_id: 0,
+            x: 150.0,
+            y: 25.0,
+        }
+    );
+    assert!(matches!(
+        RenderApp::pointer_owner(window, 75.0, 25.0),
+        PointerOwner::Root {
+            frame_id: 0,
+            x: 75.0,
+            y: 25.0,
+        }
+    ));
 }
 
 fn make_test_device() -> Option<wgpu::Device> {
