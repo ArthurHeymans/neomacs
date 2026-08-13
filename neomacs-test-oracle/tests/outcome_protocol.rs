@@ -1,5 +1,5 @@
 use neomacs_test_oracle::{
-    BatchProbe, EvalOutcome, ExpectedOutcome, extract_marked_batch_protocol,
+    BatchProbe, CapturedEvaluation, EvalOutcome, ExpectedOutcome, extract_marked_batch_protocol,
     extract_marked_outcome, validate_batch_case_id, wrap_elisp_batch_outcomes, wrap_elisp_outcome,
 };
 
@@ -21,6 +21,26 @@ fn parses_values_and_signals_from_editor_output() {
         )
         .unwrap(),
         EvalOutcome::Signal("(wrong-type-argument numberp \"x\")".to_string())
+    );
+}
+
+#[test]
+fn captured_evaluation_separates_ordinary_stdout_from_the_typed_outcome() {
+    let evaluation = CapturedEvaluation::from_marked_streams(
+        "Enter (default 42): Enter: ",
+        "diagnostic noise\nNEOMACS-TEST-OUTCOME:OK (end-of-file end-of-file)\n",
+        MARKER,
+    )
+    .unwrap();
+
+    assert_eq!(evaluation.stdout(), "Enter (default 42): Enter: ");
+    assert_eq!(
+        evaluation.outcome(),
+        &EvalOutcome::Value("(end-of-file end-of-file)".to_string())
+    );
+    assert_eq!(
+        evaluation.legacy_transcript(),
+        "Enter (default 42): Enter: OK (end-of-file end-of-file)"
     );
 }
 
@@ -61,7 +81,12 @@ fn elisp_wrapper_captures_the_last_value_and_errors() {
 #[test]
 fn outcome_wrappers_terminate_every_record_with_a_newline() {
     let single = wrap_elisp_outcome("", "42", MARKER);
-    assert_eq!(single.matches("(terpri)").count(), 2);
+    assert_eq!(
+        single
+            .matches("(terpri 'external-debugging-output)")
+            .count(),
+        2
+    );
 
     let batch = wrap_elisp_batch_outcomes(
         "",

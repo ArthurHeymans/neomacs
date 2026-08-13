@@ -59,9 +59,53 @@ impl fmt::Display for EvalOutcome {
     }
 }
 
-/// Extract the last marked outcome from noisy editor stdout.
-pub fn extract_marked_outcome(stdout: &str, marker: &str) -> Result<EvalOutcome, String> {
-    let encoded = stdout
+/// One editor evaluation with ordinary stdout kept separate from its typed
+/// result.
+///
+/// Editor probes are allowed to print arbitrary bytes to stdout.  Their final
+/// `EvalOutcome` therefore travels over the marked debugging-output protocol
+/// instead of sharing stdout with the code under test.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CapturedEvaluation {
+    stdout: String,
+    outcome: EvalOutcome,
+}
+
+impl CapturedEvaluation {
+    /// Decode an evaluation from the editor's separately captured streams.
+    pub fn from_marked_streams(
+        stdout: &str,
+        debugging_output: &str,
+        marker: &str,
+    ) -> Result<Self, String> {
+        Ok(Self {
+            stdout: stdout.to_string(),
+            outcome: extract_marked_outcome(debugging_output, marker)?,
+        })
+    }
+
+    /// Ordinary stdout emitted by the evaluated form.
+    pub fn stdout(&self) -> &str {
+        &self.stdout
+    }
+
+    /// The normalized value or signal emitted by the result protocol.
+    pub fn outcome(&self) -> &EvalOutcome {
+        &self.outcome
+    }
+
+    /// Render the historical oracle snapshot format: ordinary stdout followed
+    /// immediately by the encoded outcome, with outer whitespace trimmed.
+    pub fn legacy_transcript(&self) -> String {
+        format!("{}{outcome}", self.stdout, outcome = self.outcome)
+            .trim()
+            .to_string()
+    }
+}
+
+/// Extract the last marked outcome from a noisy editor output stream.
+pub fn extract_marked_outcome(output: &str, marker: &str) -> Result<EvalOutcome, String> {
+    let encoded = output
         .lines()
         .filter_map(|line| line.split_once(marker).map(|(_, encoded)| encoded.trim()))
         .next_back()
@@ -314,7 +358,9 @@ pub fn oracle_normalizer_elisp() -> &'static str {
 /// Both inputs may contain multiple forms. The value of the probe's final
 /// form is recursively normalized and printed with `prin1`; ordinary Lisp
 /// errors are caught and their complete signal data is normalized and printed
-/// instead. Workspace and per-engine sandbox roots come from the
+/// instead. The marked result is written to `external-debugging-output`, so
+/// ordinary stdout remains data owned by the evaluated form. Workspace and
+/// per-engine sandbox roots come from the
 /// `NEOMACS_TEST_WORKSPACE_ROOT` and `NEOMACS_TEST_SANDBOX_ROOT` environment
 /// variables.
 pub fn wrap_elisp_outcome(setup: &str, probe: &str, marker: &str) -> String {
@@ -331,21 +377,23 @@ pub fn wrap_elisp_outcome(setup: &str, probe: &str, marker: &str) -> String {
                       (progn
                         {setup}
                         {probe})))
-                 (princ "\n")
-                 (princ {marker})
-                 (princ "OK ")
+                 (princ "\n" 'external-debugging-output)
+                 (princ {marker} 'external-debugging-output)
+                 (princ "OK " 'external-debugging-output)
                  (prin1
                   (neomacs--test-oracle-normalized
-                   neomacs--oracle-result))
-                 (terpri))
+                   neomacs--oracle-result)
+                  'external-debugging-output)
+                 (terpri 'external-debugging-output))
              (error
-              (princ "\n")
-              (princ {marker})
-              (princ "ERR ")
+              (princ "\n" 'external-debugging-output)
+              (princ {marker} 'external-debugging-output)
+              (princ "ERR " 'external-debugging-output)
               (prin1
                (neomacs--test-oracle-normalized
-                neomacs--oracle-error))
-              (terpri))))"##,
+                neomacs--oracle-error)
+               'external-debugging-output)
+              (terpri 'external-debugging-output))))"##,
         normalizer = oracle_normalizer_elisp(),
         setup = setup,
         probe = probe,

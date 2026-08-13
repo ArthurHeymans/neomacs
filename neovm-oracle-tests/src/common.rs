@@ -6,7 +6,7 @@
 //! via `NEOVM_FORCE_ORACLE_PATH`).
 
 use colored::Colorize;
-use neomacs_test_oracle::EvalOutcome;
+use neomacs_test_oracle::CapturedEvaluation;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -265,8 +265,16 @@ fn ensure_nonempty_form(form: &str) -> Result<(), String> {
     }
 }
 
+const ORACLE_OUTCOME_MARKER: &str = "NEOVM-ORACLE-OUTCOME:";
+
 const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
     (progn
+      (defun neovm--oracle-emit-outcome (kind value)
+        (princ "\n" 'external-debugging-output)
+        (princ "NEOVM-ORACLE-OUTCOME:" 'external-debugging-output)
+        (princ kind 'external-debugging-output)
+        (prin1 value 'external-debugging-output)
+        (terpri 'external-debugging-output))
       (defun neovm--oracle-normalize-1 (v seen)
         (cond
          ;; Opaque handles print with implementation-specific identities:
@@ -506,15 +514,20 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
                         (end-of-file last))))
                 (when (buffer-live-p source-buf)
                   (kill-buffer source-buf))))))
-      (princ (concat "OK " (prin1-to-string (neovm--oracle-normalize result))))))
+      (neovm--oracle-emit-outcome "OK " (neovm--oracle-normalize result))))
   (error
-   (princ
-    (concat "ERR "
-            (prin1-to-string
-             (neovm--oracle-normalize (cons (car err) (cdr err))))))))"#;
+   (neovm--oracle-emit-outcome
+    "ERR "
+    (neovm--oracle-normalize (cons (car err) (cdr err))))))"#;
 
 const EVAL_PROGRAM_RAW: &str = r#"(condition-case err
     (progn
+      (defun neovm--oracle-emit-outcome (kind value)
+        (princ "\n" 'external-debugging-output)
+        (princ "NEOVM-ORACLE-OUTCOME:" 'external-debugging-output)
+        (princ kind 'external-debugging-output)
+        (prin1 value 'external-debugging-output)
+        (terpri 'external-debugging-output))
       (let* ((coding-system-for-read 'utf-8-unix)
              (coding-system-for-write 'utf-8-unix)
              (_ (set-language-environment "UTF-8"))
@@ -554,9 +567,9 @@ const EVAL_PROGRAM_RAW: &str = r#"(condition-case err
                           (end-of-file last))))
                   (when (buffer-live-p source-buf)
                     (kill-buffer source-buf))))))
-        (princ (concat "OK " (prin1-to-string result)))))
+        (neovm--oracle-emit-outcome "OK " result)))
   (error
-   (princ (concat "ERR " (prin1-to-string err)))))"#;
+   (neovm--oracle-emit-outcome "ERR " err)))"#;
 
 const NATIVE_COMP_SUPPRESSION_PRELUDE: &str = "(setq native-comp-jit-compilation nil inhibit-automatic-native-compilation t native-comp-enable-subr-trampolines nil)";
 
@@ -582,7 +595,7 @@ impl EvalProgram {
 fn run_oracle_eval_with_sandbox(
     sandbox: &OracleSandbox,
     eval_program: EvalProgram,
-) -> Result<String, String> {
+) -> Result<CapturedEvaluation, String> {
     let oracle_bin = oracle_emacs_path();
 
     let mem_limit = oracle_mem_limit_bytes();
@@ -612,17 +625,30 @@ fn run_oracle_eval_with_sandbox(
         ));
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    CapturedEvaluation::from_marked_streams(
+        &String::from_utf8_lossy(&output.stdout),
+        &String::from_utf8_lossy(&output.stderr),
+        ORACLE_OUTCOME_MARKER,
+    )
+    .map_err(|error| {
+        format!(
+            "oracle Emacs emitted an invalid marked outcome: {error}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        )
+    })
 }
 
 fn run_oracle_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
     let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())?;
     run_oracle_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
+        .map(|evaluation| evaluation.legacy_transcript())
 }
 
 fn run_oracle_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
     let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())?;
     run_oracle_eval_with_sandbox(&sandbox, EvalProgram::Raw)
+        .map(|evaluation| evaluation.legacy_transcript())
 }
 
 pub(crate) fn run_oracle_eval(form: &str) -> Result<String, String> {
@@ -669,9 +695,11 @@ pub(crate) fn run_oracle_eval_with_load_root(
     match OracleMode::from_env() {
         OracleMode::Snapshot => {
             run_neomacs_binary_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
+                .map(|evaluation| evaluation.legacy_transcript())
         }
         OracleMode::Verify | OracleMode::Refresh | OracleMode::Live => {
             run_oracle_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
+                .map(|evaluation| evaluation.legacy_transcript())
         }
     }
 }
@@ -683,7 +711,7 @@ pub(crate) fn run_oracle_eval_with_load_root(
 fn run_neomacs_binary_eval_with_sandbox(
     sandbox: &OracleSandbox,
     eval_program: EvalProgram,
-) -> Result<String, String> {
+) -> Result<CapturedEvaluation, String> {
     let neomacs_bin = neomacs_binary_path();
 
     let mut cmd = Command::new(&neomacs_bin);
@@ -714,17 +742,30 @@ fn run_neomacs_binary_eval_with_sandbox(
         ));
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    CapturedEvaluation::from_marked_streams(
+        &String::from_utf8_lossy(&output.stdout),
+        &String::from_utf8_lossy(&output.stderr),
+        ORACLE_OUTCOME_MARKER,
+    )
+    .map_err(|error| {
+        format!(
+            "Neomacs emitted an invalid marked outcome: {error}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        )
+    })
 }
 
 fn run_neomacs_binary_eval_inner(form: &str, load_files: &[&str]) -> Result<String, String> {
     let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())?;
     run_neomacs_binary_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
+        .map(|evaluation| evaluation.legacy_transcript())
 }
 
 fn run_neomacs_binary_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, String> {
     let sandbox = OracleSandbox::new(form, load_files, &project_lisp_dir())?;
     run_neomacs_binary_eval_with_sandbox(&sandbox, EvalProgram::Raw)
+        .map(|evaluation| evaluation.legacy_transcript())
 }
 
 pub(crate) fn run_neovm_eval(form: &str) -> Result<String, String> {
@@ -746,29 +787,24 @@ pub(crate) fn run_neovm_eval_with_load_raw(
 // Internal parity helper
 // ---------------------------------------------------------------------------
 
-fn assert_neovm_oracle_parity(neovm: &str, oracle: &str, form: &str) {
-    let neovm_outcome = EvalOutcome::parse(neovm)
-        .unwrap_or_else(|error| panic!("Neomacs emitted an invalid oracle outcome: {error}"));
-    let oracle_outcome = EvalOutcome::parse(oracle)
-        .unwrap_or_else(|error| panic!("GNU Emacs emitted an invalid oracle outcome: {error}"));
-    if neovm_outcome == oracle_outcome {
+fn assert_neovm_oracle_parity(neovm: &CapturedEvaluation, oracle: &CapturedEvaluation, form: &str) {
+    if neovm == oracle {
         return;
     }
+    let neovm_transcript = neovm.legacy_transcript();
+    let oracle_transcript = oracle.legacy_transcript();
     let neo_label = "NEO Emacs:".red().bold().to_string();
     let gnu_label = "GNU Emacs:".green().bold().to_string();
     panic!(
-        "oracle parity mismatch for form: {form}\n  {neo_label}  {neovm}\n  {gnu_label}  {oracle}\n  NEO debug (len={}): {:?}\n  GNU debug (len={}): {:?}",
-        neovm.len(),
-        neovm,
-        oracle.len(),
-        oracle
+        "oracle parity mismatch for form: {form}\n  {neo_label}  {neovm_transcript}\n  {gnu_label}  {oracle_transcript}\n  NEO debug: {neovm:?}\n  GNU debug: {oracle:?}",
     );
 }
 
 // Store inline oracle values in a Rust-debug representation. This keeps exact
 // newlines, tabs, quotes, and trailing spaces testable without putting literal
 // trailing whitespace or conflict-marker-looking lines in source files.
-fn inline_expect_payload(value: &str) -> String {
+fn inline_expect_payload(evaluation: &CapturedEvaluation) -> String {
+    let value = evaluation.legacy_transcript();
     let source_safe = value.replace('\0', "\\0").replace('\r', "\\r");
     format!("{source_safe:?}")
 }
@@ -1023,13 +1059,14 @@ pub(crate) fn try_eval_oracle_and_neovm(form: &str) -> Result<(String, String), 
     if OracleMode::from_env() == OracleMode::Snapshot {
         let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
             .map_err(|error| format!("neomacs binary eval failed: {error}"))?;
-        return Ok((neovm.clone(), neovm));
+        let transcript = neovm.legacy_transcript();
+        return Ok((transcript.clone(), transcript));
     }
     let oracle = run_oracle_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
         .map_err(|error| format!("oracle eval failed: {error}"))?;
     let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
         .map_err(|error| format!("neomacs binary eval failed: {error}"))?;
-    Ok((oracle, neovm))
+    Ok((oracle.legacy_transcript(), neovm.legacy_transcript()))
 }
 
 pub(crate) fn eval_oracle_and_neovm(form: &str) -> (String, String) {
@@ -1048,7 +1085,8 @@ pub(crate) fn eval_oracle_and_neovm_expect(
             let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
                 .expect("neomacs binary eval should run");
             expected.assert_eq(&inline_expect_payload(&neovm));
-            (neovm.clone(), neovm)
+            let transcript = neovm.legacy_transcript();
+            (transcript.clone(), transcript)
         }
         OracleMode::Verify => {
             let oracle = run_oracle_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
@@ -1057,20 +1095,21 @@ pub(crate) fn eval_oracle_and_neovm_expect(
                 .expect("neomacs binary eval should run");
             expected.assert_eq(&inline_expect_payload(&oracle));
             assert_neovm_oracle_parity(&neovm, &oracle, form);
-            (oracle, neovm)
+            (oracle.legacy_transcript(), neovm.legacy_transcript())
         }
         OracleMode::Refresh => {
             let oracle = run_oracle_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
                 .expect("oracle eval should run");
             expected.assert_eq(&inline_expect_payload(&oracle));
-            (oracle.clone(), oracle)
+            let transcript = oracle.legacy_transcript();
+            (transcript.clone(), transcript)
         }
         OracleMode::Live => {
             let oracle = run_oracle_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
                 .expect("oracle eval should run");
             let neovm = run_neomacs_binary_eval_with_sandbox(&sandbox, EvalProgram::Normalized)
                 .expect("neomacs binary eval should run");
-            (oracle, neovm)
+            (oracle.legacy_transcript(), neovm.legacy_transcript())
         }
     }
 }
@@ -1079,7 +1118,6 @@ pub(crate) fn assert_ok_eq(expected_payload: &str, oracle: &str, neovm: &str) {
     let expected = format!("OK {expected_payload}");
     assert_eq!(oracle, expected, "GNU Emacs should match expected payload");
     assert_eq!(neovm, expected, "Neomacs should match expected payload");
-    assert_neovm_oracle_parity(neovm, oracle, "assert_ok_eq");
 }
 
 pub(crate) fn assert_err_kind(oracle: &str, neovm: &str, err_kind: &str) {

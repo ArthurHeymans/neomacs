@@ -6116,7 +6116,7 @@ fn run_elisp_oracle_case(
         let sandbox = MelpaSandbox::new(name)?;
         let form = wrap_elisp_outcome(setup, probe, OUTCOME_MARKER);
         let phase = run_outcome_phase(runtime, &sandbox, name, ScenarioPhase::RestartProbe, &form)?;
-        extract_marked_outcome(&phase.stdout, OUTCOME_MARKER).map_err(|error| {
+        extract_marked_outcome(&phase.stderr, OUTCOME_MARKER).map_err(|error| {
             format!(
                 "{} direct oracle `{name}` emitted an invalid outcome: {error}\nstdout:\n{}\nstderr:\n{}",
                 runtime.name, phase.stdout, phase.stderr
@@ -6579,7 +6579,7 @@ fn run_install_and_probe(
                 format_installed_packages(&installed_packages)
             )
         })?;
-    let outcome = extract_marked_outcome(&probe.stdout, OUTCOME_MARKER).map_err(|error| {
+    let outcome = extract_marked_outcome(&probe.stderr, OUTCOME_MARKER).map_err(|error| {
         format!(
             "{} scenario `{}` emitted an invalid oracle outcome during {probe_phase:?}: {error}\ninstalled packages: {}\nstdout:\n{}\nstderr:\n{}",
             runtime.name,

@@ -227,7 +227,7 @@ fn scenario_installs_then_probes_in_a_fresh_process() {
             r##"#!/bin/sh
 printf '%s\n' invoke >> '{}'
 printf 'NEOMACS-MELPA-INSTALLED:simple-single\t1.3\n'
-printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK (:package simple-single :value 42)'
+printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK (:package simple-single :value 42)' >&2
 "##,
             invocation_log.display()
         ),
@@ -273,7 +273,7 @@ fn oracle_scenario_compares_matching_lisp_signals() {
         r##"#!/bin/sh
 printf 'NEOMACS-MELPA-INSTALLED:simple-single\t1.3\n'
 if grep -q 'NEOMACS-MELPA-OUTCOME' "$NEOMACS_MELPA_ORACLE_FORM_FILE"; then
-  printf '%s\n' 'NEOMACS-MELPA-OUTCOME:ERR (wrong-type-argument numberp "x")'
+  printf '%s\n' 'NEOMACS-MELPA-OUTCOME:ERR (wrong-type-argument numberp "x")' >&2
 fi
 "##,
     )
@@ -310,7 +310,7 @@ fn oracle_scenario_reports_a_value_divergence() {
             format!(
                 r##"#!/bin/sh
 printf 'NEOMACS-MELPA-INSTALLED:simple-single\t1.3\n'
-printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK {value}'
+printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK {value}' >&2
 "##
             ),
         )
@@ -346,7 +346,7 @@ fn direct_elisp_oracle_runs_one_form_without_a_package_install() {
         &runtime_script,
         r##"#!/bin/sh
 if grep -q 'dash-sentinel' "$NEOMACS_MELPA_ORACLE_FORM_FILE"; then
-  printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK (:dash direct)'
+  printf '%s\n' 'NEOMACS-MELPA-OUTCOME:OK (:dash direct)' >&2
 else
   exit 9
 fi
