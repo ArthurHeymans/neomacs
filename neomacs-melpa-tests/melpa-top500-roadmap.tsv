@@ -409,7 +409,7 @@ rank	package	downloads	status
 408	embark-consult	225494	covered
 409	racer	224478	covered
 410	ivy-hydra	222056	covered
-411	tree-sitter-langs	220685	todo
+411	tree-sitter-langs	220685	covered
 412	git-gutter+	220600	todo
 413	buttercup	218857	todo
 414	clj-refactor	217884	todo

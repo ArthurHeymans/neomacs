@@ -656,6 +656,7 @@ mod tinysegmenter;
 mod toc_org;
 mod toml_mode;
 mod transient;
+mod tree_sitter_langs;
 mod treemacs;
 mod treemacs_evil;
 mod treemacs_icons_dired;

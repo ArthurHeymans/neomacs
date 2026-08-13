@@ -3767,6 +3767,23 @@ pub const TAGEDIT_MELPA_PIN: (&str, &str) = ("tagedit", "20161121.855");
 /// corpus.
 pub const TRANSIENT_MELPA_PIN: (&str, &str) = ("transient", "20260725.1105");
 
+/// The exact Tree-sitter package selected as the runtime integration layer for
+/// the pinned language bundle. MELPA built this archive from upstream commit
+/// `8f0bd387ad7a1cf7e8fdd5977d386a17ea70a82d`.
+pub const TREE_SITTER_MELPA_PIN: (&str, &str) = ("tree-sitter", "20260116.9");
+
+/// The exact Tree-sitter Languages package selected for practical grammar
+/// discovery, major-mode registration, bundled highlighting-query, download,
+/// installation, skip, reinstall, and failure-recovery parity. MELPA built
+/// this archive from upstream commit
+/// `1a827f821fbcb967db5eecccd569b7fa4b93d152`.
+pub const TREE_SITTER_LANGS_MELPA_PIN: (&str, &str) = ("tree-sitter-langs", "20260729.1912");
+
+/// The exact tsc native binding package required by the pinned Tree-sitter
+/// runtime. MELPA built it from upstream commit
+/// `8f0bd387ad7a1cf7e8fdd5977d386a17ea70a82d`.
+pub const TSC_MELPA_PIN: (&str, &str) = ("tsc", "20260116.9");
+
 /// The exact Use-Package release selected from GNU ELPA by the comprehensive
 /// API parity corpus.
 pub const USE_PACKAGE_GNU_ELPA_PIN: (&str, &str) = ("use-package", "2.4.6");
