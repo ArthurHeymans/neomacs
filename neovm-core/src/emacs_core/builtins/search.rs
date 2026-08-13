@@ -8,6 +8,62 @@ use crate::emacs_core::regex::{
     char_pos_to_byte, char_pos_to_byte_lisp_string,
 };
 use crate::emacs_core::value::ValueKind;
+use strum::IntoStaticStr;
+
+/// GNU search state whose C implementation is held in predeclared `V...`
+/// variables rather than looked up by name for every operation.
+///
+/// The closed enum makes every supported identity explicit. Its exhaustive
+/// cache match means a newly added search variable cannot silently fall back
+/// to runtime string interning.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum SearchStateVariable {
+    CaseFoldSearch,
+    InhibitChangingMatchData,
+    CharScriptTable,
+    WordCombiningCategories,
+    WordSeparatingCategories,
+    CaseSymbolsAsWords,
+}
+
+impl SearchStateVariable {
+    #[inline(always)]
+    fn symbol_id(self) -> SymId {
+        use std::sync::OnceLock;
+
+        static CASE_FOLD_SEARCH: OnceLock<SymId> = OnceLock::new();
+        static INHIBIT_CHANGING_MATCH_DATA: OnceLock<SymId> = OnceLock::new();
+        static CHAR_SCRIPT_TABLE: OnceLock<SymId> = OnceLock::new();
+        static WORD_COMBINING_CATEGORIES: OnceLock<SymId> = OnceLock::new();
+        static WORD_SEPARATING_CATEGORIES: OnceLock<SymId> = OnceLock::new();
+        static CASE_SYMBOLS_AS_WORDS: OnceLock<SymId> = OnceLock::new();
+
+        let name: &'static str = self.into();
+        match self {
+            Self::CaseFoldSearch => *CASE_FOLD_SEARCH.get_or_init(|| intern(name)),
+            Self::InhibitChangingMatchData => {
+                *INHIBIT_CHANGING_MATCH_DATA.get_or_init(|| intern(name))
+            }
+            Self::CharScriptTable => *CHAR_SCRIPT_TABLE.get_or_init(|| intern(name)),
+            Self::WordCombiningCategories => {
+                *WORD_COMBINING_CATEGORIES.get_or_init(|| intern(name))
+            }
+            Self::WordSeparatingCategories => {
+                *WORD_SEPARATING_CATEGORIES.get_or_init(|| intern(name))
+            }
+            Self::CaseSymbolsAsWords => *CASE_SYMBOLS_AS_WORDS.get_or_init(|| intern(name)),
+        }
+    }
+}
+
+#[inline(always)]
+fn dynamic_or_global_symbol_value(
+    eval: &super::eval::Context,
+    variable: SearchStateVariable,
+) -> Option<Value> {
+    eval.eval_symbol_by_id(variable.symbol_id()).ok()
+}
 
 /// Map a regex front-end error string to its Lisp signal.  Compile
 /// errors are `invalid-regexp`; the matcher's fail-stack overflow is a
@@ -37,16 +93,20 @@ pub(crate) fn regex_error_signal(msg: String) -> crate::emacs_core::error::Flow 
 /// Routes through `dynamic_or_global_symbol_value` so let-bindings
 /// and per-buffer overrides are observed, matching the audit #3 fix.
 fn read_inhibit_changing_match_data(eval: &super::eval::Context) -> bool {
-    dynamic_or_global_symbol_value(eval, "inhibit-changing-match-data").is_some_and(|v| !v.is_nil())
+    dynamic_or_global_symbol_value(eval, SearchStateVariable::InhibitChangingMatchData)
+        .is_some_and(|v| !v.is_nil())
 }
 
 pub(crate) fn current_word_boundary_lookup(
     eval: &super::eval::Context,
 ) -> crate::emacs_core::regex_emacs::WordBoundaryLookup {
     crate::emacs_core::regex_emacs::WordBoundaryLookup::new(
-        dynamic_or_global_symbol_value(eval, "char-script-table").filter(|value| !value.is_nil()),
-        dynamic_or_global_symbol_value(eval, "word-combining-categories").unwrap_or(Value::NIL),
-        dynamic_or_global_symbol_value(eval, "word-separating-categories").unwrap_or(Value::NIL),
+        dynamic_or_global_symbol_value(eval, SearchStateVariable::CharScriptTable)
+            .filter(|value| !value.is_nil()),
+        dynamic_or_global_symbol_value(eval, SearchStateVariable::WordCombiningCategories)
+            .unwrap_or(Value::NIL),
+        dynamic_or_global_symbol_value(eval, SearchStateVariable::WordSeparatingCategories)
+            .unwrap_or(Value::NIL),
     )
 }
 
@@ -238,7 +298,7 @@ pub(crate) fn builtin_search_forward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
@@ -606,7 +666,7 @@ pub(crate) fn builtin_search_backward(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let inhibit_changing = read_inhibit_changing_match_data(eval);
@@ -684,7 +744,7 @@ pub(crate) fn builtin_re_search_forward(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("re-search-forward", &args, 1, 4)?;
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let syntax_properties =
@@ -805,7 +865,7 @@ pub(crate) fn builtin_re_search_backward(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("re-search-backward", &args, 1, 4)?;
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let syntax_properties =
@@ -920,7 +980,7 @@ pub(crate) fn builtin_posix_search_forward(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("posix-search-forward", &args, 1, 4)?;
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let syntax_properties =
@@ -948,7 +1008,7 @@ pub(crate) fn builtin_posix_search_backward(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("posix-search-backward", &args, 1, 4)?;
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let syntax_properties =
@@ -973,7 +1033,7 @@ pub(crate) fn builtin_posix_search_backward(
 
 pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args_range("looking-at", &args, 1, 2)?;
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let pattern = expect_lisp_string(&args[0])?;
@@ -1037,7 +1097,7 @@ pub(crate) fn builtin_looking_at_p(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("looking-at-p", &args, 1)?;
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let pattern = expect_lisp_string(&args[0])?;
@@ -1097,7 +1157,7 @@ pub(crate) fn builtin_posix_looking_at(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("posix-looking-at", &args, 1, 2)?;
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let pattern = expect_lisp_string(&args[0])?;
@@ -1247,7 +1307,7 @@ pub(crate) fn builtin_string_match_slice(
     eval: &mut super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let case_translation = if case_fold {
@@ -1403,7 +1463,7 @@ pub(crate) fn builtin_string_match_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let case_translation = if case_fold {
@@ -1434,7 +1494,7 @@ pub(crate) fn builtin_posix_string_match(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let case_fold = dynamic_or_global_symbol_value(eval, "case-fold-search")
+    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
     let case_translation = if case_fold {
@@ -2329,9 +2389,10 @@ pub(crate) fn builtin_replace_match(
     // when classifying the matched text for FIXEDCASE=nil. Read it
     // from the current dynamic environment once and thread it down.
     // See audit finding #20 in `drafts/regex-search-audit.md`.
-    let case_symbols_as_words = dynamic_or_global_symbol_value(eval, "case-symbols-as-words")
-        .map(|v| !v.is_nil())
-        .unwrap_or(false);
+    let case_symbols_as_words =
+        dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseSymbolsAsWords)
+            .map(|v| !v.is_nil())
+            .unwrap_or(false);
 
     // Determine whether this is a buffer replacement (4th arg nil/absent) so we
     // can fire modification hooks.  String replacements don't touch the buffer.
@@ -2434,3 +2495,7 @@ pub(crate) fn builtin_replace_match(
         case_symbols_as_words,
     )
 }
+
+#[cfg(test)]
+#[path = "search_test.rs"]
+mod tests;

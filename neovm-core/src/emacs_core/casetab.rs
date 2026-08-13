@@ -240,6 +240,12 @@ const CT_EXTRA_START: usize = 5;
 // Reads/writes happen through `(current-case-table)` / `(set-case-table)`.
 const STANDARD_CASE_TABLE_SYMBOL: &str = "neovm--standard-case-table-object";
 
+#[inline(always)]
+fn standard_case_table_object_symbol_id() -> SymId {
+    static SYMBOL: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+    *SYMBOL.get_or_init(|| intern(STANDARD_CASE_TABLE_SYMBOL))
+}
+
 /// Build a char-table vector with the given subtype, extra slots, default, and data pairs.
 fn build_char_table(
     subtype: &str,
@@ -437,18 +443,20 @@ pub(crate) fn builtin_set_standard_case_table(
     let table = args[0];
     ensure_case_table_derived_slots(table)?;
     ctx.obarray
-        .set_symbol_value(STANDARD_CASE_TABLE_SYMBOL, table);
+        .set_symbol_value_id(standard_case_table_object_symbol_id(), table);
     Ok(table)
 }
 
 fn ensure_standard_case_table_object_in_state(obarray: &mut super::symbol::Obarray) -> EvalResult {
-    if let Some(value) = obarray.symbol_value(STANDARD_CASE_TABLE_SYMBOL).cloned()
+    if let Some(value) = obarray
+        .symbol_value_id(standard_case_table_object_symbol_id())
+        .cloned()
         && is_case_table(&value)
     {
         return Ok(value);
     }
     let table = make_standard_case_table_value();
-    obarray.set_symbol_value(STANDARD_CASE_TABLE_SYMBOL, table);
+    obarray.set_symbol_value_id(standard_case_table_object_symbol_id(), table);
     Ok(table)
 }
 
