@@ -400,7 +400,7 @@ rank	package	downloads	status
 399	format-all	237403	covered
 400	ccls	237387	covered
 401	ivy-rich	237181	covered
-402	gptel	233704	todo
+402	gptel	233704	covered
 403	org-brain	233197	todo
 404	moe-theme	229420	todo
 405	nodejs-repl	228729	todo

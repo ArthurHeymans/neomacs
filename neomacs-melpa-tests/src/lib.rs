@@ -3232,6 +3232,11 @@ pub const GENERAL_MELPA_PIN: (&str, &str) = ("general", "20250612.2309");
 /// The exact goto-chg package selected by the comprehensive API parity corpus.
 pub const GOTO_CHG_MELPA_PIN: (&str, &str) = ("goto-chg", "20240407.1110");
 
+/// The exact Gptel package selected for practical chat-buffer, request,
+/// context, tool, preset, and response-navigation parity. MELPA built this
+/// archive from upstream commit `dc0280821c344ec10547e13179ea2095f6165f05`.
+pub const GPTEL_MELPA_PIN: (&str, &str) = ("gptel", "20260812.1855");
+
 /// The exact Helm package selected by the practical source, matching, action,
 /// completion, imenu, and occur parity corpus, and as audacious' runtime
 /// user-interface dependency.
