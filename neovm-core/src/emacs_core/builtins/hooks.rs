@@ -531,6 +531,88 @@ const WINDOW_CONFIGURATION_TAG: &str = "window-configuration";
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 const SAVE_SELECTED_WINDOW_STATE_TAG: &str = "save-selected-window--state";
 
+/// Whether restoring a window configuration also selects its saved frame.
+///
+/// This is the typed form of GNU `set-window-configuration`'s
+/// DONT-SET-FRAME argument.  Naming both states prevents the easy-to-miss
+/// inversion caused by passing the Lisp flag deeper into the window code.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SelectedFrameRestoration {
+    RestoreSaved,
+    KeepSelected,
+}
+
+/// Whether restoring a window configuration replaces the frame's live
+/// minibuffer window with the saved one.
+///
+/// This is the typed form of GNU `set-window-configuration`'s
+/// DONT-SET-MINIWINDOW argument.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MinibufferWindowRestoration {
+    RestoreSaved,
+    KeepCurrent,
+}
+
+/// Exhaustive restore policy shared by the Lisp builtin and native unwind
+/// actions.  Callers cannot accidentally swap the two same-shaped Lisp flags.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct WindowConfigurationRestoreOptions {
+    pub(crate) selected_frame: SelectedFrameRestoration,
+    pub(crate) minibuffer_window: MinibufferWindowRestoration,
+}
+
+/// A validated, GC-traceable window configuration captured from live runtime
+/// state.  Native unwind callers cannot manufacture one from an unrelated
+/// `Value`; they must cross this constructor boundary.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SavedWindowConfiguration(Value);
+
+impl SavedWindowConfiguration {
+    pub(crate) fn capture(eval: &mut super::eval::Context, frame: Value) -> Result<Self, Flow> {
+        let configuration = builtin_current_window_configuration(eval, vec![frame])?;
+        debug_assert!(configuration.is_window_configuration());
+        Ok(Self(configuration))
+    }
+
+    pub(crate) fn trace_value(self) -> Value {
+        self.0
+    }
+
+    pub(crate) fn restore(
+        self,
+        eval: &mut super::eval::Context,
+        options: WindowConfigurationRestoreOptions,
+    ) -> EvalResult {
+        set_window_configuration_with_options(eval, self.0, options)
+    }
+}
+
+impl Default for WindowConfigurationRestoreOptions {
+    fn default() -> Self {
+        Self {
+            selected_frame: SelectedFrameRestoration::RestoreSaved,
+            minibuffer_window: MinibufferWindowRestoration::RestoreSaved,
+        }
+    }
+}
+
+impl WindowConfigurationRestoreOptions {
+    fn from_lisp_args(args: &[Value]) -> Self {
+        Self {
+            selected_frame: if args.get(1).is_some_and(|value| value.is_truthy()) {
+                SelectedFrameRestoration::KeepSelected
+            } else {
+                SelectedFrameRestoration::RestoreSaved
+            },
+            minibuffer_window: if args.get(2).is_some_and(|value| value.is_truthy()) {
+                MinibufferWindowRestoration::KeepCurrent
+            } else {
+                MinibufferWindowRestoration::RestoreSaved
+            },
+        }
+    }
+}
+
 #[derive(Clone)]
 struct WindowConfigurationSnapshot {
     frame_id: crate::window::FrameId,
@@ -983,16 +1065,26 @@ pub(crate) fn builtin_set_window_configuration(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("set-window-configuration", &args, 1, 3)?;
-    let Some((_frame, serial)) = window_configuration_parts_from_value(&args[0]) else {
+    let options = WindowConfigurationRestoreOptions::from_lisp_args(&args);
+    set_window_configuration_with_options(eval, args[0], options)
+}
+
+pub(crate) fn set_window_configuration_with_options(
+    eval: &mut super::eval::Context,
+    configuration: Value,
+    options: WindowConfigurationRestoreOptions,
+) -> EvalResult {
+    let Some((_frame, serial)) = window_configuration_parts_from_value(&configuration) else {
         return Err(signal(
             LispCondition::WrongTypeArgument,
-            vec![Value::symbol("window-configuration-p"), args[0]],
+            vec![Value::symbol("window-configuration-p"), configuration],
         ));
     };
 
     let snapshot = WINDOW_CONFIGURATION_SNAPSHOTS.with(|slot| slot.borrow().get(&serial).cloned());
 
     if let Some(snapshot) = snapshot {
+        let selected_frame_before_restore = eval.frames.selected_frame().map(|frame| frame.id);
         let live_parameters = eval
             .frames
             .get(snapshot.frame_id)
@@ -1008,8 +1100,10 @@ pub(crate) fn builtin_set_window_configuration(
             // `run_window_change_functions` cycle. neomacs's
             // analog is `frame_window_hook_record_from_live_state`.
             frame.selected_window = snapshot.selected_window;
-            frame.minibuffer_window = snapshot.minibuffer_window;
-            frame.minibuffer_leaf = snapshot.minibuffer_leaf;
+            if options.minibuffer_window == MinibufferWindowRestoration::RestoreSaved {
+                frame.minibuffer_window = snapshot.minibuffer_window;
+                frame.minibuffer_leaf = snapshot.minibuffer_leaf;
+            }
             frame
                 .find_window(frame.selected_window)
                 .and_then(|window| match window {
@@ -1093,6 +1187,14 @@ pub(crate) fn builtin_set_window_configuration(
         // therefore a 23-line root at row 1.
         if let Some(frame) = eval.frames.get_mut(snapshot.frame_id) {
             frame.reconcile_restored_window_configuration_geometry();
+        }
+
+        let frame_to_select = match options.selected_frame {
+            SelectedFrameRestoration::RestoreSaved => Some(snapshot.frame_id),
+            SelectedFrameRestoration::KeepSelected => selected_frame_before_restore,
+        };
+        if let Some(frame_id) = frame_to_select {
+            let _ = eval.frames.select_frame(frame_id);
         }
     }
 

@@ -558,8 +558,63 @@ pub(crate) enum SpecBinding {
     /// `record_unwind_protect (require_unwind, require_nesting_list)`.
     /// Same rationale as [`SpecBinding::LoadsInProgress`].
     RequireStack { len: usize },
+    /// A typed native-runtime cleanup.  Unlike Lisp `unwind-protect`, each
+    /// variant carries exactly the state its cleanup requires and is traced by
+    /// the GC while live on the specpdl.
+    NativeUnwind { action: NativeUnwindAction },
     /// Placeholder. Matches GNU SPECPDL_NOP.
     Nop,
+}
+
+/// Native cleanups that must participate in GNU's specpdl unwind ordering.
+///
+/// Keep this closed and exhaustive: adding a lifecycle that can signal or
+/// allocate requires an explicit tracing and execution arm here, rather than
+/// an untyped callback whose captures the GC cannot see.
+#[derive(Clone, Debug)]
+pub(crate) enum NativeUnwindAction {
+    RestoreWindowConfiguration {
+        configuration: super::builtins::SavedWindowConfiguration,
+        options: super::builtins::WindowConfigurationRestoreOptions,
+    },
+    MinibufferSession {
+        state: Box<super::reader::MinibufferSessionUnwind>,
+    },
+}
+
+impl NativeUnwindAction {
+    fn trace_roots(&self, visit: &mut dyn FnMut(Value)) {
+        match self {
+            Self::RestoreWindowConfiguration { configuration, .. } => {
+                visit(configuration.trace_value())
+            }
+            Self::MinibufferSession { state } => state.trace_roots(visit),
+        }
+    }
+
+    fn run(self, context: &mut Context) -> EvalResult {
+        // The action has already been popped from the specpdl, so explicitly
+        // root its payload while cleanup hooks and window hooks may collect.
+        let root_scope = context.save_vm_roots();
+        self.trace_roots(&mut |value| context.push_vm_frame_root(value));
+        let result = match self {
+            Self::RestoreWindowConfiguration {
+                configuration,
+                options,
+            } => configuration.restore(context, options),
+            Self::MinibufferSession { state } => {
+                super::reader::unwind_minibuffer_session(context, *state)
+            }
+        };
+        context.restore_vm_roots(root_scope);
+        result
+    }
+}
+
+/// Stable handle for updating a typed native unwind before it fires.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct NativeUnwindToken {
+    index: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -5775,6 +5830,7 @@ impl Context {
                     }
                 }
                 SpecBinding::SaveExcursion { marker, .. } => visit(*marker),
+                SpecBinding::NativeUnwind { action } => action.trace_roots(visit),
                 SpecBinding::SaveCurrentBuffer { .. } | SpecBinding::Nop => {}
                 _ => {}
             }
@@ -13088,6 +13144,22 @@ impl Context {
         }
     }
 
+    pub(crate) fn record_native_unwind(&mut self, action: NativeUnwindAction) -> NativeUnwindToken {
+        let index = self.specpdl.len();
+        self.specpdl.push(SpecBinding::NativeUnwind { action });
+        NativeUnwindToken { index }
+    }
+
+    pub(crate) fn native_unwind_action_mut(
+        &mut self,
+        token: NativeUnwindToken,
+    ) -> Option<&mut NativeUnwindAction> {
+        match self.specpdl.get_mut(token.index) {
+            Some(SpecBinding::NativeUnwind { action }) => Some(action),
+            _ => None,
+        }
+    }
+
     pub(crate) fn push_specpdl_root(&mut self, value: Value) {
         self.specpdl.push(SpecBinding::GcRoot { value });
     }
@@ -13391,6 +13463,43 @@ impl Context {
         self.push_eval_result_roots(&result);
         self.unbind_to(count);
         self.restore_vm_roots(root_scope);
+        result
+    }
+
+    /// Execute BODY and unwind every typed/Lisp cleanup it registers, even
+    /// when BODY returns early with `?`.
+    ///
+    /// This is the native-runtime equivalent of GNU's
+    /// `record_unwind_protect` + `unbind_to`: callers put the fallible body in
+    /// the closure, so Rust control flow cannot bypass the cleanup boundary.
+    pub(crate) fn with_unwind_scope(
+        &mut self,
+        body: impl FnOnce(&mut Self) -> EvalResult,
+    ) -> EvalResult {
+        let count = self.specpdl.len();
+        let result = body(self);
+        let root_scope = self.save_vm_roots();
+        self.push_eval_result_roots(&result);
+        let mut first_cleanup_error = None;
+        while self.specpdl.len() > count {
+            match self.unbind_to_result(count) {
+                Ok(()) => break,
+                Err(flow) if first_cleanup_error.is_none() => {
+                    let rooted_error: EvalResult = Err(flow);
+                    self.push_eval_result_roots(&rooted_error);
+                    first_cleanup_error = rooted_error.err();
+                }
+                Err(_) => {
+                    // GNU continues unwinding toward the target specpdl depth
+                    // when cleanup itself exits nonlocally.  Preserve the first
+                    // cleanup flow, but still execute every lower action.
+                }
+            }
+        }
+        self.restore_vm_roots(root_scope);
+        if let Some(flow) = first_cleanup_error {
+            return Err(flow);
+        }
         result
     }
 
@@ -15209,6 +15318,7 @@ impl Context {
             | SpecBinding::SaveCurrentBuffer { .. }
             | SpecBinding::SaveRestriction { .. }
             | SpecBinding::LoadsInProgress { .. }
+            | SpecBinding::NativeUnwind { .. }
             | SpecBinding::RequireStack { .. } => false,
         })
     }
@@ -15619,6 +15729,9 @@ impl Context {
                 SpecBinding::RequireStack { len } => {
                     self.require_stack.truncate(len);
                 }
+                SpecBinding::NativeUnwind { action } => {
+                    action.run(self)?;
+                }
             }
         }
         // If cleanup forms didn't set their own quit, reinstate the
@@ -15650,6 +15763,7 @@ fn default_toplevel_binding(specpdl: &[SpecBinding], sym_id: SymId) -> Option<&S
         | SpecBinding::SaveCurrentBuffer { .. }
         | SpecBinding::SaveRestriction { .. }
         | SpecBinding::LoadsInProgress { .. }
+        | SpecBinding::NativeUnwind { .. }
         | SpecBinding::RequireStack { .. } => false,
     })
 }
@@ -15673,6 +15787,7 @@ pub(crate) fn default_toplevel_value_in_state(
         | Some(SpecBinding::SaveCurrentBuffer { .. })
         | Some(SpecBinding::SaveRestriction { .. })
         | Some(SpecBinding::LoadsInProgress { .. })
+        | Some(SpecBinding::NativeUnwind { .. })
         | Some(SpecBinding::RequireStack { .. }) => {
             unreachable!("non-variable bindings are excluded above")
         }
@@ -15732,6 +15847,7 @@ pub(crate) fn set_default_toplevel_value_in_state(
             | SpecBinding::SaveCurrentBuffer { .. }
             | SpecBinding::SaveRestriction { .. }
             | SpecBinding::LoadsInProgress { .. }
+            | SpecBinding::NativeUnwind { .. }
             | SpecBinding::RequireStack { .. } => {}
         }
     }
@@ -15784,6 +15900,7 @@ fn let_shadows_buffer_binding_p_in_state(
         | SpecBinding::SaveCurrentBuffer { .. }
         | SpecBinding::SaveRestriction { .. }
         | SpecBinding::LoadsInProgress { .. }
+        | SpecBinding::NativeUnwind { .. }
         | SpecBinding::RequireStack { .. } => false,
     })
 }

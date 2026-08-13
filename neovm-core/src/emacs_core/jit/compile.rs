@@ -1201,7 +1201,6 @@ pub extern "C" fn neovm_jit_named_builtin(
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_save_window_excursion(ctx: *mut u8, body: i64, out: *mut i64) -> i64 {
     jit_shim_contain!(ctx, STATUS_SIGNAL, {
-        use crate::emacs_core::window_cmds;
         let body = Value::from_bits(body as usize);
         // SAFETY: see neovm_jit_call's function-level contract.
         let ctx = unsafe { &mut *(ctx as *mut Context) };
@@ -1210,39 +1209,35 @@ pub extern "C" fn neovm_jit_save_window_excursion(ctx: *mut u8, body: i64, out: 
         let progn_form = Value::cons(Value::symbol("progn"), body);
         push_scratch_gc_root(progn_form);
         let status = (|| {
-            let saved =
-                match window_cmds::builtin_current_window_configuration(ctx, vec![Value::NIL]) {
-                    Ok(v) => v,
-                    Err(flow) => {
-                        stash_pending_flow(flow);
-                        return STATUS_SIGNAL;
-                    }
-                };
-            push_scratch_gc_root(saved);
-            let body_result = ctx.eval_sub(progn_form);
-            if let Ok(v) = &body_result {
-                push_scratch_gc_root(*v);
-            }
-            let restore_result = window_cmds::builtin_set_window_configuration(ctx, vec![saved]);
-            match body_result {
-                Ok(result) => match restore_result {
-                    Ok(_) => {
-                        // SAFETY: `out` is the generated code's result stack slot.
-                        unsafe { *out = result.bits() as i64 };
-                        STATUS_OK
-                    }
-                    Err(flow) => {
-                        stash_pending_flow(flow);
-                        STATUS_SIGNAL
-                    }
-                },
+            let saved = match crate::emacs_core::builtins::SavedWindowConfiguration::capture(
+                ctx,
+                Value::NIL,
+            ) {
+                Ok(saved) => saved,
                 Err(flow) => {
-                    // Interpreter parity: vm_try!(restore_result) runs first, so a
-                    // restore failure takes precedence over the body's flow.
-                    match restore_result {
-                        Err(restore_flow) => stash_pending_flow(restore_flow),
-                        Ok(_) => stash_pending_flow(flow),
-                    }
+                    stash_pending_flow(flow);
+                    return STATUS_SIGNAL;
+                }
+            };
+            let body_result = ctx.with_unwind_scope(|ctx| {
+                ctx.record_native_unwind(
+                    crate::emacs_core::eval::NativeUnwindAction::RestoreWindowConfiguration {
+                        configuration: saved,
+                        options:
+                            crate::emacs_core::builtins::WindowConfigurationRestoreOptions::default(
+                            ),
+                    },
+                );
+                ctx.eval_sub(progn_form)
+            });
+            match body_result {
+                Ok(result) => {
+                    // SAFETY: `out` is the generated code's result stack slot.
+                    unsafe { *out = result.bits() as i64 };
+                    STATUS_OK
+                }
+                Err(flow) => {
+                    stash_pending_flow(flow);
                     STATUS_SIGNAL
                 }
             }

@@ -8141,6 +8141,39 @@ fn unwind_protect_cleanup_signal_overrides_throw() {
 }
 
 #[test]
+fn native_unwind_scope_runs_lower_cleanups_after_a_cleanup_error() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let original_depth = eval.specpdl.len();
+    let lower_cleanup = eval
+        .eval_str("'((setq native-lower-cleanup-ran t))")
+        .expect("parse lower cleanup forms");
+    let failing_cleanup = eval
+        .eval_str("'((error \"native cleanup failed\"))")
+        .expect("parse failing cleanup forms");
+
+    let result = eval.with_unwind_scope(|eval| {
+        eval.specpdl.push(SpecBinding::UnwindProtect {
+            forms: lower_cleanup,
+            lexenv: Value::NIL,
+        });
+        eval.specpdl.push(SpecBinding::UnwindProtect {
+            forms: failing_cleanup,
+            lexenv: Value::NIL,
+        });
+        Ok(Value::NIL)
+    });
+
+    assert!(matches!(result, Err(Flow::Signal(_))));
+    assert_eq!(
+        eval.eval_symbol("native-lower-cleanup-ran")
+            .expect("lower cleanup should have run"),
+        Value::T
+    );
+    assert_eq!(eval.specpdl.len(), original_depth);
+}
+
+#[test]
 fn fmakunbound_masks_builtin_special_and_evaluator_callable_fallbacks() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
@@ -12037,6 +12070,69 @@ fn set_window_configuration_reconciles_restored_batch_frame_geometry() {
         crate::emacs_core::format_eval_result(&Ok(result)),
         "OK ((24 (0 0 80 24)) 23 (0 1 80 24) (0 1 80 24))"
     );
+}
+
+#[test]
+fn set_window_configuration_honors_dont_set_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let first_buffer = ev.buffers.create_buffer("*first-frame*");
+    let second_buffer = ev.buffers.create_buffer("*second-frame*");
+    ev.buffers.set_current(first_buffer);
+    let first_frame = ev.frames.create_frame("F1", 80, 24, first_buffer);
+    let second_frame = ev.frames.create_frame("F2", 80, 24, second_buffer);
+    ev.frames.select_frame(first_frame);
+    ev.obarray
+        .set_symbol_value("test-first-frame", Value::make_frame(first_frame.0));
+    ev.obarray
+        .set_symbol_value("test-second-frame", Value::make_frame(second_frame.0));
+
+    let result = ev
+        .eval_str(
+            r##"(let ((configuration
+                         (current-window-configuration test-first-frame)))
+                   (select-frame test-second-frame)
+                   (set-window-configuration configuration)
+                   (let ((selected-saved-frame
+                          (eq (selected-frame) test-first-frame)))
+                     (select-frame test-second-frame)
+                     (set-window-configuration configuration t)
+                     (list selected-saved-frame
+                           (eq (selected-frame) test-second-frame))))"##,
+        )
+        .expect("set-window-configuration should honor DONT-SET-FRAME");
+
+    assert_eq!(format!("{result}"), "(t t)");
+}
+
+#[test]
+fn set_window_configuration_honors_dont_set_miniwindow() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let root_buffer = ev.buffers.create_buffer("*root*");
+    ev.buffers.set_current(root_buffer);
+    ev.frames.create_frame("F1", 80, 24, root_buffer);
+
+    let result = ev
+        .eval_str(
+            r##"(let* ((miniwindow (minibuffer-window))
+                        (saved-buffer (window-buffer miniwindow))
+                        (replacement (get-buffer-create " *replacement-mini*"))
+                        (configuration (current-window-configuration)))
+                   (unwind-protect
+                       (progn
+                         (set-window-buffer miniwindow replacement)
+                         (set-window-configuration configuration nil t)
+                         (let ((kept-replacement
+                                (eq (window-buffer miniwindow) replacement)))
+                           (set-window-configuration configuration)
+                           (list kept-replacement
+                                 (eq (window-buffer miniwindow) saved-buffer))))
+                     (kill-buffer replacement)))"##,
+        )
+        .expect("set-window-configuration should honor DONT-SET-MINIWINDOW");
+
+    assert_eq!(format!("{result}"), "(t t)");
 }
 
 #[test]

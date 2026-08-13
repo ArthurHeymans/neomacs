@@ -1045,49 +1045,40 @@ fn read_from_minibuffer_rejects_more_than_seven_args() {
 }
 
 #[test]
-fn shared_read_from_minibuffer_runtime_runs_setup_and_exit_hooks_around_edit() {
+fn read_from_minibuffer_runs_setup_edit_and_exit_in_gnu_order() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let order = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
-    let order_in_setup = std::rc::Rc::clone(&order);
-    let order_in_exit = std::rc::Rc::clone(&order);
-    let order_in_edit = std::rc::Rc::clone(&order);
-    let args = vec![Value::string("Prompt: ")];
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer command");
+    ev.input_rx = Some(rx);
 
-    let result = finish_read_from_minibuffer_in_state_with_recursive_edit(
-        &mut ev.obarray,
-        &mut ev.buffers,
-        &mut ev.frames,
-        &mut ev.minibuffers,
-        &mut ev.minibuffer_selected_window,
-        &mut ev.active_minibuffer_window,
-        ev.command_loop.recursive_depth,
-        &args,
-        || Ok(Value::NIL),
-        move || {
-            order_in_setup.borrow_mut().push("setup");
-            Ok(Value::NIL)
-        },
-        move || {
-            order_in_exit.borrow_mut().push("exit");
-            Ok(Value::NIL)
-        },
-        || Ok(Value::NIL),
-        move || {
-            order_in_edit.borrow_mut().push("edit");
-            Err(Flow::Throw {
-                tag: Value::symbol("exit"),
-                value: Value::NIL,
-            })
-        },
-    )
-    .expect("shared read-from-minibuffer should exit normally");
+    let result = ev
+        .eval_str(
+            r##"(progn
+                   (setq test-minibuffer-order nil)
+                   (unwind-protect
+                       (let ((map (make-sparse-keymap))
+                             (minibuffer-setup-hook
+                              (list (lambda ()
+                                      (push 'setup test-minibuffer-order))))
+                             (minibuffer-exit-hook
+                              (list (lambda ()
+                                      (push 'exit test-minibuffer-order)))))
+                         (define-key map " "
+                           (lambda ()
+                             (interactive)
+                             (push 'edit test-minibuffer-order)
+                             (exit-minibuffer)))
+                         (read-from-minibuffer "Prompt: " nil map)
+                         (nreverse test-minibuffer-order))
+                     (makunbound 'test-minibuffer-order)))"##,
+        )
+        .expect("read-from-minibuffer should exit normally");
 
-    if !result.is_string() {
-        panic!("expected string result, got {result:?}");
-    };
-    assert_eq!(result.as_utf8_str().unwrap(), "");
-    assert_eq!(*order.borrow(), vec!["setup", "edit", "exit"]);
+    assert_eq!(format!("{result}"), "(setup edit exit)");
 }
 
 #[test]
@@ -1174,65 +1165,177 @@ fn read_from_minibuffer_uses_calling_buffers_default_directory_like_gnu() {
 }
 
 #[test]
-fn shared_read_from_minibuffer_runtime_swallows_exit_hook_signals() {
+fn read_from_minibuffer_swallows_exit_hook_signals_after_cleanup() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let args = vec![Value::string("Prompt: ")];
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer command");
+    ev.input_rx = Some(rx);
 
-    let result = finish_read_from_minibuffer_in_state_with_recursive_edit(
-        &mut ev.obarray,
-        &mut ev.buffers,
-        &mut ev.frames,
-        &mut ev.minibuffers,
-        &mut ev.minibuffer_selected_window,
-        &mut ev.active_minibuffer_window,
-        ev.command_loop.recursive_depth,
-        &args,
-        || Ok(Value::NIL),
-        || Ok(Value::NIL),
-        || Err(signal("error", vec![Value::string("ignored")])),
-        || Ok(Value::NIL),
-        || {
-            Err(Flow::Throw {
-                tag: Value::symbol("exit"),
-                value: Value::NIL,
-            })
-        },
-    );
+    let result = ev
+        .eval_str(
+            r##"(let ((map (make-sparse-keymap))
+                       (minibuffer-setup-hook nil)
+                       (minibuffer-exit-hook
+                        (list (lambda () (error "ignored")))))
+                   (define-key map " "
+                     (lambda () (interactive) (exit-minibuffer)))
+                   (read-from-minibuffer "Prompt: " nil map))"##,
+        )
+        .expect("the exit-hook signal should be swallowed after cleanup");
 
-    assert!(result.is_ok(), "result={result:?}");
+    assert_eq!(result.as_utf8_str(), Some(""));
 }
 
 #[test]
-fn shared_read_from_minibuffer_runtime_converts_unibyte_initial_input_to_buffer_text() {
+fn read_from_minibuffer_restores_window_splits_created_during_the_read() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer command");
+    drop(tx);
+    ev.input_rx = Some(rx);
+
+    let result = ev
+        .eval_str(
+            r#"(let ((read-minibuffer-restore-windows t)
+                     (minibuffer-setup-hook nil)
+                     (minibuffer-exit-hook nil)
+                     (map (make-sparse-keymap)))
+                 (define-key map " "
+                   (lambda ()
+                     (interactive)
+                     (split-window (minibuffer-selected-window) nil 'right)
+                     (exit-minibuffer)))
+                 (let ((before (length (window-list))))
+                   (read-from-minibuffer "Prompt: " nil map)
+                   (list before (length (window-list)))))"#,
+        )
+        .expect("read-from-minibuffer should restore its caller's windows");
+
+    assert_eq!(format!("{result}"), "(1 1)");
+}
+
+#[test]
+fn read_from_minibuffer_keeps_window_splits_when_restoration_is_disabled() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer command");
+    drop(tx);
+    ev.input_rx = Some(rx);
+
+    let result = ev
+        .eval_str(
+            r#"(let ((read-minibuffer-restore-windows nil)
+                     (minibuffer-setup-hook nil)
+                     (minibuffer-exit-hook nil)
+                     (map (make-sparse-keymap)))
+                 (define-key map " "
+                   (lambda ()
+                     (interactive)
+                     (split-window (minibuffer-selected-window) nil 'right)
+                     (exit-minibuffer)))
+                 (let ((before (length (window-list))))
+                   (read-from-minibuffer "Prompt: " nil map)
+                   (list before (length (window-list)))))"#,
+        )
+        .expect("read-from-minibuffer should preserve window changes by policy");
+
+    assert_eq!(format!("{result}"), "(1 2)");
+}
+
+#[test]
+fn read_from_minibuffer_setup_error_unwinds_the_complete_session() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char('x'),
+    ))
+    .expect("keep the interactive command-loop input source live");
+    ev.input_rx = Some(rx);
+
+    let result = ev
+        .eval_str(
+            r##"(let ((calling-buffer (current-buffer))
+                       (calling-window (selected-window))
+                       (minibuffer-setup-hook
+                        (list (lambda () (error "setup failed"))))
+                       (minibuffer-exit-hook nil))
+                   (condition-case nil
+                       (read-from-minibuffer "Prompt: ")
+                     (error nil))
+                   (list (eq (current-buffer) calling-buffer)
+                         (eq (selected-window) calling-window)
+                         (= (minibuffer-depth) 0)
+                         (null (active-minibuffer-window))
+                         (minibufferp (current-buffer))))"##,
+        )
+        .expect("the setup-hook signal should be handled after minibuffer unwind");
+
+    assert_eq!(format!("{result}"), "(t t t t nil)");
+}
+
+#[test]
+fn read_from_minibuffer_mode_error_unwinds_before_session_entry() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char('x'),
+    ))
+    .expect("keep the interactive command-loop input source live");
+    ev.input_rx = Some(rx);
+
+    let result = ev
+        .eval_str(
+            r##"(let ((calling-buffer (current-buffer))
+                       (calling-window (selected-window))
+                       (minibuffer-mode-hook
+                        (list (lambda () (error "mode failed"))))
+                       (minibuffer-setup-hook nil)
+                       (minibuffer-exit-hook nil))
+                   (condition-case nil
+                       (read-from-minibuffer "Prompt: ")
+                     (error nil))
+                   (list (eq (current-buffer) calling-buffer)
+                         (eq (selected-window) calling-window)
+                         (= (minibuffer-depth) 0)
+                         (null (active-minibuffer-window))
+                         (minibufferp (current-buffer))))"##,
+        )
+        .expect("the mode-hook signal should be handled after minibuffer unwind");
+
+    assert_eq!(format!("{result}"), "(t t t t nil)");
+}
+
+#[test]
+fn read_from_minibuffer_converts_unibyte_initial_input_to_buffer_text() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::named(crate::keyboard::NamedKey::Return),
+    ))
+    .expect("queue minibuffer return");
+    ev.input_rx = Some(rx);
     let args = vec![
         Value::string("Prompt: "),
         Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF])),
     ];
 
-    let result = finish_read_from_minibuffer_in_state_with_recursive_edit(
-        &mut ev.obarray,
-        &mut ev.buffers,
-        &mut ev.frames,
-        &mut ev.minibuffers,
-        &mut ev.minibuffer_selected_window,
-        &mut ev.active_minibuffer_window,
-        ev.command_loop.recursive_depth,
-        &args,
-        || Ok(Value::NIL),
-        || Ok(Value::NIL),
-        || Ok(Value::NIL),
-        || Ok(Value::NIL),
-        || {
-            Err(Flow::Throw {
-                tag: Value::symbol("exit"),
-                value: Value::NIL,
-            })
-        },
-    )
-    .expect("shared read-from-minibuffer should return initial input");
+    let result = finish_read_from_minibuffer_in_vm_runtime(&mut ev, &args)
+        .expect("read-from-minibuffer should return initial input");
 
     let result_text = result
         .as_lisp_string()
@@ -1245,9 +1348,9 @@ fn shared_read_from_minibuffer_runtime_converts_unibyte_initial_input_to_buffer_
 }
 
 #[test]
-fn shared_read_from_minibuffer_runtime_restores_calling_frame_after_frame_switch() {
+fn read_from_minibuffer_restores_calling_frame_after_frame_switch() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
+    let mut ev = crate::test_utils::runtime_startup_context();
     let calling_frame = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut ev);
     let other_buffer = ev.buffers.create_buffer("*completion-frame*");
     let other_frame = ev
@@ -1257,36 +1360,30 @@ fn shared_read_from_minibuffer_runtime_restores_calling_frame_after_frame_switch
         ev.frames.selected_frame().map(|frame| frame.id),
         Some(calling_frame)
     );
+    ev.obarray.set_symbol_value(
+        "test-minibuffer-other-frame",
+        Value::make_frame(other_frame.0),
+    );
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer command");
+    ev.input_rx = Some(rx);
 
-    let frames_ptr = std::ptr::NonNull::from(&mut ev.frames);
-    let args = vec![Value::string("Prompt: ")];
-
-    let result = finish_read_from_minibuffer_in_state_with_recursive_edit(
-        &mut ev.obarray,
-        &mut ev.buffers,
-        &mut ev.frames,
-        &mut ev.minibuffers,
-        &mut ev.minibuffer_selected_window,
-        &mut ev.active_minibuffer_window,
-        ev.command_loop.recursive_depth,
-        &args,
-        || Ok(Value::NIL),
-        || Ok(Value::NIL),
-        || Ok(Value::NIL),
-        || Ok(Value::NIL),
-        move || unsafe {
-            frames_ptr
-                .as_ptr()
-                .as_mut()
-                .unwrap()
-                .select_frame(other_frame);
-            Err(Flow::Throw {
-                tag: Value::symbol("exit"),
-                value: Value::NIL,
-            })
-        },
-    )
-    .expect("minibuffer read should exit normally");
+    let result = ev
+        .eval_str(
+            r##"(let ((map (make-sparse-keymap))
+                       (minibuffer-setup-hook nil)
+                       (minibuffer-exit-hook nil))
+                   (define-key map " "
+                     (lambda ()
+                       (interactive)
+                       (select-frame test-minibuffer-other-frame)
+                       (exit-minibuffer)))
+                   (read-from-minibuffer "Prompt: " nil map))"##,
+        )
+        .expect("minibuffer read should exit normally");
 
     assert_eq!(result.as_utf8_str(), Some(""));
     assert_eq!(
@@ -1294,6 +1391,80 @@ fn shared_read_from_minibuffer_runtime_restores_calling_frame_after_frame_switch
         Some(calling_frame),
         "GNU read_minibuf switches back to the frame that invoked the minibuffer"
     );
+}
+
+#[test]
+fn read_from_minibuffer_uses_and_restores_a_separate_minibuffer_owner_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
+    let root_frame = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut ev);
+    let root_minibuffer = ev
+        .frames
+        .get(root_frame)
+        .and_then(|frame| frame.minibuffer_window)
+        .expect("root frame minibuffer");
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(root_frame.0),
+        ),
+        Value::cons(Value::symbol("width"), Value::fixnum(40)),
+        Value::cons(Value::symbol("height"), Value::fixnum(10)),
+        Value::cons(
+            Value::symbol("minibuffer"),
+            Value::make_window(root_minibuffer.0),
+        ),
+        Value::cons(Value::symbol("visibility"), Value::NIL),
+    ]);
+    let child = crate::emacs_core::frame::builtin_make_terminal_frame(&mut ev, vec![params])
+        .expect("make child frame sharing the root minibuffer");
+    let child_frame = crate::window::FrameId(child.as_frame_id().expect("child frame"));
+    ev.frames.select_frame(child_frame);
+    ev.obarray.set_symbol_value(
+        "test-minibuffer-root-frame",
+        Value::make_frame(root_frame.0),
+    );
+    ev.obarray.set_symbol_value(
+        "test-minibuffer-child-frame",
+        Value::make_frame(child_frame.0),
+    );
+    ev.obarray
+        .set_symbol_value("test-minibuffer-owner-was-root", Value::NIL);
+
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer command");
+    ev.input_rx = Some(rx);
+
+    let result = ev
+        .eval_str(
+            r##"(let ((map (make-sparse-keymap))
+                       (before (length (window-list test-minibuffer-root-frame)))
+                       (minibuffer-setup-hook
+                        (list (lambda ()
+                                (setq test-minibuffer-owner-was-root
+                                      (eq (window-frame
+                                           (active-minibuffer-window))
+                                          test-minibuffer-root-frame)))))
+                       (minibuffer-exit-hook nil))
+                   (define-key map " "
+                     (lambda ()
+                       (interactive)
+                       (with-selected-frame test-minibuffer-root-frame
+                         (split-window (frame-root-window)))
+                       (exit-minibuffer)))
+                   (read-from-minibuffer "Prompt: " nil map)
+                   (list test-minibuffer-owner-was-root
+                         (eq (selected-frame) test-minibuffer-child-frame)
+                         before
+                         (length (window-list test-minibuffer-root-frame))))"##,
+        )
+        .expect("shared-minibuffer-frame read should exit normally");
+
+    assert_eq!(format!("{result}"), "(t t 1 1)");
 }
 
 #[test]
@@ -1437,6 +1608,70 @@ fn read_from_minibuffer_uses_live_prompt_field_boundary_after_prompt_rewrite_lik
         .expect("minibuffer read should finish");
 
     assert_eq!(format!("{result}"), r#"("production" ("production"))"#);
+}
+
+#[test]
+fn read_from_minibuffer_adds_history_after_restoring_the_calling_buffer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer exit key");
+    eval.input_rx = Some(rx);
+
+    let result = eval
+        .eval_str(
+            r##"(progn
+                   (defvar neo-buffer-local-minibuffer-history nil)
+                   (with-current-buffer
+                       (get-buffer-create " *minibuffer-history-caller*")
+                     (setq-local neo-buffer-local-minibuffer-history nil)
+                     (let ((map (make-sparse-keymap))
+                           (minibuffer-setup-hook nil)
+                           (minibuffer-exit-hook nil))
+                       (define-key map " " #'exit-minibuffer)
+                       (list
+                        (read-from-minibuffer
+                         "Prompt: " "local" map nil
+                         'neo-buffer-local-minibuffer-history)
+                        neo-buffer-local-minibuffer-history))))"##,
+        )
+        .expect("history insertion should observe the restored caller buffer");
+
+    assert_eq!(format!("{result}"), r#"("local" ("local"))"#);
+}
+
+#[test]
+fn read_from_minibuffer_uses_empty_input_default_only_for_history_when_read_is_nil() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer exit key");
+    eval.input_rx = Some(rx);
+
+    let result = eval
+        .eval_str(
+            r##"(progn
+                   (defvar neo-empty-minibuffer-history nil)
+                   (setq neo-empty-minibuffer-history nil)
+                   (let ((map (make-sparse-keymap))
+                         (minibuffer-setup-hook nil)
+                         (minibuffer-exit-hook nil))
+                     (define-key map " " #'exit-minibuffer)
+                     (list
+                      (read-from-minibuffer
+                       "Prompt: " nil map nil
+                       'neo-empty-minibuffer-history "fallback")
+                      neo-empty-minibuffer-history)))"##,
+        )
+        .expect("empty input should return as a string and record the default");
+
+    assert_eq!(format!("{result}"), r#"("" ("fallback"))"#);
 }
 
 #[test]

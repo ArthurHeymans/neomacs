@@ -2218,38 +2218,35 @@ impl<'a> Vm<'a> {
                     let body = stk!().pop().unwrap_or(Value::NIL);
                     let progn_form = Value::cons(Value::symbol("progn"), body);
                     let saved = vm_try!(
-                        crate::emacs_core::window_cmds::builtin_current_window_configuration(
+                        crate::emacs_core::builtins::SavedWindowConfiguration::capture(
                             self.ctx,
-                            vec![Value::NIL],
+                            Value::NIL,
                         )
                     );
-                    // eval_sub runs arbitrary Lisp; window-config restore can
-                    // run hooks — both escape, so bracket them together.
-                    // `saved` (and its embedded snapshot roots) lives only in
-                    // this Rust local while the body runs — root it, or a GC
-                    // during the body frees the configuration and restore
-                    // silently no-ops (GNU keeps it on the specpdl via
-                    // record_unwind_protect, bytecode.c:945-952).
+                    // GNU records the restore on the specpdl before evaluating
+                    // the body.  Use the same typed native-unwind action as the
+                    // minibuffer lifecycle, so a new Rust `?`/flow path cannot
+                    // bypass restoration.
                     cursor.publish(self.ctx);
                     let root_scope = self.ctx.save_vm_roots();
-                    self.push_dynamic_vm_root(saved);
                     self.push_dynamic_vm_root(progn_form);
-                    let body_result = self.ctx.eval_sub(progn_form);
-                    let restore_result =
-                        crate::emacs_core::window_cmds::builtin_set_window_configuration(
-                            self.ctx,
-                            vec![saved],
+                    let body_result = self.ctx.with_unwind_scope(|ctx| {
+                        ctx.record_native_unwind(
+                            crate::emacs_core::eval::NativeUnwindAction::RestoreWindowConfiguration {
+                                configuration: saved,
+                                options: crate::emacs_core::builtins::WindowConfigurationRestoreOptions::default(),
+                            },
                         );
+                        ctx.eval_sub(progn_form)
+                    });
                     self.ctx.restore_vm_roots(root_scope);
                     cursor = StackCursor::acquire(self.ctx);
 
                     match body_result {
                         Ok(result) => {
-                            vm_try!(restore_result);
                             stk_push!(result);
                         }
                         Err(flow) => {
-                            vm_try!(restore_result);
                             cursor.publish(self.ctx);
                             resume_flow!(flow)
                         }

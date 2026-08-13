@@ -190,6 +190,95 @@ fn history_add_new_input_enabled(obarray: &Obarray) -> bool {
         .is_none_or(|value| value.is_truthy())
 }
 
+fn default_minibuffer_string(default: Value) -> Option<crate::heap_types::LispString> {
+    if let Some(string) = default.as_lisp_string() {
+        return Some(string.clone());
+    }
+    if default.is_cons() {
+        return default.cons_car().as_lisp_string().cloned();
+    }
+    None
+}
+
+fn minibuffer_history_entry(
+    result: &crate::heap_types::LispString,
+    default: Value,
+) -> Option<crate::heap_types::LispString> {
+    if result.as_bytes().is_empty() {
+        default_minibuffer_string(default)
+    } else {
+        Some(result.clone())
+    }
+}
+
+fn add_minibuffer_history_after_unwind(
+    eval: &mut super::eval::Context,
+    history_name: SymId,
+    entry: &crate::heap_types::LispString,
+) -> EvalResult {
+    let value = Value::heap_string(entry.clone());
+    if eval.obarray.fboundp("add-to-history") {
+        // Call the GNU Lisp helper only after the caller buffer and its local
+        // bindings have been restored.  Raw obarray assignment cannot express
+        // a buffer-local history variable.
+        eval.apply(
+            Value::symbol("add-to-history"),
+            vec![Value::from_sym_id(history_name), value],
+        )?;
+    } else {
+        // Interactive reads cannot normally precede subr.el, but retain a
+        // bootstrap-safe fallback for deliberately minimal test contexts.
+        add_to_minibuffer_history_variable(&mut eval.obarray, history_name, entry);
+    }
+
+    if !entry.as_bytes().is_empty() {
+        let max_length =
+            minibuffer_history_limit(&eval.obarray, history_name).unwrap_or(usize::MAX);
+        eval.minibuffers
+            .add_to_history_lisp(history_name, entry.clone(), max_length);
+    }
+    Ok(Value::NIL)
+}
+
+fn finish_minibuffer_result_after_unwind(
+    eval: &mut super::eval::Context,
+    result: crate::heap_types::LispString,
+    read: Value,
+    default: Value,
+) -> EvalResult {
+    if read.is_nil() {
+        // GNU returns the empty string here.  DEFAULT only supplies history
+        // and an input source when READ is non-nil.
+        return Ok(Value::heap_string(result));
+    }
+
+    let input = if result.as_bytes().is_empty() {
+        default_minibuffer_string(default).unwrap_or(result)
+    } else {
+        result
+    };
+    let read_result =
+        read_from_string_impl(&eval.obarray, vec![Value::heap_string(input.clone())])?;
+    let value = read_result.cons_car();
+    let end_char = read_result.cons_cdr().xfixnum().max(0) as usize;
+    let end_byte = if input.is_multibyte() {
+        crate::emacs_core::emacs_char::char_to_byte_pos(input.as_bytes(), end_char)
+    } else {
+        end_char.min(input.as_bytes().len())
+    };
+    if input.as_bytes()[end_byte..]
+        .iter()
+        .any(|byte| !matches!(byte, b' ' | b'\t' | b'\n'))
+    {
+        return Err(signal(
+            LispCondition::InvalidReadSyntax,
+            vec![Value::string("Trailing garbage following expression")],
+        ));
+    }
+    eval.obarray_mut().materialize_read_symbols(value);
+    Ok(value)
+}
+
 fn expect_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, Flow> {
     match value.kind() {
         ValueKind::String => Ok(value
@@ -284,17 +373,99 @@ fn expect_completing_read_initial_input(value: &Value) -> Result<(), Flow> {
     }
 }
 
+/// Frame that invoked the minibuffer.  Kept distinct from the frame that owns
+/// its minibuffer window so those roles cannot be swapped at a call site.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct CallingFrame(crate::window::FrameId);
+
+/// Frame whose window tree physically contains the active minibuffer window.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct MinibufferOwnerFrame(crate::window::FrameId);
+
 #[derive(Clone, Copy, Debug)]
 struct ActiveMinibufferWindowState {
-    frame_id: crate::window::FrameId,
+    minibuffer_frame: MinibufferOwnerFrame,
     minibuffer_window_id: crate::window::WindowId,
-    calling_frame: crate::window::FrameId,
-    previous_selected_window: crate::window::WindowId,
+    calling_frame: CallingFrame,
+    calling_selected_window: crate::window::WindowId,
+    previous_minibuffer_frame_selected_window: crate::window::WindowId,
     previous_minibuffer_buffer: Option<crate::buffer::BufferId>,
     previous_minibuffer_window_start: LispCharPos1,
     previous_minibuffer_point: LispCharPos1,
     previous_minibuffer_selected_window: Option<crate::window::WindowId>,
     previous_active_minibuffer_window: Option<crate::window::WindowId>,
+}
+
+/// How the recursive edit completed, recorded before the session unwind runs.
+/// `Pending` covers failures in mode/setup hooks before recursive edit starts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MinibufferExitDisposition {
+    Pending,
+    Accepted,
+    Aborted,
+}
+
+/// Semantic result of the recursive command loop.  The command loop's
+/// low-level `Flow::Throw` representation must not leak into lifecycle code:
+/// only `(throw 'exit nil)` is an accepted minibuffer read; every other flow
+/// is an abort that must be propagated after cleanup.
+enum MinibufferCommandOutcome {
+    Accepted,
+    Aborted(Flow),
+}
+
+impl MinibufferCommandOutcome {
+    fn from_recursive_edit(result: EvalResult) -> Self {
+        match result {
+            Ok(_) => Self::Accepted,
+            Err(Flow::Throw { tag, value })
+                if tag.is_symbol_named("exit") && !value.is_truthy() =>
+            {
+                Self::Accepted
+            }
+            Err(flow) => Self::Aborted(flow),
+        }
+    }
+
+    fn disposition(&self) -> MinibufferExitDisposition {
+        match self {
+            Self::Accepted => MinibufferExitDisposition::Accepted,
+            Self::Aborted(_) => MinibufferExitDisposition::Aborted,
+        }
+    }
+}
+
+/// Complete native state for one GNU `read_minibuf_unwind` equivalent.
+///
+/// This value lives inside a typed specpdl action, so every fallible operation
+/// after minibuffer activation may use `?` without skipping teardown.  Its
+/// private fields ensure it can only be assembled at the activation boundary.
+#[derive(Clone, Debug)]
+pub(crate) struct MinibufferSessionUnwind {
+    minibuf_id: crate::buffer::BufferId,
+    depth_before_entry: usize,
+    active_window_state: Option<ActiveMinibufferWindowState>,
+    saved_buffer_id: Option<crate::buffer::BufferId>,
+    saved_current_prefix_arg: Value,
+    saved_minibuffer_history_variable: Value,
+    saved_minibuffer_history_position: Value,
+    saved_command_keys: Vec<Value>,
+    saved_raw_command_keys: Vec<Value>,
+    disposition: MinibufferExitDisposition,
+}
+
+impl MinibufferSessionUnwind {
+    pub(crate) fn trace_roots(&self, visit: &mut dyn FnMut(Value)) {
+        visit(self.saved_current_prefix_arg);
+        visit(self.saved_minibuffer_history_variable);
+        visit(self.saved_minibuffer_history_position);
+        for key in self.saved_command_keys.iter().copied() {
+            visit(key);
+        }
+        for key in self.saved_raw_command_keys.iter().copied() {
+            visit(key);
+        }
+    }
 }
 
 fn activate_minibuffer_window_in_state(
@@ -304,10 +475,15 @@ fn activate_minibuffer_window_in_state(
     active_minibuffer_window: &mut Option<crate::window::WindowId>,
     minibuf_id: crate::buffer::BufferId,
 ) -> Option<ActiveMinibufferWindowState> {
-    let frame_id = super::window_cmds::ensure_selected_frame_id_in_state(frames, buffers);
-    let frame = frames.get(frame_id)?;
-    let minibuffer_window_id = frame.minibuffer_window?;
-    let previous_selected_window = frame.selected_window;
+    let calling_frame = CallingFrame(super::window_cmds::ensure_selected_frame_id_in_state(
+        frames, buffers,
+    ));
+    let calling_frame_state = frames.get(calling_frame.0)?;
+    let minibuffer_window_id = calling_frame_state.minibuffer_window?;
+    let calling_selected_window = calling_frame_state.selected_window;
+    let minibuffer_frame = MinibufferOwnerFrame(frames.find_window_frame_id(minibuffer_window_id)?);
+    let minibuffer_frame_state = frames.get(minibuffer_frame.0)?;
+    let previous_minibuffer_frame_selected_window = minibuffer_frame_state.selected_window;
     let mut previous_minibuffer_buffer = None;
     let mut previous_minibuffer_window_start = LispCharPos1::ONE;
     let mut previous_minibuffer_point = LispCharPos1::ONE;
@@ -316,7 +492,7 @@ fn activate_minibuffer_window_in_state(
         window_start,
         point,
         ..
-    }) = frame.find_window(minibuffer_window_id)
+    }) = minibuffer_frame_state.find_window(minibuffer_window_id)
     {
         previous_minibuffer_buffer = Some(*buffer_id);
         previous_minibuffer_window_start = *window_start;
@@ -324,10 +500,11 @@ fn activate_minibuffer_window_in_state(
     }
 
     let saved = ActiveMinibufferWindowState {
-        frame_id,
+        minibuffer_frame,
         minibuffer_window_id,
-        calling_frame: frame_id,
-        previous_selected_window,
+        calling_frame,
+        calling_selected_window,
+        previous_minibuffer_frame_selected_window,
         previous_minibuffer_buffer,
         previous_minibuffer_window_start,
         previous_minibuffer_point,
@@ -339,8 +516,8 @@ fn activate_minibuffer_window_in_state(
     // selecting the minibuffer.  The caller becomes non-selected during the
     // read, so redisplay and mode-line `%l` must read that saved point rather
     // than the window's stale construction-time marker.
-    super::window_cmds::remember_selected_window_point_in_state(frames, buffers, frame_id);
-    if let Some(frame) = frames.get_mut(frame_id) {
+    super::window_cmds::remember_selected_window_point_in_state(frames, buffers, calling_frame.0);
+    if let Some(frame) = frames.get_mut(minibuffer_frame.0) {
         if let Some(window) = frame.find_window_mut(minibuffer_window_id) {
             window.set_buffer(minibuf_id);
             debug_assert_eq!(window.buffer_id(), Some(minibuf_id));
@@ -348,8 +525,9 @@ fn activate_minibuffer_window_in_state(
         }
         let _ = frame.select_window(minibuffer_window_id);
     }
+    let _ = frames.select_frame(minibuffer_frame.0);
     buffers.switch_current(minibuf_id);
-    *minibuffer_selected_window = Some(previous_selected_window);
+    *minibuffer_selected_window = Some(calling_selected_window);
     *active_minibuffer_window = Some(minibuffer_window_id);
     Some(saved)
 }
@@ -375,7 +553,7 @@ fn restore_minibuffer_window_in_state(
     active_minibuffer_window: &mut Option<crate::window::WindowId>,
     saved: ActiveMinibufferWindowState,
 ) {
-    if let Some(frame) = frames.get_mut(saved.frame_id) {
+    if let Some(frame) = frames.get_mut(saved.minibuffer_frame.0) {
         if let Some(window) = frame.find_window_mut(saved.minibuffer_window_id)
             && let Some(prev_buffer_id) = saved.previous_minibuffer_buffer
         {
@@ -393,14 +571,17 @@ fn restore_minibuffer_window_in_state(
                 saved.previous_minibuffer_point,
             );
         }
-        let _ = frame.select_window(saved.previous_selected_window);
+        let _ = frame.select_window(saved.previous_minibuffer_frame_selected_window);
     }
-    if frames.get(saved.calling_frame).is_some()
+    if let Some(frame) = frames.get_mut(saved.calling_frame.0) {
+        let _ = frame.select_window(saved.calling_selected_window);
+    }
+    if frames.get(saved.calling_frame.0).is_some()
         && frames
             .selected_frame()
-            .is_none_or(|frame| frame.id != saved.calling_frame)
+            .is_none_or(|frame| frame.id != saved.calling_frame.0)
     {
-        let _ = frames.select_frame(saved.calling_frame);
+        let _ = frames.select_frame(saved.calling_frame.0);
     }
     *minibuffer_selected_window = saved.previous_minibuffer_selected_window;
     *active_minibuffer_window = saved.previous_active_minibuffer_window;
@@ -455,7 +636,7 @@ fn teardown_minibuffer_level_in_state(
     saved: ActiveMinibufferWindowState,
     run_inactive_mode: impl FnOnce() -> EvalResult,
 ) -> EvalResult {
-    let teardown_frame_id = saved.frame_id;
+    let teardown_frame_id = saved.minibuffer_frame.0;
 
     // (R1) Completely reset the expired *Minibuf-N* (overlays + text), then run
     // minibuffer-inactive-mode.
@@ -480,6 +661,98 @@ fn teardown_minibuffer_level_in_state(
     }
 
     inactive_mode_result
+}
+
+/// Execute the typed cleanup registered immediately after minibuffer-window
+/// activation.  It deliberately stores hook failures until every structural
+/// restoration has completed, matching GNU's unwind discipline: an exit hook
+/// cannot strand an active minibuffer or skip the caller-window restoration.
+pub(crate) fn unwind_minibuffer_session(
+    shared: &mut super::eval::Context,
+    state: MinibufferSessionUnwind,
+) -> EvalResult {
+    let exit_hook_result = match shared.run_hook_if_bound("minibuffer-exit-hook") {
+        Ok(value) => Ok(value),
+        Err(Flow::Signal(_)) => Ok(Value::NIL),
+        Err(flow) => Err(flow),
+    };
+
+    if shared.minibuffers.depth() > state.depth_before_entry {
+        match state.disposition {
+            MinibufferExitDisposition::Accepted => {
+                let _ = shared.minibuffers.exit_minibuffer();
+            }
+            MinibufferExitDisposition::Pending | MinibufferExitDisposition::Aborted => {
+                shared.minibuffers.abort_minibuffer();
+            }
+        }
+    }
+    // Defensive recovery for a future nested setup path: specpdl actions
+    // unwind LIFO, so normally the loop executes zero times after the pop
+    // above.  The invariant on return is the captured entry depth.
+    while shared.minibuffers.depth() > state.depth_before_entry {
+        shared.minibuffers.abort_minibuffer();
+    }
+
+    let inactive_mode_result = if let Some(saved) = state.active_window_state {
+        let _ = shared.buffers.switch_current_unrecorded(state.minibuf_id);
+        let shared_ptr = std::ptr::NonNull::from(&mut *shared);
+        teardown_minibuffer_level_in_state(
+            &mut shared.frames,
+            &mut shared.buffers,
+            &mut shared.minibuffer_selected_window,
+            &mut shared.active_minibuffer_window,
+            state.minibuf_id,
+            shared.minibuffers.depth(),
+            saved,
+            move || unsafe {
+                run_minibuffer_mode_if_bound(
+                    shared_ptr.as_ptr().as_mut().unwrap(),
+                    "minibuffer-inactive-mode",
+                )
+            },
+        )
+    } else {
+        erase_expired_minibuffer_buffer_in_state(&mut shared.buffers, state.minibuf_id);
+        run_minibuffer_mode_if_bound(shared, "minibuffer-inactive-mode")
+    };
+
+    if let Some(buffer_id) = state.saved_buffer_id
+        && shared.buffers.get(buffer_id).is_some()
+    {
+        shared.buffers.switch_current(buffer_id);
+    }
+    shared.obarray.set_symbol_value(
+        "minibuffer-depth",
+        Value::fixnum(shared.minibuffers.depth() as i64),
+    );
+    shared
+        .obarray
+        .set_symbol_value("current-prefix-arg", state.saved_current_prefix_arg);
+    shared.obarray.set_symbol_value(
+        "minibuffer-history-variable",
+        state.saved_minibuffer_history_variable,
+    );
+    shared.obarray.set_symbol_value(
+        "minibuffer-history-position",
+        state.saved_minibuffer_history_position,
+    );
+    shared.set_command_key_sequences(state.saved_command_keys, state.saved_raw_command_keys);
+
+    tracing::debug!(
+        "read-from-minibuffer: unwound current_buffer={:?} depth={} active_window={:?} selected_window={:?}",
+        shared.buffers.current_buffer_id(),
+        shared.minibuffers.depth(),
+        shared.active_minibuffer_window,
+        shared
+            .frames
+            .selected_frame()
+            .map(|frame| frame.selected_window)
+    );
+
+    exit_hook_result?;
+    inactive_mode_result?;
+    Ok(Value::NIL)
 }
 
 fn find_or_create_minibuffer_buffer_in_state(
@@ -1094,6 +1367,123 @@ fn read_from_stdin_noninteractive(prompt: &str) -> EvalResult {
     }
 }
 
+/// GNU's `read-minibuffer-restore-windows` policy, made exhaustive at the
+/// runtime boundary shared by interpreted and byte-compiled minibuffer reads.
+///
+/// GNU `read_minibuf` installs the saved configuration as an unwind action, so
+/// it runs after `minibuffer-exit-hook` and minibuffer teardown for normal
+/// return, `C-g`, and errors alike.  Keeping this as an enum prevents a caller
+/// from representing “restoration requested but no configuration captured”.
+#[derive(Clone, Copy, Debug)]
+enum MinibufferWindowRestoration {
+    KeepChanges,
+    Restore(MinibufferWindowRestorationPlan),
+}
+
+/// The one- or two-frame restore stack installed by GNU `read_minibuf`.
+/// Caller is recorded first and the separate minibuffer-owner frame second,
+/// so specpdl LIFO restores the owner frame before the caller configuration.
+#[derive(Clone, Copy, Debug)]
+struct MinibufferWindowRestorationPlan {
+    caller: super::builtins::SavedWindowConfiguration,
+    minibuffer_owner: Option<super::builtins::SavedWindowConfiguration>,
+}
+
+impl MinibufferWindowRestoration {
+    fn capture(eval: &mut super::eval::Context) -> Result<Self, Flow> {
+        if !eval
+            .obarray
+            .symbol_value("read-minibuffer-restore-windows")
+            .is_some_and(|value| value.is_truthy())
+        {
+            return Ok(Self::KeepChanges);
+        }
+
+        let caller = super::builtins::SavedWindowConfiguration::capture(eval, Value::NIL)?;
+        let selected_frame = eval.frames.selected_frame().map(|frame| frame.id);
+        let minibuffer_owner = eval
+            .frames
+            .selected_frame()
+            .and_then(|frame| frame.minibuffer_window)
+            .and_then(|window| eval.frames.find_window_frame_id(window))
+            .filter(|owner| Some(*owner) != selected_frame)
+            .map(|owner| {
+                super::builtins::SavedWindowConfiguration::capture(eval, Value::make_frame(owner.0))
+            })
+            .transpose()?;
+        Ok(Self::Restore(MinibufferWindowRestorationPlan {
+            caller,
+            minibuffer_owner,
+        }))
+    }
+
+    fn record(&self, eval: &mut super::eval::Context) {
+        if let Self::Restore(plan) = *self {
+            eval.record_native_unwind(
+                super::eval::NativeUnwindAction::RestoreWindowConfiguration {
+                    configuration: plan.caller,
+                    options: super::builtins::WindowConfigurationRestoreOptions {
+                        selected_frame: super::builtins::SelectedFrameRestoration::KeepSelected,
+                        minibuffer_window:
+                            super::builtins::MinibufferWindowRestoration::KeepCurrent,
+                    },
+                },
+            );
+            if let Some(configuration) = plan.minibuffer_owner {
+                eval.record_native_unwind(
+                    super::eval::NativeUnwindAction::RestoreWindowConfiguration {
+                        configuration,
+                        options: super::builtins::WindowConfigurationRestoreOptions {
+                            selected_frame: super::builtins::SelectedFrameRestoration::RestoreSaved,
+                            minibuffer_window:
+                                super::builtins::MinibufferWindowRestoration::KeepCurrent,
+                        },
+                    },
+                );
+            }
+        }
+    }
+}
+
+/// Everything GNU captures at the boundary of one interactive read.
+///
+/// Keeping the caller identity beside the configuration stack makes the
+/// required post-unwind frame selection impossible to forget or accidentally
+/// apply before the configurations have been restored.
+#[derive(Clone, Copy, Debug)]
+struct MinibufferInvocationRestoration {
+    calling_frame: Option<CallingFrame>,
+    windows: MinibufferWindowRestoration,
+}
+
+impl MinibufferInvocationRestoration {
+    fn capture(eval: &mut super::eval::Context) -> Result<Self, Flow> {
+        Ok(Self {
+            calling_frame: eval
+                .frames
+                .selected_frame()
+                .map(|frame| CallingFrame(frame.id)),
+            windows: MinibufferWindowRestoration::capture(eval)?,
+        })
+    }
+
+    fn record(&self, eval: &mut super::eval::Context) {
+        self.windows.record(eval);
+    }
+
+    fn select_calling_frame(&self, eval: &mut super::eval::Context) {
+        // GNU `read_minibuf` explicitly reselects the invoking frame after
+        // `unbind_to` has restored the owner/caller configuration stack.  The
+        // restore options intentionally keep the then-current selected frame,
+        // so this final step is distinct from configuration restoration.
+        if let Some(calling_frame) = self.calling_frame
+            && eval.frames.get(calling_frame.0).is_some()
+        {
+            let _ = eval.frames.select_frame(calling_frame.0);
+        }
+    }
+}
+
 pub(crate) fn finish_read_from_minibuffer_in_eval(
     eval: &mut super::eval::Context,
     args: &[Value],
@@ -1104,77 +1494,12 @@ pub(crate) fn finish_read_from_minibuffer_in_eval(
 fn finish_read_from_minibuffer_in_eval_with_setup(
     eval: &mut super::eval::Context,
     args: &[Value],
-    mut run_before_setup_hook: impl FnMut(&mut super::eval::Context) -> EvalResult,
+    run_before_setup_hook: impl FnMut(&mut super::eval::Context) -> EvalResult,
 ) -> EvalResult {
-    // GNU `read_minibuf` saves the OUTER command's `this-command-keys` on
-    // `minibuf_save_list` (minibuf.c:738-739, `Fthis_command_keys_vector ()`)
-    // and `read_minibuf_unwind` restores it on EVERY teardown path
-    // (minibuf.c:1144-1146, `this_command_keys = key_vec`). The minibuffer's
-    // own recursive-edit command loop reads and commits its own key sequences
-    // (the closing RET ends up as `this-command-keys` == [13]); without
-    // restoring the outer keys, the command that invoked the minibuffer (e.g.
-    // `query-replace`/`perform-replace`) would see that stale [13] in its next
-    // `read-key`, whose idle timer (subr.el:3648-3665) then throws immediately
-    // and leaks the user's real keystroke into the buffer. Snapshot here and
-    // restore unconditionally after the recursive edit so the outer
-    // `this-command-keys` survives the minibuffer recursion, exactly like GNU.
-    let saved_command_keys = eval.read_command_keys().to_vec();
-    let saved_raw_command_keys = eval.read_raw_command_keys().to_vec();
-
-    let eval_ptr = std::ptr::NonNull::from(&mut *eval);
-    let command_loop_depth = eval.recursive_command_loop_depth();
-    let result = finish_read_from_minibuffer_in_state_with_recursive_edit(
-        &mut eval.obarray,
-        &mut eval.buffers,
-        &mut eval.frames,
-        &mut eval.minibuffers,
-        &mut eval.minibuffer_selected_window,
-        &mut eval.active_minibuffer_window,
-        command_loop_depth,
-        args,
-        move || unsafe {
-            run_minibuffer_mode_if_bound(eval_ptr.as_ptr().as_mut().unwrap(), "minibuffer-mode")
-        },
-        move || unsafe {
-            let eval = eval_ptr.as_ptr().as_mut().unwrap();
-            run_before_setup_hook(eval)?;
-            eval.run_hook_if_bound("minibuffer-setup-hook")
-        },
-        move || unsafe {
-            match eval_ptr
-                .as_ptr()
-                .as_mut()
-                .unwrap()
-                .run_hook_if_bound("minibuffer-exit-hook")
-            {
-                Ok(value) => Ok(value),
-                Err(Flow::Signal(_)) => Ok(Value::NIL),
-                Err(flow) => Err(flow),
-            }
-        },
-        move || unsafe {
-            run_minibuffer_mode_if_bound(
-                eval_ptr.as_ptr().as_mut().unwrap(),
-                "minibuffer-inactive-mode",
-            )
-        },
-        move || unsafe {
-            eval_ptr
-                .as_ptr()
-                .as_mut()
-                .unwrap()
-                .minibuffer_command_loop_inner()
-        },
-    );
-    // Restore the outer command's `this-command-keys` (GNU
-    // `read_minibuf_unwind`, minibuf.c:1144-1146). Done on every path — normal
-    // return, `'exit` throw, and error — so the invoking command's key context
-    // is never clobbered by the minibuffer's own command-loop reads.
-    eval.set_command_key_sequences(saved_command_keys, saved_raw_command_keys);
-    if result.is_ok() {
-        eval.note_interactive_minibuffer_read();
-    }
-    result
+    // There is one production lifecycle implementation for interpreted and
+    // byte-compiled callers.  Keeping the evaluator path as a thin adapter
+    // prevents the two paths from acquiring different early-return holes.
+    finish_read_from_minibuffer_in_vm_runtime_interactive(eval, args, run_before_setup_hook)
 }
 
 pub(crate) fn builtin_read_from_minibuffer_in_runtime(
@@ -1194,282 +1519,6 @@ pub(crate) fn builtin_read_from_minibuffer_in_runtime(
             &crate::emacs_core::emacs_char::to_utf8_lossy(prompt.as_bytes()),
         )
         .map(Some),
-    }
-}
-
-/// Shared runtime setup/teardown for `read-from-minibuffer`.
-///
-/// GNU's `read_minibuf` is a C/runtime path that only enters the command
-/// loop for the actual recursive edit. This helper mirrors that shape: it
-/// performs buffer/window setup and final result handling in shared runtime
-/// state, and delegates only the recursive edit itself to the callback.
-#[allow(clippy::too_many_arguments)] // mirrors GNU read_minibuf's split runtime state
-pub(crate) fn finish_read_from_minibuffer_in_state_with_recursive_edit(
-    obarray: &mut super::symbol::Obarray,
-    buffers: &mut crate::buffer::BufferManager,
-    frames: &mut crate::window::FrameManager,
-    minibuffers: &mut crate::emacs_core::minibuffer::MinibufferManager,
-    minibuffer_selected_window: &mut Option<crate::window::WindowId>,
-    active_minibuffer_window: &mut Option<crate::window::WindowId>,
-    recursive_depth: usize,
-    args: &[Value],
-    mut run_active_mode: impl FnMut() -> EvalResult,
-    mut run_setup_hook: impl FnMut() -> EvalResult,
-    mut run_exit_hook: impl FnMut() -> EvalResult,
-    run_inactive_mode: impl FnOnce() -> EvalResult,
-    mut run_recursive_edit: impl FnMut() -> EvalResult,
-) -> EvalResult {
-    // Check inhibit-interaction — GNU Emacs signals an error when any
-    // interactive read is attempted while this variable is non-nil.
-    if obarray
-        .symbol_value("inhibit-interaction")
-        .is_some_and(|v| v.is_truthy())
-    {
-        return Err(signal(
-            "inhibited-interaction",
-            vec![Value::string(
-                "Attempt to interact with user while inhibit-interaction is non-nil",
-            )],
-        ));
-    }
-
-    let prompt = expect_lisp_string(&args[0])?;
-    let prompt_display = crate::emacs_core::emacs_char::to_utf8_lossy(prompt.as_bytes());
-    // Extract optional arguments
-    let initial_input = args.get(1).and_then(reader_initial_input_lisp_string);
-    let keymap_arg = args.get(2).copied().unwrap_or(Value::NIL);
-    let read_arg = args.get(3).copied().unwrap_or(Value::NIL);
-    let history_spec = minibuffer_history_spec(args.get(4));
-    let default_val = args.get(5).copied().unwrap_or(Value::NIL);
-
-    let recursive_policy = if obarray
-        .symbol_value("enable-recursive-minibuffers")
-        .is_some_and(|value| value.is_truthy())
-    {
-        RecursiveMinibufferPolicy::Allow
-    } else {
-        RecursiveMinibufferPolicy::Reject
-    };
-    // GNU checks this before selecting, clearing, or changing the mode of a
-    // minibuffer buffer. Keep admission before every externally visible setup
-    // mutation so rejection leaves the active level untouched.
-    let entry_permit = minibuffers
-        .prepare_entry(recursive_policy)
-        .map_err(MinibufferEntryRejection::into_flow)?;
-
-    // Save state.  GNU read_minibuf saves Vcurrent_prefix_arg in
-    // minibuf_save_list and restores it during read_minibuf_unwind;
-    // minibuffer commands may clobber it while reading input.
-    let saved_buffer_id = buffers.current_buffer().map(|b| b.id);
-    let caller_allows_text_properties =
-        minibuffer_text_properties_enabled_in_buffer(obarray, buffers, saved_buffer_id);
-    let saved_current_prefix_arg = obarray
-        .symbol_value("current-prefix-arg")
-        .copied()
-        .unwrap_or(Value::NIL);
-    let saved_minibuffer_history_variable = obarray
-        .symbol_value("minibuffer-history-variable")
-        .copied()
-        .unwrap_or(Value::from_sym_id(intern("minibuffer-history")));
-    let saved_minibuffer_history_position = obarray
-        .symbol_value("minibuffer-history-position")
-        .copied()
-        .unwrap_or(Value::NIL);
-
-    // GNU `read_minibuf` captures the caller's directory before switching to
-    // *Minibuf-N*, then installs it after minibuffer-mode has reset locals.
-    let ambient_directory = minibuffer_ambient_directory_in_state(buffers);
-
-    // Find or create *Minibuf-N* buffer
-    let minibuf_depth = entry_permit.depth();
-    let minibuf_id = find_or_create_minibuffer_buffer_in_state(buffers, minibuf_depth);
-
-    let active_window_state = activate_minibuffer_window_in_state(
-        frames,
-        buffers,
-        minibuffer_selected_window,
-        active_minibuffer_window,
-        minibuf_id,
-    );
-    if active_window_state.is_none() {
-        // Batch/no-frame fallback: still switch current buffer so tests without
-        // a realized GUI frame can exercise the minibuffer logic.
-        buffers.switch_current(minibuf_id);
-    }
-    run_active_mode()?;
-    install_minibuffer_ambient_directory_in_state(buffers, minibuf_id, ambient_directory);
-
-    // Clear the minibuffer buffer and insert prompt + initial input
-    let prompt_properties = obarray
-        .symbol_value("minibuffer-prompt-properties")
-        .copied()
-        .unwrap_or(Value::NIL);
-    super::minibuffer::install_minibuffer_buffer_text(
-        buffers,
-        minibuf_id,
-        &prompt,
-        initial_input.as_ref(),
-        prompt_properties,
-    );
-    tracing::debug!(
-        "read-from-minibuffer: prompt={:?} minibuf_id={:?} current_buffer={:?} active_window={:?} selected_window={:?}",
-        prompt_display,
-        minibuf_id,
-        buffers.current_buffer_id(),
-        *active_minibuffer_window,
-        frames.selected_frame().map(|frame| frame.selected_window)
-    );
-
-    let state = minibuffers.enter_with_permit(
-        entry_permit,
-        minibuf_id,
-        &prompt,
-        initial_input.as_ref(),
-        history_spec.history_name,
-    );
-    state.command_loop_depth = recursive_depth;
-
-    // Set local keymap: use KEYMAP arg if provided, otherwise minibuffer-local-map
-    let minibuf_keymap = if !keymap_arg.is_nil() {
-        keymap_arg
-    } else {
-        obarray
-            .symbol_value("minibuffer-local-map")
-            .copied()
-            .unwrap_or(Value::NIL)
-    };
-    let _ = buffers.set_current_local_map(minibuf_keymap);
-
-    // Set minibuffer-related variables
-    obarray.set_symbol_value("minibuffer-prompt", Value::heap_string(prompt.clone()));
-    obarray.set_symbol_value("minibuffer-depth", Value::fixnum(minibuf_depth as i64));
-    obarray.set_symbol_value("minibuffer-history-variable", history_spec.variable_value);
-    obarray.set_symbol_value("minibuffer-history-position", history_spec.position);
-
-    run_setup_hook()?;
-
-    // Enter recursive edit — the command loop runs until exit-minibuffer throws 'exit.
-    let edit_result = run_recursive_edit();
-
-    // Read the minibuffer contents (everything after the prompt)
-    // GNU `read_minibuf` preserves properties when the option was enabled in
-    // the calling buffer or was enabled buffer-locally by minibuffer setup.
-    let _ = buffers.switch_current_unrecorded(minibuf_id);
-    let preserve_text_properties = caller_allows_text_properties
-        || minibuffer_text_properties_enabled_in_buffer(obarray, buffers, Some(minibuf_id));
-    let result_text = super::minibuffer::minibuffer_contents_lisp_string_in_state(
-        obarray,
-        buffers,
-        minibuffers,
-        preserve_text_properties,
-    )?;
-
-    let exit_hook_result = match run_exit_hook() {
-        Err(Flow::Signal(_)) => Ok(Value::NIL),
-        other => other,
-    };
-
-    let exited_normally = match &edit_result {
-        Ok(_) => true,
-        Err(Flow::Throw { tag, value }) if tag.is_symbol_named("exit") => !value.is_truthy(),
-        _ => false,
-    };
-
-    match &edit_result {
-        Ok(_) => {
-            let _ = minibuffers.exit_minibuffer();
-        }
-        Err(Flow::Throw { tag, value }) if tag.is_symbol_named("exit") => {
-            if value.is_truthy() {
-                minibuffers.abort_minibuffer();
-            } else {
-                let _ = minibuffers.exit_minibuffer();
-            }
-        }
-        Err(_) => {
-            minibuffers.abort_minibuffer();
-        }
-    }
-
-    // Restore state. Route the full teardown (reset expired buffer + overlays,
-    // inactive-mode, restore window buffer, force-resize at the outermost level)
-    // through the single `teardown_minibuffer_level_in_state` boundary so exit
-    // and abort tear down identically (GNU runs the same unwind for both).
-    let depth_after_pop = minibuffers.depth();
-    let inactive_mode_result = if let Some(saved) = active_window_state {
-        let _ = buffers.switch_current_unrecorded(minibuf_id);
-        teardown_minibuffer_level_in_state(
-            frames,
-            buffers,
-            minibuffer_selected_window,
-            active_minibuffer_window,
-            minibuf_id,
-            depth_after_pop,
-            saved,
-            run_inactive_mode,
-        )
-    } else {
-        Ok(Value::NIL)
-    };
-    if let Some(buf_id) = saved_buffer_id {
-        buffers.switch_current(buf_id);
-    }
-    tracing::debug!(
-        "read-from-minibuffer: restored current_buffer={:?} active_window={:?} selected_window={:?}",
-        buffers.current_buffer_id(),
-        *active_minibuffer_window,
-        frames.selected_frame().map(|frame| frame.selected_window)
-    );
-    obarray.set_symbol_value(
-        "minibuffer-depth",
-        Value::fixnum(minibuffers.depth() as i64),
-    );
-    obarray.set_symbol_value("current-prefix-arg", saved_current_prefix_arg);
-    obarray.set_symbol_value(
-        "minibuffer-history-variable",
-        saved_minibuffer_history_variable,
-    );
-    obarray.set_symbol_value(
-        "minibuffer-history-position",
-        saved_minibuffer_history_position,
-    );
-    exit_hook_result?;
-    inactive_mode_result?;
-
-    if exited_normally
-        && history_add_new_input_enabled(obarray)
-        && let Some(history_name) = history_spec.history_name
-    {
-        add_to_minibuffer_history_variable(obarray, history_name, &result_text);
-        let max_length = minibuffer_history_limit(obarray, history_name).unwrap_or(usize::MAX);
-        minibuffers.add_to_history_lisp(history_name, result_text.clone(), max_length);
-    }
-
-    // Handle the recursive edit result
-    match edit_result {
-        Ok(_) | Err(Flow::Throw { .. }) => {
-            // Normal exit (throw 'exit from exit-minibuffer)
-            // If READ arg is non-nil, evaluate the result as a Lisp expression
-            if !read_arg.is_nil() && !result_text.as_bytes().is_empty() {
-                // READ is non-nil: parse the result string as a Lisp expression
-                // (like calling (read STRING)) and return the parsed object.
-                let read_result =
-                    read_from_string_impl(obarray, vec![Value::heap_string(result_text.clone())])?;
-                // read-from-string returns (OBJECT . END-POS), extract OBJECT
-                if read_result.is_cons() {
-                    return Ok(read_result.cons_car());
-                }
-                return Ok(read_result);
-            }
-
-            // If result is empty and DEFAULT is provided, use it
-            if result_text.as_bytes().is_empty() && !default_val.is_nil() {
-                return Ok(default_val);
-            }
-
-            Ok(Value::heap_string(result_text))
-        }
-        Err(flow) => Err(flow),
     }
 }
 
@@ -1738,12 +1787,20 @@ pub(crate) fn finish_read_from_minibuffer_in_vm_runtime(
 fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     shared: &mut super::eval::Context,
     args: &[Value],
-    mut run_before_setup_hook: impl FnMut(&mut super::eval::Context) -> EvalResult,
+    run_before_setup_hook: impl FnMut(&mut super::eval::Context) -> EvalResult,
 ) -> EvalResult {
     if let Some(result) = builtin_read_from_minibuffer_in_runtime(shared, args)? {
         return Ok(result);
     }
 
+    finish_read_from_minibuffer_in_vm_runtime_interactive(shared, args, run_before_setup_hook)
+}
+
+fn finish_read_from_minibuffer_in_vm_runtime_interactive(
+    shared: &mut super::eval::Context,
+    args: &[Value],
+    mut run_before_setup_hook: impl FnMut(&mut super::eval::Context) -> EvalResult,
+) -> EvalResult {
     // Check inhibit-interaction — GNU Emacs signals an error when any
     // interactive read is attempted while this variable is non-nil.
     if shared
@@ -1767,19 +1824,34 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     let history_spec = minibuffer_history_spec(args.get(4));
     let default_val = args.get(5).copied().unwrap_or(Value::NIL);
 
-    let recursive_policy = if shared
-        .obarray
-        .symbol_value("enable-recursive-minibuffers")
-        .is_some_and(|value| value.is_truthy())
-    {
-        RecursiveMinibufferPolicy::Allow
-    } else {
-        RecursiveMinibufferPolicy::Reject
-    };
-    let entry_permit = shared
-        .minibuffers
-        .prepare_entry(recursive_policy)
-        .map_err(MinibufferEntryRejection::into_flow)?;
+    let result = shared.with_unwind_scope(|shared| {
+        // Root every Lisp argument through both lifecycle unwind and the
+        // post-unwind history/parser phase.  Native argument slices are not GC
+        // roots by themselves.
+        for root in args.iter().copied() {
+            shared.push_specpdl_root(root);
+        }
+
+        let restoration = MinibufferInvocationRestoration::capture(shared)?;
+        let lifecycle_result = shared.with_unwind_scope(|shared| {
+            // Window configurations are below the session action on the inner
+            // specpdl stack, so teardown runs first and configurations follow.
+            restoration.record(shared);
+
+            let recursive_policy = if shared
+                .obarray
+                .symbol_value("enable-recursive-minibuffers")
+                .is_some_and(|value| value.is_truthy())
+            {
+                RecursiveMinibufferPolicy::Allow
+            } else {
+                RecursiveMinibufferPolicy::Reject
+            };
+        let depth_before_entry = shared.minibuffers.depth();
+        let entry_permit = shared
+            .minibuffers
+            .prepare_entry(recursive_policy)
+            .map_err(MinibufferEntryRejection::into_flow)?;
 
     // Save state.  GNU read_minibuf saves Vcurrent_prefix_arg in
     // minibuf_save_list and restores it during read_minibuf_unwind;
@@ -1834,6 +1906,23 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     if active_window_state.is_none() {
         shared.buffers.switch_current(minibuf_id);
     }
+    let session_unwind = MinibufferSessionUnwind {
+        minibuf_id,
+        depth_before_entry,
+        active_window_state,
+        saved_buffer_id,
+        saved_current_prefix_arg,
+        saved_minibuffer_history_variable,
+        saved_minibuffer_history_position,
+        saved_command_keys,
+        saved_raw_command_keys,
+        disposition: MinibufferExitDisposition::Pending,
+    };
+    let session_token = shared.record_native_unwind(
+        super::eval::NativeUnwindAction::MinibufferSession {
+            state: Box::new(session_unwind),
+        },
+    );
     run_minibuffer_mode_if_bound(shared, "minibuffer-mode")?;
     install_minibuffer_ambient_directory_in_state(
         &mut shared.buffers,
@@ -1901,152 +1990,60 @@ fn finish_read_from_minibuffer_in_vm_runtime_with_setup(
     run_before_setup_hook(shared)?;
     shared.run_hook_if_bound("minibuffer-setup-hook")?;
 
-    let gc_roots = shared.save_specpdl_roots();
-    for root in args {
-        shared.push_specpdl_root(*root);
-    }
-    let edit_result = shared.minibuffer_command_loop_inner();
-    shared.restore_specpdl_roots(gc_roots);
-
-    let _ = shared.buffers.switch_current_unrecorded(minibuf_id);
-    let preserve_text_properties = caller_allows_text_properties
-        || minibuffer_text_properties_enabled_in_buffer(
-            &shared.obarray,
-            &shared.buffers,
-            Some(minibuf_id),
-        );
-    let result_text = super::minibuffer::minibuffer_contents_lisp_string_in_state(
-        &shared.obarray,
-        &shared.buffers,
-        &shared.minibuffers,
-        preserve_text_properties,
-    )?;
-
-    let exit_hook_result = match shared.run_hook_if_bound("minibuffer-exit-hook") {
-        Ok(value) => Ok(value),
-        Err(Flow::Signal(_)) => Ok(Value::NIL),
-        Err(flow) => Err(flow),
-    };
-
-    let exited_normally = match &edit_result {
-        Ok(_) => true,
-        Err(Flow::Throw { tag, value }) if tag.is_symbol_named("exit") => !value.is_truthy(),
-        _ => false,
-    };
-
-    match &edit_result {
-        Ok(_) => {
-            let _ = shared.minibuffers.exit_minibuffer();
+    let command_outcome =
+        MinibufferCommandOutcome::from_recursive_edit(shared.minibuffer_command_loop_inner());
+    match shared.native_unwind_action_mut(session_token) {
+        Some(super::eval::NativeUnwindAction::MinibufferSession { state }) => {
+            state.disposition = command_outcome.disposition();
         }
-        Err(Flow::Throw { tag, value }) if tag.is_symbol_named("exit") => {
-            if value.is_truthy() {
-                shared.minibuffers.abort_minibuffer();
-            } else {
-                let _ = shared.minibuffers.exit_minibuffer();
-            }
-        }
-        Err(_) => {
-            shared.minibuffers.abort_minibuffer();
+        other => {
+            debug_assert!(false, "minibuffer unwind action disappeared: {other:?}");
         }
     }
 
-    // Route the full teardown through the single
-    // `teardown_minibuffer_level_in_state` boundary (the same one the eval-side
-    // `finish_read_from_minibuffer_in_state_with_recursive_edit` uses) so exit
-    // and abort are provably identical here too. The `minibuffer-inactive-mode`
-    // hook needs `&mut shared`, while the boundary borrows individual `shared`
-    // fields; mirror this file's established pattern and run the hook through a
-    // raw pointer so the two borrows do not alias at the type level.
-    let depth_after_pop = shared.minibuffers.depth();
-    let inactive_mode_result = if let Some(saved) = active_window_state {
-        let _ = shared.buffers.switch_current_unrecorded(minibuf_id);
-        let shared_ptr = std::ptr::NonNull::from(&mut *shared);
-        teardown_minibuffer_level_in_state(
-            &mut shared.frames,
-            &mut shared.buffers,
-            &mut shared.minibuffer_selected_window,
-            &mut shared.active_minibuffer_window,
-            minibuf_id,
-            depth_after_pop,
-            saved,
-            move || unsafe {
-                run_minibuffer_mode_if_bound(
-                    shared_ptr.as_ptr().as_mut().unwrap(),
-                    "minibuffer-inactive-mode",
-                )
-            },
-        )
-    } else {
-        Ok(Value::NIL)
-    };
-    if let Some(buf_id) = saved_buffer_id {
-        shared.buffers.switch_current(buf_id);
-    }
-    tracing::debug!(
-        "read-from-minibuffer: restored current_buffer={:?} active_window={:?} selected_window={:?}",
-        shared.buffers.current_buffer_id(),
-        shared.active_minibuffer_window,
-        shared
-            .frames
-            .selected_frame()
-            .map(|frame| frame.selected_window)
-    );
-    shared.obarray.set_symbol_value(
-        "minibuffer-depth",
-        Value::fixnum(shared.minibuffers.depth() as i64),
-    );
-    shared
-        .obarray
-        .set_symbol_value("current-prefix-arg", saved_current_prefix_arg);
-    // Restore the invoking command's `this-command-keys` (GNU
-    // `read_minibuf_unwind`, minibuf.c:1144-1146). Placed before the `?`
-    // propagations below and after the (non-`?`) `edit_result` teardown so it
-    // runs on every exit path: normal return, `'exit` throw, and error.
-    shared.set_command_key_sequences(saved_command_keys, saved_raw_command_keys);
-    shared.obarray.set_symbol_value(
-        "minibuffer-history-variable",
-        saved_minibuffer_history_variable,
-    );
-    shared.obarray.set_symbol_value(
-        "minibuffer-history-position",
-        saved_minibuffer_history_position,
-    );
-    exit_hook_result?;
-    inactive_mode_result?;
-
-    if exited_normally
-        && history_add_new_input_enabled(&shared.obarray)
-        && let Some(history_name) = history_spec.history_name
-    {
-        add_to_minibuffer_history_variable(&mut shared.obarray, history_name, &result_text);
-        let max_length =
-            minibuffer_history_limit(&shared.obarray, history_name).unwrap_or(usize::MAX);
-        shared
-            .minibuffers
-            .add_to_history_lisp(history_name, result_text.clone(), max_length);
-    }
-
-    let result = match edit_result {
-        Ok(_) | Err(Flow::Throw { .. }) => {
-            if !read_arg.is_nil() && !result_text.as_bytes().is_empty() {
-                let read_result = read_from_string_impl(
+    match command_outcome {
+        MinibufferCommandOutcome::Accepted => {
+            let _ = shared.buffers.switch_current_unrecorded(minibuf_id);
+            let preserve_text_properties = caller_allows_text_properties
+                || minibuffer_text_properties_enabled_in_buffer(
                     &shared.obarray,
-                    vec![Value::heap_string(result_text.clone())],
-                )?;
-                if read_result.is_cons() {
-                    return Ok(read_result.cons_car());
-                }
-                return Ok(read_result);
-            }
-
-            if result_text.as_bytes().is_empty() && !default_val.is_nil() {
-                return Ok(default_val);
-            }
-
-            Ok(Value::heap_string(result_text))
+                    &shared.buffers,
+                    Some(minibuf_id),
+                );
+            Ok(Value::heap_string(
+                super::minibuffer::minibuffer_contents_lisp_string_in_state(
+                    &shared.obarray,
+                    &shared.buffers,
+                    &shared.minibuffers,
+                    preserve_text_properties,
+                )?,
+            ))
         }
-        Err(flow) => Err(flow),
-    };
+        MinibufferCommandOutcome::Aborted(flow) => Err(flow),
+    }
+        });
+
+        // This is deliberately between the inner lifecycle scope and history:
+        // GNU restores both configurations, then reselects the caller, then
+        // calls `add-to-history` in the restored buffer-local environment.
+        restoration.select_calling_frame(shared);
+        // `with_unwind_scope` roots the tagged result while exit hooks and
+        // window restoration allocate, so string properties cannot retain
+        // otherwise-unreachable Lisp objects through an untraced Rust value.
+        let result_value = lifecycle_result?;
+        let result_text = result_value
+            .as_lisp_string()
+            .expect("an accepted minibuffer command must return its contents")
+            .clone();
+        if history_add_new_input_enabled(&shared.obarray)
+            && let Some(history_name) = history_spec.history_name
+            && let Some(history_entry) = minibuffer_history_entry(&result_text, default_val)
+        {
+            add_minibuffer_history_after_unwind(shared, history_name, &history_entry)?;
+        }
+
+        finish_minibuffer_result_after_unwind(shared, result_text, read_arg, default_val)
+    });
     if result.is_ok() {
         shared.note_interactive_minibuffer_read();
     }
