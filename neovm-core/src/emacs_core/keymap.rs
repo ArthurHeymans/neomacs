@@ -857,9 +857,46 @@ fn maybe_resolve_keyelt(binding: Value, resolve_keyelt: bool) -> Value {
     }
 }
 
+/// The single canonical event index GNU's `access_keymap_1` compares against
+/// every entry in a keymap spine.
+///
+/// Keeping this as a distinct type makes it impossible for recursive member
+/// and parent scans to accidentally repeat event-head extraction or modifier
+/// canonicalization.  Stored alist keys are already canonicalized by
+/// `store_in_keymap`; repairing arbitrary keys while reading would both cost a
+/// parse per comparison and diverge from GNU.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct KeymapLookupEvent(Value);
+
+impl KeymapLookupEvent {
+    fn from_event(event: Value) -> Self {
+        let head = if event.is_cons() {
+            event.cons_car()
+        } else {
+            event
+        };
+        let canonical = match head.kind() {
+            ValueKind::Symbol(_) => reorder_event_symbol_modifiers(head),
+            // GNU clears bits above the event representation before scanning
+            // (`CHAR_META | (CHAR_META - 1)`, src/keymap.c).
+            ValueKind::Fixnum(code) => Value::fixnum(code & (KEY_CHAR_META | (KEY_CHAR_META - 1))),
+            _ => head,
+        };
+        Self(canonical)
+    }
+
+    fn value(self) -> Value {
+        self.0
+    }
+
+    fn matches_stored_key(self, stored: Value) -> bool {
+        eq_value(&stored, &self.0)
+    }
+}
+
 fn lookup_in_keymap_level_impl(
     keymap: &Value,
-    event: &Value,
+    event: KeymapLookupEvent,
     noinherit: bool,
     t_ok: bool,
     resolve_keyelt: bool,
@@ -885,12 +922,12 @@ fn lookup_in_keymap_level_impl(
         // GNU keymap.c:441-450: nil in char-table means unbound;
         // Qt means explicitly nil binding.
         if is_char_table(&entry_car) {
-            if let Some(code) = event.as_fixnum()
+            if let Some(code) = event.value().as_fixnum()
                 && (code & KEY_CHAR_MOD_MASK) == 0
             {
                 let base = code & KEY_CHAR_CODE_MASK;
                 if (0..=0x3FFFFF).contains(&base) {
-                    let result = builtin_char_table_range(vec![entry_car, *event], None)
+                    let result = builtin_char_table_range(vec![entry_car, event.value()], None)
                         .unwrap_or(Value::NIL);
                     if !result.is_nil() {
                         // Qt in char-table means explicitly nil binding
@@ -921,7 +958,7 @@ fn lookup_in_keymap_level_impl(
         // Vector element in keymap spine: maps char codes 0..len to
         // bindings by index. Matches GNU keymap.c:431-434.
         if entry_car.is_vector() {
-            if let Some(code) = event.as_fixnum()
+            if let Some(code) = event.value().as_fixnum()
                 && code >= 0
             {
                 let idx = code as usize;
@@ -978,7 +1015,7 @@ fn lookup_in_keymap_level_impl(
         if entry_car.is_cons() {
             let binding_car = entry_car.cons_car();
             let binding_cdr = entry_car.cons_cdr();
-            if events_match(&binding_car, event) {
+            if event.matches_stored_key(binding_car) {
                 let val = maybe_resolve_keyelt(binding_cdr, resolve_keyelt);
                 if val.is_nil() {
                     nil_binding_found = true;
@@ -1032,7 +1069,7 @@ fn lookup_in_keymap_level_impl(
 /// parents that follow, while no entry at all lets them through.
 fn access_keymap_in_member(
     member: &Value,
-    event: &Value,
+    event: KeymapLookupEvent,
     noinherit: bool,
     t_ok: bool,
     resolve_keyelt: bool,
@@ -1049,7 +1086,7 @@ fn access_keymap_in_member(
         // same event, exactly as it would if the member were looked up directly.
         Some(binding) if is_list_keymap(&binding) && !parent.is_nil() => {
             let parent_binding =
-                list_keymap_access_impl(&parent, event, false, t_ok, resolve_keyelt, obarray);
+                list_keymap_access_with_event(&parent, event, false, t_ok, resolve_keyelt, obarray);
             if is_list_keymap(&parent_binding) {
                 Some(compose_prefix_with_parent_keymap(&binding, &parent_binding))
             } else {
@@ -1162,9 +1199,9 @@ pub(crate) fn list_keymap_lookup_one_unresolved_t_ok_in_obarray(
     list_keymap_access_unresolved_in_obarray(keymap, event, false, true, obarray)
 }
 
-fn list_keymap_access_impl(
+fn list_keymap_access_with_event(
     keymap: &Value,
-    event: &Value,
+    event: KeymapLookupEvent,
     noinherit: bool,
     t_ok: bool,
     resolve_keyelt: bool,
@@ -1193,7 +1230,7 @@ fn list_keymap_access_impl(
                     // create a composed keymap: (keymap child-sub . parent-sub)
                     let parent = get_keymap_tail_parent(&current);
                     if !parent.is_nil() {
-                        let parent_binding = list_keymap_access_impl(
+                        let parent_binding = list_keymap_access_with_event(
                             &parent,
                             event,
                             false,
@@ -1222,6 +1259,24 @@ fn list_keymap_access_impl(
             }
         }
     }
+}
+
+fn list_keymap_access_impl(
+    keymap: &Value,
+    event: &Value,
+    noinherit: bool,
+    t_ok: bool,
+    resolve_keyelt: bool,
+    obarray: Option<&Obarray>,
+) -> Value {
+    list_keymap_access_with_event(
+        keymap,
+        KeymapLookupEvent::from_event(*event),
+        noinherit,
+        t_ok,
+        resolve_keyelt,
+        obarray,
+    )
 }
 
 fn accumulate_prefix_keymap(existing: Option<Value>, next: Value) -> Value {
@@ -1254,21 +1309,6 @@ fn compose_prefix_with_parent_keymap(child: &Value, parent: &Value) -> Value {
     } else {
         compose_prefix_keymaps(child, parent)
     }
-}
-
-/// Check if two event values match for keymap lookup purposes.
-fn events_match(a: &Value, b: &Value) -> bool {
-    let normalize = |value: &Value| {
-        if value.is_cons() {
-            reorder_event_symbol_modifiers(value.cons_car())
-        } else {
-            reorder_event_symbol_modifiers(*value)
-        }
-    };
-    let a = normalize(a);
-    let b = normalize(b);
-
-    eq_value(&a, &b)
 }
 
 pub(crate) fn expand_meta_prefix_char_events_in_obarray(
@@ -1639,7 +1679,7 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
                         return;
                     }
                 }
-            } else if events_match(&binding_car, &event) {
+            } else if eq_value(&binding_car, &event) {
                 if remove {
                     // GNU uses `Fdelq (elt, insertion_point)`: remove exactly
                     // this binding cons while preserving earlier alist entries

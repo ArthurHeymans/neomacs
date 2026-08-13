@@ -492,6 +492,29 @@ fn list_keymap_define_and_lookup() {
     assert_eq!(result.as_symbol_name(), Some("newline"));
 }
 
+/// GNU `access_keymap_1` canonicalizes the lookup index once before scanning,
+/// while `store_in_keymap` canonicalizes keys when they enter a keymap.  It
+/// does not repair a noncanonical alist entry manufactured directly by Lisp.
+/// Consequently both written orders miss `(M-C-f1 . hit)`, while `define-key`
+/// would have stored the key as `C-M-f1`.
+#[test]
+fn lookup_does_not_canonicalize_each_stored_alist_key() {
+    crate::test_utils::init_test_tracing();
+    let manual = Value::list(vec![
+        Value::symbol("keymap"),
+        Value::cons(Value::symbol("M-C-f1"), Value::symbol("hit")),
+    ]);
+
+    assert!(
+        list_keymap_lookup_one(&manual, &Value::symbol("C-M-f1")).is_nil(),
+        "GNU canonicalizes the lookup event, not a manually stored alist key"
+    );
+    assert!(
+        list_keymap_lookup_one(&manual, &Value::symbol("M-C-f1")).is_nil(),
+        "the noncanonical lookup spelling is canonicalized before the scan"
+    );
+}
+
 #[test]
 fn list_keymap_define_inserts_bindings_before_prompt_like_gnu() {
     crate::test_utils::init_test_tracing();
