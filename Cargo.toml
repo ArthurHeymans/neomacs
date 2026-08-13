@@ -253,11 +253,28 @@ strip = "debuginfo"
 [profile.release.package.neovm-oracle-tests]
 opt-level = 0
 
-# Nix enables `_FORTIFY_SOURCE`, which rejects the C dependency's default dev
-# `-O0` before jemalloc's configure probes can run. Keep Rust dev builds
-# unchanged while giving only jemalloc's native build the required optimization.
-[profile.dev.package.tikv-jemalloc-sys]
-opt-level = 1
+# Keep workspace crates fast to compile and easy to debug, while building their
+# third-party dependencies with release-like code generation. Cargo package
+# overrides cannot set `lto`, `panic`, or `rpath`, so those continue to inherit
+# from the dev profile.
+[profile.dev.package."*"]
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+codegen-units = 16
+incremental = false
+
+# Apply the same policy to workspace build scripts, proc macros, and their
+# dependencies. Non-workspace build dependencies already match the package
+# wildcard above; this also covers build targets owned by workspace members.
+[profile.dev.build-override]
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+codegen-units = 16
+incremental = false
 
 # Optimized build driven by a PGO profile. Same codegen settings as release,
 # but cargo gives it its own target/release-pgo directory, so a PGO build never
