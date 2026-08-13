@@ -470,6 +470,51 @@ fn uninterned_symbol_name_value_roots_are_heap_owned() {
 }
 
 #[test]
+fn shared_symbol_name_object_is_one_gc_root_per_heap() {
+    crate::test_utils::init_test_tracing();
+
+    let mut heap = crate::tagged::gc::TaggedHeap::new();
+    crate::tagged::gc::set_tagged_heap(&mut heap);
+    let heap_id = crate::tagged::gc::current_tagged_heap_identity().unwrap();
+    let name = crate::emacs_core::value::Value::string("shared-symbol-name-root");
+
+    let first = make_uninterned_symbol_with_name_value(name);
+    let second = make_uninterned_symbol_with_name_value(name);
+    assert_ne!(first, second, "make-symbol identity must remain unique");
+    assert_eq!(resolve_sym_name_value(first), Some(name));
+    assert_eq!(resolve_sym_name_value(second), Some(name));
+
+    let equal_but_distinct_name =
+        crate::emacs_core::value::Value::string("shared-symbol-name-root");
+    assert_ne!(
+        equal_but_distinct_name.bits(),
+        name.bits(),
+        "the regression fixture needs two equal strings with distinct identities"
+    );
+    let third = make_uninterned_symbol_with_name_value(equal_but_distinct_name);
+    assert_eq!(resolve_sym_name_value(third), Some(equal_but_distinct_name));
+
+    let mut roots = Vec::new();
+    collect_symbol_name_gc_roots(&mut roots, heap_id);
+    let shared_occurrences = roots
+        .iter()
+        .filter(|root| root.bits() == name.bits())
+        .count();
+    assert_eq!(
+        shared_occurrences, 1,
+        "one shared Lisp name object should occupy one GC root slot"
+    );
+    let distinct_occurrences = roots
+        .iter()
+        .filter(|root| root.bits() == equal_but_distinct_name.bits())
+        .count();
+    assert_eq!(
+        distinct_occurrences, 1,
+        "equal-but-distinct name objects must retain separate GC roots"
+    );
+}
+
+#[test]
 fn sym_id_debug_resolves_the_symbol_name() {
     crate::test_utils::init_test_tracing();
     // `Debug` must name the symbol (readable bug reports), not print a bare id.

@@ -272,10 +272,69 @@ impl StringInterner {
     }
 }
 
+/// Identity of the tagged heap that owns a Lisp-visible symbol name object.
+///
+/// Keeping this distinct from object identity makes it impossible to index the
+/// per-heap root table with a raw object address (or vice versa).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[repr(transparent)]
+struct SymbolNameHeapId(usize);
+
+/// Pointer identity of one Lisp-visible symbol name object.
+///
+/// `TaggedValue`'s `Eq`/`Hash` are structural, while GC roots are identities:
+/// two equal strings must remain separate roots and one shared string must be
+/// seeded only once.  This key makes that distinction explicit in the type.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[repr(transparent)]
+struct SymbolNameObjectId(usize);
+
+impl SymbolNameObjectId {
+    fn of(value: TaggedValue) -> Self {
+        Self(value.bits())
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct SymbolNameValue {
     value: TaggedValue,
-    heap_id: usize,
+    heap_id: SymbolNameHeapId,
+}
+
+/// The unique name objects that must be seeded for each live tagged heap.
+///
+/// Many uninterned symbols may deliberately share one exact name string (GNU
+/// `make-symbol` preserves the argument object).  Root cardinality therefore
+/// follows name-object identity, not symbol cardinality.
+#[derive(Debug, Default)]
+struct SymbolNameRootIndex {
+    by_heap: FxHashMap<SymbolNameHeapId, FxHashMap<SymbolNameObjectId, TaggedValue>>,
+}
+
+impl SymbolNameRootIndex {
+    fn insert(&mut self, name: SymbolNameValue) {
+        let object_id = SymbolNameObjectId::of(name.value);
+        let old = self
+            .by_heap
+            .entry(name.heap_id)
+            .or_default()
+            .insert(object_id, name.value);
+        debug_assert!(
+            old.is_none_or(|old| old.bits() == name.value.bits()),
+            "one symbol-name object identity mapped to different values"
+        );
+    }
+
+    fn extend_roots(&self, roots: &mut Vec<TaggedValue>, heap_id: SymbolNameHeapId) {
+        if let Some(by_object) = self.by_heap.get(&heap_id) {
+            roots.extend(by_object.values().copied());
+        }
+    }
+
+    #[cfg(all(test, debug_assertions))]
+    fn root_count(&self, heap_id: SymbolNameHeapId) -> usize {
+        self.by_heap.get(&heap_id).map_or(0, FxHashMap::len)
+    }
 }
 
 /// The name a freshly allocated symbol carries, stated at every construction
@@ -303,7 +362,10 @@ impl NewSymbolName {
     fn from_lisp_object(value: TaggedValue) -> Self {
         let heap_id = crate::tagged::gc::current_tagged_heap_identity()
             .expect("a Lisp symbol name value requires an installed tagged heap");
-        Self::LispObject(SymbolNameValue { value, heap_id })
+        Self::LispObject(SymbolNameValue {
+            value,
+            heap_id: SymbolNameHeapId(heap_id),
+        })
     }
 }
 
@@ -336,14 +398,10 @@ struct SymbolRegistry {
     /// Keeping this rare case out of `SymbolSlot` makes every ordinary symbol
     /// substantially smaller.
     name_values: FxHashMap<SymId, SymbolNameValue>,
-    /// Task #7 stage 2a rider: per-heap index of the symbols carrying a
-    /// `name_value`, so the GC root walk (`collect_name_value_roots`) touches
-    /// only the requesting heap's entries instead of scanning the sparse side
-    /// table. Maintained at the single symbol construction chokepoint
-    /// (`alloc_symbol`); `name_value` is immutable after construction, so
-    /// entries are never removed (a torn-down heap's id is simply never
-    /// queried again).
-    name_value_syms_by_heap: FxHashMap<usize, Vec<SymId>>,
+    /// Per-heap set of exact Lisp name objects. This is deliberately indexed
+    /// by object identity rather than symbol id: many uninterned symbols can
+    /// share one name object, and seeding it once is sufficient.
+    name_value_roots: SymbolNameRootIndex,
 }
 
 impl Default for SymbolRegistry {
@@ -359,7 +417,7 @@ impl SymbolRegistry {
             symbols: Vec::new(),
             canonical_by_name: FxHashMap::default(),
             name_values: FxHashMap::default(),
-            name_value_syms_by_heap: FxHashMap::default(),
+            name_value_roots: SymbolNameRootIndex::default(),
         };
         let nil_name = registry.names.intern("nil");
         let nil_id = registry.alloc_symbol(nil_name, true, NewSymbolName::AtomOnly);
@@ -382,10 +440,7 @@ impl SymbolRegistry {
         if let NewSymbolName::LispObject(name_value) = name_value {
             let old = self.name_values.insert(id, name_value);
             debug_assert!(old.is_none(), "new symbol id already had a name value");
-            self.name_value_syms_by_heap
-                .entry(name_value.heap_id)
-                .or_default()
-                .push(id);
+            self.name_value_roots.insert(name_value);
         }
         if canonical {
             self.canonical_by_name.insert(name, id);
@@ -494,8 +549,9 @@ impl SymbolRegistry {
         self.slot(id)
             .unwrap_or_else(|| panic!("invalid symbol id {:?}", id));
         let name_value = self.name_values.get(&id).copied()?;
-        (crate::tagged::gc::current_tagged_heap_identity() == Some(name_value.heap_id))
-            .then_some(name_value.value)
+        (crate::tagged::gc::current_tagged_heap_identity().map(SymbolNameHeapId)
+            == Some(name_value.heap_id))
+        .then_some(name_value.value)
     }
 
     #[inline]
@@ -647,35 +703,27 @@ impl SymbolRegistry {
     }
 
     fn collect_name_value_roots(&self, roots: &mut Vec<TaggedValue>, heap_id: usize) {
-        // Task #7 stage 2a rider: walk only this heap's indexed entries (the
-        // full-slot scan this replaced was 29-39us of both STW handshakes for
-        // a handful of roots). Same SET as the old filter — `name_value` is
-        // immutable after `alloc_symbol`, the sole symbol constructor. The
-        // cross-check runs in debug test builds only: the release drain
-        // profilers are cfg(test) binaries, and the full-slot walk would
-        // re-add the exact cost this index removed.
+        let heap_id = SymbolNameHeapId(heap_id);
+        // Cross-check the identity set against the authoritative per-symbol
+        // metadata in debug tests. The production root walk stays O(unique
+        // name objects), independent of how many symbols share each object.
         #[cfg(all(test, debug_assertions))]
         {
-            let full = self
+            let mut unique = FxHashMap::default();
+            for name_value in self
                 .name_values
                 .values()
                 .filter(|name_value| name_value.heap_id == heap_id)
-                .count();
-            let indexed = self
-                .name_value_syms_by_heap
-                .get(&heap_id)
-                .map_or(0, Vec::len);
-            assert_eq!(indexed, full, "per-heap name_value index diverged");
+            {
+                unique.insert(SymbolNameObjectId::of(name_value.value), name_value.value);
+            }
+            assert_eq!(
+                self.name_value_roots.root_count(heap_id),
+                unique.len(),
+                "per-heap name-object root index diverged"
+            );
         }
-        let Some(ids) = self.name_value_syms_by_heap.get(&heap_id) else {
-            return;
-        };
-        roots.extend(ids.iter().map(|&id| {
-            self.name_values
-                .get(&id)
-                .expect("indexed symbol lost its name_value")
-                .value
-        }));
+        self.name_value_roots.extend_roots(roots, heap_id);
     }
 }
 
