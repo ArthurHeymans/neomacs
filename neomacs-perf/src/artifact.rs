@@ -114,6 +114,8 @@ pub enum ArtifactKind {
     FrontendLog,
     CompositorLog,
     InputProvenance,
+    NativeProfileData,
+    NativeProfileReport,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

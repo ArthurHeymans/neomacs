@@ -3,7 +3,9 @@ use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use super::{ComparisonSampleCount, Frontend, PerfCommand, ScenarioId, parse_perf_command};
+use super::{
+    ComparisonSampleCount, Frontend, NativeProfiler, PerfCommand, ScenarioId, parse_perf_command,
+};
 
 fn parse(args: &[&str]) -> Result<PerfCommand, super::PerfCliError> {
     parse_perf_command(args.iter().map(OsString::from))
@@ -42,7 +44,7 @@ fn run_command_parses_into_a_typed_workload_request() {
 fn run_command_rejects_zero_iterations_before_launch() {
     let error = parse(&["run", "rust-lsp-typing", "--iterations", "0"])
         .expect_err("zero iterations must fail");
-    assert!(error.to_string().contains("greater than zero"));
+    assert!(error.to_string().contains("non-zero type"));
 }
 
 #[test]
@@ -89,7 +91,8 @@ fn compare_command_rejects_a_missing_candidate_before_launch() {
         "target/release/neomacs",
     ])
     .expect_err("both editor identities are required");
-    assert!(error.to_string().contains("--candidate-editor is required"));
+    assert!(error.to_string().contains("--candidate-editor"));
+    assert!(error.to_string().contains("required arguments"));
 }
 
 #[test]
@@ -105,11 +108,57 @@ fn compare_command_rejects_fewer_than_three_samples_per_side() {
         "2",
     ])
     .expect_err("two samples cannot characterize run-to-run dispersion");
-    assert!(error.to_string().contains("--samples must be at least 3"));
+    assert!(
+        error
+            .to_string()
+            .contains("comparison sample count must be at least 3")
+    );
+}
+
+#[test]
+fn profile_command_selects_native_sampling_without_becoming_a_comparison() {
+    assert_eq!(
+        parse(&[
+            "profile",
+            "rust-lsp-typing",
+            "--profiler",
+            "perf",
+            "--editor",
+            "target/profiling/neomacs",
+            "--iterations",
+            "40",
+            "--frontend",
+            "tui",
+            "--timeout-secs",
+            "180",
+        ])
+        .expect("parse native profile command"),
+        PerfCommand::Profile {
+            scenario: ScenarioId::RustLspTyping,
+            profiler: NativeProfiler::Perf,
+            editor: Some(PathBuf::from("target/profiling/neomacs")),
+            iterations: NonZeroU32::new(40).expect("non-zero literal"),
+            frontend: Some(Frontend::Tui {
+                rows: 40,
+                columns: 120,
+            }),
+            timeout: Duration::from_secs(180),
+        }
+    );
 }
 
 #[test]
 fn list_and_help_are_explicit_commands() {
     assert_eq!(parse(&["list"]).expect("parse list"), PerfCommand::List);
-    assert_eq!(parse(&["--help"]).expect("parse help"), PerfCommand::Help);
+    let PerfCommand::Help { rendered } = parse(&["--help"]).expect("parse root help") else {
+        panic!("--help must produce rendered help")
+    };
+    assert!(rendered.contains("Usage: cargo xtask perf <COMMAND>"));
+
+    let PerfCommand::Help { rendered } = parse(&["profile", "--help"]).expect("parse profile help")
+    else {
+        panic!("profile --help must produce rendered help")
+    };
+    assert!(rendered.contains("Usage: cargo xtask perf profile [OPTIONS] <SCENARIO>"));
+    assert!(rendered.contains("--profiler <PROFILER>"));
 }

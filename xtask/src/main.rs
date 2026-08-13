@@ -4158,6 +4158,7 @@ Usage: cargo xtask [fresh-build] (--release | --profile NAME) [--bin-dir DIR] [-
        cargo xtask perf list
        cargo xtask perf run SCENARIO [--editor PATH] [--iterations N] [--frontend batch|tui|gui]
        cargo xtask perf compare SCENARIO --baseline-editor PATH --candidate-editor PATH [--samples N>=3]
+       cargo xtask perf profile SCENARIO [--profiler perf] [--editor PATH] [--iterations N]
 
 --release (or --profile NAME) is required: fresh-build produces the runnable runtime
 binary by byte-compiling the Lisp tree with it, so it needs an optimized profile.

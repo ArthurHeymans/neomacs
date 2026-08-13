@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
+use std::fmt;
 use std::fs;
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
@@ -127,6 +129,25 @@ impl TryFrom<u32> for ComparisonSampleCount {
 impl From<ComparisonSampleCount> for u32 {
     fn from(value: ComparisonSampleCount) -> Self {
         value.get()
+    }
+}
+
+impl fmt::Display for ComparisonSampleCount {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.get().fmt(formatter)
+    }
+}
+
+impl FromStr for ComparisonSampleCount {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        value
+            .parse::<u32>()
+            .map_err(|_| {
+                format!("comparison sample count must be an unsigned integer, got `{value}`")
+            })?
+            .try_into()
     }
 }
 

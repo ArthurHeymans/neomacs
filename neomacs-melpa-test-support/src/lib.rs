@@ -11,8 +11,9 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
+use command_group::{CommandGroup, GroupChild};
 use wait_timeout::ChildExt;
 
 mod prepared_package_set;
@@ -31,6 +32,8 @@ pub use tree_sitter_grammar::{
 
 pub const DEFAULT_PROCESS_TIMEOUT: Duration = Duration::from_secs(300);
 
+#[cfg(test)]
+mod process_test;
 #[cfg(test)]
 mod tree_sitter_grammar_test;
 
@@ -294,22 +297,129 @@ pub fn output_with_timeout(
     command: &mut Command,
     timeout: Duration,
 ) -> Result<Output, CommandError> {
+    output_with_timeout_in_scope(command, timeout, ProcessScope::Single)
+}
+
+/// Capture a command with a deadline that terminates its complete process tree.
+///
+/// Use this for adapters that intentionally launch profilers, PTYs, or
+/// compositors. Ordinary single-process package probes retain
+/// [`output_with_timeout`]'s narrower process ownership.
+pub fn group_output_with_timeout(
+    command: &mut Command,
+    timeout: Duration,
+) -> Result<Output, CommandError> {
+    output_with_timeout_in_scope(command, timeout, ProcessScope::Group)
+}
+
+#[derive(Clone, Copy)]
+enum ProcessScope {
+    Single,
+    Group,
+}
+
+enum ManagedChild {
+    Single(std::process::Child),
+    Group(GroupChild),
+}
+
+impl ManagedChild {
+    fn process(&mut self) -> &mut std::process::Child {
+        match self {
+            Self::Single(child) => child,
+            Self::Group(child) => child.inner(),
+        }
+    }
+
+    fn kill(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::Single(child) => child.kill(),
+            Self::Group(child) => child.kill(),
+        }
+    }
+
+    fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        match self {
+            Self::Single(child) => child.wait(),
+            Self::Group(child) => child.wait(),
+        }
+    }
+
+    fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        match self {
+            Self::Single(child) => child.try_wait(),
+            Self::Group(child) => child.try_wait(),
+        }
+    }
+
+    fn wait_for_exit_and_output(
+        &mut self,
+        scope: ProcessScope,
+        timeout: Duration,
+        stdout_reader: &thread::JoinHandle<std::io::Result<Vec<u8>>>,
+        stderr_reader: &thread::JoinHandle<std::io::Result<Vec<u8>>>,
+    ) -> std::io::Result<Option<std::process::ExitStatus>> {
+        match scope {
+            ProcessScope::Single => self.process().wait_timeout(timeout),
+            ProcessScope::Group => {
+                let started = Instant::now();
+                let mut leader_status = None;
+                loop {
+                    if leader_status.is_none() {
+                        leader_status = self.try_wait()?;
+                    }
+                    if leader_status.is_some()
+                        && stdout_reader.is_finished()
+                        && stderr_reader.is_finished()
+                    {
+                        return Ok(leader_status);
+                    }
+                    let elapsed = started.elapsed();
+                    let Some(remaining) = timeout.checked_sub(elapsed) else {
+                        return Ok(None);
+                    };
+                    thread::sleep(remaining.min(Duration::from_millis(10)));
+                }
+            }
+        }
+    }
+}
+
+fn output_with_timeout_in_scope(
+    command: &mut Command,
+    timeout: Duration,
+    scope: ProcessScope,
+) -> Result<Output, CommandError> {
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command.spawn().map_err(CommandError::Launch)?;
+    let mut child = match scope {
+        ProcessScope::Single => {
+            ManagedChild::Single(command.spawn().map_err(CommandError::Launch)?)
+        }
+        ProcessScope::Group => {
+            ManagedChild::Group(command.group_spawn().map_err(CommandError::Launch)?)
+        }
+    };
     let stdout = child
+        .process()
         .stdout
         .take()
         .ok_or_else(|| CommandError::Capture("stdout pipe was not created".to_string()))?;
     let stderr = child
+        .process()
         .stderr
         .take()
         .ok_or_else(|| CommandError::Capture("stderr pipe was not created".to_string()))?;
     let stdout_reader = thread::spawn(move || read_pipe(stdout));
     let stderr_reader = thread::spawn(move || read_pipe(stderr));
 
-    let status = match child.wait_timeout(timeout).map_err(CommandError::Launch)? {
+    let status = match child
+        .wait_for_exit_and_output(scope, timeout, &stdout_reader, &stderr_reader)
+        .map_err(CommandError::Launch)?
+    {
         Some(status) => status,
         None => {
+            // For grouped children this terminates the complete process group
+            // (or Windows job), so descendants cannot retain the output pipes.
             let _ = child.kill();
             let status = child.wait().map_err(CommandError::Launch)?;
             let stdout = stdout_reader

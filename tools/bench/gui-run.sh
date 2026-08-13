@@ -44,11 +44,20 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     continue
   fi
 
-  # GUI_PERF_OUT wraps ONLY the app in perf stat (cycles+instructions,
-  # all app threads: Lisp, render, wpe). Wrapping the whole script would
-  # also count Weston's compositing, muddying attribution.
+  # GUI_PERF_RECORD / GUI_PERF_OUT wrap ONLY the app. Wrapping this whole
+  # runner would also profile Weston and retry bookkeeping, muddying
+  # attribution. The record settings are explicit environment fields so the
+  # typed Rust profile artifact can persist exactly what produced perf.data.
   if [ -n "${GUI_PERF_RECORD:-}" ]; then
-    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT"       taskset -c 0-15 perf record -F 999 --call-graph=lbr -o "$GUI_PERF_RECORD"       "$BIN" "$@" >"$GUI_APP_LOG" 2>&1
+    GUI_PERF_EVENT=${GUI_PERF_EVENT:-cycles:u}
+    GUI_PERF_FREQUENCY=${GUI_PERF_FREQUENCY:-999}
+    GUI_PERF_CALL_GRAPH=${GUI_PERF_CALL_GRAPH:-lbr}
+    WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT" \
+      perf record --quiet --no-buildid-cache \
+        --event "$GUI_PERF_EVENT" --freq "$GUI_PERF_FREQUENCY" \
+        --call-graph "$GUI_PERF_CALL_GRAPH" \
+        --output "$GUI_PERF_RECORD" -- \
+        "$BIN" "$@" >"$GUI_APP_LOG" 2>&1
   elif [ -n "${GUI_PERF_OUT:-}" ]; then
     WAYLAND_DISPLAY="$SOCKET" timeout "$GUI_TIMEOUT"       taskset -c 0-15 perf stat -o "$GUI_PERF_OUT" -e cycles:u,instructions:u       "$BIN" "$@" >"$GUI_APP_LOG" 2>&1
   else

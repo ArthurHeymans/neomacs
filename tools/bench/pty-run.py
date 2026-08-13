@@ -8,6 +8,10 @@ terminal output makes it deterministic (5/5 runs).
   SENTINEL=path PTY_TIMEOUT=secs TERM=xterm-256color \
     python3 tools/bench/pty-run.py ./target/release/neomacs -nw -Q -l fixture.el
 
+PTY_PERF_RECORD optionally profiles only the app inside this private PTY. The
+runner remains outside the capture, so terminal draining does not pollute app
+attribution.
+
 Known limit: it drains terminal output in a read loop, so a fixture that
 redraws thousands of times is bottlenecked by pty I/O rather than by the
 application. Keep iteration counts modest, or the app blocks on write.
@@ -23,6 +27,15 @@ output_path = os.environ.get("PTY_OUTPUT", "")
 timeout = float(os.environ.get("PTY_TIMEOUT", "120"))
 rows = int(os.environ.get("PTY_ROWS", "40"))
 cols = int(os.environ.get("PTY_COLS", "120"))
+perf_record = os.environ.get("PTY_PERF_RECORD", "")
+if perf_record:
+    argv = [
+        "perf", "record", "--quiet", "--no-buildid-cache",
+        "--event", os.environ.get("PTY_PERF_EVENT", "cycles:u"),
+        "--freq", os.environ.get("PTY_PERF_FREQUENCY", "999"),
+        "--call-graph", os.environ.get("PTY_PERF_CALL_GRAPH", "lbr"),
+        "--output", perf_record, "--",
+    ] + argv
 if sentinel and os.path.exists(sentinel):
     os.unlink(sentinel)
 pid, fd = pty.fork()
@@ -65,7 +78,9 @@ while time.time() < deadline:
     if done:
         break
 try:
-    os.kill(pid, signal.SIGKILL)
+    # pty.fork makes the child a new session and process-group leader. Kill
+    # that complete group so a profiler cannot leave its editor child alive.
+    os.killpg(pid, signal.SIGKILL)
 except ProcessLookupError:
     pass
 if output_path:

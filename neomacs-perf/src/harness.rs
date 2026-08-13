@@ -1,16 +1,17 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::fs;
-use std::io::Read;
-use std::num::NonZeroU32;
+use std::io::{BufReader, Read};
+use std::num::{NonZeroU32, NonZeroU64};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+use linux_perf_data::{PerfFileReader, PerfFileRecord, linux_perf_event_reader::RecordType};
 use neomacs_melpa_test_support::{
-    CommandError, EmacsRuntime, MelpaSandbox, PreparedPackageSet, locked_melpa_sources,
-    output_with_timeout, prepare_cached_tree_sitter_grammar,
+    CommandError, EmacsRuntime, MelpaSandbox, PreparedPackageSet, group_output_with_timeout,
+    locked_melpa_sources, output_with_timeout, prepare_cached_tree_sitter_grammar,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -18,7 +19,8 @@ use thiserror::Error;
 
 use crate::{
     ArtifactFile, ArtifactKind, CorrectnessMismatch, EditorProvenance, Frontend, Measurement,
-    MetricName, MetricUnit, RunArtifact, RunVerdict, ScenarioId,
+    MetricName, MetricUnit, PerfCaptureConfiguration, ProfileArtifact, ProfileRejection,
+    ProfileReport, ProfileRequest, ProfileVerdict, RunArtifact, RunVerdict, ScenarioId,
     artifact_store::{unix_time_ms, write_json_atomically},
     scenario,
 };
@@ -134,7 +136,70 @@ impl PerfHarness {
             );
         }
 
-        self.run_prepared_scenario(request, context)
+        self.run_prepared_scenario(request, context, None)
+    }
+
+    pub fn profile(&self, request: &ProfileRequest) -> Result<ProfileReport, PerfError> {
+        let run_request = RunRequest::new(request.scenario, &request.editor, request.iterations)
+            .with_frontend(request.frontend())
+            .with_timeout(request.timeout);
+        let context = RunContext::create_in(
+            &self.workspace_root,
+            &run_request,
+            ArtifactNamespace::Profiles,
+        )?;
+        let platform_rejection = request.profiler.platform_rejection();
+        let run = if let Some(reason) = &platform_rejection {
+            context.infrastructure_failure(
+                format!("native profiler is unavailable: {reason:?}"),
+                Vec::new(),
+            )?
+        } else if !request.editor.is_file() {
+            context.infrastructure_failure(
+                format!("missing editor executable {}", request.editor.display()),
+                Vec::new(),
+            )?
+        } else {
+            let capture =
+                PerfCapture::new(&context.directory, request.profiler.capture_configuration());
+            self.run_prepared_scenario(&run_request, context, Some(&capture))?
+        };
+        self.publish_profile(request, run, platform_rejection)
+    }
+
+    fn publish_profile(
+        &self,
+        request: &ProfileRequest,
+        run: RunReport,
+        forced_rejection: Option<ProfileRejection>,
+    ) -> Result<ProfileReport, PerfError> {
+        let verdict = forced_rejection.map_or_else(
+            || profile_verdict(&run),
+            |reason| ProfileVerdict::Rejected { reason },
+        );
+        let artifact = ProfileArtifact {
+            schema_version: ProfileArtifact::SCHEMA_VERSION,
+            profile_id: run.artifact.run_id.clone(),
+            scenario: request.scenario,
+            frontend: request.frontend(),
+            editor: request.editor.clone(),
+            iterations: request.iterations,
+            profiler: request.profiler,
+            configuration: request.profiler.capture_configuration(),
+            run_artifact_path: PathBuf::from("artifact.json"),
+            verdict,
+        };
+        let artifact_path = run
+            .artifact_path
+            .parent()
+            .expect("run artifact has a parent directory")
+            .join("profile.json");
+        write_json_atomically(&artifact_path, &artifact)?;
+        Ok(ProfileReport {
+            artifact,
+            artifact_path,
+            run,
+        })
     }
 
     /// Validate and persist a result produced by a frontend adapter.
@@ -179,6 +244,7 @@ impl PerfHarness {
         &self,
         request: &RunRequest,
         context: RunContext,
+        profile: Option<&PerfCapture>,
     ) -> Result<RunReport, PerfError> {
         let mut files = Vec::new();
         let prepared = match self.prepare_rust_lsp_typing(request, &context.directory) {
@@ -189,9 +255,17 @@ impl PerfHarness {
         };
         files.extend(prepared.input_artifacts());
 
-        let mut command = frontend_command(request, &self.workspace_root, &prepared);
+        let frontend = frontend_command(request, &self.workspace_root, &prepared);
+        let mut command = match profile {
+            Some(profile) => profile.wrap(frontend, request.frontend()),
+            None => frontend,
+        };
         let process_started = Instant::now();
-        let output = match output_with_timeout(&mut command, request.timeout) {
+        let execution = match profile {
+            Some(_) => group_output_with_timeout(&mut command, request.timeout),
+            None => output_with_timeout(&mut command, request.timeout),
+        };
+        let output = match execution {
             Ok(output) => output,
             Err(error) => {
                 let (message, output) = command_error_details(error, request.timeout);
@@ -205,6 +279,15 @@ impl PerfHarness {
         let process_wall_us = process_started.elapsed().as_micros();
         files.extend(write_process_output(&context.directory, &output)?);
         files.extend(frontend_artifacts_if_present(&prepared));
+        if let Some(profile) = profile {
+            match profile.collect() {
+                Ok(profile_files) => files.extend(profile_files),
+                Err(error) => {
+                    files.extend(error.files);
+                    return context.infrastructure_failure(error.message, files);
+                }
+            }
+        }
 
         if !output.status.success() {
             return context.infrastructure_failure(
@@ -389,10 +472,18 @@ struct RunContext {
 
 impl RunContext {
     fn create(workspace_root: &Path, request: &RunRequest) -> Result<Self, PerfError> {
+        Self::create_in(workspace_root, request, ArtifactNamespace::Benchmarks)
+    }
+
+    fn create_in(
+        workspace_root: &Path,
+        request: &RunRequest,
+        namespace: ArtifactNamespace,
+    ) -> Result<Self, PerfError> {
         let started = Instant::now();
         let started_unix_ms = unix_time_ms();
         let run_id = next_run_id(request.scenario, started_unix_ms);
-        let directory = workspace_root.join("tmp/perf").join(&run_id);
+        let directory = workspace_root.join(namespace.relative_root()).join(&run_id);
         fs::create_dir_all(&directory).map_err(|source| PerfError::CreateArtifactDirectory {
             path: directory.clone(),
             source,
@@ -447,6 +538,210 @@ impl RunContext {
             artifact_path,
         })
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ArtifactNamespace {
+    Benchmarks,
+    Profiles,
+}
+
+impl ArtifactNamespace {
+    const fn relative_root(self) -> &'static str {
+        match self {
+            Self::Benchmarks => "tmp/perf",
+            Self::Profiles => "tmp/perf-profiles",
+        }
+    }
+}
+
+fn profile_verdict(run: &RunReport) -> ProfileVerdict {
+    match &run.artifact.verdict {
+        RunVerdict::CorrectnessMismatch { .. } => ProfileVerdict::Rejected {
+            reason: ProfileRejection::CorrectnessMismatch,
+        },
+        RunVerdict::InfrastructureFailure { message } => ProfileVerdict::Rejected {
+            reason: ProfileRejection::InfrastructureFailure {
+                message: message.clone(),
+            },
+        },
+        RunVerdict::Valid { .. } => {
+            let Some(data) =
+                artifact_path_of_kind(&run.artifact.files, ArtifactKind::NativeProfileData)
+            else {
+                return ProfileVerdict::Rejected {
+                    reason: ProfileRejection::InfrastructureFailure {
+                        message: "profile run did not retain perf.data".to_string(),
+                    },
+                };
+            };
+            let Some(report) =
+                artifact_path_of_kind(&run.artifact.files, ArtifactKind::NativeProfileReport)
+            else {
+                return ProfileVerdict::Rejected {
+                    reason: ProfileRejection::InfrastructureFailure {
+                        message: "profile run did not retain its hotspot report".to_string(),
+                    },
+                };
+            };
+            let data_on_disk = run
+                .artifact_path
+                .parent()
+                .expect("run artifact has a parent directory")
+                .join(data);
+            match perf_data_sample_count(&data_on_disk) {
+                Ok(sample_count) => ProfileVerdict::Captured {
+                    perf_data_path: data.to_path_buf(),
+                    hotspot_report_path: report.to_path_buf(),
+                    sample_count,
+                },
+                Err(message) => ProfileVerdict::Rejected {
+                    reason: ProfileRejection::InfrastructureFailure { message },
+                },
+            }
+        }
+    }
+}
+
+fn artifact_path_of_kind(files: &[ArtifactFile], kind: ArtifactKind) -> Option<&Path> {
+    files
+        .iter()
+        .find(|file| file.kind == kind)
+        .map(|file| file.path.as_path())
+}
+
+pub(crate) fn perf_data_sample_count(path: &Path) -> Result<NonZeroU64, String> {
+    let file = fs::File::open(path)
+        .map_err(|error| format!("failed to open native profile {}: {error}", path.display()))?;
+    let PerfFileReader {
+        mut perf_file,
+        mut record_iter,
+    } = PerfFileReader::parse_file(BufReader::new(file))
+        .map_err(|error| format!("failed to parse native profile {}: {error}", path.display()))?;
+    let mut sample_count = 0_u64;
+    while let Some(record) = record_iter
+        .next_record(&mut perf_file)
+        .map_err(|error| format!("failed to read native profile {}: {error}", path.display()))?
+    {
+        if matches!(
+            record,
+            PerfFileRecord::EventRecord { record, .. } if record.record_type == RecordType::SAMPLE
+        ) {
+            sample_count = sample_count
+                .checked_add(1)
+                .ok_or_else(|| "native profile sample count overflowed u64".to_string())?;
+        }
+    }
+    NonZeroU64::new(sample_count)
+        .ok_or_else(|| format!("native profile {} contained no samples", path.display()))
+}
+
+pub(crate) struct PerfCapture {
+    configuration: PerfCaptureConfiguration,
+    data: PathBuf,
+    report: PathBuf,
+}
+
+impl PerfCapture {
+    pub(crate) fn new(directory: &Path, configuration: PerfCaptureConfiguration) -> Self {
+        Self {
+            configuration,
+            data: directory.join("perf.data"),
+            report: directory.join("perf-report.txt"),
+        }
+    }
+
+    pub(crate) fn wrap(&self, mut command: Command, frontend: Frontend) -> Command {
+        let adapter_prefix = match frontend {
+            Frontend::Tui { .. } => Some("PTY"),
+            Frontend::Gui { .. } => Some("GUI"),
+            Frontend::Batch => None,
+        };
+        if let Some(prefix) = adapter_prefix {
+            command.env(format!("{prefix}_PERF_RECORD"), &self.data);
+            for (name, value) in self.configuration.adapter_record_environment(prefix) {
+                command.env(name, value);
+            }
+            return command;
+        }
+
+        let mut profiled = Command::new("perf");
+        profiled.args(self.configuration.record_arguments(&self.data));
+        profiled.arg(command.get_program());
+        profiled.args(command.get_args());
+        if let Some(directory) = command.get_current_dir() {
+            profiled.current_dir(directory);
+        }
+        profiled.env_clear();
+        for (name, value) in command.get_envs() {
+            match value {
+                Some(value) => {
+                    profiled.env(name, value);
+                }
+                None => {
+                    profiled.env_remove(name);
+                }
+            }
+        }
+        profiled
+    }
+
+    fn collect(&self) -> Result<Vec<ArtifactFile>, ProfileCaptureError> {
+        if !self.data.is_file() {
+            return Err(ProfileCaptureError {
+                message: format!(
+                    "perf record did not produce profile data {}",
+                    self.data.display()
+                ),
+                files: Vec::new(),
+            });
+        }
+        let mut files = vec![ArtifactFile {
+            kind: ArtifactKind::NativeProfileData,
+            path: relative_artifact_path(&self.data),
+        }];
+        let output = Command::new("perf")
+            .args(PerfCaptureConfiguration::report_arguments(&self.data))
+            .env("LC_ALL", "C")
+            .env("PERF_PAGER", "cat")
+            .output()
+            .map_err(|error| ProfileCaptureError {
+                message: format!("failed to launch perf report: {error}"),
+                files: files.clone(),
+            })?;
+        let mut report = output.stdout;
+        if !output.stderr.is_empty() {
+            report.extend_from_slice(b"\n# perf report stderr\n");
+            report.extend_from_slice(&output.stderr);
+        }
+        fs::write(&self.report, &report).map_err(|error| ProfileCaptureError {
+            message: format!(
+                "failed to write native hotspot report {}: {error}",
+                self.report.display()
+            ),
+            files: files.clone(),
+        })?;
+        files.push(ArtifactFile {
+            kind: ArtifactKind::NativeProfileReport,
+            path: relative_artifact_path(&self.report),
+        });
+        if !output.status.success() {
+            return Err(ProfileCaptureError {
+                message: format!("perf report exited with status {}", output.status),
+                files,
+            });
+        }
+        perf_data_sample_count(&self.data).map_err(|message| ProfileCaptureError {
+            message,
+            files: files.clone(),
+        })?;
+        Ok(files)
+    }
+}
+
+struct ProfileCaptureError {
+    message: String,
+    files: Vec<ArtifactFile>,
 }
 
 struct PreparedScenario {
@@ -529,7 +824,7 @@ fn frontend_command(
             command
                 .env("PTY_ROWS", rows.to_string())
                 .env("PTY_COLS", columns.to_string())
-                .env("PTY_TIMEOUT", request.timeout().as_secs().to_string())
+                .env("PTY_TIMEOUT", adapter_timeout(request.timeout()))
                 .env("PTY_OUTPUT", &prepared.terminal_bytes)
                 // The package sandbox deliberately defaults to TERM=dumb for
                 // batch tests. A real PTY owns its display capabilities.
@@ -539,7 +834,7 @@ fn frontend_command(
             command
                 .env("GUI_WIDTH", width.to_string())
                 .env("GUI_HEIGHT", height.to_string())
-                .env("GUI_TIMEOUT", request.timeout().as_secs().to_string())
+                .env("GUI_TIMEOUT", adapter_timeout(request.timeout()))
                 .env("GUI_APP_LOG", &prepared.gui_app_log)
                 .env("GUI_WESTON_LOG", &prepared.gui_weston_log)
                 .env("XDG_RUNTIME_DIR", &prepared.gui_runtime_directory);
@@ -564,6 +859,11 @@ fn frontend_command(
             request.iterations().get().to_string(),
         );
     command
+}
+
+fn adapter_timeout(outer_timeout: Duration) -> String {
+    let grace = Duration::from_millis(500).min(outer_timeout / 10);
+    format!("{:.3}", outer_timeout.saturating_sub(grace).as_secs_f64())
 }
 
 const BENCHMARK_PASSTHROUGH_ENVIRONMENT: &[&str] = &[

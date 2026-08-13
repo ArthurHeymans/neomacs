@@ -1,19 +1,20 @@
 use std::ffi::OsString;
-use std::num::NonZeroU32;
+use std::num::{NonZeroU32, NonZeroU64};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use clap::{Args, Parser, Subcommand, ValueEnum, error::ErrorKind};
 use thiserror::Error;
 
 use crate::{
-    ComparisonRequest, ComparisonSampleCount, ComparisonVerdict, Frontend, PerfError, PerfHarness,
-    RunRequest, ScenarioId, scenarios,
+    ComparisonRequest, ComparisonSampleCount, ComparisonVerdict, Frontend, NativeProfiler,
+    PerfError, PerfHarness, ProfileRequest, ProfileVerdict, RunRequest, ScenarioId, scenarios,
 };
 
 const DEFAULT_ITERATIONS: NonZeroU32 = NonZeroU32::new(100).expect("100 is non-zero");
 const DEFAULT_SAMPLES: ComparisonSampleCount =
     ComparisonSampleCount::new(5).expect("5 meets the minimum sample count");
-const DEFAULT_TIMEOUT: Duration = Duration::from_secs(300);
+const DEFAULT_TIMEOUT_SECS: NonZeroU64 = NonZeroU64::new(300).expect("300 is non-zero");
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PerfCommand {
@@ -34,12 +35,146 @@ pub enum PerfCommand {
         frontend: Option<Frontend>,
         timeout: Duration,
     },
-    Help,
+    Profile {
+        scenario: ScenarioId,
+        profiler: NativeProfiler,
+        editor: Option<PathBuf>,
+        iterations: NonZeroU32,
+        frontend: Option<Frontend>,
+        timeout: Duration,
+    },
+    Help {
+        rendered: String,
+    },
+}
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "cargo xtask perf",
+    about = "Run correctness-gated Neomacs performance workloads",
+    after_long_help = "Every attempt writes a structured artifact below ./tmp. Only a run whose\nfixture invariants all pass receives a valid verdict and performance samples.\nA comparison is valid only when every baseline and candidate run is valid.\nProfile runs are diagnostic and never contribute samples to a comparison."
+)]
+struct PerfCli {
+    #[command(subcommand)]
+    command: PerfSubcommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum PerfSubcommand {
+    /// List the registered performance scenarios.
+    List,
+    /// Execute one correctness-gated workload run.
+    Run(RunArgs),
+    /// Compare repeated, interleaved runs from two editor binaries.
+    Compare(CompareArgs),
+    /// Capture native sampled stacks for one workload run.
+    Profile(ProfileArgs),
+}
+
+#[derive(Debug, Args)]
+struct RunArgs {
+    /// Registered scenario to execute.
+    scenario: ScenarioId,
+    /// Editor executable (defaults to target/release/neomacs).
+    #[arg(long)]
+    editor: Option<PathBuf>,
+    #[command(flatten)]
+    workload: WorkloadArgs,
+}
+
+#[derive(Debug, Args)]
+struct CompareArgs {
+    /// Registered scenario to execute.
+    scenario: ScenarioId,
+    /// Baseline editor executable.
+    #[arg(long)]
+    baseline_editor: PathBuf,
+    /// Candidate editor executable.
+    #[arg(long)]
+    candidate_editor: PathBuf,
+    /// Repetitions per editor; must be at least three.
+    #[arg(long, default_value_t = DEFAULT_SAMPLES)]
+    samples: ComparisonSampleCount,
+    #[command(flatten)]
+    workload: WorkloadArgs,
+}
+
+#[derive(Debug, Args)]
+struct ProfileArgs {
+    /// Registered scenario to execute.
+    scenario: ScenarioId,
+    /// Native sampling backend.
+    #[arg(long, value_enum, default_value_t = NativeProfilerArg::Perf)]
+    profiler: NativeProfilerArg,
+    /// Editor executable (defaults to target/profiling/neomacs).
+    #[arg(long)]
+    editor: Option<PathBuf>,
+    #[command(flatten)]
+    workload: WorkloadArgs,
+}
+
+#[derive(Debug, Args)]
+struct WorkloadArgs {
+    /// Number of editing operations in the scenario.
+    #[arg(long, default_value_t = DEFAULT_ITERATIONS)]
+    iterations: NonZeroU32,
+    /// Editor frontend used for the workload.
+    #[arg(long, value_enum)]
+    frontend: Option<FrontendArg>,
+    /// Hard deadline for the editor process.
+    #[arg(long, default_value_t = DEFAULT_TIMEOUT_SECS)]
+    timeout_secs: NonZeroU64,
+}
+
+impl WorkloadArgs {
+    fn into_semantic(self) -> (NonZeroU32, Option<Frontend>, Duration) {
+        (
+            self.iterations,
+            self.frontend.map(Frontend::from),
+            Duration::from_secs(self.timeout_secs.get()),
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum FrontendArg {
+    Batch,
+    Tui,
+    Gui,
+}
+
+impl From<FrontendArg> for Frontend {
+    fn from(frontend: FrontendArg) -> Self {
+        match frontend {
+            FrontendArg::Batch => Self::Batch,
+            FrontendArg::Tui => Self::Tui {
+                rows: 40,
+                columns: 120,
+            },
+            FrontendArg::Gui => Self::Gui {
+                width: 1200,
+                height: 800,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum NativeProfilerArg {
+    Perf,
+}
+
+impl From<NativeProfilerArg> for NativeProfiler {
+    fn from(profiler: NativeProfilerArg) -> Self {
+        match profiler {
+            NativeProfilerArg::Perf => Self::Perf,
+        }
+    }
 }
 
 #[derive(Debug, Error)]
 pub enum PerfCliError {
-    #[error("{message}\n\n{usage}", usage = perf_usage())]
+    #[error("{message}")]
     Usage { message: String },
     #[error(transparent)]
     Harness(#[from] PerfError),
@@ -47,237 +182,70 @@ pub enum PerfCliError {
     RunRejected { artifact: PathBuf, reason: String },
     #[error("performance comparison was rejected; inspect {artifact}: {reason}")]
     ComparisonRejected { artifact: PathBuf, reason: String },
+    #[error("native performance profile was rejected; inspect {artifact}: {reason}")]
+    ProfileRejected { artifact: PathBuf, reason: String },
 }
 
 pub fn parse_perf_command(
     args: impl IntoIterator<Item = OsString>,
 ) -> Result<PerfCommand, PerfCliError> {
-    let mut args = args.into_iter();
-    let Some(command) = args.next() else {
-        return Err(usage_error("performance command is required"));
-    };
-    match command.to_str() {
-        Some("list") => {
-            reject_trailing_args(args, "list")?;
-            Ok(PerfCommand::List)
+    let arguments = std::iter::once(OsString::from("cargo xtask perf")).chain(args);
+    match PerfCli::try_parse_from(arguments) {
+        Ok(cli) => Ok(cli.command.into()),
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            Ok(PerfCommand::Help {
+                rendered: error.to_string(),
+            })
         }
-        Some("run") => parse_run_command(args),
-        Some("compare") => parse_compare_command(args),
-        Some("help" | "--help" | "-h") => Ok(PerfCommand::Help),
-        Some(unknown) => Err(usage_error(format!(
-            "unknown performance command `{unknown}`"
-        ))),
-        None => Err(usage_error("performance command is not valid UTF-8")),
-    }
-}
-
-fn parse_compare_command(
-    mut args: impl Iterator<Item = OsString>,
-) -> Result<PerfCommand, PerfCliError> {
-    let scenario = required_scenario(&mut args, "compare")?;
-    let mut baseline_editor = None;
-    let mut candidate_editor = None;
-    let mut samples = DEFAULT_SAMPLES;
-    let mut iterations = DEFAULT_ITERATIONS;
-    let mut frontend = None;
-    let mut timeout = DEFAULT_TIMEOUT;
-
-    while let Some(option) = args.next() {
-        let option_text = option
-            .to_str()
-            .ok_or_else(|| usage_error("performance option is not valid UTF-8"))?;
-        match option_text {
-            "--baseline-editor" => {
-                baseline_editor = Some(PathBuf::from(required_value(
-                    &mut args,
-                    "--baseline-editor",
-                )?));
-            }
-            "--candidate-editor" => {
-                candidate_editor = Some(PathBuf::from(required_value(
-                    &mut args,
-                    "--candidate-editor",
-                )?));
-            }
-            "--samples" => {
-                let raw = required_utf8_value(&mut args, "--samples")?;
-                let parsed = raw.parse::<u32>().map_err(|_| {
-                    usage_error(format!(
-                        "--samples requires an unsigned integer, got `{raw}`"
-                    ))
-                })?;
-                samples = ComparisonSampleCount::new(parsed).ok_or_else(|| {
-                    usage_error(format!(
-                        "--samples must be at least {}",
-                        ComparisonSampleCount::MINIMUM
-                    ))
-                })?;
-            }
-            "--iterations" => {
-                iterations = parse_non_zero_u32(&mut args, "--iterations")?;
-            }
-            "--frontend" => {
-                frontend = Some(parse_frontend(&mut args)?);
-            }
-            "--timeout-secs" => {
-                timeout = parse_timeout(&mut args)?;
-            }
-            "--help" | "-h" => return Ok(PerfCommand::Help),
-            unknown => {
-                return Err(usage_error(format!("unknown compare option `{unknown}`")));
-            }
-        }
-    }
-
-    Ok(PerfCommand::Compare {
-        scenario,
-        baseline_editor: baseline_editor
-            .ok_or_else(|| usage_error("--baseline-editor is required"))?,
-        candidate_editor: candidate_editor
-            .ok_or_else(|| usage_error("--candidate-editor is required"))?,
-        samples,
-        iterations,
-        frontend,
-        timeout,
-    })
-}
-
-fn parse_run_command(
-    mut args: impl Iterator<Item = OsString>,
-) -> Result<PerfCommand, PerfCliError> {
-    let scenario = required_scenario(&mut args, "run")?;
-    let mut editor = None;
-    let mut iterations = DEFAULT_ITERATIONS;
-    let mut frontend = None;
-    let mut timeout = DEFAULT_TIMEOUT;
-
-    while let Some(option) = args.next() {
-        let option_text = option
-            .to_str()
-            .ok_or_else(|| usage_error("performance option is not valid UTF-8"))?;
-        match option_text {
-            "--editor" => {
-                editor = Some(PathBuf::from(required_value(&mut args, "--editor")?));
-            }
-            "--iterations" => {
-                iterations = parse_non_zero_u32(&mut args, "--iterations")?;
-            }
-            "--frontend" => {
-                frontend = Some(parse_frontend(&mut args)?);
-            }
-            "--timeout-secs" => {
-                timeout = parse_timeout(&mut args)?;
-            }
-            "--help" | "-h" => return Ok(PerfCommand::Help),
-            unknown => {
-                return Err(usage_error(format!("unknown run option `{unknown}`")));
-            }
-        }
-    }
-
-    Ok(PerfCommand::Run {
-        scenario,
-        editor,
-        iterations,
-        frontend,
-        timeout,
-    })
-}
-
-fn required_scenario(
-    args: &mut impl Iterator<Item = OsString>,
-    command: &str,
-) -> Result<ScenarioId, PerfCliError> {
-    let scenario_name = args
-        .next()
-        .ok_or_else(|| usage_error(format!("{command} requires a scenario name")))?;
-    let scenario_name = scenario_name
-        .to_str()
-        .ok_or_else(|| usage_error("scenario name is not valid UTF-8"))?;
-    scenario_name
-        .parse::<ScenarioId>()
-        .map_err(|error| usage_error(error.to_string()))
-}
-
-fn parse_non_zero_u32(
-    args: &mut impl Iterator<Item = OsString>,
-    option: &str,
-) -> Result<NonZeroU32, PerfCliError> {
-    let raw = required_utf8_value(args, option)?;
-    let parsed = raw.parse::<u32>().map_err(|_| {
-        usage_error(format!(
-            "{option} requires an unsigned integer, got `{raw}`"
-        ))
-    })?;
-    NonZeroU32::new(parsed)
-        .ok_or_else(|| usage_error(format!("{option} must be greater than zero")))
-}
-
-fn parse_frontend(args: &mut impl Iterator<Item = OsString>) -> Result<Frontend, PerfCliError> {
-    let raw = required_utf8_value(args, "--frontend")?;
-    match raw.as_str() {
-        "batch" => Ok(Frontend::Batch),
-        "tui" => Ok(Frontend::Tui {
-            rows: 40,
-            columns: 120,
+        Err(error) => Err(PerfCliError::Usage {
+            message: error.to_string(),
         }),
-        "gui" => Ok(Frontend::Gui {
-            width: 1200,
-            height: 800,
-        }),
-        unknown => Err(usage_error(format!(
-            "unknown frontend `{unknown}`; expected batch, tui, or gui"
-        ))),
     }
 }
 
-fn parse_timeout(args: &mut impl Iterator<Item = OsString>) -> Result<Duration, PerfCliError> {
-    let raw = required_utf8_value(args, "--timeout-secs")?;
-    let seconds = raw.parse::<u64>().map_err(|_| {
-        usage_error(format!(
-            "--timeout-secs requires an unsigned integer, got `{raw}`"
-        ))
-    })?;
-    if seconds == 0 {
-        return Err(usage_error("--timeout-secs must be greater than zero"));
-    }
-    Ok(Duration::from_secs(seconds))
-}
-
-fn required_value(
-    args: &mut impl Iterator<Item = OsString>,
-    option: &str,
-) -> Result<OsString, PerfCliError> {
-    args.next()
-        .ok_or_else(|| usage_error(format!("{option} requires a value")))
-}
-
-fn required_utf8_value(
-    args: &mut impl Iterator<Item = OsString>,
-    option: &str,
-) -> Result<String, PerfCliError> {
-    let value = required_value(args, option)?;
-    value
-        .into_string()
-        .map_err(|_| usage_error(format!("{option} value is not valid UTF-8")))
-}
-
-fn reject_trailing_args(
-    mut args: impl Iterator<Item = OsString>,
-    command: &str,
-) -> Result<(), PerfCliError> {
-    if let Some(argument) = args.next() {
-        return Err(usage_error(format!(
-            "{command} does not accept argument `{}`",
-            argument.to_string_lossy()
-        )));
-    }
-    Ok(())
-}
-
-fn usage_error(message: impl Into<String>) -> PerfCliError {
-    PerfCliError::Usage {
-        message: message.into(),
+impl From<PerfSubcommand> for PerfCommand {
+    fn from(command: PerfSubcommand) -> Self {
+        match command {
+            PerfSubcommand::List => Self::List,
+            PerfSubcommand::Run(arguments) => {
+                let (iterations, frontend, timeout) = arguments.workload.into_semantic();
+                Self::Run {
+                    scenario: arguments.scenario,
+                    editor: arguments.editor,
+                    iterations,
+                    frontend,
+                    timeout,
+                }
+            }
+            PerfSubcommand::Compare(arguments) => {
+                let (iterations, frontend, timeout) = arguments.workload.into_semantic();
+                Self::Compare {
+                    scenario: arguments.scenario,
+                    baseline_editor: arguments.baseline_editor,
+                    candidate_editor: arguments.candidate_editor,
+                    samples: arguments.samples,
+                    iterations,
+                    frontend,
+                    timeout,
+                }
+            }
+            PerfSubcommand::Profile(arguments) => {
+                let (iterations, frontend, timeout) = arguments.workload.into_semantic();
+                Self::Profile {
+                    scenario: arguments.scenario,
+                    profiler: arguments.profiler.into(),
+                    editor: arguments.editor,
+                    iterations,
+                    frontend,
+                    timeout,
+                }
+            }
+        }
     }
 }
 
@@ -293,8 +261,8 @@ pub fn run_cli(
             }
             Ok(())
         }
-        PerfCommand::Help => {
-            print!("{}", perf_usage());
+        PerfCommand::Help { rendered } => {
+            print!("{rendered}");
             Ok(())
         }
         PerfCommand::Run {
@@ -367,21 +335,46 @@ pub fn run_cli(
                 }),
             }
         }
+        PerfCommand::Profile {
+            scenario,
+            profiler,
+            editor,
+            iterations,
+            frontend,
+            timeout,
+        } => {
+            let editor = editor.unwrap_or_else(|| workspace_root.join("target/profiling/neomacs"));
+            let mut request =
+                ProfileRequest::new(scenario, editor, iterations, profiler).with_timeout(timeout);
+            if let Some(frontend) = frontend {
+                request = request.with_frontend(frontend);
+            }
+            let report = PerfHarness::new(workspace_root).profile(&request)?;
+            println!("profile = {}", report.artifact_path.display());
+            match &report.artifact.verdict {
+                ProfileVerdict::Captured {
+                    perf_data_path,
+                    hotspot_report_path,
+                    sample_count,
+                } => {
+                    let directory = report
+                        .artifact_path
+                        .parent()
+                        .expect("profile artifact has a parent directory");
+                    println!("verdict = captured ({sample_count} sampled stacks)");
+                    println!("data    = {}", directory.join(perf_data_path).display());
+                    println!(
+                        "report  = {}",
+                        directory.join(hotspot_report_path).display()
+                    );
+                    println!("note    = instrumented timings are diagnostic, not comparable");
+                    Ok(())
+                }
+                ProfileVerdict::Rejected { reason } => Err(PerfCliError::ProfileRejected {
+                    artifact: report.artifact_path,
+                    reason: format!("{reason:?}"),
+                }),
+            }
+        }
     }
-}
-
-pub fn perf_usage() -> &'static str {
-    "\
-Usage:
-  cargo xtask perf list
-  cargo xtask perf run SCENARIO [--editor PATH] [--iterations N]
-                         [--frontend batch|tui|gui] [--timeout-secs N]
-  cargo xtask perf compare SCENARIO --baseline-editor PATH --candidate-editor PATH
-                         [--samples N>=3] [--iterations N]
-                         [--frontend batch|tui|gui] [--timeout-secs N]
-
-Every run writes a structured artifact below ./tmp/perf. Only a run whose
-fixture invariants all pass receives a valid verdict and performance samples.
-A comparison is valid only when every baseline and candidate run is valid.
-"
 }

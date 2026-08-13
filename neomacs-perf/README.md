@@ -15,6 +15,9 @@ cargo xtask perf compare rust-lsp-typing \
   --baseline-editor target/release/neomacs \
   --candidate-editor target/release-pgo/neomacs \
   --samples 5 --iterations 20
+cargo xtask perf profile rust-lsp-typing \
+  --profiler perf --editor target/profiling/neomacs \
+  --iterations 100 --frontend tui
 ```
 
 The default editor is `target/release/neomacs`. Use `--editor PATH` to measure
@@ -64,6 +67,38 @@ has a correctness mismatch, infrastructure failure, missing metric, invalid
 value, duplicate metric, wrong unit, or wrong sample identity, the comparison
 contains no statistics and the command exits nonzero. A faster incomplete or
 incorrect workload can therefore never improve the reported candidate result.
+
+## Finding native hotspots
+
+`perf profile` runs the same scenario under Linux `perf record`, using a
+999 Hz user-space CPU-clock event and 16 KiB DWARF call stacks. It writes a
+typed `profile.json`, the linked instrumented scenario `artifact.json`, raw
+`perf.data`, and a self-overhead call-graph report below
+`./tmp/perf-profiles/<profile-id>`. A captured verdict requires a correct
+scenario, successful report generation, and a nonzero reported sample count.
+
+Use a symbol-preserving build when investigating optimized code:
+
+```sh
+cargo xtask fresh-build --profile profiling
+cargo xtask perf profile rust-lsp-typing --profiler perf --iterations 100
+```
+
+The profiling command defaults to `target/profiling/neomacs`; pass
+`--editor target/release/neomacs` to inspect an existing release build. Profile
+metadata deliberately contains no timing measurements, and comparison commands
+cannot consume profile artifacts. The linked scenario run still records its
+instrumented timing for diagnosis, but that timing is not comparable to a
+normal run.
+
+The native profile starts with the editor process and covers editor startup,
+fixture loading, and the edit loop. Package, grammar, and input preparation
+finish before sampling begins. Use the raw call graph to separate startup-only
+work from repeated editing work. `perf` must be installed and permitted by the
+host's `perf_event_paranoid` policy. TUI profiling uses an app-only hook inside
+the harness's private PTY and does not attach to an existing tmux session. GUI
+profiling likewise uses the GUI runner's app-only hook, so Weston and retry
+bookkeeping do not pollute Neomacs attribution.
 
 ## `rust-lsp-typing`
 

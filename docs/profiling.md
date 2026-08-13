@@ -17,6 +17,9 @@ cargo xtask perf compare rust-lsp-typing \
   --baseline-editor target/release/neomacs \
   --candidate-editor target/release-pgo/neomacs \
   --samples 5 --iterations 20
+cargo xtask perf profile rust-lsp-typing \
+  --profiler perf --editor target/profiling/neomacs \
+  --iterations 100 --frontend tui
 ```
 
 Every attempt writes a structured bundle below `./tmp/perf`. Measurements are
@@ -24,6 +27,24 @@ published only when the fixture's correctness invariants pass; mismatches and
 infrastructure failures are retained as failed artifacts and make the command
 exit nonzero. See [`neomacs-perf/README.md`](../neomacs-perf/README.md) for the
 workload contract, collected files, and metric definitions.
+
+Use `perf profile` when timings show a regression but do not explain it. The
+Linux-only command samples the editor/application process tree and retains both
+raw `perf.data` and a text hotspot report below `./tmp/perf-profiles`. Prefer a
+`profiling` build, which preserves symbols without replacing the release
+binary:
+
+```sh
+cargo xtask fresh-build --profile profiling
+```
+
+Profile runs are deliberately diagnostic: instrumentation changes timing, so
+their metadata carries no comparable measurements and cannot be fed into
+`perf compare`. The linked scenario artifact still proves the same correctness
+invariants passed. Sampling starts with the editor process and covers editor
+startup, fixture loading, and the edit loop; package, grammar, and input
+preparation finish before sampling begins. Consult the call graph when
+distinguishing startup work from steady editing work.
 
 ## Emacs Lisp profiler
 

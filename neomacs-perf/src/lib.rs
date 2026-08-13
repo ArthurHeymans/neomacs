@@ -4,6 +4,7 @@ mod catalog;
 mod cli;
 mod comparison;
 mod harness;
+mod profile;
 
 pub use artifact::{
     ArtifactFile, ArtifactKind, CorrectnessMismatch, EditorProvenance, Measurement, MetricName,
@@ -18,9 +19,15 @@ pub use comparison::{
 };
 #[cfg(test)]
 pub(crate) use comparison::{ComparisonObservation, evaluate_comparison};
-pub use harness::{PerfError, PerfHarness, RunReport, RunRequest};
 #[cfg(test)]
-pub(crate) use harness::{collect_editor_provenance, configure_benchmark_environment};
+pub(crate) use harness::perf_data_sample_count;
+#[cfg(test)]
+pub(crate) use harness::{PerfCapture, collect_editor_provenance, configure_benchmark_environment};
+pub use harness::{PerfError, PerfHarness, RunReport, RunRequest};
+pub use profile::{
+    NativeProfiler, PerfCallGraph, PerfCaptureConfiguration, PerfSamplingEvent, ProfileArtifact,
+    ProfileRejection, ProfileReport, ProfileRequest, ProfileVerdict,
+};
 
 #[cfg(test)]
 mod artifact_test;
@@ -32,3 +39,5 @@ mod cli_test;
 mod comparison_test;
 #[cfg(test)]
 mod harness_test;
+#[cfg(test)]
+mod profile_test;
