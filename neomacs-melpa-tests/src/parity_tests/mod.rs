@@ -480,6 +480,7 @@ mod inf_ruby;
 mod inflections;
 mod iter2;
 mod ivy;
+mod ivy_hydra;
 mod ivy_rich;
 mod js2_mode;
 mod js2_refactor;
