@@ -2908,6 +2908,12 @@ pub const POLYMODE_MELPA_PIN: (&str, &str) = ("polymode", "20260505.1803");
 /// `d8b058c9e9d0429ea7e81d121ce19b064bd7e0f5` before the mode moved into Emacs.
 pub const CSHARP_MODE_MELPA_PIN: (&str, &str) = ("csharp-mode", "20221126.2005");
 
+/// The exact Format All package selected for practical built-in and external
+/// formatter chains, buffer/region commands, error recovery, and format-on-save
+/// parity. MELPA built this archive from upstream commit
+/// `0dbe9c70eaf8b92dca1a42552761eaa13c3139cf`.
+pub const FORMAT_ALL_MELPA_PIN: (&str, &str) = ("format-all", "20260620.1824");
+
 /// The exact CSV Mode release selected from GNU ELPA by the practical quoted
 /// row, column editing, sorting, alignment, and transpose parity corpus.
 pub const CSV_MODE_GNU_ELPA_PIN: (&str, &str) = ("csv-mode", "1.27");

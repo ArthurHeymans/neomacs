@@ -397,7 +397,7 @@ rank	package	downloads	status
 396	command-log-mode	243799	covered
 397	helm-gtags	241393	covered
 398	csharp-mode	240019	covered
-399	format-all	237403	todo
+399	format-all	237403	covered
 400	ccls	237387	todo
 401	ivy-rich	237181	covered
 402	gptel	233704	todo

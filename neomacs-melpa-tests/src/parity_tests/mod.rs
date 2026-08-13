@@ -399,6 +399,7 @@ mod flycheck_rust;
 mod flyspell_correct;
 mod flyspell_correct_helm;
 mod forge;
+mod format_all;
 mod fringe_helper;
 mod frozen_packages;
 mod fuzzy;
