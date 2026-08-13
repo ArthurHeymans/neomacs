@@ -1061,19 +1061,24 @@ pub(crate) fn resolve_lisp_visible_symbol_name(id: SymId) -> LispVisibleSymbolNa
         .resolve_lisp_visible_name(id)
 }
 
-/// Resolve a set of Lisp-visible symbol names under one registry read lock.
+/// Map a set of Lisp-visible symbol names under one registry read lock.
 ///
 /// GNU stores the name directly in each symbol, so an obarray scan performs no
 /// global lock acquisition per candidate. Keeping the lock inside this batch
-/// boundary gives Neomacs the same O(1)-lock scan shape while retaining the
-/// rare GC-owned name objects required for exact `symbol-name` semantics.
-pub(crate) fn resolve_lisp_visible_symbol_names(
-    ids: impl IntoIterator<Item = SymId>,
-) -> Vec<LispVisibleSymbolName> {
+/// boundary gives Neomacs the same O(1)-lock scan shape.  The mapper writes
+/// directly into the caller's final collection, so no parallel full-obarray
+/// name collection is required.  `LispVisibleSymbolName` remains owned because
+/// completion predicates may run Lisp and GC after this lock is released.
+pub(crate) fn map_lisp_visible_symbol_names<T>(
+    ids: &[SymId],
+    mut map: impl FnMut(SymId, LispVisibleSymbolName) -> T,
+) -> Vec<T> {
     let registry = global_symbol_registry().read();
-    ids.into_iter()
-        .map(|id| registry.resolve_lisp_visible_name(id))
-        .collect()
+    let mut mapped = Vec::with_capacity(ids.len());
+    for &id in ids {
+        mapped.push(map(id, registry.resolve_lisp_visible_name(id)));
+    }
+    mapped
 }
 
 #[inline]

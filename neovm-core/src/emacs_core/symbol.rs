@@ -698,7 +698,10 @@ pub struct Obarray {
 struct CompletionOrderCache {
     members_epoch: u64,
     obarray_len: usize,
-    ids: Vec<SymId>,
+    /// Immutable bucket-order snapshot shared by completion readers.  An
+    /// `Arc<[SymId]>` makes a cache hit O(1) without lending the cache mutex
+    /// across the caller's (potentially much longer) symbol-name scan.
+    ids: std::sync::Arc<[SymId]>,
 }
 
 /// Power-of-two slots per obarray chunk (`idx >> 12` / `idx & 4095`).
@@ -3187,7 +3190,7 @@ impl Obarray {
         &self,
         obarray_len: usize,
         compute: impl FnOnce() -> Vec<SymId>,
-    ) -> Vec<SymId> {
+    ) -> std::sync::Arc<[SymId]> {
         let mut guard = self
             .completion_order_cache
             .lock()
@@ -3196,13 +3199,13 @@ impl Obarray {
             && cache.members_epoch == self.members_epoch
             && cache.obarray_len == obarray_len
         {
-            return cache.ids.clone();
+            return std::sync::Arc::clone(&cache.ids);
         }
-        let ids = compute();
+        let ids: std::sync::Arc<[SymId]> = compute().into();
         *guard = Some(CompletionOrderCache {
             members_epoch: self.members_epoch,
             obarray_len,
-            ids: ids.clone(),
+            ids: std::sync::Arc::clone(&ids),
         });
         ids
     }

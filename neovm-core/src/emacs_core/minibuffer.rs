@@ -2048,24 +2048,13 @@ fn completion_candidates_from_global_obarray_in_state(
     obarray: &Obarray,
     lisp_obarray: Value,
 ) -> Vec<CompletionCandidate> {
-    let symbols =
-        super::builtins::symbols::global_obarray_symbols_in_bucket_order(obarray, lisp_obarray);
-    let names = crate::emacs_core::intern::resolve_lisp_visible_symbol_names(symbols.iter().map(
-        |symbol| {
-            symbol
-                .as_symbol_id()
-                .expect("global obarray entries are symbols")
-        },
-    ));
-    symbols
-        .into_iter()
-        .zip(names)
-        .map(|(sym, name)| CompletionCandidate {
-            completion: completion_text_from_symbol_name(name),
-            predicate_arg: sym,
-            predicate_extra_arg: None,
-        })
-        .collect()
+    let ids =
+        super::builtins::symbols::global_obarray_symbol_ids_in_bucket_order(obarray, lisp_obarray);
+    crate::emacs_core::intern::map_lisp_visible_symbol_names(&ids, |id, name| CompletionCandidate {
+        completion: completion_text_from_symbol_name(name),
+        predicate_arg: Value::from_sym_id(id),
+        predicate_extra_arg: None,
+    })
 }
 
 pub(crate) fn completion_candidates_from_collection_in_state(

@@ -1501,10 +1501,16 @@ fn obarray_hash_bytes(bytes: &[u8], len: usize) -> usize {
     }
 }
 
-pub(crate) fn global_obarray_symbols_in_bucket_order(
+/// Immutable symbol-id snapshot in GNU obarray iteration order.
+///
+/// Completion consumes the ids directly, while Lisp APIs such as `mapatoms`
+/// may materialize `Value`s from the same snapshot.  Keeping those two
+/// ownership policies separate prevents the hot completion path from paying
+/// for a parallel `Vec<Value>`.
+pub(crate) fn global_obarray_symbol_ids_in_bucket_order(
     obarray: &Obarray,
     lisp_obarray: Value,
-) -> Vec<Value> {
+) -> std::sync::Arc<[crate::emacs_core::intern::SymId]> {
     let len = obarray_len(lisp_obarray)
         .filter(|len| *len > 1)
         .unwrap_or(GNU_INITIAL_OBARRAY_SIZE);
@@ -1516,7 +1522,7 @@ pub(crate) fn global_obarray_symbols_in_bucket_order(
     // is memoized per membership epoch: symbol names are immutable
     // (append-only interner) so it only changes on intern/unintern or an
     // obarray resize (the len cache key).
-    let ids = obarray.completion_bucket_order_cached(len, || {
+    obarray.completion_bucket_order_cached(len, || {
         let mut entries: Vec<_> = obarray
             .global_member_ids()
             .enumerate()
@@ -1527,8 +1533,34 @@ pub(crate) fn global_obarray_symbols_in_bucket_order(
             .collect();
         entries.sort_unstable_by(|a, b| a.0.cmp(&b.0).then_with(|| b.1.cmp(&a.1)));
         entries.into_iter().map(|(_, _, id)| id).collect()
-    });
-    ids.into_iter().map(Value::from_sym_id).collect()
+    })
+}
+
+#[cfg(test)]
+thread_local! {
+    static GLOBAL_OBARRAY_SYMBOL_VALUE_MATERIALIZATIONS: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_global_obarray_symbol_value_materializations() {
+    GLOBAL_OBARRAY_SYMBOL_VALUE_MATERIALIZATIONS.set(0);
+}
+
+#[cfg(test)]
+pub(crate) fn global_obarray_symbol_value_materializations() -> usize {
+    GLOBAL_OBARRAY_SYMBOL_VALUE_MATERIALIZATIONS.get()
+}
+
+pub(crate) fn global_obarray_symbols_in_bucket_order(
+    obarray: &Obarray,
+    lisp_obarray: Value,
+) -> Vec<Value> {
+    #[cfg(test)]
+    GLOBAL_OBARRAY_SYMBOL_VALUE_MATERIALIZATIONS
+        .set(GLOBAL_OBARRAY_SYMBOL_VALUE_MATERIALIZATIONS.get() + 1);
+    let ids = global_obarray_symbol_ids_in_bucket_order(obarray, lisp_obarray);
+    ids.iter().copied().map(Value::from_sym_id).collect()
 }
 
 /// The name string a symbol answers to in an obarray.

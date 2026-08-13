@@ -1694,6 +1694,27 @@ fn symbol_completion_observes_the_lisp_visible_mutated_name() {
     );
 }
 
+/// GNU `Fall_completions` (`src/minibuf.c`) advances one `obarray_iter_t`
+/// entry at a time and constructs only the surviving completion result.  The
+/// Neomacs ownership boundary needs one rooted candidate collection because a
+/// Lisp predicate may run GC, but it must not first materialize parallel
+/// full-obarray symbol and name collections.
+#[test]
+fn global_obarray_completion_has_no_pre_candidate_staging_collections() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    crate::emacs_core::builtins::symbols::reset_global_obarray_symbol_value_materializations();
+    eval.eval_str(r##"(all-completions "global-obarray-stage-probe" obarray)"##)
+        .expect("global obarray completion");
+
+    assert_eq!(
+        crate::emacs_core::builtins::symbols::global_obarray_symbol_value_materializations(),
+        0,
+        "global obarray completion must stream cached ids and visible names directly into the rooted candidate set"
+    );
+}
+
 /// Task #26: GNU filters completion candidates against
 /// `completion-regexp-list` through `fast_string_match_internal`
 /// (`src/minibuf.c:1592` `match_regexps`, `Ftry_completion`), which arms
