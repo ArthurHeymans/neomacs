@@ -363,7 +363,7 @@ fn monospace_preference_penalizes_proportional_candidates() {
 
     assert!(
         mono_score < proportional_score,
-        "expected mono candidate to outrank proportional candidate: mono={mono_score} proportional={proportional_score}"
+        "expected mono candidate to outrank proportional candidate: mono={mono_score:?} proportional={proportional_score:?}"
     );
 }
 
@@ -424,7 +424,7 @@ fn family_affinity_prefers_requested_family_over_unrelated_fixed_pitch_fallback(
 
     assert!(
         requested_score < fallback_score,
-        "expected requested-family CJK companion to outrank unrelated fixed fallback: requested={requested_score} fallback={fallback_score}"
+        "expected requested-family CJK companion to outrank unrelated fixed fallback: requested={requested_score:?} fallback={fallback_score:?}"
     );
 }
 
@@ -521,7 +521,7 @@ fn find_font_candidate_prefers_requested_width_over_candidate_order() {
 }
 
 #[test]
-fn best_candidate_for_pass_prefers_first_family_when_later_style_matches_catch_up() {
+fn best_candidate_for_pass_preserves_each_equal_score_entity_ordinal() {
     let candidates = vec![
         ListedFont {
             foundry: None,
@@ -575,8 +575,8 @@ fn best_candidate_for_pass_prefers_first_family_when_later_style_matches_catch_u
 
     let matched = super::best_candidate_for_pass(candidates, 400, false, None, None, true, None)
         .expect("best candidate");
-    assert_eq!(matched.family, "Noto Sans Mono CJK SC");
-    assert_eq!(matched.postscript_name.as_deref(), Some("Mono-Regular"));
+    assert_eq!(matched.family, "Noto Sans CJK JP");
+    assert_eq!(matched.postscript_name.as_deref(), Some("Sans-Regular"));
 }
 
 #[cfg(unix)]

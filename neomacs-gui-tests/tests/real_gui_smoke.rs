@@ -110,6 +110,11 @@ fn real_gui_font_selection_semi_light_tie_matches_gnu_emacs() {
     run_font_selection_oracle(Some("noto-sans-weight-semi-light-h150-s12"));
 }
 
+#[test]
+fn real_gui_font_selection_italic_entity_order_matches_gnu_emacs() {
+    run_font_selection_oracle(Some("noto-sans-slant-italic-h150-s12"));
+}
+
 fn run_font_selection_oracle(case_filter: Option<&str>) {
     if !cfg!(target_os = "linux") {
         eprintln!("skipping real GUI font selection oracle; X11 comparator is Linux-only");

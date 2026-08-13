@@ -11,6 +11,7 @@
 //! - candidate discovery uses Fontconfig's `FcFontList`
 //! - style selection is scored in Rust instead of delegated to Fontconfig
 
+use crate::font::selection::{CandidateSelectionScore, candidate_selection_score};
 #[cfg(unix)]
 use fontconfig_sys::constants::{
     FC_RGBA, FC_RGBA_BGR, FC_RGBA_NONE, FC_RGBA_RGB, FC_RGBA_VBGR, FC_RGBA_VRGB,
@@ -800,38 +801,21 @@ fn best_candidate_for_pass(
     prefer_monospace: bool,
     queried_family: Option<&str>,
 ) -> Option<FontMatch> {
-    let mut family_best: HashMap<(String, Option<String>), (usize, u32, FontMatch)> =
-        HashMap::new();
-
-    for (ordinal, candidate) in candidates.into_iter().enumerate() {
-        let score = candidate_score(
-            &candidate,
-            requested_weight,
-            italic,
-            requested_slant,
-            requested_spacing,
-            prefer_monospace,
-            queried_family,
-        );
-        let key = (
-            candidate.matched.family.clone(),
-            candidate.matched.file.clone(),
-        );
-        let matched = candidate.matched;
-        match family_best.get_mut(&key) {
-            Some((_, best_score, best_match)) if score < *best_score => {
-                *best_score = score;
-                *best_match = matched;
-            }
-            Some(_) => {}
-            None => {
-                family_best.insert(key, (ordinal, score, matched));
-            }
-        }
-    }
-
-    family_best
-        .into_values()
+    candidates
+        .into_iter()
+        .enumerate()
+        .map(|(ordinal, candidate)| {
+            let score = candidate_score(
+                &candidate,
+                requested_weight,
+                italic,
+                requested_slant,
+                requested_spacing,
+                prefer_monospace,
+                queried_family,
+            );
+            (ordinal, score, candidate.matched)
+        })
         .min_by_key(|(ordinal, score, _)| (*score, *ordinal))
         .map(|(_, _, matched)| matched)
 }
@@ -869,7 +853,7 @@ fn candidate_score(
     requested_spacing: Option<i32>,
     prefer_monospace: bool,
     queried_family: Option<&str>,
-) -> u32 {
+) -> CandidateSelectionScore {
     let style = candidate.style.to_ascii_lowercase();
     let candidate_weight = candidate
         .weight_css
@@ -882,11 +866,17 @@ fn candidate_score(
         neovm_core::face::FontSlant::Normal
     });
 
-    let mut score = spacing_score(requested_spacing, candidate.spacing, prefer_monospace);
-    score += family_affinity_score(queried_family, &candidate.matched.family);
-    score += u32::from(candidate_weight.abs_diff(requested_weight));
-    score += slant_distance(requested_slant, candidate_slant);
-    score
+    let compatibility = spacing_score(requested_spacing, candidate.spacing, prefer_monospace)
+        + family_affinity_score(queried_family, &candidate.matched.family);
+    candidate_selection_score(
+        compatibility,
+        requested_weight,
+        requested_slant,
+        None,
+        candidate_weight,
+        candidate_slant,
+        candidate.width,
+    )
 }
 
 fn requested_spacing(_spec: &StoredFontSpec) -> Option<i32> {
@@ -967,24 +957,6 @@ fn spacing_distance(requested: SpacingClass, candidate: SpacingClass) -> u32 {
         (Dual, Charcell) | (Charcell, Dual) => 250,
         (Mono, Charcell) | (Charcell, Mono) => 100,
         _ => 0,
-    }
-}
-
-fn slant_distance(
-    requested: neovm_core::face::FontSlant,
-    candidate: neovm_core::face::FontSlant,
-) -> u32 {
-    use neovm_core::face::FontSlant::{Italic, Normal, Oblique, ReverseItalic, ReverseOblique};
-
-    match (requested, candidate) {
-        (Normal, Normal) => 0,
-        (Italic, Italic) | (Italic, Oblique) => 0,
-        (Oblique, Oblique) | (Oblique, Italic) => 0,
-        (ReverseItalic, ReverseItalic) | (ReverseItalic, ReverseOblique) => 0,
-        (ReverseOblique, ReverseOblique) | (ReverseOblique, ReverseItalic) => 0,
-        (Normal, _) => 350,
-        (_, Normal) => 250,
-        _ => 75,
     }
 }
 

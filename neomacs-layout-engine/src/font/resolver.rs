@@ -6,6 +6,7 @@
 //! Fontconfig, CoreText, or DirectWrite to discover candidates, but it never
 //! decides which fontset entry or style wins.
 
+use crate::font::selection::{CandidateSelectionScore, candidate_selection_score};
 use crate::font_backend::{
     FontBackend, FontCandidate, FontCandidateQuery, PlatformFontMatch, TextDirection,
 };
@@ -289,31 +290,16 @@ fn select_best_candidate(
     candidates: Vec<FontCandidate>,
     request: &SelectionRequest<'_>,
 ) -> Option<PlatformFontMatch> {
-    // GNU groups style entities by family/file, preserves the group's first
-    // discovery ordinal, and then replaces its representative with the
-    // closest style. The representative still carries its exact
-    // face/named-instance identity.
-    let mut family_file_best: HashMap<String, (usize, u32, PlatformFontMatch)> = HashMap::default();
-    for (ordinal, candidate) in candidates.into_iter().enumerate() {
-        let score = candidate_score(&candidate, request);
-        let key = candidate
-            .matched
-            .file_path()
-            .map(|file| format!("{}\0{file}", candidate.matched.family()))
-            .unwrap_or_else(|| candidate.matched.identity.stable_key.clone());
-        match family_file_best.get_mut(&key) {
-            Some((_, best_score, matched)) if score < *best_score => {
-                *best_score = score;
-                *matched = candidate.matched;
-            }
-            Some(_) => {}
-            None => {
-                family_file_best.insert(key, (ordinal, score, candidate.matched));
-            }
-        }
-    }
-    let selected = family_file_best
-        .into_values()
+    // GNU scores every entity independently. Equal scores retain the entity's
+    // own Fontconfig discovery order; a different named instance in the same
+    // variable file must not donate an earlier ordinal to the winner.
+    let selected = candidates
+        .into_iter()
+        .enumerate()
+        .map(|(ordinal, candidate)| {
+            let score = candidate_score(&candidate, request);
+            (ordinal, score, candidate.matched)
+        })
         .min_by_key(|(ordinal, score, _)| (*score, *ordinal));
     if let Some((ordinal, score, matched)) = selected.as_ref() {
         tracing::trace!(
@@ -323,7 +309,7 @@ fn select_best_candidate(
             weight = matched.weight(),
             slant = ?matched.slant(),
             ordinal,
-            score,
+            ?score,
             "shared font resolver selected platform candidate"
         );
     }
@@ -357,22 +343,22 @@ fn family_search_order(
     order
 }
 
-fn candidate_score(candidate: &FontCandidate, request: &SelectionRequest<'_>) -> u32 {
+fn candidate_score(
+    candidate: &FontCandidate,
+    request: &SelectionRequest<'_>,
+) -> CandidateSelectionScore {
     let candidate_weight = candidate.matched.weight().unwrap_or(400);
-    let mut score = spacing_score(request.spacing, candidate.spacing, request.prefer_monospace);
-    score += family_affinity_score(request.queried_family, candidate.matched.family());
-    score += u32::from(candidate_weight.abs_diff(request.weight));
-    score += slant_distance(request.slant, candidate.matched.slant());
-    score += request.width.map_or(0, |requested| {
-        u32::from(
-            candidate
-                .width
-                .unwrap_or(FontWidth::Normal)
-                .gnu_numeric()
-                .abs_diff(requested.gnu_numeric()),
-        )
-    });
-    score
+    let compatibility = spacing_score(request.spacing, candidate.spacing, request.prefer_monospace)
+        + family_affinity_score(request.queried_family, candidate.matched.family());
+    candidate_selection_score(
+        compatibility,
+        request.weight,
+        request.slant,
+        request.width,
+        candidate_weight,
+        candidate.matched.slant(),
+        candidate.width,
+    )
 }
 
 fn spacing_score(
@@ -451,20 +437,6 @@ fn family_affinity_score(queried_family: Option<&str>, candidate_family: &str) -
     }
 }
 
-fn slant_distance(requested: FontSlant, candidate: FontSlant) -> u32 {
-    use FontSlant::{Italic, Normal, Oblique, ReverseItalic, ReverseOblique};
-    match (requested, candidate) {
-        (Normal, Normal) => 0,
-        (Italic, Italic) | (Italic, Oblique) => 0,
-        (Oblique, Oblique) | (Oblique, Italic) => 0,
-        (ReverseItalic, ReverseItalic) | (ReverseItalic, ReverseOblique) => 0,
-        (ReverseOblique, ReverseOblique) | (ReverseOblique, ReverseItalic) => 0,
-        (Normal, _) => 350,
-        (_, Normal) => 250,
-        _ => 75,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -530,6 +502,47 @@ mod tests {
             .expect("candidate");
         assert_eq!(selected.weight(), Some(700));
         assert_eq!(selected.slant(), FontSlant::Italic);
+    }
+
+    #[test]
+    fn equal_score_entities_keep_their_own_discovery_order() {
+        let mut variable_seed = candidate("Fixture", 800, FontSlant::Italic, 100);
+        variable_seed.matched.identity = ResolvedFontIdentity::from_file(
+            "/fixture/Fixture[wdth,wght].ttf",
+            0x0008_0000,
+            Some("Fixture-ExtraBoldItalic".to_string()),
+        );
+        let mut static_bold = candidate("Fixture", 700, FontSlant::Italic, 100);
+        static_bold.matched.identity = ResolvedFontIdentity::from_file(
+            "/fixture/Fixture-BoldItalic.ttf",
+            0,
+            Some("Fixture-BoldItalic".to_string()),
+        );
+        let mut variable_bold = candidate("Fixture", 700, FontSlant::Italic, 100);
+        variable_bold.matched.identity = ResolvedFontIdentity::from_file(
+            "/fixture/Fixture[wdth,wght].ttf",
+            0x0007_0000,
+            Some("Fixture-BoldItalic".to_string()),
+        );
+
+        let selected = select_best_candidate(
+            vec![variable_seed, static_bold, variable_bold],
+            &SelectionRequest {
+                weight: 700,
+                slant: FontSlant::Italic,
+                width: Some(FontWidth::Normal),
+                spacing: None,
+                prefer_monospace: false,
+                queried_family: Some("Fixture"),
+            },
+        )
+        .expect("equal-score entity");
+
+        assert_eq!(
+            selected.file_path(),
+            Some("/fixture/Fixture-BoldItalic.ttf"),
+            "GNU scores each entity independently; a variable file's earlier, non-matching instance must not donate its ordinal to a later instance"
+        );
     }
 
     struct MetricBackend {

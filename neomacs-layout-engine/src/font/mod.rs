@@ -6,3 +6,4 @@ pub mod loader;
 pub mod metrics;
 pub mod probe;
 pub mod resolver;
+pub(crate) mod selection;
