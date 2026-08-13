@@ -1935,6 +1935,34 @@ fn next_single_property_change_bounded_matches_unbounded_within_limit_and_soft_s
 }
 
 #[test]
+fn non_nil_property_range_query_ignores_matching_properties_outside_the_range() {
+    let mut table = TextPropertyTable::new();
+    for i in 0..10 {
+        put_chars(
+            &mut table,
+            i * 10,
+            i * 10 + 10,
+            Value::symbol("face"),
+            Value::symbol(if i % 2 == 0 { "a" } else { "b" }),
+        );
+    }
+    put_chars(
+        &mut table,
+        80,
+        90,
+        Value::symbol("display"),
+        Value::string("replacement"),
+    );
+    put_chars(&mut table, 20, 21, Value::symbol("invisible"), Value::T);
+    let structural = [Value::symbol("display"), Value::symbol("invisible")];
+
+    assert!(!table.has_any_non_nil_property_in_char_range(char_range(0, 1), &structural));
+    assert!(table.has_any_non_nil_property_in_char_range(char_range(20, 21), &structural));
+    assert!(table.has_any_non_nil_property_in_char_range(char_range(79, 81), &structural));
+    assert!(!table.has_any_non_nil_property_in_char_range(char_range(80, 80), &structural));
+}
+
+#[test]
 fn find_id_memo_never_disagrees_with_fresh_descent() {
     // Differential fuzz for the find_id positional memo (version/cache_* fields):
     // apply a randomized sequence of splits (put), merges (remove), and position

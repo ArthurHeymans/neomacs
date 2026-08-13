@@ -628,13 +628,79 @@ impl DisplayRowWriteMetrics {
     ///
     /// Most characters append a new tail glyph, but a contextual-script run
     /// grows the earlier Composite base and appends a zero-accounting padding
-    /// cell.  Taking the whole-area delta makes both representations report
-    /// the same incremental progress to the source-position authority.
+    /// cell.  Taking the captured existing-glyph delta makes both
+    /// representations report the same incremental progress to the
+    /// source-position authority without rescanning the whole row.
     fn growth_since(self, before: Self) -> Self {
         Self::new(
             (self.width_px - before.width_px).max(0.0),
             self.width_cols.saturating_sub(before.width_cols),
         )
+    }
+}
+
+/// Metric state captured immediately before one text character is emitted.
+///
+/// A text write can append tail glyphs and, for contextual shaping or a
+/// grapheme continuation, grow exactly one existing non-padding tail glyph.
+/// Encoding those two mutation regions here avoids taking whole-row metric
+/// snapshots before and after every character.  The `must_use` contract makes
+/// the caller finish metric accounting after layout/clipping mutations.
+#[must_use = "finish the pending row write after all glyph mutations"]
+#[derive(Clone, Copy, Debug)]
+struct PendingDisplayRowWriteMetrics {
+    appended_from: usize,
+    existing_tail: Option<ExistingGlyphMetricCheckpoint>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ExistingGlyphMetricCheckpoint {
+    index: usize,
+    metrics: DisplayRowWriteMetrics,
+}
+
+impl PendingDisplayRowWriteMetrics {
+    fn capture(
+        glyphs: &[Glyph],
+        char_width_px: f32,
+        kind: DisplayRowTextNaturalAdvanceKind,
+    ) -> Self {
+        let existing_tail = matches!(
+            kind,
+            DisplayRowTextNaturalAdvanceKind::ClusterContinuation
+                | DisplayRowTextNaturalAdvanceKind::ComplexRunMember
+        )
+        .then(|| {
+            glyphs
+                .iter()
+                .rposition(|glyph| !glyph.padding)
+                .map(|index| ExistingGlyphMetricCheckpoint {
+                    index,
+                    metrics: DisplayRowWriteMetrics::from_glyphs(
+                        std::slice::from_ref(&glyphs[index]),
+                        char_width_px,
+                    ),
+                })
+        })
+        .flatten();
+
+        Self {
+            appended_from: glyphs.len(),
+            existing_tail,
+        }
+    }
+
+    fn finish(self, glyphs: &[Glyph], char_width_px: f32) -> DisplayRowWriteMetrics {
+        let mut written =
+            DisplayRowWriteMetrics::from_glyphs(&glyphs[self.appended_from..], char_width_px);
+        if let Some(checkpoint) = self.existing_tail
+            && let Some(glyph) = glyphs.get(checkpoint.index)
+        {
+            let current =
+                DisplayRowWriteMetrics::from_glyphs(std::slice::from_ref(glyph), char_width_px);
+            written.add(current.growth_since(checkpoint.metrics));
+        }
+        written
     }
 }
 
@@ -1587,7 +1653,11 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             }
 
             let before_len = self.area_len();
-            let before_metrics = self.writer.current_text_metrics();
+            let pending_metrics = PendingDisplayRowWriteMetrics::capture(
+                &self.writer.row.glyphs[self.writer.area_index()],
+                self.writer.layout.char_width_px,
+                advance_request.kind(),
+            );
             let slot_start = self.position;
             if resolved_source_mapping.is_none() {
                 resolved_source_mapping = Some(source_mapping.resolve(span, self.writer.row));
@@ -1615,10 +1685,10 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
             for glyph in &mut self.writer.row.glyphs[area_index][before_len..] {
                 glyph.pointer_appearance = pointer_metadata;
             }
-            let written = self
-                .writer
-                .current_text_metrics()
-                .growth_since(before_metrics);
+            let written = pending_metrics.finish(
+                &self.writer.row.glyphs[self.writer.area_index()],
+                self.writer.layout.char_width_px,
+            );
             slots.push(DisplayRowGlyphSlot::with_pointer_appearance(
                 source_mapping.slot_source(&span.start, char_offset, byte_offset),
                 slot_start.x_px(),

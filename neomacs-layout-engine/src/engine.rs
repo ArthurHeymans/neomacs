@@ -99,6 +99,39 @@ const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
 /// never publish mismatched geometry or spin forever.
 const MAX_FRAME_LAYOUT_RETRIES: usize = 12;
 
+/// Text properties that can change row structure across a localized edit.
+///
+/// This is a closed enum rather than a string slice so adding a new structural
+/// property necessarily participates in the pre-interned symbol table below.
+/// `VariantArray` and `EnumCount` keep that table exhaustive at compile time.
+#[repr(usize)]
+#[derive(Clone, Copy, Debug, strum::EnumCount, strum::IntoStaticStr, strum::VariantArray)]
+#[strum(serialize_all = "kebab-case")]
+enum EditReplayStructureProperty {
+    Display,
+    Invisible,
+    Composition,
+    LinePrefix,
+    WrapPrefix,
+}
+
+impl EditReplayStructureProperty {
+    fn symbols() -> &'static [Value; <Self as strum::EnumCount>::COUNT] {
+        use std::sync::OnceLock;
+        use strum::VariantArray;
+
+        const N: usize = <EditReplayStructureProperty as strum::EnumCount>::COUNT;
+        static SYMBOLS: OnceLock<[Value; N]> = OnceLock::new();
+        SYMBOLS.get_or_init(|| {
+            std::array::from_fn(|index| {
+                Value::symbol(neovm_core::emacs_core::intern::intern(
+                    EditReplayStructureProperty::VARIANTS[index].into(),
+                ))
+            })
+        })
+    }
+}
+
 /// Why layout is running.
 ///
 /// This is deliberately a closed set: callers cannot accidentally combine a
@@ -2066,38 +2099,15 @@ impl LayoutEngine {
         // re-syncs against the old matrix post-walk; here the post-walk
         // `expected_walk` validation is the backstop and this scan keeps the
         // replay from being built (and bailed) pointlessly.
-        let structure_props = [
-            "display",
-            "invisible",
-            "composition",
-            "line-prefix",
-            "wrap-prefix",
-        ];
+        let structure_range = neovm_core::buffer::CharRange::new(
+            neovm_core::buffer::CharPos0::new(dirty_start.max(0) as usize),
+            neovm_core::buffer::CharPos0::new(dirty_end.max(0) as usize),
+        );
         let span_structure_safe = simple_span
-            && structure_props.iter().all(|prop| {
-                let name = neovm_core::emacs_core::value::Value::symbol(prop);
-                let mut byte = buffer.char_pos_to_emacs_byte_pos_clamped(
-                    neovm_core::buffer::CharPos0::new(dirty_start.max(0) as usize),
-                );
-                let end_byte = buffer.char_pos_to_emacs_byte_pos_clamped(
-                    neovm_core::buffer::CharPos0::new(dirty_end.max(0) as usize),
-                );
-                loop {
-                    if byte >= end_byte {
-                        return true;
-                    }
-                    if buffer
-                        .text_props_get_property_at_emacs_byte_pos(byte, name)
-                        .is_some()
-                    {
-                        return false;
-                    }
-                    match buffer.text_props_next_single_change_after_emacs_byte_pos(byte, name) {
-                        Some(next) if next > byte => byte = next,
-                        _ => return true,
-                    }
-                }
-            });
+            && !buffer.has_any_non_nil_property_in_char_range(
+                structure_range,
+                EditReplayStructureProperty::symbols(),
+            );
         let damage = EditDamage::new(dirty_start, dirty_end, delta, span_newlines);
         let mut replay = prev.edit_replay(&curr_key, damage, span_structure_safe)?;
         if prev.chrome_reusable_after_edit(

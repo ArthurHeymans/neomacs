@@ -2147,6 +2147,25 @@ impl TextPropertyTable {
         }
     }
 
+    /// Whether any property in `keys` has a non-nil value on the half-open
+    /// character `range`.
+    ///
+    /// The [`CharRange`] argument makes the scan limit part of the operation's
+    /// type instead of an optional caller convention.  The interval tree is
+    /// located once at `range.start()` and then traversed in order only until
+    /// `range.end()`, matching GNU redisplay's bounded, multi-property walk in
+    /// `compute_stop_pos`.
+    pub fn has_any_non_nil_property_in_char_range(&self, range: CharRange, keys: &[Value]) -> bool {
+        if range.is_empty() || keys.is_empty() {
+            return false;
+        }
+
+        self.intervals
+            .cursor_at(range.start())
+            .take_while(|(start, _, _)| *start < range.end())
+            .any(|(_, _, node)| !watched_keys_equal_eq_plist(node.plist, Value::NIL, keys))
+    }
+
     pub fn get_properties_at_char_pos(&self, pos: CharPos0) -> HashMap<Value, Value> {
         self.get_properties_raw(pos)
     }

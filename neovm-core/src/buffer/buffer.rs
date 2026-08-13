@@ -2807,6 +2807,14 @@ impl Buffer {
             .next_watched_property_change_at_char_pos(pos, cap, keys)
     }
 
+    /// Whether any property in `keys` is non-nil inside the bounded character
+    /// `range`.  See
+    /// [`TextPropertyTable::has_any_non_nil_property_in_char_range`].
+    pub fn has_any_non_nil_property_in_char_range(&self, range: CharRange, keys: &[Value]) -> bool {
+        self.text
+            .has_any_non_nil_property_in_char_range(range, keys)
+    }
+
     pub fn text_props_get_properties_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,

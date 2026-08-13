@@ -1180,6 +1180,14 @@ impl BufferText {
             .next_watched_property_change(pos, cap, keys)
     }
 
+    /// See [`text_props::TextPropertyTable::has_any_non_nil_property_in_char_range`].
+    pub fn has_any_non_nil_property_in_char_range(&self, range: CharRange, keys: &[Value]) -> bool {
+        self.storage
+            .borrow()
+            .text_props
+            .has_any_non_nil_property_in_char_range(range, keys)
+    }
+
     pub fn text_props_get_properties_at_emacs_byte_pos(
         &self,
         pos: EmacsBytePos,
