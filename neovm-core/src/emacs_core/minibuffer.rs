@@ -33,6 +33,7 @@ use super::value::{Value, ValueKind, VecLikeType};
 enum CompletionStateVariable {
     CompletionIgnoreCase,
     CompletionRegexpList,
+    Obarray,
 }
 
 impl CompletionStateVariable {
@@ -42,6 +43,7 @@ impl CompletionStateVariable {
 
         static COMPLETION_IGNORE_CASE: OnceLock<SymId> = OnceLock::new();
         static COMPLETION_REGEXP_LIST: OnceLock<SymId> = OnceLock::new();
+        static OBARRAY: OnceLock<SymId> = OnceLock::new();
         let name: &'static str = self.into();
         match self {
             Self::CompletionIgnoreCase => {
@@ -50,6 +52,7 @@ impl CompletionStateVariable {
             Self::CompletionRegexpList => {
                 *COMPLETION_REGEXP_LIST.get_or_init(|| super::intern::intern(name))
             }
+            Self::Obarray => *OBARRAY.get_or_init(|| super::intern::intern(name)),
         }
     }
 }
@@ -2076,8 +2079,8 @@ fn gnu_compare_strings(a: &[u32], b: &[u32], len: usize, ignore_case: bool) -> S
 
 fn is_global_obarray_proxy_in_state(obarray: &Obarray, value: &Value) -> bool {
     obarray
-        .symbol_value("obarray")
-        .is_some_and(|proxy| *proxy == *value)
+        .symbol_value_id_copied(CompletionStateVariable::Obarray.symbol_id())
+        .is_some_and(|proxy| proxy == *value)
 }
 
 fn completion_candidates_from_global_obarray_in_state(

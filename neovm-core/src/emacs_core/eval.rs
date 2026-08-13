@@ -1833,6 +1833,17 @@ pub(crate) struct LoadReadCursor {
     pub(crate) shorthands: Option<super::value_reader::ReadSymbolShorthands>,
 }
 
+/// Result of reading a Lisp variable before choosing whether an unbound cell
+/// should signal.  GNU's C hot paths frequently read predeclared `V...` state
+/// as optional data, while Lisp evaluation must turn the same unbound state
+/// into `void-variable`.  Keeping those outcomes distinct prevents optional
+/// internal reads from constructing and then discarding a Lisp signal.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SymbolValueLookup {
+    Bound(Value),
+    Unbound,
+}
+
 pub struct Context {
     /// Tagged pointer heap — sole GC and allocator.
     pub(crate) tagged_heap: Box<crate::tagged::gc::TaggedHeap>,
@@ -10568,10 +10579,14 @@ impl Context {
         Ok(())
     }
 
-    /// Look up a symbol by its SymId. Uses the SymId directly for lexenv
-    /// lookup (preserving uninterned symbol identity, like Emacs's EQ-based
-    /// Fassq on Vinternal_interpreter_environment).
-    pub(crate) fn eval_symbol_by_id(&self, sym_id: SymId) -> EvalResult {
+    /// Look up a symbol by its SymId without deciding that an unbound cell is
+    /// an error. Uses the SymId directly for lexenv lookup (preserving
+    /// uninterned symbol identity, like Emacs's EQ-based Fassq on
+    /// Vinternal_interpreter_environment).
+    pub(crate) fn lookup_symbol_value_by_id(
+        &self,
+        sym_id: SymId,
+    ) -> Result<SymbolValueLookup, Flow> {
         // GNU eval.c checks the lexenv for the ORIGINAL symbol BEFORE
         // resolving variable aliases and does not rescan declared-special
         // flags on ordinary reads. Declared-special affects how bindings are
@@ -10579,20 +10594,20 @@ impl Context {
         if self.lexical_binding()
             && let Some(value) = self.lexenv_lookup_cached_in(self.lexenv, sym_id)
         {
-            return Ok(value);
+            return Ok(SymbolValueLookup::Bound(value));
         }
 
         // GNU keywords are self-valued constants installed by `intern_sym`;
         // keep lexenv lookup first, then use the same self-value directly.
         if is_keyword_id(sym_id) {
-            return Ok(Value::from_kw_id(sym_id));
+            return Ok(SymbolValueLookup::Bound(Value::from_kw_id(sym_id)));
         }
 
         let resolved = super::builtins::resolve_variable_alias_id(self, sym_id)?;
         let resolved_is_canonical = is_canonical_id(resolved);
 
         if resolved != sym_id && is_keyword_id(resolved) {
-            return Ok(Value::from_kw_id(resolved));
+            return Ok(SymbolValueLookup::Bound(Value::from_kw_id(resolved)));
         }
 
         use crate::emacs_core::symbol::SymbolRedirect;
@@ -10610,18 +10625,15 @@ impl Context {
                             buf.local_var_alist_value(),
                         ) {
                             if value.is_unbound() {
-                                return Err(signal(
-                                    LispCondition::VoidVariable,
-                                    vec![value_from_symbol_id(sym_id)],
-                                ));
+                                return Ok(SymbolValueLookup::Unbound);
                             }
-                            return Ok(value);
+                            return Ok(SymbolValueLookup::Bound(value));
                         }
                     }
                 }
                 SymbolRedirect::Forwarded => {
                     if let Some(value) = self.forwarded_buffer_obj_value(sym) {
-                        return Ok(value);
+                        return Ok(SymbolValueLookup::Bound(value));
                     }
                 }
                 SymbolRedirect::Plainval | SymbolRedirect::Varalias => {}
@@ -10637,11 +10649,9 @@ impl Context {
             && let Some(buf) = self.buffers.current_buffer()
             && let Some(binding) = buf.get_buffer_local_binding_by_sym_id(resolved)
         {
-            return binding.as_value().ok_or_else(|| {
-                signal(
-                    LispCondition::VoidVariable,
-                    vec![value_from_symbol_id(sym_id)],
-                )
+            return Ok(match binding.as_value() {
+                Some(value) => SymbolValueLookup::Bound(value),
+                None => SymbolValueLookup::Unbound,
             });
         }
 
@@ -10650,7 +10660,7 @@ impl Context {
         // forwarder descriptor's default rather than returning None
         // and signalling void-variable.
         if let Some(value) = self.obarray.find_symbol_value(resolved) {
-            return Ok(value);
+            return Ok(SymbolValueLookup::Bound(value));
         }
 
         // Task #36: canonical constant fallback. When `t` / `nil`
@@ -10658,22 +10668,31 @@ impl Context {
         // specbound, they resolve to their canonical values.
         // Mirrors the vm.rs `lookup_var` fallback path.
         if is_canonical_id(sym_id) && sym_id == nil_symbol() {
-            return Ok(Value::NIL);
+            return Ok(SymbolValueLookup::Bound(Value::NIL));
         }
         if is_canonical_id(sym_id) && sym_id == t_symbol() {
-            return Ok(Value::T);
+            return Ok(SymbolValueLookup::Bound(Value::T));
         }
         if resolved_is_canonical && resolved == nil_symbol() {
-            return Ok(Value::NIL);
+            return Ok(SymbolValueLookup::Bound(Value::NIL));
         }
         if resolved_is_canonical && resolved == t_symbol() {
-            return Ok(Value::T);
+            return Ok(SymbolValueLookup::Bound(Value::T));
         }
 
-        Err(signal(
-            LispCondition::VoidVariable,
-            vec![value_from_symbol_id(sym_id)],
-        ))
+        Ok(SymbolValueLookup::Unbound)
+    }
+
+    /// Lisp-visible variable evaluation: unlike optional internal state reads,
+    /// an unbound cell signals `void-variable`.
+    pub(crate) fn eval_symbol_by_id(&self, sym_id: SymId) -> EvalResult {
+        match self.lookup_symbol_value_by_id(sym_id)? {
+            SymbolValueLookup::Bound(value) => Ok(value),
+            SymbolValueLookup::Unbound => Err(signal(
+                LispCondition::VoidVariable,
+                vec![value_from_symbol_id(sym_id)],
+            )),
+        }
     }
 
     pub(crate) fn eval_symbol(&self, symbol: &str) -> EvalResult {

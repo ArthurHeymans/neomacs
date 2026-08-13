@@ -184,6 +184,44 @@ impl SyntaxPurposeSymbol {
     }
 }
 
+/// GNU syntax switches backed by predeclared C variables.  The closed domain
+/// gives each hot lookup one stable symbol identity; Lisp-visible evaluation
+/// remains responsible for signaling if some unrelated variable is unbound.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum SyntaxStateVariable {
+    ParseSexpIgnoreComments,
+    ParseSexpLookupProperties,
+}
+
+impl SyntaxStateVariable {
+    #[inline(always)]
+    fn symbol_id(self) -> crate::emacs_core::intern::SymId {
+        use std::sync::OnceLock;
+
+        static PARSE_SEXP_IGNORE_COMMENTS: OnceLock<crate::emacs_core::intern::SymId> =
+            OnceLock::new();
+        static PARSE_SEXP_LOOKUP_PROPERTIES: OnceLock<crate::emacs_core::intern::SymId> =
+            OnceLock::new();
+        let name: &'static str = self.into();
+        match self {
+            Self::ParseSexpIgnoreComments => {
+                *PARSE_SEXP_IGNORE_COMMENTS.get_or_init(|| crate::emacs_core::intern::intern(name))
+            }
+            Self::ParseSexpLookupProperties => *PARSE_SEXP_LOOKUP_PROPERTIES
+                .get_or_init(|| crate::emacs_core::intern::intern(name)),
+        }
+    }
+
+    #[inline(always)]
+    fn enabled(self, ctx: &super::eval::Context) -> bool {
+        matches!(
+            ctx.lookup_symbol_value_by_id(self.symbol_id()),
+            Ok(super::eval::SymbolValueLookup::Bound(value)) if value.is_truthy()
+        )
+    }
+}
+
 // Phase 10D holdout 3: the per-buffer syntax table char-table now lives in
 // `Buffer::slots[BUFFER_SLOT_SYNTAX_TABLE.index()]`, mirroring GNU's
 // `BVAR(buf, syntax_table)` storage. Reads go through `slots[offset]`,
@@ -3215,15 +3253,11 @@ fn effective_syntax_entry_for_abs_char(
 }
 
 pub(crate) fn parse_sexp_lookup_properties_enabled(ctx: &super::eval::Context) -> bool {
-    ctx.eval_symbol("parse-sexp-lookup-properties")
-        .unwrap_or(Value::NIL)
-        .is_truthy()
+    SyntaxStateVariable::ParseSexpLookupProperties.enabled(ctx)
 }
 
 fn parse_sexp_ignore_comments_enabled(ctx: &super::eval::Context) -> bool {
-    ctx.eval_symbol("parse-sexp-ignore-comments")
-        .unwrap_or(Value::NIL)
-        .is_truthy()
+    SyntaxStateVariable::ParseSexpIgnoreComments.enabled(ctx)
 }
 
 pub(crate) fn maybe_syntax_propertize_for_scan(

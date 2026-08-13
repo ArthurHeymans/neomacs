@@ -62,7 +62,10 @@ fn dynamic_or_global_symbol_value(
     eval: &super::eval::Context,
     variable: SearchStateVariable,
 ) -> Option<Value> {
-    eval.eval_symbol_by_id(variable.symbol_id()).ok()
+    match eval.lookup_symbol_value_by_id(variable.symbol_id()) {
+        Ok(super::eval::SymbolValueLookup::Bound(value)) => Some(value),
+        Ok(super::eval::SymbolValueLookup::Unbound) | Err(_) => None,
+    }
 }
 
 /// Map a regex front-end error string to its Lisp signal.  Compile

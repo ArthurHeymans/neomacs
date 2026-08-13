@@ -1749,6 +1749,36 @@ fn completion_state_reads_use_predeclared_symbols() {
     );
 }
 
+/// GNU's empty-prefix M-x scan walks predeclared symbol identities and function
+/// cells; after initialization it does not return to the string interner for
+/// each candidate.  Keep that invariant at the whole `all-completions` entry
+/// point so a name-based helper cannot hide below `commandp` again.
+#[test]
+fn repeated_mx_completion_does_not_intern_during_candidate_scan() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let obarray = *eval
+        .obarray
+        .symbol_value("obarray")
+        .expect("global obarray proxy");
+    let args = vec![
+        Value::string(""),
+        obarray,
+        Value::from_sym_id(crate::emacs_core::interactive::CommandpSymbol::id()),
+    ];
+
+    let _ = builtin_all_completions(&mut eval, args.clone()).expect("warm M-x completion");
+    crate::emacs_core::intern::reset_intern_calls();
+    let _ = builtin_all_completions(&mut eval, args).expect("steady-state M-x completion");
+
+    assert_eq!(
+        crate::emacs_core::intern::intern_calls(),
+        0,
+        "steady-state M-x candidate scanning must use symbol identities; interned {:?}",
+        crate::emacs_core::intern::intern_call_names()
+    );
+}
+
 /// GNU `Ftry_completion` / `Fall_completions` compare the predicate with the
 /// predeclared `Qcommandp` and call `Fcommandp` directly.  This is observable,
 /// not merely an optimization: rebinding the symbol's function cell does not

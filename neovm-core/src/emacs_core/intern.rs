@@ -810,7 +810,10 @@ pub(crate) fn restore_runtime_interner(
 #[inline]
 pub fn intern(s: &str) -> SymId {
     #[cfg(test)]
-    INTERN_CALLS.set(INTERN_CALLS.get() + 1);
+    {
+        INTERN_CALLS.set(INTERN_CALLS.get() + 1);
+        INTERN_CALL_NAMES.with(|names| names.borrow_mut().push(s.to_owned()));
+    }
     ensure_thread_local_cache_epoch_current();
     if let Some(sym_id) = thread_local_interned_str(s) {
         return sym_id;
@@ -1146,6 +1149,7 @@ thread_local! {
 thread_local! {
     static RESOLVE_SYM_LISP_STRING_REGISTRY_READS: RefCell<usize> = const { RefCell::new(0) };
     static INTERN_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static INTERN_CALL_NAMES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
 #[cfg(test)]
@@ -1166,11 +1170,17 @@ pub(crate) fn resolve_sym_lisp_string_registry_reads() -> usize {
 #[cfg(test)]
 pub(crate) fn reset_intern_calls() {
     INTERN_CALLS.set(0);
+    INTERN_CALL_NAMES.with(|names| names.borrow_mut().clear());
 }
 
 #[cfg(test)]
 pub(crate) fn intern_calls() -> usize {
     INTERN_CALLS.get()
+}
+
+#[cfg(test)]
+pub(crate) fn intern_call_names() -> Vec<String> {
+    INTERN_CALL_NAMES.with(|names| names.borrow().clone())
 }
 
 fn ensure_thread_local_cache_epoch_current() {
