@@ -1414,6 +1414,48 @@ fn unrelated_property_and_overlay_boundaries_keep_one_mouse_face_extent() {
 }
 
 #[test]
+fn absent_mouse_face_does_not_request_an_exact_extent() {
+    use crate::buffer_source::text_source::{
+        exact_mouse_face_extent_query_count, reset_exact_mouse_face_extent_query_count,
+    };
+
+    let mut eval = Context::new();
+    let buffer_id = eval.buffer_manager().current_buffer().unwrap().id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buffer_id).unwrap();
+        buffer.insert(&"x".repeat(200));
+        for start in (0..200).step_by(2) {
+            buffer.text_props_put_property_in_emacs_byte_range(
+                EmacsByteRange::new(EmacsBytePos::new(start), EmacsBytePos::new(start + 1)),
+                Value::symbol("face"),
+                Value::symbol("bold"),
+            );
+        }
+    }
+    let buffer = eval.buffer_manager().get(buffer_id).unwrap();
+    let snapshot = LayoutBufferSnapshot::from_buffer(buffer);
+    let mut source = BufferTextSourceCursor::new(
+        buffer_id,
+        &snapshot,
+        CharPos0::ZERO,
+        buffer.total_char_end_pos(),
+        RenderFaceRef::FaceId(FaceId::new(3)),
+    );
+    let mut resolver = SymbolFaceResolver;
+    let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
+
+    reset_exact_mouse_face_extent_query_count();
+    let items = std::iter::from_fn(|| source.next_item(&mut context)).collect::<Vec<_>>();
+
+    assert!(items.iter().all(|item| item.pointer_appearance().is_none()));
+    assert_eq!(
+        exact_mouse_face_extent_query_count(),
+        0,
+        "a nil mouse-face produces no pointer output, so exact extents are unnecessary"
+    );
+}
+
+#[test]
 fn distinct_mouse_face_extents_keep_distinct_identities() {
     let mut eval = Context::new();
     let buffer_id = eval.buffer_manager().current_buffer().unwrap().id();

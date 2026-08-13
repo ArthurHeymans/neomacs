@@ -22,6 +22,26 @@ use crate::unicode::decode_utf8;
 use neovm_core::buffer::{BufferId, CharLen, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::composite::composition_display_text_for_property;
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[cfg(test)]
+static EXACT_MOUSE_FACE_EXTENT_QUERY_COUNT: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(crate) fn reset_exact_mouse_face_extent_query_count() {
+    EXACT_MOUSE_FACE_EXTENT_QUERY_COUNT.store(0, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(crate) fn exact_mouse_face_extent_query_count() -> usize {
+    EXACT_MOUSE_FACE_EXTENT_QUERY_COUNT.load(Ordering::Relaxed)
+}
+
+fn record_exact_mouse_face_extent_query() {
+    #[cfg(test)]
+    EXACT_MOUSE_FACE_EXTENT_QUERY_COUNT.fetch_add(1, Ordering::Relaxed);
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferTextDisplayReplacementMode {
@@ -170,10 +190,64 @@ pub(crate) struct BufferTextSourceCursor<'a, B: LayoutBufferView + ?Sized> {
 }
 
 #[derive(Clone, Copy)]
-struct CachedMouseFaceExtent {
-    value: Option<Value>,
+struct NonNilMouseFace(Value);
+
+impl NonNilMouseFace {
+    fn new(value: Value) -> Option<Self> {
+        (!value.is_nil()).then_some(Self(value))
+    }
+
+    fn value(self) -> Value {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy)]
+enum MouseFaceOwner {
+    Text,
+    Overlay(Value),
+}
+
+impl MouseFaceOwner {
+    fn overlay(self) -> Option<Value> {
+        match self {
+            Self::Text => None,
+            Self::Overlay(overlay) => Some(overlay),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ResolvedMouseFace {
+    value: NonNilMouseFace,
     range: EmacsByteRange,
-    overlay: Option<Value>,
+    owner: MouseFaceOwner,
+}
+
+#[derive(Clone, Copy)]
+enum CachedMouseFaceExtent {
+    Absent { range: EmacsByteRange },
+    Active(ResolvedMouseFace),
+}
+
+impl CachedMouseFaceExtent {
+    fn range(self) -> EmacsByteRange {
+        match self {
+            Self::Absent { range } | Self::Active(ResolvedMouseFace { range, .. }) => range,
+        }
+    }
+
+    fn contains(self, bytepos: EmacsBytePos) -> bool {
+        let range = self.range();
+        range.start() <= bytepos && bytepos < range.end()
+    }
+
+    fn resolved(self) -> Option<ResolvedMouseFace> {
+        match self {
+            Self::Absent { .. } => None,
+            Self::Active(resolved) => Some(resolved),
+        }
+    }
 }
 
 impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
@@ -483,20 +557,14 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
     fn mouse_face_at(
         &mut self,
         char_pos: CharPos0,
-    ) -> Option<(Value, EmacsBytePos, EmacsBytePos, Option<Value>)> {
+        stable_until: CharPos0,
+    ) -> Option<ResolvedMouseFace> {
         let bytepos = self.byte_pos(char_pos);
         if let Some(cached) = self
             .mouse_face_extent
-            .filter(|cached| cached.range.start() <= bytepos && bytepos < cached.range.end())
+            .filter(|cached| cached.contains(bytepos))
         {
-            return cached.value.map(|value| {
-                (
-                    value,
-                    cached.range.start(),
-                    cached.range.end(),
-                    cached.overlay,
-                )
-            });
+            return cached.resolved();
         }
 
         let overlays = self.buffer.layout_overlays();
@@ -514,24 +582,36 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             self.window_id,
         )?;
         if let Some(overlay) = overlay_extent.overlay() {
-            let cached = CachedMouseFaceExtent {
-                value: Some(overlay_extent.value()),
+            let value = NonNilMouseFace::new(overlay_extent.value())
+                .expect("overlay mouse-face lookup returns only non-nil values");
+            let cached = CachedMouseFaceExtent::Active(ResolvedMouseFace {
+                value,
                 range: overlay_extent.range(),
-                overlay: Some(overlay),
-            };
+                owner: MouseFaceOwner::Overlay(overlay),
+            });
             self.mouse_face_extent = Some(cached);
-            return Some((
-                overlay_extent.value(),
-                cached.range.start(),
-                cached.range.end(),
-                Some(overlay),
-            ));
+            return cached.resolved();
         }
 
         let value = self
             .buffer
             .layout_text_prop_at_emacs_byte_pos(bytepos, property)
-            .filter(|value| !value.is_nil());
+            .and_then(NonNilMouseFace::new);
+        let Some(value) = value else {
+            // `stable_until` is the next boundary of ANY text property or
+            // overlay.  Therefore a missing mouse-face cannot become active
+            // before it, and no exact whole-buffer extent query is needed.
+            let stable_end = self
+                .byte_pos(stable_until)
+                .min(overlay_extent.range().end());
+            let cached = CachedMouseFaceExtent::Absent {
+                range: EmacsByteRange::new(bytepos, stable_end),
+            };
+            self.mouse_face_extent = Some(cached);
+            return None;
+        };
+
+        record_exact_mouse_face_extent_query();
         let text_start = self
             .buffer
             .layout_previous_single_text_prop_change_before_emacs_byte_pos(bytepos, property)
@@ -540,27 +620,27 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
             .buffer
             .layout_next_single_text_prop_change_after_emacs_byte_pos(bytepos, property)
             .unwrap_or_else(|| self.buffer.layout_point_max_emacs_byte_pos());
-        let cached = CachedMouseFaceExtent {
+        let cached = CachedMouseFaceExtent::Active(ResolvedMouseFace {
             value,
             range: EmacsByteRange::new(
                 text_start.max(overlay_extent.range().start()),
                 text_end.min(overlay_extent.range().end()),
             ),
-            overlay: None,
-        };
+            owner: MouseFaceOwner::Text,
+        });
         self.mouse_face_extent = Some(cached);
-        value.map(|value| (value, cached.range.start(), cached.range.end(), None))
+        cached.resolved()
     }
 
     fn pointer_appearance_at(
         &mut self,
         start: CharPos0,
-        _property_end: CharPos0,
+        property_end: CharPos0,
         face: RenderFaceRef,
         context: &mut DisplaySourceContext<'_>,
     ) -> Option<DisplayPointerAppearance> {
-        let (value, range_start, range_end, overlay_owner) = self.mouse_face_at(start)?;
-        let pointer_face = context.resolve_pointer_face_ref(face, value)?;
+        let mouse_face = self.mouse_face_at(start, property_end)?;
+        let pointer_face = context.resolve_pointer_face_ref(face, mouse_face.value.value())?;
         let source = DisplayPointerSourceRange::effective(
             DisplaySourcePosition::buffer(
                 self.buffer_id,
@@ -568,12 +648,12 @@ impl<'a, B: LayoutBufferView + ?Sized> BufferTextSourceCursor<'a, B> {
                 self.byte_pos(CharPos0::ZERO),
             ),
             self.buffer
-                .layout_emacs_byte_pos_to_char_pos(range_start)
+                .layout_emacs_byte_pos_to_char_pos(mouse_face.range.start())
                 .get(),
             self.buffer
-                .layout_emacs_byte_pos_to_char_pos(range_end)
+                .layout_emacs_byte_pos_to_char_pos(mouse_face.range.end())
                 .get(),
-            overlay_owner,
+            mouse_face.owner.overlay(),
         );
         Some(DisplayPointerAppearance::new(source, pointer_face))
     }
