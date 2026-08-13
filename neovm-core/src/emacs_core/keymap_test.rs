@@ -467,6 +467,21 @@ fn list_keymap_create_and_check() {
     assert!(!is_list_keymap(&Value::fixnum(42)));
 }
 
+/// GNU `get_keymap` recognizes the marker with `EQ (XCAR (object),
+/// Qkeymap)` (`src/keymap.c`), so an uninterned symbol that merely has the
+/// same printed name is not a keymap marker.
+#[test]
+fn list_keymap_marker_requires_the_canonical_symbol_object() {
+    crate::test_utils::init_test_tracing();
+    let canonical = Value::list(vec![Value::symbol("keymap")]);
+    let same_name = Value::list(vec![Value::from_sym_id(
+        crate::emacs_core::intern::intern_uninterned("keymap"),
+    )]);
+
+    assert!(is_list_keymap(&canonical));
+    assert!(!is_list_keymap(&same_name));
+}
+
 #[test]
 fn list_keymap_define_and_lookup() {
     crate::test_utils::init_test_tracing();

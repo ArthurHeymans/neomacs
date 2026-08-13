@@ -75,8 +75,30 @@ impl KeymapMarker {
         self.into()
     }
 
+    /// The exact canonical symbol object GNU names `Qkeymap`, `Qmenu_item`,
+    /// or `Qremap`.
+    ///
+    /// GNU keymap.c tests these markers with `EQ`, not by comparing their
+    /// printed names. Keeping one typed ID per enum variant both preserves
+    /// that identity rule and avoids decoding a symbol name in hot keymap
+    /// walks. The exhaustive match makes a newly added marker choose its own
+    /// canonical-symbol cache at compile time.
+    pub fn symbol_id(self) -> SymId {
+        use std::sync::OnceLock;
+
+        static KEYMAP: OnceLock<SymId> = OnceLock::new();
+        static MENU_ITEM: OnceLock<SymId> = OnceLock::new();
+        static REMAP: OnceLock<SymId> = OnceLock::new();
+
+        match self {
+            Self::Keymap => *KEYMAP.get_or_init(|| intern("keymap")),
+            Self::MenuItem => *MENU_ITEM.get_or_init(|| intern("menu-item")),
+            Self::Remap => *REMAP.get_or_init(|| intern("remap")),
+        }
+    }
+
     pub fn symbol_value(self) -> Value {
-        Value::symbol(self.symbol_name())
+        Value::from_sym_id(self.symbol_id())
     }
 
     pub fn from_symbol_name(name: &str) -> Option<Self> {
@@ -84,11 +106,14 @@ impl KeymapMarker {
     }
 
     pub fn from_value(value: Value) -> Option<Self> {
-        Self::from_symbol_name(value.as_symbol_name()?)
+        let symbol = value.as_symbol_id()?;
+        [Self::Keymap, Self::MenuItem, Self::Remap]
+            .into_iter()
+            .find(|marker| symbol == marker.symbol_id())
     }
 
     pub fn is_value(self, value: Value) -> bool {
-        Self::from_value(value) == Some(self)
+        value.as_symbol_id() == Some(self.symbol_id())
     }
 }
 
