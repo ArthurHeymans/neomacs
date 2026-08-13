@@ -1,13 +1,15 @@
 use std::str::FromStr;
 
-use super::{Frontend, ScenarioId, scenario, scenarios};
+use std::num::NonZeroU32;
+
+use super::{Frontend, MetricName, ScenarioId, scenario, scenarios};
 
 #[test]
 fn catalog_exposes_the_rust_lsp_typing_workload_as_a_typed_scenario() {
     let scenarios = scenarios();
-    assert_eq!(scenarios.len(), 1);
+    assert_eq!(scenarios.len(), 2);
 
-    let rust_lsp = scenario(ScenarioId::RustLspTyping).expect("registered scenario");
+    let rust_lsp = scenario(ScenarioId::RustLspTyping);
     assert_eq!(rust_lsp.id, ScenarioId::RustLspTyping);
     assert_eq!(rust_lsp.id.to_string(), "rust-lsp-typing");
     assert_eq!(
@@ -23,6 +25,34 @@ fn catalog_exposes_the_rust_lsp_typing_workload_as_a_typed_scenario() {
     );
     assert!(rust_lsp.description.contains("Tree-sitter"));
     assert!(rust_lsp.description.contains("LSP Mode"));
+    assert_eq!(
+        rust_lsp.default_iterations,
+        NonZeroU32::new(100).expect("non-zero default")
+    );
+    assert_eq!(rust_lsp.primary_metric, MetricName::PerEditCpuTime);
+}
+
+#[test]
+fn catalog_exposes_mx_tab_as_a_real_completion_window_workload() {
+    let mx_tab = scenario(ScenarioId::MxTabCompletion);
+    assert_eq!(mx_tab.id.to_string(), "mx-tab-completion");
+    assert_eq!(
+        ScenarioId::from_str("mx-tab-completion"),
+        Ok(ScenarioId::MxTabCompletion)
+    );
+    assert_eq!(
+        mx_tab.default_frontend,
+        Frontend::Tui {
+            rows: 40,
+            columns: 120,
+        }
+    );
+    assert_eq!(
+        mx_tab.default_iterations,
+        NonZeroU32::new(5).expect("non-zero default")
+    );
+    assert_eq!(mx_tab.primary_metric, MetricName::PerCompletionCpuTime);
+    assert!(mx_tab.description.contains("M-x TAB"));
 }
 
 #[test]

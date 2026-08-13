@@ -12,7 +12,6 @@ use crate::{
     scenarios,
 };
 
-const DEFAULT_ITERATIONS: NonZeroU32 = NonZeroU32::new(100).expect("100 is non-zero");
 const DEFAULT_SAMPLES: ComparisonSampleCount =
     ComparisonSampleCount::new(5).expect("5 meets the minimum sample count");
 const DEFAULT_TIMEOUT_SECS: NonZeroU64 = NonZeroU64::new(300).expect("300 is non-zero");
@@ -120,9 +119,9 @@ struct ProfileArgs {
 
 #[derive(Debug, Args)]
 struct WorkloadArgs {
-    /// Number of editing operations in the scenario.
-    #[arg(long, default_value_t = DEFAULT_ITERATIONS)]
-    iterations: NonZeroU32,
+    /// Number of workload operations (uses the scenario-owned default).
+    #[arg(long)]
+    iterations: Option<NonZeroU32>,
     /// Editor frontend used for the workload.
     #[arg(long, value_enum)]
     frontend: Option<FrontendArg>,
@@ -132,9 +131,10 @@ struct WorkloadArgs {
 }
 
 impl WorkloadArgs {
-    fn into_semantic(self) -> (NonZeroU32, Option<Frontend>, Duration) {
+    fn into_semantic(self, scenario_id: ScenarioId) -> (NonZeroU32, Option<Frontend>, Duration) {
+        let default_iterations = crate::scenario(scenario_id).default_iterations;
         (
-            self.iterations,
+            self.iterations.unwrap_or(default_iterations),
             self.frontend.map(Frontend::from),
             Duration::from_secs(self.timeout_secs.get()),
         )
@@ -233,7 +233,8 @@ impl From<PerfSubcommand> for PerfCommand {
         match command {
             PerfSubcommand::List => Self::List,
             PerfSubcommand::Run(arguments) => {
-                let (iterations, frontend, timeout) = arguments.workload.into_semantic();
+                let (iterations, frontend, timeout) =
+                    arguments.workload.into_semantic(arguments.scenario);
                 Self::Run {
                     scenario: arguments.scenario,
                     editor: arguments.editor,
@@ -243,7 +244,8 @@ impl From<PerfSubcommand> for PerfCommand {
                 }
             }
             PerfSubcommand::Compare(arguments) => {
-                let (iterations, frontend, timeout) = arguments.workload.into_semantic();
+                let (iterations, frontend, timeout) =
+                    arguments.workload.into_semantic(arguments.scenario);
                 Self::Compare {
                     scenario: arguments.scenario,
                     baseline_editor: arguments.baseline_editor,
@@ -255,7 +257,8 @@ impl From<PerfSubcommand> for PerfCommand {
                 }
             }
             PerfSubcommand::Profile(arguments) => {
-                let (iterations, frontend, timeout) = arguments.workload.into_semantic();
+                let (iterations, frontend, timeout) =
+                    arguments.workload.into_semantic(arguments.scenario);
                 Self::Profile {
                     scenario: arguments.scenario,
                     profiler: arguments.profiler.into(),

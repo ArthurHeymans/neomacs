@@ -78,11 +78,8 @@ impl RunRequest {
     }
 
     pub fn frontend(&self) -> Frontend {
-        self.frontend.unwrap_or_else(|| {
-            scenario(self.scenario)
-                .expect("catalogued scenario")
-                .default_frontend
-        })
+        self.frontend
+            .unwrap_or_else(|| scenario(self.scenario).default_frontend)
     }
 
     pub const fn timeout(&self) -> Duration {
@@ -220,7 +217,7 @@ impl PerfHarness {
         request: &RunRequest,
         raw_result: &str,
     ) -> Result<RunReport, PerfError> {
-        let result: RustLspTypingResult = serde_json::from_str(raw_result).map_err(|source| {
+        let result = parse_scenario_result(request.scenario, raw_result).map_err(|source| {
             PerfError::InvalidScenarioResult {
                 scenario: request.scenario,
                 source,
@@ -236,9 +233,9 @@ impl PerfHarness {
             }
         })?;
 
-        let verdict = result_verdict(request, &result, u128::from(result.elapsed_us));
+        let verdict = result_verdict(request, &result, u128::from(result.elapsed_us()));
         context.publish(
-            u128::from(result.elapsed_us),
+            u128::from(result.elapsed_us()),
             verdict,
             vec![ArtifactFile {
                 kind: ArtifactKind::ScenarioResult,
@@ -254,7 +251,7 @@ impl PerfHarness {
         mut profile: Option<&mut PerfCapture>,
     ) -> Result<RunReport, PerfError> {
         let mut files = Vec::new();
-        let prepared = match self.prepare_rust_lsp_typing(request, &context.directory) {
+        let prepared = match self.prepare_scenario(request, &context.directory) {
             Ok(prepared) => prepared,
             Err(message) => {
                 return context.infrastructure_failure(message, files);
@@ -337,7 +334,7 @@ impl PerfHarness {
             kind: ArtifactKind::ScenarioResult,
             path: relative_artifact_path(&prepared.result),
         });
-        let result: RustLspTypingResult = match serde_json::from_str(&raw_result) {
+        let result = match parse_scenario_result(request.scenario, &raw_result) {
             Ok(result) => result,
             Err(error) => {
                 return context.infrastructure_failure(
@@ -348,6 +345,17 @@ impl PerfHarness {
         };
         let verdict = result_verdict(request, &result, process_wall_us);
         context.publish(context.elapsed_us(), verdict, files)
+    }
+
+    fn prepare_scenario(
+        &self,
+        request: &RunRequest,
+        run_directory: &Path,
+    ) -> Result<PreparedScenario, String> {
+        match request.scenario {
+            ScenarioId::RustLspTyping => self.prepare_rust_lsp_typing(request, run_directory),
+            ScenarioId::MxTabCompletion => self.prepare_mx_tab_completion(request, run_directory),
+        }
     }
 
     fn prepare_rust_lsp_typing(
@@ -406,7 +414,7 @@ impl PerfHarness {
             })?;
         }
         let provenance = run_directory.join("input-provenance.json");
-        let provenance_manifest = InputProvenanceManifest {
+        let provenance_manifest = RustLspInputProvenanceManifest {
             lsp_mode: PackageProvenance {
                 name: lsp_mode.0,
                 version: lsp_mode.1,
@@ -437,32 +445,9 @@ impl PerfHarness {
                 provenance.display()
             )
         })?;
-        let gui_runtime_directory = self
-            .workspace_root
-            .join("tmp/gui-runtime")
-            .join(std::process::id().to_string());
-        fs::create_dir_all(&gui_runtime_directory).map_err(|error| {
-            format!(
-                "failed to create short GUI runtime directory {}: {error}",
-                gui_runtime_directory.display()
-            )
-        })?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&gui_runtime_directory, fs::Permissions::from_mode(0o700))
-                .map_err(|error| {
-                    format!(
-                        "failed to secure GUI runtime directory {}: {error}",
-                        gui_runtime_directory.display()
-                    )
-                })?;
-        }
+        let gui_runtime_directory = prepare_gui_runtime_directory(&self.workspace_root)?;
         Ok(PreparedScenario {
-            startup,
             fixture,
-            source,
-            replay,
             provenance,
             result: run_directory.join("scenario-result.json"),
             sentinel: run_directory.join("completed"),
@@ -470,10 +455,72 @@ impl PerfHarness {
             gui_app_log: run_directory.join("gui-app.log"),
             gui_weston_log: run_directory.join("weston.log"),
             gui_runtime_directory,
-            grammar_directory,
-            grammar_libraries,
-            packages,
             sandbox,
+            workload: PreparedWorkload::RustLspTyping {
+                startup,
+                source,
+                replay,
+                grammar_directory,
+                grammar_libraries,
+                packages: Box::new(packages),
+            },
+        })
+    }
+
+    fn prepare_mx_tab_completion(
+        &self,
+        request: &RunRequest,
+        run_directory: &Path,
+    ) -> Result<PreparedScenario, String> {
+        let sandbox = MelpaSandbox::new(&format!("perf-{}", request.scenario))?;
+        let editor = collect_editor_provenance(request.editor(), &sandbox)?;
+        let fixture_source = self
+            .workspace_root
+            .join("neomacs-perf/fixtures/mx-tab-completion.el");
+        if !fixture_source.is_file() {
+            return Err(format!(
+                "missing committed performance fixture {}",
+                fixture_source.display()
+            ));
+        }
+        let fixture = run_directory.join("mx-tab-completion.el");
+        fs::copy(&fixture_source, &fixture).map_err(|error| {
+            format!(
+                "failed to copy performance fixture {} to {}: {error}",
+                fixture_source.display(),
+                fixture.display()
+            )
+        })?;
+        let provenance = run_directory.join("input-provenance.json");
+        let provenance_manifest = MxTabInputProvenanceManifest {
+            editor,
+            workload_source: "neomacs-perf/fixtures/mx-tab-completion.el",
+            workload_source_sha256: sha256_file(&fixture_source)?,
+            environment_policy: "closed-v1",
+            passthrough_environment: benchmark_passthrough_environment()
+                .into_iter()
+                .map(|(name, value)| (name.to_string(), value.to_string_lossy().into_owned()))
+                .collect(),
+        };
+        let provenance_json = serde_json::to_vec_pretty(&provenance_manifest)
+            .map_err(|error| format!("failed to serialize input provenance: {error}"))?;
+        fs::write(&provenance, provenance_json).map_err(|error| {
+            format!(
+                "failed to write input provenance {}: {error}",
+                provenance.display()
+            )
+        })?;
+        Ok(PreparedScenario {
+            fixture,
+            provenance,
+            result: run_directory.join("scenario-result.json"),
+            sentinel: run_directory.join("completed"),
+            terminal_bytes: run_directory.join("terminal.ansi"),
+            gui_app_log: run_directory.join("gui-app.log"),
+            gui_weston_log: run_directory.join("weston.log"),
+            gui_runtime_directory: prepare_gui_runtime_directory(&self.workspace_root)?,
+            sandbox,
+            workload: PreparedWorkload::MxTabCompletion,
         })
     }
 }
@@ -819,10 +866,7 @@ struct ProfileCaptureError {
 }
 
 struct PreparedScenario {
-    startup: PathBuf,
     fixture: PathBuf,
-    source: PathBuf,
-    replay: PathBuf,
     provenance: PathBuf,
     result: PathBuf,
     sentinel: PathBuf,
@@ -830,28 +874,57 @@ struct PreparedScenario {
     gui_app_log: PathBuf,
     gui_weston_log: PathBuf,
     gui_runtime_directory: PathBuf,
-    grammar_directory: PathBuf,
-    grammar_libraries: Vec<PathBuf>,
-    packages: PreparedPackageSet,
     sandbox: MelpaSandbox,
+    workload: PreparedWorkload,
+}
+
+enum PreparedWorkload {
+    RustLspTyping {
+        startup: PathBuf,
+        source: PathBuf,
+        replay: PathBuf,
+        grammar_directory: PathBuf,
+        grammar_libraries: Vec<PathBuf>,
+        packages: Box<PreparedPackageSet>,
+    },
+    MxTabCompletion,
 }
 
 impl PreparedScenario {
     fn input_artifacts(&self) -> Vec<ArtifactFile> {
-        let mut artifacts = [
-            (ArtifactKind::PackageStartup, &self.startup),
-            (ArtifactKind::ScenarioFixture, &self.fixture),
-            (ArtifactKind::SourceFixture, &self.source),
-            (ArtifactKind::LspReplay, &self.replay),
-            (ArtifactKind::InputProvenance, &self.provenance),
-        ]
-        .into_iter()
-        .map(|(kind, path)| ArtifactFile {
-            kind,
-            path: relative_artifact_path(path),
-        })
-        .collect::<Vec<_>>();
-        artifacts.extend(self.grammar_libraries.iter().map(|path| {
+        let mut artifacts = vec![
+            ArtifactFile {
+                kind: ArtifactKind::ScenarioFixture,
+                path: relative_artifact_path(&self.fixture),
+            },
+            ArtifactFile {
+                kind: ArtifactKind::InputProvenance,
+                path: relative_artifact_path(&self.provenance),
+            },
+        ];
+        let PreparedWorkload::RustLspTyping {
+            startup,
+            source,
+            replay,
+            grammar_libraries,
+            ..
+        } = &self.workload
+        else {
+            return artifacts;
+        };
+        artifacts.extend(
+            [
+                (ArtifactKind::PackageStartup, startup),
+                (ArtifactKind::SourceFixture, source),
+                (ArtifactKind::LspReplay, replay),
+            ]
+            .into_iter()
+            .map(|(kind, path)| ArtifactFile {
+                kind,
+                path: relative_artifact_path(path),
+            }),
+        );
+        artifacts.extend(grammar_libraries.iter().map(|path| {
             ArtifactFile {
                 kind: ArtifactKind::TreeSitterGrammar,
                 path: PathBuf::from("tree-sitter").join(
@@ -862,6 +935,53 @@ impl PreparedScenario {
         }));
         artifacts
     }
+
+    fn add_workload_arguments(&self, command: &mut Command) {
+        if let PreparedWorkload::RustLspTyping { startup, .. } = &self.workload {
+            command.arg("--load").arg(startup);
+        }
+        command.arg("--load").arg(&self.fixture);
+    }
+
+    fn add_workload_environment(&self, command: &mut Command) {
+        if let PreparedWorkload::RustLspTyping {
+            source,
+            replay,
+            grammar_directory,
+            packages,
+            ..
+        } = &self.workload
+        {
+            command
+                .envs(packages.process_environment())
+                .env("NEOMACS_PERF_SOURCE", source)
+                .env("NEOMACS_PERF_LSP_REPLAY", replay)
+                .env("NEOMACS_PERF_TREE_SITTER_DIR", grammar_directory);
+        }
+    }
+}
+
+fn prepare_gui_runtime_directory(workspace_root: &Path) -> Result<PathBuf, String> {
+    let directory = workspace_root
+        .join("tmp/gui-runtime")
+        .join(std::process::id().to_string());
+    fs::create_dir_all(&directory).map_err(|error| {
+        format!(
+            "failed to create short GUI runtime directory {}: {error}",
+            directory.display()
+        )
+    })?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700)).map_err(|error| {
+            format!(
+                "failed to secure GUI runtime directory {}: {error}",
+                directory.display()
+            )
+        })?;
+    }
+    Ok(directory)
 }
 
 fn frontend_command(
@@ -914,24 +1034,17 @@ fn frontend_command(
                 .env("XDG_RUNTIME_DIR", &prepared.gui_runtime_directory);
         }
     }
+    prepared.add_workload_arguments(&mut command);
+    command.current_dir(workspace_root);
     command
-        .arg("--load")
-        .arg(&prepared.startup)
-        .arg("--load")
-        .arg(&prepared.fixture)
-        .current_dir(workspace_root);
-    command
-        .envs(prepared.packages.process_environment())
         .env_remove("EMACSLOADPATH")
         .env("SENTINEL", &prepared.sentinel)
         .env("NEOMACS_PERF_RESULT", &prepared.result)
-        .env("NEOMACS_PERF_SOURCE", &prepared.source)
-        .env("NEOMACS_PERF_LSP_REPLAY", &prepared.replay)
-        .env("NEOMACS_PERF_TREE_SITTER_DIR", &prepared.grammar_directory)
         .env(
             "NEOMACS_PERF_ITERATIONS",
             request.iterations().get().to_string(),
         );
+    prepared.add_workload_environment(&mut command);
     command
 }
 
@@ -1174,6 +1287,33 @@ struct RustLspTypingResult {
     lsp_diagnostic_count: u64,
 }
 
+enum ScenarioResult {
+    RustLspTyping(RustLspTypingResult),
+    MxTabCompletion(MxTabCompletionResult),
+}
+
+impl ScenarioResult {
+    #[cfg(test)]
+    const fn elapsed_us(&self) -> u64 {
+        match self {
+            Self::RustLspTyping(result) => result.elapsed_us,
+            Self::MxTabCompletion(result) => result.elapsed_us,
+        }
+    }
+}
+
+fn parse_scenario_result(
+    scenario: ScenarioId,
+    raw: &str,
+) -> Result<ScenarioResult, serde_json::Error> {
+    match scenario {
+        ScenarioId::RustLspTyping => serde_json::from_str(raw).map(ScenarioResult::RustLspTyping),
+        ScenarioId::MxTabCompletion => {
+            serde_json::from_str(raw).map(ScenarioResult::MxTabCompletion)
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RustLspTypingResultWire {
@@ -1219,21 +1359,7 @@ impl TryFrom<RustLspTypingResultWire> for RustLspTypingResult {
     type Error = String;
 
     fn try_from(wire: RustLspTypingResultWire) -> Result<Self, Self::Error> {
-        let outcome = match (wire.status, wire.error) {
-            (ScenarioStatus::Ok, None) => ScenarioOutcome::Ok,
-            (ScenarioStatus::Ok, Some(_)) => {
-                return Err("status `ok` requires a null error".to_string());
-            }
-            (ScenarioStatus::Error, Some(message)) if !message.trim().is_empty() => {
-                ScenarioOutcome::Error(message)
-            }
-            (ScenarioStatus::Error, Some(_)) => {
-                return Err("status `error` requires a non-empty error".to_string());
-            }
-            (ScenarioStatus::Error, None) => {
-                return Err("status `error` requires a non-null error".to_string());
-            }
-        };
+        let outcome = scenario_outcome(wire.status, wire.error)?;
         Ok(Self {
             schema_version: wire.schema_version,
             scenario: wire.scenario,
@@ -1251,10 +1377,102 @@ impl TryFrom<RustLspTypingResultWire> for RustLspTypingResult {
     }
 }
 
+fn scenario_outcome(
+    status: ScenarioStatus,
+    error: Option<String>,
+) -> Result<ScenarioOutcome, String> {
+    match (status, error) {
+        (ScenarioStatus::Ok, None) => Ok(ScenarioOutcome::Ok),
+        (ScenarioStatus::Ok, Some(_)) => Err("status `ok` requires a null error".to_string()),
+        (ScenarioStatus::Error, Some(message)) if !message.trim().is_empty() => {
+            Ok(ScenarioOutcome::Error(message))
+        }
+        (ScenarioStatus::Error, Some(_)) => {
+            Err("status `error` requires a non-empty error".to_string())
+        }
+        (ScenarioStatus::Error, None) => {
+            Err("status `error` requires a non-null error".to_string())
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(try_from = "MxTabCompletionResultWire")]
+struct MxTabCompletionResult {
+    schema_version: u32,
+    scenario: ScenarioId,
+    outcome: ScenarioOutcome,
+    iterations: u32,
+    elapsed_us: u64,
+    completion_help_calls: u32,
+    completion_visible: bool,
+    completion_mode_correct: bool,
+    known_commands_present: bool,
+    completion_candidate_count: u64,
+    candidate_count_stable: bool,
+    completion_hidden_after_exit: bool,
+    minibuffer_depth_restored: bool,
+    selected_buffer_restored: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MxTabCompletionResultWire {
+    schema_version: u32,
+    scenario: ScenarioId,
+    status: ScenarioStatus,
+    iterations: u32,
+    elapsed_us: u64,
+    completion_help_calls: u32,
+    completion_visible: bool,
+    completion_mode_correct: bool,
+    known_commands_present: bool,
+    completion_candidate_count: u64,
+    candidate_count_stable: bool,
+    completion_hidden_after_exit: bool,
+    minibuffer_depth_restored: bool,
+    selected_buffer_restored: bool,
+    #[serde(deserialize_with = "deserialize_optional_error", rename = "error")]
+    error: Option<String>,
+}
+
+impl TryFrom<MxTabCompletionResultWire> for MxTabCompletionResult {
+    type Error = String;
+
+    fn try_from(wire: MxTabCompletionResultWire) -> Result<Self, Self::Error> {
+        let outcome = scenario_outcome(wire.status, wire.error)?;
+        Ok(Self {
+            schema_version: wire.schema_version,
+            scenario: wire.scenario,
+            outcome,
+            iterations: wire.iterations,
+            elapsed_us: wire.elapsed_us,
+            completion_help_calls: wire.completion_help_calls,
+            completion_visible: wire.completion_visible,
+            completion_mode_correct: wire.completion_mode_correct,
+            known_commands_present: wire.known_commands_present,
+            completion_candidate_count: wire.completion_candidate_count,
+            candidate_count_stable: wire.candidate_count_stable,
+            completion_hidden_after_exit: wire.completion_hidden_after_exit,
+            minibuffer_depth_restored: wire.minibuffer_depth_restored,
+            selected_buffer_restored: wire.selected_buffer_restored,
+        })
+    }
+}
+
 #[derive(Serialize)]
-struct InputProvenanceManifest<'a> {
+struct RustLspInputProvenanceManifest<'a> {
     lsp_mode: PackageProvenance<'a>,
     tree_sitter_grammar: GrammarProvenance<'a>,
+    editor: EditorProvenance,
+    workload_source: &'a str,
+    workload_source_sha256: String,
+    environment_policy: &'a str,
+    passthrough_environment: BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+struct MxTabInputProvenanceManifest<'a> {
     editor: EditorProvenance,
     workload_source: &'a str,
     workload_source_sha256: String,
@@ -1355,12 +1573,104 @@ fn validate_rust_lsp_typing_result(
     mismatches
 }
 
+fn validate_mx_tab_completion_result(
+    request: &RunRequest,
+    result: &MxTabCompletionResult,
+) -> Vec<CorrectnessMismatch> {
+    let mut mismatches = Vec::new();
+    mismatch(
+        &mut mismatches,
+        "scenario-result-schema",
+        SCENARIO_RESULT_SCHEMA_VERSION,
+        result.schema_version,
+    );
+    mismatch(
+        &mut mismatches,
+        "scenario-id",
+        request.scenario,
+        result.scenario,
+    );
+    mismatch(
+        &mut mismatches,
+        "scenario-outcome",
+        &ScenarioOutcome::Ok,
+        &result.outcome,
+    );
+    mismatch(
+        &mut mismatches,
+        "iterations",
+        request.iterations.get(),
+        result.iterations,
+    );
+    mismatch(
+        &mut mismatches,
+        "completion-help-calls",
+        request.iterations.get(),
+        result.completion_help_calls,
+    );
+    mismatch(
+        &mut mismatches,
+        "completion-window-visible",
+        true,
+        result.completion_visible,
+    );
+    mismatch(
+        &mut mismatches,
+        "completion-buffer-mode",
+        true,
+        result.completion_mode_correct,
+    );
+    mismatch(
+        &mut mismatches,
+        "known-command-candidates",
+        true,
+        result.known_commands_present,
+    );
+    mismatch(
+        &mut mismatches,
+        "completion-candidate-count-stable",
+        true,
+        result.candidate_count_stable,
+    );
+    if result.completion_candidate_count == 0 {
+        mismatches.push(CorrectnessMismatch {
+            invariant: "completion-candidate-count".to_string(),
+            expected: "non-zero".to_string(),
+            actual: "0".to_string(),
+        });
+    }
+    mismatch(
+        &mut mismatches,
+        "completion-window-hidden-after-exit",
+        true,
+        result.completion_hidden_after_exit,
+    );
+    mismatch(
+        &mut mismatches,
+        "minibuffer-depth-restored",
+        true,
+        result.minibuffer_depth_restored,
+    );
+    mismatch(
+        &mut mismatches,
+        "selected-buffer-restored",
+        true,
+        result.selected_buffer_restored,
+    );
+    mismatches
+}
+
 fn result_verdict(
     request: &RunRequest,
-    result: &RustLspTypingResult,
+    result: &ScenarioResult,
     process_wall_us: u128,
 ) -> RunVerdict {
-    let mismatches = validate_rust_lsp_typing_result(request, result);
+    let mismatches = match result {
+        ScenarioResult::RustLspTyping(result) => validate_rust_lsp_typing_result(request, result),
+        ScenarioResult::MxTabCompletion(result) => {
+            validate_mx_tab_completion_result(request, result)
+        }
+    };
     if mismatches.is_empty() {
         RunVerdict::Valid {
             measurements: valid_measurements(result, process_wall_us),
@@ -1383,7 +1693,21 @@ where
     }
 }
 
-fn valid_measurements(result: &RustLspTypingResult, wall_elapsed_us: u128) -> Vec<Measurement> {
+fn valid_measurements(result: &ScenarioResult, wall_elapsed_us: u128) -> Vec<Measurement> {
+    match result {
+        ScenarioResult::RustLspTyping(result) => {
+            valid_rust_lsp_typing_measurements(result, wall_elapsed_us)
+        }
+        ScenarioResult::MxTabCompletion(result) => {
+            valid_mx_tab_completion_measurements(result, wall_elapsed_us)
+        }
+    }
+}
+
+fn valid_rust_lsp_typing_measurements(
+    result: &RustLspTypingResult,
+    wall_elapsed_us: u128,
+) -> Vec<Measurement> {
     let edits = u64::from(result.iterations) * 2;
     vec![
         Measurement {
@@ -1424,6 +1748,44 @@ fn valid_measurements(result: &RustLspTypingResult, wall_elapsed_us: u128) -> Ve
         Measurement {
             name: MetricName::LspDiagnosticCount,
             value: result.lsp_diagnostic_count as f64,
+            unit: MetricUnit::Count,
+        },
+    ]
+}
+
+fn valid_mx_tab_completion_measurements(
+    result: &MxTabCompletionResult,
+    wall_elapsed_us: u128,
+) -> Vec<Measurement> {
+    vec![
+        Measurement {
+            name: MetricName::ProcessWallTime,
+            value: wall_elapsed_us as f64,
+            unit: MetricUnit::Microseconds,
+        },
+        Measurement {
+            name: MetricName::WorkloadCpuTime,
+            value: result.elapsed_us as f64,
+            unit: MetricUnit::Microseconds,
+        },
+        Measurement {
+            name: MetricName::PerCompletionCpuTime,
+            value: result.elapsed_us as f64 / f64::from(result.completion_help_calls.max(1)),
+            unit: MetricUnit::MicrosecondsPerCompletion,
+        },
+        Measurement {
+            name: MetricName::CompletionHelpCalls,
+            value: f64::from(result.completion_help_calls),
+            unit: MetricUnit::Count,
+        },
+        Measurement {
+            name: MetricName::CompletionCandidateCount,
+            value: result.completion_candidate_count as f64,
+            unit: MetricUnit::Count,
+        },
+        Measurement {
+            name: MetricName::Iterations,
+            value: f64::from(result.iterations),
             unit: MetricUnit::Count,
         },
     ]

@@ -49,6 +49,22 @@ fn run_command_rejects_zero_iterations_before_launch() {
 }
 
 #[test]
+fn workload_defaults_come_from_the_typed_scenario_spec() {
+    let PerfCommand::Run {
+        scenario,
+        iterations,
+        frontend,
+        ..
+    } = parse(&["run", "mx-tab-completion"]).expect("parse M-x TAB workload")
+    else {
+        panic!("run command must remain typed")
+    };
+    assert_eq!(scenario, ScenarioId::MxTabCompletion);
+    assert_eq!(iterations, NonZeroU32::new(5).expect("non-zero literal"));
+    assert_eq!(frontend, None);
+}
+
+#[test]
 fn compare_command_requires_two_editors_and_parses_repetition_controls() {
     assert_eq!(
         parse(&[

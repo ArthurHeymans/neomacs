@@ -69,11 +69,8 @@ impl ProfileRequest {
     }
 
     pub fn frontend(&self) -> Frontend {
-        self.frontend.unwrap_or_else(|| {
-            scenario(self.scenario)
-                .expect("catalogued scenario")
-                .default_frontend
-        })
+        self.frontend
+            .unwrap_or_else(|| scenario(self.scenario).default_frontend)
     }
 }
 

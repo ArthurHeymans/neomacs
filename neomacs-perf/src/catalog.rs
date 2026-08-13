@@ -1,7 +1,10 @@
 use std::fmt;
+use std::num::NonZeroU32;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
+
+use crate::MetricName;
 
 /// Stable identity of a committed performance workload.
 ///
@@ -11,12 +14,14 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "kebab-case")]
 pub enum ScenarioId {
     RustLspTyping,
+    MxTabCompletion,
 }
 
 impl ScenarioId {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::RustLspTyping => "rust-lsp-typing",
+            Self::MxTabCompletion => "mx-tab-completion",
         }
     }
 }
@@ -44,6 +49,7 @@ impl FromStr for ScenarioId {
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "rust-lsp-typing" => Ok(Self::RustLspTyping),
+            "mx-tab-completion" => Ok(Self::MxTabCompletion),
             unknown => Err(UnknownScenarioId(unknown.to_string())),
         }
     }
@@ -64,21 +70,45 @@ pub struct ScenarioSpec {
     pub id: ScenarioId,
     pub description: &'static str,
     pub default_frontend: Frontend,
+    pub default_iterations: NonZeroU32,
+    pub primary_metric: MetricName,
 }
 
-const SCENARIOS: &[ScenarioSpec] = &[ScenarioSpec {
-    id: ScenarioId::RustLspTyping,
-    description: "Rust Tree-sitter typing with revision-pinned LSP Mode and deterministic diagnostic replay",
-    default_frontend: Frontend::Tui {
-        rows: 40,
-        columns: 120,
+const SCENARIOS: &[ScenarioSpec] = &[
+    ScenarioSpec {
+        id: ScenarioId::RustLspTyping,
+        description: "Rust Tree-sitter typing with revision-pinned LSP Mode and deterministic diagnostic replay",
+        default_frontend: Frontend::Tui {
+            rows: 40,
+            columns: 120,
+        },
+        default_iterations: NonZeroU32::new(100).expect("non-zero scenario default"),
+        primary_metric: MetricName::PerEditCpuTime,
     },
-}];
+    ScenarioSpec {
+        id: ScenarioId::MxTabCompletion,
+        description: "Empty M-x TAB command completion through a real minibuffer and completion window",
+        default_frontend: Frontend::Tui {
+            rows: 40,
+            columns: 120,
+        },
+        default_iterations: NonZeroU32::new(5).expect("non-zero scenario default"),
+        primary_metric: MetricName::PerCompletionCpuTime,
+    },
+];
 
 pub fn scenarios() -> &'static [ScenarioSpec] {
     SCENARIOS
 }
 
-pub fn scenario(id: ScenarioId) -> Option<&'static ScenarioSpec> {
-    SCENARIOS.iter().find(|candidate| candidate.id == id)
+/// Return the definition for a typed scenario identity.
+///
+/// `ScenarioId` is closed, so absence is not a representable state. Keeping
+/// this match exhaustive makes adding an enum variant fail to compile until
+/// its workload definition is also registered.
+pub const fn scenario(id: ScenarioId) -> &'static ScenarioSpec {
+    match id {
+        ScenarioId::RustLspTyping => &SCENARIOS[0],
+        ScenarioId::MxTabCompletion => &SCENARIOS[1],
+    }
 }

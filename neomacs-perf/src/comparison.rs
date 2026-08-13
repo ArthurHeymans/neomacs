@@ -205,11 +205,8 @@ impl ComparisonRequest {
     }
 
     pub fn frontend(&self) -> Frontend {
-        self.frontend.unwrap_or_else(|| {
-            scenario(self.scenario)
-                .expect("catalogued scenario")
-                .default_frontend
-        })
+        self.frontend
+            .unwrap_or_else(|| scenario(self.scenario).default_frontend)
     }
 }
 
@@ -587,7 +584,7 @@ impl PerfHarness {
             frontend,
             iterations: request.iterations,
             samples_per_side: request.samples_per_side,
-            primary_metric: MetricName::PerEditCpuTime,
+            primary_metric: scenario(request.scenario).primary_metric,
             baseline_editor: request.baseline_editor.clone(),
             candidate_editor: request.candidate_editor.clone(),
         };

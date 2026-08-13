@@ -10,6 +10,7 @@ Run the catalogued workloads through `xtask`:
 ```sh
 cargo xtask perf list
 cargo xtask perf run rust-lsp-typing
+cargo xtask perf run mx-tab-completion
 cargo xtask perf run rust-lsp-typing --iterations 20 --frontend tui
 cargo xtask perf compare rust-lsp-typing \
   --baseline-editor target/release/neomacs \
@@ -18,11 +19,15 @@ cargo xtask perf compare rust-lsp-typing \
 cargo xtask perf profile rust-lsp-typing \
   --profiler perf --editor target/profiling/neomacs \
   --iterations 100 --frontend tui --scope edit-loop
+cargo xtask perf profile mx-tab-completion \
+  --profiler perf --iterations 10 --frontend tui --scope edit-loop
 ```
 
 The default editor is `target/release/neomacs`. Use `--editor PATH` to measure
 another build. Frontend choices are `batch`, `tui`, and `gui`; each scenario
-owns a default. `rust-lsp-typing` defaults to a 40 by 120 TUI.
+owns its frontend and iteration defaults. Both current workloads default to a
+40 by 120 TUI; `rust-lsp-typing` runs 100 edits and `mx-tab-completion` runs
+five completions unless `--iterations` overrides the scenario default.
 
 ## Validity before timing
 
@@ -53,11 +58,13 @@ covers the timed edit loop inside Emacs.
 `perf compare` runs both editors once per sample and reverses their order for
 each odd-numbered pair. This interleaving reduces time-order bias from thermal
 or background-load drift. The primary statistic is the median
-`per-edit-cpu-time`. At least three samples per editor are required. The
-artifact reports the sorted raw samples, both medians, median absolute
-deviation (MAD), candidate-to-baseline ratio, and percentage change. These are
-descriptive measurements, not a statistical-significance claim; use more than
-the default five samples for noisy or release-critical decisions.
+scenario's primary metric: `per-edit-cpu-time` for `rust-lsp-typing` and
+`per-completion-cpu-time` for `mx-tab-completion`. At least three samples per
+editor are required. The artifact reports the sorted raw samples, both
+medians, median absolute deviation (MAD), candidate-to-baseline ratio, and
+percentage change. These are descriptive measurements, not a
+statistical-significance claim; use more than the default five samples for
+noisy or release-critical decisions.
 
 Comparison artifacts live below
 `./tmp/perf-comparisons/<comparison-id>/comparison.json` and link every
@@ -129,12 +136,36 @@ timing, and project discovery. It still exercises Neomacs, Tree-sitter,
 fontification, LSP Mode's diagnostic update, overlays, layout, and the selected
 frontend on every edit.
 
+## `mx-tab-completion`
+
+This workload reproduces the expensive empty-prefix command-completion path.
+Each iteration sends the real command-loop input `M-x TAB`, waits until the
+`*Completions*` window is presentable, then selects the no-op command `ignore`
+and exits the minibuffer normally. The CPU timer covers candidate generation,
+creation of the completion buffer and window, and a forced redisplay. It stops
+before the oracle walks the returned candidates.
+
+The run is rejected unless all of these remain true:
+
+- the requested number of completion-help calls completed;
+- `*Completions*` became visible in `completion-list-mode`;
+- the returned candidates include `execute-extended-command` and `find-file`;
+- every iteration returns the same non-empty candidate count (recorded in the
+  artifact so cross-editor workload cardinality differences remain visible);
+- the completion window disappeared after the command was selected;
+- minibuffer depth and the originally selected buffer were restored.
+
+No package preparation or live external service is involved. This keeps the
+workload focused on the built-in obarray completion and display path that GNU
+Emacs and Neomacs both execute for an empty `M-x TAB`.
+
 ## Adding a workload
 
-Add a `ScenarioId` and `ScenarioSpec`, committed fixtures, a harness adapter,
-and strict result validation. Keep the identity enum closed: an unknown name
-must fail rather than silently creating a new time series. Put unit tests in a
-separate `_test.rs` file and run them with `cargo nextest`, never `cargo test`.
+Add a `ScenarioId` and `ScenarioSpec` (including the scenario-owned iteration
+default and primary metric), committed fixtures, a harness adapter, and strict
+result validation. Keep the identity enum closed: an unknown name must fail
+rather than silently creating a new time series. Put unit tests in a separate
+`_test.rs` file and run them with `cargo nextest`, never `cargo test`.
 
 Use [`docs/profiling.md`](../docs/profiling.md) for native and Lisp attribution
 after a repeatable workload identifies a regression.

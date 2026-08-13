@@ -112,6 +112,120 @@ fn fixture_overlay_count_is_checked_against_the_harness_oracle() {
 }
 
 #[test]
+fn mx_tab_result_is_valid_only_when_the_real_completion_window_lifecycle_completed() {
+    let workspace_tmp = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");
+    let workspace = tempfile::Builder::new()
+        .prefix("neomacs-perf-mx-tab-result-")
+        .tempdir_in(&workspace_tmp)
+        .expect("create workspace-local test directory");
+    let harness = PerfHarness::new(workspace.path());
+    let request = RunRequest::new(
+        ScenarioId::MxTabCompletion,
+        workspace.path().join("fake-neomacs"),
+        NonZeroU32::new(2).expect("non-zero iterations"),
+    )
+    .with_frontend(Frontend::Tui {
+        rows: 40,
+        columns: 120,
+    });
+
+    let report = harness
+        .record_fixture_result(
+            &request,
+            r##"{
+              "schema_version": 1,
+              "scenario": "mx-tab-completion",
+              "status": "ok",
+              "iterations": 2,
+              "elapsed_us": 1000,
+              "completion_help_calls": 2,
+              "completion_visible": true,
+              "completion_mode_correct": true,
+              "known_commands_present": true,
+              "completion_candidate_count": 3124,
+              "candidate_count_stable": true,
+              "completion_hidden_after_exit": true,
+              "minibuffer_depth_restored": true,
+              "selected_buffer_restored": true,
+              "error": null
+            }"##,
+        )
+        .expect("record fixture result");
+
+    let RunVerdict::Valid { measurements } = report.artifact.verdict else {
+        panic!("correct M-x TAB lifecycle was rejected")
+    };
+    let per_completion = measurements
+        .iter()
+        .find(|measurement| measurement.name == super::MetricName::PerCompletionCpuTime)
+        .expect("per-completion metric");
+    assert_eq!(per_completion.value, 500.0);
+    assert_eq!(
+        per_completion.unit,
+        super::MetricUnit::MicrosecondsPerCompletion
+    );
+}
+
+#[test]
+fn mx_tab_result_cannot_treat_a_missing_completion_window_as_a_fast_sample() {
+    let workspace_tmp = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");
+    let workspace = tempfile::Builder::new()
+        .prefix("neomacs-perf-mx-tab-mismatch-")
+        .tempdir_in(&workspace_tmp)
+        .expect("create workspace-local test directory");
+    let harness = PerfHarness::new(workspace.path());
+    let request = RunRequest::new(
+        ScenarioId::MxTabCompletion,
+        workspace.path().join("fake-neomacs"),
+        NonZeroU32::new(1).expect("non-zero iterations"),
+    );
+
+    let report = harness
+        .record_fixture_result(
+            &request,
+            r##"{
+              "schema_version": 1,
+              "scenario": "mx-tab-completion",
+              "status": "ok",
+              "iterations": 1,
+              "elapsed_us": 1,
+              "completion_help_calls": 1,
+              "completion_visible": false,
+              "completion_mode_correct": true,
+              "known_commands_present": true,
+              "completion_candidate_count": 0,
+              "candidate_count_stable": false,
+              "completion_hidden_after_exit": true,
+              "minibuffer_depth_restored": true,
+              "selected_buffer_restored": true,
+              "error": null
+            }"##,
+        )
+        .expect("record fixture result");
+
+    let RunVerdict::CorrectnessMismatch { mismatches } = report.artifact.verdict else {
+        panic!("missing completion window was accepted")
+    };
+    assert!(
+        mismatches
+            .iter()
+            .any(|mismatch| mismatch.invariant == "completion-window-visible")
+    );
+    assert!(
+        mismatches
+            .iter()
+            .any(|mismatch| mismatch.invariant == "completion-candidate-count-stable")
+    );
+    assert!(
+        mismatches
+            .iter()
+            .any(|mismatch| mismatch.invariant == "completion-candidate-count")
+    );
+}
+
+#[test]
 fn scenario_result_requires_every_schema_field() {
     let workspace_tmp = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tmp");
     fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");
