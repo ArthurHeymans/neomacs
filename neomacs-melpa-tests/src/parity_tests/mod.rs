@@ -528,6 +528,7 @@ mod maude_mode;
 mod memoize;
 mod mmm_mode;
 mod modus_themes;
+mod moe_theme;
 mod monokai_theme;
 mod move_text;
 mod mozc;

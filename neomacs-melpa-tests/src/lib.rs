@@ -6680,6 +6680,12 @@ pub const JADE_MODE_MELPA_PIN: (&str, &str) = ("jade-mode", "20210908.2121");
 /// MELPA built this archive from upstream commit `dacd9d8a8867afea3ed76b15a6c997053ff88093`.
 pub const MONOKAI_THEME_MELPA_PIN: (&str, &str) = ("monokai-theme", "20240911.1046");
 
+/// The exact Moe Theme package selected for practical light/dark theme,
+/// modeline color, palette flavour, and timed-switcher parity.
+/// MELPA built version 1.1.0 from upstream commit
+/// `d091865eeb97b0894e6517137dc0544560bc57fb`.
+pub const MOE_THEME_MELPA_PIN: (&str, &str) = ("moe-theme", "20260811.1919");
+
 /// The exact spacemacs-theme package selected for practical theme load and defcustom defaults.
 /// Pinned to upstream commit `cbd290dfde96f53a7b41730c7840850a8a7b8a02`.
 pub const SPACEMACS_THEME_MELPA_PIN: (&str, &str) = ("spacemacs-theme", "0.2");
