@@ -473,44 +473,30 @@ pub(crate) fn builtin_called_interactively_p(eval: &mut Context, args: Vec<Value
 /// `(commandp FUNCTION &optional FOR-CALL-INTERACTIVELY)`
 /// Return non-nil if FUNCTION is a command (i.e., can be called interactively).
 ///
-/// Matches GNU Emacs eval.c:2268-2376.  Uses the fast _in_state check first,
-/// then falls back to `(interactive-form fun)` for genfun/oclosure dispatch.
+/// Matches GNU Emacs eval.c:Fcommandp. Resolves a symbol designator once, then
+/// classifies whether GNU returns immediately, checks the original symbol
+/// chain's property, or performs generic interactive-form dispatch.
 pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("commandp", &args, 1)?;
     expect_max_args("commandp", &args, 2)?;
     let for_call_interactively = args.get(1).is_some_and(|value| !value.is_nil());
 
-    // Fast path: _in_state check (handles most cases without Elisp calls)
-    let fast = command_designator_p_in_state(
+    let classification = classify_command_designator_in_state(
         &eval.obarray,
         &eval.interactive,
         &args[0],
         for_call_interactively,
     );
-    if fast {
-        return Ok(Value::T);
-    }
-
-    let resolved_fun = if let Some(symbol) = args[0].as_symbol_id() {
-        let Some((_, fun)) =
-            crate::emacs_core::builtins::symbols::resolve_indirect_symbol_by_id_in_obarray(
-                &eval.obarray,
-                symbol,
-            )
-        else {
-            return Ok(Value::NIL);
-        };
-        fun
-    } else {
-        args[0]
+    let fallback = match classification {
+        CommandpClassification::Interactive => return Ok(Value::T),
+        CommandpClassification::Reject => return Ok(Value::NIL),
+        CommandpClassification::CheckInteractiveFormProperty(fallback) => fallback,
     };
-    if resolved_fun.is_nil() {
-        return Ok(Value::NIL);
-    }
 
     // GNU Emacs eval.c:Fcommandp checks `interactive-form' properties after
-    // ordinary command checks fail.  The property is not accepted as making a
-    // function interactive; it is a hard error.
+    // ordinary checks fail for a callable object. The property is not accepted
+    // as making a function interactive; it is a hard error. Invalid scalars,
+    // rejected keyboard macros, and non-lambda lists return before this walk.
     let mut fun = args[0];
     while let Some(symbol) = fun.as_symbol_id() {
         if eval
@@ -532,10 +518,10 @@ pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: Vec<Value>)
         fun = next;
     }
 
-    // GNU only calls `interactive-form' here for the generic-function
-    // (oclosure/advice) path indicated by an invalid doc slot.
-    if command_object_needs_interactive_form_dispatch(resolved_fun) {
-        let iform = eval.apply(Value::symbol("interactive-form"), vec![resolved_fun])?;
+    // GNU only calls `interactive-form' here for the generic-function path
+    // selected while classifying an invalid closure doc slot.
+    if let InteractiveFormFallback::GenericDispatch(resolved_function) = fallback {
+        let iform = eval.apply(Value::symbol("interactive-form"), vec![resolved_function])?;
         if !iform.is_nil() {
             return Ok(Value::T);
         }
@@ -787,15 +773,27 @@ fn value_is_interactive_autoload(value: &Value) -> bool {
     items.get(3).is_some_and(|v| !v.is_nil())
 }
 
-fn command_object_needs_interactive_form_dispatch(value: Value) -> bool {
-    match value.kind() {
-        ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::Macro) => {
-            value.closure_interactive().is_none() && value.closure_doc_form().flatten().is_some()
-        }
+fn is_valid_docstring_reference(value: Value) -> bool {
+    value.is_fixnum()
+        || value.is_string()
+        || (value.is_cons() && value.cons_car().is_string() && value.cons_cdr().is_fixnum())
+}
+
+fn closure_interactive_form_fallback(value: Value) -> InteractiveFormFallback {
+    let invalid_doc_slot = match value.kind() {
+        ValueKind::Veclike(VecLikeType::Lambda) | ValueKind::Veclike(VecLikeType::Macro) => value
+            .closure_doc_value()
+            .is_some_and(|doc| !doc.is_nil() && !is_valid_docstring_reference(doc)),
         ValueKind::Veclike(VecLikeType::ByteCode) => value
             .get_bytecode_data()
-            .is_some_and(|bc| bc.observable_closure_slot_count() <= 5 && bc.doc_form.is_some()),
+            .and_then(|bytecode| bytecode.doc_form)
+            .is_some_and(|doc| !is_valid_docstring_reference(doc)),
         _ => false,
+    };
+    if invalid_doc_slot {
+        InteractiveFormFallback::GenericDispatch(value)
+    } else {
+        InteractiveFormFallback::PropertyOnly
     }
 }
 
@@ -844,19 +842,35 @@ fn registered_builtin_command(subr_id: SymId) -> bool {
     registered_builtin_interactive_spec(subr_id).is_some()
 }
 
-fn command_object_p_in_state(
+/// GNU `Fcommandp` has three semantically distinct outcomes after resolving a
+/// function designator. Keeping them as variants prevents an immediate `nil`
+/// result from accidentally entering the property/generic-function fallback.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CommandpClassification {
+    Interactive,
+    Reject,
+    CheckInteractiveFormProperty(InteractiveFormFallback),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum InteractiveFormFallback {
+    PropertyOnly,
+    GenericDispatch(Value),
+}
+
+fn classify_command_object_in_state(
     interactive: &InteractiveRegistry,
     resolved_symbol: Option<SymId>,
     value: &Value,
     for_call_interactively: bool,
-) -> bool {
+) -> CommandpClassification {
     if let Some(symbol) = resolved_symbol
         && interactive.is_interactive(symbol)
     {
-        return true;
+        return CommandpClassification::Interactive;
     }
     if value_is_interactive_autoload(value) {
-        return true;
+        return CommandpClassification::Interactive;
     }
 
     match value.kind() {
@@ -864,44 +878,104 @@ fn command_object_p_in_state(
         // vector shape.  Slot 5 may contain nil; its presence is sufficient.
         // A short closure whose body happens to contain `(interactive)` is
         // not a command and must not trigger an O(n) body materialization.
-        ValueKind::Veclike(VecLikeType::Lambda) => value.closure_interactive().is_some(),
-        ValueKind::Veclike(VecLikeType::ByteCode) => value
-            .get_bytecode_data()
-            .is_some_and(|bc| bc.observable_closure_slot_count() > 5),
-        ValueKind::Cons => quoted_lambda_has_interactive_form(value),
-        ValueKind::Subr(id) => registered_builtin_command(id),
+        ValueKind::Veclike(VecLikeType::Lambda) => {
+            if value.closure_interactive().is_some() {
+                CommandpClassification::Interactive
+            } else {
+                CommandpClassification::CheckInteractiveFormProperty(
+                    closure_interactive_form_fallback(*value),
+                )
+            }
+        }
+        ValueKind::Veclike(VecLikeType::Macro) => {
+            CommandpClassification::CheckInteractiveFormProperty(closure_interactive_form_fallback(
+                *value,
+            ))
+        }
+        ValueKind::Veclike(VecLikeType::ByteCode) => {
+            if value
+                .get_bytecode_data()
+                .is_some_and(|bc| bc.observable_closure_slot_count() > 5)
+            {
+                CommandpClassification::Interactive
+            } else {
+                CommandpClassification::CheckInteractiveFormProperty(
+                    closure_interactive_form_fallback(*value),
+                )
+            }
+        }
+        ValueKind::Cons if super::autoload::is_autoload_value(value) => {
+            CommandpClassification::CheckInteractiveFormProperty(
+                InteractiveFormFallback::PropertyOnly,
+            )
+        }
+        ValueKind::Cons => {
+            if quoted_lambda_has_interactive_form(value) {
+                CommandpClassification::Interactive
+            } else {
+                CommandpClassification::Reject
+            }
+        }
+        ValueKind::Subr(id) => {
+            if registered_builtin_command(id) {
+                CommandpClassification::Interactive
+            } else {
+                CommandpClassification::CheckInteractiveFormProperty(
+                    InteractiveFormFallback::PropertyOnly,
+                )
+            }
+        }
         ValueKind::Veclike(VecLikeType::Subr) => {
             let id = value.as_subr_id().unwrap();
-            registered_builtin_command(id)
+            if registered_builtin_command(id) {
+                CommandpClassification::Interactive
+            } else {
+                CommandpClassification::CheckInteractiveFormProperty(
+                    InteractiveFormFallback::PropertyOnly,
+                )
+            }
         }
-        ValueKind::String | ValueKind::Veclike(VecLikeType::Vector) => !for_call_interactively,
-        _ => false,
+        ValueKind::String | ValueKind::Veclike(VecLikeType::Vector) => {
+            if for_call_interactively {
+                CommandpClassification::Reject
+            } else {
+                CommandpClassification::Interactive
+            }
+        }
+        _ => CommandpClassification::Reject,
     }
 }
 
-fn command_designator_p_in_state(
+fn classify_command_designator_in_state(
     obarray: &Obarray,
     interactive: &InteractiveRegistry,
     designator: &Value,
     for_call_interactively: bool,
-) -> bool {
+) -> CommandpClassification {
     if let Some(symbol) = designator.as_symbol_id() {
         if obarray.is_function_unbound_id(symbol) {
-            return false;
+            return CommandpClassification::Reject;
         }
         if let Some((resolved_symbol, resolved_value)) =
             resolve_function_designator_symbol_in_state(obarray, symbol)
         {
-            return command_object_p_in_state(
+            if resolved_value.is_nil() {
+                return CommandpClassification::Reject;
+            }
+            return classify_command_object_in_state(
                 interactive,
                 Some(resolved_symbol),
                 &resolved_value,
                 for_call_interactively,
             );
         }
-        return interactive.is_interactive(symbol);
+        return if interactive.is_interactive(symbol) {
+            CommandpClassification::Interactive
+        } else {
+            CommandpClassification::Reject
+        };
     }
-    command_object_p_in_state(
+    classify_command_object_in_state(
         interactive,
         designator.as_symbol_id(),
         designator,

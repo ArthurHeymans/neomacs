@@ -691,6 +691,41 @@ fn commandp_uses_closure_slot_shape_instead_of_scanning_body() {
 }
 
 #[test]
+fn commandp_distinguishes_gnu_docstring_references_from_oclosure_tags() {
+    crate::test_utils::init_test_tracing();
+    let classify_doc = |doc| {
+        let closure = Value::make_lambda_with_slots(vec![
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            Value::NIL,
+            doc,
+        ]);
+        classify_command_object_in_state(&InteractiveRegistry::new(), None, &closure, false)
+    };
+
+    for valid_doc in [
+        Value::fixnum(7),
+        Value::string("inline documentation"),
+        Value::cons(Value::string("etc/DOC"), Value::fixnum(42)),
+    ] {
+        assert_eq!(
+            classify_doc(valid_doc),
+            CommandpClassification::CheckInteractiveFormProperty(
+                InteractiveFormFallback::PropertyOnly
+            )
+        );
+    }
+    let oclosure_tag = Value::symbol("neo-test-oclosure-tag");
+    assert!(matches!(
+        classify_doc(oclosure_tag),
+        CommandpClassification::CheckInteractiveFormProperty(
+            InteractiveFormFallback::GenericDispatch(closure)
+        ) if closure.closure_doc_value() == Some(oclosure_tag)
+    ));
+}
+
+#[test]
 fn commandp_returns_nil_for_raw_unibyte_symbol_name() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -721,6 +756,33 @@ fn commandp_errors_on_uninterned_interactive_form_property_like_gnu() {
                        (commandp (symbol-function s))))"#
         ),
         r#"OK ((error t) (interactive "p") nil)"#
+    );
+}
+
+#[test]
+fn commandp_only_checks_interactive_form_property_for_gnu_fallback_classes() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r##"(let ((scalar (make-symbol "neo-commandp-scalar"))
+                       (macro (make-symbol "neo-commandp-macro"))
+                       (non-lambda (make-symbol "neo-commandp-non-lambda")))
+                   (defmacro neo-commandp-macro-form () nil)
+                   (fset scalar 42)
+                   (fset macro "x")
+                   (fset non-lambda '(not-lambda))
+                   (put scalar 'interactive-form '(interactive))
+                   (put macro 'interactive-form '(interactive))
+                   (put non-lambda 'interactive-form '(interactive))
+                   (put 'neo-commandp-macro-form 'interactive-form '(interactive))
+                   (list (condition-case nil (commandp scalar) (error 'error))
+                         (condition-case nil (commandp macro t) (error 'error))
+                         (condition-case nil (commandp non-lambda) (error 'error))
+                         (condition-case nil
+                             (commandp 'neo-commandp-macro-form)
+                           (error 'error))))"##
+        ),
+        "OK (nil nil nil nil)"
     );
 }
 
