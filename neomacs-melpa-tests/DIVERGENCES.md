@@ -5134,3 +5134,48 @@ pending command input no longer completes the wait.  `sit-for` keeps yielding,
 because GNU passes a non-zero READ_KBD there.
 
 Status: FIXED.
+
+## 100. A minibuffer read dropped an undo boundary into buffers an earlier command had edited -- FIXED
+
+The Tide cross-file rename workflow renames a symbol, then renames files, each
+step reading its argument from the minibuffer.  Every buffer the first rename
+edited came out of the later steps with one more undo entry than GNU's -- 12
+entries and 1 boundary in `src/main.js` against GNU's 11 and 0, 4 and 1 in
+`src/math.js` against 3 and 0.
+
+```elisp
+(with-current-buffer (get-buffer-create "probe")
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (insert "hello")
+  (let ((setup (lambda ()
+                 (setq unread-command-events
+                       (append (listify-key-sequence (kbd "z RET"))
+                               unread-command-events)))))
+    (add-hook 'minibuffer-setup-hook setup)
+    (unwind-protect (let ((executing-kbd-macro t)) (read-from-minibuffer "P: "))
+      (remove-hook 'minibuffer-setup-hook setup)))
+  buffer-undo-list)
+;; GNU                => ((1 . 6) (t . 0))
+;; Neomacs before fix => (nil (1 . 6) (t . 0))
+```
+
+`undo-auto--add-boundary` runs once per command-loop iteration and adds a
+boundary to every buffer listed in `undo-auto--undoably-changed-buffers`
+(`lisp/simple.el:4104-4116`).  A minibuffer read enters a command loop of its
+own, so without further care the first minibuffer command would group the
+edits of a command that has already finished.
+
+GNU handles that where the recursive loop is entered.  `recursive_edit_1`
+(`src/keyboard.c:708-748`) is the one entry both `recursive-edit` and
+`read_minibuf` pass through, and it specbinds
+`undo-auto--undoably-changed-buffers` to nil before calling `command_loop`,
+under the comment "so that changes in the recursive edit will not result in
+undo boundaries in buffers changed before we entered there recursive edit"
+(Bug #23632).
+
+Neomacs never bound it.  The binding now lives in
+`run_exit_wrapped_command_loop`, the function both `recursive-edit` and the
+minibuffer command loop go through, and is unwound with the loop's result.
+
+Status: FIXED.
