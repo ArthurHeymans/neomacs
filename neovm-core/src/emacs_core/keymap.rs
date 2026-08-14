@@ -117,6 +117,77 @@ impl KeymapMarker {
     }
 }
 
+/// Lisp variables whose values are native inputs to GNU's active-keymap
+/// collector.
+///
+/// GNU stores these as predeclared `Lisp_Object` globals (`V...` fields), so a
+/// key lookup reads their identities directly.  Keeping the corresponding
+/// Neomacs identities behind a closed enum prevents hot callers from falling
+/// back to string-based lookup and makes every newly modeled variable choose a
+/// cache slot at compile time.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+enum KeymapStateVariable {
+    EmulationModeMapAlists,
+    MetaPrefixChar,
+    MinorModeMapAlist,
+    MinorModeOverridingMapAlist,
+    OverridingLocalMap,
+    OverridingLocalMapMenuFlag,
+    OverridingTerminalLocalMap,
+}
+
+impl KeymapStateVariable {
+    fn symbol_id(self) -> SymId {
+        use std::sync::OnceLock;
+
+        static EMULATION_MODE_MAP_ALISTS: OnceLock<SymId> = OnceLock::new();
+        static META_PREFIX_CHAR: OnceLock<SymId> = OnceLock::new();
+        static MINOR_MODE_MAP_ALIST: OnceLock<SymId> = OnceLock::new();
+        static MINOR_MODE_OVERRIDING_MAP_ALIST: OnceLock<SymId> = OnceLock::new();
+        static OVERRIDING_LOCAL_MAP: OnceLock<SymId> = OnceLock::new();
+        static OVERRIDING_LOCAL_MAP_MENU_FLAG: OnceLock<SymId> = OnceLock::new();
+        static OVERRIDING_TERMINAL_LOCAL_MAP: OnceLock<SymId> = OnceLock::new();
+
+        match self {
+            Self::EmulationModeMapAlists => {
+                *EMULATION_MODE_MAP_ALISTS.get_or_init(|| intern(self.into()))
+            }
+            Self::MetaPrefixChar => *META_PREFIX_CHAR.get_or_init(|| intern(self.into())),
+            Self::MinorModeMapAlist => *MINOR_MODE_MAP_ALIST.get_or_init(|| intern(self.into())),
+            Self::MinorModeOverridingMapAlist => {
+                *MINOR_MODE_OVERRIDING_MAP_ALIST.get_or_init(|| intern(self.into()))
+            }
+            Self::OverridingLocalMap => *OVERRIDING_LOCAL_MAP.get_or_init(|| intern(self.into())),
+            Self::OverridingLocalMapMenuFlag => {
+                *OVERRIDING_LOCAL_MAP_MENU_FLAG.get_or_init(|| intern(self.into()))
+            }
+            Self::OverridingTerminalLocalMap => {
+                *OVERRIDING_TERMINAL_LOCAL_MAP.get_or_init(|| intern(self.into()))
+            }
+        }
+    }
+
+    fn global_value(self, obarray: &Obarray) -> Option<Value> {
+        obarray.symbol_value_id(self.symbol_id()).copied()
+    }
+
+    fn buffer_or_global_value(
+        self,
+        obarray: &Obarray,
+        buffers: &crate::buffer::BufferManager,
+        buffer_id: Option<crate::buffer::BufferId>,
+    ) -> Option<Value> {
+        dynamic_buffer_or_global_symbol_value_by_sym_id_in_state(
+            obarray,
+            &[],
+            buffers,
+            buffer_id,
+            self.symbol_id(),
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
 #[strum(prefix = ":", serialize_all = "kebab-case")]
 pub enum MenuItemProperty {
@@ -1315,8 +1386,8 @@ pub(crate) fn expand_meta_prefix_char_events_in_obarray(
     obarray: &Obarray,
     events: &[Value],
 ) -> Option<Vec<Value>> {
-    let meta_prefix = obarray
-        .symbol_value("meta-prefix-char")
+    let meta_prefix = KeymapStateVariable::MetaPrefixChar
+        .global_value(obarray)
         .and_then(|v| v.as_fixnum())?;
 
     let mut changed = false;
@@ -1881,30 +1952,6 @@ impl SelectedGlobalMap {
     }
 }
 
-fn dynamic_or_global_symbol_value_in_state(
-    obarray: &Obarray,
-    _dynamic: &[OrderedRuntimeBindingMap],
-    name: &str,
-) -> Option<Value> {
-    obarray.symbol_value(name).cloned()
-}
-
-fn dynamic_buffer_or_global_symbol_value_in_state(
-    obarray: &Obarray,
-    _dynamic: &[OrderedRuntimeBindingMap],
-    buffers: &crate::buffer::BufferManager,
-    buffer_id: Option<crate::buffer::BufferId>,
-    name: &str,
-) -> Option<Value> {
-    if let Some(buffer_id) = buffer_id
-        && let Some(buf) = buffers.get(buffer_id)
-        && let Some(value) = buf.get_buffer_local(name)
-    {
-        return Some(value);
-    }
-    obarray.symbol_value(name).cloned()
-}
-
 fn dynamic_buffer_or_global_symbol_value_by_sym_id_in_state(
     obarray: &Obarray,
     _dynamic: &[OrderedRuntimeBindingMap],
@@ -2019,12 +2066,8 @@ fn collect_map_entries_from_alist_in_state(
             continue;
         }
 
-        let mode_active = dynamic_buffer_or_global_symbol_value_in_state(
-            obarray,
-            dynamic,
-            buffers,
-            buffer_id,
-            resolve_sym(mode_name),
+        let mode_active = dynamic_buffer_or_global_symbol_value_by_sym_id_in_state(
+            obarray, dynamic, buffers, buffer_id, mode_name,
         )
         .map(|value| value.is_truthy())
         .unwrap_or(false);
@@ -2065,18 +2108,14 @@ pub(crate) fn collect_minor_mode_maps_in_state(
 ) -> Vec<Value> {
     let mut maps = Vec::new();
 
-    if let Some(emulation_raw) = dynamic_buffer_or_global_symbol_value_in_state(
-        obarray,
-        dynamic,
-        buffers,
-        buffer_id,
-        "emulation-mode-map-alists",
-    ) && let Some(emulation_entries) = list_to_vec(&emulation_raw)
+    if let Some(emulation_raw) = KeymapStateVariable::EmulationModeMapAlists
+        .buffer_or_global_value(obarray, buffers, buffer_id)
+        && let Some(emulation_entries) = list_to_vec(&emulation_raw)
     {
         for entry in emulation_entries {
-            let alist_value = match entry.as_symbol_name() {
-                Some(name) => dynamic_buffer_or_global_symbol_value_in_state(
-                    obarray, dynamic, buffers, buffer_id, name,
+            let alist_value = match entry.as_symbol_id() {
+                Some(sym_id) => dynamic_buffer_or_global_symbol_value_by_sym_id_in_state(
+                    obarray, dynamic, buffers, buffer_id, sym_id,
                 )
                 .unwrap_or(Value::NIL),
                 None => entry,
@@ -2093,13 +2132,8 @@ pub(crate) fn collect_minor_mode_maps_in_state(
         }
     }
 
-    let overriding = dynamic_buffer_or_global_symbol_value_in_state(
-        obarray,
-        dynamic,
-        buffers,
-        buffer_id,
-        "minor-mode-overriding-map-alist",
-    );
+    let overriding = KeymapStateVariable::MinorModeOverridingMapAlist
+        .buffer_or_global_value(obarray, buffers, buffer_id);
     if let Some(ref overriding_maps) = overriding {
         collect_maps_from_alist_in_state(
             obarray,
@@ -2112,13 +2146,9 @@ pub(crate) fn collect_minor_mode_maps_in_state(
         );
     }
 
-    if let Some(regular) = dynamic_buffer_or_global_symbol_value_in_state(
-        obarray,
-        dynamic,
-        buffers,
-        buffer_id,
-        "minor-mode-map-alist",
-    ) {
+    if let Some(regular) =
+        KeymapStateVariable::MinorModeMapAlist.buffer_or_global_value(obarray, buffers, buffer_id)
+    {
         collect_maps_from_alist_in_state(
             obarray,
             dynamic,
@@ -2151,10 +2181,8 @@ pub fn menu_bar_active_keymaps_for_frame_read_only(
         .get(frame_id)
         .and_then(|frame| frame.selected_window())
         .map(|window| Value::make_window(window.id().0));
-    let obey_overriding_local_maps = ctx
-        .obarray
-        .symbol_value("overriding-local-map-menu-flag")
-        .copied()
+    let obey_overriding_local_maps = KeymapStateVariable::OverridingLocalMapMenuFlag
+        .global_value(&ctx.obarray)
         .is_some_and(|value| value.is_truthy());
 
     let Ok(mut maps) = current_active_maps_for_position_read_only(
@@ -2184,18 +2212,14 @@ pub(crate) fn collect_minor_mode_map_entries_in_state(
 ) -> Vec<(SymId, Value)> {
     let mut maps = Vec::new();
 
-    if let Some(emulation_raw) = dynamic_buffer_or_global_symbol_value_in_state(
-        obarray,
-        dynamic,
-        buffers,
-        buffer_id,
-        "emulation-mode-map-alists",
-    ) && let Some(emulation_entries) = list_to_vec(&emulation_raw)
+    if let Some(emulation_raw) = KeymapStateVariable::EmulationModeMapAlists
+        .buffer_or_global_value(obarray, buffers, buffer_id)
+        && let Some(emulation_entries) = list_to_vec(&emulation_raw)
     {
         for entry in emulation_entries {
-            let alist_value = match entry.as_symbol_name() {
-                Some(name) => dynamic_buffer_or_global_symbol_value_in_state(
-                    obarray, dynamic, buffers, buffer_id, name,
+            let alist_value = match entry.as_symbol_id() {
+                Some(sym_id) => dynamic_buffer_or_global_symbol_value_by_sym_id_in_state(
+                    obarray, dynamic, buffers, buffer_id, sym_id,
                 )
                 .unwrap_or(Value::NIL),
                 None => entry,
@@ -2212,13 +2236,8 @@ pub(crate) fn collect_minor_mode_map_entries_in_state(
         }
     }
 
-    let overriding = dynamic_buffer_or_global_symbol_value_in_state(
-        obarray,
-        dynamic,
-        buffers,
-        buffer_id,
-        "minor-mode-overriding-map-alist",
-    );
+    let overriding = KeymapStateVariable::MinorModeOverridingMapAlist
+        .buffer_or_global_value(obarray, buffers, buffer_id);
     if let Some(ref overriding_maps) = overriding {
         collect_map_entries_from_alist_in_state(
             obarray,
@@ -2231,13 +2250,9 @@ pub(crate) fn collect_minor_mode_map_entries_in_state(
         );
     }
 
-    if let Some(regular) = dynamic_buffer_or_global_symbol_value_in_state(
-        obarray,
-        dynamic,
-        buffers,
-        buffer_id,
-        "minor-mode-map-alist",
-    ) {
+    if let Some(regular) =
+        KeymapStateVariable::MinorModeMapAlist.buffer_or_global_value(obarray, buffers, buffer_id)
+    {
         collect_map_entries_from_alist_in_state(
             obarray,
             dynamic,
@@ -2379,9 +2394,9 @@ fn keymap_property_at_position(
     buffers: &crate::buffer::BufferManager,
     buffer_object: Value,
     char_pos: i64,
-    prop_name: &str,
+    property: LocalMapProperty,
 ) -> Result<Value, Flow> {
-    let prop_symbol = Value::symbol(prop_name);
+    let prop_symbol = Value::from_sym_id(property.symbol_id());
     let char_property = super::builtins::textprop::builtin_get_char_property_in_state(
         obarray,
         buffers,
@@ -2406,13 +2421,26 @@ fn keymap_property_at_position(
 /// Naming the property with a string instead let the two fallbacks drift apart:
 /// `keymap` has none, `local-map` falls back to the buffer's own keymap, and a
 /// caller that passes the wrong string gets the wrong fallback silently.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum LocalMapProperty {
     /// `keymap`: consulted ahead of the minor-mode maps, with NO fallback.
     Keymap,
     /// `local-map`: consulted in place of the buffer's own keymap, which is its
     /// fallback.
     LocalMap,
+}
+
+impl LocalMapProperty {
+    fn symbol_id(self) -> SymId {
+        use std::sync::OnceLock;
+
+        static LOCAL_MAP: OnceLock<SymId> = OnceLock::new();
+
+        match self {
+            Self::Keymap => KeymapMarker::Keymap.symbol_id(),
+            Self::LocalMap => *LOCAL_MAP.get_or_init(|| intern("local-map")),
+        }
+    }
 }
 
 /// GNU `get_local_map (BUF_PT (b), b, PROP)`: the keymap named by PROP at
@@ -2429,12 +2457,12 @@ pub(crate) fn local_map_property_at_buffer_point(
     property: LocalMapProperty,
     buffer_keymap: Value,
 ) -> Result<Value, Flow> {
-    let (prop_name, fallback) = match property {
-        LocalMapProperty::Keymap => ("keymap", Value::NIL),
-        LocalMapProperty::LocalMap => ("local-map", buffer_keymap),
+    let fallback = match property {
+        LocalMapProperty::Keymap => Value::NIL,
+        LocalMapProperty::LocalMap => buffer_keymap,
     };
     let found =
-        keymap_property_at_position(obarray, buffers, buffer_object, buffer_point, prop_name)?;
+        keymap_property_at_position(obarray, buffers, buffer_object, buffer_point, property)?;
     Ok(maybe_keymap_in_obarray(obarray, &found).unwrap_or(fallback))
 }
 
@@ -2455,7 +2483,7 @@ fn current_local_map_for_position(
             buffers,
             active_position.buffer_object,
             char_pos,
-            "local-map",
+            LocalMapProperty::LocalMap,
         )?;
         return Ok(
             maybe_keymap_in_obarray(obarray, &property).unwrap_or(active_position.buffer_local_map)
@@ -2484,7 +2512,7 @@ fn position_keymap(
         buffers,
         active_position.buffer_object,
         char_pos,
-        "keymap",
+        LocalMapProperty::Keymap,
     )?;
     Ok(maybe_keymap_in_obarray(obarray, &property).unwrap_or(Value::NIL))
 }
@@ -2552,12 +2580,12 @@ pub(crate) fn current_active_maps_for_position(
     position: Option<&Value>,
 ) -> Result<Vec<Value>, Flow> {
     let global_map = ctx.current_global_map();
-    let overriding_local_map =
-        dynamic_or_global_symbol_value_in_state(&ctx.obarray, &[], "overriding-local-map")
-            .and_then(|value| maybe_keymap_in_obarray(&ctx.obarray, &value));
-    let overriding_terminal_local_map =
-        dynamic_or_global_symbol_value_in_state(&ctx.obarray, &[], "overriding-terminal-local-map")
-            .and_then(|value| maybe_keymap_in_obarray(&ctx.obarray, &value));
+    let overriding_local_map = KeymapStateVariable::OverridingLocalMap
+        .global_value(&ctx.obarray)
+        .and_then(|value| maybe_keymap_in_obarray(&ctx.obarray, &value));
+    let overriding_terminal_local_map = KeymapStateVariable::OverridingTerminalLocalMap
+        .global_value(&ctx.obarray)
+        .and_then(|value| maybe_keymap_in_obarray(&ctx.obarray, &value));
 
     current_active_maps_from_parts(
         &ctx.obarray,
@@ -2579,12 +2607,12 @@ pub(crate) fn current_active_maps_for_position_read_only(
     position: Option<&Value>,
 ) -> Result<Vec<Value>, Flow> {
     let global_map = ctx.current_global_map();
-    let overriding_local_map =
-        dynamic_or_global_symbol_value_in_state(&ctx.obarray, &[], "overriding-local-map")
-            .and_then(|value| maybe_keymap_in_obarray(&ctx.obarray, &value));
-    let overriding_terminal_local_map =
-        dynamic_or_global_symbol_value_in_state(&ctx.obarray, &[], "overriding-terminal-local-map")
-            .and_then(|value| maybe_keymap_in_obarray(&ctx.obarray, &value));
+    let overriding_local_map = KeymapStateVariable::OverridingLocalMap
+        .global_value(&ctx.obarray)
+        .and_then(|value| maybe_keymap_in_obarray(&ctx.obarray, &value));
+    let overriding_terminal_local_map = KeymapStateVariable::OverridingTerminalLocalMap
+        .global_value(&ctx.obarray)
+        .and_then(|value| maybe_keymap_in_obarray(&ctx.obarray, &value));
 
     current_active_maps_from_parts(
         &ctx.obarray,
@@ -2752,12 +2780,10 @@ pub(crate) fn minor_mode_key_binding_in_context(
     events: &[Value],
 ) -> Result<Value, Flow> {
     let current_buffer_id = ctx.buffers.current_buffer_id();
-    if let Some(emulation_raw) = dynamic_buffer_or_global_symbol_value_in_state(
+    if let Some(emulation_raw) = KeymapStateVariable::EmulationModeMapAlists.buffer_or_global_value(
         &ctx.obarray,
-        &[],
         &ctx.buffers,
         current_buffer_id,
-        "emulation-mode-map-alists",
     ) && let Some(emulation_entries) = list_to_vec(&emulation_raw)
     {
         for emulation_entry in emulation_entries {
@@ -2788,14 +2814,13 @@ pub(crate) fn minor_mode_key_binding_in_context(
         }
     }
 
-    for alist_name in ["minor-mode-overriding-map-alist", "minor-mode-map-alist"] {
-        let Some(alist_value) = dynamic_buffer_or_global_symbol_value_in_state(
-            &ctx.obarray,
-            &[],
-            &ctx.buffers,
-            current_buffer_id,
-            alist_name,
-        ) else {
+    for variable in [
+        KeymapStateVariable::MinorModeOverridingMapAlist,
+        KeymapStateVariable::MinorModeMapAlist,
+    ] {
+        let Some(alist_value) =
+            variable.buffer_or_global_value(&ctx.obarray, &ctx.buffers, current_buffer_id)
+        else {
             continue;
         };
         if let Some((mode_name, binding)) = lookup_minor_mode_binding_in_alist_in_obarray(
@@ -3717,7 +3742,7 @@ pub fn list_keymap_accessible(
     out: &mut Vec<Value>,
 ) {
     let meta_prefix_char = obarray
-        .and_then(|o| o.symbol_value("meta-prefix-char"))
+        .and_then(|o| KeymapStateVariable::MetaPrefixChar.global_value(o))
         .and_then(|v| v.as_fixnum())
         .unwrap_or(KEY_META_PREFIX_CHAR_DEFAULT);
 

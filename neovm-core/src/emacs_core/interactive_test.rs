@@ -5088,6 +5088,54 @@ fn where_is_internal_reuses_one_reverse_index_for_many_definitions() {
     assert_eq!(eval.interactive.where_is_reverse_index_build_count(), 1);
 }
 
+/// GNU's `Fwhere_is_internal` reads C globals such as
+/// `Vminor_mode_map_alist` and predeclared property identities such as
+/// `Qkeymap` directly while collecting the active maps.  M-x affixation calls
+/// this path once per command candidate, so a steady-state lookup must not
+/// translate those fixed identities from Rust strings on every call.
+#[test]
+fn where_is_internal_active_map_collection_uses_predeclared_symbols() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_interactive_shims();
+    eval.eval_str(
+        r#"(progn
+              (defalias 'test-predeclared-where-is-command (lambda () (interactive)))
+              (let ((map (make-sparse-keymap)))
+                (define-key map "a" 'test-predeclared-where-is-command)
+                (use-global-map map)))"#,
+    )
+    .expect("install active global keymap");
+
+    let command = Value::symbol("test-predeclared-where-is-command");
+    let args = vec![command, Value::NIL, Value::T];
+    let warm = builtin_where_is_internal(&mut eval, args.clone()).expect("warm where-is");
+    assert_eq!(warm, Value::vector(vec![Value::fixnum(b'a'.into())]));
+
+    crate::emacs_core::intern::reset_intern_calls();
+    let repeated = builtin_where_is_internal(&mut eval, args).expect("repeat where-is");
+    assert_eq!(repeated, warm);
+
+    const GNU_PREDECLARED_KEYMAP_IDENTITIES: &[&str] = &[
+        "emulation-mode-map-alists",
+        "minor-mode-overriding-map-alist",
+        "minor-mode-map-alist",
+        "overriding-local-map",
+        "overriding-terminal-local-map",
+        "keymap",
+        "local-map",
+        "meta-prefix-char",
+    ];
+    let interned = crate::emacs_core::intern::intern_call_names();
+    let repeated_fixed_names = interned
+        .iter()
+        .filter(|name| GNU_PREDECLARED_KEYMAP_IDENTITIES.contains(&name.as_str()))
+        .collect::<Vec<_>>();
+    assert!(
+        repeated_fixed_names.is_empty(),
+        "steady-state where-is must use GNU-shaped predeclared identities; interned {repeated_fixed_names:?}"
+    );
+}
+
 #[test]
 fn where_is_internal_answers_many_command_remappings_from_reverse_index() {
     crate::test_utils::init_test_tracing();
