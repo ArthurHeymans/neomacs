@@ -1,6 +1,5 @@
 //! Winit + wgpu GPU-accelerated display backend.
 
-mod animation;
 mod events;
 pub mod toolbar_icons;
 mod transition;
@@ -22,7 +21,6 @@ pub use neomacs_renderer_wgpu::{
 #[cfg(target_os = "linux")]
 pub use neomacs_renderer_wgpu::DmaBufBuffer;
 
-pub use animation::{AnimatedProperty, Animation, AnimationEngine, AnimationTarget, Easing};
 pub use events::{
     EventKind, NEOMACS_CTRL_MASK, NEOMACS_EVENT_BUTTON_PRESS, NEOMACS_EVENT_BUTTON_RELEASE,
     NEOMACS_EVENT_CLOSE, NEOMACS_EVENT_FILE_DROP, NEOMACS_EVENT_FOCUS_IN, NEOMACS_EVENT_FOCUS_OUT,
