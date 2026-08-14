@@ -498,6 +498,44 @@ impl MatrixRow0 {
     }
 }
 
+/// How a redisplay pass arrived at the window start it published.
+///
+/// GNU `redisplay_window` calls `run_window_scroll_functions`
+/// (src/xdisp.c:19222) exactly at the sites where it commits a start rather
+/// than reusing the one it was handed: the `w->force_start` branch
+/// (src/xdisp.c:20728), the `try_scrolling` result (src/xdisp.c:19645), and
+/// the recenter fallback (src/xdisp.c:21227). Everything else — the
+/// optimizations and a `try_window` that simply worked from the existing start
+/// — reaches none of them. Making that an enum keeps the hook from becoming an
+/// opt-in each publication site has to remember.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use]
+pub enum WindowStartCommit {
+    /// Redisplay reused the start it was handed; GNU runs no scroll hook.
+    Inherited,
+    /// Redisplay committed a start (forced, scrolled, or recentered);
+    /// GNU runs `window-scroll-functions` for it.
+    Committed,
+}
+
+impl WindowStartCommit {
+    /// `forced` is GNU `w->force_start` — its branch runs the hook even when
+    /// the forced start equals the previous one. `moved` covers the
+    /// `try_scrolling` and recenter sites, which are only reached because the
+    /// start changed.
+    pub const fn of(forced: bool, moved: bool) -> Self {
+        if forced || moved {
+            Self::Committed
+        } else {
+            Self::Inherited
+        }
+    }
+
+    pub const fn runs_window_scroll_functions(self) -> bool {
+        matches!(self, Self::Committed)
+    }
+}
+
 /// One atomically published GNU-compatible window-end record.
 ///
 /// GNU stores both distances from buffer Z plus the matrix row that produced
@@ -1345,6 +1383,14 @@ impl Window {
         } = self
         {
             *combination_limit = limit;
+        }
+    }
+
+    /// Start position of this window (leaf only).
+    pub fn window_start(&self) -> Option<LispCharPos1> {
+        match self {
+            Window::Leaf { window_start, .. } => Some(*window_start),
+            Window::Internal { .. } => None,
         }
     }
 

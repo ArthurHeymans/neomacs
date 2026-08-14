@@ -259,12 +259,20 @@ impl BufferSourceRedisplayPublishRequest {
         match self.publication {
             WindowPositionPublication::Redisplay
             | WindowPositionPublication::RedisplayMinibufferMeasurement => {
-                evaluator.publish_redisplay_window_positions(
+                let commit = evaluator.publish_redisplay_window_positions(
                     self.frame_id,
                     self.window_id,
                     positions.window_start(),
                     window_end,
                 );
+                // GNU runs the scroll hook from `redisplay_window` itself, and
+                // only for a start redisplay committed. The preliminary
+                // `resize_mini_window` measurement is not that redisplay.
+                if commit.runs_window_scroll_functions()
+                    && self.publication == WindowPositionPublication::Redisplay
+                {
+                    evaluator.run_window_scroll_functions_for_committed_start(self.window_id);
+                }
             }
             WindowPositionPublication::SynchronousQueryEnd => {
                 evaluator.publish_window_layout_query_end(
