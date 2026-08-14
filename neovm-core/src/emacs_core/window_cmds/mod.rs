@@ -11,7 +11,7 @@ use super::error::{EvalResult, Flow, signal};
 use super::intern::{SymId, resolve_sym};
 use super::minibuffer::MinibufferManager;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
-use crate::buffer::{BufferId, BufferManager, EmacsByteLen, EmacsBytePos, LispCharPos1};
+use crate::buffer::{BufferId, BufferManager, EmacsBytePos, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
 pub(crate) use crate::emacs_core::error::{
     expect_args, expect_fixnum, expect_max_args, expect_min_args,
@@ -5849,87 +5849,33 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
 /// top (or bottom if ARG is negative).
 pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_max_args("recenter", &args, 2)?;
+    let Some((fid, wid, buffer_id, pt, target_line)) = recenter_backward_origin(eval, &args)?
+    else {
+        return Ok(Value::NIL);
+    };
+
+    // Move back `target_line` SCREEN lines, through the same display-motion
+    // seam `vertical-motion` and window scrolling use. GNU's positive-ARG
+    // branch runs the display iterator for exactly this --  `start_display`,
+    // `move_it_by_lines (&it, 0)` onto the head of point's screen line, then
+    // `move_it_by_lines (&it, -nlines)` (src/window.c:7395-7407) -- so
+    // invisible text, continuation rows and display properties all count the
+    // way redisplay counts them. Walking buffer newlines here instead made a
+    // hidden line consume one of the ARG lines and left window-start one line
+    // short of GNU's.
+    let (pos, _moved) = crate::emacs_core::builtins::symbols::screen_line_motion_target(
+        eval,
+        buffer_id,
+        pt,
+        None,
+        -target_line,
+    )?;
+
     {
         let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
-
-        let wh = window_body_height_impl(frames, buffers, vec![])
-            .ok()
-            .and_then(|v| v.as_fixnum())
-            .unwrap_or(24);
-
-        // Determine target line from top of window where point should appear.
-        let target_line = match args.first().and_then(|v| v.as_fixnum()) {
-            Some(n) => {
-                if n >= 0 {
-                    n
-                } else {
-                    // Negative: count from bottom.
-                    (wh + n).max(0)
-                }
-            }
-            None if args.first().is_some_and(|v| !v.is_nil()) => wh / 2, // non-integer truthy = center
-            _ => wh / 2,                                                 // nil or absent = center
-        };
-
-        // Compute new window-start by moving backward target_line lines from point.
-        let _ = ensure_selected_frame_id_in_state(frames, buffers);
-        let (fid, wid) = resolve_window_id_in_state(frames, buffers, None)?;
-        let (buffer_id, window_point) = match get_leaf(frames, fid, wid)? {
-            Window::Leaf {
-                buffer_id, point, ..
-            } => {
-                if buffers.current_buffer_id() != Some(*buffer_id) {
-                    let quoting_style =
-                        crate::emacs_core::coding::effective_text_quoting_style(&eval.obarray);
-                    let message = crate::emacs_core::coding::requote_c_error_message(
-                        "`recenter'ing a window that does not display current-buffer",
-                        quoting_style,
-                    );
-                    return Err(signal("error", vec![Value::string(message)]));
-                }
-                let point = buffers
-                    .get(*buffer_id)
-                    .map(|buf| {
-                        lisp_char_pos_from_one_based_usize(
-                            buf.point_char_pos().get().saturating_add(1),
-                        )
-                    })
-                    .unwrap_or(*point);
-                (*buffer_id, point)
-            }
-            _ => return Ok(Value::NIL),
-        };
         let Some(buf) = buffers.get(buffer_id) else {
             return Ok(Value::NIL);
         };
-        let accessible = buf.accessible_emacs_byte_region();
-        let begv = accessible.start();
-        let pt = accessible.clamp(buf.lisp_pos_to_emacs_byte_pos(window_point));
-
-        // Walk backward over newlines directly on the buffer bytes to find the
-        // new window-start.  GNU `Frecenter` scans lines with `find_newline`,
-        // touching only the bytes near point; materializing the whole buffer as
-        // a String here was ~16% of redisplay CPU on large font-locked buffers
-        // scrolled with recenter.
-        //
-        // Beginning of the line containing `from` (or begv when no newline
-        // precedes it): the byte just past the last `\n` in `[begv, from)`.
-        let line_start = |from: EmacsBytePos| {
-            buf.prev_newline_emacs_byte(from, begv)
-                .map(|nl| nl.add_len(EmacsByteLen::new(1)))
-                .unwrap_or(begv)
-        };
-        let mut pos = line_start(pt);
-        // Move backward `target_line` lines from point's line.  Each step drops
-        // onto the `\n` that ends the previous line, then finds that line's BOL.
-        for _ in 0..target_line {
-            if pos <= begv {
-                break;
-            }
-            pos = line_start(pos.saturating_sub_len(EmacsByteLen::new(1)));
-        }
-
-        // Set window-start.
         let pos_lisp = buf.emacs_byte_pos_to_lisp_char_pos(pos).as_i64();
         if let Some(clamped) = clamped_window_position_in_state(frames, buffers, fid, wid, pos_lisp)
             && let Some(window) = frames
@@ -5948,10 +5894,77 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
                 *preserve_vscroll_p = false;
             }
         }
-    } // end borrow scope
+    }
 
     eval.invalidate_redisplay();
     Ok(Value::NIL)
+}
+
+/// Resolve everything `recenter` needs before it moves: the window to restart,
+/// the buffer and point it restarts around, and how many screen lines above
+/// point the new window-start sits.
+///
+/// `Ok(None)` means there is nothing to recenter (the selected window is not a
+/// leaf), which GNU also answers with nil.
+#[allow(clippy::type_complexity)]
+fn recenter_backward_origin(
+    eval: &mut super::eval::Context,
+    args: &[Value],
+) -> Result<Option<(FrameId, WindowId, BufferId, EmacsBytePos, i64)>, Flow> {
+    let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
+
+    let wh = window_body_height_impl(frames, buffers, vec![])
+        .ok()
+        .and_then(|v| v.as_fixnum())
+        .unwrap_or(24);
+
+    // Determine target line from top of window where point should appear.
+    let target_line = match args.first().and_then(|v| v.as_fixnum()) {
+        Some(n) => {
+            if n >= 0 {
+                n
+            } else {
+                // Negative: count from bottom.
+                (wh + n).max(0)
+            }
+        }
+        None if args.first().is_some_and(|v| !v.is_nil()) => wh / 2, // non-integer truthy = center
+        _ => wh / 2,                                                 // nil or absent = center
+    };
+
+    // Compute new window-start by moving backward target_line lines from point.
+    let _ = ensure_selected_frame_id_in_state(frames, buffers);
+    let (fid, wid) = resolve_window_id_in_state(frames, buffers, None)?;
+    let (buffer_id, window_point) = match get_leaf(frames, fid, wid)? {
+        Window::Leaf {
+            buffer_id, point, ..
+        } => {
+            if buffers.current_buffer_id() != Some(*buffer_id) {
+                let quoting_style =
+                    crate::emacs_core::coding::effective_text_quoting_style(&eval.obarray);
+                let message = crate::emacs_core::coding::requote_c_error_message(
+                    "`recenter'ing a window that does not display current-buffer",
+                    quoting_style,
+                );
+                return Err(signal("error", vec![Value::string(message)]));
+            }
+            let point = buffers
+                .get(*buffer_id)
+                .map(|buf| {
+                    lisp_char_pos_from_one_based_usize(buf.point_char_pos().get().saturating_add(1))
+                })
+                .unwrap_or(*point);
+            (*buffer_id, point)
+        }
+        _ => return Ok(None),
+    };
+    let Some(buf) = buffers.get(buffer_id) else {
+        return Ok(None);
+    };
+    let accessible = buf.accessible_emacs_byte_region();
+    let pt = accessible.clamp(buf.lisp_pos_to_emacs_byte_pos(window_point));
+
+    Ok(Some((fid, wid, buffer_id, pt, target_line)))
 }
 
 // ===========================================================================

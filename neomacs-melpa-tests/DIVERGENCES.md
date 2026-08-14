@@ -5057,3 +5057,40 @@ the row's end stop, so the second exit cannot be forgotten by whichever branch
 built the candidate list.
 
 Status: FIXED.
+
+## 98. `recenter` counted buffer lines where GNU counts screen lines -- FIXED
+
+`helm-css-scss--recenter` is `(recenter (/ (window-height) 2))`, so every Helm
+candidate move re-anchors the source window.  With one line of the SCSS fixture
+folded away by an `invisible` overlay, Neomacs put window-start one line lower
+than GNU, and the source pane rendered `  color: red;` at its top row where
+GNU renders `.dashboard--compact {`.
+
+The package-free reduction needs no package at all -- a 23-line buffer, line 10
+hidden by an `invisible` overlay, point on line 20, run in a PTY under both
+editors:
+
+```elisp
+;; hidden line 10, point on line 20
+;; (vertical-motion -12)  => line 7   GNU and Neomacs agree
+;; (recenter 12)          => line 7   GNU
+;;                        => line 8   Neomacs before this fix
+;; with nothing hidden both answer line 8, so only the hidden line diverged
+```
+
+GNU's positive-ARG branch of `Frecenter` runs the display iterator:
+`start_display`, `move_it_by_lines (&it, 0)` onto the head of the screen line
+holding point, then `move_it_by_lines (&it, -nlines)`
+(src/window.c:7395-7407).  That is the same machinery `vertical-motion` uses,
+so invisible text is stepped over without consuming one of the ARG lines.
+
+Neomacs had the seam already -- `screen_line_motion_target`, whose own doc
+calls itself "the shared display-motion seam used by both `vertical-motion` and
+window scrolling" -- and `recenter` simply never opted into it, walking raw
+buffer newlines with `prev_newline_emacs_byte` instead.  That is the ledger-95
+shape again: a rule every caller has to remember, which GNU applies once, in the
+iterator.  `recenter` now resolves its origin and then goes through the seam, so
+invisible text, continuation rows and display properties all count the way
+redisplay counts them.
+
+Status: FIXED.
