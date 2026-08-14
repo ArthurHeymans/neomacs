@@ -189,20 +189,31 @@ fn renderer_keeps_missing_ascii_on_primary_font() {
     };
     use neomacs_layout_engine::font::metrics::FontMetricsService;
 
-    let Some(resolved) = FontMetricsService::new().resolved_font_for_face(
-        "Symbols Nerd Font Mono",
-        400,
-        false,
-        10.0,
+    let requested_family = "Symbols Nerd Font Mono";
+    let Some(platform) = neomacs_layout_engine::font::fontconfig::find_font_for_spec(
+        Some(requested_family),
+        None,
+        None,
+        None,
+        None,
+        None,
     ) else {
         return;
     };
-    if !resolved
-        .family
-        .eq_ignore_ascii_case("Symbols Nerd Font Mono")
-    {
+    // `ResolvedFont::family` deliberately preserves the requested family,
+    // even when Fontconfig substitutes another face.  This test needs the
+    // actual symbols-only font because a substituted text font normally has
+    // an ASCII space glyph.
+    if !platform.family.eq_ignore_ascii_case(requested_family) {
         return;
     }
+
+    let Some(resolved) =
+        FontMetricsService::new().resolved_font_for_face(requested_family, 400, false, 10.0)
+    else {
+        return;
+    };
+    assert_eq!(resolved.identity.file_path, platform.file);
     let Some(mut atlas) = try_test_atlas() else {
         return;
     };
@@ -231,7 +242,7 @@ fn renderer_keeps_missing_ascii_on_primary_font() {
         &Default::default(),
     );
     let mut face = Face::new(FaceId::new(7));
-    face.font_family = "Symbols Nerd Font Mono".to_string();
+    face.font_family = requested_family.to_string();
     face.font_size = 10.0;
     face.font_ascent = 8;
     face.font_descent = 2;
