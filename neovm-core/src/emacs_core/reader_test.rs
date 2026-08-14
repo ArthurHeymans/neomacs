@@ -1082,6 +1082,47 @@ fn read_from_minibuffer_runs_setup_edit_and_exit_in_gnu_order() {
 }
 
 #[test]
+fn read_from_minibuffer_initializes_an_unbound_history_before_setup_hooks() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    tx.send(crate::keyboard::InputEvent::key_press(
+        crate::keyboard::KeyEvent::char(' '),
+    ))
+    .expect("queue minibuffer exit key");
+    eval.input_rx = Some(rx);
+
+    let result = eval
+        .eval_str(
+            r##"(progn
+                   (setq neo-unbound-history-seen nil)
+                   (makunbound 'neo-unbound-minibuffer-history)
+                   (let ((map (make-sparse-keymap))
+                         (minibuffer-setup-hook
+                          (list
+                           (lambda ()
+                             (setq neo-unbound-history-seen
+                                   (list
+                                    (boundp 'neo-unbound-minibuffer-history)
+                                    neo-unbound-minibuffer-history
+                                    minibuffer-history-variable)))))
+                         (minibuffer-exit-hook nil))
+                     (define-key map " " #'exit-minibuffer)
+                     (read-from-minibuffer
+                      "Prompt: " "entry" map nil
+                      'neo-unbound-minibuffer-history))
+                   (list neo-unbound-history-seen
+                         neo-unbound-minibuffer-history))"##,
+        )
+        .expect("GNU initializes an unbound history variable before setup hooks");
+
+    assert_eq!(
+        format!("{result}"),
+        "((t nil neo-unbound-minibuffer-history) (\"entry\"))"
+    );
+}
+
+#[test]
 fn read_from_minibuffer_runs_minibuffer_modes_to_clear_stale_locals() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::test_utils::runtime_startup_context();

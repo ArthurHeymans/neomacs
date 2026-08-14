@@ -125,6 +125,22 @@ fn minibuffer_history_spec(hist_arg: Option<&Value>) -> MinibufferHistorySpec {
     }
 }
 
+fn initialize_unbound_minibuffer_history(
+    shared: &mut super::eval::Context,
+    history: MinibufferHistorySpec,
+) -> Result<(), Flow> {
+    let Some(history_name) = history.history_name else {
+        return Ok(());
+    };
+    if shared
+        .visible_runtime_variable_value_by_id(history_name)?
+        .is_none()
+    {
+        shared.try_set_runtime_binding_by_id(history_name, Value::NIL)?;
+    }
+    Ok(())
+}
+
 fn minibuffer_history_limit(obarray: &Obarray, history_name: SymId) -> Option<usize> {
     let configured = obarray
         .get_property_id(history_name, intern("history-length"))
@@ -1923,6 +1939,11 @@ fn finish_read_from_minibuffer_in_vm_runtime_interactive(
         .unwrap_or(Value::NIL);
     let recursive_depth = shared.recursive_command_loop_depth();
 
+    // GNU read_minibuf initializes an unbound requested history in the
+    // caller's runtime environment before switching to the minibuffer and
+    // before any mode/setup hook can inspect it (minibuf.c:765-772).
+    initialize_unbound_minibuffer_history(shared, history_spec)?;
+
     // GNU `read_minibuf` captures the caller's directory before switching to
     // *Minibuf-N*, then installs it after minibuffer-mode has reset locals.
     let ambient_directory = minibuffer_ambient_directory_in_state(&shared.buffers);
@@ -1957,6 +1978,12 @@ fn finish_read_from_minibuffer_in_vm_runtime_interactive(
             state: Box::new(session_unwind),
         },
     );
+    shared
+        .obarray
+        .set_symbol_value("minibuffer-history-variable", history_spec.variable_value);
+    shared
+        .obarray
+        .set_symbol_value("minibuffer-history-position", history_spec.position);
     run_minibuffer_mode_if_bound(shared, "minibuffer-mode")?;
     install_minibuffer_ambient_directory_in_state(
         &mut shared.buffers,
@@ -2015,12 +2042,6 @@ fn finish_read_from_minibuffer_in_vm_runtime_interactive(
     shared
         .obarray
         .set_symbol_value("minibuffer-depth", Value::fixnum(minibuf_depth as i64));
-    shared
-        .obarray
-        .set_symbol_value("minibuffer-history-variable", history_spec.variable_value);
-    shared
-        .obarray
-        .set_symbol_value("minibuffer-history-position", history_spec.position);
     run_before_setup_hook(shared)?;
     shared.run_hook_if_bound("minibuffer-setup-hook")?;
 
