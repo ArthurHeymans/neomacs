@@ -5093,6 +5093,19 @@ iterator.  `recenter` now resolves its origin and then goes through the seam, so
 invisible text, continuation rows and display properties all count the way
 redisplay counts them.
 
+Residual, NOT this divergence: `helm_css_scss_public_tui_workflows_match_gnu`
+still fails.  The grid assertion this entry is about
+(helm_css_scss_test.rs:1125, "filtered real Helm grid differs") now passes, and
+the failure moved to `report_expect` at helm_css_scss_test.rs:1500, which pins
+GNU's OWN ledger and no longer matches live GNU: at `:stage cancel` GNU reports
+`:windows ("tui-fixture.scss")` where the pin says
+`("tui-fixture.scss" :other)`.  Neomacs cannot influence that side.  A
+`UPDATE_EXPECT=1` run rewrites three GNU pins (1500, 1751, 1804) and then
+reaches a further, separately-masked failure in the MULTI-buffer phase
+("Neomacs multi action returned did not reach the expected terminal state"), so
+the pins were deliberately left untouched rather than refreshed blind.  Two more
+layers live behind this one and want their own ledger entries.
+
 Status: FIXED.
 
 ## 99. The terminal writer quantized 256-colors with its own heuristic -- FIXED
