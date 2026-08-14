@@ -1,4 +1,4 @@
-use crate::display_row::transition::DisplayRowOverflowTransitionPlan;
+use crate::display_row::transition::{DisplayRowOverflowTransitionPlan, VisualWrapBreak};
 use crate::display_row::walk_state::{
     DisplayRowTextOverflowDecision, SpecialTextRowOverflowDecision, TextRowTransitionStatePolicy,
     WordWrapBreakCandidate,
@@ -31,11 +31,13 @@ impl DisplaySourceTextCharOverflowAction {
             DisplayRowTextOverflowDecision::WordWrap { break_candidate } => Self::WordWrap {
                 break_candidate,
                 transition: DisplayRowOverflowTransitionPlan::visual_wrap(
+                    VisualWrapBreak::AtWordBoundary,
                     TextRowTransitionStatePolicy::visual_wrap(),
                 ),
             },
             DisplayRowTextOverflowDecision::CharacterWrap => Self::CharacterWrap {
                 transition: DisplayRowOverflowTransitionPlan::visual_wrap(
+                    VisualWrapBreak::MidElement,
                     TextRowTransitionStatePolicy::character_wrap(),
                 ),
             },
@@ -65,6 +67,7 @@ impl DisplaySourceSpecialCharOverflowAction {
             },
             SpecialTextRowOverflowDecision::Wrap => Self::Wrap {
                 transition: DisplayRowOverflowTransitionPlan::visual_wrap(
+                    VisualWrapBreak::MidElement,
                     TextRowTransitionStatePolicy::special_visual_wrap(),
                 ),
             },

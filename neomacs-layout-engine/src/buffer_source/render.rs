@@ -21,7 +21,7 @@ use crate::display_row::replacement::{
 };
 use crate::display_row::transition::{
     DisplayRowOverflowTransitionPlan, DisplayRowTextWindowEmitContext,
-    DisplayRowTransitionContinuation,
+    DisplayRowTransitionContinuation, VisualWrapBreak,
 };
 use crate::display_row::walk_state::TextRowTransitionStatePolicy;
 use crate::display_source::DisplaySourceStepChar;
@@ -66,8 +66,12 @@ fn emit_display_string_visual_wrap(
 
     let charpos = progress.charpos();
     let hit_range = hit_capture.hit_row_range.range_to(charpos);
-    let transition =
-        DisplayRowOverflowTransitionPlan::visual_wrap(TextRowTransitionStatePolicy::visual_wrap());
+    // A display string that runs past the right edge is broken mid-element, the
+    // branch where GNU produces IT_CONTINUATION (src/xdisp.c:26421-26432).
+    let transition = DisplayRowOverflowTransitionPlan::visual_wrap(
+        VisualWrapBreak::MidElement,
+        TextRowTransitionStatePolicy::visual_wrap(),
+    );
     let row_position = progress.row_position();
     let row_transition = DisplayRowTextWindowEmitContext::from_source_render(
         loop_context.row_geometry_defaults(),

@@ -69,10 +69,28 @@ pub(crate) struct DisplayRowLineBreakTransitionPlan {
     state_policy: TextRowTransitionStatePolicy,
 }
 
+/// How a visually wrapped row reached the right edge, in GNU's terms.
+///
+/// GNU's `display_line` takes two different branches when a line does not fit.
+/// The word-wrap branch (`back_to_wrap`, src/xdisp.c:26360-26388) rewinds to
+/// the recorded wrap point, marks `row->continued_p` and extends the face, but
+/// never calls `produce_special_glyphs (it, IT_CONTINUATION, ...)`. Every other
+/// overflow branch -- the element does not fit at all (src/xdisp.c:26336-26345),
+/// an over-wide TAB (src/xdisp.c:26399-26403) and the general mid-element break
+/// (src/xdisp.c:26421-26432) -- does produce that glyph on a TTY frame. The
+/// distinction only affects the marker, never `continued_p` itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum VisualWrapBreak {
+    /// The row broke at a recorded word-wrap point: no continuation marker.
+    AtWordBoundary,
+    /// The row broke inside a display element: GNU produces IT_CONTINUATION.
+    MidElement,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DisplayRowOverflowTransitionKind {
     Truncation,
-    VisualWrap,
+    VisualWrap(VisualWrapBreak),
 }
 
 pub(crate) struct DisplayRowOverflowTransitionRequest<'a> {
@@ -477,8 +495,14 @@ impl DisplayRowOverflowTransitionPlan {
         Self::new(DisplayRowOverflowTransitionKind::Truncation, state_policy)
     }
 
-    pub(crate) fn visual_wrap(state_policy: TextRowTransitionStatePolicy) -> Self {
-        Self::new(DisplayRowOverflowTransitionKind::VisualWrap, state_policy)
+    pub(crate) fn visual_wrap(
+        break_kind: VisualWrapBreak,
+        state_policy: TextRowTransitionStatePolicy,
+    ) -> Self {
+        Self::new(
+            DisplayRowOverflowTransitionKind::VisualWrap(break_kind),
+            state_policy,
+        )
     }
 
     pub(crate) fn apply_prefix_state(self, mut state: DisplayRowTransitionRenderState<'_>) {
@@ -516,8 +540,9 @@ impl DisplayRowOverflowTransitionPlan {
                     max_rows,
                 )
             }
-            DisplayRowOverflowTransitionKind::VisualWrap => {
+            DisplayRowOverflowTransitionKind::VisualWrap(break_kind) => {
                 DisplayRowOverflowTransitionRequest::visual_wrap(
+                    break_kind,
                     hit_range,
                     defaults,
                     row_base,
@@ -556,6 +581,7 @@ impl<'a> DisplayRowOverflowTransitionRequest<'a> {
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn visual_wrap(
+        break_kind: VisualWrapBreak,
         hit_range: DisplayRowHitRange,
         defaults: DisplayRowGeometryDefaults,
         row_base: usize,
@@ -565,7 +591,7 @@ impl<'a> DisplayRowOverflowTransitionRequest<'a> {
         max_rows: usize,
     ) -> Self {
         Self {
-            kind: DisplayRowOverflowTransitionKind::VisualWrap,
+            kind: DisplayRowOverflowTransitionKind::VisualWrap(break_kind),
             hit_range,
             defaults,
             row_base,
@@ -586,14 +612,16 @@ impl<'a> DisplayRowOverflowTransitionRequest<'a> {
                 self.x,
                 self.row_y_recording,
             ),
-            DisplayRowOverflowTransitionKind::VisualWrap => DisplayRowBoundaryTarget::visual_wrap(
-                self.hit_range,
-                self.defaults,
-                self.row_base,
-                self.col,
-                self.x,
-                self.row_y_recording,
-            ),
+            DisplayRowOverflowTransitionKind::VisualWrap(_) => {
+                DisplayRowBoundaryTarget::visual_wrap(
+                    self.hit_range,
+                    self.defaults,
+                    self.row_base,
+                    self.col,
+                    self.x,
+                    self.row_y_recording,
+                )
+            }
         }
     }
 
@@ -613,19 +641,30 @@ impl<'a> DisplayRowOverflowTransitionRequest<'a> {
                     row_limit,
                 );
             }
-            DisplayRowOverflowTransitionKind::VisualWrap => {
+            DisplayRowOverflowTransitionKind::VisualWrap(break_kind) => {
+                // GNU sets row->continued_p on every wrap branch; only the
+                // mid-element branches also produce the IT_CONTINUATION glyph.
                 row_geometry.mark_current_row_flag_kind(
                     row_flags,
                     DisplayRowFlagKind::Continued,
                     row_limit,
                 );
+                if break_kind == VisualWrapBreak::MidElement {
+                    row_geometry.mark_current_row_flag_kind(
+                        row_flags,
+                        DisplayRowFlagKind::ContinuedMidElement,
+                        row_limit,
+                    );
+                }
             }
         }
         let kind = self.kind;
         let max_rows = self.max_rows;
         let transition = DisplayRowBoundaryTransitionRequest::new(self.boundary_target(), max_rows)
             .emit_with_output(row_geometry, hit_rows, output_render);
-        if kind == DisplayRowOverflowTransitionKind::VisualWrap && !transition.is_exhausted() {
+        if matches!(kind, DisplayRowOverflowTransitionKind::VisualWrap(_))
+            && !transition.is_exhausted()
+        {
             row_geometry.mark_current_row_flag_kind(
                 row_flags,
                 DisplayRowFlagKind::Continuation,
