@@ -11,7 +11,9 @@ pub use artifact::{
     ArtifactFile, ArtifactKind, CorrectnessMismatch, EditorProvenance, Measurement, MetricName,
     MetricUnit, RunArtifact, RunVerdict,
 };
-pub use catalog::{Frontend, ScenarioId, ScenarioSpec, scenario, scenarios};
+pub use catalog::{
+    CrossEditorParityMetric, Frontend, ScenarioId, ScenarioSpec, scenario, scenarios,
+};
 pub use cli::{PerfCliError, PerfCommand, parse_perf_command, run_cli};
 pub use comparison::{
     ComparisonArtifact, ComparisonInput, ComparisonMetricSummary, ComparisonRejection,

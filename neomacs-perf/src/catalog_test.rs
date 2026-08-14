@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use std::num::NonZeroU32;
 
-use super::{Frontend, MetricName, ScenarioId, scenario, scenarios};
+use super::{CrossEditorParityMetric, Frontend, MetricName, ScenarioId, scenario, scenarios};
 
 #[test]
 fn catalog_exposes_the_rust_lsp_typing_workload_as_a_typed_scenario() {
@@ -52,6 +52,10 @@ fn catalog_exposes_mx_tab_as_a_real_completion_window_workload() {
         NonZeroU32::new(5).expect("non-zero default")
     );
     assert_eq!(mx_tab.primary_metric, MetricName::PerCompletionCpuTime);
+    assert_eq!(
+        mx_tab.cross_editor_parity_metrics,
+        &[CrossEditorParityMetric::CompletionCandidateCount]
+    );
     assert!(mx_tab.description.contains("M-x TAB"));
 }
 

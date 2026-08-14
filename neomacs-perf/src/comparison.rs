@@ -305,6 +305,11 @@ pub enum ComparisonRejection {
         expected: MetricUnit,
         actual: MetricUnit,
     },
+    CrossEditorParityMismatch {
+        metric: MetricName,
+        baseline_values: Vec<String>,
+        candidate_values: Vec<String>,
+    },
 }
 
 /// Aggregate outcome. Statistics exist only when every underlying run is valid.
@@ -524,6 +529,23 @@ pub(crate) fn evaluate_comparison(
         samples.push((run.role, measurement.value));
     }
 
+    for parity_metric in scenario(input.scenario).cross_editor_parity_metrics {
+        let metric = parity_metric.metric_name();
+        let mut baseline_values =
+            parity_metric_values(observations, ComparisonRunRole::Baseline, metric);
+        let mut candidate_values =
+            parity_metric_values(observations, ComparisonRunRole::Candidate, metric);
+        baseline_values.sort_by(f64::total_cmp);
+        candidate_values.sort_by(f64::total_cmp);
+        if baseline_values != candidate_values {
+            reasons.push(ComparisonRejection::CrossEditorParityMismatch {
+                metric,
+                baseline_values: render_metric_values(&baseline_values),
+                candidate_values: render_metric_values(&candidate_values),
+            });
+        }
+    }
+
     if !reasons.is_empty() {
         return ComparisonVerdict::Rejected { reasons };
     }
@@ -557,6 +579,29 @@ pub(crate) fn evaluate_comparison(
             percent_change: (ratio - 1.0) * 100.0,
         },
     }
+}
+
+fn parity_metric_values(
+    observations: &[ComparisonObservation],
+    role: ComparisonRunRole,
+    metric: MetricName,
+) -> Vec<f64> {
+    observations
+        .iter()
+        .filter(|observation| observation.run.role == role)
+        .filter_map(|observation| {
+            let measurements = observation.verdict.measurements()?;
+            let mut matching = measurements
+                .iter()
+                .filter(|measurement| measurement.name == metric);
+            let measurement = matching.next()?;
+            matching.next().is_none().then_some(measurement.value)
+        })
+        .collect()
+}
+
+fn render_metric_values(values: &[f64]) -> Vec<String> {
+    values.iter().map(ToString::to_string).collect()
 }
 
 impl PerfHarness {

@@ -6,6 +6,24 @@ use serde::{Deserialize, Serialize};
 
 use crate::MetricName;
 
+/// A semantic count that must agree exactly between editors before their
+/// timings may be compared.
+///
+/// This is deliberately a closed enum rather than an arbitrary `MetricName`:
+/// duration metrics cannot accidentally be declared correctness invariants.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum CrossEditorParityMetric {
+    CompletionCandidateCount,
+}
+
+impl CrossEditorParityMetric {
+    pub const fn metric_name(self) -> MetricName {
+        match self {
+            Self::CompletionCandidateCount => MetricName::CompletionCandidateCount,
+        }
+    }
+}
+
 /// Stable identity of a committed performance workload.
 ///
 /// A closed enum prevents a typo from selecting a different fixture or
@@ -72,6 +90,7 @@ pub struct ScenarioSpec {
     pub default_frontend: Frontend,
     pub default_iterations: NonZeroU32,
     pub primary_metric: MetricName,
+    pub cross_editor_parity_metrics: &'static [CrossEditorParityMetric],
 }
 
 const SCENARIOS: &[ScenarioSpec] = &[
@@ -84,6 +103,7 @@ const SCENARIOS: &[ScenarioSpec] = &[
         },
         default_iterations: NonZeroU32::new(100).expect("non-zero scenario default"),
         primary_metric: MetricName::PerEditCpuTime,
+        cross_editor_parity_metrics: &[],
     },
     ScenarioSpec {
         id: ScenarioId::MxTabCompletion,
@@ -94,6 +114,7 @@ const SCENARIOS: &[ScenarioSpec] = &[
         },
         default_iterations: NonZeroU32::new(5).expect("non-zero scenario default"),
         primary_metric: MetricName::PerCompletionCpuTime,
+        cross_editor_parity_metrics: &[CrossEditorParityMetric::CompletionCandidateCount],
     },
 ];
 

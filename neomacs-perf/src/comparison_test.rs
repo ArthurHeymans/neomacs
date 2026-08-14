@@ -157,6 +157,43 @@ fn valid_repetitions_produce_medians_and_candidate_ratio() {
 }
 
 #[test]
+fn cross_editor_completion_candidate_count_mismatch_rejects_comparison() {
+    let mut input = input();
+    input.scenario = ScenarioId::MxTabCompletion;
+    input.primary_metric = MetricName::PerCompletionCpuTime;
+    let mut observations = valid_observations();
+    for observation in &mut observations {
+        observation.run.scenario = ScenarioId::MxTabCompletion;
+        let RunVerdict::Valid { measurements } = &mut observation.verdict else {
+            unreachable!("fixture uses valid runs")
+        };
+        measurements[0].name = MetricName::PerCompletionCpuTime;
+        measurements[0].unit = MetricUnit::MicrosecondsPerCompletion;
+        measurements.push(Measurement {
+            name: MetricName::CompletionCandidateCount,
+            value: match observation.run.role {
+                ComparisonRunRole::Baseline => 3_114.0,
+                ComparisonRunRole::Candidate => 3_118.0,
+            },
+            unit: MetricUnit::Count,
+        });
+    }
+
+    let ComparisonVerdict::Rejected { reasons } = evaluate_comparison(&input, &observations) else {
+        panic!("cross-editor candidate divergence was accepted")
+    };
+    assert!(reasons.iter().any(|reason| matches!(
+        reason,
+        ComparisonRejection::CrossEditorParityMismatch {
+            metric: MetricName::CompletionCandidateCount,
+            baseline_values,
+            candidate_values,
+        } if baseline_values == &["3114", "3114", "3114"]
+            && candidate_values == &["3118", "3118", "3118"]
+    )));
+}
+
+#[test]
 fn one_correctness_mismatch_rejects_without_serializing_partial_measurements() {
     let mut observations = valid_observations();
     let mismatch = &mut observations[1];
