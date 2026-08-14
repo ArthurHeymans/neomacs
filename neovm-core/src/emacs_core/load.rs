@@ -425,11 +425,18 @@ fn load_form_log_preview(path: &Path, make_preview: impl FnOnce() -> String) -> 
     }
 }
 
-fn read_error_for_load(path: &Path, e: super::value_reader::ReadError) -> EvalError {
+fn read_error_for_load(
+    path: &Path,
+    source: super::reader::ReadSourceObject,
+    e: super::value_reader::ReadError,
+) -> EvalError {
     match e.kind {
+        // GNU `end_of_file_error` takes the datum from the STREAM
+        // (`src/lread.c:2121-2132`); the readevalloop that noticed the
+        // truncation has no say in it.
         super::value_reader::ReadErrorKind::EndOfFile => EvalError::Signal {
             symbol: intern("end-of-file"),
-            data: vec![],
+            data: source.error_datum().into_iter().collect(),
             raw_data: None,
         },
         super::value_reader::ReadErrorKind::Error => EvalError::Signal {
@@ -1697,6 +1704,7 @@ fn streaming_readevalloop(
     path: &Path,
     hist_file_name: &LispString,
     content: &str,
+    source: super::reader::ReadSourceObject,
     shorthands: Option<&ReadSymbolShorthands>,
     macroexpand_fn: Option<Value>,
 ) -> Result<Value, EvalError> {
@@ -1722,7 +1730,7 @@ fn streaming_readevalloop(
             &eval.obarray,
             shorthands,
         )
-        .map_err(|e| read_error_for_load(path, e))?;
+        .map_err(|e| read_error_for_load(path, source, e))?;
 
         let Some((form, next_pos)) = read_result else {
             break; // EOF
@@ -1791,6 +1799,7 @@ fn streaming_readevalloop_lisp_source(
     path: &Path,
     hist_file_name: &LispString,
     content: &LispString,
+    source: super::reader::ReadSourceObject,
     shorthands: Option<&ReadSymbolShorthands>,
     macroexpand_fn: Option<Value>,
 ) -> Result<Value, EvalError> {
@@ -1810,15 +1819,19 @@ fn streaming_readevalloop_lisp_source(
     let setup_specpdl_base = eval.specpdl.len();
     let content_value = Value::heap_string(content.clone());
     eval.push_specpdl_root(content_value);
-    let eof_source = Value::heap_string(hist_file_name.clone());
-    eval.push_specpdl_root(eof_source);
+    // `(read)` inside a loaded form reads the SAME stream, so GNU raises its
+    // end-of-file through the same `end_of_file_error (source)`.
+    let eof_source = source.error_datum();
+    if let Some(eof_source) = eof_source {
+        eval.push_specpdl_root(eof_source);
+    }
     eval.specbind(
         intern("standard-input"),
         eval.load_read_stream_token.as_lisp_value(),
     );
     eval.load_read_cursors.push(super::eval::LoadReadCursor {
         source: content_value,
-        eof_source: Some(eof_source),
+        eof_source,
         pos: 0,
         shorthands: shorthands.cloned(),
     });
@@ -1862,7 +1875,7 @@ fn streaming_readevalloop_lisp_source(
             // chosen below.
             let probe = read_source
                 .read_one_with_shorthands(pos, &eval.obarray, shorthands)
-                .map_err(|e| read_error_for_load(path, e))?;
+                .map_err(|e| read_error_for_load(path, source, e))?;
             let Some((probed_form, probed_next)) = probe else {
                 break;
             };
@@ -2290,7 +2303,12 @@ fn load_file_body(
         let content = skip_elc_header(&raw_bytes);
         let lexical_binding = elc_has_lexical_binding(&raw_bytes);
         with_load_context(eval, &hist_file_name, found, lexical_binding, |eval| {
-            streaming_readevalloop(eval, path, &hist_file_name, &content, None, None)
+            // GNU `Fload` reads a `.elc` from the file itself, so its reader
+            // errors are the `from_file_p` arm: the datum is the
+            // `load-true-file-name` this context just bound.
+            let source =
+                super::reader::ReadSourceObject::LoadFile(Value::heap_string(found.clone()));
+            streaming_readevalloop(eval, path, &hist_file_name, &content, source, None, None)
         })
     } else {
         // GNU `Fload` (`src/lread.c`) lets the coding system swallow a leading
@@ -2316,11 +2334,17 @@ fn load_file_body(
         };
         with_load_context(eval, &hist_file_name, found, lexical_binding, |eval| {
             let macroexpand_fn = get_eager_macroexpand_fn(eval);
+            // Reached only when `load-source-file-function` is nil, i.e. when
+            // `Fload` really does read the source file itself: GNU's
+            // `from_file_p` arm.
+            let source =
+                super::reader::ReadSourceObject::LoadFile(Value::heap_string(found.clone()));
             streaming_readevalloop_lisp_source(
                 eval,
                 path,
                 &hist_file_name,
                 &content,
+                source,
                 shorthands.as_ref(),
                 macroexpand_fn,
             )
@@ -2337,10 +2361,15 @@ fn load_file_body(
     result
 }
 
+/// Run a readevalloop over a source file's text on behalf of a caller that
+/// already owns the stream — `eval-buffer` during a `load`.  `source` is that
+/// stream, and it decides the datum of every reader error GNU raises through
+/// `end_of_file_error` (`src/lread.c:2121-2132`).
 pub(crate) fn eval_lisp_source_file_in_context(
     eval: &mut super::eval::Context,
     found: &LispString,
     content: &LispString,
+    source: super::reader::ReadSourceObject,
 ) -> Result<Value, EvalError> {
     let macroexpand_fn = get_eager_macroexpand_fn(eval);
     let path = load_path_buf(found);
@@ -2362,6 +2391,7 @@ pub(crate) fn eval_lisp_source_file_in_context(
         &path,
         found,
         content,
+        source,
         shorthands.as_ref(),
         macroexpand_fn,
     )

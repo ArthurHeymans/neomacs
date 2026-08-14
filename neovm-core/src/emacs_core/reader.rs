@@ -912,6 +912,57 @@ pub(crate) fn end_of_file_error_for_source(source: Option<Value>) -> Flow {
     signal(LispCondition::EndOfFile, source.into_iter().collect())
 }
 
+/// Which stream a `readevalloop` is reading, in the only terms GNU's
+/// `end_of_file_error` (`src/lread.c:2121-2132`) distinguishes:
+///
+/// ```c
+/// static AVOID
+/// end_of_file_error (source_t *source)
+/// {
+///   if (from_file_p (source))
+///     /* Only Fload calls read on a file, and Fload always binds
+///        load-true-file-name around the call.  */
+///     xsignal1 (Qend_of_file, Vload_true_file_name);
+///   else if (from_buffer_p (source))
+///     xsignal1 (Qend_of_file, source->object);
+///   else
+///     xsignal0 (Qend_of_file);
+/// }
+/// ```
+///
+/// The datum is a property of the STREAM, not of the site that notices the
+/// truncation, so every readevalloop carries one of these and no raise site
+/// assembles `end-of-file` data of its own.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ReadSourceObject {
+    /// GNU `from_file_p`: `Fload` reading a file directly (a `.elc`, or a
+    /// source file when `load-source-file-function` is nil).  The datum is
+    /// `load-true-file-name`, which `Fload` binds around the read.
+    LoadFile(Value),
+    /// GNU `from_buffer_p`: the buffer `readcharfun` names.  `eval-buffer`
+    /// and `eval-region` read this way, and so does `load` for a source file
+    /// once `load-with-code-conversion` has put the text in a temp buffer —
+    /// which is why GNU reports a truncated `.el` as `#<killed buffer>`.
+    Buffer(Value),
+    /// Strings, markers and reader functions: GNU signals with no datum.
+    Anonymous,
+}
+
+impl ReadSourceObject {
+    /// The datum GNU attaches to reader errors raised on this stream.
+    pub(crate) fn error_datum(self) -> Option<Value> {
+        match self {
+            Self::LoadFile(value) | Self::Buffer(value) => Some(value),
+            Self::Anonymous => None,
+        }
+    }
+
+    /// GNU `end_of_file_error` (`src/lread.c:2121-2132`).
+    pub(crate) fn end_of_file_error(self) -> Flow {
+        end_of_file_error_for_source(self.error_datum())
+    }
+}
+
 /// Read the next top-level form from the active load-read cursor — the stream
 /// `standard-input` is bound to during a `load`/`eval-buffer` readevalloop
 /// (see [`crate::emacs_core::eval::LoadReadStreamToken`]).  Advancing the
@@ -925,7 +976,7 @@ fn read_from_active_load_cursor(
     let Some(cursor) = ctx.load_read_cursors.last() else {
         // `standard-input` names the load stream but no load is active: treat
         // as a spent stream (EOF) rather than crashing.
-        return Err(end_of_file_error_for_source(None));
+        return Err(ReadSourceObject::Anonymous.end_of_file_error());
     };
     let source = cursor.source;
     let eof_source = cursor.eof_source;
@@ -959,7 +1010,9 @@ fn read_from_active_load_cursor(
 
 fn signal_reader_error_from_string(e: super::value_reader::ReadError) -> Flow {
     match e.kind {
-        super::value_reader::ReadErrorKind::EndOfFile => end_of_file_error_for_source(None),
+        super::value_reader::ReadErrorKind::EndOfFile => {
+            ReadSourceObject::Anonymous.end_of_file_error()
+        }
         super::value_reader::ReadErrorKind::Error => {
             signal("error", vec![Value::string(e.message)])
         }
@@ -979,7 +1032,7 @@ fn signal_reader_error_from_buffer(
 ) -> Flow {
     match e.kind {
         super::value_reader::ReadErrorKind::EndOfFile => {
-            end_of_file_error_for_source(Some(Value::make_buffer(buffer.id)))
+            ReadSourceObject::Buffer(Value::make_buffer(buffer.id)).end_of_file_error()
         }
         super::value_reader::ReadErrorKind::Error => {
             signal("error", vec![Value::string(e.message)])
@@ -1258,18 +1311,18 @@ pub fn builtin_read_impl(
             let Some((Some(buf_id), Some(position), _)) =
                 super::marker::marker_logical_fields(&stream)
             else {
-                return Err(end_of_file_error_for_source(None));
+                return Err(ReadSourceObject::Anonymous.end_of_file_error());
             };
 
             let (read_result, new_position) = {
                 let buf = ctx
                     .buffers
                     .get(buf_id)
-                    .ok_or_else(|| end_of_file_error_for_source(None))?;
+                    .ok_or_else(|| ReadSourceObject::Anonymous.end_of_file_error())?;
                 let start = buf.char_pos_to_emacs_byte_pos_clamped(position.to_char_pos());
                 let end = buf.accessible_emacs_byte_region().end();
                 if start >= end {
-                    return Err(end_of_file_error_for_source(None));
+                    return Err(ReadSourceObject::Anonymous.end_of_file_error());
                 }
 
                 match super::value_reader::read_one_from_buffer_with_locate_syms(
@@ -1309,41 +1362,42 @@ pub fn builtin_read_impl(
                     Value::make_buffer(buf_id),
                 ],
             )?;
-            let value = read_result?.ok_or_else(|| end_of_file_error_for_source(None))?;
+            let value =
+                read_result?.ok_or_else(|| ReadSourceObject::Anonymous.end_of_file_error())?;
             ctx.obarray_mut().materialize_read_symbols(value);
             Ok(value)
         }
         ResolvedReadStream::Buffer(buf_id) => {
-            let (maybe_value, new_pt) = {
-                let buf = ctx
-                    .buffers
-                    .get(buf_id)
-                    .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+            let (maybe_value, new_pt) =
+                {
+                    let buf = ctx.buffers.get(buf_id).ok_or_else(|| {
+                        signal("error", vec![Value::string("Buffer does not exist")])
+                    })?;
 
-                let start = buf.point_emacs_byte_pos();
-                let end = buf.accessible_emacs_byte_region().end();
-                if start >= end {
-                    return Err(end_of_file_error_for_source(Some(Value::make_buffer(
-                        buf_id,
-                    ))));
-                }
+                    let start = buf.point_emacs_byte_pos();
+                    let end = buf.accessible_emacs_byte_region().end();
+                    if start >= end {
+                        return Err(ReadSourceObject::Buffer(Value::make_buffer(buf_id))
+                            .end_of_file_error());
+                    }
 
-                match super::value_reader::read_one_from_buffer_with_locate_syms(
-                    buf,
-                    EmacsByteRange::new(start, end),
-                    super::value_reader::BufferReadcharOffsetOrigin::BufferPoint,
-                    locate_syms,
-                    &ctx.obarray,
-                    shorthands.as_ref(),
-                ) {
-                    Ok(result) => result,
-                    Err(e) => return Err(signal_reader_error_from_buffer(buf, e)),
-                }
-            };
+                    match super::value_reader::read_one_from_buffer_with_locate_syms(
+                        buf,
+                        EmacsByteRange::new(start, end),
+                        super::value_reader::BufferReadcharOffsetOrigin::BufferPoint,
+                        locate_syms,
+                        &ctx.obarray,
+                        shorthands.as_ref(),
+                    ) {
+                        Ok(result) => result,
+                        Err(e) => return Err(signal_reader_error_from_buffer(buf, e)),
+                    }
+                };
 
             let _ = &mut ctx.buffers.goto_buffer_emacs_byte_pos(buf_id, new_pt);
-            let value = maybe_value
-                .ok_or_else(|| end_of_file_error_for_source(Some(Value::make_buffer(buf_id))))?;
+            let value = maybe_value.ok_or_else(|| {
+                ReadSourceObject::Buffer(Value::make_buffer(buf_id)).end_of_file_error()
+            })?;
             ctx.obarray_mut().materialize_read_symbols(value);
             Ok(value)
         }
