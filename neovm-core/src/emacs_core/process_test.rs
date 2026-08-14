@@ -4246,7 +4246,7 @@ fn accept_process_output_drains_ready_output_before_yielding_to_command_input() 
         &mut ev,
         vec![Value::make_process(pid), Value::make_float(0.5)],
     )
-    .expect("accept-process-output should drain ready output then yield to command input");
+    .expect("accept-process-output should drain ready output despite pending command input");
     drop(tx);
 
     // The ready output must have been drained (filter ran) despite the pending
@@ -4260,10 +4260,14 @@ fn accept_process_output_drains_ready_output_before_yielding_to_command_input() 
         "ready process output must be drained before yielding to command input"
     );
 
-    // The yield-to-command-input semantics are preserved: the pending command
-    // input is still reported (return nil / left queued).
-    assert_eq!(result, Value::NIL);
-    assert_eq!(ev.command_loop.keyboard.pending_input_events.len(), 1);
+    // GNU's return value reports PROCESS activity, not input: "Return non-nil
+    // if we received any output from PROCESS ... before the timeout expired"
+    // (process.c:4880-4884).  Output was received, so the call returns t.
+    // Pending command input is not part of that contract -- GNU's
+    // `Faccept_process_output` passes READ_KBD = 0 and never ends the wait on
+    // input (process.c:4957-4959, 5930-5937) -- and the queued keystroke is
+    // left for the command loop either way.
+    assert_eq!(result, Value::T);
 }
 
 #[test]
