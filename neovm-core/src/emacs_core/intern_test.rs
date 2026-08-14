@@ -129,6 +129,43 @@ fn atom_only_symbol_names_are_cached_and_rooted_per_heap_identity() {
 }
 
 #[test]
+fn atom_only_symbol_name_resolution_skips_the_rare_exact_object_table() {
+    crate::test_utils::init_test_tracing();
+    let _eval = crate::emacs_core::eval::Context::new();
+    let symbol = intern("atom-only-symbol-name-storage-probe");
+
+    reset_symbol_name_value_probes();
+    let materialized = materialize_symbol_name_value(symbol);
+    assert!(materialized.is_string());
+    let (exact_probes, materialized_probes) = symbol_name_value_probes();
+
+    assert_eq!(
+        exact_probes, 0,
+        "an atom-backed symbol must not probe the table reserved for Lisp-supplied name objects"
+    );
+    assert!(
+        materialized_probes >= 1,
+        "atom-backed lookup must use the per-heap materialized-name table"
+    );
+}
+
+#[test]
+fn lisp_object_symbol_name_resolution_uses_its_declared_storage_first() {
+    crate::test_utils::init_test_tracing();
+    let _eval = crate::emacs_core::eval::Context::new();
+    let name = crate::emacs_core::value::Value::string("lisp-object-symbol-name-storage-probe");
+    let symbol = make_uninterned_symbol_with_name_value(name);
+
+    reset_symbol_name_value_probes();
+    assert_eq!(resolve_sym_name_value(symbol).unwrap().bits(), name.bits());
+    assert_eq!(
+        symbol_name_value_probes(),
+        (1, 0),
+        "a Lisp-created symbol should find its exact name object without probing the materialized fallback"
+    );
+}
+
+#[test]
 fn name_to_symbol_cache_round_trips_nonzero_ids() {
     let name_id = NameId(7);
     let sym_id = SymId(11);

@@ -367,6 +367,18 @@ enum NewSymbolName {
     LispObject(SymbolNameValue),
 }
 
+/// Storage selected for a symbol's first Lisp-visible name.
+///
+/// This discriminator lives in padding already present in [`SymbolSlot`].  It
+/// avoids probing both sparse object tables for every symbol-name read while
+/// keeping heap-local pointers out of the process-global dense symbol array.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+enum SymbolNameOrigin {
+    AtomOnly,
+    LispObject,
+}
+
 /// The Lisp-visible name of a symbol, keeping GNU's two ownership cases
 /// distinct at the type boundary.
 ///
@@ -387,6 +399,13 @@ pub(crate) enum LispVisibleSymbolName {
 }
 
 impl NewSymbolName {
+    fn origin(self) -> SymbolNameOrigin {
+        match self {
+            Self::AtomOnly => SymbolNameOrigin::AtomOnly,
+            Self::LispObject(_) => SymbolNameOrigin::LispObject,
+        }
+    }
+
     /// Adopt a Lisp string object as a new symbol's name, as GNU's
     /// `Fmake_symbol (string)` does.
     fn from_lisp_object(value: TaggedValue) -> Self {
@@ -403,6 +422,7 @@ impl NewSymbolName {
 struct SymbolSlot {
     name: NameId,
     canonical: bool,
+    name_origin: SymbolNameOrigin,
 }
 
 pub(crate) struct DumpedSymbolTable {
@@ -472,7 +492,11 @@ impl SymbolRegistry {
 
     fn alloc_symbol(&mut self, name: NameId, canonical: bool, name_value: NewSymbolName) -> SymId {
         let id = SymId(self.symbols.len() as u32);
-        self.symbols.push(SymbolSlot { name, canonical });
+        self.symbols.push(SymbolSlot {
+            name,
+            canonical,
+            name_origin: name_value.origin(),
+        });
         if let NewSymbolName::LispObject(name_value) = name_value {
             let old = self.name_values.insert(id, name_value);
             debug_assert!(old.is_none(), "new symbol id already had a name value");
@@ -586,21 +610,28 @@ impl SymbolRegistry {
         id: SymId,
         heap_id: SymbolNameHeapId,
     ) -> Option<TaggedValue> {
-        self.slot(id)
+        let slot = self
+            .slot(id)
             .unwrap_or_else(|| panic!("invalid symbol id {:?}", id));
-        self.name_values
-            .get(&id)
-            .copied()
-            .filter(|name_value| name_value.heap_id == heap_id)
-            .map(|name_value| name_value.value)
-            .or_else(|| {
-                self.materialized_name_values
-                    .get(&MaterializedSymbolNameKey {
-                        heap_id,
-                        symbol: id,
-                    })
-                    .copied()
+        if slot.name_origin == SymbolNameOrigin::LispObject {
+            note_exact_symbol_name_value_probe();
+            if let Some(name_value) = self
+                .name_values
+                .get(&id)
+                .copied()
+                .filter(|name_value| name_value.heap_id == heap_id)
+            {
+                return Some(name_value.value);
+            }
+        }
+
+        note_materialized_symbol_name_value_probe();
+        self.materialized_name_values
+            .get(&MaterializedSymbolNameKey {
+                heap_id,
+                symbol: id,
             })
+            .copied()
     }
 
     #[inline]
@@ -1241,6 +1272,38 @@ thread_local! {
     static RESOLVE_SYM_LISP_STRING_REGISTRY_READS: RefCell<usize> = const { RefCell::new(0) };
     static INTERN_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static INTERN_CALL_NAMES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
+    static EXACT_SYMBOL_NAME_VALUE_PROBES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static MATERIALIZED_SYMBOL_NAME_VALUE_PROBES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn note_exact_symbol_name_value_probe() {
+    EXACT_SYMBOL_NAME_VALUE_PROBES.set(EXACT_SYMBOL_NAME_VALUE_PROBES.get() + 1);
+}
+
+#[cfg(not(test))]
+fn note_exact_symbol_name_value_probe() {}
+
+#[cfg(test)]
+fn note_materialized_symbol_name_value_probe() {
+    MATERIALIZED_SYMBOL_NAME_VALUE_PROBES.set(MATERIALIZED_SYMBOL_NAME_VALUE_PROBES.get() + 1);
+}
+
+#[cfg(not(test))]
+fn note_materialized_symbol_name_value_probe() {}
+
+#[cfg(test)]
+fn reset_symbol_name_value_probes() {
+    EXACT_SYMBOL_NAME_VALUE_PROBES.set(0);
+    MATERIALIZED_SYMBOL_NAME_VALUE_PROBES.set(0);
+}
+
+#[cfg(test)]
+fn symbol_name_value_probes() -> (usize, usize) {
+    (
+        EXACT_SYMBOL_NAME_VALUE_PROBES.get(),
+        MATERIALIZED_SYMBOL_NAME_VALUE_PROBES.get(),
+    )
 }
 
 #[cfg(test)]
