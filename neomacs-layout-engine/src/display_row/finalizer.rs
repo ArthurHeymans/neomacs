@@ -96,12 +96,14 @@ impl DisplayRowLineEndFinalizer {
             right_edge_x: self.remaining_width_px,
             char_width: self.fallback_metrics.char_width().max(1.0),
             indicator: None,
-            extend: extend_face
-                .filter(|face| face.background != self.base_background)
-                .map(|face| LineEndExtend {
-                    bg: face.background,
-                    face_id: face.face_id,
-                }),
+            // Unfiltered on purpose -- see line_end::extend_fill_runs: the
+            // frame-background skip is GNU's FRAME_WINDOW_P-guarded early
+            // return (xdisp.c:24388) and must not reach a terminal row.
+            extend: extend_face.map(|face| LineEndExtend {
+                bg: face.background,
+                face_id: face.face_id,
+            }),
+            frame_background: self.base_background,
             trailing_whitespace_enabled: false,
         };
         let height_px = row.height_px.max(1.0);

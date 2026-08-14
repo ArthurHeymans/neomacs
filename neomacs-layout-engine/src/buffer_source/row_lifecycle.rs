@@ -1591,12 +1591,16 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                     col: context.fill_column_indicator,
                     ch: context.fill_column_indicator_char,
                 }),
+                // Handed over unfiltered: the frame-background visibility skip
+                // is GNU's FRAME_WINDOW_P-guarded one (xdisp.c:24388) and now
+                // belongs to line_end::extend_fill_runs, which never applies it
+                // to a terminal row.
                 extend: row_build
                     .row_extend
                     .value_on(row_build.row_geometry)
                     .copied()
-                    .filter(|(bg, _)| *bg != context.frame_background)
                     .map(|(bg, face_id)| LineEndExtend { bg, face_id }),
+                frame_background: context.frame_background,
                 trailing_whitespace_enabled: row_carryover.trailing_whitespace.is_enabled(),
             };
             let line_end_geometry = LineEndFillGeometry {

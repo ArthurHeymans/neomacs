@@ -44,13 +44,55 @@ pub(crate) struct LineEndIndicator {
     pub(crate) ch: char,
 }
 
-/// The active `:extend` face at the line end, already filtered against the
-/// frame background (an extend fill whose background equals the frame
-/// background is invisible and never planned).
+/// The active `:extend` face at the line end, exactly as face resolution
+/// produced it.
+///
+/// This is deliberately NOT pre-filtered against the frame background. Whether
+/// an invisible fill may be skipped is a property of the FRAME TYPE, not of
+/// the caller: GNU guards that skip with `FRAME_WINDOW_P`
+/// (`src/xdisp.c:24388`), so a terminal frame can never take it. Callers used
+/// to apply the background filter themselves, which made a terminal row
+/// silently drop a fill GNU always performs. [`extend_fill_runs`] is now the
+/// single place that decides.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct LineEndExtend {
     pub(crate) bg: Color,
     pub(crate) face_id: FaceId,
+}
+
+/// Does the plain `:extend` fill run for this line end?
+///
+/// GNU's "nothing would be painted, so skip the fill" early return is guarded
+/// by `FRAME_WINDOW_P` (`src/xdisp.c:24388`). A terminal frame cannot reach
+/// it, so control always falls through to the terminal fill branch
+/// (`src/xdisp.c:24679-24809`), which materializes the row out to the
+/// text-area edge regardless of how the face looks — carrying, for instance, a
+/// `:extend` face's FOREGROUND even when its background equals the frame's.
+///
+/// Encoding that as a total match on [`DisplayRowMeasurementMode`] is what
+/// makes the omission unrepresentable: the skip is reachable only from the
+/// `ConcreteFont` arm, so no caller and no future branch can pre-filter a
+/// terminal row's fill away by forgetting the rule.
+pub(crate) fn extend_fill_runs(
+    mode: DisplayRowMeasurementMode,
+    extend: Option<LineEndExtend>,
+    frame_background: Color,
+) -> bool {
+    let Some(extend) = extend else {
+        // No `:extend` face is active. GNU's terminal branch still materializes
+        // the row tail, but with the DEFAULT face — and the TTY backend already
+        // produces exactly those cells when it rasterizes the row
+        // (`neomacs-display-runtime/src/backend/tty/rif.rs`, GNU
+        // `src/xdisp.c:24681-24758`). Synthesizing a default-face stretch here
+        // instead would change that backend's blank-erase classification, which
+        // is derived from the last non-padding glyph's face, so the fill stays
+        // the backend's job in this case.
+        return false;
+    };
+    match mode {
+        DisplayRowMeasurementMode::LogicalCells => true,
+        DisplayRowMeasurementMode::ConcreteFont => extend.bg != frame_background,
+    }
 }
 
 /// Everything the line-end decision needs, as pure data.
@@ -72,12 +114,31 @@ pub(crate) struct LineEndContext {
     pub(crate) char_width: f32,
     pub(crate) indicator: Option<LineEndIndicator>,
     pub(crate) extend: Option<LineEndExtend>,
+    /// Frame background, used ONLY by the window-system visibility skip
+    /// (GNU `src/xdisp.c:24388`). Required rather than optional so that every
+    /// call site is forced to supply it instead of quietly pre-filtering
+    /// `extend` against it and losing the terminal fill.
+    pub(crate) frame_background: Color,
     pub(crate) trailing_whitespace_enabled: bool,
 }
 
 impl LineEndContext {
     fn remaining_px(&self) -> f32 {
         self.right_edge_x - self.pen_x
+    }
+
+    /// The `:extend` face that actually paints, after GNU's frame-type-gated
+    /// visibility skip (`src/xdisp.c:24388`).
+    ///
+    /// Every consumer of the extend face must go through this rather than the
+    /// raw [`Self::extend`] field: the plain fill, the indicator gap/tail, and
+    /// the merged-indicator background all have to agree on whether the
+    /// highlight is painting, or a row would get an indicator tail in a face
+    /// whose fill was skipped.
+    fn effective_extend(&self) -> Option<LineEndExtend> {
+        extend_fill_runs(self.measurement_mode, self.extend, self.frame_background)
+            .then_some(self.extend)
+            .flatten()
     }
 }
 
@@ -165,7 +226,7 @@ pub(crate) fn plan(ctx: &LineEndContext) -> LineEndPlan {
             return LineEndPlan { steps };
         }
     }
-    if ctx.extend.is_some() && ctx.right_edge_x - from_x > 0.0 {
+    if ctx.effective_extend().is_some() && ctx.right_edge_x - from_x > 0.0 {
         steps.push(LineEndStep::ExtendFill { from_x });
     }
     LineEndPlan { steps }
@@ -269,9 +330,10 @@ fn resolve_step<R: LineEndFaceResolver>(
         LineEndStep::AppendGlyph { ch, face } => {
             let face_id = match face {
                 AppendedGlyphFace::NewlineFace => ctx.newline_face_id,
-                AppendedGlyphFace::MergedIndicator => {
-                    resolver.fill_column_indicator_face_id(ctx.extend.map(|extend| extend.bg))
-                }
+                AppendedGlyphFace::MergedIndicator => resolver
+                    .fill_column_indicator_face_id(
+                        ctx.effective_extend().map(|extend| extend.bg),
+                    ),
             };
             ResolvedLineEndStep::AppendGlyph {
                 ch,
@@ -284,7 +346,7 @@ fn resolve_step<R: LineEndFaceResolver>(
         ),
         LineEndStep::ExtendFill { from_x } => {
             let extend = ctx
-                .extend
+                .effective_extend()
                 .expect("plan() emits ExtendFill only with an extend config");
             ResolvedLineEndStep::ExtendFill(RowExtendFill::new(
                 extend.bg,
@@ -318,7 +380,7 @@ fn resolve_indicator_fill<R: LineEndFaceResolver>(
     // the gap to 0 and place the indicator right after the text (as GNU does).
     let gap_px = (indicator_px - from_x).max(0.0);
     let gap_cols = (gap_px / char_width).round().clamp(0.0, u16::MAX as f32) as u16;
-    match ctx.extend {
+    match ctx.effective_extend() {
         Some(extend) => {
             let indicator_face_id = resolver.fill_column_indicator_face_id(Some(extend.bg));
             let tail_px = (ctx.right_edge_x - (indicator_px + char_width)).max(0.0);
@@ -516,6 +578,10 @@ mod tests {
 
     const NEWLINE_FACE: FaceId = FaceId::new(7);
     const EXTEND_FACE: FaceId = FaceId::new(11);
+    /// The Leuven default background, `#FFFFFF`.
+    fn frame_bg() -> Color {
+        Color::from_pixel(0x00FFFFFF)
+    }
 
     fn terminal_ctx() -> LineEndContext {
         LineEndContext {
@@ -528,6 +594,7 @@ mod tests {
             char_width: 8.0,
             indicator: None,
             extend: None,
+            frame_background: frame_bg(),
             trailing_whitespace_enabled: false,
         }
     }
@@ -535,6 +602,18 @@ mod tests {
     fn with_extend(mut ctx: LineEndContext) -> LineEndContext {
         ctx.extend = Some(LineEndExtend {
             bg: Color::from_pixel(0x00112233),
+            face_id: EXTEND_FACE,
+        });
+        ctx
+    }
+
+    /// An `:extend` face whose background is EXACTLY the frame background --
+    /// the Leuven `diff-context` shape (GNU defines it `'((t :extend t))`,
+    /// lisp/vc/diff-mode.el:476-479; Leuven maps it to `diff-none`, whose
+    /// realized background is the default `#FFFFFF`).
+    fn with_invisible_extend(mut ctx: LineEndContext) -> LineEndContext {
+        ctx.extend = Some(LineEndExtend {
+            bg: frame_bg(),
             face_id: EXTEND_FACE,
         });
         ctx
@@ -586,6 +665,17 @@ mod tests {
         assert_eq!(GlyphProvenance::line_end().buffer_charpos(), None);
     }
 
+    /// With no `:extend` face, GNU's terminal branch still materializes the row
+    /// tail (`src/xdisp.c:24679-24809`) -- but with the DEFAULT face, and the
+    /// TTY backend already emits exactly those cells while rasterizing the row
+    /// (`neomacs-display-runtime/src/backend/tty/rif.rs`, ledger 81). So this
+    /// seam emitting no fill here is a LAYERING choice, not a divergence: the
+    /// glyph row differs from GNU's, the resulting terminal cells do not.
+    ///
+    /// Do not "fix" this by synthesizing a default-face stretch. The backend
+    /// derives a row tail's blank-erase class from the last non-padding glyph's
+    /// face, so an extra default-face glyph here would reclassify tails that
+    /// ledger 81 deliberately keeps `Explicit`.
     #[test]
     fn terminal_newline_without_extend_appends_only() {
         let plan = plan(&terminal_ctx());
@@ -595,6 +685,64 @@ mod tests {
                 ch: ' ',
                 face: AppendedGlyphFace::NewlineFace,
             }]
+        );
+    }
+
+    /// THE REGRESSION TEST for ledger 94, in both shapes GNU distinguishes.
+    ///
+    /// GNU's "skip the fill, nothing would show" early return is guarded by
+    /// `FRAME_WINDOW_P` (`src/xdisp.c:24388`). A terminal frame can never take
+    /// it, so an `:extend` face whose background happens to equal the frame's
+    /// STILL fills to the text-area edge -- which is how GNU carries such a
+    /// face's foreground (Leuven `diff-context`, `#A0A1A7` on `#FFFFFF`) across
+    /// the row. A window-system frame takes the skip and paints nothing.
+    ///
+    /// Both arms live in one test on purpose: a fix that filled on neither, or
+    /// on both, would leave half of this green.
+    #[test]
+    fn invisible_extend_fills_on_a_terminal_row_but_is_skipped_on_a_window_system_row() {
+        let terminal = with_invisible_extend(terminal_ctx());
+        assert_eq!(
+            plan(&terminal).steps(),
+            &[
+                LineEndStep::AppendGlyph {
+                    ch: ' ',
+                    face: AppendedGlyphFace::NewlineFace,
+                },
+                LineEndStep::ExtendFill { from_x: 32.0 },
+            ],
+            "terminal row: GNU cannot reach the FRAME_WINDOW_P skip, so the \
+             fill runs even though the extend background is invisible"
+        );
+
+        let mut gui = with_invisible_extend(terminal_ctx());
+        gui.measurement_mode = DisplayRowMeasurementMode::ConcreteFont;
+        assert_eq!(
+            plan(&gui).steps(),
+            &[],
+            "window-system row: the fill would paint frame background over \
+             frame background, so GNU returns early (xdisp.c:24388)"
+        );
+    }
+
+    /// The visible-background case must keep filling on BOTH frame types --
+    /// guards against "fix" that simply inverted the mode test.
+    #[test]
+    fn visible_extend_fills_on_both_frame_types() {
+        let terminal = with_extend(terminal_ctx());
+        assert!(
+            plan(&terminal)
+                .steps()
+                .contains(&LineEndStep::ExtendFill { from_x: 32.0 })
+        );
+
+        let mut gui = with_extend(terminal_ctx());
+        gui.measurement_mode = DisplayRowMeasurementMode::ConcreteFont;
+        assert_eq!(
+            plan(&gui).steps(),
+            &[LineEndStep::ExtendFill { from_x: 24.0 }],
+            "no appended glyph on a window-system row, so the fill starts at \
+             the un-advanced pen"
         );
     }
 
