@@ -120,6 +120,62 @@ impl NamespaceScopes {
     }
 }
 
+/// Character data accumulated since the last non-character-data event.
+///
+/// libxml2 substitutes the predefined entities (`&amp;`, `&lt;`, `&gt;`,
+/// `&quot;`, `&apos;`) and character references directly into the character
+/// data it is building, so `<term>edited &amp; translated by</term>` reaches
+/// `make_dom` (GNU `src/xml.c:123-160`) as ONE `XML_TEXT_NODE` and GNU returns
+/// one string child.  `quick_xml` instead reports the reference as its own
+/// `Event::GeneralRef` between two `Event::Text`s, so the run has to be
+/// re-joined here or a caller counting an element's children sees three where
+/// GNU sees one.
+///
+/// `citeproc-term--from-xml-frag` counts exactly that
+/// (`(if (= (length frag) 2) ...)`), and on the split it takes the two-form
+/// branch and calls `cl-caddr` on the string `"edited "` — the
+/// `(wrong-type-argument listp "edited ")` org-ref's CSL export raised.
+#[derive(Default)]
+struct PendingText {
+    text: String,
+    /// A run that resolved a reference is never "ignorable whitespace", even
+    /// if the resolved character is a space: libxml2's `XML_PARSE_NOBLANKS`
+    /// only drops text that was blank in the source.
+    saw_reference: bool,
+}
+
+impl PendingText {
+    fn is_empty(&self) -> bool {
+        self.text.is_empty()
+    }
+
+    /// Emit the accumulated run as one string child, dropping it when it is
+    /// ignorable whitespace (libxml2 `XML_PARSE_NOBLANKS`, which GNU passes
+    /// at `src/xml.c:226-227`).
+    fn flush(
+        &mut self,
+        stack: &mut Vec<(String, Vec<Value>, Vec<Value>)>,
+        top_level: &mut Vec<Value>,
+        has_top_level_comments: &mut bool,
+    ) {
+        if self.is_empty() {
+            return;
+        }
+        let text = std::mem::take(&mut self.text);
+        let saw_reference = std::mem::replace(&mut self.saw_reference, false);
+        if !saw_reference && is_xml_blank_text(&text) {
+            return;
+        }
+        let node = Value::string(text.as_str());
+        if let Some((_, _, children)) = stack.last_mut() {
+            children.push(node);
+        } else {
+            *has_top_level_comments = true;
+            top_level.push(node);
+        }
+    }
+}
+
 /// Parse region using quick-xml and return Elisp parse tree.
 fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
     use quick_xml::Reader;
@@ -133,10 +189,12 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
     let mut top_level: Vec<Value> = Vec::new();
     let mut has_top_level_comments = false;
     let mut scopes = NamespaceScopes::default();
+    let mut pending = PendingText::default();
 
     loop {
         match reader.read_event() {
             Ok(Event::Start(ref e)) => {
+                pending.flush(&mut stack, &mut top_level, &mut has_top_level_comments);
                 // Push this element's namespace declarations before resolving
                 // its own qname, so a prefix declared and used on the same
                 // element (`<p:root xmlns:p=...>`) resolves correctly.
@@ -148,6 +206,7 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
                 stack.push((tag, attrs, Vec::new()));
             }
             Ok(Event::Empty(ref e)) => {
+                pending.flush(&mut stack, &mut top_level, &mut has_top_level_comments);
                 // Empty elements open and close immediately; their declarations
                 // only scope their own qname/attributes, so push/resolve/pop.
                 scopes.frames.push(collect_ns_declarations(e.attributes()));
@@ -164,6 +223,7 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
                 }
             }
             Ok(Event::End(_)) => {
+                pending.flush(&mut stack, &mut top_level, &mut has_top_level_comments);
                 scopes.frames.pop();
                 if let Some((tag, attrs, children)) = stack.pop() {
                     let node = make_element_node(&tag, attrs, children);
@@ -177,17 +237,23 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
             Ok(Event::Text(ref e)) => {
                 let decoded = e.decode().ok()?;
                 let text = quick_xml::escape::unescape(decoded.as_ref()).ok()?;
-                if !is_xml_blank_text(text.as_ref()) {
-                    let node = Value::string(text.as_ref());
-                    if let Some((_, _, children)) = stack.last_mut() {
-                        children.push(node);
-                    } else {
-                        has_top_level_comments = true;
-                        top_level.push(node);
-                    }
-                }
+                pending.text.push_str(text.as_ref());
+            }
+            Ok(Event::GeneralRef(ref e)) => {
+                // libxml2 substitutes the reference into the character data it
+                // is accumulating, so this belongs to the SAME text node as the
+                // characters around it.
+                let name = e.decode().ok()?;
+                let reference = format!("&{name};");
+                let resolved = quick_xml::escape::unescape(&reference).ok()?;
+                pending.text.push_str(resolved.as_ref());
+                pending.saw_reference = true;
             }
             Ok(Event::CData(ref e)) => {
+                // libxml2 keeps a CDATA section as its own
+                // XML_CDATA_SECTION_NODE, which GNU turns into its own string
+                // child (`src/xml.c:158-160`), so it does NOT join the run.
+                pending.flush(&mut stack, &mut top_level, &mut has_top_level_comments);
                 let text = String::from_utf8_lossy(e.as_ref());
                 if !text.is_empty() {
                     let node = Value::string(text.as_ref());
@@ -200,6 +266,7 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
                 }
             }
             Ok(Event::Comment(ref e)) => {
+                pending.flush(&mut stack, &mut top_level, &mut has_top_level_comments);
                 if discard_comments && stack.is_empty() {
                     continue;
                 }
@@ -216,7 +283,10 @@ fn parse_xml_region(data: &[u8], discard_comments: bool) -> Option<Value> {
                     top_level.push(node);
                 }
             }
-            Ok(Event::Eof) => break,
+            Ok(Event::Eof) => {
+                pending.flush(&mut stack, &mut top_level, &mut has_top_level_comments);
+                break;
+            }
             Err(_) => return None,
             _ => continue,
         }

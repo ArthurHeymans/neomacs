@@ -508,3 +508,59 @@ fn zlib_decompress_region_inserts_raw_bytes_not_decoded_characters() {
          collapsed 206 169 to 169, 228 189 160 to 96, and 240 159 152 128 to NUL"
     );
 }
+
+/// libxml2 substitutes predefined entities and character references straight
+/// into the character data it is building, so an element whose text contains
+/// `&amp;` still reaches GNU's `make_dom` (`src/xml.c:123-160`) as ONE
+/// `XML_TEXT_NODE` and comes back as one string child.
+///
+/// `quick_xml` reports the reference as a separate `Event::GeneralRef`, so
+/// without re-joining the run Neomacs both dropped the resolved character and
+/// handed the caller three children where GNU hands one.
+/// `citeproc-term--from-xml-frag` branches on exactly that count
+/// (`(if (= (length frag) 2) ...)`) while parsing the CSL locale's
+/// `<term name="editortranslator" form="verb">edited &amp; translated by</term>`,
+/// and on the split it called `cl-caddr` on the string `"edited "` -- the
+/// `(wrong-type-argument listp "edited ")` org-ref's CSL export raised.
+///
+/// A CDATA section stays its own node in libxml2, so it does NOT join the run.
+///
+/// Every expected value here was produced by running the input through GNU
+/// Emacs 31.0.90's `libxml-parse-xml-region`.
+#[test]
+fn xml_entity_references_join_the_surrounding_text_node_like_libxml2() {
+    crate::test_utils::init_test_tracing();
+    let cases: &[(&str, &str)] = &[
+        (
+            r#"<r><term form="verb">edited &amp; translated by</term></r>"#,
+            r#"(r nil (term ((form . "verb")) "edited & translated by"))"#,
+        ),
+        (r#"<r><t>a&lt;b&gt;c</t></r>"#, r#"(r nil (t nil "a<b>c"))"#),
+        // Character references resolve the same way.
+        (r#"<r><t>&#65;&#x42;C</t></r>"#, r#"(r nil (t nil "ABC"))"#),
+        (r#"<r><t>&amp;</t></r>"#, r#"(r nil (t nil "&"))"#),
+        // A run that resolved a reference is never ignorable whitespace, even
+        // though `XML_PARSE_NOBLANKS` would drop the spaces on their own.
+        (r#"<r><t> &amp; </t></r>"#, r#"(r nil (t nil " & "))"#),
+        // An element boundary still ends the run.
+        (
+            r#"<r><t>x<b/>y</t></r>"#,
+            r#"(r nil (t nil "x" (b nil) "y"))"#,
+        ),
+        // CDATA is its own node in libxml2 and stays a separate string.
+        (
+            r#"<r><t><![CDATA[raw]]>tail</t></r>"#,
+            r#"(r nil (t nil "raw" "tail"))"#,
+        ),
+        // Whitespace-only text between elements is still dropped.
+        ("<r>\n  <t>v</t>\n</r>", r#"(r nil (t nil "v"))"#),
+    ];
+    for (input, expected) in cases {
+        let parsed = parse_xml_region(input.as_bytes(), false).expect("parse");
+        assert_eq!(
+            crate::emacs_core::print::print_value(&parsed),
+            *expected,
+            "input: {input}"
+        );
+    }
+}
