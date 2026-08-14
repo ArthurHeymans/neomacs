@@ -5566,7 +5566,7 @@ fn accept_process_output_pipe_reports_gnu_output_status_invariants() {
 }
 
 #[test]
-fn accept_process_output_direct_pty_runs_minimum_status_pass() {
+fn accept_process_output_direct_pty_reports_gnu_output_status_invariants() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");
     let mut ev = Context::new();
@@ -5593,9 +5593,16 @@ fn accept_process_output_direct_pty_runs_minimum_status_pass() {
         ),
     );
 
-    assert_eq!(
-        result,
-        "OK (real exit t nil \"preexistingprocess-output\n\nProcess apio-direct-pty finished\n\")"
+    // GNU's MINIMUM pass after reading PTY output is non-blocking
+    // (`wait_reading_process_output`, process.c).  The child can therefore
+    // still be `run`, or its exit and default sentinel can already have been
+    // observed.  Both states occurred repeatedly with the same GNU build;
+    // the invariant is that the complete child output is present first.
+    assert!(
+        result == "OK (real run t (#<process apio-direct-pty>) \"preexistingprocess-output\n\")"
+            || result
+                == "OK (real exit t nil \"preexistingprocess-output\n\nProcess apio-direct-pty finished\n\")",
+        "unexpected direct PTY status/output after accept-process-output: {result}"
     );
 }
 
