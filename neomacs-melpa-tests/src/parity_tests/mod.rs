@@ -492,6 +492,7 @@ mod js2_mode;
 mod js2_refactor;
 mod js_doc;
 mod json_mode;
+mod json_navigator;
 mod json_reformat;
 mod json_snatcher;
 mod julia_mode;

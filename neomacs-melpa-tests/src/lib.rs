@@ -2075,6 +2075,12 @@ pub const IVY_RICH_MELPA_PIN: (&str, &str) = ("ivy-rich", "20230425.1422");
 /// `77125b01c0ddce537085201098bea9b4b8ba6be3`.
 pub const JSON_MODE_MELPA_PIN: (&str, &str) = ("json-mode", "20240427.1245");
 
+/// The exact JSON Navigator package selected for practical region, after-point,
+/// hierarchy rendering, widget expansion, truncation, and recovery parity.
+/// MELPA built this archive from upstream commit
+/// `8ab49b066bc23de731a29ef07bbafa29999e1852`.
+pub const JSON_NAVIGATOR_MELPA_PIN: (&str, &str) = ("json-navigator", "20241031.630");
+
 /// The exact JSON Reformat package selected for practical document, selected
 /// region, indentation, string-policy, object-order, scalar-root, and parser
 /// diagnostic parity. MELPA built this archive from upstream commit
