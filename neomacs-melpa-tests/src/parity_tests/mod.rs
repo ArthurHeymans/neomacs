@@ -364,6 +364,7 @@ mod eshell_prompt_extras;
 mod eshell_z;
 mod espuds;
 mod ess;
+mod esup;
 mod esxml;
 mod eval_sexp_fu;
 mod evil;

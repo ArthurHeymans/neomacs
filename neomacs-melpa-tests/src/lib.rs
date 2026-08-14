@@ -1795,6 +1795,12 @@ pub const ESH_HELP_MELPA_PIN: (&str, &str) = ("esh-help", "20190905.22");
 /// upstream commit `c3960e09f37550d300437c46ca03fb28975378a1`.
 pub const ESS_MELPA_PIN: (&str, &str) = ("ess", "20260723.934");
 
+/// The exact esup package selected for practical Emacs startup profiling,
+/// child-process launch, result rendering, navigation, and visit parity.
+/// MELPA built this archive from upstream commit
+/// `4b49c8d599d4cc0fbf994e9e54a9c78e5ab62a5f`.
+pub const ESUP_MELPA_PIN: (&str, &str) = ("esup", "20220202.2335");
+
 /// The exact Keytar package selected as auth-source-keytar's runtime
 /// credential-provider dependency and by the practical credential lifecycle,
 /// shell-quoting, executable discovery, and npm installation parity corpus.
