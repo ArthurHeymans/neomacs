@@ -4813,3 +4813,80 @@ runtime read, so no path through `read-from-minibuffer`, `read-string`,
 GNU invariants that are applied once above dispatch.
 
 Status: FIXED.
+
+## 94. A terminal row skipped the `:extend` fill whenever its background was invisible -- FIXED
+
+The Leuven TUI workflow renders a `diff-mode` buffer.  GNU carries the
+`diff-context` face to the end of its row; Neomacs stopped one space after the
+text, so the row lost the face's foreground across its whole tail.
+
+GNU's `extend_face_to_end_of_line` has a "nothing would be painted, skip the
+fill" early return, and it is guarded by `FRAME_WINDOW_P`
+(`src/xdisp.c:24388`).  A terminal frame can never reach it, so control always
+falls through to the terminal fill branch (`src/xdisp.c:24679-24809`), which
+materializes the row out to the text-area edge whatever the face looks like.
+The skip is a window-system optimization only.
+
+That matters precisely when an `:extend` face is invisible against the frame.
+GNU defines `diff-context` as `'((t :extend t))`
+(`lisp/vc/diff-mode.el:476-479`) and Leuven maps it to `diff-none`
+(`etc/themes/leuven-theme.el:341`), whose realized background is the default
+`#FFFFFF`.  Comparing backgrounds alone therefore drops a fill GNU still
+performs -- and GNU uses it to carry the face's FOREGROUND `#A0A1A7` across the
+row.
+
+Neomacs applied that background comparison on both frame types, and applied it
+at each caller rather than once: `row_lifecycle.rs` and `finalizer.rs` each
+pre-filtered the extend face out of the `LineEndContext` before the line-end
+seam ever saw it, and `source_render.rs` repeated the test for the wrap-break
+path.  This is the opt-in-invariant shape: a rule every branch had to remember.
+
+The fix moves the decision into the seam as `line_end::extend_fill_runs`, a
+total match on `DisplayRowMeasurementMode` (the existing `FRAME_WINDOW_P`
+equivalent).  The skip lives only in the `ConcreteFont` arm, so a terminal row
+that skipped the fill is no longer representable.  `LineEndContext` gained a
+required `frame_background` field, which turned every call site into a compile
+error until it stopped filtering and handed the raw face over.  A single
+`effective_extend` accessor now feeds the plain fill, the fill-column-indicator
+gap/tail and the merged-indicator background, so those three cannot disagree
+about whether the highlight is painting.
+
+The unchanged `leuven_theme_real_color_lifecycle_matches_gnu` failed before and
+passes after.  Two focused `line_end` tests pin both arms in one test each --
+an invisible `:extend` face fills on a terminal row and is skipped on a
+window-system row, and a visible one fills on both -- so a fix that filled on
+neither or on both would leave half of it green.  `neomacs-layout-engine`
+passes 1,966 tests with 3 skipped.  A fresh release build produced a
+13,646,938-byte pdump.
+
+Attribution was established by running the whole `tui_parity_tests` set twice
+at the same filesystem path, swapping only the binary: pristine gives 7 passed
+/ 6 failed, the fix gives 8 passed / 5 failed, and `leuven` is the only test
+that moves.  That control matters because this worktree's long path makes five
+unrelated terminal tests (`magit`, `mwim`, `gruvbox`, `helm_css_scss`,
+`beacon`, plus two `neomacs-tui-tests` cases) fail identically with and without
+the change -- they wrap prompts and truncate directory strings that a shorter
+checkout path never exercises.  `helm_pydoc`, the pin guarding ledger 81's
+blank-erase semantics, stays green.
+
+Magit is NOT fixed by this and is a different defect.  Its remaining diff is
+`row 3 cols 44..=120` and `row 4 cols 15..=120`, where GNU has
+`contents=" "` and Neomacs has `contents=""` -- rows carrying NO `:extend`
+face, whose text-area gap sits before a right window margin.  Row 2, which does
+carry an extend face, already matched.  The cells are not missing because
+nothing fills them: the TTY backend's rasterizer already materializes that gap.
+They are missing because `set_desired_glyph_cell`
+(`neomacs-display-runtime/src/backend/tty/rif.rs:1041-1057`) preserves a cell's
+existing `Erased` materialization whenever a default-face blank is written over
+an identical default-face blank, and `normalize_desired_blank_tails`
+(`rif.rs:1476-1490`) only ever converts the row's uniform trailing run to
+`Erased`, never promotes an interior cell back to `Written`.  GNU writes those
+cells because they are interior -- margin glyphs follow them, so its row
+trimming cannot reach them.  Emitting fill glyphs from the layout engine would
+not help, since a stretch glyph takes the same `set_desired_glyph_cell` path.
+The candidate rule is to make `Erased` hold exactly for cells inside the row's
+uniform erasable tail, but `materialization` feeds the row hash
+(`rif.rs:1977`) and the wholly-erased fast path (`rif.rs:1329`), so that change
+needs its own red/green cycle and is deliberately left unmade here.
+
+Status: FIXED for the `:extend` line fill (Leuven); Magit tracked separately.
