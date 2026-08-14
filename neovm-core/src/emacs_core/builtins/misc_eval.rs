@@ -5,6 +5,7 @@ use crate::emacs_core::error::{
     expect_args, expect_args_range, expect_fixnum, expect_max_args, expect_min_args,
 };
 use crate::emacs_core::symbol::Obarray;
+use crate::emacs_core::textprop::{StickinessProperty, TextPropertyControlVariable};
 
 fn runtime_string_value(value: Value) -> String {
     value
@@ -779,17 +780,6 @@ pub(super) fn dynamic_or_global_symbol_value_in_state(
     obarray.symbol_value(name).cloned()
 }
 
-fn buffer_local_or_global_symbol_value(
-    obarray: &crate::emacs_core::symbol::Obarray,
-    buf: &crate::buffer::Buffer,
-    name: &str,
-) -> Option<Value> {
-    if let Some(binding) = buf.get_buffer_local_binding(name) {
-        return binding.as_value();
-    }
-    obarray.symbol_value(name).cloned()
-}
-
 fn text_property_stickiness_in_state(
     obarray: &crate::emacs_core::symbol::Obarray,
     buffers: &crate::buffer::BufferManager,
@@ -800,7 +790,7 @@ fn text_property_stickiness_in_state(
     let ignore_previous_character = pos <= buf.point_min_lisp_char_pos().as_i64();
 
     let default_nonsticky =
-        buffer_local_or_global_symbol_value(obarray, buf, "text-property-default-nonsticky");
+        TextPropertyControlVariable::TextPropertyDefaultNonsticky.value_for_buffer(obarray, buf);
 
     let mut rear_sticky = !(ignore_previous_character
         || default_nonsticky
@@ -813,7 +803,7 @@ fn text_property_stickiness_in_state(
             buffers,
             buf,
             LispCharPos1::new(pos - 1),
-            Value::symbol("rear-nonsticky"),
+            StickinessProperty::RearNonsticky.value(),
         );
         if matches_rear_nonsticky(previous_props, prop) {
             rear_sticky = false;
@@ -826,7 +816,7 @@ fn text_property_stickiness_in_state(
             buffers,
             buf,
             LispCharPos1::new(pos),
-            Value::symbol("front-sticky"),
+            StickinessProperty::FrontSticky.value(),
         ),
         prop,
     );
@@ -890,20 +880,20 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     // `rear-nonsticky t` on their category symbol rather than on every
     // interval.  Resolve these meta-properties through the same effective
     // text-property path used by GNU before deciding what padding inherits.
-    let effective_stickiness = |props: &[(Value, Value)], name: &str| {
+    let effective_stickiness = |props: &[(Value, Value)], property: StickinessProperty| {
         super::textprop::lookup_text_property_from_plist_slice(
             obarray,
             buffers,
             props,
-            Value::symbol(name),
+            property.value(),
         )
     };
-    let left_front = effective_stickiness(&left_props, "front-sticky");
-    let left_rear = effective_stickiness(&left_props, "rear-nonsticky");
-    let right_front = effective_stickiness(&right_props, "front-sticky");
-    let right_rear = effective_stickiness(&right_props, "rear-nonsticky");
+    let left_front = effective_stickiness(&left_props, StickinessProperty::FrontSticky);
+    let left_rear = effective_stickiness(&left_props, StickinessProperty::RearNonsticky);
+    let right_front = effective_stickiness(&right_props, StickinessProperty::FrontSticky);
+    let right_rear = effective_stickiness(&right_props, StickinessProperty::RearNonsticky);
     let default_nonsticky =
-        buffer_local_or_global_symbol_value(obarray, buf, "text-property-default-nonsticky");
+        TextPropertyControlVariable::TextPropertyDefaultNonsticky.value_for_buffer(obarray, buf);
 
     // GNU `adjust_intervals_for_insertion` (src/intervals.c): inserting into the
     // MIDDLE of a single uniform interval extends that interval, so the inserted
@@ -917,7 +907,9 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     // the merge in that case.
     if !left_props.is_empty() && !right_props.is_empty() && left_map == right_map {
         let forces_split = left_props.iter().any(|(name, _)| {
-            if *name == Value::symbol("front-sticky") || *name == Value::symbol("rear-nonsticky") {
+            if StickinessProperty::FrontSticky.is_value(*name)
+                || StickinessProperty::RearNonsticky.is_value(*name)
+            {
                 return false;
             }
             let default_rear_nonsticky = default_nonsticky
@@ -937,7 +929,9 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     let mut seen = HashSet::new();
 
     for (name, right_value) in &right_props {
-        if *name == Value::symbol("front-sticky") || *name == Value::symbol("rear-nonsticky") {
+        if StickinessProperty::FrontSticky.is_value(*name)
+            || StickinessProperty::RearNonsticky.is_value(*name)
+        {
             continue;
         }
         seen.insert(*name);
@@ -981,8 +975,8 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     }
 
     for (name, left_value) in &left_props {
-        if *name == Value::symbol("front-sticky")
-            || *name == Value::symbol("rear-nonsticky")
+        if StickinessProperty::FrontSticky.is_value(*name)
+            || StickinessProperty::RearNonsticky.is_value(*name)
             || seen.contains(name)
         {
             continue;
@@ -1012,7 +1006,10 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     if !rear_nonsticky.is_empty() {
         merged_props.insert(
             0,
-            (Value::symbol("rear-nonsticky"), Value::list(rear_nonsticky)),
+            (
+                StickinessProperty::RearNonsticky.value(),
+                Value::list(rear_nonsticky),
+            ),
         );
     }
 
@@ -1024,14 +1021,17 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
                 .flatten()
         })
         .and_then(|category| {
-            obarray.get_property_id(category, crate::emacs_core::intern::intern("front-sticky"))
+            obarray.get_property_id(category, StickinessProperty::FrontSticky.symbol_id())
         })
         .is_some_and(|value| value == Value::T);
 
     if !front_sticky.is_empty() && !category_front_sticky_t {
         merged_props.insert(
             0,
-            (Value::symbol("front-sticky"), Value::list(front_sticky)),
+            (
+                StickinessProperty::FrontSticky.value(),
+                Value::list(front_sticky),
+            ),
         );
     }
 

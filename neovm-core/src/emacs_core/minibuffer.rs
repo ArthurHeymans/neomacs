@@ -20,6 +20,7 @@ use super::hashtab::hash_key_to_visible_value;
 use super::intern::{NIL_SYM_ID, SymId, T_SYM_ID, resolve_sym};
 use super::reader::{KeyboardInputRuntime, MinibufferInputSource};
 use super::symbol::Obarray;
+use super::textprop::StickinessProperty;
 use super::value::{Value, ValueKind, VecLikeType};
 
 /// GNU completion state held in predeclared C variables/symbols rather than
@@ -362,12 +363,12 @@ pub(crate) fn install_minibuffer_buffer_text(
         );
         buf.text_props_put_property_in_emacs_byte_range(
             prompt_range,
-            Value::symbol("front-sticky"),
+            StickinessProperty::FrontSticky.value(),
             Value::T,
         );
         buf.text_props_put_property_in_emacs_byte_range(
             prompt_range,
-            Value::symbol("rear-nonsticky"),
+            StickinessProperty::RearNonsticky.value(),
             Value::T,
         );
         apply_minibuffer_prompt_properties(buf, prompt_end, prompt_properties);

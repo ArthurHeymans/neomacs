@@ -363,6 +363,59 @@ fn plain_insert_splits_inserted_nil_interval_like_gnu_graft() {
     );
 }
 
+/// GNU `adjust_intervals_for_insertion` reads `Qfront_sticky`,
+/// `Qrear_nonsticky`, and `Vtext_property_default_nonsticky` through
+/// predeclared identities.  Completion construction inserts thousands of
+/// candidate strings, so the steady-state insertion path must not translate
+/// those fixed identities from Rust strings for every candidate.
+#[test]
+fn inheriting_insert_uses_predeclared_text_property_stickiness_identities() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.insert("ab");
+        buf.text_props_put_property_in_emacs_byte_range(
+            crate::buffer::EmacsByteRange::from_usize(0, 1),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        );
+        buf.text_props_put_property_in_emacs_byte_range(
+            crate::buffer::EmacsByteRange::from_usize(1, 2),
+            Value::symbol("face"),
+            Value::symbol("italic"),
+        );
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
+    }
+
+    crate::emacs_core::buffer::builtin_insert_and_inherit(&mut eval, vec![Value::string("X")])
+        .expect("warm insertion path");
+    eval.buffers
+        .current_buffer_mut()
+        .expect("current buffer")
+        .goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
+
+    crate::emacs_core::intern::reset_intern_calls();
+    crate::emacs_core::buffer::builtin_insert_and_inherit(&mut eval, vec![Value::string("Y")])
+        .expect("repeat insertion path");
+
+    const GNU_PREDECLARED_STICKINESS_IDENTITIES: &[&str] = &[
+        "text-property-default-nonsticky",
+        "front-sticky",
+        "rear-nonsticky",
+    ];
+    let interned = crate::emacs_core::intern::intern_call_names();
+    let repeated_fixed_names = interned
+        .iter()
+        .filter(|name| GNU_PREDECLARED_STICKINESS_IDENTITIES.contains(&name.as_str()))
+        .collect::<Vec<_>>();
+    assert!(
+        repeated_fixed_names.is_empty(),
+        "steady-state insertion must use GNU-shaped predeclared identities; interned \
+         {repeated_fixed_names:?}"
+    );
+}
+
 // -----------------------------------------------------------------------
 // get-char-property
 // -----------------------------------------------------------------------

@@ -17,35 +17,129 @@ use crate::buffer::{
 };
 use crate::emacs_core::SymId;
 use crate::window::{FrameManager, WindowId};
+use strum::IntoStaticStr;
+
+/// Lisp variables that control native text-property resolution.
+///
+/// GNU keeps these in predeclared `V...`/`Q...` globals.  A closed Rust enum
+/// gives the corresponding Neomacs variables stable identities too: callers
+/// cannot accidentally put a string-based lookup back on a per-character or
+/// per-insertion path, and adding a modeled variable requires an explicit
+/// cache slot in the exhaustive match below.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub(crate) enum TextPropertyControlVariable {
+    CharPropertyAliasAlist,
+    DefaultTextProperties,
+    TextPropertyDefaultNonsticky,
+}
+
+impl TextPropertyControlVariable {
+    pub(crate) fn name(self) -> &'static str {
+        self.into()
+    }
+
+    pub(crate) fn symbol_id(self) -> SymId {
+        use std::sync::OnceLock;
+
+        static CHAR_PROPERTY_ALIAS_ALIST: OnceLock<SymId> = OnceLock::new();
+        static DEFAULT_TEXT_PROPERTIES: OnceLock<SymId> = OnceLock::new();
+        static TEXT_PROPERTY_DEFAULT_NONSTICKY: OnceLock<SymId> = OnceLock::new();
+
+        match self {
+            Self::CharPropertyAliasAlist => {
+                *CHAR_PROPERTY_ALIAS_ALIST.get_or_init(|| super::intern::intern(self.into()))
+            }
+            Self::DefaultTextProperties => {
+                *DEFAULT_TEXT_PROPERTIES.get_or_init(|| super::intern::intern(self.into()))
+            }
+            Self::TextPropertyDefaultNonsticky => {
+                *TEXT_PROPERTY_DEFAULT_NONSTICKY.get_or_init(|| super::intern::intern(self.into()))
+            }
+        }
+    }
+
+    /// Read this variable for one explicit buffer, falling back to its global
+    /// default exactly as GNU's buffer-local value machinery does.
+    pub(crate) fn value_for_buffer(self, obarray: &Obarray, buf: &Buffer) -> Option<Value> {
+        let symbol_id = self.symbol_id();
+        let localized = obarray.is_localized(symbol_id);
+        if let Some(binding) = buf.get_buffer_local_binding_by_sym_id_gated(symbol_id, localized) {
+            return binding.as_value();
+        }
+        obarray.symbol_value_id_copied(symbol_id)
+    }
+}
+
+/// The two properties that override default text-property stickiness.
+///
+/// GNU's interval code compares `Qfront_sticky` and `Qrear_nonsticky`
+/// directly.  Carrying the distinction as an enum prevents arbitrary strings
+/// from entering the insertion merge and makes every property-to-symbol
+/// mapping exhaustive.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, IntoStaticStr)]
+#[strum(serialize_all = "kebab-case")]
+pub(crate) enum StickinessProperty {
+    FrontSticky,
+    RearNonsticky,
+}
+
+impl StickinessProperty {
+    pub(crate) fn symbol_id(self) -> SymId {
+        use std::sync::OnceLock;
+
+        static FRONT_STICKY: OnceLock<SymId> = OnceLock::new();
+        static REAR_NONSTICKY: OnceLock<SymId> = OnceLock::new();
+
+        match self {
+            Self::FrontSticky => *FRONT_STICKY.get_or_init(|| super::intern::intern(self.into())),
+            Self::RearNonsticky => {
+                *REAR_NONSTICKY.get_or_init(|| super::intern::intern(self.into()))
+            }
+        }
+    }
+
+    pub(crate) fn value(self) -> Value {
+        Value::from_sym_id(self.symbol_id())
+    }
+
+    pub(crate) fn is_value(self, value: Value) -> bool {
+        value.as_symbol_id() == Some(self.symbol_id())
+    }
+}
 
 pub(crate) fn init_textprop_vars(
     obarray: &mut crate::emacs_core::symbol::Obarray,
     _custom: &mut crate::emacs_core::custom::CustomManager,
 ) {
-    obarray.set_symbol_value("default-text-properties", Value::NIL);
-    obarray.make_special("default-text-properties");
+    let default_properties = TextPropertyControlVariable::DefaultTextProperties;
+    obarray.set_symbol_value(default_properties.name(), Value::NIL);
+    obarray.make_special(default_properties.name());
 
-    obarray.set_symbol_value("char-property-alias-alist", Value::NIL);
-    obarray.make_special("char-property-alias-alist");
+    let alias_alist = TextPropertyControlVariable::CharPropertyAliasAlist;
+    obarray.set_symbol_value(alias_alist.name(), Value::NIL);
+    obarray.make_special(alias_alist.name());
 
     obarray.set_symbol_value("inhibit-point-motion-hooks", Value::T);
     obarray.make_special("inhibit-point-motion-hooks");
 
+    let default_nonsticky = TextPropertyControlVariable::TextPropertyDefaultNonsticky;
+    let default_nonsticky_name = default_nonsticky.name();
     obarray.set_symbol_value(
-        "text-property-default-nonsticky",
+        default_nonsticky_name,
         Value::list(vec![
             Value::cons(Value::symbol("syntax-table"), Value::T),
             Value::cons(Value::symbol("display"), Value::T),
         ]),
     );
-    obarray.make_special("text-property-default-nonsticky");
+    obarray.make_special(default_nonsticky_name);
     // Mirrors GNU `Fmake_variable_buffer_local` (`data.c:2142-2207`):
     // flip the redirect tag to LOCALIZED, allocate a BLV, set
     // local_if_set = 1. Replaces the legacy `make_buffer_local`
     // helper which was destructive (set the redirect back to
     // PLAINVAL and orphaned the BLV).
     {
-        let id = crate::emacs_core::intern::intern("text-property-default-nonsticky");
+        let id = default_nonsticky.symbol_id();
         let default = obarray
             .find_symbol_value(id)
             .unwrap_or(crate::emacs_core::value::Value::NIL);
@@ -140,11 +234,17 @@ pub(crate) fn expect_property_key(value: &Value) -> Result<Value, Flow> {
 }
 
 pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
-    obarray.set_symbol_value("default-text-properties", Value::NIL);
-    obarray.set_symbol_value("char-property-alias-alist", Value::NIL);
+    obarray.set_symbol_value(
+        TextPropertyControlVariable::DefaultTextProperties.name(),
+        Value::NIL,
+    );
+    obarray.set_symbol_value(
+        TextPropertyControlVariable::CharPropertyAliasAlist.name(),
+        Value::NIL,
+    );
     obarray.set_symbol_value("inhibit-point-motion-hooks", Value::T);
     obarray.set_symbol_value(
-        "text-property-default-nonsticky",
+        TextPropertyControlVariable::TextPropertyDefaultNonsticky.name(),
         Value::list(vec![
             Value::cons(Value::symbol("syntax-table"), Value::T),
             Value::cons(Value::symbol("display"), Value::T),
@@ -152,34 +252,18 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     );
 }
 
-/// Interned id of `char-property-alias-alist`, resolved once. The
-/// get-char-property miss path consults this var on every miss during
-/// redisplay/fontification; caching the id avoids re-hashing the 25-char
-/// name on each call (GNU compares against the `Qchar_property_alias_alist`
-/// symbol by identity, never by name).
-fn char_property_alias_alist_sym_id() -> SymId {
-    static ID: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
-    *ID.get_or_init(|| super::intern::intern("char-property-alias-alist"))
-}
-
-/// Interned id of `default-text-properties`, resolved once. See
-/// [`char_property_alias_alist_sym_id`].
-fn default_text_properties_sym_id() -> SymId {
-    static ID: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
-    *ID.get_or_init(|| super::intern::intern("default-text-properties"))
-}
-
 fn current_textprop_variable_value(
     obarray: &Obarray,
     buffers: &BufferManager,
-    sym_id: SymId,
+    variable: TextPropertyControlVariable,
 ) -> Option<Value> {
     // Text-property control vars (char-property-alias-alist, default-text-
     // properties, inhibit-*, ...) are almost always plain globals. A global
     // (non-Localized) symbol can never be in a buffer's local_var_alist, so
     // skip the per-buffer scan for it -- this runs during redisplay and was
     // ~3% of the layout profile. See `Obarray::is_localized`. The caller
-    // passes a cached SymId so the hot miss path never re-interns the name.
+    // passes a closed typed identity so the hot path cannot re-intern a name.
+    let sym_id = variable.symbol_id();
     let localized = obarray.is_localized(sym_id);
     if let Some(buf) = buffers.current_buffer()
         && let Some(binding) = buf.get_buffer_local_binding_by_sym_id_gated(sym_id, localized)
@@ -390,14 +474,20 @@ pub(crate) struct CharPropertyResolver<'a> {
 
 impl<'a> CharPropertyResolver<'a> {
     pub(crate) fn snapshot(obarray: &'a Obarray, buffers: &BufferManager, prop: Value) -> Self {
-        let aliases =
-            current_textprop_variable_value(obarray, buffers, char_property_alias_alist_sym_id())
-                .and_then(|value| assq_rest(value, prop))
-                .unwrap_or(Value::NIL);
-        let default =
-            current_textprop_variable_value(obarray, buffers, default_text_properties_sym_id())
-                .filter(|value| value.is_cons())
-                .and_then(|defaults| plist_get_value(defaults, prop));
+        let aliases = current_textprop_variable_value(
+            obarray,
+            buffers,
+            TextPropertyControlVariable::CharPropertyAliasAlist,
+        )
+        .and_then(|value| assq_rest(value, prop))
+        .unwrap_or(Value::NIL);
+        let default = current_textprop_variable_value(
+            obarray,
+            buffers,
+            TextPropertyControlVariable::DefaultTextProperties,
+        )
+        .filter(|value| value.is_cons())
+        .and_then(|defaults| plist_get_value(defaults, prop));
         Self {
             obarray,
             prop,
@@ -467,10 +557,13 @@ fn lookup_char_property_from_direct<F>(
 where
     F: FnMut(Value) -> Option<Value>,
 {
-    let mut aliases =
-        current_textprop_variable_value(obarray, buffers, char_property_alias_alist_sym_id())
-            .and_then(|value| assq_rest(value, prop))
-            .unwrap_or(Value::NIL);
+    let mut aliases = current_textprop_variable_value(
+        obarray,
+        buffers,
+        TextPropertyControlVariable::CharPropertyAliasAlist,
+    )
+    .and_then(|value| assq_rest(value, prop))
+    .unwrap_or(Value::NIL);
     let alias_iter = std::iter::from_fn(move || {
         if !aliases.is_cons() {
             return None;
@@ -481,9 +574,13 @@ where
     });
     let default = textprop
         .then(|| {
-            current_textprop_variable_value(obarray, buffers, default_text_properties_sym_id())
-                .filter(|value| value.is_cons())
-                .and_then(|defaults| plist_get_value(defaults, prop))
+            current_textprop_variable_value(
+                obarray,
+                buffers,
+                TextPropertyControlVariable::DefaultTextProperties,
+            )
+            .filter(|value| value.is_cons())
+            .and_then(|defaults| plist_get_value(defaults, prop))
         })
         .flatten();
 
@@ -1174,7 +1271,7 @@ pub(crate) fn verify_text_read_only_for_insert_in_state(
                 buffers,
                 buf,
                 byte_pos,
-                Value::symbol("front-sticky"),
+                StickinessProperty::FrontSticky.value(),
             );
             if text_prop_sticky_member(read_only_sym, front_sticky) {
                 return Err(text_read_only_flow(after));
@@ -1199,7 +1296,7 @@ pub(crate) fn verify_text_read_only_for_insert_in_state(
                 buffers,
                 buf,
                 before_byte,
-                Value::symbol("rear-nonsticky"),
+                StickinessProperty::RearNonsticky.value(),
             );
             if !text_prop_sticky_member(read_only_sym, rear_nonsticky) {
                 return Err(text_read_only_flow(before));
