@@ -11,6 +11,7 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
+use std::num::NonZeroUsize;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -49,11 +50,35 @@ pub(crate) fn constrain_dimensions(width: u32, height: u32) -> (u32, u32) {
 /// Maximum total cache memory in bytes (64MB)
 const MAX_CACHE_MEMORY: usize = 64 * 1024 * 1024;
 
-/// Get number of decoder threads (use all available CPU cores)
-fn decoder_thread_count() -> usize {
-    std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4)
+const MAX_IMAGE_DECODER_THREADS: usize = 4;
+
+/// A deliberately small, non-empty pool of persistent image decoders.
+///
+/// Image requests are normally sparse and already queue through one shared
+/// receiver.  Scaling this pool to every host CPU made each GUI reserve dozens
+/// of idle thread stacks before it had seen an image.  GNU image decoding is
+/// synchronous (`image.c` even declines WebP's multithreaded option), so four
+/// asynchronous workers retain useful parallelism without making GUI startup
+/// resources proportional to machine size.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ImageDecoderPoolSize(NonZeroUsize);
+
+impl ImageDecoderPoolSize {
+    fn detected() -> Self {
+        Self::from_available_parallelism(std::thread::available_parallelism().ok())
+    }
+
+    fn from_available_parallelism(available: Option<NonZeroUsize>) -> Self {
+        let available = available.map_or(MAX_IMAGE_DECODER_THREADS, NonZeroUsize::get);
+        Self(
+            NonZeroUsize::new(available.min(MAX_IMAGE_DECODER_THREADS))
+                .expect("the image decoder pool cap is nonzero"),
+        )
+    }
+
+    const fn get(self) -> usize {
+        self.0.get()
+    }
 }
 
 /// Image loading state
@@ -414,10 +439,9 @@ impl ImageCache {
         // Wrap receiver in Arc<Mutex> for sharing across threads
         let decode_rx = Arc::new(Mutex::new(decode_rx));
 
-        // Spawn decoder thread pool (one per CPU core)
-        let num_threads = decoder_thread_count();
-        tracing::info!("Starting {} image decoder threads", num_threads);
-        for i in 0..num_threads {
+        let pool_size = ImageDecoderPoolSize::detected();
+        tracing::info!("Starting {} image decoder threads", pool_size.get());
+        for i in 0..pool_size.get() {
             let rx = Arc::clone(&decode_rx);
             let tx = decoded_tx.clone();
             thread::spawn(move || {

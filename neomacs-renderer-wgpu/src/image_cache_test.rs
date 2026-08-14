@@ -1,6 +1,26 @@
 use super::*;
 use neomacs_display_protocol::{AxisSize, ImageRotation, ImageSizeSpec};
 use std::io::Cursor;
+use std::num::NonZeroUsize;
+
+#[test]
+fn image_decoder_pool_is_nonempty_and_bounded_on_large_hosts() {
+    let one = NonZeroUsize::new(1).unwrap();
+    let large_host = NonZeroUsize::new(256).unwrap();
+
+    assert_eq!(
+        ImageDecoderPoolSize::from_available_parallelism(Some(one)).get(),
+        1
+    );
+    assert_eq!(
+        ImageDecoderPoolSize::from_available_parallelism(Some(large_host)).get(),
+        MAX_IMAGE_DECODER_THREADS
+    );
+    assert_eq!(
+        ImageDecoderPoolSize::from_available_parallelism(None).get(),
+        MAX_IMAGE_DECODER_THREADS
+    );
+}
 
 #[test]
 fn freed_or_replaced_image_loads_reject_late_decode_outcomes() {
