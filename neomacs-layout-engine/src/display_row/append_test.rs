@@ -4047,6 +4047,7 @@ fn display_row_overflow_transition_request_marks_visual_wrap_rows_and_emits_boun
     let mut ctx = RowTransitionTestContext::new("overflow-visual-wrap-request");
 
     let transition = DisplayRowOverflowTransitionRequest::visual_wrap(
+        VisualWrapBreak::MidElement,
         DisplayRowHitRange {
             charpos_start: 3,
             charpos_end: 9,
@@ -4072,6 +4073,10 @@ fn display_row_overflow_transition_request_marks_visual_wrap_rows_and_emits_boun
     assert_eq!(ctx.hit_rows[0].charpos_start, 3);
     assert_eq!(ctx.hit_rows[0].charpos_end, 9);
     assert!(ctx.row_flags.is_set(0, DisplayRowFlagKind::Continued));
+    assert!(
+        ctx.row_flags
+            .is_set(0, DisplayRowFlagKind::ContinuedMidElement)
+    );
     assert!(ctx.row_flags.is_set(1, DisplayRowFlagKind::Continuation));
     assert!(!ctx.row_flags.is_set(0, DisplayRowFlagKind::Truncated));
     assert_eq!(ctx.row_y_positions.recorded(), &[0.0, 16.0]);

@@ -236,7 +236,7 @@ pub(crate) fn text_window_right_edge_marker_decorations(
             Some('$')
         } else if request
             .row_flags
-            .is_set(row_idx, DisplayRowFlagKind::Continued)
+            .is_set(row_idx, DisplayRowFlagKind::ContinuedMidElement)
         {
             Some('\\')
         } else {

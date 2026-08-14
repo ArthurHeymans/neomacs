@@ -204,9 +204,18 @@ pub(crate) struct DisplayRowLimit {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DisplayRowFlagKind {
+    /// GNU's `row->continued_p`: the row wrapped rather than ended a line.
     Continued,
+    /// GNU's `row->truncated_on_right_p`.
     Truncated,
+    /// This row continues the previous one (GNU's `row->continuation_lines_width`
+    /// carry-over, drawn as the left fringe arrow).
     Continuation,
+    /// The row's wrap broke a display element in the middle, so GNU produced the
+    /// IT_CONTINUATION special glyph for it (src/xdisp.c:26336-26345,
+    /// 26399-26403, 26421-26432). A row broken at a recorded word-wrap point
+    /// (`back_to_wrap`, src/xdisp.c:26360-26388) is `Continued` but not this.
+    ContinuedMidElement,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -214,6 +223,7 @@ pub(crate) struct DisplayRowFlags {
     continued: Vec<bool>,
     truncated: Vec<bool>,
     continuation: Vec<bool>,
+    continued_mid_element: Vec<bool>,
 }
 
 impl DisplayRowFlags {
@@ -222,6 +232,7 @@ impl DisplayRowFlags {
             continued: vec![false; row_count],
             truncated: vec![false; row_count],
             continuation: vec![false; row_count],
+            continued_mid_element: vec![false; row_count],
         }
     }
 
@@ -244,6 +255,7 @@ impl DisplayRowFlags {
             DisplayRowFlagKind::Continued => &self.continued,
             DisplayRowFlagKind::Truncated => &self.truncated,
             DisplayRowFlagKind::Continuation => &self.continuation,
+            DisplayRowFlagKind::ContinuedMidElement => &self.continued_mid_element,
         }
     }
 
@@ -252,6 +264,7 @@ impl DisplayRowFlags {
             DisplayRowFlagKind::Continued => &mut self.continued,
             DisplayRowFlagKind::Truncated => &mut self.truncated,
             DisplayRowFlagKind::Continuation => &mut self.continuation,
+            DisplayRowFlagKind::ContinuedMidElement => &mut self.continued_mid_element,
         }
     }
 }

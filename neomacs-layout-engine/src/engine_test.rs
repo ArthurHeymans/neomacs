@@ -15807,6 +15807,37 @@ fn plain_item_prefix_shadow_matches_first_row_of_wrapped_line() {
     );
 }
 
+/// GNU emits the TTY continuation glyph only when a display element had to be
+/// broken in the middle. The word-wrap branch of `display_line`
+/// (`back_to_wrap`, src/xdisp.c:26360-26388) marks the row continued and calls
+/// `extend_face_to_end_of_line`, but never calls
+/// `produce_special_glyphs (it, IT_CONTINUATION, ...)` -- unlike the
+/// mid-element branch (src/xdisp.c:26411-26432) and the does-not-fit-at-all
+/// branch (src/xdisp.c:26336-26345), which both do. So a row broken at a word
+/// boundary ends in its wrapped text, with no backslash marker.
+#[test]
+fn word_wrapped_row_carries_no_continuation_marker() {
+    let text = format!("{}\nshort\n", "alpha beta gamma delta ".repeat(8));
+    let (_eval, _buf_id, _frame_id, rows, _char_width, _char_height) =
+        layout_main_text_rows_with(&text, |eval, buf_id| {
+            eval.buffer_manager_mut().set_current(buf_id);
+            eval.eval_str("(setq word-wrap t)").expect("word-wrap");
+        });
+    assert!(
+        rows.len() >= 3,
+        "the long word-wrapped line must occupy at least two rows (got {})",
+        rows.len()
+    );
+    let main_glyphs = &rows[0].glyphs[1];
+    let last = main_glyphs.last().expect("row 0 must hold glyphs");
+    assert!(
+        !matches!(last.glyph_type, GlyphType::Char { ch: '\\' }),
+        "a row broken at a word-wrap point must not carry the continuation \
+         marker, got {:?}",
+        last.glyph_type
+    );
+}
+
 /// Engagement proof for the phase-2f truncation extension (flag-on suite
 /// gate): laying out an over-wide line under truncate-lines must take the
 /// routed overflow-prefix acquisition. Trivially passes when the flag is
@@ -25240,16 +25271,20 @@ fn p45_word_wrap_break_shadow_pins_the_c9_corpora() {
 
     // C9a candidate-at-space: the break takes the whole word to the next row,
     // which resumes at the 'b' (charpos 5), and the row that broke keeps the
-    // trailing space of the word boundary.
+    // trailing space of the word boundary. GNU's word-wrap branch
+    // (`back_to_wrap`, src/xdisp.c:26360-26388) marks the row continued without
+    // producing IT_CONTINUATION, so the broken row carries no marker.
     let c9a = word_wrap_trace("aaaa bbbbbb\n");
     assert_eq!(row_break_charposes(&c9a), vec![0, 5]);
-    assert_eq!(row_texts(&c9a), vec!["aaaa      \\", "bbbbbb "]);
+    assert_eq!(row_texts(&c9a), vec!["aaaa ", "bbbbbb "]);
 
     // C9b candidate-mid-run: the b-word is itself longer than the row, so after
-    // the space break it CHARACTER-wraps with no candidate inside it.
+    // the space break it CHARACTER-wraps with no candidate inside it. Only that
+    // second, mid-element break produces the marker
+    // (src/xdisp.c:26421-26432).
     let c9b = word_wrap_trace("aaaa bbbbbbbbbbbb\n");
     assert_eq!(row_break_charposes(&c9b), vec![0, 5, 15]);
-    assert_eq!(row_texts(&c9b), vec!["aaaa      \\", "bbbbbbbbbb\\", "bb "]);
+    assert_eq!(row_texts(&c9b), vec!["aaaa ", "bbbbbbbbbb\\", "bb "]);
 
     // C9c no candidate at all: word wrap degrades to character wrap at the row
     // edge.
