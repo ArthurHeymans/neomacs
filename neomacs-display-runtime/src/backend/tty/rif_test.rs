@@ -1673,6 +1673,79 @@ fn first_content_written_into_an_erased_row_keeps_its_erased_tail() {
 }
 
 #[test]
+fn erased_row_gaining_content_up_to_its_last_column_writes_its_interior_gap() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(20, 1, caps);
+
+    // Blank repaint first: every cell of the row is physically erased.
+    rif.diff_and_render();
+    let _ = rif.take_output();
+
+    // A Magit log row: text, then the text-area gap, then right-margin
+    // glyphs that reach the last column.  GNU's `!olen` branch trims only
+    // TRAILING default-face blanks (`dispnew.c:6019-6022`); with none to
+    // trim, `nlen` stays the full row and `write_glyphs (f, nbody + nsp,
+    // nlen - nsp)` (`dispnew.c:6062-6079`) writes the interior gap too.
+    for (col, ch) in "ab".chars().enumerate() {
+        rif.desired.set(0, col, ch, CellAttrs::default(), false);
+    }
+    for (offset, ch) in "xyz".chars().enumerate() {
+        rif.desired
+            .set(0, 17 + offset, ch, CellAttrs::default(), false);
+    }
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![TermOp::WriteRun {
+            row: 0,
+            start: 0,
+            end: 20,
+        }],
+        "a blank row's interior gap is written when margin glyphs follow it",
+    );
+}
+
+#[test]
+fn changed_row_writes_the_erased_cells_inside_its_changed_span() {
+    let mut caps = TermCaps::default();
+    caps.synchronized_output = false;
+    let mut rif = TtyRif::new_with_caps(20, 1, caps);
+
+    // Leftover content keeps the row out of GNU's `!olen` path.
+    for (col, ch) in "two".chars().enumerate() {
+        rif.desired.set(0, col, ch, CellAttrs::default(), false);
+    }
+    rif.diff_and_render();
+    let _ = rif.take_output();
+
+    // GNU's insert/delete path writes ONE span, `write_glyphs (f, nbody +
+    // nsp + begmatch, nlen - tem)` (`dispnew.c:6180-6186`), and never
+    // re-diffs its interior.  Skipping an unchanged interior cell is
+    // invisible only when that cell is already written; here the gap is
+    // erased, so GNU's span leaves spaces where a skip leaves unwritten
+    // cells.
+    rif.desired = TtyGrid::new(20, 1);
+    for (col, ch) in "ab".chars().enumerate() {
+        rif.desired.set(0, col, ch, CellAttrs::default(), false);
+    }
+    for (offset, ch) in "xyz".chars().enumerate() {
+        rif.desired
+            .set(0, 17 + offset, ch, CellAttrs::default(), false);
+    }
+
+    assert_eq!(
+        rif.plan_for_test(),
+        vec![TermOp::WriteRun {
+            row: 0,
+            start: 0,
+            end: 20,
+        }],
+        "erased cells inside a changed span are content GNU writes",
+    );
+}
+
+#[test]
 fn written_default_blanks_inside_a_changed_row_are_not_treated_as_erased() {
     let mut caps = TermCaps::default();
     caps.synchronized_output = false;

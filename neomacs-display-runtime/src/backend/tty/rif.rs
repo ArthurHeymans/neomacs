@@ -1025,6 +1025,23 @@ impl TtyRif {
         }
     }
 
+    /// GNU's `nlen` for a desired row: the column past the last cell
+    /// `write_row` still considers content.
+    ///
+    /// `write_row` trims trailing `CHAR_GLYPH_SPACE_P` cells only when it may
+    /// leave them to `ce` (`src/dispnew.c:6019-6022`, guarded by
+    /// `write_spaces_p`); everything before that column is content, blank or
+    /// not.  A row whose right window margin reaches the last column has no
+    /// such tail at all, so `nlen` stays the full row and its interior gap is
+    /// content GNU writes.  Returning a single column keeps that one decision
+    /// in one place for every caller that needs it.
+    fn desired_row_content_end(&self, row: &[TtyCell], search_start: usize) -> usize {
+        match uniform_erasable_tail(row, search_start) {
+            Some((split, bg)) if self.caps.blank_tail.can_erase(bg) => split,
+            _ => row.len(),
+        }
+    }
+
     /// Install one logical glyph cell while preserving the real terminal's
     /// erased/written state when GNU considers a default-face blank implicit.
     /// Non-default blanks are always written, even when their SGR attributes
@@ -1320,22 +1337,23 @@ impl TtyRif {
                 continue;
             }
 
-            // GNU dispnew.c:6067-6083 treats an enabled row whose effective
+            // GNU dispnew.c:6062-6079 treats an enabled row whose effective
             // old length is zero uniformly: skip implicit leading blanks and
-            // write only the meaningful desired content.  Content provenance
-            // is irrelevant; the terminal's erased tail remains erased.
+            // write everything from there to `nlen` in ONE run, then return.
+            // Content provenance is irrelevant, and so is whether the interior
+            // happens to match the blank row already on screen: the run is not
+            // a cell-by-cell diff.  Only the trailing blanks trimmed off
+            // `nlen` stay erased.
             let current_row_is_erased = current_row
                 .iter()
                 .all(|cell| cell.materialization == CellMaterialization::Erased);
-            if current_row_is_erased
-                && let Some((split, bg)) = uniform_erasable_tail(desired_row, first_changed)
-                && self.caps.blank_tail.can_erase(bg)
-            {
-                if first_changed < split {
+            if current_row_is_erased {
+                let write_end = self.desired_row_content_end(desired_row, first_changed);
+                if first_changed < write_end {
                     ops.push(TermOp::WriteRun {
                         row: row as u16,
                         start: first_changed as u16,
-                        end: split as u16,
+                        end: write_end as u16,
                     });
                 }
                 continue;
@@ -1423,12 +1441,23 @@ impl TtyRif {
             // middle. Split the [first, last] range into changed runs and
             // coalesce runs whose gap is cheaper to retransmit than a
             // cursor motion (a goto costs ~8 bytes; an unchanged text cell
-            // usually 1). GNU's update_frame_line keeps one
-            // begmatch/endmatch span per line; per-run emission with a
-            // byte-cost coalesce rule strictly dominates it.
+            // usually 1).
+            //
+            // GNU emits ONE span here: `write_glyphs (f, nbody + nsp +
+            // begmatch, nlen - tem)` (`src/dispnew.c:6180-6186`), which
+            // physically writes every cell of the span whether or not it
+            // changed. Skipping an unchanged interior cell is invisible only
+            // when the terminal already has a glyph there; a cell the
+            // terminal ERASED stays unwritten, which a raw cell capture sees
+            // as empty where GNU has a space. So physical materialization,
+            // not just logical equality, decides what the run must cover —
+            // the byte-cost rule may only skip already-written cells.
             const GOTO_COST_CELLS: usize = 8;
-            let changed =
-                |col: usize| !desired_row[col].padding && desired_row[col] != current_row[col];
+            let changed = |col: usize| {
+                !desired_row[col].padding
+                    && (desired_row[col] != current_row[col]
+                        || current_row[col].materialization == CellMaterialization::Erased)
+            };
             let mut col = first_changed;
             let row_op_floor = ops.len();
             while col <= last_changed {
