@@ -3604,6 +3604,28 @@ impl Buffer {
         self.mark_marker_ptr = std::ptr::null_mut();
     }
 
+    /// GNU `buffer_visited_file_modtime` (`src/fileio.c:6156-6163`): a Lisp
+    /// timestamp when this buffer has a recorded visited-file modification
+    /// time, and the fixnum 0 when it has none.
+    ///
+    /// This is what `visited-file-modtime` returns and what
+    /// `record_first_change` stores in the `(t . TIME)` undo entry, so the two
+    /// must be computed the same way or `primitive-undo` can never match them.
+    pub fn visited_file_modtime_value(&self) -> Value {
+        match (self.modtime_sec, self.modtime_nsec) {
+            (Some(sec), Some(nsec)) => {
+                // GNU `make_lisp_time`: (HIGH LOW USEC PSEC).
+                Value::list(vec![
+                    Value::fixnum(sec >> 16),
+                    Value::fixnum(sec & 0xFFFF),
+                    Value::fixnum((nsec / 1000) as i64),
+                    Value::fixnum(((nsec % 1000) as i64) * 1000),
+                ])
+            }
+            _ => Value::fixnum(0),
+        }
+    }
+
     // -- Modified flag -------------------------------------------------------
 
     pub fn modified_tick(&self) -> i64 {
@@ -4450,7 +4472,7 @@ fn record_text_property_first_change(buf: &mut Buffer, undo_list: &mut Value) {
     if buf.modified_tick() > buf.save_modified_tick() {
         return;
     }
-    undo::undo_list_record_first_change(undo_list);
+    undo::undo_list_record_first_change(undo_list, buf.visited_file_modtime_value());
     buf.undo_state.set_recorded_first_change(true);
 }
 
