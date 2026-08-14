@@ -1886,6 +1886,17 @@ pub(crate) struct BcFrame {
     pub fun: Value,
 }
 
+/// Result of consulting the bytecode tier dispatcher for a stack-backed call.
+///
+/// The interpreter owns the `Interpret` transition so a bytecode caller can
+/// install the callee frame without recursively constructing another VM.
+/// Native execution remains hidden behind `Complete`; a deopt returns
+/// `Interpret` and therefore rejoins the same Tier-0 frame protocol.
+pub(crate) enum BytecodeStackCallDispatch {
+    Interpret,
+    Complete(EvalResult),
+}
+
 /// A unit of work to run synchronously on the Lisp thread at a safe point.
 ///
 /// Other threads (e.g. the diagnostics server) send these over a channel and
@@ -13947,14 +13958,32 @@ impl Context {
         nargs: usize,
         func_value: Value,
     ) -> EvalResult {
+        match self.dispatch_bytecode_call_from_stack(bc_data, args_start, nargs, func_value) {
+            BytecodeStackCallDispatch::Interpret => {
+                let mut vm = super::bytecode::Vm::from_context(self);
+                vm.execute_from_stack_args(bc_data, args_start, nargs, func_value)
+            }
+            BytecodeStackCallDispatch::Complete(result) => result,
+        }
+    }
+
+    /// Consult the tier dispatcher once without recursively entering Tier 0.
+    ///
+    /// This is the typed seam used by the bytecode interpreter's iterative
+    /// `Bcall` transition.  `Interpret` means the caller must install a Tier-0
+    /// frame; `Complete` means native code either returned or raised a flow.
+    pub(crate) fn dispatch_bytecode_call_from_stack(
+        &mut self,
+        bc_data: &super::bytecode::ByteCodeFunction,
+        args_start: usize,
+        nargs: usize,
+        func_value: Value,
+    ) -> BytecodeStackCallDispatch {
         #[cfg(feature = "jit")]
         {
             use crate::emacs_core::jit::Plan;
             match bc_data.runtime.dispatch() {
-                Plan::Interpret => {
-                    let mut vm = super::bytecode::Vm::from_context(self);
-                    vm.execute_from_stack_args(bc_data, args_start, nargs, func_value)
-                }
+                Plan::Interpret => BytecodeStackCallDispatch::Interpret,
                 Plan::Compiled => {
                     let args = LispArgVec::from_slice(&self.bc_buf[args_start..args_start + nargs]);
                     let saved_roots = save_scratch_gc_roots();
@@ -13965,20 +13994,19 @@ impl Context {
                     );
                     restore_scratch_gc_roots(saved_roots);
                     match native {
-                        Ok(Some(bits)) => Ok(crate::emacs_core::value::Value::from_bits(bits)),
-                        Ok(None) => {
-                            let mut vm = super::bytecode::Vm::from_context(self);
-                            vm.execute_from_stack_args(bc_data, args_start, nargs, func_value)
-                        }
-                        Err(flow) => Err(flow),
+                        Ok(Some(bits)) => BytecodeStackCallDispatch::Complete(Ok(
+                            crate::emacs_core::value::Value::from_bits(bits),
+                        )),
+                        Ok(None) => BytecodeStackCallDispatch::Interpret,
+                        Err(flow) => BytecodeStackCallDispatch::Complete(Err(flow)),
                     }
                 }
             }
         }
         #[cfg(not(feature = "jit"))]
         {
-            let mut vm = super::bytecode::Vm::from_context(self);
-            vm.execute_from_stack_args(bc_data, args_start, nargs, func_value)
+            let _ = (bc_data, args_start, nargs, func_value);
+            BytecodeStackCallDispatch::Interpret
         }
     }
 

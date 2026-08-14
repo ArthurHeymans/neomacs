@@ -10,8 +10,8 @@ use super::opcode::Op;
 use crate::emacs_core::builtins;
 use crate::emacs_core::error::*;
 use crate::emacs_core::eval::{
-    ConditionFrame, LispArgVec, ResumeTarget, SubrEntry, lookup_global_subr_entry,
-    subr_entry_from_value,
+    BytecodeStackCallDispatch, ConditionFrame, LispArgVec, ResumeTarget, SubrEntry,
+    lookup_global_subr_entry, subr_entry_from_value,
 };
 use crate::emacs_core::intern::{SymId, intern, lookup_interned, resolve_sym};
 // storage_char_len and storage_substring no longer needed here — using emacs_char + LispString
@@ -457,6 +457,45 @@ enum Handler {
 type HandlerStack = SmallVec<[Handler; 4]>;
 type BindStack = SmallVec<[usize; 8]>;
 
+#[cfg(test)]
+thread_local! {
+    static RUN_LOOP_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static RUN_LOOP_MAX_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+struct RunLoopDepthGuard;
+
+#[cfg(test)]
+impl RunLoopDepthGuard {
+    fn enter() -> Self {
+        RUN_LOOP_DEPTH.with(|depth| {
+            let current = depth.get() + 1;
+            depth.set(current);
+            RUN_LOOP_MAX_DEPTH.with(|maximum| maximum.set(maximum.get().max(current)));
+        });
+        Self
+    }
+}
+
+#[cfg(test)]
+impl Drop for RunLoopDepthGuard {
+    fn drop(&mut self) {
+        RUN_LOOP_DEPTH.with(|depth| depth.set(depth.get() - 1));
+    }
+}
+
+#[cfg(test)]
+fn reset_run_loop_max_depth() {
+    RUN_LOOP_DEPTH.with(|depth| depth.set(0));
+    RUN_LOOP_MAX_DEPTH.with(|maximum| maximum.set(0));
+}
+
+#[cfg(test)]
+fn run_loop_max_depth() -> usize {
+    RUN_LOOP_MAX_DEPTH.with(std::cell::Cell::get)
+}
+
 use crate::emacs_core::eval::SpecBinding;
 
 #[cold]
@@ -660,6 +699,98 @@ enum ResolvedStackCallTarget {
     ByteCode { callee: Value },
     Builtin(ResolvedBuiltinStackCall),
     Generic,
+}
+
+#[derive(Clone, Copy)]
+struct InterpreterFrameCleanup {
+    condition_stack_base: usize,
+    specpdl_base: usize,
+}
+
+/// All mutable Tier-0 state required to suspend and later resume one frame.
+///
+/// GNU stores the equivalent fields in `struct bc_frame` plus the register
+/// locals saved by `Bcall`.  Keeping them in one Rust value makes a recursive
+/// interpreter entry unrepresentable on the iterative path: callers are moved
+/// onto the driver stack and can only be resumed through `Breturn` handling.
+#[derive(Clone, Copy)]
+enum InterpreterFunction {
+    /// The function borrowed by this `run_loop` entry boundary.
+    Entry,
+    /// A bytecode object kept live by the matching `BcFrame` root.
+    Rooted(Value),
+}
+
+struct InterpreterFrame {
+    function: InterpreterFunction,
+    frame_base: usize,
+    frame_limit: usize,
+    pc: usize,
+    quitcounter: u8,
+    #[cfg(feature = "jit")]
+    osr_tried: bool,
+    cleanup: Option<InterpreterFrameCleanup>,
+    #[cfg(debug_assertions)]
+    entry_lexenv: Option<Value>,
+}
+
+/// Variable-sized state for the active frame at the matching driver depth.
+///
+/// Keeping this in a parallel stack lets suspended frames remain compact:
+/// moving an `InterpreterFrame` at every Bcall/Breturn no longer copies the
+/// inline storage of two `SmallVec`s. The auxiliary state stays at a stable
+/// logical depth until that frame completes, like GNU's separate handler and
+/// specpdl stacks.
+struct InterpreterFrameAux {
+    handlers: HandlerStack,
+    bind_stack: BindStack,
+}
+
+impl InterpreterFrameAux {
+    fn new(handlers: HandlerStack, bind_stack: BindStack) -> Self {
+        Self {
+            handlers,
+            bind_stack,
+        }
+    }
+
+    fn empty() -> Self {
+        Self::new(HandlerStack::new(), BindStack::new())
+    }
+}
+
+struct SuspendedInterpreterFrame {
+    frame: InterpreterFrame,
+    continuation: BytecodeCallContinuation,
+}
+
+#[derive(Clone, Copy)]
+struct BytecodeCallContinuation {
+    stack_after_call: usize,
+    backtrace_base: usize,
+}
+
+enum InterpreterStackCall {
+    Enter {
+        func_value: Value,
+        args_start: usize,
+        nargs: usize,
+        backtrace_base: usize,
+    },
+    Complete(EvalResult),
+}
+
+enum InterpreterFrameControl {
+    Enter {
+        frame: InterpreterFrame,
+        continuation: BytecodeCallContinuation,
+    },
+    Complete(EvalResult),
+}
+
+enum InterpreterFrameCompletion {
+    Resume,
+    Exit(EvalResult),
 }
 
 impl DirectSubrCallee {
@@ -902,6 +1033,14 @@ impl<'a> Vm<'a> {
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<T, Flow>,
     ) -> Result<T, Flow> {
+        self.enter_bytecode_call_depth()?;
+        let result = f(self);
+        self.leave_bytecode_call_depth();
+        result
+    }
+
+    #[inline(always)]
+    fn enter_bytecode_call_depth(&mut self) -> Result<(), Flow> {
         self.ctx.depth += 1;
         if self.ctx.depth > self.ctx.max_depth {
             // Cold: the floor-raise + error construction stay out of the hot
@@ -911,10 +1050,13 @@ impl<'a> Vm<'a> {
                 return Err(flow);
             }
         }
+        Ok(())
+    }
 
-        let result = f(self);
+    #[inline(always)]
+    fn leave_bytecode_call_depth(&mut self) {
+        debug_assert!(self.ctx.depth > 0);
         self.ctx.depth -= 1;
-        result
     }
 
     /// Cold arm of [`Vm::with_bytecode_call_depth`]: GNU raises the effective
@@ -1596,21 +1738,345 @@ impl<'a> Vm<'a> {
         self.cleanup_bytecode_frame(result, condition_stack_base, specpdl_base, frame_base)
     }
 
-    fn run_loop(
+    /// Whether this frame can use the first iterative `setup_frame` slice.
+    ///
+    /// The slice deliberately starts with GNU's common encoded-argument,
+    /// env-less bytecode shape.  Dynamic parameter binding, captured lexical
+    /// environments and `&rest` construction still use the established
+    /// recursive path until their unwind transitions are represented in the
+    /// frame state as well.
+    fn can_enter_interpreter_frame_iteratively(
+        &self,
+        func: &ByteCodeFunction,
+        nargs: usize,
+    ) -> bool {
+        let required = func.params.required.len();
+        let optional = func.params.optional.len();
+        let nonrest = required + optional;
+        let has_named_params = nonrest > 0;
+        let params_on_stack = func.lexical || matches!(func.arglist.kind(), ValueKind::Fixnum(_));
+
+        func.env.is_none()
+            && func.params.rest.is_none()
+            && (!has_named_params || params_on_stack)
+            && required <= nargs
+            && nargs <= nonrest
+            && nonrest <= func.max_stack as usize
+    }
+
+    /// Install one already-validated env-less interpreter frame.
+    ///
+    /// No Lisp allocation or GC safe point occurs here.  The callee value is
+    /// placed in `bc_frames` before any bytecode executes, so the frame owns a
+    /// stable, GC-traced identity instead of borrowing a `ByteCodeFunction`.
+    fn prepare_iterative_interpreter_frame(
         &mut self,
         func: &ByteCodeFunction,
+        func_value: Value,
+        args_start: usize,
+        nargs: usize,
+    ) -> InterpreterFrame {
+        debug_assert!(self.can_enter_interpreter_frame_iteratively(func, nargs));
+        let condition_stack_base = self.ctx.condition_stack_len();
+        let specpdl_base = self.ctx.specpdl.len();
+        let frame_base = self.ctx.bc_buf.len();
+        debug_assert!(args_start + nargs <= frame_base);
+        let frame_limit = frame_base
+            .checked_add(func.max_stack as usize)
+            .expect("iterative frame limit prevalidated");
+
+        self.ctx.bc_frames.push(crate::emacs_core::eval::BcFrame {
+            base: frame_base,
+            fun: func_value,
+        });
+        if self.ctx.bc_buf.capacity() < frame_limit {
+            self.ctx
+                .bc_buf
+                .reserve_exact(frame_limit - self.ctx.bc_buf.len());
+        }
+
+        let nonrest = func.params.required.len() + func.params.optional.len();
+        copy_frame_arguments(&mut self.ctx.bc_buf, args_start, nargs);
+        for _ in nargs..nonrest {
+            self.ctx.bc_buf.push(Value::NIL);
+        }
+
+        InterpreterFrame {
+            function: InterpreterFunction::Rooted(func_value),
+            frame_base,
+            frame_limit,
+            pc: 0,
+            quitcounter: 1,
+            #[cfg(feature = "jit")]
+            osr_tried: false,
+            cleanup: Some(InterpreterFrameCleanup {
+                condition_stack_base,
+                specpdl_base,
+            }),
+            #[cfg(debug_assertions)]
+            entry_lexenv: Some(self.ctx.lexenv),
+        }
+    }
+
+    fn finish_interpreter_frame(
+        &mut self,
+        frame: &InterpreterFrame,
+        result: EvalResult,
+    ) -> EvalResult {
+        let Some(cleanup) = frame.cleanup else {
+            return result;
+        };
+        #[cfg(debug_assertions)]
+        if let Some(entry_lexenv) = frame.entry_lexenv {
+            debug_assert!(
+                lexenv_tail_reachable(self.ctx.lexenv, entry_lexenv),
+                "env-less iterative bytecode frame changed ctx.lexenv beyond defvar markers"
+            );
+        }
+        self.cleanup_bytecode_frame(
+            result,
+            cleanup.condition_stack_base,
+            cleanup.specpdl_base,
+            frame.frame_base,
+        )
+    }
+
+    /// Finish the current frame and either restore its caller or leave the
+    /// interpreter driver.  A nonlocal exit is offered to each suspended
+    /// caller in turn, exactly as recursive Rust returns used to do, but the
+    /// unwind is represented as data rather than host-stack control flow.
+    fn complete_interpreter_frame_chain(
+        &mut self,
+        current: &mut InterpreterFrame,
+        callers: &mut SmallVec<[SuspendedInterpreterFrame; 8]>,
+        frame_aux: &mut Vec<InterpreterFrameAux>,
+        entry_func: &ByteCodeFunction,
+        mut result: EvalResult,
+    ) -> InterpreterFrameCompletion {
+        loop {
+            result = self.finish_interpreter_frame(current, result);
+
+            let Some(suspended) = callers.pop() else {
+                return InterpreterFrameCompletion::Exit(result);
+            };
+
+            self.leave_bytecode_call_depth();
+            // `dispatch_interpreter_stack_call` created this frame directly
+            // from `bc_buf`, and `finish_interpreter_frame` has already
+            // unwound the callee to the depth immediately above it.  Unlike a
+            // generic funcall backtrace, this representation never owns an
+            // out-of-line `backtrace_args_stack` slot, so GNU's Breturn fast
+            // path is exactly a specpdl pointer decrement.  Keeping the fast
+            // pop behind the typed iterative continuation prevents the
+            // generic release/unbind machinery from becoming a per-call tax.
+            self.ctx
+                .pop_fast_bytecode_backtrace_frame(suspended.continuation.backtrace_base);
+            frame_aux
+                .pop()
+                .expect("a suspended caller must have a callee auxiliary frame");
+            *current = suspended.frame;
+
+            match result {
+                Ok(value) => {
+                    self.ctx
+                        .bc_buf
+                        .truncate(suspended.continuation.stack_after_call);
+                    debug_assert!(self.ctx.bc_buf.len() < current.frame_limit);
+                    self.ctx.bc_buf.push(value);
+                    return InterpreterFrameCompletion::Resume;
+                }
+                Err(flow) => {
+                    let func = match current.function {
+                        InterpreterFunction::Entry => entry_func,
+                        InterpreterFunction::Rooted(value) => value
+                            .get_bytecode_data()
+                            .expect("active interpreter frame must own bytecode"),
+                    };
+                    let aux = frame_aux
+                        .last_mut()
+                        .expect("a restored interpreter frame must own auxiliary state");
+                    match self.resume_nonlocal(
+                        func,
+                        &mut current.pc,
+                        &mut aux.handlers,
+                        &mut aux.bind_stack,
+                        flow,
+                    ) {
+                        Ok(()) => return InterpreterFrameCompletion::Resume,
+                        Err(flow) => result = Err(flow),
+                    }
+                }
+            }
+        }
+    }
+
+    /// Resolve and dispatch one `Op::Call` after the depth guard has entered.
+    ///
+    /// `Enter` deliberately leaves the backtrace frame open; the iterative
+    /// driver closes it when the callee returns.  Every other target completes
+    /// synchronously and preserves the existing call protocol.
+    fn dispatch_interpreter_stack_call(
+        &mut self,
+        func_val: Value,
+        args_start: usize,
+        nargs: usize,
+    ) -> InterpreterStackCall {
+        match self.resolve_stack_call_target(func_val) {
+            ResolvedStackCallTarget::ByteCode { callee } => {
+                let backtrace_base = self.ctx.specpdl.len();
+                self.ctx
+                    .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
+                let func = callee
+                    .get_bytecode_data()
+                    .expect("resolved bytecode target must remain bytecode");
+                match self
+                    .ctx
+                    .dispatch_bytecode_call_from_stack(func, args_start, nargs, callee)
+                {
+                    BytecodeStackCallDispatch::Interpret
+                        if self.can_enter_interpreter_frame_iteratively(func, nargs) =>
+                    {
+                        InterpreterStackCall::Enter {
+                            func_value: callee,
+                            args_start,
+                            nargs,
+                            backtrace_base,
+                        }
+                    }
+                    BytecodeStackCallDispatch::Interpret => {
+                        let result = self.execute_from_stack_args(func, args_start, nargs, callee);
+                        let result = self.ctx.dispatch_signal_result_if_needed(result);
+                        InterpreterStackCall::Complete(
+                            self.ctx
+                                .pop_bytecode_backtrace_frame_with_result(backtrace_base, result),
+                        )
+                    }
+                    BytecodeStackCallDispatch::Complete(result) => {
+                        let result = self.ctx.dispatch_signal_result_if_needed(result);
+                        InterpreterStackCall::Complete(
+                            self.ctx
+                                .pop_bytecode_backtrace_frame_with_result(backtrace_base, result),
+                        )
+                    }
+                }
+            }
+            ResolvedStackCallTarget::Builtin(target) => InterpreterStackCall::Complete(
+                self.call_resolved_builtin_from_stack_args(func_val, args_start, nargs, target),
+            ),
+            ResolvedStackCallTarget::Generic => {
+                let backtrace_base = self.ctx.specpdl.len();
+                self.ctx
+                    .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
+                let result = self.call_function_untraced_from_stack(func_val, args_start, nargs);
+                let result = self.ctx.dispatch_signal_result_if_needed(result);
+                InterpreterStackCall::Complete(
+                    self.ctx
+                        .pop_bytecode_backtrace_frame_with_result(backtrace_base, result),
+                )
+            }
+        }
+    }
+
+    fn run_loop(
+        &mut self,
+        entry_func: &ByteCodeFunction,
         frame_base: usize,
         frame_limit: usize,
         pc: &mut usize,
         handlers: &mut HandlerStack,
         bind_stack: &mut BindStack,
     ) -> EvalResult {
+        #[cfg(test)]
+        let _run_loop_depth = RunLoopDepthGuard::enter();
+
+        let mut current = InterpreterFrame {
+            function: InterpreterFunction::Entry,
+            frame_base,
+            frame_limit,
+            pc: *pc,
+            quitcounter: 1,
+            #[cfg(feature = "jit")]
+            osr_tried: false,
+            cleanup: None,
+            #[cfg(debug_assertions)]
+            entry_lexenv: None,
+        };
+        let mut callers: SmallVec<[SuspendedInterpreterFrame; 8]> = SmallVec::new();
+        let mut frame_aux = Vec::with_capacity(8);
+        frame_aux.push(InterpreterFrameAux::new(
+            std::mem::take(handlers),
+            std::mem::take(bind_stack),
+        ));
+
+        loop {
+            debug_assert_eq!(frame_aux.len(), callers.len() + 1);
+            let aux = frame_aux
+                .last_mut()
+                .expect("the current interpreter frame must own auxiliary state");
+            let control = self.run_interpreter_frame(&mut current, aux, entry_func);
+            match control {
+                InterpreterFrameControl::Enter {
+                    frame,
+                    continuation,
+                } => {
+                    let parent = std::mem::replace(&mut current, frame);
+                    callers.push(SuspendedInterpreterFrame {
+                        frame: parent,
+                        continuation,
+                    });
+                    frame_aux.push(InterpreterFrameAux::empty());
+                }
+                InterpreterFrameControl::Complete(result) => {
+                    match self.complete_interpreter_frame_chain(
+                        &mut current,
+                        &mut callers,
+                        &mut frame_aux,
+                        entry_func,
+                        result,
+                    ) {
+                        InterpreterFrameCompletion::Resume => {}
+                        InterpreterFrameCompletion::Exit(result) => {
+                            *pc = current.pc;
+                            let mut entry_aux = frame_aux
+                                .pop()
+                                .expect("entry interpreter frame must own auxiliary state");
+                            debug_assert!(frame_aux.is_empty());
+                            *handlers = std::mem::take(&mut entry_aux.handlers);
+                            *bind_stack = std::mem::take(&mut entry_aux.bind_stack);
+                            return result;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Run one frame until it calls another Tier-0 bytecode function or
+    /// completes. The outer driver owns frame suspension and unwinding; this
+    /// hot method owns only GNU's opcode-dispatch registers. It is always
+    /// inlined so the source-level seam does not become a per-call host-stack
+    /// boundary.
+    #[inline(always)]
+    fn run_interpreter_frame(
+        &mut self,
+        current: &mut InterpreterFrame,
+        aux: &mut InterpreterFrameAux,
+        entry_func: &ByteCodeFunction,
+    ) -> InterpreterFrameControl {
+        let func = match current.function {
+            InterpreterFunction::Entry => entry_func,
+            InterpreterFunction::Rooted(value) => value
+                .get_bytecode_data()
+                .expect("active interpreter frame must own bytecode"),
+        };
+        let frame_base = current.frame_base;
+        let frame_limit = current.frame_limit;
         let ops = func.executable_ops();
         let constants = &func.constants;
         let ops_len = ops.len();
         let ops_ptr = ops.as_ptr();
-        let mut pc_local = *pc;
-        let mut quitcounter: u8 = 1;
+        let mut pc_local = current.pc;
+        let mut quitcounter = current.quitcounter;
         // OSR (on-stack replacement): once a hot loop is detected at a backward
         // branch, transfer the rest of this interpreted call into native code at
         // the loop header. `osr_tried` latches so a loop that can't/didn't OSR is
@@ -1621,7 +2087,7 @@ impl<'a> Vm<'a> {
         // (measured; the tax persisted under `NEOVM_JIT=0`, which is what pinned
         // it to the interpreter path rather than to compile-time analysis).
         #[cfg(feature = "jit")]
-        let mut osr_tried = false;
+        let mut osr_tried = current.osr_tried;
 
         // A6: base+len of the operand stack live in registers for the whole
         // dispatch loop (GNU keeps top/pc in locals, bytecode.c). Every
@@ -1641,12 +2107,26 @@ impl<'a> Vm<'a> {
         // can run unwind-protect cleanup forms (arbitrary Lisp / GC).
         macro_rules! resume_flow {
             ($flow:expr) => {{
-                match self.resume_nonlocal(func, &mut pc_local, handlers, bind_stack, $flow) {
+                match self.resume_nonlocal(
+                    func,
+                    &mut pc_local,
+                    &mut aux.handlers,
+                    &mut aux.bind_stack,
+                    $flow,
+                ) {
                     Ok(()) => {
                         cursor = StackCursor::acquire(&mut self.ctx);
                         continue;
                     }
-                    Err(flow) => return Err(flow),
+                    Err(flow) => {
+                        current.pc = pc_local;
+                        current.quitcounter = quitcounter;
+                        #[cfg(feature = "jit")]
+                        {
+                            current.osr_tried = osr_tried;
+                        }
+                        return InterpreterFrameControl::Complete(Err(flow));
+                    }
                 }
             }};
         }
@@ -1765,7 +2245,12 @@ impl<'a> Vm<'a> {
                                 ctx_ptr, func, target, &snapshot,
                             ) {
                                 Some(crate::emacs_core::jit::compile::NativeRun::Ok(bits)) => {
-                                    return Ok(Value::from_bits(bits));
+                                    current.pc = pc_local;
+                                    current.quitcounter = quitcounter;
+                                    current.osr_tried = osr_tried;
+                                    return InterpreterFrameControl::Complete(Ok(
+                                        Value::from_bits(bits),
+                                    ));
                                 }
                                 Some(crate::emacs_core::jit::compile::NativeRun::Signal) => {
                                     let flow = crate::emacs_core::jit::compile::take_pending_flow()
@@ -1977,16 +2462,16 @@ impl<'a> Vm<'a> {
                     // vm_try publishes the stack because specbind can run
                     // variable watchers (arbitrary Lisp).
                     vm_try!(self.ctx.try_specbind(name_id, val));
-                    bind_stack.push(bind_depth);
+                    aux.bind_stack.push(bind_depth);
                 }
                 Op::Unbind(n) => {
                     let n = *n as usize;
-                    let target = if n <= bind_stack.len() {
-                        let depth = bind_stack[bind_stack.len() - n];
-                        bind_stack.truncate(bind_stack.len() - n);
+                    let target = if n <= aux.bind_stack.len() {
+                        let depth = aux.bind_stack[aux.bind_stack.len() - n];
+                        aux.bind_stack.truncate(aux.bind_stack.len() - n);
                         depth
                     } else {
-                        bind_stack.clear();
+                        aux.bind_stack.clear();
                         0
                     };
                     // unbind_to can run unwind-protect cleanups — escape.
@@ -2051,9 +2536,48 @@ impl<'a> Vm<'a> {
                         .map(|_| stk!()[args_start..].iter().copied().collect::<LispArgVec>());
                     let result =
                         if writeback_names.is_none() {
-                            vm_try!(self.with_bytecode_call_depth(|vm| {
-                                vm.call_function_from_stack_args(func_val, args_start, n, true)
-                            }))
+                            cursor.publish(self.ctx);
+                            if let Err(flow) = self.enter_bytecode_call_depth() {
+                                resume_flow!(flow)
+                            }
+                            match self.dispatch_interpreter_stack_call(func_val, args_start, n) {
+                                InterpreterStackCall::Enter {
+                                    func_value,
+                                    args_start,
+                                    nargs,
+                                    backtrace_base,
+                                } => {
+                                    current.pc = pc_local;
+                                    current.quitcounter = quitcounter;
+                                    #[cfg(feature = "jit")]
+                                    {
+                                        current.osr_tried = osr_tried;
+                                    }
+                                    let callee = func_value
+                                        .get_bytecode_data()
+                                        .expect("iterative call target must remain bytecode");
+                                    let child = self.prepare_iterative_interpreter_frame(
+                                        callee, func_value, args_start, nargs,
+                                    );
+                                    return InterpreterFrameControl::Enter {
+                                        frame: child,
+                                        continuation: BytecodeCallContinuation {
+                                            stack_after_call,
+                                            backtrace_base,
+                                        },
+                                    };
+                                }
+                                InterpreterStackCall::Complete(result) => {
+                                    self.leave_bytecode_call_depth();
+                                    match result {
+                                        Ok(value) => {
+                                            cursor = StackCursor::acquire(self.ctx);
+                                            value
+                                        }
+                                        Err(flow) => resume_flow!(flow),
+                                    }
+                                }
+                            }
                         } else {
                             let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
                             vm_try!(self.with_bytecode_call_depth(|vm| {
@@ -2251,13 +2775,19 @@ impl<'a> Vm<'a> {
                 Op::Return => {
                     let result = stk!().pop().unwrap_or(Value::NIL);
                     cursor.publish(self.ctx);
-                    return Ok(result);
+                    current.pc = pc_local;
+                    current.quitcounter = quitcounter;
+                    #[cfg(feature = "jit")]
+                    {
+                        current.osr_tried = osr_tried;
+                    }
+                    return InterpreterFrameControl::Complete(Ok(result));
                 }
                 Op::SaveCurrentBuffer => {
                     if let Some(buffer_id) =
                         self.ctx.buffers.current_buffer().map(|buffer| buffer.id)
                     {
-                        bind_stack.push(self.ctx.specpdl.len());
+                        aux.bind_stack.push(self.ctx.specpdl.len());
                         self.ctx
                             .specpdl
                             .push(SpecBinding::SaveCurrentBuffer { buffer_id });
@@ -2265,12 +2795,12 @@ impl<'a> Vm<'a> {
                 }
                 Op::SaveExcursion => {
                     if let Some(count) = self.ctx.record_save_excursion() {
-                        bind_stack.push(count);
+                        aux.bind_stack.push(count);
                     }
                 }
                 Op::SaveRestriction => {
                     if let Some(saved) = self.ctx.buffers.save_current_restriction_state() {
-                        bind_stack.push(self.ctx.specpdl.len());
+                        aux.bind_stack.push(self.ctx.specpdl.len());
                         self.ctx.specpdl.push(SpecBinding::save_restriction(saved));
                     }
                 }
@@ -3011,9 +3541,9 @@ impl<'a> Vm<'a> {
                 Op::PushConditionCase(target) => {
                     let stack_len = stk!().len();
                     let spec_depth = self.ctx.specpdl.len();
-                    let bsl = bind_stack.len();
+                    let bsl = aux.bind_stack.len();
                     let resume_id = self.ctx.allocate_resume_id();
-                    handlers.push(Handler::Condition);
+                    aux.handlers.push(Handler::Condition);
                     self.ctx
                         .push_condition_frame(ConditionFrame::ConditionCase {
                             conditions: Value::symbol("error"),
@@ -3031,9 +3561,9 @@ impl<'a> Vm<'a> {
                     let conditions = stk!().pop().unwrap_or(Value::NIL);
                     let stack_len = stk!().len();
                     let spec_depth = self.ctx.specpdl.len();
-                    let bsl = bind_stack.len();
+                    let bsl = aux.bind_stack.len();
                     let resume_id = self.ctx.allocate_resume_id();
-                    handlers.push(Handler::Condition);
+                    aux.handlers.push(Handler::Condition);
                     self.ctx
                         .push_condition_frame(ConditionFrame::ConditionCase {
                             conditions,
@@ -3050,9 +3580,9 @@ impl<'a> Vm<'a> {
                     let tag = stk!().pop().unwrap_or(Value::NIL);
                     let stack_len = stk!().len();
                     let spec_depth = self.ctx.specpdl.len();
-                    let bsl = bind_stack.len();
+                    let bsl = aux.bind_stack.len();
                     let resume_id = self.ctx.allocate_resume_id();
-                    handlers.push(Handler::Condition);
+                    aux.handlers.push(Handler::Condition);
                     self.ctx.push_condition_frame(ConditionFrame::Catch {
                         tag,
                         resume: ResumeTarget::VmCatch {
@@ -3065,13 +3595,13 @@ impl<'a> Vm<'a> {
                     });
                 }
                 Op::PopHandler => {
-                    if handlers.pop().is_some() {
+                    if aux.handlers.pop().is_some() {
                         self.ctx.pop_condition_frame();
                     }
                 }
                 Op::UnwindProtectPop => {
                     let cleanup = stk!().pop().unwrap_or(Value::NIL);
-                    bind_stack.push(self.ctx.specpdl.len());
+                    aux.bind_stack.push(self.ctx.specpdl.len());
                     self.ctx.specpdl.push(SpecBinding::UnwindProtect {
                         forms: cleanup,
                         lexenv: self.ctx.lexenv,
@@ -3182,11 +3712,17 @@ impl<'a> Vm<'a> {
             }
         }
 
-        // Fell off the end — return TOS or nil
-        *pc = pc_local;
+        // Fell off the end — return TOS or nil through the same Breturn frame
+        // transition as an explicit Return opcode.
         let result = stk!().pop().unwrap_or(Value::NIL);
         cursor.publish(self.ctx);
-        Ok(result)
+        current.pc = pc_local;
+        current.quitcounter = quitcounter;
+        #[cfg(feature = "jit")]
+        {
+            current.osr_tried = osr_tried;
+        }
+        InterpreterFrameControl::Complete(Ok(result))
     }
 
     // -- Helper methods --

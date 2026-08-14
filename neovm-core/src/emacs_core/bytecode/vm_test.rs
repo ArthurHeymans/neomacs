@@ -1745,6 +1745,59 @@ fn vm_symbol_bytecode_call_resolves_live_function_cell_once() {
 }
 
 #[test]
+fn vm_bytecode_call_chain_stays_in_one_interpreter_driver() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+    let leaf_symbol = intern("vm-iterative-frame-leaf");
+    let middle_symbol = intern("vm-iterative-frame-middle");
+
+    let mut leaf = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let answer_idx = leaf.add_constant(Value::fixnum(42));
+    leaf.ops = vec![Op::Constant(answer_idx), Op::Return];
+    leaf.max_stack = 1;
+    eval.obarray
+        .set_symbol_function_id(leaf_symbol, Value::make_bytecode(leaf));
+
+    let mut middle = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let leaf_idx = middle.add_constant(Value::from_sym_id(leaf_symbol));
+    middle.ops = vec![Op::Constant(leaf_idx), Op::Call(0), Op::Return];
+    middle.max_stack = 1;
+    eval.obarray
+        .set_symbol_function_id(middle_symbol, Value::make_bytecode(middle));
+
+    let mut outer = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let middle_idx = outer.add_constant(Value::from_sym_id(middle_symbol));
+    outer.ops = vec![Op::Constant(middle_idx), Op::Call(0), Op::Return];
+    outer.max_stack = 1;
+
+    reset_run_loop_max_depth();
+    let result = {
+        let mut vm = new_vm(&mut eval);
+        vm.execute(&outer, vec![])
+            .expect("nested bytecode calls should return through their callers")
+    };
+
+    assert_eq!(result, Value::fixnum(42));
+    assert_eq!(
+        run_loop_max_depth(),
+        1,
+        "GNU Bcall/setup_frame/Breturn keeps bytecode callees in one interpreter driver"
+    );
+}
+
+#[test]
 fn vm_bcall_max_eval_depth_reports_error_like_gnu_bytecode() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_minimal_vm_harness();
