@@ -763,7 +763,6 @@ fn undo_of_descending_adjacent_inserts_restores_the_untouched_text() {
     );
 }
 
-
 /// GNU `recursive_edit_1` (keyboard.c:708-748) specbinds
 /// `undo-auto--undoably-changed-buffers` to nil before it runs the command
 /// loop, "so that changes in the recursive edit will not result in undo

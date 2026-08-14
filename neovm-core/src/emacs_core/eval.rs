@@ -6710,10 +6710,7 @@ impl Context {
         // The binding lives here rather than in the recursive-edit entry point
         // because neomacs already keeps its sibling `inhibit-redisplay` binding
         // here, and both must unwind at the same boundary.
-        self.specbind(
-            intern("undo-auto--undoably-changed-buffers"),
-            Value::NIL,
-        );
+        self.specbind(intern("undo-auto--undoably-changed-buffers"), Value::NIL);
 
         self.command_loop_1_entry_prologue()?;
 
