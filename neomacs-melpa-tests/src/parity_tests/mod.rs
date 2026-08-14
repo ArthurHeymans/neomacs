@@ -685,6 +685,7 @@ mod treemacs_magit;
 mod treemacs_persp;
 mod treemacs_projectile;
 mod treepy;
+mod tuareg;
 mod two_bit;
 mod typescript_mode;
 mod undercover;

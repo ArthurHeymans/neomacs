@@ -433,7 +433,7 @@ rank	package	downloads	status
 432	a	207106	covered
 433	rtags	206955	covered
 434	go-eldoc	206860	covered
-435	tuareg	206148	todo
+435	tuareg	206148	covered
 436	hcl-mode	205742	todo
 437	auto-package-update	205557	covered
 438	esup	203329	todo

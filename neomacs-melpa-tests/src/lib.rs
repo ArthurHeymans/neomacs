@@ -3900,6 +3900,13 @@ pub const TRANSIENT_MELPA_PIN: (&str, &str) = ("transient", "20260725.1105");
 /// commit `94c87794d53883a2358d13da264ad8dab9a52daa`.
 pub const TRANSPOSE_FRAME_MELPA_PIN: (&str, &str) = ("transpose-frame", "20221109.2053");
 
+/// The exact Tuareg package selected for practical OCaml editing, SMIE
+/// indentation, fontification, phrase/defun motion, comment-dwim,
+/// compiler-error navigation, and unbraced-eval recovery parity. MELPA
+/// built this archive from upstream commit
+/// `2d67d53a66fbf9d83c0416dba3275080b1bc6dfd`.
+pub const TUAREG_MELPA_PIN: (&str, &str) = ("tuareg", "20260626.936");
+
 /// The exact Tree-sitter package selected as the runtime integration layer for
 /// the pinned language bundle. MELPA built this archive from upstream commit
 /// `8f0bd387ad7a1cf7e8fdd5977d386a17ea70a82d`.
