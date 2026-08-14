@@ -6327,7 +6327,28 @@ impl Context {
         Ok(CommandLoopExit::Normal)
     }
 
+    /// GNU `recursive_edit_1` (keyboard.c:708-748) is the single entry both
+    /// `recursive-edit` and `read_minibuf` go through, and it specbinds
+    /// `undo-auto--undoably-changed-buffers` to nil before calling
+    /// `command_loop` -- "so that changes in the recursive edit will not result
+    /// in undo boundaries in buffers changed before we entered the recursive
+    /// edit" (keyboard.c:741-747, Bug #23632).
+    ///
+    /// Without it, the first command of a minibuffer read calls
+    /// `undo-auto--add-boundary` with the OUTER list still in place and drops a
+    /// boundary into every buffer an earlier, already-finished command had
+    /// edited.  Any command that reads an argument from the minibuffer after a
+    /// previous command edited a buffer -- a second `tide-rename-symbol` after
+    /// the first one rewrote main.js and math.js -- therefore grew one undo
+    /// entry that GNU does not have.
     fn run_exit_wrapped_command_loop(&mut self, increment_depth: bool) -> EvalResult {
+        let count = self.specpdl.len();
+        self.specbind(intern("undo-auto--undoably-changed-buffers"), Value::NIL);
+        let result = self.run_exit_wrapped_command_loop_1(increment_depth);
+        self.unbind_to_with_result(count, result)
+    }
+
+    fn run_exit_wrapped_command_loop_1(&mut self, increment_depth: bool) -> EvalResult {
         // Interactive command loops need an input source. Batch mode is
         // different: GNU still runs `top-level`/`normal-top-level` and lets
         // `read_char` terminate the loop via noninteractive EOF, even when
