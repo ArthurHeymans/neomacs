@@ -501,6 +501,7 @@ mod json_navigator;
 mod json_reformat;
 mod json_snatcher;
 mod julia_mode;
+mod key_chord;
 mod keyfreq;
 mod keytar;
 mod leaf;

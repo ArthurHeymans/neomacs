@@ -2254,6 +2254,12 @@ pub const PKG_INFO_MELPA_PIN: (&str, &str) = ("pkg-info", "20150517.1143");
 /// `e1177c728ae52a5e67157fb18ee1409d8e95386a`.
 pub const JS2_REFACTOR_MELPA_PIN: (&str, &str) = ("js2-refactor", "20250210.1811");
 
+/// The exact key-chord package selected for practical two-key and
+/// double-tap chord definition, input-method lookup, typing detection,
+/// and macro/read-char recovery parity. MELPA built this archive from
+/// upstream commit `cb646e815c61f253ad9fdfbe058049dda4e2b32b`.
+pub const KEY_CHORD_MELPA_PIN: (&str, &str) = ("key-chord", "20250330.2011");
+
 /// The exact Keyfreq package selected by the practical command accounting,
 /// report generation, export, cooperative persistence, and autosave lifecycle
 /// parity corpus. MELPA built this archive from upstream commit
