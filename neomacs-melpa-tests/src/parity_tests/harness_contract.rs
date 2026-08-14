@@ -33,7 +33,7 @@ fn installed_autoload_activation_never_loads_the_package_source() {
 }
 
 #[test]
-fn sandbox_keeps_process_state_under_workspace_tmp() {
+fn sandbox_keeps_process_state_under_workspace_tmp_and_socket_paths_bounded() {
     let sandbox = MelpaSandbox::new("environment-contract").expect("create MELPA sandbox");
     let scratch_base = workspace_root().join("tmp/melpa");
 
@@ -48,7 +48,7 @@ fn sandbox_keeps_process_state_under_workspace_tmp() {
         let mut command = Command::new("sh");
         command.args([
             "-c",
-            r##"printf '%s\n' "$HOME" "$TMPDIR" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$PWD" "$USER" "$LOGNAME" "$HOSTNAME" "$EMAIL" "$TZ" "$LC_ALL" "$TERM""##,
+            r##"printf '%s\n' "$HOME" "$TMPDIR" "$XDG_CONFIG_HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$XDG_RUNTIME_DIR" "$PWD" "$USER" "$LOGNAME" "$HOSTNAME" "$EMAIL" "$TZ" "$LC_ALL" "$TERM""##,
         ]);
         sandbox.configure(&mut command);
         let output = command.output().expect("inspect sandbox environment");
@@ -56,7 +56,7 @@ fn sandbox_keeps_process_state_under_workspace_tmp() {
         let stdout = String::from_utf8(output.stdout).expect("environment output is UTF-8");
         let paths = stdout
             .lines()
-            .take(7)
+            .take(8)
             .map(Path::new)
             .map(Path::to_path_buf)
             .collect::<Vec<_>>();
@@ -68,11 +68,24 @@ fn sandbox_keeps_process_state_under_workspace_tmp() {
                 .iter()
                 .all(|path| path.starts_with(sandbox.root()))
         );
-        assert_eq!(paths[6], sandbox.root());
+        let runtime_dir = &paths[6];
+        assert!(runtime_dir.is_dir());
+        use std::os::unix::ffi::OsStrExt;
+        assert!(
+            runtime_dir
+                .join("emacs/server")
+                .as_os_str()
+                .as_bytes()
+                .len()
+                <= 100,
+            "XDG runtime path must leave safe headroom below Unix-domain socket limits: {}",
+            runtime_dir.display()
+        );
+        assert_eq!(paths[7], sandbox.root());
 
         let values = stdout.lines().collect::<Vec<_>>();
         assert_eq!(
-            &values[7..],
+            &values[8..],
             [
                 "melpa-test",
                 "melpa-test",

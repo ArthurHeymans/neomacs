@@ -54,6 +54,13 @@ const PRELUDE: &str = r####"
         (buffer-string))
     nil))
 
+(defun pip384-test-file-sha256 (path)
+  "Hash the bytes at PATH rather than the spelling of PATH itself."
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert-file-contents-literally path)
+    (secure-hash 'sha256 (current-buffer))))
+
 (defun pip384-test-normalize (value root)
   (cond
    ((stringp value)
@@ -252,7 +259,8 @@ fn mode_keymap_project_discovery_and_source_identity() -> ParityBatchCase {
      (pipenv-mode 1)
      (let ((enabled
             (list :feature (featurep 'pipenv)
-                  :source (secure-hash 'sha256 (symbol-file 'pipenv-mode))
+                  :source (pip384-test-file-sha256
+                           (symbol-file 'pipenv-mode))
                   :mode pipenv-mode
                   :lighter (assq 'pipenv-mode minor-mode-alist)
                   :project
@@ -269,7 +277,7 @@ fn mode_keymap_project_discovery_and_source_identity() -> ParityBatchCase {
        (pipenv-mode -1)
        (list :enabled enabled :disabled pipenv-mode)))))"####,
         expect![[
-            r#"OK (:result (:enabled (:feature t :source "015e4b34d314f2bcab7f1ebd611452582cc2047272122dd20d2669723bcee631" :mode t :lighter (pipenv-mode " Pipenv") :project t :installed "/owned/pipenv" :aliases (t t) :keys (pipenv-activate pipenv-deactivate pipenv-shell pipenv-open pipenv-install pipenv-uninstall)) :disabled nil) :cleanup clean)"#
+            r#"OK (:result (:enabled (:feature t :source "abac25a652d19f8c40ccdc9d3a10e96a2ac8d63923ec7963e656e5a8b005a423" :mode t :lighter (pipenv-mode " Pipenv") :project t :installed "/owned/pipenv" :aliases (t t) :keys (pipenv-activate pipenv-deactivate pipenv-shell pipenv-open pipenv-install pipenv-uninstall)) :disabled nil) :cleanup clean)"#
         ]],
     )
 }

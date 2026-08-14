@@ -54,6 +54,66 @@ pub struct MelpaSandbox {
     case_root: tempfile::TempDir,
     home: PathBuf,
     tmp: PathBuf,
+    runtime: RuntimeDirectory,
+}
+
+enum RuntimeDirectory {
+    #[cfg(unix)]
+    ShortSocketPath(tempfile::TempDir),
+    #[cfg(not(unix))]
+    InSandbox(PathBuf),
+}
+
+impl RuntimeDirectory {
+    fn new(_case_root: &Path) -> Result<Self, String> {
+        #[cfg(unix)]
+        {
+            // GNU Emacs appends `emacs/<server-name>` to XDG_RUNTIME_DIR
+            // before binding an AF_UNIX socket.  Keep that namespace outside
+            // the arbitrarily deep checkout path while every persistent test
+            // artifact remains below CASE_ROOT.
+            let system_tmp = Path::new("/tmp");
+            let base = if system_tmp.is_dir() {
+                system_tmp.to_path_buf()
+            } else {
+                std::env::temp_dir()
+            };
+            let directory = tempfile::Builder::new()
+                .prefix("nmr-")
+                .tempdir_in(&base)
+                .map_err(|error| {
+                    format!(
+                        "failed to create short MELPA runtime directory in {}: {error}",
+                        base.display()
+                    )
+                })?;
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700)).map_err(
+                |error| format!("failed to secure isolated XDG runtime directory: {error}"),
+            )?;
+            Ok(Self::ShortSocketPath(directory))
+        }
+        #[cfg(not(unix))]
+        {
+            let directory = _case_root.join("xdg/runtime");
+            fs::create_dir_all(&directory).map_err(|error| {
+                format!(
+                    "failed to create MELPA runtime directory {}: {error}",
+                    directory.display()
+                )
+            })?;
+            Ok(Self::InSandbox(directory))
+        }
+    }
+
+    fn path(&self) -> &Path {
+        match self {
+            #[cfg(unix)]
+            Self::ShortSocketPath(directory) => directory.path(),
+            #[cfg(not(unix))]
+            Self::InSandbox(directory) => directory,
+        }
+    }
 }
 
 impl MelpaSandbox {
@@ -82,16 +142,7 @@ impl MelpaSandbox {
         let xdg_cache = case_root.path().join("xdg/cache");
         let xdg_data = case_root.path().join("xdg/data");
         let xdg_state = case_root.path().join("xdg/state");
-        let xdg_runtime = case_root.path().join("xdg/runtime");
-        for directory in [
-            &home,
-            &tmp,
-            &xdg_config,
-            &xdg_cache,
-            &xdg_data,
-            &xdg_state,
-            &xdg_runtime,
-        ] {
+        for directory in [&home, &tmp, &xdg_config, &xdg_cache, &xdg_data, &xdg_state] {
             fs::create_dir_all(directory).map_err(|error| {
                 format!(
                     "failed to create MELPA sandbox directory {}: {error}",
@@ -99,13 +150,7 @@ impl MelpaSandbox {
                 )
             })?;
         }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&xdg_runtime, fs::Permissions::from_mode(0o700)).map_err(
-                |error| format!("failed to secure isolated XDG runtime directory: {error}"),
-            )?;
-        }
+        let runtime = RuntimeDirectory::new(case_root.path())?;
         fs::create_dir_all(home.join(".emacs.d"))
             .map_err(|error| format!("failed to create isolated .emacs.d: {error}"))?;
 
@@ -113,6 +158,7 @@ impl MelpaSandbox {
             case_root,
             home,
             tmp,
+            runtime,
         })
     }
 
@@ -131,22 +177,38 @@ impl MelpaSandbox {
     /// Deterministic environment entries for adapters that do not use
     /// [`std::process::Command`] directly, such as a PTY launcher.
     pub fn process_environment(&self) -> Vec<PackageEnvironmentEntry> {
-        deterministic_process_environment(self.root(), &self.home, &self.tmp)
+        deterministic_process_environment(self.root(), &self.home, &self.tmp, self.runtime.path())
     }
 
     /// Apply the deterministic process environment shared by package test
     /// adapters.
     pub fn configure(&self, command: &mut Command) {
-        configure_process_environment(command, self.root(), &self.home, &self.tmp);
+        configure_process_environment_with_runtime(
+            command,
+            self.root(),
+            &self.home,
+            &self.tmp,
+            self.runtime.path(),
+        );
     }
 }
 
 /// Apply the deterministic environment used by package preparation and test
 /// processes.
 pub fn configure_process_environment(command: &mut Command, root: &Path, home: &Path, tmp: &Path) {
+    configure_process_environment_with_runtime(command, root, home, tmp, &root.join("xdg/runtime"));
+}
+
+fn configure_process_environment_with_runtime(
+    command: &mut Command,
+    root: &Path,
+    home: &Path,
+    tmp: &Path,
+    runtime: &Path,
+) {
     command
         .current_dir(root)
-        .envs(deterministic_process_environment(root, home, tmp))
+        .envs(deterministic_process_environment(root, home, tmp, runtime))
         .env_remove("EMACSLOADPATH");
 }
 
@@ -154,6 +216,7 @@ fn deterministic_process_environment(
     root: &Path,
     home: &Path,
     tmp: &Path,
+    runtime: &Path,
 ) -> Vec<PackageEnvironmentEntry> {
     vec![
         (OsString::from("HOME"), os_string(home.as_os_str())),
@@ -178,7 +241,7 @@ fn deterministic_process_environment(
         ),
         (
             OsString::from("XDG_RUNTIME_DIR"),
-            os_string(root.join("xdg/runtime").as_os_str()),
+            os_string(runtime.as_os_str()),
         ),
         (OsString::from("LANG"), OsString::from("C.UTF-8")),
         (OsString::from("LC_ALL"), OsString::from("C.UTF-8")),

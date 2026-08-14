@@ -168,7 +168,8 @@ impl PreparedPackageSet {
             .join(" ");
         let activation = package_activation_elisp(self.activation);
         format!(
-            r##"(progn
+            r##";;; -*- lexical-binding: t; -*-
+(progn
                    (require 'package)
                    (setq package-user-dir
                          (getenv "NEOMACS_PACKAGE_USER_DIR")
@@ -247,6 +248,7 @@ mod tests {
         assert_eq!(environment[1].0, "NEOMACS_PACKAGE_SOURCE");
 
         let startup = prepared.startup_elisp();
+        assert!(startup.starts_with(";;; -*- lexical-binding: t; -*-"));
         assert!(startup.contains("(package-initialize)"));
         assert!(startup.contains("example-test-ready"));
         assert!(startup.contains("compat"));
