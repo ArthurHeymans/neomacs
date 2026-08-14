@@ -501,7 +501,7 @@ fn eval_region_with_read_function(
                 eval.record_save_excursion();
                 if let Some(state) = eval.buffers.save_current_restriction_state() {
                     eval.specpdl
-                        .push(super::eval::SpecBinding::SaveRestriction { state });
+                        .push(super::eval::SpecBinding::save_restriction(state));
                 }
 
                 let (accessible_start, start_byte, end_byte) = {

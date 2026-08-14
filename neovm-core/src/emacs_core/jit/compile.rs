@@ -2155,8 +2155,7 @@ pub extern "C" fn neovm_jit_save_restriction(ctx: *mut u8) {
     let ctx = unsafe { &mut *(ctx as *mut Context) };
     if let Some(saved) = ctx.buffers.save_current_restriction_state() {
         JIT_BIND_STACK.with(|s| s.borrow_mut().push(ctx.specpdl.len()));
-        ctx.specpdl
-            .push(SpecBinding::SaveRestriction { state: saved });
+        ctx.specpdl.push(SpecBinding::save_restriction(saved));
     }
 }
 

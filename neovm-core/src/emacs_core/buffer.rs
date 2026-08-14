@@ -1768,7 +1768,7 @@ pub(crate) fn builtin_replace_region_contents(
         eval.record_save_excursion();
         if let Some(state) = eval.buffers.save_current_restriction_state() {
             eval.specpdl
-                .push(super::eval::SpecBinding::SaveRestriction { state });
+                .push(super::eval::SpecBinding::save_restriction(state));
         }
         let narrow_result =
             builtin_narrow_to_region(eval, vec![Value::fixnum(start), Value::fixnum(end)])

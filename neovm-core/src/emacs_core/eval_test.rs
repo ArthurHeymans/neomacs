@@ -22372,6 +22372,20 @@ fn render_uncaught_signal_backtrace_lists_live_frames_innermost_first() {
     assert!(truncated.contains("..."), "truncation marker: {truncated}");
 }
 
+/// GNU's `union specbinding` is 32 bytes on the supported 64-bit Unix build.
+/// Neomacs needs a little more room for its typed inline two-argument
+/// backtrace representation, but cold unwind payloads must not inflate every
+/// entry in the call-heavy specpdl vector beyond 48 bytes.
+#[test]
+fn specpdl_entry_stays_compact_for_hot_backtrace_pushes() {
+    let entry_size = std::mem::size_of::<SpecBinding>();
+
+    assert!(
+        entry_size <= 48,
+        "SpecBinding is {entry_size} bytes; cold unwind payloads must not set the hot specpdl stride"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Redisplay skip: a change that lands DURING the paint must still be painted
 // ---------------------------------------------------------------------------

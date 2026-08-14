@@ -2251,9 +2251,7 @@ impl<'a> Vm<'a> {
                 Op::SaveRestriction => {
                     if let Some(saved) = self.ctx.buffers.save_current_restriction_state() {
                         bind_stack.push(self.ctx.specpdl.len());
-                        self.ctx
-                            .specpdl
-                            .push(SpecBinding::SaveRestriction { state: saved });
+                        self.ctx.specpdl.push(SpecBinding::save_restriction(saved));
                     }
                 }
 

@@ -564,9 +564,7 @@ pub(crate) enum SpecBinding {
     /// save-current-buffer state. Matches GNU record_unwind_current_buffer.
     SaveCurrentBuffer { buffer_id: crate::buffer::BufferId },
     /// save-restriction state. Matches GNU SPECPDL_UNWIND with save_restriction_restore.
-    SaveRestriction {
-        state: crate::buffer::SavedRestrictionState,
-    },
+    SaveRestriction { state: SavedRestrictionUnwind },
     /// Truncate `Context::loads_in_progress` back to `len` on unbind — the
     /// specpdl-carried form of GNU lread.c `Fload`'s
     /// `record_unwind_protect (record_load_unwind, Vloads_in_progress)`.
@@ -586,6 +584,35 @@ pub(crate) enum SpecBinding {
     NativeUnwind { action: NativeUnwindAction },
     /// Placeholder. Matches GNU SPECPDL_NOP.
     Nop,
+}
+
+/// Cold, owned payload for a `save-restriction` unwind entry.
+///
+/// `SavedRestrictionState` contains an optional `Vec` of labeled
+/// restrictions. Keeping it inline made that rare payload set the stride of
+/// every `SpecBinding`, including the backtrace entry pushed for every Lisp
+/// call. The private box forces construction through
+/// [`SpecBinding::save_restriction`] while retaining exhaustive typed unwind
+/// handling.
+#[derive(Clone, Debug)]
+pub(crate) struct SavedRestrictionUnwind(Box<crate::buffer::SavedRestrictionState>);
+
+impl SavedRestrictionUnwind {
+    fn state(&self) -> &crate::buffer::SavedRestrictionState {
+        &self.0
+    }
+
+    fn into_state(self) -> crate::buffer::SavedRestrictionState {
+        *self.0
+    }
+}
+
+impl SpecBinding {
+    pub(crate) fn save_restriction(state: crate::buffer::SavedRestrictionState) -> Self {
+        Self::SaveRestriction {
+            state: SavedRestrictionUnwind(Box::new(state)),
+        }
+    }
 }
 
 /// Native cleanups that must participate in GNU's specpdl unwind ordering.
@@ -5874,11 +5901,11 @@ impl Context {
                 }
                 SpecBinding::SaveRestriction { state } => {
                     let mut roots = Vec::new();
-                    state.trace_roots(&mut roots);
+                    state.state().trace_roots(&mut roots);
                     // The saved bounds live as marker ids only; root the
                     // marker objects so restore still finds them (see
                     // SavedRestrictionState::trace_marker_roots).
-                    state.trace_marker_roots(&self.buffers, &mut roots);
+                    state.state().trace_marker_roots(&self.buffers, &mut roots);
                     for root in roots {
                         visit(root);
                     }
@@ -12266,7 +12293,7 @@ impl Context {
     fn sf_save_restriction_value(&mut self, tail: Value) -> EvalResult {
         let count = self.specpdl.len();
         if let Some(state) = self.buffers.save_current_restriction_state() {
-            self.specpdl.push(SpecBinding::SaveRestriction { state });
+            self.specpdl.push(SpecBinding::save_restriction(state));
         }
         let result = self.sf_progn_value(tail);
         self.unbind_to(count);
@@ -15785,7 +15812,8 @@ impl Context {
                     self.restore_current_buffer_if_live(buffer_id);
                 }
                 SpecBinding::SaveRestriction { state } => {
-                    self.buffers.restore_saved_restriction_state(state);
+                    self.buffers
+                        .restore_saved_restriction_state(state.into_state());
                 }
                 SpecBinding::LoadsInProgress { len } => {
                     self.loads_in_progress.truncate(len);
