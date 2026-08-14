@@ -3782,6 +3782,12 @@ pub const EXPAND_REGION_MELPA_PIN: (&str, &str) = ("expand-region", "20241217.18
 /// `7919681b0d883502155d5b26e791fec15da6aeca`.
 pub const RAINBOW_DELIMITERS_MELPA_PIN: (&str, &str) = ("rainbow-delimiters", "20210515.1254");
 
+/// The exact rake.el package selected for practical Rakefile discovery,
+/// task listing, bundler/zeus/spring prefixes, cache, find-task, and
+/// rerun recovery parity. MELPA built this archive from upstream commit
+/// `452ea0caca33376487103c64177c295ed2960cca`.
+pub const RAKE_MELPA_PIN: (&str, &str) = ("rake", "20220211.827");
+
 /// The exact Racket Mode package selected for practical classic-mode,
 /// font-lock, indentation, editing, completion, Imenu, Xref, folding, and
 /// recovery parity. MELPA built this archive from upstream commit

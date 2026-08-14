@@ -623,6 +623,7 @@ mod quickrun;
 mod racer;
 mod racket_mode;
 mod rainbow_delimiters;
+mod rake;
 mod reformatter;
 mod request;
 mod restart_emacs;
