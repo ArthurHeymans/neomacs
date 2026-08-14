@@ -3232,6 +3232,12 @@ pub const FANCY_BATTERY_MELPA_PIN: (&str, &str) = ("fancy-battery", "20150101.12
 /// `6d6e132f5e9ebcbe5b475df939c556794dd1ce64`.
 pub const FIND_FILE_IN_PROJECT_MELPA_PIN: (&str, &str) = ("find-file-in-project", "20250612.234");
 
+/// The exact Fish Mode package selected for practical fish-script opening,
+/// fontification, indentation, fish_indent save-hook, and unmatched
+/// end/case recovery parity. MELPA built this archive from upstream
+/// commit `2526b1803b58cf145bc70ff6ce2adb3f6c246f89`.
+pub const FISH_MODE_MELPA_PIN: (&str, &str) = ("fish-mode", "20240129.1213");
+
 /// The exact Gruvbox Theme package selected for practical public variant,
 /// palette, fontification, option, failure, display-gate, and restoration
 /// parity. MELPA built this archive from upstream commit

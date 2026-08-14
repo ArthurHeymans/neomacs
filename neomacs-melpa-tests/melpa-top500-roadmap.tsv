@@ -425,7 +425,7 @@ rank	package	downloads	status
 424	espuds	212079	covered
 425	bash-completion	211889	covered
 426	transpose-frame	211127	covered
-427	fish-mode	210971	todo
+427	fish-mode	210971	covered
 428	esxml	210812	todo
 429	rake	210119	todo
 430	key-chord	209552	todo
