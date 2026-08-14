@@ -6986,16 +6986,14 @@ fn set_window_buffer_updates_history_lists_on_real_buffer_switches() {
 }
 
 #[test]
-fn current_window_configuration_roots_window_history_across_gc() {
+fn set_window_configuration_preserves_reused_window_history_across_gc() {
     crate::test_utils::init_test_tracing();
     let results = eval_with_frame(
         r#"(let* ((w (selected-window))
                   (b1 (get-buffer-create "wcfg-next-a"))
                   (b2 (get-buffer-create "wcfg-next-b"))
-                  (cfg nil))
+                  (cfg (current-window-configuration)))
              (set-window-next-buffers w (list b2 b1))
-             (setq cfg (current-window-configuration))
-             (set-window-next-buffers w nil)
              (garbage-collect)
              (set-window-configuration cfg)
              (mapcar #'buffer-name (window-next-buffers w)))"#,

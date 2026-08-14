@@ -280,6 +280,89 @@ fn sync_leaf(window: &mut Window, bm: &BufferManager, edited_buffer_id: BufferId
     }
 }
 
+/// Clone a live or saved window tree while giving every live-buffer leaf an
+/// independent marker set.
+///
+/// `Window::clone` deliberately cannot do this by itself because allocating
+/// markers requires the owning `BufferManager`.  Callers that retain a tree
+/// beyond the lifetime of a live-tree borrow (notably window configurations)
+/// must cross this boundary instead of retaining copied marker handles.
+pub fn clone_window_tree_with_independent_position_markers(
+    bm: &mut BufferManager,
+    source: &Window,
+) -> Window {
+    let mut cloned = source.clone();
+    refresh_cloned_subtree_from_shared_markers(&mut cloned, bm);
+    detach_cloned_subtree_marker_handles(&mut cloned);
+    attach_cloned_subtree_independent_markers(&mut cloned, bm);
+    cloned
+}
+
+fn refresh_cloned_subtree_from_shared_markers(window: &mut Window, bm: &BufferManager) {
+    match window {
+        Window::Leaf {
+            buffer_id,
+            window_start,
+            position_markers,
+            point,
+            old_point,
+            ..
+        } => {
+            let Some(markers) = position_markers.attached() else {
+                return;
+            };
+            if let Some(position) = marker_lisp_position(bm, *buffer_id, markers.start.raw()) {
+                *window_start = position;
+            }
+            if let Some(position) = marker_lisp_position(bm, *buffer_id, markers.point.raw()) {
+                *point = position;
+            }
+            if let Some(position) = marker_lisp_position(bm, *buffer_id, markers.old_point.raw()) {
+                *old_point = position;
+            }
+        }
+        Window::Internal { children, .. } => {
+            for child in children {
+                refresh_cloned_subtree_from_shared_markers(child, bm);
+            }
+        }
+    }
+}
+
+fn detach_cloned_subtree_marker_handles(window: &mut Window) {
+    match window {
+        Window::Leaf {
+            position_markers, ..
+        } => {
+            // These handles are shared with SOURCE.  Dropping this copied
+            // ownership state must not unchain SOURCE's markers.
+            *position_markers = WindowPositionMarkerState::Detached;
+        }
+        Window::Internal { children, .. } => {
+            for child in children {
+                detach_cloned_subtree_marker_handles(child);
+            }
+        }
+    }
+}
+
+fn attach_cloned_subtree_independent_markers(window: &mut Window, bm: &mut BufferManager) {
+    match window {
+        Window::Leaf { buffer_id, .. } => {
+            // A configuration may outlive its saved buffer.  Such leaves stay
+            // detached until restoration chooses a live replacement buffer.
+            if bm.get(*buffer_id).is_some() {
+                attach_window_position_markers(bm, window);
+            }
+        }
+        Window::Internal { children, .. } => {
+            for child in children {
+                attach_cloned_subtree_independent_markers(child, bm);
+            }
+        }
+    }
+}
+
 /// Attach markers to every leaf owned by a newly constructed frame.
 ///
 /// Frame factories call this once after choosing root/minibuffer buffers and

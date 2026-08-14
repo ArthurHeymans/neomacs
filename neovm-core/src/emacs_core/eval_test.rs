@@ -12308,6 +12308,133 @@ fn current_window_configuration_saves_selected_window_live_point() {
 }
 
 #[test]
+fn set_window_configuration_commits_point_from_a_disconnected_nonselected_window() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        eval_one_with_frame(
+            r##"(let ((original-buffer (current-buffer))
+                       (extra-buffer
+                        (get-buffer-create " *window-configuration-point*"))
+                       (before nil))
+                   (unwind-protect
+                       (progn
+                         (set-buffer extra-buffer)
+                         (insert "abcdefghij")
+                         (set-buffer original-buffer)
+                         (let ((configuration (current-window-configuration))
+                               (extra-window
+                                (split-window-internal
+                                 (selected-window) nil nil nil)))
+                           (set-window-buffer extra-window extra-buffer)
+                           (set-window-point extra-window 7)
+                           (set-buffer extra-buffer)
+                           (goto-char 2)
+                           (setq before (point))
+                           (set-buffer original-buffer)
+                           (set-window-configuration configuration)
+                           (set-buffer extra-buffer)
+                           (list before (point) (window-live-p extra-window))))
+                     (if (buffer-live-p extra-buffer)
+                         (kill-buffer extra-buffer))))"##,
+        ),
+        "OK (2 7 nil)"
+    );
+}
+
+#[test]
+fn set_window_configuration_preserves_live_history_on_a_reused_window() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        eval_one_with_frame(
+            r##"(let ((buffer-a (get-buffer-create "window-history-a"))
+                       (buffer-b (get-buffer-create "window-history-b")))
+                   (unwind-protect
+                       (let ((window (selected-window)))
+                         (set-window-buffer window buffer-a)
+                         (set-window-prev-buffers window nil)
+                         (let ((configuration (current-window-configuration)))
+                           (set-window-buffer window buffer-b)
+                           (set-window-configuration configuration)
+                           (let ((history (window-prev-buffers window)))
+                             (list (buffer-name (window-buffer window))
+                                   (consp history)
+                                   (if history
+                                       (buffer-name (car (car history)))
+                                     nil)))))
+                     (if (buffer-live-p buffer-a) (kill-buffer buffer-a))
+                     (if (buffer-live-p buffer-b) (kill-buffer buffer-b))))"##,
+        ),
+        "OK (\"window-history-a\" t \"window-history-b\")"
+    );
+}
+
+#[test]
+fn current_window_configuration_owns_independent_window_point_markers() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        eval_one_with_frame(
+            r##"(let ((original-buffer (current-buffer))
+                       (buffer (get-buffer-create " *configuration-marker*")))
+                   (unwind-protect
+                       (progn
+                         (set-buffer buffer)
+                         (insert "abcdefghij")
+                         (set-buffer original-buffer)
+                         (let ((window
+                                (split-window-internal
+                                 (selected-window) nil nil nil)))
+                           (set-window-buffer window buffer)
+                           (set-window-point window 3)
+                           (let ((configuration
+                                  (current-window-configuration)))
+                             (set-window-point window 7)
+                             (set-window-configuration configuration)
+                             (let ((restored-point (window-point window)))
+                               (set-buffer buffer)
+                               (goto-char 1)
+                               (insert "X")
+                               (let ((shifted-point (window-point window)))
+                                 (set-window-point window 8)
+                                 (set-window-configuration configuration)
+                                 (list restored-point shifted-point
+                                       (window-point window)))))))
+                     (if (buffer-live-p buffer) (kill-buffer buffer))))"##,
+        ),
+        "OK (3 4 4)"
+    );
+}
+
+#[test]
+fn set_window_configuration_keeps_a_reused_windows_live_buffer_when_saved_buffer_died() {
+    crate::test_utils::init_test_tracing();
+
+    assert_eq!(
+        eval_one_with_frame(
+            r##"(let ((buffer-a (get-buffer-create "window-killed-a"))
+                       (buffer-b (get-buffer-create "window-killed-b"))
+                       (window (selected-window)))
+                   (unwind-protect
+                       (progn
+                         (set-window-buffer window buffer-a)
+                         (let ((configuration
+                                (current-window-configuration)))
+                           (set-window-buffer window buffer-b)
+                           (kill-buffer buffer-a)
+                           (set-window-configuration configuration)
+                           (list (buffer-name (window-buffer window))
+                                 (eq window (selected-window))
+                                 (window-live-p window))))
+                     (if (buffer-live-p buffer-a) (kill-buffer buffer-a))
+                     (if (buffer-live-p buffer-b) (kill-buffer buffer-b))))"##,
+        ),
+        "OK (\"window-killed-b\" t t)"
+    );
+}
+
+#[test]
 fn save_selected_window_restores_selected_window_on_success_and_error() {
     crate::test_utils::init_test_tracing();
     let results = bootstrap_eval_all(

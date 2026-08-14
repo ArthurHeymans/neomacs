@@ -613,7 +613,6 @@ impl WindowConfigurationRestoreOptions {
     }
 }
 
-#[derive(Clone)]
 struct WindowConfigurationSnapshot {
     frame_id: crate::window::FrameId,
     root_window: crate::window::Window,
@@ -623,7 +622,428 @@ struct WindowConfigurationSnapshot {
     minibuffer_leaf: Option<crate::window::Window>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DisconnectedWindowPoint {
+    PreserveSelectedBuffer,
+    PreserveLastSelectedWindow(crate::window::WindowId),
+    CommitWindowPoint(LispCharPos1),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct OutgoingWindowBuffer {
+    window_id: crate::window::WindowId,
+    buffer_id: crate::buffer::BufferId,
+    window_start: LispCharPos1,
+    window_point: LispCharPos1,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReusedWindowHistoryTransition {
+    PreserveLiveHistory,
+    RecordOutgoingBuffer {
+        outgoing: OutgoingWindowBuffer,
+        incoming_buffer_id: crate::buffer::BufferId,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SavedWindowBufferRestoration {
+    RestoreSavedBuffer,
+    KeepReusedWindowBuffer {
+        buffer_id: crate::buffer::BufferId,
+        point: LispCharPos1,
+    },
+    FindSubstituteBuffer,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct CurrentWindowBuffer {
+    buffer_id: crate::buffer::BufferId,
+    point: LispCharPos1,
+}
+
+fn apply_saved_window_buffer_restoration(
+    window: &mut crate::window::Window,
+    current_buffers: &HashMap<crate::window::WindowId, CurrentWindowBuffer>,
+    buffers: &mut crate::buffer::BufferManager,
+) {
+    match window {
+        crate::window::Window::Leaf {
+            id,
+            buffer_id,
+            window_start,
+            position_markers,
+            point,
+            old_point,
+            ..
+        } => {
+            let restoration = if buffers.get(*buffer_id).is_some() {
+                SavedWindowBufferRestoration::RestoreSavedBuffer
+            } else if let Some(current) = current_buffers.get(id) {
+                SavedWindowBufferRestoration::KeepReusedWindowBuffer {
+                    buffer_id: current.buffer_id,
+                    point: current.point,
+                }
+            } else {
+                SavedWindowBufferRestoration::FindSubstituteBuffer
+            };
+
+            match restoration {
+                SavedWindowBufferRestoration::RestoreSavedBuffer => {}
+                SavedWindowBufferRestoration::KeepReusedWindowBuffer {
+                    buffer_id: current_buffer_id,
+                    point: current_point,
+                } => {
+                    *buffer_id = current_buffer_id;
+                    *window_start = LispCharPos1::ONE;
+                    *point = current_point;
+                    *old_point = current_point;
+                    *position_markers = crate::window::WindowPositionMarkerState::Detached;
+                    crate::window::window_markers::attach_window_position_markers(buffers, window);
+                }
+                SavedWindowBufferRestoration::FindSubstituteBuffer => {}
+            }
+        }
+        crate::window::Window::Internal { children, .. } => {
+            for child in children {
+                apply_saved_window_buffer_restoration(child, current_buffers, buffers);
+            }
+        }
+    }
+}
+
+fn prepare_saved_window_buffer_restoration(
+    eval: &mut super::eval::Context,
+    snapshot: &mut WindowConfigurationSnapshot,
+) {
+    let globally_selected_window = eval
+        .frames
+        .selected_frame()
+        .map(|frame| frame.selected_window);
+    let current_buffers = eval
+        .frames
+        .get(snapshot.frame_id)
+        .map(|frame| {
+            frame
+                .window_list()
+                .into_iter()
+                .filter_map(|window_id| {
+                    let crate::window::Window::Leaf {
+                        buffer_id, point, ..
+                    } = frame.find_window(window_id)?
+                    else {
+                        return None;
+                    };
+                    let point = if globally_selected_window == Some(window_id) {
+                        eval.buffers
+                            .get(*buffer_id)
+                            .map(|buffer| {
+                                LispCharPos1::from_one_based_usize(
+                                    buffer.point_char_pos().get().saturating_add(1),
+                                )
+                            })
+                            .unwrap_or(*point)
+                    } else {
+                        *point
+                    };
+                    Some((
+                        window_id,
+                        CurrentWindowBuffer {
+                            buffer_id: *buffer_id,
+                            point,
+                        },
+                    ))
+                })
+                .collect::<HashMap<_, _>>()
+        })
+        .unwrap_or_default();
+    apply_saved_window_buffer_restoration(
+        &mut snapshot.root_window,
+        &current_buffers,
+        &mut eval.buffers,
+    );
+}
+
+fn collect_leaf_buffer_ids(
+    window: &crate::window::Window,
+    buffers: &mut HashMap<crate::window::WindowId, crate::buffer::BufferId>,
+) {
+    match window {
+        crate::window::Window::Leaf { id, buffer_id, .. } => {
+            buffers.insert(*id, *buffer_id);
+        }
+        crate::window::Window::Internal { children, .. } => {
+            for child in children {
+                collect_leaf_buffer_ids(child, buffers);
+            }
+        }
+    }
+}
+
+fn merge_live_window_histories(
+    window: &mut crate::window::Window,
+    live_histories: &HashMap<crate::window::WindowId, crate::window::WindowHistoryState>,
+) {
+    match window {
+        crate::window::Window::Leaf { id, history, .. } => {
+            if let Some(live_history) = live_histories.get(id) {
+                *history = live_history.clone();
+            }
+        }
+        crate::window::Window::Internal { children, .. } => {
+            for child in children {
+                merge_live_window_histories(child, live_histories);
+            }
+        }
+    }
+}
+
+fn prepare_reused_window_histories(
+    eval: &mut super::eval::Context,
+    snapshot: &mut WindowConfigurationSnapshot,
+) -> Result<(), Flow> {
+    let mut saved_buffers = HashMap::new();
+    collect_leaf_buffer_ids(&snapshot.root_window, &mut saved_buffers);
+
+    let globally_selected_window = eval
+        .frames
+        .selected_frame()
+        .map(|frame| frame.selected_window);
+    let transitions = eval
+        .frames
+        .get(snapshot.frame_id)
+        .map(|frame| {
+            frame
+                .window_list()
+                .into_iter()
+                .filter_map(|window_id| {
+                    let saved_buffer_id = saved_buffers.get(&window_id).copied()?;
+                    let crate::window::Window::Leaf {
+                        buffer_id,
+                        window_start,
+                        point,
+                        ..
+                    } = frame.find_window(window_id)?
+                    else {
+                        return None;
+                    };
+                    let window_point = if globally_selected_window == Some(window_id) {
+                        eval.buffers
+                            .get(*buffer_id)
+                            .map(|buffer| {
+                                LispCharPos1::from_one_based_usize(
+                                    buffer.point_char_pos().get().saturating_add(1),
+                                )
+                            })
+                            .unwrap_or(*point)
+                    } else {
+                        *point
+                    };
+                    let outgoing = OutgoingWindowBuffer {
+                        window_id,
+                        buffer_id: *buffer_id,
+                        window_start: *window_start,
+                        window_point,
+                    };
+                    if outgoing.buffer_id != saved_buffer_id
+                        && eval.buffers.get(saved_buffer_id).is_some()
+                    {
+                        Some(ReusedWindowHistoryTransition::RecordOutgoingBuffer {
+                            outgoing,
+                            incoming_buffer_id: saved_buffer_id,
+                        })
+                    } else {
+                        Some(ReusedWindowHistoryTransition::PreserveLiveHistory)
+                    }
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    for transition in transitions {
+        match transition {
+            ReusedWindowHistoryTransition::PreserveLiveHistory => {}
+            ReusedWindowHistoryTransition::RecordOutgoingBuffer {
+                outgoing,
+                incoming_buffer_id,
+            } => {
+                let run_buffer_list_hook = {
+                    let (frames, buffers, minibuffers) =
+                        (&mut eval.frames, &eval.buffers, &eval.minibuffers);
+                    super::window_cmds::record_window_buffer_change_history_in_state(
+                        frames,
+                        minibuffers,
+                        buffers,
+                        snapshot.frame_id,
+                        outgoing.window_id,
+                        super::window_cmds::WindowBufferHistoryChange {
+                            outgoing_buffer_id: outgoing.buffer_id,
+                            incoming_buffer_id,
+                            outgoing_window_start: outgoing.window_start,
+                            outgoing_window_point: outgoing.window_point,
+                        },
+                    )?
+                };
+                if run_buffer_list_hook {
+                    super::super::buffer::run_buffer_list_update_hook(eval)?;
+                }
+            }
+        }
+    }
+
+    let live_histories = eval
+        .frames
+        .get(snapshot.frame_id)
+        .map(|frame| {
+            frame
+                .window_list()
+                .into_iter()
+                .filter_map(|window_id| {
+                    frame
+                        .find_window(window_id)
+                        .and_then(crate::window::Window::history)
+                        .cloned()
+                        .map(|history| (window_id, history))
+                })
+                .collect::<HashMap<_, _>>()
+        })
+        .unwrap_or_default();
+    merge_live_window_histories(&mut snapshot.root_window, &live_histories);
+    Ok(())
+}
+
+fn live_window_displays_buffer(
+    frames: &crate::window::FrameManager,
+    window_id: crate::window::WindowId,
+    buffer_id: crate::buffer::BufferId,
+) -> bool {
+    frames
+        .lookup_window(window_id)
+        .and_then(crate::window::Window::buffer_id)
+        == Some(buffer_id)
+}
+
+fn disconnected_window_point(
+    eval: &super::eval::Context,
+    outgoing: OutgoingWindowBuffer,
+) -> DisconnectedWindowPoint {
+    let selected_buffer_id = eval
+        .frames
+        .selected_frame()
+        .and_then(|frame| frame.find_window(frame.selected_window))
+        .and_then(crate::window::Window::buffer_id);
+    if selected_buffer_id == Some(outgoing.buffer_id) {
+        return DisconnectedWindowPoint::PreserveSelectedBuffer;
+    }
+
+    let last_selected_window = eval
+        .buffers
+        .get(outgoing.buffer_id)
+        .and_then(|buffer| buffer.last_selected_window);
+    if let Some(window_id) = last_selected_window
+        && window_id != outgoing.window_id
+        && live_window_displays_buffer(&eval.frames, window_id, outgoing.buffer_id)
+    {
+        return DisconnectedWindowPoint::PreserveLastSelectedWindow(window_id);
+    }
+
+    DisconnectedWindowPoint::CommitWindowPoint(outgoing.window_point)
+}
+
+/// Disconnect every current root leaf from its buffer before restoring a
+/// saved window tree.  This is the neomacs counterpart of GNU
+/// `delete_all_child_windows` calling `unshow_buffer` for each outgoing leaf.
+fn unshow_frame_root_buffers(eval: &mut super::eval::Context, frame_id: crate::window::FrameId) {
+    // GNU first swaps the globally selected window's live buffer point into
+    // its window marker.  The frame being restored need not be selected.
+    if let Some(selected_frame_id) = eval.frames.selected_frame().map(|frame| frame.id) {
+        super::window_cmds::remember_selected_window_point_in_state(
+            &mut eval.frames,
+            &mut eval.buffers,
+            selected_frame_id,
+        );
+    }
+
+    let outgoing_windows = eval
+        .frames
+        .get(frame_id)
+        .map(|frame| {
+            frame
+                .window_list()
+                .into_iter()
+                .filter_map(|window_id| match frame.find_window(window_id) {
+                    Some(crate::window::Window::Leaf {
+                        buffer_id,
+                        window_start,
+                        point,
+                        ..
+                    }) => Some(OutgoingWindowBuffer {
+                        window_id,
+                        buffer_id: *buffer_id,
+                        window_start: *window_start,
+                        window_point: *point,
+                    }),
+                    Some(crate::window::Window::Internal { .. }) | None => None,
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    for outgoing in outgoing_windows {
+        let point = disconnected_window_point(eval, outgoing);
+        if let Some(buffer) = eval.buffers.get_mut(outgoing.buffer_id) {
+            buffer.last_window_start = outgoing.window_start.max(LispCharPos1::ONE);
+        }
+
+        match point {
+            DisconnectedWindowPoint::PreserveSelectedBuffer => {}
+            DisconnectedWindowPoint::PreserveLastSelectedWindow(window_id) => {
+                debug_assert!(live_window_displays_buffer(
+                    &eval.frames,
+                    window_id,
+                    outgoing.buffer_id
+                ));
+            }
+            DisconnectedWindowPoint::CommitWindowPoint(window_point) => {
+                let byte_pos = eval.buffers.get(outgoing.buffer_id).map(|buffer| {
+                    buffer.lisp_pos_to_emacs_byte_pos(window_point.max(LispCharPos1::ONE))
+                });
+                if let Some(byte_pos) = byte_pos {
+                    let _ = eval
+                        .buffers
+                        .goto_buffer_emacs_byte_pos(outgoing.buffer_id, byte_pos);
+                }
+            }
+        }
+
+        if let Some(buffer) = eval.buffers.get_mut(outgoing.buffer_id)
+            && buffer.last_selected_window == Some(outgoing.window_id)
+        {
+            buffer.last_selected_window = None;
+        }
+    }
+}
+
 impl WindowConfigurationSnapshot {
+    fn clone_for_restore(&self, buffers: &mut crate::buffer::BufferManager) -> Self {
+        Self {
+            frame_id: self.frame_id,
+            root_window:
+                crate::window::window_markers::clone_window_tree_with_independent_position_markers(
+                    buffers,
+                    &self.root_window,
+                ),
+            selected_window: self.selected_window,
+            current_buffer: self.current_buffer,
+            minibuffer_window: self.minibuffer_window,
+            minibuffer_leaf: self.minibuffer_leaf.as_ref().map(|window| {
+                crate::window::window_markers::clone_window_tree_with_independent_position_markers(
+                    buffers, window,
+                )
+            }),
+        }
+    }
+
     fn trace_roots(&self, roots: &mut Vec<Value>) {
         self.root_window.trace_roots(roots);
         if let Some(minibuffer) = &self.minibuffer_leaf {
@@ -640,7 +1060,7 @@ fn window_configuration_snapshot_roots(snapshot: &WindowConfigurationSnapshot) -
 
 fn normalize_selected_window_point_in_snapshot(
     snapshot: &mut WindowConfigurationSnapshot,
-    buffers: &crate::buffer::BufferManager,
+    buffers: &mut crate::buffer::BufferManager,
 ) {
     let selected_buffer_id = snapshot
         .root_window
@@ -662,24 +1082,25 @@ fn normalize_selected_window_point_in_snapshot(
         return;
     };
 
-    if let Some(crate::window::Window::Leaf {
-        point: window_point,
-        ..
-    }) = snapshot.root_window.find_mut(snapshot.selected_window)
-    {
-        *window_point = LispCharPos1::from_one_based_usize(point);
+    if let Some(window) = snapshot.root_window.find_mut(snapshot.selected_window) {
+        crate::window::window_markers::set_window_point_with_marker(
+            buffers,
+            window,
+            LispCharPos1::from_one_based_usize(point),
+        );
         return;
     }
 
-    if let Some(crate::window::Window::Leaf {
-        point: window_point,
-        ..
-    }) = snapshot
+    if let Some(window) = snapshot
         .minibuffer_leaf
         .as_mut()
         .filter(|window| window.id() == snapshot.selected_window)
     {
-        *window_point = LispCharPos1::from_one_based_usize(point);
+        crate::window::window_markers::set_window_point_with_marker(
+            buffers,
+            window,
+            LispCharPos1::from_one_based_usize(point),
+        );
     }
 }
 
@@ -1025,13 +1446,22 @@ pub(crate) fn builtin_current_window_configuration(
     if let Some(frame_state) = eval.frames.get(frame_id) {
         let mut snapshot = WindowConfigurationSnapshot {
             frame_id,
-            root_window: frame_state.root_window.clone(),
+            root_window:
+                crate::window::window_markers::clone_window_tree_with_independent_position_markers(
+                    &mut eval.buffers,
+                    &frame_state.root_window,
+                ),
             selected_window: frame_state.selected_window,
             current_buffer: eval.buffers.current_buffer_id(),
             minibuffer_window: frame_state.minibuffer_window,
-            minibuffer_leaf: frame_state.minibuffer_leaf.clone(),
+            minibuffer_leaf: frame_state.minibuffer_leaf.as_ref().map(|window| {
+                crate::window::window_markers::clone_window_tree_with_independent_position_markers(
+                    &mut eval.buffers,
+                    window,
+                )
+            }),
         };
-        normalize_selected_window_point_in_snapshot(&mut snapshot, &eval.buffers);
+        normalize_selected_window_point_in_snapshot(&mut snapshot, &mut eval.buffers);
         save_snapshot_persistent_window_parameters(
             &mut snapshot,
             eval.obarray
@@ -1081,7 +1511,11 @@ pub(crate) fn set_window_configuration_with_options(
         ));
     };
 
-    let snapshot = WINDOW_CONFIGURATION_SNAPSHOTS.with(|slot| slot.borrow().get(&serial).cloned());
+    let snapshot = WINDOW_CONFIGURATION_SNAPSHOTS.with(|slot| {
+        slot.borrow()
+            .get(&serial)
+            .map(|snapshot| snapshot.clone_for_restore(&mut eval.buffers))
+    });
 
     if let Some(snapshot) = snapshot {
         let selected_frame_before_restore = eval.frames.selected_frame().map(|frame| frame.id);
@@ -1092,7 +1526,10 @@ pub(crate) fn set_window_configuration_with_options(
             .unwrap_or_default();
         let mut snapshot = snapshot;
         merge_snapshot_window_parameters(&mut snapshot, &live_parameters);
-        let selected_window_state = if let Some(frame) = eval.frames.get_mut(snapshot.frame_id) {
+        prepare_saved_window_buffer_restoration(eval, &mut snapshot);
+        prepare_reused_window_histories(eval, &mut snapshot)?;
+        unshow_frame_root_buffers(eval, snapshot.frame_id);
+        if let Some(frame) = eval.frames.get_mut(snapshot.frame_id) {
             frame.root_window = snapshot.root_window;
             // GNU `Fset_window_configuration` does NOT touch
             // `frame->old_selected_window` directly — that field
@@ -1104,17 +1541,7 @@ pub(crate) fn set_window_configuration_with_options(
                 frame.minibuffer_window = snapshot.minibuffer_window;
                 frame.minibuffer_leaf = snapshot.minibuffer_leaf;
             }
-            frame
-                .find_window(frame.selected_window)
-                .and_then(|window| match window {
-                    crate::window::Window::Leaf {
-                        buffer_id, point, ..
-                    } => Some((*buffer_id, *point)),
-                    crate::window::Window::Internal { .. } => None,
-                })
-        } else {
-            None
-        };
+        }
         // GNU `Fset_window_configuration` (window.c) substitutes a live buffer via
         // `other_buffer_safely` for any restored window whose saved buffer was
         // killed, instead of leaving a dead buffer in the window (which would
@@ -1152,18 +1579,54 @@ pub(crate) fn set_window_configuration_with_options(
             )
             .ok()
             .and_then(|value| value.as_buffer_id());
-            if let Some(substitute) = substitute
-                && let Some(frame) = eval.frames.get_mut(snapshot.frame_id)
-            {
-                for wid in dead_leaf_windows {
-                    if let Some(crate::window::Window::Leaf { buffer_id, .. }) =
-                        frame.find_window_mut(wid)
-                    {
-                        *buffer_id = substitute;
+            if let Some(substitute) = substitute {
+                let substitute_point = eval
+                    .buffers
+                    .get(substitute)
+                    .map(|buffer| {
+                        LispCharPos1::from_one_based_usize(
+                            buffer.point_char_pos().get().saturating_add(1),
+                        )
+                    })
+                    .unwrap_or(LispCharPos1::ONE);
+                let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
+                if let Some(frame) = frames.get_mut(snapshot.frame_id) {
+                    for wid in dead_leaf_windows {
+                        if let Some(window) = frame.find_window_mut(wid) {
+                            if let crate::window::Window::Leaf {
+                                buffer_id,
+                                window_start,
+                                position_markers,
+                                point,
+                                old_point,
+                                ..
+                            } = window
+                            {
+                                *buffer_id = substitute;
+                                *window_start = LispCharPos1::ONE;
+                                *point = substitute_point;
+                                *old_point = substitute_point;
+                                *position_markers =
+                                    crate::window::WindowPositionMarkerState::Detached;
+                            }
+                            crate::window::window_markers::attach_window_position_markers(
+                                buffers, window,
+                            );
+                        }
                     }
                 }
             }
         }
+        let selected_window_state = eval.frames.get(snapshot.frame_id).and_then(|frame| {
+            frame
+                .find_window(frame.selected_window)
+                .and_then(|window| match window {
+                    crate::window::Window::Leaf {
+                        buffer_id, point, ..
+                    } => Some((*buffer_id, *point)),
+                    crate::window::Window::Internal { .. } => None,
+                })
+        });
         if let Some((buffer_id, point)) = selected_window_state
             && let Some(buffer) = eval.buffers.get(buffer_id)
         {

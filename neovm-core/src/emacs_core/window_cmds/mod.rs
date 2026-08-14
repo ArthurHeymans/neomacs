@@ -1037,6 +1037,69 @@ fn should_record_window_history_buffer(
         .is_some_and(|buffer| !buffer.name_starts_with_space())
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct WindowBufferHistoryChange {
+    pub(crate) outgoing_buffer_id: BufferId,
+    pub(crate) incoming_buffer_id: BufferId,
+    pub(crate) outgoing_window_start: LispCharPos1,
+    pub(crate) outgoing_window_point: LispCharPos1,
+}
+
+/// Apply the history part of GNU `record-window-buffer` for a window that is
+/// about to change buffers.  Both ordinary `set-window-buffer` and window
+/// configuration restoration cross this seam.
+pub(crate) fn record_window_buffer_change_history_in_state(
+    frames: &mut FrameManager,
+    minibuffers: &MinibufferManager,
+    buffers: &BufferManager,
+    frame_id: FrameId,
+    window_id: WindowId,
+    change: WindowBufferHistoryChange,
+) -> Result<bool, Flow> {
+    let outgoing_buffer = Value::make_buffer(change.outgoing_buffer_id);
+    let incoming_buffer = Value::make_buffer(change.incoming_buffer_id);
+    let history_entry = Value::list(vec![
+        outgoing_buffer,
+        super::marker::make_marker_value(
+            Some(change.outgoing_buffer_id),
+            Some(change.outgoing_window_start.max(LispCharPos1::ONE)),
+            false,
+        ),
+        super::marker::make_marker_value(
+            Some(change.outgoing_buffer_id),
+            Some(change.outgoing_window_point.max(LispCharPos1::ONE)),
+            false,
+        ),
+    ]);
+
+    // GNU removes both the outgoing buffer (before re-adding it at the front)
+    // and the incoming buffer (which is no longer a previous buffer).
+    let filtered_prev = filtered_window_prev_buffers(
+        frames.window_prev_buffers(window_id),
+        &[outgoing_buffer, incoming_buffer],
+    )?;
+    frames.set_window_next_buffers(window_id, Value::NIL);
+
+    let record_outgoing = should_record_window_history_buffer(
+        frames,
+        minibuffers,
+        buffers,
+        frame_id,
+        window_id,
+        change.outgoing_buffer_id,
+    );
+    if record_outgoing {
+        let mut next_prev = Vec::with_capacity(filtered_prev.len() + 1);
+        next_prev.push(history_entry);
+        next_prev.extend(filtered_prev);
+        frames.set_window_prev_buffers(window_id, Value::list(next_prev));
+    } else {
+        frames.set_window_prev_buffers(window_id, Value::list(filtered_prev));
+    }
+
+    Ok(record_outgoing && !is_minibuffer_window(frames, frame_id, window_id))
+}
+
 fn window_body_height_lines(frames: &FrameManager, fid: FrameId, wid: WindowId, w: &Window) -> i64 {
     let ch = frames.get(fid).map(|f| f.char_height).unwrap_or(16.0);
     let lines = window_height_lines(w, ch);
@@ -4547,49 +4610,19 @@ pub(crate) fn builtin_set_window_buffer(
                 buffer.last_selected_window = None;
             }
             if old_buffer_id != buf_id {
-                let old_buffer_value = Value::make_buffer(old_buffer_id);
-                let old_window_start_pos = old_window_start.max(LispCharPos1::ONE);
-                let old_point_pos = old_point.max(LispCharPos1::ONE);
-                let history_entry = Value::list(vec![
-                    old_buffer_value,
-                    super::marker::make_marker_value(
-                        Some(old_buffer_id),
-                        Some(old_window_start_pos),
-                        false,
-                    ),
-                    super::marker::make_marker_value(
-                        Some(old_buffer_id),
-                        Some(old_point_pos),
-                        false,
-                    ),
-                ]);
-                // GNU keeps the newly displayed buffer out of the window's
-                // previous buffers (record-window-buffer removes it), so filter
-                // out both the old buffer (re-added at the front below) and the
-                // buffer being switched to.
-                let filtered_prev = filtered_window_prev_buffers(
-                    frames.window_prev_buffers(wid),
-                    &[old_buffer_value, Value::make_buffer(buf_id)],
-                )?;
-                frames.set_window_next_buffers(wid, Value::NIL);
-                let record_window_history = should_record_window_history_buffer(
+                run_buffer_list_hook = record_window_buffer_change_history_in_state(
                     frames,
                     minibuffers,
                     buffers,
                     fid,
                     wid,
-                    old_buffer_id,
-                );
-                if record_window_history {
-                    let mut next_prev = Vec::with_capacity(filtered_prev.len() + 1);
-                    next_prev.push(history_entry);
-                    next_prev.extend(filtered_prev);
-                    frames.set_window_prev_buffers(wid, Value::list(next_prev));
-                } else {
-                    frames.set_window_prev_buffers(wid, Value::list(filtered_prev));
-                }
-                run_buffer_list_hook =
-                    record_window_history && !is_minibuffer_window(frames, fid, wid);
+                    WindowBufferHistoryChange {
+                        outgoing_buffer_id: old_buffer_id,
+                        incoming_buffer_id: buf_id,
+                        outgoing_window_start: old_window_start,
+                        outgoing_window_point: old_point,
+                    },
+                )?;
             } else {
                 discard_buffers_from_window_history(frames, wid, &[Value::make_buffer(buf_id)])?;
             }
