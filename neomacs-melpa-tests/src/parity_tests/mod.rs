@@ -440,6 +440,7 @@ mod gitignore_mode;
 mod gitignore_templates;
 mod gntp;
 mod gnuplot;
+mod go_eldoc;
 mod go_mode;
 mod golden_ratio;
 mod google_translate;

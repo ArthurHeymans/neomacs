@@ -1514,6 +1514,13 @@ pub const GNTP_MELPA_PIN: (&str, &str) = ("gntp", "20141025.250");
 /// `81e3cb30297f0d12df41b865d2a76c8ba179089c`.
 pub const GNUPLOT_MELPA_PIN: (&str, &str) = ("gnuplot", "20260623.1111");
 
+/// The exact go-eldoc package selected for practical go-mode eldoc setup,
+/// gocode function signatures, builtin make/len fallback, variable and
+/// package types, and assignment-return highlighting parity. MELPA built
+/// this archive from upstream commit
+/// `cbbd2ea1e94a36004432a9ac61414cb5a95a39bd`.
+pub const GO_ELDOC_MELPA_PIN: (&str, &str) = ("go-eldoc", "20170305.1427");
+
 /// The exact Go Mode package selected for practical source editing,
 /// indentation, semantic fontification, comment filling, signature
 /// navigation, import management, formatter, module/workspace, and coverage
