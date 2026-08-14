@@ -167,19 +167,16 @@ pub(crate) fn constant_set_outcome_in_obarray(
     symbol_arg: Value,
     new_value: Value,
 ) -> Option<EvalResult> {
-    if !obarray.is_constant_id(symbol) {
-        return None;
+    use crate::emacs_core::symbol::ConstantWrite;
+    match obarray.classify_constant_write(symbol, new_value) {
+        ConstantWrite::Writable => None,
+        // GNU `set_internal` returns the new value without storing.
+        ConstantWrite::KeywordSelfAssign => Some(Ok(new_value)),
+        ConstantWrite::Refused => Some(Err(signal(
+            LispCondition::SettingConstant,
+            vec![symbol_arg],
+        ))),
     }
-
-    let name = resolve_sym(symbol);
-    if name.starts_with(':') && eq_value(&Value::from_kw_id(symbol), &new_value) {
-        return Some(Ok(new_value));
-    }
-
-    Some(Err(signal(
-        LispCondition::SettingConstant,
-        vec![symbol_arg],
-    )))
 }
 
 pub(crate) fn expect_symbol_id(value: &Value) -> Result<SymId, Flow> {

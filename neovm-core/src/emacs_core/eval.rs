@@ -35,7 +35,7 @@ use super::process::ProcessManager;
 use super::rect::RectangleState;
 use super::regex::MatchData;
 use super::register::RegisterManager;
-use super::symbol::Obarray;
+use super::symbol::{ConstantWrite, Obarray};
 use super::threads::ThreadManager;
 use super::value::*;
 use crate::buffer::{
@@ -1200,10 +1200,22 @@ fn is_runtime_dynamically_special(obarray: &Obarray, sym_id: SymId) -> bool {
     obarray.is_special_id(sym_id) && !obarray.is_constant_id(sym_id)
 }
 
-fn let_constant_error_name(obarray: &Obarray, sym_id: SymId) -> Option<String> {
-    obarray
-        .is_constant_id(sym_id)
-        .then(|| resolve_sym(sym_id).to_owned())
+/// The name `(let ((SYM VALUE)) ...)` must report as `(setting-constant SYM)`,
+/// or `None` when the binding is one GNU performs.
+///
+/// GNU's `let`/`let*` have no constant check of their own: `Flet`/`Flet_star`
+/// just `specbind`, and the refusal comes from `do_specbind`
+/// (`src/eval.c:3597-3604`) handing a trapped-write symbol to `set_internal`,
+/// whose `SYMBOL_NOWRITE` arm (`src/data.c:1687-1697`) lets a KEYWORD be
+/// re-bound to the value it already has.  `(let ((:text :text)) ...)` is
+/// therefore legal in GNU while `(let ((:text 5)) ...)` is not — and dash's
+/// `-let` plist destructuring emits exactly the legal shape, binding `:text`
+/// to the `:text` it just popped off the plist.
+fn let_constant_error_name(obarray: &Obarray, sym_id: SymId, value: Value) -> Option<String> {
+    match obarray.classify_constant_write(sym_id, value) {
+        ConstantWrite::Writable | ConstantWrite::KeywordSelfAssign => None,
+        ConstantWrite::Refused => Some(resolve_sym(sym_id).to_owned()),
+    }
 }
 
 pub(crate) fn sync_features_variable_in_state(obarray: &mut Obarray, features: &[SymId]) {
@@ -11268,7 +11280,8 @@ impl Context {
             let binding = self.unwrap_symbol(bindings.cons_car());
             bindings = bindings.cons_cdr();
             if let Some(id) = binding.as_symbol_id() {
-                if let Some(name) = let_constant_error_name(&self.obarray, id) {
+                // A bare binder binds nil, which is never a keyword's own value.
+                if let Some(name) = let_constant_error_name(&self.obarray, id, Value::NIL) {
                     if constant_binding_error.is_none() {
                         constant_binding_error = Some(name);
                     }
@@ -11329,7 +11342,7 @@ impl Context {
                 return Err(self.listp_error(binding));
             };
             self.push_specpdl_root(value);
-            if let Some(name) = let_constant_error_name(&self.obarray, id) {
+            if let Some(name) = let_constant_error_name(&self.obarray, id, value) {
                 if constant_binding_error.is_none() {
                     constant_binding_error = Some(name);
                 }
@@ -11495,7 +11508,7 @@ impl Context {
                 };
                 self.set_eval_temp_root_slot(val_temp_slot, value);
 
-                if let Some(name) = let_constant_error_name(&self.obarray, id) {
+                if let Some(name) = let_constant_error_name(&self.obarray, id, value) {
                     return Err(signal(
                         LispCondition::SettingConstant,
                         vec![Value::symbol(&name)],

@@ -3571,11 +3571,18 @@ impl<'a> Vm<'a> {
             name_id,
         )?;
 
-        if self.ctx.obarray.is_constant_id(resolved) {
-            return Err(signal(
-                LispCondition::SettingConstant,
-                vec![Value::from_sym_id(name_id)],
-            ));
+        // GNU `set_internal`'s `SYMBOL_NOWRITE` arm (`src/data.c:1687-1697`):
+        // a keyword re-assigned its own value is a silent no-op, not a signal.
+        use crate::emacs_core::symbol::ConstantWrite;
+        match self.ctx.obarray.classify_constant_write(resolved, value) {
+            ConstantWrite::Writable => {}
+            ConstantWrite::KeywordSelfAssign => return Ok(()),
+            ConstantWrite::Refused => {
+                return Err(signal(
+                    LispCondition::SettingConstant,
+                    vec![Value::from_sym_id(name_id)],
+                ));
+            }
         }
 
         // Phase 9b of the symbol-redirect refactor: for LOCALIZED
@@ -3783,11 +3790,17 @@ impl<'a> Vm<'a> {
         // specbind writes directly to obarray, so dynamic stack mutation
         // is no longer needed — fall through to obarray write.
 
-        if self.ctx.obarray.is_constant_id(resolved) {
-            return Err(signal(
-                LispCondition::SettingConstant,
-                vec![Value::symbol(name)],
-            ));
+        // GNU `set_internal`'s `SYMBOL_NOWRITE` arm (`src/data.c:1687-1697`).
+        use crate::emacs_core::symbol::ConstantWrite;
+        match self.ctx.obarray.classify_constant_write(resolved, value) {
+            ConstantWrite::Writable => {}
+            ConstantWrite::KeywordSelfAssign => return Ok(()),
+            ConstantWrite::Refused => {
+                return Err(signal(
+                    LispCondition::SettingConstant,
+                    vec![Value::symbol(name)],
+                ));
+            }
         }
 
         let where_value = self.ctx.variable_watcher_where_for_set_by_id(resolved);

@@ -125,6 +125,25 @@ impl SymbolTrappedWrite {
     }
 }
 
+/// What GNU does with a variable write, once the symbol's `trapped_write`
+/// flag has been consulted.
+///
+/// GNU spells this out twice, identically, in `set_internal`
+/// (`src/data.c:1687-1697`) and `set_default_internal`
+/// (`src/data.c:2039-2049`); [`Obarray::classify_constant_write`] is the one
+/// place Neomacs spells it.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ConstantWrite {
+    /// Not a constant: store the value.
+    Writable,
+    /// A keyword being assigned the value it already has.  GNU's comment is
+    /// "Allow setting keywords to their own value"; it `return`s without
+    /// storing and without signalling.
+    KeywordSelfAssign,
+    /// GNU signals `(setting-constant SYMBOL)`.
+    Refused,
+}
+
 /// Two-bit `interned` flag. Mirrors GNU `enum symbol_interned`
 /// (`src/lisp.h:782-787`).
 #[repr(u8)]
@@ -2896,6 +2915,39 @@ impl Obarray {
             || self
                 .slot(id)
                 .is_some_and(|s| s.flags.trapped_write() == SymbolTrappedWrite::NoWrite)
+    }
+
+    /// Decide what GNU does when `new_value` is written to `id`.
+    ///
+    /// This is the single authority for the `SYMBOL_NOWRITE` arm that GNU
+    /// duplicates in `set_internal` (`src/data.c:1687-1697`) and
+    /// `set_default_internal` (`src/data.c:2039-2049`).  Both read:
+    ///
+    /// ```c
+    /// case SYMBOL_NOWRITE:
+    ///   if (NILP (Fkeywordp (symbol))
+    ///       || !EQ (newval, Fsymbol_value (symbol)))
+    ///     xsignal1 (Qsetting_constant, symbol);
+    ///   else
+    ///     /* Allow setting keywords to their own value.  */
+    ///     return;
+    /// ```
+    ///
+    /// Every write path that GNU funnels through those two functions —
+    /// `set`, `setq`, `set-default`, and `specbind` (via `do_specbind`,
+    /// `src/eval.c:3597-3604`) — must ask this instead of testing
+    /// [`Obarray::is_constant_id`] alone, or a keyword re-assigned its own
+    /// value signals where GNU quietly does nothing.
+    pub fn classify_constant_write(&self, id: SymId, new_value: Value) -> ConstantWrite {
+        if !self.is_constant_id(id) {
+            return ConstantWrite::Writable;
+        }
+        if crate::emacs_core::intern::is_keyword_id(id)
+            && crate::emacs_core::value::eq_value(&Value::keyword_id(id), &new_value)
+        {
+            return ConstantWrite::KeywordSelfAssign;
+        }
+        ConstantWrite::Refused
     }
 
     /// Mark a symbol as a hard constant (like SYMBOL_NOWRITE in GNU Emacs).

@@ -7389,6 +7389,50 @@ fn let_and_let_star_binding_constants_signal_setting_constant() {
     assert_eq!(results[9], "OK (:error setting-constant (t))");
 }
 
+/// GNU's `let`/`let*` refuse a constant only through `set_internal`'s
+/// `SYMBOL_NOWRITE` arm (`src/data.c:1687-1697`), which explicitly permits
+/// "setting keywords to their own value".  `dash`'s `-let` plist
+/// destructuring emits exactly that shape — `(let* ((:text (pop src)) ...))`
+/// where the popped value IS `:text` — so refusing it breaks every package
+/// that destructures a plist with `(&as :key val . rest)`.
+///
+/// Expected values taken by running each form under GNU Emacs 31.0.90.
+#[test]
+fn let_binding_a_keyword_to_its_own_value_is_allowed_like_gnu_emacs() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        "(condition-case err (let ((:vm-kw-self :vm-kw-self)) 1)
+           (error (list :error (car err) (cdr err))))
+         (condition-case err (let* ((:vm-kw-self :vm-kw-self)) 2)
+           (error (list :error (car err) (cdr err))))
+         (condition-case err (let ((:vm-kw-self 5)) 3)
+           (error (list :error (car err) (cdr err))))
+         (condition-case err (let* ((:vm-kw-self 5)) 4)
+           (error (list :error (car err) (cdr err))))
+         :vm-kw-self
+         (condition-case err (set :vm-kw-self :vm-kw-self)
+           (error (list :error (car err) (cdr err))))
+         (condition-case err (let ((t t)) 6)
+           (error (list :error (car err) (cdr err))))
+         (let* ((plist (list :text \"body\" :buffer 7)))
+           (condition-case err
+               (let* ((:text (car plist)) (text (nth 1 plist)) (rest (nthcdr 2 plist)))
+                 (list text rest))
+             (error (list :error (car err) (cdr err)))))",
+    );
+    assert_eq!(results[0], "OK 1");
+    assert_eq!(results[1], "OK 2");
+    assert_eq!(results[2], "OK (:error setting-constant (:vm-kw-self))");
+    assert_eq!(results[3], "OK (:error setting-constant (:vm-kw-self))");
+    // The permitted binding must not have disturbed the keyword's value.
+    assert_eq!(results[4], "OK :vm-kw-self");
+    assert_eq!(results[5], "OK :vm-kw-self");
+    // `t` is a constant but not a keyword: GNU still refuses it.
+    assert_eq!(results[6], "OK (:error setting-constant (t))");
+    // The exact `-let` plist-destructuring shape from helm-org-rifle.
+    assert_eq!(results[7], "OK (\"body\" (:buffer 7))");
+}
+
 #[test]
 fn lambda_parameters_can_shadow_nil_and_t_like_gnu_emacs() {
     crate::test_utils::init_test_tracing();
