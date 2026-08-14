@@ -6327,28 +6327,7 @@ impl Context {
         Ok(CommandLoopExit::Normal)
     }
 
-    /// GNU `recursive_edit_1` (keyboard.c:708-748) is the single entry both
-    /// `recursive-edit` and `read_minibuf` go through, and it specbinds
-    /// `undo-auto--undoably-changed-buffers` to nil before calling
-    /// `command_loop` -- "so that changes in the recursive edit will not result
-    /// in undo boundaries in buffers changed before we entered the recursive
-    /// edit" (keyboard.c:741-747, Bug #23632).
-    ///
-    /// Without it, the first command of a minibuffer read calls
-    /// `undo-auto--add-boundary` with the OUTER list still in place and drops a
-    /// boundary into every buffer an earlier, already-finished command had
-    /// edited.  Any command that reads an argument from the minibuffer after a
-    /// previous command edited a buffer -- a second `tide-rename-symbol` after
-    /// the first one rewrote main.js and math.js -- therefore grew one undo
-    /// entry that GNU does not have.
     fn run_exit_wrapped_command_loop(&mut self, increment_depth: bool) -> EvalResult {
-        let count = self.specpdl.len();
-        self.specbind(intern("undo-auto--undoably-changed-buffers"), Value::NIL);
-        let result = self.run_exit_wrapped_command_loop_1(increment_depth);
-        self.unbind_to_with_result(count, result)
-    }
-
-    fn run_exit_wrapped_command_loop_1(&mut self, increment_depth: bool) -> EvalResult {
         // Interactive command loops need an input source. Batch mode is
         // different: GNU still runs `top-level`/`normal-top-level` and lets
         // `read_char` terminate the loop via noninteractive EOF, even when
@@ -6714,6 +6693,27 @@ impl Context {
         // startup or set-message can permanently suppress the first
         // TTY paint (user-visible ~3 s blank scratch buffer).
         self.specbind(intern("inhibit-redisplay"), Value::NIL);
+
+        // GNU keyboard.c:741-747, the specbind that sits beside the one above
+        // in `recursive_edit_1`: `undo-auto--undoably-changed-buffers` is
+        // rebound to nil for the nested loop, "so that changes in the recursive
+        // edit will not result in undo boundaries in buffers changed before we
+        // entered there recursive edit" (Bug #23632).
+        //
+        // `undo-auto--add-boundary` runs once per iteration below and adds a
+        // boundary to every buffer on that list (simple.el:4104-4116).  Without
+        // the rebinding, the first command of a minibuffer read groups the
+        // edits of a command that has already finished: a rename that reads its
+        // new name from the minibuffer left one undo entry more than GNU in
+        // every buffer an earlier rename had rewritten.
+        //
+        // The binding lives here rather than in the recursive-edit entry point
+        // because neomacs already keeps its sibling `inhibit-redisplay` binding
+        // here, and both must unwind at the same boundary.
+        self.specbind(
+            intern("undo-auto--undoably-changed-buffers"),
+            Value::NIL,
+        );
 
         self.command_loop_1_entry_prologue()?;
 
