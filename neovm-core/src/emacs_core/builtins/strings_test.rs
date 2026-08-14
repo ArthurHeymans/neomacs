@@ -782,3 +782,68 @@ fn prin1_unibyte_string_into_unibyte_buffer_prints_raw_bytes() {
         );
     }
 }
+
+/// GNU `styled_format` carries the FORMAT STRING's own text properties into
+/// the result (`src/editfns.c:4303-4377`).  Its `discarded[]` scan gives one
+/// character of a conversion specification a special role: the spec's first
+/// character is `discarded[] == 1`, and walking past it jumps `translated`
+/// over the whole converted field.  A property boundary that falls inside the
+/// spec therefore lands at the field's END, not its start.
+///
+/// `xref--insert-xrefs` depends on exactly that.  It formats a propertized
+/// format string twice —
+/// `(format (format #("%%%dd:" 0 4 (face xref-line-number) 5 6 (face shadow)) W) LINE)`
+/// — and the second `format`'s `xref-line-number` range covers `"%1d"`, whose
+/// end is interior to the spec.  Mapping that end to the field START collapses
+/// the range to nothing and the line number renders unfaced, which is how the
+/// `("3" xref-line-number)` run went missing from ggtags' `*xref*` buffer.
+///
+/// Every expected value here was produced by running the form under GNU Emacs
+/// 31.0.90.
+#[test]
+fn format_maps_format_string_properties_across_conversion_fields_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let cases: &[(&str, &str)] = &[
+        // xref's first pass: build the width-specific line format.
+        (
+            r#"(format #("%%%dd:" 0 4 (face xref-line-number) 5 6 (face shadow)) 1)"#,
+            r##"#("%1d:" 0 2 (face xref-line-number) 3 4 (face shadow))"##,
+        ),
+        // xref's second pass: this is the one that used to lose the face.
+        (
+            r#"(format #("%1d:" 0 2 (face xref-line-number) 3 4 (face shadow)) 3)"#,
+            r##"#("3:" 0 1 (face xref-line-number) 1 2 (face shadow))"##,
+        ),
+        (
+            r#"(format #("%%%dd:" 0 4 (face xref-line-number) 5 6 (face shadow)) 2)"#,
+            r##"#("%2d:" 0 2 (face xref-line-number) 3 4 (face shadow))"##,
+        ),
+        // Padding belongs to the field, so the property covers it too.
+        (
+            r#"(format #("%2d:" 0 3 (face xref-line-number) 3 4 (face shadow)) 7)"#,
+            r##"#(" 7:" 0 2 (face xref-line-number) 2 3 (face shadow))"##,
+        ),
+        (
+            r#"(format #("%5dX" 0 2 (face f2)) 7)"#,
+            r##"#("    7X" 0 5 (face f2))"##,
+        ),
+        // A boundary that STARTS inside the spec also lands at the field end.
+        (
+            r#"(format #("a%dbb" 2 4 (face f6)) 9)"#,
+            r##"#("a9bb" 2 3 (face f6))"##,
+        ),
+        // `%%` is not a conversion field: its discarded `%` has nothing to
+        // jump over, so a boundary between the two `%`s stays put and the
+        // property collapses to nothing.
+        (r#"(format #("%%x" 0 1 (face f1)))"#, r#""%x""#),
+    ];
+    for (form, expected) in cases {
+        let result = ev.eval_str(form).expect("eval");
+        assert_eq!(
+            crate::emacs_core::print::print_value(&result),
+            *expected,
+            "form: {form}"
+        );
+    }
+}

@@ -5177,5 +5177,237 @@ undo boundaries in buffers changed before we entered there recursive edit"
 Neomacs never bound it.  The binding now lives in
 `run_exit_wrapped_command_loop`, the function both `recursive-edit` and the
 minibuffer command loop go through, and is unwound with the loop's result.
+## 101. `let` refused to bind a keyword to its own value -- FIXED
+
+The Helm Org Rifle occur workflow renders its results buffer and Neomacs
+signalled `(setting-constant :text)` where GNU renders.  The signal comes from
+`dash`, not from Helm Org Rifle: the render loop destructures each result plist
+with `(-let (((plist &as :text text . rest) entry)) ...)`, and `-let` expands a
+keyword pattern into a plain `let*` binding of the keyword itself
+(`dash--match-symbol`, dash.el), producing
+`(let* ((:text (pop src)) (text (pop src)) (rest src)) ...)` where the value
+popped off the plist IS `:text`.
+
+```elisp
+(list (condition-case e (let ((:text :text)) 1) (error e))
+      (condition-case e (let ((:text 5)) 2) (error e))
+      (condition-case e (let ((t t)) 3) (error e)))
+;; GNU                => (1 (setting-constant :text) (setting-constant t))
+;; Neomacs before fix => ((setting-constant :text) (setting-constant :text)
+;;                        (setting-constant t))
+```
+
+GNU's `let`/`let*` have no constant check of their own.  `Flet`/`Flet_star`
+just `specbind`, and the refusal comes from `do_specbind`
+(`src/eval.c:3597-3604`) handing a trapped-write symbol to `set_internal`,
+whose `SYMBOL_NOWRITE` arm makes one exception:
+
+```c
+case SYMBOL_NOWRITE:
+  if (NILP (Fkeywordp (symbol)) || !EQ (newval, Fsymbol_value (symbol)))
+    xsignal1 (Qsetting_constant, symbol);
+  else
+    /* Allow setting keywords to their own value.  */
+    return;
+```
+
+(`src/data.c:1687-1697`; `set_default_internal` repeats it verbatim at
+`src/data.c:2039-2049`.)  Neomacs asked only whether the symbol was a
+constant, at four separate sites.
+
+`Obarray::classify_constant_write` is now the single place that spells GNU's
+rule, returning `Writable`, `KeywordSelfAssign` or `Refused`, and the four
+sites that mirror `set_internal` ask it: interpreted `let`, `let*`, the VM's
+two assignment paths, and the `set` builtin, which already carried a
+hand-rolled copy of the keyword exception and now shares this one.  Sites that
+mirror GNU's other constant test -- `make-variable-buffer-local`,
+`make-local-variable`, `makunbound`, `fset` -- keep refusing unconditionally,
+because GNU's `SYMBOL_CONSTANT_P` there has no keyword exception.
+
+Status: FIXED.
+
+## 102. `end-of-file` was raised without the stream that hit it -- FIXED
+
+Company Statistics loads a truncated history file with plain `load`.  GNU's
+error data carries the buffer the reader was reading, which
+`load-with-code-conversion` has already killed by the time a handler sees it;
+Neomacs raised a bare `(end-of-file)`, so the package's recorded condition
+lost both the datum and the rendered message.
+
+This reduction needs one file on disk rather than a single form:
+
+```elisp
+(let ((f (expand-file-name "tmp/divergence-98.el")))
+  (with-temp-file f (insert "(setq foo '(1 2\n"))
+  (condition-case e (load f 'noerror nil 'nosuffix)
+    (t (list (car e) (cdr e) (error-message-string e)))))
+;; GNU                => (end-of-file (#<killed buffer>)
+;;                        "End of file during parsing: #<killed buffer>")
+;; Neomacs before fix => (end-of-file nil "End of file during parsing")
+```
+
+GNU decides the datum from the STREAM, in one function:
+
+```c
+static AVOID
+end_of_file_error (source_t *source)
+{
+  if (from_file_p (source))
+    /* Only Fload calls read on a file, and Fload always binds
+       load-true-file-name around the call.  */
+    xsignal1 (Qend_of_file, Vload_true_file_name);
+  else if (from_buffer_p (source))
+    xsignal1 (Qend_of_file, source->object);
+  else
+    xsignal0 (Qend_of_file);
+}
+```
+
+(`src/lread.c:2121-2132`).  Loading a source file reaches the buffer arm,
+because `load-source-file-function` is `load-with-code-conversion`, which reads
+the text in a temp buffer through `eval-buffer`.
+
+Neomacs's `eval-buffer` already handed the buffer to its own readevalloop, but
+the arm it takes while a load is in progress went through `load.rs`, whose
+`read_error_for_load` assembled `end-of-file` data of its own and assembled it
+empty.  `ReadSourceObject` now names GNU's three arms and every readevalloop
+carries one, so no raise site invents `end-of-file` data: `eval-buffer` during
+a load passes the buffer, and `load` reading a file itself -- a `.elc`, or a
+source file when `load-source-file-function` is nil -- passes the
+`load-true-file-name` it just bound.  A `(read)` inside a loaded form reads the
+same stream and reports the same datum.
+
+Status: FIXED.
+
+## 103. `format` lost a format-string property that spanned into a conversion -- FIXED
+
+The ggtags xref workflow reads the face runs of the `*xref*` buffer.  GNU's
+runs include `("3" xref-line-number)` for the line number; Neomacs's did not,
+and the run was missing rather than misfaced -- `xref-line-number` is an
+undefined face in both editors, so this is a text property that never arrived.
+
+```elisp
+(format #("%1d:" 0 2 (face xref-line-number) 3 4 (face shadow)) 3)
+;; GNU                => #("3:" 0 1 (face xref-line-number) 1 2 (face shadow))
+;; Neomacs before fix => #("3:" 1 2 (face shadow))
+```
+
+`xref--insert-xrefs` builds that argument itself, by formatting a propertized
+format string twice (`lisp/progmodes/xref.el:1160-1184`):
+
+```elisp
+(format #("%%%dd:" 0 4 (face xref-line-number) 5 6 (face shadow))
+        (1+ (floor (log max-line 10))))
+```
+
+whose result the line number is then formatted through.  The second pass's
+`xref-line-number` range covers `"%1d"`, so its end falls INSIDE the conversion
+specification.
+
+GNU carries a format string's own text properties into the result
+(`src/editfns.c:4303-4377`) by walking the format string against a
+`discarded[]` table.  The specification's first character is
+`discarded[] == 1`, and passing it jumps `translated` over the whole converted
+field, so a boundary interior to a specification lands at the field's END.
+Neomacs mapped an interior boundary to the field's START, which keeps the
+translation monotonic but collapses this range to nothing.
+
+`FormatSourceSpan` now records which of GNU's three shapes produced it.  A
+conversion sends an interior boundary to the field end; `%%` sends it to the
+start, because its discarded `%` has no field to jump over and GNU drops the
+property there too; a literal character has no interior at all.
+
+Status: FIXED.
+
+## 104. An XML entity reference split its text node in three -- FIXED
+
+The org-ref LaTeX/CSL export workflow raised
+`(wrong-type-argument listp "edited ")` where GNU completes the export.
+`"edited "` is the first half of a CSL locale term:
+
+```elisp
+(with-temp-buffer
+  (insert "<r><term form=\"verb\">edited &amp; translated by</term></r>")
+  (libxml-parse-xml-region (point-min) (point-max)))
+;; GNU                => (r nil (term ((form . "verb")) "edited & translated by"))
+;; Neomacs before fix => (r nil (term ((form . "verb")) "edited " " translated by"))
+```
+
+libxml2 substitutes the predefined entities and character references into the
+character data it is accumulating, so the element reaches GNU's `make_dom`
+(`src/xml.c:123-160`) as ONE `XML_TEXT_NODE` and comes back as one string
+child.  `quick_xml` reports the reference as its own `Event::GeneralRef`
+between two `Event::Text`s, and `parse_xml_region` had no arm for it: the
+resolved character was dropped and the element came back with three children.
+
+citeproc branches on exactly that count while reading the locale
+(`citeproc-term.el`, `citeproc-term--from-xml-frag`):
+
+```elisp
+(if (= (length frag) 2)
+    (setf (citeproc-term-text term) (cadr frag))
+  (setf (citeproc-term-text term) (cl-caddr (cadr frag)))
+  ...)
+```
+
+so the split sent it down the two-form branch, where `cl-caddr` on the string
+`"edited "` signals `(wrong-type-argument listp "edited ")`.
+
+Character data now accumulates across `Text` and `GeneralRef` events and is
+emitted as one string when an element boundary, comment, CDATA section or EOF
+ends the run.  CDATA stays its own node, because libxml2 keeps it as its own
+`XML_CDATA_SECTION_NODE` and GNU turns that into its own string child.  A run
+that resolved a reference is never treated as ignorable whitespace, since
+`XML_PARSE_NOBLANKS` only drops text that was blank in the source.
+
+Status: FIXED.
+
+## 105. The first-change undo entry recorded a constant instead of the visited-file modtime -- FIXED
+
+The org-ref prefix-completion workflow inserts a citation, undoes it with
+`C-_`, and records the document state.  GNU reports `:modified nil` after the
+undo; Neomacs reported `:modified t`.  That was the whole difference between
+the two editors on that workflow.
+
+```elisp
+(progn (setq buffer-file-name (expand-file-name "tmp/divergence-101.txt"))
+       (with-temp-file buffer-file-name (insert ""))
+       (set-visited-file-modtime)
+       (setq buffer-undo-list nil)
+       (set-buffer-modified-p nil)
+       (insert "hello")
+       (let ((entries buffer-undo-list))
+         (primitive-undo 1 entries)
+         (list :recorded (cdr (assq t entries))
+               :after-undo (buffer-modified-p))))
+;; GNU                => (:recorded (27263 16044 798808 306000) :after-undo nil)
+;; Neomacs before fix => (:recorded 0 :after-undo t)
+```
+
+GNU's `record_first_change` (`src/undo.c:209-223`) stores the buffer's
+visited-file modification time:
+
+```c
+bset_undo_list (current_buffer,
+                Fcons (Fcons (Qt, buffer_visited_file_modtime (base_buffer)),
+                       BVAR (current_buffer, undo_list)));
+```
+
+and that datum is the entry's entire purpose.  `primitive-undo`'s `(t . TIME)`
+arm (`lisp/simple.el:3669-3688`) clears the modified flag only when
+`(time-equal-p time (visited-file-modtime))`, so that undoing back to a save
+the file has since outlived does not claim the buffer is unmodified.  Neomacs
+recorded the constant `(t . 0)` for every buffer, so the comparison could never
+succeed for a file-visiting buffer.
+
+`Buffer::visited_file_modtime_value` now spells GNU's
+`buffer_visited_file_modtime` (`src/fileio.c:6156-6163`) once, and both the
+recorder and the `visited-file-modtime` builtin read it -- they have to agree
+or `primitive-undo` could never match them.
+
+Residue: GNU's `record_first_change` redirects an indirect buffer to its base
+buffer's modtime.  A `Buffer` here cannot reach the buffer manager, so an
+indirect buffer still records 0 -- strictly narrower than before, when every
+buffer did.
 
 Status: FIXED.

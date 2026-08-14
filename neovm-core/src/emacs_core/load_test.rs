@@ -10189,7 +10189,17 @@ fn load_file_single_line_shebang_signals_end_of_file() {
     match err {
         EvalError::Signal { symbol, data, .. } => {
             assert_eq!(resolve_sym(symbol), "end-of-file");
-            assert!(data.is_empty());
+            // A bare `Context` has no `load-source-file-function`, so `load`
+            // reads the file itself -- GNU's `from_file_p` arm of
+            // `end_of_file_error` (`src/lread.c:2121-2132`), whose datum is
+            // the `load-true-file-name` the load context bound.  (With the
+            // real Lisp loaded, `load-with-code-conversion` puts the text in a
+            // buffer first and the datum is that buffer instead.)
+            assert_eq!(data.len(), 1, "end-of-file datum: {data:?}");
+            assert_eq!(
+                crate::emacs_core::print::print_value(&data[0]),
+                format!("{:?}", file.to_string_lossy()),
+            );
         }
         other => panic!("unexpected error: {other:?}"),
     }

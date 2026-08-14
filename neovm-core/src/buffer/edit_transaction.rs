@@ -832,7 +832,7 @@ impl Buffer {
         if self.modified_tick() > self.save_modified_tick() {
             return;
         }
-        undo::undo_list_record_first_change(&mut ul);
+        undo::undo_list_record_first_change(&mut ul, self.visited_file_modtime_value());
         self.set_undo_list(ul);
         self.undo_state.set_recorded_first_change(true);
     }

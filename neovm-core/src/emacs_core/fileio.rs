@@ -4005,25 +4005,12 @@ pub(crate) fn builtin_visited_file_modtime(eval: &mut Context, args: Vec<Value>)
         .buffers
         .current_buffer()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let sec = buf.modtime_sec;
-    let nsec = buf.modtime_nsec;
-    match (sec, nsec) {
-        (Some(s), Some(ns)) => {
-            // GNU returns (HIGH LOW USEC PSEC) via make_lisp_time: PSEC is
-            // `ns % 1000 * 1000`, not a hardcoded 0.
-            let high = s >> 16;
-            let low = s & 0xFFFF;
-            let usec = (ns / 1000) as i64;
-            let psec = ((ns % 1000) as i64) * 1000;
-            Ok(Value::list(vec![
-                Value::fixnum(high),
-                Value::fixnum(low),
-                Value::fixnum(usec),
-                Value::fixnum(psec),
-            ]))
-        }
-        _ => Ok(Value::fixnum(0)),
-    }
+    // GNU `Fvisited_file_modtime` is exactly
+    // `buffer_visited_file_modtime (current_buffer)` (`src/fileio.c:6165-6175`),
+    // the same function `record_first_change` stores in its `(t . TIME)` undo
+    // entry -- so the two must stay one implementation or `primitive-undo`
+    // could never match them.
+    Ok(buf.visited_file_modtime_value())
 }
 
 /// `(verify-visited-file-modtime &optional BUFFER)` — check if file

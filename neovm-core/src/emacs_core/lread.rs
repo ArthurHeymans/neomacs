@@ -434,12 +434,19 @@ pub(crate) fn builtin_eval_buffer(eval: &mut super::eval::Context, args: Vec<Val
                 result
             }
             FormReader::Internal if loading_source_file => {
+                // GNU `Feval_buffer` hands `readevalloop' the BUFFER whether or
+                // not a load is in progress (`src/lread.c:2417`), so reader
+                // errors carry the buffer here too — that is why a truncated
+                // `.el` reports `(end-of-file #<killed buffer>)` after
+                // `load-with-code-conversion`'s temp buffer is killed, not a
+                // bare `(end-of-file)`.
                 super::load::eval_lisp_source_file_in_context(
                     eval,
                     filename
                         .as_ref()
                         .expect("load-in-progress eval-buffer must have filename"),
                     &source,
+                    super::reader::ReadSourceObject::Buffer(buffer_value),
                 )
                 .map_err(map_eval_error_to_flow)
             }

@@ -5678,16 +5678,25 @@ fn bootstrap_find_file_noselect_undo_preserves_visited_file_contents() {
                (condition-case _err
                    (undo)
                  (error nil))
+               ;; GNU's first-change entry is `(t . VISITED-FILE-MODTIME)`
+               ;; (`src/undo.c:209-223`), so its datum varies per run.  Fold it
+               ;; to whether it is the modtime `primitive-undo` will compare it
+               ;; against (`lisp/simple.el:3669-3688`); GNU prints `(t . t)`.
                (list (buffer-string)
                      pending-undo-list
-                     buffer-undo-list)))"#,
+                     (mapcar (lambda (entry)
+                               (if (and (consp entry) (eq (car entry) t))
+                                   (cons t (equal (cdr entry)
+                                                  (visited-file-modtime)))
+                                 entry))
+                             buffer-undo-list))))"#,
         path_str
     )));
 
     assert_eq!(
         rendered,
         r#"OK ("alpha line
-" t (("omega line" . 12) (12 . 22) (t . 0)))"#
+" t (("omega line" . 12) (12 . 22) (t . t)))"#
     );
 }
 

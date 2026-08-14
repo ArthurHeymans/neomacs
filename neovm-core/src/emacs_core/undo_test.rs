@@ -805,3 +805,61 @@ fn a_minibuffer_read_adds_no_undo_boundary_to_previously_changed_buffers() {
 
     assert_eq!(format!("{result}"), "(0 2)");
 }
+
+/// GNU's first-change entry is `(t . VISITED-FILE-MODTIME)`, not a constant:
+/// `record_first_change` stores `buffer_visited_file_modtime (base_buffer)`
+/// (`src/undo.c:209-223`), and `primitive-undo`'s `(t . TIME)` arm
+/// (`lisp/simple.el:3669-3688`) clears the modified flag only when
+/// `(time-equal-p time (visited-file-modtime))` -- so that undoing back to a
+/// save the file has since outlived does NOT claim the buffer is unmodified.
+///
+/// Neomacs recorded the fixnum 0 for every buffer, so a file-visiting buffer's
+/// comparison could never match and `undo` back to the saved text left
+/// `buffer-modified-p` t where GNU reports nil.  The org-ref completion
+/// workflow reads exactly that flag after `C-_`.
+///
+/// This pins the recorder, which is the part Neomacs owns -- `primitive-undo`
+/// itself is GNU's `simple.el` and is not loaded in a bare `Context`.  The
+/// entry's datum must be exactly what `visited-file-modtime` reports for the
+/// same buffer, and for a file-visiting buffer that is a timestamp, never the
+/// no-modtime 0.  The full flow reads
+/// `(:before-undo t :text "" :after-undo nil :modtime-recorded t)` under GNU
+/// Emacs 31.0.90.
+#[test]
+fn first_change_marker_records_the_visited_file_modtime_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+    let mut eval = Context::new();
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock before epoch")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("neovm-undo-first-change-{unique}"));
+    std::fs::create_dir_all(&dir).expect("create temp fixture dir");
+    let file = dir.join("probe.txt");
+    std::fs::write(&file, "").expect("write empty fixture");
+
+    let form = format!(
+        r#"(progn
+             (setq buffer-file-name {:?})
+             (set-visited-file-modtime)
+             (setq buffer-undo-list nil)
+             (set-buffer-modified-p nil)
+             (insert "hello")
+             (list :recorded (cdr (assq t buffer-undo-list))
+                   :matches (equal (cdr (assq t buffer-undo-list))
+                                   (visited-file-modtime))))"#,
+        file.to_string_lossy()
+    );
+    let rendered = super::super::print::print_value(&eval.eval_str(&form).expect("eval"));
+    assert!(
+        rendered.ends_with(":matches t)"),
+        "the first-change datum must be the buffer's visited-file modtime: {rendered}"
+    );
+    assert!(
+        !rendered.starts_with("(:recorded 0 "),
+        "a file-visiting buffer records a timestamp, not GNU's no-modtime 0: {rendered}"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

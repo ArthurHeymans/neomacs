@@ -269,14 +269,36 @@ pub fn undo_list_record_property_change(
     restore_scratch_gc_roots(saved);
 }
 
-/// Record the first-change sentinel `(t . 0)`.
-pub fn undo_list_record_first_change(undo_list: &mut Value) {
+/// Record the first-change sentinel `(t . VISITED-FILE-MODTIME)`.
+///
+/// GNU `record_first_change` (`src/undo.c:209-223`) records the buffer's
+/// visited-file modtime, not a placeholder:
+///
+/// ```c
+/// bset_undo_list (current_buffer,
+///                 Fcons (Fcons (Qt, buffer_visited_file_modtime (base_buffer)),
+///                        BVAR (current_buffer, undo_list)));
+/// ```
+///
+/// The datum is what makes the entry *mean* anything: `primitive-undo`'s
+/// `(t . TIME)` arm (`lisp/simple.el:3669-3688`) clears the modified flag only
+/// when `(time-equal-p time (visited-file-modtime))`, so that undoing back to
+/// a save that has since been superseded on disk does NOT claim the buffer is
+/// unmodified.  Recording a constant made every such comparison fail for a
+/// file-visiting buffer, and `undo` back to the saved text left
+/// `buffer-modified-p` t where GNU reports nil.
+///
+/// `visited_file_modtime` must be the value GNU's
+/// `buffer_visited_file_modtime` would return for the buffer owning the undo
+/// list -- see [`crate::buffer::Buffer::visited_file_modtime_value`].
+pub fn undo_list_record_first_change(undo_list: &mut Value, visited_file_modtime: Value) {
     if undo_list_is_disabled(undo_list) {
         return;
     }
     let saved = save_scratch_gc_roots();
     push_scratch_gc_root(*undo_list);
-    let entry = Value::cons(Value::T, Value::fixnum(0));
+    push_scratch_gc_root(visited_file_modtime);
+    let entry = Value::cons(Value::T, visited_file_modtime);
     push_scratch_gc_root(entry);
     *undo_list = Value::cons(entry, *undo_list);
     restore_scratch_gc_roots(saved);
