@@ -102,3 +102,48 @@ derived from elapsed presentation time, so missed or deliberately skipped
 ticks do not change the animation speed.  Demand pauses while the window is
 unfocused or cursors are blinked off.  Hollow cursor visuals do not contribute
 to the frame rate; split windows use the fastest enabled non-hollow cursor.
+
+## Timing: evaluation targets the presentation instant
+
+Effect *evaluation* never reads the wall clock mid-draw. Each frame plan
+tick carries a `target_presentation_time`; the render thread freezes it
+into the renderer as `FrameSampleTime` before building any elements, and
+every age, phase, and progress read samples that one instant. A frame
+delayed by render-side work still animates to the moment it will be
+shown, so motion lands on the refresh grid regardless of when the
+rendering code got to run.
+
+The split is:
+
+- *Triggers* stamp a bare `Instant` when the input event happens (a
+  click halo starts at the click, not at the next frame target).
+- *Evaluation* reads `FrameSampleTime` (carried on `EffectCtx` as
+  `frame_now`, or passed explicitly to the transition and visual-bell
+  render paths).
+
+The cursor position/size integrators are exact recurrences of their
+closed forms (exponential approach and critically damped springs), so
+sampling one large step equals accumulating many small steps; property
+tests pin this. Because the recurrences telescope, advancing them again
+at render time with the presentation instant corrects the idle-loop
+step to exactly the target time. Particles remain genuinely stepped:
+they carry per-particle physics.
+
+## Reduce motion
+
+`MotionPolicy` (`Full` | `Reduced`) is the prefers-reduced-motion analog,
+stored on `VisualConfig` and enforced at every motion-producing gate
+rather than per effect. Under `Reduced`:
+
+- cursor position and size changes snap (`set-target` snaps when
+  animation is disabled),
+- buffer transitions cut instead of animating (`TransitionPolicy` gates
+  both crossfade and scroll),
+- every effect exposing an `enabled` property starts disabled, derived
+  through the same effect registry as the Lisp API, so effects added
+  later are covered automatically.
+
+Cursor blinking is deliberately unaffected: it signals input state, not
+motion. The Elisp surface is the `neomacs-reduce-motion` Custom option
+in `term/neo-win.el` and the `neomacs-motion-policy` primitive (query
+with no argument; set with `full` or `reduced`).

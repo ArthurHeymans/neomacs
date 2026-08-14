@@ -695,6 +695,27 @@ Use `neomacs-effect-set' for an incremental update to one effect and
          (neomacs-effects-apply value)
          (set-default symbol value)))
 
+;;; Accessibility motion policy
+
+(defcustom neomacs-reduce-motion nil
+  "When non-nil, suppress non-essential motion in the display.
+The display engine snaps cursor position and size changes, cuts
+between buffer states instead of animating the crossfade or scroll
+slide, and disables every renderer effect that has an `enabled'
+property.  Cursor blinking is unaffected: it signals input state
+rather than animating motion.
+
+The underlying switch is the `neomacs-motion-policy' primitive:
+called with no argument it returns `full' or `reduced'; called with
+one of those symbols it publishes the policy and returns the old
+one.  Prefer this option; a plain `setq' changes only the variable
+and does not publish the policy to the display."
+  :type 'boolean
+  :group 'frames
+  :set (lambda (symbol value)
+         (neomacs-motion-policy (if value 'reduced 'full))
+         (set-default symbol value)))
+
 (defvar-local neomacs-cursor-effect nil
   "Per-buffer cursor effect profile.
 The value is one entry or a list of entries in `neomacs-effects' format.
