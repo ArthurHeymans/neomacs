@@ -2362,6 +2362,12 @@ pub const MARKDOWN_MODE_MELPA_PIN: (&str, &str) = ("markdown-mode", "20260722.40
 /// `d22633b654193bcab322ec51b6dd3bb98dd5f69f`.
 pub const MARKDOWN_TOC_MELPA_PIN: (&str, &str) = ("markdown-toc", "20260131.1444");
 
+/// The exact Marshal package selected for practical EIEIO alist, plist,
+/// JSON, typed recursive value, subclass-discriminator, custom-driver, and
+/// failure/recovery parity. MELPA built this archive from upstream commit
+/// `490496d974d03906f784707ecc2e0ac36ed84b96`.
+pub const MARSHAL_MELPA_PIN: (&str, &str) = ("marshal", "20201223.1853");
+
 /// The exact Math Symbol Lists package selected for the practical completion,
 /// Unicode formula rendering, package-requirement, conflict-resolution,
 /// scripted-character, and full-corpus integrity parity suite. MELPA built
