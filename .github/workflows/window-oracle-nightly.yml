@@ -70,8 +70,9 @@ jobs:
             libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
             wayland-protocols libxcb1-dev libxrandr-dev libxinerama-dev \
             libxi-dev libxcursor-dev mesa-vulkan-drivers libvulkan-dev \
-            libdbus-1-dev libsystemd-dev libsqlite3-dev libxml2-dev \
+            libdbus-1-dev libsystemd-dev libsqlite3-dev libxml2-dev liblcms2-dev \
             gnutls-bin libgnutls28-dev zlib1g-dev
+          pkg-config --modversion lcms2
 
       - name: Install GNU Emacs oracle
         run: |

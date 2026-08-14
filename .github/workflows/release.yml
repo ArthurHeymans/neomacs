@@ -46,8 +46,9 @@ jobs:
             libxcb1-dev libxrandr-dev libxinerama-dev \
             libxi-dev libxcursor-dev mesa-vulkan-drivers libvulkan-dev \
             libdbus-1-dev libsystemd-dev libsqlite3-dev \
-            libxml2-dev gnutls-bin libgnutls28-dev rpm \
+            libxml2-dev liblcms2-dev gnutls-bin libgnutls28-dev rpm \
             binutils cpio file zlib1g-dev
+          pkg-config --modversion lcms2
 
       - name: Prepare workspace temp directory
         run: mkdir -p "$TMPDIR"
@@ -156,7 +157,8 @@ jobs:
             libxcb1-dev libxrandr-dev libxinerama-dev \
             libxi-dev libxcursor-dev mesa-vulkan-drivers libvulkan-dev \
             libdbus-1-dev libsystemd-dev libsqlite3-dev \
-            libxml2-dev gnutls-bin libgnutls28-dev zlib1g-dev
+            libxml2-dev liblcms2-dev gnutls-bin libgnutls28-dev zlib1g-dev
+          pkg-config --modversion lcms2
 
       - name: Prepare workspace temp directory
         run: mkdir -p "$TMPDIR"

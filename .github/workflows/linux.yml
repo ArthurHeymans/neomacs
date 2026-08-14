@@ -56,10 +56,12 @@ jobs:
             libsystemd-dev \
             libsqlite3-dev \
             libxml2-dev \
+            liblcms2-dev \
             gnutls-bin \
             libgnutls28-dev \
             emacs-nox \
             zlib1g-dev
+          pkg-config --modversion lcms2
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable
@@ -141,9 +143,11 @@ jobs:
             libsystemd-dev \
             libsqlite3-dev \
             libxml2-dev \
+            liblcms2-dev \
             gnutls-bin \
             libgnutls28-dev \
             zlib1g-dev
+          pkg-config --modversion lcms2
 
       - name: Install Rust toolchain (from rust-toolchain.toml)
         uses: dtolnay/rust-toolchain@stable

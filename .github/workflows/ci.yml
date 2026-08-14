@@ -125,9 +125,11 @@ jobs:
             libsystemd-dev \
             libsqlite3-dev \
             libxml2-dev \
+            liblcms2-dev \
             gnutls-bin \
             libgnutls28-dev \
             zlib1g-dev
+          pkg-config --modversion lcms2
 
       - name: Install macOS system dependencies
         if: runner.os == 'macOS'
