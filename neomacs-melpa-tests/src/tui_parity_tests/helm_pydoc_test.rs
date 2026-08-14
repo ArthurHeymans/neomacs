@@ -419,7 +419,7 @@ fn helm_pydoc_real_helm_workflows_match_gnu_terminal_and_filesystem() {
             04 |                                                                               |    deploymentkit - Release deployment helpers.
             07 |                                                                               |    promote(release, region="prod")
             08 |                                                                               |        Promote one release after policy validation.
-            42 |-UU-:--- F1  release_console.py   All   L6     (Python ElDoc) -----------------|-UUU:%*- F1  *Pydoc deploymentkit*   All   L1     (Fundamental View) -----------
+            48 |-UU-:--- F1  release_console.py   All   L6     (Python ElDoc) -----------------|-UUU:%*- F1  *Pydoc deploymentkit*   All   L1     (Fundamental View) -----------
         "#]],
         &mut divergences,
     );
@@ -496,7 +496,7 @@ fn helm_pydoc_real_helm_workflows_match_gnu_terminal_and_filesystem() {
             03 |from os import path                                                            |def promote(release, region="prod"):
             04 |                                                                               |    """Promote one release after policy validation."""
             05 |release = {"id": "candidate-42"}                                               |    return release, region
-            42 |-UU-:--- F1  release_console.py   All   L6     (Python ElDoc) -----------------|-UU-:%%- F1  deploymentkit.py   All   L1     (Python ElDoc) --------------------
+            48 |-UU-:--- F1  release_console.py   All   L6     (Python ElDoc) -----------------|-UU-:%%- F1  deploymentkit.py   All   L1     (Python ElDoc) --------------------
         "#]],
         &mut divergences,
     );
