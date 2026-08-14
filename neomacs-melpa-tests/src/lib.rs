@@ -2963,6 +2963,13 @@ pub const EL_MOCK_MELPA_PIN: (&str, &str) = ("el-mock", "20220625.1949");
 /// upstream commit `70cb0748b222b7c96ab9821ef898ffbdb45eacd8`.
 pub const ECUKES_MELPA_PIN: (&str, &str) = ("ecukes", "20241226.1759");
 
+/// The exact Espuds package selected for practical buffer, cursor, region,
+/// action-chain, file, mode, face, message, and assertion-recovery
+/// step-definition parity.
+/// MELPA built this archive from upstream commit
+/// `57c18a48f1a01d8174298eaab4fcf3b2c6549291`.
+pub const ESPUDS_MELPA_PIN: (&str, &str) = ("espuds", "20230218.910");
+
 /// The exact Google Translate package selected by the practical request,
 /// response, dictionary, suggestion, speech, language-selection, editing, and
 /// backend-dispatch parity corpus. MELPA built this archive from upstream

@@ -422,7 +422,7 @@ rank	package	downloads	status
 421	json-navigator	214445	covered
 422	marshal	214403	covered
 423	ecukes	212298	covered
-424	espuds	212079	todo
+424	espuds	212079	covered
 425	bash-completion	211889	todo
 426	transpose-frame	211127	todo
 427	fish-mode	210971	todo
