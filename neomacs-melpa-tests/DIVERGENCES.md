@@ -5012,3 +5012,48 @@ with a pristine binary built at the same filesystem path -- they wrap this
 worktree's long directory string and disagree with the host `ls` column width.
 
 Status: FIXED.
+
+## 97. `end-of-visual-line` stopped one column short on a newline-terminated row -- FIXED
+
+MWIM binds `C-e` to `end-of-visual-line`, so its terminal workflow ends every
+visual row of a `visual-line-mode` buffer.  On the LAST visual row of a logical
+line Neomacs landed on the row's last character where GNU lands on the newline:
+`MWIM-MOVE e=8` is `p=83 col=82` in GNU and was `p=82 col=81` here.  This is the
+second defect in the area ledger 90 opened; 90 fixed how a word-wrap break is
+DRAWN, this one is the wrap/end POSITION itself.
+
+The package-free reduction is `vertical-motion` with a goal column, in a
+24-column `visual-line-mode` window over
+`"  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron\n"`.
+Run under GNU in a PTY, every screen line answers `next-screen-line-start - 1`:
+
+```elisp
+;; (vertical-motion 0) / (vertical-motion (cons 24 0)) / (vertical-motion 1)
+;; GNU               P45  bol=43 eovl=59 vm1=60      ; row closed by a wrap
+;; GNU               P80  bol=60 eovl=83 vm1=84      ; row closed by a newline
+;; Neomacs before    P45  bol=43 eovl=59 vm1=60
+;; Neomacs before    P80  bol=60 eovl=82 vm1=84
+```
+
+`end-of-visual-line` is exactly `(vertical-motion (cons (window-width) 0))`
+(lisp/simple.el:8546-8558), and this is the interactive display-iterator path,
+not the `noninteractive` `vmotion` branch of ledger 71: `Fvertical_motion`
+takes the `else` arm at src/indent.c:2287 and reaches the goal column with
+`move_it_in_display_line (&it, ZV, first_x + to_x, MOVE_TO_X)`
+(src/indent.c:2540).  `move_it_in_display_line_to` (src/xdisp.c:10105) has TWO
+ways to stop: at a glyph that reaches the goal x, or -- when the goal is past
+everything the row draws -- where the display line itself ENDS, at the newline
+it refuses to consume.  A wrap-closed row's end coincides with its last glyph,
+so only newline-closed rows exposed the gap.
+
+Neomacs answered the goal column from the redisplay snapshot's `points`, which
+carry only DRAWN glyphs; a newline draws none, so the row's end was not a
+candidate at all and the walk settled on the last glyph one column back.  The
+row's end was already published, correctly, as `DisplayRowSnapshot::end_col` /
+`end_x` / `end_buffer_pos` -- for a newline-closed row `end_buffer_pos` is the
+newline, one column past the last glyph.  The fix names both exits as one kind,
+`RowGoalStop`, and has the goal-column walk range over glyph stops chained with
+the row's end stop, so the second exit cannot be forgotten by whichever branch
+built the candidate list.
+
+Status: FIXED.
