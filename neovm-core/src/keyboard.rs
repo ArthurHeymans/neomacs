@@ -3880,10 +3880,7 @@ impl crate::emacs_core::eval::Context {
             // retain GNU's separate immediate-echo string, so the equivalent
             // terminal-cell effect is to finish the transient echo-area
             // message at this reader boundary.
-            self.command_loop.reset_key_sequence();
-            if !options.continue_echo {
-                self.clear_read_command_keys();
-            }
+            self.begin_key_sequence_read(options.continue_echo);
             self.command_loop
                 .set_command_key_sequences(Vec::new(), Vec::new());
             self.clear_key_echo_message();
@@ -3924,6 +3921,39 @@ impl crate::emacs_core::eval::Context {
             && self.command_loop.keyboard.kboard.unread_events.is_empty()
     }
 
+    /// The prologue GNU `read_key_sequence` runs before it reads anything, at
+    /// and after its `replay_sequence:` label (keyboard.c:11038-11054).
+    ///
+    /// Every key-sequence read starts here, including the zero-length read that
+    /// discovers an exhausted keyboard macro, so the effects below are stated
+    /// once above that dispatch rather than repeated in each branch.
+    ///
+    /// * `reset_key_sequence` clears the in-progress accumulator (GNU `t = 0`).
+    /// * CONTINUE-ECHO nil also clears the COMMITTED `this-command-keys`
+    ///   (`this_command_key_count = 0; this_single_command_key_start = 0;`,
+    ///   keyboard.c:11919-11923), so the sequence starts fresh.  neomacs's
+    ///   `reset_key_sequence` alone would leave `command_keys`/`raw_command_keys`
+    ///   in place, and a command's internal `read-key` (subr.el) — which reads
+    ///   with CONTINUE-ECHO nil and arms an idle timer that throws as soon as
+    ///   `(this-command-keys-vector)` is non-empty (subr.el:3648-3665) — would
+    ///   observe the STALE invoking sequence and return that key immediately
+    ///   instead of waiting for the next keystroke (neomacs#187).
+    /// * `last_nonmenu_event = Qnil` (keyboard.c:11054).  The variable holds the
+    ///   key of the sequence CURRENTLY being read, assigned further down
+    ///   (keyboard.c:11668-11673); it is not a durable record of the last key
+    ///   pressed.  Lisp reads the cleared value after a keyboard macro finishes,
+    ///   and code branches on its type: `imenu-choose-buffer-index`
+    ///   (lisp/imenu.el:915) picks the mouse menu over the completing-read
+    ///   prompt when `(listp last-nonmenu-event)`, so a leftover integer turns a
+    ///   silent GNU `imenu` into a minibuffer prompt.
+    fn begin_key_sequence_read(&mut self, continue_echo: bool) {
+        self.command_loop.reset_key_sequence();
+        if !continue_echo {
+            self.clear_read_command_keys();
+        }
+        self.assign("last-nonmenu-event", Value::NIL);
+    }
+
     pub(crate) fn read_key_sequence_with_options(
         &mut self,
         options: ReadKeySequenceOptions,
@@ -3934,25 +3964,7 @@ impl crate::emacs_core::eval::Context {
         };
 
         self.sync_keyboard_terminal_owner();
-        self.command_loop.reset_key_sequence();
-
-        // GNU `read_key_sequence_vs` keyboard.c:11919-11923: when CONTINUE-ECHO
-        // is nil, reset the COMMITTED `this-command-keys` of the previous
-        // sequence (`this_command_key_count = 0; this_single_command_key_start
-        // = 0;`) so the sequence we are about to read starts fresh. neomacs's
-        // `reset_key_sequence` above only clears the in-progress accumulator,
-        // NOT the committed `command_keys`/`raw_command_keys` that back
-        // `this-command-keys(-vector)`. Without this, a command's internal
-        // `read-key` (subr.el) — which calls `read-key-sequence-vector` with
-        // CONTINUE-ECHO nil and arms an idle timer that throws as soon as
-        // `(this-command-keys-vector)` is non-empty (subr.el:3648-3665) — would
-        // observe the STALE invoking sequence and return that key immediately
-        // instead of waiting for the user's next keystroke (which then leaks
-        // into the buffer as self-insert). This mirrors GNU's clear so the
-        // probe sees an empty vector and `read-key` blocks correctly.
-        if !options.continue_echo {
-            self.clear_read_command_keys();
-        }
+        self.begin_key_sequence_read(options.continue_echo);
 
         // GNU `read_key_sequence` stashes the PROMPT in
         // `current_kboard->echo_prompt` (keyboard.c:10990) and the echo
