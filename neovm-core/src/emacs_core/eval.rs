@@ -2805,6 +2805,22 @@ fn lisp_frame_manager() -> FrameManager {
     frames
 }
 
+/// The evaluator owns its `TaggedHeap` (a `Box` field) and publishes a raw
+/// pointer to it in the thread-local allocation slot (`setup_thread_locals` /
+/// the constructors). That publication has no lifetime tied to the box, so the
+/// owner must retract it: without this hook the slot outlived the storage and
+/// the next `Value::` constructor on the thread allocated into freed memory.
+///
+/// Retraction is by pointer identity, so a thread that has since installed a
+/// different evaluator's heap keeps that newer installation. Once the slot is
+/// empty the next allocation re-derives one (the `cfg(test)` fallback heap) or
+/// panics loudly in production, rather than corrupting silently.
+impl Drop for Context {
+    fn drop(&mut self) {
+        crate::tagged::gc::clear_tagged_heap_if_installed(&self.tagged_heap);
+    }
+}
+
 impl Context {
     pub(crate) fn module_boundary_snapshot(&self) -> ModuleBoundarySnapshot {
         ModuleBoundarySnapshot {

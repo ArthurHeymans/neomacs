@@ -19472,6 +19472,41 @@ fn gc_safe_point_exact_frees_stack_only_values() {
     );
 }
 
+/// Dropping an evaluator must retract the thread-local allocation slot it
+/// installed. A stale slot points at freed storage, and `with_tagged_heap`
+/// treats "non-null" as "usable": the next allocation is a use-after-free.
+#[test]
+fn dropping_the_evaluator_uninstalls_its_thread_local_heap() {
+    crate::test_utils::init_test_tracing();
+    let ev = Context::new();
+    assert!(
+        crate::tagged::gc::tagged_heap_is_installed(),
+        "constructing an evaluator installs its heap for allocation"
+    );
+    drop(ev);
+    assert!(
+        !crate::tagged::gc::tagged_heap_is_installed(),
+        "dropping the evaluator must retract the pointer to its freed heap"
+    );
+}
+
+/// A later evaluator's installation wins: retraction is by pointer identity,
+/// so dropping an evaluator that is no longer the installed one is a no-op.
+#[test]
+fn dropping_a_displaced_evaluator_leaves_the_live_installation() {
+    crate::test_utils::init_test_tracing();
+    let first = Context::new();
+    let _second = Context::new();
+    drop(first);
+    assert!(
+        crate::tagged::gc::tagged_heap_is_installed(),
+        "the still-live evaluator's heap must stay installed"
+    );
+    // Allocating and reading it back proves the installed heap is the live one.
+    let v = Value::cons(Value::fixnum(1), Value::fixnum(2));
+    assert_eq!(v.cons_car(), Value::fixnum(1));
+}
+
 #[test]
 fn gc_stress_collects_after_allocation_not_at_unchanged_safe_points() {
     crate::test_utils::init_test_tracing();

@@ -1897,6 +1897,32 @@ fn version_lessp_leading_zero_runs_match_gnu() {
     assert!(reverse_equal_numeric.is_nil());
 }
 
+/// Regression: a string allocated AFTER an evaluator has been dropped must be
+/// readable by the next evaluator.
+///
+/// Before the `Context` drop hook existed, `Context::new` installed its boxed
+/// `TaggedHeap` in the thread-local allocation slot and nothing ever removed
+/// it, so dropping the evaluator left that slot pointing at freed storage.
+/// The next `Value::string` allocated INTO the freed heap and the following
+/// `Context::new` reused the same storage, so reading the string's header
+/// produced a garbage `sbytes()` and aborted the process
+/// ("memory allocation of N bytes failed"). This is the two-call shape of
+/// `version_lessp_leading_zero_runs_match_gnu` reduced to its cause.
+#[test]
+fn string_allocated_after_a_dropped_evaluator_stays_readable() {
+    crate::test_utils::init_test_tracing();
+    // Repeat the construct-then-evaluate cycle: each iteration drops the
+    // previous evaluator, and under the bug the next allocation lands in that
+    // freed heap while the following `Context::new` reuses the same storage.
+    for _ in 0..8 {
+        let args = vec![Value::string("001"), Value::string("1")];
+        let mut ev = Context::new();
+        let r =
+            builtin_string_version_lessp(&mut ev, args).expect("string-version-lessp evaluates");
+        assert!(r.is_nil());
+    }
+}
+
 // ---- string-collate-lessp ----
 
 #[test]
