@@ -1783,6 +1783,7 @@ fn vm_bytecode_call_chain_stays_in_one_interpreter_driver() {
     outer.max_stack = 1;
 
     reset_run_loop_max_depth();
+    reset_generic_bytecode_cleanup_count();
     let result = {
         let mut vm = new_vm(&mut eval);
         vm.execute(&outer, vec![])
@@ -1794,6 +1795,11 @@ fn vm_bytecode_call_chain_stays_in_one_interpreter_driver() {
         run_loop_max_depth(),
         1,
         "GNU Bcall/setup_frame/Breturn keeps bytecode callees in one interpreter driver"
+    );
+    assert_eq!(
+        generic_bytecode_cleanup_count(),
+        1,
+        "ordinary GNU Breturn transitions bypass generic frame cleanup; only the outer frame exits through it"
     );
 }
 

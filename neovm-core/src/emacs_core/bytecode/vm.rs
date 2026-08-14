@@ -461,6 +461,7 @@ type BindStack = SmallVec<[usize; 8]>;
 thread_local! {
     static RUN_LOOP_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static RUN_LOOP_MAX_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static GENERIC_BYTECODE_CLEANUP_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -494,6 +495,16 @@ fn reset_run_loop_max_depth() {
 #[cfg(test)]
 fn run_loop_max_depth() -> usize {
     RUN_LOOP_MAX_DEPTH.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn reset_generic_bytecode_cleanup_count() {
+    GENERIC_BYTECODE_CLEANUP_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+fn generic_bytecode_cleanup_count() -> usize {
+    GENERIC_BYTECODE_CLEANUP_COUNT.with(std::cell::Cell::get)
 }
 
 use crate::emacs_core::eval::SpecBinding;
@@ -817,13 +828,31 @@ enum InterpreterFrameControl {
         frame: InterpreterFrame,
         continuation: BytecodeCallContinuation,
     },
-    Complete(EvalResult),
+    Return(Value),
+    Propagate(Flow),
 }
 
 enum InterpreterFrameCompletion {
     Resume,
     Exit(EvalResult),
 }
+
+/// Result of GNU's ordinary `Breturn` transition.
+///
+/// A successful bytecode return is a tagged value, not a general Lisp control
+/// transfer. Keeping that distinction in the type prevents the common path
+/// from constructing and copying `Result<Value, Flow>` merely to discover that
+/// no unwind is required. Only frames with outstanding dynamic state are sent
+/// to the generic cleanup machinery.
+enum InterpreterValueCompletion {
+    Resume,
+    Exit(Value),
+    NeedsSlowCleanup(Value),
+}
+
+const _: () = {
+    assert!(std::mem::size_of::<InterpreterValueCompletion>() <= 16);
+};
 
 impl DirectSubrCallee {
     #[inline]
@@ -1129,6 +1158,9 @@ impl<'a> Vm<'a> {
         specpdl_base: usize,
         frame_base: usize,
     ) -> EvalResult {
+        #[cfg(test)]
+        GENERIC_BYTECODE_CLEANUP_COUNT.with(|count| count.set(count.get() + 1));
+
         // GNU bytecode.c keeps a bytecode return value in `TOP` while unwinding
         // back to the caller. Neomacs uses recursive Rust frames, so the result
         // must be rooted only while this frame runs an operation that can GC.
@@ -1944,6 +1976,62 @@ impl<'a> Vm<'a> {
         }
     }
 
+    /// Perform the common GNU `Breturn` transition without packaging the value
+    /// as an `EvalResult` or entering generic unwind machinery.
+    ///
+    /// Env-less iterative frames normally leave no specpdl entries. A frame
+    /// that does have outstanding dynamic state is classified explicitly and
+    /// handed back to `complete_interpreter_frame_chain`; this fast path never
+    /// approximates or skips an unwind.
+    #[inline(always)]
+    fn complete_interpreter_frame_value(
+        &mut self,
+        current: &mut InterpreterFrame,
+        callers: &mut Vec<SuspendedInterpreterFrame>,
+        frame_aux: &mut Vec<InterpreterFrameAux>,
+        value: Value,
+    ) -> InterpreterValueCompletion {
+        if current.function.is_entry() {
+            return InterpreterValueCompletion::Exit(value);
+        }
+
+        let cleanup = current.cleanup;
+        #[cfg(debug_assertions)]
+        debug_assert!(
+            lexenv_tail_reachable(self.ctx.lexenv, current.entry_lexenv),
+            "env-less iterative bytecode frame changed ctx.lexenv beyond defvar markers"
+        );
+
+        // ConditionFrame has no Drop and truncation cannot run Lisp or GC.
+        // Do it before classifying the specpdl state so the slow fallback has
+        // exactly the same observable unwind state as the generic path.
+        self.ctx
+            .truncate_condition_stack(cleanup.condition_stack_base);
+        if self.ctx.specpdl.len() != cleanup.specpdl_base {
+            return InterpreterValueCompletion::NeedsSlowCleanup(value);
+        }
+
+        self.ctx.bc_buf.truncate(current.frame_base);
+        self.ctx.bc_frames.pop();
+
+        let suspended = callers
+            .pop()
+            .expect("an iterative bytecode frame must have a suspended caller");
+        self.leave_bytecode_call_depth();
+        self.ctx
+            .pop_fast_bytecode_backtrace_frame(suspended.continuation.backtrace_base);
+        frame_aux
+            .pop()
+            .expect("a suspended caller must have a callee auxiliary frame");
+        *current = suspended.frame;
+        self.ctx
+            .bc_buf
+            .truncate(suspended.continuation.stack_after_call);
+        debug_assert!(self.ctx.bc_buf.len() < current.frame_limit);
+        self.ctx.bc_buf.push(value);
+        InterpreterValueCompletion::Resume
+    }
+
     /// Resolve and dispatch one `Op::Call` after the depth guard has entered.
     ///
     /// `Enter` deliberately leaves the backtrace frame open; the iterative
@@ -2067,13 +2155,54 @@ impl<'a> Vm<'a> {
                     });
                     frame_aux.push(InterpreterFrameAux::empty());
                 }
-                InterpreterFrameControl::Complete(result) => {
+                InterpreterFrameControl::Return(value) => {
+                    match self.complete_interpreter_frame_value(
+                        &mut current,
+                        &mut callers,
+                        &mut frame_aux,
+                        value,
+                    ) {
+                        InterpreterValueCompletion::Resume => {}
+                        InterpreterValueCompletion::Exit(value) => {
+                            *pc = current.pc;
+                            let mut entry_aux = frame_aux
+                                .pop()
+                                .expect("entry interpreter frame must own auxiliary state");
+                            debug_assert!(frame_aux.is_empty());
+                            *handlers = std::mem::take(&mut entry_aux.handlers);
+                            *bind_stack = std::mem::take(&mut entry_aux.bind_stack);
+                            return Ok(value);
+                        }
+                        InterpreterValueCompletion::NeedsSlowCleanup(value) => {
+                            match self.complete_interpreter_frame_chain(
+                                &mut current,
+                                &mut callers,
+                                &mut frame_aux,
+                                entry_func,
+                                Ok(value),
+                            ) {
+                                InterpreterFrameCompletion::Resume => {}
+                                InterpreterFrameCompletion::Exit(result) => {
+                                    *pc = current.pc;
+                                    let mut entry_aux = frame_aux
+                                        .pop()
+                                        .expect("entry interpreter frame must own auxiliary state");
+                                    debug_assert!(frame_aux.is_empty());
+                                    *handlers = std::mem::take(&mut entry_aux.handlers);
+                                    *bind_stack = std::mem::take(&mut entry_aux.bind_stack);
+                                    return result;
+                                }
+                            }
+                        }
+                    }
+                }
+                InterpreterFrameControl::Propagate(flow) => {
                     match self.complete_interpreter_frame_chain(
                         &mut current,
                         &mut callers,
                         &mut frame_aux,
                         entry_func,
-                        result,
+                        Err(flow),
                     ) {
                         InterpreterFrameCompletion::Resume => {}
                         InterpreterFrameCompletion::Exit(result) => {
@@ -2169,7 +2298,7 @@ impl<'a> Vm<'a> {
                         {
                             current.osr_tried = osr_tried;
                         }
-                        return InterpreterFrameControl::Complete(Err(flow));
+                        return InterpreterFrameControl::Propagate(flow);
                     }
                 }
             }};
@@ -2292,9 +2421,7 @@ impl<'a> Vm<'a> {
                                     current.pc = pc_local;
                                     current.quitcounter = quitcounter;
                                     current.osr_tried = osr_tried;
-                                    return InterpreterFrameControl::Complete(Ok(
-                                        Value::from_bits(bits),
-                                    ));
+                                    return InterpreterFrameControl::Return(Value::from_bits(bits));
                                 }
                                 Some(crate::emacs_core::jit::compile::NativeRun::Signal) => {
                                     let flow = crate::emacs_core::jit::compile::take_pending_flow()
@@ -2825,7 +2952,7 @@ impl<'a> Vm<'a> {
                     {
                         current.osr_tried = osr_tried;
                     }
-                    return InterpreterFrameControl::Complete(Ok(result));
+                    return InterpreterFrameControl::Return(result);
                 }
                 Op::SaveCurrentBuffer => {
                     if let Some(buffer_id) =
@@ -3766,7 +3893,7 @@ impl<'a> Vm<'a> {
         {
             current.osr_tried = osr_tried;
         }
-        InterpreterFrameControl::Complete(Ok(result))
+        InterpreterFrameControl::Return(result)
     }
 
     // -- Helper methods --
