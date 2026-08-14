@@ -2957,6 +2957,12 @@ pub const CLJ_REFACTOR_MELPA_PIN: (&str, &str) = ("clj-refactor", "20260716.1545
 /// upstream commit `6cfbc9de8f1927295dca6864907fe4156bd71910`.
 pub const EL_MOCK_MELPA_PIN: (&str, &str) = ("el-mock", "20220625.1949");
 
+/// The exact Ecukes package selected for practical project scaffolding,
+/// feature parsing, hook/step execution, spec reporting, tag/pattern
+/// selection, and failure/recovery parity. MELPA built this archive from
+/// upstream commit `70cb0748b222b7c96ab9821ef898ffbdb45eacd8`.
+pub const ECUKES_MELPA_PIN: (&str, &str) = ("ecukes", "20241226.1759");
+
 /// The exact Google Translate package selected by the practical request,
 /// response, dictionary, suggestion, speech, language-selection, editing, and
 /// backend-dispatch parity corpus. MELPA built this archive from upstream
