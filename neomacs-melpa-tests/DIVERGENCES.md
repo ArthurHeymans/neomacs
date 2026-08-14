@@ -4943,3 +4943,72 @@ uniform erasable tail, but `materialization` feeds the row hash
 needs its own red/green cycle and is deliberately left unmade here.
 
 Status: FIXED for the `:extend` line fill (Leuven); Magit tracked separately.
+
+## 96. Terminal cells GNU wrote inside a row's changed span were left erased -- FIXED
+
+Magit's log buffer puts a right margin (author and date) at the far end of
+every row.  GNU filled the gap between the commit subject and that margin with
+spaces; Neomacs left those cells never written, so a raw PTY capture read
+`contents=" "` for GNU and `contents=""` for Neomacs across `row 3 cols
+44..=120` and `row 4 cols 15..=120`.  Ledger 95 diagnosed the rows as carrying
+no `:extend` face and left the fix unmade.
+
+The diagnosis inherited from ledger 95 -- that `set_desired_glyph_cell`
+preserves an `Erased` materialization and `normalize_desired_blank_tails`
+never promotes an interior cell back to `Written` -- is accurate about how
+those cells become `Erased`, but it is not where the divergence is decided.
+Reading GNU shows the decision lives one level up, in how a row is put on the
+wire.  `write_row` never diffs the interior of what it writes.  When the
+current row is blank it takes the `!olen` path and emits ONE run,
+`write_glyphs (f, nbody + nsp, nlen - nsp)` (`src/dispnew.c:6062-6079`);
+otherwise the insert/delete path emits ONE run,
+`write_glyphs (f, nbody + nsp + begmatch, nlen - tem)`
+(`src/dispnew.c:6173-6186`).  Either way every cell between the common prefix
+and `nlen` is physically written.  `nlen` loses only the trailing
+`CHAR_GLYPH_SPACE_P` cells, and only when `write_spaces_p` is false
+(`src/dispnew.c:6019-6022`) -- a row whose margin reaches the last column has
+no such tail, so its interior gap is content GNU writes.
+
+Neomacs decided both cases by logical cell equality instead.  Its
+wholly-erased fast path required `uniform_erasable_tail` to find a trimmable
+tail and refused the whole GNU branch when there was none; its multi-span
+emitter split `[first_changed, last_changed]` into changed runs and skipped
+gaps up to `GOTO_COST_CELLS`, whose comment claimed the byte-cost rule
+"strictly dominates" GNU's single span.  It does not: a skipped gap whose
+cells are physically erased stays unwritten where GNU has spaces, and that
+difference is exactly what a raw cell capture reads.
+
+The fix keeps materialization untouched and corrects the two write decisions.
+`desired_row_content_end` names GNU's `nlen` once, so the wholly-erased path
+falls back to the full row instead of abandoning GNU's branch, and the span
+emitter's gap test now asks whether the terminal already has a glyph there:
+byte cost may only skip cells that are already `Written`.  Skipping a written
+cell is invisible; skipping an erased one is not.  Nothing else observes the
+change -- `row_hash` only accelerates scroll matching and always verifies cell
+equality before trusting a match, and the wholly-erased fast path's guard
+still reads the same materialization it always did, now with GNU's extent.
+
+Two focused tests pin the two paths.  An erased row gaining content that
+reaches its last column previously planned `[WriteRun 0..2, WriteRun 17..20]`
+and now plans `[WriteRun 0..20]`; a row with leftover content, which stays out
+of the `!olen` path, previously planned `[WriteRun 0..3, WriteRun 17..20]` and
+now plans `[WriteRun 0..20]`.  Both failed before the change and pass after.
+
+`magit_log_buffer_file_margin_columns_match_gnu_full_screen` passes against a
+freshly built release binary (13,647,778-byte pdump, 1,651 Lisp byte
+compiles).  The whole `tui_parity_tests` set is 13 tests run: 9 passed, 4
+failed, and the four -- `mwim`, `gruvbox`, `helm_css_scss`, `beacon` -- are
+ledger 95's long-worktree-path set minus `magit`, which is the only test that
+moved.  `helm_pydoc`, the pin guarding ledger 81's blank-erase semantics,
+stays green.  `neomacs-layout-engine` passes 1,966 with 3 skipped;
+`neomacs-display-runtime` passes 614 (the `wgpu::transition` and
+`render_thread` groups hang for 600s each in this headless worktree with and
+without the change, so they are excluded rather than reported as passing);
+`neomacs-tui-tests` is 913 tests run: 910 passed, 3 failed, and those three
+(`set_visited_file_name_elisp_functions_match_gnu_semantics`,
+`dired_copy_current_file_via_c_copies_file_and_updates_listing`,
+`keyboard_quit_after_find_file_ctrl_h_returns_to_scratch`) fail identically
+with a pristine binary built at the same filesystem path -- they wrap this
+worktree's long directory string and disagree with the host `ls` column width.
+
+Status: FIXED.
