@@ -724,3 +724,41 @@ fn first_change_marker_rearmed_on_each_clean_transition() {
         "((12 . 13) (t . 0) (11 . 12) (t . 0) (1 . 11) (t . 0))"
     );
 }
+
+/// Back-to-front edits, the shape every LSP-style client applies (`tide` walks
+/// TypeScript's `textChanges` in reverse so earlier positions stay valid), must
+/// undo to the original text.
+///
+/// GNU records the two adjacent one-character insertions as `(19 . 20)` and
+/// `(20 . 21)` -- `record_insert` (src/undo.c:98-112) coalesces only when the
+/// newest record ENDS where the new insertion BEGINS.  neomacs also coalesced
+/// in the opposite direction, producing a single `(19 . 21)` whose undo
+/// deleted the untouched `=` between the two inserted spaces and turned
+/// `total=add` into `total add`.
+#[test]
+fn undo_of_descending_adjacent_inserts_restores_the_untouched_text() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (insert "export const total=add(1,2)")
+                 (undo-boundary)
+                 (goto-char 20)
+                 (insert " ")
+                 (goto-char 19)
+                 (insert " ")
+                 (let ((records buffer-undo-list))
+                   (primitive-undo 1 buffer-undo-list)
+                   (list (buffer-string) (car records) (car (cdr records)))))"#,
+        )
+        .expect("descending insert undo eval");
+
+    // Transcribed from GNU Emacs -Q --batch (tmp/p97-probe8.el).
+    assert_eq!(
+        super::super::print::print_value(&result),
+        "(\"export const total=add(1,2)\" (19 . 20) (20 . 21))"
+    );
+}

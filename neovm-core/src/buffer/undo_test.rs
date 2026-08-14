@@ -116,6 +116,37 @@ fn no_double_boundary() {
     assert_eq!(group.len(), 1);
 }
 
+/// GNU `record_insert` (src/undo.c:98-112) coalesces a new insertion into the
+/// newest record in exactly one direction: when that record is a `(BEG . END)`
+/// insertion whose END equals the new insertion's BEG.  There is no reverse
+/// rule -- an insertion that ENDS where the newest record BEGINS stays its own
+/// record, because `primitive-undo` replays the records in order and each
+/// later record's positions are read against the buffer the earlier deletions
+/// already reshaped.
+///
+/// Descending edits are the ordinary case: `tide-apply-edits` walks a
+/// TypeScript `textChanges` list back-to-front so earlier positions stay valid,
+/// which produces exactly this shape.  Verified on GNU Emacs -Q --batch: two
+/// one-character insertions at 20 then 19 leave `((19 . 20) (20 . 21))`.
+#[test]
+fn descending_adjacent_inserts_stay_separate_records_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut list = Value::NIL;
+    // Insert one character at 1-indexed 20, then one at 1-indexed 19.
+    undo_list_record_insert(&mut list, c(19), clen(1), None);
+    undo_list_record_insert(&mut list, c(18), clen(1), None);
+
+    let newest = list.cons_car();
+    assert_eq!(newest.cons_car(), Value::fixnum(19));
+    assert_eq!(newest.cons_cdr(), Value::fixnum(20));
+
+    let older = list.cons_cdr().cons_car();
+    assert_eq!(older.cons_car(), Value::fixnum(20));
+    assert_eq!(older.cons_cdr(), Value::fixnum(21));
+
+    assert!(list.cons_cdr().cons_cdr().is_nil());
+}
+
 #[test]
 fn to_value_produces_list() {
     crate::test_utils::init_test_tracing();
