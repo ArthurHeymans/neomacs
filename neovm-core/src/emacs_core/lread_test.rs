@@ -1795,3 +1795,164 @@ fn the_running_platform_uses_its_own_suffixes() {
         assert_eq!(module_suffixes().secondary, None);
     }
 }
+
+// ---------------------------------------------------------------------------
+// `eval-buffer' / `eval-region' must read through `load-read-function'
+// ---------------------------------------------------------------------------
+
+/// Define a counting reader that records, per call, whether it was handed the
+/// buffer that is current at the time of the call.  Edebug's `edebug--read'
+/// makes exactly that test (`(eq stream (current-buffer))',
+/// lisp/emacs-lisp/edebug.el:457) before it instruments anything, so a fixture
+/// that only counted calls would not pin what Edebug actually needs.
+///
+/// `load-read-function' is a dynamic binding, so nested file loads triggered
+/// from inside the region under test legitimately go through it too -- GNU does
+/// the same, and an unfiltered counter reads 124 instead of 2 there.  Loading a
+/// source file goes through `load-source-file-function', i.e. `eval-buffer' on
+/// a work buffer, in both editors, so filtering on "is a buffer" is not enough
+/// either; the buffer under test carries a name only this fixture uses.  All
+/// expectations below were taken by running this same fixture under GNU.
+fn define_stream_recording_reader(eval: &mut Context) {
+    eval.eval_str(
+        "(progn (defvar lrf-eb-calls 0)
+                (defvar lrf-eb-stream-is-current-buffer nil)
+                (defun lrf-eb-read (&optional stream)
+                  (when (and (bufferp stream)
+                             (string-prefix-p \" lrf-eb-target\"
+                                              (buffer-name stream)))
+                    (setq lrf-eb-calls (1+ lrf-eb-calls))
+                    (push (and (eq stream (current-buffer)) t)
+                          lrf-eb-stream-is-current-buffer))
+                  (read stream)))",
+    )
+    .expect("define the counting reader");
+}
+
+#[test]
+fn eval_buffer_reads_each_form_through_load_read_function() {
+    // GNU `Feval_buffer' calls `readevalloop' with the BUFFER as readcharfun
+    // (src/lread.c:2417), and `readevalloop' reads every top-level form through
+    // `load-read-function' when it is non-nil:
+    //     else if (! NILP (Vload_read_function))
+    //       val = calln (Vload_read_function, readcharfun);   (src/lread.c:2317-2318)
+    //
+    // Edebug installs itself exactly there --
+    //     (add-function :around load-read-function #'edebug--read)
+    // (lisp/emacs-lisp/edebug.el:556, run unconditionally at edebug.el:4632) --
+    // and instruments only when the stream it is handed is the current buffer
+    // (edebug.el:457).  An `eval-buffer' that reads the buffer text internally
+    // never calls the hook, so `edebug-all-defs' silently does nothing.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    define_stream_recording_reader(&mut eval);
+
+    eval.eval_str(
+        "(with-temp-buffer
+           (rename-buffer \" lrf-eb-target\" t)
+           (insert \"(setq lrf-eb-one 1)\\n(setq lrf-eb-two 2)\\n\")
+           (let ((load-read-function #'lrf-eb-read)) (eval-buffer)))",
+    )
+    .expect("eval-buffer with the hook installed");
+
+    assert_eq!(
+        eval.eval_str("lrf-eb-calls")
+            .expect("call count")
+            .to_string(),
+        "2",
+        "`eval-buffer' must read each top-level form through `load-read-function'"
+    );
+    assert_eq!(
+        eval.eval_str("lrf-eb-stream-is-current-buffer")
+            .expect("recorded streams")
+            .to_string(),
+        "(t t)",
+        "the hook must be handed the buffer being evaluated, and that buffer \
+         must be current -- Edebug instruments on exactly that identity"
+    );
+    for (var, want) in [("lrf-eb-one", "1"), ("lrf-eb-two", "2")] {
+        assert_eq!(
+            eval.eval_str(var).expect("evaluated variable").to_string(),
+            want,
+            "the forms the hook returned must still be evaluated"
+        );
+    }
+}
+
+#[test]
+fn eval_buffer_of_a_named_file_during_a_load_still_uses_load_read_function() {
+    // Undercover's file handler evaluates the visited source file with
+    //     (let ((edebug-all-defs t) (load-file-name ...) (load-in-progress t))
+    //       (save-excursion (eval-buffer (find-file load-file-name))))
+    // (undercover.el `undercover--load-file-handler'), so the buffer has a file
+    // name and `load-in-progress' is t.  GNU takes no special branch for that:
+    // `Feval_buffer' is one `readevalloop' over the buffer either way
+    // (src/lread.c:2417).  Pin the hook on that shape too.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    define_stream_recording_reader(&mut eval);
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let file = dir.path().join("visited.el");
+    std::fs::write(&file, "(setq lrf-eb-three 3)\n").expect("write file");
+
+    let form = format!(
+        "(let ((load-in-progress t) (load-file-name {path:?})
+               (load-read-function #'lrf-eb-read))
+           (with-temp-buffer
+             (rename-buffer \" lrf-eb-target\" t)
+             (insert-file-contents {path:?})
+             (setq buffer-file-name {path:?})
+             (unwind-protect (eval-buffer)
+               (setq buffer-file-name nil))))",
+        path = file.to_str().expect("utf8 path")
+    );
+    eval.eval_str(&form).expect("eval-buffer of a visited file");
+
+    assert_eq!(
+        eval.eval_str("lrf-eb-calls")
+            .expect("call count")
+            .to_string(),
+        "1",
+        "a file-visiting `eval-buffer' during a load must still consult the hook"
+    );
+    assert_eq!(
+        eval.eval_str("lrf-eb-three")
+            .expect("evaluated variable")
+            .to_string(),
+        "3"
+    );
+}
+
+#[test]
+fn eval_region_reads_through_load_read_function_when_no_read_function_is_passed() {
+    // GNU `readevalloop' prefers an explicit READ-FUNCTION argument and falls
+    // back to `load-read-function' (src/lread.c:2302-2318); `Feval_region'
+    // passes the region's buffer as readcharfun (src/lread.c:2451).
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    define_stream_recording_reader(&mut eval);
+
+    eval.eval_str(
+        "(with-temp-buffer
+           (rename-buffer \" lrf-eb-target\" t)
+           (insert \"(setq lrf-er-one 1)\\n(setq lrf-er-two 2)\\n\")
+           (let ((load-read-function #'lrf-eb-read))
+             (eval-region (point-min) (point-max))))",
+    )
+    .expect("eval-region with the hook installed");
+
+    assert_eq!(
+        eval.eval_str("lrf-eb-calls")
+            .expect("call count")
+            .to_string(),
+        "2",
+        "`eval-region' must fall back to `load-read-function'"
+    );
+    for (var, want) in [("lrf-er-one", "1"), ("lrf-er-two", "2")] {
+        assert_eq!(
+            eval.eval_str(var).expect("evaluated variable").to_string(),
+            want
+        );
+    }
+}
