@@ -1920,6 +1920,46 @@ fn completion_char_codes(string: &crate::heap_types::LispString) -> Vec<u32> {
     super::builtins::lisp_string_char_codes(string)
 }
 
+/// The prefix state shared by GNU's three scanning completion primitives.
+///
+/// Empty input is not merely a zero-length character buffer: for prefix
+/// matching it accepts every string without inspecting that candidate at all.
+/// Keeping that state as a distinct variant prevents the hot obarray scan from
+/// constructing a decoder for every symbol only to discover that `all` over an
+/// empty iterator is true.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum CompletionPrefix {
+    Empty,
+    Characters(Vec<u32>),
+}
+
+impl CompletionPrefix {
+    fn from_lisp_string(string: &crate::heap_types::LispString) -> Self {
+        let characters = completion_char_codes(string);
+        if characters.is_empty() {
+            Self::Empty
+        } else {
+            Self::Characters(characters)
+        }
+    }
+
+    fn characters(&self) -> &[u32] {
+        match self {
+            Self::Empty => &[],
+            Self::Characters(characters) => characters,
+        }
+    }
+
+    fn matches(&self, completion: &CompletionText, ignore_case: bool) -> bool {
+        match self {
+            Self::Empty => true,
+            Self::Characters(characters) => {
+                completion_text_matches_nonempty_prefix(characters, completion, ignore_case)
+            }
+        }
+    }
+}
+
 /// Lazy char-code iterator over a LispString, decoding exactly like
 /// lisp_string_char_codes but without materializing a Vec. Prefix matching
 /// over large candidate sets (a whole obarray) usually rejects on the first
@@ -1957,11 +1997,12 @@ fn completion_fold_char(code: u32, ignore_case: bool) -> u32 {
     crate::emacs_core::builtins::downcase_char_code_emacs_compat(code as i64) as u32
 }
 
-fn completion_text_matches_prefix(
+fn completion_text_matches_nonempty_prefix(
     prefix_codes: &[u32],
     completion: &CompletionText,
     ignore_case: bool,
 ) -> bool {
+    debug_assert!(!prefix_codes.is_empty());
     let string = completion.lisp_string();
     if prefix_codes.len() > string.schars() {
         return false;
@@ -2206,7 +2247,8 @@ pub(crate) fn builtin_try_completion_with_candidates(
     // `bestmatchsize` characters are common to every accepted completion.  When
     // `completion_ignore_case` is set the *identity* of `bestmatch` can switch
     // to a later candidate so the returned case pattern matches GNU exactly.
-    let string_codes = completion_char_codes(&string);
+    let prefix = CompletionPrefix::from_lisp_string(&string);
+    let string_codes = prefix.characters();
     let string_schars = string_codes.len();
 
     let mut bestmatch: Option<&CompletionCandidate> = None;
@@ -2215,7 +2257,7 @@ pub(crate) fn builtin_try_completion_with_candidates(
     let mut matchcount = 0i32;
 
     for candidate in &candidates {
-        if !completion_text_matches_prefix(&string_codes, &candidate.completion, ignore_case) {
+        if !prefix.matches(&candidate.completion, ignore_case) {
             continue;
         }
         if !regexps.is_empty()
@@ -2266,10 +2308,10 @@ pub(crate) fn builtin_try_completion_with_candidates(
             // whose case agrees with the input over the current bestmatch which
             // does not.
             let elt_matches_input_case =
-                gnu_compare_strings(&elt_codes, &string_codes, string_schars, false)
+                gnu_compare_strings(&elt_codes, string_codes, string_schars, false)
                     == StringCompare::Equal;
             let best_matches_input_case =
-                gnu_compare_strings(&best_codes, &string_codes, string_schars, false)
+                gnu_compare_strings(&best_codes, string_codes, string_schars, false)
                     == StringCompare::Equal;
             let cond2 =
                 (elt_exact == best_exact) && elt_matches_input_case && !best_matches_input_case;
@@ -2341,10 +2383,10 @@ pub(crate) fn builtin_all_completions_with_candidates(
     // (which may trigger GC via apply), then create string Values.
     // This avoids holding unrooted Value strings across GC-triggering
     // predicate calls.
-    let string_codes = completion_char_codes(&string);
+    let prefix = CompletionPrefix::from_lisp_string(&string);
     let mut matching_completions: Vec<CompletionText> = Vec::new();
     for candidate in &candidates {
-        if !completion_text_matches_prefix(&string_codes, &candidate.completion, ignore_case) {
+        if !prefix.matches(&candidate.completion, ignore_case) {
             continue;
         }
         if !regexps.is_empty()
@@ -2392,9 +2434,9 @@ pub(crate) fn builtin_test_completion_with_candidates(
         );
     };
 
-    let string_codes = completion_char_codes(&string);
+    let prefix = CompletionPrefix::from_lisp_string(&string);
     for candidate in &candidates {
-        if !completion_text_equals_string(&candidate.completion, &string_codes, ignore_case) {
+        if !completion_text_equals_string(&candidate.completion, prefix.characters(), ignore_case) {
             continue;
         }
         if !regexps.is_empty()

@@ -62,6 +62,21 @@ fn flex_cost_gotoh_honors_completion_ignore_case() {
 // -- Completion matching --------------------------------------------------
 
 #[test]
+fn completion_prefix_models_empty_input_as_match_all() {
+    let empty = LispString::from_utf8("");
+    let nonempty = LispString::from_utf8("M-x");
+
+    assert_eq!(
+        CompletionPrefix::from_lisp_string(&empty),
+        CompletionPrefix::Empty
+    );
+    assert_eq!(
+        CompletionPrefix::from_lisp_string(&nonempty),
+        CompletionPrefix::Characters(vec!['M' as u32, '-' as u32, 'x' as u32])
+    );
+}
+
+#[test]
 fn normalize_symbol_reader_default_uses_list_head_and_symbol_name() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
