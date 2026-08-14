@@ -1879,7 +1879,7 @@ impl<'a> Vm<'a> {
     fn complete_interpreter_frame_chain(
         &mut self,
         current: &mut InterpreterFrame,
-        callers: &mut SmallVec<[SuspendedInterpreterFrame; 8]>,
+        callers: &mut Vec<SuspendedInterpreterFrame>,
         frame_aux: &mut Vec<InterpreterFrameAux>,
         entry_func: &ByteCodeFunction,
         mut result: EvalResult,
@@ -2038,7 +2038,11 @@ impl<'a> Vm<'a> {
             #[cfg(debug_assertions)]
             entry_lexenv: Value::NIL,
         };
-        let mut callers: SmallVec<[SuspendedInterpreterFrame; 8]> = SmallVec::new();
+        // Most bytecode bodies make no nested bytecode call, so begin without
+        // allocating. The first iterative Bcall grows this once and thereafter
+        // gets Vec's single-representation push/pop path; SmallVec's repeated
+        // inline-vs-spilled branch was measurable on every Bcall/Breturn.
+        let mut callers = Vec::new();
         let mut frame_aux = Vec::with_capacity(8);
         frame_aux.push(InterpreterFrameAux::new(
             std::mem::take(handlers),
