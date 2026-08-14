@@ -1,6 +1,21 @@
 use super::*;
 use flate2::{Compression, write::GzEncoder};
 
+fn github_workflow_job<'a>(workflow: &'a str, name: &str) -> &'a str {
+    let marker = format!("\n  {name}:\n");
+    let (_, tail) = workflow
+        .split_once(&marker)
+        .unwrap_or_else(|| panic!("workflow must define job {name}"));
+    let mut offset = 0;
+    for line in tail.split_inclusive('\n') {
+        if line.starts_with("  ") && !line.starts_with("   ") {
+            return &tail[..offset];
+        }
+        offset += line.len();
+    }
+    tail
+}
+
 #[test]
 fn top_level_dispatch_routes_perf_without_parsing_fresh_build_options() {
     run_xtask(
@@ -88,6 +103,66 @@ fn every_linux_package_uses_the_canonical_desktop_asset_installer() {
             "{name} packaging duplicates the canonical desktop entry"
         );
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn linux_ci_setup_profiles_expose_capabilities_and_reject_unknown_profiles() {
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask must live under the repository root")
+        .to_path_buf();
+    let script = repo_root.join("scripts/ci/setup-linux.sh");
+
+    let packages = |profile: &str| {
+        let output = Command::new("bash")
+            .arg(&script)
+            .args(["--list", profile])
+            .output()
+            .unwrap_or_else(|error| panic!("list {profile} Linux CI packages: {error}"));
+        assert!(
+            output.status.success(),
+            "profile {profile} failed:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).expect("package list must be UTF-8")
+    };
+
+    let build = packages("build");
+    assert!(build.lines().any(|package| package == "liblcms2-dev"));
+    assert!(!build.lines().any(|package| package == "emacs-nox"));
+
+    let oracle = packages("oracle");
+    for package in ["liblcms2-dev", "emacs-nox", "libfaketime"] {
+        assert!(oracle.lines().any(|candidate| candidate == package));
+    }
+
+    let ecosystem = packages("ecosystem");
+    for package in [
+        "emacs-nox",
+        "gnupg",
+        "xvfb",
+        "xauth",
+        "x11-utils",
+        "xdotool",
+        "imagemagick",
+        "weston",
+    ] {
+        assert!(ecosystem.lines().any(|candidate| candidate == package));
+    }
+
+    let release = packages("release");
+    for package in ["rpm", "binutils", "cpio", "file"] {
+        assert!(release.lines().any(|candidate| candidate == package));
+    }
+
+    let invalid = Command::new("bash")
+        .arg(script)
+        .args(["--list", "typo"])
+        .output()
+        .expect("reject unknown Linux CI profile");
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("unknown profile: typo"));
 }
 
 #[test]
@@ -247,10 +322,7 @@ printf 'args=%s\nemacs=%s\nhome=%s\n' "$*" "$EMACS" "$HOME" > "$DOOM_TEST_REPORT
 #[test]
 fn ci_runs_the_doom_install_contract_against_the_shared_runtime() {
     let workflow = include_str!("../../.github/workflows/ci.yml");
-    let job = workflow
-        .split_once("\n  doom-install-compatibility:\n")
-        .map(|(_, job)| job)
-        .expect("ci must define a Doom installation compatibility job");
+    let job = github_workflow_job(workflow, "doom-install-compatibility");
 
     assert!(job.contains("needs: neomacs-test-runtime"));
     assert!(job.contains("- *download_test_runtime"));
@@ -260,31 +332,158 @@ fn ci_runs_the_doom_install_contract_against_the_shared_runtime() {
 }
 
 #[test]
+fn ci_lints_every_github_actions_workflow() {
+    let workflow = include_str!("../../.github/workflows/ci.yml");
+    let job = github_workflow_job(workflow, "workflow-lint");
+
+    assert!(job.contains("github.event_name != 'schedule'"));
+    assert!(job.contains("github.com/rhysd/actionlint/cmd/actionlint@v1.7.12"));
+    assert!(job.contains(".github/workflows/*.yml"));
+}
+
+#[test]
+fn rust_ci_setup_uses_the_workspace_toolchain_and_owns_test_tooling() {
+    let action = include_str!("../../.github/actions/setup-rust/action.yml");
+
+    assert!(action.contains("cache-key:"));
+    assert!(action.contains("hashFiles('scripts/ci/setup-linux.sh'"));
+    assert!(action.contains("install-nextest:"));
+    assert!(action.contains("actions-rust-lang/setup-rust-toolchain@"));
+    assert!(
+        !action.contains("toolchain:"),
+        "omitting a toolchain input makes rust-toolchain.toml the source of truth"
+    );
+    assert!(action.contains("rustflags: \"\""));
+    assert!(action.contains("taiki-e/install-action@"));
+    assert!(action.contains("tool: cargo-nextest"));
+}
+
+#[test]
+fn ci_pins_external_actions_and_enables_automated_updates() {
+    let workflows = [
+        include_str!("../../.github/workflows/nextest-shards.yml"),
+        include_str!("../../.github/workflows/ci.yml"),
+        include_str!("../../.github/workflows/codeql.yml"),
+        include_str!("../../.github/workflows/linux.yml"),
+        include_str!("../../.github/workflows/nix-smoke.yml"),
+        include_str!("../../.github/workflows/release.yml"),
+        include_str!("../../.github/workflows/tmp_mac_test.yml"),
+        include_str!("../../.github/workflows/window-oracle-nightly.yml"),
+        include_str!("../../.github/workflows/windows-installer.yml"),
+        include_str!("../../.github/actions/setup-rust/action.yml"),
+    ];
+
+    for workflow in workflows {
+        for line in workflow.lines().map(str::trim) {
+            let Some(action) = line.strip_prefix("uses: ") else {
+                continue;
+            };
+            if action.starts_with("./") {
+                continue;
+            }
+            let revision = action
+                .split_once('@')
+                .unwrap_or_else(|| panic!("external action lacks a revision: {action}"))
+                .1
+                .split_whitespace()
+                .next()
+                .unwrap();
+            assert_eq!(
+                revision.len(),
+                40,
+                "action is not pinned to a commit: {action}"
+            );
+            assert!(
+                revision.bytes().all(|byte| byte.is_ascii_hexdigit()),
+                "action revision is not hexadecimal: {action}"
+            );
+        }
+    }
+
+    let dependabot = include_str!("../../.github/dependabot.yml");
+    assert!(dependabot.contains("package-ecosystem: github-actions"));
+    assert!(dependabot.contains("directory: /"));
+}
+
+#[test]
+fn ci_uses_one_typed_sharded_nextest_workflow_for_core_and_oracle() {
+    let reusable = include_str!("../../.github/workflows/nextest-shards.yml");
+    assert!(reusable.contains("workflow_call:"));
+    assert!(reusable.contains("suite:"));
+    assert!(reusable.contains("core|oracle"));
+    assert!(reusable.contains("package(neovm-core)"));
+    assert!(reusable.contains("package(neovm-oracle-tests)"));
+    assert!(reusable.contains("--partition slice:${{ matrix.partition }}/20"));
+    assert_eq!(
+        reusable.matches("case \"$SHARD_SUITE\" in").count(),
+        1,
+        "the closed suite selector must be decoded exactly once"
+    );
+
+    let workflow = include_str!("../../.github/workflows/ci.yml");
+    let core = github_workflow_job(workflow, "neovm-core-tests");
+    assert!(core.contains("needs: [neomacs-test-runtime, neomacs-workspace-test-archive]"));
+    assert!(core.contains("uses: ./.github/workflows/nextest-shards.yml"));
+    assert!(core.contains("suite: core"));
+
+    let oracle = github_workflow_job(workflow, "neovm-oracle-tests");
+    assert!(oracle.contains("needs: [neomacs-test-runtime, neomacs-workspace-test-archive]"));
+    assert!(oracle.contains("uses: ./.github/workflows/nextest-shards.yml"));
+    assert!(oracle.contains("suite: oracle"));
+}
+
+#[test]
 fn ci_runs_offline_melpa_parity_from_shared_artifacts() {
     let workflow = include_str!("../../.github/workflows/ci.yml");
-    let job = workflow
-        .split_once("\n  neomacs-melpa-tests:\n")
-        .map(|(_, job)| job)
-        .expect("ci must define a deterministic MELPA compatibility job");
+    let job = github_workflow_job(workflow, "neomacs-melpa-tests");
 
     assert!(job.contains("needs: [neomacs-test-runtime, neomacs-workspace-test-archive]"));
-    assert!(job.contains("- *download_test_runtime"));
-    assert!(job.contains("- *unpack_test_runtime"));
-    assert!(job.contains("- *download_workspace_test_archive"));
+    assert!(!job.contains("if: ${{ false }}"));
+    assert!(job.contains("name: neomacs-test-runtime-linux-x86_64"));
+    assert!(job.contains("tar xzf neomacs-test-runtime-linux-x86_64.tar.gz"));
+    assert!(job.contains("name: neomacs-workspace-tests-nextest-archive-linux-x86_64"));
     assert!(job.contains("NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs"));
     assert!(job.contains("NEOMACS_MELPA_ORACLE_EMACS: /usr/bin/emacs"));
-    assert!(job.contains("sudo apt-get install -y --no-install-recommends emacs-nox gnupg"));
+    assert!(job.contains("run: scripts/ci/setup-linux.sh ecosystem"));
+    for suite in ["batch", "tui", "gui"] {
+        assert!(job.contains(&format!("suite: {suite}")));
+    }
+    assert!(job.contains("--skip tui_parity_tests:: --skip gui_parity_tests::"));
+    assert!(job.contains("libtest_args: \"tui_parity_tests::\""));
+    assert!(job.contains("libtest_args: \"gui_parity_tests::\""));
     assert!(job.contains("-E 'package(neomacs-melpa-tests)'"));
+    assert!(job.contains("-- $LIBTEST_ARGS"));
     assert!(job.contains("--success-output immediate"));
+}
+
+#[test]
+fn ci_executes_display_stack_and_real_gui_tests_from_shared_artifacts() {
+    let workflow = include_str!("../../.github/workflows/ci.yml");
+
+    let display = github_workflow_job(workflow, "neomacs-display-tests");
+    assert!(display.contains("needs: neomacs-workspace-test-archive"));
+    for package in [
+        "neomacs-display-protocol",
+        "neomacs-display-runtime",
+        "neomacs-layout-engine",
+        "neomacs-renderer-wgpu",
+    ] {
+        assert!(display.contains(&format!("package({package})")));
+    }
+    assert!(display.contains("-E \"$NEXTEST_FILTER\""));
+    assert!(display.contains("protocol)|package(neomacs-display-runtime)"));
+
+    let gui = github_workflow_job(workflow, "neomacs-gui-tests");
+    assert!(gui.contains("needs: [neomacs-test-runtime, neomacs-workspace-test-archive]"));
+    assert!(gui.contains("NEOMACS_GUI_TEST_BACKEND: x11"));
+    assert!(gui.contains("NEOMACS_GUI_TEST_GNU_EMACS: /usr/bin/emacs"));
+    assert!(gui.contains("package(neomacs-gui-tests)"));
 }
 
 #[test]
 fn ci_runs_live_melpa_only_as_an_explicit_canary() {
     let workflow = include_str!("../../.github/workflows/ci.yml");
-    let job = workflow
-        .split_once("\n  neomacs-melpa-live-canary:\n")
-        .map(|(_, job)| job)
-        .expect("ci must define a live MELPA canary job");
+    let job = github_workflow_job(workflow, "neomacs-melpa-live-canary");
 
     assert!(workflow.contains("schedule:"));
     assert!(job.contains("needs: [neomacs-test-runtime, neomacs-workspace-test-archive]"));

@@ -15,10 +15,23 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  RUST_VERSION: "1.96.1"
+permissions:
+  contents: read
 
 jobs:
+  workflow-lint:
+    name: GitHub Actions workflow lint
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - &checkout
+        name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Run actionlint
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 .github/workflows/*.yml
+
   fmt:
     name: cargo fmt (${{ matrix.label }})
     if: github.event_name != 'schedule'
@@ -38,15 +51,13 @@ jobs:
           - runner: windows-latest
             label: windows-msvc-x86_64
     steps:
-      - &checkout
-        name: Checkout
-        uses: actions/checkout@v6
+      - *checkout
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
         with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: rustfmt
+          cache-key: ci-fmt-${{ matrix.label }}
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: cargo fmt
         run: |
@@ -62,9 +73,8 @@ jobs:
       - *checkout
 
       - name: Check advisories, licenses, bans, and sources
-        uses: EmbarkStudios/cargo-deny-action@v2
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2
         with:
-          rust-version: ${{ env.RUST_VERSION }}
           command: check
           arguments: --all-features
           command-arguments: --hide-inclusion-graph
@@ -94,57 +104,16 @@ jobs:
       - &install_linux_deps
         name: Install Linux system dependencies
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            git \
-            pkg-config \
-            cmake \
-            m4 \
-            libssl-dev \
-            fontconfig \
-            libfontconfig1-dev \
-            libfreetype-dev \
-            libglib2.0-dev \
-            libunwind-dev \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libxkbcommon-dev \
-            libxkbcommon-x11-dev \
-            libwayland-dev \
-            wayland-protocols \
-            libxcb1-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxi-dev \
-            libxcursor-dev \
-            mesa-vulkan-drivers \
-            libvulkan-dev \
-            libdbus-1-dev \
-            libsystemd-dev \
-            libsqlite3-dev \
-            libxml2-dev \
-            liblcms2-dev \
-            gnutls-bin \
-            libgnutls28-dev \
-            zlib1g-dev
-          pkg-config --modversion lcms2
+        run: scripts/ci/setup-linux.sh build
 
       - name: Install macOS system dependencies
         if: runner.os == 'macOS'
         run: brew install pkg-config gstreamer
 
-      - &install_rust
-        name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-
       - name: Restore GStreamer SDK cache
         if: runner.os == 'Windows'
         id: cache-gstreamer
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             C:\gstreamer
@@ -158,7 +127,7 @@ jobs:
 
       - name: Save GStreamer SDK cache
         if: runner.os == 'Windows' && steps.cache-gstreamer.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             C:\gstreamer
@@ -170,13 +139,11 @@ jobs:
         shell: powershell
         run: ./scripts/setup-windows-gstreamer.ps1
 
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
         with:
-          prefix-key: ci-check-${{ matrix.label }}
-          cache-bin: false
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
+          cache-key: ci-check-${{ matrix.label }}
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Verify GStreamer pkg-config
         if: runner.os == 'Windows'
@@ -213,21 +180,12 @@ jobs:
         name: Prepare workspace temp directory
         run: mkdir -p "$TMPDIR/nextest"
       - *install_linux_deps
-      - *install_rust
-      - &cache_cargo
-        name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
         with:
-          prefix-key: ci-ubuntu-24.04-x86_64
-          cache-bin: false
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
-
-      - &install_nextest
-        name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
+          cache-key: ci-workspace-archive-linux-x86_64
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+          install-nextest: true
 
       - name: Build and archive workspace tests
         run: |
@@ -237,7 +195,7 @@ jobs:
             --archive-file neomacs-workspace-tests.tar.zst
 
       - name: Upload workspace test archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: neomacs-workspace-tests-nextest-archive-linux-x86_64
           path: neomacs-workspace-tests.tar.zst
@@ -264,16 +222,12 @@ jobs:
           "TMP=$taskTmp" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "TEMP=$taskTmp" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - *install_rust
-      - *install_nextest
-
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
         with:
-          prefix-key: ci-windows-direct-adapter-x86_64
-          cache-bin: false
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
+          cache-key: ci-windows-direct-adapter-x86_64
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+          install-nextest: true
 
       - name: Run native Windows direct adapter contracts
         run: >-
@@ -284,58 +238,11 @@ jobs:
           --no-fail-fast
 
   neovm-core-tests:
-    name: neovm-core tests shard ${{ matrix.partition }}/20 (linux x86_64)
     if: github.event_name != 'schedule'
     needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    env:
-      CARGO_TERM_COLOR: always
-      RUST_BACKTRACE: 1
-      NEOMACS_RUNTIME_ROOT: ${{ github.workspace }}
-      TMPDIR: ${{ github.workspace }}/tmp
-    strategy:
-      fail-fast: false
-      matrix:
-        partition: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-    steps:
-      - *checkout
-      - *prepare_workspace_tmp
-      - *install_linux_deps
-      - *install_rust
-      - *install_nextest
-
-      - &download_test_runtime
-        name: Download shared test runtime
-        uses: actions/download-artifact@v5
-        with:
-          name: neomacs-test-runtime-linux-x86_64
-          path: .
-
-      - &unpack_test_runtime
-        name: Unpack shared test runtime
-        run: |
-          tar xzf neomacs-test-runtime-linux-x86_64.tar.gz
-          chmod +x target/release/neomacs
-          test -f lisp/international/charscript.el
-          test -f lisp/international/charprop.el
-
-      - &download_workspace_test_archive
-        name: Download workspace test archive
-        uses: actions/download-artifact@v5
-        with:
-          name: neomacs-workspace-tests-nextest-archive-linux-x86_64
-          path: .
-
-      - name: Run neovm-core test shard
-        run: |
-          cargo nextest run \
-            --archive-file neomacs-workspace-tests.tar.zst \
-            --extract-to "$TMPDIR/nextest" \
-            -E 'package(neovm-core)' \
-            --workspace-remap "$GITHUB_WORKSPACE" \
-            --partition slice:${{ matrix.partition }}/20 \
-            --no-fail-fast
+    uses: ./.github/workflows/nextest-shards.yml
+    with:
+      suite: core
 
   neomacs-test-runtime:
     name: shared test runtime (linux x86_64)
@@ -349,8 +256,11 @@ jobs:
       - *checkout
       - *prepare_workspace_tmp
       - *install_linux_deps
-      - *install_rust
-      - *cache_cargo
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: ci-shared-runtime-linux-x86_64
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: cargo build --release
         run: cargo build --release
@@ -372,7 +282,7 @@ jobs:
             etc
 
       - name: Upload shared test runtime
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: neomacs-test-runtime-linux-x86_64
           path: neomacs-test-runtime-linux-x86_64.tar.gz
@@ -380,97 +290,74 @@ jobs:
           retention-days: 1
 
   neovm-oracle-tests:
-    name: oracle-tests shard ${{ matrix.partition }}/20 (linux x86_64)
+    if: github.event_name != 'schedule'
+    needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
+    uses: ./.github/workflows/nextest-shards.yml
+    with:
+      suite: oracle
+
+  neomacs-melpa-tests:
+    name: MELPA ${{ matrix.suite }} compatibility and GNU parity (linux x86_64)
     if: github.event_name != 'schedule'
     needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    env:
-      CARGO_TERM_COLOR: always
-      RUST_BACKTRACE: 1
-      NEOVM_ORACLE_MODE: snapshot
-      NEOVM_BINARY_PATH: ${{ github.workspace }}/target/release/neomacs
-      NEOMACS_RUNTIME_ROOT: ${{ github.workspace }}
-      TMPDIR: ${{ github.workspace }}/tmp
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        partition:
-          - 1
-          - 2
-          - 3
-          - 4
-          - 5
-          - 6
-          - 7
-          - 8
-          - 9
-          - 10
-          - 11
-          - 12
-          - 13
-          - 14
-          - 15
-          - 16
-          - 17
-          - 18
-          - 19
-          - 20
-    steps:
-      - *checkout
-      - *prepare_workspace_tmp
-      - *install_linux_deps
-      - *install_rust
-      - *install_nextest
-
-      - name: Install and configure libfaketime
-        run: |
-          sudo apt-get install -y --no-install-recommends libfaketime
-          libfaketime_so="$(dpkg -L libfaketime | grep -E '/libfaketime\.so\.1$' | head -n 1)"
-          test -n "$libfaketime_so"
-          echo "NEOVM_LIBFAKETIME_SO=$libfaketime_so" >> "$GITHUB_ENV"
-
-      - *download_test_runtime
-      - *unpack_test_runtime
-      - *download_workspace_test_archive
-
-      - name: Run neovm-oracle-tests shard
-        run: |
-          cargo nextest run \
-            --archive-file neomacs-workspace-tests.tar.zst \
-            --extract-to "$TMPDIR/nextest" \
-            -E 'package(neovm-oracle-tests)' \
-            --workspace-remap "$GITHUB_WORKSPACE" \
-            --partition slice:${{ matrix.partition }}/20 \
-            --no-fail-fast
-
-  neomacs-melpa-tests:
-    name: MELPA offline compatibility and GNU parity (linux x86_64)
-    if: ${{ false }}
-    needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+        include:
+          - suite: batch
+            libtest_args: "--skip tui_parity_tests:: --skip gui_parity_tests::"
+          - suite: tui
+            libtest_args: "tui_parity_tests::"
+          - suite: gui
+            libtest_args: "gui_parity_tests::"
     env:
       CARGO_TERM_COLOR: always
       RUST_BACKTRACE: 1
       TMPDIR: ${{ github.workspace }}/tmp
+      LIBTEST_ARGS: ${{ matrix.libtest_args }}
       NEOMACS_BIN: ${{ github.workspace }}/target/release/neomacs
       NEOMACS_RUNTIME_ROOT: ${{ github.workspace }}
       NEOMACS_MELPA_ORACLE_EMACS: /usr/bin/emacs
+      NEOMACS_GUI_TEST_BACKEND: x11
+      NEOMACS_GUI_TEST_BINARY: ${{ github.workspace }}/target/release/neomacs
+      NEOMACS_GUI_TEST_GNU_EMACS: /usr/bin/emacs
     steps:
       - *checkout
       - *prepare_workspace_tmp
-      - *install_linux_deps
-      - name: Install GNU Emacs oracle
-        run: sudo apt-get install -y --no-install-recommends emacs-nox gnupg
-      - *install_rust
-      - *install_nextest
-      - *download_test_runtime
-      - *unpack_test_runtime
-      - *download_workspace_test_archive
+      - name: Install Linux ecosystem dependencies
+        run: scripts/ci/setup-linux.sh ecosystem
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: ci-melpa-${{ matrix.suite }}
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+          install-nextest: true
+      - &download_test_runtime
+        name: Download shared test runtime
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: neomacs-test-runtime-linux-x86_64
+          path: .
+
+      - &unpack_test_runtime
+        name: Unpack shared test runtime
+        run: |
+          tar xzf neomacs-test-runtime-linux-x86_64.tar.gz
+          chmod +x target/release/neomacs
+          test -f lisp/international/charscript.el
+          test -f lisp/international/charprop.el
+
+      - &download_workspace_test_archive
+        name: Download workspace test archive
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: neomacs-workspace-tests-nextest-archive-linux-x86_64
+          path: .
 
       - name: Install Nix for exact MELPA test runtimes
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
 
       - name: Run deterministic package ecosystem compatibility tests
         run: |
@@ -480,7 +367,86 @@ jobs:
             -E 'package(neomacs-melpa-tests)' \
             --workspace-remap "$GITHUB_WORKSPACE" \
             --success-output immediate \
+            --no-fail-fast \
+            -- $LIBTEST_ARGS
+
+  neomacs-display-tests:
+    name: display stack tests (linux x86_64)
+    if: github.event_name != 'schedule'
+    needs: neomacs-workspace-test-archive
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      TMPDIR: ${{ github.workspace }}/tmp
+      NEXTEST_FILTER: "package(neomacs-display-protocol)|package(neomacs-display-runtime)|package(neomacs-layout-engine)|package(neomacs-renderer-wgpu)"
+    steps:
+      - *checkout
+      - *prepare_workspace_tmp
+      - *install_linux_deps
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: ci-display-tests
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+          install-nextest: true
+      - *download_workspace_test_archive
+
+      - name: Run display stack tests
+        run: |
+          cargo nextest run \
+            --archive-file neomacs-workspace-tests.tar.zst \
+            --extract-to "$TMPDIR/nextest" \
+            -E "$NEXTEST_FILTER" \
+            --workspace-remap "$GITHUB_WORKSPACE" \
             --no-fail-fast
+
+  neomacs-gui-tests:
+    name: real GUI tests (linux x86_64, X11)
+    if: github.event_name != 'schedule'
+    needs: [neomacs-test-runtime, neomacs-workspace-test-archive]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      TMPDIR: ${{ github.workspace }}/tmp
+      NEOMACS_GUI_TEST_BACKEND: x11
+      NEOMACS_GUI_TEST_BINARY: ${{ github.workspace }}/target/release/neomacs
+      NEOMACS_GUI_TEST_GNU_EMACS: /usr/bin/emacs
+    steps:
+      - *checkout
+      - *prepare_workspace_tmp
+      - name: Install Linux ecosystem dependencies
+        run: scripts/ci/setup-linux.sh ecosystem
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: ci-real-gui-tests
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+          install-nextest: true
+      - *download_test_runtime
+      - *unpack_test_runtime
+      - *download_workspace_test_archive
+
+      - name: Run real GUI tests
+        run: |
+          cargo nextest run \
+            --archive-file neomacs-workspace-tests.tar.zst \
+            --extract-to "$TMPDIR/nextest" \
+            -E 'package(neomacs-gui-tests)' \
+            --workspace-remap "$GITHUB_WORKSPACE" \
+            --no-fail-fast
+
+      - name: Upload GUI diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: neomacs-gui-tests-linux-x11-${{ github.run_id }}
+          path: target/neomacs-gui-tests
+          if-no-files-found: ignore
+          retention-days: 14
 
   neomacs-melpa-live-canary:
     name: MELPA live ecosystem canary (linux x86_64)
@@ -498,11 +464,14 @@ jobs:
     steps:
       - *checkout
       - *prepare_workspace_tmp
-      - *install_linux_deps
-      - name: Install GNU Emacs oracle
-        run: sudo apt-get install -y --no-install-recommends emacs-nox
-      - *install_rust
-      - *install_nextest
+      - name: Install Linux ecosystem dependencies
+        run: scripts/ci/setup-linux.sh ecosystem
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: ci-melpa-live-canary
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+          install-nextest: true
       - *download_test_runtime
       - *unpack_test_runtime
       - *download_workspace_test_archive
@@ -554,13 +523,15 @@ jobs:
       - *install_linux_deps
 
       - name: Install nightly Rust
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@7c8d7d138f5c09cef361f8214cf96882cd029cdb # nightly
+        with:
+          toolchain: nightly
 
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --version 0.13.2 --locked
 
       - name: Restore evolving fuzz corpora
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: neovm-core/fuzz/corpus
           key: regex-fuzz-corpus-${{ github.run_id }}
@@ -581,7 +552,7 @@ jobs:
 
       - name: Upload crash artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: regex-fuzz-crashes-${{ github.run_id }}
           path: neovm-core/fuzz/artifacts

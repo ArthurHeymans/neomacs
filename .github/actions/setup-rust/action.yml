@@ -1,0 +1,40 @@
+name: Set up Neomacs Rust tooling
+description: Install the workspace toolchain, restore Cargo caches, and optionally install nextest.
+
+inputs:
+  cache-key:
+    description: Job-specific suffix for the Rust build cache.
+    required: true
+  cache-save-if:
+    description: Expression result controlling whether the cache is saved.
+    required: false
+    default: "true"
+  install-nextest:
+    description: Install the cargo-nextest binary.
+    required: false
+    default: "false"
+  target:
+    description: Optional additional Rust compilation target.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install workspace Rust toolchain and restore Cargo cache
+      uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+      with:
+        target: ${{ inputs.target }}
+        cache-key: ${{ inputs.cache-key }}-${{ hashFiles('scripts/ci/setup-linux.sh', '.github/actions/setup-rust/action.yml') }}
+        cache-bin: false
+        cache-on-failure: true
+        cache-save-if: ${{ inputs.cache-save-if }}
+        # Preserve workspace/config rustflags; the upstream action otherwise
+        # injects `-D warnings` globally and changes existing build behavior.
+        rustflags: ""
+
+    - name: Install cargo-nextest
+      if: inputs.install-nextest == 'true'
+      uses: taiki-e/install-action@82cd3e7658a6f96c86c0234aeeda1748937cb0a1 # v2
+      with:
+        tool: cargo-nextest

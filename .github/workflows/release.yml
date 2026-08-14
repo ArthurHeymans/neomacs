@@ -28,58 +28,31 @@ jobs:
       TMPDIR: ${{ github.workspace }}/tmp
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
       - name: Install system dependencies (apt)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential git pkg-config cmake m4 \
-            libssl-dev fontconfig libfontconfig1-dev libfreetype-dev \
-            libglib2.0-dev libunwind-dev \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libxkbcommon-dev libxkbcommon-x11-dev \
-            libwayland-dev wayland-protocols \
-            libxcb1-dev libxrandr-dev libxinerama-dev \
-            libxi-dev libxcursor-dev mesa-vulkan-drivers libvulkan-dev \
-            libdbus-1-dev libsystemd-dev libsqlite3-dev \
-            libxml2-dev liblcms2-dev gnutls-bin libgnutls28-dev rpm \
-            binutils cpio file zlib1g-dev
-          pkg-config --modversion lcms2
+        run: scripts/ci/setup-linux.sh release
 
       - name: Prepare workspace temp directory
         run: mkdir -p "$TMPDIR"
 
-      - name: Install Rust toolchain (from rust-toolchain.toml)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
         with:
-          toolchain: 1.96.1
-
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: linux-x86_64
-          cache-bin: false
-          save-if: true
-          cache-on-failure: true
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-nextest
+          cache-key: release-linux-x86_64
+          install-nextest: true
 
       - name: Install linuxdeploy
-        uses: AnimMouse/setup-appimage@v2
+        uses: AnimMouse/setup-appimage@c8debfb91e47b03bf4bdc78a4b22fe14ebfaf7f5 # v2
         with:
           filename: linuxdeploy
           url: https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           cache_key: continuous
 
       - name: Install appimagetool
-        uses: AnimMouse/setup-appimage@v2
+        uses: AnimMouse/setup-appimage@c8debfb91e47b03bf4bdc78a4b22fe14ebfaf7f5 # v2
         with:
           filename: appimagetool
           url: https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
@@ -118,7 +91,7 @@ jobs:
         run: ./scripts/test-linux-release-artifacts.sh --tar-version "$VERSION"
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linux-x86_64
           path: |
@@ -139,43 +112,21 @@ jobs:
       TMPDIR: ${{ github.workspace }}/tmp
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
       - name: Install system dependencies (apt)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential git pkg-config cmake m4 \
-            libssl-dev fontconfig libfontconfig1-dev libfreetype-dev \
-            libglib2.0-dev libunwind-dev \
-            libgstreamer1.0-dev \
-            libgstreamer-plugins-base1.0-dev \
-            libxkbcommon-dev libxkbcommon-x11-dev \
-            libwayland-dev wayland-protocols \
-            libxcb1-dev libxrandr-dev libxinerama-dev \
-            libxi-dev libxcursor-dev mesa-vulkan-drivers libvulkan-dev \
-            libdbus-1-dev libsystemd-dev libsqlite3-dev \
-            libxml2-dev liblcms2-dev gnutls-bin libgnutls28-dev zlib1g-dev
-          pkg-config --modversion lcms2
+        run: scripts/ci/setup-linux.sh release
 
       - name: Prepare workspace temp directory
         run: mkdir -p "$TMPDIR"
 
-      - name: Install Rust toolchain (from rust-toolchain.toml)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
         with:
-          toolchain: 1.96.1
-          targets: aarch64-unknown-linux-gnu
-
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: linux-aarch64
-          cache-bin: false
-          save-if: true
-          cache-on-failure: true
+          cache-key: release-linux-aarch64
+          target: aarch64-unknown-linux-gnu
 
       - name: Build release binaries
         run: cargo xtask fresh-build --release --features neomacs-layout-engine/freetype-bundled
@@ -205,7 +156,7 @@ jobs:
             --formats tar
 
       - name: Upload Linux aarch64 artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linux-aarch64
           path: dist/*.tar.gz
@@ -222,26 +173,18 @@ jobs:
       GSTREAMER_VERSION: 1.26.9
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
       - name: Install system dependencies (brew)
         run: brew install pkg-config gstreamer
 
-      - name: Install Rust toolchain (from rust-toolchain.toml)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
         with:
-          toolchain: 1.96.1
-          targets: aarch64-apple-darwin
-
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: macos-aarch64
-          cache-bin: false
-          save-if: true
-          cache-on-failure: true
+          cache-key: release-macos-aarch64
+          target: aarch64-apple-darwin
 
       - name: Set version env
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
@@ -267,7 +210,7 @@ jobs:
         run: ./scripts/package-macos-app.sh --no-smoke
 
       - name: Upload macOS aarch64 artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: macos-aarch64
           path: |
@@ -286,19 +229,13 @@ jobs:
       GSTREAMER_VERSION: 1.26.9
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
-      - name: Install Rust toolchain (from rust-toolchain.toml)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.96.1
-          targets: x86_64-pc-windows-msvc
-
       - name: Restore GStreamer SDK cache
         id: cache-gstreamer
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             C:\gstreamer
@@ -312,7 +249,7 @@ jobs:
 
       - name: Save GStreamer SDK cache
         if: steps.cache-gstreamer.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             C:\gstreamer
@@ -323,13 +260,11 @@ jobs:
         shell: powershell
         run: ./scripts/setup-windows-gstreamer.ps1
 
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@v2
+      - name: Set up Rust tooling
+        uses: ./.github/actions/setup-rust
         with:
-          shared-key: windows-msvc-x86_64
-          cache-bin: false
-          save-if: true
-          cache-on-failure: true
+          cache-key: release-windows-msvc-x86_64
+          target: x86_64-pc-windows-msvc
 
       - name: Install NSIS
         run: choco install nsis -y
@@ -393,7 +328,7 @@ jobs:
         run: ./scripts/run-windows-installer-contract.ps1 -ConfirmEphemeralRunner
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: windows-x86_64
           path: |
@@ -415,13 +350,13 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           path: dist
           merge-multiple: true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           name: NEO Emacs ${{ github.ref_name }}
           files: dist/*
