@@ -558,12 +558,8 @@ pub(crate) fn builtin_commandp_interactive(eval: &mut Context, args: &[Value]) -
     expect_max_args("commandp", args, 2)?;
     let for_call_interactively = args.get(1).is_some_and(|value| !value.is_nil());
 
-    let classification = classify_command_designator_in_state(
-        &eval.obarray,
-        &eval.interactive,
-        &args[0],
-        for_call_interactively,
-    );
+    let classification =
+        classify_command_designator_in_state(&eval.obarray, &args[0], for_call_interactively);
     let fallback = match classification {
         CommandpClassification::Interactive => return Ok(Value::T),
         CommandpClassification::Reject => return Ok(Value::NIL),
@@ -936,16 +932,9 @@ enum InteractiveFormFallback {
 }
 
 fn classify_command_object_in_state(
-    interactive: &InteractiveRegistry,
-    resolved_symbol: Option<SymId>,
     value: &Value,
     for_call_interactively: bool,
 ) -> CommandpClassification {
-    if let Some(symbol) = resolved_symbol
-        && interactive.is_interactive(symbol)
-    {
-        return CommandpClassification::Interactive;
-    }
     if value_is_interactive_autoload(value) {
         return CommandpClassification::Interactive;
     }
@@ -1025,36 +1014,21 @@ fn classify_command_object_in_state(
 
 fn classify_command_designator_in_state(
     obarray: &Obarray,
-    interactive: &InteractiveRegistry,
     designator: &Value,
     for_call_interactively: bool,
 ) -> CommandpClassification {
     if let Some(symbol) = designator.as_symbol_id() {
-        if let Some((resolved_symbol, resolved_value)) =
+        if let Some((_resolved_symbol, resolved_value)) =
             resolve_function_designator_symbol_in_state(obarray, symbol)
         {
             if resolved_value.is_nil() {
                 return CommandpClassification::Reject;
             }
-            return classify_command_object_in_state(
-                interactive,
-                Some(resolved_symbol),
-                &resolved_value,
-                for_call_interactively,
-            );
+            return classify_command_object_in_state(&resolved_value, for_call_interactively);
         }
-        return if interactive.is_interactive(symbol) {
-            CommandpClassification::Interactive
-        } else {
-            CommandpClassification::Reject
-        };
+        return CommandpClassification::Reject;
     }
-    classify_command_object_in_state(
-        interactive,
-        designator.as_symbol_id(),
-        designator,
-        for_call_interactively,
-    )
+    classify_command_object_in_state(designator, for_call_interactively)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

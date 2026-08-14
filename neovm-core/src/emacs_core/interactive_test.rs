@@ -706,12 +706,7 @@ fn commandp_reads_each_function_cell_once() {
 
     ev.obarray.reset_symbol_slot_read_count();
     assert_eq!(
-        classify_command_designator_in_state(
-            &ev.obarray,
-            &ev.interactive,
-            &Value::from_sym_id(command),
-            false,
-        ),
+        classify_command_designator_in_state(&ev.obarray, &Value::from_sym_id(command), false),
         CommandpClassification::Interactive
     );
     assert_eq!(
@@ -725,12 +720,7 @@ fn commandp_reads_each_function_cell_once() {
         .set_symbol_function_id(alias, Value::from_sym_id(command));
     ev.obarray.reset_symbol_slot_read_count();
     assert_eq!(
-        classify_command_designator_in_state(
-            &ev.obarray,
-            &ev.interactive,
-            &Value::from_sym_id(alias),
-            false,
-        ),
+        classify_command_designator_in_state(&ev.obarray, &Value::from_sym_id(alias), false),
         CommandpClassification::Interactive
     );
     assert_eq!(
@@ -763,7 +753,7 @@ fn commandp_distinguishes_gnu_docstring_references_from_oclosure_tags() {
             Value::NIL,
             doc,
         ]);
-        classify_command_object_in_state(&InteractiveRegistry::new(), None, &closure, false)
+        classify_command_object_in_state(&closure, false)
     };
 
     for valid_doc in [
@@ -1450,11 +1440,6 @@ fn commandp_rejects_overflow_arity() {
 fn commandp_resolves_aliases_and_symbol_designators() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    // Register forward-char as an interactive command for testing.
-    ev.interactive.register_interactive(
-        crate::emacs_core::intern::intern("forward-char"),
-        InteractiveSpec::new("p"),
-    );
     ev.obarray
         .set_symbol_function("t", Value::symbol("forward-char"));
     ev.obarray
@@ -1475,6 +1460,27 @@ fn commandp_resolves_aliases_and_symbol_designators() {
     let keyword_alias_result =
         builtin_commandp_interactive(&mut ev, &[Value::symbol("vm-command-alias-keyword")]);
     assert!(keyword_alias_result.unwrap().is_truthy());
+}
+
+/// GNU `eval.c:Fcommandp` derives command identity from the resolved function
+/// object.  Mutable auxiliary metadata must not make an unbound symbol a
+/// command: otherwise a stale registry entry can survive a definition change
+/// and disagree with the Lisp-visible function cell.
+#[test]
+fn commandp_ignores_registry_metadata_for_an_unbound_symbol() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let symbol = crate::emacs_core::intern::intern("neovm--stale-command-metadata");
+    ev.interactive
+        .register_interactive(symbol, InteractiveSpec::no_args());
+
+    let result = builtin_commandp_interactive(&mut ev, &[Value::from_sym_id(symbol)])
+        .expect("commandp should classify an unbound symbol");
+
+    assert!(
+        result.is_nil(),
+        "only the GNU-shaped function cell may establish command identity"
+    );
 }
 
 #[test]
