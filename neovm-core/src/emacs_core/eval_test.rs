@@ -13850,9 +13850,9 @@ fn specpdl_backtrace_frame_args_survive_exact_gc() {
         .specpdl
         .iter()
         .rev()
-        .find_map(|entry| match entry {
-            SpecBinding::Backtrace { args, .. } => ev.backtrace_args_values(args).first().copied(),
-            _ => None,
+        .find_map(|entry| {
+            ev.backtrace_entry_values(entry)
+                .and_then(|(_, args, _, _)| args.first().copied())
         })
         .expect("backtrace frame should remain present");
     assert_eq!(
@@ -13878,9 +13878,9 @@ fn specpdl_gc_root_survives_exact_gc() {
         .specpdl
         .iter()
         .rev()
-        .find_map(|entry| match entry {
-            SpecBinding::Backtrace { args, .. } => ev.backtrace_args_values(args).first().copied(),
-            _ => None,
+        .find_map(|entry| {
+            ev.backtrace_entry_values(entry)
+                .and_then(|(_, args, _, _)| args.first().copied())
         })
         .expect("backtrace frame should remain present");
     assert_eq!(
@@ -22510,16 +22510,8 @@ fn eval_task_drain_runs_queued_closures_in_order() {
 fn render_uncaught_signal_backtrace_lists_live_frames_innermost_first() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    ev.specpdl.push(SpecBinding::Backtrace {
-        function: Value::symbol("outer-fn"),
-        args: BacktraceArgs::Evaluated0,
-        debug_on_exit: false,
-    });
-    ev.specpdl.push(SpecBinding::Backtrace {
-        function: Value::symbol("inner-fn"),
-        args: BacktraceArgs::Evaluated1(Value::fixnum(42)),
-        debug_on_exit: false,
-    });
+    ev.push_backtrace_frame(Value::symbol("outer-fn"), &[]);
+    ev.push_backtrace_frame(Value::symbol("inner-fn"), &[Value::fixnum(42)]);
     let bt = ev.render_uncaught_signal_backtrace(64);
     assert!(bt.contains("(inner-fn 42)"), "inner frame with arg: {bt}");
     assert!(bt.contains("(outer-fn)"), "outer frame, no args: {bt}");
@@ -22542,7 +22534,14 @@ fn bytecode_backtraces_reference_the_live_caller_stack_for_every_arity() {
         ev.bc_buf
             .extend((0..nargs).map(|arg| Value::fixnum(arg as i64 + 10)));
         let backtrace_base = ev.specpdl.len();
-        ev.push_backtrace_frame_from_bc_stack(Value::symbol("callee"), args_start, nargs);
+        let backtrace =
+            ev.push_backtrace_frame_from_bc_stack(Value::symbol("callee"), args_start, nargs);
+        assert_eq!(backtrace.base_for_test(), backtrace_base);
+        assert_eq!(
+            backtrace.word_for_test(),
+            backtrace_base,
+            "the ordinary bytecode-call token must be the raw specpdl base so its hot pop needs no decode"
+        );
 
         let args = match ev.specpdl.last() {
             Some(SpecBinding::Backtrace { args, .. }) => args,
@@ -22550,9 +22549,9 @@ fn bytecode_backtraces_reference_the_live_caller_stack_for_every_arity() {
         };
         assert!(
             matches!(
-                args,
-                BacktraceArgs::EvaluatedBcStack { start, len }
-                    if *start == args_start && *len == nargs
+                args.view(),
+                BacktraceArgsView::EvaluatedBcStack(span)
+                    if span.start() == args_start && span.len() == nargs
             ),
             "GNU Bcall keeps every arity as a pointer into the live caller stack: {args:?}"
         );
@@ -22563,22 +22562,117 @@ fn bytecode_backtraces_reference_the_live_caller_stack_for_every_arity() {
                 .collect::<LispArgVec>()
         );
 
-        ev.pop_fast_bytecode_backtrace_frame(backtrace_base);
+        ev.pop_fast_bytecode_backtrace_frame(backtrace);
         ev.bc_buf.truncate(args_start);
     }
 }
 
+#[test]
+fn generic_backtraces_keep_one_and_two_arguments_inline() {
+    let mut ev = Context::new();
+    let owned_base = ev.backtrace_args_stack.len();
+
+    ev.push_backtrace_frame(Value::symbol("one"), &[Value::fixnum(11)]);
+    assert!(matches!(
+        ev.specpdl.last(),
+        Some(SpecBinding::Backtrace1 {
+            arg: value,
+            debug_on_exit: false,
+            ..
+        }) if *value == Value::fixnum(11)
+    ));
+    assert_eq!(ev.backtrace_args_stack.len(), owned_base);
+    ev.unbind_to(0);
+
+    ev.push_backtrace_frame(
+        Value::symbol("two"),
+        &[Value::fixnum(21), Value::fixnum(22)],
+    );
+    assert!(matches!(
+        ev.specpdl.last(),
+        Some(SpecBinding::Backtrace2 {
+            arg0,
+            arg1,
+            ..
+        }) if *arg0 == Value::fixnum(21) && *arg1 == Value::fixnum(22)
+    ));
+    assert_eq!(ev.backtrace_args_stack.len(), owned_base);
+    ev.unbind_to(0);
+
+    let frame_base = ev.specpdl.len();
+    ev.push_backtrace_frame(
+        Value::symbol("three"),
+        &[Value::fixnum(31), Value::fixnum(32), Value::fixnum(33)],
+    );
+    assert_eq!(ev.backtrace_args_stack.len(), owned_base + 1);
+    let result = ev.unbind_to_with_result(frame_base, Ok(Value::fixnum(34)));
+    assert_eq!(
+        result.expect("trivial pop preserves success"),
+        Value::fixnum(34)
+    );
+    assert_eq!(ev.specpdl.len(), frame_base);
+    assert_eq!(
+        ev.backtrace_args_stack.len(),
+        owned_base,
+        "the trivial pointer-decrement pop must still release owned variadic arguments"
+    );
+}
+
+#[test]
+#[should_panic(expected = "fast bytecode pop requires its frame to remain the specpdl top")]
+fn bytecode_backtrace_token_rejects_an_unbalanced_fast_pop() {
+    let mut ev = Context::new();
+    let backtrace = ev.push_backtrace_frame_from_bc_stack(Value::symbol("callee"), 0, 0);
+    ev.push_specpdl_root(Value::T);
+    ev.pop_fast_bytecode_backtrace_frame(backtrace);
+}
+
+#[test]
+fn bytecode_backtrace_span_is_checked_and_round_trips_both_indices() {
+    let span = BytecodeBacktraceSpan::try_new(
+        BytecodeBacktraceSpan::START_MAX,
+        BytecodeBacktraceSpan::LEN_MASK,
+    )
+    .expect("values that fit in the packed representation");
+    assert_eq!(span.start(), BytecodeBacktraceSpan::START_MAX);
+    assert_eq!(span.len(), BytecodeBacktraceSpan::LEN_MASK);
+
+    assert!(BytecodeBacktraceSpan::try_new(BytecodeBacktraceSpan::START_MAX + 1, 0).is_none());
+    assert!(BytecodeBacktraceSpan::try_new(0, BytecodeBacktraceSpan::LEN_MASK + 1).is_none());
+}
+
+#[test]
+fn compact_saved_binding_options_round_trip_none_and_live_values() {
+    let value = Value::fixnum(42);
+    assert_eq!(SavedBindingValue::from_option(None).get(), None);
+    assert!(
+        SavedBindingValue::from_option(Some(value))
+            .get()
+            .is_some_and(|saved| saved.bits() == value.bits())
+    );
+
+    let buffer_id = crate::buffer::BufferId(7);
+    assert_eq!(SavedBufferId::from_option(None).get(), None);
+    assert_eq!(
+        SavedBufferId::from_option(Some(buffer_id)).get(),
+        Some(buffer_id)
+    );
+}
+
 /// GNU's `union specbinding` is 32 bytes on the supported 64-bit Unix build.
-/// Neomacs needs a little more room for its typed inline two-argument
-/// backtrace representation, but cold unwind payloads must not inflate every
-/// entry in the call-heavy specpdl vector beyond 48 bytes.
+/// A bytecode call pushes one of these entries and Breturn immediately pops
+/// it, so matching GNU's four-word stride is part of the hot call protocol.
 #[test]
 fn specpdl_entry_stays_compact_for_hot_backtrace_pushes() {
     let entry_size = std::mem::size_of::<SpecBinding>();
 
-    assert!(
-        entry_size <= 48,
-        "SpecBinding is {entry_size} bytes; cold unwind payloads must not set the hot specpdl stride"
+    assert_eq!(std::mem::size_of::<BacktraceArgs>(), 8);
+    assert_eq!(std::mem::size_of::<BytecodeBacktraceFrame>(), 8);
+    assert_eq!(std::mem::size_of::<SavedBindingValue>(), 8);
+    assert_eq!(std::mem::size_of::<SavedBufferId>(), 8);
+    assert_eq!(
+        entry_size, 32,
+        "SpecBinding is {entry_size} bytes; GNU's hot specpdl stride is 32 bytes"
     );
 }
 

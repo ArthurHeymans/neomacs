@@ -10,8 +10,8 @@ use super::opcode::Op;
 use crate::emacs_core::builtins;
 use crate::emacs_core::error::*;
 use crate::emacs_core::eval::{
-    BytecodeStackCallDispatch, ConditionFrame, LispArgVec, ResumeTarget, SubrEntry,
-    lookup_global_subr_entry, subr_entry_from_value,
+    BytecodeBacktraceFrame, BytecodeStackCallDispatch, ConditionFrame, LispArgVec, ResumeTarget,
+    SubrEntry, lookup_global_subr_entry, subr_entry_from_value,
 };
 use crate::emacs_core::intern::{SymId, intern, lookup_interned, resolve_sym};
 // storage_char_len and storage_substring no longer needed here — using emacs_char + LispString
@@ -807,10 +807,9 @@ const _: () = {
     assert!(std::mem::size_of::<SuspendedInterpreterFrame>() <= 80);
 };
 
-#[derive(Clone, Copy)]
 struct BytecodeCallContinuation {
     stack_after_call: usize,
-    backtrace_base: usize,
+    backtrace: BytecodeBacktraceFrame,
 }
 
 enum InterpreterStackCall {
@@ -818,7 +817,7 @@ enum InterpreterStackCall {
         func_value: Value,
         args_start: usize,
         nargs: usize,
-        backtrace_base: usize,
+        backtrace: BytecodeBacktraceFrame,
     },
     Complete(EvalResult),
 }
@@ -1504,7 +1503,7 @@ impl<'a> Vm<'a> {
     /// frame starts at `bc_buf.len()` and the args are copied ONCE into
     /// fresh callee slots (GNU setup_frame's `PUSH (*args++)` loop,
     /// bytecode.c:542-549), so a zero-copy backtrace span over the caller's
-    /// slots (`BacktraceArgs::EvaluatedBcStack`) stays valid and unmutated
+    /// slots (`BacktraceArgs::EvaluatedBcStack`) stay valid and unmutated
     /// for the whole call — exactly GNU's `record_in_backtrace` pointer into
     /// the intact caller stack. Every exit truncates back to the frame base,
     /// leaving the caller's args for the CALLER to pop.
@@ -1933,7 +1932,7 @@ impl<'a> Vm<'a> {
             // pop behind the typed iterative continuation prevents the
             // generic release/unbind machinery from becoming a per-call tax.
             self.ctx
-                .pop_fast_bytecode_backtrace_frame(suspended.continuation.backtrace_base);
+                .pop_fast_bytecode_backtrace_frame(suspended.continuation.backtrace);
             frame_aux
                 .pop()
                 .expect("a suspended caller must have a callee auxiliary frame");
@@ -2019,7 +2018,7 @@ impl<'a> Vm<'a> {
             .expect("an iterative bytecode frame must have a suspended caller");
         self.leave_bytecode_call_depth();
         self.ctx
-            .pop_fast_bytecode_backtrace_frame(suspended.continuation.backtrace_base);
+            .pop_fast_bytecode_backtrace_frame(suspended.continuation.backtrace);
         frame_aux
             .pop()
             .expect("a suspended caller must have a callee auxiliary frame");
@@ -2045,8 +2044,8 @@ impl<'a> Vm<'a> {
     ) -> InterpreterStackCall {
         match self.resolve_stack_call_target(func_val) {
             ResolvedStackCallTarget::ByteCode { callee } => {
-                let backtrace_base = self.ctx.specpdl.len();
-                self.ctx
+                let backtrace = self
+                    .ctx
                     .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
                 let func = callee
                     .get_bytecode_data()
@@ -2062,7 +2061,7 @@ impl<'a> Vm<'a> {
                             func_value: callee,
                             args_start,
                             nargs,
-                            backtrace_base,
+                            backtrace,
                         }
                     }
                     BytecodeStackCallDispatch::Interpret => {
@@ -2070,14 +2069,14 @@ impl<'a> Vm<'a> {
                         let result = self.ctx.dispatch_signal_result_if_needed(result);
                         InterpreterStackCall::Complete(
                             self.ctx
-                                .pop_bytecode_backtrace_frame_with_result(backtrace_base, result),
+                                .pop_bytecode_backtrace_token_with_result(backtrace, result),
                         )
                     }
                     BytecodeStackCallDispatch::Complete(result) => {
                         let result = self.ctx.dispatch_signal_result_if_needed(result);
                         InterpreterStackCall::Complete(
                             self.ctx
-                                .pop_bytecode_backtrace_frame_with_result(backtrace_base, result),
+                                .pop_bytecode_backtrace_token_with_result(backtrace, result),
                         )
                     }
                 }
@@ -2086,14 +2085,14 @@ impl<'a> Vm<'a> {
                 self.call_resolved_builtin_from_stack_args(func_val, args_start, nargs, target),
             ),
             ResolvedStackCallTarget::Generic => {
-                let backtrace_base = self.ctx.specpdl.len();
-                self.ctx
+                let backtrace = self
+                    .ctx
                     .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
                 let result = self.call_function_untraced_from_stack(func_val, args_start, nargs);
                 let result = self.ctx.dispatch_signal_result_if_needed(result);
                 InterpreterStackCall::Complete(
                     self.ctx
-                        .pop_bytecode_backtrace_frame_with_result(backtrace_base, result),
+                        .pop_bytecode_backtrace_token_with_result(backtrace, result),
                 )
             }
         }
@@ -2716,7 +2715,7 @@ impl<'a> Vm<'a> {
                                     func_value,
                                     args_start,
                                     nargs,
-                                    backtrace_base,
+                                    backtrace,
                                 } => {
                                     current.pc = pc_local;
                                     current.quitcounter = quitcounter;
@@ -2734,7 +2733,7 @@ impl<'a> Vm<'a> {
                                         frame: child,
                                         continuation: BytecodeCallContinuation {
                                             stack_after_call,
-                                            backtrace_base,
+                                            backtrace,
                                         },
                                     };
                                 }
@@ -5103,8 +5102,8 @@ impl<'a> Vm<'a> {
                     .collect();
                 return vm.call_function(func_val, args);
             };
-            let bt_count = vm.ctx.specpdl.len();
-            vm.ctx
+            let backtrace = vm
+                .ctx
                 .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
             let result = if nargs < entry.min_args as usize
                 || entry.max_args.is_some_and(|max| nargs > max as usize)
@@ -5126,7 +5125,7 @@ impl<'a> Vm<'a> {
             };
             let result = vm.ctx.dispatch_signal_result_if_needed(result);
             vm.ctx
-                .pop_bytecode_backtrace_frame_with_result(bt_count, result)
+                .pop_bytecode_backtrace_token_with_result(backtrace, result)
         })
     }
 
@@ -5269,8 +5268,8 @@ impl<'a> Vm<'a> {
                     );
                 }
                 ResolvedStackCallTarget::ByteCode { callee } => {
-                    let bt_count = self.ctx.specpdl.len();
-                    self.ctx
+                    let backtrace = self
+                        .ctx
                         .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
                     let bc_data = callee
                         .get_bytecode_data()
@@ -5281,12 +5280,11 @@ impl<'a> Vm<'a> {
                     let result = self.ctx.dispatch_signal_result_if_needed(result);
                     return self
                         .ctx
-                        .pop_bytecode_backtrace_frame_with_result(bt_count, result);
+                        .pop_bytecode_backtrace_token_with_result(backtrace, result);
                 }
                 ResolvedStackCallTarget::Generic => {}
             }
         }
-        let bt_count = self.ctx.specpdl.len();
         // Zero-copy call protocol (GNU Bcall): the args stay in the caller's
         // bc_buf slots for the whole call — the backtrace entry records the
         // span (GNU record_in_backtrace stores a pointer into the same
@@ -5294,7 +5292,8 @@ impl<'a> Vm<'a> {
         // setup_frame's PUSH loop), and the caller pops them only after the
         // call returns. No LispArgVec, no per-arg rooting: bc_buf is
         // GC-traced.
-        self.ctx
+        let backtrace = self
+            .ctx
             .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
         let result = self.call_function_untraced_from_stack(func_val, args_start, nargs);
         let result = self.ctx.dispatch_signal_result_if_needed(result);
@@ -5302,7 +5301,7 @@ impl<'a> Vm<'a> {
         // single-entry pop (specpdl_ptr-- shape); imbalanced/debug-on-exit
         // cases fall back to the general unwinder inside.
         self.ctx
-            .pop_bytecode_backtrace_frame_with_result(bt_count, result)
+            .pop_bytecode_backtrace_token_with_result(backtrace, result)
     }
 
     /// Stack-args twin of [`Vm::call_function_untraced_owned`]: dispatch a
@@ -5418,8 +5417,8 @@ impl<'a> Vm<'a> {
             entry,
             callee,
         } = target;
-        let bt_count = self.ctx.specpdl.len();
-        self.ctx
+        let backtrace = self
+            .ctx
             .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
         let result = if nargs < entry.min_args as usize
             || entry.max_args.is_some_and(|max| nargs > max as usize)
@@ -5432,7 +5431,7 @@ impl<'a> Vm<'a> {
             if let Some(value) =
                 self.try_dispatch_builtin_subr_fast_value_from_stack_args(sym_id, args_start, nargs)
             {
-                self.ctx.pop_fast_bytecode_backtrace_frame(bt_count);
+                self.ctx.pop_fast_bytecode_backtrace_frame(backtrace);
                 return Ok(value);
             }
             match entry.function {
@@ -5452,7 +5451,7 @@ impl<'a> Vm<'a> {
         };
         let result = self.ctx.dispatch_signal_result_if_needed(result);
         self.ctx
-            .pop_bytecode_backtrace_frame_with_result(bt_count, result)
+            .pop_bytecode_backtrace_token_with_result(backtrace, result)
     }
 
     #[inline]

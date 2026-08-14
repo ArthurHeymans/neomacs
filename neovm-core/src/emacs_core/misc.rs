@@ -710,19 +710,14 @@ fn backtrace_frame_snapshot_at(
     eval: &super::eval::Context,
     index: usize,
 ) -> Option<BacktraceFrameSnapshot> {
-    match eval.specpdl.get(index) {
-        Some(super::eval::SpecBinding::Backtrace {
-            function,
-            args,
-            debug_on_exit,
-        }) => Some(BacktraceFrameSnapshot {
-            function: *function,
-            args: eval.backtrace_args_values(args).into_iter().collect(),
-            debug_on_exit: *debug_on_exit,
-            unevalled: args.is_unevalled(),
-        }),
-        _ => None,
-    }
+    let entry = eval.specpdl.get(index)?;
+    let (function, args, debug_on_exit, unevalled) = eval.backtrace_entry_values(entry)?;
+    Some(BacktraceFrameSnapshot {
+        function,
+        args: args.into_iter().collect(),
+        debug_on_exit,
+        unevalled,
+    })
 }
 
 /// Collect backtrace frame specpdl indices, ordered oldest-first (index 0 = deepest).
@@ -731,7 +726,9 @@ fn collect_backtrace_frame_indices(eval: &super::eval::Context) -> Vec<usize> {
         .iter()
         .enumerate()
         .filter_map(|(index, entry)| match entry {
-            super::eval::SpecBinding::Backtrace { .. } => Some(index),
+            super::eval::SpecBinding::Backtrace { .. }
+            | super::eval::SpecBinding::Backtrace1 { .. }
+            | super::eval::SpecBinding::Backtrace2 { .. } => Some(index),
             _ => None,
         })
         .collect()

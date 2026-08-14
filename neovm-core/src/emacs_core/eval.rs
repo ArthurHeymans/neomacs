@@ -504,6 +504,58 @@ struct ExecutingKbdMacroRuntimeScope {
     real_this_command: Value,
 }
 
+/// Saved symbol-cell value using GNU's `Qunbound` sentinel for absence.
+///
+/// `Option<Value>` is two words because every `Value` bit pattern is valid.
+/// GNU already defines `Qunbound` as the exact old-value marker on the
+/// specpdl, so retaining that representation internally is both narrower and
+/// more faithful than adding a Rust enum discriminant.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SavedBindingValue(Value);
+
+impl SavedBindingValue {
+    #[inline]
+    fn from_option(value: Option<Value>) -> Self {
+        Self(value.unwrap_or(Value::UNBOUND))
+    }
+
+    #[inline]
+    pub(crate) fn get(self) -> Option<Value> {
+        (!self.0.is_unbound()).then_some(self.0)
+    }
+
+    #[inline]
+    fn set(&mut self, value: Option<Value>) {
+        *self = Self::from_option(value);
+    }
+}
+
+/// Optional buffer identity with zero reserved for `None`.
+///
+/// BufferManager allocates IDs monotonically from one. Capturing that
+/// invariant in `NonZeroU64` lets Rust use the null niche instead of storing a
+/// second word for `Option<BufferId>`.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SavedBufferId(Option<std::num::NonZeroU64>);
+
+impl SavedBufferId {
+    #[inline]
+    fn from_option(buffer_id: Option<crate::buffer::BufferId>) -> Self {
+        Self(buffer_id.map(|buffer_id| {
+            std::num::NonZeroU64::new(buffer_id.0)
+                .expect("live BufferId values are allocated from one")
+        }))
+    }
+
+    #[inline]
+    fn get(self) -> Option<crate::buffer::BufferId> {
+        self.0
+            .map(|buffer_id| crate::buffer::BufferId(buffer_id.get()))
+    }
+}
+
 /// A single entry on the specpdl (special binding stack).
 /// Matches GNU Emacs's `union specbinding` SPECPDL_LET / SPECPDL_LET_LOCAL.
 #[derive(Clone, Debug)]
@@ -511,7 +563,7 @@ pub(crate) enum SpecBinding {
     /// Plain dynamic let-binding: saves old obarray (global/default) value.
     Let {
         sym_id: SymId,
-        old_value: Option<Value>,
+        old_value: SavedBindingValue,
     },
     /// Buffer-local let-binding: saves old buffer-local value and which buffer.
     /// On unbind, restores the value in that specific buffer (if still live).
@@ -526,8 +578,8 @@ pub(crate) enum SpecBinding {
     /// Matches GNU's SPECPDL_LET_DEFAULT.
     LetDefault {
         sym_id: SymId,
-        old_value: Option<Value>,
-        buffer_id: Option<crate::buffer::BufferId>,
+        old_value: SavedBindingValue,
+        buffer_id: SavedBufferId,
     },
     /// Lexical environment save/restore. Mirrors GNU's
     /// `specbind(Qinternal_interpreter_environment, ...)` which saves
@@ -540,7 +592,7 @@ pub(crate) enum SpecBinding {
     /// Call frame for backtrace. Matches GNU SPECPDL_BACKTRACE.
     /// unbind_to discards these (no-op).
     ///
-    /// `args == BacktraceArgs::Unevalled(_)` mirrors GNU's
+    /// `args.is_unevalled()` mirrors GNU's
     /// `nargs == UNEVALLED` marker (eval.c:2585 for special forms).
     /// In that shape, the payload is the original cons list of
     /// un-evaluated argument forms. The walker emits
@@ -550,6 +602,22 @@ pub(crate) enum SpecBinding {
         function: Value,
         args: BacktraceArgs,
         debug_on_exit: bool,
+    },
+    /// Common evaluated one-argument call, stored directly in the specpdl
+    /// entry so callback-heavy paths do not clone into the owned side stack.
+    Backtrace1 {
+        function: Value,
+        arg: Value,
+        debug_on_exit: bool,
+    },
+    /// Common evaluated two-argument call. Omitting `debug_on_exit` is a type-
+    /// level statement that this compact form is the ordinary non-debug frame;
+    /// a future debugger setter must promote it to owned [`Self::Backtrace`]
+    /// before enabling exit debugging.
+    Backtrace2 {
+        function: Value,
+        arg0: Value,
+        arg1: Value,
     },
     /// unwind-protect cleanup. Matches GNU SPECPDL_UNWIND.
     /// For interpreter: forms is a cons list, unbind_to calls sf_progn_value.
@@ -666,49 +734,254 @@ pub(crate) struct NativeUnwindToken {
     index: usize,
 }
 
-#[derive(Clone, Debug)]
-pub(crate) enum BacktraceArgs {
+/// A live argument range in the bytecode value stack.
+///
+/// GNU stores a pointer and a count in its four-word backtrace entry.  Neomacs
+/// indexes a relocating `Vec<Value>` instead, so the equivalent identity is a
+/// `(start, len)` pair.  The checked packed form fits in the payload of
+/// [`BacktraceArgs`]; callers that cannot be represented fall back to the
+/// owned argument stack, so this type never imposes a semantic limit.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct BytecodeBacktraceSpan(usize);
+
+impl BytecodeBacktraceSpan {
+    const LEN_BITS: u32 = u16::BITS;
+    const LEN_MASK: usize = (1usize << Self::LEN_BITS) - 1;
+    const START_BITS: u32 = BacktraceArgs::PAYLOAD_BITS - Self::LEN_BITS;
+    const START_MAX: usize = (1usize << Self::START_BITS) - 1;
+
+    #[inline]
+    fn try_new(start: usize, len: usize) -> Option<Self> {
+        (start <= Self::START_MAX && len <= Self::LEN_MASK)
+            .then_some(Self((start << Self::LEN_BITS) | len))
+    }
+
+    #[inline]
+    fn start(self) -> usize {
+        self.0 >> Self::LEN_BITS
+    }
+
+    #[inline]
+    fn len(self) -> usize {
+        self.0 & Self::LEN_MASK
+    }
+}
+
+/// Decoded view of the one-word backtrace argument descriptor.
+#[derive(Clone, Copy, Debug)]
+enum BacktraceArgsView {
     Unevalled(Value),
     Evaluated0,
-    Evaluated1(Value),
-    Evaluated2(Value, Value),
     Evaluated(usize),
-    /// Evaluated bytecode-call args still live in `bc_buf`.
-    ///
-    /// GNU `record_in_backtrace` stores the caller's `Lisp_Object *call_args`
-    /// for `Bcall` frames (bytecode.c:795).  Keeping a bytecode stack span here
-    /// preserves that shape without cloning variadic argument lists just for
-    /// backtrace/debug metadata.
-    EvaluatedBcStack {
-        start: usize,
-        len: usize,
-    },
+    EvaluatedBcStack(BytecodeBacktraceSpan),
 }
+
+/// One-word encoding of GNU's `(args, nargs)` backtrace fields.
+///
+/// Real Lisp values never use tagged-value tag `001` (it is reserved by GNU),
+/// so a word with any other tag directly represents an UNEVALLED argument
+/// form.  Internal descriptors use `001`, followed by a two-bit kind and a
+/// checked payload. Evaluated argument vectors live in
+/// `Context::backtrace_args_stack`; bytecode calls instead encode their live
+/// caller-stack span directly. Keeping the bit protocol private makes an
+/// invalid descriptor unconstructable outside this module.
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+pub(crate) struct BacktraceArgs(usize);
+
+impl BacktraceArgs {
+    const DESCRIPTOR_TAG: usize = 0b001;
+    const TAG_MASK: usize = 0b111;
+    const KIND_SHIFT: u32 = 3;
+    const KIND_BITS: u32 = 2;
+    const KIND_MASK: usize = (1usize << Self::KIND_BITS) - 1;
+    const PAYLOAD_SHIFT: u32 = Self::KIND_SHIFT + Self::KIND_BITS;
+    const PAYLOAD_BITS: u32 = usize::BITS - Self::PAYLOAD_SHIFT;
+    const PAYLOAD_MAX: usize = usize::MAX >> Self::PAYLOAD_SHIFT;
+    const EVALUATED_0_KIND: usize = 0;
+    const EVALUATED_KIND: usize = 1;
+    const BYTECODE_STACK_KIND: usize = 2;
+
+    #[inline]
+    fn unevalled(value: Value) -> Self {
+        assert_ne!(
+            value.tag(),
+            Self::DESCRIPTOR_TAG,
+            "real Lisp values cannot use GNU's reserved tag 001"
+        );
+        Self(value.bits())
+    }
+
+    #[inline]
+    fn evaluated0() -> Self {
+        Self::descriptor(Self::EVALUATED_0_KIND, 0)
+    }
+
+    #[inline]
+    fn evaluated(index: usize) -> Self {
+        assert!(
+            index <= Self::PAYLOAD_MAX,
+            "a live Vec<LispArgVec> index must fit the descriptor payload"
+        );
+        Self::descriptor(Self::EVALUATED_KIND, index)
+    }
+
+    #[inline]
+    fn evaluated_bc_stack(span: BytecodeBacktraceSpan) -> Self {
+        Self::descriptor(Self::BYTECODE_STACK_KIND, span.0)
+    }
+
+    #[inline]
+    fn descriptor(kind: usize, payload: usize) -> Self {
+        debug_assert!(kind <= Self::KIND_MASK);
+        debug_assert!(payload <= Self::PAYLOAD_MAX);
+        Self((payload << Self::PAYLOAD_SHIFT) | (kind << Self::KIND_SHIFT) | Self::DESCRIPTOR_TAG)
+    }
+
+    #[inline]
+    fn view(self) -> BacktraceArgsView {
+        if self.0 & Self::TAG_MASK != Self::DESCRIPTOR_TAG {
+            return BacktraceArgsView::Unevalled(Value::from_bits(self.0));
+        }
+        let kind = (self.0 >> Self::KIND_SHIFT) & Self::KIND_MASK;
+        let payload = self.0 >> Self::PAYLOAD_SHIFT;
+        match kind {
+            Self::EVALUATED_0_KIND => BacktraceArgsView::Evaluated0,
+            Self::EVALUATED_KIND => BacktraceArgsView::Evaluated(payload),
+            Self::BYTECODE_STACK_KIND => {
+                BacktraceArgsView::EvaluatedBcStack(BytecodeBacktraceSpan(payload))
+            }
+            _ => unreachable!("private backtrace descriptor kind must be valid"),
+        }
+    }
+
+    #[inline]
+    fn owned_index(self) -> Option<usize> {
+        let is_descriptor = self.0 & Self::TAG_MASK == Self::DESCRIPTOR_TAG;
+        let kind = (self.0 >> Self::KIND_SHIFT) & Self::KIND_MASK;
+        (is_descriptor && kind == Self::EVALUATED_KIND).then_some(self.0 >> Self::PAYLOAD_SHIFT)
+    }
+
+    #[inline]
+    pub(crate) fn is_unevalled(self) -> bool {
+        matches!(self.view(), BacktraceArgsView::Unevalled(_))
+    }
+
+    #[inline]
+    fn is_evaluated(self) -> bool {
+        !self.is_unevalled()
+    }
+
+    #[inline]
+    fn is_bytecode_storage(self) -> bool {
+        matches!(
+            self.view(),
+            BacktraceArgsView::EvaluatedBcStack(_) | BacktraceArgsView::Evaluated(_)
+        )
+    }
+}
+
+impl std::fmt::Debug for BacktraceArgs {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.view().fmt(formatter)
+    }
+}
+
+const _: () = assert!(std::mem::size_of::<BacktraceArgs>() == std::mem::size_of::<usize>());
+const _: () = {
+    assert!(!std::mem::needs_drop::<Value>());
+    assert!(!std::mem::needs_drop::<BacktraceArgs>());
+};
+
+/// Proof that one bytecode-call backtrace frame was pushed at `base`.
+///
+/// The token is deliberately non-`Copy`: consuming it makes a second fast pop
+/// impossible through the typed API, without borrowing `Context` across the
+/// call or introducing lifetimes into the interpreter driver.
+#[must_use = "a pushed bytecode backtrace frame must be consumed by a matching pop"]
+#[repr(transparent)]
+#[derive(Debug)]
+pub(crate) struct BytecodeBacktraceFrame(usize);
+
+impl BytecodeBacktraceFrame {
+    /// `Vec` allocations are bounded by `isize::MAX` bytes, so a live
+    /// `specpdl` length can never use the high bit. Reserve it to tell the
+    /// return path that the packed bytecode span overflowed and owns a cold
+    /// `backtrace_args_stack` slot. The overwhelmingly common token remains
+    /// exactly the raw base and therefore needs no decode before `set_len`.
+    const OWNED_ARGS_FLAG: usize = 1usize << (usize::BITS - 1);
+    const BASE_MASK: usize = !Self::OWNED_ARGS_FLAG;
+
+    #[inline]
+    fn new(base: usize, owns_args: bool) -> Self {
+        debug_assert_eq!(
+            base & Self::OWNED_ARGS_FLAG,
+            0,
+            "a Vec length cannot occupy the bytecode-frame ownership bit"
+        );
+        Self(base | usize::from(owns_args) * Self::OWNED_ARGS_FLAG)
+    }
+
+    #[inline]
+    fn base(&self) -> usize {
+        self.0 & Self::BASE_MASK
+    }
+
+    #[cfg(test)]
+    pub(crate) fn base_for_test(&self) -> usize {
+        self.base()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn word_for_test(&self) -> usize {
+        self.0
+    }
+}
+
+const _: () =
+    assert!(std::mem::size_of::<BytecodeBacktraceFrame>() == std::mem::size_of::<usize>());
 
 #[derive(Clone, Debug)]
 pub(crate) struct ThreadDynamicBindingState {
     lexenv: Value,
 }
 
-impl BacktraceArgs {
-    #[inline]
-    pub(crate) fn is_unevalled(&self) -> bool {
-        matches!(self, Self::Unevalled(_))
+/// Copy-only state needed before discarding a trivially-unbound specpdl entry.
+///
+/// This is intentionally a separate closed enum: the fast pop below cannot
+/// accidentally admit a new `SpecBinding` variant with an owned Rust payload.
+#[derive(Clone, Copy)]
+enum TrivialSpecBindingPop {
+    NoOwnedArgs,
+    BacktraceArgs(BacktraceArgs),
+}
+
+#[inline]
+fn trivial_spec_binding_pop(binding: &SpecBinding) -> Option<TrivialSpecBindingPop> {
+    match binding {
+        SpecBinding::GcRoot { .. }
+        | SpecBinding::Nop
+        | SpecBinding::Backtrace1 {
+            debug_on_exit: false,
+            ..
+        }
+        | SpecBinding::Backtrace2 { .. } => Some(TrivialSpecBindingPop::NoOwnedArgs),
+        SpecBinding::Backtrace {
+            args,
+            debug_on_exit: false,
+            ..
+        } => Some(TrivialSpecBindingPop::BacktraceArgs(*args)),
+        _ => None,
     }
 }
 
 #[inline]
 fn spec_binding_has_trivial_unbind(binding: &SpecBinding) -> bool {
-    matches!(
-        binding,
-        SpecBinding::GcRoot { .. }
-            | SpecBinding::Nop
-            | SpecBinding::Backtrace {
-                debug_on_exit: false,
-                ..
-            }
-    )
+    trivial_spec_binding_pop(binding).is_some()
 }
+
+const _: () = assert!(!std::mem::needs_drop::<TrivialSpecBindingPop>());
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct VmRootFrame {
@@ -731,6 +1004,12 @@ pub(crate) struct PendingSafeFuncall {
 
 pub(crate) type LispArgVec = SmallVec<[Value; 8]>;
 type LetBindingVec = SmallVec<[(SymId, Value); 8]>;
+
+// `BacktraceArgs::evaluated` stores a Vec index in its descriptor payload.
+// Rust cannot allocate enough non-zero-sized entries for a valid index to
+// exceed that payload, on either 32- or 64-bit targets.
+const _: () =
+    assert!(isize::MAX as usize / std::mem::size_of::<LispArgVec>() <= BacktraceArgs::PAYLOAD_MAX);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct GnuTimerTimestamp {
@@ -3419,16 +3698,15 @@ impl Context {
     fn render_uncaught_signal_backtrace(&self, max_frames: usize) -> String {
         let mut lines: Vec<String> = Vec::new();
         for entry in self.specpdl.iter().rev() {
-            let SpecBinding::Backtrace { function, args, .. } = entry else {
+            let Some((function, args, _, _)) = self.backtrace_entry_values(entry) else {
                 continue;
             };
             if lines.len() >= max_frames {
                 lines.push("    ...".to_string());
                 break;
             }
-            let fn_str = crate::emacs_core::print_value_with_eval(self, function);
-            let arg_strs: Vec<String> = self
-                .backtrace_args_values(args)
+            let fn_str = crate::emacs_core::print_value_with_eval(self, &function);
+            let arg_strs: Vec<String> = args
                 .iter()
                 .map(|v| crate::emacs_core::print_value_with_eval(self, v))
                 .collect();
@@ -5869,20 +6147,35 @@ impl Context {
         group("specpdl");
         for entry in &self.specpdl {
             match entry {
-                SpecBinding::Let {
-                    old_value: Some(val),
-                    ..
-                } => visit(*val),
+                SpecBinding::Let { old_value, .. } => {
+                    if let Some(value) = old_value.get() {
+                        visit(value);
+                    }
+                }
                 SpecBinding::LetLocal { old_value, .. } => visit(*old_value),
-                SpecBinding::LetDefault {
-                    old_value: Some(val),
-                    ..
-                } => visit(*val),
+                SpecBinding::LetDefault { old_value, .. } => {
+                    if let Some(value) = old_value.get() {
+                        visit(value);
+                    }
+                }
                 SpecBinding::LexicalEnv { old_lexenv } => visit(*old_lexenv),
                 SpecBinding::GcRoot { value } => visit(*value),
                 SpecBinding::Backtrace { function, args, .. } => {
                     visit(*function);
                     self.trace_backtrace_args(args, visit);
+                }
+                SpecBinding::Backtrace1 { function, arg, .. } => {
+                    visit(*function);
+                    visit(*arg);
+                }
+                SpecBinding::Backtrace2 {
+                    function,
+                    arg0,
+                    arg1,
+                } => {
+                    visit(*function);
+                    visit(*arg0);
+                    visit(*arg1);
                 }
                 SpecBinding::UnwindProtect { forms, lexenv } => {
                     visit(*forms);
@@ -13027,7 +13320,27 @@ impl Context {
         self.eval_value(&tail.cons_car()).map(Some)
     }
 
+    #[inline(always)]
     pub(crate) fn push_backtrace_frame(&mut self, function: Value, args: &[Value]) {
+        match args {
+            [arg] => {
+                self.specpdl.push(SpecBinding::Backtrace1 {
+                    function,
+                    arg: *arg,
+                    debug_on_exit: false,
+                });
+                return;
+            }
+            [arg0, arg1] => {
+                self.specpdl.push(SpecBinding::Backtrace2 {
+                    function,
+                    arg0: *arg0,
+                    arg1: *arg1,
+                });
+                return;
+            }
+            _ => {}
+        }
         let args = self.backtrace_args_from_slice(args);
         self.specpdl.push(SpecBinding::Backtrace {
             function,
@@ -13038,6 +13351,25 @@ impl Context {
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn push_backtrace_frame_owned(&mut self, function: Value, args: LispArgVec) {
+        match args.as_slice() {
+            [arg] => {
+                self.specpdl.push(SpecBinding::Backtrace1 {
+                    function,
+                    arg: *arg,
+                    debug_on_exit: false,
+                });
+                return;
+            }
+            [arg0, arg1] => {
+                self.specpdl.push(SpecBinding::Backtrace2 {
+                    function,
+                    arg0: *arg0,
+                    arg1: *arg1,
+                });
+                return;
+            }
+            _ => {}
+        }
         let args = self.backtrace_args_from_owned(args);
         self.specpdl.push(SpecBinding::Backtrace {
             function,
@@ -13046,27 +13378,48 @@ impl Context {
         });
     }
 
+    #[inline(always)]
     pub(crate) fn push_backtrace_frame_from_bc_stack(
         &mut self,
         function: Value,
         args_start: usize,
         nargs: usize,
-    ) {
+    ) -> BytecodeBacktraceFrame {
+        let base = self.specpdl.len();
         debug_assert!(
             args_start
                 .checked_add(nargs)
                 .is_some_and(|end| end <= self.bc_buf.len()),
             "bytecode backtrace arguments must be a live caller-stack span"
         );
-        let args = BacktraceArgs::EvaluatedBcStack {
-            start: args_start,
-            len: nargs,
+        let (args, owns_args) = match BytecodeBacktraceSpan::try_new(args_start, nargs) {
+            Some(span) => (BacktraceArgs::evaluated_bc_stack(span), false),
+            None => (
+                self.backtrace_args_from_oversized_bc_stack(args_start, nargs),
+                true,
+            ),
         };
         self.specpdl.push(SpecBinding::Backtrace {
             function,
             args,
             debug_on_exit: false,
         });
+        BytecodeBacktraceFrame::new(base, owns_args)
+    }
+
+    /// Semantic fallback for a bytecode stack span too large for the compact
+    /// descriptor. Keep it out of the ordinary Bcall instruction stream: a
+    /// packed span covers every normally allocatable frame, while this path
+    /// must retain behavior rather than impose a representation limit.
+    #[cold]
+    #[inline(never)]
+    fn backtrace_args_from_oversized_bc_stack(
+        &mut self,
+        args_start: usize,
+        nargs: usize,
+    ) -> BacktraceArgs {
+        let values = LispArgVec::from_slice(&self.bc_buf[args_start..args_start + nargs]);
+        BacktraceArgs::evaluated(self.store_backtrace_args(values))
     }
 
     /// Push a backtrace frame for a special-form call (`nargs == UNEVALLED`
@@ -13076,7 +13429,7 @@ impl Context {
     pub(crate) fn push_unevalled_backtrace_frame(&mut self, function: Value, original_args: Value) {
         self.specpdl.push(SpecBinding::Backtrace {
             function,
-            args: BacktraceArgs::Unevalled(original_args),
+            args: BacktraceArgs::unevalled(original_args),
             debug_on_exit: false,
         });
     }
@@ -13091,31 +13444,80 @@ impl Context {
     #[inline]
     fn backtrace_args_from_slice(&mut self, args: &[Value]) -> BacktraceArgs {
         match args {
-            [] => BacktraceArgs::Evaluated0,
-            [arg0] => BacktraceArgs::Evaluated1(*arg0),
-            [arg0, arg1] => BacktraceArgs::Evaluated2(*arg0, *arg1),
-            _ => BacktraceArgs::Evaluated(self.store_backtrace_args(LispArgVec::from_slice(args))),
+            [] => BacktraceArgs::evaluated0(),
+            _ => BacktraceArgs::evaluated(self.store_backtrace_args(LispArgVec::from_slice(args))),
         }
     }
 
     #[inline]
     fn backtrace_args_from_owned(&mut self, args: LispArgVec) -> BacktraceArgs {
         if args.is_empty() {
-            BacktraceArgs::Evaluated0
-        } else if args.len() == 1 {
-            BacktraceArgs::Evaluated1(args[0])
-        } else if args.len() == 2 {
-            BacktraceArgs::Evaluated2(args[0], args[1])
+            BacktraceArgs::evaluated0()
         } else {
-            BacktraceArgs::Evaluated(self.store_backtrace_args(args))
+            BacktraceArgs::evaluated(self.store_backtrace_args(args))
+        }
+    }
+
+    fn evaluated_backtrace_from_slice(
+        &mut self,
+        function: Value,
+        debug_on_exit: bool,
+        args: &[Value],
+    ) -> SpecBinding {
+        match args {
+            [arg] => SpecBinding::Backtrace1 {
+                function,
+                arg: *arg,
+                debug_on_exit,
+            },
+            [arg0, arg1] if !debug_on_exit => SpecBinding::Backtrace2 {
+                function,
+                arg0: *arg0,
+                arg1: *arg1,
+            },
+            _ => SpecBinding::Backtrace {
+                function,
+                args: self.backtrace_args_from_slice(args),
+                debug_on_exit,
+            },
+        }
+    }
+
+    fn evaluated_backtrace_from_owned(
+        &mut self,
+        function: Value,
+        debug_on_exit: bool,
+        args: LispArgVec,
+    ) -> SpecBinding {
+        match args.as_slice() {
+            [arg] => SpecBinding::Backtrace1 {
+                function,
+                arg: *arg,
+                debug_on_exit,
+            },
+            [arg0, arg1] if !debug_on_exit => SpecBinding::Backtrace2 {
+                function,
+                arg0: *arg0,
+                arg1: *arg1,
+            },
+            _ => SpecBinding::Backtrace {
+                function,
+                args: self.backtrace_args_from_owned(args),
+                debug_on_exit,
+            },
         }
     }
 
     #[inline]
     fn release_backtrace_args(&mut self, args: &BacktraceArgs) {
-        let BacktraceArgs::Evaluated(index) = *args else {
+        let Some(index) = args.owned_index() else {
             return;
         };
+        self.release_owned_backtrace_args(index);
+    }
+
+    #[inline(never)]
+    fn release_owned_backtrace_args(&mut self, index: usize) {
         if index >= self.backtrace_args_stack.len() {
             // Healed residue: a panic contained at a JIT-shim/module boundary
             // truncated `backtrace_args_stack` while the panicked extent's
@@ -13146,42 +13548,40 @@ impl Context {
     fn release_backtrace_args_in_specpdl_suffix(&mut self, count: usize) {
         let mut truncate_to = self.backtrace_args_stack.len();
         for binding in self.specpdl[count..].iter().rev() {
-            if let SpecBinding::Backtrace {
-                args: BacktraceArgs::Evaluated(index),
-                ..
-            } = binding
+            if let SpecBinding::Backtrace { args, .. } = binding
+                && let BacktraceArgsView::Evaluated(index) = args.view()
             {
-                if *index >= truncate_to {
+                if index >= truncate_to {
                     // Healed residue (see `release_backtrace_args`): the slot
                     // was already truncated by a containment boundary restore.
                     continue;
                 }
                 debug_assert_eq!(
-                    *index + 1,
+                    index + 1,
                     truncate_to,
                     "backtrace args stack should match the specpdl unwind suffix"
                 );
-                truncate_to = *index;
+                truncate_to = index;
             }
         }
         self.backtrace_args_stack.truncate(truncate_to);
     }
 
     pub(crate) fn backtrace_args_values(&self, args: &BacktraceArgs) -> LispArgVec {
-        match args {
-            BacktraceArgs::Unevalled(value) => smallvec::smallvec![*value],
-            BacktraceArgs::Evaluated0 => LispArgVec::new(),
-            BacktraceArgs::Evaluated1(value) => smallvec::smallvec![*value],
-            BacktraceArgs::Evaluated2(arg0, arg1) => smallvec::smallvec![*arg0, *arg1],
-            BacktraceArgs::Evaluated(index) => self
+        match args.view() {
+            BacktraceArgsView::Unevalled(value) => smallvec::smallvec![value],
+            BacktraceArgsView::Evaluated0 => LispArgVec::new(),
+            BacktraceArgsView::Evaluated(index) => self
                 .backtrace_args_stack
-                .get(*index)
+                .get(index)
                 .cloned()
                 .unwrap_or_default(),
-            BacktraceArgs::EvaluatedBcStack { start, len } => {
-                let end = start.saturating_add(*len);
+            BacktraceArgsView::EvaluatedBcStack(span) => {
+                let start = span.start();
+                let len = span.len();
+                let end = start.saturating_add(len);
                 if end <= self.bc_buf.len() {
-                    LispArgVec::from_slice(&self.bc_buf[*start..end])
+                    LispArgVec::from_slice(&self.bc_buf[start..end])
                 } else {
                     LispArgVec::new()
                 }
@@ -13189,41 +13589,68 @@ impl Context {
         }
     }
 
+    /// Copy the logical GNU backtrace fields from any compact physical frame.
+    /// Backtrace inspection is cold; centralizing the representation split
+    /// keeps callers exhaustive without putting a larger enum in the hot
+    /// specpdl entry itself.
+    pub(crate) fn backtrace_entry_values(
+        &self,
+        entry: &SpecBinding,
+    ) -> Option<(Value, LispArgVec, bool, bool)> {
+        match entry {
+            SpecBinding::Backtrace {
+                function,
+                args,
+                debug_on_exit,
+            } => Some((
+                *function,
+                self.backtrace_args_values(args),
+                *debug_on_exit,
+                args.is_unevalled(),
+            )),
+            SpecBinding::Backtrace1 {
+                function,
+                arg,
+                debug_on_exit,
+            } => Some((*function, smallvec::smallvec![*arg], *debug_on_exit, false)),
+            SpecBinding::Backtrace2 {
+                function,
+                arg0,
+                arg1,
+            } => Some((*function, smallvec::smallvec![*arg0, *arg1], false, false)),
+            _ => None,
+        }
+    }
+
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn backtrace_args_len(&self, args: &BacktraceArgs) -> usize {
-        match args {
-            BacktraceArgs::Unevalled(_) => 1,
-            BacktraceArgs::Evaluated0 => 0,
-            BacktraceArgs::Evaluated1(_) => 1,
-            BacktraceArgs::Evaluated2(_, _) => 2,
-            BacktraceArgs::Evaluated(index) => self
+        match args.view() {
+            BacktraceArgsView::Unevalled(_) => 1,
+            BacktraceArgsView::Evaluated0 => 0,
+            BacktraceArgsView::Evaluated(index) => self
                 .backtrace_args_stack
-                .get(*index)
+                .get(index)
                 .map_or(0, |args| args.len()),
-            BacktraceArgs::EvaluatedBcStack { len, .. } => *len,
+            BacktraceArgsView::EvaluatedBcStack(span) => span.len(),
         }
     }
 
     fn trace_backtrace_args(&self, args: &BacktraceArgs, visit: &mut dyn FnMut(Value)) {
-        match args {
-            BacktraceArgs::Unevalled(value) => visit(*value),
-            BacktraceArgs::Evaluated0 => {}
-            BacktraceArgs::Evaluated1(value) => visit(*value),
-            BacktraceArgs::Evaluated2(arg0, arg1) => {
-                visit(*arg0);
-                visit(*arg1);
-            }
-            BacktraceArgs::Evaluated(index) => {
-                if let Some(args) = self.backtrace_args_stack.get(*index) {
+        match args.view() {
+            BacktraceArgsView::Unevalled(value) => visit(value),
+            BacktraceArgsView::Evaluated0 => {}
+            BacktraceArgsView::Evaluated(index) => {
+                if let Some(args) = self.backtrace_args_stack.get(index) {
                     for arg in args.iter().copied() {
                         visit(arg);
                     }
                 }
             }
-            BacktraceArgs::EvaluatedBcStack { start, len } => {
-                let end = start.saturating_add(*len);
+            BacktraceArgsView::EvaluatedBcStack(span) => {
+                let start = span.start();
+                let end = start.saturating_add(span.len());
                 if end <= self.bc_buf.len() {
-                    for arg in self.bc_buf[*start..end].iter().copied() {
+                    for arg in self.bc_buf[start..end].iter().copied() {
                         visit(arg);
                     }
                 }
@@ -13244,67 +13671,33 @@ impl Context {
     /// must keep the invariant that every `set_backtrace_args_evalled`
     /// matches exactly one prior `push_unevalled_backtrace_frame`.
     pub(crate) fn set_backtrace_args_evalled(&mut self, count: usize, evaluated: &[Value]) {
-        let is_unevalled = matches!(
-            self.specpdl.get(count),
+        let (function, debug_on_exit) = match self.specpdl.get(count) {
             Some(SpecBinding::Backtrace {
-                args: BacktraceArgs::Unevalled(_),
-                ..
-            })
-        );
-        if !is_unevalled {
-            panic!(
-                "set_backtrace_args_evalled: expected UNEVALLED Backtrace at specpdl[{count}], got {:?}",
-                self.specpdl.get(count)
-            );
-        }
-        let evaluated_args = self.backtrace_args_from_slice(evaluated);
-        let entry = self
-            .specpdl
-            .get_mut(count)
-            .expect("set_backtrace_args_evalled: specpdl index out of range");
-        match entry {
-            SpecBinding::Backtrace {
-                args: backtrace_args,
-                ..
-            } if backtrace_args.is_unevalled() => {
-                *backtrace_args = evaluated_args;
-            }
+                function,
+                args,
+                debug_on_exit,
+            }) if args.is_unevalled() => (*function, *debug_on_exit),
             other => panic!(
                 "set_backtrace_args_evalled: expected UNEVALLED Backtrace at specpdl[{count}], got {other:?}"
             ),
-        }
+        };
+        let replacement = self.evaluated_backtrace_from_slice(function, debug_on_exit, evaluated);
+        self.specpdl[count] = replacement;
     }
 
     pub(crate) fn set_backtrace_args_evalled_owned(&mut self, count: usize, evaluated: LispArgVec) {
-        let is_unevalled = matches!(
-            self.specpdl.get(count),
+        let (function, debug_on_exit) = match self.specpdl.get(count) {
             Some(SpecBinding::Backtrace {
-                args: BacktraceArgs::Unevalled(_),
-                ..
-            })
-        );
-        if !is_unevalled {
-            panic!(
-                "set_backtrace_args_evalled_owned: expected UNEVALLED Backtrace at specpdl[{count}], got {:?}",
-                self.specpdl.get(count)
-            );
-        }
-        let evaluated_args = self.backtrace_args_from_owned(evaluated);
-        let entry = self
-            .specpdl
-            .get_mut(count)
-            .expect("set_backtrace_args_evalled_owned: specpdl index out of range");
-        match entry {
-            SpecBinding::Backtrace {
-                args: backtrace_args,
-                ..
-            } if backtrace_args.is_unevalled() => {
-                *backtrace_args = evaluated_args;
-            }
+                function,
+                args,
+                debug_on_exit,
+            }) if args.is_unevalled() => (*function, *debug_on_exit),
             other => panic!(
                 "set_backtrace_args_evalled_owned: expected UNEVALLED Backtrace at specpdl[{count}], got {other:?}"
             ),
-        }
+        };
+        let replacement = self.evaluated_backtrace_from_owned(function, debug_on_exit, evaluated);
+        self.specpdl[count] = replacement;
     }
 
     pub(crate) fn save_specpdl_roots(&self) -> SpecpdlRootScopeState {
@@ -13426,13 +13819,15 @@ impl Context {
             return;
         };
         let saved_len = frame.saved_len;
-        let Some(SpecBinding::Backtrace { args, .. }) = self.specpdl.get(count) else {
+        let Some(entry) = self.specpdl.get(count) else {
             return;
         };
-        if args.is_unevalled() {
+        let Some((_, values, _, unevalled)) = self.backtrace_entry_values(entry) else {
+            return;
+        };
+        if unevalled {
             return;
         }
-        let values = self.backtrace_args_values(args);
         let frame_index = self.sequence_temp_root_frames.len() - 1;
         self.sequence_temp_root_frames[frame_index].call_roots = values.to_vec();
         debug_assert!(self.eval_temp_roots.len() >= saved_len);
@@ -13597,21 +13992,20 @@ impl Context {
         if specpdl_len == count {
             return result;
         }
-        if specpdl_len == count + 1
-            && let Some(
-                SpecBinding::GcRoot { .. }
-                | SpecBinding::Nop
-                | SpecBinding::Backtrace {
-                    debug_on_exit: false,
-                    ..
-                },
-            ) = self.specpdl.last()
-        {
-            let binding = self.specpdl.pop().expect("specpdl_len checked above");
-            if let SpecBinding::Backtrace { args, .. } = binding {
-                self.release_backtrace_args(&args);
+        if specpdl_len == count + 1 {
+            let trivial_pop = self.specpdl.last().and_then(trivial_spec_binding_pop);
+            if let Some(trivial_pop) = trivial_pop {
+                if let TrivialSpecBindingPop::BacktraceArgs(args) = trivial_pop {
+                    self.release_backtrace_args(&args);
+                }
+                // SAFETY: `trivial_spec_binding_pop` is the closed proof that
+                // the top variant has no owned Rust payload. Its only copied
+                // cleanup state is `BacktraceArgs`, which was released above.
+                // This is GNU's common `specpdl_ptr--` without routing every
+                // call through `SpecBinding`'s whole-enum drop glue.
+                unsafe { self.specpdl.set_len(count) };
+                return result;
             }
-            return result;
         }
         if self.specpdl[count..]
             .iter()
@@ -13688,14 +14082,10 @@ impl Context {
             && matches!(
                 self.specpdl.last(),
                 Some(SpecBinding::Backtrace {
-                    args: BacktraceArgs::Evaluated0
-                        | BacktraceArgs::Evaluated1(_)
-                        | BacktraceArgs::Evaluated2(_, _)
-                        | BacktraceArgs::EvaluatedBcStack { .. }
-                        | BacktraceArgs::Evaluated(_),
+                    args,
                     debug_on_exit: false,
                     ..
-                })
+                }) if args.is_evaluated()
             );
 
         if can_pop {
@@ -13713,20 +14103,71 @@ impl Context {
     }
 
     #[inline]
-    pub(crate) fn pop_fast_bytecode_backtrace_frame(&mut self, count: usize) {
-        debug_assert!(
-            self.specpdl.len() == count + 1
-                && matches!(
-                    self.specpdl.last(),
-                    Some(SpecBinding::Backtrace {
-                        args: BacktraceArgs::EvaluatedBcStack { .. },
-                        debug_on_exit: false,
-                        ..
-                    })
-                ),
-            "fast bytecode subr call should only pop its own trivial backtrace frame"
+    pub(crate) fn pop_bytecode_backtrace_token_with_result(
+        &mut self,
+        frame: BytecodeBacktraceFrame,
+        result: EvalResult,
+    ) -> EvalResult {
+        self.pop_bytecode_backtrace_frame_with_result(frame.base(), result)
+    }
+
+    #[inline(always)]
+    pub(crate) fn pop_fast_bytecode_backtrace_frame(&mut self, frame: BytecodeBacktraceFrame) {
+        let frame_word = frame.0;
+        debug_assert_eq!(
+            self.specpdl.len(),
+            frame.base() + 1,
+            "fast bytecode pop requires its frame to remain the specpdl top"
         );
-        self.specpdl.pop();
+        debug_assert!(matches!(
+            self.specpdl.last(),
+            Some(SpecBinding::Backtrace {
+                args,
+                debug_on_exit: false,
+                ..
+            }) if args.is_bytecode_storage()
+        ));
+        let count = if frame_word & BytecodeBacktraceFrame::OWNED_ARGS_FLAG == 0 {
+            // The ordinary token is exactly its base: no mask or descriptor
+            // decode on GNU's Breturn-shaped hot path.
+            frame_word
+        } else {
+            self.release_oversized_bytecode_backtrace_frame(frame_word)
+        };
+
+        // SAFETY: `BytecodeBacktraceFrame` is private, non-Copy, and only
+        // constructed immediately after pushing this Backtrace variant. The
+        // interpreter driver consumes it only after the nested call restored
+        // the exact specpdl depth; debug builds verify that protocol above.
+        // Backtrace's fields (`Value`,
+        // `BacktraceArgs`, bool) need no drop, so reducing the length is GNU's
+        // `specpdl_ptr--` without leaking an owned Rust payload. Any path that
+        // can leave another binding or debug-on-exit state uses the exhaustive
+        // `pop_bytecode_backtrace_frame_with_result`/`unbind_to` path instead.
+        unsafe { self.specpdl.set_len(count) };
+    }
+
+    /// Release the semantic fallback for a bytecode argument span that could
+    /// not fit the compact descriptor. Keeping both the descriptor decode and
+    /// side-stack maintenance here leaves the ordinary return as one predicted
+    /// branch plus the `specpdl` pointer decrement.
+    #[cold]
+    #[inline(never)]
+    fn release_oversized_bytecode_backtrace_frame(&mut self, frame_word: usize) -> usize {
+        let count = frame_word & BytecodeBacktraceFrame::BASE_MASK;
+        let args = match self.specpdl.get(count) {
+            Some(SpecBinding::Backtrace {
+                args,
+                debug_on_exit: false,
+                ..
+            }) => *args,
+            _ => panic!("oversized bytecode pop requires its own non-debug backtrace frame"),
+        };
+        let index = args
+            .owned_index()
+            .expect("oversized bytecode backtrace must own an argument slot");
+        self.release_owned_backtrace_args(index);
+        count
     }
 
     fn apply_internal(
@@ -14303,29 +14744,17 @@ impl Context {
 
     #[inline]
     fn backtrace_arg_or_nil(&self, args: &BacktraceArgs, index: usize) -> Value {
-        match args {
-            BacktraceArgs::Unevalled(_) | BacktraceArgs::Evaluated0 => Value::NIL,
-            BacktraceArgs::Evaluated1(value) => {
-                if index == 0 {
-                    *value
-                } else {
-                    Value::NIL
-                }
-            }
-            BacktraceArgs::Evaluated2(arg0, arg1) => match index {
-                0 => *arg0,
-                1 => *arg1,
-                _ => Value::NIL,
-            },
-            BacktraceArgs::Evaluated(args_index) => self
+        match args.view() {
+            BacktraceArgsView::Unevalled(_) | BacktraceArgsView::Evaluated0 => Value::NIL,
+            BacktraceArgsView::Evaluated(args_index) => self
                 .backtrace_args_stack
-                .get(*args_index)
+                .get(args_index)
                 .and_then(|args| args.get(index).copied())
                 .unwrap_or(Value::NIL),
-            BacktraceArgs::EvaluatedBcStack { start, len } => {
-                if index < *len {
+            BacktraceArgsView::EvaluatedBcStack(span) => {
+                if index < span.len() {
                     self.bc_buf
-                        .get(start.saturating_add(index))
+                        .get(span.start().saturating_add(index))
                         .copied()
                         .unwrap_or(Value::NIL)
                 } else {
@@ -14338,15 +14767,21 @@ impl Context {
     #[inline]
     fn backtrace_evaluated_arg_or_nil(&self, count: usize, index: usize) -> Value {
         match self.specpdl.get(count) {
-            Some(SpecBinding::Backtrace {
-                args:
-                    args @ (BacktraceArgs::Evaluated0
-                    | BacktraceArgs::Evaluated1(_)
-                    | BacktraceArgs::Evaluated2(_, _)
-                    | BacktraceArgs::Evaluated(_)
-                    | BacktraceArgs::EvaluatedBcStack { .. }),
-                ..
-            }) => self.backtrace_arg_or_nil(args, index),
+            Some(SpecBinding::Backtrace { args, .. }) if args.is_evaluated() => {
+                self.backtrace_arg_or_nil(args, index)
+            }
+            Some(SpecBinding::Backtrace1 { arg, .. }) => {
+                if index == 0 {
+                    *arg
+                } else {
+                    Value::NIL
+                }
+            }
+            Some(SpecBinding::Backtrace2 { arg0, arg1, .. }) => match index {
+                0 => *arg0,
+                1 => *arg1,
+                _ => Value::NIL,
+            },
             Some(other) => panic!(
                 "backtrace_evaluated_arg_or_nil: expected EVALD Backtrace at specpdl[{count}], got {other:?}"
             ),
@@ -15331,8 +15766,8 @@ impl Context {
                         };
                         self.specpdl.push(SpecBinding::LetDefault {
                             sym_id: resolved,
-                            old_value: old_default,
-                            buffer_id: buf_id_opt,
+                            old_value: SavedBindingValue::from_option(old_default),
+                            buffer_id: SavedBufferId::from_option(buf_id_opt),
                         });
                         if self.watchers.has_watchers(resolved) {
                             let _ = self.run_variable_watchers_by_id(
@@ -15399,8 +15834,8 @@ impl Context {
             } else {
                 self.specpdl.push(SpecBinding::LetDefault {
                     sym_id: resolved,
-                    old_value: Some(old_val),
-                    buffer_id: Some(buf_id),
+                    old_value: SavedBindingValue::from_option(Some(old_val)),
+                    buffer_id: SavedBufferId::from_option(Some(buf_id)),
                 });
             }
             if self.watchers.has_watchers(resolved) {
@@ -15430,7 +15865,7 @@ impl Context {
         let old_value = self.obarray.symbol_value_id(resolved).copied();
         self.specpdl.push(SpecBinding::Let {
             sym_id: resolved,
-            old_value,
+            old_value: SavedBindingValue::from_option(old_value),
         });
         if self.watchers.has_watchers(resolved) {
             let _ = self.run_variable_watchers_by_id(resolved, &value, &Value::NIL, "let");
@@ -15481,12 +15916,14 @@ impl Context {
                 sym_id: s,
                 buffer_id,
                 ..
-            } => *s == sym_id && *buffer_id == current,
+            } => *s == sym_id && buffer_id.get() == current,
             SpecBinding::LetLocal { .. } => false,
             SpecBinding::Let { .. }
             | SpecBinding::LexicalEnv { .. }
             | SpecBinding::GcRoot { .. }
             | SpecBinding::Backtrace { .. }
+            | SpecBinding::Backtrace1 { .. }
+            | SpecBinding::Backtrace2 { .. }
             | SpecBinding::Nop
             | SpecBinding::UnwindProtect { .. }
             | SpecBinding::SaveExcursion { .. }
@@ -15605,10 +16042,10 @@ impl Context {
 
     fn swap_let_binding_for_thread_switch(&mut self, index: usize) {
         let (sym_id, old_value, default_binding) = match self.specpdl.get(index) {
-            Some(SpecBinding::Let { sym_id, old_value }) => (*sym_id, *old_value, false),
+            Some(SpecBinding::Let { sym_id, old_value }) => (*sym_id, old_value.get(), false),
             Some(SpecBinding::LetDefault {
                 sym_id, old_value, ..
-            }) => (*sym_id, *old_value, true),
+            }) => (*sym_id, old_value.get(), true),
             _ => return,
         };
         let current_value = if default_binding {
@@ -15625,7 +16062,7 @@ impl Context {
                 old_value: saved_value,
                 ..
             }) => {
-                *saved_value = current_value;
+                saved_value.set(current_value);
             }
             _ => {}
         }
@@ -15716,6 +16153,7 @@ impl Context {
             let binding = self.specpdl.pop().unwrap();
             match binding {
                 SpecBinding::Let { sym_id, old_value } => {
+                    let old_value = old_value.get();
                     if self.watchers.has_watchers(sym_id) {
                         let restore_val = old_value.unwrap_or(Value::NIL);
                         let _ = self.run_variable_watchers_by_id(
@@ -15835,6 +16273,7 @@ impl Context {
                 SpecBinding::LetDefault {
                     sym_id, old_value, ..
                 } => {
+                    let old_value = old_value.get();
                     // Restore the default value (GNU: set_default_internal)
                     if self.watchers.has_watchers(sym_id) {
                         let restore_val = old_value.unwrap_or(Value::NIL);
@@ -15856,6 +16295,9 @@ impl Context {
                 SpecBinding::Backtrace { args, .. } => {
                     self.release_backtrace_args(&args);
                     // No-op, matches GNU SPECPDL_BACKTRACE
+                }
+                SpecBinding::Backtrace1 { .. } | SpecBinding::Backtrace2 { .. } => {
+                    // Inline evaluated backtraces own no side-stack payload.
                 }
                 SpecBinding::Nop => {
                     // No-op, matches GNU SPECPDL_NOP
@@ -15933,6 +16375,8 @@ fn default_toplevel_binding(specpdl: &[SpecBinding], sym_id: SymId) -> Option<&S
         | SpecBinding::LexicalEnv { .. }
         | SpecBinding::GcRoot { .. }
         | SpecBinding::Backtrace { .. }
+        | SpecBinding::Backtrace1 { .. }
+        | SpecBinding::Backtrace2 { .. }
         | SpecBinding::Nop
         | SpecBinding::UnwindProtect { .. }
         | SpecBinding::SaveExcursion { .. }
@@ -15952,11 +16396,13 @@ pub(crate) fn default_toplevel_value_in_state(
 ) -> Option<Value> {
     match default_toplevel_binding(specpdl, sym_id) {
         Some(SpecBinding::Let { old_value, .. })
-        | Some(SpecBinding::LetDefault { old_value, .. }) => *old_value,
+        | Some(SpecBinding::LetDefault { old_value, .. }) => old_value.get(),
         Some(SpecBinding::LetLocal { .. })
         | Some(SpecBinding::LexicalEnv { .. })
         | Some(SpecBinding::GcRoot { .. })
         | Some(SpecBinding::Backtrace { .. })
+        | Some(SpecBinding::Backtrace1 { .. })
+        | Some(SpecBinding::Backtrace2 { .. })
         | Some(SpecBinding::Nop)
         | Some(SpecBinding::UnwindProtect { .. })
         | Some(SpecBinding::SaveExcursion { .. })
@@ -16008,7 +16454,7 @@ pub(crate) fn set_default_toplevel_value_in_state(
                 old_value,
                 ..
             } if *binding_sym == sym_id => {
-                *old_value = Some(value);
+                old_value.set(Some(value));
                 return true;
             }
             SpecBinding::Let { .. }
@@ -16017,6 +16463,8 @@ pub(crate) fn set_default_toplevel_value_in_state(
             | SpecBinding::LexicalEnv { .. }
             | SpecBinding::GcRoot { .. }
             | SpecBinding::Backtrace { .. }
+            | SpecBinding::Backtrace1 { .. }
+            | SpecBinding::Backtrace2 { .. }
             | SpecBinding::Nop
             | SpecBinding::UnwindProtect { .. }
             | SpecBinding::SaveExcursion { .. }
@@ -16064,12 +16512,14 @@ fn let_shadows_buffer_binding_p_in_state(
             sym_id: s,
             buffer_id,
             ..
-        } => *s == sym_id && *buffer_id == current,
+        } => *s == sym_id && buffer_id.get() == current,
         SpecBinding::LetLocal { .. }
         | SpecBinding::Let { .. }
         | SpecBinding::LexicalEnv { .. }
         | SpecBinding::GcRoot { .. }
         | SpecBinding::Backtrace { .. }
+        | SpecBinding::Backtrace1 { .. }
+        | SpecBinding::Backtrace2 { .. }
         | SpecBinding::Nop
         | SpecBinding::UnwindProtect { .. }
         | SpecBinding::SaveExcursion { .. }

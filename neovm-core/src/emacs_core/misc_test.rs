@@ -703,11 +703,9 @@ fn eval_sub_cons_pushes_unevalled_frame_for_special_forms() {
         let snap: Vec<(Value, bool)> = eval
             .specpdl
             .iter()
-            .filter_map(|e| match e {
-                super::super::eval::SpecBinding::Backtrace { function, args, .. } => {
-                    Some((*function, args.is_unevalled()))
-                }
-                _ => None,
+            .filter_map(|entry| {
+                eval.backtrace_entry_values(entry)
+                    .map(|(function, _, _, unevalled)| (function, unevalled))
             })
             .collect();
         PROBE.with(|p| *p.borrow_mut() = snap);
@@ -746,11 +744,9 @@ fn eval_sub_cons_pushes_outer_unevalled_during_arg_eval() {
         let snap: Vec<(Value, bool)> = eval
             .specpdl
             .iter()
-            .filter_map(|e| match e {
-                super::super::eval::SpecBinding::Backtrace { function, args, .. } => {
-                    Some((*function, args.is_unevalled()))
-                }
-                _ => None,
+            .filter_map(|entry| {
+                eval.backtrace_entry_values(entry)
+                    .map(|(function, _, _, unevalled)| (function, unevalled))
             })
             .collect();
         ARG_PROBE.with(|p| *p.borrow_mut() = snap);
@@ -800,15 +796,16 @@ fn set_backtrace_args_evalled_mutates_in_place() {
     eval.set_backtrace_args_evalled(bt_count, &evaluated);
 
     // Inspect slot — should now be EVALD with the evaluated values.
-    match eval.specpdl.last().expect("frame present") {
-        super::super::eval::SpecBinding::Backtrace { function, args, .. } => {
-            assert!(!args.is_unevalled(), "flag cleared after promotion");
-            assert_eq!(*function, Value::symbol("my-func"), "function preserved");
-            let got: Vec<Value> = eval.backtrace_args_values(args).into_iter().collect();
-            assert_eq!(got, evaluated, "args replaced with evaluated values");
-        }
-        other => panic!("expected Backtrace, got {other:?}"),
-    }
+    let (function, args, _, unevalled) = eval
+        .backtrace_entry_values(eval.specpdl.last().expect("frame present"))
+        .expect("backtrace frame");
+    assert!(!unevalled, "flag cleared after promotion");
+    assert_eq!(function, Value::symbol("my-func"), "function preserved");
+    assert_eq!(
+        args.as_slice(),
+        evaluated,
+        "args replaced with evaluated values"
+    );
 }
 
 /// Regression for `backtrace-frame--internal` UNEVALLED dispatch. Set
