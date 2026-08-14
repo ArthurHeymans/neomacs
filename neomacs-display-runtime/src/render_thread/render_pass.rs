@@ -411,7 +411,7 @@ impl RenderApp {
         height: u32,
     ) {
         if let Some(start) = *visual_bell_start {
-            let elapsed = start.elapsed().as_secs_f32();
+            let elapsed = renderer.frame_sample_time().since(start).as_secs_f32();
             let duration = 0.15;
             if elapsed < duration {
                 let alpha = (1.0 - elapsed / duration) * 0.3;
@@ -831,6 +831,7 @@ impl RenderApp {
                 &composition_view,
                 native.width,
                 native.height,
+                renderer.frame_sample_time(),
             );
             if render.compositor.transitions.has_active() {
                 render.mark_dirty();
@@ -1453,6 +1454,15 @@ impl RenderApp {
             .compositor
             .transitions
             .apply_policy(self.transition_policy);
+        {
+            let sample = renderer.frame_sample_time();
+            window_state
+                .render
+                .tick_cursor_animation(sample.as_instant());
+            window_state
+                .render
+                .tick_cursor_size_animation(sample.as_instant());
+        }
 
         let rendered = Self::render_frame_window_contents_to_surface(
             renderer,

@@ -501,7 +501,11 @@ impl RenderApp {
                         );
                     }
                     if let Some(renderer) = self.renderer.as_mut() {
-                        renderer.set_frame_sample_time(plan.tick.target_presentation_time);
+                        renderer.set_frame_sample_time(
+                            neomacs_renderer_wgpu::FrameSampleTime::from_target(
+                                plan.tick.target_presentation_time,
+                            ),
+                        );
                     }
                     if let Some(window_state) = self.frame_windows.get_mut(emacs_fid) {
                         window_state.render.set_dirty(false);

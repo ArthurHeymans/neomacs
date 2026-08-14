@@ -1,6 +1,6 @@
 use super::{
-    RenderedCharBounds, char_overlap, cursor_color_cycle_color_at, cursor_glyph_slot_rect,
-    frame_default_glyph_metrics,
+    super::super::FrameSampleTime, RenderedCharBounds, char_overlap, cursor_color_cycle_color_at,
+    cursor_glyph_slot_rect, frame_default_glyph_metrics,
 };
 use neomacs_display_protocol::CursorColorCycleConfig;
 use neomacs_display_protocol::frame_glyphs::{
@@ -18,15 +18,16 @@ fn cursor_cycle_color_depends_on_target_time_not_delivered_tick_count() {
     let start = std::time::Instant::now();
     let target = start + std::time::Duration::from_millis(500);
 
-    let direct = cursor_color_cycle_color_at(&cycle, target, start);
+    let direct = cursor_color_cycle_color_at(&cycle, FrameSampleTime::from_target(target), start);
     for skipped_sample in [40, 80, 120, 250] {
         let _ = cursor_color_cycle_color_at(
             &cycle,
-            start + std::time::Duration::from_millis(skipped_sample),
+            FrameSampleTime::from_target(start + std::time::Duration::from_millis(skipped_sample)),
             start,
         );
     }
-    let after_intermediate_samples = cursor_color_cycle_color_at(&cycle, target, start);
+    let after_intermediate_samples =
+        cursor_color_cycle_color_at(&cycle, FrameSampleTime::from_target(target), start);
 
     assert_eq!(direct, after_intermediate_samples);
     assert_eq!(
@@ -46,8 +47,13 @@ fn cursor_cycle_retains_frame_scale_precision_after_a_year() {
     let after_a_year = start + std::time::Duration::from_secs(365 * 24 * 60 * 60);
     let one_24_hz_period = std::time::Duration::from_secs_f64(1.0 / 24.0);
 
-    let first = cursor_color_cycle_color_at(&cycle, after_a_year, start);
-    let next = cursor_color_cycle_color_at(&cycle, after_a_year + one_24_hz_period, start);
+    let first =
+        cursor_color_cycle_color_at(&cycle, FrameSampleTime::from_target(after_a_year), start);
+    let next = cursor_color_cycle_color_at(
+        &cycle,
+        FrameSampleTime::from_target(after_a_year + one_24_hz_period),
+        start,
+    );
 
     assert_ne!(
         first, next,

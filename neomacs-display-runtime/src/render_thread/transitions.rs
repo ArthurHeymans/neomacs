@@ -5,7 +5,7 @@ use crate::core::frame_glyphs::{
 };
 use crate::core::types::Rect;
 use neomacs_display_protocol::{ScrollEasing, ScrollEffect, TransitionPolicy};
-use neomacs_renderer_wgpu::WgpuRenderer;
+use neomacs_renderer_wgpu::{FrameSampleTime, WgpuRenderer};
 use std::collections::HashMap;
 
 /// State for an active crossfade transition
@@ -401,8 +401,9 @@ pub(super) fn render_frame_transitions(
     surface_view: &wgpu::TextureView,
     width: u32,
     height: u32,
+    sample_time: FrameSampleTime,
 ) {
-    let now = std::time::Instant::now();
+    let now = sample_time.as_instant();
     let current_bg = match current_offscreen_view_and_bg(transitions) {
         Some((_, bg)) => bg.clone(),
         None => return,

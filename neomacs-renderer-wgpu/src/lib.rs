@@ -46,8 +46,8 @@ pub use image_cache::{
 };
 pub use overlay_state::{MenuPanel, PopupMenuState, TooltipState};
 pub use renderer::{
-    FrameRowDamage, RendererFrameEffects, RowDamageInfo, RowReuseStats, WgpuRenderer,
-    WindowRowDamage,
+    FrameRowDamage, FrameSampleTime, RendererFrameEffects, RowDamageInfo, RowReuseStats,
+    WgpuRenderer, WindowRowDamage,
 };
 pub use shader_surface::{
     SURFACE_USER_UNIFORM_SLOTS, SurfaceUniformInit, compose_surface_wgsl, validate_surface_wgsl,

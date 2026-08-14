@@ -1145,10 +1145,10 @@ impl GuiFrameRenderState {
         frame
     }
 
-    pub(super) fn tick_cursor_animation(&mut self) -> bool {
-        let mut dirty = self.cursor.tick_animation();
+    pub(super) fn tick_cursor_animation(&mut self, now: Instant) -> bool {
+        let mut dirty = self.cursor.tick_animation(now);
         for cursor in self.compositor.visual_cursors.values_mut() {
-            dirty |= cursor.tick_animation();
+            dirty |= cursor.tick_animation(now);
         }
         if dirty {
             self.compositor.dirty = true;
@@ -1213,10 +1213,10 @@ impl GuiFrameRenderState {
         self.compositor.dirty = true;
     }
 
-    pub(super) fn tick_cursor_size_animation(&mut self) -> bool {
-        let mut dirty = self.cursor.tick_size_animation();
+    pub(super) fn tick_cursor_size_animation(&mut self, now: Instant) -> bool {
+        let mut dirty = self.cursor.tick_size_animation(now);
         for cursor in self.compositor.visual_cursors.values_mut() {
-            dirty |= cursor.tick_size_animation();
+            dirty |= cursor.tick_size_animation(now);
         }
         if dirty {
             self.compositor.dirty = true;
@@ -2414,18 +2414,18 @@ impl GuiFrameWindowManager {
         dirty
     }
 
-    pub(super) fn tick_top_level_cursor_animations(&mut self) -> bool {
+    pub(super) fn tick_top_level_cursor_animations(&mut self, now: Instant) -> bool {
         let mut dirty = false;
         self.for_each_top_level_window_mut(|window_state| {
-            dirty |= window_state.render.tick_cursor_animation();
+            dirty |= window_state.render.tick_cursor_animation(now);
         });
         dirty
     }
 
-    pub(super) fn tick_top_level_cursor_size_animations(&mut self) -> bool {
+    pub(super) fn tick_top_level_cursor_size_animations(&mut self, now: Instant) -> bool {
         let mut dirty = false;
         self.for_each_top_level_window_mut(|window_state| {
-            dirty |= window_state.render.tick_cursor_size_animation();
+            dirty |= window_state.render.tick_cursor_size_animation(now);
         });
         dirty
     }

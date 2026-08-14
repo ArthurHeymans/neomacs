@@ -260,9 +260,10 @@ impl RenderApp {
             self.renderer.as_ref(),
         );
 
-        self.frame_windows.tick_top_level_cursor_animations();
+        self.frame_windows.tick_top_level_cursor_animations(now);
 
-        self.frame_windows.tick_top_level_cursor_size_animations();
+        self.frame_windows
+            .tick_top_level_cursor_size_animations(now);
 
         if self.effects.idle_dim.enabled {
             let idle_dim_config = self.effects.idle_dim.clone();

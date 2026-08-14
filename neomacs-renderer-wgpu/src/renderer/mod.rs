@@ -101,7 +101,36 @@ pub struct WgpuRenderer {
     /// target presentation time). Set by the runtime before each render so
     /// time-driven effects sample one consistent instant instead of reading
     /// the wall clock mid-draw.
-    pub(super) frame_sample_time: std::time::Instant,
+    pub(super) frame_sample_time: FrameSampleTime,
+}
+
+/// The instant a frame's animation samples evaluate against: the frame
+/// tick's target presentation time (niri-style frozen clock).
+///
+/// Newtype over [`std::time::Instant`] so evaluation parameters cannot be
+/// confused with wall-clock reads; input-event *triggers* legitimately use
+/// bare `Instant`s to stamp when an effect started, while every *evaluation*
+/// site reads this type. Construct it only from the frame coordinator's
+/// plan tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FrameSampleTime(std::time::Instant);
+
+impl FrameSampleTime {
+    /// Wrap the frame tick's target presentation time.
+    pub fn from_target(at: std::time::Instant) -> Self {
+        Self(at)
+    }
+
+    /// Elapsed time since an earlier wall-clock timestamp (an effect's
+    /// start, recorded when the effect was triggered).
+    pub fn since(&self, earlier: std::time::Instant) -> std::time::Duration {
+        self.0.saturating_duration_since(earlier)
+    }
+
+    /// The wrapped instant, for sites that need `Instant` arithmetic.
+    pub fn as_instant(&self) -> std::time::Instant {
+        self.0
+    }
 }
 
 impl WgpuRenderer {
@@ -988,7 +1017,7 @@ impl WgpuRenderer {
             ambient: AmbientClocks::default(),
             row_reuse: row_reuse::RowReuseCache::default(),
             glyph_stats: GlyphRenderStats::new(),
-            frame_sample_time: std::time::Instant::now(),
+            frame_sample_time: FrameSampleTime::from_target(std::time::Instant::now()),
         }
     }
 
@@ -1160,8 +1189,13 @@ impl WgpuRenderer {
 
     /// Set the absolute time this frame's animation samples target
     /// (the frame tick's target presentation time).
-    pub fn set_frame_sample_time(&mut self, at: std::time::Instant) {
+    pub fn set_frame_sample_time(&mut self, at: FrameSampleTime) {
         self.frame_sample_time = at;
+    }
+
+    /// The instant this frame's animation samples evaluate against.
+    pub fn frame_sample_time(&self) -> FrameSampleTime {
+        self.frame_sample_time
     }
 
     /// Get the glyph bind group layout for creating glyph bind groups

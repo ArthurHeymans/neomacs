@@ -391,7 +391,7 @@ impl CursorState {
     }
 
     /// Tick cursor animation, returns true if position changed (needs redraw)
-    pub(super) fn tick_animation(&mut self) -> bool {
+    pub(super) fn tick_animation(&mut self, now: std::time::Instant) -> bool {
         if !self.anim_enabled || !self.animating {
             return false;
         }
@@ -400,8 +400,9 @@ impl CursorState {
             None => return false,
         };
 
-        let now = std::time::Instant::now();
-        let dt = now.duration_since(self.last_anim_time).as_secs_f32();
+        let dt = now
+            .saturating_duration_since(self.last_anim_time)
+            .as_secs_f32();
         self.last_anim_time = now;
 
         match self.anim_style {
@@ -520,11 +521,13 @@ impl CursorState {
     }
 
     /// Tick cursor size transition, returns true if size changed (needs redraw).
-    pub(super) fn tick_size_animation(&mut self) -> bool {
+    pub(super) fn tick_size_animation(&mut self, now: std::time::Instant) -> bool {
         if !self.size_transition_enabled || !self.size_animating {
             return false;
         }
-        let elapsed = self.size_anim_start.elapsed().as_secs_f32();
+        let elapsed = now
+            .saturating_duration_since(self.size_anim_start)
+            .as_secs_f32();
         let raw_t = (elapsed / self.size_transition_duration).min(1.0);
         let t = raw_t * (2.0 - raw_t); // ease-out-quad
         self.current_w = self.size_start_w + (self.size_target_w - self.size_start_w) * t;

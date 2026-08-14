@@ -13,6 +13,7 @@ fn make_ctx<'a>(effects: &'a EffectsConfig, fgb: &'a FrameGlyphBuffer) -> Effect
         surface_width: 800,
         surface_height: 600,
         aurora_start: std::time::Instant::now(),
+        frame_now: crate::FrameSampleTime::from_target(std::time::Instant::now()),
         scale_factor: 1.0,
         logical_w: 800.0,
         logical_h: 600.0,

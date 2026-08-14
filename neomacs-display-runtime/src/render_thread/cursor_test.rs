@@ -487,7 +487,6 @@ fn reset_blink_updates_timestamp() {
     let mut state = CursorState::default();
     let old_time = state.last_blink_toggle;
     // Sleep briefly to ensure time advances
-    std::thread::sleep(Duration::from_millis(2));
     state.reset_blink();
     assert!(state.last_blink_toggle > old_time);
 }
@@ -508,7 +507,7 @@ fn tick_animation_returns_false_when_disabled() {
         20.0,
         CursorStyle::FilledBox,
     ));
-    assert!(!state.tick_animation());
+    assert!(!state.tick_animation(Instant::now()));
 }
 
 #[test]
@@ -523,7 +522,7 @@ fn tick_animation_returns_false_when_not_animating() {
         20.0,
         CursorStyle::FilledBox,
     ));
-    assert!(!state.tick_animation());
+    assert!(!state.tick_animation(Instant::now()));
 }
 
 #[test]
@@ -532,7 +531,7 @@ fn tick_animation_returns_false_when_no_target() {
     state.anim_enabled = true;
     state.animating = true;
     state.target = None;
-    assert!(!state.tick_animation());
+    assert!(!state.tick_animation(Instant::now()));
 }
 
 // ---------------------------------------------------------------
@@ -557,12 +556,12 @@ fn tick_animation_exponential_moves_toward_target() {
         20.0,
         CursorStyle::FilledBox,
     ));
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
     // Wait a tiny bit so dt > 0
-    std::thread::sleep(Duration::from_millis(5));
 
-    let result = state.tick_animation();
+    let result = state.tick_animation(t0 + Duration::from_millis(5));
     assert!(result);
     // Should have moved toward target
     assert!(
@@ -599,10 +598,10 @@ fn tick_animation_exponential_snaps_when_close() {
         20.1,
         CursorStyle::FilledBox,
     ));
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    std::thread::sleep(Duration::from_millis(1));
-    state.tick_animation();
+    state.tick_animation(t0 + Duration::from_millis(1));
 
     // Should have snapped: position == target, animating == false
     assert_eq!(state.current_x, 100.3);
@@ -639,12 +638,12 @@ fn tick_animation_linear_interpolation() {
         CursorStyle::FilledBox,
     ));
     state.anim_start_time = Instant::now();
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
     // Sleep to let some time pass
-    std::thread::sleep(Duration::from_millis(10));
 
-    let result = state.tick_animation();
+    let result = state.tick_animation(t0 + Duration::from_millis(10));
     assert!(result);
 
     // With linear easing, progress should be proportional to time elapsed
@@ -675,9 +674,10 @@ fn tick_animation_linear_completes_and_snaps() {
     ));
     // Set start time in the past so elapsed > duration
     state.anim_start_time = Instant::now() - Duration::from_millis(100);
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    state.tick_animation();
+    state.tick_animation(t0);
 
     // Should snap to target when raw_t >= 1.0
     assert_eq!(state.current_x, 100.0);
@@ -710,10 +710,10 @@ fn tick_animation_ease_out_quad_progresses() {
         CursorStyle::FilledBox,
     ));
     state.anim_start_time = Instant::now();
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    std::thread::sleep(Duration::from_millis(10));
-    let result = state.tick_animation();
+    let result = state.tick_animation(t0 + Duration::from_millis(10));
     assert!(result);
     assert!(state.current_x > 0.0);
 }
@@ -741,10 +741,10 @@ fn tick_animation_ease_out_cubic_progresses() {
         CursorStyle::FilledBox,
     ));
     state.anim_start_time = Instant::now();
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    std::thread::sleep(Duration::from_millis(10));
-    let result = state.tick_animation();
+    let result = state.tick_animation(t0 + Duration::from_millis(10));
     assert!(result);
     assert!(
         state.current_x > 50.0,
@@ -769,10 +769,10 @@ fn tick_animation_ease_out_expo_progresses() {
     state.start_h = 15.0;
     state.target = Some(make_target(300.0, 300.0, 5.0, 15.0, CursorStyle::FilledBox));
     state.anim_start_time = Instant::now();
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    std::thread::sleep(Duration::from_millis(10));
-    let result = state.tick_animation();
+    let result = state.tick_animation(t0 + Duration::from_millis(10));
     assert!(result);
     assert!(state.current_x > 0.0);
 }
@@ -794,10 +794,10 @@ fn tick_animation_ease_in_out_cubic_progresses() {
     state.start_h = 16.0;
     state.target = Some(make_target(400.0, 400.0, 8.0, 16.0, CursorStyle::FilledBox));
     state.anim_start_time = Instant::now();
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    std::thread::sleep(Duration::from_millis(10));
-    let result = state.tick_animation();
+    let result = state.tick_animation(t0 + Duration::from_millis(10));
     assert!(result);
     assert!(state.current_x > 10.0);
 }
@@ -830,10 +830,10 @@ fn tick_animation_spring_moves_toward_target() {
         state.corner_springs[i].target_x = target_corners[i].0;
         state.corner_springs[i].target_y = target_corners[i].1;
     }
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    std::thread::sleep(Duration::from_millis(5));
-    let result = state.tick_animation();
+    let result = state.tick_animation(t0 + Duration::from_millis(5));
     assert!(result);
 
     // Springs should have moved corners toward target
@@ -861,10 +861,10 @@ fn tick_animation_spring_settles_at_target() {
         state.corner_springs[i].target_x = target_corners[i].0;
         state.corner_springs[i].target_y = target_corners[i].1;
     }
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    std::thread::sleep(Duration::from_millis(5));
-    state.tick_animation();
+    state.tick_animation(t0 + Duration::from_millis(5));
 
     // Should have settled: snapped to target
     assert_eq!(state.current_x, 100.0);
@@ -892,10 +892,10 @@ fn tick_animation_spring_resets_velocities_on_settle() {
         state.corner_springs[i].target_x = target_corners[i].0;
         state.corner_springs[i].target_y = target_corners[i].1;
     }
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    std::thread::sleep(Duration::from_millis(5));
-    state.tick_animation();
+    state.tick_animation(t0 + Duration::from_millis(5));
 
     // Velocities should be reset to 0
     for spring in &state.corner_springs {
@@ -931,10 +931,10 @@ fn tick_animation_same_start_and_end_position() {
         CursorStyle::FilledBox,
     ));
     state.anim_start_time = Instant::now();
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    std::thread::sleep(Duration::from_millis(5));
-    let result = state.tick_animation();
+    let result = state.tick_animation(t0 + Duration::from_millis(5));
     assert!(result);
 
     // Position should stay the same since start == target
@@ -961,14 +961,14 @@ fn tick_animation_zero_duration_completes_immediately() {
         CursorStyle::FilledBox,
     ));
     state.anim_start_time = Instant::now();
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
     // Even with zero duration, raw_t would be infinity or NaN from 0/0,
     // but it's clamped to min(1.0) so it should snap immediately.
     // The .min(1.0) ensures raw_t = 1.0 regardless of elapsed/0.
     // Actually: elapsed/0.0 = inf, inf.min(1.0) = 1.0
-    std::thread::sleep(Duration::from_millis(1));
-    state.tick_animation();
+    state.tick_animation(t0 + Duration::from_millis(1));
 
     assert_eq!(state.current_x, 500.0);
     assert_eq!(state.current_y, 600.0);
@@ -995,10 +995,10 @@ fn tick_animation_exponential_same_position_snaps() {
         20.0,
         CursorStyle::FilledBox,
     ));
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    std::thread::sleep(Duration::from_millis(1));
-    state.tick_animation();
+    state.tick_animation(t0 + Duration::from_millis(1));
 
     // dx, dy, dw, dh are all 0.0 (< 0.5), should snap immediately
     assert_eq!(state.current_x, 100.0);
@@ -1028,15 +1028,15 @@ fn tick_animation_exponential_converges_over_many_ticks() {
         20.0,
         CursorStyle::FilledBox,
     ));
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    // Run many ticks
-    for _ in 0..200 {
-        std::thread::sleep(Duration::from_millis(2));
+    // Run many ticks at explicit 2 ms steps (no wall-clock sleeps).
+    for i in 0..200 {
         if !state.animating {
             break;
         }
-        state.tick_animation();
+        state.tick_animation(t0 + Duration::from_millis(2 * (i + 1)));
     }
 
     // Should have snapped to target
@@ -1068,15 +1068,15 @@ fn tick_animation_linear_converges_over_duration() {
         CursorStyle::FilledBox,
     ));
     state.anim_start_time = Instant::now();
-    state.last_anim_time = Instant::now();
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
 
-    // Run ticks until animation completes
-    for _ in 0..100 {
-        std::thread::sleep(Duration::from_millis(2));
+    // Run ticks until animation completes, at explicit 2 ms steps.
+    for i in 0..100 {
         if !state.animating {
             break;
         }
-        state.tick_animation();
+        state.tick_animation(t0 + Duration::from_millis(2 * (i + 1)));
     }
 
     assert_eq!(state.current_x, 100.0);
@@ -1095,7 +1095,7 @@ fn tick_size_animation_returns_false_when_disabled() {
     let mut state = CursorState::default();
     state.size_transition_enabled = false;
     state.size_animating = true;
-    assert!(!state.tick_size_animation());
+    assert!(!state.tick_size_animation(Instant::now()));
 }
 
 #[test]
@@ -1103,7 +1103,7 @@ fn tick_size_animation_returns_false_when_not_animating() {
     let mut state = CursorState::default();
     state.size_transition_enabled = true;
     state.size_animating = false;
-    assert!(!state.tick_size_animation());
+    assert!(!state.tick_size_animation(Instant::now()));
 }
 
 #[test]
@@ -1118,10 +1118,10 @@ fn tick_size_animation_interpolates_size() {
     state.size_target_h = 80.0;
     state.current_w = 10.0;
     state.current_h = 20.0;
-    state.size_anim_start = Instant::now();
+    let t0 = Instant::now();
+    state.size_anim_start = t0;
 
-    std::thread::sleep(Duration::from_millis(10));
-    let result = state.tick_size_animation();
+    let result = state.tick_size_animation(t0 + Duration::from_millis(10));
     assert!(result);
 
     // Size should have moved toward target
@@ -1152,9 +1152,10 @@ fn tick_size_animation_completes_and_snaps() {
     state.size_target_h = 80.0;
     state.current_w = 10.0;
     state.current_h = 20.0;
-    state.size_anim_start = Instant::now() - Duration::from_millis(100);
+    let t0 = Instant::now();
+    state.size_anim_start = t0 - Duration::from_millis(100);
 
-    let result = state.tick_size_animation();
+    let result = state.tick_size_animation(t0);
     assert!(result);
 
     // Should snap to target size
@@ -1175,10 +1176,10 @@ fn tick_size_animation_zero_duration_completes_immediately() {
     state.size_target_h = 60.0;
     state.current_w = 5.0;
     state.current_h = 10.0;
-    state.size_anim_start = Instant::now();
+    let t0 = Instant::now();
+    state.size_anim_start = t0;
 
-    std::thread::sleep(Duration::from_millis(1));
-    state.tick_size_animation();
+    state.tick_size_animation(t0 + Duration::from_millis(1));
 
     assert_eq!(state.current_w, 30.0);
     assert_eq!(state.current_h, 60.0);
@@ -1197,10 +1198,10 @@ fn tick_size_animation_same_start_and_target() {
     state.size_target_h = 40.0;
     state.current_w = 20.0;
     state.current_h = 40.0;
-    state.size_anim_start = Instant::now();
+    let t0 = Instant::now();
+    state.size_anim_start = t0;
 
-    std::thread::sleep(Duration::from_millis(5));
-    let result = state.tick_size_animation();
+    let result = state.tick_size_animation(t0 + Duration::from_millis(5));
     assert!(result);
 
     // Size should remain the same since start == target
@@ -1224,9 +1225,10 @@ fn tick_size_animation_ease_out_quad_curve() {
     state.current_w = 0.0;
     state.current_h = 0.0;
     // Set start time 50ms ago (halfway through 100ms)
-    state.size_anim_start = Instant::now() - Duration::from_millis(50);
+    let t0 = Instant::now();
+    state.size_anim_start = t0 - Duration::from_millis(50);
 
-    state.tick_size_animation();
+    state.tick_size_animation(t0);
 
     // At raw_t=0.5, ease-out-quad = 0.5*(2.0-0.5) = 0.75
     // So width should be ~75.0 and height ~75.0
@@ -1255,14 +1257,14 @@ fn tick_size_animation_converges() {
     state.size_target_h = 100.0;
     state.current_w = 10.0;
     state.current_h = 10.0;
-    state.size_anim_start = Instant::now();
+    let t0 = Instant::now();
+    state.size_anim_start = t0;
 
-    for _ in 0..100 {
-        std::thread::sleep(Duration::from_millis(2));
+    for i in 0..100 {
         if !state.size_animating {
             break;
         }
-        state.tick_size_animation();
+        state.tick_size_animation(t0 + Duration::from_millis(2 * (i + 1)));
     }
 
     assert_eq!(state.current_w, 100.0);
@@ -1367,11 +1369,12 @@ fn tick_animation_updates_last_anim_time() {
     let old_time = Instant::now() - Duration::from_millis(100);
     state.last_anim_time = old_time;
     state.anim_start_time = old_time;
+    let tick_time = old_time + Duration::from_millis(100);
 
-    state.tick_animation();
+    state.tick_animation(tick_time);
 
-    // last_anim_time should have been updated to approximately now
-    assert!(state.last_anim_time > old_time);
+    // last_anim_time advances to exactly the instant the tick evaluated at
+    assert_eq!(state.last_anim_time, tick_time);
 }
 
 // ---------------------------------------------------------------
@@ -1406,9 +1409,10 @@ fn tick_animation_all_easing_styles_reach_target() {
             CursorStyle::FilledBox,
         ));
         state.anim_start_time = Instant::now() - Duration::from_millis(100);
-        state.last_anim_time = Instant::now();
+        let t0 = Instant::now();
+        state.last_anim_time = t0;
 
-        state.tick_animation();
+        state.tick_animation(t0);
 
         assert_eq!(state.current_x, 200.0, "{:?} did not reach target x", style);
         assert_eq!(state.current_y, 300.0, "{:?} did not reach target y", style);

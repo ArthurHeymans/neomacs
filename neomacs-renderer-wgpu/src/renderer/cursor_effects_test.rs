@@ -1,5 +1,6 @@
 use super::super::effect_common::EffectCtx;
 use super::*;
+use crate::FrameSampleTime;
 use crate::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{FrameGlyphBuffer, WindowInfo};
 use neomacs_display_protocol::types::{AnimatedCursor, Rect};
@@ -20,6 +21,7 @@ fn make_ctx<'a>(
         surface_width: 800,
         surface_height: 600,
         aurora_start: std::time::Instant::now(),
+        frame_now: FrameSampleTime::from_target(std::time::Instant::now()),
         scale_factor: 1.0,
         logical_w: 800.0,
         logical_h: 600.0,
@@ -692,4 +694,54 @@ fn test_cursor_glow_layer_count_calculation() {
         );
         validate_vertex_count(&verts);
     }
+}
+
+/// Task 1 (animation best practices): effect evaluation must sample the
+/// frame's target presentation time, never wall-clock mid-render, so a frame
+/// delayed by render-side work still animates to the instant it will be
+/// shown (niri's frozen-clock discipline).
+#[test]
+fn sonar_ping_progress_uses_frame_sample_time() {
+    let mut effects = EffectsConfig::default();
+    effects.cursor_sonar_ping.enabled = true;
+    effects.cursor_sonar_ping.ring_count = 1;
+    effects.cursor_sonar_ping.max_radius = 100.0;
+    effects.cursor_sonar_ping.opacity = 1.0;
+
+    let fgb = FrameGlyphBuffer::default();
+    let anim_cursor = Some(make_animated_cursor(100.0, 100.0, 10.0, 20.0, 1));
+
+    let t0 = std::time::Instant::now();
+    let mut entries = vec![SonarPingEntry {
+        cx: 100.0,
+        cy: 100.0,
+        started: t0,
+        duration: std::time::Duration::from_secs(1),
+    }];
+
+    // The frame targets 500 ms after the ping started: the ring must be at
+    // half radius. Wall-clock sampling (the old behavior) would read ~0 ms
+    // elapsed and collapse the ring onto the cursor.
+    let ctx = make_ctx(&effects, &fgb, &anim_cursor, true);
+    let ctx = EffectCtx {
+        frame_now: FrameSampleTime::from_target(t0 + std::time::Duration::from_millis(500)),
+        ..ctx
+    };
+    let (verts, needs_redraw) = emit_cursor_sonar_ping(&ctx, &mut entries);
+
+    assert!(needs_redraw);
+    validate_vertex_count(&verts);
+    let max_dist = verts
+        .iter()
+        .map(|v| {
+            let dx = v.position[0] - 100.0;
+            let dy = v.position[1] - 100.0;
+            (dx * dx + dy * dy).sqrt()
+        })
+        .fold(0.0_f32, f32::max);
+    assert!(
+        (40.0..=60.0).contains(&max_dist),
+        "ring radius {max_dist} should track the frame sample time (half of max_radius), \
+         not wall-clock elapsed"
+    );
 }

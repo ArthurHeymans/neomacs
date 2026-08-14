@@ -20,6 +20,10 @@ pub(super) struct EffectCtx<'a> {
     pub surface_width: u32,
     pub surface_height: u32,
     pub aurora_start: std::time::Instant,
+    /// The instant this frame's effect evaluation targets (the frame tick's
+    /// target presentation time). Every age/progress/phase read in an emit
+    /// function samples this, never the wall clock mid-draw.
+    pub frame_now: super::FrameSampleTime,
     pub scale_factor: f32,
     /// Logical frame width (frame_glyphs.width or surface_width/scale_factor)
     pub logical_w: f32,

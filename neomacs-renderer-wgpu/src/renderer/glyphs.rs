@@ -28,12 +28,10 @@ const CHAR_OVERLAP_LOG_LIMIT: usize = 32;
 
 fn cursor_color_cycle_color_at(
     cycle: &CursorColorCycleConfig,
-    sample_time: std::time::Instant,
+    sample_time: super::FrameSampleTime,
     cycle_start: std::time::Instant,
 ) -> Color {
-    let elapsed = sample_time
-        .saturating_duration_since(cycle_start)
-        .as_secs_f64();
+    let elapsed = sample_time.since(cycle_start).as_secs_f64();
     // Keep the unbounded uptime calculation in f64. Converting a year of
     // elapsed seconds to f32 loses more precision than a 24 Hz frame interval
     // and makes adjacent samples collapse to the same color. Only narrow the
@@ -1435,6 +1433,7 @@ impl WgpuRenderer {
                 surface_width,
                 surface_height,
                 aurora_start: self.ambient.aurora_start,
+                frame_now: self.frame_sample_time,
                 scale_factor: self.scale_factor,
                 logical_w,
                 logical_h,

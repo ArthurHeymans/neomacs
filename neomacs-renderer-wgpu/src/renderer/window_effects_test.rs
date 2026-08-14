@@ -15,6 +15,7 @@ fn test_ctx<'a>(effects: &'a EffectsConfig, frame_glyphs: &'a FrameGlyphBuffer) 
         surface_width: 800,
         surface_height: 600,
         aurora_start: Instant::now(),
+        frame_now: crate::FrameSampleTime::from_target(Instant::now()),
         scale_factor: 1.0,
         logical_w: 800.0,
         logical_h: 600.0,
