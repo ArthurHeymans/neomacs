@@ -789,6 +789,101 @@ impl InterpreterFrameAux {
     fn empty() -> Self {
         Self::new(HandlerStack::new(), BindStack::new())
     }
+
+    fn is_empty(&self) -> bool {
+        self.handlers.is_empty() && self.bind_stack.is_empty()
+    }
+}
+
+/// Logical caller depth in the iterative interpreter driver.
+///
+/// A dedicated type prevents sparse auxiliary state from being restored with
+/// an unrelated bytecode-buffer or specpdl index.  Depth zero denotes the
+/// entry frame; a callee's current depth is the number of suspended callers.
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct InterpreterDriverDepth(usize);
+
+impl InterpreterDriverDepth {
+    #[cfg(test)]
+    const ROOT: Self = Self(0);
+
+    fn from_suspended_callers(callers: usize) -> Self {
+        Self(callers)
+    }
+}
+
+struct SuspendedInterpreterFrameAux {
+    depth: InterpreterDriverDepth,
+    state: InterpreterFrameAux,
+}
+
+/// Variable-sized handler/bind state for the current driver frame.
+///
+/// GNU keeps handler/spec state outside `bc_frame`; ordinary calls therefore
+/// do not copy an empty record.  Mirror that shape with one current state and
+/// a sparse stack containing only suspended callers whose state is nonempty.
+/// The common Bcall/Breturn path changes only `current`'s empty state and never
+/// pushes the 96-byte pair of inline `SmallVec`s.
+struct InterpreterFrameAuxStack {
+    current: InterpreterFrameAux,
+    suspended: Vec<SuspendedInterpreterFrameAux>,
+}
+
+impl InterpreterFrameAuxStack {
+    fn new(handlers: HandlerStack, bind_stack: BindStack) -> Self {
+        Self {
+            current: InterpreterFrameAux::new(handlers, bind_stack),
+            suspended: Vec::new(),
+        }
+    }
+
+    fn current_mut(&mut self) -> &mut InterpreterFrameAux {
+        &mut self.current
+    }
+
+    fn suspend_current(&mut self, depth: InterpreterDriverDepth) {
+        if self.current.is_empty() {
+            return;
+        }
+        self.suspended.push(SuspendedInterpreterFrameAux {
+            depth,
+            state: std::mem::replace(&mut self.current, InterpreterFrameAux::empty()),
+        });
+    }
+
+    fn restore_current(&mut self, depth: InterpreterDriverDepth) {
+        self.current = InterpreterFrameAux::empty();
+        if self
+            .suspended
+            .last()
+            .is_some_and(|suspended| suspended.depth == depth)
+        {
+            self.current = self
+                .suspended
+                .pop()
+                .expect("matching sparse auxiliary frame must exist")
+                .state;
+        } else {
+            debug_assert!(
+                self.suspended
+                    .last()
+                    .is_none_or(|suspended| suspended.depth < depth),
+                "sparse auxiliary frames must remain ordered by driver depth"
+            );
+        }
+    }
+
+    fn take_entry(&mut self) -> (HandlerStack, BindStack) {
+        debug_assert!(self.suspended.is_empty());
+        let entry = std::mem::replace(&mut self.current, InterpreterFrameAux::empty());
+        (entry.handlers, entry.bind_stack)
+    }
+
+    #[cfg(test)]
+    fn materialized_suspended_len(&self) -> usize {
+        self.suspended.len()
+    }
 }
 
 struct SuspendedInterpreterFrame {
@@ -1948,7 +2043,7 @@ impl<'a> Vm<'a> {
         &mut self,
         current: &mut InterpreterFrame,
         callers: &mut Vec<SuspendedInterpreterFrame>,
-        frame_aux: &mut Vec<InterpreterFrameAux>,
+        aux_stack: &mut InterpreterFrameAuxStack,
         entry_func: &ByteCodeFunction,
         mut result: EvalResult,
     ) -> InterpreterFrameCompletion {
@@ -1970,10 +2065,10 @@ impl<'a> Vm<'a> {
             // generic release/unbind machinery from becoming a per-call tax.
             self.ctx
                 .pop_fast_bytecode_backtrace_frame(suspended.continuation.backtrace);
-            frame_aux
-                .pop()
-                .expect("a suspended caller must have a callee auxiliary frame");
             *current = suspended.frame;
+            aux_stack.restore_current(InterpreterDriverDepth::from_suspended_callers(
+                callers.len(),
+            ));
 
             match result {
                 Ok(value) => {
@@ -1994,9 +2089,7 @@ impl<'a> Vm<'a> {
                             .get_bytecode_data()
                             .expect("active interpreter frame must own bytecode")
                     };
-                    let aux = frame_aux
-                        .last_mut()
-                        .expect("a restored interpreter frame must own auxiliary state");
+                    let aux = aux_stack.current_mut();
                     match self.resume_nonlocal(
                         func,
                         &mut current.pc,
@@ -2024,7 +2117,7 @@ impl<'a> Vm<'a> {
         &mut self,
         current: &mut InterpreterFrame,
         callers: &mut Vec<SuspendedInterpreterFrame>,
-        frame_aux: &mut Vec<InterpreterFrameAux>,
+        aux_stack: &mut InterpreterFrameAuxStack,
         value: Value,
     ) -> InterpreterValueCompletion {
         if current.function.is_entry() {
@@ -2056,10 +2149,10 @@ impl<'a> Vm<'a> {
         self.leave_bytecode_call_depth();
         self.ctx
             .pop_fast_bytecode_backtrace_frame(suspended.continuation.backtrace);
-        frame_aux
-            .pop()
-            .expect("a suspended caller must have a callee auxiliary frame");
         *current = suspended.frame;
+        aux_stack.restore_current(InterpreterDriverDepth::from_suspended_callers(
+            callers.len(),
+        ));
         self.ctx
             .bc_buf
             .truncate(suspended.continuation.stack_after_call);
@@ -2167,65 +2260,55 @@ impl<'a> Vm<'a> {
         // gets Vec's single-representation push/pop path; SmallVec's repeated
         // inline-vs-spilled branch was measurable on every Bcall/Breturn.
         let mut callers = Vec::new();
-        let mut frame_aux = Vec::with_capacity(8);
-        frame_aux.push(InterpreterFrameAux::new(
-            std::mem::take(handlers),
-            std::mem::take(bind_stack),
-        ));
+        let mut aux_stack =
+            InterpreterFrameAuxStack::new(std::mem::take(handlers), std::mem::take(bind_stack));
 
         loop {
-            debug_assert_eq!(frame_aux.len(), callers.len() + 1);
-            let aux = frame_aux
-                .last_mut()
-                .expect("the current interpreter frame must own auxiliary state");
+            let aux = aux_stack.current_mut();
             let control = self.run_interpreter_frame(&mut current, aux, entry_func);
             match control {
                 InterpreterFrameControl::Enter {
                     frame,
                     continuation,
                 } => {
+                    let caller_depth =
+                        InterpreterDriverDepth::from_suspended_callers(callers.len());
                     let parent = std::mem::replace(&mut current, frame);
+                    aux_stack.suspend_current(caller_depth);
                     callers.push(SuspendedInterpreterFrame {
                         frame: parent,
                         continuation,
                     });
-                    frame_aux.push(InterpreterFrameAux::empty());
                 }
                 InterpreterFrameControl::Return(value) => {
                     match self.complete_interpreter_frame_value(
                         &mut current,
                         &mut callers,
-                        &mut frame_aux,
+                        &mut aux_stack,
                         value,
                     ) {
                         InterpreterValueCompletion::Resume => {}
                         InterpreterValueCompletion::Exit(value) => {
                             *pc = current.pc;
-                            let mut entry_aux = frame_aux
-                                .pop()
-                                .expect("entry interpreter frame must own auxiliary state");
-                            debug_assert!(frame_aux.is_empty());
-                            *handlers = std::mem::take(&mut entry_aux.handlers);
-                            *bind_stack = std::mem::take(&mut entry_aux.bind_stack);
+                            let (entry_handlers, entry_bind_stack) = aux_stack.take_entry();
+                            *handlers = entry_handlers;
+                            *bind_stack = entry_bind_stack;
                             return Ok(value);
                         }
                         InterpreterValueCompletion::NeedsSlowCleanup(value) => {
                             match self.complete_interpreter_frame_chain(
                                 &mut current,
                                 &mut callers,
-                                &mut frame_aux,
+                                &mut aux_stack,
                                 entry_func,
                                 Ok(value),
                             ) {
                                 InterpreterFrameCompletion::Resume => {}
                                 InterpreterFrameCompletion::Exit(result) => {
                                     *pc = current.pc;
-                                    let mut entry_aux = frame_aux
-                                        .pop()
-                                        .expect("entry interpreter frame must own auxiliary state");
-                                    debug_assert!(frame_aux.is_empty());
-                                    *handlers = std::mem::take(&mut entry_aux.handlers);
-                                    *bind_stack = std::mem::take(&mut entry_aux.bind_stack);
+                                    let (entry_handlers, entry_bind_stack) = aux_stack.take_entry();
+                                    *handlers = entry_handlers;
+                                    *bind_stack = entry_bind_stack;
                                     return result;
                                 }
                             }
@@ -2236,19 +2319,16 @@ impl<'a> Vm<'a> {
                     match self.complete_interpreter_frame_chain(
                         &mut current,
                         &mut callers,
-                        &mut frame_aux,
+                        &mut aux_stack,
                         entry_func,
                         Err(flow),
                     ) {
                         InterpreterFrameCompletion::Resume => {}
                         InterpreterFrameCompletion::Exit(result) => {
                             *pc = current.pc;
-                            let mut entry_aux = frame_aux
-                                .pop()
-                                .expect("entry interpreter frame must own auxiliary state");
-                            debug_assert!(frame_aux.is_empty());
-                            *handlers = std::mem::take(&mut entry_aux.handlers);
-                            *bind_stack = std::mem::take(&mut entry_aux.bind_stack);
+                            let (entry_handlers, entry_bind_stack) = aux_stack.take_entry();
+                            *handlers = entry_handlers;
+                            *bind_stack = entry_bind_stack;
                             return result;
                         }
                     }

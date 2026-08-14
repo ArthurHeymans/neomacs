@@ -1825,6 +1825,44 @@ fn interpreter_driver_frame_layout_stays_compact() {
 }
 
 #[test]
+fn interpreter_aux_stack_materializes_only_nonempty_suspended_frames() {
+    let mut aux = InterpreterFrameAuxStack::new(HandlerStack::new(), BindStack::new());
+
+    aux.suspend_current(InterpreterDriverDepth::ROOT);
+    assert_eq!(
+        aux.materialized_suspended_len(),
+        0,
+        "ordinary GNU bytecode calls must not copy an empty handler/bind record"
+    );
+
+    aux.current_mut().bind_stack.push(7);
+    aux.suspend_current(InterpreterDriverDepth::ROOT);
+    assert_eq!(aux.materialized_suspended_len(), 1);
+    assert!(aux.current_mut().bind_stack.is_empty());
+
+    aux.restore_current(InterpreterDriverDepth::ROOT);
+    assert_eq!(aux.materialized_suspended_len(), 0);
+    assert_eq!(aux.current_mut().bind_stack.as_slice(), &[7]);
+
+    aux.suspend_current(InterpreterDriverDepth::ROOT);
+    aux.suspend_current(InterpreterDriverDepth::from_suspended_callers(1));
+    aux.current_mut().bind_stack.push(9);
+    aux.suspend_current(InterpreterDriverDepth::from_suspended_callers(2));
+    assert_eq!(
+        aux.materialized_suspended_len(),
+        2,
+        "empty intermediate frames must leave holes in the sparse stack"
+    );
+
+    aux.restore_current(InterpreterDriverDepth::from_suspended_callers(2));
+    assert_eq!(aux.current_mut().bind_stack.as_slice(), &[9]);
+    aux.restore_current(InterpreterDriverDepth::from_suspended_callers(1));
+    assert!(aux.current_mut().bind_stack.is_empty());
+    aux.restore_current(InterpreterDriverDepth::ROOT);
+    assert_eq!(aux.current_mut().bind_stack.as_slice(), &[7]);
+}
+
+#[test]
 fn vm_bcall_max_eval_depth_reports_error_like_gnu_bytecode() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_minimal_vm_harness();
