@@ -43,7 +43,29 @@ pub(crate) struct OracleSandbox {
     load_files: Vec<PathBuf>,
     project_root: PathBuf,
     case_filesystem: CaseFilesystemPolicy,
+    result_normalization: ResultNormalization,
     extra_env: Vec<(OsString, OsString)>,
+}
+
+/// Text-property policy applied to the value returned by an oracle form.
+///
+/// Exact is the safe default: tests which intentionally exercise font-lock
+/// must observe every property.  Org workflow probes may explicitly discard
+/// `fontified', which is jit-lock scheduling state rather than Org data.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum ResultNormalization {
+    #[default]
+    Exact,
+    IgnoreVolatileFontification,
+}
+
+impl ResultNormalization {
+    fn as_env_value(self) -> &'static str {
+        match self {
+            Self::Exact => "exact",
+            Self::IgnoreVolatileFontification => "ignore-volatile-fontification",
+        }
+    }
 }
 
 /// How a child process may use the per-case directory.
@@ -84,6 +106,7 @@ impl OracleSandbox {
             load_files,
             project_root,
             case_filesystem: CaseFilesystemPolicy::Private,
+            result_normalization: ResultNormalization::Exact,
             extra_env: Vec::new(),
         })
     }
@@ -109,6 +132,14 @@ impl OracleSandbox {
         self
     }
 
+    pub(crate) fn with_result_normalization(
+        mut self,
+        result_normalization: ResultNormalization,
+    ) -> Self {
+        self.result_normalization = result_normalization;
+        self
+    }
+
     pub(crate) fn configure(&self, command: &mut Command) {
         command
             .env("LANG", SNAPSHOT_LOCALE)
@@ -128,6 +159,13 @@ impl OracleSandbox {
         for (name, value) in &self.extra_env {
             command.env(name, value);
         }
+        // This is harness-owned typed state, not an arbitrary per-test
+        // override.  Apply it after `extra_env' so callers cannot create a
+        // policy value which Rust did not select.
+        command.env(
+            "NEOVM_ORACLE_RESULT_NORMALIZATION",
+            self.result_normalization.as_env_value(),
+        );
 
         let scratch_root = self.case_root.path();
         let explicit_tmpdir = self

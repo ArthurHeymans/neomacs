@@ -130,3 +130,18 @@ fn oracle_string_property_coalescing_is_explicit() {
         expect,
     );
 }
+
+#[test]
+fn volatile_fontification_normalization_is_explicit_and_preserves_semantic_properties() {
+    let expect =
+        expect_test::expect![[r#""OK #(\"abc\" 0 3 (face bold org-todo-head \"TODO\"))""#]];
+
+    crate::common::assert_oracle_parity_ignoring_volatile_fontification_expect(
+        r#"(let ((s (propertize "abc"
+                                'fontified nil
+                                'face 'bold
+                                'org-todo-head "TODO")))
+              s)"#,
+        expect,
+    );
+}

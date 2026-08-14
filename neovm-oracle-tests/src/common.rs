@@ -16,7 +16,7 @@ use std::sync::OnceLock;
 #[path = "oracle_sandbox.rs"]
 pub(crate) mod oracle_sandbox;
 
-use oracle_sandbox::OracleSandbox;
+use oracle_sandbox::{OracleSandbox, ResultNormalization};
 
 #[cfg(unix)]
 fn apply_virtual_memory_limit(cmd: &mut Command, mem_limit: u64) {
@@ -377,13 +377,21 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
          ;; hex content (`%x' output, docstrings quoting code points) is
          ;; untouched.
          ((stringp v)
-          (replace-regexp-in-string
-           "\\(#<[^>]*\\) 0x[0-9a-f]+"
-           "\\1 0xADDR"
-           (replace-regexp-in-string
-            "%b - \\(?:GNU\\|NEO\\) Emacs at "
-            "%b - [EMACS-PRODUCT] at "
-            (neovm--oracle-squash-roots v))))
+          (let ((out (copy-sequence v)))
+            ;; jit-lock writes `fontified' as lazy redisplay bookkeeping.
+            ;; It can differ with byte-compiled artifact state even when the
+            ;; returned Org value is semantically identical.  Keep stripping
+            ;; opt-in: exact font-lock probes must continue to observe it.
+            (when (equal (getenv "NEOVM_ORACLE_RESULT_NORMALIZATION")
+                         "ignore-volatile-fontification")
+              (remove-text-properties 0 (length out) '(fontified nil) out))
+            (replace-regexp-in-string
+             "\\(#<[^>]*\\) 0x[0-9a-f]+"
+             "\\1 0xADDR"
+             (replace-regexp-in-string
+              "%b - \\(?:GNU\\|NEO\\) Emacs at "
+              "%b - [EMACS-PRODUCT] at "
+              (neovm--oracle-squash-roots out)))))
          (t v)))
       (defun neovm--oracle-squash-roots (s)
         (let ((load-root (getenv "NEOVM_ORACLE_LOAD_ROOT"))
@@ -915,6 +923,17 @@ pub(crate) fn assert_oracle_parity_expect(form: &str, expected: expect_test::Exp
     assert_oracle_parity_expect_with_sandbox(form, expected, &sandbox, EvalProgram::Normalized);
 }
 
+/// Assert an Org-style workflow result while ignoring only jit-lock's
+/// volatile `fontified' string property.  Other text properties remain exact.
+pub(crate) fn assert_oracle_parity_ignoring_volatile_fontification_expect(
+    form: &str,
+    expected: expect_test::Expect,
+) {
+    let sandbox = oracle_sandbox(form, &[], &project_lisp_dir())
+        .with_result_normalization(ResultNormalization::IgnoreVolatileFontification);
+    assert_oracle_parity_expect_with_sandbox(form, expected, &sandbox, EvalProgram::Normalized);
+}
+
 pub(crate) fn assert_oracle_parity_with_shared_tempdir_expect(
     form: &str,
     expected: expect_test::Expect,
@@ -953,6 +972,33 @@ pub(crate) fn assert_oracle_parity_frozen_time_expect(form: &str, expected: expe
     assert_oracle_parity_frozen_time_with_load_expect(form, &[], expected);
 }
 
+fn frozen_time_oracle_sandbox(
+    form: &str,
+    load_files: &[&str],
+    result_normalization: ResultNormalization,
+) -> OracleSandbox {
+    let env_owned = frozen_time_env();
+    let extra_env: Vec<(&str, &str)> = env_owned
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    oracle_sandbox(form, load_files, &project_lisp_dir())
+        .expose_case_root_as_test_tmpdir()
+        .with_extra_env(&extra_env)
+        .with_result_normalization(result_normalization)
+}
+
+/// Frozen-clock counterpart of
+/// [`assert_oracle_parity_ignoring_volatile_fontification_expect`].
+pub(crate) fn assert_oracle_parity_frozen_time_ignoring_volatile_fontification_expect(
+    form: &str,
+    expected: expect_test::Expect,
+) {
+    let sandbox =
+        frozen_time_oracle_sandbox(form, &[], ResultNormalization::IgnoreVolatileFontification);
+    assert_oracle_parity_expect_with_sandbox(form, expected, &sandbox, EvalProgram::Normalized);
+}
+
 /// [`assert_oracle_parity_frozen_time_expect`] with extra `load_files` loaded
 /// into both engines first -- the frozen-clock counterpart of
 /// [`assert_oracle_parity_with_load_expect`].
@@ -961,14 +1007,7 @@ pub(crate) fn assert_oracle_parity_frozen_time_with_load_expect(
     load_files: &[&str],
     expected: expect_test::Expect,
 ) {
-    let env_owned = frozen_time_env();
-    let extra_env: Vec<(&str, &str)> = env_owned
-        .iter()
-        .map(|(k, v)| (k.as_str(), v.as_str()))
-        .collect();
-    let sandbox = oracle_sandbox(form, load_files, &project_lisp_dir())
-        .expose_case_root_as_test_tmpdir()
-        .with_extra_env(&extra_env);
+    let sandbox = frozen_time_oracle_sandbox(form, load_files, ResultNormalization::Exact);
     assert_oracle_parity_expect_with_sandbox(form, expected, &sandbox, EvalProgram::Normalized);
 }
 

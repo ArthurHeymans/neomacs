@@ -117,9 +117,9 @@ fn org_capture_olp_datetree_week_clock_template_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let expect = expect_test::expect![[
-        r##""OK ((t #(\"Captured body\" 0 13 (fontified nil)) #<killed buffer>) nil \"* Journal\\n** Work\\n*** 2026\\n**** 2026-W22\\n***** 2026-05-27 Wednesday\\n****** TODO Captured body\\n:LOGBOOK:\\nCLOCK: [stamp]--[stamp] => [duration]\\n:END:\\nCreated: [stamp]\\n\")""##
+        r#""OK ((t \"Captured body\" #<killed buffer>) nil \"* Journal\\n** Work\\n*** 2026\\n**** 2026-W22\\n***** 2026-05-27 Wednesday\\n****** TODO Captured body\\n:LOGBOOK:\\nCLOCK: [stamp]--[stamp] => [duration]\\n:END:\\nCreated: [stamp]\\n\")""#
     ]];
-    crate::common::assert_oracle_parity_expect(
+    crate::common::assert_oracle_parity_ignoring_volatile_fontification_expect(
         r##"(progn
   (require 'org)
   (require 'org-capture)
