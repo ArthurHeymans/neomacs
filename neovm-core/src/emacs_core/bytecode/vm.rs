@@ -642,6 +642,26 @@ enum DirectSubrCallee {
     Value(Value),
 }
 
+#[derive(Clone, Copy)]
+struct ResolvedBuiltinStackCall {
+    sym_id: SymId,
+    entry: SubrEntry,
+    callee: DirectSubrCallee,
+}
+
+/// Result of GNU `Bcall`'s single live function-cell read.
+///
+/// Keeping this closed prevents the bytecode call path from first probing one
+/// target class and then re-resolving the same mutable symbol cell in a second
+/// helper.  Every direct branch carries the exact live callee it classified;
+/// aliases, autoloads, advice and compiler overrides remain on `Generic`.
+#[derive(Clone, Copy)]
+enum ResolvedStackCallTarget {
+    ByteCode { callee: Value },
+    Builtin(ResolvedBuiltinStackCall),
+    Generic,
+}
+
 impl DirectSubrCallee {
     #[inline]
     fn wrong_arity_value(self) -> Value {
@@ -4297,7 +4317,7 @@ impl<'a> Vm<'a> {
     /// `sym_id`'s function cell still holds `subr_value` (per-site epoch check
     /// against `function_epoch`, re-validated on epoch moves) and that no
     /// compiler function overrides are active — so the symbol resolution that
-    /// `direct_subr_call_target` would perform is provably redundant and is
+    /// `resolve_stack_call_target` would perform is provably redundant and is
     /// skipped. Everything ELSE mirrors [`call_for_jit_stack`] on a symbol
     /// callee resolving to a builtin subr, clause by clause:
     ///
@@ -4312,7 +4332,7 @@ impl<'a> Vm<'a> {
     ///   may all have changed since compile time while the armed check still
     ///   passes. A rewritten entry that stopped being a plain builtin falls
     ///   back to the traced `call_function` on the SYMBOL — the exact spot
-    ///   `direct_subr_call_target` would bail to on the generic path;
+    ///   `resolve_stack_call_target` would classify as generic;
     /// * the arity signal (`wrong-number-of-arguments`) is checked against
     ///   that fresh entry INSIDE the backtrace frame, with the subr object as
     ///   payload (`DirectSubrCallee::Value` parity);
@@ -4508,13 +4528,32 @@ impl<'a> Vm<'a> {
         nargs: usize,
         allow_direct_builtin_subr: bool,
     ) -> EvalResult {
-        let bt_count = self.ctx.specpdl.len();
-        if allow_direct_builtin_subr
-            && let Some(result) =
-                self.try_call_builtin_subr_from_stack_args(func_val, args_start, nargs)
-        {
-            return result;
+        if allow_direct_builtin_subr {
+            match self.resolve_stack_call_target(func_val) {
+                ResolvedStackCallTarget::Builtin(target) => {
+                    return self.call_resolved_builtin_from_stack_args(
+                        func_val, args_start, nargs, target,
+                    );
+                }
+                ResolvedStackCallTarget::ByteCode { callee } => {
+                    let bt_count = self.ctx.specpdl.len();
+                    self.ctx
+                        .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
+                    let bc_data = callee
+                        .get_bytecode_data()
+                        .expect("resolved bytecode target must remain bytecode");
+                    let result = self
+                        .ctx
+                        .execute_bytecode_call_from_stack(bc_data, args_start, nargs, callee);
+                    let result = self.ctx.dispatch_signal_result_if_needed(result);
+                    return self
+                        .ctx
+                        .pop_bytecode_backtrace_frame_with_result(bt_count, result);
+                }
+                ResolvedStackCallTarget::Generic => {}
+            }
         }
+        let bt_count = self.ctx.specpdl.len();
         // Zero-copy call protocol (GNU Bcall): the args stay in the caller's
         // bc_buf slots for the whole call — the backtrace entry records the
         // span (GNU record_in_backtrace stores a pointer into the same
@@ -4601,7 +4640,7 @@ impl<'a> Vm<'a> {
             // interpreted closures, macros and special forms have non-bytecode
             // cells and fall through to the full generic dispatch unchanged. The
             // cell is re-read live every call so redefinition is honored; the
-            // compiler-override guard mirrors direct_subr_call_target. Both this
+            // compiler-override guard mirrors resolve_stack_call_target. Both this
             // and funcall_general converge on execute_bytecode_call, so behavior
             // is identical minus the redundant resolution.
             ValueKind::Symbol(sym_id) if !self.ctx.compiler_function_overrides_active() => {
@@ -4627,7 +4666,25 @@ impl<'a> Vm<'a> {
         args_start: usize,
         nargs: usize,
     ) -> Option<EvalResult> {
-        let (sym_id, entry, callee) = self.direct_subr_call_target(func_val)?;
+        let ResolvedStackCallTarget::Builtin(target) = self.resolve_stack_call_target(func_val)
+        else {
+            return None;
+        };
+        Some(self.call_resolved_builtin_from_stack_args(func_val, args_start, nargs, target))
+    }
+
+    fn call_resolved_builtin_from_stack_args(
+        &mut self,
+        func_val: Value,
+        args_start: usize,
+        nargs: usize,
+        target: ResolvedBuiltinStackCall,
+    ) -> EvalResult {
+        let ResolvedBuiltinStackCall {
+            sym_id,
+            entry,
+            callee,
+        } = target;
         let bt_count = self.ctx.specpdl.len();
         self.ctx
             .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
@@ -4643,7 +4700,7 @@ impl<'a> Vm<'a> {
                 self.try_dispatch_builtin_subr_fast_value_from_stack_args(sym_id, args_start, nargs)
             {
                 self.ctx.pop_fast_bytecode_backtrace_frame(bt_count);
-                return Some(Ok(value));
+                return Ok(value);
             }
             match entry.function {
                 Some(function) => self
@@ -4661,10 +4718,8 @@ impl<'a> Vm<'a> {
             }
         };
         let result = self.ctx.dispatch_signal_result_if_needed(result);
-        Some(
-            self.ctx
-                .pop_bytecode_backtrace_frame_with_result(bt_count, result),
-        )
+        self.ctx
+            .pop_bytecode_backtrace_frame_with_result(bt_count, result)
     }
 
     #[inline]
@@ -4957,16 +5012,32 @@ impl<'a> Vm<'a> {
         }
     }
 
-    fn direct_subr_call_target(
-        &self,
-        func_val: Value,
-    ) -> Option<(SymId, SubrEntry, DirectSubrCallee)> {
-        let (sym_id, entry, callee) = match func_val.kind() {
+    fn resolve_stack_call_target(&self, func_val: Value) -> ResolvedStackCallTarget {
+        let builtin = |sym_id: SymId, entry: SubrEntry, callee: DirectSubrCallee| {
+            if entry.dispatch_kind == SubrDispatchKind::Builtin {
+                ResolvedStackCallTarget::Builtin(ResolvedBuiltinStackCall {
+                    sym_id,
+                    entry,
+                    callee,
+                })
+            } else {
+                ResolvedStackCallTarget::Generic
+            }
+        };
+        match func_val.kind() {
+            ValueKind::Veclike(VecLikeType::ByteCode) => {
+                ResolvedStackCallTarget::ByteCode { callee: func_val }
+            }
             ValueKind::Symbol(sym_id) => {
                 if self.ctx.compiler_function_overrides_active() {
-                    return None;
+                    return ResolvedStackCallTarget::Generic;
                 }
                 match self.ctx.obarray.symbol_function_id(sym_id) {
+                    Some(value)
+                        if matches!(value.kind(), ValueKind::Veclike(VecLikeType::ByteCode)) =>
+                    {
+                        ResolvedStackCallTarget::ByteCode { callee: value }
+                    }
                     // GNU bytecode.c:Bcall resolves a symbol's live function
                     // cell and calls SUBRP function cells directly. Use the
                     // same resolved subr object here instead of consulting the
@@ -4977,37 +5048,31 @@ impl<'a> Vm<'a> {
                             ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr)
                         ) =>
                     {
-                        let (callee_sym, entry) = subr_entry_from_value(value)?;
-                        (callee_sym, entry, DirectSubrCallee::Value(value))
+                        let Some((callee_sym, entry)) = subr_entry_from_value(value) else {
+                            return ResolvedStackCallTarget::Generic;
+                        };
+                        builtin(callee_sym, entry, DirectSubrCallee::Value(value))
                     }
-                    Some(value) if value.is_nil() => (
-                        sym_id,
-                        lookup_global_subr_entry(sym_id)?,
-                        DirectSubrCallee::Symbol(sym_id),
-                    ),
-                    None => (
-                        sym_id,
-                        lookup_global_subr_entry(sym_id)?,
-                        DirectSubrCallee::Symbol(sym_id),
-                    ),
-                    _ => return None,
+                    None => lookup_global_subr_entry(sym_id)
+                        .map_or(ResolvedStackCallTarget::Generic, |entry| {
+                            builtin(sym_id, entry, DirectSubrCallee::Symbol(sym_id))
+                        }),
+                    _ => ResolvedStackCallTarget::Generic,
                 }
             }
             ValueKind::Veclike(VecLikeType::Subr) | ValueKind::Subr(_) => {
-                let (sym_id, entry) = subr_entry_from_value(func_val)?;
-                (sym_id, entry, DirectSubrCallee::Value(func_val))
+                let Some((sym_id, entry)) = subr_entry_from_value(func_val) else {
+                    return ResolvedStackCallTarget::Generic;
+                };
+                builtin(sym_id, entry, DirectSubrCallee::Value(func_val))
             }
-            _ => return None,
-        };
-        if entry.dispatch_kind != SubrDispatchKind::Builtin {
-            return None;
+            _ => ResolvedStackCallTarget::Generic,
         }
-        Some((sym_id, entry, callee))
     }
 
     /// vm-profile only: classify how THIS `Op::Call` callee resolves on the
     /// current dispatch path, without perturbing it — a read-only peek that
-    /// mirrors `direct_subr_call_target` + `call_function_untraced_owned`'s
+    /// mirrors `resolve_stack_call_target` + `call_function_untraced_owned`'s
     /// kind tests. Returns (per-site callee key, CK_* class). Classified
     /// BEFORE the call so the pre-call state is what is counted.
     #[cfg(feature = "vm-profile")]

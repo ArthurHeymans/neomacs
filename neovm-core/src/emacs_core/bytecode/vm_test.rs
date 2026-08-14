@@ -1698,6 +1698,53 @@ fn vm_bytecoded_call_executes_heap_bytecode_without_cloning_function() {
 }
 
 #[test]
+fn vm_symbol_bytecode_call_resolves_live_function_cell_once() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+    let callee_symbol = intern("vm-single-function-cell-read");
+
+    let mut callee = ByteCodeFunction::new(LambdaParams {
+        required: vec![intern("argument")],
+        optional: vec![],
+        rest: None,
+    });
+    callee.lexical = true;
+    callee.ops = vec![Op::StackRef(0), Op::Return];
+    callee.max_stack = 2;
+    eval.obarray
+        .set_symbol_function_id(callee_symbol, Value::make_bytecode(callee));
+
+    let mut caller = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let callee_idx = caller.add_constant(Value::from_sym_id(callee_symbol));
+    let argument_idx = caller.add_constant(Value::fixnum(42));
+    caller.ops = vec![
+        Op::Constant(callee_idx),
+        Op::Constant(argument_idx),
+        Op::Call(1),
+        Op::Return,
+    ];
+    caller.max_stack = 2;
+
+    crate::emacs_core::symbol::reset_function_cell_lookup_count();
+    let result = {
+        let mut vm = new_vm(&mut eval);
+        vm.execute(&caller, vec![])
+            .expect("symbol-bound bytecode call should execute")
+    };
+
+    assert_eq!(result, Value::fixnum(42));
+    assert_eq!(
+        crate::emacs_core::symbol::function_cell_lookup_count(),
+        1,
+        "GNU Bcall reads the live symbol function cell once before dispatch"
+    );
+}
+
+#[test]
 fn vm_bcall_max_eval_depth_reports_error_like_gnu_bytecode() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_minimal_vm_harness();

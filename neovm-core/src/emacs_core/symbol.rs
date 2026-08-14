@@ -37,7 +37,24 @@ use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::tagged::header::{load_value_atomic, store_value_atomic};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+#[cfg(test)]
+use std::cell::Cell;
 use std::sync::atomic::{AtomicU32, Ordering};
+
+#[cfg(test)]
+thread_local! {
+    static FUNCTION_CELL_LOOKUP_COUNT: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_function_cell_lookup_count() {
+    FUNCTION_CELL_LOOKUP_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn function_cell_lookup_count() -> usize {
+    FUNCTION_CELL_LOOKUP_COUNT.with(Cell::get)
+}
 
 // ===========================================================================
 // Redirect machinery — mirrors GNU `lisp.h:771-829`
@@ -2482,6 +2499,8 @@ impl Obarray {
 
     /// Get the function cell of a symbol by identity.
     pub fn symbol_function_id(&self, id: SymId) -> Option<Value> {
+        #[cfg(test)]
+        FUNCTION_CELL_LOOKUP_COUNT.with(|count| count.set(count.get() + 1));
         match self.function_cell_snapshot(id) {
             FunctionCellSnapshot::Bound(function) => Some(function),
             FunctionCellSnapshot::ExplicitlyUnbound | FunctionCellSnapshot::Empty => None,
