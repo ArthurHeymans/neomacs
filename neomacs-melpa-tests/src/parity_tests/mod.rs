@@ -670,6 +670,7 @@ mod tinysegmenter;
 mod toc_org;
 mod toml_mode;
 mod transient;
+mod transpose_frame;
 mod tree_sitter_langs;
 mod treemacs;
 mod treemacs_evil;
