@@ -7880,9 +7880,9 @@ fn recenter_uses_current_buffer_point_for_selected_window() {
     assert_eq!(results[0], "OK (7 4 4)");
 }
 
-/// `recenter` walks backward `target_line` lines from point directly over the
-/// buffer bytes (no full-buffer String copy). Exercises the multi-line backward
-/// walk and the begv clamp -- the paths the 0-line / 1-line cases above miss.
+/// `recenter` walks backward `target_line` screen lines from point. Exercises
+/// the multi-line backward walk and the begv clamp -- the paths the 0-line /
+/// 1-line cases above miss.
 #[test]
 fn recenter_backward_multiple_lines_scans_bytes_to_window_start() {
     crate::test_utils::init_test_tracing();
@@ -7901,6 +7901,48 @@ fn recenter_backward_multiple_lines_scans_bytes_to_window_start() {
                     (line-number-at-pos (window-start)))))",
     );
     assert_eq!(results[0], "OK (3 1)");
+}
+
+/// `recenter` counts SCREEN lines, so invisible text does not consume one.
+///
+/// GNU's positive-ARG branch runs the display iterator --
+/// `start_display`, `move_it_by_lines (&it, 0)` to the head of the screen line
+/// holding point, then `move_it_by_lines (&it, -nlines)` (src/window.c:7395-7407)
+/// -- the same machinery `vertical-motion` uses, which steps over invisible
+/// text without counting it. Verified under GNU in a PTY: with line 10 of a
+/// 23-line buffer hidden by an `invisible` overlay and point on line 20,
+/// `(recenter 12)` puts window-start on line 7, exactly where
+/// `(vertical-motion -12)` lands; a buffer with nothing hidden puts it on
+/// line 8. Neomacs answered line 8 in BOTH cases, because `recenter` walked
+/// raw buffer newlines instead of screen lines.
+///
+/// `helm-css-scss--recenter` is `(recenter (/ (window-height) 2))`, which is
+/// how this reached the terminal parity suite.
+#[test]
+fn recenter_counts_screen_lines_not_buffer_lines_over_invisible_text() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        "(let ((w (selected-window)))
+           (save-current-buffer (set-buffer (window-buffer w))
+             (erase-buffer)
+             (insert \"l1\\nl2\\nl3\\nl4\\nl5\\nl6\\nl7\\nl8\\nl9\\nl10\\nl11\\nl12\\n\"))
+           (list
+             ;; Nothing hidden: 4 screen lines back from line 9 is line 5.
+             (progn (goto-char (point-min)) (forward-line 8) (recenter 4)
+                    (line-number-at-pos (window-start)))
+             ;; Hide line 6 entirely. It is no longer a screen line, so the
+             ;; same 4 screen lines back reach one line further, to line 4.
+             (progn
+               (let ((overlay (make-overlay
+                               (save-excursion (goto-char (point-min))
+                                               (forward-line 5) (point))
+                               (save-excursion (goto-char (point-min))
+                                               (forward-line 6) (point)))))
+                 (overlay-put overlay 'invisible t))
+               (goto-char (point-min)) (forward-line 8) (recenter 4)
+               (line-number-at-pos (window-start)))))",
+    );
+    assert_eq!(results[0], "OK (5 4)");
 }
 
 #[test]

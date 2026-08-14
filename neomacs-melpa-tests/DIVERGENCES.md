@@ -5409,5 +5409,147 @@ Residue: GNU's `record_first_change` redirects an indirect buffer to its base
 buffer's modtime.  A `Buffer` here cannot reach the buffer manager, so an
 indirect buffer still records 0 -- strictly narrower than before, when every
 buffer did.
+## 106. `end-of-visual-line` stopped one column short on a newline-terminated row -- FIXED
+
+MWIM binds `C-e` to `end-of-visual-line`, so its terminal workflow ends every
+visual row of a `visual-line-mode` buffer.  On the LAST visual row of a logical
+line Neomacs landed on the row's last character where GNU lands on the newline:
+`MWIM-MOVE e=8` is `p=83 col=82` in GNU and was `p=82 col=81` here.  This is the
+second defect in the area ledger 90 opened; 90 fixed how a word-wrap break is
+DRAWN, this one is the wrap/end POSITION itself.
+
+The package-free reduction is `vertical-motion` with a goal column, in a
+24-column `visual-line-mode` window over
+`"  alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron\n"`.
+Run under GNU in a PTY, every screen line answers `next-screen-line-start - 1`:
+
+```elisp
+;; (vertical-motion 0) / (vertical-motion (cons 24 0)) / (vertical-motion 1)
+;; GNU               P45  bol=43 eovl=59 vm1=60      ; row closed by a wrap
+;; GNU               P80  bol=60 eovl=83 vm1=84      ; row closed by a newline
+;; Neomacs before    P45  bol=43 eovl=59 vm1=60
+;; Neomacs before    P80  bol=60 eovl=82 vm1=84
+```
+
+`end-of-visual-line` is exactly `(vertical-motion (cons (window-width) 0))`
+(lisp/simple.el:8546-8558), and this is the interactive display-iterator path,
+not the `noninteractive` `vmotion` branch of ledger 71: `Fvertical_motion`
+takes the `else` arm at src/indent.c:2287 and reaches the goal column with
+`move_it_in_display_line (&it, ZV, first_x + to_x, MOVE_TO_X)`
+(src/indent.c:2540).  `move_it_in_display_line_to` (src/xdisp.c:10105) has TWO
+ways to stop: at a glyph that reaches the goal x, or -- when the goal is past
+everything the row draws -- where the display line itself ENDS, at the newline
+it refuses to consume.  A wrap-closed row's end coincides with its last glyph,
+so only newline-closed rows exposed the gap.
+
+Neomacs answered the goal column from the redisplay snapshot's `points`, which
+carry only DRAWN glyphs; a newline draws none, so the row's end was not a
+candidate at all and the walk settled on the last glyph one column back.  The
+row's end was already published, correctly, as `DisplayRowSnapshot::end_col` /
+`end_x` / `end_buffer_pos` -- for a newline-closed row `end_buffer_pos` is the
+newline, one column past the last glyph.  The fix names both exits as one kind,
+`RowGoalStop`, and has the goal-column walk range over glyph stops chained with
+the row's end stop, so the second exit cannot be forgotten by whichever branch
+built the candidate list.
+
+Status: FIXED.
+
+## 107. `recenter` counted buffer lines where GNU counts screen lines -- FIXED
+
+`helm-css-scss--recenter` is `(recenter (/ (window-height) 2))`, so every Helm
+candidate move re-anchors the source window.  With one line of the SCSS fixture
+folded away by an `invisible` overlay, Neomacs put window-start one line lower
+than GNU, and the source pane rendered `  color: red;` at its top row where
+GNU renders `.dashboard--compact {`.
+
+The package-free reduction needs no package at all -- a 23-line buffer, line 10
+hidden by an `invisible` overlay, point on line 20, run in a PTY under both
+editors:
+
+```elisp
+;; hidden line 10, point on line 20
+;; (vertical-motion -12)  => line 7   GNU and Neomacs agree
+;; (recenter 12)          => line 7   GNU
+;;                        => line 8   Neomacs before this fix
+;; with nothing hidden both answer line 8, so only the hidden line diverged
+```
+
+GNU's positive-ARG branch of `Frecenter` runs the display iterator:
+`start_display`, `move_it_by_lines (&it, 0)` onto the head of the screen line
+holding point, then `move_it_by_lines (&it, -nlines)`
+(src/window.c:7395-7407).  That is the same machinery `vertical-motion` uses,
+so invisible text is stepped over without consuming one of the ARG lines.
+
+Neomacs had the seam already -- `screen_line_motion_target`, whose own doc
+calls itself "the shared display-motion seam used by both `vertical-motion` and
+window scrolling" -- and `recenter` simply never opted into it, walking raw
+buffer newlines with `prev_newline_emacs_byte` instead.  That is the ledger-95
+shape again: a rule every caller has to remember, which GNU applies once, in the
+iterator.  `recenter` now resolves its origin and then goes through the seam, so
+invisible text, continuation rows and display properties all count the way
+redisplay counts them.
+
+Residual, NOT this divergence: `helm_css_scss_public_tui_workflows_match_gnu`
+still fails.  The grid assertion this entry is about
+(helm_css_scss_test.rs:1125, "filtered real Helm grid differs") now passes, and
+the failure moved to `report_expect` at helm_css_scss_test.rs:1500, which pins
+GNU's OWN ledger and no longer matches live GNU: at `:stage cancel` GNU reports
+`:windows ("tui-fixture.scss")` where the pin says
+`("tui-fixture.scss" :other)`.  Neomacs cannot influence that side.  A
+`UPDATE_EXPECT=1` run rewrites three GNU pins (1500, 1751, 1804) and then
+reaches a further, separately-masked failure in the MULTI-buffer phase
+("Neomacs multi action returned did not reach the expected terminal state"), so
+the pins were deliberately left untouched rather than refreshed blind.  Two more
+layers live behind this one and want their own ledger entries.
+
+Status: FIXED.
+
+## 108. The terminal writer quantized 256-colors with its own heuristic -- FIXED
+
+Under Gruvbox's 256-color LIGHT profile, `font-lock-comment-face`,
+`org-verbatim` and `org-document-info-keyword` came out as `38;5;248` where GNU
+emits `38;5;145`.
+
+Several tempting explanations were probed under both editors first and all came
+back byte-identical: `tty-color-approximate`, `tty-color-desc`,
+`tty-color-translate`, the whole 256-entry `tty-color-alist`, and the resolved
+face value (`#afafaf`, which those functions map to 145 in BOTH editors), across
+a dark -> light -> `disable-theme` lifecycle.  Every one of those probes was
+right, and every one of them missed the defect, because none of them is what
+draws the glyph.
+
+GNU does not quantize in the writer at all.  `turn_on_face` (src/term.c) emits
+the index the realized face already carries, and that index came from
+`tty-color-approximate` (lisp/term/tty-colors.el:875-915), which scans the WHOLE
+palette for the smallest squared 8-bit RGB distance, skipping candidates on the
+gray diagonal when the requested color is 0.065 radians or more off it
+(`tty-color-off-gray-diag`, tty-colors.el:866-873).
+
+Neomacs' TTY writer carried a SECOND, independent quantizer: a hand-rolled
+`rgb_to_256` that short-circuited any color with `max - min < 8` straight into
+the 24-step grayscale ramp, and bucketed the rest through a coarse cube-level
+table.  `#afafaf` is an EXACT 6x6x6 cube entry (145), but the gray short-circuit
+never looked at the cube and answered 248 (`#a8a8a8`, distance 147).  That is why
+the divergence was invisible to every Lisp-level probe: the Lisp palette was
+right and only the writer disagreed.
+
+Measured against 41 colors read out of GNU -- `emacs -Q -nw` in a PTY with
+COLORTERM unset, `(nth 1 (tty-color-approximate (tty-color-standard-values C)))`
+-- the old function was wrong on 13 of them, well beyond the reported face:
+
+```
+;;              GNU   before
+;; #afafaf      145      248     ; the reported one
+;; #ebdbb2      187      223
+;; #665c54       95       59
+;; #504945      239       59
+;; #ffffff       15      231     ; the 16 system colors lead tty-color-alist,
+;; #000000        0       16     ; so they win an exact tie
+```
+
+`rgb_to_256` is now the search GNU's Lisp does: all 256 candidates in the same
+ascending order the alist is consulted (so exact ties resolve identically),
+squared 8-bit RGB distance, and GNU's gray-diagonal exclusion.  All 41 GNU
+answers are pinned as a test.
 
 Status: FIXED.

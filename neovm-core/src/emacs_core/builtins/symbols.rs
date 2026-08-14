@@ -2431,6 +2431,57 @@ fn snapshot_row_index_for_pos(rows: &[&DisplayRowSnapshot], pos: LispCharPos1) -
     })
 }
 
+/// One place on a screen row where GNU's goal-column walk can come to rest.
+///
+/// GNU reaches a `vertical-motion` goal column with
+/// `move_it_in_display_line (&it, ZV, first_x + to_x, MOVE_TO_X)`
+/// (src/indent.c:2540), and `move_it_in_display_line_to` has TWO ways to stop:
+/// at a glyph that reaches the goal x, or -- when the goal is past everything
+/// the row draws -- where the DISPLAY LINE itself ends. Naming both as stops
+/// keeps that second exit from being an afterthought: a row's end is a
+/// position in its own right, and on a newline-terminated row it is the
+/// newline, which sits one column past the last glyph because it draws none.
+#[derive(Clone, Copy)]
+struct RowGoalStop {
+    col: i64,
+    x: i64,
+    pos: LispCharPos1,
+}
+
+impl RowGoalStop {
+    /// Ordering key for "closest to the goal column, ties preferring the stop
+    /// at or after it" -- GNU's `MOVE_TO_X` never stops short when a stop at
+    /// the goal exists.
+    fn distance_key(self, target_col: i64) -> (i64, i64, i64, i64, i64) {
+        let distance = (self.col - target_col).abs();
+        let side = if self.col >= target_col { 0 } else { 1 };
+        (distance, side, self.col, self.x, self.pos.as_i64())
+    }
+}
+
+/// Every stop the goal-column walk may land on for one row: the drawn glyphs,
+/// then the row's own end boundary.
+fn row_goal_stops(
+    snapshot: &WindowDisplaySnapshot,
+    row: &DisplayRowSnapshot,
+) -> impl Iterator<Item = RowGoalStop> {
+    let glyphs = snapshot
+        .points
+        .iter()
+        .filter(|point| point.row == row.row)
+        .map(|point| RowGoalStop {
+            col: point.col,
+            x: point.x,
+            pos: point.buffer_pos,
+        });
+    let row_end = row.end_buffer_pos.map(|pos| RowGoalStop {
+        col: row.end_col,
+        x: row.end_x,
+        pos,
+    });
+    glyphs.chain(row_end)
+}
+
 fn snapshot_target_pos_on_row(
     snapshot: &WindowDisplaySnapshot,
     row: &DisplayRowSnapshot,
@@ -2439,22 +2490,9 @@ fn snapshot_target_pos_on_row(
     let Some(target_col) = cols.map(|col| col.max(0)) else {
         return row.start_buffer_pos;
     };
-    snapshot
-        .points
-        .iter()
-        .filter(|point| point.row == row.row)
-        .min_by_key(|point| {
-            let distance = (point.col - target_col).abs();
-            let side = if point.col >= target_col { 0 } else { 1 };
-            (
-                distance,
-                side,
-                point.col,
-                point.x,
-                point.buffer_pos.as_i64(),
-            )
-        })
-        .map(|point| point.buffer_pos)
+    row_goal_stops(snapshot, row)
+        .min_by_key(|stop| stop.distance_key(target_col))
+        .map(|stop| stop.pos)
         .or(row.start_buffer_pos)
 }
 

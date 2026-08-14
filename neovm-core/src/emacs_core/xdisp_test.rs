@@ -3577,6 +3577,90 @@ fn test_vertical_motion_eval_uses_live_redisplay_goal_column() {
     assert_eq!(super::super::print::print_value(&result), "(1 43)");
 }
 
+/// A goal column past everything a row draws lands on the row's END boundary,
+/// not on its last glyph.
+///
+/// `end-of-visual-line` is `(vertical-motion (cons (window-width) 0))`
+/// (lisp/simple.el:8558), and GNU reaches the goal column with
+/// `move_it_in_display_line (&it, ZV, first_x + to_x, MOVE_TO_X)`
+/// (src/indent.c:2540). `move_it_in_display_line_to` stops either at the first
+/// glyph that reaches the goal x or, when the goal is past the whole row, where
+/// the DISPLAY LINE ends: at the newline it refuses to consume. So on a
+/// newline-terminated row the answer is the newline's own position, one column
+/// past the last glyph -- verified under GNU on a 24-column `visual-line-mode`
+/// window, where every screen line answers `next-screen-line-start - 1`.
+///
+/// The fixture mirrors what the layout engine really publishes for such a row:
+/// `end_buffer_pos` is the terminating NEWLINE (see
+/// `overlay_string_newline_leaves_row_bounds_on_the_anchor_boundary` in
+/// neomacs-layout-engine, where "hello world\nsecond\n" yields bounds
+/// `(1, 12)` and `(13, 19)`), while `points` carry only drawn glyphs -- the
+/// newline draws none.
+#[test]
+fn test_vertical_motion_goal_column_past_row_end_lands_on_the_row_end_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("xdisp-vertical-motion-row-end", 160, 96, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let buf = eval.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert("hello world\nsecond\n");
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    {
+        // "hello world" is 11 glyphs at columns 0..=10; the newline at position
+        // 12 draws nothing, so the row's pen stops at column 11.
+        let points = (0..11)
+            .map(|index| crate::window::DisplayPointSnapshot {
+                buffer_pos: crate::buffer::LispCharPos1::new(1 + index),
+                x: 8 * index as i64,
+                y: 0,
+                width: 8,
+                height: 16,
+                row: 0,
+                col: index as i64,
+            })
+            .collect::<Vec<_>>();
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id: selected_window,
+            points,
+            rows: vec![crate::window::DisplayRowSnapshot {
+                row: 0,
+                y: 0,
+                height: 16,
+                start_x: 0,
+                start_col: 0,
+                end_x: 88,
+                end_col: 11,
+                start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                end_buffer_pos: Some(crate::buffer::LispCharPos1::new(12)),
+                fringe: Default::default(),
+            }],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    // A goal column beyond the row: GNU stops at the newline (position 12).
+    let past_end = eval
+        .eval_str("(progn (goto-char 3) (list (vertical-motion (cons 40 0)) (point)))")
+        .unwrap();
+    assert_eq!(super::super::print::print_value(&past_end), "(0 12)");
+
+    // A goal column inside the row still selects the glyph at that column.
+    let inside = eval
+        .eval_str("(progn (goto-char 3) (list (vertical-motion (cons 6 0)) (point)))")
+        .unwrap();
+    assert_eq!(super::super::print::print_value(&inside), "(0 7)");
+}
+
 #[test]
 fn test_move_point_visually() {
     crate::test_utils::init_test_tracing();
