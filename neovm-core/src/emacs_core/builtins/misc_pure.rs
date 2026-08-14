@@ -524,11 +524,7 @@ pub(crate) fn symbol_name_string_for_format(value: Value) -> Option<Value> {
 
 fn builtin_symbol_name_value(symbol: Value, symbols_with_pos_enabled: bool) -> EvalResult {
     match super::symbols::symbol_id_checked(&symbol, symbols_with_pos_enabled) {
-        Some(id) => Ok(
-            crate::emacs_core::intern::resolve_sym_name_value(id).unwrap_or_else(|| {
-                Value::heap_string(crate::emacs_core::intern::resolve_sym_lisp_string(id).clone())
-            }),
-        ),
+        Some(id) => Ok(crate::emacs_core::intern::materialize_symbol_name_value(id)),
         None => Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), symbol],

@@ -301,6 +301,17 @@ struct SymbolNameValue {
     heap_id: SymbolNameHeapId,
 }
 
+/// Identity of a lazily materialized atom-backed symbol name.
+///
+/// A `SymId` is process-global while a Lisp string belongs to one tagged
+/// heap.  Making both axes part of the key prevents a name object allocated by
+/// one evaluator from being returned in another evaluator's heap.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct MaterializedSymbolNameKey {
+    heap_id: SymbolNameHeapId,
+    symbol: SymId,
+}
+
 /// The unique name objects that must be seeded for each live tagged heap.
 ///
 /// Many uninterned symbols may deliberately share one exact name string (GNU
@@ -345,8 +356,8 @@ impl SymbolNameRootIndex {
 /// returns it with its text properties, its multibyteness and any later
 /// mutation intact. We additionally construct symbols from Rust text -- the
 /// reader, the dumper, bootstrap -- where no Lisp object exists to store; those
-/// sites say `AtomOnly` and `symbol-name` materializes a string from the name
-/// atom instead.
+/// sites say `AtomOnly`; the first Lisp-visible `symbol-name` read materializes
+/// one heap-local string from the atom and subsequent reads reuse it.
 #[derive(Clone, Copy, Debug)]
 enum NewSymbolName {
     /// No Lisp string object was involved; the interned name atom is the whole
@@ -361,14 +372,18 @@ enum NewSymbolName {
 ///
 /// Lisp-created symbols retain the exact mutable string object supplied to
 /// `intern` or `make-symbol`. Symbols synthesized by the reader, dumper, or
-/// Rust bootstrap have only a process-lifetime immutable name atom. Callers
-/// must not silently substitute the atom when an object exists: GNU
-/// `symbol-name` and every primitive built on it observe later mutation of the
-/// object.
+/// Rust bootstrap begin with only a process-lifetime immutable name atom.  A
+/// Lisp-visible read can borrow that atom while filtering, then materialize one
+/// cached heap object when it must return a value.  Callers must not silently
+/// substitute the atom once an object exists: GNU `symbol-name` and every
+/// primitive built on it observe later mutation of the object.
 #[derive(Clone)]
 pub(crate) enum LispVisibleSymbolName {
     LispObject(TaggedValue),
-    Atom(&'static LispString),
+    Atom {
+        symbol: SymId,
+        string: &'static LispString,
+    },
 }
 
 impl NewSymbolName {
@@ -413,6 +428,11 @@ struct SymbolRegistry {
     /// Keeping this rare case out of `SymbolSlot` makes every ordinary symbol
     /// substantially smaller.
     name_values: FxHashMap<SymId, SymbolNameValue>,
+    /// Per-heap Lisp objects lazily created for symbols whose name originated
+    /// as a Rust/process-lifetime atom.  GNU always stores one Lisp string in
+    /// every symbol; this cache supplies the equivalent object without making
+    /// every process-global [`SymbolSlot`] carry a heap-local pointer.
+    materialized_name_values: FxHashMap<MaterializedSymbolNameKey, TaggedValue>,
     /// Per-heap set of exact Lisp name objects. This is deliberately indexed
     /// by object identity rather than symbol id: many uninterned symbols can
     /// share one name object, and seeding it once is sufficient.
@@ -432,6 +452,7 @@ impl SymbolRegistry {
             symbols: Vec::new(),
             canonical_by_name: FxHashMap::default(),
             name_values: FxHashMap::default(),
+            materialized_name_values: FxHashMap::default(),
             name_value_roots: SymbolNameRootIndex::default(),
         };
         let nil_name = registry.names.intern("nil");
@@ -560,13 +581,32 @@ impl SymbolRegistry {
     }
 
     #[inline]
-    fn resolve_name_value(&self, id: SymId) -> Option<TaggedValue> {
+    fn resolve_name_value_in_heap(
+        &self,
+        id: SymId,
+        heap_id: SymbolNameHeapId,
+    ) -> Option<TaggedValue> {
         self.slot(id)
             .unwrap_or_else(|| panic!("invalid symbol id {:?}", id));
-        let name_value = self.name_values.get(&id).copied()?;
-        (crate::tagged::gc::current_tagged_heap_identity().map(SymbolNameHeapId)
-            == Some(name_value.heap_id))
-        .then_some(name_value.value)
+        self.name_values
+            .get(&id)
+            .copied()
+            .filter(|name_value| name_value.heap_id == heap_id)
+            .map(|name_value| name_value.value)
+            .or_else(|| {
+                self.materialized_name_values
+                    .get(&MaterializedSymbolNameKey {
+                        heap_id,
+                        symbol: id,
+                    })
+                    .copied()
+            })
+    }
+
+    #[inline]
+    fn resolve_name_value(&self, id: SymId) -> Option<TaggedValue> {
+        let heap_id = crate::tagged::gc::current_tagged_heap_identity().map(SymbolNameHeapId)?;
+        self.resolve_name_value_in_heap(id, heap_id)
     }
 
     #[inline]
@@ -578,7 +618,10 @@ impl SymbolRegistry {
             );
             LispVisibleSymbolName::LispObject(value)
         } else {
-            LispVisibleSymbolName::Atom(self.resolve_lisp_string(id))
+            LispVisibleSymbolName::Atom {
+                symbol: id,
+                string: self.resolve_lisp_string(id),
+            }
         }
     }
 
@@ -744,6 +787,13 @@ impl SymbolRegistry {
                 .filter(|name_value| name_value.heap_id == heap_id)
             {
                 unique.insert(SymbolNameObjectId::of(name_value.value), name_value.value);
+            }
+            for value in self
+                .materialized_name_values
+                .iter()
+                .filter_map(|(key, value)| (key.heap_id == heap_id).then_some(value))
+            {
+                unique.insert(SymbolNameObjectId::of(*value), *value);
             }
             assert_eq!(
                 self.name_value_roots.root_count(heap_id),
@@ -1061,6 +1111,49 @@ pub(crate) fn resolve_lisp_visible_symbol_name(id: SymId) -> LispVisibleSymbolNa
     global_symbol_registry()
         .read()
         .resolve_lisp_visible_name(id)
+}
+
+/// Return the one Lisp name object for `id` in the current tagged heap.
+///
+/// GNU stores this object directly in `struct Lisp_Symbol`.  Neomacs keeps
+/// process-global symbol identity separate from evaluator-local heaps, so an
+/// atom-backed symbol acquires its object lazily and caches it under the typed
+/// `(heap, symbol)` identity.  The allocation happens outside the registry
+/// lock; the second lookup makes concurrent first reads converge on one
+/// published object.
+pub(crate) fn materialize_symbol_name_value(id: SymId) -> TaggedValue {
+    let heap_id = SymbolNameHeapId(
+        crate::tagged::gc::current_tagged_heap_identity()
+            .expect("materializing a Lisp symbol name requires an installed tagged heap"),
+    );
+    let atom = {
+        let registry = global_symbol_registry().read();
+        if let Some(value) = registry.resolve_name_value_in_heap(id, heap_id) {
+            return value;
+        }
+        registry.resolve_lisp_string(id)
+    };
+
+    let materialized = TaggedValue::heap_string(atom.clone());
+    let mut registry = global_symbol_registry().write();
+    if let Some(value) = registry.resolve_name_value_in_heap(id, heap_id) {
+        return value;
+    }
+
+    let key = MaterializedSymbolNameKey {
+        heap_id,
+        symbol: id,
+    };
+    let old = registry.materialized_name_values.insert(key, materialized);
+    debug_assert!(
+        old.is_none(),
+        "materialized symbol name replaced after lookup"
+    );
+    registry.name_value_roots.insert(SymbolNameValue {
+        value: materialized,
+        heap_id,
+    });
+    materialized
 }
 
 /// Map a set of Lisp-visible symbol names under one registry read lock.

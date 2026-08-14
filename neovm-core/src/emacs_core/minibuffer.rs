@@ -1803,10 +1803,14 @@ enum CompletionText {
     /// and Lisp-created symbol names; both must preserve object identity,
     /// mutation, text properties, and multibyteness like GNU.
     LispObject(Value),
-    /// Process-lifetime atom for a symbol that genuinely has no Lisp name
-    /// object. Kept as a thin reference so ordinary obarray candidates stay
-    /// compact.
-    Atom(&'static crate::heap_types::LispString),
+    /// Process-lifetime atom for a symbol whose name has not yet been
+    /// materialized on this heap.  Kept with its typed symbol identity so
+    /// filtering stays allocation-free and a surviving result can acquire the
+    /// symbol's one cached Lisp name object.
+    Atom {
+        symbol: SymId,
+        string: &'static crate::heap_types::LispString,
+    },
 }
 
 impl CompletionText {
@@ -1815,14 +1819,16 @@ impl CompletionText {
             Self::LispObject(value) => value
                 .as_lisp_string()
                 .expect("a rooted completion string remains a string"),
-            Self::Atom(string) => string,
+            Self::Atom { string, .. } => string,
         }
     }
 
     fn as_result_value(&self) -> Value {
         match self {
             Self::LispObject(value) => *value,
-            Self::Atom(string) => Value::heap_string((*string).clone()),
+            Self::Atom { symbol, .. } => {
+                crate::emacs_core::intern::materialize_symbol_name_value(*symbol)
+            }
         }
     }
 
@@ -1849,7 +1855,7 @@ impl CompletionText {
     fn searched_string(&self) -> super::regex::SearchedString {
         match self {
             Self::LispObject(value) => super::regex::SearchedString::Heap(*value),
-            Self::Atom(string) => super::regex::SearchedString::Owned((*string).clone()),
+            Self::Atom { string, .. } => super::regex::SearchedString::Owned((*string).clone()),
         }
     }
 }
@@ -1877,8 +1883,8 @@ fn completion_text_from_symbol_name(
         crate::emacs_core::intern::LispVisibleSymbolName::LispObject(value) => {
             CompletionText::LispObject(value)
         }
-        crate::emacs_core::intern::LispVisibleSymbolName::Atom(string) => {
-            CompletionText::Atom(string)
+        crate::emacs_core::intern::LispVisibleSymbolName::Atom { symbol, string } => {
+            CompletionText::Atom { symbol, string }
         }
     }
 }

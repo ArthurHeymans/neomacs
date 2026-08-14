@@ -1709,6 +1709,30 @@ fn symbol_completion_observes_the_lisp_visible_mutated_name() {
     );
 }
 
+/// GNU `Fall_completions` conses the exact `Fsymbol_name` object into its
+/// result.  Bootstrap/Rust-created symbols start from immutable name atoms in
+/// Neomacs, but their first Lisp-visible completion must materialize and retain
+/// one object rather than cloning the atom for every TAB.
+#[test]
+fn atom_backed_completion_returns_the_symbols_materialized_name_object() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    eval.obarray
+        .intern("atom-backed-completion-name-identity-probe");
+
+    let result = eval
+        .eval_str(
+            r##"(let ((matches
+                    (all-completions
+                     "atom-backed-completion-name-identity-probe" obarray)))
+                (eq (car matches)
+                    (symbol-name 'atom-backed-completion-name-identity-probe)))"##,
+        )
+        .expect("atom-backed completion identity probe");
+
+    assert_eq!(result, Value::T);
+}
+
 /// GNU `Fall_completions` (`src/minibuf.c`) advances one `obarray_iter_t`
 /// entry at a time and constructs only the surviving completion result.  The
 /// Neomacs ownership boundary needs one rooted candidate collection because a

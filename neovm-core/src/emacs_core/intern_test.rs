@@ -52,6 +52,82 @@ fn immutable_symbol_name_resolution_reads_the_registry_once_per_thread() {
     assert_eq!(resolve_sym_lisp_string_registry_reads(), 1);
 }
 
+/// GNU stores a Lisp string object directly in every symbol and
+/// `Fsymbol_name` returns that same object on every call.  Symbols synthesized
+/// from Rust text must lazily acquire the same per-heap identity instead of
+/// cloning their process-lifetime name atom for each read.
+#[test]
+fn atom_only_symbol_name_materializes_one_lisp_object_per_heap() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let symbol = crate::emacs_core::value::Value::from_sym_id(intern(
+        "atom-only-symbol-name-identity-probe",
+    ));
+
+    let first = crate::emacs_core::builtins::misc_pure::builtin_symbol_name_1(&mut eval, symbol)
+        .expect("symbol-name should materialize an atom-only name");
+    let second = crate::emacs_core::builtins::misc_pure::builtin_symbol_name_1(&mut eval, symbol)
+        .expect("symbol-name should reuse the materialized name");
+
+    assert_eq!(
+        first.bits(),
+        second.bits(),
+        "GNU Fsymbol_name returns the symbol's one stored name object"
+    );
+
+    crate::emacs_core::builtins::collections::builtin_aset(vec![
+        first,
+        crate::emacs_core::value::Value::fixnum(0),
+        crate::emacs_core::value::Value::fixnum('X' as i64),
+    ])
+    .expect("GNU permits mutation of the stored symbol-name string");
+    let after_mutation =
+        crate::emacs_core::builtins::misc_pure::builtin_symbol_name_1(&mut eval, symbol)
+            .expect("symbol-name should retain the mutated object");
+    assert_eq!(after_mutation.bits(), first.bits());
+    assert_eq!(
+        after_mutation
+            .as_lisp_string()
+            .expect("symbol-name remains a string")
+            .as_bytes()[0],
+        b'X'
+    );
+}
+
+#[test]
+fn atom_only_symbol_names_are_cached_and_rooted_per_heap_identity() {
+    crate::test_utils::init_test_tracing();
+    let symbol = intern("atom-only-symbol-name-per-heap-probe");
+
+    let mut first_heap = crate::tagged::gc::TaggedHeap::new();
+    crate::tagged::gc::set_tagged_heap(&mut first_heap);
+    let first_heap_id = crate::tagged::gc::current_tagged_heap_identity().unwrap();
+    let first = materialize_symbol_name_value(symbol);
+    assert_eq!(materialize_symbol_name_value(symbol).bits(), first.bits());
+
+    let mut second_heap = crate::tagged::gc::TaggedHeap::new();
+    crate::tagged::gc::set_tagged_heap(&mut second_heap);
+    let second_heap_id = crate::tagged::gc::current_tagged_heap_identity().unwrap();
+    let second = materialize_symbol_name_value(symbol);
+    assert_ne!(
+        first.bits(),
+        second.bits(),
+        "heap-local Lisp objects must never cross evaluator heaps"
+    );
+
+    crate::tagged::gc::set_tagged_heap(&mut first_heap);
+    assert_eq!(materialize_symbol_name_value(symbol).bits(), first.bits());
+    let mut first_roots = Vec::new();
+    collect_symbol_name_gc_roots(&mut first_roots, first_heap_id);
+    assert!(first_roots.iter().any(|root| root.bits() == first.bits()));
+
+    crate::tagged::gc::set_tagged_heap(&mut second_heap);
+    let mut second_roots = Vec::new();
+    collect_symbol_name_gc_roots(&mut second_roots, second_heap_id);
+    assert!(second_roots.iter().any(|root| root.bits() == second.bits()));
+    assert!(!second_roots.iter().any(|root| root.bits() == first.bits()));
+}
+
 #[test]
 fn name_to_symbol_cache_round_trips_nonzero_ids() {
     let name_id = NameId(7);
