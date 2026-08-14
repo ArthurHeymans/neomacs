@@ -434,7 +434,7 @@ rank	package	downloads	status
 433	rtags	206955	covered
 434	go-eldoc	206860	covered
 435	tuareg	206148	covered
-436	hcl-mode	205742	todo
+436	hcl-mode	205742	covered
 437	auto-package-update	205557	covered
 438	esup	203329	todo
 439	cyberpunk-theme	203077	todo

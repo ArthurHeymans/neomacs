@@ -451,6 +451,7 @@ mod gruvbox_theme;
 mod haml_mode;
 mod harness_contract;
 mod haskell_mode;
+mod hcl_mode;
 mod helm;
 mod helm_ag;
 mod helm_c_yasnippet;
