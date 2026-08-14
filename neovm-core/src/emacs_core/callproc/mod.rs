@@ -997,12 +997,14 @@ fn builtin_call_process_region_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("call-process-region", &args, 3)?;
-    let program = super::builtins::expect_lisp_string(&args[2])?.clone();
-    let program_os = resolve_call_process_program(eval, &program)?;
-    // GNU `Fcall_process_region` delegates the chdir to `Fcall_process`, so the
-    // same `get_current_directory` validation applies: signal "Setting current
-    // directory" for an inaccessible local `default-directory` before any work.
-    let subprocess_dir = validate_subprocess_current_directory(eval)?;
+    // GNU `Fcall_process_region` (src/callproc.c:1099-1147) runs in this order:
+    // validate the region, write it to the temp file, perform the DELETE, and
+    // only then call `call_process` — which is where PROGRAM is type-checked
+    // (src/callproc.c:390) and searched for on `exec-path` (src/callproc.c:447-476).
+    // Everything that can signal about the program, the working directory, the
+    // destination, or the argument vector therefore happens AFTER the region is
+    // gone, and this function keeps that order.
+    //
     // Bug 10 (GNU `Fcall_process_region`): when DELETE is set GNU removes the
     // region with `Fdelete_region`/`del_range`, whose `prepare_to_modify_buffer`
     // runs `barf_if_buffer_read_only` first — so a read-only buffer signals
@@ -1014,32 +1016,11 @@ fn builtin_call_process_region_impl(
     if delete && !args[0].is_string() {
         super::editfns::ensure_current_buffer_writable_in_state(&eval.obarray, &[], &eval.buffers)?;
     }
-    // Materialize the frame-aware child environment before taking the mutable
-    // buffer borrow below.
-    let subprocess_env =
-        super::environment::ChildEnvironment::materialize(eval, subprocess_dir.as_deref());
-
-    // Encode the trailing string ARGUMENTS through the write coding system
-    // before borrowing the buffers, exactly like the synchronous `call-process`
-    // path (GNU `Fcall_process_region` delegates argv encoding to
-    // `Fcall_process`).
-    let cmd_args = if args.len() > 6 {
-        let parsed = super::process::parse_lisp_string_args_strict(&args[6..])?;
-        encode_call_process_args(eval, &parsed)
-    } else {
-        Vec::new()
-    };
 
     // Resolve the region's write coding (`coding-system-for-write`) before taking
-    // the mutable buffers borrow below.
+    // the mutable buffers borrow below.  GNU encodes the region while writing the
+    // temp file, which also precedes the DELETE.
     let write_coding = resolve_call_process_region_write_coding(eval);
-
-    let destination = if args.len() > 4 {
-        &args[4]
-    } else {
-        &Value::NIL
-    };
-    let destination_spec = parse_call_process_destination(&eval.buffers, destination)?;
 
     let region_text = match args[0].kind() {
         ValueKind::Nil => {
@@ -1113,6 +1094,39 @@ fn builtin_call_process_region_impl(
             text
         }
     };
+
+    // From here on we are inside GNU's `call_process`: PROGRAM is type-checked
+    // and looked up, the working directory is validated, the child environment
+    // and argument vector are built, and the destination is resolved.  A signal
+    // from any of these leaves the DELETE above already applied, exactly as in
+    // GNU.
+    let program = super::builtins::expect_lisp_string(&args[2])?.clone();
+    let program_os = resolve_call_process_program(eval, &program)?;
+    // GNU `Fcall_process_region` delegates the chdir to `Fcall_process`, so the
+    // same `get_current_directory` validation applies: signal "Setting current
+    // directory" for an inaccessible local `default-directory`.
+    let subprocess_dir = validate_subprocess_current_directory(eval)?;
+    // Materialize the frame-aware child environment before taking the mutable
+    // buffer borrow below.
+    let subprocess_env =
+        super::environment::ChildEnvironment::materialize(eval, subprocess_dir.as_deref());
+
+    // Encode the trailing string ARGUMENTS through the write coding system,
+    // exactly like the synchronous `call-process` path (GNU
+    // `Fcall_process_region` delegates argv encoding to `Fcall_process`).
+    let cmd_args = if args.len() > 6 {
+        let parsed = super::process::parse_lisp_string_args_strict(&args[6..])?;
+        encode_call_process_args(eval, &parsed)
+    } else {
+        Vec::new()
+    };
+
+    let destination = if args.len() > 4 {
+        &args[4]
+    } else {
+        &Value::NIL
+    };
+    let destination_spec = parse_call_process_destination(&eval.buffers, destination)?;
 
     if destination_spec.no_wait {
         let mut command = new_child_command(&program_os);

@@ -207,6 +207,60 @@ fn call_process_region_delete_respects_buffer_read_only() {
     assert_eq!(String::from_utf8_lossy(text.as_bytes()), "rodata");
 }
 
+/// GNU's `Fcall_process_region` (src/callproc.c:1099-1147) performs the DELETE
+/// deletion *before* it calls `call_process`, and `call_process`
+/// (src/callproc.c:390, 447-476) is where PROGRAM is type-checked and searched
+/// for on `exec-path`.  A missing executable therefore leaves the region
+/// already deleted.  Neomacs used to resolve the executable first, so the
+/// region survived a failed lookup.
+///
+/// GNU oracle (emacs -Q --batch):
+///   (with-temp-buffer (insert "hello")
+///     (list (condition-case e (call-process-region (point-min) (point-max)
+///                                                  "neomacs-no-such-program-xyz" t nil)
+///             (error e))
+///           (buffer-string)))
+///   => ((file-missing "Searching for program" "No such file or directory"
+///        "neomacs-no-such-program-xyz") "")
+/// The same holds with START = nil (whole-buffer delete).
+#[test]
+fn call_process_region_delete_happens_before_the_program_lookup_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    for start in [Value::fixnum(1), Value::NIL] {
+        let mut eval = Context::new();
+        let buffer_id = eval.buffers.create_buffer("callproc-region-delete-order");
+        assert!(eval.buffers.switch_current(buffer_id));
+        eval.buffers
+            .insert_lisp_string_into_buffer(buffer_id, &LispString::from_utf8("hello"))
+            .expect("insert");
+
+        let r = builtin_call_process_region(
+            &mut eval,
+            vec![
+                start,
+                Value::fixnum(6),
+                Value::string("neomacs-no-such-program-xyz"),
+                Value::T, // DELETE
+                Value::NIL,
+                Value::NIL,
+            ],
+        );
+
+        let (symbol, _data) = expect_signal(r);
+        assert_eq!(symbol, "file-missing", "START = {start:?}");
+
+        let buf = eval.buffers.get(buffer_id).expect("buffer");
+        let range = buf.full_emacs_byte_range();
+        let text = buf.buffer_substring_lisp_string_range(range);
+        assert_eq!(
+            String::from_utf8_lossy(text.as_bytes()),
+            "",
+            "GNU deletes the region before it looks the program up (START = {start:?})"
+        );
+    }
+}
+
 /// Bug 16: opening a nonexistent INFILE reports GNU's
 ///   (file-missing "Opening process input file" "No such file or directory" FILENAME)
 /// — bare strerror (no Rust "(os error N)") plus the (expanded) filename.
