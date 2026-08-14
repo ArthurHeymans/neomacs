@@ -992,8 +992,10 @@ fn classify_command_object_in_state(
             }
         }
         ValueKind::Veclike(VecLikeType::Subr) => {
-            let id = value.as_subr_id().unwrap();
-            if registered_builtin_command(id) {
+            if value
+                .subr_interactivity()
+                .is_some_and(crate::tagged::header::SubrInteractivity::is_interactive)
+            {
                 CommandpClassification::Interactive
             } else {
                 CommandpClassification::CheckInteractiveFormProperty(

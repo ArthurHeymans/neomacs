@@ -76,6 +76,7 @@ pub(crate) fn update_static_subr_object_entry(
     min_args: u16,
     max_args: Option<u16>,
     dispatch_kind: super::header::SubrDispatchKind,
+    interactivity: super::header::SubrInteractivity,
 ) {
     STATIC_SUBR_OBJECTS.with(|objects| {
         let Some(value) = objects
@@ -98,6 +99,7 @@ pub(crate) fn update_static_subr_object_entry(
             (*ptr).min_args = min_args;
             (*ptr).max_args = max_args;
             (*ptr).dispatch_kind = dispatch_kind;
+            (*ptr).interactivity = interactivity;
         }
     });
 }
@@ -164,12 +166,13 @@ fn canonical_subr_object(sym_id: SymId) -> TaggedValue {
 fn allocate_static_subr_object(sym_id: SymId) -> TaggedValue {
     let name_id = symbol_name_id(sym_id);
     let entry = crate::emacs_core::eval::lookup_global_subr_entry(sym_id);
-    let (function, min_args, max_args, dispatch_kind) = if let Some(entry) = entry {
+    let (function, min_args, max_args, dispatch_kind, interactivity) = if let Some(entry) = entry {
         (
             entry.function,
             entry.min_args,
             entry.max_args,
             entry.dispatch_kind,
+            super::header::SubrInteractivity::from(entry.interactive_spec.is_some()),
         )
     } else {
         let (min_args, max_args, dispatch_kind) =
@@ -178,7 +181,13 @@ fn allocate_static_subr_object(sym_id: SymId) -> TaggedValue {
                 0,
                 None,
             );
-        (None, min_args, max_args, dispatch_kind)
+        (
+            None,
+            min_args,
+            max_args,
+            dispatch_kind,
+            super::header::SubrInteractivity::NonInteractive,
+        )
     };
 
     let obj = Box::new(SubrObj {
@@ -188,6 +197,7 @@ fn allocate_static_subr_object(sym_id: SymId) -> TaggedValue {
         min_args,
         max_args,
         dispatch_kind,
+        interactivity,
         function,
     });
     let ptr = Box::leak(obj) as *mut SubrObj;
@@ -597,6 +607,16 @@ impl TaggedValue {
         } else {
             None
         }
+    }
+
+    /// Read GNU's intrinsic primitive-command state from the subr object.
+    #[inline(always)]
+    pub fn subr_interactivity(self) -> Option<super::header::SubrInteractivity> {
+        if self.veclike_type() != Some(super::header::VecLikeType::Subr) {
+            return None;
+        }
+        let ptr = self.as_veclike_ptr().unwrap() as *const super::header::SubrObj;
+        Some(unsafe { (*ptr).interactivity })
     }
 
     // -- Heap pointer extractors --

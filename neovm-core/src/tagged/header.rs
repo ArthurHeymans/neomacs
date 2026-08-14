@@ -1130,6 +1130,36 @@ pub enum SubrDispatchKind {
     SpecialForm,
 }
 
+/// Whether a primitive function has a GNU `Lisp_Subr::intspec`.
+///
+/// This is intrinsic function-object metadata, not a property of the symbol
+/// whose function cell happens to reference the object.  Keeping the state as
+/// a closed enum makes a newly constructed or refreshed [`SubrObj`] choose its
+/// command classification explicitly.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SubrInteractivity {
+    NonInteractive,
+    Interactive,
+}
+
+impl SubrInteractivity {
+    #[inline(always)]
+    pub fn is_interactive(self) -> bool {
+        matches!(self, Self::Interactive)
+    }
+}
+
+impl From<bool> for SubrInteractivity {
+    fn from(interactive: bool) -> Self {
+        if interactive {
+            Self::Interactive
+        } else {
+            Self::NonInteractive
+        }
+    }
+}
+
 #[repr(C)]
 pub struct SubrObj {
     pub header: VecLikeHeader,
@@ -1143,6 +1173,8 @@ pub struct SubrObj {
     pub max_args: Option<u16>,
     /// How the evaluator should dispatch this public subr surface.
     pub dispatch_kind: SubrDispatchKind,
+    /// GNU `Lisp_Subr::intspec.string` presence, used directly by `commandp`.
+    pub interactivity: SubrInteractivity,
     /// Native Rust entry point for the builtin, if fully registered.
     pub function: Option<SubrFn>,
 }

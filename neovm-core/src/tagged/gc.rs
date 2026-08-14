@@ -10435,6 +10435,7 @@ mod ownership_tests {
             min_args: 1,
             max_args: Some(2),
             dispatch_kind: crate::tagged::header::SubrDispatchKind::Builtin,
+            interactivity: crate::tagged::header::SubrInteractivity::NonInteractive,
             function: None,
         });
         let ptr = Box::into_raw(obj);

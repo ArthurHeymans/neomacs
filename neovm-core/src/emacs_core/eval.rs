@@ -43,7 +43,9 @@ use crate::buffer::{
 };
 use crate::face::{Face as RuntimeFace, FaceTable, FontSlant, FontWeight, FontWidth};
 use crate::gc_trace::GcTrace;
-use crate::tagged::header::{CLOSURE_ARGLIST, SubrDispatchKind, SubrFn, SubrObj};
+use crate::tagged::header::{
+    CLOSURE_ARGLIST, SubrDispatchKind, SubrFn, SubrInteractivity, SubrObj,
+};
 use crate::window::{FrameFullscreen, FrameManager, WindowId};
 
 /// Stress-GC at every allocation-bearing safe point when `NEOVM_GC_STRESS=1`.
@@ -328,8 +330,9 @@ fn redisplay_f32_bits(value: f32) -> u32 {
     }
 }
 
-/// Static subr entry — lives in global table, not on the tagged heap.
-/// Replaces the heap-allocated SubrObj for builtin function metadata.
+/// Authoritative builtin registration entry.  The Lisp-visible static
+/// [`SubrObj`] mirrors its directly observable GNU object metadata; the table
+/// retains Rust-only dispatch data and the complete interactive spec.
 #[derive(Clone, Copy)]
 pub(crate) struct SubrEntry {
     pub(crate) function: Option<crate::tagged::header::SubrFn>,
@@ -344,6 +347,12 @@ thread_local! {
     // Static subrs are encoded directly from `SymId`, so the registry should
     // be indexed by that dense id rather than hashed again at dispatch time.
     static GLOBAL_SUBR_TABLE: RefCell<Vec<Option<SubrEntry>>> = const { RefCell::new(Vec::new()) };
+
+    /// Test-only visibility into hot-path registry reads.  Primitive objects
+    /// should carry the GNU `Lisp_Subr` metadata needed by `commandp` instead
+    /// of re-entering this table for every M-x candidate.
+    #[cfg(test)]
+    static GLOBAL_SUBR_LOOKUP_COUNT: Cell<usize> = const { Cell::new(0) };
 
     /// Thread-local handle to the active `Context::quit_requested`
     /// atomic. Installed by `Context::setup_thread_locals`, read by
@@ -383,12 +392,25 @@ pub(crate) fn register_global_subr_entry(sym_id: SymId, entry: SubrEntry) {
         entry.min_args,
         entry.max_args,
         entry.dispatch_kind,
+        SubrInteractivity::from(entry.interactive_spec.is_some()),
     );
 }
 
 /// Look up a subr entry by SymId.
 pub(crate) fn lookup_global_subr_entry(sym_id: SymId) -> Option<SubrEntry> {
+    #[cfg(test)]
+    GLOBAL_SUBR_LOOKUP_COUNT.with(|count| count.set(count.get() + 1));
     GLOBAL_SUBR_TABLE.with(|table| table.borrow().get(sym_id.0 as usize).copied().flatten())
+}
+
+#[cfg(test)]
+pub(crate) fn reset_global_subr_lookup_count() {
+    GLOBAL_SUBR_LOOKUP_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn global_subr_lookup_count() -> usize {
+    GLOBAL_SUBR_LOOKUP_COUNT.with(Cell::get)
 }
 
 #[inline(always)]

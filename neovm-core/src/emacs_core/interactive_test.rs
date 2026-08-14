@@ -730,6 +730,55 @@ fn commandp_reads_each_function_cell_once() {
     );
 }
 
+/// GNU `Fcommandp` reads `XSUBR (fun)->intspec.string` directly from the
+/// primitive object.  Re-entering Neomacs's global subr registry for every
+/// primitive candidate turns the M-x obarray scan into thousands of TLS
+/// `RefCell` borrows.
+#[test]
+fn commandp_reads_interactivity_from_the_subr_object() {
+    crate::test_utils::init_test_tracing();
+    let ev = Context::new();
+    let function = ev
+        .obarray
+        .symbol_function_id(intern("forward-char"))
+        .expect("forward-char should have a primitive function cell");
+    assert_eq!(function.veclike_type(), Some(VecLikeType::Subr));
+
+    crate::emacs_core::eval::reset_global_subr_lookup_count();
+    assert_eq!(
+        classify_command_object_in_state(&function, false),
+        CommandpClassification::Interactive
+    );
+    assert_eq!(
+        crate::emacs_core::eval::global_subr_lookup_count(),
+        0,
+        "primitive interactivity must be an intrinsic SubrObj field"
+    );
+}
+
+#[test]
+fn subr_registration_refreshes_an_existing_objects_interactivity() {
+    crate::test_utils::init_test_tracing();
+    let _ev = Context::new();
+    let symbol = intern("neo-commandp-late-interactive-subr");
+    let function = Value::subr_from_sym_id(symbol);
+    assert_eq!(
+        function.subr_interactivity(),
+        Some(crate::tagged::header::SubrInteractivity::NonInteractive)
+    );
+
+    let mut entry = crate::emacs_core::eval::lookup_global_subr_entry(intern("forward-char"))
+        .expect("forward-char should have registered primitive metadata");
+    entry.name_id = crate::emacs_core::intern::symbol_name_id(symbol);
+    crate::emacs_core::eval::register_global_subr_entry(symbol, entry);
+
+    assert_eq!(
+        function.subr_interactivity(),
+        Some(crate::tagged::header::SubrInteractivity::Interactive),
+        "defsubr registration must refresh an object allocated before its entry"
+    );
+}
+
 #[test]
 fn commandp_uses_closure_slot_shape_instead_of_scanning_body() {
     crate::test_utils::init_test_tracing();
