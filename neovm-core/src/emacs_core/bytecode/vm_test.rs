@@ -1798,6 +1798,23 @@ fn vm_bytecode_call_chain_stays_in_one_interpreter_driver() {
 }
 
 #[test]
+fn interpreter_driver_frame_layout_stays_compact() {
+    assert_eq!(
+        std::mem::size_of::<InterpreterFunction>(),
+        std::mem::size_of::<Value>(),
+        "the rooted/entry function handle must fit in one tagged value"
+    );
+    assert!(
+        std::mem::size_of::<InterpreterFrame>() <= 64,
+        "an active interpreter frame must stay register-snapshot sized"
+    );
+    assert!(
+        std::mem::size_of::<SuspendedInterpreterFrame>() <= 80,
+        "a suspended frame must not copy enum/Option padding on every Bcall"
+    );
+}
+
+#[test]
 fn vm_bcall_max_eval_depth_reports_error_like_gnu_bytecode() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_minimal_vm_harness();

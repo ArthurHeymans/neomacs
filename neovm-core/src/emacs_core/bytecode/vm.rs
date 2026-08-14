@@ -713,12 +713,35 @@ struct InterpreterFrameCleanup {
 /// locals saved by `Bcall`.  Keeping them in one Rust value makes a recursive
 /// interpreter entry unrepresentable on the iterative path: callers are moved
 /// onto the driver stack and can only be resumed through `Breturn` handling.
+/// One-word identity for the function executed by an interpreter frame.
+///
+/// `Value::NIL` is reserved for the entry frame whose `ByteCodeFunction` is
+/// borrowed by `run_loop`; every nested frame carries the heap bytecode value
+/// rooted by its matching `BcFrame`.  Encoding that distinction in the value's
+/// otherwise-impossible NIL state avoids both an enum tag and a lifetime on
+/// every driver type.
+#[repr(transparent)]
 #[derive(Clone, Copy)]
-enum InterpreterFunction {
-    /// The function borrowed by this `run_loop` entry boundary.
-    Entry,
-    /// A bytecode object kept live by the matching `BcFrame` root.
-    Rooted(Value),
+struct InterpreterFunction(Value);
+
+impl InterpreterFunction {
+    const ENTRY: Self = Self(Value::NIL);
+
+    fn rooted(value: Value) -> Self {
+        debug_assert!(value.get_bytecode_data().is_some());
+        Self(value)
+    }
+
+    #[inline]
+    fn is_entry(self) -> bool {
+        self.0.is_nil()
+    }
+
+    #[inline]
+    fn rooted_value(self) -> Value {
+        debug_assert!(!self.is_entry());
+        self.0
+    }
 }
 
 struct InterpreterFrame {
@@ -729,9 +752,9 @@ struct InterpreterFrame {
     quitcounter: u8,
     #[cfg(feature = "jit")]
     osr_tried: bool,
-    cleanup: Option<InterpreterFrameCleanup>,
+    cleanup: InterpreterFrameCleanup,
     #[cfg(debug_assertions)]
-    entry_lexenv: Option<Value>,
+    entry_lexenv: Value,
 }
 
 /// Variable-sized state for the active frame at the matching driver depth.
@@ -763,6 +786,15 @@ struct SuspendedInterpreterFrame {
     frame: InterpreterFrame,
     continuation: BytecodeCallContinuation,
 }
+
+// These values are copied on every iterative Bcall/Breturn. Keep accidental
+// enum/Option padding from silently turning frame transitions into bulk memory
+// traffic again. The bounds include the debug-only lexenv invariant field.
+const _: () = {
+    assert!(std::mem::size_of::<InterpreterFunction>() == std::mem::size_of::<Value>());
+    assert!(std::mem::size_of::<InterpreterFrame>() <= 64);
+    assert!(std::mem::size_of::<SuspendedInterpreterFrame>() <= 80);
+};
 
 #[derive(Clone, Copy)]
 struct BytecodeCallContinuation {
@@ -1802,19 +1834,19 @@ impl<'a> Vm<'a> {
         }
 
         InterpreterFrame {
-            function: InterpreterFunction::Rooted(func_value),
+            function: InterpreterFunction::rooted(func_value),
             frame_base,
             frame_limit,
             pc: 0,
             quitcounter: 1,
             #[cfg(feature = "jit")]
             osr_tried: false,
-            cleanup: Some(InterpreterFrameCleanup {
+            cleanup: InterpreterFrameCleanup {
                 condition_stack_base,
                 specpdl_base,
-            }),
+            },
             #[cfg(debug_assertions)]
-            entry_lexenv: Some(self.ctx.lexenv),
+            entry_lexenv: self.ctx.lexenv,
         }
     }
 
@@ -1823,16 +1855,15 @@ impl<'a> Vm<'a> {
         frame: &InterpreterFrame,
         result: EvalResult,
     ) -> EvalResult {
-        let Some(cleanup) = frame.cleanup else {
+        if frame.function.is_entry() {
             return result;
-        };
-        #[cfg(debug_assertions)]
-        if let Some(entry_lexenv) = frame.entry_lexenv {
-            debug_assert!(
-                lexenv_tail_reachable(self.ctx.lexenv, entry_lexenv),
-                "env-less iterative bytecode frame changed ctx.lexenv beyond defvar markers"
-            );
         }
+        let cleanup = frame.cleanup;
+        #[cfg(debug_assertions)]
+        debug_assert!(
+            lexenv_tail_reachable(self.ctx.lexenv, frame.entry_lexenv),
+            "env-less iterative bytecode frame changed ctx.lexenv beyond defvar markers"
+        );
         self.cleanup_bytecode_frame(
             result,
             cleanup.condition_stack_base,
@@ -1886,11 +1917,14 @@ impl<'a> Vm<'a> {
                     return InterpreterFrameCompletion::Resume;
                 }
                 Err(flow) => {
-                    let func = match current.function {
-                        InterpreterFunction::Entry => entry_func,
-                        InterpreterFunction::Rooted(value) => value
+                    let func = if current.function.is_entry() {
+                        entry_func
+                    } else {
+                        current
+                            .function
+                            .rooted_value()
                             .get_bytecode_data()
-                            .expect("active interpreter frame must own bytecode"),
+                            .expect("active interpreter frame must own bytecode")
                     };
                     let aux = frame_aux
                         .last_mut()
@@ -1990,16 +2024,19 @@ impl<'a> Vm<'a> {
         let _run_loop_depth = RunLoopDepthGuard::enter();
 
         let mut current = InterpreterFrame {
-            function: InterpreterFunction::Entry,
+            function: InterpreterFunction::ENTRY,
             frame_base,
             frame_limit,
             pc: *pc,
             quitcounter: 1,
             #[cfg(feature = "jit")]
             osr_tried: false,
-            cleanup: None,
+            cleanup: InterpreterFrameCleanup {
+                condition_stack_base: 0,
+                specpdl_base: 0,
+            },
             #[cfg(debug_assertions)]
-            entry_lexenv: None,
+            entry_lexenv: Value::NIL,
         };
         let mut callers: SmallVec<[SuspendedInterpreterFrame; 8]> = SmallVec::new();
         let mut frame_aux = Vec::with_capacity(8);
@@ -2063,11 +2100,14 @@ impl<'a> Vm<'a> {
         aux: &mut InterpreterFrameAux,
         entry_func: &ByteCodeFunction,
     ) -> InterpreterFrameControl {
-        let func = match current.function {
-            InterpreterFunction::Entry => entry_func,
-            InterpreterFunction::Rooted(value) => value
+        let func = if current.function.is_entry() {
+            entry_func
+        } else {
+            current
+                .function
+                .rooted_value()
                 .get_bytecode_data()
-                .expect("active interpreter frame must own bytecode"),
+                .expect("active interpreter frame must own bytecode")
         };
         let frame_base = current.frame_base;
         let frame_limit = current.frame_limit;
