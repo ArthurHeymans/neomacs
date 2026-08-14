@@ -3315,38 +3315,38 @@ fn remap_old_byte_to_new_boundary(
     lisp_string_advance_byte_to_boundary(new_storage, new_byte)
 }
 
-fn collect_insert_pieces(args: &[Value], target_multibyte: bool) -> Result<Vec<InsertPiece>, Flow> {
-    let mut pieces = Vec::with_capacity(args.len());
-    for arg in args {
-        match arg.kind() {
-            ValueKind::String => {
-                pieces.push(buffer_insert_piece_from_string(*arg, target_multibyte)?);
-            }
-            ValueKind::Fixnum(c) => {
-                let code = u32::try_from(c).ok();
-                let text = code
-                    .and_then(|code| encode_char_code_for_buffer_bytes(code, target_multibyte))
-                    .map(|bytes| lisp_string_from_buffer_bytes(bytes, target_multibyte))
-                    .ok_or_else(|| {
-                        signal(
-                            LispCondition::WrongTypeArgument,
-                            vec![Value::symbol("char-or-string-p"), *arg],
-                        )
-                    })?;
-                pieces.push(InsertPiece {
-                    text,
-                    text_props: None,
-                });
-            }
-            _other => {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("char-or-string-p"), *arg],
-                ));
-            }
+/// Convert one `insert` argument into the text that GNU's
+/// `general_insert_function` would hand to `insert`/`insert_from_string`
+/// (src/editfns.c:1307-1345).
+///
+/// GNU converts and inserts one argument at a time, so this deliberately takes
+/// a single argument: hoisting the conversion of the whole argument vector
+/// above the first insertion is exactly what made a valid prefix disappear when
+/// a later argument was neither a character nor a string.
+fn insert_piece_from_arg(arg: Value, target_multibyte: bool) -> Result<InsertPiece, Flow> {
+    match arg.kind() {
+        ValueKind::String => buffer_insert_piece_from_string(arg, target_multibyte),
+        ValueKind::Fixnum(c) => {
+            let code = u32::try_from(c).ok();
+            let text = code
+                .and_then(|code| encode_char_code_for_buffer_bytes(code, target_multibyte))
+                .map(|bytes| lisp_string_from_buffer_bytes(bytes, target_multibyte))
+                .ok_or_else(|| {
+                    signal(
+                        LispCondition::WrongTypeArgument,
+                        vec![Value::symbol("char-or-string-p"), arg],
+                    )
+                })?;
+            Ok(InsertPiece {
+                text,
+                text_props: None,
+            })
         }
+        _other => Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("char-or-string-p"), arg],
+        )),
     }
-    Ok(pieces)
 }
 
 pub(crate) fn apply_inherited_text_properties(
@@ -3424,11 +3424,50 @@ pub(crate) enum InsertPiecePropertyMode {
     InheritAdjoining,
 }
 
-pub(crate) fn builtin_insert(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
-    let pieces = collect_insert_pieces(&args, target_multibyte)?;
+/// GNU's `general_insert_function` (src/editfns.c:1307-1345): the single loop
+/// behind `insert`, `insert-before-markers`, `insert-and-inherit`, and
+/// `insert-before-markers-and-inherit`.
+///
+/// Each argument is converted and inserted in turn.  Two GNU-visible
+/// consequences follow from the loop shape and are the reason this is one
+/// function rather than four hoisted copies:
+///
+///  * a `wrong-type-argument` for argument N leaves arguments 0..N already in
+///    the buffer, with point, `buffer-modified-p`, and the undo list advanced;
+///  * the buffer's multibyteness is re-read per argument, because a
+///    change hook run by an earlier argument may have changed it.
+///
+/// The two behavioral axes GNU passes as separate parameters stay separate
+/// here, so no call site can conflate marker placement with property
+/// inheritance.
+fn general_insert_function(
+    eval: &mut super::eval::Context,
+    args: &[Value],
+    marker_placement: InsertPieceMarkerPlacement,
+    property_mode: InsertPiecePropertyMode,
+) -> EvalResult {
+    for arg in args {
+        let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
+        let piece = insert_piece_from_arg(*arg, target_multibyte)?;
+        insert_one_piece(eval, piece, marker_placement, property_mode)?;
+    }
+    Ok(Value::NIL)
+}
+
+/// Insert exactly one converted argument, with its own before/after change
+/// signals, mirroring one `insert`/`insert_from_string` call inside GNU's
+/// `general_insert_function` loop.
+fn insert_one_piece(
+    eval: &mut super::eval::Context,
+    piece: InsertPiece,
+    marker_placement: InsertPieceMarkerPlacement,
+    property_mode: InsertPiecePropertyMode,
+) -> EvalResult {
+    let pieces = vec![piece];
     let insert_extent = insert_pieces_extent(&pieces);
     if insert_extent.is_empty() {
+        // GNU `insert_from_string` returns immediately for an empty string
+        // (src/insdel.c), so no change hook runs for an empty argument.
         return Ok(Value::NIL);
     }
     let current_id = eval
@@ -3454,129 +3493,57 @@ pub(crate) fn builtin_insert(eval: &mut super::eval::Context, args: Vec<Value>) 
         &[],
         &mut eval.buffers,
         pieces,
-        InsertPieceMarkerPlacement::AfterMarkers,
-        InsertPiecePropertyMode::SourceOnly,
+        marker_placement,
+        property_mode,
     )?;
     super::editfns::signal_after_text_change(eval, change)?;
     eval.restore_specpdl_roots(piece_root_scope);
     Ok(Value::NIL)
+}
+
+pub(crate) fn builtin_insert(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    general_insert_function(
+        eval,
+        &args,
+        InsertPieceMarkerPlacement::AfterMarkers,
+        InsertPiecePropertyMode::SourceOnly,
+    )
 }
 
 pub(crate) fn builtin_insert_before_markers(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
-    let pieces = collect_insert_pieces(&args, target_multibyte)?;
-    let insert_extent = insert_pieces_extent(&pieces);
-    if insert_extent.is_empty() {
-        return Ok(Value::NIL);
-    }
-    let current_id = eval
-        .buffers
-        .current_buffer_id()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let insert_pos = eval
-        .buffers
-        .get(current_id)
-        .map(Buffer::point_emacs_byte_pos)
-        .unwrap_or(EmacsBytePos::ZERO);
-    let change = current_empty_text_change_at_emacs_byte_pos(
-        &eval.buffers,
-        current_id,
-        insert_pos,
-        insert_extent,
-    )?;
-    let piece_root_scope = eval.save_specpdl_roots();
-    eval.push_specpdl_root(insert_pieces_root_holder(&pieces));
-    super::editfns::signal_before_text_change(eval, change)?;
-    insert_pieces_in_state(
-        &eval.obarray,
-        &[],
-        &mut eval.buffers,
-        pieces,
+    general_insert_function(
+        eval,
+        &args,
         InsertPieceMarkerPlacement::BeforeMarkers,
         InsertPiecePropertyMode::SourceOnly,
-    )?;
-    super::editfns::signal_after_text_change(eval, change)?;
-    eval.restore_specpdl_roots(piece_root_scope);
-    Ok(Value::NIL)
+    )
 }
 
 pub(crate) fn builtin_insert_and_inherit(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
-    let pieces = collect_insert_pieces(&args, target_multibyte)?;
-    let insert_extent = insert_pieces_extent(&pieces);
-    if insert_extent.is_empty() {
-        return Ok(Value::NIL);
-    }
-    let current_id = eval
-        .buffers
-        .current_buffer_id()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let insert_pos = eval
-        .buffers
-        .get(current_id)
-        .map(Buffer::point_emacs_byte_pos)
-        .unwrap_or(EmacsBytePos::ZERO);
-    let change = current_empty_text_change_at_emacs_byte_pos(
-        &eval.buffers,
-        current_id,
-        insert_pos,
-        insert_extent,
-    )?;
-    super::editfns::signal_before_text_change(eval, change)?;
-    insert_pieces_in_state(
-        &eval.obarray,
-        &[],
-        &mut eval.buffers,
-        pieces,
+    general_insert_function(
+        eval,
+        &args,
         InsertPieceMarkerPlacement::AfterMarkers,
         InsertPiecePropertyMode::InheritAdjoining,
-    )?;
-    super::editfns::signal_after_text_change(eval, change)?;
-    Ok(Value::NIL)
+    )
 }
 
 pub(crate) fn builtin_insert_before_markers_and_inherit(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
-    let pieces = collect_insert_pieces(&args, target_multibyte)?;
-    let insert_extent = insert_pieces_extent(&pieces);
-    if insert_extent.is_empty() {
-        return Ok(Value::NIL);
-    }
-    let current_id = eval
-        .buffers
-        .current_buffer_id()
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let insert_pos = eval
-        .buffers
-        .get(current_id)
-        .map(Buffer::point_emacs_byte_pos)
-        .unwrap_or(EmacsBytePos::ZERO);
-    let change = current_empty_text_change_at_emacs_byte_pos(
-        &eval.buffers,
-        current_id,
-        insert_pos,
-        insert_extent,
-    )?;
-    super::editfns::signal_before_text_change(eval, change)?;
-    insert_pieces_in_state(
-        &eval.obarray,
-        &[],
-        &mut eval.buffers,
-        pieces,
+    general_insert_function(
+        eval,
+        &args,
         InsertPieceMarkerPlacement::BeforeMarkers,
         InsertPiecePropertyMode::InheritAdjoining,
-    )?;
-    super::editfns::signal_after_text_change(eval, change)?;
-    Ok(Value::NIL)
+    )
 }
 
 fn insert_pieces_in_state(

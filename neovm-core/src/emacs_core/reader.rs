@@ -1882,6 +1882,15 @@ fn finish_read_from_minibuffer_in_vm_runtime_interactive(
             shared.push_specpdl_root(root);
         }
 
+        // GNU `read_minibuf` binds `minibuffer-default` to DEFAULT for the whole
+        // read (src/minibuf.c:591) and unwinds it afterwards.  Everything that
+        // offers the default to the user reads the variable, not the argument:
+        // `next-history-element`/`M-n`, `minibuffer-default-add-function`, and
+        // packages that observe the live minibuffer from
+        // `minibuffer-setup-hook`.  It is bound here, above the recursion and
+        // entry checks, so no path through this read can skip it.
+        shared.specbind(intern("minibuffer-default"), default_val);
+
         let restoration = MinibufferInvocationRestoration::capture(shared)?;
         let lifecycle_result = shared.with_unwind_scope(|shared| {
             // Window configurations are below the session action on the inner

@@ -4708,5 +4708,108 @@ transition type (`VisualWrapBreak::AtWordBoundary` vs `MidElement`) and raises
 a separate `ContinuedMidElement` flag that the marker pass reads; `Continued`
 keeps GNU's `row->continued_p` meaning, so fringe continuation arrows are
 unchanged.
+## 91. `insert` discarded the arguments it had already converted -- FIXED
+
+The Git Rebase Mode fallback-insert workflow passes a valid prefix, a list
+returned by `process-lines`, and a newline to primitive `insert`.  GNU leaves
+the valid prefix in the buffer and signals on the list; Neomacs inserted
+nothing, so the workflow's buffer, point, `buffer-modified-p` and undo list all
+diverged.
+
+```elisp
+(with-temp-buffer
+  (list (condition-case e (insert "pick " '("x") "\n") (error e))
+        (buffer-string)
+        (point)
+        (buffer-modified-p)))
+;; GNU                => ((wrong-type-argument char-or-string-p ("x")) "pick " 6 t)
+;; Neomacs before fix => ((wrong-type-argument char-or-string-p ("x")) "" 1 nil)
+```
+
+GNU's `general_insert_function` (`src/editfns.c:1307-1345`) converts and
+inserts one argument at a time, so `wrong_type_argument` for argument N leaves
+arguments 0..N already in the buffer.  It also re-reads the buffer's
+multibyteness per argument, because a change hook run by an earlier argument
+may have changed it.  Neomacs collected and validated the whole argument vector
+first, then inserted the batch.
+
+`insert`, `insert-before-markers`, `insert-and-inherit` and
+`insert-before-markers-and-inherit` were four hoisted copies of that batch
+body.  They now share one `general_insert_function` mirroring GNU's loop, with
+GNU's two behavioral axes kept as the separate `InsertPieceMarkerPlacement` and
+`InsertPiecePropertyMode` parameters so no call site can conflate them.  All
+four variants insert their valid prefix, as verified in GNU.
+
+Status: FIXED.
+
+## 92. `call-process-region` resolved the program before applying DELETE -- FIXED
+
+The emacs-w3m recovery workflow calls `call-process-region` with DELETE=t and a
+renderer that is not on `exec-path`.  GNU has already deleted the region when
+the executable lookup fails; Neomacs still held the original HTML, so the two
+editors entered the recovery step from different buffer states.
+
+```elisp
+(with-temp-buffer
+  (insert "hello")
+  (list (condition-case e
+            (call-process-region (point-min) (point-max)
+                                 "neomacs-no-such-program-xyz" t nil)
+          (error e))
+        (buffer-string)))
+;; GNU                => ((file-missing "Searching for program"
+;;                         "No such file or directory"
+;;                         "neomacs-no-such-program-xyz") "")
+;; Neomacs before fix => (... "hello")
+```
+
+GNU's `Fcall_process_region` (`src/callproc.c:1099-1147`) validates the region,
+writes it to the temp file, performs the DELETE, and only then calls
+`call_process`.  `call_process` is where PROGRAM is type-checked
+(`src/callproc.c:390`) and searched for on `exec-path`
+(`src/callproc.c:447-476`), so everything that can signal about the program,
+the working directory, the destination or the argument vector happens after the
+region is gone.  Neomacs did all of that first.
+
+The impl now follows GNU's order.  The read-only pre-check stays ahead of the
+deletion, where GNU's `Fdelete_region`/`barf_if_buffer_read_only` puts it, and
+the write coding system is still resolved before the region text is captured,
+matching GNU's `create_temp_file`.  The same holds for START = nil, GNU's
+whole-buffer delete branch.
+
+Status: FIXED.
+
+## 93. `minibuffer-default` was never bound during a minibuffer read -- FIXED
+
+All five failing Imenu Anywhere workflows record `minibuffer-default` from
+`minibuffer-setup-hook` while `imenu-anywhere` runs its real `completing-read`.
+GNU reports the guessed default; Neomacs reported nil in every one of them.
+
+```elisp
+(let ((seen nil))
+  (let ((minibuffer-setup-hook
+         (list (lambda ()
+                 (push (copy-tree minibuffer-default) seen)
+                 (setq unread-command-events
+                       (listify-key-sequence (kbd "RET"))))))
+        (executing-kbd-macro t))
+    (read-from-minibuffer "P: " nil nil nil nil "zed")
+    (read-from-minibuffer "Q: " nil nil nil nil '("one" "two")))
+  (list (nreverse seen) minibuffer-default))
+;; GNU                => (("zed" ("one" "two")) nil)
+;; Neomacs before fix => ((nil nil) nil)
+```
+
+GNU's `read_minibuf` binds the variable to the DEFAULT argument at the top of
+the read (`src/minibuf.c:591`, `specbind (Qminibuffer_default, defalt)`) and
+unwinds it on exit.  Everything that offers the default to the user reads the
+variable rather than the argument: `next-history-element`/`M-n`,
+`minibuffer-default-add-function`, and packages observing the live minibuffer.
+Neomacs threaded DEFAULT through the read but never bound the variable.
+
+The bind now sits above the recursion and entry checks in the one shared VM
+runtime read, so no path through `read-from-minibuffer`, `read-string`,
+`completing-read` or their callers can skip it -- the same shape as the other
+GNU invariants that are applied once above dispatch.
 
 Status: FIXED.

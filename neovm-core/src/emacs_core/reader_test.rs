@@ -1122,6 +1122,56 @@ fn read_from_minibuffer_initializes_an_unbound_history_before_setup_hooks() {
     );
 }
 
+/// GNU `read_minibuf` binds `minibuffer-default` to the DEFAULT argument for
+/// the whole read (`src/minibuf.c:591`, `specbind (Qminibuffer_default,
+/// defalt)`), and restores the outer value on exit.  Everything that offers the
+/// default to the user reads that variable rather than the argument:
+/// `next-history-element`/`M-n`, `minibuffer-default-add-function`, and
+/// packages that observe the live minibuffer from `minibuffer-setup-hook`.
+///
+/// Neomacs threaded DEFAULT through the read but never bound the variable, so
+/// the variable stayed nil throughout.
+///
+/// GNU oracle (emacs -Q --batch), recording `minibuffer-default` from
+/// `minibuffer-setup-hook`:
+///   (read-from-minibuffer "P: " nil nil nil nil "zed") => seen ((:default "zed"))
+///   (completing-read "Imenu: " '("alpha" "beta") nil t nil nil "beta")
+///                                                     => seen ((:default "beta"))
+#[test]
+fn read_from_minibuffer_binds_minibuffer_default_for_the_whole_read_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    for _ in 0..2 {
+        tx.send(crate::keyboard::InputEvent::key_press(
+            crate::keyboard::KeyEvent::char(' '),
+        ))
+        .expect("queue minibuffer exit key");
+    }
+    ev.input_rx = Some(rx);
+
+    let result = ev
+        .eval_str(
+            r##"(let ((map (make-sparse-keymap))
+                     (seen nil))
+                 (define-key map " " #'exit-minibuffer)
+                 (let ((minibuffer-setup-hook
+                        (list (lambda () (push minibuffer-default seen))))
+                       (minibuffer-exit-hook nil))
+                   (read-from-minibuffer "P: " nil map nil nil "zed")
+                   (read-from-minibuffer "Q: " nil map nil nil '("one" "two")))
+                 (list (nreverse seen) minibuffer-default))"##,
+        )
+        .expect("read-from-minibuffer should exit normally");
+
+    assert_eq!(
+        format!("{result}"),
+        r#"(("zed" ("one" "two")) nil)"#,
+        "DEFAULT must be visible as minibuffer-default during the read and \
+         restored to the outer value afterwards"
+    );
+}
+
 #[test]
 fn read_from_minibuffer_runs_minibuffer_modes_to_clear_stale_locals() {
     crate::test_utils::init_test_tracing();
