@@ -2455,29 +2455,99 @@ fn color_tier(caps: &TtyAttributeCapabilities) -> u8 {
     }
 }
 
-/// Nearest xterm-256 palette index for an RGB triple (16 system + 6x6x6 cube +
-/// 24-step grayscale).
-pub fn rgb_to_256(r: u8, g: u8, b: u8) -> u8 {
-    let (max, min) = (r.max(g).max(b), r.min(g).min(b));
-    if max - min < 8 {
-        if r < 8 {
-            return 16;
-        }
-        if r > 238 {
-            return 231;
-        }
-        return 232 + ((r as u16 - 8) / 10).min(23) as u8;
+/// The 6 channel intensities of the xterm 6x6x6 color cube.
+const CUBE_LEVELS: [u8; 6] = [0, 95, 135, 175, 215, 255];
+
+/// The 16 aixterm/xterm system colors, GNU `xterm-standard-colors`
+/// (lisp/term/xterm.el:748-768). They lead `tty-color-alist`, so on an exact
+/// tie they win over the cube entry with the same RGB -- which is why GNU
+/// answers 0 for #000000 and 15 for #ffffff rather than 16 and 231.
+const SYSTEM_COLORS: [(u8, u8, u8); 16] = [
+    (0, 0, 0),
+    (205, 0, 0),
+    (0, 205, 0),
+    (205, 205, 0),
+    (0, 0, 238),
+    (205, 0, 205),
+    (0, 205, 205),
+    (229, 229, 229),
+    (127, 127, 127),
+    (255, 0, 0),
+    (0, 255, 0),
+    (255, 255, 0),
+    (92, 92, 255),
+    (255, 0, 255),
+    (0, 255, 255),
+    (255, 255, 255),
+];
+
+/// RGB of xterm-256 palette entry INDEX: the system colors (0..=15), the
+/// 6x6x6 cube (16..=231) or the grayscale ramp (232..=255).
+fn xterm_256_entry(index: u8) -> (u8, u8, u8) {
+    if index < 16 {
+        return SYSTEM_COLORS[index as usize];
     }
-    let level = |v: u8| -> u16 {
-        if v < 48 {
-            0
-        } else if v < 115 {
-            1
-        } else {
-            ((v as u16 - 35) / 40).min(5)
+    if index >= 232 {
+        let gray = 8 + 10 * (index - 232);
+        return (gray, gray, gray);
+    }
+    let offset = index - 16;
+    (
+        CUBE_LEVELS[(offset / 36) as usize],
+        CUBE_LEVELS[((offset / 6) % 6) as usize],
+        CUBE_LEVELS[(offset % 6) as usize],
+    )
+}
+
+/// Angle between a color and the gray diagonal of the RGB cube, GNU
+/// `tty-color-off-gray-diag` (lisp/term/tty-colors.el:866-873).
+fn off_gray_diagonal(r: u8, g: u8, b: u8) -> f64 {
+    let (r, g, b) = (r as f64, g as f64, b as f64);
+    let magnitude = (3.0 * (r * r + g * g + b * b)).sqrt();
+    if magnitude < 1.0 {
+        return 0.0;
+    }
+    ((r + g + b) / magnitude).clamp(-1.0, 1.0).acos()
+}
+
+/// Nearest xterm-256 palette index for an RGB triple, over the whole palette.
+///
+/// GNU does not quantize in the writer at all: `turn_on_face` (src/term.c)
+/// emits the index the realized face already carries, and that index came from
+/// `tty-color-approximate` (lisp/term/tty-colors.el:875-915), which scans the
+/// WHOLE palette for the smallest squared 8-bit RGB distance -- skipping
+/// candidates that sit on the gray diagonal whenever the REQUESTED color is
+/// 0.065 radians or more off it.
+///
+/// This used to short-circuit every near-gray straight into the grayscale
+/// ramp, which is not a nearest search: #afafaf has an EXACT cube entry at 145,
+/// but the ramp branch answered 248 (#a8a8a8, distance 147). That is Gruvbox
+/// light's comment / org-verbatim / org-document-info-keyword foreground, and
+/// it is why probing `tty-color-approximate` itself never reproduced the
+/// divergence -- the Lisp palette was right and only the writer disagreed.
+/// The scan is 256 candidates of integer arithmetic, bounded and allocation
+/// free, in the same ascending order GNU's alist is consulted so that exact
+/// ties resolve to the same index.
+pub fn rgb_to_256(r: u8, g: u8, b: u8) -> u8 {
+    let favor_non_gray = off_gray_diagonal(r, g, b) >= 0.065;
+    let mut best_index = 0_u8;
+    let mut best_distance = u32::MAX;
+    for index in 0..=255_u8 {
+        let (cr, cg, cb) = xterm_256_entry(index);
+        if favor_non_gray && cr == cg && cg == cb {
+            continue;
         }
-    };
-    (16 + 36 * level(r) + 6 * level(g) + level(b)) as u8
+        let difference = |lhs: u8, rhs: u8| -> u32 {
+            let delta = lhs as i32 - rhs as i32;
+            (delta * delta) as u32
+        };
+        let distance = difference(r, cr) + difference(g, cg) + difference(b, cb);
+        if distance < best_distance {
+            best_distance = distance;
+            best_index = index;
+        }
+    }
+    best_index
 }
 
 /// Nearest basic-ANSI color as `(base 0..7, bright)` for an RGB triple.

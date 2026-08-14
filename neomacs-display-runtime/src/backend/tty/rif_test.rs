@@ -2426,12 +2426,21 @@ fn plain_cluster_composite_stays_one_cell_and_skips_joiners() {
 
 #[test]
 fn tty_color_rgb_to_256_corners() {
-    assert_eq!(rgb_to_256(255, 0, 0), 196);
-    assert_eq!(rgb_to_256(0, 255, 0), 46);
+    // Read out of GNU, `emacs -Q -nw` in a PTY with COLORTERM unset:
+    // (nth 1 (tty-color-approximate (tty-color-standard-values COLOR))).
+    // The 16 system colors lead `tty-color-alist`, so pure red/green/white and
+    // black resolve there rather than to the cube entry with the same RGB --
+    // this test used to pin 196 / 46 / 231 / 16, which GNU never emits.
+    assert_eq!(rgb_to_256(255, 0, 0), 9);
+    assert_eq!(rgb_to_256(0, 255, 0), 10);
     assert_eq!(rgb_to_256(0, 0, 255), 21);
-    assert_eq!(rgb_to_256(0, 0, 0), 16);
-    assert_eq!(rgb_to_256(255, 255, 255), 231);
-    assert!((232..=255).contains(&rgb_to_256(128, 128, 128)));
+    assert_eq!(rgb_to_256(0, 0, 0), 0);
+    assert_eq!(rgb_to_256(255, 255, 255), 15);
+    assert_eq!(rgb_to_256(0xcd, 0, 0), 1);
+    assert_eq!(rgb_to_256(0x5c, 0x5c, 0xff), 12);
+    assert_eq!(rgb_to_256(0xe5, 0xe5, 0xe5), 7);
+    assert_eq!(rgb_to_256(0x7f, 0x7f, 0x7f), 8);
+    assert_eq!(rgb_to_256(128, 128, 128), 244);
 }
 
 #[test]
@@ -2456,7 +2465,8 @@ fn tty_write_sgr_downsamples_by_tier() {
     let mut buf = Vec::new();
     write_sgr(&mut buf, &attrs);
     let s = String::from_utf8(buf).unwrap();
-    assert!(s.contains("\x1b[38;5;196m"), "256 tier red: {s:?}");
+    // GNU approximates #ff0000 to the system "brightred" cell, index 9.
+    assert!(s.contains("\x1b[38;5;9m"), "256 tier red: {s:?}");
     assert!(!s.contains("38;2;"), "must not emit truecolor at 256 tier");
 
     // Basic (8/16) terminal -> bright-red ANSI code.
@@ -3583,4 +3593,73 @@ fn reused_damage_rows_carry_verbatim_and_plan_nothing() {
         }) && !ops.is_empty(),
         "only the edited row may be written: {ops:?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// 256-color approximation
+// ---------------------------------------------------------------------------
+
+/// Every answer below was READ OUT OF GNU, not derived: `emacs -Q -nw` in a PTY
+/// with COLORTERM unset (so `display-color-cells` is 256), evaluating
+/// `(nth 1 (tty-color-approximate (tty-color-standard-values COLOR)))`.
+///
+/// The near-gray rows are the point. `#afafaf` is an exact 6x6x6 cube entry, so
+/// GNU answers 145; a writer-side short-circuit that sent every near-gray into
+/// the grayscale ramp answered 248 and turned Gruvbox light's comment,
+/// org-verbatim and org-document-info-keyword the wrong shade.
+#[test]
+fn rgb_to_256_matches_gnu_tty_color_approximate() {
+    let gnu = [
+        ("#afafaf", 145),
+        ("#a8a8a8", 248),
+        ("#ffdfaf", 223),
+        ("#262626", 235),
+        ("#3a3a3a", 237),
+        ("#d75f5f", 167),
+        ("#afaf00", 142),
+        ("#5f8787", 66),
+        ("#949494", 246),
+        ("#5fafaf", 73),
+        ("#d75f00", 166),
+        ("#87af87", 108),
+        ("#ffaf00", 214),
+        ("#ffd7af", 223),
+        ("#ffffd7", 230),
+        ("#ffffaf", 229),
+        ("#5f5f5f", 59),
+        ("#878787", 102),
+        ("#d7d7d7", 188),
+        ("#ffffff", 15),
+        ("#000000", 0),
+        ("#080808", 232),
+        ("#121212", 233),
+        ("#928374", 101),
+        ("#7c6f64", 95),
+        ("#665c54", 95),
+        ("#3c3836", 237),
+        ("#282828", 235),
+        ("#fbf1c7", 230),
+        ("#ebdbb2", 187),
+        ("#a89984", 138),
+        ("#bdae93", 144),
+        ("#504945", 239),
+        ("#d5c4a1", 187),
+        ("#101010", 233),
+        ("#0a0a0a", 232),
+        ("#606060", 59),
+        ("#616161", 241),
+        ("#00005f", 17),
+        ("#005f00", 22),
+        ("#8a8a8a", 245),
+    ];
+    let mismatches = gnu
+        .iter()
+        .filter_map(|(hex, expected)| {
+            let channel =
+                |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).expect("hex channel");
+            let got = rgb_to_256(channel(1), channel(3), channel(5));
+            (got != *expected).then(|| format!("{hex}: GNU {expected}, got {got}"))
+        })
+        .collect::<Vec<_>>();
+    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }

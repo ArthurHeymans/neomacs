@@ -5094,3 +5094,53 @@ invisible text, continuation rows and display properties all count the way
 redisplay counts them.
 
 Status: FIXED.
+
+## 99. The terminal writer quantized 256-colors with its own heuristic -- FIXED
+
+Under Gruvbox's 256-color LIGHT profile, `font-lock-comment-face`,
+`org-verbatim` and `org-document-info-keyword` came out as `38;5;248` where GNU
+emits `38;5;145`.
+
+Several tempting explanations were probed under both editors first and all came
+back byte-identical: `tty-color-approximate`, `tty-color-desc`,
+`tty-color-translate`, the whole 256-entry `tty-color-alist`, and the resolved
+face value (`#afafaf`, which those functions map to 145 in BOTH editors), across
+a dark -> light -> `disable-theme` lifecycle.  Every one of those probes was
+right, and every one of them missed the defect, because none of them is what
+draws the glyph.
+
+GNU does not quantize in the writer at all.  `turn_on_face` (src/term.c) emits
+the index the realized face already carries, and that index came from
+`tty-color-approximate` (lisp/term/tty-colors.el:875-915), which scans the WHOLE
+palette for the smallest squared 8-bit RGB distance, skipping candidates on the
+gray diagonal when the requested color is 0.065 radians or more off it
+(`tty-color-off-gray-diag`, tty-colors.el:866-873).
+
+Neomacs' TTY writer carried a SECOND, independent quantizer: a hand-rolled
+`rgb_to_256` that short-circuited any color with `max - min < 8` straight into
+the 24-step grayscale ramp, and bucketed the rest through a coarse cube-level
+table.  `#afafaf` is an EXACT 6x6x6 cube entry (145), but the gray short-circuit
+never looked at the cube and answered 248 (`#a8a8a8`, distance 147).  That is why
+the divergence was invisible to every Lisp-level probe: the Lisp palette was
+right and only the writer disagreed.
+
+Measured against 41 colors read out of GNU -- `emacs -Q -nw` in a PTY with
+COLORTERM unset, `(nth 1 (tty-color-approximate (tty-color-standard-values C)))`
+-- the old function was wrong on 13 of them, well beyond the reported face:
+
+```
+;;              GNU   before
+;; #afafaf      145      248     ; the reported one
+;; #ebdbb2      187      223
+;; #665c54       95       59
+;; #504945      239       59
+;; #ffffff       15      231     ; the 16 system colors lead tty-color-alist,
+;; #000000        0       16     ; so they win an exact tie
+```
+
+`rgb_to_256` is now the search GNU's Lisp does: all 256 candidates in the same
+ascending order the alist is consulted (so exact ties resolve identically),
+squared 8-bit RGB distance, and GNU's gray-diagonal exclusion.  All 41 GNU
+answers are pinned as a test.
+
+Status: FIXED.
