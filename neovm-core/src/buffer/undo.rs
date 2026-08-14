@@ -45,7 +45,8 @@ pub fn undo_list_is_disabled(undo_list: &Value) -> bool {
 ///
 /// Consecutive adjacent inserts are merged when the head entry is an
 /// insert whose END equals `beg+1` (the 1-indexed start of the new
-/// insert).
+/// insert), and only then: an insert that ends where the head entry begins
+/// stays its own record, exactly as in GNU `record_insert`.
 pub fn undo_list_record_insert(
     undo_list: &mut Value,
     beg: CharPos0,
@@ -73,24 +74,26 @@ pub fn undo_list_record_insert(
     let beg1 = beg.to_lisp().as_i64();
     let end1 = beg.add_len(len).to_lisp().as_i64();
 
-    // Try to merge with the head entry if it's an adjacent insert.
+    // GNU `record_insert` (undo.c:98-112) coalesces in exactly ONE direction:
+    // into a newest record that is an insertion ENDING where this insertion
+    // BEGINS.  There is deliberately no reverse rule.  `primitive-undo` replays
+    // the records newest-first and each deletion reshapes the buffer the later
+    // records are read against, so two insertions made back-to-front --
+    // the ordinary shape when a client applies a server's edit list in reverse
+    // to keep earlier positions valid -- must stay two records.  Merging them
+    // would claim the untouched text between them as newly inserted and delete
+    // it on undo.
     if undo_list.is_cons() {
         let head = undo_list.cons_car();
         if head.is_cons() {
             let car = head.cons_car();
             let cdr = head.cons_cdr();
-            if let (Some(prev_beg), Some(prev_end)) = (car.as_fixnum(), cdr.as_fixnum()) {
-                if prev_end == beg1 {
-                    // Merge: extend the existing insert entry.
-                    head.set_cdr(Value::fixnum(prev_end + len.get() as i64));
-                    return;
-                }
-                // Check if insert is at the beginning of the previous range
-                if prev_beg == end1 {
-                    head.set_car(Value::fixnum(beg1));
-                    return;
-                }
-                let _ = (prev_beg, prev_end); // suppress unused warnings
+            if let (Some(_prev_beg), Some(prev_end)) = (car.as_fixnum(), cdr.as_fixnum())
+                && prev_end == beg1
+            {
+                // Merge: extend the existing insert entry.
+                head.set_cdr(Value::fixnum(prev_end + len.get() as i64));
+                return;
             }
         }
     }

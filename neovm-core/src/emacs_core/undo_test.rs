@@ -724,3 +724,85 @@ fn first_change_marker_rearmed_on_each_clean_transition() {
         "((12 . 13) (t . 0) (11 . 12) (t . 0) (1 . 11) (t . 0))"
     );
 }
+
+/// Back-to-front edits, the shape every LSP-style client applies (`tide` walks
+/// TypeScript's `textChanges` in reverse so earlier positions stay valid), must
+/// undo to the original text.
+///
+/// GNU records the two adjacent one-character insertions as `(19 . 20)` and
+/// `(20 . 21)` -- `record_insert` (src/undo.c:98-112) coalesces only when the
+/// newest record ENDS where the new insertion BEGINS.  neomacs also coalesced
+/// in the opposite direction, producing a single `(19 . 21)` whose undo
+/// deleted the untouched `=` between the two inserted spaces and turned
+/// `total=add` into `total add`.
+#[test]
+fn undo_of_descending_adjacent_inserts_restores_the_untouched_text() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    let mut eval = Context::new();
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (insert "export const total=add(1,2)")
+                 (undo-boundary)
+                 (goto-char 20)
+                 (insert " ")
+                 (goto-char 19)
+                 (insert " ")
+                 (let ((records buffer-undo-list))
+                   (primitive-undo 1 buffer-undo-list)
+                   (list (buffer-string) (car records) (car (cdr records)))))"#,
+        )
+        .expect("descending insert undo eval");
+
+    // Transcribed from GNU Emacs -Q --batch (tmp/p97-probe8.el).
+    assert_eq!(
+        super::super::print::print_value(&result),
+        "(\"export const total=add(1,2)\" (19 . 20) (20 . 21))"
+    );
+}
+
+
+/// GNU `recursive_edit_1` (keyboard.c:708-748) specbinds
+/// `undo-auto--undoably-changed-buffers` to nil before it runs the command
+/// loop, "so that changes in the recursive edit will not result in undo
+/// boundaries in buffers changed before we entered there recursive edit"
+/// (keyboard.c:741-747, Bug #23632).  Both `recursive-edit` and `read_minibuf`
+/// enter through it, so reading an argument from the minibuffer must not drop a
+/// boundary into a buffer an earlier, already-finished command edited.
+///
+/// Measured on GNU Emacs -Q --batch (tmp/p97-probe11.el): the undo list is
+/// `((1 . 6) (t . 0))` both before and after the read.
+#[test]
+fn a_minibuffer_read_adds_no_undo_boundary_to_previously_changed_buffers() {
+    crate::test_utils::init_test_tracing();
+
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let result = eval
+        .eval_str(
+            r#"(let ((buf (get-buffer-create "neo-undo-boundary")))
+                 (set-buffer buf)
+                 (buffer-enable-undo)
+                 (setq buffer-undo-list nil)
+                 (insert "hello")
+                 (let ((setup
+                        (lambda ()
+                          (setq unread-command-events
+                                (append (listify-key-sequence (kbd "z RET"))
+                                        unread-command-events)))))
+                   (add-hook 'minibuffer-setup-hook setup)
+                   (unwind-protect
+                       (let ((executing-kbd-macro t))
+                         (read-from-minibuffer "P: "))
+                     (remove-hook 'minibuffer-setup-hook setup)))
+                 (with-current-buffer buf
+                   (let ((boundaries 0))
+                     (dolist (entry buffer-undo-list)
+                       (unless entry (setq boundaries (1+ boundaries))))
+                     (list boundaries (length buffer-undo-list)))))"#,
+        )
+        .expect("minibuffer read should finish");
+
+    assert_eq!(format!("{result}"), "(0 2)");
+}

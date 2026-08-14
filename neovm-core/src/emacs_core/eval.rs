@@ -6694,6 +6694,27 @@ impl Context {
         // TTY paint (user-visible ~3 s blank scratch buffer).
         self.specbind(intern("inhibit-redisplay"), Value::NIL);
 
+        // GNU keyboard.c:741-747, the specbind that sits beside the one above
+        // in `recursive_edit_1`: `undo-auto--undoably-changed-buffers` is
+        // rebound to nil for the nested loop, "so that changes in the recursive
+        // edit will not result in undo boundaries in buffers changed before we
+        // entered there recursive edit" (Bug #23632).
+        //
+        // `undo-auto--add-boundary` runs once per iteration below and adds a
+        // boundary to every buffer on that list (simple.el:4104-4116).  Without
+        // the rebinding, the first command of a minibuffer read groups the
+        // edits of a command that has already finished: a rename that reads its
+        // new name from the minibuffer left one undo entry more than GNU in
+        // every buffer an earlier rename had rewritten.
+        //
+        // The binding lives here rather than in the recursive-edit entry point
+        // because neomacs already keeps its sibling `inhibit-redisplay` binding
+        // here, and both must unwind at the same boundary.
+        self.specbind(
+            intern("undo-auto--undoably-changed-buffers"),
+            Value::NIL,
+        );
+
         self.command_loop_1_entry_prologue()?;
 
         loop {

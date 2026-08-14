@@ -5012,3 +5012,170 @@ with a pristine binary built at the same filesystem path -- they wrap this
 worktree's long directory string and disagree with the host `ls` column width.
 
 Status: FIXED.
+
+## 97. `record_insert` coalesced insertions in the wrong direction, so undo deleted untouched text -- FIXED
+
+The Tide format/undo workflow formats a JS region, then undoes it.  GNU's
+`undo-only` restores the file byte for byte; Neomacs restored
+`export const total=add(1,2)` as `export const total add(1,2)` -- the `=` that
+neither editor had touched was gone.
+
+```elisp
+(with-current-buffer (get-buffer-create "probe")
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (insert "export const total=add(1,2)")
+  (undo-boundary)
+  (goto-char 20) (insert " ")
+  (goto-char 19) (insert " ")
+  (let ((records buffer-undo-list))
+    (primitive-undo 1 buffer-undo-list)
+    (list (buffer-string) (car records) (car (cdr records)))))
+;; GNU                => ("export const total=add(1,2)" (19 . 20) (20 . 21))
+;; Neomacs before fix => ("export const total add(1,2)" (19 . 21) 28)
+```
+
+GNU's `record_insert` (`src/undo.c:98-112`) coalesces a new insertion into the
+newest record in exactly one direction: when that record is a `(BEG . END)`
+insertion whose END equals the new insertion's BEG.  There is deliberately no
+reverse rule.  `primitive-undo` replays the records newest-first, and each
+deletion reshapes the buffer that the later records are read against, so two
+insertions made back-to-front are two records that undo correctly in sequence.
+
+Neomacs had a second, invented branch that also merged when the new insertion
+ENDED where the newest record BEGAN, rewriting `(20 . 21)` and a new insert at
+19 into a single `(19 . 21)`.  That record claims positions 19 and 20 are both
+newly inserted text; position 20 is the untouched `=`, and undo deleted it.
+
+Back-to-front is the ordinary shape, not an exotic one: `tide-apply-edits`
+walks a TypeScript `textChanges` list in reverse precisely so that earlier
+positions stay valid while later edits are applied, and every LSP-style client
+does the same.  The invented branch is deleted; the remaining merge is GNU's.
+
+Status: FIXED.
+
+## 98. `last-nonmenu-event` outlived the key sequence that read it, so `imenu` prompted -- FIXED
+
+The Tide navigation workflow calls `imenu` interactively after driving two
+commands through `execute-kbd-macro`.  GNU builds the index and returns without
+a prompt and without moving point; Neomacs read `Index item: ` from the
+minibuffer and jumped.
+
+```elisp
+(defun probe-cmd () (interactive) nil)
+(global-set-key (kbd "C-c C-d") #'probe-cmd)
+(execute-kbd-macro (kbd "C-c C-d C-c C-d"))
+last-nonmenu-event
+;; GNU                => nil
+;; Neomacs before fix => 4
+```
+
+`imenu-choose-buffer-index` (`lisp/imenu.el:915`) chooses between the mouse menu
+and the completing-read prompt with `(listp last-nonmenu-event)`, and `nil` is a
+list.  With `imenu-use-popup-menu` at its default `on-mouse` GNU therefore takes
+the menu path, which in a batch session selects nothing and leaves point where
+it was.  A leftover integer sends Neomacs down the prompt path instead.
+
+The variable is not a durable record of the last key pressed.  GNU's
+`read_key_sequence` clears it at the top of every sequence read, at and after
+the `replay_sequence:` label (`src/keyboard.c:11038-11054`), and only then
+assigns the key it read (`src/keyboard.c:11668-11673`).  The sequence read that
+discovers an exhausted keyboard macro therefore leaves it nil, which is what
+Lisp observes once `execute-kbd-macro` returns.
+
+Neomacs assigned the key but never cleared it, and its macro-exhausted case
+returns before the reader's prologue.  The prologue is now one
+`begin_key_sequence_read` called above that dispatch -- accumulator reset,
+committed `this-command-keys` clear, and `last-nonmenu-event` clear together --
+so neither branch can apply a subset.
+
+Status: FIXED.
+
+## 99. `accept-process-output` returned early on pending input, so a wait inside a keyboard macro did not wait -- FIXED
+
+The Tern documentation workflow presses `C-c C-d` twice in one
+`execute-kbd-macro`.  The first press's `post-command-hook` pumps
+`accept-process-output` until the analyzer's reply lands, so the second press
+sees `tern-last-docs-url` set and opens the URL.  In Neomacs the pump returned
+instantly, the hook timed out, and the second press issued a second analyzer
+request instead of opening anything.
+
+```elisp
+(defvar probe-log nil)
+(defun probe-cmd ()
+  (interactive)
+  (let ((start (float-time)))
+    (dotimes (_ 20) (accept-process-output nil 0.01))
+    (push (- (float-time) start) probe-log)))
+(global-set-key (kbd "C-c C-d") #'probe-cmd)
+(execute-kbd-macro (kbd "C-c C-d C-c C-d"))
+(nreverse probe-log)
+;; GNU                => (0.201 0.202)
+;; Neomacs before fix => (0.000 0.201)   ; the first command did not wait
+```
+
+The events of a running keyboard macro that have not executed yet are pending
+input, which is why only the first of the two commands was affected: by the
+second, the macro was exhausted.
+
+GNU's `Faccept_process_output` calls `wait_reading_process_output` with
+READ_KBD = 0 (`src/process.c:4957-4959`), and that value is exactly what
+suppresses the return-on-input path.  With READ_KBD = 0 the loop calls
+`swallow_events` when input is pending and keeps waiting; the `break` next to it
+is `#if 0`-ed out under the comment "Exiting when read_kbd doesn't request that
+seems wrong, though" (`src/process.c:5930-5937`).  The docstring states the same
+contract: "if PROCESS is nil, the function should not be expected to return
+before the timeout expires."
+
+Neomacs built the request with a yield-on-command-input keyboard policy.  It now
+uses the service-special-input-only policy, which is the typed spelling of
+READ_KBD = 0: special events are still serviced, quit still interrupts, and
+pending command input no longer completes the wait.  `sit-for` keeps yielding,
+because GNU passes a non-zero READ_KBD there.
+
+Status: FIXED.
+
+## 100. A minibuffer read dropped an undo boundary into buffers an earlier command had edited -- FIXED
+
+The Tide cross-file rename workflow renames a symbol, then renames files, each
+step reading its argument from the minibuffer.  Every buffer the first rename
+edited came out of the later steps with one more undo entry than GNU's -- 12
+entries and 1 boundary in `src/main.js` against GNU's 11 and 0, 4 and 1 in
+`src/math.js` against 3 and 0.
+
+```elisp
+(with-current-buffer (get-buffer-create "probe")
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (insert "hello")
+  (let ((setup (lambda ()
+                 (setq unread-command-events
+                       (append (listify-key-sequence (kbd "z RET"))
+                               unread-command-events)))))
+    (add-hook 'minibuffer-setup-hook setup)
+    (unwind-protect (let ((executing-kbd-macro t)) (read-from-minibuffer "P: "))
+      (remove-hook 'minibuffer-setup-hook setup)))
+  buffer-undo-list)
+;; GNU                => ((1 . 6) (t . 0))
+;; Neomacs before fix => (nil (1 . 6) (t . 0))
+```
+
+`undo-auto--add-boundary` runs once per command-loop iteration and adds a
+boundary to every buffer listed in `undo-auto--undoably-changed-buffers`
+(`lisp/simple.el:4104-4116`).  A minibuffer read enters a command loop of its
+own, so without further care the first minibuffer command would group the
+edits of a command that has already finished.
+
+GNU handles that where the recursive loop is entered.  `recursive_edit_1`
+(`src/keyboard.c:708-748`) is the one entry both `recursive-edit` and
+`read_minibuf` pass through, and it specbinds
+`undo-auto--undoably-changed-buffers` to nil before calling `command_loop`,
+under the comment "so that changes in the recursive edit will not result in
+undo boundaries in buffers changed before we entered there recursive edit"
+(Bug #23632).
+
+Neomacs never bound it.  The binding now lives in
+`run_exit_wrapped_command_loop`, the function both `recursive-edit` and the
+minibuffer command loop go through, and is unwound with the loop's result.
+
+Status: FIXED.

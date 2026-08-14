@@ -256,6 +256,23 @@ impl WaitRequest {
         }
     }
 
+    /// GNU `Faccept_process_output` calls `wait_reading_process_output` with
+    /// READ_KBD = 0 (process.c:4957-4959), and that value is exactly what
+    /// suppresses the return-on-input path: when input is pending the loop only
+    /// runs `swallow_events` and keeps waiting, with the `break` deliberately
+    /// `#if 0`-ed out under the comment "Exiting when read_kbd doesn't request
+    /// that seems wrong, though" (process.c:5930-5937).  The docstring states
+    /// the same contract: "if PROCESS is nil, the function should not be
+    /// expected to return before the timeout expires".
+    ///
+    /// So this wait services special input but never completes on pending
+    /// command input.  Yielding there made `accept-process-output` a no-op for
+    /// any caller pumping the event loop while ordinary input was queued --
+    /// most visibly inside a keyboard macro, where the not-yet-executed macro
+    /// events are pending input, so a package that waits for an asynchronous
+    /// HTTP reply from `post-command-hook` returned instantly and never saw the
+    /// reply.  `sit-for` keeps yielding: GNU passes a non-zero READ_KBD there
+    /// (`sit_for`, dispnew.c).
     fn accept_process_output(
         deadline: WaitDeadline,
         processes: ProcessWaitPolicy,
@@ -263,7 +280,7 @@ impl WaitRequest {
     ) -> Self {
         Self {
             deadline,
-            keyboard: KeyboardWaitPolicy::YieldOnCommandInput,
+            keyboard: KeyboardWaitPolicy::ServiceSpecialOnly,
             processes,
             timers,
             redisplay: false,

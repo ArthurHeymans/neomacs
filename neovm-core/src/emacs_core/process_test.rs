@@ -4246,7 +4246,7 @@ fn accept_process_output_drains_ready_output_before_yielding_to_command_input() 
         &mut ev,
         vec![Value::make_process(pid), Value::make_float(0.5)],
     )
-    .expect("accept-process-output should drain ready output then yield to command input");
+    .expect("accept-process-output should drain ready output despite pending command input");
     drop(tx);
 
     // The ready output must have been drained (filter ran) despite the pending
@@ -4260,10 +4260,14 @@ fn accept_process_output_drains_ready_output_before_yielding_to_command_input() 
         "ready process output must be drained before yielding to command input"
     );
 
-    // The yield-to-command-input semantics are preserved: the pending command
-    // input is still reported (return nil / left queued).
-    assert_eq!(result, Value::NIL);
-    assert_eq!(ev.command_loop.keyboard.pending_input_events.len(), 1);
+    // GNU's return value reports PROCESS activity, not input: "Return non-nil
+    // if we received any output from PROCESS ... before the timeout expired"
+    // (process.c:4880-4884).  Output was received, so the call returns t.
+    // Pending command input is not part of that contract -- GNU's
+    // `Faccept_process_output` passes READ_KBD = 0 and never ends the wait on
+    // input (process.c:4957-4959, 5930-5937) -- and the queued keystroke is
+    // left for the command loop either way.
+    assert_eq!(result, Value::T);
 }
 
 #[test]
@@ -8819,4 +8823,43 @@ fn the_stderr_pipe_sentinel_still_runs_after_the_owners() {
     ));
 
     assert_eq!(result, "OK (owner stderr)");
+}
+
+/// GNU `Faccept_process_output` passes READ_KBD = 0 to
+/// `wait_reading_process_output` (process.c:4957-4959), and with READ_KBD = 0
+/// pending input never ends the wait -- the loop only calls `swallow_events`,
+/// its `break` is `#if 0`-ed out under "Exiting when read_kbd doesn't request
+/// that seems wrong, though" (process.c:5930-5937) -- and the docstring
+/// promises the call "should not be expected to return before the timeout
+/// expires".
+///
+/// The not-yet-executed events of a running keyboard macro are pending input,
+/// so a wait started from a command inside a macro is the case that exposes a
+/// yield-on-input policy: the first of two macro commands returned instantly
+/// while the second, with the macro exhausted, waited the full time.  Measured
+/// on GNU Emacs -Q --batch (tmp/p97-probe10.el): both commands wait.
+#[test]
+fn accept_process_output_inside_a_kbd_macro_waits_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (setq neo-accept-wait-log nil)
+                 (defun neo-accept-wait-command ()
+                   (interactive)
+                   (let ((start (float-time)))
+                     (accept-process-output nil 0.05)
+                     (push (- (float-time) start) neo-accept-wait-log)))
+                 (let ((map (make-sparse-keymap)))
+                   (define-key map "a" #'neo-accept-wait-command)
+                   (use-local-map map)
+                   (execute-kbd-macro "aa"))
+                 (mapcar (lambda (elapsed) (>= elapsed 0.04))
+                         neo-accept-wait-log))"#,
+        )
+        .expect("keyboard macro should execute");
+
+    assert_eq!(format!("{result}"), "(t t)");
 }

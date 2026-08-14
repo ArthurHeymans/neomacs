@@ -538,6 +538,45 @@ fn execute_kbd_macro_tail_is_not_pending_input_for_while_no_input_like_gnu() {
     assert_eq!(format!("{result}"), "(ran ran ran)");
 }
 
+/// GNU clears `last_nonmenu_event` at the top of EVERY key-sequence read
+/// (keyboard.c:11038-11054, just after the `replay_sequence:` label), and only
+/// then assigns the key it read (keyboard.c:11668-11673).  The sequence read
+/// that discovers an exhausted keyboard macro therefore leaves the variable
+/// nil, which is what Lisp observes after `execute-kbd-macro` returns.
+///
+/// Measured on GNU Emacs -Q --batch (`tmp/p97-probe5.el`): a command bound to
+/// `C-c C-d` invoked twice by one macro sees `last-nonmenu-event` = 4 (C-d)
+/// both times, and the variable is nil once the macro finishes.
+///
+/// The value matters beyond bookkeeping: `imenu-choose-buffer-index`
+/// (lisp/imenu.el:915) decides between the mouse menu and the completing-read
+/// prompt with `(listp last-nonmenu-event)`, so a stale integer left behind by
+/// a macro turns a silent GNU `imenu` into a minibuffer prompt.
+#[test]
+fn execute_kbd_macro_leaves_last_nonmenu_event_nil_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+
+    let result = eval
+        .eval_str(
+            r#"(progn
+                 (setq neo-last-nonmenu-macro-log nil)
+                 (defun neo-last-nonmenu-macro-command ()
+                   (interactive)
+                   (push last-nonmenu-event neo-last-nonmenu-macro-log))
+                 (let ((map (make-sparse-keymap)))
+                   (define-key map (kbd "C-c C-d")
+                     #'neo-last-nonmenu-macro-command)
+                   (use-local-map map)
+                   (execute-kbd-macro (kbd "C-c C-d C-c C-d")))
+                 (list (nreverse neo-last-nonmenu-macro-log)
+                       last-nonmenu-event))"#,
+        )
+        .expect("keyboard macro should execute");
+
+    assert_eq!(format!("{result}"), "((4 4) nil)");
+}
+
 /// GNU ends a keyboard-macro iteration inside `read_key_sequence`, whose
 /// `done` path calls `echo_update` before it returns an empty sequence to
 /// `command_loop_1`.  Neomacs must cross the same key-reader boundary instead
