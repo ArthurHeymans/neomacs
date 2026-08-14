@@ -266,6 +266,7 @@ mod auto_yasnippet;
 mod autothemer;
 mod avy;
 mod avy_menu;
+mod bash_completion;
 mod beacon;
 mod bert;
 mod bind_key;

@@ -3050,6 +3050,12 @@ pub const LOREM_IPSUM_MELPA_PIN: (&str, &str) = ("lorem-ipsum", "20221214.1857")
 /// multi-level selection, inactive item, and cancellation lifecycle corpus.
 pub const AVY_MENU_MELPA_PIN: (&str, &str) = ("avy-menu", "20230606.1519");
 
+/// The exact Bash Completion package selected for practical setup, command-line
+/// tokenization, nocomint/capf completion, file-name escaping, timeout, debug,
+/// and reset parity. MELPA built this archive from upstream commit
+/// `5b621db96efc549c64436011a81fd658c6dcf6a0`.
+pub const BASH_COMPLETION_MELPA_PIN: (&str, &str) = ("bash-completion", "20260206.1459");
+
 /// The exact Beacon package selected for practical command-loop movement,
 /// scrolling, overlay, timer, suppression, mark, and display parity. MELPA
 /// built this archive from upstream commit
