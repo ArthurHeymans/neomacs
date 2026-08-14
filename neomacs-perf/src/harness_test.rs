@@ -226,6 +226,103 @@ fn mx_tab_result_cannot_treat_a_missing_completion_window_as_a_fast_sample() {
 }
 
 #[test]
+fn bytecode_call_loop_accepts_only_the_full_interpreted_call_count() {
+    let workspace_tmp = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");
+    let workspace = tempfile::Builder::new()
+        .prefix("neomacs-perf-bytecode-call-result-")
+        .tempdir_in(&workspace_tmp)
+        .expect("create workspace-local test directory");
+    let harness = PerfHarness::new(workspace.path());
+    let request = RunRequest::new(
+        ScenarioId::BytecodeCallLoop,
+        workspace.path().join("fake-neomacs"),
+        NonZeroU32::new(20).expect("non-zero iterations"),
+    );
+
+    let report = harness
+        .record_fixture_result(
+            &request,
+            r##"{
+              "schema_version": 1,
+              "scenario": "bytecode-call-loop",
+              "status": "ok",
+              "iterations": 20,
+              "elapsed_us": 10,
+              "bytecode_calls": 20,
+              "result": 1,
+              "expected_result": 1,
+              "bytecode_functions_compiled": true,
+              "interpreter_requested": true,
+              "error": null
+            }"##,
+        )
+        .expect("record fixture result");
+
+    let RunVerdict::Valid { measurements } = report.artifact.verdict else {
+        panic!("correct bytecode call loop was rejected")
+    };
+    let per_call = measurements
+        .iter()
+        .find(|measurement| measurement.name == super::MetricName::PerBytecodeCallCpuTime)
+        .expect("per-bytecode-call metric");
+    assert_eq!(per_call.value, 0.5);
+    assert_eq!(
+        per_call.unit,
+        super::MetricUnit::MicrosecondsPerBytecodeCall
+    );
+}
+
+#[test]
+fn bytecode_call_loop_rejects_a_short_or_wrong_result() {
+    let workspace_tmp = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tmp");
+    fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");
+    let workspace = tempfile::Builder::new()
+        .prefix("neomacs-perf-bytecode-call-mismatch-")
+        .tempdir_in(&workspace_tmp)
+        .expect("create workspace-local test directory");
+    let harness = PerfHarness::new(workspace.path());
+    let request = RunRequest::new(
+        ScenarioId::BytecodeCallLoop,
+        workspace.path().join("fake-neomacs"),
+        NonZeroU32::new(20).expect("non-zero iterations"),
+    );
+
+    let report = harness
+        .record_fixture_result(
+            &request,
+            r##"{
+              "schema_version": 1,
+              "scenario": "bytecode-call-loop",
+              "status": "ok",
+              "iterations": 20,
+              "elapsed_us": 1,
+              "bytecode_calls": 19,
+              "result": 20,
+              "expected_result": 1,
+              "bytecode_functions_compiled": true,
+              "interpreter_requested": true,
+              "error": null
+            }"##,
+        )
+        .expect("record fixture result");
+
+    let RunVerdict::CorrectnessMismatch { mismatches } = report.artifact.verdict else {
+        panic!("incomplete bytecode call loop was accepted")
+    };
+    assert!(
+        mismatches
+            .iter()
+            .any(|mismatch| mismatch.invariant == "bytecode-call-count")
+    );
+    assert!(
+        mismatches
+            .iter()
+            .any(|mismatch| mismatch.invariant == "bytecode-result")
+    );
+}
+
+#[test]
 fn scenario_result_requires_every_schema_field() {
     let workspace_tmp = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../tmp");
     fs::create_dir_all(&workspace_tmp).expect("create workspace-local test scratch root");

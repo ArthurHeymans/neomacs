@@ -7,7 +7,7 @@ use super::{CrossEditorParityMetric, Frontend, MetricName, ScenarioId, scenario,
 #[test]
 fn catalog_exposes_the_rust_lsp_typing_workload_as_a_typed_scenario() {
     let scenarios = scenarios();
-    assert_eq!(scenarios.len(), 2);
+    assert_eq!(scenarios.len(), 3);
 
     let rust_lsp = scenario(ScenarioId::RustLspTyping);
     assert_eq!(rust_lsp.id, ScenarioId::RustLspTyping);
@@ -30,6 +30,26 @@ fn catalog_exposes_the_rust_lsp_typing_workload_as_a_typed_scenario() {
         NonZeroU32::new(100).expect("non-zero default")
     );
     assert_eq!(rust_lsp.primary_metric, MetricName::PerEditCpuTime);
+}
+
+#[test]
+fn catalog_exposes_the_pure_interpreter_bytecode_call_loop() {
+    let bytecode_calls = scenario(ScenarioId::BytecodeCallLoop);
+    assert_eq!(bytecode_calls.id.to_string(), "bytecode-call-loop");
+    assert_eq!(
+        ScenarioId::from_str("bytecode-call-loop"),
+        Ok(ScenarioId::BytecodeCallLoop)
+    );
+    assert_eq!(bytecode_calls.default_frontend, Frontend::Batch);
+    assert_eq!(
+        bytecode_calls.default_iterations,
+        NonZeroU32::new(20_000_000).expect("non-zero default")
+    );
+    assert_eq!(
+        bytecode_calls.primary_metric,
+        MetricName::PerBytecodeCallCpuTime
+    );
+    assert!(bytecode_calls.description.contains("Tier-0"));
 }
 
 #[test]

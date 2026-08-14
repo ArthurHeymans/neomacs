@@ -11,6 +11,7 @@ Run the catalogued workloads through `xtask`:
 cargo xtask perf list
 cargo xtask perf run rust-lsp-typing
 cargo xtask perf run mx-tab-completion
+cargo xtask perf run bytecode-call-loop
 cargo xtask perf run rust-lsp-typing --iterations 20 --frontend tui
 cargo xtask perf compare rust-lsp-typing \
   --baseline-editor target/release/neomacs \
@@ -21,13 +22,16 @@ cargo xtask perf profile rust-lsp-typing \
   --iterations 100 --frontend tui --scope edit-loop
 cargo xtask perf profile mx-tab-completion \
   --profiler perf --iterations 10 --frontend tui --scope edit-loop
+cargo xtask perf profile bytecode-call-loop \
+  --profiler perf --iterations 20000000 --scope edit-loop
 ```
 
 The default editor is `target/release/neomacs`. Use `--editor PATH` to measure
 another build. Frontend choices are `batch`, `tui`, and `gui`; each scenario
-owns its frontend and iteration defaults. Both current workloads default to a
-40 by 120 TUI; `rust-lsp-typing` runs 100 edits and `mx-tab-completion` runs
-five completions unless `--iterations` overrides the scenario default.
+owns its frontend and iteration defaults. `rust-lsp-typing` and
+`mx-tab-completion` default to a 40 by 120 TUI and run 100 edits and five
+completions, respectively. `bytecode-call-loop` defaults to batch mode and
+20 million calls. `--iterations` overrides any scenario default.
 
 ## Validity before timing
 
@@ -58,9 +62,10 @@ covers the timed edit loop inside Emacs.
 `perf compare` runs both editors once per sample and reverses their order for
 each odd-numbered pair. This interleaving reduces time-order bias from thermal
 or background-load drift. The primary statistic is the median
-scenario's primary metric: `per-edit-cpu-time` for `rust-lsp-typing` and
-`per-completion-cpu-time` for `mx-tab-completion`. At least three samples per
-editor are required. The artifact reports the sorted raw samples, both
+scenario's primary metric: `per-edit-cpu-time` for `rust-lsp-typing`,
+`per-completion-cpu-time` for `mx-tab-completion`, and
+`per-bytecode-call-cpu-time` for `bytecode-call-loop`. At least three samples
+per editor are required. The artifact reports the sorted raw samples, both
 medians, median absolute deviation (MAD), candidate-to-baseline ratio, and
 percentage change. These are descriptive measurements, not a
 statistical-significance claim; use more than the default five samples for
@@ -158,6 +163,28 @@ The run is rejected unless all of these remain true:
 No package preparation or live external service is involved. This keeps the
 workload focused on the built-in obarray completion and display path that GNU
 Emacs and Neomacs both execute for an empty `M-x TAB`.
+
+## `bytecode-call-loop`
+
+This workload isolates Tier-0 bytecode-to-bytecode call and return overhead.
+It byte-compiles a one-argument identity function and a fixed-count caller,
+warms both functions, collects garbage, then opens the acknowledged profiling
+gate only around the repeated call loop. The harness owns `NEOVM_JIT=0`, so the
+same catalog entry cannot silently switch execution tiers as local environment
+variables change.
+
+The run is rejected unless all of these remain true:
+
+- the requested number of bytecode calls completed exactly;
+- the caller and callee are byte-code functions;
+- the final result is the known result `1`;
+- the harness requested the Tier-0 interpreter.
+
+The default 20 million calls provide enough work for stable comparisons and
+native sampling. Use a smaller `--iterations` value for a smoke test. This is
+an interpreter-core micro-workload inside the whole-editor harness: it is
+useful for attributing VM call/return regressions, but it does not represent
+redisplay, package, or interactive editing performance.
 
 ## Adding a workload
 

@@ -33,6 +33,7 @@ impl CrossEditorParityMetric {
 pub enum ScenarioId {
     RustLspTyping,
     MxTabCompletion,
+    BytecodeCallLoop,
 }
 
 impl ScenarioId {
@@ -40,6 +41,7 @@ impl ScenarioId {
         match self {
             Self::RustLspTyping => "rust-lsp-typing",
             Self::MxTabCompletion => "mx-tab-completion",
+            Self::BytecodeCallLoop => "bytecode-call-loop",
         }
     }
 }
@@ -68,6 +70,7 @@ impl FromStr for ScenarioId {
         match value {
             "rust-lsp-typing" => Ok(Self::RustLspTyping),
             "mx-tab-completion" => Ok(Self::MxTabCompletion),
+            "bytecode-call-loop" => Ok(Self::BytecodeCallLoop),
             unknown => Err(UnknownScenarioId(unknown.to_string())),
         }
     }
@@ -116,6 +119,14 @@ const SCENARIOS: &[ScenarioSpec] = &[
         primary_metric: MetricName::PerCompletionCpuTime,
         cross_editor_parity_metrics: &[CrossEditorParityMetric::CompletionCandidateCount],
     },
+    ScenarioSpec {
+        id: ScenarioId::BytecodeCallLoop,
+        description: "Tier-0 bytecode-to-bytecode call and return loop with the Neomacs JIT disabled",
+        default_frontend: Frontend::Batch,
+        default_iterations: NonZeroU32::new(20_000_000).expect("non-zero scenario default"),
+        primary_metric: MetricName::PerBytecodeCallCpuTime,
+        cross_editor_parity_metrics: &[],
+    },
 ];
 
 pub fn scenarios() -> &'static [ScenarioSpec] {
@@ -131,5 +142,6 @@ pub const fn scenario(id: ScenarioId) -> &'static ScenarioSpec {
     match id {
         ScenarioId::RustLspTyping => &SCENARIOS[0],
         ScenarioId::MxTabCompletion => &SCENARIOS[1],
+        ScenarioId::BytecodeCallLoop => &SCENARIOS[2],
     }
 }

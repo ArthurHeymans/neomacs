@@ -51,6 +51,7 @@ pub enum MetricName {
     ProcessWallTime,
     PerEditCpuTime,
     PerCompletionCpuTime,
+    PerBytecodeCallCpuTime,
     Iterations,
     Edits,
     Redisplays,
@@ -58,6 +59,7 @@ pub enum MetricName {
     CompletionCandidateCount,
     OverlayCount,
     LspDiagnosticCount,
+    BytecodeCalls,
 }
 
 impl MetricName {
@@ -67,13 +69,15 @@ impl MetricName {
             Self::WorkloadCpuTime | Self::ProcessWallTime => MetricUnit::Microseconds,
             Self::PerEditCpuTime => MetricUnit::MicrosecondsPerEdit,
             Self::PerCompletionCpuTime => MetricUnit::MicrosecondsPerCompletion,
+            Self::PerBytecodeCallCpuTime => MetricUnit::MicrosecondsPerBytecodeCall,
             Self::Iterations
             | Self::Edits
             | Self::Redisplays
             | Self::CompletionHelpCalls
             | Self::CompletionCandidateCount
             | Self::OverlayCount
-            | Self::LspDiagnosticCount => MetricUnit::Count,
+            | Self::LspDiagnosticCount
+            | Self::BytecodeCalls => MetricUnit::Count,
         }
     }
 }
@@ -84,6 +88,7 @@ pub enum MetricUnit {
     Microseconds,
     MicrosecondsPerEdit,
     MicrosecondsPerCompletion,
+    MicrosecondsPerBytecodeCall,
     Count,
 }
 
