@@ -4672,3 +4672,41 @@ category boundary, while the Org Brain visualization workflow locks the
 original multi-line button topology.
 
 Status: FIXED.
+
+## 90. A word-wrap break drew a continuation marker GNU never produces -- FIXED
+
+MWIM binds `C-a`/`C-e` to visual-line movers, so its terminal workflow renders
+a `visual-line-mode` buffer whose long lines wrap at word boundaries.  Every
+wrapped row in Neomacs ended in a backslash where GNU's row ends in the
+wrapped text.
+
+The package-free reduction is the shape of the rows themselves.  With a
+ten-column window, `word-wrap` on and `truncate-lines` off:
+
+```elisp
+;; buffer contents "aaaa bbbbbb\n"
+;; GNU rows              => ("aaaa "        "bbbbbb ")
+;; Neomacs before fix    => ("aaaa      \\" "bbbbbb ")
+
+;; buffer contents "aaaa bbbbbbbbbbbb\n"
+;; GNU rows              => ("aaaa " "bbbbbbbbbb\\" "bb ")
+;; Neomacs before fix    => ("aaaa      \\" "bbbbbbbbbb\\" "bb ")
+```
+
+GNU's `display_line` distinguishes the two ways a row can reach the right
+edge.  The word-wrap branch (`back_to_wrap`, `src/xdisp.c:26360-26388`)
+rewinds to the recorded wrap point, sets `row->continued_p` and calls
+`extend_face_to_end_of_line`, but never calls `produce_special_glyphs` with
+`IT_CONTINUATION`.  The mid-element branches do: the element that does not fit
+at all (`src/xdisp.c:26336-26345`), an over-wide TAB
+(`src/xdisp.c:26399-26403`), and the general case (`src/xdisp.c:26421-26432`),
+which produces the glyph whenever `!FRAME_WINDOW_P`.
+
+Neomacs drove its right-edge marker off one `Continued` row flag, which
+conflates both branches.  The fix carries the break kind through the overflow
+transition type (`VisualWrapBreak::AtWordBoundary` vs `MidElement`) and raises
+a separate `ContinuedMidElement` flag that the marker pass reads; `Continued`
+keeps GNU's `row->continued_p` meaning, so fringe continuation arrows are
+unchanged.
+
+Status: FIXED.
