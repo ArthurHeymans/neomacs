@@ -22,6 +22,7 @@
 //! - [`diff_screens_text`] is a simpler text-only comparison that ignores
 //!   face attributes and normalises product names.
 
+use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -343,10 +344,21 @@ impl TuiSession {
     /// file (e.g. Doom config).  Uses the real HOME so Doom is found.
     /// For face/theme comparison tests.
     pub fn gnu_emacs_with_init(extra_args: &str) -> Self {
+        Self::gnu_emacs_with_init_args(extra_args.split_whitespace())
+    }
+
+    /// Structured-argument counterpart of [`Self::gnu_emacs_with_init`].
+    /// Paths and Lisp forms remain distinct OS arguments rather than passing
+    /// through whitespace tokenization.
+    pub fn gnu_emacs_with_init_args<I, S>(extra_args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<OsString>,
+    {
         let real_home = PathBuf::from(std::env::var("HOME").expect("HOME"));
         let launch = TuiLaunch::new("emacs")
             .arg("-nw")
-            .args(extra_args.split_whitespace())
+            .args(extra_args)
             .env("HOME", real_home.as_os_str());
         Self::spawn_launch(launch, "GNU")
     }
@@ -355,6 +367,15 @@ impl TuiSession {
     /// (e.g. Doom Emacs config) is loaded.  Uses the real HOME.
     /// For face/theme tests.
     pub fn neomacs_with_init(extra_args: &str) -> Self {
+        Self::neomacs_with_init_args(extra_args.split_whitespace())
+    }
+
+    /// Structured-argument counterpart of [`Self::neomacs_with_init`].
+    pub fn neomacs_with_init_args<I, S>(extra_args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<OsString>,
+    {
         let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let workspace = manifest.parent().expect("workspace root");
         let bin = neomacs_binary_path(workspace);
@@ -366,7 +387,7 @@ impl TuiSession {
         let real_home = PathBuf::from(std::env::var("HOME").expect("HOME"));
         let launch = TuiLaunch::new(bin.as_os_str())
             .arg("-nw")
-            .args(extra_args.split_whitespace())
+            .args(extra_args)
             .env("HOME", real_home.as_os_str());
         Self::spawn_launch(launch, "NEO")
     }

@@ -7,9 +7,69 @@
 
 mod support;
 use neomacs_tui_tests::*;
+use std::ffi::OsString;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use support::*;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DoomStartupState {
+    Loading,
+    ConfirmingDirectoryLocalVariables,
+    Ready,
+}
+
+fn doom_startup_state(grid: &[String], ready: impl Fn(&[String]) -> bool) -> DoomStartupState {
+    if grid.iter().any(|row| row.contains("*Local Variables*"))
+        && grid
+            .iter()
+            .any(|row| row.contains("Do you want to apply it?"))
+    {
+        DoomStartupState::ConfirmingDirectoryLocalVariables
+    } else if ready(grid) {
+        DoomStartupState::Ready
+    } else {
+        DoomStartupState::Loading
+    }
+}
+
+fn wait_for_doom_startup(
+    gnu: &mut TuiSession,
+    neo: &mut TuiSession,
+    timeout: Duration,
+    ready: impl Fn(&[String]) -> bool + Copy,
+) {
+    let deadline = Instant::now() + timeout;
+    let poll_slice = Duration::from_millis(80);
+
+    while Instant::now() < deadline {
+        let gnu_state = doom_startup_state(&gnu.text_grid(), ready);
+        let neo_state = doom_startup_state(&neo.text_grid(), ready);
+        if gnu_state == DoomStartupState::Ready && neo_state == DoomStartupState::Ready {
+            return;
+        }
+
+        match gnu_state {
+            DoomStartupState::Loading => gnu.read(poll_slice),
+            DoomStartupState::ConfirmingDirectoryLocalVariables => {
+                // GNU files.el's `hack-local-variables-confirm' defines `y'
+                // as apply-once.  Do not send `+', which persists trust in
+                // the user's customization file.
+                gnu.send(b"y");
+                gnu.read(poll_slice);
+            }
+            DoomStartupState::Ready => {}
+        }
+        match neo_state {
+            DoomStartupState::Loading => neo.read(poll_slice),
+            DoomStartupState::ConfirmingDirectoryLocalVariables => {
+                neo.send(b"y");
+                neo.read(poll_slice);
+            }
+            DoomStartupState::Ready => {}
+        }
+    }
+}
 
 #[test]
 fn index_org_has_face_colours() {
@@ -21,13 +81,30 @@ fn index_org_has_face_colours() {
     .into_iter()
     .find(|path| path.is_file())
     .expect("Doom docs/index.org should exist");
-    let launch_args = format!("{} --eval=(goto-char(point-min))", index.to_string_lossy());
+    let doom_root = index
+        .parent()
+        .and_then(|docs_directory| docs_directory.parent())
+        .expect("Doom index should be below the Doom root");
+    let docs_library = doom_root.join("lisp/lib/docs.el");
+    assert!(
+        docs_library.is_file(),
+        "Doom docs mode library should exist at {}",
+        docs_library.display()
+    );
+    let launch_args = [
+        OsString::from("--init-directory"),
+        doom_root.as_os_str().to_os_string(),
+        OsString::from("--load"),
+        docs_library.into_os_string(),
+        index.into_os_string(),
+        OsString::from("--eval=(goto-char(point-min))"),
+    ];
 
     // Start both editors with Doom and the same document.  Opening the file at
     // launch keeps this test focused on face rendering rather than Doom keymap
     // or completion-UI differences.
-    let mut gnu = TuiSession::gnu_emacs_with_init(&launch_args);
-    let mut neo = TuiSession::neomacs_with_init(&launch_args);
+    let mut gnu = TuiSession::gnu_emacs_with_init_args(launch_args.clone());
+    let mut neo = TuiSession::neomacs_with_init_args(launch_args);
     let has_index = |grid: &[String]| {
         grid.iter().any(|row| row.contains("index.org"))
             && grid.iter().any(|row| row.contains("Doom Docs"))
@@ -39,7 +116,10 @@ fn index_org_has_face_colours() {
                 .iter()
                 .any(|row| row.contains("Emoji images not available"))
     };
-    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(45), startup);
+    wait_for_doom_startup(&mut gnu, &mut neo, Duration::from_secs(45), startup);
+    if !startup(&gnu.text_grid()) || !startup(&neo.text_grid()) {
+        dump_pair_grids("starting Doom with index.org", &gnu, &neo);
+    }
     assert!(
         startup(&gnu.text_grid()),
         "GNU Doom startup did not complete"
