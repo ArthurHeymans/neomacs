@@ -1805,6 +1805,10 @@ fn vm_bytecode_call_chain_stays_in_one_interpreter_driver() {
 
 #[test]
 fn interpreter_driver_frame_layout_stays_compact() {
+    assert!(
+        std::mem::size_of::<ResolvedStackCallTarget>() <= 2 * std::mem::size_of::<usize>(),
+        "call-target classification must not carry cold subr metadata through every Bcall"
+    );
     assert_eq!(
         std::mem::size_of::<InterpreterFunction>(),
         std::mem::size_of::<Value>(),

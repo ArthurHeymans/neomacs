@@ -16,7 +16,7 @@ use crate::emacs_core::eval::{
 use crate::emacs_core::intern::{SymId, intern, lookup_interned, resolve_sym};
 // storage_char_len and storage_substring no longer needed here — using emacs_char + LispString
 use crate::emacs_core::value::*;
-use crate::tagged::header::{SubrDispatchKind, SubrFn};
+use crate::tagged::header::{SubrDispatchKind, SubrFn, SubrObj};
 use crate::window::FrameId;
 
 /// Dynamic, execution-weighted opcode histogram for the Tier-0 interpreter
@@ -686,18 +686,16 @@ impl std::ops::DerefMut for StackCursor {
     }
 }
 
+/// One-word proof that a call target resolved to an ordinary builtin subr.
+///
+/// A symbol value denotes the legacy static-table fallback; a subr value is
+/// the exact live function-cell object read by Bcall. Constructors validate
+/// the corresponding metadata before creating the token, so dispatch can
+/// materialize the relatively large [`SubrEntry`] only after selecting the
+/// builtin branch.
+#[repr(transparent)]
 #[derive(Clone, Copy)]
-enum DirectSubrCallee {
-    Symbol(SymId),
-    Value(Value),
-}
-
-#[derive(Clone, Copy)]
-struct ResolvedBuiltinStackCall {
-    sym_id: SymId,
-    entry: SubrEntry,
-    callee: DirectSubrCallee,
-}
+struct ResolvedBuiltinCallee(Value);
 
 /// Result of GNU `Bcall`'s single live function-cell read.
 ///
@@ -708,7 +706,7 @@ struct ResolvedBuiltinStackCall {
 #[derive(Clone, Copy)]
 enum ResolvedStackCallTarget {
     ByteCode { callee: Value },
-    Builtin(ResolvedBuiltinStackCall),
+    Builtin { callee: ResolvedBuiltinCallee },
     Generic,
 }
 
@@ -853,15 +851,54 @@ const _: () = {
     assert!(std::mem::size_of::<InterpreterValueCompletion>() <= 16);
 };
 
-impl DirectSubrCallee {
+impl ResolvedBuiltinCallee {
+    #[inline]
+    fn from_static_symbol(sym_id: SymId) -> Option<Self> {
+        lookup_global_subr_entry(sym_id)
+            .is_some_and(|entry| entry.dispatch_kind == SubrDispatchKind::Builtin)
+            .then_some(Self(Value::from_sym_id(sym_id)))
+    }
+
+    #[inline(always)]
+    fn from_subr_value(value: Value) -> Option<Self> {
+        if value.veclike_type() != Some(VecLikeType::Subr) {
+            return None;
+        }
+        let ptr = value.as_veclike_ptr()? as *const SubrObj;
+        // SAFETY: the veclike type check above proves this points to a live
+        // SubrObj. This reads only intrinsic GNU Lisp_Subr metadata; no Lisp
+        // runs between classification and dispatch.
+        let subr = unsafe { &*ptr };
+        (subr.dispatch_kind == SubrDispatchKind::Builtin && subr.function.is_some())
+            .then_some(Self(value))
+    }
+
+    #[inline]
+    fn entry(self) -> (SymId, SubrEntry) {
+        if let Some(sym_id) = self.0.as_symbol_id() {
+            let entry = lookup_global_subr_entry(sym_id)
+                .expect("resolved static builtin must retain its registered entry");
+            debug_assert_eq!(entry.dispatch_kind, SubrDispatchKind::Builtin);
+            (sym_id, entry)
+        } else {
+            let (sym_id, entry) = subr_entry_from_value(self.0)
+                .expect("resolved builtin object must remain a valid subr");
+            debug_assert_eq!(entry.dispatch_kind, SubrDispatchKind::Builtin);
+            (sym_id, entry)
+        }
+    }
+
     #[inline]
     fn wrong_arity_value(self) -> Value {
-        match self {
-            Self::Symbol(sym_id) => Value::subr_from_sym_id(sym_id),
-            Self::Value(value) => value,
+        if let Some(sym_id) = self.0.as_symbol_id() {
+            Value::subr_from_sym_id(sym_id)
+        } else {
+            self.0
         }
     }
 }
+
+const _: () = assert!(std::mem::size_of::<ResolvedBuiltinCallee>() == std::mem::size_of::<Value>());
 
 /// Debug check for env-less bytecode frames: after the frame body runs,
 /// `ctx.lexenv` must be the entry lexenv, possibly EXTENDED by value-less
@@ -2081,8 +2118,8 @@ impl<'a> Vm<'a> {
                     }
                 }
             }
-            ResolvedStackCallTarget::Builtin(target) => InterpreterStackCall::Complete(
-                self.call_resolved_builtin_from_stack_args(func_val, args_start, nargs, target),
+            ResolvedStackCallTarget::Builtin { callee } => InterpreterStackCall::Complete(
+                self.call_resolved_builtin_from_stack_args(func_val, args_start, nargs, callee),
             ),
             ResolvedStackCallTarget::Generic => {
                 let backtrace = self
@@ -5067,7 +5104,7 @@ impl<'a> Vm<'a> {
     ///   `resolve_stack_call_target` would classify as generic;
     /// * the arity signal (`wrong-number-of-arguments`) is checked against
     ///   that fresh entry INSIDE the backtrace frame, with the subr object as
-    ///   payload (`DirectSubrCallee::Value` parity);
+    ///   payload (resolved subr-object parity);
     /// * dispatch through the stack-args dispatcher (A0..A8 nil-padding;
     ///   `Many`/`ManySlice` get the exact-length args, so even an in-place
     ///   rewrite to a variadic entry stays correct);
@@ -5262,9 +5299,9 @@ impl<'a> Vm<'a> {
     ) -> EvalResult {
         if allow_direct_builtin_subr {
             match self.resolve_stack_call_target(func_val) {
-                ResolvedStackCallTarget::Builtin(target) => {
+                ResolvedStackCallTarget::Builtin { callee } => {
                     return self.call_resolved_builtin_from_stack_args(
-                        func_val, args_start, nargs, target,
+                        func_val, args_start, nargs, callee,
                     );
                 }
                 ResolvedStackCallTarget::ByteCode { callee } => {
@@ -5398,11 +5435,11 @@ impl<'a> Vm<'a> {
         args_start: usize,
         nargs: usize,
     ) -> Option<EvalResult> {
-        let ResolvedStackCallTarget::Builtin(target) = self.resolve_stack_call_target(func_val)
+        let ResolvedStackCallTarget::Builtin { callee } = self.resolve_stack_call_target(func_val)
         else {
             return None;
         };
-        Some(self.call_resolved_builtin_from_stack_args(func_val, args_start, nargs, target))
+        Some(self.call_resolved_builtin_from_stack_args(func_val, args_start, nargs, callee))
     }
 
     fn call_resolved_builtin_from_stack_args(
@@ -5410,13 +5447,9 @@ impl<'a> Vm<'a> {
         func_val: Value,
         args_start: usize,
         nargs: usize,
-        target: ResolvedBuiltinStackCall,
+        callee: ResolvedBuiltinCallee,
     ) -> EvalResult {
-        let ResolvedBuiltinStackCall {
-            sym_id,
-            entry,
-            callee,
-        } = target;
+        let (sym_id, entry) = callee.entry();
         let backtrace = self
             .ctx
             .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
@@ -5745,17 +5778,6 @@ impl<'a> Vm<'a> {
     }
 
     fn resolve_stack_call_target(&self, func_val: Value) -> ResolvedStackCallTarget {
-        let builtin = |sym_id: SymId, entry: SubrEntry, callee: DirectSubrCallee| {
-            if entry.dispatch_kind == SubrDispatchKind::Builtin {
-                ResolvedStackCallTarget::Builtin(ResolvedBuiltinStackCall {
-                    sym_id,
-                    entry,
-                    callee,
-                })
-            } else {
-                ResolvedStackCallTarget::Generic
-            }
-        };
         match func_val.kind() {
             ValueKind::Veclike(VecLikeType::ByteCode) => {
                 ResolvedStackCallTarget::ByteCode { callee: func_val }
@@ -5780,23 +5802,23 @@ impl<'a> Vm<'a> {
                             ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr)
                         ) =>
                     {
-                        let Some((callee_sym, entry)) = subr_entry_from_value(value) else {
-                            return ResolvedStackCallTarget::Generic;
-                        };
-                        builtin(callee_sym, entry, DirectSubrCallee::Value(value))
+                        ResolvedBuiltinCallee::from_subr_value(value)
+                            .map_or(ResolvedStackCallTarget::Generic, |callee| {
+                                ResolvedStackCallTarget::Builtin { callee }
+                            })
                     }
-                    None => lookup_global_subr_entry(sym_id)
-                        .map_or(ResolvedStackCallTarget::Generic, |entry| {
-                            builtin(sym_id, entry, DirectSubrCallee::Symbol(sym_id))
+                    None => ResolvedBuiltinCallee::from_static_symbol(sym_id)
+                        .map_or(ResolvedStackCallTarget::Generic, |callee| {
+                            ResolvedStackCallTarget::Builtin { callee }
                         }),
                     _ => ResolvedStackCallTarget::Generic,
                 }
             }
             ValueKind::Veclike(VecLikeType::Subr) | ValueKind::Subr(_) => {
-                let Some((sym_id, entry)) = subr_entry_from_value(func_val) else {
-                    return ResolvedStackCallTarget::Generic;
-                };
-                builtin(sym_id, entry, DirectSubrCallee::Value(func_val))
+                ResolvedBuiltinCallee::from_subr_value(func_val)
+                    .map_or(ResolvedStackCallTarget::Generic, |callee| {
+                        ResolvedStackCallTarget::Builtin { callee }
+                    })
             }
             _ => ResolvedStackCallTarget::Generic,
         }
