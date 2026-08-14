@@ -28,7 +28,7 @@ fn string_char_range(start: usize, end: usize) -> CharRange {
 
 typed_subr! {
     pub(crate) fn builtin_string_equal_2(_eval, a: StringDesignator, b: StringDesignator) -> EvalResult {
-        string_equal_designators(a.0, b.0)
+        string_equal_designators(a.text(), b.text())
     }
 }
 
@@ -121,13 +121,13 @@ fn string_equal_designators(
 
 typed_subr! {
     pub(crate) fn builtin_string_lessp_2(_eval, a: StringDesignator, b: StringDesignator) -> EvalResult {
-        Ok(Value::bool_val(string_ordering(a.0, b.0).is_lt()))
+        Ok(Value::bool_val(string_ordering(a.text(), b.text()).is_lt()))
     }
 }
 
 typed_subr! {
     pub(crate) fn builtin_string_greaterp_2(_eval, a: StringDesignator, b: StringDesignator) -> EvalResult {
-        Ok(Value::bool_val(string_ordering(a.0, b.0).is_gt()))
+        Ok(Value::bool_val(string_ordering(a.text(), b.text()).is_gt()))
     }
 }
 

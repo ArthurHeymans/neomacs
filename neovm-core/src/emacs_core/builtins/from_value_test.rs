@@ -159,9 +159,9 @@ fn string_designator_accepts_symbols() {
     let string = Value::string("abc");
     let string_storage = string.as_lisp_string().expect("string value has storage");
     let from_string = StringDesignator::from_value(&mut eval, string).unwrap();
-    assert_eq!(from_string.0.as_bytes(), b"abc");
+    assert_eq!(from_string.text().as_bytes(), b"abc");
     assert!(
-        std::ptr::eq(from_string.0, string_storage),
+        std::ptr::eq(from_string.text(), string_storage),
         "GNU compares the original string object instead of cloning its storage"
     );
 
@@ -170,9 +170,9 @@ fn string_designator_accepts_symbols() {
         symbol.as_symbol_id().expect("symbol value has an id"),
     );
     let from_symbol = StringDesignator::from_value(&mut eval, symbol).unwrap();
-    assert_eq!(from_symbol.0.as_bytes(), b"abc");
+    assert_eq!(from_symbol.text().as_bytes(), b"abc");
     assert!(
-        std::ptr::eq(from_symbol.0, symbol_name),
+        std::ptr::eq(from_symbol.text(), symbol_name),
         "GNU compares the symbol's existing name string instead of rebuilding it"
     );
     let bad = Value::fixnum(1);
@@ -199,7 +199,7 @@ fn string_designator_honors_positioned_symbol_dynamic_view() {
 
     eval.set_variable("symbols-with-pos-enabled", Value::T);
     let designator = StringDesignator::from_value(&mut eval, positioned).unwrap();
-    assert_eq!(designator.0.as_bytes(), b"alpha");
+    assert_eq!(designator.text().as_bytes(), b"alpha");
 }
 
 #[test]

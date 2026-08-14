@@ -87,9 +87,9 @@ fn collation_errno_message(errno: libc::c_int) -> String {
 // ---------------------------------------------------------------------------
 
 fn string_designator_text(eval: &mut Context, val: Value) -> Result<String, Flow> {
-    let string = StringDesignator::from_value(eval, val)?.0;
+    let designator = StringDesignator::from_value(eval, val)?;
     Ok(crate::emacs_core::emacs_char::to_utf8_lossy(
-        string.as_bytes(),
+        designator.text().as_bytes(),
     ))
 }
 
@@ -1551,11 +1551,11 @@ fn require_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, F
 pub(crate) fn builtin_string_version_lessp(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("string-version-lessp", &args, 2)?;
     let s1 = StringDesignator::from_value(eval, args[0])?
-        .0
+        .text()
         .as_bytes()
         .to_vec();
     let s2 = StringDesignator::from_value(eval, args[1])?
-        .0
+        .text()
         .as_bytes()
         .to_vec();
 
