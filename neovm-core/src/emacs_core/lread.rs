@@ -412,23 +412,46 @@ pub(crate) fn builtin_eval_buffer(eval: &mut super::eval::Context, args: Vec<Val
             .visible_variable_value_or_nil("load-in-progress")
             .is_truthy()
             && filename.is_some();
-        let result = if loading_source_file {
-            super::load::eval_lisp_source_file_in_context(
-                eval,
-                filename
-                    .as_ref()
-                    .expect("load-in-progress eval-buffer must have filename"),
-                &source,
-            )
-            .map_err(map_eval_error_to_flow)
-        } else {
-            let result = eval_forms_from_lisp_source(eval, &source, Some(buffer_value));
-            if result.is_ok()
-                && let Some(filename) = filename.as_ref()
-            {
-                record_eval_buffer_load_history(eval, filename);
+        let result = match FormReader::resolve(eval, None) {
+            // GNU `Feval_buffer' hands the BUFFER to `readevalloop'
+            // (src/lread.c:2417) and takes no branch on `load-in-progress': it is
+            // one readevalloop either way.  Reading the buffer text internally
+            // would skip the hook and so skip Edebug entirely.
+            FormReader::Lisp(reader) => {
+                let result = readevalloop_buffer_with_lisp_reader(
+                    eval,
+                    buffer_id,
+                    reader,
+                    BufferReadRegion::WholeAccessible,
+                );
+                if result.is_ok()
+                    && let Some(filename) = filename.as_ref()
+                {
+                    // GNU `readevalloop' calls `loadhist_initialize (sourcename)'
+                    // for every shape of the loop (src/lread.c:2227).
+                    record_eval_buffer_load_history(eval, filename);
+                }
+                result
             }
-            result
+            FormReader::Internal if loading_source_file => {
+                super::load::eval_lisp_source_file_in_context(
+                    eval,
+                    filename
+                        .as_ref()
+                        .expect("load-in-progress eval-buffer must have filename"),
+                    &source,
+                )
+                .map_err(map_eval_error_to_flow)
+            }
+            FormReader::Internal => {
+                let result = eval_forms_from_lisp_source(eval, &source, Some(buffer_value));
+                if result.is_ok()
+                    && let Some(filename) = filename.as_ref()
+                {
+                    record_eval_buffer_load_history(eval, filename);
+                }
+                result
+            }
         };
 
         eval.unbind_to(specpdl_count);
@@ -444,12 +467,22 @@ pub(crate) fn builtin_eval_buffer(eval: &mut super::eval::Context, args: Vec<Val
 ///
 /// Evaluate forms in the [START, END) region of the current buffer.
 pub(crate) fn builtin_eval_region(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    if let Some(read_function) = args.get(3).copied().filter(|value| !value.is_nil()) {
+    if let FormReader::Lisp(read_function) = FormReader::resolve(eval, args.get(3).copied()) {
         let (start, end) = eval_region_bounds_in_state(&eval.buffers, &args)?;
         if start >= end {
             return Ok(Value::NIL);
         }
-        return eval_region_with_read_function(eval, start, end, read_function);
+        let buffer_id = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
+            .id;
+        return readevalloop_buffer_with_lisp_reader(
+            eval,
+            buffer_id,
+            read_function,
+            BufferReadRegion::Bounded { start, end },
+        );
     }
 
     let source = eval_region_source_text_in_state(&eval.buffers, &args)?;
@@ -463,62 +496,215 @@ pub(crate) fn builtin_eval_region(eval: &mut super::eval::Context, args: Vec<Val
     eval_forms_from_lisp_source(eval, &source, Some(Value::make_buffer(buffer.id)))
 }
 
-fn eval_region_with_read_function(
+/// Which function reads each top-level form of a `readevalloop`.
+///
+/// GNU picks it once per form, in this order (src/lread.c:2302-2320):
+///   1. an explicit READ-FUNCTION argument (`eval-region' only),
+///   2. `load-read-function',
+///   3. the internal reader.
+///
+/// `load-read-function' defaults to the bare symbol `read' (src/lread.c:5741),
+/// and calling that builtin on this stream is observably identical to reading
+/// internally, so the default keeps the fast internal path.  That is the same
+/// discrimination `load' already makes in
+/// `streaming_readevalloop_lisp_source' (load.rs); making it a type keeps the
+/// two entry points from drifting apart, and keeps the bootstrap off the Lisp
+/// call route.
+#[derive(Clone, Copy, Debug)]
+enum FormReader {
+    Internal,
+    Lisp(Value),
+}
+
+impl FormReader {
+    fn resolve(eval: &super::eval::Context, explicit: Option<Value>) -> Self {
+        if let Some(read_function) = explicit.filter(|value| !value.is_nil()) {
+            return Self::Lisp(read_function);
+        }
+        match eval
+            .obarray
+            .symbol_value("load-read-function")
+            .copied()
+            .filter(|hook| !hook.is_nil() && !hook.is_symbol_named("read"))
+        {
+            Some(hook) => Self::Lisp(hook),
+            None => Self::Internal,
+        }
+    }
+}
+
+/// The two shapes GNU `readevalloop' takes over a buffer, selected by whether
+/// its START argument is nil (src/lread.c:2237-2264).
+#[derive(Clone, Copy, Debug)]
+enum BufferReadRegion {
+    /// `eval-buffer': START is nil, so GNU neither switches buffers nor
+    /// narrows -- it reads straight from the buffer's own point
+    /// (`source_buffer_get', src/lread.c:332), which `Feval_buffer' has already
+    /// set to BEGV (src/lread.c:2411-2416).
+    WholeAccessible,
+    /// `eval-region': START is non-nil, so GNU records an excursion, makes the
+    /// buffer current and narrows to [BEGV, END) around every single read.
+    Bounded { start: i64, end: i64 },
+}
+
+/// GNU `readevalloop' skips whitespace and comments and breaks on EOF *before*
+/// invoking the reader (src/lread.c:2272-2288), so the reader is called exactly
+/// once per form and a trailing newline never provokes an extra end-of-file
+/// read.  Returns false when only whitespace and comments remain.
+fn skip_to_next_form_in_buffer(
+    buffer: &mut crate::buffer::Buffer,
+    end_byte: crate::buffer::EmacsBytePos,
+) -> bool {
+    loop {
+        let pos = buffer.point_emacs_byte_pos();
+        if pos >= end_byte {
+            return false;
+        }
+        let Some(ch) = buffer.char_at_emacs_byte_pos(pos) else {
+            return false;
+        };
+        let Some(len) = buffer.char_after_emacs_byte_len(pos) else {
+            return false;
+        };
+        match ch {
+            ';' => {
+                buffer.goto_emacs_byte_pos(pos.add_len(len));
+                // `while ((c = readchar (&source)) != '\n' && c != -1);`
+                loop {
+                    let pos = buffer.point_emacs_byte_pos();
+                    if pos >= end_byte {
+                        return false;
+                    }
+                    let (Some(ch), Some(len)) = (
+                        buffer.char_at_emacs_byte_pos(pos),
+                        buffer.char_after_emacs_byte_len(pos),
+                    ) else {
+                        return false;
+                    };
+                    buffer.goto_emacs_byte_pos(pos.add_len(len));
+                    if ch == '\n' {
+                        break;
+                    }
+                }
+            }
+            // The exact set GNU treats as inter-form whitespace, NO-BREAK SPACE
+            // included (src/lread.c:2285-2286).
+            ' ' | '\t' | '\n' | '\u{c}' | '\r' | '\u{a0}' => {
+                buffer.goto_emacs_byte_pos(pos.add_len(len));
+            }
+            _ => return true,
+        }
+    }
+}
+
+/// GNU `readevalloop' over a buffer, with a Lisp function reading each form.
+///
+/// The reader is the SOLE reader of each form: it reads from the buffer at
+/// point and leaves point after the form it consumed.  Edebug relies on exactly
+/// that (`edebug-read-and-maybe-wrap-form' reads the current buffer at point),
+/// and on being handed the buffer itself as the stream -- `edebug--read'
+/// instruments only when `(eq stream (current-buffer))'
+/// (lisp/emacs-lisp/edebug.el:441-458).
+fn readevalloop_buffer_with_lisp_reader(
     eval: &mut super::eval::Context,
-    start: i64,
-    end: i64,
+    buffer_id: crate::buffer::BufferId,
     read_function: Value,
+    region: BufferReadRegion,
 ) -> EvalResult {
-    let buffer_id = {
-        let buffer = eval
-            .buffers
-            .current_buffer()
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        buffer.id
-    };
     let buffer_value = Value::make_buffer(buffer_id);
 
     let gc_roots = eval.save_specpdl_roots();
     eval.push_specpdl_root(read_function);
     eval.push_specpdl_root(buffer_value);
+    let outer_specpdl = eval.specpdl.len();
+    // GNU: `specbind (Qstandard_input, readcharfun);' (src/lread.c:2207), so a
+    // bare `(read)' inside an evaluated form reads on from the same buffer.
+    eval.specbind(intern("standard-input"), buffer_value);
+
+    if let BufferReadRegion::WholeAccessible = region {
+        // `BUF_TEMP_SET_PT (XBUFFER (buf), BUF_BEGV (XBUFFER (buf)));'
+        // (src/lread.c:2411) -- note GNU sets the point of BUF, which need not
+        // be the current buffer, and does not switch to it.
+        if let Some(buffer) = eval.buffers.get_mut(buffer_id) {
+            let begv = buffer.accessible_emacs_byte_region().start();
+            buffer.goto_emacs_byte_pos(begv);
+        }
+    }
+
     let result = (|| {
-        let mut next_start = start;
+        // `Bounded' unwinds an excursion after every read, so it cannot leave the
+        // cursor in the buffer's point; GNU carries it in the loop's START
+        // (`start = Fpoint_marker ()', src/lread.c:2330).  `WholeAccessible'
+        // reads straight from the buffer's own point, which nothing unwinds.
+        let mut next_start = match region {
+            BufferReadRegion::Bounded { start, .. } => start,
+            BufferReadRegion::WholeAccessible => 0,
+        };
         loop {
-            if next_start >= end {
-                return Ok(Value::NIL);
-            }
-
-            // GNU `readevalloop` saves the caller's excursion, switches to the
-            // source buffer, saves that buffer's point/restriction, and only
-            // then invokes READ-FUNCTION.  Crucially it captures the reader's
-            // advanced point *before* evaluating the returned form: Edebug's
-            // transformed form is allowed to move point without changing
-            // where the next read begins.
+            // GNU `readevalloop` captures the reader's advanced point *before*
+            // evaluating the returned form: Edebug's transformed form is allowed
+            // to move point without changing where the next read begins.
             let iteration_specpdl = eval.specpdl.len();
-            eval.record_save_excursion();
-            let read_result = (|| -> Result<(Value, i64, bool), Flow> {
-                eval.set_current_buffer_unrecorded(buffer_id)?;
-                eval.record_save_excursion();
-                if let Some(state) = eval.buffers.save_current_restriction_state() {
-                    eval.specpdl
-                        .push(super::eval::SpecBinding::save_restriction(state));
-                }
+            let read_result = (|| -> Result<Option<(Value, i64)>, Flow> {
+                let end = match region {
+                    BufferReadRegion::Bounded { end, .. } => {
+                        // GNU saves the caller's excursion, switches to the source
+                        // buffer, saves that buffer's point/restriction, and only
+                        // then invokes READ-FUNCTION (src/lread.c:2237-2258).
+                        eval.record_save_excursion();
+                        eval.set_current_buffer_unrecorded(buffer_id)?;
+                        eval.record_save_excursion();
+                        if let Some(state) = eval.buffers.save_current_restriction_state() {
+                            eval.specpdl
+                                .push(super::eval::SpecBinding::save_restriction(state));
+                        }
+                        Some(end)
+                    }
+                    BufferReadRegion::WholeAccessible => None,
+                };
 
-                let (accessible_start, start_byte, end_byte) = {
+                let end_byte = {
                     let buffer = eval.buffers.get(buffer_id).ok_or_else(|| {
                         signal("error", vec![Value::string("Reading from killed buffer")])
                     })?;
-                    (
-                        buffer.accessible_emacs_byte_region().start(),
-                        buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(next_start)),
-                        buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(end)),
-                    )
+                    match end {
+                        Some(end) => {
+                            buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(end))
+                        }
+                        None => buffer.accessible_emacs_byte_region().end(),
+                    }
                 };
+                if let BufferReadRegion::Bounded { .. } = region {
+                    let (accessible_start, start_byte) = {
+                        let buffer = eval
+                            .buffers
+                            .get(buffer_id)
+                            .expect("buffer checked live above");
+                        (
+                            buffer.accessible_emacs_byte_region().start(),
+                            buffer.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(
+                                next_start,
+                            )),
+                        )
+                    };
+                    let buffer = eval
+                        .buffers
+                        .get_mut(buffer_id)
+                        .expect("buffer checked live");
+                    buffer.narrow_to_emacs_byte_range(EmacsByteRange::new(
+                        accessible_start,
+                        end_byte,
+                    ));
+                    buffer.goto_emacs_byte_pos(start_byte);
+                }
+
                 let buffer = eval.buffers.get_mut(buffer_id).ok_or_else(|| {
                     signal("error", vec![Value::string("Reading from killed buffer")])
                 })?;
-                buffer.narrow_to_emacs_byte_range(EmacsByteRange::new(accessible_start, end_byte));
-                buffer.goto_emacs_byte_pos(start_byte);
+                if !skip_to_next_form_in_buffer(buffer, end_byte) {
+                    return Ok(None);
+                }
+                let form_start = buffer.point_lisp_char_pos().as_i64();
 
                 let form = eval.funcall_general(read_function, vec![buffer_value])?;
                 let after_read = eval
@@ -529,19 +715,26 @@ fn eval_region_with_read_function(
                     })?
                     .point_lisp_char_pos()
                     .as_i64();
-                Ok((form, after_read, after_read >= end))
+                if after_read <= form_start {
+                    return Err(signal(
+                        "error",
+                        vec![Value::string(
+                            "eval-region read function did not advance the input stream",
+                        )],
+                    ));
+                }
+                Ok(Some((form, after_read)))
             })();
-            eval.unbind_to(iteration_specpdl);
 
-            let (form, after_read, reached_end) = read_result?;
-            if after_read <= next_start {
-                return Err(signal(
-                    "error",
-                    vec![Value::string(
-                        "eval-region read function did not advance the input stream",
-                    )],
-                ));
+            // `Bounded' unwinds the excursion/restriction it recorded above; the
+            // reader's advanced point survives in `after_read'.
+            if let BufferReadRegion::Bounded { .. } = region {
+                eval.unbind_to(iteration_specpdl);
             }
+
+            let Some((form, after_read)) = read_result? else {
+                return Ok(Value::NIL);
+            };
             next_start = after_read;
 
             let form_roots = eval.save_specpdl_roots();
@@ -549,12 +742,10 @@ fn eval_region_with_read_function(
             let eval_result = eval.eval_value(&form);
             eval.restore_specpdl_roots(form_roots);
             eval_result?;
-            if reached_end {
-                return Ok(Value::NIL);
-            }
         }
     })();
 
+    eval.unbind_to(outer_specpdl);
     eval.restore_specpdl_roots(gc_roots);
     result
 }

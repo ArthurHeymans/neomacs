@@ -4813,3 +4813,57 @@ runtime read, so no path through `read-from-minibuffer`, `read-string`,
 GNU invariants that are applied once above dispatch.
 
 Status: FIXED.
+
+## 94. `eval-buffer` never consulted `load-read-function`, so Edebug never instrumented -- FIXED
+
+All five Undercover coverage workflows report zero coverage.  Undercover
+instruments through Edebug, and Edebug never ran: with `edebug-all-defs` bound
+to t, defining a function left no `edebug` property and no `edebug-*` call in
+the stored body at all.  Instrumentation did not happen differently -- it did
+not happen.
+
+```elisp
+(require 'edebug)
+(with-temp-buffer
+  (insert "(defun probe-fn (x) (+ x 1))\n")
+  (let ((edebug-all-defs t)) (eval-buffer)))
+(list (and (get 'probe-fn 'edebug) t)
+      (and (string-match-p "edebug-after" (format "%S" (symbol-function 'probe-fn))) t))
+;; GNU                => (t t)      ; and it prints "Edebug: probe-fn"
+;; Neomacs before fix => (nil nil)
+```
+
+Edebug does not hook `defun`, `eval-defun` or macroexpansion for this.  It
+replaces the *reader*: `edebug-install-read-eval-functions` runs
+`(add-function :around load-read-function #'edebug--read)`
+(`lisp/emacs-lisp/edebug.el:556`), unconditionally when edebug.el loads
+(`edebug.el:4632`).  GNU's `readevalloop` reads every top-level form through
+that variable --
+
+```c
+	  else if (! NILP (Vload_read_function))
+	    val = calln (Vload_read_function, readcharfun);   /* src/lread.c:2317 */
+```
+
+-- and `edebug--read` instruments only when the stream it is handed is the
+current buffer (`edebug.el:457`), which is why `eval-buffer` instruments and
+`load` of a file does not: `Feval_buffer` passes the BUFFER as readcharfun
+(`src/lread.c:2417`), while loading a file passes `get-file-char`.  Undercover
+picks the instrumenting one on purpose, through a `file-name-handler-alist`
+entry: `(let ((edebug-all-defs t) ...) (eval-buffer (find-file file)))`.
+
+Neomacs's `load` already consulted the hook; `eval-buffer` and `eval-region`
+did not.  They lifted the buffer's text and read it internally, so the hook was
+never called and `edebug-all-defs` silently did nothing.
+
+The fix makes our readevalloop consult the hook GNU consults -- no Edebug
+behaviour is written in Rust; edebug.el is loaded as Lisp and does the
+instrumenting.  Which function reads a form is now one type resolved once from
+GNU's precedence (explicit READ-FUNCTION, then `load-read-function`, then the
+internal reader), and the two shapes GNU's loop takes over a buffer are a
+second type: `eval-buffer` reads from the buffer's own point, `eval-region`
+records an excursion and narrows around every read.  Both skip whitespace and
+comments before invoking the reader, as GNU does (`src/lread.c:2272-2288`), so
+a trailing newline no longer provokes an extra end-of-file read.
+
+Status: FIXED.
