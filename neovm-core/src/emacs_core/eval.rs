@@ -13052,14 +13052,15 @@ impl Context {
         args_start: usize,
         nargs: usize,
     ) {
-        let args = match nargs {
-            0 => BacktraceArgs::Evaluated0,
-            1 => BacktraceArgs::Evaluated1(self.bc_buf[args_start]),
-            2 => BacktraceArgs::Evaluated2(self.bc_buf[args_start], self.bc_buf[args_start + 1]),
-            _ => BacktraceArgs::EvaluatedBcStack {
-                start: args_start,
-                len: nargs,
-            },
+        debug_assert!(
+            args_start
+                .checked_add(nargs)
+                .is_some_and(|end| end <= self.bc_buf.len()),
+            "bytecode backtrace arguments must be a live caller-stack span"
+        );
+        let args = BacktraceArgs::EvaluatedBcStack {
+            start: args_start,
+            len: nargs,
         };
         self.specpdl.push(SpecBinding::Backtrace {
             function,
@@ -13718,10 +13719,7 @@ impl Context {
                 && matches!(
                     self.specpdl.last(),
                     Some(SpecBinding::Backtrace {
-                        args: BacktraceArgs::Evaluated0
-                            | BacktraceArgs::Evaluated1(_)
-                            | BacktraceArgs::Evaluated2(_, _)
-                            | BacktraceArgs::EvaluatedBcStack { .. },
+                        args: BacktraceArgs::EvaluatedBcStack { .. },
                         debug_on_exit: false,
                         ..
                     })

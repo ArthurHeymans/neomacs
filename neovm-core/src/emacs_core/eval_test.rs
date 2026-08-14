@@ -22533,6 +22533,41 @@ fn render_uncaught_signal_backtrace_lists_live_frames_innermost_first() {
     assert!(truncated.contains("..."), "truncation marker: {truncated}");
 }
 
+#[test]
+fn bytecode_backtraces_reference_the_live_caller_stack_for_every_arity() {
+    let mut ev = Context::new();
+
+    for nargs in 0..=3 {
+        let args_start = ev.bc_buf.len();
+        ev.bc_buf
+            .extend((0..nargs).map(|arg| Value::fixnum(arg as i64 + 10)));
+        let backtrace_base = ev.specpdl.len();
+        ev.push_backtrace_frame_from_bc_stack(Value::symbol("callee"), args_start, nargs);
+
+        let args = match ev.specpdl.last() {
+            Some(SpecBinding::Backtrace { args, .. }) => args,
+            other => panic!("expected bytecode backtrace frame, got {other:?}"),
+        };
+        assert!(
+            matches!(
+                args,
+                BacktraceArgs::EvaluatedBcStack { start, len }
+                    if *start == args_start && *len == nargs
+            ),
+            "GNU Bcall keeps every arity as a pointer into the live caller stack: {args:?}"
+        );
+        assert_eq!(
+            ev.backtrace_args_values(args),
+            (0..nargs)
+                .map(|arg| Value::fixnum(arg as i64 + 10))
+                .collect::<LispArgVec>()
+        );
+
+        ev.pop_fast_bytecode_backtrace_frame(backtrace_base);
+        ev.bc_buf.truncate(args_start);
+    }
+}
+
 /// GNU's `union specbinding` is 32 bytes on the supported 64-bit Unix build.
 /// Neomacs needs a little more room for its typed inline two-argument
 /// backtrace representation, but cold unwind payloads must not inflate every
