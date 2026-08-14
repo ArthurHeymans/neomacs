@@ -712,6 +712,18 @@ pub(crate) enum FunctionCellSnapshot {
     Bound(Value),
 }
 
+/// One logical read of a symbol's property-list state for lookup.
+///
+/// GNU's `plist_get` immediately returns nil for nil and malformed non-cons
+/// plists.  Representing that terminal state explicitly lets hot `get` callers
+/// avoid entering the general cycle-safe list walker while preserving the
+/// verbatim value exposed by `symbol-plist`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SymbolPlistSnapshot {
+    NoEntries,
+    Entries(Value),
+}
+
 /// See [`Obarray::completion_order_cache`].
 struct CompletionOrderCache {
     members_epoch: u64,
@@ -2697,8 +2709,12 @@ impl Obarray {
 
     /// Get a property from the symbol's plist by identity.
     pub fn get_property_id(&self, symbol: SymId, prop: SymId) -> Option<Value> {
-        let sym = self.slot(symbol)?;
-        crate::emacs_core::plist::plist_get(sym.plist, &Value::from_sym_id(prop))
+        match self.symbol_plist_snapshot_id(symbol) {
+            SymbolPlistSnapshot::NoEntries => None,
+            SymbolPlistSnapshot::Entries(plist) => {
+                crate::emacs_core::plist::plist_get(plist, &Value::from_sym_id(prop))
+            }
+        }
     }
 
     /// Set a property on the symbol's plist.
@@ -2781,6 +2797,18 @@ impl Obarray {
     /// Get the symbol's full plist as a flat list by identity.
     pub fn symbol_plist_id(&self, id: SymId) -> Value {
         self.slot(id).map(|s| s.plist).unwrap_or(Value::NIL)
+    }
+
+    /// Snapshot the states relevant to property lookup in one symbol-slot read.
+    ///
+    /// `setplist` accepts arbitrary Lisp objects.  A non-cons value therefore
+    /// means the same thing as nil to GNU's `plist_get`, even though
+    /// [`Self::symbol_plist_id`] must continue returning it verbatim.
+    pub(crate) fn symbol_plist_snapshot_id(&self, id: SymId) -> SymbolPlistSnapshot {
+        match self.slot(id).map(|symbol| symbol.plist) {
+            Some(plist) if plist.is_cons() => SymbolPlistSnapshot::Entries(plist),
+            _ => SymbolPlistSnapshot::NoEntries,
+        }
     }
 
     /// Mark a symbol as special (dynamically bound).

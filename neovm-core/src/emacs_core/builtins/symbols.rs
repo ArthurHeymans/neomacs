@@ -12,7 +12,7 @@ use crate::emacs_core::fontset;
 use crate::emacs_core::indent;
 use crate::emacs_core::intern::{NIL_SYM_ID, T_SYM_ID, intern, is_canonical_id};
 use crate::emacs_core::minibuffer;
-use crate::emacs_core::symbol::{FunctionCellSnapshot, Obarray};
+use crate::emacs_core::symbol::{FunctionCellSnapshot, Obarray, SymbolPlistSnapshot};
 use crate::window::{DisplayRowSnapshot, WindowDisplaySnapshot, WindowId};
 use malachite::integer::Integer;
 use std::collections::VecDeque;
@@ -941,11 +941,13 @@ pub(crate) fn symbol_property_get(
         return Ok((sym, Some(propval)));
     }
 
-    let plist = eval.obarray().symbol_plist_id(sym);
-    Ok((
-        sym,
-        crate::emacs_core::plist::plist_get_swp(plist, &prop, symbols_with_pos_enabled),
-    ))
+    let property = match eval.obarray().symbol_plist_snapshot_id(sym) {
+        SymbolPlistSnapshot::NoEntries => None,
+        SymbolPlistSnapshot::Entries(plist) => {
+            crate::emacs_core::plist::plist_get_swp(plist, &prop, symbols_with_pos_enabled)
+        }
+    };
+    Ok((sym, property))
 }
 
 pub(crate) fn builtin_put(

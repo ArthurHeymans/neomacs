@@ -14,6 +14,7 @@ use crate::emacs_core::value::{Value, eq_value, eq_value_swp};
 #[cfg(test)]
 thread_local! {
     static SYMBOL_WITH_POS_PLIST_COMPARISONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static PLIST_GET_WALKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -29,6 +30,21 @@ pub(crate) fn reset_symbol_with_pos_plist_comparisons() {
 #[cfg(test)]
 pub(crate) fn symbol_with_pos_plist_comparisons() -> usize {
     SYMBOL_WITH_POS_PLIST_COMPARISONS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn note_plist_get_walk() {
+    PLIST_GET_WALKS.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(test)]
+pub(crate) fn reset_plist_get_walks() {
+    PLIST_GET_WALKS.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn plist_get_walks() -> usize {
+    PLIST_GET_WALKS.with(std::cell::Cell::get)
 }
 
 /// Compile-time key-comparison policy for a plist walk.
@@ -126,6 +142,8 @@ pub fn plist_get_swp(plist: Value, prop: &Value, symbols_with_pos_enabled: bool)
 
 #[inline]
 fn plist_get_with<Comparison: PlistKeyComparison>(plist: Value, prop: &Value) -> Option<Value> {
+    #[cfg(test)]
+    note_plist_get_walk();
     let mut tail = plist;
     let mut safe_tail = SafeTailGuard::new(tail);
     while tail.is_cons() {

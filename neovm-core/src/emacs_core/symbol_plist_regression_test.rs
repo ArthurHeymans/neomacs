@@ -47,6 +47,39 @@ fn plist_get_missing_returns_nil() {
 }
 
 #[test]
+fn get_does_not_enter_the_plist_walker_when_a_symbol_has_no_entries() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = make_ctx();
+
+    crate::emacs_core::plist::reset_plist_get_walks();
+    assert_eq!(eval(&mut ctx, "(get 'plist-empty 'missing)"), Value::NIL);
+    assert_eq!(
+        crate::emacs_core::plist::plist_get_walks(),
+        0,
+        "an empty symbol plist should be classified before entering the general cyclic-list walker"
+    );
+}
+
+#[test]
+fn get_skips_non_cons_symbol_plists_without_hiding_the_verbatim_value() {
+    crate::test_utils::init_test_tracing();
+    let mut ctx = make_ctx();
+    eval(&mut ctx, "(setplist 'plist-malformed 42)");
+
+    crate::emacs_core::plist::reset_plist_get_walks();
+    assert_eq!(
+        eval(&mut ctx, "(get 'plist-malformed 'missing)"),
+        Value::NIL
+    );
+    assert_eq!(crate::emacs_core::plist::plist_get_walks(), 0);
+    assert_eq!(
+        eval(&mut ctx, "(symbol-plist 'plist-malformed)"),
+        Value::fixnum(42),
+        "setplist's verbatim non-cons value remains Lisp-visible"
+    );
+}
+
+#[test]
 fn ordinary_plist_get_does_not_enter_symbol_with_position_comparison_loop() {
     crate::test_utils::init_test_tracing();
     let plist = Value::list(vec![
