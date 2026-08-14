@@ -2970,6 +2970,12 @@ pub const ECUKES_MELPA_PIN: (&str, &str) = ("ecukes", "20241226.1759");
 /// `57c18a48f1a01d8174298eaab4fcf3b2c6549291`.
 pub const ESPUDS_MELPA_PIN: (&str, &str) = ("espuds", "20230218.910");
 
+/// The exact esxml package selected for practical esxml/sxml rendering,
+/// local document parsing, CSS-selector query, and invalid-form recovery
+/// parity. MELPA built this archive from upstream commit
+/// `35940903049f05858d2519c9d8316d00bc228953`.
+pub const ESXML_MELPA_PIN: (&str, &str) = ("esxml", "20260329.1617");
+
 /// The exact Google Translate package selected by the practical request,
 /// response, dictionary, suggestion, speech, language-selection, editing, and
 /// backend-dispatch parity corpus. MELPA built this archive from upstream

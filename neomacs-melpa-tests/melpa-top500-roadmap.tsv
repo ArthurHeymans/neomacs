@@ -426,7 +426,7 @@ rank	package	downloads	status
 425	bash-completion	211889	covered
 426	transpose-frame	211127	covered
 427	fish-mode	210971	covered
-428	esxml	210812	todo
+428	esxml	210812	covered
 429	rake	210119	todo
 430	key-chord	209552	todo
 431	docker-tramp	207451	todo
