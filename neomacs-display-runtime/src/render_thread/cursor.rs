@@ -155,12 +155,13 @@ impl CursorState {
     pub(super) fn apply_visual_config(&mut self, config: &VisualConfig) {
         self.blink_enabled = config.cursor_blink.enabled;
         self.blink_interval = config.cursor_blink.interval;
-        self.anim_enabled = config.cursor_motion.enabled;
+        self.anim_enabled = config.cursor_motion.enabled && !config.motion.is_reduced();
         self.anim_speed = config.cursor_motion.speed;
         self.anim_style = config.cursor_motion.style;
         self.anim_duration = config.cursor_motion.duration.as_secs_f32();
         self.trail_size = config.cursor_motion.trail_size;
-        self.size_transition_enabled = config.cursor_size_transition.enabled;
+        self.size_transition_enabled =
+            config.cursor_size_transition.enabled && !config.motion.is_reduced();
         self.size_transition_duration = config.cursor_size_transition.duration.as_secs_f32();
         if !self.anim_enabled {
             self.animating = false;

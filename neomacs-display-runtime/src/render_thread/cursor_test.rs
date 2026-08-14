@@ -1626,3 +1626,31 @@ fn spring_tick_is_time_invariant_under_frame_drops() {
         );
     }
 }
+
+#[test]
+fn reduced_motion_snaps_cursor_motion_and_size_transitions() {
+    use neomacs_display_protocol::{MotionPolicy, VisualConfig};
+    let mut config = VisualConfig::default();
+    config.cursor_motion.enabled = true;
+    config.cursor_size_transition.enabled = true;
+
+    let mut state = CursorState::default();
+    state.apply_visual_config(&config);
+    assert!(state.anim_enabled, "Full policy keeps cursor motion on");
+    assert!(state.size_transition_enabled);
+
+    config.motion = MotionPolicy::Reduced;
+    state.apply_visual_config(&config);
+    assert!(
+        !state.anim_enabled,
+        "Reduced motion must snap cursor position changes"
+    );
+    assert!(
+        !state.size_transition_enabled,
+        "Reduced motion must snap cursor size changes"
+    );
+    assert!(
+        state.blink_enabled,
+        "blinking is state signaling, not motion"
+    );
+}

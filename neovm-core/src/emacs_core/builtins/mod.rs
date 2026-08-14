@@ -7025,6 +7025,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr(
+        "neomacs-motion-policy",
+        effects::builtin_neomacs_motion_policy,
+        0,
+        Some(1),
+    );
+    ctx.defsubr(
         "neomacs-effects-apply",
         effects::builtin_neomacs_effects_apply,
         1,

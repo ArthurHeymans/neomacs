@@ -5,7 +5,7 @@ use crate::emacs_core::effect_profile::{
     EffectScope, effect_name_from_lisp, effect_operations_from_lisp, effect_set_operation_from_lisp,
 };
 use crate::emacs_core::error::{expect_args, expect_args_range, expect_min_args};
-use neomacs_display_protocol::{EffectOperation, EffectValue, VisualConfig};
+use neomacs_display_protocol::{EffectOperation, EffectValue, MotionPolicy, VisualConfig};
 
 fn effect_error(function: &str, message: impl std::fmt::Display) -> Flow {
     signal(
@@ -67,6 +67,43 @@ pub(crate) fn builtin_neomacs_effect_get(
         result.push(value_to_lisp(value));
     }
     Ok(Value::list(result))
+}
+
+/// Set or query the accessibility motion policy.
+///
+/// (neomacs-motion-policy) returns the current policy symbol; with 'full or
+/// 'reduced it publishes a new policy, and the render thread gates cursor
+/// motion, size transitions, buffer transitions, and every effect with an
+/// enabled property accordingly.
+pub(crate) fn builtin_neomacs_motion_policy(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_args_range("neomacs-motion-policy", &args, 0, 1)?;
+    let current = eval.visual_config.motion;
+    let Some(arg) = args.first() else {
+        return Ok(Value::symbol(match current {
+            MotionPolicy::Full => "full",
+            MotionPolicy::Reduced => "reduced",
+        }));
+    };
+    let policy = match arg.as_symbol_name() {
+        Some("full") => MotionPolicy::Full,
+        Some("reduced") => MotionPolicy::Reduced,
+        _ => {
+            return Err(effect_error(
+                "neomacs-motion-policy",
+                "expected 'full or 'reduced",
+            ));
+        }
+    };
+    let mut updated = eval.visual_config.clone();
+    updated.motion = policy;
+    publish_visual_config(eval, "neomacs-motion-policy", updated)?;
+    Ok(Value::symbol(match current {
+        MotionPolicy::Full => "full",
+        MotionPolicy::Reduced => "reduced",
+    }))
 }
 
 pub(crate) fn builtin_neomacs_effect_reset(

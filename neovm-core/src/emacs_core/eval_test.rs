@@ -22485,3 +22485,40 @@ fn command_loop_exit_classifies_thrown_value_by_type_like_gnu() {
         "a thrown function must be called, not collapsed into a plain quit"
     );
 }
+
+#[test]
+fn neomacs_motion_policy_sets_queries_and_reaches_the_host() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let visual_calls = Rc::new(RefCell::new(Vec::new()));
+    ev.set_display_host(Box::new(VisualConfigRecordingDisplayHost {
+        visual_calls: Rc::clone(&visual_calls),
+    }));
+    visual_calls.borrow_mut().clear();
+
+    // Query with no argument.
+    let value = ev.eval_str("(neomacs-motion-policy)").expect("query");
+    assert_eq!(value.as_symbol_name(), Some("full"));
+
+    // Set reduced; the previous policy is returned.
+    let value = ev
+        .eval_str("(neomacs-motion-policy 'reduced)")
+        .expect("set reduced");
+    assert_eq!(value.as_symbol_name(), Some("full"));
+
+    // The published snapshot carries the policy and reached the host.
+    let calls = visual_calls.borrow();
+    assert_eq!(calls.len(), 1, "one visual-config publication");
+    assert_eq!(
+        calls[0].motion,
+        neomacs_display_protocol::MotionPolicy::Reduced
+    );
+
+    // Query reflects the new policy.
+    let value = ev.eval_str("(neomacs-motion-policy)").expect("query");
+    assert_eq!(value.as_symbol_name(), Some("reduced"));
+
+    // Invalid argument signals.
+    let err = ev.eval_str("(neomacs-motion-policy 'warp)");
+    assert!(err.is_err(), "invalid policy must signal");
+}

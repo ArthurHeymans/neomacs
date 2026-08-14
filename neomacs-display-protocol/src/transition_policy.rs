@@ -27,9 +27,17 @@ impl Default for TransitionPolicy {
 
 impl From<&VisualConfig> for TransitionPolicy {
     fn from(config: &VisualConfig) -> Self {
+        // Reduced motion cuts between buffer states instead of animating.
+        let motion_allowed = !config.motion.is_reduced();
         Self {
-            crossfade: config.crossfade_transition,
-            scroll: config.scroll_transition,
+            crossfade: WindowTransitionConfig {
+                enabled: config.crossfade_transition.enabled && motion_allowed,
+                ..config.crossfade_transition
+            },
+            scroll: WindowTransitionConfig {
+                enabled: config.scroll_transition.enabled && motion_allowed,
+                ..config.scroll_transition
+            },
         }
     }
 }

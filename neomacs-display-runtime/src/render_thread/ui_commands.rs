@@ -237,7 +237,7 @@ impl RenderApp {
                 self.transition_policy = neomacs_display_protocol::TransitionPolicy::from(&config);
                 self.frame_windows
                     .apply_top_level_transition_policy(self.transition_policy);
-                self.effects = config.effects;
+                self.effects = config.effects.with_motion_policy(config.motion);
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.effects = self.effects.clone();
                 }

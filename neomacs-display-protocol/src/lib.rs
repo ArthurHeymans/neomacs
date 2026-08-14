@@ -69,6 +69,10 @@ mod popup_placement_test;
 mod geometry_test;
 
 #[cfg(test)]
+#[path = "transition_policy_test.rs"]
+mod transition_policy_test;
+
+#[cfg(test)]
 #[path = "present_mapping_test.rs"]
 mod present_mapping_test;
 
