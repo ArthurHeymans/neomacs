@@ -17,7 +17,7 @@ use crate::heap_types::LispString;
 
 use super::error::{EvalResult, Flow, signal};
 use super::hashtab::hash_key_to_visible_value;
-use super::intern::{SymId, resolve_sym};
+use super::intern::{NIL_SYM_ID, SymId, T_SYM_ID, resolve_sym};
 use super::reader::{KeyboardInputRuntime, MinibufferInputSource};
 use super::symbol::Obarray;
 use super::value::{Value, ValueKind, VecLikeType};
@@ -1801,83 +1801,70 @@ enum CompletionText {
     /// An exact GC-owned Lisp string. This covers literal collection entries
     /// and Lisp-created symbol names; both must preserve object identity,
     /// mutation, text properties, and multibyteness like GNU.
-    LispObject {
-        value: Value,
-        string: crate::heap_types::LispString,
-    },
+    LispObject(Value),
     /// Process-lifetime atom for a symbol that genuinely has no Lisp name
     /// object. Kept as a thin reference so ordinary obarray candidates stay
     /// compact.
     Atom(&'static crate::heap_types::LispString),
-    Generated {
-        string: crate::heap_types::LispString,
-    },
 }
 
 impl CompletionText {
     fn lisp_string(&self) -> &crate::heap_types::LispString {
         match self {
-            Self::LispObject { string, .. } | Self::Generated { string } => string,
+            Self::LispObject(value) => value
+                .as_lisp_string()
+                .expect("a rooted completion string remains a string"),
             Self::Atom(string) => string,
         }
     }
 
     fn as_result_value(&self) -> Value {
         match self {
-            Self::LispObject { value, .. } => *value,
+            Self::LispObject(value) => *value,
             Self::Atom(string) => Value::heap_string((*string).clone()),
-            Self::Generated { string } => Value::heap_string(string.clone()),
         }
     }
 
     fn substring_value(&self, end_chars: usize) -> Value {
-        match self {
-            Self::LispObject { value, string } if end_chars >= string.schars() => *value,
-            _ => {
-                let string = self.lisp_string();
-                let end_chars = end_chars.min(string.schars());
-                let end_byte = if string.is_multibyte() {
-                    crate::emacs_core::emacs_char::char_to_byte_pos(string.as_bytes(), end_chars)
-                } else {
-                    end_chars.min(string.byte_len())
-                };
-                let sliced = string
-                    .slice(0, end_byte)
-                    .expect("validated completion prefix slice");
-                Value::heap_string(sliced)
-            }
+        let string = self.lisp_string();
+        if let Self::LispObject(value) = self
+            && end_chars >= string.schars()
+        {
+            return *value;
         }
+
+        let end_chars = end_chars.min(string.schars());
+        let end_byte = if string.is_multibyte() {
+            crate::emacs_core::emacs_char::char_to_byte_pos(string.as_bytes(), end_chars)
+        } else {
+            end_chars.min(string.byte_len())
+        };
+        let sliced = string
+            .slice(0, end_byte)
+            .expect("validated completion prefix slice");
+        Value::heap_string(sliced)
     }
 
     fn searched_string(&self) -> super::regex::SearchedString {
         match self {
-            Self::LispObject { value, .. } => super::regex::SearchedString::Heap(*value),
+            Self::LispObject(value) => super::regex::SearchedString::Heap(*value),
             Self::Atom(string) => super::regex::SearchedString::Owned((*string).clone()),
-            Self::Generated { string } => super::regex::SearchedString::Owned(string.clone()),
         }
     }
 }
 
 fn completion_text_from_value(value: &Value) -> Option<CompletionText> {
     match value.kind() {
-        ValueKind::String => {
-            value
-                .as_lisp_string()
-                .cloned()
-                .map(|string| CompletionText::LispObject {
-                    value: *value,
-                    string,
-                })
-        }
+        ValueKind::String => Some(CompletionText::LispObject(*value)),
         ValueKind::Symbol(id) => Some(completion_text_from_symbol_name(
             crate::emacs_core::intern::resolve_lisp_visible_symbol_name(id),
         )),
-        ValueKind::Nil => Some(CompletionText::Generated {
-            string: crate::heap_types::LispString::from_utf8("nil"),
-        }),
-        ValueKind::T => Some(CompletionText::Generated {
-            string: crate::heap_types::LispString::from_utf8("t"),
-        }),
+        ValueKind::Nil => Some(completion_text_from_symbol_name(
+            crate::emacs_core::intern::resolve_lisp_visible_symbol_name(NIL_SYM_ID),
+        )),
+        ValueKind::T => Some(completion_text_from_symbol_name(
+            crate::emacs_core::intern::resolve_lisp_visible_symbol_name(T_SYM_ID),
+        )),
         _ => None,
     }
 }
@@ -1886,8 +1873,8 @@ fn completion_text_from_symbol_name(
     name: crate::emacs_core::intern::LispVisibleSymbolName,
 ) -> CompletionText {
     match name {
-        crate::emacs_core::intern::LispVisibleSymbolName::LispObject { value, string } => {
-            CompletionText::LispObject { value, string }
+        crate::emacs_core::intern::LispVisibleSymbolName::LispObject(value) => {
+            CompletionText::LispObject(value)
         }
         crate::emacs_core::intern::LispVisibleSymbolName::Atom(string) => {
             CompletionText::Atom(string)
@@ -2585,7 +2572,7 @@ fn completion_string_matches_regexps(
 fn completion_candidates_root_holder(candidates: &[CompletionCandidate]) -> Value {
     let mut holder = Value::NIL;
     for candidate in candidates.iter().rev() {
-        if let CompletionText::LispObject { value, .. } = &candidate.completion {
+        if let CompletionText::LispObject(value) = &candidate.completion {
             holder = Value::cons(*value, holder);
         }
         if candidate.predicate_arg.is_heap_object() {

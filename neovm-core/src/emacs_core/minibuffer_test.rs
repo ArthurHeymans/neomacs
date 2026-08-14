@@ -1715,6 +1715,15 @@ fn global_obarray_completion_has_no_pre_candidate_staging_collections() {
     );
 }
 
+#[test]
+fn completion_candidate_keeps_the_global_obarray_scan_compact() {
+    assert!(
+        std::mem::size_of::<CompletionCandidate>() <= 5 * std::mem::size_of::<usize>(),
+        "completion candidates should carry compact ownership handles, not inline LispString payloads; got {} bytes",
+        std::mem::size_of::<CompletionCandidate>()
+    );
+}
+
 /// GNU keeps these hot completion controls in predeclared
 /// `completion_ignore_case` / `Vcompletion_regexp_list` C state. Reading them
 /// for every TAB must use their cached symbol identities rather than returning

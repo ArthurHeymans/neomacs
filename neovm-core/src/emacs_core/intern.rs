@@ -367,10 +367,7 @@ enum NewSymbolName {
 /// object.
 #[derive(Clone)]
 pub(crate) enum LispVisibleSymbolName {
-    LispObject {
-        value: TaggedValue,
-        string: LispString,
-    },
+    LispObject(TaggedValue),
     Atom(&'static LispString),
 }
 
@@ -575,11 +572,11 @@ impl SymbolRegistry {
     #[inline]
     fn resolve_lisp_visible_name(&self, id: SymId) -> LispVisibleSymbolName {
         if let Some(value) = self.resolve_name_value(id) {
-            let string = value
-                .as_lisp_string()
-                .expect("a registered symbol name object remains a string")
-                .clone();
-            LispVisibleSymbolName::LispObject { value, string }
+            debug_assert!(
+                value.is_string(),
+                "a registered symbol name object remains a string"
+            );
+            LispVisibleSymbolName::LispObject(value)
         } else {
             LispVisibleSymbolName::Atom(self.resolve_lisp_string(id))
         }
@@ -1072,8 +1069,9 @@ pub(crate) fn resolve_lisp_visible_symbol_name(id: SymId) -> LispVisibleSymbolNa
 /// global lock acquisition per candidate. Keeping the lock inside this batch
 /// boundary gives Neomacs the same O(1)-lock scan shape.  The mapper writes
 /// directly into the caller's final collection, so no parallel full-obarray
-/// name collection is required.  `LispVisibleSymbolName` remains owned because
-/// completion predicates may run Lisp and GC after this lock is released.
+/// name collection is required. `LispVisibleSymbolName` carries either a
+/// process-lifetime atom or the exact rooted Lisp value, never a reference into
+/// the registry lock.
 pub(crate) fn map_lisp_visible_symbol_names<T>(
     ids: &[SymId],
     mut map: impl FnMut(SymId, LispVisibleSymbolName) -> T,
