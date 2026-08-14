@@ -330,6 +330,7 @@ mod diminish;
 mod dired_quick_sort;
 mod distel_completion_lib;
 mod docker;
+mod docker_tramp;
 mod dockerfile_mode;
 mod doom_modeline;
 mod doom_themes;

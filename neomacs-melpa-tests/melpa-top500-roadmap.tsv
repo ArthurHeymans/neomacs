@@ -429,7 +429,7 @@ rank	package	downloads	status
 428	esxml	210812	covered
 429	rake	210119	covered
 430	key-chord	209552	covered
-431	docker-tramp	207451	todo
+431	docker-tramp	207451	covered
 432	a	207106	covered
 433	rtags	206955	covered
 434	go-eldoc	206860	todo

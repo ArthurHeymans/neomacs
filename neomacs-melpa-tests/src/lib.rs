@@ -3732,6 +3732,12 @@ pub const DOCKERFILE_MODE_MELPA_PIN: (&str, &str) = ("dockerfile-mode", "2025122
 /// `8a51aee19a7931bc16aa63cf076b109cdd6a1c62`.
 pub const DOCKER_MELPA_PIN: (&str, &str) = ("docker", "20260803.930");
 
+/// The exact docker-tramp package selected for practical docker TRAMP
+/// method registration, running-container completion, cache cleanup, and
+/// modern-tramp compat no-op parity. MELPA built this archive from
+/// upstream commit `19d0771db4e6b89e19c00af5806438e315779c15`.
+pub const DOCKER_TRAMP_MELPA_PIN: (&str, &str) = ("docker-tramp", "20230809.511");
+
 /// The exact Doom Modeline package selected for practical file-buffer,
 /// state-transition, selection, encoding, extension, layout, and global-mode
 /// lifecycle parity. MELPA built this archive from upstream commit
