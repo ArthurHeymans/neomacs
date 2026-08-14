@@ -331,9 +331,7 @@ fn resolve_step<R: LineEndFaceResolver>(
             let face_id = match face {
                 AppendedGlyphFace::NewlineFace => ctx.newline_face_id,
                 AppendedGlyphFace::MergedIndicator => resolver
-                    .fill_column_indicator_face_id(
-                        ctx.effective_extend().map(|extend| extend.bg),
-                    ),
+                    .fill_column_indicator_face_id(ctx.effective_extend().map(|extend| extend.bg)),
             };
             ResolvedLineEndStep::AppendGlyph {
                 ch,
