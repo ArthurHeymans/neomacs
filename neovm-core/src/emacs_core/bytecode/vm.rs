@@ -735,6 +735,66 @@ pub struct Vm<'a> {
     ctx: &'a mut crate::emacs_core::eval::Context,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FrameArgumentCopy {
+    Scalar,
+    Bulk,
+}
+
+impl FrameArgumentCopy {
+    /// GNU's bytecode `setup_frame` pushes arguments one word at a time.  That
+    /// wins for ordinary Lisp arities because a libc `memmove` dispatch costs
+    /// more than a handful of already-capacity-checked stores.  Retain the
+    /// bulk path for unusually wide generated functions.
+    const fn for_count(count: usize) -> Self {
+        const SCALAR_COPY_MAX: usize = 8;
+        if count <= SCALAR_COPY_MAX {
+            Self::Scalar
+        } else {
+            Self::Bulk
+        }
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static FRAME_ARGUMENT_COPY_COUNTS: std::cell::Cell<(usize, usize)> =
+        const { std::cell::Cell::new((0, 0)) };
+}
+
+#[cfg(test)]
+fn reset_frame_argument_copy_counts() {
+    FRAME_ARGUMENT_COPY_COUNTS.set((0, 0));
+}
+
+#[cfg(test)]
+fn frame_argument_copy_counts() -> (usize, usize) {
+    FRAME_ARGUMENT_COPY_COUNTS.get()
+}
+
+fn copy_frame_arguments(buffer: &mut Vec<Value>, args_start: usize, copied: usize) {
+    let strategy = FrameArgumentCopy::for_count(copied);
+    #[cfg(test)]
+    FRAME_ARGUMENT_COPY_COUNTS.with(|counts| {
+        let (scalar, bulk) = counts.get();
+        counts.set(match strategy {
+            FrameArgumentCopy::Scalar => (scalar + 1, bulk),
+            FrameArgumentCopy::Bulk => (scalar, bulk + 1),
+        });
+    });
+    match strategy {
+        FrameArgumentCopy::Scalar => {
+            for offset in 0..copied {
+                let value = buffer[args_start + offset];
+                buffer.push(value);
+            }
+        }
+        FrameArgumentCopy::Bulk => {
+            buffer.extend_from_within(args_start..args_start + copied);
+        }
+    }
+}
+
 // Match the evaluator's coarse stack-growth policy so deeply recursive
 // bytecode/macroexpansion paths don't exhaust the native thread stack before
 // `max-lisp-eval-depth` handling can fire.
@@ -1337,9 +1397,7 @@ impl<'a> Vm<'a> {
             // The one arg copy of the call protocol (GNU setup_frame's PUSH
             // loop): caller slots -> fresh callee slots, then nil-pad the
             // missing optionals.
-            self.ctx
-                .bc_buf
-                .extend_from_within(args_start..args_start + copied);
+            copy_frame_arguments(&mut self.ctx.bc_buf, args_start, copied);
             for _ in copied..nonrest {
                 self.ctx.bc_buf.push(Value::NIL);
             }

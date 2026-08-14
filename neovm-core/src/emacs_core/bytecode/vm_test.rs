@@ -10106,6 +10106,37 @@ fn vm_gnu_arg_descriptor_preserves_optional_and_rest_slots() {
 }
 
 #[test]
+fn small_bytecode_frames_copy_arguments_without_bulk_memmove() {
+    reset_frame_argument_copy_counts();
+    let mut values = vec![Value::fixnum(1), Value::fixnum(2)];
+
+    copy_frame_arguments(&mut values, 0, 2);
+
+    assert_eq!(
+        values,
+        vec![
+            Value::fixnum(1),
+            Value::fixnum(2),
+            Value::fixnum(1),
+            Value::fixnum(2),
+        ]
+    );
+    assert_eq!(frame_argument_copy_counts(), (1, 0));
+}
+
+#[test]
+fn wide_bytecode_frames_retain_bulk_argument_copy() {
+    reset_frame_argument_copy_counts();
+    let mut values = (0..16).map(Value::fixnum).collect::<Vec<_>>();
+
+    copy_frame_arguments(&mut values, 0, 16);
+
+    assert_eq!(values.len(), 32);
+    assert_eq!(&values[..16], &values[16..]);
+    assert_eq!(frame_argument_copy_counts(), (0, 1));
+}
+
+#[test]
 fn vm_compiled_autoload_registration_updates_shared_autoload_manager() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_vm_runtime_harness();
