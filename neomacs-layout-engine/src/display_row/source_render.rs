@@ -25,7 +25,7 @@ use crate::display_row::face_state::{
 pub(crate) use crate::display_row::finalizer::RowExtendFill;
 use crate::display_row::geometry::{DisplayRowGeometryState, DisplayRowScopedValue};
 use crate::display_row::line_end::{
-    self, LineEndContext, LineEndFaceResolver, LineEndFillGeometry,
+    self, LineEndContext, LineEndExtend, LineEndFaceResolver, LineEndFillGeometry,
 };
 use crate::display_row::metrics::DisplayRowFallbackMetrics;
 use crate::display_row::render_policy::DisplayRowRenderPolicy;
@@ -1171,8 +1171,11 @@ impl<'a> TextRowSourceRenderState<'a> {
     /// Fill the current row's background from the current pen `x` to the
     /// text-area `right_edge` with the active `:extend` face (GNU
     /// `extend_face_to_end_of_line`). No-op (returns `false`) when the row is
-    /// reversed (R2L), when the fill width is non-positive, or when the extend
-    /// background equals the frame background.
+    /// reversed (R2L), when the fill width is non-positive, or when
+    /// [`line_end::extend_fill_runs`] declines — which, per GNU's
+    /// `FRAME_WINDOW_P` guard (xdisp.c:24388), can happen for an
+    /// invisible background only on a window-system row, never on a terminal
+    /// one.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn extend_face_to_end_of_line(
         &mut self,
@@ -1193,12 +1196,18 @@ impl<'a> TextRowSourceRenderState<'a> {
         if fill_px <= 0.0 {
             return false;
         }
-        let Some(&(bg, face_id)) = row_extend.value_on(row_geometry) else {
-            return false;
-        };
-        if bg == frame_background {
+        let extend = row_extend
+            .value_on(row_geometry)
+            .copied()
+            .map(|(bg, face_id)| LineEndExtend { bg, face_id });
+        // Same rule as the line-end seam, encoded once: the frame-background
+        // skip is GNU's FRAME_WINDOW_P-guarded early return (xdisp.c:24388) and
+        // never applies to a terminal row.
+        if !line_end::extend_fill_runs(self.measurement_mode(), extend, frame_background) {
             return false;
         }
+        let LineEndExtend { bg, face_id } =
+            extend.expect("extend_fill_runs returns false without an extend face");
         self.output_render
             .extend_current_row_face_to_end_of_line(RowExtendFill::new(
                 bg, face_id, fill_px, height_px, ascent_px, char_width,
