@@ -1729,12 +1729,38 @@ pub(crate) struct FormatPropSpan {
     pub arg_char_len: usize,
 }
 
+/// How one run of format-string characters becomes one run of result
+/// characters — the distinction GNU draws with its `discarded[]` table in
+/// `styled_format` (`src/editfns.c:4325-4372`).
+///
+/// GNU's property-translation scan walks the format string byte by byte and
+/// only advances `translated` for characters that are NOT discarded, with one
+/// exception: the FIRST character of a conversion specification is
+/// `discarded[] == 1`, and passing it jumps `translated` over the whole
+/// converted field.  That exception is what keeps `#("%1d:" 0 2 (face F))`
+/// from collapsing to an empty range when `%1d` becomes `3`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FormatSpanKind {
+    /// A format-string character copied through (possibly quote-translated):
+    /// one source character, one result character.
+    Literal,
+    /// `%%`: GNU discards the first `%` without any field to jump over, then
+    /// copies the second.  A property boundary between the two `%`s therefore
+    /// lands at the START of the copied character, not after it.
+    PercentEscape,
+    /// A conversion specification: every one of its characters is discarded
+    /// and the converted field replaces the lot.  Any boundary past the
+    /// spec's first character lands at the END of the field.
+    Conversion,
+}
+
 #[derive(Debug)]
 struct FormatSourceSpan {
     source_char_start: usize,
     source_char_end: usize,
     result_char_start: usize,
     result_char_end: usize,
+    kind: FormatSpanKind,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1971,6 +1997,7 @@ fn do_format(
                 source_char_end: format_char_pos,
                 result_char_start: result_char_pos,
                 result_char_end: result_char_pos + 1,
+                kind: FormatSpanKind::Literal,
             });
             result_char_pos += 1;
             continue;
@@ -1990,6 +2017,7 @@ fn do_format(
                 source_char_end: spec_source_end,
                 result_char_start: result_char_pos,
                 result_char_end: result_char_pos + 1,
+                kind: FormatSpanKind::PercentEscape,
             });
             result_char_pos += 1;
             continue;
@@ -2105,6 +2133,7 @@ fn do_format(
                 source_char_end: spec_source_end,
                 result_char_start: result_char_pos,
                 result_char_end: result_char_pos + formatted_chars,
+                kind: FormatSpanKind::Conversion,
             });
         }
         result_char_pos += formatted_chars;
@@ -2280,16 +2309,23 @@ fn translate_format_source_position(pos: usize, spans: &[FormatSourceSpan]) -> O
             return Some(span.result_char_end);
         }
         if span.source_char_start < pos && pos < span.source_char_end {
-            let source_len = span.source_char_end - span.source_char_start;
-            let result_len = span.result_char_end - span.result_char_start;
-            return Some(if source_len == result_len {
-                span.result_char_start + (pos - span.source_char_start)
-            } else {
-                // GNU's discarded-table scan maps property endpoints inside a
-                // conversion specification to the conversion field boundary.
-                // Interior spec endpoints are rare, but choosing the field
-                // start preserves the same monotonic interval translation.
-                span.result_char_start
+            // GNU's `discarded[]` scan (`src/editfns.c:4331-4372`) decides an
+            // interior endpoint by what the characters it has walked past do.
+            return Some(match span.kind {
+                // Every character of the spec is discarded, and passing the
+                // FIRST one jumps `translated` over the whole converted field
+                // (`discarded[bytepos] == 1` plus the `info[fieldn]` match).
+                // So any boundary past the leading `%` is the field's end —
+                // this is what keeps `#("%1d:" 0 2 (face F))` formatting to
+                // `#("3:" 0 1 (face F))` instead of losing the property to an
+                // empty range.
+                FormatSpanKind::Conversion => span.result_char_end,
+                // `%%` discards its leading `%` with no field to jump over,
+                // so `translated` has not moved yet when the boundary falls
+                // between the two `%`s.
+                FormatSpanKind::PercentEscape => span.result_char_start,
+                // One source character, one result character: no interior.
+                FormatSpanKind::Literal => span.result_char_start + (pos - span.source_char_start),
             });
         }
     }
