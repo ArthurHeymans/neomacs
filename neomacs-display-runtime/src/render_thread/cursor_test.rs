@@ -1518,3 +1518,111 @@ fn spring_physics_with_initial_velocity() {
         target
     );
 }
+
+// ---------------------------------------------------------------
+// Task 2 (animation best practices): cursor motion is a pure function
+// of time. Sampling one large step must equal accumulating many small
+// steps, so dropped or delayed frames cannot drift the animation.
+// ---------------------------------------------------------------
+
+#[test]
+fn exponential_tick_is_time_invariant_under_frame_drops() {
+    let mut state = CursorState::default();
+    state.anim_enabled = true;
+    state.animating = true;
+    state.anim_style = CursorAnimStyle::Exponential;
+    state.anim_speed = 8.0;
+    state.current_x = 0.0;
+    state.current_y = 0.0;
+    state.current_w = 10.0;
+    state.current_h = 10.0;
+    state.target = Some(make_target(
+        200.0,
+        100.0,
+        40.0,
+        20.0,
+        CursorStyle::FilledBox,
+    ));
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
+    state.anim_start_time = t0;
+    state.start_x = 0.0;
+    state.start_y = 0.0;
+    state.start_w = 10.0;
+    state.start_h = 10.0;
+
+    // One 100 ms step (a delayed frame) vs ten 10 ms steps.
+    let mut dropped = state.clone();
+    dropped.tick_animation(t0 + Duration::from_millis(100));
+    for i in 1..=10 {
+        state.tick_animation(t0 + Duration::from_millis(10 * i));
+    }
+
+    for (field, a, b) in [
+        ("x", dropped.current_x, state.current_x),
+        ("y", dropped.current_y, state.current_y),
+        ("w", dropped.current_w, state.current_w),
+        ("h", dropped.current_h, state.current_h),
+    ] {
+        assert!(
+            (a - b).abs() < 1e-3,
+            "exponential {field} drifted under frame drops: one-step {a} vs stepped {b}"
+        );
+    }
+}
+
+#[test]
+fn spring_tick_is_time_invariant_under_frame_drops() {
+    let mut state = CursorState::default();
+    state.anim_enabled = true;
+    state.animating = true;
+    state.anim_style = CursorAnimStyle::CriticallyDampedSpring;
+    state.anim_duration = 0.15;
+    state.current_x = 0.0;
+    state.current_y = 0.0;
+    state.current_w = 10.0;
+    state.current_h = 10.0;
+    state.target = Some(make_target(
+        300.0,
+        200.0,
+        50.0,
+        30.0,
+        CursorStyle::FilledBox,
+    ));
+    let t0 = Instant::now();
+    state.last_anim_time = t0;
+    state.anim_start_time = t0;
+    // Seed springs exactly as set_target would: current corners, at rest.
+    let corners = CursorState::target_corners(state.target.as_ref().unwrap());
+    for (spring, (x, y)) in state.corner_springs.iter_mut().zip(corners) {
+        spring.x = x;
+        spring.y = y;
+        spring.vx = 0.0;
+        spring.vy = 0.0;
+        spring.target_x = 300.0_f32.min(x + 50.0); // distinct per-corner targets below
+        spring.target_y = 200.0_f32.min(y + 30.0);
+        spring.omega = 4.0 / state.anim_duration.max(0.01);
+    }
+
+    let mut dropped = state.clone();
+    dropped.tick_animation(t0 + Duration::from_millis(100));
+    for i in 1..=10 {
+        state.tick_animation(t0 + Duration::from_millis(10 * i));
+    }
+
+    for (i, (a, b)) in dropped
+        .corner_springs
+        .iter()
+        .zip(state.corner_springs.iter())
+        .enumerate()
+    {
+        assert!(
+            (a.x - b.x).abs() < 1e-2 && (a.y - b.y).abs() < 1e-2,
+            "spring {i} drifted under frame drops: one-step ({}, {}) vs stepped ({}, {})",
+            a.x,
+            a.y,
+            b.x,
+            b.y
+        );
+    }
+}

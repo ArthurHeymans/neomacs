@@ -50,6 +50,7 @@ pub(super) struct CursorConfigSnapshot {
 /// Cursor animation, blinking, and size transition state.
 ///
 /// Extracted from RenderApp to group all cursor-related fields together.
+#[derive(Clone)]
 pub(super) struct CursorState {
     // Blink state (managed by render thread)
     pub(super) blink_on: bool,
