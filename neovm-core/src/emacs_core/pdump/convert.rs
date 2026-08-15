@@ -23,7 +23,7 @@ use crate::emacs_core::abbrev::{Abbrev, AbbrevManager, AbbrevTable};
 use crate::emacs_core::advice::{VariableWatcher, VariableWatcherList};
 use crate::emacs_core::autoload::{AutoloadEntry, AutoloadManager, AutoloadType};
 use crate::emacs_core::bookmark::{Bookmark, BookmarkManager};
-use crate::emacs_core::bytecode::chunk::{ByteCodeFunction, GnuByteOffsetMapEntry};
+use crate::emacs_core::bytecode::chunk::ByteCodeFunction;
 use crate::emacs_core::bytecode::opcode::Op;
 use crate::emacs_core::charset::{
     CharsetInfoSnapshot, CharsetMethodSnapshot, CharsetRegistrySnapshot, restore_charset_registry,
@@ -2307,9 +2307,14 @@ pub(crate) fn dump_bytecode(
     encoder: &mut DumpEncoder,
     bc: &ByteCodeFunction,
 ) -> DumpByteCodeFunction {
-    let ops = bc.executable_ops();
+    let instructions = match &bc.gnu_bytecode_bytes {
+        Some(bytes) => DumpByteCodeInstructions::Gnu(bytes.clone()),
+        None => {
+            DumpByteCodeInstructions::Decoded(bc.executable_ops().iter().map(dump_op).collect())
+        }
+    };
     DumpByteCodeFunction {
-        ops: ops.iter().map(dump_op).collect(),
+        instructions,
         constants: bc
             .constants
             .iter()
@@ -2320,12 +2325,6 @@ pub(crate) fn dump_bytecode(
         arglist: Some(encoder.dump_value(&bc.arglist)),
         lexical: bc.lexical,
         env: encoder.dump_opt_value(&bc.env),
-        gnu_byte_offset_map: bc.executable_gnu_byte_offset_map().map(|map| {
-            map.iter()
-                .map(|entry| (entry.byte_offset as u32, entry.instruction_index as u32))
-                .collect()
-        }),
-        gnu_bytecode_bytes: bc.gnu_bytecode_bytes.clone(),
         docstring: bc.docstring.as_ref().map(dump_lisp_string),
         doc_form: encoder.dump_opt_value(&bc.doc_form),
         interactive: encoder.dump_opt_value(&bc.interactive),
@@ -3975,24 +3974,19 @@ fn load_lambda_params_owned(p: DumpLambdaParams) -> LambdaParams {
     }
 }
 
-fn load_byte_offset_map<I>(pairs: I) -> Vec<GnuByteOffsetMapEntry>
-where
-    I: IntoIterator<Item = (u32, u32)>,
-{
-    let mut pairs: Vec<_> = pairs
-        .into_iter()
-        .map(|(byte_off, instr_idx)| {
-            GnuByteOffsetMapEntry::new(byte_off as usize, instr_idx as usize)
-        })
-        .collect();
-    pairs.sort_unstable_by_key(|entry| entry.byte_offset);
-    pairs
-}
-
 fn load_bytecode_owned(
     decoder: &mut LoadDecoder,
     bc: DumpByteCodeFunction,
 ) -> Result<ByteCodeFunction, DumpError> {
+    let (ops, gnu_bytecode_bytes) = match bc.instructions {
+        DumpByteCodeInstructions::Decoded(ops) => (
+            ops.into_iter()
+                .map(|op| load_op(&op))
+                .collect::<Result<Vec<_>, _>>()?,
+            None,
+        ),
+        DumpByteCodeInstructions::Gnu(bytes) => (Vec::new(), Some(bytes)),
+    };
     let params = load_lambda_params_owned(bc.params);
     let arglist = bc
         .arglist
@@ -4000,11 +3994,7 @@ fn load_bytecode_owned(
         .unwrap_or_else(|| crate::emacs_core::builtins::lambda_params_to_value(&params));
     let mut function = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
-        ops: bc
-            .ops
-            .into_iter()
-            .map(|op| load_op(&op))
-            .collect::<Result<Vec<_>, _>>()?,
+        ops,
         constants: bc
             .constants
             .into_iter()
@@ -4015,8 +4005,8 @@ fn load_bytecode_owned(
         arglist,
         lexical: bc.lexical,
         env: decoder.load_opt_value_owned(bc.env),
-        gnu_byte_offset_map: bc.gnu_byte_offset_map.map(load_byte_offset_map),
-        gnu_bytecode_bytes: bc.gnu_bytecode_bytes,
+        gnu_byte_offset_map: None,
+        gnu_bytecode_bytes,
         docstring: bc.docstring.map(load_lisp_string_owned),
         doc_form: decoder.load_opt_value_owned(bc.doc_form),
         interactive: decoder.load_opt_value_owned(bc.interactive),
@@ -4031,7 +4021,9 @@ fn load_bytecode_owned(
         lazy_gnu_code: None,
     };
     if function.gnu_bytecode_bytes.is_some() {
-        function.defer_gnu_decode();
+        function.restore_gnu_decode_policy().map_err(|error| {
+            DumpError::DeserializationError(format!("invalid GNU bytecode in pdump: {error}"))
+        })?;
     }
     Ok(function)
 }

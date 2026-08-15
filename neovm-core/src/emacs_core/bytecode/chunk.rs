@@ -250,6 +250,33 @@ impl ByteCodeFunction {
         self.lazy_gnu_code = Some(Box::new(LazyGnuCode::new()));
     }
 
+    /// Restore GNU bytecode from its canonical byte stream using the active
+    /// eager/lazy policy.
+    ///
+    /// File dumps intentionally omit decoded instructions because they are
+    /// derived from `gnu_bytecode_bytes`. Unlike [`Self::defer_gnu_decode`],
+    /// this entry point also materializes those instructions when eager mode
+    /// is requested, so the serialized representation cannot create an
+    /// invalid empty eager function.
+    pub(crate) fn restore_gnu_decode_policy(&mut self) -> Result<(), super::decode::DecodeError> {
+        let raw_bytes = self
+            .gnu_bytecode_bytes
+            .as_deref()
+            .expect("restored GNU bytecode requires original bytes");
+        self.lazy_gnu_code = None;
+        if eager_gnu_bytecode() {
+            let (ops, byte_offset_map) =
+                super::decode::decode_gnu_bytecode_with_offset_map(raw_bytes, &mut self.constants)?;
+            self.ops = ops;
+            self.gnu_byte_offset_map = Some(byte_offset_map);
+        } else {
+            self.ops.clear();
+            self.gnu_byte_offset_map = None;
+            self.lazy_gnu_code = Some(Box::new(LazyGnuCode::new()));
+        }
+        Ok(())
+    }
+
     /// Executable instructions, decoding a cold GNU byte string on first use.
     #[inline]
     pub fn executable_ops(&self) -> &[Op] {

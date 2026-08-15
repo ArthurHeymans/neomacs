@@ -1,5 +1,7 @@
 use super::*;
 use crate::buffer::LispCharPos1;
+use crate::emacs_core::bytecode::chunk::{ByteCodeFunction, GnuByteOffsetMapEntry};
+use crate::emacs_core::bytecode::opcode::Op;
 fn test_ob() -> crate::emacs_core::symbol::Obarray {
     crate::emacs_core::symbol::Obarray::new()
 }
@@ -7,10 +9,11 @@ use crate::emacs_core::format_eval_result;
 use crate::emacs_core::intern::intern;
 use crate::emacs_core::mode::{FontLockDefaults, FontLockKeyword, MajorMode};
 use crate::emacs_core::pdump::types::{
-    DumpByteCodeFunction, DumpHeapObject, DumpLambdaParams, DumpOp, DumpSymId,
+    DumpByteCodeFunction, DumpByteCodeInstructions, DumpHeapObject, DumpLambdaParams, DumpOp,
+    DumpSymId,
 };
 use crate::emacs_core::value::{
-    StringTextPropertyRun, Value, get_string_text_properties_for_value, list_to_vec,
+    LambdaParams, StringTextPropertyRun, Value, get_string_text_properties_for_value, list_to_vec,
     set_string_text_properties_for_value,
 };
 use crate::heap_types::{LispMarker, LispString, OverlayData};
@@ -67,6 +70,39 @@ fn file_pdump_object_descriptors_stay_sparse() {
     assert_eq!(descriptors.descriptor_count(), 1);
     assert!(descriptors.get(0).is_none());
     assert!(matches!(descriptors.get(1), Some(DumpHeapObject::Free)));
+}
+
+#[test]
+fn dumped_gnu_bytecode_does_not_duplicate_derived_instructions() {
+    let mut function = ByteCodeFunction::new(LambdaParams::simple(Vec::new()));
+    function.ops = vec![Op::Nil, Op::Return];
+    function.gnu_byte_offset_map = Some(vec![
+        GnuByteOffsetMapEntry::new(0, 0),
+        GnuByteOffsetMapEntry::new(1, 1),
+    ]);
+    function.gnu_bytecode_bytes = Some(vec![0xC1, 0x87]);
+
+    let mut eval = Context::new();
+    eval.obarray
+        .set_symbol_value("pdump-bytecode-source", Value::make_bytecode(function));
+    let snapshot = snapshot_evaluator(&eval);
+    let dumped = snapshot
+        .tagged_heap
+        .objects
+        .iter()
+        .find_map(|object| match object {
+            DumpHeapObject::ByteCode(function) => Some(function),
+            _ => None,
+        })
+        .expect("dumped bytecode descriptor");
+
+    assert!(
+        matches!(
+            &dumped.instructions,
+            DumpByteCodeInstructions::Gnu(bytes) if bytes == &[0xC1, 0x87]
+        ),
+        "GNU bytecode bytes must be the sole instruction source; decoded instructions and byte offsets are derived load-time state"
+    );
 }
 
 #[test]
@@ -1660,7 +1696,11 @@ fn test_restore_snapshot_rejects_legacy_unwind_protect_dump_opcode() {
         .tagged_heap
         .objects
         .push(DumpHeapObject::ByteCode(DumpByteCodeFunction {
-            ops: vec![DumpOp::UnwindProtect(7), DumpOp::Nil, DumpOp::Return],
+            instructions: DumpByteCodeInstructions::Decoded(vec![
+                DumpOp::UnwindProtect(7),
+                DumpOp::Nil,
+                DumpOp::Return,
+            ]),
             constants: vec![],
             max_stack: 1,
             params: DumpLambdaParams {
@@ -1671,8 +1711,6 @@ fn test_restore_snapshot_rejects_legacy_unwind_protect_dump_opcode() {
             arglist: None,
             lexical: false,
             env: None,
-            gnu_byte_offset_map: None,
-            gnu_bytecode_bytes: None,
             docstring: None,
             doc_form: None,
             interactive: None,

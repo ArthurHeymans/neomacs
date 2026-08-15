@@ -199,7 +199,14 @@ pub struct DumpLambdaParams {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DumpByteCodeFunction {
-    pub ops: Vec<DumpOp>,
+    /// Executable instruction source for this function.
+    ///
+    /// GNU bytecode is kept as its original byte stream and decoded according
+    /// to the runtime's eager/lazy policy. Native NeoVM bytecode has no such
+    /// byte stream, so it carries its decoded instruction sequence instead.
+    /// Keeping these alternatives in an enum prevents a dump from serializing
+    /// both the source bytes and redundant derived instructions.
+    pub instructions: DumpByteCodeInstructions,
     pub constants: Vec<DumpValue>,
     pub max_stack: u16,
     pub params: DumpLambdaParams,
@@ -208,9 +215,6 @@ pub struct DumpByteCodeFunction {
     #[serde(default)]
     pub lexical: bool,
     pub env: Option<DumpValue>,
-    pub gnu_byte_offset_map: Option<Vec<(u32, u32)>>,
-    #[serde(default)]
-    pub gnu_bytecode_bytes: Option<Vec<u8>>,
     pub docstring: Option<DumpLispString>,
     pub doc_form: Option<DumpValue>,
     #[serde(default)]
@@ -219,6 +223,15 @@ pub struct DumpByteCodeFunction {
     pub closure_slot_count: usize,
     #[serde(default)]
     pub extra_slots: Vec<DumpValue>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum DumpByteCodeInstructions {
+    /// Native NeoVM instructions that have no GNU byte-string source.
+    Decoded(Vec<DumpOp>),
+    /// Original GNU bytecode. Decoded instructions and byte-offset maps are
+    /// derived from this stream and therefore do not belong in the dump.
+    Gnu(Vec<u8>),
 }
 
 // ---------------------------------------------------------------------------

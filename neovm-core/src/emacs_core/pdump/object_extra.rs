@@ -25,7 +25,7 @@ use super::{DumpError, types::*};
 use crate::tagged::header::VecLikeType;
 
 const OBJECT_EXTRA_MAGIC: [u8; 16] = *b"NEOOBJEXTRA\0\0\0\0\0";
-const OBJECT_EXTRA_FORMAT_VERSION: u32 = 5;
+const OBJECT_EXTRA_FORMAT_VERSION: u32 = 6;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]

@@ -6,10 +6,10 @@
 
 use super::DumpError;
 use super::types::{
-    DumpBufferId, DumpByteCodeFunction, DumpByteData, DumpHashKey, DumpHashTableTest,
-    DumpHashTableWeakness, DumpHeapObject, DumpHeapRef, DumpLambdaParams, DumpLispHashTable,
-    DumpLispString, DumpMarker, DumpNameId, DumpOp, DumpOverlay, DumpStringTextPropertyRun,
-    DumpSymId, DumpValue,
+    DumpBufferId, DumpByteCodeFunction, DumpByteCodeInstructions, DumpByteData, DumpHashKey,
+    DumpHashTableTest, DumpHashTableWeakness, DumpHeapObject, DumpHeapRef, DumpLambdaParams,
+    DumpLispHashTable, DumpLispString, DumpMarker, DumpNameId, DumpOp, DumpOverlay,
+    DumpStringTextPropertyRun, DumpSymId, DumpValue,
 };
 
 const HEAP_CONS: u8 = 0;
@@ -32,6 +32,9 @@ const HEAP_FREE: u8 = 16;
 const HEAP_CHAR_TABLE: u8 = 17;
 const HEAP_SUB_CHAR_TABLE: u8 = 18;
 const HEAP_OBARRAY: u8 = 19;
+
+const BYTECODE_DECODED: u8 = 0;
+const BYTECODE_GNU: u8 = 1;
 
 pub(crate) fn write_heap_object(
     out: &mut Vec<u8>,
@@ -460,15 +463,22 @@ fn write_text_property_runs(
 }
 
 fn write_byte_code(out: &mut Vec<u8>, function: &DumpByteCodeFunction) -> Result<(), DumpError> {
-    write_ops(out, &function.ops);
+    match &function.instructions {
+        DumpByteCodeInstructions::Decoded(ops) => {
+            write_u8(out, BYTECODE_DECODED);
+            write_ops(out, ops);
+        }
+        DumpByteCodeInstructions::Gnu(bytes) => {
+            write_u8(out, BYTECODE_GNU);
+            write_bytes(out, bytes)?;
+        }
+    }
     write_values(out, &function.constants)?;
     write_u16(out, function.max_stack);
     write_lambda_params(out, &function.params)?;
     write_opt_value(out, function.arglist.as_ref())?;
     write_bool(out, function.lexical);
     write_opt_value(out, function.env.as_ref())?;
-    write_opt_u32_pairs(out, function.gnu_byte_offset_map.as_ref())?;
-    write_opt_bytes(out, function.gnu_bytecode_bytes.as_deref())?;
     write_opt_lisp_string(out, function.docstring.as_ref())?;
     write_opt_value(out, function.doc_form.as_ref())?;
     write_opt_value(out, function.interactive.as_ref())?;
@@ -797,24 +807,6 @@ fn write_opt_u64(out: &mut Vec<u8>, value: Option<u64>) {
     }
 }
 
-fn write_opt_u32_pairs(
-    out: &mut Vec<u8>,
-    pairs: Option<&Vec<(u32, u32)>>,
-) -> Result<(), DumpError> {
-    match pairs {
-        Some(pairs) => {
-            write_bool(out, true);
-            write_len(out, pairs.len(), "u32 pair count")?;
-            for (left, right) in pairs {
-                write_u32(out, *left);
-                write_u32(out, *right);
-            }
-        }
-        None => write_bool(out, false),
-    }
-    Ok(())
-}
-
 fn write_len(out: &mut Vec<u8>, len: usize, what: &str) -> Result<(), DumpError> {
     let len = u64::try_from(len)
         .map_err(|_| DumpError::SerializationError(format!("{what} overflows u64")))?;
@@ -836,14 +828,6 @@ fn write_string(out: &mut Vec<u8>, text: &str) -> Result<(), DumpError> {
 fn write_bytes(out: &mut Vec<u8>, bytes: &[u8]) -> Result<(), DumpError> {
     write_len(out, bytes.len(), "byte payload length")?;
     out.extend_from_slice(bytes);
-    Ok(())
-}
-
-fn write_opt_bytes(out: &mut Vec<u8>, bytes: Option<&[u8]>) -> Result<(), DumpError> {
-    write_bool(out, bytes.is_some());
-    if let Some(bytes) = bytes {
-        write_bytes(out, bytes)?;
-    }
     Ok(())
 }
 
@@ -1169,16 +1153,23 @@ impl<'a> Cursor<'a> {
     }
 
     fn read_byte_code(&mut self) -> Result<DumpByteCodeFunction, DumpError> {
+        let instructions = match self.read_u8("bytecode instruction source")? {
+            BYTECODE_DECODED => DumpByteCodeInstructions::Decoded(self.read_ops()?),
+            BYTECODE_GNU => DumpByteCodeInstructions::Gnu(self.read_bytes()?),
+            other => {
+                return Err(DumpError::ImageFormatError(format!(
+                    "unknown bytecode instruction source {other}"
+                )));
+            }
+        };
         Ok(DumpByteCodeFunction {
-            ops: self.read_ops()?,
+            instructions,
             constants: self.read_values()?,
             max_stack: self.read_u16("bytecode max stack")?,
             params: self.read_lambda_params()?,
             arglist: self.read_opt_value()?,
             lexical: self.read_bool("bytecode lexical flag")?,
             env: self.read_opt_value()?,
-            gnu_byte_offset_map: self.read_opt_u32_pairs()?,
-            gnu_bytecode_bytes: self.read_opt_bytes()?,
             docstring: self.read_opt_lisp_string()?,
             doc_form: self.read_opt_value()?,
             interactive: self.read_opt_value()?,
@@ -1404,21 +1395,6 @@ impl<'a> Cursor<'a> {
         }
     }
 
-    fn read_opt_u32_pairs(&mut self) -> Result<Option<Vec<(u32, u32)>>, DumpError> {
-        if !self.read_bool("u32 pairs present")? {
-            return Ok(None);
-        }
-        let len = self.read_len("u32 pair count")?;
-        let mut pairs = Vec::with_capacity(len);
-        for _ in 0..len {
-            pairs.push((
-                self.read_u32("u32 pair left")?,
-                self.read_u32("u32 pair right")?,
-            ));
-        }
-        Ok(Some(pairs))
-    }
-
     pub(crate) fn read_string(&mut self) -> Result<String, DumpError> {
         let bytes = self.read_bytes()?;
         String::from_utf8(bytes)
@@ -1432,14 +1408,6 @@ impl<'a> Cursor<'a> {
 
     pub(crate) fn read_bytes_fixed(&mut self, len: usize) -> Result<Vec<u8>, DumpError> {
         Ok(self.read_exact(len, "fixed byte payload")?.to_vec())
-    }
-
-    fn read_opt_bytes(&mut self) -> Result<Option<Vec<u8>>, DumpError> {
-        if self.read_bool("bytes present")? {
-            Ok(Some(self.read_bytes()?))
-        } else {
-            Ok(None)
-        }
     }
 
     pub(crate) fn read_len(&mut self, what: &str) -> Result<usize, DumpError> {
@@ -1545,11 +1513,7 @@ mod tests {
                 cdr: DumpValue::Str(DumpHeapRef { index: 0 }),
             },
             DumpHeapObject::ByteCode(DumpByteCodeFunction {
-                ops: vec![
-                    DumpOp::Constant(1),
-                    DumpOp::CallBuiltinSym(DumpSymId(9), 2),
-                    DumpOp::Return,
-                ],
+                instructions: DumpByteCodeInstructions::Gnu(vec![0xC0, 0x87]),
                 constants: vec![DumpValue::Bignum("12345678901234567890".into())],
                 max_stack: 4,
                 params: DumpLambdaParams {
@@ -1560,8 +1524,32 @@ mod tests {
                 arglist: Some(DumpValue::Nil),
                 lexical: true,
                 env: Some(DumpValue::Vector(DumpHeapRef { index: 4 })),
-                gnu_byte_offset_map: Some(vec![(1, 2), (3, 4)]),
-                gnu_bytecode_bytes: Some(vec![0xC0, 0x87]),
+                docstring: Some(DumpLispString {
+                    data: b"doc".to_vec(),
+                    size: 3,
+                    size_byte: 3,
+                }),
+                doc_form: Some(DumpValue::True),
+                interactive: Some(DumpValue::Nil),
+                closure_slot_count: 6,
+                extra_slots: vec![],
+            }),
+            DumpHeapObject::ByteCode(DumpByteCodeFunction {
+                instructions: DumpByteCodeInstructions::Decoded(vec![
+                    DumpOp::Constant(1),
+                    DumpOp::CallBuiltinSym(DumpSymId(9), 2),
+                    DumpOp::Return,
+                ]),
+                constants: vec![DumpValue::Bignum("12345678901234567890".into())],
+                max_stack: 4,
+                params: DumpLambdaParams {
+                    required: vec![DumpSymId(1)],
+                    optional: vec![DumpSymId(2)],
+                    rest: Some(DumpSymId(3)),
+                },
+                arglist: Some(DumpValue::Nil),
+                lexical: true,
+                env: Some(DumpValue::Vector(DumpHeapRef { index: 4 })),
                 docstring: Some(DumpLispString {
                     data: b"doc".to_vec(),
                     size: 3,
