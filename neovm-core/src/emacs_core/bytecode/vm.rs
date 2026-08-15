@@ -896,11 +896,38 @@ struct SuspendedInterpreterFrame {
     continuation: BytecodeCallContinuation,
 }
 
+/// A bytecode callee proven eligible for GNU's iterative `setup_frame` path.
+///
+/// `value` is the GC-visible Lisp identity installed in `bc_frames`; `function`
+/// is the matching immutable code address already checked by Bcall dispatch.
+/// Keeping them inseparable prevents child-frame construction from decoding the
+/// tagged value a second time or accidentally pairing code with another value.
+#[derive(Clone, Copy)]
+struct PreparedInterpreterCallee {
+    value: Value,
+    function: InterpreterFunction,
+}
+
+impl PreparedInterpreterCallee {
+    fn new(value: Value, code: &ByteCodeFunction) -> Self {
+        Self {
+            value,
+            function: InterpreterFunction::new(code),
+        }
+    }
+
+    #[inline(always)]
+    fn code(&self) -> &ByteCodeFunction {
+        self.function.code()
+    }
+}
+
 // These values are copied on every iterative Bcall/Breturn. Keep accidental
 // enum/Option padding from silently turning frame transitions into bulk memory
 // traffic again. The bounds include the debug-only lexenv invariant field.
 const _: () = {
     assert!(std::mem::size_of::<InterpreterFunction>() == std::mem::size_of::<Value>());
+    assert!(std::mem::size_of::<PreparedInterpreterCallee>() == 2 * std::mem::size_of::<Value>());
     assert!(std::mem::size_of::<InterpreterFrame>() <= 64);
     assert!(std::mem::size_of::<SuspendedInterpreterFrame>() <= 80);
 };
@@ -912,7 +939,7 @@ struct BytecodeCallContinuation {
 
 enum InterpreterStackCall {
     Enter {
-        func_value: Value,
+        callee: PreparedInterpreterCallee,
         args_start: usize,
         nargs: usize,
         backtrace: BytecodeBacktraceFrame,
@@ -2109,11 +2136,11 @@ impl<'a> Vm<'a> {
     /// stable, GC-traced identity instead of borrowing a `ByteCodeFunction`.
     fn prepare_iterative_interpreter_frame(
         &mut self,
-        func: &ByteCodeFunction,
-        func_value: Value,
+        callee: PreparedInterpreterCallee,
         args_start: usize,
         nargs: usize,
     ) -> InterpreterFrame {
+        let func = callee.code();
         debug_assert!(self.can_enter_interpreter_frame_iteratively(func, nargs));
         let condition_stack_base = self.ctx.condition_stack_len();
         let specpdl_base = self.ctx.specpdl.len();
@@ -2125,7 +2152,7 @@ impl<'a> Vm<'a> {
 
         self.ctx.bc_frames.push(crate::emacs_core::eval::BcFrame {
             base: frame_base,
-            fun: func_value,
+            fun: callee.value,
         });
         if self.ctx.bc_buf.capacity() < frame_limit {
             self.ctx
@@ -2140,7 +2167,7 @@ impl<'a> Vm<'a> {
         }
 
         InterpreterFrame {
-            function: InterpreterFunction::new(func),
+            function: callee.function,
             frame_base,
             frame_limit,
             pc: 0,
@@ -2320,7 +2347,7 @@ impl<'a> Vm<'a> {
                         if self.can_enter_interpreter_frame_iteratively(func, nargs) =>
                     {
                         InterpreterStackCall::Enter {
-                            func_value: callee,
+                            callee: PreparedInterpreterCallee::new(callee, func),
                             args_start,
                             nargs,
                             backtrace,
@@ -2969,56 +2996,53 @@ impl<'a> Vm<'a> {
                     let writeback_args = writeback_names
                         .as_ref()
                         .map(|_| stk!()[args_start..].iter().copied().collect::<LispArgVec>());
-                    let result =
-                        if writeback_names.is_none() {
-                            cursor.publish(self.ctx);
-                            if let Err(flow) = self.enter_bytecode_call_depth() {
-                                resume_flow!(flow)
-                            }
-                            match self.dispatch_interpreter_stack_call(func_val, args_start, n) {
-                                InterpreterStackCall::Enter {
-                                    func_value,
-                                    args_start,
-                                    nargs,
-                                    backtrace,
-                                } => {
-                                    current.pc = pc_local;
-                                    *driver_quitcounter = quitcounter;
-                                    #[cfg(feature = "jit")]
-                                    {
-                                        current.osr_tried = osr_tried;
-                                    }
-                                    let callee = func_value
-                                        .get_bytecode_data()
-                                        .expect("iterative call target must remain bytecode");
-                                    let child = self.prepare_iterative_interpreter_frame(
-                                        callee, func_value, args_start, nargs,
-                                    );
-                                    return InterpreterFrameControl::Enter {
-                                        frame: child,
-                                        continuation: BytecodeCallContinuation {
-                                            stack_after_call,
-                                            backtrace,
-                                        },
-                                    };
+                    let result = if writeback_names.is_none() {
+                        cursor.publish(self.ctx);
+                        if let Err(flow) = self.enter_bytecode_call_depth() {
+                            resume_flow!(flow)
+                        }
+                        match self.dispatch_interpreter_stack_call(func_val, args_start, n) {
+                            InterpreterStackCall::Enter {
+                                callee,
+                                args_start,
+                                nargs,
+                                backtrace,
+                            } => {
+                                current.pc = pc_local;
+                                *driver_quitcounter = quitcounter;
+                                #[cfg(feature = "jit")]
+                                {
+                                    current.osr_tried = osr_tried;
                                 }
-                                InterpreterStackCall::Complete(result) => {
-                                    self.leave_bytecode_call_depth();
-                                    match result {
-                                        Ok(value) => {
-                                            cursor = StackCursor::acquire(self.ctx);
-                                            value
-                                        }
-                                        Err(flow) => resume_flow!(flow),
+                                let child = self
+                                    .prepare_iterative_interpreter_frame(callee, args_start, nargs);
+                                return InterpreterFrameControl::Enter {
+                                    frame: child,
+                                    continuation: BytecodeCallContinuation {
+                                        stack_after_call,
+                                        backtrace,
+                                    },
+                                };
+                            }
+                            InterpreterStackCall::Complete(result) => {
+                                self.leave_bytecode_call_depth();
+                                match result {
+                                    Ok(value) => {
+                                        cursor = StackCursor::acquire(self.ctx);
+                                        value
                                     }
+                                    Err(flow) => resume_flow!(flow),
                                 }
                             }
-                        } else {
-                            let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
-                            vm_try!(self.with_bytecode_call_depth(|vm| {
+                        }
+                    } else {
+                        let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
+                        vm_try!(
+                            self.with_bytecode_call_depth(|vm| {
                                 vm.call_function(func_val, args)
-                            }))
-                        };
+                            })
+                        )
+                    };
                     if let (Some((called_name, alias_target)), Some(writeback_args)) =
                         (writeback_names.as_ref(), writeback_args.as_ref())
                     {

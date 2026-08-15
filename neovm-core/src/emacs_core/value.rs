@@ -276,6 +276,19 @@ impl OrderedRuntimeBindingMap {
 thread_local! {
     static THREAD_LOCAL_ALLOCATION_COUNTS: Cell<[u64; MEMORY_USE_COUNT_LEN]> =
         const { Cell::new([0; MEMORY_USE_COUNT_LEN]) };
+
+    #[cfg(test)]
+    static BYTECODE_DATA_ACCESS_COUNT: Cell<usize> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_bytecode_data_access_count() {
+    BYTECODE_DATA_ACCESS_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn bytecode_data_access_count() -> usize {
+    BYTECODE_DATA_ACCESS_COUNT.with(Cell::get)
 }
 
 #[inline]
@@ -2045,6 +2058,8 @@ impl TaggedValue {
 
     /// Borrow the ByteCodeFunction from a ByteCode value.
     pub fn get_bytecode_data(self) -> Option<&'static super::bytecode::ByteCodeFunction> {
+        #[cfg(test)]
+        BYTECODE_DATA_ACCESS_COUNT.with(|count| count.set(count.get() + 1));
         if self.veclike_type()? == VecLikeType::ByteCode {
             let ptr = self.as_veclike_ptr().unwrap() as *const ByteCodeObj;
             Some(unsafe { &(*ptr).data })

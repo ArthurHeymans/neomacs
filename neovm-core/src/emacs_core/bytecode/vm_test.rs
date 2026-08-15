@@ -1825,6 +1825,7 @@ fn vm_repeated_symbol_bytecode_calls_reuse_epoch_validated_resolution() {
     caller.max_stack = 3;
 
     crate::emacs_core::symbol::reset_function_cell_lookup_count();
+    crate::emacs_core::value::reset_bytecode_data_access_count();
     let result = {
         let mut vm = new_vm(&mut eval);
         vm.execute(&caller, vec![])
@@ -1836,6 +1837,11 @@ fn vm_repeated_symbol_bytecode_calls_reuse_epoch_validated_resolution() {
         crate::emacs_core::symbol::function_cell_lookup_count(),
         1,
         "a stable function epoch should make repeated bytecode calls reuse one proven target"
+    );
+    assert_eq!(
+        crate::emacs_core::value::bytecode_data_access_count(),
+        3,
+        "a resolved bytecode callee should carry its checked code through each GNU Bcall transition"
     );
 }
 
