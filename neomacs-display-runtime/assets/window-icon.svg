@@ -15,6 +15,18 @@
       <stop offset="0.7" stop-color="#7e55b3"/>
       <stop offset="1" stop-color="#8381c5"/>
     </linearGradient>
+    <linearGradient
+      id="emacsOrange"
+      x1="20"
+      y1="0"
+      x2="20"
+      y2="40"
+      gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9a3f00"/>
+      <stop offset="0.35" stop-color="#d05f00"/>
+      <stop offset="0.7" stop-color="#ff9900"/>
+      <stop offset="1" stop-color="#ffd166"/>
+    </linearGradient>
     <path
       id="lambdaMark"
       d="M10.9 7.6 C13.3 10.3 12.2 13.1 10.2 15.9 Q9.8 16.5 10.4 16.8 Q11 17.1 11.5 16.5 C12.4 15.1 13.1 13.7 13.8 12.1 C14.4 13.6 15 15 15.6 16.3 Q15.9 16.9 16.5 16.7 Q17.1 16.5 16.8 15.9 C15.7 12.5 14.3 9.4 12.8 7.6 Q11.8 6.7 10.9 7.6 Z"
@@ -26,7 +38,7 @@
     <circle cx="20" cy="20" r="20" fill="url(#emacsPurple)"/>
     <path
       d="M20 0 a20 20 0 0 1 0 40 a10 10 0 0 1 0 -20 a10 10 0 0 0 0 -20 Z"
-      fill="#ff9900"/>
+      fill="url(#emacsOrange)"/>
     <use href="#lambdaMark"/>
     <use href="#lambdaMark" transform="rotate(180 20 20)"/>
   </g>
