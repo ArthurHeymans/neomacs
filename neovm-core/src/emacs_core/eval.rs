@@ -354,6 +354,10 @@ thread_local! {
     #[cfg(test)]
     static GLOBAL_SUBR_LOOKUP_COUNT: Cell<usize> = const { Cell::new(0) };
 
+    /// Test-only observation of GNU bytecode backedge polling cadence.
+    #[cfg(test)]
+    static BYTECODE_BRANCH_POLL_COUNT: Cell<usize> = const { Cell::new(0) };
+
     /// Thread-local handle to the active `Context::quit_requested`
     /// atomic. Installed by `Context::setup_thread_locals`, read by
     /// leaf functions (e.g. the regex matcher) that need a cheap quit
@@ -411,6 +415,16 @@ pub(crate) fn reset_global_subr_lookup_count() {
 #[cfg(test)]
 pub(crate) fn global_subr_lookup_count() -> usize {
     GLOBAL_SUBR_LOOKUP_COUNT.with(Cell::get)
+}
+
+#[cfg(test)]
+pub(crate) fn reset_bytecode_branch_poll_count() {
+    BYTECODE_BRANCH_POLL_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn bytecode_branch_poll_count() -> usize {
+    BYTECODE_BRANCH_POLL_COUNT.with(Cell::get)
 }
 
 #[inline(always)]
@@ -9124,6 +9138,8 @@ impl Context {
     /// Match GNU `bytecode.c:op_branch`: after the bytecode loop's unsigned
     /// quit counter wraps, run `maybe_gc (); maybe_quit ();`.
     pub(crate) fn bytecode_branch_maybe_gc_and_quit(&mut self) -> Result<(), Flow> {
+        #[cfg(test)]
+        BYTECODE_BRANCH_POLL_COUNT.with(|count| count.set(count.get() + 1));
         if self.gc_safe_point_exact_should_collect() {
             self.gc_collect_from_current_roots();
         }

@@ -1943,6 +1943,64 @@ fn vm_bytecode_call_chain_stays_in_one_interpreter_driver() {
 }
 
 #[test]
+fn vm_backward_branch_quit_counter_spans_bytecode_calls_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+    let child_symbol = intern("vm-backedge-counter-child");
+
+    let mut child = ByteCodeFunction::new(LambdaParams::simple(vec![]));
+    child.constants = vec![Value::fixnum(55), Value::fixnum(0), Value::fixnum(42)];
+    child.ops = vec![
+        Op::Constant(0),
+        Op::StackRef(0),
+        Op::Constant(1),
+        Op::Gtr,
+        Op::GotoIfNil(7),
+        Op::Sub1,
+        Op::Goto(1),
+        Op::Pop,
+        Op::Constant(2),
+        Op::Return,
+    ];
+    child.max_stack = 3;
+    eval.obarray
+        .set_symbol_function_id(child_symbol, Value::make_bytecode(child));
+
+    let mut outer = ByteCodeFunction::new(LambdaParams::simple(vec![]));
+    outer.constants = vec![
+        Value::fixnum(200),
+        Value::fixnum(0),
+        Value::from_sym_id(child_symbol),
+    ];
+    outer.ops = vec![
+        Op::Constant(0),
+        Op::StackRef(0),
+        Op::Constant(1),
+        Op::Gtr,
+        Op::GotoIfNil(7),
+        Op::Sub1,
+        Op::Goto(1),
+        Op::Pop,
+        Op::Constant(2),
+        Op::Call(0),
+        Op::Return,
+    ];
+    outer.max_stack = 3;
+
+    crate::emacs_core::eval::reset_bytecode_branch_poll_count();
+    let result = new_vm(&mut eval)
+        .execute(&outer, vec![])
+        .expect("caller and callee countdowns should complete");
+
+    assert_eq!(result, Value::fixnum(42));
+    assert_eq!(
+        crate::emacs_core::eval::bytecode_branch_poll_count(),
+        1,
+        "GNU carries one unsigned quitcounter through setup_frame/Breturn"
+    );
+}
+
+#[test]
 fn interpreter_driver_frame_layout_stays_compact() {
     assert!(
         std::mem::size_of::<ResolvedStackCallTarget>() <= 2 * std::mem::size_of::<usize>(),
@@ -1951,7 +2009,7 @@ fn interpreter_driver_frame_layout_stays_compact() {
     assert_eq!(
         std::mem::size_of::<InterpreterFunction>(),
         std::mem::size_of::<Value>(),
-        "the rooted/entry function handle must fit in one tagged value"
+        "the non-null function code handle must fit in one tagged value"
     );
     assert!(
         std::mem::size_of::<InterpreterFrame>() <= 64,
@@ -1970,13 +2028,9 @@ fn interpreter_function_caches_immutable_bytecode_code() {
         .get_bytecode_data()
         .expect("bytecode value must expose immutable code");
 
-    let function = InterpreterFunction::rooted(code);
+    let function = InterpreterFunction::new(code);
 
-    assert!(std::ptr::eq(
-        function.code().expect("rooted frame must retain code"),
-        code,
-    ));
-    assert!(InterpreterFunction::ENTRY.code().is_none());
+    assert!(std::ptr::eq(function.code(), code));
 }
 
 #[test]

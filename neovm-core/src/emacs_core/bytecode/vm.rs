@@ -727,54 +727,43 @@ struct InterpreterFrameCleanup {
     specpdl_base: usize,
 }
 
-/// All mutable Tier-0 state required to suspend and later resume one frame.
-///
-/// GNU stores the equivalent fields in `struct bc_frame` plus the register
-/// locals saved by `Bcall`.  Keeping them in one Rust value makes a recursive
-/// interpreter entry unrepresentable on the iterative path: callers are moved
-/// onto the driver stack and can only be resumed through `Breturn` handling.
 /// One-word immutable code handle for the function executed by a frame.
 ///
-/// `None` identifies the entry frame whose `ByteCodeFunction` is borrowed by
-/// `run_loop`.  Every nested frame's matching `BcFrame` owns the Lisp value and
-/// keeps this pointer live.  Bytecode arena slots are immovable, and published
-/// bytecode is immutable in production, so the handle can retain the already
-/// checked code address instead of repeating tagged-object classification each
-/// time GNU's `Breturn` resumes a caller.  `NonNull` keeps the distinction typed
-/// and preserves the one-word null niche without adding lifetime parameters to
-/// the driver state.
+/// The entry pointer is borrowed for exactly the `run_loop` call. Every nested
+/// frame's matching `BcFrame` owns the Lisp value and keeps its pointer live.
+/// Bytecode arena slots are immovable, and published bytecode is immutable in
+/// production, so the handle can retain the already checked address instead of
+/// repeating tagged-object classification each time GNU's `Breturn` resumes a
+/// caller. Whether a frame is the entry frame is represented by the caller
+/// stack, not by a nullable code sentinel, so every frame has valid code.
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-struct InterpreterFunction(Option<std::ptr::NonNull<ByteCodeFunction>>);
+struct InterpreterFunction(std::ptr::NonNull<ByteCodeFunction>);
 
 impl InterpreterFunction {
-    const ENTRY: Self = Self(None);
-
-    fn rooted(code: &ByteCodeFunction) -> Self {
-        Self(Some(std::ptr::NonNull::from(code)))
+    fn new(code: &ByteCodeFunction) -> Self {
+        Self(std::ptr::NonNull::from(code))
     }
 
     #[inline]
-    fn is_entry(self) -> bool {
-        self.0.is_none()
-    }
-
-    #[inline]
-    fn code(&self) -> Option<&ByteCodeFunction> {
-        self.0.map(|pointer| {
-            // SAFETY: the matching `BcFrame` roots the immutable, immovable
-            // bytecode arena slot for every nested interpreter frame.
-            unsafe { pointer.as_ref() }
-        })
+    fn code(&self) -> &ByteCodeFunction {
+        // SAFETY: the entry borrow outlives `run_loop`; every nested frame's
+        // matching `BcFrame` roots its immutable, immovable bytecode arena slot.
+        unsafe { self.0.as_ref() }
     }
 }
 
+/// All mutable Tier-0 state required to suspend and later resume one frame.
+///
+/// GNU stores the equivalent fields in `struct bc_frame` plus the register
+/// locals saved by `Bcall`. Keeping them in one Rust value makes a recursive
+/// interpreter entry unrepresentable on the iterative path: callers are moved
+/// onto the driver stack and can only be resumed through `Breturn` handling.
 struct InterpreterFrame {
     function: InterpreterFunction,
     frame_base: usize,
     frame_limit: usize,
     pc: usize,
-    quitcounter: u8,
     #[cfg(feature = "jit")]
     osr_tried: bool,
     cleanup: InterpreterFrameCleanup,
@@ -2151,11 +2140,10 @@ impl<'a> Vm<'a> {
         }
 
         InterpreterFrame {
-            function: InterpreterFunction::rooted(func),
+            function: InterpreterFunction::new(func),
             frame_base,
             frame_limit,
             pc: 0,
-            quitcounter: 1,
             #[cfg(feature = "jit")]
             osr_tried: false,
             cleanup: InterpreterFrameCleanup {
@@ -2170,9 +2158,10 @@ impl<'a> Vm<'a> {
     fn finish_interpreter_frame(
         &mut self,
         frame: &InterpreterFrame,
+        is_entry: bool,
         result: EvalResult,
     ) -> EvalResult {
-        if frame.function.is_entry() {
+        if is_entry {
             return result;
         }
         let cleanup = frame.cleanup;
@@ -2198,11 +2187,10 @@ impl<'a> Vm<'a> {
         current: &mut InterpreterFrame,
         callers: &mut Vec<SuspendedInterpreterFrame>,
         aux_stack: &mut InterpreterFrameAuxStack,
-        entry_func: &ByteCodeFunction,
         mut result: EvalResult,
     ) -> InterpreterFrameCompletion {
         loop {
-            result = self.finish_interpreter_frame(current, result);
+            result = self.finish_interpreter_frame(current, callers.is_empty(), result);
 
             let Some(suspended) = callers.pop() else {
                 return InterpreterFrameCompletion::Exit(result);
@@ -2234,8 +2222,7 @@ impl<'a> Vm<'a> {
                     return InterpreterFrameCompletion::Resume;
                 }
                 Err(flow) => {
-                    let function = current.function;
-                    let func = function.code().unwrap_or(entry_func);
+                    let func = current.function.code();
                     let aux = aux_stack.current_mut();
                     match self.resume_nonlocal(
                         func,
@@ -2267,7 +2254,7 @@ impl<'a> Vm<'a> {
         aux_stack: &mut InterpreterFrameAuxStack,
         value: Value,
     ) -> InterpreterValueCompletion {
-        if current.function.is_entry() {
+        if callers.is_empty() {
             return InterpreterValueCompletion::Exit(value);
         }
 
@@ -2408,11 +2395,10 @@ impl<'a> Vm<'a> {
         let _run_loop_depth = RunLoopDepthGuard::enter();
 
         let mut current = InterpreterFrame {
-            function: InterpreterFunction::ENTRY,
+            function: InterpreterFunction::new(entry_func),
             frame_base,
             frame_limit,
             pc: *pc,
-            quitcounter: 1,
             #[cfg(feature = "jit")]
             osr_tried: false,
             cleanup: InterpreterFrameCleanup {
@@ -2427,12 +2413,15 @@ impl<'a> Vm<'a> {
         // gets Vec's single-representation push/pop path; SmallVec's repeated
         // inline-vs-spilled branch was measurable on every Bcall/Breturn.
         let mut callers = Vec::new();
+        // GNU bytecode.c keeps one unsigned quit counter for the whole
+        // exec_byte_code driver. setup_frame/Breturn do not save or reset it.
+        let mut quitcounter = 1;
         let mut aux_stack =
             InterpreterFrameAuxStack::new(std::mem::take(handlers), std::mem::take(bind_stack));
 
         loop {
             let aux = aux_stack.current_mut();
-            let control = self.run_interpreter_frame(&mut current, aux, entry_func);
+            let control = self.run_interpreter_frame(&mut current, aux, &mut quitcounter);
             match control {
                 InterpreterFrameControl::Enter {
                     frame,
@@ -2467,7 +2456,6 @@ impl<'a> Vm<'a> {
                                 &mut current,
                                 &mut callers,
                                 &mut aux_stack,
-                                entry_func,
                                 Ok(value),
                             ) {
                                 InterpreterFrameCompletion::Resume => {}
@@ -2487,7 +2475,6 @@ impl<'a> Vm<'a> {
                         &mut current,
                         &mut callers,
                         &mut aux_stack,
-                        entry_func,
                         Err(flow),
                     ) {
                         InterpreterFrameCompletion::Resume => {}
@@ -2514,10 +2501,9 @@ impl<'a> Vm<'a> {
         &mut self,
         current: &mut InterpreterFrame,
         aux: &mut InterpreterFrameAux,
-        entry_func: &ByteCodeFunction,
+        driver_quitcounter: &mut u8,
     ) -> InterpreterFrameControl {
-        let function = current.function;
-        let func = function.code().unwrap_or(entry_func);
+        let func = current.function.code();
         let frame_base = current.frame_base;
         let frame_limit = current.frame_limit;
         let ops = func.executable_ops();
@@ -2525,7 +2511,7 @@ impl<'a> Vm<'a> {
         let ops_len = ops.len();
         let ops_ptr = ops.as_ptr();
         let mut pc_local = current.pc;
-        let mut quitcounter = current.quitcounter;
+        let mut quitcounter = *driver_quitcounter;
         // OSR (on-stack replacement): once a hot loop is detected at a backward
         // branch, transfer the rest of this interpreted call into native code at
         // the loop header. `osr_tried` latches so a loop that can't/didn't OSR is
@@ -2569,7 +2555,7 @@ impl<'a> Vm<'a> {
                     }
                     Err(flow) => {
                         current.pc = pc_local;
-                        current.quitcounter = quitcounter;
+                        *driver_quitcounter = quitcounter;
                         #[cfg(feature = "jit")]
                         {
                             current.osr_tried = osr_tried;
@@ -2695,7 +2681,7 @@ impl<'a> Vm<'a> {
                             ) {
                                 Some(crate::emacs_core::jit::compile::NativeRun::Ok(bits)) => {
                                     current.pc = pc_local;
-                                    current.quitcounter = quitcounter;
+                                    *driver_quitcounter = quitcounter;
                                     current.osr_tried = osr_tried;
                                     return InterpreterFrameControl::Return(Value::from_bits(bits));
                                 }
@@ -2997,7 +2983,7 @@ impl<'a> Vm<'a> {
                                     backtrace,
                                 } => {
                                     current.pc = pc_local;
-                                    current.quitcounter = quitcounter;
+                                    *driver_quitcounter = quitcounter;
                                     #[cfg(feature = "jit")]
                                     {
                                         current.osr_tried = osr_tried;
@@ -3225,7 +3211,7 @@ impl<'a> Vm<'a> {
                     let result = stk!().pop().unwrap_or(Value::NIL);
                     cursor.publish(self.ctx);
                     current.pc = pc_local;
-                    current.quitcounter = quitcounter;
+                    *driver_quitcounter = quitcounter;
                     #[cfg(feature = "jit")]
                     {
                         current.osr_tried = osr_tried;
@@ -4166,7 +4152,7 @@ impl<'a> Vm<'a> {
         let result = stk!().pop().unwrap_or(Value::NIL);
         cursor.publish(self.ctx);
         current.pc = pc_local;
-        current.quitcounter = quitcounter;
+        *driver_quitcounter = quitcounter;
         #[cfg(feature = "jit")]
         {
             current.osr_tried = osr_tried;
