@@ -1745,6 +1745,99 @@ fn vm_symbol_bytecode_call_resolves_live_function_cell_once() {
 }
 
 #[test]
+fn vm_repeated_symbol_bytecode_calls_reuse_epoch_validated_resolution() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+    let callee_symbol = intern("vm-cached-function-cell-read");
+
+    let mut callee = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let answer_idx = callee.add_constant(Value::fixnum(42));
+    callee.ops = vec![Op::Constant(answer_idx), Op::Return];
+    callee.max_stack = 1;
+    eval.obarray
+        .set_symbol_function_id(callee_symbol, Value::make_bytecode(callee));
+
+    let mut caller = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let callee_idx = caller.add_constant(Value::from_sym_id(callee_symbol));
+    caller.ops = vec![
+        Op::Constant(callee_idx),
+        Op::Call(0),
+        Op::Constant(callee_idx),
+        Op::Call(0),
+        Op::Constant(callee_idx),
+        Op::Call(0),
+        Op::Return,
+    ];
+    caller.max_stack = 3;
+
+    crate::emacs_core::symbol::reset_function_cell_lookup_count();
+    let result = {
+        let mut vm = new_vm(&mut eval);
+        vm.execute(&caller, vec![])
+            .expect("repeated symbol-bound bytecode calls should execute")
+    };
+
+    assert_eq!(result, Value::fixnum(42));
+    assert_eq!(
+        crate::emacs_core::symbol::function_cell_lookup_count(),
+        1,
+        "a stable function epoch should make repeated bytecode calls reuse one proven target"
+    );
+}
+
+#[test]
+fn vm_symbol_bytecode_call_cache_invalidates_after_fset() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+    let callee_symbol = intern("vm-invalidated-function-cell-read");
+
+    let make_callee = |answer| {
+        let mut callee = ByteCodeFunction::new(LambdaParams {
+            required: vec![],
+            optional: vec![],
+            rest: None,
+        });
+        let answer_idx = callee.add_constant(Value::fixnum(answer));
+        callee.ops = vec![Op::Constant(answer_idx), Op::Return];
+        callee.max_stack = 1;
+        Value::make_bytecode(callee)
+    };
+    let first = make_callee(1);
+    let second = make_callee(2);
+    eval.obarray.set_symbol_function_id(callee_symbol, first);
+
+    crate::emacs_core::symbol::reset_function_cell_lookup_count();
+    let mut vm = new_vm(&mut eval);
+    let ResolvedStackCallTarget::ByteCode { callee } =
+        vm.resolve_stack_call_target(Value::from_sym_id(callee_symbol))
+    else {
+        panic!("first function cell should resolve to bytecode");
+    };
+    assert_eq!(callee.value(), first);
+
+    vm.ctx.obarray.set_symbol_function_id(callee_symbol, second);
+    let ResolvedStackCallTarget::ByteCode { callee } =
+        vm.resolve_stack_call_target(Value::from_sym_id(callee_symbol))
+    else {
+        panic!("redefined function cell should resolve to bytecode");
+    };
+    assert_eq!(callee.value(), second);
+    assert_eq!(
+        crate::emacs_core::symbol::function_cell_lookup_count(),
+        2,
+        "an fset epoch change must force a fresh live function-cell read"
+    );
+}
+
+#[test]
 fn vm_bytecode_call_chain_stays_in_one_interpreter_driver() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_minimal_vm_harness();

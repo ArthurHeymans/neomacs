@@ -697,6 +697,17 @@ impl std::ops::DerefMut for StackCursor {
 #[derive(Clone, Copy)]
 struct ResolvedBuiltinCallee(Value);
 
+/// One-word proof that a value is the bytecode object read from a symbol's
+/// live function cell.
+///
+/// The wrapper is deliberately distinct from an arbitrary [`Value`]: only a
+/// successfully classified function-cell read can populate the symbol-call
+/// cache, so a cache hit can skip both the paged symbol lookup and the heap
+/// kind check without making an unchecked value callable.
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+struct ResolvedByteCodeCallee(Value);
+
 /// Result of GNU `Bcall`'s single live function-cell read.
 ///
 /// Keeping this closed prevents the bytecode call path from first probing one
@@ -705,7 +716,7 @@ struct ResolvedBuiltinCallee(Value);
 /// aliases, autoloads, advice and compiler overrides remain on `Generic`.
 #[derive(Clone, Copy)]
 enum ResolvedStackCallTarget {
-    ByteCode { callee: Value },
+    ByteCode { callee: ResolvedByteCodeCallee },
     Builtin { callee: ResolvedBuiltinCallee },
     Generic,
 }
@@ -946,6 +957,27 @@ const _: () = {
     assert!(std::mem::size_of::<InterpreterValueCompletion>() <= 16);
 };
 
+impl ResolvedByteCodeCallee {
+    #[inline(always)]
+    fn from_live_function_cell(value: Value) -> Option<Self> {
+        (value.veclike_type() == Some(VecLikeType::ByteCode)).then_some(Self(value))
+    }
+
+    #[inline(always)]
+    fn from_direct_value(value: Value) -> Self {
+        debug_assert_eq!(value.veclike_type(), Some(VecLikeType::ByteCode));
+        Self(value)
+    }
+
+    #[inline(always)]
+    fn value(self) -> Value {
+        self.0
+    }
+}
+
+const _: () =
+    assert!(std::mem::size_of::<ResolvedByteCodeCallee>() == std::mem::size_of::<Value>());
+
 impl ResolvedBuiltinCallee {
     #[inline]
     fn from_static_symbol(sym_id: SymId) -> Option<Self> {
@@ -1071,11 +1103,76 @@ fn logxor_sym_id() -> SymId {
     *LOGXOR.get_or_init(|| intern("logxor"))
 }
 
+/// A tiny direct-mapped cache for symbol function cells proven to contain
+/// bytecode. It lives only for one [`Vm`] invocation: it is neither a Lisp/GC
+/// root nor persisted in pdump state.
+///
+/// A cached callee remains rooted by the same live function cell that supplied
+/// it. Every function-cell mutation advances `Obarray::function_epoch`; an
+/// epoch mismatch makes the old bits unreachable before they can be used.
+/// `u64::MAX` is reserved by the epoch implementation, so it is an
+/// unambiguous empty-entry marker without `Option` padding.
+const SYMBOL_BYTECODE_CALL_CACHE_CAPACITY: usize = 8;
+const EMPTY_FUNCTION_EPOCH: u64 = u64::MAX;
+
+#[derive(Clone, Copy)]
+struct SymbolByteCodeCallCacheEntry {
+    function_epoch: u64,
+    callee: ResolvedByteCodeCallee,
+    symbol: SymId,
+}
+
+impl SymbolByteCodeCallCacheEntry {
+    const EMPTY: Self = Self {
+        function_epoch: EMPTY_FUNCTION_EPOCH,
+        callee: ResolvedByteCodeCallee(Value::NIL),
+        symbol: crate::emacs_core::intern::NIL_SYM_ID,
+    };
+}
+
+struct SymbolByteCodeCallCache {
+    entries: [SymbolByteCodeCallCacheEntry; SYMBOL_BYTECODE_CALL_CACHE_CAPACITY],
+}
+
+impl SymbolByteCodeCallCache {
+    const fn new() -> Self {
+        Self {
+            entries: [SymbolByteCodeCallCacheEntry::EMPTY; SYMBOL_BYTECODE_CALL_CACHE_CAPACITY],
+        }
+    }
+
+    #[inline(always)]
+    const fn index(symbol: SymId) -> usize {
+        symbol.0 as usize & (SYMBOL_BYTECODE_CALL_CACHE_CAPACITY - 1)
+    }
+
+    #[inline(always)]
+    fn get(&self, symbol: SymId, function_epoch: u64) -> Option<ResolvedByteCodeCallee> {
+        let entry = self.entries[Self::index(symbol)];
+        (entry.function_epoch == function_epoch && entry.symbol == symbol).then_some(entry.callee)
+    }
+
+    #[inline(always)]
+    fn insert(&mut self, symbol: SymId, function_epoch: u64, callee: ResolvedByteCodeCallee) {
+        self.entries[Self::index(symbol)] = SymbolByteCodeCallCacheEntry {
+            function_epoch,
+            callee,
+            symbol,
+        };
+    }
+}
+
+const _: () = {
+    assert!(SYMBOL_BYTECODE_CALL_CACHE_CAPACITY.is_power_of_two());
+    assert!(std::mem::size_of::<SymbolByteCodeCallCacheEntry>() == 3 * std::mem::size_of::<u64>());
+};
+
 /// The bytecode VM execution engine.
 ///
 /// Operates on an Context's obarray and dynamic binding stack.
 pub struct Vm<'a> {
     ctx: &'a mut crate::emacs_core::eval::Context,
+    symbol_bytecode_call_cache: SymbolByteCodeCallCache,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1191,7 +1288,10 @@ impl<'a> crate::emacs_core::hook_runtime::HookRuntime for Vm<'a> {
 
 impl<'a> Vm<'a> {
     pub(crate) fn from_context(ctx: &'a mut crate::emacs_core::eval::Context) -> Self {
-        Self { ctx }
+        Self {
+            ctx,
+            symbol_bytecode_call_cache: SymbolByteCodeCallCache::new(),
+        }
     }
 
     /// Truncate the bytecode operand stack to `len` — used by the JIT call shim
@@ -2174,6 +2274,7 @@ impl<'a> Vm<'a> {
     ) -> InterpreterStackCall {
         match self.resolve_stack_call_target(func_val) {
             ResolvedStackCallTarget::ByteCode { callee } => {
+                let callee = callee.value();
                 let backtrace = self
                     .ctx
                     .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
@@ -5385,6 +5486,7 @@ impl<'a> Vm<'a> {
                     );
                 }
                 ResolvedStackCallTarget::ByteCode { callee } => {
+                    let callee = callee.value();
                     let backtrace = self
                         .ctx
                         .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
@@ -5857,41 +5959,47 @@ impl<'a> Vm<'a> {
         }
     }
 
-    fn resolve_stack_call_target(&self, func_val: Value) -> ResolvedStackCallTarget {
+    fn resolve_stack_call_target(&mut self, func_val: Value) -> ResolvedStackCallTarget {
         match func_val.kind() {
-            ValueKind::Veclike(VecLikeType::ByteCode) => {
-                ResolvedStackCallTarget::ByteCode { callee: func_val }
-            }
+            ValueKind::Veclike(VecLikeType::ByteCode) => ResolvedStackCallTarget::ByteCode {
+                callee: ResolvedByteCodeCallee::from_direct_value(func_val),
+            },
             ValueKind::Symbol(sym_id) => {
                 if self.ctx.compiler_function_overrides_active() {
                     return ResolvedStackCallTarget::Generic;
                 }
+                let function_epoch = self.ctx.obarray.function_epoch();
+                if let Some(callee) = self.symbol_bytecode_call_cache.get(sym_id, function_epoch) {
+                    return ResolvedStackCallTarget::ByteCode { callee };
+                }
                 match self.ctx.obarray.symbol_function_id(sym_id) {
-                    Some(value)
-                        if matches!(value.kind(), ValueKind::Veclike(VecLikeType::ByteCode)) =>
-                    {
-                        ResolvedStackCallTarget::ByteCode { callee: value }
+                    Some(value) => {
+                        let Some(callee) = ResolvedByteCodeCallee::from_live_function_cell(value)
+                        else {
+                            return if matches!(
+                                value.kind(),
+                                ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr)
+                            ) {
+                                ResolvedBuiltinCallee::from_subr_value(value)
+                                    .map_or(ResolvedStackCallTarget::Generic, |callee| {
+                                        ResolvedStackCallTarget::Builtin { callee }
+                                    })
+                            } else {
+                                ResolvedStackCallTarget::Generic
+                            };
+                        };
+                        self.symbol_bytecode_call_cache
+                            .insert(sym_id, function_epoch, callee);
+                        ResolvedStackCallTarget::ByteCode { callee }
                     }
                     // GNU bytecode.c:Bcall resolves a symbol's live function
                     // cell and calls SUBRP function cells directly. Use the
                     // same resolved subr object here instead of consulting the
                     // static table again on the hot path.
-                    Some(value)
-                        if matches!(
-                            value.kind(),
-                            ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr)
-                        ) =>
-                    {
-                        ResolvedBuiltinCallee::from_subr_value(value)
-                            .map_or(ResolvedStackCallTarget::Generic, |callee| {
-                                ResolvedStackCallTarget::Builtin { callee }
-                            })
-                    }
                     None => ResolvedBuiltinCallee::from_static_symbol(sym_id)
                         .map_or(ResolvedStackCallTarget::Generic, |callee| {
                             ResolvedStackCallTarget::Builtin { callee }
                         }),
-                    _ => ResolvedStackCallTarget::Generic,
                 }
             }
             ValueKind::Veclike(VecLikeType::Subr) | ValueKind::Subr(_) => {
