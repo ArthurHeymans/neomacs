@@ -1980,7 +1980,102 @@ fn native_popup_navigation_command(keys: &[Value]) -> Option<TtyMenuNavigationCo
     }
 }
 
-pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
+/// Decode the place-to-put-the-menu half of an `x-popup-menu` POSITION whose
+/// car is the `(X Y)` cons, exactly as GNU `x_popup_menu_1` does.
+///
+/// GNU reads the designator from the SECOND element and the coordinates from
+/// the first (`src/menu.c:1144-1150`):
+///
+/// ```c
+///     tem = Fcar (position);
+///     if (CONSP (tem))
+///       { window = Fcar (Fcdr (position)); x = XCAR (tem); y = Fcar (XCDR (tem)); }
+/// ```
+///
+/// When both coordinates are nil it abandons the designator entirely and uses
+/// the current mouse position instead (`src/menu.c:1182-1184` plus
+/// `1228-1235`, which sets WINDOW to the selected frame), so nothing about the
+/// supplied value is checked in that case.  Otherwise the designator may be a
+/// FRAME or a LIVE WINDOW, and only something that is neither is a `windowp`
+/// error (`src/menu.c:1239-1269`); an internal window fails the liveness check
+/// with `window-live-p`.
+fn decode_popup_menu_position_window(
+    ctx: &mut Context,
+    position_car: Value,
+    position_cdr: Value,
+) -> Result<(), Flow> {
+    let x = position_car.cons_car();
+    let y = {
+        let rest = position_car.cons_cdr();
+        if rest.is_cons() {
+            rest.cons_car()
+        } else {
+            Value::NIL
+        }
+    };
+    if x.is_nil() && y.is_nil() {
+        // GNU's `get_current_pos_p` path: WINDOW is replaced by the selected
+        // frame before the decode below ever runs.
+        return Ok(());
+    }
+
+    let window = if position_cdr.is_cons() {
+        position_cdr.cons_car()
+    } else {
+        Value::NIL
+    };
+    if window.is_frame() {
+        return Ok(());
+    }
+    if let Some(id) = window.as_window_id() {
+        if ctx.frames.is_live_window_id(crate::window::WindowId(id)) {
+            return Ok(());
+        }
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("window-live-p"), window],
+        ));
+    }
+    Err(signal(
+        LispCondition::WrongTypeArgument,
+        vec![Value::symbol("windowp"), window],
+    ))
+}
+
+/// Take GNU's two keymap branches for an `x-popup-menu` MENU argument, and
+/// report whether one of them applied.
+///
+/// GNU `x_popup_menu_1` (`src/menu.c:1294-1364`):
+///
+/// ```c
+///   keymap = get_keymap (menu, 0, 0);
+///   if (CONSP (keymap)) { keymap_panes (&menu, 1); ... }
+///   else if (CONSP (menu) && KEYMAPP (XCAR (menu)))
+///     { ... maps[i++] = keymap = get_keymap (XCAR (tem), 1, 0); ... }
+///   else { title = Fcar (menu); CHECK_STRING (title); list_of_panes (Fcdr (menu)); }
+/// ```
+///
+/// The list-of-keymaps branch resolves EVERY element with `error = 1`, so a
+/// list that starts with a keymap and continues with anything else signals
+/// `keymapp` on that element -- not `stringp` on the list.
+fn decode_popup_menu_keymap_argument(ctx: &mut Context, menu: Value) -> Result<bool, Flow> {
+    if super::keymap::get_keymap_in_runtime(ctx, &menu, false, false)?.is_truthy() {
+        return Ok(true);
+    }
+    if menu.is_cons()
+        && super::keymap::get_keymap_in_runtime(ctx, &menu.cons_car(), false, false)?.is_truthy()
+    {
+        let mut rest = menu;
+        while rest.is_cons() {
+            super::keymap::get_keymap_in_runtime(ctx, &rest.cons_car(), true, false)?;
+            rest = rest.cons_cdr();
+        }
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+pub(crate) fn builtin_x_popup_menu_batch(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_args("x-popup-menu", &args, 2)?;
     let position = &args[0];
     let menu = &args[1];
@@ -2030,22 +2125,21 @@ pub(crate) fn builtin_x_popup_menu_batch(args: Vec<Value>) -> EvalResult {
         }
 
         if !position_car.is_nil() {
-            let window_designator = match position_cdr.kind() {
-                ValueKind::Cons => {
-                    let pair_car = position_cdr.cons_car();
-                    let _pair_cdr = position_cdr.cons_cdr();
-                    pair_car
-                }
-                _ => Value::NIL,
-            };
-            return Err(signal(
-                LispCondition::WrongTypeArgument,
-                vec![Value::symbol("windowp"), window_designator],
-            ));
+            decode_popup_menu_position_window(ctx, position_car, position_cdr)?;
         }
     }
 
-    // This follows the menu descriptor shape expected by batch-mode oracle:
+    // GNU decodes MENU in three branches (`src/menu.c:1294-1364`), and only the
+    // last one requires a string title.  A keymap, or a list of keymaps, is
+    // turned into panes by `keymap_panes` and carries its title in the keymap
+    // prompt, so `CHECK_STRING (title)` never runs for it.  `imenu` reaches
+    // exactly that branch: `imenu--mouse-menu` builds a keymap and
+    // `popup-menu` hands it over as `(indirect-function map)`.
+    if decode_popup_menu_keymap_argument(ctx, *menu)? {
+        return Ok(Value::NIL);
+    }
+
+    // The remaining branch is GNU's "old-fashioned menu":
     // MENU = (TITLE . REST), REST either nil or (PANE . _)
     // PANE = (PANE-TITLE . PANE-ITEMS)
     if menu.is_nil() {
@@ -2123,7 +2217,7 @@ pub(crate) fn builtin_x_popup_menu(ctx: &mut Context, args: Vec<Value>) -> EvalR
         return x_popup_menu_interactive(ctx, position, menu);
     }
 
-    builtin_x_popup_menu_batch(args)
+    builtin_x_popup_menu_batch(ctx, args)
 }
 
 /// (x-synchronize DISPLAY &optional NO-OP) -> error in batch/no-X context.
