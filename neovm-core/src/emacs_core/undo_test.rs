@@ -863,3 +863,61 @@ fn first_change_marker_records_the_visited_file_modtime_like_gnu() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// GNU `record_point` (`src/undo.c:47-78`) reads `at_boundary` from the undo
+/// list BEFORE `record_first_change` may cons `(t . TIME)` onto it, and only
+/// then pushes `point_before_last_command_or_undo`.  GNU's own comment on that
+/// read names the hazard: "This check is currently dependent on being called
+/// before record_first_change".
+///
+/// Neomacs ran the first-change step first and let each recorder re-derive
+/// `at_boundary` afterwards, so on the very case the check exists for -- the
+/// first change to a CLEAN buffer -- the list was no longer at a boundary and
+/// the point entry was dropped.  `primitive-undo` then had nothing to restore
+/// point from and `undo` left point at the change instead of where the command
+/// started (Tide's format/undo-only workflow read point 206 for GNU's 1).
+///
+/// The expected list is what GNU Emacs 31.0.90 prints for this exact form
+/// under `emacs -Q --batch`:
+///
+/// ```text
+/// undo-list=((7 . 8) 1 (t 27263 42178 675008 795000))
+/// ```
+#[test]
+fn record_point_runs_before_the_first_change_sentinel_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+    let mut eval = Context::new();
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock before epoch")
+        .as_nanos();
+    let dir = std::env::temp_dir().join(format!("neovm-undo-record-point-{unique}"));
+    std::fs::create_dir_all(&dir).expect("create temp fixture dir");
+    let file = dir.join("probe.txt");
+    std::fs::write(&file, "").expect("write empty fixture");
+
+    let form = format!(
+        r#"(progn
+             (setq buffer-file-name {:?})
+             (set-visited-file-modtime)
+             (insert "abcdef")
+             (setq buffer-undo-list nil)
+             (set-buffer-modified-p nil)
+             (goto-char (point-min))
+             (undo-boundary)
+             (save-excursion (goto-char (point-max)) (insert "X"))
+             (list :newest (car buffer-undo-list)
+                   :point-entry (nth 1 buffer-undo-list)
+                   :first-change (car-safe (nth 2 buffer-undo-list))
+                   :length (length buffer-undo-list)))"#,
+        file.to_string_lossy()
+    );
+    let rendered = super::super::print::print_value(&eval.eval_str(&form).expect("eval"));
+    assert_eq!(
+        rendered, "(:newest (7 . 8) :point-entry 1 :first-change t :length 3)",
+        "the point entry belongs between the change and the first-change sentinel"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

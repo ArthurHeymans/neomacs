@@ -144,15 +144,10 @@ impl Buffer {
         }
         // GNU `record_insert` always calls `record_point`, and that path
         // records the first-change sentinel when the buffer was unmodified.
-        self.undo_prepare_change(edit.byte_pos(), self.point_emacs_byte_pos());
+        self.undo_prepare_change(edit.char_pos());
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
-            undo::undo_list_record_insert(
-                &mut ul,
-                edit.char_pos(),
-                edit.char_len(),
-                self.undo_state.point_before_command_or_undo(),
-            );
+            undo::undo_list_record_insert(&mut ul, edit.char_pos(), edit.char_len());
             self.set_undo_list(ul);
         }
         self.apply_insert_text_plan(plan)
@@ -201,31 +196,20 @@ impl Buffer {
             return edit.range();
         }
 
-        // GNU `record_delete` always calls `record_point`, and that path
-        // records the first-change sentinel when the buffer was unmodified.
-        self.undo_prepare_change(plan.range().byte_start(), self.point_emacs_byte_pos());
+        // GNU `record_delete` (undo.c) runs `record_point` FIRST, then the
+        // marker adjustments, then conses the deletion, so the point entry
+        // precedes the `(MARKER . ADJ)` entries (GNU bug 16818 ordering).
+        self.undo_prepare_change(plan.range().char_start());
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
-            // GNU `record_delete` (undo.c) records the point-position entry
-            // FIRST, then the marker adjustments, then conses the deletion.
-            // The point entry must precede the `(MARKER . ADJ)` entries so the
-            // boundary check inside `record_point` still sees the undo list at
-            // a boundary (GNU bug 16818 ordering).
-            undo::undo_list_record_point_for_change(
-                &mut ul,
-                plan.range().char_start(),
-                self.undo_state.point_before_command_or_undo(),
-            );
             for &(marker, adjustment) in plan.marker_adjustments() {
                 undo::undo_list_record_marker_adjustment(&mut ul, marker, adjustment);
             }
-            undo::undo_list_record_delete_with_point(
+            undo::undo_list_record_delete(
                 &mut ul,
                 plan.range().char_start(),
                 plan.deleted_text().clone(),
                 self.point_char_pos(),
-                self.undo_state.point_before_command_or_undo(),
-                false,
             );
             self.set_undo_list(ul);
         }
@@ -329,23 +313,22 @@ impl Buffer {
         let old_point = self.point_anchor();
         let deleted_text = self.buffer_region_lisp_string(old_range.byte_range());
 
-        self.undo_prepare_change(old_range.byte_start(), old_point.emacs_byte_pos());
+        // GNU `replace_range` (insdel.c:1638-1639) records the insertion
+        // first, so the `record_point` prologue runs for the *insertion's*
+        // beg -- `from + SCHARS (deletion)`, i.e. the old range's end -- and
+        // the following `record_delete` finds the list off a boundary and adds
+        // nothing.
+        self.undo_prepare_change(plan.old_char_end());
         let mut ul = self.get_undo_list();
         if undo::undo_list_is_disabled(&ul) {
             return;
         }
-        undo::undo_list_record_insert(
-            &mut ul,
-            plan.old_char_end(),
-            plan.new_char_len(),
-            self.undo_state.point_before_command_or_undo(),
-        );
+        undo::undo_list_record_insert(&mut ul, plan.old_char_end(), plan.new_char_len());
         undo::undo_list_record_delete(
             &mut ul,
             plan.old_char_start(),
             deleted_text,
             old_point.char_pos(),
-            self.undo_state.point_before_command_or_undo(),
         );
         self.set_undo_list(ul);
     }
@@ -376,7 +359,7 @@ impl Buffer {
         let old_point = self.point_anchor();
         let deleted_text = self.buffer_region_lisp_string(old_range.byte_range());
 
-        self.undo_prepare_change(old_range.byte_start(), old_point.emacs_byte_pos());
+        self.undo_prepare_change(old_range.char_start());
         let mut ul = self.get_undo_list();
         if !undo::undo_list_is_disabled(&ul) {
             // GNU `casify_region` records `record_delete` first, then
@@ -387,14 +370,8 @@ impl Buffer {
                 old_range.char_start(),
                 deleted_text,
                 old_point.char_pos(),
-                self.undo_state.point_before_command_or_undo(),
             );
-            undo::undo_list_record_insert(
-                &mut ul,
-                old_range.char_start(),
-                plan.new_char_len(),
-                self.undo_state.point_before_command_or_undo(),
-            );
+            undo::undo_list_record_insert(&mut ul, old_range.char_start(), plan.new_char_len());
             self.set_undo_list(ul);
         }
 
@@ -555,7 +532,7 @@ impl Buffer {
     ) {
         let edit = MeasuredSameLenEdit::new(range, modified_range);
         if !noundo {
-            self.undo_prepare_change(modified_range.byte_start(), self.point_emacs_byte_pos());
+            self.undo_prepare_change(modified_range.char_start());
             let mut ul = self.get_undo_list();
             if !undo::undo_list_is_disabled(&ul) {
                 for changed_range in plan.changed_ranges().iter().copied() {
@@ -574,13 +551,11 @@ impl Buffer {
                         changed_range.char_start(),
                         deleted,
                         self.point_char_pos(),
-                        self.undo_state.point_before_command_or_undo(),
                     );
                     undo::undo_list_record_insert(
                         &mut ul,
                         changed_range.char_start(),
                         changed_range.char_len(),
-                        self.undo_state.point_before_command_or_undo(),
                     );
                 }
                 self.set_undo_list(ul);
@@ -607,7 +582,7 @@ impl Buffer {
         let second = transposition.second();
         let old_span = self.buffer_region_lisp_string(transposition.byte_span());
 
-        self.undo_prepare_change(first.byte_start(), self.point_emacs_byte_pos());
+        self.undo_prepare_change(first.char_start());
         let mut undo_list = self.get_undo_list();
         if undo::undo_list_is_disabled(&undo_list) {
             return;
@@ -616,11 +591,10 @@ impl Buffer {
         let record_change = |undo_list: &mut Value,
                              start_char: CharPos0,
                              deleted: LispString,
-                             pt: CharPos0,
-                             point_before: Option<CharPos0>| {
+                             pt: CharPos0| {
             let len_chars = CharLen::new(deleted.schars());
-            undo::undo_list_record_delete(undo_list, start_char, deleted, pt, point_before);
-            undo::undo_list_record_insert(undo_list, start_char, len_chars, point_before);
+            undo::undo_list_record_delete(undo_list, start_char, deleted, pt);
+            undo::undo_list_record_insert(undo_list, start_char, len_chars);
         };
 
         if transposition.same_char_len() {
@@ -630,7 +604,6 @@ impl Buffer {
                     first.char_start(),
                     old_span,
                     self.point_char_pos(),
-                    self.undo_state.point_before_command_or_undo(),
                 );
             } else {
                 record_change(
@@ -638,14 +611,12 @@ impl Buffer {
                     first.char_start(),
                     self.buffer_region_lisp_string(first.byte_range()),
                     self.point_char_pos(),
-                    self.undo_state.point_before_command_or_undo(),
                 );
                 record_change(
                     &mut undo_list,
                     second.char_start(),
                     self.buffer_region_lisp_string(second.byte_range()),
                     self.point_char_pos(),
-                    self.undo_state.point_before_command_or_undo(),
                 );
             }
         } else {
@@ -654,7 +625,6 @@ impl Buffer {
                 first.char_start(),
                 old_span,
                 self.point_char_pos(),
-                self.undo_state.point_before_command_or_undo(),
             );
         }
         self.set_undo_list(undo_list);
@@ -813,38 +783,57 @@ impl Buffer {
             .record_char_modification(modification_tick_delta(changed_chars));
     }
 
-    /// Prepare to record a buffer change: ensure the first-change sentinel
-    /// has been recorded if needed.
+    /// GNU `record_point` (undo.c:47-78), the prologue every recorder runs
+    /// exactly once before it conses anything for a change starting at `beg`.
     ///
-    /// GNU `record_point` (undo.c:64) unconditionally calls `record_first_change`
-    /// whenever `MODIFF <= SAVE_MODIFF`, i.e. whenever the buffer is currently
-    /// CLEAN.  Because `(set-buffer-modified-p nil)` resets `SAVE_MODIFF =
-    /// MODIFF`, the buffer becomes clean again and the *next* modification must
-    /// re-emit `(t . MODTIME)`.  We therefore gate purely on the modified-tick
-    /// comparison (no sticky "already recorded" flag): the first edit after each
-    /// clean->modified transition records the sentinel, and subsequent edits in
-    /// the same modified run see `MODIFF > SAVE_MODIFF` and skip it.
-    fn undo_ensure_first_change(&mut self) {
+    /// GNU's body is three steps *in this order*, and the order is the whole
+    /// point:
+    ///
+    /// ```c
+    ///   at_boundary = ! CONSP (undo_list) || NILP (XCAR (undo_list));
+    ///   if (MODIFF <= SAVE_MODIFF) record_first_change ();
+    ///   if (at_boundary && point_before_last_command_or_undo != beg && ...)
+    ///     push point_before_last_command_or_undo;
+    /// ```
+    ///
+    /// `at_boundary` is read from the list as the command found it — *before*
+    /// `record_first_change` may cons `(t . TIME)` onto it.  Deriving it after
+    /// that push answers `false` for exactly the case it exists to catch (the
+    /// first change to a clean buffer), so the point entry is dropped and
+    /// `primitive-undo` has nothing to restore point from: `undo` leaves point
+    /// at the change instead of where the command started.  GNU's own comment
+    /// on the check ("currently dependent on being called before
+    /// record_first_change") names the hazard.
+    ///
+    /// Keeping all three steps here, instead of leaving each recorder to redo
+    /// the boundary test, is why the ordering cannot be got wrong per call
+    /// site: `undo_list_record_insert` / `undo_list_record_delete` no longer
+    /// take the saved point at all, so there is nothing for them to record
+    /// late.  It also puts the point entry ahead of any `(MARKER . ADJUSTMENT)`
+    /// entries a deletion conses (GNU bug 16818 ordering) for free.
+    ///
+    /// The first-change step gates purely on the modified-tick comparison (no
+    /// sticky "already recorded" flag), like GNU's `MODIFF <= SAVE_MODIFF`:
+    /// `(set-buffer-modified-p nil)` resets `SAVE_MODIFF = MODIFF`, so the
+    /// buffer becomes clean again and the next modification must re-emit
+    /// `(t . MODTIME)`.
+    pub(in crate::buffer) fn undo_prepare_change(&mut self, beg: CharPos0) {
         let mut ul = self.get_undo_list();
         if undo::undo_list_is_disabled(&ul) {
             return;
         }
-        if self.modified_tick() > self.save_modified_tick() {
-            return;
+        let at_boundary = undo::undo_list_at_boundary(&ul);
+        if self.modified_tick() <= self.save_modified_tick() {
+            undo::undo_list_record_first_change(&mut ul, self.visited_file_modtime_value());
+            self.undo_state.set_recorded_first_change(true);
         }
-        undo::undo_list_record_first_change(&mut ul, self.visited_file_modtime_value());
+        if let Some(point) = self.undo_state.point_before_command_or_undo()
+            && at_boundary
+            && point != beg
+        {
+            undo::undo_list_record_point(&mut ul, point);
+        }
         self.set_undo_list(ul);
-        self.undo_state.set_recorded_first_change(true);
-    }
-
-    /// Prepare undo recording for a buffer edit at `beg` with point at `pt`.
-    pub(in crate::buffer) fn undo_prepare_change(&mut self, beg: EmacsBytePos, pt: EmacsBytePos) {
-        let ul = self.get_undo_list();
-        if undo::undo_list_is_disabled(&ul) {
-            return;
-        }
-        let _ = (beg, pt);
-        self.undo_ensure_first_change();
     }
 }
 

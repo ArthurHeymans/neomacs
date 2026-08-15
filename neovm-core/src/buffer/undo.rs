@@ -37,22 +37,31 @@ pub fn undo_list_is_disabled(undo_list: &Value) -> bool {
     undo_list.is_t()
 }
 
+/// True when `buffer-undo-list` currently sits at an undo boundary: it is
+/// empty, or its newest entry is the `nil` boundary.
+///
+/// GNU `record_point` (`src/undo.c:59-61`) reads exactly this, and reads it
+/// *before* `record_first_change` may cons `(t . TIME)` onto the list.  The
+/// answer is therefore a fact about the list as the command found it, which
+/// is why it is read once by [`crate::buffer::Buffer::undo_prepare_change`]
+/// rather than re-derived by each recorder.
+pub fn undo_list_at_boundary(undo_list: &Value) -> bool {
+    undo_list.is_nil() || (undo_list.is_cons() && undo_list.cons_car().is_nil())
+}
+
 /// Record that text was inserted at character position `beg` with character
 /// length `len`.  Positions stored in the list are 1-indexed.
 ///
-/// If we are right at an undo boundary (head is nil or list is empty)
-/// and `pt` != `beg`, a cursor-position entry is recorded first.
+/// The caller must already have run the GNU `record_point` prologue (see
+/// [`crate::buffer::Buffer::undo_prepare_change`]); this records only the
+/// insertion itself, exactly like GNU's `record_insert` body after its
+/// `record_point (beg)` call.
 ///
 /// Consecutive adjacent inserts are merged when the head entry is an
 /// insert whose END equals `beg+1` (the 1-indexed start of the new
 /// insert), and only then: an insert that ends where the head entry begins
 /// stays its own record, exactly as in GNU `record_insert`.
-pub fn undo_list_record_insert(
-    undo_list: &mut Value,
-    beg: CharPos0,
-    len: CharLen,
-    point_before_command_or_undo: Option<CharPos0>,
-) {
+pub fn undo_list_record_insert(undo_list: &mut Value, beg: CharPos0, len: CharLen) {
     // GNU `record_insert` (undo.c) returns early only for a disabled undo
     // list; a zero-length insertion still conses `(BEG . BEG)`.  That record
     // is load-bearing, because `record_insert` coalesces into the newest
@@ -61,14 +70,6 @@ pub fn undo_list_record_insert(
     // change runs.
     if undo_list_is_disabled(undo_list) {
         return;
-    }
-
-    let at_boundary = undo_list.is_nil() || (undo_list.is_cons() && undo_list.cons_car().is_nil());
-    if let Some(point) = point_before_command_or_undo
-        && at_boundary
-        && point != beg
-    {
-        undo_list_record_point(undo_list, point);
     }
 
     let beg1 = beg.to_lisp().as_i64();
@@ -106,32 +107,6 @@ pub fn undo_list_record_insert(
     restore_scratch_gc_roots(saved);
 }
 
-/// Record the point-position undo entry that GNU `record_point (beg)` conses
-/// at the start of `record_delete`/`record_insert`.
-///
-/// GNU records `point_before_last_command_or_undo` (point as it was at the
-/// beginning of the command) — *not* the current point — and only when the
-/// undo list is currently at a boundary and that saved point differs from
-/// `beg` (the start of the change).  This must run *before* any
-/// marker-adjustment entries are consed so the resulting undo list keeps the
-/// point entry ahead of them (GNU bug 16818 ordering).
-pub fn undo_list_record_point_for_change(
-    undo_list: &mut Value,
-    beg: CharPos0,
-    point_before_command_or_undo: Option<CharPos0>,
-) {
-    if undo_list_is_disabled(undo_list) {
-        return;
-    }
-    let at_boundary = undo_list.is_nil() || (undo_list.is_cons() && undo_list.cons_car().is_nil());
-    if let Some(point) = point_before_command_or_undo
-        && at_boundary
-        && point != beg
-    {
-        undo_list_record_point(undo_list, point);
-    }
-}
-
 /// Record a deletion.  `beg` is the 0-indexed character position, `text` is
 /// the deleted string, `pt` is the 0-indexed cursor character position at
 /// the time of deletion.
@@ -139,16 +114,15 @@ pub fn undo_list_record_point_for_change(
 /// The stored position is 1-indexed and negative when `pt` was at the
 /// END of the deleted region (i.e. `pt == beg + SCHARS (text)`).
 ///
-/// When `record_point` is `false` the caller has already recorded the
-/// point-position entry (GNU records it *before* marker adjustments, so the
-/// marker-adjustment path records it itself and suppresses it here).
-pub fn undo_list_record_delete_with_point(
+/// The caller must already have run the GNU `record_point` prologue (see
+/// [`crate::buffer::Buffer::undo_prepare_change`]), which is also what keeps
+/// the point entry ahead of any `(MARKER . ADJUSTMENT)` entries (GNU bug
+/// 16818 ordering).
+pub fn undo_list_record_delete(
     undo_list: &mut Value,
     beg: CharPos0,
     text: LispString,
     pt: CharPos0,
-    point_before_command_or_undo: Option<CharPos0>,
-    record_point: bool,
 ) {
     // GNU `record_delete` (undo.c) returns early only for a disabled undo
     // list; it never tests the string's length, so a zero-length deletion
@@ -156,10 +130,6 @@ pub fn undo_list_record_delete_with_point(
     // empty record matters.
     if undo_list_is_disabled(undo_list) {
         return;
-    }
-
-    if record_point {
-        undo_list_record_point_for_change(undo_list, beg, point_before_command_or_undo);
     }
 
     let pos1 = beg.to_lisp().as_i64();
@@ -177,25 +147,6 @@ pub fn undo_list_record_delete_with_point(
     push_scratch_gc_root(entry);
     *undo_list = Value::cons(entry, *undo_list);
     restore_scratch_gc_roots(saved);
-}
-
-/// Record a deletion, recording the point-position entry first (the common
-/// case with no marker adjustments).  See [`undo_list_record_delete_with_point`].
-pub fn undo_list_record_delete(
-    undo_list: &mut Value,
-    beg: CharPos0,
-    text: LispString,
-    pt: CharPos0,
-    point_before_command_or_undo: Option<CharPos0>,
-) {
-    undo_list_record_delete_with_point(
-        undo_list,
-        beg,
-        text,
-        pt,
-        point_before_command_or_undo,
-        true,
-    );
 }
 
 /// Record a marker adjustment immediately before a deletion record.
