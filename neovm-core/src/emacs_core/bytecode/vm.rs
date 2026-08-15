@@ -947,15 +947,6 @@ enum InterpreterStackCall {
     Complete(EvalResult),
 }
 
-enum InterpreterFrameControl {
-    Enter {
-        frame: InterpreterFrame,
-        continuation: BytecodeCallContinuation,
-    },
-    Return(Value),
-    Propagate(Flow),
-}
-
 enum InterpreterFrameCompletion {
     Resume,
     Exit(EvalResult),
@@ -2446,154 +2437,147 @@ impl<'a> Vm<'a> {
         let mut aux_stack =
             InterpreterFrameAuxStack::new(std::mem::take(handlers), std::mem::take(bind_stack));
 
-        loop {
-            let aux = aux_stack.current_mut();
-            let control = self.run_interpreter_frame(&mut current, aux, &mut quitcounter);
-            match control {
-                InterpreterFrameControl::Enter {
-                    frame,
-                    continuation,
-                } => {
-                    let caller_depth =
-                        InterpreterDriverDepth::from_suspended_callers(callers.len());
-                    let parent = std::mem::replace(&mut current, frame);
-                    aux_stack.suspend_current(caller_depth);
-                    callers.push(SuspendedInterpreterFrame {
-                        frame: parent,
-                        continuation,
-                    });
-                }
-                InterpreterFrameControl::Return(value) => {
-                    match self.complete_interpreter_frame_value(
-                        &mut current,
-                        &mut callers,
-                        &mut aux_stack,
-                        value,
-                    ) {
-                        InterpreterValueCompletion::Resume => {}
-                        InterpreterValueCompletion::Exit(value) => {
-                            *pc = current.pc;
-                            let (entry_handlers, entry_bind_stack) = aux_stack.take_entry();
-                            *handlers = entry_handlers;
-                            *bind_stack = entry_bind_stack;
-                            return Ok(value);
+        let result = self.run_interpreter_driver(
+            &mut current,
+            &mut callers,
+            &mut aux_stack,
+            &mut quitcounter,
+        );
+        *pc = current.pc;
+        let (entry_handlers, entry_bind_stack) = aux_stack.take_entry();
+        *handlers = entry_handlers;
+        *bind_stack = entry_bind_stack;
+        result
+    }
+
+    /// Run every eligible Tier-0 bytecode frame in one GNU-shaped dispatcher.
+    ///
+    /// `Bcall` installs a child and `Breturn` restores its caller inside the
+    /// same driver.  Frame transitions therefore cannot accidentally grow the
+    /// Rust call stack or package the hot path in a general control-flow enum.
+    /// The `'frame` loop is the typed equivalent of GNU bytecode.c's
+    /// `setup_frame`/`Breturn` jumps; the inner loop remains opcode dispatch.
+    #[inline(always)]
+    fn run_interpreter_driver(
+        &mut self,
+        current: &mut InterpreterFrame,
+        callers: &mut Vec<SuspendedInterpreterFrame>,
+        aux_stack: &mut InterpreterFrameAuxStack,
+        driver_quitcounter: &mut u8,
+    ) -> EvalResult {
+        'frame: loop {
+            let func = current.function.code();
+            let frame_base = current.frame_base;
+            let frame_limit = current.frame_limit;
+            let ops = func.executable_ops();
+            let constants = &func.constants;
+            let ops_len = ops.len();
+            let ops_ptr = ops.as_ptr();
+            let mut pc_local = current.pc;
+            let mut quitcounter = *driver_quitcounter;
+            // OSR (on-stack replacement): once a hot loop is detected at a backward
+            // branch, transfer the rest of this interpreted call into native code at
+            // the loop header. `osr_tried` latches so a loop that can't/didn't OSR is
+            // probed only once per frame. The opt-in/kill-switch gates are evaluated
+            // at the USE site (inside the 1-in-256 back-edge wrap), NOT here: this
+            // runs on every interpreted call, and hoisting two `OnceLock` reads onto
+            // that path cost +1.8% on byte-compile even with the JIT disabled
+            // (measured; the tax persisted under `NEOVM_JIT=0`, which is what pinned
+            // it to the interpreter path rather than to compile-time analysis).
+            #[cfg(feature = "jit")]
+            let mut osr_tried = current.osr_tried;
+
+            // A6: base+len of the operand stack live in registers for the whole
+            // dispatch loop (GNU keeps top/pc in locals, bytecode.c). Every
+            // escape into Context/eval publishes first and reacquires after; the
+            // publish is a move, so a stale cursor use is a compile error.
+            let mut cursor = StackCursor::acquire(self.ctx);
+
+            macro_rules! stk {
+                () => {
+                    cursor
+                };
+            }
+
+            // Resume nonlocal flow at the innermost VM handler, or propagate out
+            // of run_loop. The cursor must be PUBLISHED before this runs:
+            // resume_nonlocal truncates bc_buf to the handler's stack height and
+            // can run unwind-protect cleanup forms (arbitrary Lisp / GC).
+            macro_rules! resume_flow {
+                ($flow:expr) => {{
+                    let resume = {
+                        let aux = aux_stack.current_mut();
+                        self.resume_nonlocal(
+                            func,
+                            &mut pc_local,
+                            &mut aux.handlers,
+                            &mut aux.bind_stack,
+                            $flow,
+                        )
+                    };
+                    match resume {
+                        Ok(()) => {
+                            cursor = StackCursor::acquire(&mut self.ctx);
+                            continue;
                         }
-                        InterpreterValueCompletion::NeedsSlowCleanup(value) => {
+                        Err(flow) => {
+                            current.pc = pc_local;
+                            *driver_quitcounter = quitcounter;
+                            #[cfg(feature = "jit")]
+                            {
+                                current.osr_tried = osr_tried;
+                            }
                             match self.complete_interpreter_frame_chain(
-                                &mut current,
-                                &mut callers,
-                                &mut aux_stack,
-                                Ok(value),
+                                current,
+                                callers,
+                                aux_stack,
+                                Err(flow),
                             ) {
-                                InterpreterFrameCompletion::Resume => {}
-                                InterpreterFrameCompletion::Exit(result) => {
-                                    *pc = current.pc;
-                                    let (entry_handlers, entry_bind_stack) = aux_stack.take_entry();
-                                    *handlers = entry_handlers;
-                                    *bind_stack = entry_bind_stack;
-                                    return result;
-                                }
+                                InterpreterFrameCompletion::Resume => continue 'frame,
+                                InterpreterFrameCompletion::Exit(result) => return result,
                             }
                         }
                     }
-                }
-                InterpreterFrameControl::Propagate(flow) => {
-                    match self.complete_interpreter_frame_chain(
-                        &mut current,
-                        &mut callers,
-                        &mut aux_stack,
-                        Err(flow),
-                    ) {
-                        InterpreterFrameCompletion::Resume => {}
-                        InterpreterFrameCompletion::Exit(result) => {
-                            *pc = current.pc;
-                            let (entry_handlers, entry_bind_stack) = aux_stack.take_entry();
-                            *handlers = entry_handlers;
-                            *bind_stack = entry_bind_stack;
-                            return result;
-                        }
-                    }
-                }
+                }};
             }
-        }
-    }
 
-    /// Run one frame until it calls another Tier-0 bytecode function or
-    /// completes. The outer driver owns frame suspension and unwinding; this
-    /// hot method owns only GNU's opcode-dispatch registers. It is always
-    /// inlined so the source-level seam does not become a per-call host-stack
-    /// boundary.
-    #[inline(always)]
-    fn run_interpreter_frame(
-        &mut self,
-        current: &mut InterpreterFrame,
-        aux: &mut InterpreterFrameAux,
-        driver_quitcounter: &mut u8,
-    ) -> InterpreterFrameControl {
-        let func = current.function.code();
-        let frame_base = current.frame_base;
-        let frame_limit = current.frame_limit;
-        let ops = func.executable_ops();
-        let constants = &func.constants;
-        let ops_len = ops.len();
-        let ops_ptr = ops.as_ptr();
-        let mut pc_local = current.pc;
-        let mut quitcounter = *driver_quitcounter;
-        // OSR (on-stack replacement): once a hot loop is detected at a backward
-        // branch, transfer the rest of this interpreted call into native code at
-        // the loop header. `osr_tried` latches so a loop that can't/didn't OSR is
-        // probed only once per frame. The opt-in/kill-switch gates are evaluated
-        // at the USE site (inside the 1-in-256 back-edge wrap), NOT here: this
-        // runs on every interpreted call, and hoisting two `OnceLock` reads onto
-        // that path cost +1.8% on byte-compile even with the JIT disabled
-        // (measured; the tax persisted under `NEOVM_JIT=0`, which is what pinned
-        // it to the interpreter path rather than to compile-time analysis).
-        #[cfg(feature = "jit")]
-        let mut osr_tried = current.osr_tried;
-
-        // A6: base+len of the operand stack live in registers for the whole
-        // dispatch loop (GNU keeps top/pc in locals, bytecode.c). Every
-        // escape into Context/eval publishes first and reacquires after; the
-        // publish is a move, so a stale cursor use is a compile error.
-        let mut cursor = StackCursor::acquire(self.ctx);
-
-        macro_rules! stk {
-            () => {
-                cursor
-            };
-        }
-
-        // Resume nonlocal flow at the innermost VM handler, or propagate out
-        // of run_loop. The cursor must be PUBLISHED before this runs:
-        // resume_nonlocal truncates bc_buf to the handler's stack height and
-        // can run unwind-protect cleanup forms (arbitrary Lisp / GC).
-        macro_rules! resume_flow {
-            ($flow:expr) => {{
-                match self.resume_nonlocal(
-                    func,
-                    &mut pc_local,
-                    &mut aux.handlers,
-                    &mut aux.bind_stack,
-                    $flow,
-                ) {
-                    Ok(()) => {
-                        cursor = StackCursor::acquire(&mut self.ctx);
-                        continue;
+            macro_rules! complete_value {
+                ($value:expr) => {{
+                    let value = $value;
+                    current.pc = pc_local;
+                    *driver_quitcounter = quitcounter;
+                    #[cfg(feature = "jit")]
+                    {
+                        current.osr_tried = osr_tried;
                     }
-                    Err(flow) => {
-                        current.pc = pc_local;
-                        *driver_quitcounter = quitcounter;
-                        #[cfg(feature = "jit")]
-                        {
-                            current.osr_tried = osr_tried;
+                    match self.complete_interpreter_frame_value(current, callers, aux_stack, value)
+                    {
+                        InterpreterValueCompletion::Resume => continue 'frame,
+                        InterpreterValueCompletion::Exit(value) => return Ok(value),
+                        InterpreterValueCompletion::NeedsSlowCleanup(value) => {
+                            match self.complete_interpreter_frame_chain(
+                                current,
+                                callers,
+                                aux_stack,
+                                Ok(value),
+                            ) {
+                                InterpreterFrameCompletion::Resume => continue 'frame,
+                                InterpreterFrameCompletion::Exit(result) => return result,
+                            }
                         }
-                        return InterpreterFrameControl::Propagate(flow);
                     }
-                }
-            }};
-        }
+                }};
+            }
 
-        macro_rules! stk_push {
+            macro_rules! return_value {
+                ($value:expr) => {{
+                    let value = $value;
+                    cursor.publish(self.ctx);
+                    complete_value!(value)
+                }};
+            }
+
+            macro_rules! stk_push {
             ($val:expr) => {{
                 let v = $val;
                 #[cfg(debug_assertions)]
@@ -2636,442 +2620,312 @@ impl<'a> Vm<'a> {
             }};
         }
 
-        macro_rules! vm_try {
-            ($expr:expr) => {{
-                cursor.publish(&mut self.ctx);
-                let result = $expr;
-                cursor = StackCursor::acquire(&mut self.ctx);
-                match result {
-                    Ok(value) => value,
-                    Err(flow) => {
-                        cursor.publish(&mut self.ctx);
-                        resume_flow!(flow)
-                    }
-                }
-            }};
-        }
-
-        // For NON-ESCAPING fallible helpers only (no bc_buf access, no GC
-        // safe point, no Lisp): evaluates $expr with the cursor live so it
-        // may read operands straight off the stack slice; publishes only on
-        // the error path (resume_flow requires it).
-        macro_rules! vm_try_pure {
-            ($expr:expr) => {{
-                match $expr {
-                    Ok(value) => value,
-                    Err(flow) => {
-                        cursor.publish(&mut self.ctx);
-                        resume_flow!(flow)
-                    }
-                }
-            }};
-        }
-
-        macro_rules! branch_to {
-            ($target:expr) => {{
-                let target = $target;
-                if target < pc_local {
-                    quitcounter = quitcounter.wrapping_add(1);
-                    if quitcounter == 0 {
-                        quitcounter = 1;
-                        // Loop-work heat (jit): 256 backward branches ≈ one call
-                        // toward tier-up, so a hot INNER LOOP in a rarely-called
-                        // body still goes native on its next entry. Piggybacks on
-                        // the existing per-wrap cold path; no per-iteration cost.
-                        #[cfg(feature = "jit")]
-                        func.runtime.note_loop_work();
-                        vm_try!(self.ctx.bytecode_branch_maybe_gc_and_quit());
-                        // OSR: the loop is hot and this is a backward branch (its
-                        // target is the loop header). If the function is OSR-eligible
-                        // and the live operand stack matches the header's entry depth,
-                        // transfer into native code and finish there. `Ok` = the
-                        // function completed (its result); `Signal` propagates; a
-                        // deopt / non-transfer just falls back to interpreting (the
-                        // OSR ran in its own frame, so our state is untouched).
-                        // Gates ordered cheapest-first: a local bool, then the
-                        // opt-in knob (default OFF, so it short-circuits the rest
-                        // for every stock build), then the kill switch, then the
-                        // heat load.
-                        #[cfg(feature = "jit")]
-                        if !osr_tried
-                            && crate::emacs_core::jit::jit_osr_on()
-                            && crate::emacs_core::jit::jit_runtime_enabled()
-                            && func.runtime.is_hot()
-                        {
-                            let depth = cursor.len - frame_base;
+            macro_rules! vm_try {
+                ($expr:expr) => {{
+                    cursor.publish(&mut self.ctx);
+                    let result = $expr;
+                    cursor = StackCursor::acquire(&mut self.ctx);
+                    match result {
+                        Ok(value) => value,
+                        Err(flow) => {
                             cursor.publish(&mut self.ctx);
-                            let snapshot: Vec<Value> =
-                                self.ctx.bc_buf[frame_base..frame_base + depth].to_vec();
-                            let ctx_ptr: *mut crate::emacs_core::eval::Context = &mut *self.ctx;
-                            match crate::emacs_core::jit::cache::try_run_osr(
-                                ctx_ptr, func, target, &snapshot,
-                            ) {
-                                Some(crate::emacs_core::jit::compile::NativeRun::Ok(bits)) => {
-                                    current.pc = pc_local;
-                                    *driver_quitcounter = quitcounter;
-                                    current.osr_tried = osr_tried;
-                                    return InterpreterFrameControl::Return(Value::from_bits(bits));
-                                }
-                                Some(crate::emacs_core::jit::compile::NativeRun::Signal) => {
-                                    let flow = crate::emacs_core::jit::compile::take_pending_flow()
-                                        .expect("OSR Signal must stash a pending flow");
-                                    resume_flow!(flow)
-                                }
-                                _ => {
-                                    // Deopt / DeoptAt / not-transferred: fall back to
-                                    // the interpreter (state unchanged); don't retry.
-                                    osr_tried = true;
-                                    cursor = StackCursor::acquire(&mut self.ctx);
-                                }
-                            }
-                        }
-                    }
-                }
-                pc_local = target;
-            }};
-        }
-
-        macro_rules! invalid_bytecode {
-            ($reason:expr) => {{
-                let invalid_pc = pc_local.saturating_sub(1);
-                let stack_len = cursor.len;
-                cursor.publish(&mut self.ctx);
-                trace_invalid_bytecode_site(
-                    func,
-                    $reason,
-                    invalid_pc,
-                    frame_base,
-                    frame_limit,
-                    stack_len,
-                    ops.get(invalid_pc),
-                );
-                resume_flow!(invalid_bytecode_flow())
-            }};
-        }
-
-        while pc_local < ops_len {
-            let op = unsafe { &*ops_ptr.add(pc_local) };
-            pc_local += 1;
-            #[cfg(feature = "vm-profile")]
-            vm_profile::bump(op);
-
-            match op {
-                // -- Constants and stack --
-                Op::Constant(idx) => {
-                    let Some(value) = constants.get(*idx as usize).copied() else {
-                        invalid_bytecode!("constant-index-out-of-range");
-                    };
-                    stk_push!(value);
-                }
-                Op::Nil => stk_push!(Value::NIL),
-                Op::True => stk_push!(Value::T),
-                Op::Pop => {
-                    if stk!().is_empty() {
-                        invalid_bytecode!("pop-empty-stack");
-                    }
-                    stk!().pop();
-                }
-                Op::Dup => {
-                    if pc_local + 2 < ops_len {
-                        let next0 = unsafe { &*ops_ptr.add(pc_local) };
-                        let next1 = unsafe { &*ops_ptr.add(pc_local + 1) };
-                        let next2 = unsafe { &*ops_ptr.add(pc_local + 2) };
-                        if let (Op::StackRef(stack_ref), Op::Lss, Op::GotoIfNil(target)) =
-                            (next0, next1, next2)
-                        {
-                            let len = cursor.len;
-                            if len == 0 {
-                                invalid_bytecode!("dup-lss-gotoifnil-empty-stack");
-                            }
-                            if len >= frame_limit {
-                                invalid_bytecode!("dup-lss-gotoifnil-stack-at-frame-limit");
-                            }
-
-                            let top = unsafe { *cursor.get_unchecked(len - 1) };
-                            let after_dup_len = len + 1;
-                            let offset = 1 + *stack_ref as usize;
-
-                            if offset > after_dup_len || after_dup_len >= frame_limit {
-                                // SAFETY: len < frame_limit checked above.
-                                unsafe { cursor.push_unchecked(top) };
-                                pc_local += 1;
-                                invalid_bytecode!("dup-lss-gotoifnil-stackref-out-of-range");
-                            }
-
-                            let ref_index = after_dup_len - offset;
-                            let ref_value = if ref_index == len {
-                                top
-                            } else {
-                                unsafe { *cursor.get_unchecked(ref_index) }
-                            };
-
-                            if top.is_fixnum() && ref_value.is_fixnum() {
-                                pc_local += 3;
-                                if !fixnum_lt(top, ref_value) {
-                                    branch_to!(*target as usize);
-                                }
-                                continue;
-                            }
-                        }
-                    }
-
-                    if let Some(&top) = stk!().last() {
-                        stk_push!(top);
-                    } else {
-                        invalid_bytecode!("dup-empty-stack");
-                    }
-                }
-                Op::StackRef(n) => {
-                    let offset = 1 + *n as usize;
-                    let len = stk!().len();
-                    if offset <= len {
-                        // Valid bytecode references an existing stack slot.
-                        // Keep the hot path to one explicit check and avoid
-                        // the slice indexer's second bounds check.
-                        let val = unsafe { *stk!().get_unchecked(len - offset) };
-                        stk_push!(val);
-                    } else {
-                        invalid_bytecode!("stack-ref-out-of-range");
-                    }
-                }
-                Op::StackSet(n) => {
-                    let len = stk!().len();
-                    if len == 0 {
-                        invalid_bytecode!("stack-set-empty-stack");
-                    }
-                    let n = *n as usize;
-                    if n == 0 {
-                        stk!().pop();
-                        continue;
-                    }
-                    if n < len {
-                        let val = unsafe { *cursor.get_unchecked(len - 1) };
-                        let idx = len - 1 - n;
-                        unsafe { *cursor.get_unchecked_mut(idx) = val };
-                        cursor.len = len - 1;
-                    } else {
-                        invalid_bytecode!("stack-set-out-of-range");
-                    }
-                }
-                Op::DiscardN(raw) => {
-                    let preserve_tos = (raw & 0x80) != 0;
-                    let n = (raw & 0x7F) as usize;
-                    if n == 0 {
-                        continue;
-                    }
-                    let len = stk!().len();
-                    if n > len {
-                        invalid_bytecode!("discard-n-out-of-range");
-                    }
-                    if preserve_tos {
-                        if n >= len {
-                            invalid_bytecode!("discard-n-preserve-tos-out-of-range");
-                        }
-                        let top = unsafe { *cursor.get_unchecked(len - 1) };
-                        let target = len - 1 - n;
-                        unsafe { *cursor.get_unchecked_mut(target) = top };
-                    }
-                    cursor.len = len - n;
-                }
-
-                // -- Variable access --
-                Op::VarRef(idx) => {
-                    let name_id = sym_id_at(constants, *idx);
-                    // Task-4 profiling: class + per-symbol VarRef breakdown
-                    // (the BLV-fraction counter the T1 report flagged missing).
-                    #[cfg(feature = "vm-profile")]
-                    {
-                        let (class, via_alias) = self.vm_profile_classify_varref(name_id);
-                        vm_profile::bump_varref(name_id, class, via_alias);
-                    }
-                    let val = vm_try!(self.fast_path_var_ref(name_id));
-                    stk_push!(val);
-                }
-                Op::VarSet(idx) => {
-                    let name_id = sym_id_at(constants, *idx);
-                    let val = stk!().pop().unwrap_or(Value::NIL);
-                    let extra = [val];
-                    vm_try!(
-                        self.with_frame_roots(func, &extra, |vm| {
-                            vm.assign_var_id(name_id, val)
-                        },)
-                    );
-                }
-                Op::VarBind(idx) => {
-                    // GNU bytecode.c Bvarbind: `specbind (vectorp[arg], POP);`
-                    // — always a dynamic binding, no lexical fallback. The
-                    // byte-compiler (bytecomp.el byte-compile-bind) emits
-                    // `byte-varbind` ONLY for variables that
-                    // `cconv--not-lexical-var-p` reports as dynamic — i.e.
-                    // members of `byte-compile-bound-variables`, populated
-                    // from the file's top-level `(defvar VAR)` declarations
-                    // among other sources. Lexical `let` bindings never get
-                    // a varbind opcode at all; they live on the value stack
-                    // and are tracked via `byte-compile--lexical-environment`.
-                    //
-                    // Therefore the VM must NOT second-guess the byte-compiler
-                    // by inspecting `is_special_id` / `lexenv_declares_special`
-                    // at runtime. Doing so misroutes file-local-only dynamic
-                    // declarations (e.g. `(defvar cconv-freevars-alist)` in
-                    // cconv.el — declared special locally but not globally) to
-                    // the lexenv, where they are invisible to other functions
-                    // called from the let body and surface as `void-variable`.
-                    let name_id = sym_id_at(constants, *idx);
-                    let val = stk!().pop().unwrap_or(Value::NIL);
-                    let bind_depth = self.ctx.specpdl.len();
-                    // vm_try publishes the stack because specbind can run
-                    // variable watchers (arbitrary Lisp).
-                    vm_try!(self.ctx.try_specbind(name_id, val));
-                    aux.bind_stack.push(bind_depth);
-                }
-                Op::Unbind(n) => {
-                    let n = *n as usize;
-                    let target = if n <= aux.bind_stack.len() {
-                        let depth = aux.bind_stack[aux.bind_stack.len() - n];
-                        aux.bind_stack.truncate(aux.bind_stack.len() - n);
-                        depth
-                    } else {
-                        aux.bind_stack.clear();
-                        0
-                    };
-                    // unbind_to can run unwind-protect cleanups — escape.
-                    cursor.publish(self.ctx);
-                    self.ctx.unbind_to(target);
-                    cursor = StackCursor::acquire(self.ctx);
-                }
-
-                // -- Function calls --
-                Op::Call(n) => {
-                    let n = *n as usize;
-                    let args_start = stk!().len().saturating_sub(n);
-                    let stack_after_call = args_start.saturating_sub(1);
-                    let func_val = if args_start > 0 {
-                        stk!()[args_start - 1]
-                    } else {
-                        Value::NIL
-                    };
-                    // JIT Phase 1: record the callee for direct-call speculation.
-                    // Only NAMED (symbol) callees carry a SymId; the call-site
-                    // index is `pc_local - 1` (pc was advanced past Call above).
-                    // GC-safe: a SymId is a stable index, never a heap pointer.
-                    #[cfg(feature = "jit")]
-                    if self.bytecode_tier_policy.records_call_feedback()
-                        && let ValueKind::Symbol(id) = func_val.kind()
-                    {
-                        func.runtime.record_call(pc_local - 1, ops_len, id);
-                    }
-                    // Round-2 profiling: attribute this Op::Call to its callee
-                    // symbol (the find_spec_sites entry population). Resolve a
-                    // subr-object callee to its SymId so both `(f x)` (symbol
-                    // callee) and a spilled subr value count the same builtin.
-                    // Task-4 profiling: also record the resolution kind
-                    // (closure-vs-builtin split) and the callee under its call
-                    // site — the execution-weighted per-site polymorphism table.
-                    #[cfg(feature = "vm-profile")]
-                    {
-                        if let Some(id) = match func_val.kind() {
-                            ValueKind::Symbol(id) => Some(id),
-                            _ => func_val.as_subr_id(),
-                        } {
-                            vm_profile::bump_entry(id, vm_profile::ENTRY_CALL);
-                        }
-                        let (site_key, kind) = self.vm_profile_classify_call(func_val);
-                        vm_profile::bump_call_site(
-                            func as *const ByteCodeFunction as usize,
-                            (pc_local - 1) as u32,
-                            site_key,
-                            kind,
-                        );
-                    }
-                    // GNU `bytecode.c:Bcall` polls `maybe_quit` before
-                    // entering the callee. This is observable when bytecode
-                    // sets `quit-flag` immediately before a call: the callee
-                    // must not run.
-                    vm_try!(self.ctx.maybe_quit());
-                    let writeback_names = if n > 0 && stk!()[args_start].is_string() {
-                        self.writeback_mutating_callable_names(&func_val)
-                    } else {
-                        None
-                    };
-                    let writeback_args = writeback_names
-                        .as_ref()
-                        .map(|_| stk!()[args_start..].iter().copied().collect::<LispArgVec>());
-                    let result = if writeback_names.is_none() {
-                        cursor.publish(self.ctx);
-                        if let Err(flow) = self.enter_bytecode_call_depth() {
                             resume_flow!(flow)
                         }
-                        match self.dispatch_interpreter_stack_call(func_val, args_start, n) {
-                            InterpreterStackCall::Enter {
-                                callee,
-                                args_start,
-                                nargs,
-                                backtrace,
-                            } => {
-                                current.pc = pc_local;
-                                *driver_quitcounter = quitcounter;
-                                #[cfg(feature = "jit")]
-                                {
-                                    current.osr_tried = osr_tried;
-                                }
-                                let child = self
-                                    .prepare_iterative_interpreter_frame(callee, args_start, nargs);
-                                return InterpreterFrameControl::Enter {
-                                    frame: child,
-                                    continuation: BytecodeCallContinuation {
-                                        stack_after_call,
-                                        backtrace,
-                                    },
-                                };
-                            }
-                            InterpreterStackCall::Complete(result) => {
-                                self.leave_bytecode_call_depth();
-                                match result {
-                                    Ok(value) => {
-                                        cursor = StackCursor::acquire(self.ctx);
-                                        value
-                                    }
-                                    Err(flow) => resume_flow!(flow),
-                                }
-                            }
-                        }
-                    } else {
-                        let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
-                        vm_try!(
-                            self.with_bytecode_call_depth(|vm| {
-                                vm.call_function(func_val, args)
-                            })
-                        )
-                    };
-                    if let (Some((called_name, alias_target)), Some(writeback_args)) =
-                        (writeback_names.as_ref(), writeback_args.as_ref())
-                    {
-                        let root_scope = self.ctx.save_vm_roots();
-                        self.push_dynamic_vm_root(result);
-                        for value in writeback_args.iter().copied() {
-                            self.push_dynamic_vm_root(value);
-                        }
-                        self.maybe_writeback_mutating_first_arg(
-                            called_name,
-                            *alias_target,
-                            writeback_args,
-                            &result,
-                        );
-                        self.ctx.restore_vm_roots(root_scope);
                     }
-                    stk!().truncate(stack_after_call);
-                    stk_push!(result);
-                }
-                Op::Apply(n) => {
-                    let n = *n as usize;
-                    vm_try!(self.ctx.maybe_quit());
-                    if n == 0 {
-                        let stack_after_call = stk!().len().saturating_sub(1);
-                        let func_val = stk!().last().copied().unwrap_or(Value::NIL);
-                        let result = vm_try!(self.call_function(func_val, LispArgVec::new()));
-                        stk!().truncate(stack_after_call);
-                        stk_push!(result);
-                    } else {
+                }};
+            }
+
+            // For NON-ESCAPING fallible helpers only (no bc_buf access, no GC
+            // safe point, no Lisp): evaluates $expr with the cursor live so it
+            // may read operands straight off the stack slice; publishes only on
+            // the error path (resume_flow requires it).
+            macro_rules! vm_try_pure {
+                ($expr:expr) => {{
+                    match $expr {
+                        Ok(value) => value,
+                        Err(flow) => {
+                            cursor.publish(&mut self.ctx);
+                            resume_flow!(flow)
+                        }
+                    }
+                }};
+            }
+
+            macro_rules! branch_to {
+                ($target:expr) => {{
+                    let target = $target;
+                    if target < pc_local {
+                        quitcounter = quitcounter.wrapping_add(1);
+                        if quitcounter == 0 {
+                            quitcounter = 1;
+                            // Loop-work heat (jit): 256 backward branches ≈ one call
+                            // toward tier-up, so a hot INNER LOOP in a rarely-called
+                            // body still goes native on its next entry. Piggybacks on
+                            // the existing per-wrap cold path; no per-iteration cost.
+                            #[cfg(feature = "jit")]
+                            func.runtime.note_loop_work();
+                            vm_try!(self.ctx.bytecode_branch_maybe_gc_and_quit());
+                            // OSR: the loop is hot and this is a backward branch (its
+                            // target is the loop header). If the function is OSR-eligible
+                            // and the live operand stack matches the header's entry depth,
+                            // transfer into native code and finish there. `Ok` = the
+                            // function completed (its result); `Signal` propagates; a
+                            // deopt / non-transfer just falls back to interpreting (the
+                            // OSR ran in its own frame, so our state is untouched).
+                            // Gates ordered cheapest-first: a local bool, then the
+                            // opt-in knob (default OFF, so it short-circuits the rest
+                            // for every stock build), then the kill switch, then the
+                            // heat load.
+                            #[cfg(feature = "jit")]
+                            if !osr_tried
+                                && crate::emacs_core::jit::jit_osr_on()
+                                && crate::emacs_core::jit::jit_runtime_enabled()
+                                && func.runtime.is_hot()
+                            {
+                                let depth = cursor.len - frame_base;
+                                cursor.publish(&mut self.ctx);
+                                let snapshot: Vec<Value> =
+                                    self.ctx.bc_buf[frame_base..frame_base + depth].to_vec();
+                                let ctx_ptr: *mut crate::emacs_core::eval::Context = &mut *self.ctx;
+                                match crate::emacs_core::jit::cache::try_run_osr(
+                                    ctx_ptr, func, target, &snapshot,
+                                ) {
+                                    Some(crate::emacs_core::jit::compile::NativeRun::Ok(bits)) => {
+                                        complete_value!(Value::from_bits(bits));
+                                    }
+                                    Some(crate::emacs_core::jit::compile::NativeRun::Signal) => {
+                                        let flow =
+                                            crate::emacs_core::jit::compile::take_pending_flow()
+                                                .expect("OSR Signal must stash a pending flow");
+                                        resume_flow!(flow)
+                                    }
+                                    _ => {
+                                        // Deopt / DeoptAt / not-transferred: fall back to
+                                        // the interpreter (state unchanged); don't retry.
+                                        osr_tried = true;
+                                        cursor = StackCursor::acquire(&mut self.ctx);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    pc_local = target;
+                }};
+            }
+
+            macro_rules! invalid_bytecode {
+                ($reason:expr) => {{
+                    let invalid_pc = pc_local.saturating_sub(1);
+                    let stack_len = cursor.len;
+                    cursor.publish(&mut self.ctx);
+                    trace_invalid_bytecode_site(
+                        func,
+                        $reason,
+                        invalid_pc,
+                        frame_base,
+                        frame_limit,
+                        stack_len,
+                        ops.get(invalid_pc),
+                    );
+                    resume_flow!(invalid_bytecode_flow())
+                }};
+            }
+
+            while pc_local < ops_len {
+                let op = unsafe { &*ops_ptr.add(pc_local) };
+                pc_local += 1;
+                #[cfg(feature = "vm-profile")]
+                vm_profile::bump(op);
+
+                match op {
+                    // -- Constants and stack --
+                    Op::Constant(idx) => {
+                        let Some(value) = constants.get(*idx as usize).copied() else {
+                            invalid_bytecode!("constant-index-out-of-range");
+                        };
+                        stk_push!(value);
+                    }
+                    Op::Nil => stk_push!(Value::NIL),
+                    Op::True => stk_push!(Value::T),
+                    Op::Pop => {
+                        if stk!().is_empty() {
+                            invalid_bytecode!("pop-empty-stack");
+                        }
+                        stk!().pop();
+                    }
+                    Op::Dup => {
+                        if pc_local + 2 < ops_len {
+                            let next0 = unsafe { &*ops_ptr.add(pc_local) };
+                            let next1 = unsafe { &*ops_ptr.add(pc_local + 1) };
+                            let next2 = unsafe { &*ops_ptr.add(pc_local + 2) };
+                            if let (Op::StackRef(stack_ref), Op::Lss, Op::GotoIfNil(target)) =
+                                (next0, next1, next2)
+                            {
+                                let len = cursor.len;
+                                if len == 0 {
+                                    invalid_bytecode!("dup-lss-gotoifnil-empty-stack");
+                                }
+                                if len >= frame_limit {
+                                    invalid_bytecode!("dup-lss-gotoifnil-stack-at-frame-limit");
+                                }
+
+                                let top = unsafe { *cursor.get_unchecked(len - 1) };
+                                let after_dup_len = len + 1;
+                                let offset = 1 + *stack_ref as usize;
+
+                                if offset > after_dup_len || after_dup_len >= frame_limit {
+                                    // SAFETY: len < frame_limit checked above.
+                                    unsafe { cursor.push_unchecked(top) };
+                                    pc_local += 1;
+                                    invalid_bytecode!("dup-lss-gotoifnil-stackref-out-of-range");
+                                }
+
+                                let ref_index = after_dup_len - offset;
+                                let ref_value = if ref_index == len {
+                                    top
+                                } else {
+                                    unsafe { *cursor.get_unchecked(ref_index) }
+                                };
+
+                                if top.is_fixnum() && ref_value.is_fixnum() {
+                                    pc_local += 3;
+                                    if !fixnum_lt(top, ref_value) {
+                                        branch_to!(*target as usize);
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
+
+                        if let Some(&top) = stk!().last() {
+                            stk_push!(top);
+                        } else {
+                            invalid_bytecode!("dup-empty-stack");
+                        }
+                    }
+                    Op::StackRef(n) => {
+                        let offset = 1 + *n as usize;
+                        let len = stk!().len();
+                        if offset <= len {
+                            // Valid bytecode references an existing stack slot.
+                            // Keep the hot path to one explicit check and avoid
+                            // the slice indexer's second bounds check.
+                            let val = unsafe { *stk!().get_unchecked(len - offset) };
+                            stk_push!(val);
+                        } else {
+                            invalid_bytecode!("stack-ref-out-of-range");
+                        }
+                    }
+                    Op::StackSet(n) => {
+                        let len = stk!().len();
+                        if len == 0 {
+                            invalid_bytecode!("stack-set-empty-stack");
+                        }
+                        let n = *n as usize;
+                        if n == 0 {
+                            stk!().pop();
+                            continue;
+                        }
+                        if n < len {
+                            let val = unsafe { *cursor.get_unchecked(len - 1) };
+                            let idx = len - 1 - n;
+                            unsafe { *cursor.get_unchecked_mut(idx) = val };
+                            cursor.len = len - 1;
+                        } else {
+                            invalid_bytecode!("stack-set-out-of-range");
+                        }
+                    }
+                    Op::DiscardN(raw) => {
+                        let preserve_tos = (raw & 0x80) != 0;
+                        let n = (raw & 0x7F) as usize;
+                        if n == 0 {
+                            continue;
+                        }
+                        let len = stk!().len();
+                        if n > len {
+                            invalid_bytecode!("discard-n-out-of-range");
+                        }
+                        if preserve_tos {
+                            if n >= len {
+                                invalid_bytecode!("discard-n-preserve-tos-out-of-range");
+                            }
+                            let top = unsafe { *cursor.get_unchecked(len - 1) };
+                            let target = len - 1 - n;
+                            unsafe { *cursor.get_unchecked_mut(target) = top };
+                        }
+                        cursor.len = len - n;
+                    }
+
+                    // -- Variable access --
+                    Op::VarRef(idx) => {
+                        let name_id = sym_id_at(constants, *idx);
+                        // Task-4 profiling: class + per-symbol VarRef breakdown
+                        // (the BLV-fraction counter the T1 report flagged missing).
+                        #[cfg(feature = "vm-profile")]
+                        {
+                            let (class, via_alias) = self.vm_profile_classify_varref(name_id);
+                            vm_profile::bump_varref(name_id, class, via_alias);
+                        }
+                        let val = vm_try!(self.fast_path_var_ref(name_id));
+                        stk_push!(val);
+                    }
+                    Op::VarSet(idx) => {
+                        let name_id = sym_id_at(constants, *idx);
+                        let val = stk!().pop().unwrap_or(Value::NIL);
+                        let extra = [val];
+                        vm_try!(self.with_frame_roots(func, &extra, |vm| {
+                            vm.assign_var_id(name_id, val)
+                        },));
+                    }
+                    Op::VarBind(idx) => {
+                        // GNU bytecode.c Bvarbind: `specbind (vectorp[arg], POP);`
+                        // — always a dynamic binding, no lexical fallback. The
+                        // byte-compiler (bytecomp.el byte-compile-bind) emits
+                        // `byte-varbind` ONLY for variables that
+                        // `cconv--not-lexical-var-p` reports as dynamic — i.e.
+                        // members of `byte-compile-bound-variables`, populated
+                        // from the file's top-level `(defvar VAR)` declarations
+                        // among other sources. Lexical `let` bindings never get
+                        // a varbind opcode at all; they live on the value stack
+                        // and are tracked via `byte-compile--lexical-environment`.
+                        //
+                        // Therefore the VM must NOT second-guess the byte-compiler
+                        // by inspecting `is_special_id` / `lexenv_declares_special`
+                        // at runtime. Doing so misroutes file-local-only dynamic
+                        // declarations (e.g. `(defvar cconv-freevars-alist)` in
+                        // cconv.el — declared special locally but not globally) to
+                        // the lexenv, where they are invisible to other functions
+                        // called from the let body and surface as `void-variable`.
+                        let name_id = sym_id_at(constants, *idx);
+                        let val = stk!().pop().unwrap_or(Value::NIL);
+                        let bind_depth = self.ctx.specpdl.len();
+                        // vm_try publishes the stack because specbind can run
+                        // variable watchers (arbitrary Lisp).
+                        vm_try!(self.ctx.try_specbind(name_id, val));
+                        aux_stack.current_mut().bind_stack.push(bind_depth);
+                    }
+                    Op::Unbind(n) => {
+                        let n = *n as usize;
+                        let target = {
+                            let aux = aux_stack.current_mut();
+                            if n <= aux.bind_stack.len() {
+                                let depth = aux.bind_stack[aux.bind_stack.len() - n];
+                                aux.bind_stack.truncate(aux.bind_stack.len() - n);
+                                depth
+                            } else {
+                                aux.bind_stack.clear();
+                                0
+                            }
+                        };
+                        // unbind_to can run unwind-protect cleanups — escape.
+                        cursor.publish(self.ctx);
+                        self.ctx.unbind_to(target);
+                        cursor = StackCursor::acquire(self.ctx);
+                    }
+
+                    // -- Function calls --
+                    Op::Call(n) => {
+                        let n = *n as usize;
                         let args_start = stk!().len().saturating_sub(n);
                         let stack_after_call = args_start.saturating_sub(1);
                         let func_val = if args_start > 0 {
@@ -3079,53 +2933,105 @@ impl<'a> Vm<'a> {
                         } else {
                             Value::NIL
                         };
-                        // Spread the trailing list IN PLACE on the GC-traced
-                        // bc_buf: the explicit args a1..a(n-1) already sit
-                        // contiguously at [args_start, args_start + n - 1);
-                        // replace the list's slot with its elements (GNU
-                        // Fapply builds the same contiguous spread, then
-                        // funcall reads it — eval.c). list_to_vec keeps the
-                        // existing dotted/circular semantics (errors -> empty
-                        // spread) and its Floyd cycle detection. Checked Vec
-                        // ops only: the extension deliberately lives above
-                        // this frame's declared max-stack region, which
-                        // nothing inspects before the call returns (handler
-                        // watermarks below it truncate through it correctly
-                        // on a nonlocal exit).
-                        let last = stk!()[args_start + n - 1];
-                        let spread = list_to_vec(&last).unwrap_or_default();
-                        // The spread grows bc_buf (reserve can realloc), so it
-                        // runs published; reacquire picks up the new base.
-                        cursor.publish(self.ctx);
-                        self.ctx.bc_buf.truncate(args_start + n - 1);
-                        self.ctx.bc_buf.reserve(spread.len());
-                        self.ctx.bc_buf.extend_from_slice(&spread);
-                        cursor = StackCursor::acquire(self.ctx);
-                        let total = n - 1 + spread.len();
-                        // Writeback gate tests the first POST-spread argument
-                        // (for (apply f '("str" ...)) the string comes from
-                        // the spread).
-                        let writeback_names = if total > 0 && stk!()[args_start].is_string() {
+                        // JIT Phase 1: record the callee for direct-call speculation.
+                        // Only NAMED (symbol) callees carry a SymId; the call-site
+                        // index is `pc_local - 1` (pc was advanced past Call above).
+                        // GC-safe: a SymId is a stable index, never a heap pointer.
+                        #[cfg(feature = "jit")]
+                        if self.bytecode_tier_policy.records_call_feedback()
+                            && let ValueKind::Symbol(id) = func_val.kind()
+                        {
+                            func.runtime.record_call(pc_local - 1, ops_len, id);
+                        }
+                        // Round-2 profiling: attribute this Op::Call to its callee
+                        // symbol (the find_spec_sites entry population). Resolve a
+                        // subr-object callee to its SymId so both `(f x)` (symbol
+                        // callee) and a spilled subr value count the same builtin.
+                        // Task-4 profiling: also record the resolution kind
+                        // (closure-vs-builtin split) and the callee under its call
+                        // site — the execution-weighted per-site polymorphism table.
+                        #[cfg(feature = "vm-profile")]
+                        {
+                            if let Some(id) = match func_val.kind() {
+                                ValueKind::Symbol(id) => Some(id),
+                                _ => func_val.as_subr_id(),
+                            } {
+                                vm_profile::bump_entry(id, vm_profile::ENTRY_CALL);
+                            }
+                            let (site_key, kind) = self.vm_profile_classify_call(func_val);
+                            vm_profile::bump_call_site(
+                                func as *const ByteCodeFunction as usize,
+                                (pc_local - 1) as u32,
+                                site_key,
+                                kind,
+                            );
+                        }
+                        // GNU `bytecode.c:Bcall` polls `maybe_quit` before
+                        // entering the callee. This is observable when bytecode
+                        // sets `quit-flag` immediately before a call: the callee
+                        // must not run.
+                        vm_try!(self.ctx.maybe_quit());
+                        let writeback_names = if n > 0 && stk!()[args_start].is_string() {
                             self.writeback_mutating_callable_names(&func_val)
                         } else {
                             None
                         };
-                        let writeback_args: Option<LispArgVec> =
-                            writeback_names.as_ref().map(|_| {
-                                stk!()[args_start..args_start + total]
-                                    .iter()
-                                    .copied()
-                                    .collect()
-                            });
-                        // Same call protocol as before (traced call_function:
-                        // backtrace push + generic dispatch, no depth guard,
-                        // no direct-builtin fast path), in its stack-args
-                        // flavor — the spread args stay rooted on bc_buf for
-                        // the whole call; func_val stays rooted in its own
-                        // caller slot below args_start.
-                        let result = vm_try!(
-                            self.call_function_from_stack_args(func_val, args_start, total, false,)
-                        );
+                        let writeback_args = writeback_names
+                            .as_ref()
+                            .map(|_| stk!()[args_start..].iter().copied().collect::<LispArgVec>());
+                        let result = if writeback_names.is_none() {
+                            cursor.publish(self.ctx);
+                            if let Err(flow) = self.enter_bytecode_call_depth() {
+                                resume_flow!(flow)
+                            }
+                            match self.dispatch_interpreter_stack_call(func_val, args_start, n) {
+                                InterpreterStackCall::Enter {
+                                    callee,
+                                    args_start,
+                                    nargs,
+                                    backtrace,
+                                } => {
+                                    current.pc = pc_local;
+                                    *driver_quitcounter = quitcounter;
+                                    #[cfg(feature = "jit")]
+                                    {
+                                        current.osr_tried = osr_tried;
+                                    }
+                                    let child = self.prepare_iterative_interpreter_frame(
+                                        callee, args_start, nargs,
+                                    );
+                                    let caller_depth =
+                                        InterpreterDriverDepth::from_suspended_callers(
+                                            callers.len(),
+                                        );
+                                    let parent = std::mem::replace(current, child);
+                                    aux_stack.suspend_current(caller_depth);
+                                    callers.push(SuspendedInterpreterFrame {
+                                        frame: parent,
+                                        continuation: BytecodeCallContinuation {
+                                            stack_after_call,
+                                            backtrace,
+                                        },
+                                    });
+                                    continue 'frame;
+                                }
+                                InterpreterStackCall::Complete(result) => {
+                                    self.leave_bytecode_call_depth();
+                                    match result {
+                                        Ok(value) => {
+                                            cursor = StackCursor::acquire(self.ctx);
+                                            value
+                                        }
+                                        Err(flow) => resume_flow!(flow),
+                                    }
+                                }
+                            }
+                        } else {
+                            let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
+                            vm_try!(self.with_bytecode_call_depth(|vm| {
+                                vm.call_function(func_val, args)
+                            }))
+                        };
                         if let (Some((called_name, alias_target)), Some(writeback_args)) =
                             (writeback_names.as_ref(), writeback_args.as_ref())
                         {
@@ -3145,157 +3051,241 @@ impl<'a> Vm<'a> {
                         stk!().truncate(stack_after_call);
                         stk_push!(result);
                     }
-                }
-
-                // -- Control flow --
-                // Backward branches mirror GNU `bytecode.c:op_branch`: an
-                // unsigned byte `quitcounter` is incremented only for backward
-                // jumps, and `maybe_gc(); maybe_quit();` runs when it wraps.
-                Op::Goto(addr) => {
-                    branch_to!(*addr as usize);
-                }
-                Op::GotoIfNil(addr) => {
-                    let len = cursor.len;
-                    if len == 0 {
-                        invalid_bytecode!("goto-if-nil-empty-stack");
-                    }
-                    let val = unsafe { *cursor.get_unchecked(len - 1) };
-                    cursor.len = len - 1;
-                    if val.is_nil() {
-                        branch_to!(*addr as usize);
-                    }
-                }
-                Op::GotoIfNotNil(addr) => {
-                    let len = cursor.len;
-                    if len == 0 {
-                        invalid_bytecode!("goto-if-not-nil-empty-stack");
-                    }
-                    let val = unsafe { *cursor.get_unchecked(len - 1) };
-                    cursor.len = len - 1;
-                    if val.is_truthy() {
-                        branch_to!(*addr as usize);
-                    }
-                }
-                Op::GotoIfNilElsePop(addr) => {
-                    let len = cursor.len;
-                    if len == 0 {
-                        invalid_bytecode!("goto-if-nil-else-pop-empty-stack");
-                    }
-                    if unsafe { cursor.get_unchecked(len - 1) }.is_nil() {
-                        branch_to!(*addr as usize);
-                    } else {
-                        cursor.len = len - 1;
-                    }
-                }
-                Op::GotoIfNotNilElsePop(addr) => {
-                    let len = cursor.len;
-                    if len == 0 {
-                        invalid_bytecode!("goto-if-not-nil-else-pop-empty-stack");
-                    }
-                    if unsafe { cursor.get_unchecked(len - 1) }.is_truthy() {
-                        branch_to!(*addr as usize);
-                    } else {
-                        cursor.len = len - 1;
-                    }
-                }
-                Op::Switch => {
-                    let jump_table = stk!().pop().unwrap_or(Value::NIL);
-                    let dispatch = stk!().pop().unwrap_or(Value::NIL);
-
-                    if !matches!(
-                        jump_table.kind(),
-                        ValueKind::Veclike(VecLikeType::HashTable)
-                    ) {
-                        cursor.publish(self.ctx);
-                        resume_flow!(signal(
-                            LispCondition::WrongTypeArgument,
-                            vec![Value::symbol("hash-table-p"), jump_table],
-                        ))
-                    }
-
-                    let ht = jump_table.as_hash_table().unwrap();
-                    let key = dispatch.to_hash_key_swp(&ht.test, self.ctx.symbols_with_pos_enabled);
-                    let target = ht.data.get(&key).copied();
-
-                    if let Some(target_val) = target {
-                        match target_val.kind() {
-                            ValueKind::Fixnum(addr) => {
-                                pc_local = vm_try!(resolve_switch_target(func, addr));
+                    Op::Apply(n) => {
+                        let n = *n as usize;
+                        vm_try!(self.ctx.maybe_quit());
+                        if n == 0 {
+                            let stack_after_call = stk!().len().saturating_sub(1);
+                            let func_val = stk!().last().copied().unwrap_or(Value::NIL);
+                            let result = vm_try!(self.call_function(func_val, LispArgVec::new()));
+                            stk!().truncate(stack_after_call);
+                            stk_push!(result);
+                        } else {
+                            let args_start = stk!().len().saturating_sub(n);
+                            let stack_after_call = args_start.saturating_sub(1);
+                            let func_val = if args_start > 0 {
+                                stk!()[args_start - 1]
+                            } else {
+                                Value::NIL
+                            };
+                            // Spread the trailing list IN PLACE on the GC-traced
+                            // bc_buf: the explicit args a1..a(n-1) already sit
+                            // contiguously at [args_start, args_start + n - 1);
+                            // replace the list's slot with its elements (GNU
+                            // Fapply builds the same contiguous spread, then
+                            // funcall reads it — eval.c). list_to_vec keeps the
+                            // existing dotted/circular semantics (errors -> empty
+                            // spread) and its Floyd cycle detection. Checked Vec
+                            // ops only: the extension deliberately lives above
+                            // this frame's declared max-stack region, which
+                            // nothing inspects before the call returns (handler
+                            // watermarks below it truncate through it correctly
+                            // on a nonlocal exit).
+                            let last = stk!()[args_start + n - 1];
+                            let spread = list_to_vec(&last).unwrap_or_default();
+                            // The spread grows bc_buf (reserve can realloc), so it
+                            // runs published; reacquire picks up the new base.
+                            cursor.publish(self.ctx);
+                            self.ctx.bc_buf.truncate(args_start + n - 1);
+                            self.ctx.bc_buf.reserve(spread.len());
+                            self.ctx.bc_buf.extend_from_slice(&spread);
+                            cursor = StackCursor::acquire(self.ctx);
+                            let total = n - 1 + spread.len();
+                            // Writeback gate tests the first POST-spread argument
+                            // (for (apply f '("str" ...)) the string comes from
+                            // the spread).
+                            let writeback_names = if total > 0 && stk!()[args_start].is_string() {
+                                self.writeback_mutating_callable_names(&func_val)
+                            } else {
+                                None
+                            };
+                            let writeback_args: Option<LispArgVec> =
+                                writeback_names.as_ref().map(|_| {
+                                    stk!()[args_start..args_start + total]
+                                        .iter()
+                                        .copied()
+                                        .collect()
+                                });
+                            // Same call protocol as before (traced call_function:
+                            // backtrace push + generic dispatch, no depth guard,
+                            // no direct-builtin fast path), in its stack-args
+                            // flavor — the spread args stay rooted on bc_buf for
+                            // the whole call; func_val stays rooted in its own
+                            // caller slot below args_start.
+                            let result =
+                                vm_try!(self.call_function_from_stack_args(
+                                    func_val, args_start, total, false,
+                                ));
+                            if let (Some((called_name, alias_target)), Some(writeback_args)) =
+                                (writeback_names.as_ref(), writeback_args.as_ref())
+                            {
+                                let root_scope = self.ctx.save_vm_roots();
+                                self.push_dynamic_vm_root(result);
+                                for value in writeback_args.iter().copied() {
+                                    self.push_dynamic_vm_root(value);
+                                }
+                                self.maybe_writeback_mutating_first_arg(
+                                    called_name,
+                                    *alias_target,
+                                    writeback_args,
+                                    &result,
+                                );
+                                self.ctx.restore_vm_roots(root_scope);
                             }
-                            _ => {
-                                vm_try!(Err(signal(
-                                    LispCondition::WrongTypeArgument,
-                                    vec![Value::symbol("integerp"), target_val],
-                                )));
+                            stk!().truncate(stack_after_call);
+                            stk_push!(result);
+                        }
+                    }
+
+                    // -- Control flow --
+                    // Backward branches mirror GNU `bytecode.c:op_branch`: an
+                    // unsigned byte `quitcounter` is incremented only for backward
+                    // jumps, and `maybe_gc(); maybe_quit();` runs when it wraps.
+                    Op::Goto(addr) => {
+                        branch_to!(*addr as usize);
+                    }
+                    Op::GotoIfNil(addr) => {
+                        let len = cursor.len;
+                        if len == 0 {
+                            invalid_bytecode!("goto-if-nil-empty-stack");
+                        }
+                        let val = unsafe { *cursor.get_unchecked(len - 1) };
+                        cursor.len = len - 1;
+                        if val.is_nil() {
+                            branch_to!(*addr as usize);
+                        }
+                    }
+                    Op::GotoIfNotNil(addr) => {
+                        let len = cursor.len;
+                        if len == 0 {
+                            invalid_bytecode!("goto-if-not-nil-empty-stack");
+                        }
+                        let val = unsafe { *cursor.get_unchecked(len - 1) };
+                        cursor.len = len - 1;
+                        if val.is_truthy() {
+                            branch_to!(*addr as usize);
+                        }
+                    }
+                    Op::GotoIfNilElsePop(addr) => {
+                        let len = cursor.len;
+                        if len == 0 {
+                            invalid_bytecode!("goto-if-nil-else-pop-empty-stack");
+                        }
+                        if unsafe { cursor.get_unchecked(len - 1) }.is_nil() {
+                            branch_to!(*addr as usize);
+                        } else {
+                            cursor.len = len - 1;
+                        }
+                    }
+                    Op::GotoIfNotNilElsePop(addr) => {
+                        let len = cursor.len;
+                        if len == 0 {
+                            invalid_bytecode!("goto-if-not-nil-else-pop-empty-stack");
+                        }
+                        if unsafe { cursor.get_unchecked(len - 1) }.is_truthy() {
+                            branch_to!(*addr as usize);
+                        } else {
+                            cursor.len = len - 1;
+                        }
+                    }
+                    Op::Switch => {
+                        let jump_table = stk!().pop().unwrap_or(Value::NIL);
+                        let dispatch = stk!().pop().unwrap_or(Value::NIL);
+
+                        if !matches!(
+                            jump_table.kind(),
+                            ValueKind::Veclike(VecLikeType::HashTable)
+                        ) {
+                            cursor.publish(self.ctx);
+                            resume_flow!(signal(
+                                LispCondition::WrongTypeArgument,
+                                vec![Value::symbol("hash-table-p"), jump_table],
+                            ))
+                        }
+
+                        let ht = jump_table.as_hash_table().unwrap();
+                        let key =
+                            dispatch.to_hash_key_swp(&ht.test, self.ctx.symbols_with_pos_enabled);
+                        let target = ht.data.get(&key).copied();
+
+                        if let Some(target_val) = target {
+                            match target_val.kind() {
+                                ValueKind::Fixnum(addr) => {
+                                    pc_local = vm_try!(resolve_switch_target(func, addr));
+                                }
+                                _ => {
+                                    vm_try!(Err(signal(
+                                        LispCondition::WrongTypeArgument,
+                                        vec![Value::symbol("integerp"), target_val],
+                                    )));
+                                }
                             }
                         }
                     }
-                }
-                Op::Return => {
-                    let result = stk!().pop().unwrap_or(Value::NIL);
-                    cursor.publish(self.ctx);
-                    current.pc = pc_local;
-                    *driver_quitcounter = quitcounter;
-                    #[cfg(feature = "jit")]
-                    {
-                        current.osr_tried = osr_tried;
+                    Op::Return => {
+                        let result = stk!().pop().unwrap_or(Value::NIL);
+                        return_value!(result);
                     }
-                    return InterpreterFrameControl::Return(result);
-                }
-                Op::SaveCurrentBuffer => {
-                    if let Some(buffer_id) =
-                        self.ctx.buffers.current_buffer().map(|buffer| buffer.id)
-                    {
-                        aux.bind_stack.push(self.ctx.specpdl.len());
-                        self.ctx
-                            .specpdl
-                            .push(SpecBinding::SaveCurrentBuffer { buffer_id });
+                    Op::SaveCurrentBuffer => {
+                        if let Some(buffer_id) =
+                            self.ctx.buffers.current_buffer().map(|buffer| buffer.id)
+                        {
+                            aux_stack
+                                .current_mut()
+                                .bind_stack
+                                .push(self.ctx.specpdl.len());
+                            self.ctx
+                                .specpdl
+                                .push(SpecBinding::SaveCurrentBuffer { buffer_id });
+                        }
                     }
-                }
-                Op::SaveExcursion => {
-                    if let Some(count) = self.ctx.record_save_excursion() {
-                        aux.bind_stack.push(count);
+                    Op::SaveExcursion => {
+                        if let Some(count) = self.ctx.record_save_excursion() {
+                            aux_stack.current_mut().bind_stack.push(count);
+                        }
                     }
-                }
-                Op::SaveRestriction => {
-                    if let Some(saved) = self.ctx.buffers.save_current_restriction_state() {
-                        aux.bind_stack.push(self.ctx.specpdl.len());
-                        self.ctx.specpdl.push(SpecBinding::save_restriction(saved));
+                    Op::SaveRestriction => {
+                        if let Some(saved) = self.ctx.buffers.save_current_restriction_state() {
+                            aux_stack
+                                .current_mut()
+                                .bind_stack
+                                .push(self.ctx.specpdl.len());
+                            self.ctx.specpdl.push(SpecBinding::save_restriction(saved));
+                        }
                     }
-                }
 
-                Op::SaveWindowExcursion => {
-                    // GNU bytecode.c Bsave_window_excursion (opcode 139):
-                    // Pop body form list, evaluate with Fprogn inside
-                    // a real window-configuration save/restore.
-                    //
-                    // GNU `src/bytecode.c:945-952`:
-                    //
-                    //   record_unwind_protect (restore_window_configuration,
-                    //                          Fcurrent_window_configuration (Qnil));
-                    //   TOP = Fprogn (TOP);
-                    //   unbind_to (count1, TOP);
-                    //
-                    // `save-some-buffers`, `map-y-or-n-p`, and other
-                    // byte-compiled Lisp still rely on this obsolete opcode.
-                    // Evaluating the body without restoring the window
-                    // configuration leaves minibuffer/window state corrupted.
-                    let body = stk!().pop().unwrap_or(Value::NIL);
-                    let progn_form = Value::cons(Value::symbol("progn"), body);
-                    let saved = vm_try!(
-                        crate::emacs_core::builtins::SavedWindowConfiguration::capture(
-                            self.ctx,
-                            Value::NIL,
-                        )
-                    );
-                    // GNU records the restore on the specpdl before evaluating
-                    // the body.  Use the same typed native-unwind action as the
-                    // minibuffer lifecycle, so a new Rust `?`/flow path cannot
-                    // bypass restoration.
-                    cursor.publish(self.ctx);
-                    let root_scope = self.ctx.save_vm_roots();
-                    self.push_dynamic_vm_root(progn_form);
-                    let body_result = self.ctx.with_unwind_scope(|ctx| {
+                    Op::SaveWindowExcursion => {
+                        // GNU bytecode.c Bsave_window_excursion (opcode 139):
+                        // Pop body form list, evaluate with Fprogn inside
+                        // a real window-configuration save/restore.
+                        //
+                        // GNU `src/bytecode.c:945-952`:
+                        //
+                        //   record_unwind_protect (restore_window_configuration,
+                        //                          Fcurrent_window_configuration (Qnil));
+                        //   TOP = Fprogn (TOP);
+                        //   unbind_to (count1, TOP);
+                        //
+                        // `save-some-buffers`, `map-y-or-n-p`, and other
+                        // byte-compiled Lisp still rely on this obsolete opcode.
+                        // Evaluating the body without restoring the window
+                        // configuration leaves minibuffer/window state corrupted.
+                        let body = stk!().pop().unwrap_or(Value::NIL);
+                        let progn_form = Value::cons(Value::symbol("progn"), body);
+                        let saved = vm_try!(
+                            crate::emacs_core::builtins::SavedWindowConfiguration::capture(
+                                self.ctx,
+                                Value::NIL,
+                            )
+                        );
+                        // GNU records the restore on the specpdl before evaluating
+                        // the body.  Use the same typed native-unwind action as the
+                        // minibuffer lifecycle, so a new Rust `?`/flow path cannot
+                        // bypass restoration.
+                        cursor.publish(self.ctx);
+                        let root_scope = self.ctx.save_vm_roots();
+                        self.push_dynamic_vm_root(progn_form);
+                        let body_result = self.ctx.with_unwind_scope(|ctx| {
                         ctx.record_native_unwind(
                             crate::emacs_core::eval::NativeUnwindAction::RestoreWindowConfiguration {
                                 configuration: saved,
@@ -3304,97 +3294,109 @@ impl<'a> Vm<'a> {
                         );
                         ctx.eval_sub(progn_form)
                     });
-                    self.ctx.restore_vm_roots(root_scope);
-                    cursor = StackCursor::acquire(self.ctx);
+                        self.ctx.restore_vm_roots(root_scope);
+                        cursor = StackCursor::acquire(self.ctx);
 
-                    match body_result {
-                        Ok(result) => {
-                            stk_push!(result);
-                        }
-                        Err(flow) => {
-                            cursor.publish(self.ctx);
-                            resume_flow!(flow)
+                        match body_result {
+                            Ok(result) => {
+                                stk_push!(result);
+                            }
+                            Err(flow) => {
+                                cursor.publish(self.ctx);
+                                resume_flow!(flow)
+                            }
                         }
                     }
-                }
 
-                // -- Arithmetic --
-                // Inline fixnum fast paths match GNU Emacs bytecode.c design:
-                // the bytecode opcode IS the contract — no override check needed.
-                Op::Add => {
-                    let fallback = {
-                        let len = cursor.len;
-                        if len < 2 {
-                            invalid_bytecode!("add-stack-underflow");
-                        }
-                        let b = unsafe { *cursor.get_unchecked(len - 1) };
-                        let a = unsafe { *cursor.get_unchecked(len - 2) };
-                        if a.is_fixnum() && b.is_fixnum() {
-                            let av = a.xfixnum();
-                            let bv = b.xfixnum();
-                            let res = av + bv;
-                            if (Value::MOST_NEGATIVE_FIXNUM..=Value::MOST_POSITIVE_FIXNUM)
-                                .contains(&res)
-                            {
-                                unsafe {
-                                    *cursor.get_unchecked_mut(len - 2) = Value::fixnum(res);
+                    // -- Arithmetic --
+                    // Inline fixnum fast paths match GNU Emacs bytecode.c design:
+                    // the bytecode opcode IS the contract — no override check needed.
+                    Op::Add => {
+                        let fallback = {
+                            let len = cursor.len;
+                            if len < 2 {
+                                invalid_bytecode!("add-stack-underflow");
+                            }
+                            let b = unsafe { *cursor.get_unchecked(len - 1) };
+                            let a = unsafe { *cursor.get_unchecked(len - 2) };
+                            if a.is_fixnum() && b.is_fixnum() {
+                                let av = a.xfixnum();
+                                let bv = b.xfixnum();
+                                let res = av + bv;
+                                if (Value::MOST_NEGATIVE_FIXNUM..=Value::MOST_POSITIVE_FIXNUM)
+                                    .contains(&res)
+                                {
+                                    unsafe {
+                                        *cursor.get_unchecked_mut(len - 2) = Value::fixnum(res);
+                                    }
+                                    cursor.len = len - 1;
+                                    None
+                                } else {
+                                    cursor.len = len - 2;
+                                    Some((a, b))
                                 }
-                                cursor.len = len - 1;
-                                None
                             } else {
                                 cursor.len = len - 2;
                                 Some((a, b))
                             }
-                        } else {
-                            cursor.len = len - 2;
-                            Some((a, b))
+                        };
+                        if let Some((a, b)) = fallback {
+                            let result =
+                                vm_try!(self.dispatch_vm_builtin_with_frame(func, "+", vec![a, b]));
+                            stk_push!(result);
                         }
-                    };
-                    if let Some((a, b)) = fallback {
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "+", vec![a, b]));
-                        stk_push!(result);
                     }
-                }
-                Op::Sub => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if a.is_fixnum() && b.is_fixnum() {
-                        let av = a.xfixnum();
-                        let bv = b.xfixnum();
-                        let res = av - bv;
-                        if (Value::MOST_NEGATIVE_FIXNUM..=Value::MOST_POSITIVE_FIXNUM)
-                            .contains(&res)
-                        {
-                            stk!()[len - 2] = Value::fixnum(res);
-                            stk!().pop();
+                    Op::Sub => {
+                        let len = stk!().len();
+                        let b = stk!()[len - 1];
+                        let a = stk!()[len - 2];
+                        if a.is_fixnum() && b.is_fixnum() {
+                            let av = a.xfixnum();
+                            let bv = b.xfixnum();
+                            let res = av - bv;
+                            if (Value::MOST_NEGATIVE_FIXNUM..=Value::MOST_POSITIVE_FIXNUM)
+                                .contains(&res)
+                            {
+                                stk!()[len - 2] = Value::fixnum(res);
+                                stk!().pop();
+                            } else {
+                                stk!().truncate(len - 2);
+                                let result = vm_try!(self.dispatch_vm_builtin_with_frame(
+                                    func,
+                                    "-",
+                                    vec![a, b]
+                                ));
+                                stk_push!(result);
+                            }
                         } else {
                             stk!().truncate(len - 2);
                             let result =
                                 vm_try!(self.dispatch_vm_builtin_with_frame(func, "-", vec![a, b]));
                             stk_push!(result);
                         }
-                    } else {
-                        stk!().truncate(len - 2);
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "-", vec![a, b]));
-                        stk_push!(result);
                     }
-                }
-                Op::Mul => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if a.is_fixnum() && b.is_fixnum() {
-                        let av = a.xfixnum();
-                        let bv = b.xfixnum();
-                        if let Some(res) = av.checked_mul(bv) {
-                            if (Value::MOST_NEGATIVE_FIXNUM..=Value::MOST_POSITIVE_FIXNUM)
-                                .contains(&res)
-                            {
-                                stk!()[len - 2] = Value::fixnum(res);
-                                stk!().pop();
+                    Op::Mul => {
+                        let len = stk!().len();
+                        let b = stk!()[len - 1];
+                        let a = stk!()[len - 2];
+                        if a.is_fixnum() && b.is_fixnum() {
+                            let av = a.xfixnum();
+                            let bv = b.xfixnum();
+                            if let Some(res) = av.checked_mul(bv) {
+                                if (Value::MOST_NEGATIVE_FIXNUM..=Value::MOST_POSITIVE_FIXNUM)
+                                    .contains(&res)
+                                {
+                                    stk!()[len - 2] = Value::fixnum(res);
+                                    stk!().pop();
+                                } else {
+                                    stk!().truncate(len - 2);
+                                    let result = vm_try!(self.dispatch_vm_builtin_with_frame(
+                                        func,
+                                        "*",
+                                        vec![a, b]
+                                    ));
+                                    stk_push!(result);
+                                }
                             } else {
                                 stk!().truncate(len - 2);
                                 let result = vm_try!(self.dispatch_vm_builtin_with_frame(
@@ -3410,603 +3412,665 @@ impl<'a> Vm<'a> {
                                 vm_try!(self.dispatch_vm_builtin_with_frame(func, "*", vec![a, b]));
                             stk_push!(result);
                         }
-                    } else {
-                        stk!().truncate(len - 2);
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "*", vec![a, b]));
-                        stk_push!(result);
                     }
-                }
-                Op::Div => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if a.is_fixnum() && b.is_fixnum() {
-                        let av = a.xfixnum();
-                        let bv = b.xfixnum();
-                        if bv != 0 {
-                            // Emacs truncation division (towards zero), matching C semantics
-                            let res = av / bv;
-                            stk!()[len - 2] = Value::fixnum(res);
-                            stk!().pop();
+                    Op::Div => {
+                        let len = stk!().len();
+                        let b = stk!()[len - 1];
+                        let a = stk!()[len - 2];
+                        if a.is_fixnum() && b.is_fixnum() {
+                            let av = a.xfixnum();
+                            let bv = b.xfixnum();
+                            if bv != 0 {
+                                // Emacs truncation division (towards zero), matching C semantics
+                                let res = av / bv;
+                                stk!()[len - 2] = Value::fixnum(res);
+                                stk!().pop();
+                            } else {
+                                stk!().truncate(len - 2);
+                                let result = vm_try!(self.dispatch_vm_builtin_with_frame(
+                                    func,
+                                    "/",
+                                    vec![a, b]
+                                ));
+                                stk_push!(result);
+                            }
                         } else {
                             stk!().truncate(len - 2);
                             let result =
                                 vm_try!(self.dispatch_vm_builtin_with_frame(func, "/", vec![a, b]));
                             stk_push!(result);
                         }
-                    } else {
-                        stk!().truncate(len - 2);
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "/", vec![a, b]));
-                        stk_push!(result);
                     }
-                }
-                Op::Rem => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if a.is_fixnum() && b.is_fixnum() {
-                        let av = a.xfixnum();
-                        let bv = b.xfixnum();
-                        if bv != 0 {
-                            stk!()[len - 2] = Value::fixnum(av % bv);
-                            stk!().pop();
+                    Op::Rem => {
+                        let len = stk!().len();
+                        let b = stk!()[len - 1];
+                        let a = stk!()[len - 2];
+                        if a.is_fixnum() && b.is_fixnum() {
+                            let av = a.xfixnum();
+                            let bv = b.xfixnum();
+                            if bv != 0 {
+                                stk!()[len - 2] = Value::fixnum(av % bv);
+                                stk!().pop();
+                            } else {
+                                stk!().truncate(len - 2);
+                                let result = vm_try!(self.dispatch_vm_builtin_with_frame(
+                                    func,
+                                    "%",
+                                    vec![a, b]
+                                ));
+                                stk_push!(result);
+                            }
                         } else {
                             stk!().truncate(len - 2);
                             let result =
                                 vm_try!(self.dispatch_vm_builtin_with_frame(func, "%", vec![a, b]));
                             stk_push!(result);
                         }
-                    } else {
-                        stk!().truncate(len - 2);
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "%", vec![a, b]));
-                        stk_push!(result);
                     }
-                }
-                Op::Add1 => {
-                    let fallback = {
-                        let len = cursor.len;
-                        if len == 0 {
-                            invalid_bytecode!("add1-empty-stack");
-                        }
-                        let top = unsafe { *cursor.get_unchecked(len - 1) };
-                        if top.is_fixnum() {
-                            let n = top.xfixnum();
-                            if n != Value::MOST_POSITIVE_FIXNUM {
-                                unsafe {
-                                    *cursor.get_unchecked_mut(len - 1) = Value::fixnum(n + 1);
+                    Op::Add1 => {
+                        let fallback = {
+                            let len = cursor.len;
+                            if len == 0 {
+                                invalid_bytecode!("add1-empty-stack");
+                            }
+                            let top = unsafe { *cursor.get_unchecked(len - 1) };
+                            if top.is_fixnum() {
+                                let n = top.xfixnum();
+                                if n != Value::MOST_POSITIVE_FIXNUM {
+                                    unsafe {
+                                        *cursor.get_unchecked_mut(len - 1) = Value::fixnum(n + 1);
+                                    }
+                                    None
+                                } else {
+                                    cursor.len = len - 1;
+                                    Some(top)
                                 }
-                                None
                             } else {
                                 cursor.len = len - 1;
                                 Some(top)
                             }
-                        } else {
-                            cursor.len = len - 1;
-                            Some(top)
+                        };
+                        if let Some(top) = fallback {
+                            let result =
+                                vm_try!(self.dispatch_vm_builtin_with_frame(func, "1+", vec![top]));
+                            stk_push!(result);
                         }
-                    };
-                    if let Some(top) = fallback {
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "1+", vec![top]));
-                        stk_push!(result);
                     }
-                }
-                Op::Sub1 => {
-                    let top = *stk!().last().unwrap();
-                    if top.is_fixnum() {
-                        let n = top.xfixnum();
-                        if n != Value::MOST_NEGATIVE_FIXNUM {
-                            *stk!().last_mut().unwrap() = Value::fixnum(n - 1);
+                    Op::Sub1 => {
+                        let top = *stk!().last().unwrap();
+                        if top.is_fixnum() {
+                            let n = top.xfixnum();
+                            if n != Value::MOST_NEGATIVE_FIXNUM {
+                                *stk!().last_mut().unwrap() = Value::fixnum(n - 1);
+                            } else {
+                                stk!().pop();
+                                let result = vm_try!(self.dispatch_vm_builtin_with_frame(
+                                    func,
+                                    "1-",
+                                    vec![top]
+                                ));
+                                stk_push!(result);
+                            }
                         } else {
                             stk!().pop();
                             let result =
                                 vm_try!(self.dispatch_vm_builtin_with_frame(func, "1-", vec![top]));
                             stk_push!(result);
                         }
-                    } else {
-                        stk!().pop();
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "1-", vec![top]));
-                        stk_push!(result);
                     }
-                }
-                Op::Negate => {
-                    let top = *stk!().last().unwrap();
-                    if top.is_fixnum() {
-                        let n = top.xfixnum();
-                        if n != Value::MOST_NEGATIVE_FIXNUM {
-                            *stk!().last_mut().unwrap() = Value::fixnum(-n);
+                    Op::Negate => {
+                        let top = *stk!().last().unwrap();
+                        if top.is_fixnum() {
+                            let n = top.xfixnum();
+                            if n != Value::MOST_NEGATIVE_FIXNUM {
+                                *stk!().last_mut().unwrap() = Value::fixnum(-n);
+                            } else {
+                                stk!().pop();
+                                let result = vm_try!(self.dispatch_vm_builtin_with_frame(
+                                    func,
+                                    "-",
+                                    vec![top]
+                                ));
+                                stk_push!(result);
+                            }
                         } else {
                             stk!().pop();
                             let result =
                                 vm_try!(self.dispatch_vm_builtin_with_frame(func, "-", vec![top]));
                             stk_push!(result);
                         }
-                    } else {
-                        stk!().pop();
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "-", vec![top]));
-                        stk_push!(result);
                     }
-                }
 
-                // -- Comparison --
-                // Inline fixnum fast paths match GNU Emacs bytecode.c.
-                Op::Eqlsign => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if a.is_fixnum() && b.is_fixnum() {
-                        stk!()[len - 2] = if a.0 == b.0 { Value::T } else { Value::NIL };
-                        stk!().pop();
-                    } else {
-                        stk!().truncate(len - 2);
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "=", vec![a, b]));
-                        stk_push!(result);
-                    }
-                }
-                Op::Gtr => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if a.is_fixnum() && b.is_fixnum() {
-                        stk!()[len - 2] = if fixnum_gt(a, b) {
-                            Value::T
-                        } else {
-                            Value::NIL
-                        };
-                        stk!().pop();
-                    } else {
-                        stk!().truncate(len - 2);
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, ">", vec![a, b]));
-                        stk_push!(result);
-                    }
-                }
-                Op::Lss => {
-                    let fallback = {
-                        let len = cursor.len;
-                        if len < 2 {
-                            invalid_bytecode!("lss-stack-underflow");
-                        }
-                        let b = unsafe { *cursor.get_unchecked(len - 1) };
-                        let a = unsafe { *cursor.get_unchecked(len - 2) };
+                    // -- Comparison --
+                    // Inline fixnum fast paths match GNU Emacs bytecode.c.
+                    Op::Eqlsign => {
+                        let len = stk!().len();
+                        let b = stk!()[len - 1];
+                        let a = stk!()[len - 2];
                         if a.is_fixnum() && b.is_fixnum() {
-                            unsafe {
-                                *cursor.get_unchecked_mut(len - 2) = if fixnum_lt(a, b) {
-                                    Value::T
-                                } else {
-                                    Value::NIL
-                                };
+                            stk!()[len - 2] = if a.0 == b.0 { Value::T } else { Value::NIL };
+                            stk!().pop();
+                        } else {
+                            stk!().truncate(len - 2);
+                            let result =
+                                vm_try!(self.dispatch_vm_builtin_with_frame(func, "=", vec![a, b]));
+                            stk_push!(result);
+                        }
+                    }
+                    Op::Gtr => {
+                        let len = stk!().len();
+                        let b = stk!()[len - 1];
+                        let a = stk!()[len - 2];
+                        if a.is_fixnum() && b.is_fixnum() {
+                            stk!()[len - 2] = if fixnum_gt(a, b) {
+                                Value::T
+                            } else {
+                                Value::NIL
+                            };
+                            stk!().pop();
+                        } else {
+                            stk!().truncate(len - 2);
+                            let result =
+                                vm_try!(self.dispatch_vm_builtin_with_frame(func, ">", vec![a, b]));
+                            stk_push!(result);
+                        }
+                    }
+                    Op::Lss => {
+                        let fallback = {
+                            let len = cursor.len;
+                            if len < 2 {
+                                invalid_bytecode!("lss-stack-underflow");
                             }
-                            cursor.len = len - 1;
-                            None
-                        } else {
-                            cursor.len = len - 2;
-                            Some((a, b))
+                            let b = unsafe { *cursor.get_unchecked(len - 1) };
+                            let a = unsafe { *cursor.get_unchecked(len - 2) };
+                            if a.is_fixnum() && b.is_fixnum() {
+                                unsafe {
+                                    *cursor.get_unchecked_mut(len - 2) = if fixnum_lt(a, b) {
+                                        Value::T
+                                    } else {
+                                        Value::NIL
+                                    };
+                                }
+                                cursor.len = len - 1;
+                                None
+                            } else {
+                                cursor.len = len - 2;
+                                Some((a, b))
+                            }
+                        };
+                        if let Some((a, b)) = fallback {
+                            let result =
+                                vm_try!(self.dispatch_vm_builtin_with_frame(func, "<", vec![a, b]));
+                            stk_push!(result);
                         }
-                    };
-                    if let Some((a, b)) = fallback {
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "<", vec![a, b]));
+                    }
+                    Op::Leq => {
+                        let len = stk!().len();
+                        let b = stk!()[len - 1];
+                        let a = stk!()[len - 2];
+                        if a.is_fixnum() && b.is_fixnum() {
+                            stk!()[len - 2] = if fixnum_le(a, b) {
+                                Value::T
+                            } else {
+                                Value::NIL
+                            };
+                            stk!().pop();
+                        } else {
+                            stk!().truncate(len - 2);
+                            let result = vm_try!(self.dispatch_vm_builtin_with_frame(
+                                func,
+                                "<=",
+                                vec![a, b]
+                            ));
+                            stk_push!(result);
+                        }
+                    }
+                    Op::Geq => {
+                        let len = stk!().len();
+                        let b = stk!()[len - 1];
+                        let a = stk!()[len - 2];
+                        if a.is_fixnum() && b.is_fixnum() {
+                            stk!()[len - 2] = if fixnum_ge(a, b) {
+                                Value::T
+                            } else {
+                                Value::NIL
+                            };
+                            stk!().pop();
+                        } else {
+                            stk!().truncate(len - 2);
+                            let result = vm_try!(self.dispatch_vm_builtin_with_frame(
+                                func,
+                                ">=",
+                                vec![a, b]
+                            ));
+                            stk_push!(result);
+                        }
+                    }
+                    Op::Max => {
+                        let len = stk!().len();
+                        let b = stk!()[len - 1];
+                        let a = stk!()[len - 2];
+                        if a.is_fixnum() && b.is_fixnum() {
+                            stk!()[len - 2] = if fixnum_ge(a, b) { a } else { b };
+                            stk!().pop();
+                        } else {
+                            stk!().truncate(len - 2);
+                            let result = vm_try!(self.dispatch_vm_builtin_with_frame(
+                                func,
+                                "max",
+                                vec![a, b]
+                            ));
+                            stk_push!(result);
+                        }
+                    }
+                    Op::Min => {
+                        let len = stk!().len();
+                        let b = stk!()[len - 1];
+                        let a = stk!()[len - 2];
+                        if a.is_fixnum() && b.is_fixnum() {
+                            stk!()[len - 2] = if fixnum_le(a, b) { a } else { b };
+                            stk!().pop();
+                        } else {
+                            stk!().truncate(len - 2);
+                            let result = vm_try!(self.dispatch_vm_builtin_with_frame(
+                                func,
+                                "min",
+                                vec![a, b]
+                            ));
+                            stk_push!(result);
+                        }
+                    }
+
+                    // -- List operations --
+                    // Inline car/cdr/car-safe/cdr-safe match GNU Emacs exactly:
+                    // direct cons field access, nil passthrough, error on wrong type.
+                    Op::Car => {
+                        let top = stk!().last_mut().unwrap();
+                        if top.is_cons() {
+                            *top = top.cons_car();
+                        } else if !top.is_nil() {
+                            let val = *top;
+                            stk!().pop();
+                            vm_try!(Err(signal(
+                                LispCondition::WrongTypeArgument,
+                                vec![Value::symbol("listp"), val]
+                            )));
+                        }
+                        // nil → nil: no change needed
+                    }
+                    Op::Cdr => {
+                        let top = stk!().last_mut().unwrap();
+                        if top.is_cons() {
+                            *top = top.cons_cdr();
+                        } else if !top.is_nil() {
+                            let val = *top;
+                            stk!().pop();
+                            vm_try!(Err(signal(
+                                LispCondition::WrongTypeArgument,
+                                vec![Value::symbol("listp"), val]
+                            )));
+                        }
+                    }
+                    Op::CarSafe => {
+                        let top = stk!().last_mut().unwrap();
+                        *top = if top.is_cons() {
+                            top.cons_car()
+                        } else {
+                            Value::NIL
+                        };
+                    }
+                    Op::CdrSafe => {
+                        let top = stk!().last_mut().unwrap();
+                        *top = if top.is_cons() {
+                            top.cons_cdr()
+                        } else {
+                            Value::NIL
+                        };
+                    }
+                    Op::Cons => {
+                        let len = stk!().len();
+                        let cdr_val = stk!()[len - 1];
+                        let car_val = stk!()[len - 2];
+                        stk!()[len - 2] = Value::cons(car_val, cdr_val);
+                        stk!().pop();
+                    }
+                    Op::List(n) => {
+                        let n = *n as usize;
+                        let start = stk!().len().saturating_sub(n);
+                        // GNU bytecode.c:BlistN keeps operands on the bytecode
+                        // stack and calls Flist(n, &TOP).  Keep the same stack
+                        // rooting discipline here and build from the live slice.
+                        let result = Value::list_from_slice(&stk!()[start..]);
+                        stk!().truncate(start);
                         stk_push!(result);
                     }
-                }
-                Op::Leq => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if a.is_fixnum() && b.is_fixnum() {
-                        stk!()[len - 2] = if fixnum_le(a, b) {
+                    Op::Length => {
+                        let len = stk!().len();
+                        let val = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_length_1(&mut *self.ctx, val));
+                        stk!()[len - 1] = result;
+                    }
+                    Op::Nth => {
+                        let len = stk!().len();
+                        let n = stk!()[len - 2];
+                        let list = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_nth_2(&mut *self.ctx, n, list));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+                    Op::Nthcdr => {
+                        let len = stk!().len();
+                        let n = stk!()[len - 2];
+                        let list = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_nthcdr_2(&mut *self.ctx, n, list));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+                    Op::Elt => {
+                        let len = stk!().len();
+                        let seq = stk!()[len - 2];
+                        let idx = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_elt_2(&mut *self.ctx, seq, idx));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+                    Op::Setcar => {
+                        let len = stk!().len();
+                        let cell = stk!()[len - 2];
+                        let newcar = stk!()[len - 1];
+                        let result =
+                            vm_try!(builtins::builtin_setcar_2(&mut *self.ctx, cell, newcar));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+                    Op::Setcdr => {
+                        let len = stk!().len();
+                        let cell = stk!()[len - 2];
+                        let newcdr = stk!()[len - 1];
+                        let result =
+                            vm_try!(builtins::builtin_setcdr_2(&mut *self.ctx, cell, newcdr));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+                    Op::Nconc => {
+                        let start = stk!().len().saturating_sub(2);
+                        let result =
+                            vm_try_pure!(builtins::builtin_nconc_slice_values(&stk!()[start..]));
+                        stk!().truncate(start);
+                        stk_push!(result);
+                    }
+                    Op::Nreverse => {
+                        let len = stk!().len();
+                        let value = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_nreverse_1(&mut *self.ctx, value));
+                        stk!()[len - 1] = result;
+                    }
+                    Op::Member => {
+                        let len = stk!().len();
+                        let elt = stk!()[len - 2];
+                        let list = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_member_2(&mut *self.ctx, elt, list));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+                    Op::Memq => {
+                        let len = stk!().len();
+                        let elt = stk!()[len - 2];
+                        let list = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_memq_2(&mut *self.ctx, elt, list));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+                    Op::Assq => {
+                        let len = stk!().len();
+                        let key = stk!()[len - 2];
+                        let alist = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_assq_2(&mut *self.ctx, key, alist));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+
+                    // -- Type predicates --
+                    // -- Type predicates --
+                    // Pure inline tag checks, zero function calls. Matches GNU exactly.
+                    Op::Symbolp => {
+                        let top = stk!().last_mut().unwrap();
+                        let is_sym = top.is_symbol()
+                            || (self.ctx.symbols_with_pos_enabled && top.is_symbol_with_pos());
+                        *top = if is_sym { Value::T } else { Value::NIL };
+                    }
+                    Op::Consp => {
+                        let top = stk!().last_mut().unwrap();
+                        *top = if top.is_cons() { Value::T } else { Value::NIL };
+                    }
+                    Op::Stringp => {
+                        let top = stk!().last_mut().unwrap();
+                        *top = if top.is_string() {
                             Value::T
                         } else {
                             Value::NIL
                         };
-                        stk!().pop();
-                    } else {
-                        stk!().truncate(len - 2);
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "<=", vec![a, b]));
-                        stk_push!(result);
                     }
-                }
-                Op::Geq => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if a.is_fixnum() && b.is_fixnum() {
-                        stk!()[len - 2] = if fixnum_ge(a, b) {
+                    Op::Listp => {
+                        let top = stk!().last_mut().unwrap();
+                        *top = if top.is_cons() || top.is_nil() {
                             Value::T
                         } else {
                             Value::NIL
                         };
+                    }
+                    Op::Integerp => {
+                        let top = stk!().last_mut().unwrap();
+                        *top = if top.is_integer() {
+                            Value::T
+                        } else {
+                            Value::NIL
+                        };
+                    }
+                    Op::Numberp => {
+                        let top = stk!().last_mut().unwrap();
+                        *top = if top.is_number() {
+                            Value::T
+                        } else {
+                            Value::NIL
+                        };
+                    }
+                    Op::Null | Op::Not => {
+                        let top = stk!().last_mut().unwrap();
+                        *top = if top.is_nil() { Value::T } else { Value::NIL };
+                    }
+                    Op::Eq => {
+                        let len = stk!().len();
+                        let b = stk!()[len - 1];
+                        let a = stk!()[len - 2];
+                        let result = if a.0 == b.0 {
+                            true
+                        } else if self.ctx.symbols_with_pos_enabled {
+                            crate::emacs_core::value::eq_value_swp(&a, &b, true)
+                        } else {
+                            false
+                        };
+                        stk!()[len - 2] = if result { Value::T } else { Value::NIL };
                         stk!().pop();
-                    } else {
-                        stk!().truncate(len - 2);
-                        let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, ">=", vec![a, b]));
+                    }
+                    Op::Equal => {
+                        let len = stk!().len();
+                        let a = stk!()[len - 2];
+                        let b = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_equal_2(&mut *self.ctx, a, b));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+
+                    // -- String operations --
+                    Op::Concat(n) => {
+                        let n = *n as usize;
+                        let start = stk!().len().saturating_sub(n);
+                        // GNU bytecode.c:BconcatN passes the stack slice directly
+                        // to Fconcat instead of materializing an argument vector.
+                        let result = vm_try_pure!(builtins::builtin_concat_slice(&stk!()[start..]));
+                        stk!().truncate(start);
                         stk_push!(result);
                     }
-                }
-                Op::Max => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if a.is_fixnum() && b.is_fixnum() {
-                        stk!()[len - 2] = if fixnum_ge(a, b) { a } else { b };
-                        stk!().pop();
-                    } else {
-                        stk!().truncate(len - 2);
+                    Op::Substring => {
+                        let start = stk!().len().saturating_sub(3);
                         let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "max", vec![a, b]));
+                            vm_try_pure!(builtins::builtin_substring_slice(&stk!()[start..]));
+                        stk!().truncate(start);
                         stk_push!(result);
                     }
-                }
-                Op::Min => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    if a.is_fixnum() && b.is_fixnum() {
-                        stk!()[len - 2] = if fixnum_le(a, b) { a } else { b };
-                        stk!().pop();
-                    } else {
-                        stk!().truncate(len - 2);
+                    Op::StringEqual => {
+                        let len = stk!().len();
+                        let a = stk!()[len - 2];
+                        let b = stk!()[len - 1];
                         let result =
-                            vm_try!(self.dispatch_vm_builtin_with_frame(func, "min", vec![a, b]));
+                            vm_try!(builtins::builtin_string_equal_2(&mut *self.ctx, a, b));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+                    Op::StringLessp => {
+                        let len = stk!().len();
+                        let a = stk!()[len - 2];
+                        let b = stk!()[len - 1];
+                        let result =
+                            vm_try!(builtins::builtin_string_lessp_2(&mut *self.ctx, a, b));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+
+                    // -- Vector operations --
+                    Op::Aref => {
+                        let len = stk!().len();
+                        let array = stk!()[len - 2];
+                        let index = stk!()[len - 1];
+                        let result =
+                            vm_try!(builtins::builtin_aref_2(&mut *self.ctx, array, index));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
+                    }
+                    Op::Aset => {
+                        let val = stk!().pop().unwrap_or(Value::NIL);
+                        let idx_val = stk!().pop().unwrap_or(Value::fixnum(0));
+                        let vec_val = stk!().pop().unwrap_or(Value::NIL);
+                        let mut call_args = LispArgVec::new();
+                        call_args.push(vec_val);
+                        call_args.push(idx_val);
+                        call_args.push(val);
+                        let result = if let Some(result) = vm_try!(
+                            self.maybe_call_named_function_cell(func, "aset", call_args.clone(),)
+                        ) {
+                            result
+                        } else {
+                            vm_try!(builtins::builtin_aset(call_args.clone().into_vec()))
+                        };
+                        let root_scope = self.ctx.save_vm_roots();
+                        self.push_dynamic_vm_root(result);
+                        for value in call_args.iter().copied() {
+                            self.push_dynamic_vm_root(value);
+                        }
+                        self.maybe_writeback_mutating_first_arg("aset", None, &call_args, &result);
+                        self.ctx.restore_vm_roots(root_scope);
                         stk_push!(result);
                     }
-                }
 
-                // -- List operations --
-                // Inline car/cdr/car-safe/cdr-safe match GNU Emacs exactly:
-                // direct cons field access, nil passthrough, error on wrong type.
-                Op::Car => {
-                    let top = stk!().last_mut().unwrap();
-                    if top.is_cons() {
-                        *top = top.cons_car();
-                    } else if !top.is_nil() {
-                        let val = *top;
+                    // -- Symbol operations --
+                    Op::SymbolValue => {
+                        let len = stk!().len();
+                        let sym = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_symbol_value_1(&mut *self.ctx, sym));
+                        stk!()[len - 1] = result;
+                    }
+                    Op::SymbolFunction => {
+                        let len = stk!().len();
+                        let sym = stk!()[len - 1];
+                        let result =
+                            vm_try!(builtins::builtin_symbol_function_1(&mut *self.ctx, sym));
+                        stk!()[len - 1] = result;
+                    }
+                    Op::Set => {
+                        let len = stk!().len();
+                        let sym = stk!()[len - 2];
+                        let val = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_set_2(&mut *self.ctx, sym, val));
+                        stk!()[len - 2] = result;
                         stk!().pop();
-                        vm_try!(Err(signal(
-                            LispCondition::WrongTypeArgument,
-                            vec![Value::symbol("listp"), val]
-                        )));
                     }
-                    // nil → nil: no change needed
-                }
-                Op::Cdr => {
-                    let top = stk!().last_mut().unwrap();
-                    if top.is_cons() {
-                        *top = top.cons_cdr();
-                    } else if !top.is_nil() {
-                        let val = *top;
+                    Op::Fset => {
+                        let len = stk!().len();
+                        let sym = stk!()[len - 2];
+                        let val = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_fset_2(&mut *self.ctx, sym, val));
+                        stk!()[len - 2] = result;
                         stk!().pop();
-                        vm_try!(Err(signal(
-                            LispCondition::WrongTypeArgument,
-                            vec![Value::symbol("listp"), val]
-                        )));
                     }
-                }
-                Op::CarSafe => {
-                    let top = stk!().last_mut().unwrap();
-                    *top = if top.is_cons() {
-                        top.cons_car()
-                    } else {
-                        Value::NIL
-                    };
-                }
-                Op::CdrSafe => {
-                    let top = stk!().last_mut().unwrap();
-                    *top = if top.is_cons() {
-                        top.cons_cdr()
-                    } else {
-                        Value::NIL
-                    };
-                }
-                Op::Cons => {
-                    let len = stk!().len();
-                    let cdr_val = stk!()[len - 1];
-                    let car_val = stk!()[len - 2];
-                    stk!()[len - 2] = Value::cons(car_val, cdr_val);
-                    stk!().pop();
-                }
-                Op::List(n) => {
-                    let n = *n as usize;
-                    let start = stk!().len().saturating_sub(n);
-                    // GNU bytecode.c:BlistN keeps operands on the bytecode
-                    // stack and calls Flist(n, &TOP).  Keep the same stack
-                    // rooting discipline here and build from the live slice.
-                    let result = Value::list_from_slice(&stk!()[start..]);
-                    stk!().truncate(start);
-                    stk_push!(result);
-                }
-                Op::Length => {
-                    let len = stk!().len();
-                    let val = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_length_1(&mut *self.ctx, val));
-                    stk!()[len - 1] = result;
-                }
-                Op::Nth => {
-                    let len = stk!().len();
-                    let n = stk!()[len - 2];
-                    let list = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_nth_2(&mut *self.ctx, n, list));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::Nthcdr => {
-                    let len = stk!().len();
-                    let n = stk!()[len - 2];
-                    let list = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_nthcdr_2(&mut *self.ctx, n, list));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::Elt => {
-                    let len = stk!().len();
-                    let seq = stk!()[len - 2];
-                    let idx = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_elt_2(&mut *self.ctx, seq, idx));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::Setcar => {
-                    let len = stk!().len();
-                    let cell = stk!()[len - 2];
-                    let newcar = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_setcar_2(&mut *self.ctx, cell, newcar));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::Setcdr => {
-                    let len = stk!().len();
-                    let cell = stk!()[len - 2];
-                    let newcdr = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_setcdr_2(&mut *self.ctx, cell, newcdr));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::Nconc => {
-                    let start = stk!().len().saturating_sub(2);
-                    let result =
-                        vm_try_pure!(builtins::builtin_nconc_slice_values(&stk!()[start..]));
-                    stk!().truncate(start);
-                    stk_push!(result);
-                }
-                Op::Nreverse => {
-                    let len = stk!().len();
-                    let value = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_nreverse_1(&mut *self.ctx, value));
-                    stk!()[len - 1] = result;
-                }
-                Op::Member => {
-                    let len = stk!().len();
-                    let elt = stk!()[len - 2];
-                    let list = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_member_2(&mut *self.ctx, elt, list));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::Memq => {
-                    let len = stk!().len();
-                    let elt = stk!()[len - 2];
-                    let list = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_memq_2(&mut *self.ctx, elt, list));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::Assq => {
-                    let len = stk!().len();
-                    let key = stk!()[len - 2];
-                    let alist = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_assq_2(&mut *self.ctx, key, alist));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-
-                // -- Type predicates --
-                // -- Type predicates --
-                // Pure inline tag checks, zero function calls. Matches GNU exactly.
-                Op::Symbolp => {
-                    let top = stk!().last_mut().unwrap();
-                    let is_sym = top.is_symbol()
-                        || (self.ctx.symbols_with_pos_enabled && top.is_symbol_with_pos());
-                    *top = if is_sym { Value::T } else { Value::NIL };
-                }
-                Op::Consp => {
-                    let top = stk!().last_mut().unwrap();
-                    *top = if top.is_cons() { Value::T } else { Value::NIL };
-                }
-                Op::Stringp => {
-                    let top = stk!().last_mut().unwrap();
-                    *top = if top.is_string() {
-                        Value::T
-                    } else {
-                        Value::NIL
-                    };
-                }
-                Op::Listp => {
-                    let top = stk!().last_mut().unwrap();
-                    *top = if top.is_cons() || top.is_nil() {
-                        Value::T
-                    } else {
-                        Value::NIL
-                    };
-                }
-                Op::Integerp => {
-                    let top = stk!().last_mut().unwrap();
-                    *top = if top.is_integer() {
-                        Value::T
-                    } else {
-                        Value::NIL
-                    };
-                }
-                Op::Numberp => {
-                    let top = stk!().last_mut().unwrap();
-                    *top = if top.is_number() {
-                        Value::T
-                    } else {
-                        Value::NIL
-                    };
-                }
-                Op::Null | Op::Not => {
-                    let top = stk!().last_mut().unwrap();
-                    *top = if top.is_nil() { Value::T } else { Value::NIL };
-                }
-                Op::Eq => {
-                    let len = stk!().len();
-                    let b = stk!()[len - 1];
-                    let a = stk!()[len - 2];
-                    let result = if a.0 == b.0 {
-                        true
-                    } else if self.ctx.symbols_with_pos_enabled {
-                        crate::emacs_core::value::eq_value_swp(&a, &b, true)
-                    } else {
-                        false
-                    };
-                    stk!()[len - 2] = if result { Value::T } else { Value::NIL };
-                    stk!().pop();
-                }
-                Op::Equal => {
-                    let len = stk!().len();
-                    let a = stk!()[len - 2];
-                    let b = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_equal_2(&mut *self.ctx, a, b));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-
-                // -- String operations --
-                Op::Concat(n) => {
-                    let n = *n as usize;
-                    let start = stk!().len().saturating_sub(n);
-                    // GNU bytecode.c:BconcatN passes the stack slice directly
-                    // to Fconcat instead of materializing an argument vector.
-                    let result = vm_try_pure!(builtins::builtin_concat_slice(&stk!()[start..]));
-                    stk!().truncate(start);
-                    stk_push!(result);
-                }
-                Op::Substring => {
-                    let start = stk!().len().saturating_sub(3);
-                    let result = vm_try_pure!(builtins::builtin_substring_slice(&stk!()[start..]));
-                    stk!().truncate(start);
-                    stk_push!(result);
-                }
-                Op::StringEqual => {
-                    let len = stk!().len();
-                    let a = stk!()[len - 2];
-                    let b = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_string_equal_2(&mut *self.ctx, a, b));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::StringLessp => {
-                    let len = stk!().len();
-                    let a = stk!()[len - 2];
-                    let b = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_string_lessp_2(&mut *self.ctx, a, b));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-
-                // -- Vector operations --
-                Op::Aref => {
-                    let len = stk!().len();
-                    let array = stk!()[len - 2];
-                    let index = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_aref_2(&mut *self.ctx, array, index));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::Aset => {
-                    let val = stk!().pop().unwrap_or(Value::NIL);
-                    let idx_val = stk!().pop().unwrap_or(Value::fixnum(0));
-                    let vec_val = stk!().pop().unwrap_or(Value::NIL);
-                    let mut call_args = LispArgVec::new();
-                    call_args.push(vec_val);
-                    call_args.push(idx_val);
-                    call_args.push(val);
-                    let result = if let Some(result) = vm_try!(self.maybe_call_named_function_cell(
-                        func,
-                        "aset",
-                        call_args.clone(),
-                    )) {
-                        result
-                    } else {
-                        vm_try!(builtins::builtin_aset(call_args.clone().into_vec()))
-                    };
-                    let root_scope = self.ctx.save_vm_roots();
-                    self.push_dynamic_vm_root(result);
-                    for value in call_args.iter().copied() {
-                        self.push_dynamic_vm_root(value);
+                    Op::Get => {
+                        let len = stk!().len();
+                        let sym = stk!()[len - 2];
+                        let prop = stk!()[len - 1];
+                        let result = vm_try!(builtins::builtin_get_2(&mut *self.ctx, sym, prop));
+                        stk!()[len - 2] = result;
+                        stk!().pop();
                     }
-                    self.maybe_writeback_mutating_first_arg("aset", None, &call_args, &result);
-                    self.ctx.restore_vm_roots(root_scope);
-                    stk_push!(result);
-                }
+                    Op::Put => {
+                        let len = stk!().len();
+                        let sym = stk!()[len - 3];
+                        let prop = stk!()[len - 2];
+                        let val = stk!()[len - 1];
+                        let result =
+                            vm_try!(builtins::builtin_put_3(&mut *self.ctx, sym, prop, val));
+                        stk!().truncate(len - 3);
+                        stk_push!(result);
+                    }
 
-                // -- Symbol operations --
-                Op::SymbolValue => {
-                    let len = stk!().len();
-                    let sym = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_symbol_value_1(&mut *self.ctx, sym));
-                    stk!()[len - 1] = result;
-                }
-                Op::SymbolFunction => {
-                    let len = stk!().len();
-                    let sym = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_symbol_function_1(&mut *self.ctx, sym));
-                    stk!()[len - 1] = result;
-                }
-                Op::Set => {
-                    let len = stk!().len();
-                    let sym = stk!()[len - 2];
-                    let val = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_set_2(&mut *self.ctx, sym, val));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::Fset => {
-                    let len = stk!().len();
-                    let sym = stk!()[len - 2];
-                    let val = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_fset_2(&mut *self.ctx, sym, val));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::Get => {
-                    let len = stk!().len();
-                    let sym = stk!()[len - 2];
-                    let prop = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_get_2(&mut *self.ctx, sym, prop));
-                    stk!()[len - 2] = result;
-                    stk!().pop();
-                }
-                Op::Put => {
-                    let len = stk!().len();
-                    let sym = stk!()[len - 3];
-                    let prop = stk!()[len - 2];
-                    let val = stk!()[len - 1];
-                    let result = vm_try!(builtins::builtin_put_3(&mut *self.ctx, sym, prop, val));
-                    stk!().truncate(len - 3);
-                    stk_push!(result);
-                }
-
-                // -- Error handling --
-                Op::PushConditionCase(target) => {
-                    let stack_len = stk!().len();
-                    let spec_depth = self.ctx.specpdl.len();
-                    let bsl = aux.bind_stack.len();
-                    let resume_id = self.ctx.allocate_resume_id();
-                    aux.handlers.push(Handler::Condition);
-                    self.ctx
-                        .push_condition_frame(ConditionFrame::ConditionCase {
-                            conditions: Value::symbol("error"),
-                            resume: ResumeTarget::VmConditionCase {
+                    // -- Error handling --
+                    Op::PushConditionCase(target) => {
+                        let stack_len = stk!().len();
+                        let spec_depth = self.ctx.specpdl.len();
+                        let bsl = aux_stack.current_mut().bind_stack.len();
+                        let resume_id = self.ctx.allocate_resume_id();
+                        aux_stack.current_mut().handlers.push(Handler::Condition);
+                        self.ctx
+                            .push_condition_frame(ConditionFrame::ConditionCase {
+                                conditions: Value::symbol("error"),
+                                resume: ResumeTarget::VmConditionCase {
+                                    resume_id,
+                                    target: *target,
+                                    stack_len,
+                                    spec_depth,
+                                    bind_stack_len: bsl,
+                                },
+                            });
+                    }
+                    Op::PushConditionCaseRaw(target) => {
+                        // GNU bytecode consumes the handler pattern operand from TOS.
+                        let conditions = stk!().pop().unwrap_or(Value::NIL);
+                        let stack_len = stk!().len();
+                        let spec_depth = self.ctx.specpdl.len();
+                        let bsl = aux_stack.current_mut().bind_stack.len();
+                        let resume_id = self.ctx.allocate_resume_id();
+                        aux_stack.current_mut().handlers.push(Handler::Condition);
+                        self.ctx
+                            .push_condition_frame(ConditionFrame::ConditionCase {
+                                conditions,
+                                resume: ResumeTarget::VmConditionCase {
+                                    resume_id,
+                                    target: *target,
+                                    stack_len,
+                                    spec_depth,
+                                    bind_stack_len: bsl,
+                                },
+                            });
+                    }
+                    Op::PushCatch(target) => {
+                        let tag = stk!().pop().unwrap_or(Value::NIL);
+                        let stack_len = stk!().len();
+                        let spec_depth = self.ctx.specpdl.len();
+                        let bsl = aux_stack.current_mut().bind_stack.len();
+                        let resume_id = self.ctx.allocate_resume_id();
+                        aux_stack.current_mut().handlers.push(Handler::Condition);
+                        self.ctx.push_condition_frame(ConditionFrame::Catch {
+                            tag,
+                            resume: ResumeTarget::VmCatch {
                                 resume_id,
                                 target: *target,
                                 stack_len,
@@ -4014,174 +4078,133 @@ impl<'a> Vm<'a> {
                                 bind_stack_len: bsl,
                             },
                         });
-                }
-                Op::PushConditionCaseRaw(target) => {
-                    // GNU bytecode consumes the handler pattern operand from TOS.
-                    let conditions = stk!().pop().unwrap_or(Value::NIL);
-                    let stack_len = stk!().len();
-                    let spec_depth = self.ctx.specpdl.len();
-                    let bsl = aux.bind_stack.len();
-                    let resume_id = self.ctx.allocate_resume_id();
-                    aux.handlers.push(Handler::Condition);
-                    self.ctx
-                        .push_condition_frame(ConditionFrame::ConditionCase {
-                            conditions,
-                            resume: ResumeTarget::VmConditionCase {
-                                resume_id,
-                                target: *target,
-                                stack_len,
-                                spec_depth,
-                                bind_stack_len: bsl,
-                            },
+                    }
+                    Op::PopHandler => {
+                        if aux_stack.current_mut().handlers.pop().is_some() {
+                            self.ctx.pop_condition_frame();
+                        }
+                    }
+                    Op::UnwindProtectPop => {
+                        let cleanup = stk!().pop().unwrap_or(Value::NIL);
+                        aux_stack
+                            .current_mut()
+                            .bind_stack
+                            .push(self.ctx.specpdl.len());
+                        self.ctx.specpdl.push(SpecBinding::UnwindProtect {
+                            forms: cleanup,
+                            lexenv: self.ctx.lexenv,
                         });
-                }
-                Op::PushCatch(target) => {
-                    let tag = stk!().pop().unwrap_or(Value::NIL);
-                    let stack_len = stk!().len();
-                    let spec_depth = self.ctx.specpdl.len();
-                    let bsl = aux.bind_stack.len();
-                    let resume_id = self.ctx.allocate_resume_id();
-                    aux.handlers.push(Handler::Condition);
-                    self.ctx.push_condition_frame(ConditionFrame::Catch {
-                        tag,
-                        resume: ResumeTarget::VmCatch {
-                            resume_id,
-                            target: *target,
-                            stack_len,
-                            spec_depth,
-                            bind_stack_len: bsl,
-                        },
-                    });
-                }
-                Op::PopHandler => {
-                    if aux.handlers.pop().is_some() {
-                        self.ctx.pop_condition_frame();
                     }
-                }
-                Op::UnwindProtectPop => {
-                    let cleanup = stk!().pop().unwrap_or(Value::NIL);
-                    aux.bind_stack.push(self.ctx.specpdl.len());
-                    self.ctx.specpdl.push(SpecBinding::UnwindProtect {
-                        forms: cleanup,
-                        lexenv: self.ctx.lexenv,
-                    });
-                }
-                Op::Throw => {
-                    let val = stk!().pop().unwrap_or(Value::NIL);
-                    let tag = stk!().pop().unwrap_or(Value::NIL);
-                    cursor.publish(self.ctx);
-                    resume_flow!(Flow::Throw { tag, value: val })
-                }
+                    Op::Throw => {
+                        let val = stk!().pop().unwrap_or(Value::NIL);
+                        let tag = stk!().pop().unwrap_or(Value::NIL);
+                        cursor.publish(self.ctx);
+                        resume_flow!(Flow::Throw { tag, value: val })
+                    }
 
-                // -- Closure --
-                Op::MakeClosure(idx) => {
-                    let val = constants[*idx as usize];
-                    if let Some(bc_data) = val.get_bytecode_data() {
-                        let mut closure = bc_data.clone();
-                        closure.env = Some(self.ctx.lexenv);
-                        stk_push!(Value::make_bytecode(closure));
-                    } else {
-                        stk_push!(val);
+                    // -- Closure --
+                    Op::MakeClosure(idx) => {
+                        let val = constants[*idx as usize];
+                        if let Some(bc_data) = val.get_bytecode_data() {
+                            let mut closure = bc_data.clone();
+                            closure.env = Some(self.ctx.lexenv);
+                            stk_push!(Value::make_bytecode(closure));
+                        } else {
+                            stk_push!(val);
+                        }
                     }
-                }
 
-                // -- Builtin escape hatch --
-                Op::CallBuiltin(name_idx, n) => {
-                    let name_id = sym_id_at(constants, *name_idx);
-                    let name = resolve_sym(name_id);
-                    #[cfg(feature = "vm-profile")]
-                    vm_profile::bump_entry(name_id, vm_profile::ENTRY_CALLBUILTIN);
-                    let n = *n as usize;
-                    let args_start = stk!().len().saturating_sub(n);
-                    let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
-                    let writeback_args = (args.first().is_some_and(|value| value.is_string())
-                        && Self::mutates_first_arg_name(name))
-                    .then(|| args.clone());
-                    let result = if self.named_builtin_fast_path_allowed_id(name_id) {
-                        vm_try!(self.dispatch_vm_builtin_with_frame(func, name, args,))
-                    } else {
-                        let func_val = Value::from_sym_id(name_id);
-                        vm_try!(
-                            self.with_frame_call_roots(func, func_val, args, |vm, args| {
-                                vm.call_function(func_val, args)
-                            })
-                        )
-                    };
-                    if let Some(writeback_args) = writeback_args.as_ref() {
-                        let root_scope = self.ctx.save_vm_roots();
-                        self.push_dynamic_vm_root(result);
-                        for value in writeback_args.iter().copied() {
-                            self.push_dynamic_vm_root(value);
+                    // -- Builtin escape hatch --
+                    Op::CallBuiltin(name_idx, n) => {
+                        let name_id = sym_id_at(constants, *name_idx);
+                        let name = resolve_sym(name_id);
+                        #[cfg(feature = "vm-profile")]
+                        vm_profile::bump_entry(name_id, vm_profile::ENTRY_CALLBUILTIN);
+                        let n = *n as usize;
+                        let args_start = stk!().len().saturating_sub(n);
+                        let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
+                        let writeback_args = (args.first().is_some_and(|value| value.is_string())
+                            && Self::mutates_first_arg_name(name))
+                        .then(|| args.clone());
+                        let result = if self.named_builtin_fast_path_allowed_id(name_id) {
+                            vm_try!(self.dispatch_vm_builtin_with_frame(func, name, args,))
+                        } else {
+                            let func_val = Value::from_sym_id(name_id);
+                            vm_try!(
+                                self.with_frame_call_roots(func, func_val, args, |vm, args| {
+                                    vm.call_function(func_val, args)
+                                })
+                            )
+                        };
+                        if let Some(writeback_args) = writeback_args.as_ref() {
+                            let root_scope = self.ctx.save_vm_roots();
+                            self.push_dynamic_vm_root(result);
+                            for value in writeback_args.iter().copied() {
+                                self.push_dynamic_vm_root(value);
+                            }
+                            self.maybe_writeback_mutating_first_arg(
+                                name,
+                                None,
+                                writeback_args,
+                                &result,
+                            );
+                            self.ctx.restore_vm_roots(root_scope);
                         }
-                        self.maybe_writeback_mutating_first_arg(
-                            name,
-                            None,
-                            writeback_args,
-                            &result,
-                        );
-                        self.ctx.restore_vm_roots(root_scope);
+                        stk!().truncate(args_start);
+                        stk_push!(result);
+                        vm_try!(self.ctx.maybe_quit());
                     }
-                    stk!().truncate(args_start);
-                    stk_push!(result);
-                    vm_try!(self.ctx.maybe_quit());
-                }
-                // Mirrors GNU bytecode.c inline dispatch of opcodes
-                // 0140-0177 etc. — the symbol name is encoded in the
-                // op, no constants-pool lookup.
-                Op::CallBuiltinSym(sym, n) => {
-                    let name = crate::emacs_core::intern::resolve_sym(*sym);
-                    #[cfg(feature = "vm-profile")]
-                    vm_profile::bump_entry(*sym, vm_profile::ENTRY_CALLBUILTINSYM);
-                    let n = *n as usize;
-                    let args_start = stk!().len().saturating_sub(n);
-                    let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
-                    let writeback_args = (args.first().is_some_and(|value| value.is_string())
-                        && Self::mutates_first_arg_name(name))
-                    .then(|| args.clone());
-                    // GNU-parity: opcodes 0140-0177 (decode.rs:295-303)
-                    // dispatch *directly* to their C implementations
-                    // (bytecode.c:1412-1545), bypassing the symbol's
-                    // function cell and advice table. `(advice-add
-                    // 'point ...)` deliberately does not fire when
-                    // bytecode calls `(point)` via Bpoint — GNU docs
-                    // this as a limitation of advice on
-                    // bytecode-inlined primitives. Routing these
-                    // through maybe_call_named_function_cell (which
-                    // consults the symbol's function cell) would make
-                    // neomacs MORE advisable than GNU, breaking parity.
-                    let result = vm_try!(self.dispatch_vm_builtin_with_frame(func, name, args));
-                    if let Some(writeback_args) = writeback_args.as_ref() {
-                        let root_scope = self.ctx.save_vm_roots();
-                        self.push_dynamic_vm_root(result);
-                        for value in writeback_args.iter().copied() {
-                            self.push_dynamic_vm_root(value);
+                    // Mirrors GNU bytecode.c inline dispatch of opcodes
+                    // 0140-0177 etc. — the symbol name is encoded in the
+                    // op, no constants-pool lookup.
+                    Op::CallBuiltinSym(sym, n) => {
+                        let name = crate::emacs_core::intern::resolve_sym(*sym);
+                        #[cfg(feature = "vm-profile")]
+                        vm_profile::bump_entry(*sym, vm_profile::ENTRY_CALLBUILTINSYM);
+                        let n = *n as usize;
+                        let args_start = stk!().len().saturating_sub(n);
+                        let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
+                        let writeback_args = (args.first().is_some_and(|value| value.is_string())
+                            && Self::mutates_first_arg_name(name))
+                        .then(|| args.clone());
+                        // GNU-parity: opcodes 0140-0177 (decode.rs:295-303)
+                        // dispatch *directly* to their C implementations
+                        // (bytecode.c:1412-1545), bypassing the symbol's
+                        // function cell and advice table. `(advice-add
+                        // 'point ...)` deliberately does not fire when
+                        // bytecode calls `(point)` via Bpoint — GNU docs
+                        // this as a limitation of advice on
+                        // bytecode-inlined primitives. Routing these
+                        // through maybe_call_named_function_cell (which
+                        // consults the symbol's function cell) would make
+                        // neomacs MORE advisable than GNU, breaking parity.
+                        let result = vm_try!(self.dispatch_vm_builtin_with_frame(func, name, args));
+                        if let Some(writeback_args) = writeback_args.as_ref() {
+                            let root_scope = self.ctx.save_vm_roots();
+                            self.push_dynamic_vm_root(result);
+                            for value in writeback_args.iter().copied() {
+                                self.push_dynamic_vm_root(value);
+                            }
+                            self.maybe_writeback_mutating_first_arg(
+                                name,
+                                None,
+                                writeback_args,
+                                &result,
+                            );
+                            self.ctx.restore_vm_roots(root_scope);
                         }
-                        self.maybe_writeback_mutating_first_arg(
-                            name,
-                            None,
-                            writeback_args,
-                            &result,
-                        );
-                        self.ctx.restore_vm_roots(root_scope);
+                        stk!().truncate(args_start);
+                        stk_push!(result);
+                        vm_try!(self.ctx.maybe_quit());
                     }
-                    stk!().truncate(args_start);
-                    stk_push!(result);
-                    vm_try!(self.ctx.maybe_quit());
                 }
             }
-        }
 
-        // Fell off the end — return TOS or nil through the same Breturn frame
-        // transition as an explicit Return opcode.
-        let result = stk!().pop().unwrap_or(Value::NIL);
-        cursor.publish(self.ctx);
-        current.pc = pc_local;
-        *driver_quitcounter = quitcounter;
-        #[cfg(feature = "jit")]
-        {
-            current.osr_tried = osr_tried;
+            // Fell off the end — return TOS or nil through the same Breturn frame
+            // transition as an explicit Return opcode.
+            let result = stk!().pop().unwrap_or(Value::NIL);
+            return_value!(result);
         }
-        InterpreterFrameControl::Return(result)
     }
 
     // -- Helper methods --
