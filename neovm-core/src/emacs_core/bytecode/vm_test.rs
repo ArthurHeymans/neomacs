@@ -1964,6 +1964,22 @@ fn interpreter_driver_frame_layout_stays_compact() {
 }
 
 #[test]
+fn interpreter_function_caches_immutable_bytecode_code() {
+    let value = Value::make_bytecode(ByteCodeFunction::new(LambdaParams::simple(vec![])));
+    let code = value
+        .get_bytecode_data()
+        .expect("bytecode value must expose immutable code");
+
+    let function = InterpreterFunction::rooted(code);
+
+    assert!(std::ptr::eq(
+        function.code().expect("rooted frame must retain code"),
+        code,
+    ));
+    assert!(InterpreterFunction::ENTRY.code().is_none());
+}
+
+#[test]
 fn interpreter_aux_stack_materializes_only_nonempty_suspended_frames() {
     let mut aux = InterpreterFrameAuxStack::new(HandlerStack::new(), BindStack::new());
 

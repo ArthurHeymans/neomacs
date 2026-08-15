@@ -733,34 +733,39 @@ struct InterpreterFrameCleanup {
 /// locals saved by `Bcall`.  Keeping them in one Rust value makes a recursive
 /// interpreter entry unrepresentable on the iterative path: callers are moved
 /// onto the driver stack and can only be resumed through `Breturn` handling.
-/// One-word identity for the function executed by an interpreter frame.
+/// One-word immutable code handle for the function executed by a frame.
 ///
-/// `Value::NIL` is reserved for the entry frame whose `ByteCodeFunction` is
-/// borrowed by `run_loop`; every nested frame carries the heap bytecode value
-/// rooted by its matching `BcFrame`.  Encoding that distinction in the value's
-/// otherwise-impossible NIL state avoids both an enum tag and a lifetime on
-/// every driver type.
+/// `None` identifies the entry frame whose `ByteCodeFunction` is borrowed by
+/// `run_loop`.  Every nested frame's matching `BcFrame` owns the Lisp value and
+/// keeps this pointer live.  Bytecode arena slots are immovable, and published
+/// bytecode is immutable in production, so the handle can retain the already
+/// checked code address instead of repeating tagged-object classification each
+/// time GNU's `Breturn` resumes a caller.  `NonNull` keeps the distinction typed
+/// and preserves the one-word null niche without adding lifetime parameters to
+/// the driver state.
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-struct InterpreterFunction(Value);
+struct InterpreterFunction(Option<std::ptr::NonNull<ByteCodeFunction>>);
 
 impl InterpreterFunction {
-    const ENTRY: Self = Self(Value::NIL);
+    const ENTRY: Self = Self(None);
 
-    fn rooted(value: Value) -> Self {
-        debug_assert!(value.get_bytecode_data().is_some());
-        Self(value)
+    fn rooted(code: &ByteCodeFunction) -> Self {
+        Self(Some(std::ptr::NonNull::from(code)))
     }
 
     #[inline]
     fn is_entry(self) -> bool {
-        self.0.is_nil()
+        self.0.is_none()
     }
 
     #[inline]
-    fn rooted_value(self) -> Value {
-        debug_assert!(!self.is_entry());
-        self.0
+    fn code(&self) -> Option<&ByteCodeFunction> {
+        self.0.map(|pointer| {
+            // SAFETY: the matching `BcFrame` roots the immutable, immovable
+            // bytecode arena slot for every nested interpreter frame.
+            unsafe { pointer.as_ref() }
+        })
     }
 }
 
@@ -2146,7 +2151,7 @@ impl<'a> Vm<'a> {
         }
 
         InterpreterFrame {
-            function: InterpreterFunction::rooted(func_value),
+            function: InterpreterFunction::rooted(func),
             frame_base,
             frame_limit,
             pc: 0,
@@ -2229,15 +2234,8 @@ impl<'a> Vm<'a> {
                     return InterpreterFrameCompletion::Resume;
                 }
                 Err(flow) => {
-                    let func = if current.function.is_entry() {
-                        entry_func
-                    } else {
-                        current
-                            .function
-                            .rooted_value()
-                            .get_bytecode_data()
-                            .expect("active interpreter frame must own bytecode")
-                    };
+                    let function = current.function;
+                    let func = function.code().unwrap_or(entry_func);
                     let aux = aux_stack.current_mut();
                     match self.resume_nonlocal(
                         func,
@@ -2518,15 +2516,8 @@ impl<'a> Vm<'a> {
         aux: &mut InterpreterFrameAux,
         entry_func: &ByteCodeFunction,
     ) -> InterpreterFrameControl {
-        let func = if current.function.is_entry() {
-            entry_func
-        } else {
-            current
-                .function
-                .rooted_value()
-                .get_bytecode_data()
-                .expect("active interpreter frame must own bytecode")
-        };
+        let function = current.function;
+        let func = function.code().unwrap_or(entry_func);
         let frame_base = current.frame_base;
         let frame_limit = current.frame_limit;
         let ops = func.executable_ops();
