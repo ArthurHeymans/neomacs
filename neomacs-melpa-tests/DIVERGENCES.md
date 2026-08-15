@@ -5693,21 +5693,75 @@ level and answers `CommentEnderEffect::NestingLevelClosed` or
 boundary.  Both ender branches (one-character and two-character) route through
 it, so the distinction cannot be re-derived differently in one of them.
 
-Two differences remain in this suite and neither is this bug.  The comment run
-itself is now byte-identical to GNU -- after the fix the first divergence in
-`activates_unicode_scala_files_with_real_syntax_and_prettify` moves from
-character 7347 to character 10847 of the result -- and what is left there is
-that `demo.sbt` and
-`demo.worksheet.sc` are pure-ASCII fixtures whose `buffer-file-coding-system`
-GNU reports as `utf-8-unix` and Neomacs as `undecided-unix`.  A standalone
-probe visiting ASCII, Unicode and empty files answers identically in both
-editors (`undecided-unix`, `utf-8-unix`, `utf-8-unix`), so whatever promotes
-these two buffers in GNU is something the suite's world establishes, not
-coding detection.  The other is in
+Two differences remained in this suite after that fix and neither was this bug.
+Both are now resolved; what is still red is a third case neither of them named.
+
+The first was the coding system.  The comment run itself became byte-identical
+to GNU -- the first divergence in
+`activates_unicode_scala_files_with_real_syntax_and_prettify` moved from
+character 7347 to character 10847 -- and what sat at 10847 was that `demo.sbt`
+and `demo.worksheet.sc`, both pure-ASCII fixtures, had
+`buffer-file-coding-system` `utf-8-unix` in GNU and `undecided-unix` here.  A
+standalone probe visiting ASCII, Unicode and empty files answered identically
+in both editors, so the promotion came from the suite's world rather than from
+coding detection.  It comes from the package: `scala-mode-autoloads.el:49`
+(and `scala-mode.el:183`) runs
+
+```elisp
+(modify-coding-system-alist 'file "\\.\\(scala\\|sbt\\|worksheet\\.sc\\)\\'" 'utf-8)
+```
+
+which pushes an entry onto `file-coding-system-alist`.  Package-free in live
+GNU, before and after that single call:
+
+```elisp
+;; before   ("b.sbt" undecided-unix)
+;; after    ("a.sbt" utf-8-unix)  ("a.worksheet.sc" utf-8-unix)
+;;          ("a.scalax" undecided-unix)
+```
+
+The `.scalax` near-miss the suite also pins stays `undecided-unix` because the
+regexp does not match it, which is the same answer both editors already gave.
+
+Neomacs never asked.  GNU decides the read coding system on a four-rung ladder
+and stops at the first rung that answers: `coding-system-for-read`
+(src/fileio.c:4317-4318), then `set-auto-coding-function` (:4401-4402 for a
+non-empty buffer, :5051-5055 for the empty-buffer path), then
+`file-coding-system-alist` through `Ffind_operation_coding_system`
+(:4411-4420 and :5057-5066, taking `XCAR` of a cons answer), then `undecided`
+(:4423-4424).  Neomacs had rungs one, two and four.  Rung three was missing
+entirely, so `find-operation-coding-system` was a correct builtin that nothing
+on the file-reading path ever called.
+
+The fix names the ladder.  `ReadCodingDecision` carries one variant per rung,
+so the decision records WHICH source answered instead of collapsing into a
+chain of `Option::or`, and a rung cannot be dropped without deleting a variant.
+
+Building it exposed a second defect underneath.  `auto_coding_system_name`
+turned the hook's `nil` -- GNU's "I have not decided" -- into the coding-system
+NAME `"nil"`, because `nil` is a symbol and the function only asked whether it
+had a symbol name.  That was harmless while the sole consumer filtered the
+string `"nil"` back out just before decoding.  It stopped being harmless the
+moment a later rung had to ask "did rung two answer?", because rung two then
+always claimed it had.  With `set-auto-coding-function` bound to a function
+that returns `nil` -- the ordinary case -- the alist rung was unreachable, and
+the whole fix was inert until the guard was added.  It now returns "no answer"
+for `nil`, matching GNU's `NILP (coding_system)` test at src/fileio.c:4411
+and :5057.
+
+The second difference was in
 `types_and_reindents_scala_through_one_real_command_loop`, whose
-`:undo-recovery :returned` is 225 here and 227 in GNU -- a two-character
-position difference after an undo, unchanged by this fix and present at the
-same offset before it.  Both want their own investigation.
+`:undo-recovery :returned` was 225 here and 227 in GNU.  Re-measured on current
+HEAD it is gone: the case passes, and it was the undo work in ledgers 97, 100,
+105, 109 and 115 that closed it, not anything here.
+
+The suite's one remaining red case is
+`organises_imports_warns_and_recovers_through_public_commands`, which neither
+residual named and which was already red before this fix.  After `undo`,
+Neomacs leaves point at `point-min` where GNU leaves it at the change it undid:
+`:undone` point 1 (line 1) here against GNU's 271 (line 13), and the `:twice`
+state that follows from it 1 against GNU's 15.  The buffer text agrees at every
+step; only point differs.  It wants its own investigation and its own entry.
 
 Status: FIXED.
 
