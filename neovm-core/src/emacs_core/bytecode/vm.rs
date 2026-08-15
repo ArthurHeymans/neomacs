@@ -1209,6 +1209,7 @@ pub struct Vm<'a> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FrameArgumentCopy {
     None,
+    One,
     Scalar,
     Bulk,
 }
@@ -1222,7 +1223,8 @@ impl FrameArgumentCopy {
         const SCALAR_COPY_MAX: usize = 8;
         match count {
             0 => Self::None,
-            1..=SCALAR_COPY_MAX => Self::Scalar,
+            1 => Self::One,
+            2..=SCALAR_COPY_MAX => Self::Scalar,
             _ => Self::Bulk,
         }
     }
@@ -1244,6 +1246,7 @@ fn frame_argument_copy_counts() -> (usize, usize) {
     FRAME_ARGUMENT_COPY_COUNTS.get()
 }
 
+#[inline(always)]
 fn copy_frame_arguments(buffer: &mut Vec<Value>, args_start: usize, copied: usize) {
     let strategy = FrameArgumentCopy::for_count(copied);
     #[cfg(test)]
@@ -1251,12 +1254,17 @@ fn copy_frame_arguments(buffer: &mut Vec<Value>, args_start: usize, copied: usiz
         let (scalar, bulk) = counts.get();
         counts.set(match strategy {
             FrameArgumentCopy::None => (scalar, bulk),
+            FrameArgumentCopy::One => (scalar + 1, bulk),
             FrameArgumentCopy::Scalar => (scalar + 1, bulk),
             FrameArgumentCopy::Bulk => (scalar, bulk + 1),
         });
     });
     match strategy {
         FrameArgumentCopy::None => {}
+        FrameArgumentCopy::One => {
+            let value = buffer[args_start];
+            buffer.push(value);
+        }
         FrameArgumentCopy::Scalar => {
             for offset in 0..copied {
                 let value = buffer[args_start + offset];

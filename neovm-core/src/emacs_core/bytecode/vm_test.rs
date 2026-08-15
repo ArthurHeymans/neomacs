@@ -10460,6 +10460,11 @@ fn zero_argument_bytecode_frames_skip_argument_copy_work() {
 }
 
 #[test]
+fn unary_bytecode_frames_have_a_dedicated_copy_strategy() {
+    assert_eq!(FrameArgumentCopy::for_count(1), FrameArgumentCopy::One);
+}
+
+#[test]
 fn small_bytecode_frames_copy_arguments_without_bulk_memmove() {
     reset_frame_argument_copy_counts();
     let mut values = vec![Value::fixnum(1), Value::fixnum(2)];
