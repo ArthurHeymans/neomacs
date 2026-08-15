@@ -5645,13 +5645,21 @@ level and answers `CommentEnderEffect::NestingLevelClosed` or
 boundary.  Both ender branches (one-character and two-character) route through
 it, so the distinction cannot be re-derived differently in one of them.
 
-A second difference remains in this suite and is NOT this bug: `demo.sbt` and
+Two differences remain in this suite and neither is this bug.  The comment run
+itself is now byte-identical to GNU -- after the fix the first divergence in
+`activates_unicode_scala_files_with_real_syntax_and_prettify` moves from
+character 7347 to character 10847 of the result -- and what is left there is
+that `demo.sbt` and
 `demo.worksheet.sc` are pure-ASCII fixtures whose `buffer-file-coding-system`
 GNU reports as `utf-8-unix` and Neomacs as `undecided-unix`.  A standalone
 probe visiting ASCII, Unicode and empty files answers identically in both
 editors (`undecided-unix`, `utf-8-unix`, `utf-8-unix`), so whatever promotes
 these two buffers in GNU is something the suite's world establishes, not
-coding detection.  It wants its own investigation.
+coding detection.  The other is in
+`types_and_reindents_scala_through_one_real_command_loop`, whose
+`:undo-recovery :returned` is 225 here and 227 in GNU -- a two-character
+position difference after an undo, unchanged by this fix and present at the
+same offset before it.  Both want their own investigation.
 
 Status: FIXED.
 
