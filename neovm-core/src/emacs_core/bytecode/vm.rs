@@ -732,6 +732,18 @@ struct ResolvedBuiltinCallee(Value);
 #[derive(Clone, Copy)]
 struct ResolvedByteCodeCallee(Value);
 
+/// Proof that a resolved bytecode callee may enter the current Tier-0 driver
+/// directly for the exact argument count carried by its cache key.
+///
+/// Construction is private to [`Vm::resolve_interpreter_stack_call_target`]:
+/// it requires both an interpreter-only execution policy and GNU
+/// `setup_frame` eligibility.  Keeping this distinct from a merely resolved
+/// bytecode object makes accidentally bypassing adaptive tier dispatch or
+/// arity handling unrepresentable at the call site.
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+struct PreparedInterpreterCall(ResolvedByteCodeCallee);
+
 /// Result of GNU `Bcall`'s single live function-cell read.
 ///
 /// Keeping this closed prevents the bytecode call path from first probing one
@@ -740,6 +752,7 @@ struct ResolvedByteCodeCallee(Value);
 /// aliases, autoloads, advice and compiler overrides remain on `Generic`.
 #[derive(Clone, Copy)]
 enum ResolvedStackCallTarget {
+    Interpreter { call: PreparedInterpreterCall },
     ByteCode { callee: ResolvedByteCodeCallee },
     Builtin { callee: ResolvedBuiltinCallee },
     Generic,
@@ -1031,6 +1044,21 @@ impl ResolvedByteCodeCallee {
 const _: () =
     assert!(std::mem::size_of::<ResolvedByteCodeCallee>() == std::mem::size_of::<Value>());
 
+impl PreparedInterpreterCall {
+    #[inline(always)]
+    fn new(callee: ResolvedByteCodeCallee) -> Self {
+        Self(callee)
+    }
+
+    #[inline(always)]
+    fn callee(self) -> ResolvedByteCodeCallee {
+        self.0
+    }
+}
+
+const _: () =
+    assert!(std::mem::size_of::<PreparedInterpreterCall>() == std::mem::size_of::<Value>());
+
 impl ResolvedBuiltinCallee {
     #[inline]
     fn from_static_symbol(sym_id: SymId) -> Option<Self> {
@@ -1187,6 +1215,62 @@ struct SymbolByteCodeCallCache {
     entries: [SymbolByteCodeCallCacheEntry; SYMBOL_BYTECODE_CALL_CACHE_CAPACITY],
 }
 
+/// The most recently proven symbol-bound Tier-0 call.
+///
+/// Real bytecode is strongly monomorphic at an individual call site.  This
+/// one-entry cache sits in front of the wider symbol cache so the ordinary
+/// repeated call can compare the raw tagged designator before decoding its
+/// kind or hashing its `SymId`.  `function_epoch` invalidates every function
+/// cell mutation, while `nargs` keeps the `setup_frame` proof exact.
+#[derive(Clone, Copy)]
+struct RecentInterpreterCall {
+    function_epoch: u64,
+    designator: Value,
+    call: PreparedInterpreterCall,
+    nargs: u16,
+}
+
+impl RecentInterpreterCall {
+    const EMPTY: Self = Self {
+        function_epoch: EMPTY_FUNCTION_EPOCH,
+        designator: Value::NIL,
+        call: PreparedInterpreterCall(ResolvedByteCodeCallee(Value::NIL)),
+        nargs: 0,
+    };
+
+    #[inline(always)]
+    fn get(
+        self,
+        designator: Value,
+        nargs: usize,
+        function_epoch: u64,
+    ) -> Option<PreparedInterpreterCall> {
+        (self.function_epoch == function_epoch
+            && self.designator.bits() == designator.bits()
+            && usize::from(self.nargs) == nargs)
+            .then_some(self.call)
+    }
+
+    #[inline(always)]
+    fn replace(
+        &mut self,
+        designator: Value,
+        nargs: usize,
+        function_epoch: u64,
+        call: PreparedInterpreterCall,
+    ) {
+        let Ok(nargs) = u16::try_from(nargs) else {
+            return;
+        };
+        *self = Self {
+            function_epoch,
+            designator,
+            call,
+            nargs,
+        };
+    }
+}
+
 impl SymbolByteCodeCallCache {
     const fn new() -> Self {
         Self {
@@ -1218,6 +1302,7 @@ impl SymbolByteCodeCallCache {
 const _: () = {
     assert!(SYMBOL_BYTECODE_CALL_CACHE_CAPACITY.is_power_of_two());
     assert!(std::mem::size_of::<SymbolByteCodeCallCacheEntry>() == 3 * std::mem::size_of::<u64>());
+    assert!(std::mem::size_of::<RecentInterpreterCall>() <= 4 * std::mem::size_of::<u64>());
 };
 
 /// Process-selected execution policy for bytecode calls in this VM.
@@ -1255,6 +1340,7 @@ impl BytecodeTierPolicy {
 pub struct Vm<'a> {
     ctx: &'a mut crate::emacs_core::eval::Context,
     symbol_bytecode_call_cache: SymbolByteCodeCallCache,
+    recent_interpreter_call: RecentInterpreterCall,
     #[cfg(feature = "jit")]
     bytecode_tier_policy: BytecodeTierPolicy,
 }
@@ -1386,6 +1472,7 @@ impl<'a> Vm<'a> {
         Self {
             ctx,
             symbol_bytecode_call_cache: SymbolByteCodeCallCache::new(),
+            recent_interpreter_call: RecentInterpreterCall::EMPTY,
             #[cfg(feature = "jit")]
             bytecode_tier_policy: BytecodeTierPolicy::for_process(),
         }
@@ -2367,6 +2454,20 @@ impl<'a> Vm<'a> {
         target: ResolvedStackCallTarget,
     ) -> InterpreterStackCall {
         match target {
+            ResolvedStackCallTarget::Interpreter { call } => {
+                let callee = call.callee();
+                let func = callee.code();
+                let callee = callee.value();
+                let backtrace = self
+                    .ctx
+                    .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
+                InterpreterStackCall::Enter {
+                    callee: PreparedInterpreterCallee::new(callee, func),
+                    args_start,
+                    nargs,
+                    backtrace,
+                }
+            }
             ResolvedStackCallTarget::ByteCode { callee } => {
                 let func = callee.code();
                 let callee = callee.value();
@@ -3041,10 +3142,11 @@ impl<'a> Vm<'a> {
                         // sets `quit-flag` immediately before a call: the callee
                         // must not run.
                         vm_try!(self.ctx.maybe_quit());
-                        let target = self.resolve_stack_call_target(func_val);
+                        let target = self.resolve_interpreter_stack_call_target(func_val, n);
                         let writeback_names = if matches!(
                             target,
-                            ResolvedStackCallTarget::ByteCode { .. }
+                            ResolvedStackCallTarget::Interpreter { .. }
+                                | ResolvedStackCallTarget::ByteCode { .. }
                         ) {
                             // The closed target proof excludes GNU's native
                             // aset/fillarray implementations.  Bytecode may
@@ -3065,9 +3167,9 @@ impl<'a> Vm<'a> {
                             if let Err(flow) = self.enter_bytecode_call_depth() {
                                 resume_flow!(flow)
                             }
-                            match self.dispatch_interpreter_stack_call(
-                                func_val, args_start, n, target,
-                            ) {
+                            match self
+                                .dispatch_interpreter_stack_call(func_val, args_start, n, target)
+                            {
                                 InterpreterStackCall::Enter {
                                     callee,
                                     args_start,
@@ -5680,6 +5782,11 @@ impl<'a> Vm<'a> {
                         .ctx
                         .pop_bytecode_backtrace_token_with_result(backtrace, result);
                 }
+                ResolvedStackCallTarget::Interpreter { .. } => {
+                    unreachable!(
+                        "the generic stack-call resolver cannot manufacture an iterative plan"
+                    )
+                }
                 ResolvedStackCallTarget::Generic => {}
             }
         }
@@ -6135,6 +6242,55 @@ impl<'a> Vm<'a> {
                 let args = LispArgVec::from_slice(&args[args_start..args_start + nargs]);
                 func(self.ctx, &args)
             }
+        }
+    }
+
+    /// Resolve one ordinary bytecode `Call` and, when possible, prove that it
+    /// can enter the current interpreter driver without repeating tier or
+    /// `setup_frame` classification in dispatch.
+    #[inline(always)]
+    fn resolve_interpreter_stack_call_target(
+        &mut self,
+        func_val: Value,
+        nargs: usize,
+    ) -> ResolvedStackCallTarget {
+        let compiler_overrides_active = self.ctx.compiler_function_overrides_active();
+        let function_epoch = self.ctx.obarray.function_epoch();
+        if !compiler_overrides_active
+            && let Some(call) = self
+                .recent_interpreter_call
+                .get(func_val, nargs, function_epoch)
+        {
+            return ResolvedStackCallTarget::Interpreter { call };
+        }
+
+        let target = self.resolve_stack_call_target(func_val);
+        let ResolvedStackCallTarget::ByteCode { callee } = target else {
+            return target;
+        };
+        if !self.uses_interpreter_only_tier()
+            || !self.can_enter_interpreter_frame_iteratively(callee.code(), nargs)
+        {
+            return target;
+        }
+
+        let call = PreparedInterpreterCall::new(callee);
+        if !compiler_overrides_active && func_val.as_symbol_id().is_some() {
+            self.recent_interpreter_call
+                .replace(func_val, nargs, function_epoch, call);
+        }
+        ResolvedStackCallTarget::Interpreter { call }
+    }
+
+    #[inline(always)]
+    fn uses_interpreter_only_tier(&self) -> bool {
+        #[cfg(feature = "jit")]
+        {
+            self.bytecode_tier_policy == BytecodeTierPolicy::InterpreterOnly
+        }
+        #[cfg(not(feature = "jit"))]
+        {
+            true
         }
     }
 

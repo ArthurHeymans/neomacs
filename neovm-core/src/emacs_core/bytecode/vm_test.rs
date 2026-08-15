@@ -1986,6 +1986,47 @@ fn vm_symbol_bytecode_call_cache_invalidates_after_fset() {
 }
 
 #[test]
+fn vm_repeated_symbol_call_observes_fset_before_the_next_call() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+    let callee_symbol = intern("vm-live-redefined-bytecode-call");
+
+    let make_callee = |answer| {
+        let mut callee = ByteCodeFunction::new(LambdaParams::simple(vec![]));
+        let answer_idx = callee.add_constant(Value::fixnum(answer));
+        callee.ops = vec![Op::Constant(answer_idx), Op::Return];
+        callee.max_stack = 1;
+        Value::make_bytecode(callee)
+    };
+    let first = make_callee(1);
+    let second = make_callee(2);
+    eval.obarray.set_symbol_function_id(callee_symbol, first);
+
+    let mut caller = ByteCodeFunction::new(LambdaParams::simple(vec![]));
+    let designator = caller.add_constant(Value::from_sym_id(callee_symbol));
+    let replacement = caller.add_constant(second);
+    caller.ops = vec![
+        Op::Constant(designator),
+        Op::Call(0),
+        Op::Pop,
+        Op::Constant(designator),
+        Op::Constant(replacement),
+        Op::Fset,
+        Op::Pop,
+        Op::Constant(designator),
+        Op::Call(0),
+        Op::Return,
+    ];
+    caller.max_stack = 2;
+
+    let result = new_vm(&mut eval)
+        .execute(&caller, vec![])
+        .expect("the call after fset must use the replacement function cell");
+
+    assert_eq!(result, Value::fixnum(2));
+}
+
+#[test]
 fn vm_bytecode_call_chain_stays_in_one_interpreter_driver() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_minimal_vm_harness();
