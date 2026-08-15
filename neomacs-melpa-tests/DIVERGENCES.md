@@ -5821,7 +5821,7 @@ Lisp seam redisplay already runs.
 
 Status: FIXED.
 
-## 114. Helm's exit-time source resolution diverges in a multi-source session -- OPEN
+## 114. Helm's exit-time source resolution diverges in a multi-source session -- FIXED
 
 Unmasked by refreshing the three stale GNU pins in the helm-css-scss
 single-buffer suite (see the refresh commit; ledger 107 predicted this layer).
@@ -5862,13 +5862,86 @@ through its own advice on `helm-next-line` and `helm-move--next-line-fn`.  Note
 that the plain-text grid assertion before `RET` cannot see this: it compares
 text, and the selection differs only in the highlight.
 
-One nearby asymmetry worth checking first: the recenter error the preceding
-`C-n` raises is logged by GNU as
-`helm-css-scss--recenter: 'recenter'ing a window that does not display current-buffer`
-and by Neomacs as the bare message with no function prefix, which means the two
-report the error from different places.
+### Mechanism
 
-Status: OPEN, diagnosed to the seam, not fixed.
+Point in the Helm buffer, and neither the advice nor the overlay.  A probe that
+logged the whole Helm state after every command, plus `before`/`after` notes
+around `exit-minibuffer`, `bury-buffer`, `switch-to-prev-buffer`,
+`set-window-buffer` and `set-window-configuration`, is byte-identical between
+the two editors up to the last command:
+
+```
+GNU  post-command helm-next-line :helm-point 197 :helm-window-point 197 :get-current-source "component.css"
+Neo  post-command helm-next-line :helm-point 197 :helm-window-point 197 :get-current-source "component.css"
+```
+
+and then diverges across ONE unadvisable step -- the C-level window-configuration
+restore that `read_minibuf` unwinds on minibuffer exit (`src/minibuf.c:695-698`):
+
+```
+GNU  minibuffer-exit-hook :helm-point 197 ... -> before bury-buffer :helm-point 197 :helm-window 197
+Neo  minibuffer-exit-hook :helm-point 197 ... -> before bury-buffer :helm-point  53 :helm-window  53
+```
+
+53 is the preselected candidate: the position the Helm window had when Helm
+entered its minibuffer.  Neomacs restored it, so `helm-execute-selection-action-1`
+read `tui-fixture.scss` out of `(get-text-property (point) 'helm-cur-source)`
+and ran that source's baked action.
+
+`current-window-configuration` deliberately does not record point in the buffer
+that was current when it ran ("does not save the value of point in the current
+buffer"), and `Fset_window_configuration` enforces that by recomputing
+`old_point` from the LIVE session before touching anything
+(`src/window.c:7692-7733`) and writing it back over the window that was selected
+at save time, after the saved tree is installed (`src/window.c:7978-7984`):
+
+```c
+      /* Arrange *not* to restore point in the buffer that was
+	 current when the window configuration was saved.  */
+      if (EQ (XWINDOW (data->current_window)->contents, new_current_buffer))
+	set_marker_restricted (XWINDOW (data->current_window)->pointm,
+			       make_fixnum (old_point),
+			       XWINDOW (data->current_window)->contents);
+```
+
+Helm hits this exactly: `helm-internal` displays its buffer and does
+`(select-window (helm-window))` before `read-from-minibuffer`, so the Helm window
+is the saved-selected window and the Helm buffer is the saved current buffer.
+Reduced to a batch A/B (`emacs -Q --batch`, same file for both editors):
+
+```elisp
+(select-window w)                       ; w shows B, B is current
+(setq conf (current-window-configuration))
+(select-window other)
+(set-window-point w 13) (with-current-buffer b (goto-char 13))
+(set-window-configuration conf)
+(list (window-point w) (with-current-buffer b (point)))
+;; GNU               => (13 13)   live point kept
+;; Neomacs before fix => (1 1)    saved point restored
+```
+
+Neomacs restored the whole saved window tree, points included, so every window
+got its snapshot point back.  The fix computes the same exclusion GNU does, once,
+above the restore, and carries it as one value -- `LiveCurrentBufferPoint`
+(window + the buffer that window must still show + the live point) -- so no
+branch can apply half of it.  Two neomacs unit tests had pinned the pre-GNU
+behaviour (`(10 10)` and `[10, 37]` for a `save-window-excursion`-shaped round
+trip); GNU answers `(3 3)` and `(10 10)`, and both were corrected against live
+GNU rather than kept.
+
+The nearby `helm-css-scss--recenter:` prefix asymmetry in the error line was a
+red herring: with the probe attached, both editors raise it from the same frame
+(`recenter` <- `helm-css-scss--recenter` <- `helm-css-scss--move-line-action` <-
+`ad-Advice-helm-next-line`), with the same current-buffer/window-buffer pair.
+
+Status: FIXED.  `helm_css_scss_public_tui_workflows_match_gnu` passes; the
+multi-source report (including `:current-source "component.css"` and the
+`post-action` stage at `component.css` point 52) is identical between the two
+editors.  Two GNU-side grid pins in the multi test were stale from an older
+layout (they recorded a 42/7 window split; the package's own
+`helm-css-scss-split-window-function` splits 50/50, which is what live GNU
+produces today) and were refreshed in a separate commit -- they had never been
+reached before, because the workflow failed earlier.
 ## 115. The first-change sentinel was recorded before the boundary check that gates the point entry -- FIXED
 
 Tide's edit workflow formats a region, then `undo-only`.  GNU restores point to

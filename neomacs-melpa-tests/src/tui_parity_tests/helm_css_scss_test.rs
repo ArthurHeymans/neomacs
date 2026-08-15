@@ -2239,30 +2239,30 @@ fn helm_css_scss_named_display_adapter_drives_real_multi_buffer_helm() {
         21 |  color: black;
         22 |}
         23 |
-        24 |
-        25 |
-        26 |
-        27 |
-        28 |
-        29 |
-        30 |
+        24 |-UU-:--- F1  tui-fixture.scss   All   L11    (SCSS ElDoc) ------------------------------------------------------------------------------------------------------
+        25 | helm-css-scss-multi
+        26 |tui-fixture.scss
+        27 |6: .dashboard, .dashboard--compact
+        28 |10: .dashboard, .dashboard--compact .card
+        29 |13: .dashboard, .dashboard--compact .card &__title, &__subtitle
+        30 |20: .footer
         31 |
-        32 |
-        33 |
-        34 |
+        32 |component.css
+        33 |1: .button
+        34 |5: .button:hover
         35 |
-        36 |
-        37 |
-        38 |
+        36 |theme.less
+        37 |1: .theme
+        38 |4: .theme .link
         39 |
-        40 |
-        41 |
-        42 |-UU-:--- F1  tui-fixture.scss   All   L11    (SCSS ElDoc) ------------------------------------------------------------------------------------------------------
-        43 | helm-css-scss-multi
-        44 |tui-fixture.scss
-        45 |6: .dashboard, .dashboard--compact
-        46 |10: .dashboard, .dashboard--compact .card
-        47 |13: .dashboard, .dashboard--compact .card &__title, &__subtitle
+        40 |IGNORED.CSS
+        41 |1: .upper-case-extension
+        42 |
+        43 |
+        44 |
+        45 |
+        46 |
+        47 |
         48 | *Helm Css SCSS multi buffers* L2    [4 Candidate(s)]   C-h m:Help TAB:Act C-o:NextSrc RET/f1..f12:NthAct C-!:Tog.suspend C-h c:Conf
         49 |Selector:
     "#]];
@@ -2292,29 +2292,29 @@ fn helm_css_scss_named_display_adapter_drives_real_multi_buffer_helm() {
         21 |
         22 |
         23 |
-        24 |
-        25 |
-        26 |
-        27 |
-        28 |
-        29 |
-        30 |
+        24 |-UU-:--- F1  component.css   All   L5     (CSS ElDoc) ----------------------------------------------------------------------------------------------------------
+        25 | helm-css-scss-multi
+        26 |tui-fixture.scss
+        27 |6: .dashboard, .dashboard--compact
+        28 |10: .dashboard, .dashboard--compact .card
+        29 |13: .dashboard, .dashboard--compact .card &__title, &__subtitle
+        30 |20: .footer
         31 |
-        32 |
-        33 |
-        34 |
+        32 |component.css
+        33 |1: .button
+        34 |5: .button:hover
         35 |
-        36 |
-        37 |
-        38 |
+        36 |theme.less
+        37 |1: .theme
+        38 |4: .theme .link
         39 |
-        40 |
-        41 |
-        42 |-UU-:--- F1  component.css   All   L5     (CSS ElDoc) ----------------------------------------------------------------------------------------------------------
-        43 | helm-css-scss-multi
-        44 |component.css
-        45 |1: .button
-        46 |5: .button:hover
+        40 |IGNORED.CSS
+        41 |1: .upper-case-extension
+        42 |
+        43 |
+        44 |
+        45 |
+        46 |
         47 |
         48 | *Helm Css SCSS multi buffers* L2    [2 Candidate(s)]   C-h m:Help TAB:Act C-o:NextSrc RET/f1..f12:NthAct C-!:Tog.suspend C-h c:Conf
         49 |Selector:  [‘recenter’ing a window that does not display current-buffer]

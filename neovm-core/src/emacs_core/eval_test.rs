@@ -12320,11 +12320,28 @@ fn save_window_excursion_restores_selected_window_point_and_requests_final_redis
     )
     .expect("save-window-excursion equivalent should evaluate");
 
-    assert_eq!(*redisplayed_points.borrow(), vec![10, 37]);
+    // GNU answers (10 10) for this shape (emacs -Q --batch): the configuration
+    // never recorded point in the buffer that was current when it was saved, so
+    // the restore leaves the live window point alone
+    // (`src/window.c:7692-7733, 7978-7984`).
+    assert_eq!(*redisplayed_points.borrow(), vec![10, 10]);
 }
 
+/// `current-window-configuration` does not record point in the buffer that was
+/// current when it ran, so a round trip through it leaves point where the live
+/// session put it -- `Fset_window_configuration` writes `old_point` back over
+/// the saved-selected window (`src/window.c:7692-7733, 7978-7984`).  Verified
+/// against GNU (emacs -Q --batch), which answers `(3 3)` here:
+///
+/// ```elisp
+/// (let* ((w (selected-window)) (_ (goto-char 10))
+///        (cfg (current-window-configuration)))
+///   (goto-char 3)
+///   (set-window-configuration cfg)
+///   (list (window-point w) (point)))
+/// ```
 #[test]
-fn current_window_configuration_saves_selected_window_live_point() {
+fn current_window_configuration_does_not_save_point_in_the_current_buffer() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let buffer_id = ev.buffers.create_buffer("*scratch*");
@@ -12347,7 +12364,7 @@ fn current_window_configuration_saves_selected_window_live_point() {
         .expect("current-window-configuration round-trip should evaluate");
     assert_eq!(
         result,
-        Value::list(vec![Value::fixnum(10), Value::fixnum(10)])
+        Value::list(vec![Value::fixnum(3), Value::fixnum(3)])
     );
 }
 
