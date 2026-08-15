@@ -8339,7 +8339,14 @@ fn vm_insert_byte_and_buffer_undo_toggles_use_shared_runtime_state() {
                          (buffer-disable-undo)
                          buffer-undo-list)))"#
         ),
-        r#"OK ("AA" (4194248) nil t)"#
+        // `buffer-enable-undo` does NOT clear a live history -- GNU's
+        // `Fbuffer_enable_undo` resets only when the list is `t`
+        // (src/buffer.c:1846).  The two edits above are already recorded, so
+        // enabling undo here reports them.  This form run under GNU 31.0.90
+        // `-Q --batch` in `*scratch*` (whose `buffer-undo-list` starts nil):
+        //   ("AA" (4194248) "((1 . 2) (\"AA\" . -1) (1 . 3) (t . 0))" t)
+        // The previous `nil` pinned the clobber this test predates.
+        r#"OK ("AA" (4194248) ((1 . 2) ("AA" . -1) (1 . 3) (t . 0)) t)"#
     );
 
     assert_eq!(

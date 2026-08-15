@@ -6054,6 +6054,29 @@ impl BufferManager {
         Some(())
     }
 
+    /// Turn undo recording ON for `id`, GNU's `Fbuffer_enable_undo`
+    /// (src/buffer.c:1845-1847):
+    ///
+    /// ```c
+    ///   if (EQ (BVAR (XBUFFER (real_buffer), undo_list), Qt))
+    ///     bset_undo_list (XBUFFER (real_buffer), Qnil);
+    /// ```
+    ///
+    /// Enabling is a transition out of [`undo::UndoRecording::Disabled`], not an
+    /// assignment: a buffer whose undo is already on keeps its history.  That
+    /// distinction is load-bearing for indirect buffers, which share one undo
+    /// list with their base (GNU copies the base's value in
+    /// `make_indirect_buffer`, src/buffer.c:894, and re-syncs the pair on every
+    /// buffer switch in `set_buffer_internal_2`, src/buffer.c:2352-2367), so an
+    /// unconditional reset here erased the BASE buffer's history.
+    pub fn enable_buffer_undo(&mut self, id: BufferId) -> Option<()> {
+        let undo_list = self.buffers.get(&id)?.get_undo_list();
+        match undo::UndoRecording::of(&undo_list) {
+            undo::UndoRecording::Disabled => self.configure_buffer_undo_list(id, Value::NIL),
+            undo::UndoRecording::Enabled => Some(()),
+        }
+    }
+
     pub fn undo_buffer(&mut self, id: BufferId, mut count: i64) -> Option<UndoExecutionResult> {
         let (had_any_records, had_boundary, previous_undoing, groups) = {
             let buffer = self.buffers.get_mut(&id)?;
