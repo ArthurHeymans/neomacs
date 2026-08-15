@@ -1791,7 +1791,7 @@ fn vm_symbol_bytecode_call_resolves_live_function_cell_once() {
 }
 
 #[test]
-fn vm_constant_stackref_pair_uses_one_dispatch() {
+fn vm_adjacent_stack_transfer_pairs_each_use_one_dispatch() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_minimal_vm_harness();
     let callee_symbol = intern("vm-fused-constant-stackref-callee");
@@ -1832,8 +1832,57 @@ fn vm_constant_stackref_pair_uses_one_dispatch() {
     assert_eq!(result, Value::fixnum(42));
     assert_eq!(
         opcode_dispatch_count(),
-        5,
-        "constant + stack-ref should share one dispatch without fusing Call"
+        4,
+        "constant/stack-ref and stack-ref/return should each share one dispatch"
+    );
+}
+
+#[test]
+fn vm_stackref_return_pair_uses_one_dispatch() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+
+    let mut function = ByteCodeFunction::new(LambdaParams {
+        required: vec![intern("argument")],
+        optional: vec![],
+        rest: None,
+    });
+    function.lexical = true;
+    function.ops = vec![Op::StackRef(0), Op::Return];
+    function.max_stack = 2;
+
+    reset_opcode_dispatch_count();
+    let result = new_vm(&mut eval)
+        .execute(&function, vec![Value::fixnum(42)])
+        .expect("stack-ref/return should execute");
+
+    assert_eq!(result, Value::fixnum(42));
+    assert_eq!(
+        opcode_dispatch_count(),
+        1,
+        "stack-ref + return should share one dispatch"
+    );
+}
+
+#[test]
+fn vm_stackref_return_fusion_preserves_frame_limit_validation() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+
+    let mut function = ByteCodeFunction::new(LambdaParams {
+        required: vec![intern("argument")],
+        optional: vec![],
+        rest: None,
+    });
+    function.lexical = true;
+    function.ops = vec![Op::StackRef(0), Op::Return];
+    function.max_stack = 1;
+
+    let result = new_vm(&mut eval).execute(&function, vec![Value::fixnum(42)]);
+
+    assert!(
+        result.is_err(),
+        "the fused pair must reject a StackRef push beyond max-stack"
     );
 }
 

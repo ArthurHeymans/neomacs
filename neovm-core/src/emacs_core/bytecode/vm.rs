@@ -2718,6 +2718,26 @@ impl<'a> Vm<'a> {
                 }};
             }
 
+            macro_rules! ensure_stack_push_capacity {
+                () => {{
+                    if cursor.len >= frame_limit {
+                        let invalid_pc = pc_local.saturating_sub(1);
+                        let stack_len = cursor.len;
+                        cursor.publish(&mut self.ctx);
+                        trace_invalid_bytecode_site(
+                            func,
+                            "push-frame-limit",
+                            invalid_pc,
+                            frame_base,
+                            frame_limit,
+                            stack_len,
+                            ops.get(invalid_pc),
+                        );
+                        resume_flow!(invalid_bytecode_flow())
+                    }
+                }};
+            }
+
             macro_rules! stk_push {
             ($val:expr) => {{
                 let v = $val;
@@ -2740,21 +2760,7 @@ impl<'a> Vm<'a> {
                         );
                     }
                 }
-                if cursor.len >= frame_limit {
-                    let invalid_pc = pc_local.saturating_sub(1);
-                    let stack_len = cursor.len;
-                    cursor.publish(&mut self.ctx);
-                    trace_invalid_bytecode_site(
-                        func,
-                        "push-frame-limit",
-                        invalid_pc,
-                        frame_base,
-                        frame_limit,
-                        stack_len,
-                        ops.get(invalid_pc),
-                    );
-                    resume_flow!(invalid_bytecode_flow())
-                }
+                ensure_stack_push_capacity!();
                 // SAFETY: len < frame_limit <= bc_buf capacity (run_frame
                 // reserved frame_limit up front).
                 unsafe { cursor.push_unchecked(v) };
@@ -2982,6 +2988,26 @@ impl<'a> Vm<'a> {
                             // Keep the hot path to one explicit check and avoid
                             // the slice indexer's second bounds check.
                             let val = unsafe { *stk!().get_unchecked(len - offset) };
+
+                            // GNU's Bstack_ref handlers perform PUSH + NEXT,
+                            // and an adjacent Breturn immediately reads TOP;
+                            // neither handler introduces a safe point.  Keep
+                            // Return independently addressable, but when
+                            // execution arrives through StackRef, return the
+                            // selected value without a temporary push or a
+                            // second Rust dispatch.  Validate the skipped push
+                            // first so malformed max-stack metadata retains
+                            // Neomacs's existing error behavior and site.
+                            if pc_local < ops_len {
+                                let next = unsafe { &*ops_ptr.add(pc_local) };
+                                if matches!(next, Op::Return) {
+                                    ensure_stack_push_capacity!();
+                                    pc_local += 1;
+                                    #[cfg(feature = "vm-profile")]
+                                    vm_profile::bump(next);
+                                    return_value!(val);
+                                }
+                            }
                             stk_push!(val);
                         } else {
                             invalid_bytecode!("stack-ref-out-of-range");
