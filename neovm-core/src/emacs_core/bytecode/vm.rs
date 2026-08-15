@@ -464,6 +464,8 @@ thread_local! {
     static RUN_LOOP_MAX_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static GENERIC_BYTECODE_CLEANUP_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static OPCODE_DISPATCH_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static MUTATING_WRITEBACK_CLASSIFICATION_COUNT: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -517,6 +519,16 @@ fn reset_opcode_dispatch_count() {
 #[cfg(test)]
 fn opcode_dispatch_count() -> usize {
     OPCODE_DISPATCH_COUNT.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn reset_mutating_writeback_classification_count() {
+    MUTATING_WRITEBACK_CLASSIFICATION_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+fn mutating_writeback_classification_count() -> usize {
+    MUTATING_WRITEBACK_CLASSIFICATION_COUNT.with(std::cell::Cell::get)
 }
 
 use crate::emacs_core::eval::SpecBinding;
@@ -2352,8 +2364,9 @@ impl<'a> Vm<'a> {
         func_val: Value,
         args_start: usize,
         nargs: usize,
+        target: ResolvedStackCallTarget,
     ) -> InterpreterStackCall {
-        match self.resolve_stack_call_target(func_val) {
+        match target {
             ResolvedStackCallTarget::ByteCode { callee } => {
                 let func = callee.code();
                 let callee = callee.value();
@@ -3028,7 +3041,18 @@ impl<'a> Vm<'a> {
                         // sets `quit-flag` immediately before a call: the callee
                         // must not run.
                         vm_try!(self.ctx.maybe_quit());
-                        let writeback_names = if n > 0 && stk!()[args_start].is_string() {
+                        let target = self.resolve_stack_call_target(func_val);
+                        let writeback_names = if matches!(
+                            target,
+                            ResolvedStackCallTarget::ByteCode { .. }
+                        ) {
+                            // The closed target proof excludes GNU's native
+                            // aset/fillarray implementations.  Bytecode may
+                            // mutate a string through an explicit primitive,
+                            // but the ordinary call itself needs no host-side
+                            // replacement-object writeback.
+                            None
+                        } else if n > 0 && stk!()[args_start].is_string() {
                             self.writeback_mutating_callable_names(&func_val)
                         } else {
                             None
@@ -3041,7 +3065,9 @@ impl<'a> Vm<'a> {
                             if let Err(flow) = self.enter_bytecode_call_depth() {
                                 resume_flow!(flow)
                             }
-                            match self.dispatch_interpreter_stack_call(func_val, args_start, n) {
+                            match self.dispatch_interpreter_stack_call(
+                                func_val, args_start, n, target,
+                            ) {
                                 InterpreterStackCall::Enter {
                                     callee,
                                     args_start,
@@ -4276,6 +4302,8 @@ impl<'a> Vm<'a> {
         &self,
         func_val: &Value,
     ) -> Option<(&'static str, Option<&'static str>)> {
+        #[cfg(test)]
+        MUTATING_WRITEBACK_CLASSIFICATION_COUNT.with(|count| count.set(count.get() + 1));
         match func_val.kind() {
             ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr)
                 if func_val.as_subr_id().is_some() =>

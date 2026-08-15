@@ -1838,6 +1838,55 @@ fn vm_constant_stackref_pair_uses_one_dispatch() {
 }
 
 #[test]
+fn vm_bytecode_callee_skips_native_string_writeback_classification() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+    let callee_symbol = intern("vm-bytecode-string-identity");
+
+    let mut callee = ByteCodeFunction::new(LambdaParams {
+        required: vec![intern("string-argument")],
+        optional: vec![],
+        rest: None,
+    });
+    callee.lexical = true;
+    callee.ops = vec![Op::StackRef(0), Op::Return];
+    callee.max_stack = 2;
+    eval.obarray
+        .set_symbol_function_id(callee_symbol, Value::make_bytecode(callee));
+
+    let argument = Value::string("abc");
+    let mut caller = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    caller.lexical = true;
+    let callee_idx = caller.add_constant(Value::from_sym_id(callee_symbol));
+    let argument_idx = caller.add_constant(argument);
+    caller.ops = vec![
+        Op::Constant(callee_idx),
+        Op::Constant(argument_idx),
+        Op::Call(1),
+        Op::Return,
+    ];
+    caller.max_stack = 2;
+
+    reset_mutating_writeback_classification_count();
+    let result = {
+        let mut vm = new_vm(&mut eval);
+        vm.execute(&caller, vec![])
+            .expect("bytecode string identity call should execute")
+    };
+
+    assert_eq!(result, argument);
+    assert_eq!(
+        mutating_writeback_classification_count(),
+        0,
+        "a resolved bytecode callee cannot be native aset/fillarray"
+    );
+}
+
+#[test]
 fn vm_repeated_symbol_bytecode_calls_reuse_epoch_validated_resolution() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_minimal_vm_harness();
