@@ -5100,6 +5100,22 @@ struct PartialParseState {
     prev_syntax: i64,
 }
 
+/// What a comment-ender sequence did to the parse state.
+///
+/// GNU consumes a whole comment -- every nested level of it -- inside a single
+/// `forw_comment` call (`scan_sexps_forward`, src/syntax.c:3352), and only the
+/// code *after* that call clears `state->incomment` and honours `boundary_stop`
+/// (src/syntax.c:3370-3374).  An ender that merely pops a nesting level is
+/// therefore not a parse boundary at all.  Naming the two outcomes keeps that
+/// distinction from having to be re-derived at each ender branch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CommentEnderEffect {
+    /// A nested level closed; the comment is still open.
+    NestingLevelClosed,
+    /// The comment itself ended here.
+    CommentClosed,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct PartialParseLevel {
     last: Option<i64>,
@@ -5118,6 +5134,34 @@ impl PartialParseState {
             quoted: false,
             in_string_from_oldstate: false,
             prev_syntax: PARSE_PREV_SYNTAX_SMAX,
+        }
+    }
+
+    /// Apply one comment-ender sequence to a syntactic comment of `depth`.
+    ///
+    /// Mirrors GNU `forw_comment`'s nesting counter: an ender pops one level,
+    /// and the comment only ends -- clearing `state->incomment` and
+    /// `state->comstr_start` -- when the last level pops.  Note that GNU keeps
+    /// `comstr_start` at the OUTERMOST comment start throughout, which is what
+    /// element 8 of the parse state reports.
+    fn close_comment_level(
+        &mut self,
+        depth: i64,
+        style: CommentStyle,
+        nestable: bool,
+    ) -> CommentEnderEffect {
+        let next_depth = depth - 1;
+        if next_depth <= 0 {
+            self.in_comment = None;
+            self.comment_or_string_start = None;
+            CommentEnderEffect::CommentClosed
+        } else {
+            self.in_comment = Some(ParseCommentState::Syntax {
+                depth: next_depth,
+                style,
+                nestable,
+            });
+            CommentEnderEffect::NestingLevelClosed
         }
     }
 
@@ -5517,19 +5561,11 @@ fn parse_state_from_range_with_options(
                     if class == SyntaxClass::EndComment
                         && CommentStyle::from_main_flags(flags) == style
                     {
-                        let next_depth = comment_depth - 1;
                         idx += 1;
-                        if next_depth <= 0 {
-                            state.in_comment = None;
-                            state.comment_or_string_start = None;
-                        } else {
-                            state.in_comment = Some(ParseCommentState::Syntax {
-                                depth: next_depth,
-                                style,
-                                nestable,
-                            });
-                        }
-                        if commentstop == CommentStopMode::SyntaxTable {
+                        if state.close_comment_level(comment_depth, style, nestable)
+                            == CommentEnderEffect::CommentClosed
+                            && commentstop == CommentStopMode::SyntaxTable
+                        {
                             break;
                         }
                         continue;
@@ -5546,19 +5582,11 @@ fn parse_state_from_range_with_options(
                         if next_flags.contains(SyntaxFlags::COMMENT_END_SECOND)
                             && CommentStyle::from_end_flags(flags, next_flags) == style
                         {
-                            let next_depth = comment_depth - 1;
                             idx += 2;
-                            if next_depth <= 0 {
-                                state.in_comment = None;
-                                state.comment_or_string_start = None;
-                            } else {
-                                state.in_comment = Some(ParseCommentState::Syntax {
-                                    depth: next_depth,
-                                    style,
-                                    nestable,
-                                });
-                            }
-                            if commentstop == CommentStopMode::SyntaxTable {
+                            if state.close_comment_level(comment_depth, style, nestable)
+                                == CommentEnderEffect::CommentClosed
+                                && commentstop == CommentStopMode::SyntaxTable
+                            {
                                 break;
                             }
                             continue;
