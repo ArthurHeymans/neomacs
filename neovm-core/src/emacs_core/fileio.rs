@@ -5825,6 +5825,73 @@ fn decode_insert_file_contents(
     ))
 }
 
+/// Which source decided the coding system `insert-file-contents` decodes with.
+///
+/// GNU consults exactly these, in exactly this order, and stops at the first
+/// that answers: `coding-system-for-read` (src/fileio.c:4317-4318), then
+/// `set-auto-coding-function` (src/fileio.c:4401-4402 for a non-empty buffer,
+/// :5051-5055 for the empty-buffer path), then `file-coding-system-alist` via
+/// `find-operation-coding-system` (src/fileio.c:4411-4420, :5057-5066), and
+/// finally plain `undecided` (src/fileio.c:4423-4424).
+///
+/// The ladder is a value rather than a chain of `Option::or` calls so that
+/// every rung is named: a new source cannot be spliced in without choosing
+/// where it sits, and a dropped rung is a missing match arm rather than a
+/// silently shorter chain.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ReadCodingDecision {
+    /// `coding-system-for-read` was non-nil and wins outright.
+    ForRead(String),
+    /// `set-auto-coding-function` found a `coding:` cookie, an
+    /// `auto-coding-alist` entry or an `auto-coding-functions` hit.
+    AutoCoding(String),
+    /// `file-coding-system-alist` matched the file name.
+    FileNameAlist(String),
+    /// Nothing decided; the undecided category engine detects.
+    Undecided,
+}
+
+impl ReadCodingDecision {
+    /// The coding-system name to decode with, or `None` for `undecided`.
+    fn coding_system(&self) -> Option<&str> {
+        match self {
+            Self::ForRead(name) | Self::AutoCoding(name) | Self::FileNameAlist(name) => Some(name),
+            Self::Undecided => None,
+        }
+    }
+}
+
+/// Ask `file-coding-system-alist` (through `find-operation-coding-system`)
+/// which coding system this file name asks for, mirroring GNU's
+/// `CALLN (Ffind_operation_coding_system, Qinsert_file_contents, ...)`
+/// (src/fileio.c:4415-4419, :5061-5065) including its `XCAR` of a cons answer.
+fn decide_file_name_coding_for_insert_file_contents(
+    eval: &mut super::eval::Context,
+    filename: crate::heap_types::LispString,
+    visit: Value,
+    beg: Value,
+    end: Value,
+    replace: Value,
+) -> Result<Option<String>, Flow> {
+    let answer = super::builtins::builtin_find_operation_coding_system(
+        eval,
+        vec![
+            Value::symbol("insert-file-contents"),
+            Value::heap_string(filename),
+            visit,
+            beg,
+            end,
+            replace,
+        ],
+    )?;
+    let decoding = if answer.is_cons() {
+        answer.cons_car()
+    } else {
+        answer
+    };
+    auto_coding_system_name(eval, decoding)
+}
+
 fn decide_auto_coding_for_insert_file_contents(
     eval: &mut super::eval::Context,
     filename: crate::heap_types::LispString,
@@ -5884,6 +5951,13 @@ fn auto_coding_system_name(
     eval: &super::eval::Context,
     value: Value,
 ) -> Result<Option<String>, Flow> {
+    // `nil` is GNU's "I did not decide" answer (`NILP (coding_system)`,
+    // src/fileio.c:4411, :5057), not a coding-system name.  `nil` is a symbol
+    // here, so without this guard it would come back as the name "nil" and
+    // read as a decision.
+    if value.is_nil() {
+        return Ok(None);
+    }
     let Some(name) = value.as_symbol_name().map(str::to_owned).or_else(|| {
         value
             .as_lisp_string()
@@ -6147,28 +6221,49 @@ pub(crate) fn builtin_insert_file_contents(
         .buffers
         .get(current_id)
         .is_some_and(|buffer| buffer.is_text_empty());
-    let auto_coding_system = if multibyte && coding_system_for_read.is_none() {
-        if current_buffer_was_empty {
-            decide_auto_coding_for_empty_insert_file_contents(
-                eval,
-                resolved.clone(),
-                slice,
-                current_id,
-            )?
-        } else {
-            decide_auto_coding_for_insert_file_contents(eval, resolved.clone(), slice)?
+    // GNU's decision ladder, in GNU's order (src/fileio.c:4317-4424 for a
+    // non-empty buffer, :5023-5075 for the empty-buffer path).
+    let decision = match coding_system_for_read.clone() {
+        Some(name) => ReadCodingDecision::ForRead(name),
+        None if !multibyte => ReadCodingDecision::Undecided,
+        None => {
+            let auto = if current_buffer_was_empty {
+                decide_auto_coding_for_empty_insert_file_contents(
+                    eval,
+                    resolved.clone(),
+                    slice,
+                    current_id,
+                )?
+            } else {
+                decide_auto_coding_for_insert_file_contents(eval, resolved.clone(), slice)?
+            };
+            match auto {
+                Some(name) => ReadCodingDecision::AutoCoding(name),
+                None => {
+                    // GNU passes REPLACE through on the non-empty-buffer path
+                    // and nil on the empty-buffer one (src/fileio.c:4417 vs
+                    // :5063).
+                    let replace_arg = if current_buffer_was_empty {
+                        Value::NIL
+                    } else {
+                        args.get(4).copied().unwrap_or(Value::NIL)
+                    };
+                    match decide_file_name_coding_for_insert_file_contents(
+                        eval,
+                        resolved.clone(),
+                        args.get(1).copied().unwrap_or(Value::NIL),
+                        args.get(2).copied().unwrap_or(Value::NIL),
+                        args.get(3).copied().unwrap_or(Value::NIL),
+                        replace_arg,
+                    )? {
+                        Some(name) => ReadCodingDecision::FileNameAlist(name),
+                        None => ReadCodingDecision::Undecided,
+                    }
+                }
+            }
         }
-    } else {
-        None
     };
-    let contents = decode_insert_file_contents(
-        eval,
-        slice,
-        multibyte,
-        coding_system_for_read
-            .as_deref()
-            .or(auto_coding_system.as_deref()),
-    )?;
+    let contents = decode_insert_file_contents(eval, slice, multibyte, decision.coding_system())?;
     let decoded_char_count = contents.char_count();
 
     let signal_change_hooks = !visit || replace_requested;

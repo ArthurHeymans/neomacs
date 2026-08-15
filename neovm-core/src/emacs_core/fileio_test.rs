@@ -4426,6 +4426,72 @@ fn insert_file_contents_honors_dynamic_gb2312_coding_system_for_read() {
 }
 
 #[test]
+fn insert_file_contents_consults_file_coding_system_alist_when_auto_coding_declines() {
+    crate::test_utils::init_test_tracing();
+
+    // Live GNU (emacs -Q --batch), pure-ASCII fixture:
+    //   before modify-coding-system-alist -> undecided-unix
+    //   after  modify-coding-system-alist -> utf-8-unix
+    // scala-mode registers exactly such an entry from its autoloads
+    // (scala-mode-autoloads.el:49), which is what promotes its .sbt and
+    // .worksheet.sc buffers.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("promoted.sbt");
+    fs::write(&path, b"ThisBuild / scalaVersion := \"2.13.16\"\n").expect("write ASCII fixture");
+    let path_lisp = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let results = bootstrap_eval(&format!(
+        r#"(list (with-temp-buffer
+                   (insert-file-contents "{path_lisp}")
+                   last-coding-system-used)
+                 (let ((file-coding-system-alist
+                        (cons (cons "\\.sbt\\'" (cons 'utf-8 'utf-8))
+                              file-coding-system-alist)))
+                   (with-temp-buffer
+                     (insert-file-contents "{path_lisp}")
+                     last-coding-system-used)))"#
+    ));
+
+    assert_eq!(results[0], "OK (undecided-unix utf-8-unix)");
+}
+
+#[test]
+fn insert_file_contents_prefers_auto_coding_over_file_coding_system_alist() {
+    crate::test_utils::init_test_tracing();
+
+    // GNU asks `file-coding-system-alist' only when `set-auto-coding-function'
+    // declined (src/fileio.c:4411-4420, :5057-5066), so a `coding:' cookie
+    // outranks a matching alist entry.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let path = dir.path().join("cookie.sbt");
+    fs::write(
+        &path,
+        [
+            b'%', b' ', b'-', b'*', b'-', b' ', b'c', b'o', b'd', b'i', b'n', b'g', b':', b' ',
+            b'c', b'n', b'-', b'g', b'b', b'-', b'2', b'3', b'1', b'2', b' ', b'-', b'*', b'-',
+            b'\n', 0xd2, 0xbb, b'\n',
+        ],
+    )
+    .expect("write cookie fixture");
+    let path_lisp = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let results = bootstrap_eval(&format!(
+        r#"(let ((file-coding-system-alist
+                  (cons (cons "\\.sbt\\'" (cons 'utf-8 'utf-8))
+                        file-coding-system-alist)))
+             (with-temp-buffer
+               (insert-file-contents "{path_lisp}")
+               last-coding-system-used))"#
+    ));
+
+    assert_eq!(results[0], "OK chinese-iso-8bit-unix");
+}
+
+#[test]
 fn insert_file_contents_uses_set_auto_coding_function_for_coding_cookie() {
     crate::test_utils::init_test_tracing();
 
