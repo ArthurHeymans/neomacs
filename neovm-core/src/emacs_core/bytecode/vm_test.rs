@@ -10448,6 +10448,18 @@ fn vm_gnu_arg_descriptor_preserves_optional_and_rest_slots() {
 }
 
 #[test]
+fn zero_argument_bytecode_frames_skip_argument_copy_work() {
+    reset_frame_argument_copy_counts();
+    let mut values = vec![Value::fixnum(1)];
+
+    copy_frame_arguments(&mut values, 1, 0);
+
+    assert_eq!(FrameArgumentCopy::for_count(0), FrameArgumentCopy::None);
+    assert_eq!(values, vec![Value::fixnum(1)]);
+    assert_eq!(frame_argument_copy_counts(), (0, 0));
+}
+
+#[test]
 fn small_bytecode_frames_copy_arguments_without_bulk_memmove() {
     reset_frame_argument_copy_counts();
     let mut values = vec![Value::fixnum(1), Value::fixnum(2)];
