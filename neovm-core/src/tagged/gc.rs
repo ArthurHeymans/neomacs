@@ -968,6 +968,37 @@ pub fn set_tagged_heap(heap: &mut TaggedHeap) {
     TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.set(heap.concurrent_mark_running));
 }
 
+/// Uninstall `heap` from this thread's allocation slot, if it is the heap
+/// currently installed there.
+///
+/// `set_tagged_heap` stores a RAW pointer with no lifetime relationship to the
+/// storage it names, so whoever owns that storage must uninstall it before
+/// freeing it. Leaving a stale pointer behind is not merely untidy: the next
+/// `with_tagged_heap` sees a non-null slot, skips the fallback path, and
+/// allocates into freed memory — the object it hands back is already a
+/// use-after-free, and the next heap to reuse that storage turns its header
+/// into garbage.
+///
+/// The pointer identity check makes this safe to call unconditionally from a
+/// drop hook: an owner whose heap was already displaced by a later
+/// `set_tagged_heap` leaves the newer installation alone.
+pub fn clear_tagged_heap_if_installed(heap: &TaggedHeap) {
+    let owned = heap as *const TaggedHeap as *mut TaggedHeap;
+    TAGGED_HEAP.with(|h| {
+        if h.get() == owned {
+            h.set(std::ptr::null_mut());
+            TAGGED_HEAP_WRITE_TRACKING_MODE.with(|mode| mode.set(WriteTrackingMode::Disabled));
+            TAGGED_HEAP_PARTITION_ACTIVE.with(|p| p.set(false));
+            TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.set(false));
+        }
+    });
+}
+
+/// True when this thread has a tagged heap installed for allocation.
+pub fn tagged_heap_is_installed() -> bool {
+    TAGGED_HEAP.with(|h| !h.get().is_null())
+}
+
 /// Return the current thread's tagged heap identity, if one is installed.
 ///
 /// This is used only for runtime side tables that must avoid retaining Lisp

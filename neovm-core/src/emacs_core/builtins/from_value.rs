@@ -175,8 +175,23 @@ impl FromValue for CharacterCode {
 /// `symbols-with-pos-enabled` is non-nil.  Resolve that dynamic view here so
 /// every typed string-designator builtin has the same interpreter, bytecode,
 /// and JIT contract.
+///
+/// The inner reference is `&'static` only because that is how the tagged heap
+/// hands out object interiors; it is NOT a claim that the string outlives the
+/// designator.  The field is therefore private and the only way out is
+/// [`StringDesignator::text`], whose result is reborrowed from `&self`, so a
+/// caller cannot park a `&'static LispString` beyond the designator's scope.
+/// (`Value::as_lisp_string` still launders `&'static` for the ~675 call sites
+/// that predate this type; narrowing those is a separate, much larger job.)
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct StringDesignator(pub(crate) &'static LispString);
+pub(crate) struct StringDesignator(&'static LispString);
+
+impl StringDesignator {
+    /// Borrow the designated string, for no longer than the designator lives.
+    pub(crate) fn text(&self) -> &LispString {
+        self.0
+    }
+}
 
 impl FromValue for StringDesignator {
     fn from_value(eval: &mut eval::Context, value: Value) -> Result<Self, Flow> {
