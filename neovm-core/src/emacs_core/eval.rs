@@ -9586,10 +9586,8 @@ impl Context {
             crate::emacs_core::intern::intern("inhibit-redisplay"),
             Value::T,
         );
-        let result = crate::emacs_core::window_cmds::builtin_run_window_scroll_functions(
-            self,
-            vec![window],
-        );
+        let result =
+            crate::emacs_core::window_cmds::builtin_run_window_scroll_functions(self, vec![window]);
         self.unbind_to(specpdl_count);
         if let Err(flow) = result {
             tracing::debug!("window-scroll-functions signalled (ignored): {flow:?}");

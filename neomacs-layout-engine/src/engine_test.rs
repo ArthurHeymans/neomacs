@@ -26986,9 +26986,7 @@ fn redisplay_runs_window_scroll_functions_when_it_commits_a_start() {
     .expect("set an explicit window start");
     engine.layout_frame_rust(&mut eval, frame_id);
     let forced = eval
-        .eval_str(
-            "(format \"%S\" neomacs-wsf-log)",
-        )
+        .eval_str("(format \"%S\" neomacs-wsf-log)")
         .expect("read log")
         .as_str_owned()
         .expect("log string");
