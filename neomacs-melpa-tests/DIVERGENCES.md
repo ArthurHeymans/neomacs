@@ -5174,9 +5174,58 @@ under the comment "so that changes in the recursive edit will not result in
 undo boundaries in buffers changed before we entered there recursive edit"
 (Bug #23632).
 
-Neomacs never bound it.  The binding now lives in
-`run_exit_wrapped_command_loop`, the function both `recursive-edit` and the
-minibuffer command loop go through, and is unwound with the loop's result.
+Neomacs never bound it.
+
+### Which command-loop entry owns the binding (amended 2026-08-15)
+
+The first fix put the binding in `run_exit_wrapped_command_loop`, the function
+both `recursive-edit` and the minibuffer command loop go through.  A follow-up
+moved it down into `command_loop_1`, next to the `inhibit-redisplay` specbind,
+on the reasoning that GNU keeps the two together and they must unwind at the
+same boundary.
+
+That reasoning had the right pair but the wrong level, and it regressed undo
+for every keyboard macro.  GNU keeps *both* specbinds in `recursive_edit_1`
+(`src/keyboard.c:738` and `747`) and puts neither in `command_loop_1` -- and
+the distinction is the whole point, because `execute-kbd-macro` runs a command
+loop *without* passing through `recursive_edit_1` (`src/macros.c`).  A macro is
+supposed to build undo state that outlives it.
+
+Rebinding on every command-loop entry meant each `execute-kbd-macro` got a
+fresh nil list and threw it away on return, so the buffers the macro's LAST
+command changed never received their boundary:
+
+```elisp
+(let ((buffer (generate-new-buffer "*pin*")))
+  (set-window-buffer (selected-window) buffer)
+  (set-buffer buffer)
+  (text-mode)
+  (buffer-enable-undo)
+  (execute-kbd-macro (string-to-vector "abc"))
+  (execute-kbd-macro (string-to-vector "def"))
+  buffer-undo-list)
+;; GNU                 => ((4 . 7) nil (1 . 4) (t . 0))
+;; Neomacs after 08-14 => ((1 . 7) (t . 0))
+```
+
+Both halves of that follow: the boundary is missing, and because
+`record_insert` coalesces into a newest record that ends where the new
+insertion begins (`src/undo.c:98-112`), the two runs then merge into one
+record.  The user-visible cost is that `undo`'s "get rid of initial undo
+boundary" `undo-more` (`lisp/simple.el:3509-3511`) runs against a real group
+instead of a boundary, so one `C-/` takes back *two* command groups.  Typing a
+paragraph under `aggressive-fill-paragraph` and pressing `C-/` rewound to 41
+characters where GNU rewinds to 62.
+
+The binding is back at the recursive-edit entry in effect: `command_loop_1`
+now takes a `CommandLoopEntry` saying which GNU entry point it is running for,
+and rebinds `undo-auto--undoably-changed-buffers` only for
+`CommandLoopEntry::RecursiveEdit`, never for
+`CommandLoopEntry::KeyboardMacro`.  The enum exists because the failure is
+silent in the direction that gets tested: recursive edits keep behaving, and
+only keyboard macros -- which is how every melpa workflow types -- lose state.
+`inhibit-redisplay` stays where it was, so its own pin is untouched.
+
 ## 101. `let` refused to bind a keyword to its own value -- FIXED
 
 The Helm Org Rifle occur workflow renders its results buffer and Neomacs
