@@ -1499,6 +1499,152 @@ pub(crate) fn builtin_set_window_configuration(
     set_window_configuration_with_options(eval, args[0], options)
 }
 
+/// The one window whose point a restore must NOT take from the snapshot.
+///
+/// `current-window-configuration` deliberately does not record point in the
+/// buffer that was current when it ran ("does not save the value of point in
+/// the current buffer", `Fcurrent_window_configuration` docstring,
+/// `src/window.c`).  `Fset_window_configuration` honours that by computing
+/// `old_point` from the LIVE session before touching anything
+/// (`src/window.c:7692-7733`) and writing it back over the window that was
+/// selected when the configuration was saved, once the saved tree is installed
+/// (`src/window.c:7978-7984`):
+///
+/// ```c
+///   /* Arrange *not* to restore point in the buffer that was
+///      current when the window configuration was saved.  */
+///   if (EQ (XWINDOW (data->current_window)->contents, new_current_buffer))
+///     set_marker_restricted (XWINDOW (data->current_window)->pointm,
+///                            make_fixnum (old_point),
+///                            XWINDOW (data->current_window)->contents);
+/// ```
+///
+/// Restoring that window's saved point instead rewinds an in-progress session:
+/// Helm selects its own window and reads the minibuffer, so every Helm exit
+/// restored the selection to wherever it stood when the prompt opened, and the
+/// exit action then resolved the wrong source (DIVERGENCES.md 114).
+///
+/// `Some` carries the whole decision -- window, the buffer that window must
+/// still show for the rule to apply, and the live point -- so no call site can
+/// apply half of it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct LiveCurrentBufferPoint {
+    window: crate::window::WindowId,
+    buffer: crate::buffer::BufferId,
+    point: LispCharPos1,
+}
+
+impl LiveCurrentBufferPoint {
+    /// GNU's `old_point` computation, read from the live session.
+    fn read(
+        eval: &super::eval::Context,
+        snapshot: &WindowConfigurationSnapshot,
+    ) -> Option<LiveCurrentBufferPoint> {
+        // `new_current_buffer`: the buffer current at save time, unless it has
+        // since been killed (GNU drops it then, and with it the whole rule).
+        let saved_current_buffer = snapshot.current_buffer?;
+        eval.buffers.get(saved_current_buffer)?;
+
+        let frame = eval.frames.get(snapshot.frame_id)?;
+        // A dead saved-selected window has nil contents in GNU, so it can never
+        // match `new_current_buffer`; `None` here takes the same branches.
+        let saved_selected = frame
+            .find_window(snapshot.selected_window)
+            .or_else(|| {
+                frame
+                    .minibuffer_leaf
+                    .as_ref()
+                    .filter(|window| window.id() == snapshot.selected_window)
+            })
+            .and_then(|window| match window {
+                crate::window::Window::Leaf {
+                    buffer_id, point, ..
+                } => Some((*buffer_id, *point)),
+                crate::window::Window::Internal { .. } => None,
+            });
+        let saved_selected_shows_it =
+            saved_selected.is_some_and(|(buffer_id, _)| buffer_id == saved_current_buffer);
+
+        let live_selected_window = eval
+            .frames
+            .selected_frame()
+            .map(|frame| frame.selected_window);
+        let live_selected_is_saved_selected =
+            live_selected_window == Some(snapshot.selected_window);
+        let live_selected_buffer = eval.frames.selected_frame().and_then(|frame| {
+            frame
+                .find_window(frame.selected_window)
+                .or_else(|| frame.minibuffer_leaf.as_ref())
+                .and_then(|window| window.buffer_id())
+        });
+
+        let buffer_point = |buffer_id: crate::buffer::BufferId| {
+            eval.buffers.get(buffer_id).map(|buffer| {
+                LispCharPos1::from_one_based_usize(buffer.point_char_pos().get().saturating_add(1))
+            })
+        };
+
+        let point = if eval.buffers.current_buffer_id() == Some(saved_current_buffer) {
+            if saved_selected_shows_it
+                && live_selected_buffer == Some(saved_current_buffer)
+                && !live_selected_is_saved_selected
+            {
+                saved_selected.map(|(_, point)| point)?
+            } else {
+                buffer_point(saved_current_buffer)?
+            }
+        } else if saved_selected_shows_it && !live_selected_is_saved_selected {
+            saved_selected.map(|(_, point)| point)?
+        } else {
+            buffer_point(saved_current_buffer)?
+        };
+
+        Some(LiveCurrentBufferPoint {
+            window: snapshot.selected_window,
+            buffer: saved_current_buffer,
+            point,
+        })
+    }
+
+    /// Write the live point back, but only while the restored window really
+    /// does show the buffer that was current at save time -- GNU's
+    /// `EQ (XWINDOW (data->current_window)->contents, new_current_buffer)`
+    /// guard, evaluated against the freshly restored tree.
+    fn apply(self, eval: &mut super::eval::Context, frame_id: crate::window::FrameId) {
+        let buffers = &mut eval.buffers;
+        let Some(frame) = eval.frames.get_mut(frame_id) else {
+            return;
+        };
+        let window = match frame.find_window_mut(self.window) {
+            Some(window) => window,
+            None => match frame
+                .minibuffer_leaf
+                .as_mut()
+                .filter(|window| window.id() == self.window)
+            {
+                Some(window) => window,
+                None => return,
+            },
+        };
+        if window.buffer_id() != Some(self.buffer) {
+            return;
+        }
+        crate::window::window_markers::set_window_point_with_marker(buffers, window, self.point);
+    }
+}
+
+trait OptionalLiveCurrentBufferPoint {
+    fn apply(self, eval: &mut super::eval::Context, frame_id: crate::window::FrameId);
+}
+
+impl OptionalLiveCurrentBufferPoint for Option<LiveCurrentBufferPoint> {
+    fn apply(self, eval: &mut super::eval::Context, frame_id: crate::window::FrameId) {
+        if let Some(live) = self {
+            live.apply(eval, frame_id);
+        }
+    }
+}
+
 pub(crate) fn set_window_configuration_with_options(
     eval: &mut super::eval::Context,
     configuration: Value,
@@ -1525,6 +1671,10 @@ pub(crate) fn set_window_configuration_with_options(
             .map(collect_frame_window_parameters)
             .unwrap_or_default();
         let mut snapshot = snapshot;
+        // Read the live point BEFORE anything is restored: GNU computes
+        // `old_point` at the very top of `Fset_window_configuration`, from the
+        // session as it stands (`src/window.c:7692-7733`).
+        let live_current_buffer_point = LiveCurrentBufferPoint::read(eval, &snapshot);
         merge_snapshot_window_parameters(&mut snapshot, &live_parameters);
         prepare_saved_window_buffer_restoration(eval, &mut snapshot);
         prepare_reused_window_histories(eval, &mut snapshot)?;
@@ -1617,6 +1767,12 @@ pub(crate) fn set_window_configuration_with_options(
                 }
             }
         }
+        // GNU: "Arrange *not* to restore point in the buffer that was current
+        // when the window configuration was saved" (`src/window.c:7978-7984`),
+        // which it does after installing the saved tree and before selecting
+        // the saved window -- so the buffer point derived from that window
+        // below sees the live position too.
+        live_current_buffer_point.apply(eval, snapshot.frame_id);
         let selected_window_state = eval.frames.get(snapshot.frame_id).and_then(|frame| {
             frame
                 .find_window(frame.selected_window)

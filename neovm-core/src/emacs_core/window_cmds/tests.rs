@@ -7001,6 +7001,79 @@ fn set_window_configuration_preserves_reused_window_history_across_gc() {
     assert_eq!(results[0], r#"OK ("wcfg-next-b" "wcfg-next-a")"#);
 }
 
+/// GNU `current-window-configuration` deliberately does NOT record point in the
+/// buffer that was current when the configuration was saved, so restoring must
+/// leave that window's point where the live session put it.
+/// `Fset_window_configuration` implements this by recomputing `old_point` from
+/// the LIVE state (`src/window.c:7692-7733`) and writing it back over the
+/// restored marker after the tree is installed (`src/window.c:7978-7984`).
+#[test]
+fn set_window_configuration_keeps_live_point_for_the_saved_current_buffer() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        r#"(save-current-buffer
+             (let ((b (get-buffer-create "wcfg-pt-a"))
+                   (other (selected-window))
+                   conf w)
+               (setq w (split-window-internal other nil nil nil))
+               (set-window-buffer w b)
+               (set-buffer b)
+               (erase-buffer) (insert "aaa\nbbb\nccc\nddd\n") (goto-char 1)
+               (select-window w)
+               (setq conf (current-window-configuration))
+               (select-window other)
+               (set-window-point w 13)
+               (set-buffer b) (goto-char 13)
+               (set-window-configuration conf)
+               (prog1 (list (window-point w) (progn (set-buffer b) (point)))
+                 (select-window other)
+                 (delete-window w))))
+           (save-current-buffer
+             (let ((b (get-buffer-create "wcfg-pt-b"))
+                   (c (get-buffer-create "wcfg-pt-c"))
+                   (other (selected-window))
+                   conf w)
+               (setq w (split-window-internal other nil nil nil))
+               (set-window-buffer w b)
+               (set-buffer b)
+               (erase-buffer) (insert "aaa\nbbb\nccc\nddd\n") (goto-char 1)
+               (select-window w)
+               (set-buffer c)
+               (setq conf (current-window-configuration))
+               (select-window other)
+               (set-window-point w 13)
+               (set-buffer b) (goto-char 13)
+               (set-window-configuration conf)
+               (prog1 (list (window-point w) (progn (set-buffer b) (point)))
+                 (select-window other)
+                 (delete-window w))))
+           (save-current-buffer
+             (let ((b (get-buffer-create "wcfg-pt-d"))
+                   (other (selected-window))
+                   conf w)
+               (setq w (split-window-internal other nil nil nil))
+               (set-window-buffer w b)
+               (set-buffer b)
+               (erase-buffer) (insert "aaa\nbbb\nccc\nddd\n") (goto-char 1)
+               (select-window w)
+               (setq conf (current-window-configuration))
+               (goto-char 13)
+               (set-window-configuration conf)
+               (prog1 (list (window-point w) (progn (set-buffer b) (point)))
+                 (select-window other)
+                 (delete-window w))))"#,
+    );
+    // The saved-selected window still shows the buffer that was current when
+    // the configuration was saved: its live point survives the restore.
+    assert_eq!(results[0], "OK (13 13)");
+    // A different buffer was current at save time, so the window's saved point
+    // is restored normally.
+    assert_eq!(results[1], "OK (1 1)");
+    // The saved-selected window is still the selected window at restore time:
+    // `old_point` comes from PT, again leaving the live point alone.
+    assert_eq!(results[2], "OK (13 13)");
+}
+
 #[test]
 fn window_end_greater_than_start() {
     crate::test_utils::init_test_tracing();
