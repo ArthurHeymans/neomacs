@@ -440,7 +440,7 @@ rank	package	downloads	status
 439	cyberpunk-theme	203077	covered
 440	window-numbering	202830	covered
 441	hy-mode	201119	covered
-442	lsp-haskell	199039	todo
+442	lsp-haskell	199039	covered
 443	git-gutter-fringe+	198460	todo
 444	rg	198150	todo
 445	smart-mode-line	197854	todo

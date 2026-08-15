@@ -2315,6 +2315,13 @@ pub const LSP_DOCKER_MELPA_PIN: (&str, &str) = ("lsp-docker", "20260507.1750");
 /// project build/configuration, source-action, hierarchy, class-file, and
 /// debugger/test workflow parity. MELPA built this archive from upstream
 /// commit `5294db2ac033a289e4878fa8386629b75cb3ccb6`.
+/// The exact LSP Haskell package selected for practical client registration
+/// with lsp-mode, language-id mapping for the five Haskell modes, the
+/// customization surface, pure server-command assembly, and the code-action
+/// boolean-filter parity. MELPA built this archive from upstream commit
+/// `4c3001aeb116fb489223269ea353359b90e2a5e1`.
+pub const LSP_HASKELL_MELPA_PIN: (&str, &str) = ("lsp-haskell", "20260507.1745");
+
 pub const LSP_JAVA_MELPA_PIN: (&str, &str) = ("lsp-java", "20260510.647");
 
 /// The exact LSP Mode package selected for practical JSON-RPC transport,

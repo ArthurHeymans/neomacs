@@ -524,6 +524,7 @@ mod log4e;
 mod logito;
 mod lorem_ipsum;
 mod lsp_docker;
+mod lsp_haskell;
 mod lsp_java;
 mod lsp_mode;
 mod lsp_origami;
