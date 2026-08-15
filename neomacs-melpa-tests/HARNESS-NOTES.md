@@ -31,6 +31,26 @@ tests with empty literals already in place and a single further pass filled all
 five. So if your expectations are still empty, just re-run; hand-editing is only
 needed to clear stale text.
 
+**SILENT — a pin behind a step that fails is an *unverified* pin, and it rots.**
+A GNU-side `expect!` only asserts anything on a run that reaches it. In a TUI
+workflow whose stages assert in sequence, a failure at stage 3 means every pin
+from stage 4 on has never been compared to GNU — for as long as stage 3 stays
+red, which can be months. Meanwhile the MELPA cache moves under the suite and
+those pins quietly stop describing GNU. helm-css-scss had five such pins: two
+recorded a 42/7 window split that live GNU stopped producing once
+`helm-css-scss-split-window-function` began halving the frame, and nobody saw
+it because the workflow was failing earlier at DIVERGENCES.md 114.
+
+So: **when you fix the failure that was gating a workflow, treat every pin
+downstream of it as unaudited** and check each against live GNU before
+believing a red one is a parity gap. Conversely, a suite that runs green
+end-to-end *is* the audit — every pin on the path was compared to GNU on that
+run. The exception to check for is a pin inside an `if`: guard the branch on a
+condition that pushes to `divergences` when false (as
+`helm_gitignore_test.rs`'s `wait_for_progress` does, hard-asserting on the GNU
+side and recording a divergence on the Neomacs side), so a skipped pin cannot
+pass silently.
+
 **SILENT — `#N=` back references over *strings* are flaky by construction.**
 Two equal strings that happen to be the same object print as a back reference
 under `print-circle`, and whether that sharing survives the oracle's normaliser
