@@ -1840,8 +1840,8 @@ fn vm_repeated_symbol_bytecode_calls_reuse_epoch_validated_resolution() {
     );
     assert_eq!(
         crate::emacs_core::value::bytecode_data_access_count(),
-        3,
-        "a resolved bytecode callee should carry its checked code through each GNU Bcall transition"
+        0,
+        "a resolved bytecode callee should make repeated checked code lookup unrepresentable"
     );
 }
 

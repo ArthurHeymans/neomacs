@@ -16,7 +16,8 @@ use crate::emacs_core::eval::{
 use crate::emacs_core::intern::{SymId, intern, lookup_interned, resolve_sym};
 // storage_char_len and storage_substring no longer needed here — using emacs_char + LispString
 use crate::emacs_core::value::*;
-use crate::tagged::header::{SubrDispatchKind, SubrFn, SubrObj};
+use crate::tagged::header::{ByteCodeObj, SubrDispatchKind, SubrFn, SubrObj};
+use crate::tagged::value::TAG_MASK;
 use crate::window::FrameId;
 
 /// Dynamic, execution-weighted opcode histogram for the Tier-0 interpreter
@@ -984,6 +985,23 @@ impl ResolvedByteCodeCallee {
     #[inline(always)]
     fn value(self) -> Value {
         self.0
+    }
+
+    /// Project the immutable code address carried by this proof token.
+    ///
+    /// Both constructors establish the `ByteCodeObj` type before creating the
+    /// token. Bytecode arena objects are immovable, and the live function cell
+    /// or direct caller-stack value keeps the object rooted while this borrow
+    /// is used. Keeping the unchecked projection private to the proof type
+    /// prevents later dispatch from repeating tagged-object classification.
+    #[inline(always)]
+    fn code(&self) -> &ByteCodeFunction {
+        debug_assert_eq!(self.0.veclike_type(), Some(VecLikeType::ByteCode));
+        let ptr = (self.0.bits() & !TAG_MASK) as *const ByteCodeObj;
+        // SAFETY: only the checked constructors can create this token; their
+        // type proof and the rooting invariant above establish a live,
+        // immovable ByteCodeObj for the duration of this borrow.
+        unsafe { &(*ptr).data }
     }
 }
 
@@ -2326,13 +2344,11 @@ impl<'a> Vm<'a> {
     ) -> InterpreterStackCall {
         match self.resolve_stack_call_target(func_val) {
             ResolvedStackCallTarget::ByteCode { callee } => {
+                let func = callee.code();
                 let callee = callee.value();
                 let backtrace = self
                     .ctx
                     .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
-                let func = callee
-                    .get_bytecode_data()
-                    .expect("resolved bytecode target must remain bytecode");
                 match self.dispatch_bytecode_tier(func, args_start, nargs, callee) {
                     BytecodeStackCallDispatch::Interpret
                         if self.can_enter_interpreter_frame_iteratively(func, nargs) =>
