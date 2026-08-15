@@ -17,6 +17,9 @@ fn centered(point_col: i64, text_cols: i64, h_margin: i64, cur_hscroll: i64) -> 
         h_margin,
         cur_hscroll,
         min_hscroll: 0,
+        // GNU's default `auto-hscroll-mode' is t, not `current-line', so `hscl'
+        // is false in every scenario that does not say otherwise.
+        hscrolling_current_line: false,
         line_truncated: true,
         point_at_eol: false,
         step: HscrollStep::Center,
@@ -115,6 +118,30 @@ fn eol_target_respects_min_hscroll_floor() {
     let mut input = at_eol(300, 160, 5, 0);
     input.min_hscroll = 200;
     assert_eq!(compute_auto_hscroll(&input), Some(200));
+}
+
+/// GNU arms case (C) only through `hscl` (`hscrolling_current_line_p`,
+/// src/xdisp.c:16644 and :3074), i.e. only under `auto-hscroll-mode' =
+/// `current-line'.  Under the default `t' a window whose point sits to the
+/// RIGHT of its hscroll -- so cases (A) and (B) both stay quiet -- must keep the
+/// hscroll it was explicitly given.  This is the shape `set-window-hscroll'
+/// leaves behind, and without the `hscl` guard the next redisplay pass reset it
+/// to 0.
+#[test]
+fn explicit_hscroll_survives_when_only_current_line_mode_would_reset() {
+    // A 40-column window, point at column 9, window hscrolled to 2: point is
+    // on screen (screen col 7) and nowhere near either margin.
+    let input = centered(9, 40, 0, 2);
+    assert_eq!(compute_auto_hscroll(&input), None);
+}
+
+/// The same scenario with `auto-hscroll-mode' = `current-line' does reset,
+/// which is the behaviour case (C) exists to provide.
+#[test]
+fn current_line_mode_resets_the_same_short_line() {
+    let mut input = centered(9, 40, 0, 2);
+    input.hscrolling_current_line = true;
+    assert_eq!(compute_auto_hscroll(&input), Some(0));
 }
 
 #[test]
