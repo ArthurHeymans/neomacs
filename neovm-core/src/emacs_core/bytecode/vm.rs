@@ -2617,9 +2617,10 @@ impl<'a> Vm<'a> {
 
         self.ctx.bc_buf.truncate(current.frame_base);
 
-        let suspended = callers
-            .pop()
-            .expect("an iterative bytecode frame must have a suspended caller");
+        // SAFETY: the empty caller stack returned `Exit` above, and no code
+        // between that proof and this pop can mutate `callers`.  GNU's
+        // `Breturn` likewise restores its already-proven saved frame directly.
+        let suspended = unsafe { callers.pop().unwrap_unchecked() };
         self.leave_bytecode_call_depth();
         self.ctx
             .pop_fast_bytecode_backtrace_frame(suspended.continuation.backtrace);
