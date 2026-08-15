@@ -5553,3 +5553,205 @@ squared 8-bit RGB distance, and GNU's gray-diagonal exclusion.  All 41 GNU
 answers are pinned as a test.
 
 Status: FIXED.
+
+
+## 109. A self-inserted newline never filled the line it just closed -- FIXED
+
+`git-commit-mode` turns on auto-fill and pins `git-commit-fill-column`, so a
+typed commit message wraps as you type.  With `fill-column` 24 the fixture types
+`"Summary words continue beyond configured boundary\n\n"` and GNU leaves
+`"Summary words continue\nbeyond configured\nboundary"`; Neomacs left the last
+two words joined as `"beyond configured boundary"`, 26 columns wide.
+
+Auto-fill does not run per character.  `internal_self_insert` (src/cmds.c:477)
+consults `auto-fill-chars`, whose default entries are SPACE and NEWLINE, so only
+those two characters can fill.  Every space in the fixture fills correctly here;
+the newline is the one that did nothing, because of what GNU does around the
+call:
+
+```c
+      if (c == '\n')
+	/* After inserting a newline, move to previous line and fill
+	   that.  Must have the newline in place already so filling and
+	   justification, if any, know where the end is going to be.  */
+	SET_PT_BOTH (PT - 1, PT_BYTE - 1);
+      auto_fill_result = call0 (Qinternal_auto_fill);
+      /* Test PT < ZV in case the auto-fill-function is strange.  */
+      if (c == '\n' && PT < ZV)
+	SET_PT_BOTH (PT + 1, PT_BYTE + 1);
+```
+
+(src/cmds.c:484-492.)  `do-auto-fill` starts from `(current-column)`
+(lisp/simple.el:9081), and after inserting a newline that column is 0, so
+without the one-character step back the filler is asked to fill the empty line
+the newline just opened instead of the finished line it closed.  Neomacs called
+`internal-auto-fill` with no such step, so RET was a no-op for filling and only
+SPACE ever wrapped anything.
+
+Reduced to no package at all, in a 24-column `text-mode` buffer typed through
+`self-insert-command`:
+
+```elisp
+;; GNU              "Summary words continue\nbeyond configured\nboundary\n\n"
+;; Neomacs before   "Summary words continue\nbeyond configured boundary\n\n"
+```
+
+The fix names the straddle instead of open-coding `ch == '\n'` at both sides of
+the call: `NewlineFillStraddle::for_self_inserted_char` decides once, and its
+`step` method carries GNU's asymmetry -- the backward step is unconditional, the
+forward step is guarded by `PT < ZV` -- so neither half can be applied without
+the other.  The SPACE path is pinned alongside it, because it must keep leaving
+point after the space.
+
+Status: FIXED.
+
+## 110. A nested comment's inner ender ended the whole comment for font-lock -- FIXED
+
+`scala-mode` marks block comments nestable -- `?/` is `". 124b"` and `?*` is
+`". 23n"` (scala-mode-syntax.el:498-499) -- so `/* outer /* nested */ done */`
+is one comment.  Neomacs fontified only `/* outer /* nested */`: the
+`font-lock-comment-face` run ended at 454 where GNU ends it at 462, dropping
+`" done */"`.
+
+`forward-comment` and `parse-partial-sexp`'s comment DEPTH were both already
+nesting-aware; the defect was in the third thing the syntax parser owes its
+callers, the parse BOUNDARY.  `font-lock-fontify-syntactically-region` walks a
+region with `(parse-partial-sexp point end nil nil state 'syntax-table)`, and
+that `'syntax-table` argument means "stop as soon as a comment or string starts
+or ends".  GNU stops exactly twice per comment because `scan_sexps_forward`
+consumes a whole comment, nesting included, in ONE `forw_comment` call
+(src/syntax.c:3352) and only the code after that call clears `state->incomment`
+and honours `boundary_stop` (src/syntax.c:3370-3374).  Neomacs walked the
+comment character by character and treated every same-style ender as a boundary,
+so the inner `*/` cut the run even though the parse state it returned correctly
+still said depth 1.
+
+Package-free, on scala-mode's syntax table over
+`"  /* outer /* nested */ done */\nafter\n"`, driving font-lock's own loop and
+recording `(point (nth 4 state) (nth 8 state))` at every stop:
+
+```elisp
+;; GNU              ((5 1 3) (32 nil nil) (39 nil nil))
+;; Neomacs before   ((5 1 3) (24 1 3) (32 nil nil) (39 nil nil))
+```
+
+Stop 2 is the bug: position 24 is just past the inner `*/`, and Neomacs reported
+it as a boundary while simultaneously reporting `nth 4` = 1, "still in a
+comment" -- a boundary the caller cannot act on.
+
+The fix gives the ender a return value.  `close_comment_level` pops one nesting
+level and answers `CommentEnderEffect::NestingLevelClosed` or
+`CommentEnderEffect::CommentClosed`; only the latter is a `'syntax-table`
+boundary.  Both ender branches (one-character and two-character) route through
+it, so the distinction cannot be re-derived differently in one of them.
+
+A second difference remains in this suite and is NOT this bug: `demo.sbt` and
+`demo.worksheet.sc` are pure-ASCII fixtures whose `buffer-file-coding-system`
+GNU reports as `utf-8-unix` and Neomacs as `undecided-unix`.  A standalone
+probe visiting ASCII, Unicode and empty files answers identically in both
+editors (`undecided-unix`, `utf-8-unix`, `utf-8-unix`), so whatever promotes
+these two buffers in GNU is something the suite's world establishes, not
+coding detection.  It wants its own investigation.
+
+Status: FIXED.
+
+## 111. An explicit window hscroll was reset to 0 by the next redisplay -- FIXED
+
+`buffer-move` deliberately preserves horizontal scroll across a swap: it reads
+`(window-hscroll window)` before and calls `set-window-hscroll` after
+(buffer-move.el:106-115).  In the four-pane fixture GNU ends with hscrolls
+`2 11 5 8`; Neomacs ended with `0 0 0 0`.  The values were correct in the
+`:before` snapshot, so nothing was wrong with `set-window-hscroll` or
+`window-hscroll` themselves -- they were correct right up until a redisplay ran,
+which is why a batch probe that only sets and reads them reproduces nothing.
+
+GNU's auto-hscroll pass has three triggers (`hscroll_window_tree`,
+src/xdisp.c:16755-16786): point inside the left margin while hscrolled, point
+inside the right margin on a right-truncated line, and
+
+```c
+		  || (hscl
+		      && w->hscroll != w->min_hscroll
+		      && !cursor_row->truncated_on_left_p)
+```
+
+the "moved onto a short line" reset.  `hscl` is `hscrolling_current_line_p (w)`
+(src/xdisp.c:3074), which is true only when `auto-hscroll-mode` is the symbol
+`current-line`.  Under the default `t` that third trigger is dead code, and an
+explicitly set hscroll survives redisplay.  Neomacs' port had the clause -- and
+even quoted `hscl` in its comment -- but dropped it from the expression, so any
+window whose point sat to the RIGHT of its hscroll (where the other two triggers
+stay quiet) was reset to 0 on the first redisplay after the command.
+
+The fix restores the clause and, so it cannot be lost again, replaces the raw
+`auto-hscroll-mode` Lisp value with a three-case `AutoHscrollMode`
+(`Off` / `CurrentLine` / `AllLines`).  GNU reads that variable for two different
+questions -- "is auto hscroll on at all" and "is it `current-line`" -- and only
+the first degrades safely to "non-nil"; naming the cases keeps the second from
+degrading into the first.  `hscl` is computed from the pre-pass suspend flag,
+matching GNU, which evaluates it at src/xdisp.c:16644 before the STEP 4
+un-suspend.
+
+Status: FIXED.
+
+## 112. `recursive-edit` returned with the wrong buffer current -- FIXED
+
+Quelpa runs every Git command through `quelpa--run`, which in asynchronous mode
+parks in `(recursive-edit)` and lets the process sentinel call
+`exit-recursive-edit` (quelpa.el:611-627).  The caller,
+`quelpa-build--run-process-match` (quelpa.el:654-661), is a `with-temp-buffer`
+that runs the process into that temp buffer and then searches it:
+
+```elisp
+  (with-temp-buffer
+    (apply 'quelpa-build--run-process dir prog args)
+    (goto-char (point-min))
+    (re-search-forward regexp)
+    (match-string-no-properties 1))
+```
+
+Neomacs failed the very first such call with
+`Search failed: "git version \(.*\)"`, and the natural reading -- that the
+process output never reached the buffer -- is wrong.  Instrumenting the sentinel
+shows the output IS in the buffer while the sentinel runs; it is the SEARCH that
+is in the wrong place, because `recursive-edit` returned with a different buffer
+current.
+
+GNU saves and restores it.  `Frecursive_edit` (src/keyboard.c:811-816) records
+the current buffer, but only when it is not the selected window's buffer:
+
+```c
+  if (command_loop_level >= 0
+      && current_buffer != XBUFFER (XWINDOW (selected_window)->contents))
+    buffer = Fcurrent_buffer ();
+  else
+    buffer = Qnil;
+  ...
+  record_unwind_protect (recursive_edit_unwind, buffer);
+```
+
+and `recursive_edit_unwind` (src/keyboard.c:837-844) does `Fset_buffer (buffer)`
+on every exit -- including the `(throw 'exit ...)` that `exit-recursive-edit`
+uses.  Neomacs' `recursive-edit` had no such record, so the command loop's own
+buffer selection leaked out to the caller.
+
+Reduced to no package, running `sh -c "echo hello"` inside `with-temp-buffer`
+with a sentinel that exits the recursive edit:
+
+```elisp
+;; in-sentinel is the buffer's text while the sentinel runs;
+;; after is (buffer-string) once the wait loop returns.
+;; GNU              in-sentinel="hello\n"  after="hello\n"
+;; Neomacs before   in-sentinel="hello\n"  after=""
+;; sleep-for and accept-process-output waiters were already correct in both.
+```
+
+The fix is `RecursiveEditBuffer`, recorded by `recursive-edit` and applied on
+unwind.  Its two cases are GNU's two cases: `SelectedWindows`, where the command
+loop leaves the right buffer current by itself and GNU deliberately records
+nothing, and `Restore(BufferId)`, a buffer only the calling Lisp frame knows
+about.  Making the "record nothing" case a named value rather than an absent
+`if` is the point: it is the case that made the omission invisible for every
+`recursive-edit` entered from a window's own buffer.
+
+Status: FIXED.
