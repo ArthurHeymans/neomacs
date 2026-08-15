@@ -28,7 +28,7 @@ use super::text::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
 // match either pattern). Mirrors GNU's struct buffer layout in
 // buffer.h:330-462.
 use super::overlay::OverlayList;
-use super::shared::SharedUndoState;
+use super::shared::{PointBeforeCommand, SharedUndoState};
 use super::text_props::{ObjectIntervalRun, TextPropertyTable};
 use super::undo;
 use crate::emacs_core::intern::{SymId, intern};
@@ -5851,15 +5851,23 @@ impl BufferManager {
         // Default limits match GNU Emacs: undo-limit=160000, undo-strong-limit=240000.
         ul = undo::truncate_undo_list(ul, 160_000, 240_000);
         buf.set_undo_list(ul);
+        // GNU `Fundo_boundary` saves point AND buffer (src/undo.c:278-279).
         buf.undo_state
-            .set_point_before_command_or_undo(Some(buf.point_char_pos()));
+            .set_point_before_command_or_undo(Some(PointBeforeCommand {
+                buffer: id,
+                point: buf.point_char_pos(),
+            }));
         Some(())
     }
 
     pub fn record_undo_point_before_command(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
+        // GNU's command loop saves point AND buffer (src/keyboard.c:1536-1537).
         buf.undo_state
-            .set_point_before_command_or_undo(Some(buf.point_char_pos()));
+            .set_point_before_command_or_undo(Some(PointBeforeCommand {
+                buffer: id,
+                point: buf.point_char_pos(),
+            }));
         Some(())
     }
 
@@ -6052,6 +6060,29 @@ impl BufferManager {
             }
         }
         Some(())
+    }
+
+    /// Turn undo recording ON for `id`, GNU's `Fbuffer_enable_undo`
+    /// (src/buffer.c:1845-1847):
+    ///
+    /// ```c
+    ///   if (EQ (BVAR (XBUFFER (real_buffer), undo_list), Qt))
+    ///     bset_undo_list (XBUFFER (real_buffer), Qnil);
+    /// ```
+    ///
+    /// Enabling is a transition out of [`undo::UndoRecording::Disabled`], not an
+    /// assignment: a buffer whose undo is already on keeps its history.  That
+    /// distinction is load-bearing for indirect buffers, which share one undo
+    /// list with their base (GNU copies the base's value in
+    /// `make_indirect_buffer`, src/buffer.c:894, and re-syncs the pair on every
+    /// buffer switch in `set_buffer_internal_2`, src/buffer.c:2352-2367), so an
+    /// unconditional reset here erased the BASE buffer's history.
+    pub fn enable_buffer_undo(&mut self, id: BufferId) -> Option<()> {
+        let undo_list = self.buffers.get(&id)?.get_undo_list();
+        match undo::UndoRecording::of(&undo_list) {
+            undo::UndoRecording::Disabled => self.configure_buffer_undo_list(id, Value::NIL),
+            undo::UndoRecording::Enabled => Some(()),
+        }
     }
 
     pub fn undo_buffer(&mut self, id: BufferId, mut count: i64) -> Option<UndoExecutionResult> {

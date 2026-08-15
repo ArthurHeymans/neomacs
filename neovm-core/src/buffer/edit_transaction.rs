@@ -825,11 +825,18 @@ impl Buffer {
             undo::undo_list_record_first_change(&mut ul, self.visited_file_modtime_value());
             self.undo_state.set_recorded_first_change(true);
         }
-        if let Some(point) = self.undo_state.point_before_command_or_undo()
+        // GNU `record_point` (src/undo.c:73-75) takes the saved point only when
+        // it is still the SAME buffer: `buffer_before_last_command_or_undo ==
+        // current_buffer`.  A base buffer and its indirect buffer are distinct
+        // `struct buffer`s there, and they share this state here, so without
+        // the buffer check a point saved in one is spent on an edit in the
+        // other.
+        if let Some(saved) = self.undo_state.point_before_command_or_undo()
             && at_boundary
-            && point != beg
+            && saved.point != beg
+            && saved.buffer == self.id
         {
-            undo::undo_list_record_point(&mut ul, point);
+            undo::undo_list_record_point(&mut ul, saved.point);
         }
         self.set_undo_list(ul);
     }

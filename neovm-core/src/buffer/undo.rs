@@ -32,9 +32,37 @@ fn prepend_undo_entry(undo_list: &mut Value, entry: Value) {
     restore_scratch_gc_roots(saved);
 }
 
+/// The two states GNU's `buffer-undo-list` slot can be in.
+///
+/// The slot holds either the symbol `t` -- undo turned off -- or a list of
+/// undo records, which may be nil for "on, but nothing recorded yet".  GNU
+/// tests this domain by hand at every decision point (`EQ (..., Qt)` in
+/// `record_insert` src/undo.c:91, `Fbuffer_enable_undo` src/buffer.c:1846,
+/// `compact_buffer` src/buffer.c:1869).  Naming it once makes each caller's
+/// branch exhaustive at compile time, so a new state cannot be forgotten and
+/// "on with an empty history" cannot be confused with "off".
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UndoRecording {
+    /// `buffer-undo-list` is `t`: changes are not recorded.
+    Disabled,
+    /// `buffer-undo-list` is a list of records, possibly empty (nil).
+    Enabled,
+}
+
+impl UndoRecording {
+    /// Classify a `buffer-undo-list` value.
+    pub fn of(undo_list: &Value) -> Self {
+        if undo_list.is_t() {
+            Self::Disabled
+        } else {
+            Self::Enabled
+        }
+    }
+}
+
 /// Returns `true` when `buffer-undo-list` is `t` (undo disabled).
 pub fn undo_list_is_disabled(undo_list: &Value) -> bool {
-    undo_list.is_t()
+    matches!(UndoRecording::of(undo_list), UndoRecording::Disabled)
 }
 
 /// True when `buffer-undo-list` currently sits at an undo boundary: it is

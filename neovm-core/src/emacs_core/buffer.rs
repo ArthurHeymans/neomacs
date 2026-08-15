@@ -3996,7 +3996,7 @@ pub(crate) fn builtin_buffer_enable_undo(
         }
     };
     eval.buffers
-        .configure_buffer_undo_list(id, Value::NIL)
+        .enable_buffer_undo(id)
         .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
     Ok(Value::NIL)
 }

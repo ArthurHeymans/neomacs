@@ -108,3 +108,129 @@ fn get_truename_buffer_does_not_expand_its_argument_like_gnu() {
         "OK nil",
     );
 }
+
+/// GNU's `buffer-enable-undo` (src/buffer.c:1845-1847) resets the list ONLY
+/// when undo is actually off:
+///
+/// ```c
+///   if (EQ (BVAR (XBUFFER (real_buffer), undo_list), Qt))
+///     bset_undo_list (XBUFFER (real_buffer), Qnil);
+/// ```
+///
+/// Ours reset unconditionally, which destroyed an existing history.  The
+/// damage is worst through an indirect buffer, because an indirect buffer
+/// shares its base's undo list (`make_indirect_buffer`, src/buffer.c:894, plus
+/// the per-switch resync in `set_buffer_internal_2`, src/buffer.c:2352-2367):
+/// enabling undo in the indirect buffer wiped the BASE buffer's history.
+///
+/// The expected values were taken by running this exact form under GNU Emacs
+/// 31.0.90 `-Q --batch`.  Each step is snapshotted with `prin1-to-string` at
+/// capture time on purpose -- `record_insert` coalesces by mutating the head
+/// cons in place (src/undo.c:109), so collecting the live lists and printing
+/// them at the end reports the FINAL state for every earlier step.
+#[test]
+fn buffer_enable_undo_keeps_an_existing_list_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let* ((base (get-buffer-create "b2")) s1 s2 s3 s4)
+                 (set-buffer base) (buffer-enable-undo) (insert "hello")
+                 (setq s1 (prin1-to-string buffer-undo-list))
+                 (let ((ind (make-indirect-buffer base "i2")))
+                   (setq s2 (prin1-to-string buffer-undo-list))
+                   (set-buffer ind) (buffer-enable-undo)
+                   (set-buffer base) (setq s3 (prin1-to-string buffer-undo-list))
+                   (set-buffer ind) (insert "Y")
+                   (set-buffer base) (setq s4 (prin1-to-string buffer-undo-list)))
+                 (list s1 s2 s3 s4))"#
+        )),
+        r#"OK ("((1 . 6) (t . 0))" "((1 . 6) (t . 0))" "((1 . 6) (t . 0))" "((1 . 7) (t . 0))")"#,
+    );
+}
+
+/// The same clobber without any indirection: `buffer-enable-undo` on a buffer
+/// that already has a history is a no-op in GNU.
+#[test]
+fn buffer_enable_undo_is_a_noop_when_undo_is_already_on_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((before nil))
+                 (set-buffer (get-buffer-create "b4"))
+                 (setq buffer-undo-list nil)
+                 (insert "abc")
+                 (setq before (prin1-to-string buffer-undo-list))
+                 (buffer-enable-undo)
+                 (list before (prin1-to-string buffer-undo-list)))"#
+        )),
+        r#"OK ("((1 . 4) (t . 0))" "((1 . 4) (t . 0))")"#,
+    );
+}
+
+/// `buffer-enable-undo` still has to turn undo back ON when it is off, and it
+/// does so for the whole shared chain: the indirect buffer and its base read
+/// one list, so disabling undo through the indirect buffer leaves the BASE at
+/// `t` and re-enabling through it clears the base back to nil.  Both halves
+/// confirmed under GNU 31.0.90.
+#[test]
+fn buffer_enable_undo_still_clears_a_disabled_list_through_an_indirect_buffer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let* ((base (get-buffer-create "b5")) disabled)
+                 (set-buffer base) (buffer-enable-undo) (insert "hello")
+                 (let ((ind (make-indirect-buffer base "i5")))
+                   (set-buffer ind) (buffer-disable-undo)
+                   (set-buffer base) (setq disabled (prin1-to-string buffer-undo-list))
+                   (set-buffer ind) (buffer-enable-undo)
+                   (set-buffer base)
+                   (list disabled (prin1-to-string buffer-undo-list))))"#
+        )),
+        r#"OK ("t" "nil")"#,
+    );
+}
+
+/// GNU's `record_point` guards the point entry with THREE conditions, and the
+/// third is about the BUFFER (src/undo.c:73-75):
+///
+/// ```c
+///   if (at_boundary
+///       && point_before_last_command_or_undo != beg
+///       && buffer_before_last_command_or_undo == current_buffer )
+/// ```
+///
+/// `point_before_last_command_or_undo` and `buffer_before_last_command_or_undo`
+/// are written together at both of their assignment sites -- the command loop
+/// (src/keyboard.c:1536-1537) and `Fundo_boundary` (src/undo.c:278-279) -- so
+/// a saved point is only usable in the buffer it was saved in.
+///
+/// We stored only the point, and stored it in the SHARED undo state, so the
+/// point saved while the INDIRECT buffer was current was consumed by the next
+/// edit in the BASE buffer and consed a point entry GNU does not record.
+/// Confirmed under GNU 31.0.90 `-Q --batch`: `((6 . 7) nil (1 . 7) (t . 0))`,
+/// where we produced `((6 . 7) 7 nil (1 . 7) (t . 0))`.
+#[test]
+fn a_point_saved_in_one_buffer_is_not_recorded_in_another_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let* ((base (get-buffer-create "b9")))
+                 (set-buffer base) (buffer-enable-undo) (insert "hello") (goto-char 6)
+                 (let ((ind (make-indirect-buffer base "i9")))
+                   (set-buffer ind) (goto-char (point-max)) (insert "Y")
+                   (undo-boundary)
+                   (set-buffer base)
+                   (insert "Z")
+                   (list (point) (prin1-to-string buffer-undo-list))))"#
+        )),
+        r#"OK (7 "((6 . 7) nil (1 . 7) (t . 0))")"#,
+    );
+}
