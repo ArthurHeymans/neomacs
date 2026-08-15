@@ -156,9 +156,8 @@ pub(crate) fn compute_auto_hscroll(input: &AutoHscrollInput) -> Option<i64> {
     //     never resets a window's hscroll from this branch, and an explicit
     //     `set-window-hscroll' survives redisplay.
     let fits_unscrolled = input.point_col < right_edge;
-    let reset_short_line = input.hscrolling_current_line
-        && input.cur_hscroll != input.min_hscroll
-        && fits_unscrolled;
+    let reset_short_line =
+        input.hscrolling_current_line && input.cur_hscroll != input.min_hscroll && fits_unscrolled;
 
     if !(in_left_margin || in_right_margin || reset_short_line) {
         return None;
