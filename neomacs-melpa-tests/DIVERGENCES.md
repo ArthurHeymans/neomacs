@@ -6271,3 +6271,140 @@ the difference has to be in the custom/after-load machinery or in how the
 dump-time initialization is replayed at startup.
 
 Status: UNFIXED.
+## 120. `buffer-enable-undo` erased the history it was asked to keep, destroying a base buffer's undo through an indirect buffer -- FIXED
+
+Enabling undo in an indirect buffer threw away the BASE buffer's entire undo
+history.  Ten lines, deterministic, no package involved:
+
+```elisp
+(let* ((base (get-buffer-create "b2")) s1 s2 s3 s4)
+  (set-buffer base) (buffer-enable-undo) (insert "hello")
+  (setq s1 (prin1-to-string buffer-undo-list))
+  (let ((ind (make-indirect-buffer base "i2")))
+    (setq s2 (prin1-to-string buffer-undo-list))
+    (set-buffer ind) (buffer-enable-undo)
+    (set-buffer base) (setq s3 (prin1-to-string buffer-undo-list))
+    (set-buffer ind) (insert "Y")
+    (set-buffer base) (setq s4 (prin1-to-string buffer-undo-list)))
+  (list s1 s2 s3 s4))
+;; GNU                => ("((1 . 6) (t . 0))" "((1 . 6) (t . 0))" "((1 . 6) (t . 0))" "((1 . 7) (t . 0))")
+;; Neomacs before fix => ("((1 . 6) (t . 0))" "((1 . 6) (t . 0))" "nil"               "((6 . 7))")
+```
+
+Each step is snapshotted with `prin1-to-string` on purpose.  `record_insert`
+coalesces an adjacent insertion by mutating the head cons in place
+(`XSETCDR (elt, make_fixnum (beg + length))`, src/undo.c:109), so collecting
+the live lists and printing them at the end reports the FINAL state for every
+earlier step -- the first naive run of this probe printed `(1 . 7)` for all
+four rows under GNU.
+
+`buffer-enable-undo` is not Lisp; it is `Fbuffer_enable_undo`
+(src/buffer.c:1829-1850), and its body is one conditional:
+
+```c
+  if (EQ (BVAR (XBUFFER (real_buffer), undo_list), Qt))
+    bset_undo_list (XBUFFER (real_buffer), Qnil);
+```
+
+Enabling undo is a TRANSITION out of the off state, not an assignment.  Ours
+called `configure_buffer_undo_list(id, nil)` unconditionally, so it also
+cleared a live history -- the plain non-indirect case
+`(setq buffer-undo-list nil) (insert "abc") (buffer-enable-undo)` lost
+`((1 . 4) (t . 0))` too.  The indirect case is only where it does the most
+damage, because base and indirect share one list.
+
+That sharing is not a Neomacs liberty; it is what GNU does, and a direct probe
+settled it rather than the header comment.  `make_indirect_buffer` copies the
+base's value into the indirect's slot (src/buffer.c:894, "An indirect buffer
+shares undo list of its base (Bug#18180)"), and `set_buffer_internal_2`
+re-syncs the pair on EVERY buffer switch -- pushing the old buffer's list down
+into the base on the way out and pulling the base's list up on the way in
+(src/buffer.c:2352-2367).  Observably, under GNU 31.0.90: a boundary made in
+the indirect buffer appears in the base; an insertion in the base appears in
+the indirect buffer; `(setq buffer-undo-list t)` in the indirect buffer turns
+undo off for the base; and the two slots read `eq`.  Our single
+`SharedUndoState` already models exactly that, so it was never the defect.
+
+The one thing GNU's per-buffer slots buy is a stale read: with two indirect
+buffers `i1` and `i2` over one base, changing the list through `i1` leaves
+`(buffer-local-value 'buffer-undo-list i2)` reporting the OLD list until
+something makes `i2` current, at which point it catches up.  That is the lag of
+a lazily-synced cache, not a behaviour anything can rely on -- so per-buffer
+undo slots were not adopted; they would buy one stale-read artifact and cost a
+resync on every `set-buffer`.
+
+The fix names the domain instead of re-deriving it.  `UndoRecording::{Disabled,
+Enabled}` (neovm-core/src/buffer/undo.rs) classifies a `buffer-undo-list`
+value once -- GNU hand-writes `EQ (..., Qt)` at each decision point
+(src/undo.c:91, src/buffer.c:1846, src/buffer.c:1869) -- and
+`Buffers::enable_buffer_undo` is GNU's conditional as an exhaustive match, so
+the `Enabled` arm cannot silently fall through to a reset.  `buffer-disable-undo`
+is unchanged: it is a plain assignment in GNU too (lisp/simple.el:3591-3596).
+
+Residue, unchanged from ledger 105: `record_first_change` redirects an indirect
+buffer to its BASE buffer's visited-file modtime (src/undo.c:211-218), and a
+`Buffer` here still cannot reach the buffer manager, so an indirect buffer
+records 0.  Both probe columns above read `(t . 0)` because the base buffer
+visits no file.
+
+Status: FIXED.
+
+## 121. A point saved in an indirect buffer was spent on an edit in its base -- FIXED
+
+Found while confirming ledger 119 against the real binary: with 119 fixed, the
+base/indirect probe agreed with GNU on every step but one, where we consed a
+point entry GNU does not record.
+
+```elisp
+(let* ((base (get-buffer-create "b9")))
+  (set-buffer base) (buffer-enable-undo) (insert "hello") (goto-char 6)
+  (let ((ind (make-indirect-buffer base "i9")))
+    (set-buffer ind) (goto-char (point-max)) (insert "Y")
+    (undo-boundary)
+    (set-buffer base)
+    (insert "Z")
+    buffer-undo-list))
+;; GNU                => ((6 . 7) nil (1 . 7) (t . 0))
+;; Neomacs before fix => ((6 . 7) 7 nil (1 . 7) (t . 0))
+```
+
+The stray `7` is a point entry, and `primitive-undo`'s `((integerp next)
+(goto-char next))` arm acts on it, so undoing that insertion moved point to a
+position the user's command never occupied.
+
+`record_point` has THREE guards, and the third is about the BUFFER
+(`src/undo.c:73-75`):
+
+```c
+  if (at_boundary
+      && point_before_last_command_or_undo != beg
+      && buffer_before_last_command_or_undo == current_buffer )
+```
+
+We had the first two.  The third exists because GNU's saved point is a pair of
+GLOBALS, `point_before_last_command_or_undo` and
+`buffer_before_last_command_or_undo` (`src/keyboard.c:232-233`), written
+together at both of their assignment sites -- the command loop
+(`src/keyboard.c:1536-1537`) and `Fundo_boundary` (`src/undo.c:278-279`) -- so
+a point saved in one buffer is meaningless in another.  GNU's own comment at
+the read says as much: "we must not do this if the buffer has changed since the
+last command, since the value of point that we have will be for that buffer,
+not this."
+
+A base buffer and its indirect buffer are distinct `struct buffer`s in GNU, so
+the check separates them; here they share one `SharedUndoState`, which is what
+let the boundary's saved point (7, saved while the indirect buffer was current)
+be read back by the base buffer's insertion at 6.  This is the one place where
+our sharing is genuinely wider than GNU's: GNU shares the undo LIST between a
+base and its indirect buffers, but never this point.
+
+The fix pairs the two facts GNU always writes together.
+`SharedUndoState::point_before_command_or_undo` now holds a
+`PointBeforeCommand { buffer, point }` (neovm-core/src/buffer/shared.rs)
+instead of a bare `CharPos0`, so saving the point without the buffer is not
+expressible, and `undo_prepare_change` spells GNU's third guard as
+`saved.buffer == self.id`.  The type change is what found every call site: the
+compiler rejected all four fixtures that had been saving a point with no
+buffer.
+
+Status: FIXED.
