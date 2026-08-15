@@ -1791,6 +1791,53 @@ fn vm_symbol_bytecode_call_resolves_live_function_cell_once() {
 }
 
 #[test]
+fn vm_constant_stackref_pair_uses_one_dispatch() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+    let callee_symbol = intern("vm-fused-constant-stackref-callee");
+
+    let mut callee = ByteCodeFunction::new(LambdaParams {
+        required: vec![intern("callee-argument")],
+        optional: vec![],
+        rest: None,
+    });
+    callee.lexical = true;
+    callee.ops = vec![Op::StackRef(0), Op::Return];
+    callee.max_stack = 2;
+    eval.obarray
+        .set_symbol_function_id(callee_symbol, Value::make_bytecode(callee));
+
+    let mut caller = ByteCodeFunction::new(LambdaParams {
+        required: vec![intern("caller-argument")],
+        optional: vec![],
+        rest: None,
+    });
+    caller.lexical = true;
+    let callee_idx = caller.add_constant(Value::from_sym_id(callee_symbol));
+    caller.ops = vec![
+        Op::Constant(callee_idx),
+        Op::StackRef(1),
+        Op::Call(1),
+        Op::Return,
+    ];
+    caller.max_stack = 3;
+
+    reset_opcode_dispatch_count();
+    let result = {
+        let mut vm = new_vm(&mut eval);
+        vm.execute(&caller, vec![Value::fixnum(42)])
+            .expect("constant/stack-ref unary call should execute")
+    };
+
+    assert_eq!(result, Value::fixnum(42));
+    assert_eq!(
+        opcode_dispatch_count(),
+        5,
+        "constant + stack-ref should share one dispatch without fusing Call"
+    );
+}
+
+#[test]
 fn vm_repeated_symbol_bytecode_calls_reuse_epoch_validated_resolution() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_minimal_vm_harness();

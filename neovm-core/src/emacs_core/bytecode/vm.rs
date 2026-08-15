@@ -463,6 +463,7 @@ thread_local! {
     static RUN_LOOP_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static RUN_LOOP_MAX_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static GENERIC_BYTECODE_CLEANUP_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static OPCODE_DISPATCH_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -506,6 +507,16 @@ fn reset_generic_bytecode_cleanup_count() {
 #[cfg(test)]
 fn generic_bytecode_cleanup_count() -> usize {
     GENERIC_BYTECODE_CLEANUP_COUNT.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn reset_opcode_dispatch_count() {
+    OPCODE_DISPATCH_COUNT.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+fn opcode_dispatch_count() -> usize {
+    OPCODE_DISPATCH_COUNT.with(std::cell::Cell::get)
 }
 
 use crate::emacs_core::eval::SpecBinding;
@@ -2750,6 +2761,8 @@ impl<'a> Vm<'a> {
             while pc_local < ops_len {
                 let op = unsafe { &*ops_ptr.add(pc_local) };
                 pc_local += 1;
+                #[cfg(test)]
+                OPCODE_DISPATCH_COUNT.with(|count| count.set(count.get() + 1));
                 #[cfg(feature = "vm-profile")]
                 vm_profile::bump(op);
 
@@ -2760,6 +2773,34 @@ impl<'a> Vm<'a> {
                             invalid_bytecode!("constant-index-out-of-range");
                         };
                         stk_push!(value);
+
+                        // GNU's threaded interpreter executes Bconstant and
+                        // Bstack_ref as two straight-line handlers with no
+                        // intervening safe point.  Decode keeps one Op per GNU
+                        // bytecode so every original instruction remains a
+                        // valid branch target; when control reaches the pair
+                        // through its first instruction, execute the second
+                        // handler here and skip only its dispatch.  A branch
+                        // directly to the StackRef still uses the ordinary arm
+                        // below.  Advance pc before validation, matching GNU's
+                        // FETCH-before-handler error position.
+                        if pc_local < ops_len {
+                            let next = unsafe { &*ops_ptr.add(pc_local) };
+                            if let Op::StackRef(n) = next {
+                                pc_local += 1;
+                                #[cfg(feature = "vm-profile")]
+                                vm_profile::bump(next);
+
+                                let offset = 1 + *n as usize;
+                                let len = stk!().len();
+                                if offset <= len {
+                                    let value = unsafe { *stk!().get_unchecked(len - offset) };
+                                    stk_push!(value);
+                                } else {
+                                    invalid_bytecode!("stack-ref-out-of-range");
+                                }
+                            }
+                        }
                     }
                     Op::Nil => stk_push!(Value::NIL),
                     Op::True => stk_push!(Value::T),
