@@ -12,8 +12,8 @@ fn clen(len: usize) -> CharLen {
 fn basic_insert_undo() {
     crate::test_utils::init_test_tracing();
     let mut list = Value::NIL;
-    undo_list_record_insert(&mut list, c(0), clen(5), None);
-    undo_list_record_insert(&mut list, c(5), clen(3), None);
+    undo_list_record_insert(&mut list, c(0), clen(5));
+    undo_list_record_insert(&mut list, c(5), clen(3));
     undo_list_boundary(&mut list);
 
     // Should have: nil, (1 . 9) [merged], at minimum
@@ -37,7 +37,6 @@ fn delete_records_text() {
         c(3),
         crate::heap_types::LispString::from_unibyte(b"hello".to_vec()),
         c(3),
-        None,
     );
     undo_list_boundary(&mut list);
 
@@ -55,9 +54,9 @@ fn delete_records_text() {
 fn boundary_separates_groups() {
     crate::test_utils::init_test_tracing();
     let mut list = Value::NIL;
-    undo_list_record_insert(&mut list, c(0), clen(1), None);
+    undo_list_record_insert(&mut list, c(0), clen(1));
     undo_list_boundary(&mut list);
-    undo_list_record_insert(&mut list, c(1), clen(1), None);
+    undo_list_record_insert(&mut list, c(1), clen(1));
     undo_list_boundary(&mut list);
 
     let g2 = undo_list_pop_group(&mut list);
@@ -79,7 +78,7 @@ fn boundary_separates_groups() {
 fn disabled_records_nothing() {
     crate::test_utils::init_test_tracing();
     let mut list = Value::T;
-    undo_list_record_insert(&mut list, c(0), clen(5), None);
+    undo_list_record_insert(&mut list, c(0), clen(5));
     assert!(undo_list_is_disabled(&list));
 }
 
@@ -105,7 +104,7 @@ fn cursor_move_dedup() {
 fn no_double_boundary() {
     crate::test_utils::init_test_tracing();
     let mut list = Value::NIL;
-    undo_list_record_insert(&mut list, c(0), clen(1), None);
+    undo_list_record_insert(&mut list, c(0), clen(1));
     undo_list_boundary(&mut list);
     undo_list_boundary(&mut list);
     undo_list_boundary(&mut list);
@@ -133,8 +132,8 @@ fn descending_adjacent_inserts_stay_separate_records_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut list = Value::NIL;
     // Insert one character at 1-indexed 20, then one at 1-indexed 19.
-    undo_list_record_insert(&mut list, c(19), clen(1), None);
-    undo_list_record_insert(&mut list, c(18), clen(1), None);
+    undo_list_record_insert(&mut list, c(19), clen(1));
+    undo_list_record_insert(&mut list, c(18), clen(1));
 
     let newest = list.cons_car();
     assert_eq!(newest.cons_car(), Value::fixnum(19));
@@ -151,7 +150,7 @@ fn descending_adjacent_inserts_stay_separate_records_like_gnu() {
 fn to_value_produces_list() {
     crate::test_utils::init_test_tracing();
     let mut list = Value::NIL;
-    undo_list_record_insert(&mut list, c(0), clen(5), None);
+    undo_list_record_insert(&mut list, c(0), clen(5));
     undo_list_boundary(&mut list);
     assert!(list.is_list());
 }
@@ -162,10 +161,10 @@ fn undoing_flag_not_needed() {
     // The undoing flag is now tracked on Buffer, not in the undo list itself.
     // This test just verifies that disabled lists don't record.
     let mut list = Value::T; // disabled
-    undo_list_record_insert(&mut list, c(0), clen(5), None);
+    undo_list_record_insert(&mut list, c(0), clen(5));
     assert!(undo_list_is_disabled(&list));
 
     let mut list2 = Value::NIL; // enabled
-    undo_list_record_insert(&mut list2, c(0), clen(5), None);
+    undo_list_record_insert(&mut list2, c(0), clen(5));
     assert!(!undo_list_is_empty(&list2));
 }

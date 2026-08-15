@@ -17,8 +17,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-fn builtin_x_popup_menu(args: Vec<Value>) -> EvalResult {
-    super::builtin_x_popup_menu_batch(args)
+fn builtin_x_popup_menu(eval: &mut Context, args: Vec<Value>) -> EvalResult {
+    super::builtin_x_popup_menu_batch(eval, args)
 }
 
 struct ImageCapableDisplayHost;
@@ -1957,6 +1957,9 @@ fn x_coordinate_sync_and_message_batch_semantics() {
 #[test]
 fn x_popup_dialog_and_menu_batch_semantics() {
     crate::test_utils::init_test_tracing();
+    // One Context for the whole test: constructing a Context resets the
+    // tagged heap, so every Value below must be allocated after it exists.
+    let mut eval = Context::new();
     let term = terminal_handle_value();
 
     match builtin_x_popup_dialog_batch(vec![Value::NIL, Value::NIL]) {
@@ -2048,12 +2051,12 @@ fn x_popup_dialog_and_menu_batch_semantics() {
     ]);
 
     assert!(
-        builtin_x_popup_menu(vec![Value::NIL, Value::NIL])
+        builtin_x_popup_menu(&mut eval, vec![Value::NIL, Value::NIL])
             .unwrap()
             .is_nil()
     );
     assert!(
-        builtin_x_popup_menu(vec![Value::NIL, basic_menu])
+        builtin_x_popup_menu(&mut eval, vec![Value::NIL, basic_menu])
             .unwrap()
             .is_nil()
     );
@@ -2063,11 +2066,11 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::fixnum(1),
         term,
     ] {
-        assert_wta(builtin_x_popup_menu(vec![pos, Value::NIL]), "listp", pos);
+        assert_wta(builtin_x_popup_menu(&mut eval, vec![pos, Value::NIL]), "listp", pos);
     }
 
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
             Value::NIL,
         ]),
@@ -2075,7 +2078,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::fixnum(0),
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
             basic_menu,
         ]),
@@ -2083,17 +2086,17 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::fixnum(0),
     );
     assert_wta(
-        builtin_x_popup_menu(vec![Value::list(vec![Value::NIL]), Value::NIL]),
+        builtin_x_popup_menu(&mut eval, vec![Value::list(vec![Value::NIL]), Value::NIL]),
         "stringp",
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(vec![Value::list(vec![Value::NIL]), basic_menu]),
+        builtin_x_popup_menu(&mut eval, vec![Value::list(vec![Value::NIL]), basic_menu]),
         "consp",
         Value::T,
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::symbol("menu-bar")]),
             Value::NIL,
         ]),
@@ -2101,7 +2104,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::symbol("menu-bar")]),
             basic_menu,
         ]),
@@ -2109,7 +2112,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::T,
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::symbol("mouse-1")]),
             Value::NIL,
         ]),
@@ -2117,7 +2120,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::symbol("mouse-1")]),
             basic_menu,
         ]),
@@ -2126,17 +2129,17 @@ fn x_popup_dialog_and_menu_batch_semantics() {
     );
 
     assert_wta(
-        builtin_x_popup_menu(vec![Value::list(vec![Value::NIL, Value::NIL]), Value::NIL]),
+        builtin_x_popup_menu(&mut eval, vec![Value::list(vec![Value::NIL, Value::NIL]), Value::NIL]),
         "stringp",
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(vec![Value::list(vec![Value::NIL, Value::NIL]), basic_menu]),
+        builtin_x_popup_menu(&mut eval, vec![Value::list(vec![Value::NIL, Value::NIL]), basic_menu]),
         "consp",
         Value::T,
     );
     assert!(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::list(vec![Value::string("A")]),
         ])
@@ -2144,7 +2147,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         .is_nil()
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::list(vec![Value::string("A"), Value::fixnum(1)]),
         ]),
@@ -2152,7 +2155,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::list(vec![
                 Value::fixnum(1),
@@ -2163,7 +2166,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::list(vec![Value::cons(Value::string("A"), Value::T)]),
         ]),
@@ -2171,7 +2174,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::cons(Value::string("A"), Value::T),
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::fixnum(1),
         ]),
@@ -2179,7 +2182,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::string("x"),
         ]),
@@ -2187,7 +2190,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::string("x"),
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::list(vec![Value::string("A"), Value::NIL]),
         ]),
@@ -2195,7 +2198,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::list(vec![
                 Value::string("A"),
@@ -2206,7 +2209,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::NIL,
     );
     assert!(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::list(vec![
                 Value::string("A"),
@@ -2217,7 +2220,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         .is_nil()
     );
     assert!(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::list(vec![
                 Value::string("A"),
@@ -2231,7 +2234,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         .is_nil()
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::list(vec![
                 Value::string("A"),
@@ -2242,7 +2245,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::NIL, Value::NIL]),
             Value::list(vec![
                 Value::string("A"),
@@ -2254,7 +2257,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
     );
 
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::list(vec![Value::fixnum(0), Value::fixnum(0)])]),
             Value::NIL,
         ]),
@@ -2262,7 +2265,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![Value::list(vec![Value::fixnum(0), Value::fixnum(0)])]),
             basic_menu,
         ]),
@@ -2270,7 +2273,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![
                 Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
                 Value::fixnum(1),
@@ -2281,7 +2284,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::list(vec![
                 Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
                 Value::fixnum(1),
@@ -2292,7 +2295,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(vec![
+        builtin_x_popup_menu(&mut eval, vec![
             Value::cons(
                 Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
                 Value::fixnum(0),
@@ -2302,15 +2305,15 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         "listp",
         Value::fixnum(0),
     );
-    match builtin_x_popup_menu(vec![]) {
+    match builtin_x_popup_menu(&mut eval, vec![]) {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected wrong-number-of-arguments signal, got {other:?}"),
     }
-    match builtin_x_popup_menu(vec![Value::NIL]) {
+    match builtin_x_popup_menu(&mut eval, vec![Value::NIL]) {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected wrong-number-of-arguments signal, got {other:?}"),
     }
-    match builtin_x_popup_menu(vec![Value::NIL, Value::NIL, Value::NIL]) {
+    match builtin_x_popup_menu(&mut eval, vec![Value::NIL, Value::NIL, Value::NIL]) {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected wrong-number-of-arguments signal, got {other:?}"),
     }
@@ -2325,6 +2328,122 @@ fn x_popup_menu_accepts_current_mouse_position_sentinel_in_batch() {
         .expect("documented current-mouse POSITION should be accepted");
 
     assert!(result.is_nil());
+}
+
+/// GNU `x_popup_menu_1` (`src/menu.c:1239-1269`) decodes the `(XY WINDOW)`
+/// POSITION into a place to put the menu, and that decode accepts a FRAME:
+///
+/// ```c
+///     if (FRAMEP (window)) { f = XFRAME (window); xpos = 0; ypos = 0; }
+///     else if (WINDOWP (window)) { CHECK_LIVE_WINDOW (window); ... }
+///     else
+///       /* ??? Not really clean; should be Qwindow_or_framep ... */
+///       wrong_type_argument (Qwindowp, window);
+/// ```
+///
+/// A frame is what `popup-menu` passes for a nil POSITION: it normalizes via
+/// `(mouse-pixel-position)`, whose car is the frame (`lisp/menu-bar.el:2786`),
+/// which is the shape `imenu`'s mouse path reaches with `last-nonmenu-event`
+/// nil.  Neomacs' batch `x-popup-menu` rejected the second element outright
+/// with `windowp` whenever the first was non-nil, so that whole path signalled
+/// where GNU returns nil.
+///
+/// GNU also never looks at the designator when BOTH coordinates are nil: that
+/// sets `get_current_pos_p` (`src/menu.c:1182-1184`) and replaces WINDOW with
+/// the selected frame, so even a nonsense designator is accepted there.
+///
+/// Every expectation below was read from GNU Emacs 31.0.90 `-Q --batch`.
+#[test]
+fn x_popup_menu_position_window_slot_accepts_a_frame_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let menu = r#"'("Title" ("Pane" ("item" . 1)))"#;
+    let probe = |eval: &mut Context, position: &str| -> String {
+        let form = format!(
+            r#"(condition-case e (x-popup-menu {position} {menu})
+                 (error (list (car e) (cdr e))))"#
+        );
+        crate::emacs_core::print::print_value(&eval.eval_str(&form).expect("probe should evaluate"))
+    };
+
+    // A frame in the window slot: GNU puts the menu at the frame origin.
+    assert_eq!(probe(&mut eval, "(list (list 0 0) (selected-frame))"), "nil");
+    assert_eq!(probe(&mut eval, "(list (list 5 7) (selected-frame))"), "nil");
+    // A live window is equally acceptable.
+    assert_eq!(probe(&mut eval, "(list (list 5 7) (selected-window))"), "nil");
+    // Both coordinates nil: GNU never inspects the designator at all.
+    assert_eq!(probe(&mut eval, "(list (list nil nil) 'not-a-window)"), "nil");
+    assert_eq!(probe(&mut eval, "(list (list nil nil))"), "nil");
+    // Anything that is neither a frame nor a window is still `windowp`.
+    assert_eq!(
+        probe(&mut eval, "(list (list 0 0) 'not-a-window)"),
+        "(wrong-type-argument (windowp not-a-window))"
+    );
+    assert_eq!(
+        probe(&mut eval, "(list (list 0 0))"),
+        "(wrong-type-argument (windowp nil))"
+    );
+    // A valid but non-live (internal) window is `window-live-p`, not `windowp`:
+    // GNU reaches it through `CHECK_LIVE_WINDOW`.
+    let internal = probe(
+        &mut eval,
+        "(list (list 0 0) (window-parent (split-window-internal nil nil nil nil)))",
+    );
+    assert!(
+        internal.starts_with("(wrong-type-argument (window-live-p "),
+        "an internal window must fail the liveness check, not the type check: {internal}"
+    );
+}
+
+/// GNU `x_popup_menu_1` decodes MENU in three branches
+/// (`src/menu.c:1294-1364`) and only the last one -- the "old-fashioned menu"
+/// -- runs `CHECK_STRING (title)`.  A keymap becomes panes through
+/// `keymap_panes` and takes its title from the keymap prompt; a list of
+/// keymaps does the same after resolving every element with `get_keymap (...,
+/// 1, 0)`, which is why a bad element there is `keymapp`, not `stringp`.
+///
+/// `imenu` reaches the first branch: `imenu--mouse-menu` builds a keymap and
+/// `popup-menu` passes `(indirect-function map)` to `x-popup-menu`.  Neomacs
+/// validated every MENU as the old-fashioned shape and answered
+/// `(wrong-type-argument stringp keymap)`.
+///
+/// Every expectation below was read from GNU Emacs 31.0.90 `-Q --batch`.
+#[test]
+fn x_popup_menu_accepts_keymap_menus_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let probe = |eval: &mut Context, position: &str, menu: &str| -> String {
+        let form = format!(
+            r#"(let ((map (make-sparse-keymap "Index")))
+                 (define-key map [item] '(menu-item "Item" ignore))
+                 (fset 'p109-map map)
+                 (condition-case e (x-popup-menu {position} {menu})
+                   (error (list (car e) (cdr e)))))"#
+        );
+        crate::emacs_core::print::print_value(&eval.eval_str(&form).expect("probe should evaluate"))
+    };
+    let at_frame = "(list (list 0 0) (selected-frame))";
+
+    assert_eq!(probe(&mut eval, at_frame, "map"), "nil");
+    assert_eq!(probe(&mut eval, "t", "map"), "nil");
+    assert_eq!(probe(&mut eval, at_frame, "(list map)"), "nil");
+    assert_eq!(probe(&mut eval, at_frame, "'p109-map"), "nil");
+    assert_eq!(probe(&mut eval, at_frame, "(make-sparse-keymap)"), "nil");
+    // A list that starts with a keymap resolves each element with GNU's
+    // erroring `get_keymap`.
+    assert_eq!(
+        probe(&mut eval, at_frame, "(list map 42)"),
+        "(wrong-type-argument (keymapp 42))"
+    );
+    assert_eq!(
+        probe(&mut eval, at_frame, "(list map nil)"),
+        "(wrong-type-argument (keymapp nil))"
+    );
+    // The old-fashioned branch still checks its title.
+    assert_eq!(
+        probe(&mut eval, at_frame, r#"'(1 ("Pane" ("i" . 1)))"#),
+        "(wrong-type-argument (stringp 1))"
+    );
 }
 
 #[test]

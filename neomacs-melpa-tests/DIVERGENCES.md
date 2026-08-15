@@ -5869,3 +5869,159 @@ and by Neomacs as the bare message with no function prefix, which means the two
 report the error from different places.
 
 Status: OPEN, diagnosed to the seam, not fixed.
+## 115. The first-change sentinel was recorded before the boundary check that gates the point entry -- FIXED
+
+Tide's edit workflow formats a region, then `undo-only`.  GNU restores point to
+where the command started; Neomacs left it at the change.
+
+```elisp
+(setq buffer-file-name FILE) (set-visited-file-modtime)
+(insert "abcdef") (setq buffer-undo-list nil) (set-buffer-modified-p nil)
+(goto-char (point-min)) (undo-boundary)
+(save-excursion (goto-char (point-max)) (insert "X"))
+buffer-undo-list
+;; GNU               => ((7 . 8) 1 (t 27263 42178 675008 795000))
+;; Neomacs before fix => ((7 . 8) (t 27263 42729 324050 609000))
+```
+
+The `1` is the point entry.  `primitive-undo`'s `((integerp next) (goto-char
+next))` arm is the only thing that restores point across an undo, so without it
+`undo` leaves point at the change site: the same probe driven through
+`undo-only` ends at 31 under Neomacs and at 1 under GNU.
+
+GNU records it in `record_point` (`src/undo.c:47-78`), which every recorder
+calls before it conses anything:
+
+```c
+  at_boundary = ! CONSP (BVAR (current_buffer, undo_list))
+                || NILP (XCAR (BVAR (current_buffer, undo_list)));
+  if (MODIFF <= SAVE_MODIFF)
+    record_first_change ();
+  if (at_boundary && point_before_last_command_or_undo != beg && ...)
+    bset_undo_list (..., Fcons (make_fixnum (point_before_last_command_or_undo), ...));
+```
+
+The order is the whole content of the function.  `at_boundary` is a fact about
+the list as the command found it, so it is read BEFORE `record_first_change`
+may cons `(t . TIME)` on top; GNU's own comment on that read says the check "is
+currently dependent on being called before record_first_change".
+
+Neomacs had split the three steps: `undo_prepare_change` recorded the
+first-change sentinel, and then each recorder (`undo_list_record_insert`,
+`undo_list_record_delete`, plus a separate `undo_list_record_point_for_change`
+on the marker-adjustment path) re-derived `at_boundary` for itself -- after the
+sentinel was already on the list.  On the one case the check exists for, the
+first change to a CLEAN buffer, the re-derived answer is `false` and the point
+entry is dropped.  Every editing path was affected equally: insert, delete,
+replace, casify, `subst-char-in-region`, `transpose-regions`.
+
+This is the opt-in-invariant class: a rule GNU applies once above the dispatch,
+which we had asked each branch to remember.  The fix does not add a reminder --
+it removes the ability to get it wrong.  `undo_prepare_change` is now GNU's
+whole `record_point`, boundary read first, and the recorders no longer take the
+saved point at all (`undo_list_record_insert(list, beg, len)`,
+`undo_list_record_delete(list, beg, text, pt)`), so there is nothing left for a
+call site to record late.  Putting the prologue above the marker adjustments
+also keeps the point entry ahead of the `(MARKER . ADJUSTMENT)` entries (GNU bug
+16818 ordering) without the dedicated helper that used to enforce it.
+
+`replace_range` records the insertion first (`src/insdel.c:1638-1639`), so its
+prologue runs for the insertion's beg -- the old range's END -- and that is
+what the replacement path now passes.
+
+Status: FIXED.
+
+## 116. `x-popup-menu` rejected the frame GNU accepts in a POSITION's window slot -- FIXED
+
+Tide's navigation workflow calls `imenu` interactively.  With
+`last-nonmenu-event` nil (ledger 98) both editors take the mouse-menu path;
+GNU shows nothing in batch and returns nil, while Neomacs raised
+`(wrong-type-argument windowp #<frame F1>)` -- the only difference left in that
+case's whole snapshot.
+
+```elisp
+(x-popup-menu (list (list 0 0) (selected-frame)) '("Title" ("Pane" ("item" . 1))))
+;; GNU               => nil
+;; Neomacs before fix => (wrong-type-argument (windowp #<frame F1 0x100000000>))
+```
+
+The route there is `imenu-choose-buffer-index` -> `imenu--mouse-menu` ->
+`popup-menu` with a nil POSITION -> `popup-menu-normalize-position`
+(`lisp/menu-bar.el:2786`), which builds `((X Y) FRAME)` out of
+`(mouse-pixel-position)`.  A frame in that slot is not an accident, it is the
+documented shape.
+
+GNU's decode is `x_popup_menu_1` (`src/menu.c:1239-1269`):
+
+```c
+    if (FRAMEP (window))
+      { f = XFRAME (window); xpos = 0; ypos = 0; }
+    else if (WINDOWP (window))
+      { CHECK_LIVE_WINDOW (window); ... }
+    else
+      /* ??? Not really clean; should be Qwindow_or_framep
+         but I don't want to make one now.  */
+      wrong_type_argument (Qwindowp, window);
+```
+
+so the slot is window-or-frame, and the `windowp` name is only GNU's admitted
+shortcut for the third case.  Two more facts came out of the same function and
+were read back from GNU: an internal (non-live) window fails with
+`window-live-p`, not `windowp`; and when BOTH coordinates are nil GNU sets
+`get_current_pos_p` (`src/menu.c:1182-1184`) and replaces WINDOW with the
+selected frame, so it never inspects the designator at all -- even
+`((nil nil) not-a-window)` returns nil.
+
+Neomacs' batch `x-popup-menu` had no decode.  It read the second element only
+to name it in an error, and signalled `windowp` for whatever it found whenever
+the first element was non-nil: a frame, a live window and a genuine mistake all
+took the same exit.  That is the invented-refusal class -- a check we wrote
+where GNU has a decode.
+
+`decode_popup_menu_position_window` now follows the C: nil-nil coordinates
+short-circuit before the designator is read, a frame is accepted, a window must
+be live, and only the remaining values are `windowp`.  All seven GNU answers
+are pinned as a test.
+
+Status: FIXED.
+
+## 117. `x-popup-menu` demanded a string title from a keymap MENU -- FIXED
+
+Behind ledger 110, in the same Tide `imenu` case, sat a second refusal of the
+same shape.  With the POSITION accepted, the MENU was rejected:
+
+```elisp
+(let ((map (make-sparse-keymap "Index")))
+  (x-popup-menu (list (list 0 0) (selected-frame)) map))
+;; GNU               => nil
+;; Neomacs before fix => (wrong-type-argument (stringp keymap))
+```
+
+`imenu--mouse-menu` builds a keymap and `popup-menu` passes
+`(indirect-function map)`, so the keymap MENU is the ordinary case for that
+command, not an exotic one.
+
+GNU `x_popup_menu_1` (`src/menu.c:1294-1364`) decodes MENU in three branches:
+
+```c
+  keymap = get_keymap (menu, 0, 0);
+  if (CONSP (keymap))                                   /* a keymap */
+    { keymap_panes (&menu, 1); ... }
+  else if (CONSP (menu) && KEYMAPP (XCAR (menu)))       /* a list of keymaps */
+    { ... maps[i++] = keymap = get_keymap (XCAR (tem), 1, 0); ... }
+  else                                                  /* old-fashioned menu */
+    { title = Fcar (menu); CHECK_STRING (title); list_of_panes (Fcdr (menu)); }
+```
+
+`CHECK_STRING (title)` lives only in the third branch.  Neomacs' batch
+`x-popup-menu` had only that branch, so it demanded a string title from every
+MENU, and a keymap's car is the symbol `keymap`.
+
+The decode is now GNU's: a keymap (directly, or through a symbol's function
+cell, which is what `get_keymap` follows) is accepted; a list whose car is a
+keymap is accepted after resolving EVERY element with GNU's erroring
+`get_keymap`, so `(list map 42)` signals `(keymapp 42)` where we used to say
+`stringp` about the whole list; and only what is left is the old-fashioned menu
+that must have a string title.  Eight GNU answers are pinned as a test.
+
+Status: FIXED.

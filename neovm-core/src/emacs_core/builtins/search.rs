@@ -2357,13 +2357,11 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
                 start_char,
                 cased_text.clone(),
                 end_char,
-                None,
             );
             crate::buffer::undo::undo_list_record_insert(
                 &mut undo_list,
                 start_char,
                 CharLen::new(cased_text.schars()),
-                None,
             );
             buf.set_undo_list(undo_list);
         }
