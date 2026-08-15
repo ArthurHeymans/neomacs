@@ -56,31 +56,149 @@ pub(crate) struct SourceByteRange {
     end: usize,
 }
 
-/// Identity of the bytes visible to a parser at one point in time.
+/// GNU `TREESIT_TS_POINT_1_0` (`src/treesit.c`), deliberately distinct from
+/// the real first-byte coordinate `(0, 0)`.
+const TREESIT_TS_POINT_1_0: Point = Point { row: 1, column: 0 };
+
+/// Version of a buffer's *text*, as a parser sees it.
 ///
 /// Tree-sitter does not consume text properties, so GNU's `chars_modiff`
 /// rather than the broader buffer modification tick is the correct content
-/// version.  The accessible bounds are part of the identity because parsers
-/// see the narrowed buffer, not necessarily the whole backing text.
+/// version.
+///
+/// The buffer restriction is deliberately **not** part of this identity.  A
+/// parser's own view of the buffer is tracked separately, on its tree
+/// ([`ParsedTree::visible`]), exactly as GNU keeps `visible_beg`/`visible_end`
+/// on the parser (`src/treesit.h:98-118`); narrowing therefore moves a tree's
+/// window instead of invalidating the tree.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ParserInputRevision {
     chars_modified_tick: i64,
-    accessible_start_byte: EmacsBytePos,
-    accessible_end_byte: EmacsBytePos,
 }
 
 impl ParserInputRevision {
     pub(crate) fn for_buffer(buffer: &Buffer) -> Self {
-        let accessible = buffer.accessible_emacs_byte_range();
         Self {
             chars_modified_tick: buffer.chars_modified_tick(),
-            accessible_start_byte: accessible.start(),
-            accessible_end_byte: accessible.end(),
         }
     }
+}
 
-    fn accessible_byte_range(self) -> EmacsByteRange {
-        EmacsByteRange::new(self.accessible_start_byte, self.accessible_end_byte)
+/// A parse tree together with the buffer byte window its offsets are relative
+/// to.
+///
+/// GNU keeps that window on the parser as `visible_beg`/`visible_end`
+/// (`src/treesit.h:98-118`) and never lets it drift: every recorded change is
+/// clipped into it (`treesit_record_change_1`, `src/treesit.c:1503-1560`) and
+/// every reparse first reconciles it with the buffer's restriction by editing
+/// the tree (`treesit_sync_visible_region`, `src/treesit.c:1626-1740`).
+///
+/// Pairing the window with the tree makes a tree whose frame is unknown
+/// unrepresentable, which is what lets `treesit_ensure_parsed`
+/// (`src/treesit.c:1901-1949`) hand the previous tree back to tree-sitter on
+/// every reparse -- and therefore what keeps the whole-buffer affected range
+/// (`treesit_get_affected_ranges`, `src/treesit.c:1857-1880`) to the one case
+/// GNU uses it for: a parser that has never parsed.
+pub(crate) struct ParsedTree {
+    tree: Tree,
+    visible: EmacsByteRange,
+}
+
+impl ParsedTree {
+    pub(crate) const fn new(tree: Tree, visible: EmacsByteRange) -> Self {
+        Self { tree, visible }
+    }
+
+    pub(crate) const fn tree(&self) -> &Tree {
+        &self.tree
+    }
+
+    pub(crate) const fn visible(&self) -> EmacsByteRange {
+        self.visible
+    }
+
+    fn apply_edit(&mut self, edit: &InputEdit, new_visible: EmacsByteRange) {
+        self.tree.edit(edit);
+        self.visible = new_visible;
+    }
+
+    /// Move this tree's window onto BUFFER's current restriction, GNU
+    /// `treesit_sync_visible_region` (`src/treesit.c:1626-1740`).
+    ///
+    /// Returns whether the window moved, which is GNU's reason to set
+    /// `need_reparse` (`src/treesit.c:1654-1656`).
+    fn sync_visible_region(&mut self, buffer: &Buffer, tracking: ParserPointTracking) -> bool {
+        let accessible = buffer.accessible_emacs_byte_range();
+        if self.visible == accessible {
+            return false;
+        }
+        let (begv, zv) = (accessible.start(), accessible.end());
+
+        // 1. Make sure visible.start <= BEGV: tree-sitter sees an insertion at
+        //    the beginning.
+        if self.visible.start() > begv {
+            let new_end = self.visible.start().get() - begv.get();
+            let new_end_position = parser_point_at(buffer, begv, self.visible.start(), tracking);
+            self.tree.edit(&InputEdit {
+                start_byte: 0,
+                old_end_byte: 0,
+                new_end_byte: new_end,
+                start_position: TREESIT_TS_POINT_1_0,
+                old_end_position: TREESIT_TS_POINT_1_0,
+                new_end_position,
+            });
+            self.visible = EmacsByteRange::new(begv, self.visible.end());
+        }
+
+        // 2. Make sure visible.end = ZV: an insertion or a deletion at the end.
+        let visible_start = self.visible.start();
+        if self.visible.end() < zv {
+            let old_end = self.visible.end().get() - visible_start.get();
+            let start_position =
+                parser_point_at(buffer, visible_start, self.visible.end(), tracking);
+            let new_end_position = parser_point_at(buffer, visible_start, zv, tracking);
+            self.tree.edit(&InputEdit {
+                start_byte: old_end,
+                old_end_byte: old_end,
+                new_end_byte: zv.get() - visible_start.get(),
+                start_position,
+                old_end_position: start_position,
+                new_end_position,
+            });
+            self.visible = EmacsByteRange::new(visible_start, zv);
+        } else if self.visible.end() > zv {
+            let start = zv.get().saturating_sub(visible_start.get());
+            let start_position = parser_point_at(buffer, visible_start, zv, tracking);
+            let old_end_position =
+                parser_point_at(buffer, visible_start, self.visible.end(), tracking);
+            self.tree.edit(&InputEdit {
+                start_byte: start,
+                old_end_byte: self.visible.end().get() - visible_start.get(),
+                new_end_byte: start,
+                start_position,
+                old_end_position,
+                new_end_position: start_position,
+            });
+            self.visible = EmacsByteRange::new(visible_start, zv);
+        }
+
+        // 3. Make sure visible.start = BEGV: a deletion at the beginning.
+        if self.visible.start() < begv {
+            let old_end = begv.get() - self.visible.start().get();
+            let old_end_position = parser_point_at(buffer, self.visible.start(), begv, tracking);
+            self.tree.edit(&InputEdit {
+                start_byte: 0,
+                old_end_byte: old_end,
+                new_end_byte: 0,
+                start_position: TREESIT_TS_POINT_1_0,
+                old_end_position,
+                new_end_position: TREESIT_TS_POINT_1_0,
+            });
+            self.visible = EmacsByteRange::new(begv, self.visible.end());
+        }
+
+        debug_assert_eq!(self.visible, accessible);
+        true
     }
 }
 
@@ -88,11 +206,20 @@ impl ParserInputRevision {
 /// rebuilt.  Keeping this separate from `generation` prevents a buffer edit
 /// revision from being confused with the generation used to invalidate Lisp
 /// node handles.
+///
+/// GNU carries a single `need_reparse` bit (`src/treesit.h`) because every
+/// text change reaches `treesit_record_change`.  `Clean`/`ReparsePending` are
+/// that bit; the extra `FullReparseRequired` state exists only for a text
+/// change that never reached [`TreeSitterManager::finish_buffer_edit`], where
+/// the tree's window is no longer known to describe the buffer and reusing it
+/// would corrupt the parse rather than merely widen a range.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ParserFreshness {
     Unparsed,
     Clean(ParserInputRevision),
-    IncrementalEditPending(ParserInputRevision),
+    /// The tree is in sync with the buffer (every change since the last parse
+    /// was applied to it) and a reparse is due -- GNU `need_reparse`.
+    ReparsePending(ParserInputRevision),
     FullReparseRequired,
 }
 
@@ -109,21 +236,32 @@ impl ParserFreshness {
     ) -> Option<ParserReparseKind> {
         match *self {
             Self::Clean(parsed) if parsed == current => None,
-            Self::IncrementalEditPending(edited) if edited == current => {
+            Self::ReparsePending(edited) if edited == current => {
                 Some(ParserReparseKind::Incremental)
             }
             Self::Unparsed => Some(ParserReparseKind::Full),
-            Self::Clean(_) | Self::IncrementalEditPending(_) | Self::FullReparseRequired => {
+            Self::Clean(_) | Self::ReparsePending(_) | Self::FullReparseRequired => {
                 *self = Self::FullReparseRequired;
                 Some(ParserReparseKind::Full)
             }
         }
     }
 
+    /// GNU sets `need_reparse` when a parser's window had to move onto a new
+    /// buffer restriction (`src/treesit.c:1654-1656`).  The tree itself was
+    /// moved with it, so this is a pending reparse, never an invalidation.
+    fn note_window_moved(&mut self, current: ParserInputRevision) {
+        if let Self::Clean(revision) = *self
+            && revision == current
+        {
+            *self = Self::ReparsePending(revision);
+        }
+    }
+
     fn accepts_incremental_edit(self, old: ParserInputRevision) -> bool {
         matches!(
             self,
-            Self::Clean(revision) | Self::IncrementalEditPending(revision)
+            Self::Clean(revision) | Self::ReparsePending(revision)
                 if revision == old
         )
     }
@@ -150,7 +288,7 @@ pub(crate) struct ParserEntry {
     pub(crate) language: SymId,
     pub(crate) tag: Value,
     pub(crate) parser: Parser,
-    pub(crate) tree: Option<Tree>,
+    pub(crate) tree: Option<ParsedTree>,
     pub(crate) last_source: Option<LispString>,
     pub(crate) freshness: ParserFreshness,
     pub(crate) generation: u64,
@@ -389,14 +527,31 @@ unsafe fn copy_raw_query_match(raw: &ffi::TSQueryMatch) -> RawQueryMatch {
     }
 }
 
-#[derive(Clone, Copy)]
+/// A buffer change in progress, recorded in **absolute** buffer bytes.
+///
+/// GNU's `treesit_record_change_1` (`src/treesit.c:1503-1560`) receives
+/// absolute byte positions and clips them into each parser's own window, so
+/// the buffer's restriction at the moment of the edit never enters the
+/// arithmetic.  That is what makes an edit inside `comment-with-narrowing`
+/// (`lisp/newcomment.el:1094-1112`) an ordinary incremental edit.
 struct PendingBufferEdit {
-    old_revision: ParserInputRevision,
+    content_revision: ParserInputRevision,
     point_tracking: ParserPointTracking,
-    start_byte: usize,
-    old_end_byte: usize,
-    start_position: Point,
-    old_end_position: Point,
+    start_byte: EmacsBytePos,
+    old_end_byte: EmacsBytePos,
+    /// Pre-edit tree coordinates of the clipped endpoints, one entry per
+    /// parser that holds a tree, because each parser clips into its own
+    /// window.  GNU derives the same points from per-parser
+    /// `visi_beg_linecol` (`src/treesit.c:1543-1560`); measuring them here,
+    /// while the old text is still present, is the same value without the
+    /// incremental line/column bookkeeping.
+    points: Vec<PendingEditPoints>,
+}
+
+struct PendingEditPoints {
+    parser_id: u64,
+    start: Point,
+    old_end: Point,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -405,72 +560,111 @@ enum ParserPointTracking {
     LineAndColumn,
 }
 
+/// The edit as one parser's tree sees it: tree-relative offsets plus the
+/// window the tree covers afterwards.  GNU computes both in the same block
+/// (`src/treesit.c:1420-1457`).
+struct TreeRelativeEdit {
+    edit: InputEdit,
+    new_visible: EmacsByteRange,
+}
+
 impl PendingBufferEdit {
     fn for_buffer(
         buffer: &Buffer,
         byte_range: EmacsByteRange,
         point_tracking: ParserPointTracking,
+        windows: impl Iterator<Item = (u64, EmacsByteRange)>,
     ) -> Self {
-        let old_revision = ParserInputRevision::for_buffer(buffer);
-        let visible = old_revision.accessible_byte_range();
-        let start = byte_range.start().max(visible.start()).min(visible.end());
-        let old_end = byte_range.end().max(visible.start()).min(visible.end());
+        let points = if point_tracking == ParserPointTracking::LineAndColumn {
+            windows
+                .map(|(parser_id, visible)| PendingEditPoints {
+                    parser_id,
+                    start: parser_point_at(
+                        buffer,
+                        visible.start(),
+                        clamp_into(byte_range.start(), visible),
+                        point_tracking,
+                    ),
+                    old_end: parser_point_at(
+                        buffer,
+                        visible.start(),
+                        clamp_into(byte_range.end(), visible),
+                        point_tracking,
+                    ),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         Self {
-            old_revision,
+            content_revision: ParserInputRevision::for_buffer(buffer),
             point_tracking,
-            start_byte: start.get() - visible.start().get(),
-            old_end_byte: old_end.get() - visible.start().get(),
-            start_position: parser_point_at(buffer, visible.start(), start, point_tracking),
-            old_end_position: parser_point_at(buffer, visible.start(), old_end, point_tracking),
+            start_byte: byte_range.start(),
+            old_end_byte: byte_range.end(),
+            points,
         }
     }
 
-    fn finish(
-        self,
+    /// Express this change in one parser's tree coordinates, GNU
+    /// `treesit_record_change_1` (`src/treesit.c:1420-1457`).
+    fn for_window(
+        &self,
         buffer: &Buffer,
-        new_revision: ParserInputRevision,
+        parser_id: u64,
+        visible: EmacsByteRange,
         new_end: EmacsBytePos,
-    ) -> Option<InputEdit> {
-        let old_visible = self.old_revision.accessible_byte_range();
-        if new_revision.accessible_start_byte != old_visible.start() {
-            return None;
-        }
+    ) -> TreeRelativeEdit {
+        let base = visible.start().get();
+        let start_offset = clamp_into(self.start_byte, visible).get() - base;
+        let old_end_offset = clamp_into(self.old_end_byte, visible).get() - base;
+        // GNU deliberately leaves NEW_END unclipped above the window: inserting
+        // into a narrowed region grows that region (Bug#61369).
+        let new_end_offset = new_end.max(visible.start()).get() - base;
 
-        // GNU leaves NEW_END unclipped because an insertion can grow the
-        // narrowed region.  Verify that the new restriction has exactly the
-        // size implied by this edit before reusing the old tree; a simultaneous
-        // restriction change instead takes the safe full-reparse path.
-        let new_end = new_end.max(old_visible.start());
-        let new_end_byte = new_end.get() - old_visible.start().get();
-        let old_visible_len = old_visible.len().get();
-        let deleted_len = self.old_end_byte.checked_sub(self.start_byte)?;
-        let inserted_len = new_end_byte.checked_sub(self.start_byte)?;
-        let expected_visible_len = old_visible_len
-            .checked_sub(deleted_len)?
-            .checked_add(inserted_len)?;
-        if new_revision.accessible_end_byte.get()
-            != old_visible
-                .start()
-                .get()
-                .checked_add(expected_visible_len)?
-        {
-            return None;
-        }
+        // Move the window with the text that shifted it (GNU
+        // `visi_beg_delta`, `src/treesit.c:1439-1453`).
+        let (old_end, new_end_abs) = (self.old_end_byte.get(), new_end.get());
+        let visi_beg_delta: i64 = if old_end > new_end_abs {
+            base.min(new_end_abs) as i64 - base.min(old_end) as i64
+        } else if old_end < base {
+            new_end_abs as i64 - old_end as i64
+        } else {
+            0
+        };
+        let new_base = (base as i64 + visi_beg_delta).max(0) as usize;
+        let new_visible_end = (visible.end().get() as i64 + visi_beg_delta + new_end_offset as i64
+            - old_end_offset as i64)
+            .max(new_base as i64) as usize;
 
-        Some(InputEdit {
-            start_byte: self.start_byte,
-            old_end_byte: self.old_end_byte,
-            new_end_byte,
-            start_position: self.start_position,
-            old_end_position: self.old_end_position,
-            new_end_position: parser_point_at(
-                buffer,
-                old_visible.start(),
-                new_end,
-                self.point_tracking,
-            ),
-        })
+        let (start_position, old_end_position) = self
+            .points
+            .iter()
+            .find(|points| points.parser_id == parser_id)
+            .map_or((TREESIT_TS_POINT_1_0, TREESIT_TS_POINT_1_0), |points| {
+                (points.start, points.old_end)
+            });
+
+        TreeRelativeEdit {
+            edit: InputEdit {
+                start_byte: start_offset,
+                old_end_byte: old_end_offset,
+                new_end_byte: new_end_offset,
+                start_position,
+                old_end_position,
+                new_end_position: parser_point_at(
+                    buffer,
+                    EmacsBytePos::new(new_base),
+                    new_end,
+                    self.point_tracking,
+                ),
+            },
+            new_visible: EmacsByteRange::from_usize(new_base, new_visible_end),
+        }
     }
+}
+
+fn clamp_into(pos: EmacsBytePos, range: EmacsByteRange) -> EmacsBytePos {
+    pos.max(range.start()).min(range.end())
 }
 
 #[derive(Default)]
@@ -706,6 +900,32 @@ impl TreeSitterManager {
         }
     }
 
+    /// Catch one parser up with the buffer's restriction before it is asked to
+    /// parse, GNU `treesit_sync_visible_region` called from
+    /// `treesit_ensure_parsed` (`src/treesit.c:1908-1914`) and from
+    /// `Ftreesit_parser_set_included_ranges` (`src/treesit.c:2745-2746`).
+    ///
+    /// The tree is moved onto the new window rather than discarded, so a
+    /// narrowing is a reason to reparse, never a reason to lose the tree.
+    pub(crate) fn sync_visible_region(&mut self, parser_id: u64, buffer: &Buffer) {
+        let Some(parser) = self.parsers.get_mut(&parser_id) else {
+            return;
+        };
+        let tracking = if parser.tracking_linecol {
+            ParserPointTracking::LineAndColumn
+        } else {
+            ParserPointTracking::BytesOnly
+        };
+        let Some(tree) = parser.tree.as_mut() else {
+            return;
+        };
+        if tree.sync_visible_region(buffer, tracking) {
+            parser
+                .freshness
+                .note_window_moved(ParserInputRevision::for_buffer(buffer));
+        }
+    }
+
     pub(crate) fn has_editable_tree(&self, buffer_id: BufferId) -> bool {
         self.parsers.values().any(|parser| {
             !parser.deleted && parser.orig_buffer_id == buffer_id && parser.tree.is_some()
@@ -733,10 +953,19 @@ impl TreeSitterManager {
             // the common parser path and make preparing a keystroke O(1).
             ParserPointTracking::BytesOnly
         };
+        let windows = self.parser_windows(buffer_id);
         self.pending_edits.insert(
             buffer_id,
-            PendingBufferEdit::for_buffer(buffer, byte_range, point_tracking),
+            PendingBufferEdit::for_buffer(buffer, byte_range, point_tracking, windows.into_iter()),
         );
+    }
+
+    fn parser_windows(&self, buffer_id: BufferId) -> Vec<(u64, EmacsByteRange)> {
+        self.parsers
+            .iter()
+            .filter(|(_, parser)| !parser.deleted && parser.orig_buffer_id == buffer_id)
+            .filter_map(|(id, parser)| parser.tree.as_ref().map(|tree| (*id, tree.visible())))
+            .collect()
     }
 
     pub(crate) fn finish_buffer_edit(
@@ -749,7 +978,6 @@ impl TreeSitterManager {
             return;
         };
         let new_revision = ParserInputRevision::for_buffer(buffer);
-        let input_edit = edit.finish(buffer, new_revision, new_end_byte);
 
         let mut edited_parser_ids = Vec::new();
         for (parser_id, parser) in &mut self.parsers {
@@ -757,12 +985,19 @@ impl TreeSitterManager {
                 continue;
             }
             if let Some(tree) = parser.tree.as_mut() {
-                if parser.freshness.accepts_incremental_edit(edit.old_revision)
-                    && let Some(input_edit) = input_edit.as_ref()
+                if parser
+                    .freshness
+                    .accepts_incremental_edit(edit.content_revision)
                 {
-                    tree.edit(input_edit);
-                    parser.freshness = ParserFreshness::IncrementalEditPending(new_revision);
+                    let relative =
+                        edit.for_window(buffer, *parser_id, tree.visible(), new_end_byte);
+                    tree.apply_edit(&relative.edit, relative.new_visible);
+                    parser.freshness = ParserFreshness::ReparsePending(new_revision);
                 } else {
+                    // A text change that never reached this hook left the tree's
+                    // window describing text that is no longer there, so unlike
+                    // GNU -- which sees every change -- the tree cannot be
+                    // reused.
                     parser.freshness = ParserFreshness::FullReparseRequired;
                 }
                 parser.generation = parser.generation.saturating_add(1);

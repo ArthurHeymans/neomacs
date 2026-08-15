@@ -6025,3 +6025,89 @@ keymap is accepted after resolving EVERY element with GNU's erroring
 that must have a string title.  Eight GNU answers are pinned as a test.
 
 Status: FIXED.
+
+## 118. A tree-sitter parse tree was thrown away because a command narrowed the buffer -- FIXED
+
+Commenting a line in `astro-ts-mode` left `fontified nil` on intervals GNU
+leaves the property absent from.  Running the workflow with
+`treesit-parser-changed-regions` and
+`treesit--font-lock-mark-ranges-to-fontify` traced shows where that comes
+from -- the four `C-x C-;` presses in the corpus workflow:
+
+```
+                       GNU                     Neomacs before fix
+comment "const x"      nil                     ((1 . 111))
+comment "hi"           ((31 . 53))             ((1 . 120))
+comment "let y"        nil                     ((1 . 129))
+comment "color"        nil                     ((1 . 138))
+```
+
+`treesit--pre-redisplay` (`lisp/treesit.el:2310-2321`) hands whatever those
+calls return to
+`treesit--font-lock-mark-ranges-to-fontify` (`lisp/treesit.el:2257-2287`),
+which does `(put-text-property BEG END 'fontified nil)`.  We answered "the
+whole buffer" every time, so every interval it touched carried the property.
+
+The whole-buffer answer is GNU's, but only in one situation.
+`treesit_get_affected_ranges` (`src/treesit.c:1857-1880`) reads:
+
+```c
+  if (old_tree)
+    { ranges = ts_tree_get_changed_ranges (old_tree, new_tree, &len); ... }
+  else
+    /* If the old_tree is NULL, meaning this is the first parse, the
+       changed range is the whole buffer.  */
+    lisp_ranges = Fcons (Fcons (Fpoint_min (), Fpoint_max ()), Qnil);
+```
+
+so it needs `old_tree == NULL`, and GNU never lets that happen twice: a
+parser's tree is deleted only after it has been diffed
+(`treesit_ensure_parsed`, `src/treesit.c:1901-1949`), nothing else sets
+`tree` back to NULL, and even
+`Ftreesit_parser_set_included_ranges` (`src/treesit.c:2770`) only raises
+`need_reparse`.
+
+Neomacs reached that branch on every one of those keypresses, and the
+instrumented reason was not the one the reparse classification suggested:
+
+```
+finish_buffer_edit: -> FullReparseRequired parser=2
+  freshness=Clean(rev{tick:54, accessible: 0..110})
+  edit.old_revision=rev{tick:54, accessible: 30..43}
+  input_edit_is_some=true
+```
+
+The `InputEdit` was computed fine.  What failed was the guard in front of it:
+the tree had been parsed over the whole buffer, but the edit was recorded
+while the buffer was narrowed to bytes 30..43 -- the commented line.
+`comment-region-internal` wraps its edits in `comment-with-narrowing`
+(`lisp/newcomment.el:1094-1112`, used at `:1169`), a `save-restriction` plus
+`narrow-to-region` around exactly the region being commented.  The four traced
+windows (4..16, 30..43, 62..72, 100..118) are the four commented lines.
+
+Neomacs treated "the restriction changed since the tree was parsed" as a
+reason to distrust the tree, because its `ParserInputRevision` folded the
+accessible bounds into the content version and its `PendingBufferEdit`
+measured offsets from the buffer's *current* accessible start.  Under a
+narrowing those offsets are in a different coordinate frame than the tree, so
+refusing them was right -- the missing piece was the frame itself.
+
+GNU keeps that frame per parser as `visible_beg`/`visible_end`
+(`src/treesit.h:98-118`).  `treesit_record_change_1`
+(`src/treesit.c:1420-1457`) clips each change into *that* window and converts
+to window-relative offsets, so a temporary narrowing never enters the
+arithmetic; and `treesit_sync_visible_region` (`src/treesit.c:1626-1740`)
+reconciles the window with the buffer's restriction with four `ts_tree_edit`
+calls before every parse, raising `need_reparse` if it moved.  A narrowing
+moves the tree in GNU; it never invalidates it.  Neomacs had no counterpart
+to that reconciliation at all, and discarding the tree stood in for it.
+
+The window is now part of the tree (`ParsedTree { tree, visible }`), so a tree
+whose frame is unknown cannot be built; changes are recorded in each parser's
+own window; `sync_visible_region` runs before every parse and before
+`treesit-parser-set-included-ranges`, which no longer drops the tree; and the
+reparse always feeds the previous tree back, leaving the whole-buffer affected
+range to GNU's single case.  The workflow's buffer, its text properties and
+its notifier ranges are now identical to GNU's.
+
+Status: FIXED.
