@@ -1167,12 +1167,43 @@ const _: () = {
     assert!(std::mem::size_of::<SymbolByteCodeCallCacheEntry>() == 3 * std::mem::size_of::<u64>());
 };
 
+/// Process-selected execution policy for bytecode calls in this VM.
+///
+/// `NEOVM_JIT=0` means Tier 0 is the only reachable tier.  Encoding that once
+/// when the VM is constructed lets GNU's Bcall-shaped hot path skip both call-
+/// site feedback and the tier dispatcher; an interpreter-only run cannot
+/// accidentally pay for adaptive-tier state through a forgotten call site.
+#[cfg(feature = "jit")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BytecodeTierPolicy {
+    InterpreterOnly,
+    Adaptive,
+}
+
+#[cfg(feature = "jit")]
+impl BytecodeTierPolicy {
+    fn for_process() -> Self {
+        if crate::emacs_core::jit::jit_runtime_enabled() {
+            Self::Adaptive
+        } else {
+            Self::InterpreterOnly
+        }
+    }
+
+    #[inline(always)]
+    fn records_call_feedback(self) -> bool {
+        matches!(self, Self::Adaptive)
+    }
+}
+
 /// The bytecode VM execution engine.
 ///
 /// Operates on an Context's obarray and dynamic binding stack.
 pub struct Vm<'a> {
     ctx: &'a mut crate::emacs_core::eval::Context,
     symbol_bytecode_call_cache: SymbolByteCodeCallCache,
+    #[cfg(feature = "jit")]
+    bytecode_tier_policy: BytecodeTierPolicy,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1291,7 +1322,14 @@ impl<'a> Vm<'a> {
         Self {
             ctx,
             symbol_bytecode_call_cache: SymbolByteCodeCallCache::new(),
+            #[cfg(feature = "jit")]
+            bytecode_tier_policy: BytecodeTierPolicy::for_process(),
         }
+    }
+
+    #[cfg(all(test, feature = "jit"))]
+    fn force_interpreter_only_for_test(&mut self) {
+        self.bytecode_tier_policy = BytecodeTierPolicy::InterpreterOnly;
     }
 
     /// Truncate the bytecode operand stack to `len` — used by the JIT call shim
@@ -2281,10 +2319,7 @@ impl<'a> Vm<'a> {
                 let func = callee
                     .get_bytecode_data()
                     .expect("resolved bytecode target must remain bytecode");
-                match self
-                    .ctx
-                    .dispatch_bytecode_call_from_stack(func, args_start, nargs, callee)
-                {
+                match self.dispatch_bytecode_tier(func, args_start, nargs, callee) {
                     BytecodeStackCallDispatch::Interpret
                         if self.can_enter_interpreter_frame_iteratively(func, nargs) =>
                     {
@@ -2327,6 +2362,28 @@ impl<'a> Vm<'a> {
                 )
             }
         }
+    }
+
+    /// Consult adaptive tiers only when this VM can reach one.
+    ///
+    /// The policy branch is deliberately here, before the out-of-line Context
+    /// dispatcher: an interpreter-only process performs neither a function
+    /// call nor a per-function atomic heat/feedback operation on Bcall.
+    #[inline(always)]
+    fn dispatch_bytecode_tier(
+        &mut self,
+        func: &ByteCodeFunction,
+        args_start: usize,
+        nargs: usize,
+        callee: Value,
+    ) -> BytecodeStackCallDispatch {
+        #[cfg(feature = "jit")]
+        if self.bytecode_tier_policy == BytecodeTierPolicy::InterpreterOnly {
+            return BytecodeStackCallDispatch::Interpret;
+        }
+
+        self.ctx
+            .dispatch_bytecode_call_from_stack(func, args_start, nargs, callee)
     }
 
     fn run_loop(
@@ -2883,7 +2940,9 @@ impl<'a> Vm<'a> {
                     // index is `pc_local - 1` (pc was advanced past Call above).
                     // GC-safe: a SymId is a stable index, never a heap pointer.
                     #[cfg(feature = "jit")]
-                    if let ValueKind::Symbol(id) = func_val.kind() {
+                    if self.bytecode_tier_policy.records_call_feedback()
+                        && let ValueKind::Symbol(id) = func_val.kind()
+                    {
                         func.runtime.record_call(pc_local - 1, ops_len, id);
                     }
                     // Round-2 profiling: attribute this Op::Call to its callee

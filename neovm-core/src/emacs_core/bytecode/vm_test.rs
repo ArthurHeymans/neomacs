@@ -1162,6 +1162,52 @@ fn vm_records_call_feedback_for_named_callee() {
     assert_eq!(caller.runtime.call_feedback(0), CallFeedback::Uninit);
 }
 
+/// `NEOVM_JIT=0` is a real interpreter-only execution policy, not merely a
+/// high tier-up threshold.  It must remove JIT feedback work from GNU's Bcall
+/// hot path as well as preventing native dispatch.
+#[cfg(feature = "jit")]
+#[test]
+fn vm_interpreter_only_policy_skips_jit_call_feedback() {
+    use crate::emacs_core::jit::CallFeedback;
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_minimal_vm_harness();
+
+    let callee_sym = intern("vm-interpreter-only-feedback-callee");
+    let mut callee = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let answer = callee.add_constant(Value::fixnum(42));
+    callee.ops = vec![Op::Constant(answer), Op::Return];
+    callee.max_stack = 1;
+    eval.obarray
+        .set_symbol_function_id(callee_sym, Value::make_bytecode(callee));
+
+    let mut caller = ByteCodeFunction::new(LambdaParams {
+        required: vec![],
+        optional: vec![],
+        rest: None,
+    });
+    let callee_idx = caller.add_constant(Value::from_sym_id(callee_sym));
+    caller.ops = vec![Op::Constant(callee_idx), Op::Call(0), Op::Return];
+    caller.max_stack = 1;
+
+    let result = {
+        let mut vm = new_vm(&mut eval);
+        vm.force_interpreter_only_for_test();
+        vm.execute(&caller, vec![])
+            .expect("interpreter-only bytecode call should execute")
+    };
+
+    assert_eq!(result, Value::fixnum(42));
+    assert_eq!(
+        caller.runtime.call_feedback(1),
+        CallFeedback::Uninit,
+        "interpreter-only Bcall must not pay for adaptive-tier feedback"
+    );
+}
+
 #[test]
 fn vm_compiled_maphash_closure_mutates_captured_accumulator_like_face_list() {
     crate::test_utils::init_test_tracing();
