@@ -637,6 +637,7 @@ mod reformatter;
 mod request;
 mod restart_emacs;
 mod restclient;
+mod rg;
 mod robe;
 mod rspec_mode;
 mod rtags;

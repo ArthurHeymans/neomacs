@@ -6943,6 +6943,13 @@ pub const SPACEMACS_THEME_MELPA_PIN: (&str, &str) = ("spacemacs-theme", "0.2");
 /// Pinned to upstream commit `e2a2b13482d72634f8e49864cd9e5c907a5fe137`.
 pub const RESTCLIENT_MELPA_PIN: (&str, &str) = ("restclient", "20231010.1427");
 
+/// The exact Rg package selected for practical grouped-search workflows over
+/// a real fixture tree with the pinned `rg' executable, file navigation,
+/// hidden command handling, wgrep edit round trips, the transient menu
+/// surface, and the configuration defaults. MELPA built this archive from
+/// upstream commit `e46a16b8bdba111c9c0036d0e209490dd7a3690f`.
+pub const RG_MELPA_PIN: (&str, &str) = ("rg", "20260517.1310");
+
 /// The exact embark package selected for practical action-menu setup and defaults.
 /// Pinned to upstream commit `350ca86924c5027e80875943fba7b912a71e5791`.
 pub const EMBARK_MELPA_PIN: (&str, &str) = ("embark", "20260609.2102");
