@@ -921,3 +921,113 @@ fn record_point_runs_before_the_first_change_sentinel_like_gnu() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Full-runtime helper: the three pins below need the real command loop,
+/// because what they are about is a variable the command loop binds.
+fn undo_bootstrap_eval_one(src: &str) -> String {
+    crate::test_utils::runtime_startup_eval_all(src)
+        .into_iter()
+        .next()
+        .expect("at least one form")
+}
+
+/// Open a buffer that `execute-kbd-macro' can actually type into.
+///
+/// `execute-kbd-macro' reaches the buffer of the *selected window*, so making
+/// the buffer merely current is not enough.
+const UNDO_TYPING_PRELUDE: &str = r#"
+(defun neo-undo-pin-open (col)
+  (let ((buffer (generate-new-buffer "*undo-pin*")))
+    (set-window-buffer (selected-window) buffer)
+    (set-buffer buffer)
+    (text-mode)
+    (buffer-enable-undo)
+    (setq fill-column col)
+    buffer))
+"#;
+
+/// GNU `recursive_edit_1' (src/keyboard.c:747) specbinds
+/// `undo-auto--undoably-changed-buffers' to nil ONCE, at the recursive-edit
+/// entry both `recursive-edit' and `read_minibuf' pass through -- never in
+/// `command_loop_1'.  The distinction is load bearing: `execute-kbd-macro'
+/// enters `command_loop_1' but NOT `recursive_edit_1', so the buffers a macro's
+/// last command changed must stay on the list after the macro returns.
+///
+/// `undo-auto--boundaries' adds a boundary to every buffer on that list
+/// (lisp/simple.el:4106-4116).  Lose the list at the macro's edge and the next
+/// command adds no boundary at all, because an amalgamating cause never
+/// re-adds the current buffer.
+///
+/// Measured on GNU Emacs -Q --batch: `(nil (1 . 4) (t . 0))'.
+#[test]
+fn a_command_after_a_keyboard_macro_gets_the_undo_boundary_for_the_macro() {
+    crate::test_utils::init_test_tracing();
+    let result = undo_bootstrap_eval_one(&format!(
+        r#"(progn
+             {UNDO_TYPING_PRELUDE}
+             (let ((buffer (neo-undo-pin-open 20)))
+               (execute-kbd-macro (string-to-vector "abc"))
+               (let ((head-after-typing (car buffer-undo-list)))
+                 (execute-kbd-macro (kbd "C-a"))
+                 (list head-after-typing
+                       (car buffer-undo-list)
+                       buffer-undo-list))))"#
+    ));
+    assert_eq!(result, "OK ((1 . 4) nil (nil (1 . 4) (t . 0)))");
+}
+
+/// The same boundary keeps two typing runs from collapsing into one record.
+///
+/// `record_insert' (src/undo.c:98-112) coalesces into the newest record when it
+/// is an insertion ending where the new one begins.  The boundary the second
+/// macro's first command adds is what stops that: without it the two runs merge
+/// into a single `(1 . 7)' and one undo takes back both.
+///
+/// Measured on GNU Emacs -Q --batch: `((4 . 7) nil (1 . 4) (t . 0))'.
+#[test]
+fn two_typing_runs_stay_two_undo_records_separated_by_a_boundary() {
+    crate::test_utils::init_test_tracing();
+    let result = undo_bootstrap_eval_one(&format!(
+        r#"(progn
+             {UNDO_TYPING_PRELUDE}
+             (let ((buffer (neo-undo-pin-open 20)))
+               (execute-kbd-macro (string-to-vector "abc"))
+               (execute-kbd-macro (string-to-vector "def"))
+               buffer-undo-list))"#
+    ));
+    assert_eq!(result, "OK ((4 . 7) nil (1 . 4) (t . 0))");
+}
+
+/// Auto-fill typing followed by undo -- the case three separate undo fixes
+/// (ledger 97, 109 and 115) all ran through on 2026-08-14 without any of them
+/// covering it.
+///
+/// Typing wraps the line as the user types; one `undo' must take back only the
+/// last command group, leaving the text the earlier groups produced.  With the
+/// macro-edge boundary lost, `undo' ran its "get rid of initial undo boundary"
+/// `undo-more' against a real group instead of against a boundary
+/// (lisp/simple.el:3509-3511) and so undid two groups -- here, the whole
+/// buffer.
+///
+/// Measured on GNU Emacs -Q --batch:
+/// `("aaaa bbbb cccc dddd\neeee " "aaaa bbbb cccc dddd e" 22)'.
+#[test]
+fn auto_fill_typing_then_undo_takes_back_only_the_last_command_group() {
+    crate::test_utils::init_test_tracing();
+    let result = undo_bootstrap_eval_one(&format!(
+        r#"(progn
+             {UNDO_TYPING_PRELUDE}
+             (let ((buffer (neo-undo-pin-open 20)))
+               (auto-fill-mode 1)
+               (execute-kbd-macro (string-to-vector "aaaa bbbb cccc dddd eeee "))
+               (let ((typed (buffer-substring-no-properties (point-min) (point-max))))
+                 (execute-kbd-macro (kbd "C-/"))
+                 (list typed
+                       (buffer-substring-no-properties (point-min) (point-max))
+                       (point)))))"#
+    ));
+    assert_eq!(
+        result,
+        "OK (\"aaaa bbbb cccc dddd\neeee \" \"aaaa bbbb cccc dddd e\" 22)"
+    );
+}

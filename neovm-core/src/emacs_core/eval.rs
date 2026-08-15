@@ -1738,6 +1738,46 @@ enum CommandLoopExit {
     Call(Value),
 }
 
+/// Which GNU entry point a command loop is being run from.
+///
+/// GNU has two, and they do not carry the same dynamic bindings:
+///
+/// * `recursive_edit_1` (keyboard.c:708-748) — reached by `recursive-edit` and
+///   by `read_minibuf`, and by nothing else.  It owns the recursive edit's
+///   bindings and unwinds them with `unbind_to` when the edit returns.
+/// * `execute-kbd-macro` (macros.c) — runs a command loop *inside* whatever
+///   bindings are already current, precisely so that the state a macro builds
+///   up survives the macro.
+///
+/// The difference is easy to lose, and losing it is silent: a binding added to
+/// the shared loop looks harmless because recursive edits still behave, while
+/// every keyboard macro quietly discards the state its last command produced.
+/// Making the caller name its entry turns that into a compile-time obligation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CommandLoopEntry {
+    /// GNU `recursive_edit_1`: a recursive edit or a minibuffer read.
+    RecursiveEdit,
+    /// GNU `execute-kbd-macro`: borrows the caller's bindings.
+    KeyboardMacro,
+}
+
+impl CommandLoopEntry {
+    /// Whether this entry rebinds `undo-auto--undoably-changed-buffers`.
+    ///
+    /// GNU specbinds it in `recursive_edit_1` alone (keyboard.c:741-747,
+    /// Bug #23632), so a recursive edit cannot drop undo boundaries into
+    /// buffers that were changed before it started.  A keyboard macro must
+    /// leave the list alone: `undo-auto--boundaries` adds a boundary to every
+    /// buffer on it (simple.el:4106-4116), and the buffers the macro's last
+    /// command changed still need the boundary the *next* command adds.
+    fn rebinds_undoably_changed_buffers(self) -> bool {
+        match self {
+            Self::RecursiveEdit => true,
+            Self::KeyboardMacro => false,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(dead_code)]
 pub(crate) enum ResumeTarget {
@@ -6462,16 +6502,16 @@ impl Context {
             // always run command_loop_2 after top_level_1.
             let result = if outermost_command_loop {
                 match self.command_loop_top_level_1() {
-                    Ok(_) => self.command_loop_2(),
+                    Ok(_) => self.command_loop_2(CommandLoopEntry::RecursiveEdit),
                     Err(Flow::Throw { ref tag, .. }) if tag.is_symbol_named("top-level") => {
                         // top-level throw inside top_level_1 — fall through
                         // to command_loop_2 just like GNU's two-catch flow.
-                        self.command_loop_2()
+                        self.command_loop_2(CommandLoopEntry::RecursiveEdit)
                     }
                     Err(flow) => Err(flow),
                 }
             } else {
-                self.command_loop_2()
+                self.command_loop_2(CommandLoopEntry::RecursiveEdit)
             };
 
             self.pop_condition_frame();
@@ -6628,9 +6668,9 @@ impl Context {
     /// Mirrors GNU Emacs `command_loop_2()` (keyboard.c:1146).
     /// Wraps command_loop_1 with condition-case error handling.
     #[tracing::instrument(skip_all)]
-    fn command_loop_2(&mut self) -> EvalResult {
+    fn command_loop_2(&mut self, entry: CommandLoopEntry) -> EvalResult {
         loop {
-            match self.command_loop_1() {
+            match self.command_loop_1(entry) {
                 Ok(val) => return Ok(val),
                 Err(flow @ Flow::Throw { .. }) => {
                     // Throws propagate (exit, top-level, etc.) without
@@ -6710,7 +6750,7 @@ impl Context {
     /// Mirrors GNU Emacs `command_loop_1()` (keyboard.c:1306).
     /// This is the core interactive loop: read → dispatch → redisplay.
     #[tracing::instrument(skip_all)]
-    fn command_loop_1(&mut self) -> EvalResult {
+    fn command_loop_1(&mut self, entry: CommandLoopEntry) -> EvalResult {
         if !self.command_loop.running {
             return Ok(Value::NIL);
         }
@@ -6722,23 +6762,23 @@ impl Context {
         // TTY paint (user-visible ~3 s blank scratch buffer).
         self.specbind(intern("inhibit-redisplay"), Value::NIL);
 
-        // GNU keyboard.c:741-747, the specbind that sits beside the one above
-        // in `recursive_edit_1`: `undo-auto--undoably-changed-buffers` is
-        // rebound to nil for the nested loop, "so that changes in the recursive
-        // edit will not result in undo boundaries in buffers changed before we
-        // entered there recursive edit" (Bug #23632).
+        // GNU keyboard.c:741-747: `undo-auto--undoably-changed-buffers' is
+        // rebound to nil "so that changes in the recursive edit will not result
+        // in undo boundaries in buffers changed before we entered there
+        // recursive edit" (Bug #23632).
         //
-        // `undo-auto--add-boundary` runs once per iteration below and adds a
-        // boundary to every buffer on that list (simple.el:4104-4116).  Without
-        // the rebinding, the first command of a minibuffer read groups the
-        // edits of a command that has already finished: a rename that reads its
-        // new name from the minibuffer left one undo entry more than GNU in
-        // every buffer an earlier rename had rewritten.
-        //
-        // The binding lives here rather than in the recursive-edit entry point
-        // because neomacs already keeps its sibling `inhibit-redisplay` binding
-        // here, and both must unwind at the same boundary.
-        self.specbind(intern("undo-auto--undoably-changed-buffers"), Value::NIL);
+        // That specbind lives in `recursive_edit_1', which is reached by
+        // `recursive-edit' and `read_minibuf' and by nothing else --
+        // `execute-kbd-macro' runs a command loop WITHOUT passing through it.
+        // Rebinding on every command-loop entry therefore breaks keyboard
+        // macros: `undo-auto--boundaries' adds a boundary to every buffer on
+        // this list (simple.el:4106-4116), so discarding the list when a macro
+        // returns means the buffers the macro's LAST command changed never get
+        // their boundary, and the next command's `undo' takes back two command
+        // groups instead of one.
+        if entry.rebinds_undoably_changed_buffers() {
+            self.specbind(intern("undo-auto--undoably-changed-buffers"), Value::NIL);
+        }
 
         self.command_loop_1_entry_prologue()?;
 
@@ -7363,7 +7403,7 @@ impl Context {
             self.command_loop.running = true;
         }
         self.assign("prefix-arg", Value::NIL);
-        let result = self.command_loop_2();
+        let result = self.command_loop_2(CommandLoopEntry::KeyboardMacro);
         if !saved_running && self.command_loop.running {
             self.command_loop.running = false;
         }
