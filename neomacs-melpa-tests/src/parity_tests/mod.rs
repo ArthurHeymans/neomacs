@@ -315,6 +315,7 @@ mod counsel_projectile;
 mod csharp_mode;
 mod csv_mode;
 mod ctable;
+mod cyberpunk_theme;
 mod cython_mode;
 mod dap_mode;
 mod dash;

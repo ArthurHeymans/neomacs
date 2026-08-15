@@ -3212,6 +3212,13 @@ pub const COUNSEL_PROJECTILE_MELPA_PIN: (&str, &str) = ("counsel-projectile", "2
 /// `48b73742757a3ae5736d825fe49e00034cc453b5`.
 pub const CTABLE_MELPA_PIN: (&str, &str) = ("ctable", "20210128.629");
 
+/// The exact Cyberpunk Theme package selected for practical theme loading,
+/// palette registration for a documented `((class color) (min-colors 89))'
+/// display, variable settings, disable/enable lifecycle, and overlay-theme
+/// precedence parity. MELPA built this archive from upstream commit
+/// `1fd5350ddfc53c30e6eef82af77c62d7c825df3c`.
+pub const CYBERPUNK_THEME_MELPA_PIN: (&str, &str) = ("cyberpunk-theme", "20240112.1944");
+
 /// The exact cython-mode package selected for practical Cython major-mode
 /// derivation from python-mode, defun navigation, block detection, and compile
 /// command setup. MELPA built this archive from upstream commit
