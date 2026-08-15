@@ -7,6 +7,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::DumpError;
 use super::mapped_heap::MappedHeapView;
+use super::object_extra::FileObjectDescriptors;
 use super::object_starts::{LoadedObjectSpan, LoadedSpans};
 use super::types::*;
 use super::value_fixups::{self, RawValueFixup};
@@ -314,8 +315,38 @@ impl DumpEncoder {
     }
 }
 
+enum LoadObjectDescriptors {
+    /// In-memory snapshots carry one semantic descriptor for every object.
+    Snapshot(Vec<DumpHeapObject>),
+    /// File dumps omit descriptors for objects already complete in HeapImage.
+    File(FileObjectDescriptors),
+}
+
+impl LoadObjectDescriptors {
+    fn len(&self) -> usize {
+        match self {
+            Self::Snapshot(objects) => objects.len(),
+            Self::File(objects) => objects.len(),
+        }
+    }
+
+    fn get(&self, index: usize) -> Option<&DumpHeapObject> {
+        match self {
+            Self::Snapshot(objects) => objects.get(index),
+            Self::File(objects) => objects.get(index),
+        }
+    }
+
+    fn take_or_free(&mut self, index: usize) -> DumpHeapObject {
+        match self {
+            Self::Snapshot(objects) => std::mem::replace(&mut objects[index], DumpHeapObject::Free),
+            Self::File(objects) => objects.take(index).unwrap_or(DumpHeapObject::Free),
+        }
+    }
+}
+
 pub(crate) struct TaggedLoadState<'a> {
-    objects: Vec<DumpHeapObject>,
+    objects: LoadObjectDescriptors,
     spans: LoadedSpans<'a>,
     value_fixups: Vec<RawValueFixup>,
     values: Vec<Option<Value>>,
@@ -344,7 +375,7 @@ impl<'a> TaggedLoadState<'a> {
     ) -> Self {
         let len = heap.objects.len();
         Self {
-            objects: heap.objects.clone(),
+            objects: LoadObjectDescriptors::Snapshot(heap.objects.clone()),
             spans: LoadedSpans::from_heap(heap),
             value_fixups,
             values: vec![None; len],
@@ -358,8 +389,8 @@ impl<'a> TaggedLoadState<'a> {
         }
     }
 
-    fn from_objects_and_spans(
-        objects: Vec<DumpHeapObject>,
+    fn from_file_descriptors_and_spans(
+        objects: FileObjectDescriptors,
         spans: LoadedSpans<'a>,
         mapped_heap: Option<MappedHeapView>,
         value_fixups: Vec<RawValueFixup>,
@@ -367,7 +398,7 @@ impl<'a> TaggedLoadState<'a> {
         let len = objects.len();
         debug_assert_eq!(spans.len(), len);
         Self {
-            objects,
+            objects: LoadObjectDescriptors::File(objects),
             spans,
             value_fixups,
             values: vec![None; len],
@@ -411,14 +442,14 @@ impl LoadDecoder<'_> {
 }
 
 impl<'a> LoadDecoder<'a> {
-    pub(crate) fn from_objects_and_spans_with_mapped_heap_and_fixups(
-        objects: Vec<DumpHeapObject>,
+    pub(crate) fn from_file_descriptors_and_spans_with_mapped_heap_and_fixups(
+        objects: FileObjectDescriptors,
         spans: LoadedSpans<'a>,
         mapped_heap: Option<MappedHeapView>,
         value_fixups: Vec<RawValueFixup>,
     ) -> Self {
         Self {
-            state: TaggedLoadState::from_objects_and_spans(
+            state: TaggedLoadState::from_file_descriptors_and_spans(
                 objects,
                 spans,
                 mapped_heap,
@@ -465,9 +496,10 @@ impl<'a> LoadDecoder<'a> {
         if self.state.mapped_heap.is_none() {
             return;
         }
-        if !self
-            .state
-            .objects
+        let LoadObjectDescriptors::File(objects) = &mut self.state.objects else {
+            return;
+        };
+        if !objects
             .iter()
             .all(restored_file_object_descriptor_is_discardable)
         {
@@ -477,10 +509,10 @@ impl<'a> LoadDecoder<'a> {
         // File-pdump restore has already installed every live value into
         // `state.values` and the returned Context.  At this point the
         // remaining descriptors are only no-payload sentinels or mapped
-        // descriptors whose bytes live in the mmap image, so walking 200k
+        // descriptors whose bytes live in the mmap image, so running their
         // enum destructors is pure startup overhead.
         unsafe {
-            self.state.objects.set_len(0);
+            objects.discard_without_drop();
         }
     }
 
@@ -495,12 +527,10 @@ impl<'a> LoadDecoder<'a> {
         if self.object_is_fully_mapped_without_load_work(index) {
             return true;
         }
-        if matches!(self.state.objects[index], DumpHeapObject::Free)
-            && self.state.spans.vectorlike(index).is_some()
-        {
+        let Some(object) = self.state.objects.get(index) else {
             return true;
-        }
-        match &self.state.objects[index] {
+        };
+        match object {
             DumpHeapObject::Vector(_)
             | DumpHeapObject::Lambda(_)
             | DumpHeapObject::Macro(_)
@@ -666,7 +696,7 @@ impl<'a> LoadDecoder<'a> {
         id: TaggedHeapRef,
     ) -> Result<Option<Value>, DumpError> {
         let index = id.index as usize;
-        if !matches!(self.state.objects[index], DumpHeapObject::Free) {
+        if self.state.objects.get(index).is_some() {
             return Ok(None);
         }
         let Some(span) = self.state.spans.vectorlike(index) else {
@@ -994,8 +1024,8 @@ impl<'a> LoadDecoder<'a> {
     /// Reconstruct a self-contained string directly from the heap image.
     ///
     /// Mirrors `allocate_mapped_self_contained_veclike`: property-free strings
-    /// with mapped bytes have no object_extra descriptor, so the object is
-    /// `Free` and the object-starts span carries the byte-data span.  The
+    /// with mapped bytes have no object-extra descriptor; the object-starts
+    /// span carries the byte-data span instead.  The
     /// StringObj header is already baked into the image with its data pointer
     /// relocated (`write_raw_string_obj`); the only load-time work is allocating
     /// the storage-sidecar box that marks the bytes as mapped.
@@ -1004,7 +1034,7 @@ impl<'a> LoadDecoder<'a> {
         id: TaggedHeapRef,
     ) -> Result<Option<Value>, DumpError> {
         let index = id.index as usize;
-        if !matches!(self.state.objects[index], DumpHeapObject::Free) {
+        if self.state.objects.get(index).is_some() {
             return Ok(None);
         }
         let Some(byte_span) = self.state.spans.string_self_contained_data(index) else {
@@ -1221,7 +1251,13 @@ impl<'a> LoadDecoder<'a> {
         if let Some(value) = self.allocate_mapped_self_contained_string(id)? {
             return Ok(value);
         }
-        let value = match &self.state.objects[id.index as usize] {
+        let object = self.state.objects.get(id.index as usize).ok_or_else(|| {
+            DumpError::ImageFormatError(format!(
+                "dump object {} has neither a mapped representation nor a descriptor",
+                id.index
+            ))
+        })?;
+        let value = match object {
             DumpHeapObject::Cons { .. } => Value::cons(Value::NIL, Value::NIL),
             DumpHeapObject::Vector(items) => {
                 let len = self.mapped_slot_count_or(id, items.len())?;
@@ -1474,7 +1510,7 @@ impl<'a> LoadDecoder<'a> {
 
         let value = self.allocate_tagged_placeholder(id)?;
         self.state.populated[index] = true;
-        let object = std::mem::replace(&mut self.state.objects[index], DumpHeapObject::Free);
+        let object = self.state.objects.take_or_free(index);
         if self.populate_from_mapped_heap_without_descriptor_clone(id, value, &object)? {
             return Ok(());
         }
@@ -1685,7 +1721,13 @@ impl<'a> LoadDecoder<'a> {
                 continue;
             }
             self.populate_tagged_object(id)?;
-            match self.state.objects[id.index as usize].clone() {
+            match self
+                .state
+                .objects
+                .get(id.index as usize)
+                .cloned()
+                .unwrap_or(DumpHeapObject::Free)
+            {
                 DumpHeapObject::Cons { car, cdr } => {
                     stack.push(car);
                     stack.push(cdr);

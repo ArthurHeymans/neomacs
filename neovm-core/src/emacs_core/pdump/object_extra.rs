@@ -16,6 +16,7 @@
 //! `DumpHeapObject`.
 
 use bytemuck::{Pod, Zeroable};
+use std::num::NonZeroU32;
 
 use super::mapped_heap::MappedHeapView;
 use super::object_starts::{LoadedObjectSpan, LoadedSpans};
@@ -106,6 +107,111 @@ pub(crate) enum ObjectExtra {
     Marker(DumpMarker),
     /// Free slot.
     Free,
+}
+
+/// Index into the dense descriptor payload for one object that is not already
+/// self-contained in `HeapImage`.
+///
+/// Encoding the index as one-based makes `Option<ObjectDescriptorId>` exactly
+/// one `u32`: zero means that the object needs no descriptor, while every other
+/// value points into [`FileObjectDescriptors::descriptors`].
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ObjectDescriptorId(NonZeroU32);
+
+const _: () =
+    assert!(std::mem::size_of::<Option<ObjectDescriptorId>>() == std::mem::size_of::<u32>());
+
+impl ObjectDescriptorId {
+    fn from_index(index: usize) -> Result<Self, DumpError> {
+        let one_based = index
+            .checked_add(1)
+            .and_then(|value| u32::try_from(value).ok())
+            .and_then(NonZeroU32::new)
+            .ok_or_else(|| {
+                DumpError::ImageFormatError("object descriptor index overflows u32".into())
+            })?;
+        Ok(Self(one_based))
+    }
+
+    fn index(self) -> usize {
+        self.0.get() as usize - 1
+    }
+}
+
+/// Sparse file-pdump descriptors keyed by the stable dump object index.
+///
+/// Most file-pdump objects are already complete in the mapped heap image.  A
+/// one-word lookup slot per dump object keeps that absence explicit without
+/// materializing a full-sized `DumpHeapObject::Free` sentinel for every mapped
+/// cons, float, vector, closure, record, and property-free string.
+pub(crate) struct FileObjectDescriptors {
+    by_object_index: Vec<Option<ObjectDescriptorId>>,
+    descriptors: Vec<DumpHeapObject>,
+}
+
+impl FileObjectDescriptors {
+    fn new(object_count: usize, encoded_payload_len: usize) -> Self {
+        let estimated_descriptor_count =
+            encoded_payload_len / std::mem::size_of::<DumpHeapObject>().max(1);
+        Self {
+            by_object_index: vec![None; object_count],
+            descriptors: Vec::with_capacity(estimated_descriptor_count),
+        }
+    }
+
+    fn insert(&mut self, object_index: usize, descriptor: DumpHeapObject) -> Result<(), DumpError> {
+        let object_count = self.by_object_index.len();
+        let slot = self.by_object_index.get_mut(object_index).ok_or_else(|| {
+            DumpError::ImageFormatError(format!(
+                "object-extra index {object_index} is outside object count {}",
+                object_count
+            ))
+        })?;
+        if slot.is_some() {
+            return Err(DumpError::ImageFormatError(format!(
+                "object-extra has duplicate record for object {object_index}"
+            )));
+        }
+        let descriptor_id = ObjectDescriptorId::from_index(self.descriptors.len())?;
+        self.descriptors.push(descriptor);
+        *slot = Some(descriptor_id);
+        Ok(())
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.by_object_index.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn descriptor_count(&self) -> usize {
+        self.descriptors.len()
+    }
+
+    pub(crate) fn get(&self, object_index: usize) -> Option<&DumpHeapObject> {
+        let descriptor_id = self.by_object_index.get(object_index).copied().flatten()?;
+        self.descriptors.get(descriptor_id.index())
+    }
+
+    pub(crate) fn take(&mut self, object_index: usize) -> Option<DumpHeapObject> {
+        let descriptor_id = self.by_object_index.get(object_index).copied().flatten()?;
+        Some(std::mem::replace(
+            &mut self.descriptors[descriptor_id.index()],
+            DumpHeapObject::Free,
+        ))
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &DumpHeapObject> {
+        self.descriptors.iter()
+    }
+
+    pub(crate) unsafe fn discard_without_drop(&mut self) {
+        // SAFETY: callers may use this only after all live payloads have moved
+        // into the restored evaluator, leaving discardable sentinel records.
+        unsafe {
+            self.descriptors.set_len(0);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -289,11 +395,11 @@ pub(crate) fn load_object_extra(section: &[u8]) -> Result<Vec<ObjectExtra>, Dump
 /// the mapped image. Neomacs still needs a per-object descriptor vector while
 /// the loader is transitional, but mapped vectorlike objects are now treated as
 /// self-contained heap-image records instead of semantic ObjectExtra entries.
-pub(crate) fn load_compact_heap_objects_from_object_extra(
+pub(crate) fn load_file_object_descriptors(
     section: &[u8],
     spans: &LoadedSpans<'_>,
     mapped_heap: Option<MappedHeapView>,
-) -> Result<Vec<DumpHeapObject>, DumpError> {
+) -> Result<FileObjectDescriptors, DumpError> {
     let (count, payload) = object_extra_payload(section)?;
     if spans.len() != count {
         return Err(DumpError::ImageFormatError(format!(
@@ -301,13 +407,7 @@ pub(crate) fn load_compact_heap_objects_from_object_extra(
             spans.len()
         )));
     }
-    let mut objects = vec![DumpHeapObject::Free; count];
-    let mut present = vec![false; count];
-    for (index, is_present) in present.iter_mut().enumerate() {
-        if mapped_object_is_self_contained(spans.get(index), mapped_heap)? {
-            *is_present = true;
-        }
-    }
+    let mut descriptors = FileObjectDescriptors::new(count, payload.len());
 
     let mut cursor = object_value_codec::Cursor::new_at(payload, 0);
     while !cursor.is_empty() {
@@ -317,23 +417,28 @@ pub(crate) fn load_compact_heap_objects_from_object_extra(
                 "object-extra index {index} is outside object count {count}"
             )));
         }
-        if present[index] {
+        if descriptors.get(index).is_some()
+            || mapped_object_is_self_contained(spans.get(index), mapped_heap)?
+        {
             return Err(DumpError::ImageFormatError(format!(
                 "object-extra has duplicate or unnecessary record for mapped object {index}"
             )));
         }
         let extra = read_object_extra(&mut cursor)?;
-        objects[index] = object_extra_into_heap_object(extra);
-        present[index] = true;
+        descriptors.insert(index, object_extra_into_heap_object(extra))?;
     }
 
-    if let Some(index) = present.iter().position(|present| !present) {
-        return Err(DumpError::ImageFormatError(format!(
-            "object-extra has no descriptor for object {index}"
-        )));
+    for index in 0..count {
+        if descriptors.get(index).is_none()
+            && !mapped_object_is_self_contained(spans.get(index), mapped_heap)?
+        {
+            return Err(DumpError::ImageFormatError(format!(
+                "object-extra has no descriptor for object {index}"
+            )));
+        }
     }
 
-    Ok(objects)
+    Ok(descriptors)
 }
 
 fn object_extra_payload(section: &[u8]) -> Result<(usize, &[u8]), DumpError> {
@@ -775,11 +880,11 @@ mod tests {
         };
         let spans = LoadedSpans::from_heap(&heap);
 
-        let objects = load_compact_heap_objects_from_object_extra(&bytes, &spans, None)
+        let objects = load_file_object_descriptors(&bytes, &spans, None)
             .expect("load heap objects from sparse extra");
 
-        assert!(matches!(objects[0], DumpHeapObject::Free));
-        assert!(matches!(objects[1], DumpHeapObject::Free));
+        assert!(objects.get(0).is_none());
+        assert!(matches!(objects.get(1), Some(DumpHeapObject::Free)));
     }
 
     #[test]
@@ -842,15 +947,12 @@ mod tests {
         let spans = LoadedSpans::from_heap(&heap);
         let mapped_heap = MappedHeapView::from_mut_slice(&mut heap_bytes);
 
-        let objects =
-            load_compact_heap_objects_from_object_extra(&bytes, &spans, Some(mapped_heap))
-                .expect("load compact heap objects from extra");
+        let objects = load_file_object_descriptors(&bytes, &spans, Some(mapped_heap))
+            .expect("load compact heap objects from extra");
 
-        assert!(
-            objects
-                .iter()
-                .all(|object| matches!(object, DumpHeapObject::Free))
-        );
+        assert_eq!(objects.len(), 4);
+        assert_eq!(objects.descriptor_count(), 0);
+        assert!((0..objects.len()).all(|index| objects.get(index).is_none()));
     }
 
     #[test]

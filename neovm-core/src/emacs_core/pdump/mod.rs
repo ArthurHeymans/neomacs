@@ -38,7 +38,7 @@ use std::sync::OnceLock;
 use self::convert::*;
 use self::mmap_image::{DumpSectionKind, ImageSection};
 use self::runtime::*;
-use self::types::{DumpContextState, DumpHeapObject};
+use self::types::DumpContextState;
 use crate::emacs_core::charset::{
     CharsetRegistrySnapshot, restore_charset_registry, snapshot_charset_registry,
 };
@@ -485,16 +485,13 @@ pub fn load_from_dump(path: &Path) -> Result<Context, DumpError> {
     let object_extra_payload = image
         .section(DumpSectionKind::ObjectExtra)
         .ok_or_else(|| DumpError::ImageFormatError("missing object-extra section".into()))?;
-    let objects = object_extra::load_compact_heap_objects_from_object_extra(
-        object_extra_payload,
-        &spans,
-        mapped_heap,
-    )?;
-    if spans.len() != objects.len() {
+    let object_descriptors =
+        object_extra::load_file_object_descriptors(object_extra_payload, &spans, mapped_heap)?;
+    if spans.len() != object_descriptors.len() {
         return Err(DumpError::ImageFormatError(format!(
             "object-starts count {} does not match object-extra count {}",
             spans.len(),
-            objects.len()
+            object_descriptors.len()
         )));
     }
     let obarray_payload = image
@@ -545,7 +542,7 @@ pub fn load_from_dump(path: &Path) -> Result<Context, DumpError> {
 
     let mut eval = reconstruct_evaluator_after_symbol_table_with_tagged_heap_parts(
         &state,
-        objects,
+        object_descriptors,
         spans,
         mapped_heap,
         value_fixups_section,
@@ -649,13 +646,13 @@ fn reconstruct_evaluator_after_symbol_table(
 
 fn reconstruct_evaluator_after_symbol_table_with_tagged_heap_parts(
     state: &DumpContextState,
-    objects: Vec<DumpHeapObject>,
+    object_descriptors: object_extra::FileObjectDescriptors,
     spans: object_starts::LoadedSpans<'_>,
     mapped_heap: Option<mapped_heap::MappedHeapView>,
     value_fixups_section: Option<&[u8]>,
 ) -> Result<Context, DumpError> {
-    let decoder = LoadDecoder::from_objects_and_spans_with_mapped_heap_and_fixups(
-        objects,
+    let decoder = LoadDecoder::from_file_descriptors_and_spans_with_mapped_heap_and_fixups(
+        object_descriptors,
         spans,
         mapped_heap,
         Vec::new(),
