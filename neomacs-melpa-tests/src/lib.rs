@@ -1961,6 +1961,13 @@ pub const HUNGRY_DELETE_MELPA_PIN: (&str, &str) = ("hungry-delete", "20210409.16
 /// transient-keymap, extension, radio, and source-editing parity corpus.
 /// MELPA built this archive from upstream commit
 /// `59a2a45a35027948476d1d7751b0f0215b1e61aa`.
+/// The exact Hy Mode package selected for practical `.hy' activation through
+/// the auto-mode-alist autoload, Lisp-derived syntax table with Hy character
+/// classes, font-lock corpus over a real Hy program, specialized lisp
+/// indentation, and shell/describe/pdb command surface parity. MELPA built
+/// this archive from upstream commit `df814865a1faa8414dacdbb35b2a9029995312ec`.
+pub const HY_MODE_MELPA_PIN: (&str, &str) = ("hy-mode", "20211016.2011");
+
 pub const HYDRA_MELPA_PIN: (&str, &str) = ("hydra", "20250316.1254");
 
 /// The exact Highlight package selected for practical overlay and text

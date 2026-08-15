@@ -485,6 +485,7 @@ mod hl_todo;
 mod ht;
 mod htmlize;
 mod hungry_delete;
+mod hy_mode;
 mod hydra;
 mod ido_ubiquitous;
 mod ido_vertical_mode;
