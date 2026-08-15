@@ -1545,7 +1545,52 @@ pub(crate) fn builtin_recursive_edit(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("recursive-edit", &args, 0)?;
-    eval.recursive_edit_inner()
+    let restore = RecursiveEditBuffer::record(eval);
+    let result = eval.recursive_edit_inner();
+    restore.unwind(eval);
+    result
+}
+
+/// The buffer `recursive-edit` has to put back when its command loop unwinds.
+///
+/// GNU `Frecursive_edit` (src/keyboard.c:811-816) records the current buffer
+/// only when it is NOT the selected window's buffer, and
+/// `recursive_edit_unwind` (src/keyboard.c:837-844) makes it current again --
+/// on every exit, including the `(throw 'exit ...)` that
+/// `exit-recursive-edit' uses.  Without it a `recursive-edit' entered inside
+/// `with-temp-buffer' returns with the window's buffer current, so everything
+/// the caller then does to "its" buffer silently lands elsewhere.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RecursiveEditBuffer {
+    /// The current buffer is already the selected window's, so the command
+    /// loop leaves it current by itself and GNU records nothing.
+    SelectedWindows,
+    /// A buffer only this Lisp frame knows about; make it current on unwind.
+    Restore(crate::buffer::BufferId),
+}
+
+impl RecursiveEditBuffer {
+    fn record(eval: &mut super::eval::Context) -> Self {
+        let Some(current) = eval.buffers.current_buffer_id() else {
+            return Self::SelectedWindows;
+        };
+        let window_buffer = super::window_cmds::builtin_window_buffer(eval, Vec::new())
+            .ok()
+            .and_then(|value| value.as_buffer_id());
+        if window_buffer == Some(current) {
+            Self::SelectedWindows
+        } else {
+            Self::Restore(current)
+        }
+    }
+
+    fn unwind(self, eval: &mut super::eval::Context) {
+        if let Self::Restore(buffer_id) = self
+            && eval.buffers.get(buffer_id).is_some()
+        {
+            let _ = eval.buffers.switch_current(buffer_id);
+        }
+    }
 }
 
 /// `(top-level)` — exit all recursive edits.

@@ -3245,7 +3245,14 @@ pub(crate) fn builtin_self_insert_command(eval: &mut Context, args: Vec<Value>) 
             .unwrap_or(Value::NIL)
             .is_nil()
     {
+        // GNU `internal_self_insert' (src/cmds.c:484-492) straddles the filler
+        // call with a one-character point step when the self-inserted character
+        // was a newline: the filler has to see the line the newline just
+        // terminated, not the empty line it opened.
+        let straddle = NewlineFillStraddle::for_self_inserted_char(ch);
+        straddle.step(eval, NewlineFillStep::BeforeFill)?;
         eval.apply(Value::symbol("internal-auto-fill"), vec![])?;
+        straddle.step(eval, NewlineFillStep::AfterFill)?;
     }
     eval.apply(
         Value::symbol("run-hooks"),
@@ -3447,6 +3454,62 @@ fn byte_pos_char_distance(
     let beg_char = buf.emacs_byte_pos_to_lisp_char_pos(beg).as_i64();
     let end_char = buf.emacs_byte_pos_to_lisp_char_pos(end).as_i64();
     (end_char - beg_char).max(0) as usize
+}
+
+/// Whether a self-inserted character needs GNU's newline point straddle around
+/// `internal-auto-fill' (`internal_self_insert', src/cmds.c:484-492).  Making
+/// this a value rather than an `if ch == '\n'` at each of the two call sites
+/// keeps the two halves of the straddle from drifting apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NewlineFillStraddle {
+    /// Not a newline: point already sits where GNU wants the filler to see it.
+    NotNeeded,
+    /// A newline: point steps back over it before filling, forward after.
+    Needed,
+}
+
+/// Which side of the `internal-auto-fill' call a straddle step happens on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NewlineFillStep {
+    BeforeFill,
+    AfterFill,
+}
+
+impl NewlineFillStraddle {
+    fn for_self_inserted_char(ch: char) -> Self {
+        if ch == '\n' {
+            Self::Needed
+        } else {
+            Self::NotNeeded
+        }
+    }
+
+    /// GNU's `SET_PT_BOTH (PT - 1, PT_BYTE - 1)` before the filler and
+    /// `SET_PT_BOTH (PT + 1, PT_BYTE + 1)` after it.  GNU guards only the
+    /// forward step, with `PT < ZV`, because a strange `auto-fill-function' may
+    /// have left point at the end of the buffer.
+    fn step(self, eval: &mut Context, step: NewlineFillStep) -> Result<(), Flow> {
+        if self == Self::NotNeeded {
+            return Ok(());
+        }
+        let Some(buffer) = eval
+            .buffers
+            .current_buffer_id()
+            .and_then(|buffer_id| eval.buffers.get(buffer_id))
+        else {
+            return Ok(());
+        };
+        let point = buffer.point_lisp_char_pos().as_i64();
+        let point_min = buffer.point_min_lisp_char_pos().as_i64();
+        let point_max = buffer.point_max_lisp_char_pos().as_i64();
+        let target = match step {
+            NewlineFillStep::BeforeFill if point > point_min => point - 1,
+            NewlineFillStep::AfterFill if point < point_max => point + 1,
+            _ => return Ok(()),
+        };
+        eval.apply(Value::symbol("goto-char"), vec![Value::fixnum(target)])?;
+        Ok(())
+    }
 }
 
 fn self_insert_should_auto_fill(eval: &Context, ch: char) -> bool {

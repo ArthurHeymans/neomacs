@@ -907,6 +907,39 @@ fn an_existing_partition_carries_default_text_properties_to_every_position() {
     assert_eq!(result, "OK (2 2 2 2 nil (0 0 0 nil))");
 }
 
+/// GNU consumes a whole nested comment inside one `forw_comment` call
+/// (`scan_sexps_forward`, src/syntax.c:3352), so a `'syntax-table` commentstop
+/// parse stops exactly twice per comment -- once at its start, once at its real
+/// end -- and never at the ender that only pops a nesting level.  This is the
+/// loop `font-lock-fontify-syntactically-region` runs, so stopping early cut a
+/// Scala block comment's `font-lock-comment-face` run at the inner `*/`.
+///
+/// The syntax table is scala-mode's: `?/` is ". 124b" and `?*` is ". 23n"
+/// (scala-mode-syntax.el:498-499), the `n` making block comments nestable.
+#[test]
+fn commentstop_parse_ignores_an_ender_that_only_pops_a_nesting_level() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (let ((table (make-syntax-table)))
+            (modify-syntax-entry ?\/ ". 124b" table)
+            (modify-syntax-entry ?\* ". 23n" table)
+            (modify-syntax-entry ?\n "> b" table)
+            (set-syntax-table table))
+          (insert "  /* outer /* nested */ done */\nafter\n")
+          (goto-char (point-min))
+          (let ((state nil) (steps nil) (end (point-max)))
+            (while (< (point) end)
+              (setq state (parse-partial-sexp (point) end nil nil state 'syntax-table))
+              (push (list (point) (nth 4 state) (nth 8 state)) steps)
+              (when (> (length steps) 12) (goto-char end)))
+            (nreverse steps)))
+        "#,
+    );
+    assert_eq!(result, "OK ((5 1 3) (32 nil nil) (39 nil nil))");
+}
+
 /// `default-text-properties` reaches a position that HAS an interval, even one
 /// whose plist says nothing about syntax -- the same `textget` fallback the
 /// buffer scanner applies. Contrast the propertyless string above, where there

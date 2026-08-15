@@ -94,6 +94,10 @@ pub(crate) struct AutoHscrollInput {
     /// i.e. the effective wrap mode is Truncate.  GNU only auto-hscrolls
     /// truncated lines; a wrapped line is fully visible by construction.
     pub line_truncated: bool,
+    /// GNU's `hscl` (`hscrolling_current_line_p`, src/xdisp.c:3074): auto
+    /// hscroll is not suspended *and* `auto-hscroll-mode` is `current-line`.
+    /// Only that mode arms trigger (C) below.
+    pub hscrolling_current_line: bool,
     /// Whether point sits at the end of its display line (GNU
     /// `ITERATOR_AT_END_OF_LINE_P`).  This is the `C-e` case: GNU then targets
     /// the right end of the window (`text_cols - 4`) instead of the center, so
@@ -147,8 +151,14 @@ pub(crate) fn compute_auto_hscroll(input: &AutoHscrollInput) -> Option<i64> {
     //     the minimum, yet point fits unscrolled (its true column is left of
     //     the right margin).  `truncated_on_left_p` is the consequence of
     //     hscroll>0; we approximate it via "point fits unscrolled".
+    //     `hscl` is load-bearing: it is only true under
+    //     `auto-hscroll-mode' = `current-line', so with the default `t' GNU
+    //     never resets a window's hscroll from this branch, and an explicit
+    //     `set-window-hscroll' survives redisplay.
     let fits_unscrolled = input.point_col < right_edge;
-    let reset_short_line = input.cur_hscroll != input.min_hscroll && fits_unscrolled;
+    let reset_short_line = input.hscrolling_current_line
+        && input.cur_hscroll != input.min_hscroll
+        && fits_unscrolled;
 
     if !(in_left_margin || in_right_margin || reset_short_line) {
         return None;
@@ -236,22 +246,50 @@ struct LeafHscrollSnapshot {
     min_hscroll: i64,
     /// The window's `suspend_auto_hscroll` flag at the start of this pass.
     suspend_auto_hscroll: bool,
+    /// GNU's `hscl`.  Note GNU computes it (src/xdisp.c:16644) *before* the
+    /// STEP 4 un-suspend below, so it reads the pre-pass suspend flag.
+    hscrolling_current_line: bool,
     line_truncated: bool,
     point_at_eol: bool,
     step: HscrollStep,
 }
 
-/// Read `auto-hscroll-mode` buffer-local-then-global. Returns the raw value so
-/// the caller can distinguish nil / `current-line` / other-non-nil.
-fn auto_hscroll_mode_value(ctx: &Context, buffer_id: crate::buffer::BufferId) -> Value {
+/// Decoded `auto-hscroll-mode`.
+///
+/// GNU reads this variable buffer-locally in two places that mean different
+/// things: `hscroll_window_tree` gates the whole pass on it being non-nil, and
+/// `hscrolling_current_line_p` (src/xdisp.c:3074) tests it against
+/// `current-line` specifically.  Naming the three cases keeps the second test
+/// from silently degrading into "non-nil", which is what made an explicit
+/// `set-window-hscroll` get reset to 0 by the very next redisplay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AutoHscrollMode {
+    /// nil: no automatic horizontal scrolling for this window at all.
+    Off,
+    /// `current-line`: hscroll only the line point is on.
+    CurrentLine,
+    /// t, or any other non-nil value: hscroll the whole window.
+    AllLines,
+}
+
+/// Read `auto-hscroll-mode` buffer-local-then-global.  GNU's default when the
+/// variable is unbound is the `t` behaviour.
+fn auto_hscroll_mode(ctx: &Context, buffer_id: crate::buffer::BufferId) -> AutoHscrollMode {
     let buf = ctx.buffers.get(buffer_id);
-    crate::emacs_core::indent::dynamic_buffer_or_global_symbol_value(
+    let value = crate::emacs_core::indent::dynamic_buffer_or_global_symbol_value(
         &ctx.obarray,
         &[],
         buf,
         "auto-hscroll-mode",
     )
-    .unwrap_or(Value::T)
+    .unwrap_or(Value::T);
+    if value.is_nil() {
+        AutoHscrollMode::Off
+    } else if value.is_symbol_named("current-line") {
+        AutoHscrollMode::CurrentLine
+    } else {
+        AutoHscrollMode::AllLines
+    }
 }
 
 /// Whether point's line is *truncated* (does not wrap) in this window, matching
@@ -364,8 +402,8 @@ pub(crate) fn update_auto_hscroll_before_redisplay(ctx: &mut Context) {
             };
 
             // auto-hscroll-mode nil disables the whole thing for this window.
-            let mode = auto_hscroll_mode_value(ctx, buffer_id);
-            if mode.is_nil() {
+            let mode = auto_hscroll_mode(ctx, buffer_id);
+            if mode == AutoHscrollMode::Off {
                 continue;
             }
 
@@ -449,6 +487,8 @@ pub(crate) fn update_auto_hscroll_before_redisplay(ctx: &mut Context) {
                 cur_hscroll,
                 min_hscroll,
                 suspend_auto_hscroll,
+                hscrolling_current_line: !suspend_auto_hscroll
+                    && mode == AutoHscrollMode::CurrentLine,
                 line_truncated,
                 point_at_eol,
                 step: HscrollStep::decode(ctx.obarray.symbol_value("hscroll-step")),
@@ -511,6 +551,7 @@ pub(crate) fn update_auto_hscroll_before_redisplay(ctx: &mut Context) {
             h_margin: snap.h_margin,
             cur_hscroll: snap.cur_hscroll,
             min_hscroll: snap.min_hscroll,
+            hscrolling_current_line: snap.hscrolling_current_line,
             line_truncated: snap.line_truncated,
             point_at_eol: snap.point_at_eol,
             step: snap.step,
