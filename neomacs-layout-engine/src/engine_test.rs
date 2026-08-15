@@ -26934,3 +26934,67 @@ fn p52_widening_an_already_wide_buffer_does_not_dirty_chrome() {
         "the widen that undoes a narrowing moves the bounds, so it must dirty"
     );
 }
+
+/// GNU runs `window-scroll-functions` from redisplay itself, not only from
+/// `set-window-buffer`.
+///
+/// `redisplay_window` calls `run_window_scroll_functions` (src/xdisp.c:19222)
+/// at every site where it commits a window start it did not simply inherit:
+/// the `w->force_start` branch (src/xdisp.c:20728), the `try_scrolling` result
+/// (src/xdisp.c:19645), and the recenter fallback (src/xdisp.c:21227). A
+/// redisplay that keeps the start it was handed reaches none of those sites
+/// and must stay silent.
+#[test]
+fn redisplay_runs_window_scroll_functions_when_it_commits_a_start() {
+    let text = "line of scroll fixture text\n".repeat(200);
+    let (mut eval, frame_id, _buf, selected) = incr_editing_frame(&text, 800, 600);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    eval.eval_str(
+        "(progn (setq neomacs-wsf-log nil)
+                (setq window-scroll-functions
+                      (list (lambda (window start)
+                              (setq neomacs-wsf-log
+                                    (cons (list window start) neomacs-wsf-log))))))",
+    )
+    .expect("install window-scroll-functions hook");
+
+    // A redisplay that keeps the start it was handed must not run the hook.
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let quiet = eval
+        .eval_str("(format \"%S\" neomacs-wsf-log)")
+        .expect("read log")
+        .as_str_owned()
+        .expect("log string");
+    assert_eq!(
+        quiet, "nil",
+        "a redisplay that inherits its window start reaches no \
+         run_window_scroll_functions site in GNU"
+    );
+
+    // An explicit start (GNU `w->force_start`) must run it, with the window
+    // and the committed start charpos as arguments. Point moves with the
+    // start so this exercises the hook, not the separate question of what
+    // GNU's force_start branch does to a point left outside the window.
+    eval.eval_str("(goto-char 400)").expect("move point");
+    eval.eval_form(Value::list(vec![
+        Value::symbol("set-window-start"),
+        Value::make_window(selected.0),
+        Value::fixnum(400),
+    ]))
+    .expect("set an explicit window start");
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let forced = eval
+        .eval_str(
+            "(format \"%S\" neomacs-wsf-log)",
+        )
+        .expect("read log")
+        .as_str_owned()
+        .expect("log string");
+    assert_eq!(
+        forced, "((#<window 1 on *scratch*> 400))",
+        "GNU's force_start branch runs window-scroll-functions with the \
+         forced start (src/xdisp.c:20728)"
+    );
+}

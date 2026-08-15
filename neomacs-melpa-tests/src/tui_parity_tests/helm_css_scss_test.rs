@@ -1514,7 +1514,7 @@ fn helm_css_scss_named_display_adapter_drives_real_single_buffer_helm() {
             &__subtitle " helm-css-scss-target-line-face) :last-line ("tui-fixture.scss" 13) :fold-invisible neomacs-hcss-single-fold :unveiled nil :advices (t t) :update-hook t :windows ("tui-fixture.scss" "*Helm Css SCSS*") :cache-count 4) (:stage active-3 :alive t :prompt #("Selector: " 0 10 (face helm-minibuffer-prompt)) :pattern "footer" :source-name "tui-fixture.scss" :helm-buffer-text "tui-fixture.scss
         20: .footer
         " :helm-face-runs ((0 17 helm-source-header "tui-fixture.scss
-        ") (17 19 font-lock-function-name-face "20") (21 28 helm-css-scss-selector-depth-face-1 ".footer")) :selected "20: .footer" :selected-face-runs ((0 2 font-lock-function-name-face "20") (4 11 helm-css-scss-selector-depth-face-1 ".footer")) :selected-real (242 261 1 234 242 20) :source ("tui-fixture.scss" 242 20 8 32 123 ".footer {") :overlay ("tui-fixture.scss" 234 242 ".footer " helm-css-scss-target-line-face) :last-line ("tui-fixture.scss" 20) :fold-invisible neomacs-hcss-single-fold :unveiled nil :advices (t t) :update-hook t :windows ("tui-fixture.scss" "*Helm Css SCSS*") :cache-count 4) (:stage cancel :current "tui-fixture.scss" :windows ("tui-fixture.scss" :other) :source ("tui-fixture.scss" 150 11 0 10 32 nil 4 "") :disk-bytes "/* A disabled prototype is intentionally excluded. */
+        ") (17 19 font-lock-function-name-face "20") (21 28 helm-css-scss-selector-depth-face-1 ".footer")) :selected "20: .footer" :selected-face-runs ((0 2 font-lock-function-name-face "20") (4 11 helm-css-scss-selector-depth-face-1 ".footer")) :selected-real (242 261 1 234 242 20) :source ("tui-fixture.scss" 242 20 8 32 123 ".footer {") :overlay ("tui-fixture.scss" 234 242 ".footer " helm-css-scss-target-line-face) :last-line ("tui-fixture.scss" 20) :fold-invisible neomacs-hcss-single-fold :unveiled nil :advices (t t) :update-hook t :windows ("tui-fixture.scss" "*Helm Css SCSS*") :cache-count 4) (:stage cancel :current "tui-fixture.scss" :windows ("tui-fixture.scss") :source ("tui-fixture.scss" 150 11 0 10 32 nil 4 "") :disk-bytes "/* A disabled prototype is intentionally excluded. */
         /* .disabled {
           color: gray;
         } */
@@ -1773,13 +1773,13 @@ fn helm_css_scss_named_display_adapter_drives_real_single_buffer_helm() {
         21 |  color: black;
         22 |}
         23 |
-        24 |
-        25 |
-        26 |
-        27 |
-        28 |
-        29 |
-        30 |
+        24 |-UU-:--- F1  tui-fixture.scss   All   L10    (SCSS ElDoc) ------------------------------------------------------------------------------------------------------
+        25 | helm-css-scss
+        26 |tui-fixture.scss
+        27 |6: .dashboard, .dashboard--compact
+        28 |10: .dashboard, .dashboard--compact .card
+        29 |13: .dashboard, .dashboard--compact .card &__title, &__subtitle
+        30 |20: .footer
         31 |
         32 |
         33 |
@@ -1791,45 +1791,45 @@ fn helm_css_scss_named_display_adapter_drives_real_single_buffer_helm() {
         39 |
         40 |
         41 |
-        42 |-UU-:--- F1  tui-fixture.scss   All   L10    (SCSS ElDoc) ------------------------------------------------------------------------------------------------------
-        43 | helm-css-scss
-        44 |tui-fixture.scss
-        45 |6: .dashboard, .dashboard--compact
-        46 |10: .dashboard, .dashboard--compact .card
-        47 |13: .dashboard, .dashboard--compact .card &__title, &__subtitle
+        42 |
+        43 |
+        44 |
+        45 |
+        46 |
+        47 |
         48 | *Helm Css SCSS* L2    [4 Candidate(s)]   C-h m:Help TAB:Act C-o:NextSrc RET/f1..f12:NthAct C-!:Tog.suspend C-h c:Conf
         49 |Selector:
     "#]];
     initial_expect.assert_eq(&gnu_initial);
     let filtered_expect = expect![[r#"
         00 |File Edit Options Buffers Tools Minibuf Help
-        01 |/* A disabled prototype is intentionally excluded. */
-        02 |/* .disabled {
-        03 |  color: gray;
-        04 |} */
+        01 |.dashboard--compact {
+        02 |  color: red;
+        03 |
+        04 |    padding: 1rem;
         05 |
-        06 |.dashboard,
-        07 |.dashboard--compact {
-        08 |  color: red;
-        09 |
-        10 |    padding: 1rem;
-        11 |
-        12 |    &__title,
-        13 |    &__subtitle {
-        14 |      color: blue;
-        15 |    }
-        16 |  }
-        17 |}
+        06 |    &__title,
+        07 |    &__subtitle {
+        08 |      color: blue;
+        09 |    }
+        10 |  }
+        11 |}
+        12 |
+        13 |.footer {
+        14 |  color: black;
+        15 |}
+        16 |
+        17 |
         18 |
-        19 |.footer {
-        20 |  color: black;
-        21 |}
+        19 |
+        20 |
+        21 |
         22 |
         23 |
-        24 |
-        25 |
-        26 |
-        27 |
+        24 |-UU-:--- F1  tui-fixture.scss   Bot   L20    (SCSS ElDoc) ------------------------------------------------------------------------------------------------------
+        25 | helm-css-scss
+        26 |tui-fixture.scss
+        27 |20: .footer
         28 |
         29 |
         30 |
@@ -1844,10 +1844,10 @@ fn helm_css_scss_named_display_adapter_drives_real_single_buffer_helm() {
         39 |
         40 |
         41 |
-        42 |-UU-:--- F1  tui-fixture.scss   All   L20    (SCSS ElDoc) ------------------------------------------------------------------------------------------------------
-        43 | helm-css-scss
-        44 |tui-fixture.scss
-        45 |20: .footer
+        42 |
+        43 |
+        44 |
+        45 |
         46 |
         47 |
         48 | *Helm Css SCSS* L1    [1 Candidate(s)]   C-h m:Help TAB:Act C-o:NextSrc RET/f1..f12:NthAct C-!:Tog.suspend C-h c:Conf

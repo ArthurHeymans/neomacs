@@ -5763,3 +5763,109 @@ about.  Making the "record nothing" case a named value rather than an absent
 `recursive-edit` entered from a window's own buffer.
 
 Status: FIXED.
+## 113. `window-scroll-functions` existed but nothing on the scroll path ever ran it -- FIXED
+
+`beacon` never blinked on a scroll.  After `C-v` GNU reports seven overlays, a
+live blink timer and one `beacon-before-blink-hook` call (`o=7 t=t n=1`);
+Neomacs reported `o=0 t=nil n=0`.
+
+`beacon` arms itself entirely from the hook:
+
+```elisp
+;; beacon.el:441-459
+(defun beacon--window-scroll-function (window start-pos)
+  (unless (or (and (equal beacon--previous-window-start start-pos)
+                   (equal beacon--previous-window window))
+              (not beacon-blink-when-window-scrolls))
+    (if this-command
+        (setq beacon--window-scrolled window)
+      (setq beacon--window-scrolled nil)
+      (beacon-blink-automated))))
+;; beacon.el:479
+(add-hook 'window-scroll-functions #'beacon--window-scroll-function)
+```
+
+so the blink after `C-v` happens inside redisplay itself: GNU's command loop
+clears `this-command` before `read_key_sequence` (src/keyboard.c:1417), the
+redisplay inside `read_char` then runs the scroll hook with `this-command` nil,
+and `beacon` takes the immediate `beacon-blink-automated` branch.
+
+Neomacs had the hook, the variable and even the builtin
+(`run-window-scroll-functions`) -- and called it from exactly one place, the end
+of `set-window-buffer` (window_cmds/mod.rs:4754).  Redisplay never called it.
+This is ledger 94's shape exactly: the hook exists, nothing consults it on the
+path that matters.
+
+GNU calls `run_window_scroll_functions` (src/xdisp.c:19222) from
+`redisplay_window` at each site where redisplay commits a window start it did
+not simply inherit: the `w->force_start` branch (src/xdisp.c:20728), the
+`try_scrolling` result (src/xdisp.c:19645), and the recenter fallback
+(src/xdisp.c:21227).  A `try_window` that just works from the start it was
+handed reaches none of them, which is why an idle redisplay is silent.
+
+`Context::publish_redisplay_window_positions` is Neomacs's one seam where
+redisplay writes the settled start back onto the window -- it already knew both
+the old start and whether `force_start` was armed, because it is the code that
+clears `force_start`.  It now returns a `WindowStartCommit`
+(`Committed` / `Inherited`), and the publication site runs the hook for a
+`Committed` start.  The enum is `#[must_use]`, so this cannot decay into a rule
+each future publication site has to remember -- the ledger 95 / 107 failure mode.
+
+Two deliberate narrowings, both matching GNU: the preliminary
+`resize_mini_window` measurement publication is not that redisplay and stays
+silent, and the start is published before the hook runs so a hook that moves the
+start wins (GNU re-reads `w->start` after the call).  Unlike GNU we do not
+re-lay the window inside the same pass; the next redisplay picks the moved start
+up.  The call binds `inhibit-redisplay` and demotes errors, like every other
+Lisp seam redisplay already runs.
+
+Status: FIXED.
+
+## 114. Helm's exit-time source resolution diverges in a multi-source session -- OPEN
+
+Unmasked by refreshing the three stale GNU pins in the helm-css-scss
+single-buffer suite (see the refresh commit; ledger 107 predicted this layer).
+`helm_css_scss_public_tui_workflows_match_gnu` now clears the single-buffer
+phase and fails in `helm_css_scss_named_display_adapter_drives_real_multi_buffer_helm`
+at "Neomacs multi action returned": after `C-o` (next source), `C-n` and `RET`,
+GNU ends up in `component.css` at point 52 and Neomacs stays in
+`tui-fixture.scss`.
+
+`helm-css-scss--multi` bakes one action per source, closing over that source's
+buffer:
+
+```elisp
+;; helm-css-scss.el:697-702
+(action ("Goto open brace" . (lambda ($po) (switch-to-buffer ,$buf) ...)))
+```
+
+Tracing `switch-to-buffer` through the whole session shows the action DID run in
+both, with a different argument: GNU called it with `component.css`, Neomacs
+with `tui-fixture.scss`.  So the divergence is which source Helm resolves at
+exit, not `switch-to-buffer` (a direct `save-current-buffer` /
+`with-current-buffer` + `switch-to-buffer` probe agrees between the two
+editors), and not the Helm buffer's text properties: the full
+`helm-cur-source` property map over `*Helm Css SCSS multi buffers*` is
+byte-identical between GNU and Neomacs
+
+```
+((1 nil) (18 "tui-fixture.scss") (52 nil) (53 "tui-fixture.scss") (94 nil)
+ (95 "tui-fixture.scss") (158 nil) (159 "tui-fixture.scss") (170 nil)
+ (186 "component.css") (196 nil) (197 "component.css") (213 nil)
+ (226 "theme.less") (235 nil) (236 "theme.less") (251 nil)
+ (265 "IGNORED.CSS") (289 nil))
+```
+
+so the remaining suspect is where point / `helm-selection-overlay` sits in the
+Helm buffer when Helm saves its source on exit, which `helm-css-scss` reaches
+through its own advice on `helm-next-line` and `helm-move--next-line-fn`.  Note
+that the plain-text grid assertion before `RET` cannot see this: it compares
+text, and the selection differs only in the highlight.
+
+One nearby asymmetry worth checking first: the recenter error the preceding
+`C-n` raises is logged by GNU as
+`helm-css-scss--recenter: 'recenter'ing a window that does not display current-buffer`
+and by Neomacs as the bare message with no function prefix, which means the two
+report the error from different places.
+
+Status: OPEN, diagnosed to the seam, not fixed.

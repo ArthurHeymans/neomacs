@@ -9505,20 +9505,37 @@ impl Context {
         }
     }
 
+    #[must_use = "a committed window start owes window-scroll-functions a run"]
     pub fn publish_redisplay_window_positions(
         &mut self,
         frame_id: crate::window::FrameId,
         window_id: crate::window::WindowId,
         window_start_lisp: LispCharPos1,
         window_end: crate::window::WindowEndRecord,
-    ) {
+    ) -> crate::window::WindowStartCommit {
         let frames = &mut self.frames;
         let buffers = &mut self.buffers;
         let Some(frame) = frames.get_mut(frame_id) else {
-            return;
+            return crate::window::WindowStartCommit::Inherited;
         };
 
+        let mut commit = crate::window::WindowStartCommit::Inherited;
         let mut update_window = |window: &mut crate::window::Window| {
+            // GNU decides between "the start was inherited" and "redisplay
+            // committed a start" before it overwrites `w->start`: the
+            // `force_start` branch (src/xdisp.c:20724) runs the hook even when
+            // the forced start equals the old one, while `try_scrolling`
+            // (src/xdisp.c:19645) and the recenter fallback
+            // (src/xdisp.c:21227) are only reached because the start moved.
+            let forced = matches!(
+                window,
+                crate::window::Window::Leaf {
+                    force_start: true,
+                    ..
+                }
+            );
+            let moved = window.window_start() != Some(window_start_lisp);
+            commit = crate::window::WindowStartCommit::of(forced, moved);
             crate::window::window_markers::set_window_start_with_marker(
                 buffers,
                 window,
@@ -9538,6 +9555,44 @@ impl Context {
             && mini.id() == window_id
         {
             update_window(mini);
+        }
+        commit
+    }
+
+    /// GNU `run_window_scroll_functions` (src/xdisp.c:19222) for a start
+    /// redisplay just committed.
+    ///
+    /// GNU sets `w->start` from the candidate, runs the hook, then re-reads
+    /// `w->start` so a hook that moves the start wins. We publish the start
+    /// first for the same reason, so the hook's own `set-window-start` is the
+    /// value that survives this call; unlike GNU we do not re-lay the window
+    /// inside the same pass — the next redisplay picks the moved start up.
+    ///
+    /// `inhibit-redisplay` is bound like every other Lisp seam redisplay
+    /// already runs (`pre-redisplay-function`, the window-change hooks),
+    /// because this runs inside the frame's layout walk. Errors are demoted,
+    /// mirroring GNU's `safe_run_hooks_2`.
+    pub fn run_window_scroll_functions_for_committed_start(
+        &mut self,
+        window_id: crate::window::WindowId,
+    ) {
+        // No global-value early-out: `window-scroll-functions` may be
+        // buffer-local, and the builtin enters the displayed buffer before it
+        // reads the hook (GNU `run_window_scroll_functions` runs with the
+        // window's buffer current).
+        let window = Value::make_window(window_id.0);
+        let specpdl_count = self.specpdl.len();
+        self.specbind(
+            crate::emacs_core::intern::intern("inhibit-redisplay"),
+            Value::T,
+        );
+        let result = crate::emacs_core::window_cmds::builtin_run_window_scroll_functions(
+            self,
+            vec![window],
+        );
+        self.unbind_to(specpdl_count);
+        if let Err(flow) = result {
+            tracing::debug!("window-scroll-functions signalled (ignored): {flow:?}");
         }
     }
 
