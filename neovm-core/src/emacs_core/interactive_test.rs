@@ -6581,3 +6581,46 @@ fn every_letter_reports_one_history_form_per_argument_it_pushes() {
         .sum();
     assert_eq!(walked, tabled, "spec walk arity vs history_forms arity");
 }
+
+/// GNU `internal_self_insert' (src/cmds.c:484-492) fills the line a
+/// self-inserted newline just terminated: point steps back over the newline so
+/// `internal-auto-fill' sees the finished line's column, and steps forward
+/// again afterwards.  Without that step a newline never wraps anything, because
+/// point sits in column 0 of the fresh line when the filler runs.
+#[test]
+fn self_inserted_newline_fills_the_line_it_terminated() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(with-temp-buffer
+             (text-mode)
+             (setq fill-column 24)
+             (auto-fill-mode 1)
+             (dolist (char (string-to-list
+                            "Summary words continue beyond configured boundary\n\n"))
+               (let ((last-command-event char))
+                 (self-insert-command 1 char)))
+             (buffer-string))"#,
+    );
+    assert_eq!(
+        result,
+        "OK \"Summary words continue\nbeyond configured\nboundary\n\n\""
+    );
+}
+
+/// A self-inserted space fills the current line and leaves point after the
+/// space, so the newline step above must stay confined to the newline case.
+#[test]
+fn self_inserted_space_fills_without_shifting_point() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one(
+        r#"(with-temp-buffer
+             (text-mode)
+             (setq fill-column 24)
+             (auto-fill-mode 1)
+             (dolist (char (string-to-list "Summary words continue beyond "))
+               (let ((last-command-event char))
+                 (self-insert-command 1 char)))
+             (list (buffer-string) (point)))"#,
+    );
+    assert_eq!(result, "OK (\"Summary words continue\nbeyond \" 31)");
+}
