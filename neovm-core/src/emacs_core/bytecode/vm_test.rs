@@ -2114,6 +2114,7 @@ fn vm_bytecode_call_chain_stays_in_one_interpreter_driver() {
     outer.max_stack = 1;
 
     reset_run_loop_max_depth();
+    reset_iterative_context_bc_frames_max();
     reset_generic_bytecode_cleanup_count();
     let result = {
         let mut vm = new_vm(&mut eval);
@@ -2128,9 +2129,60 @@ fn vm_bytecode_call_chain_stays_in_one_interpreter_driver() {
         "GNU Bcall/setup_frame/Breturn keeps bytecode callees in one interpreter driver"
     );
     assert_eq!(
+        iterative_context_bc_frames_max(),
+        1,
+        "nested iterative frames should root their exact callee in the consumed call operand, not grow Context::bc_frames"
+    );
+    assert_eq!(
         generic_bytecode_cleanup_count(),
         1,
         "ordinary GNU Breturn transitions bypass generic frame cleanup; only the outer frame exits through it"
+    );
+}
+
+#[test]
+fn vm_iterative_call_roots_exact_callee_after_self_redefinition_and_gc() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new_vm_runtime_harness();
+    let child_symbol = intern("vm-iterative-self-redefining-child");
+
+    let mut child = ByteCodeFunction::new(LambdaParams::simple(vec![]));
+    let own_symbol = child.add_constant(Value::from_sym_id(child_symbol));
+    let replacement = child.add_constant(Value::NIL);
+    let garbage_collect = child.add_constant(Value::from_sym_id(intern("garbage-collect")));
+    let answer = child.add_constant(Value::fixnum(42));
+    child.ops = vec![
+        Op::Constant(own_symbol),
+        Op::Constant(replacement),
+        Op::Fset,
+        Op::Pop,
+        Op::Constant(garbage_collect),
+        Op::Call(0),
+        Op::Pop,
+        Op::Constant(answer),
+        Op::Return,
+    ];
+    child.max_stack = 2;
+    eval.obarray
+        .set_symbol_function_id(child_symbol, Value::make_bytecode(child));
+
+    let mut caller = ByteCodeFunction::new(LambdaParams::simple(vec![]));
+    let child_designator = caller.add_constant(Value::from_sym_id(child_symbol));
+    caller.ops = vec![Op::Constant(child_designator), Op::Call(0), Op::Return];
+    caller.max_stack = 1;
+
+    let result = {
+        let mut vm = new_vm(&mut eval);
+        vm.execute(&caller, vec![])
+            .expect("the exact executing callee must survive its own fset and GC")
+    };
+
+    assert_eq!(result, Value::fixnum(42));
+    assert!(eval.gc_count > 0, "the child must force an exact GC");
+    assert_eq!(
+        eval.obarray.symbol_function_id(child_symbol),
+        None,
+        "the test must remove the bytecode object from its original function cell"
     );
 }
 

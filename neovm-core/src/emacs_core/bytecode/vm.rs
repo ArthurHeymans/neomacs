@@ -462,6 +462,7 @@ type BindStack = SmallVec<[usize; 8]>;
 thread_local! {
     static RUN_LOOP_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static RUN_LOOP_MAX_DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static ITERATIVE_CONTEXT_BC_FRAMES_MAX: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static GENERIC_BYTECODE_CLEANUP_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static OPCODE_DISPATCH_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     static MUTATING_WRITEBACK_CLASSIFICATION_COUNT: std::cell::Cell<usize> =
@@ -499,6 +500,21 @@ fn reset_run_loop_max_depth() {
 #[cfg(test)]
 fn run_loop_max_depth() -> usize {
     RUN_LOOP_MAX_DEPTH.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn reset_iterative_context_bc_frames_max() {
+    ITERATIVE_CONTEXT_BC_FRAMES_MAX.with(|maximum| maximum.set(0));
+}
+
+#[cfg(test)]
+fn observe_iterative_context_bc_frames_len(len: usize) {
+    ITERATIVE_CONTEXT_BC_FRAMES_MAX.with(|maximum| maximum.set(maximum.get().max(len)));
+}
+
+#[cfg(test)]
+fn iterative_context_bc_frames_max() -> usize {
+    ITERATIVE_CONTEXT_BC_FRAMES_MAX.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]
@@ -764,6 +780,34 @@ struct InterpreterFrameCleanup {
     specpdl_base: usize,
 }
 
+/// Storage protocol for the Lisp value that keeps an executing bytecode
+/// function alive.
+///
+/// Entry/recursive frames own a `Context::bc_frames` entry. Iterative children
+/// instead reuse the caller's consumed function-designator operand. Keeping
+/// release behind closed marker types makes popping the context stack for an
+/// operand-rooted child impossible at the call site, with no runtime tag or
+/// extra field in [`InterpreterFrame`].
+trait BytecodeFrameRootStorage {
+    fn release(ctx: &mut crate::emacs_core::eval::Context);
+}
+
+enum ContextBytecodeFrameRoot {}
+
+impl BytecodeFrameRootStorage for ContextBytecodeFrameRoot {
+    #[inline(always)]
+    fn release(ctx: &mut crate::emacs_core::eval::Context) {
+        ctx.bc_frames.pop();
+    }
+}
+
+enum ConsumedCallOperandFrameRoot {}
+
+impl BytecodeFrameRootStorage for ConsumedCallOperandFrameRoot {
+    #[inline(always)]
+    fn release(_ctx: &mut crate::emacs_core::eval::Context) {}
+}
+
 /// Suspended Tier-0 execution position, including the JIT OSR latch.
 ///
 /// GNU's `bc_frame` saves one program-counter pointer. Neomacs also needs to
@@ -805,12 +849,13 @@ impl InterpreterResumePoint {
 /// One-word immutable code handle for the function executed by a frame.
 ///
 /// The entry pointer is borrowed for exactly the `run_loop` call. Every nested
-/// frame's matching `BcFrame` owns the Lisp value and keeps its pointer live.
-/// Bytecode arena slots are immovable, and published bytecode is immutable in
-/// production, so the handle can retain the already checked address instead of
-/// repeating tagged-object classification each time GNU's `Breturn` resumes a
-/// caller. Whether a frame is the entry frame is represented by the caller
-/// stack, not by a nullable code sentinel, so every frame has valid code.
+/// frame's consumed caller operand owns the exact Lisp value and keeps its
+/// pointer live. Bytecode arena slots are immovable, and published bytecode is
+/// immutable in production, so the handle can retain the already checked
+/// address instead of repeating tagged-object classification each time GNU's
+/// `Breturn` resumes a caller. Whether a frame is the entry frame is represented
+/// by the caller stack, not by a nullable code sentinel, so every frame has
+/// valid code.
 #[repr(transparent)]
 #[derive(Clone, Copy)]
 struct InterpreterFunction(std::ptr::NonNull<ByteCodeFunction>);
@@ -823,7 +868,8 @@ impl InterpreterFunction {
     #[inline]
     fn code(&self) -> &ByteCodeFunction {
         // SAFETY: the entry borrow outlives `run_loop`; every nested frame's
-        // matching `BcFrame` roots its immutable, immovable bytecode arena slot.
+        // consumed caller operand roots its immutable, immovable bytecode arena
+        // slot.
         unsafe { self.0.as_ref() }
     }
 }
@@ -1013,8 +1059,9 @@ struct SuspendedInterpreterFrame {
 
 /// A bytecode callee proven eligible for GNU's iterative `setup_frame` path.
 ///
-/// `value` is the GC-visible Lisp identity installed in `bc_frames`; `function`
-/// is the matching immutable code address already checked by Bcall dispatch.
+/// `value` is the exact GC-visible Lisp identity installed in the consumed call
+/// operand; `function` is the matching immutable code address already checked
+/// by Bcall dispatch.
 /// Keeping them inseparable prevents child-frame construction from decoding the
 /// tagged value a second time or accidentally pairing code with another value.
 #[derive(Clone, Copy)]
@@ -1037,6 +1084,40 @@ impl PreparedInterpreterCallee {
     }
 }
 
+/// The caller stack slot consumed by one `Op::Call` as its function
+/// designator.
+///
+/// `dispatch_interpreter_stack_call` first records GNU's user-visible
+/// backtrace function, then an iterative entry replaces this dead operand with
+/// the exact resolved bytecode object. The ordinary GC scan of `bc_buf` thereby
+/// keeps the executing function alive even if Lisp redefines its symbol while
+/// it is running. The private constructor prevents an argument slot from being
+/// mistaken for the root slot.
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+struct ConsumedCallOperandRootSlot(usize);
+
+impl ConsumedCallOperandRootSlot {
+    #[inline(always)]
+    fn from_args_start(args_start: usize) -> Self {
+        Self(
+            args_start
+                .checked_sub(1)
+                .expect("an iterative bytecode call must have a function operand"),
+        )
+    }
+
+    #[inline(always)]
+    fn args_start(self) -> usize {
+        self.0 + 1
+    }
+
+    #[inline(always)]
+    fn install_exact_callee(self, stack: &mut [Value], callee: Value) {
+        stack[self.0] = callee;
+    }
+}
+
 // These values are copied on every iterative Bcall/Breturn. Keep accidental
 // enum/Option padding from silently turning frame transitions into bulk memory
 // traffic again. The bounds include the debug-only lexenv invariant field.
@@ -1055,7 +1136,7 @@ struct BytecodeCallContinuation {
 enum InterpreterStackCall {
     Enter {
         callee: PreparedInterpreterCallee,
-        args_start: usize,
+        root_slot: ConsumedCallOperandRootSlot,
         nargs: usize,
         backtrace: BytecodeBacktraceFrame,
     },
@@ -1656,6 +1737,36 @@ impl<'a> Vm<'a> {
         specpdl_base: usize,
         frame_base: usize,
     ) -> EvalResult {
+        self.cleanup_bytecode_frame_with_root::<ContextBytecodeFrameRoot>(
+            result,
+            condition_stack_base,
+            specpdl_base,
+            frame_base,
+        )
+    }
+
+    fn cleanup_iterative_bytecode_frame(
+        &mut self,
+        result: EvalResult,
+        condition_stack_base: usize,
+        specpdl_base: usize,
+        frame_base: usize,
+    ) -> EvalResult {
+        self.cleanup_bytecode_frame_with_root::<ConsumedCallOperandFrameRoot>(
+            result,
+            condition_stack_base,
+            specpdl_base,
+            frame_base,
+        )
+    }
+
+    fn cleanup_bytecode_frame_with_root<Root: BytecodeFrameRootStorage>(
+        &mut self,
+        result: EvalResult,
+        condition_stack_base: usize,
+        specpdl_base: usize,
+        frame_base: usize,
+    ) -> EvalResult {
         #[cfg(test)]
         GENERIC_BYTECODE_CLEANUP_COUNT.with(|count| count.set(count.get() + 1));
 
@@ -1669,8 +1780,9 @@ impl<'a> Vm<'a> {
         // root scope.
         self.ctx.truncate_condition_stack(condition_stack_base);
         // unbind_to (unwind-protect bodies / binding restores) is then the ONLY
-        // remaining step that can GC; bc_buf.truncate and bc_frames.pop merely
-        // drop Copy stack slots and hit no safe point. When the frame left no
+        // remaining step that can GC; bc_buf.truncate and release of either
+        // root-storage kind merely drop Copy stack slots and hit no safe point.
+        // When the frame left no
         // dynamic binds (the common lexical case — args and locals live on the
         // operand stack, not specpdl; a backtrace frame from the caller sits
         // below this frame's specpdl_base), unbind_to would only re-run its
@@ -1680,7 +1792,7 @@ impl<'a> Vm<'a> {
         // the root keeps the same post-return contract.
         if self.ctx.specpdl.len() == specpdl_base {
             self.ctx.bc_buf.truncate(frame_base);
-            self.ctx.bc_frames.pop();
+            Root::release(self.ctx);
             return result;
         }
         // Closure fast path: an env=Some frame's sole outstanding entry is
@@ -1702,14 +1814,14 @@ impl<'a> Vm<'a> {
                 self.ctx.lexenv = old_lexenv;
             }
             self.ctx.bc_buf.truncate(frame_base);
-            self.ctx.bc_frames.pop();
+            Root::release(self.ctx);
             return result;
         }
         let root_scope = self.ctx.save_vm_roots();
         self.ctx.push_eval_result_roots(&result);
         self.ctx.unbind_to(specpdl_base);
         self.ctx.bc_buf.truncate(frame_base);
-        self.ctx.bc_frames.pop();
+        Root::release(self.ctx);
         self.ctx.restore_vm_roots(root_scope);
         result
     }
@@ -2328,15 +2440,18 @@ impl<'a> Vm<'a> {
 
     /// Install one already-validated env-less interpreter frame.
     ///
-    /// No Lisp allocation or GC safe point occurs here.  The callee value is
-    /// placed in `bc_frames` before any bytecode executes, so the frame owns a
-    /// stable, GC-traced identity instead of borrowing a `ByteCodeFunction`.
+    /// No Lisp allocation or GC safe point occurs here. The exact callee value
+    /// replaces the consumed function-designator operand before any bytecode
+    /// executes. That caller slot remains in GC-traced `bc_buf` through child
+    /// cleanup, so redefining a symbol cannot collect its executing old value.
     fn prepare_iterative_interpreter_frame(
         &mut self,
         callee: PreparedInterpreterCallee,
-        args_start: usize,
+        root_slot: ConsumedCallOperandRootSlot,
         nargs: usize,
     ) -> InterpreterFrame {
+        root_slot.install_exact_callee(&mut self.ctx.bc_buf, callee.value);
+        let args_start = root_slot.args_start();
         let func = callee.code();
         debug_assert!(self.can_enter_interpreter_frame_iteratively(func, nargs));
         let condition_stack_base = self.ctx.condition_stack_len();
@@ -2347,10 +2462,8 @@ impl<'a> Vm<'a> {
             .checked_add(func.max_stack as usize)
             .expect("iterative frame limit prevalidated");
 
-        self.ctx.bc_frames.push(crate::emacs_core::eval::BcFrame {
-            base: frame_base,
-            fun: callee.value,
-        });
+        #[cfg(test)]
+        observe_iterative_context_bc_frames_len(self.ctx.bc_frames.len());
         if self.ctx.bc_buf.capacity() < frame_limit {
             self.ctx
                 .bc_buf
@@ -2395,7 +2508,7 @@ impl<'a> Vm<'a> {
             lexenv_tail_reachable(self.ctx.lexenv, frame.entry_lexenv),
             "env-less iterative bytecode frame changed ctx.lexenv beyond defvar markers"
         );
-        self.cleanup_bytecode_frame(
+        self.cleanup_iterative_bytecode_frame(
             result,
             cleanup.condition_stack_base,
             cleanup.specpdl_base,
@@ -2503,7 +2616,6 @@ impl<'a> Vm<'a> {
         }
 
         self.ctx.bc_buf.truncate(current.frame_base);
-        self.ctx.bc_frames.pop();
 
         let suspended = callers
             .pop()
@@ -2545,7 +2657,7 @@ impl<'a> Vm<'a> {
                     .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
                 InterpreterStackCall::Enter {
                     callee: PreparedInterpreterCallee::new(callee, func),
-                    args_start,
+                    root_slot: ConsumedCallOperandRootSlot::from_args_start(args_start),
                     nargs,
                     backtrace,
                 }
@@ -2562,7 +2674,7 @@ impl<'a> Vm<'a> {
                     {
                         InterpreterStackCall::Enter {
                             callee: PreparedInterpreterCallee::new(callee, func),
-                            args_start,
+                            root_slot: ConsumedCallOperandRootSlot::from_args_start(args_start),
                             nargs,
                             backtrace,
                         }
@@ -3275,14 +3387,14 @@ impl<'a> Vm<'a> {
                             {
                                 InterpreterStackCall::Enter {
                                     callee,
-                                    args_start,
+                                    root_slot,
                                     nargs,
                                     backtrace,
                                 } => {
                                     current.save_execution_state(pc_local, osr_tried);
                                     *driver_quitcounter = quitcounter;
                                     let child = self.prepare_iterative_interpreter_frame(
-                                        callee, args_start, nargs,
+                                        callee, root_slot, nargs,
                                     );
                                     let caller_depth =
                                         InterpreterDriverDepth::from_suspended_callers(

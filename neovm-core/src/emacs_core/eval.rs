@@ -3264,9 +3264,10 @@ impl Context {
     ///   own frames by COUNT, and signal dispatch selects the innermost
     ///   matching frame — leaked frames would desynchronize the count and
     ///   could select a dead resume target.
-    /// - `bc_frames`: the interpreter releases its frame by `pop()`, so
-    ///   panic-skipped frames would permanently corrupt the stack (and their
-    ///   entries index into a `bc_buf` that enclosing cleanups truncate).
+    /// - `bc_frames`: context-rooted interpreter entries release their frame by
+    ///   `pop()`, so panic-skipped entries would permanently corrupt the stack.
+    ///   Iterative children instead root in consumed `bc_buf` operands and are
+    ///   healed by the following `bc_buf` truncation.
     /// - `bc_buf` + the root side stacks: owned by Rust frames the panic
     ///   destroyed; nothing else would ever pop them (safe-direction leak,
     ///   but unbounded over repeated contained panics).
