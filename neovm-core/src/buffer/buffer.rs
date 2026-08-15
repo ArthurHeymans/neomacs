@@ -28,7 +28,7 @@ use super::text::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
 // match either pattern). Mirrors GNU's struct buffer layout in
 // buffer.h:330-462.
 use super::overlay::OverlayList;
-use super::shared::SharedUndoState;
+use super::shared::{PointBeforeCommand, SharedUndoState};
 use super::text_props::{ObjectIntervalRun, TextPropertyTable};
 use super::undo;
 use crate::emacs_core::intern::{SymId, intern};
@@ -5851,15 +5851,23 @@ impl BufferManager {
         // Default limits match GNU Emacs: undo-limit=160000, undo-strong-limit=240000.
         ul = undo::truncate_undo_list(ul, 160_000, 240_000);
         buf.set_undo_list(ul);
+        // GNU `Fundo_boundary` saves point AND buffer (src/undo.c:278-279).
         buf.undo_state
-            .set_point_before_command_or_undo(Some(buf.point_char_pos()));
+            .set_point_before_command_or_undo(Some(PointBeforeCommand {
+                buffer: id,
+                point: buf.point_char_pos(),
+            }));
         Some(())
     }
 
     pub fn record_undo_point_before_command(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
+        // GNU's command loop saves point AND buffer (src/keyboard.c:1536-1537).
         buf.undo_state
-            .set_point_before_command_or_undo(Some(buf.point_char_pos()));
+            .set_point_before_command_or_undo(Some(PointBeforeCommand {
+                buffer: id,
+                point: buf.point_char_pos(),
+            }));
         Some(())
     }
 

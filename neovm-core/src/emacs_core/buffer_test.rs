@@ -195,3 +195,42 @@ fn buffer_enable_undo_still_clears_a_disabled_list_through_an_indirect_buffer() 
         r#"OK ("t" "nil")"#,
     );
 }
+
+/// GNU's `record_point` guards the point entry with THREE conditions, and the
+/// third is about the BUFFER (src/undo.c:73-75):
+///
+/// ```c
+///   if (at_boundary
+///       && point_before_last_command_or_undo != beg
+///       && buffer_before_last_command_or_undo == current_buffer )
+/// ```
+///
+/// `point_before_last_command_or_undo` and `buffer_before_last_command_or_undo`
+/// are written together at both of their assignment sites -- the command loop
+/// (src/keyboard.c:1536-1537) and `Fundo_boundary` (src/undo.c:278-279) -- so
+/// a saved point is only usable in the buffer it was saved in.
+///
+/// We stored only the point, and stored it in the SHARED undo state, so the
+/// point saved while the INDIRECT buffer was current was consumed by the next
+/// edit in the BASE buffer and consed a point entry GNU does not record.
+/// Confirmed under GNU 31.0.90 `-Q --batch`: `((6 . 7) nil (1 . 7) (t . 0))`,
+/// where we produced `((6 . 7) 7 nil (1 . 7) (t . 0))`.
+#[test]
+fn a_point_saved_in_one_buffer_is_not_recorded_in_another_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let* ((base (get-buffer-create "b9")))
+                 (set-buffer base) (buffer-enable-undo) (insert "hello") (goto-char 6)
+                 (let ((ind (make-indirect-buffer base "i9")))
+                   (set-buffer ind) (goto-char (point-max)) (insert "Y")
+                   (undo-boundary)
+                   (set-buffer base)
+                   (insert "Z")
+                   (list (point) (prin1-to-string buffer-undo-list))))"#
+        )),
+        r#"OK (7 "((6 . 7) nil (1 . 7) (t . 0))")"#,
+    );
+}

@@ -364,8 +364,12 @@ fn casify_manager_with_text(text: &str) -> (BufferManager, BufferId) {
     {
         let buf = mgr.get_mut(id).expect("scratch buffer");
         let end_char = buf.point_char_pos();
-        buf.undo_state
-            .set_point_before_command_or_undo(Some(end_char));
+        buf.undo_state.set_point_before_command_or_undo(Some(
+            crate::buffer::shared::PointBeforeCommand {
+                buffer: id,
+                point: end_char,
+            },
+        ));
         // GNU inserts an undo boundary between the buffer fill and the case op.
         let mut ul = buf.get_undo_list();
         crate::buffer::undo::undo_list_boundary(&mut ul);
@@ -424,8 +428,12 @@ fn casify_region_records_undo_even_when_unchanged() {
         let buf = mgr.get_mut(id).expect("scratch buffer");
         // Point at buffer position 6 (end of region) == Emacs byte pos 5.
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5));
-        buf.undo_state
-            .set_point_before_command_or_undo(Some(buf.point_char_pos()));
+        buf.undo_state.set_point_before_command_or_undo(Some(
+            crate::buffer::shared::PointBeforeCommand {
+                buffer: id,
+                point: buf.point_char_pos(),
+            },
+        ));
         let mut ul = buf.get_undo_list();
         crate::buffer::undo::undo_list_boundary(&mut ul);
         buf.set_undo_list(ul);
@@ -1614,8 +1622,12 @@ fn delete_records_point_entry_before_marker_adjustment() {
     }
     // GNU records `point_before_last_command_or_undo`; here point == 7
     // (0-indexed char 6).
-    buf.undo_state
-        .set_point_before_command_or_undo(Some(crate::buffer::CharPos0::new(6)));
+    buf.undo_state.set_point_before_command_or_undo(Some(
+        crate::buffer::shared::PointBeforeCommand {
+            buffer: buf.id,
+            point: crate::buffer::CharPos0::new(6),
+        },
+    ));
 
     // delete-region chars 3..5 (1-indexed) == Emacs bytes [2, 4).
     buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
@@ -1658,8 +1670,12 @@ fn delete_records_point_entry_without_marker_adjustment() {
         crate::buffer::undo::undo_list_boundary(&mut ul);
         buf.set_undo_list(ul);
     }
-    buf.undo_state
-        .set_point_before_command_or_undo(Some(crate::buffer::CharPos0::new(6)));
+    buf.undo_state.set_point_before_command_or_undo(Some(
+        crate::buffer::shared::PointBeforeCommand {
+            buffer: buf.id,
+            point: crate::buffer::CharPos0::new(6),
+        },
+    ));
 
     buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
 
