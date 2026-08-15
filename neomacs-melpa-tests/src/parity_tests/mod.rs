@@ -328,6 +328,7 @@ mod devdocs;
 mod diff_hl;
 mod diminish;
 mod dired_quick_sort;
+mod diredfl;
 mod distel_completion_lib;
 mod docker;
 mod docker_tramp;

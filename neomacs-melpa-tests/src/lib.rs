@@ -3738,6 +3738,13 @@ pub const DIMINISH_MELPA_PIN: (&str, &str) = ("diminish", "20220909.847");
 /// `3c9b41799b0424eb78f54caba56e4de1d7224e8b`.
 pub const DIRED_QUICK_SORT_MELPA_PIN: (&str, &str) = ("dired-quick-sort", "20260331.2219");
 
+/// The exact diredfl package selected for practical extra Dired fontification
+/// of a real listing (privileges, numbers, dates, names, suffixes, symlinks,
+/// marks, and deletion flags), customization, and mode lifecycle parity.
+/// MELPA built this archive from upstream commit
+/// `fe72d2e42ee18bf6228bba9d7086de4098f18a70`.
+pub const DIREDFL_MELPA_PIN: (&str, &str) = ("diredfl", "20241201.1141");
+
 pub const DIFF_HL_MELPA_PIN: (&str, &str) = ("diff-hl", "20260723.238");
 
 /// The exact Dockerfile Mode package selected for practical multi-stage
