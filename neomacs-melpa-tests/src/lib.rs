@@ -3983,6 +3983,17 @@ pub const WITH_EDITOR_MELPA_PIN: (&str, &str) = ("with-editor", "20260701.1252")
 /// classification, purpose-aware display routing, dedication, edge-window,
 /// layout persistence, and mode-lifecycle parity. MELPA built this archive
 /// from upstream commit `c827f45cd9b278b3eb9c2f4bcb55ef2fca5d3048`.
+/// The exact Window Numbering package selected for practical numbered-window
+/// enablement, per-window number assignment in `window-list' order, mode-line
+/// installation, numbered selection and deletion commands, hook and
+/// assign-func customization, and disable-lifecycle parity. MELPA built this
+/// archive from upstream commit `10809b3993a97c7b544240bf5d7ce9b1110a1b89`.
+pub const WINDOW_NUMBERING_MELPA_PIN: (&str, &str) = ("window-numbering", "20160809.1810");
+
+/// The exact Window Purpose package selected for practical buffer
+/// classification, purpose-aware display routing, dedication, edge-window,
+/// layout persistence, and mode-lifecycle parity. MELPA built this archive
+/// from upstream commit `c827f45cd9b278b3eb9c2f4bcb55ef2fca5d3048`.
 pub const WINDOW_PURPOSE_MELPA_PIN: (&str, &str) = ("window-purpose", "20241207.148");
 
 /// The exact Winum package selected for practical numbered-layout, selection,

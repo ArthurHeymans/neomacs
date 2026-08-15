@@ -711,6 +711,7 @@ mod websocket;
 mod wfnames;
 mod wgrep;
 mod which_key;
+mod window_numbering;
 mod window_purpose;
 mod winum;
 mod with_editor;

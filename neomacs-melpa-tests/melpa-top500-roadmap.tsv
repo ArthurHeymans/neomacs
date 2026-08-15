@@ -438,7 +438,7 @@ rank	package	downloads	status
 437	auto-package-update	205557	covered
 438	esup	203329	covered
 439	cyberpunk-theme	203077	covered
-440	window-numbering	202830	todo
+440	window-numbering	202830	covered
 441	hy-mode	201119	todo
 442	lsp-haskell	199039	todo
 443	git-gutter-fringe+	198460	todo
