@@ -764,6 +764,44 @@ struct InterpreterFrameCleanup {
     specpdl_base: usize,
 }
 
+/// Suspended Tier-0 execution position, including the JIT OSR latch.
+///
+/// GNU's `bc_frame` saves one program-counter pointer. Neomacs also needs to
+/// remember whether it already attempted OSR in that frame, but a live Rust
+/// `Vec<Op>` index can never occupy usize's high bit: allocations are bounded
+/// by `isize::MAX` bytes. Packing the latch there keeps the resume state one
+/// word wide and makes frame copies match GNU's compact saved-register shape.
+#[cfg(feature = "jit")]
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+struct InterpreterResumePoint(usize);
+
+#[cfg(feature = "jit")]
+impl InterpreterResumePoint {
+    const OSR_TRIED_FLAG: usize = 1usize << (usize::BITS - 1);
+    const PC_MASK: usize = !Self::OSR_TRIED_FLAG;
+
+    #[inline(always)]
+    fn new(pc: usize, osr_tried: bool) -> Self {
+        debug_assert_eq!(
+            pc & Self::OSR_TRIED_FLAG,
+            0,
+            "a live bytecode instruction index cannot occupy usize's high bit"
+        );
+        Self(pc | usize::from(osr_tried) * Self::OSR_TRIED_FLAG)
+    }
+
+    #[inline(always)]
+    fn pc(self) -> usize {
+        self.0 & Self::PC_MASK
+    }
+
+    #[inline(always)]
+    fn osr_tried(self) -> bool {
+        self.0 & Self::OSR_TRIED_FLAG != 0
+    }
+}
+
 /// One-word immutable code handle for the function executed by a frame.
 ///
 /// The entry pointer is borrowed for exactly the `run_loop` call. Every nested
@@ -800,12 +838,52 @@ struct InterpreterFrame {
     function: InterpreterFunction,
     frame_base: usize,
     frame_limit: usize,
-    pc: usize,
     #[cfg(feature = "jit")]
-    osr_tried: bool,
+    resume: InterpreterResumePoint,
+    #[cfg(not(feature = "jit"))]
+    pc: usize,
     cleanup: InterpreterFrameCleanup,
     #[cfg(debug_assertions)]
     entry_lexenv: Value,
+}
+
+impl InterpreterFrame {
+    #[inline(always)]
+    fn pc(&self) -> usize {
+        #[cfg(feature = "jit")]
+        {
+            self.resume.pc()
+        }
+        #[cfg(not(feature = "jit"))]
+        {
+            self.pc
+        }
+    }
+
+    #[inline(always)]
+    fn set_pc(&mut self, pc: usize) {
+        #[cfg(feature = "jit")]
+        {
+            self.resume = InterpreterResumePoint::new(pc, self.resume.osr_tried());
+        }
+        #[cfg(not(feature = "jit"))]
+        {
+            self.pc = pc;
+        }
+    }
+
+    #[inline(always)]
+    fn save_execution_state(&mut self, pc: usize, osr_tried: bool) {
+        #[cfg(feature = "jit")]
+        {
+            self.resume = InterpreterResumePoint::new(pc, osr_tried);
+        }
+        #[cfg(not(feature = "jit"))]
+        {
+            let _ = osr_tried;
+            self.pc = pc;
+        }
+    }
 }
 
 /// Variable-sized state for the active frame at the matching driver depth.
@@ -965,8 +1043,8 @@ impl PreparedInterpreterCallee {
 const _: () = {
     assert!(std::mem::size_of::<InterpreterFunction>() == std::mem::size_of::<Value>());
     assert!(std::mem::size_of::<PreparedInterpreterCallee>() == 2 * std::mem::size_of::<Value>());
-    assert!(std::mem::size_of::<InterpreterFrame>() <= 64);
-    assert!(std::mem::size_of::<SuspendedInterpreterFrame>() <= 80);
+    assert!(std::mem::size_of::<InterpreterFrame>() <= 56);
+    assert!(std::mem::size_of::<SuspendedInterpreterFrame>() <= 72);
 };
 
 struct BytecodeCallContinuation {
@@ -2289,9 +2367,10 @@ impl<'a> Vm<'a> {
             function: callee.function,
             frame_base,
             frame_limit,
-            pc: 0,
             #[cfg(feature = "jit")]
-            osr_tried: false,
+            resume: InterpreterResumePoint::new(0, false),
+            #[cfg(not(feature = "jit"))]
+            pc: 0,
             cleanup: InterpreterFrameCleanup {
                 condition_stack_base,
                 specpdl_base,
@@ -2370,13 +2449,16 @@ impl<'a> Vm<'a> {
                 Err(flow) => {
                     let func = current.function.code();
                     let aux = aux_stack.current_mut();
-                    match self.resume_nonlocal(
+                    let mut resume_pc = current.pc();
+                    let resume = self.resume_nonlocal(
                         func,
-                        &mut current.pc,
+                        &mut resume_pc,
                         &mut aux.handlers,
                         &mut aux.bind_stack,
                         flow,
-                    ) {
+                    );
+                    current.set_pc(resume_pc);
+                    match resume {
                         Ok(()) => return InterpreterFrameCompletion::Resume,
                         Err(flow) => result = Err(flow),
                     }
@@ -2557,9 +2639,10 @@ impl<'a> Vm<'a> {
             function: InterpreterFunction::new(entry_func),
             frame_base,
             frame_limit,
-            pc: *pc,
             #[cfg(feature = "jit")]
-            osr_tried: false,
+            resume: InterpreterResumePoint::new(*pc, false),
+            #[cfg(not(feature = "jit"))]
+            pc: *pc,
             cleanup: InterpreterFrameCleanup {
                 condition_stack_base: 0,
                 specpdl_base: 0,
@@ -2584,7 +2667,7 @@ impl<'a> Vm<'a> {
             &mut aux_stack,
             &mut quitcounter,
         );
-        *pc = current.pc;
+        *pc = current.pc();
         let (entry_handlers, entry_bind_stack) = aux_stack.take_entry();
         *handlers = entry_handlers;
         *bind_stack = entry_bind_stack;
@@ -2614,7 +2697,7 @@ impl<'a> Vm<'a> {
             let constants = &func.constants;
             let ops_len = ops.len();
             let ops_ptr = ops.as_ptr();
-            let mut pc_local = current.pc;
+            let mut pc_local = current.pc();
             let mut quitcounter = *driver_quitcounter;
             // OSR (on-stack replacement): once a hot loop is detected at a backward
             // branch, transfer the rest of this interpreted call into native code at
@@ -2626,7 +2709,9 @@ impl<'a> Vm<'a> {
             // (measured; the tax persisted under `NEOVM_JIT=0`, which is what pinned
             // it to the interpreter path rather than to compile-time analysis).
             #[cfg(feature = "jit")]
-            let mut osr_tried = current.osr_tried;
+            let mut osr_tried = current.resume.osr_tried();
+            #[cfg(not(feature = "jit"))]
+            let osr_tried = false;
 
             // A6: base+len of the operand stack live in registers for the whole
             // dispatch loop (GNU keeps top/pc in locals, bytecode.c). Every
@@ -2662,12 +2747,8 @@ impl<'a> Vm<'a> {
                             continue;
                         }
                         Err(flow) => {
-                            current.pc = pc_local;
+                            current.save_execution_state(pc_local, osr_tried);
                             *driver_quitcounter = quitcounter;
-                            #[cfg(feature = "jit")]
-                            {
-                                current.osr_tried = osr_tried;
-                            }
                             match self.complete_interpreter_frame_chain(
                                 current,
                                 callers,
@@ -2685,12 +2766,8 @@ impl<'a> Vm<'a> {
             macro_rules! complete_value {
                 ($value:expr) => {{
                     let value = $value;
-                    current.pc = pc_local;
+                    current.save_execution_state(pc_local, osr_tried);
                     *driver_quitcounter = quitcounter;
-                    #[cfg(feature = "jit")]
-                    {
-                        current.osr_tried = osr_tried;
-                    }
                     match self.complete_interpreter_frame_value(current, callers, aux_stack, value)
                     {
                         InterpreterValueCompletion::Resume => continue 'frame,
@@ -3202,12 +3279,8 @@ impl<'a> Vm<'a> {
                                     nargs,
                                     backtrace,
                                 } => {
-                                    current.pc = pc_local;
+                                    current.save_execution_state(pc_local, osr_tried);
                                     *driver_quitcounter = quitcounter;
-                                    #[cfg(feature = "jit")]
-                                    {
-                                        current.osr_tried = osr_tried;
-                                    }
                                     let child = self.prepare_iterative_interpreter_frame(
                                         callee, args_start, nargs,
                                     );

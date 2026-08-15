@@ -2134,6 +2134,23 @@ fn vm_bytecode_call_chain_stays_in_one_interpreter_driver() {
     );
 }
 
+#[cfg(feature = "jit")]
+#[test]
+fn interpreter_resume_point_packs_pc_and_osr_state_in_one_word() {
+    let resume = InterpreterResumePoint::new(37, true);
+
+    assert_eq!(
+        std::mem::size_of::<InterpreterResumePoint>(),
+        std::mem::size_of::<usize>()
+    );
+    assert_eq!(resume.pc(), 37);
+    assert!(resume.osr_tried());
+
+    let fresh = InterpreterResumePoint::new(91, false);
+    assert_eq!(fresh.pc(), 91);
+    assert!(!fresh.osr_tried());
+}
+
 #[test]
 fn vm_backward_branch_quit_counter_spans_bytecode_calls_like_gnu() {
     crate::test_utils::init_test_tracing();
