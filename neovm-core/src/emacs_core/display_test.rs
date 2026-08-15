@@ -2066,22 +2066,32 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::fixnum(1),
         term,
     ] {
-        assert_wta(builtin_x_popup_menu(&mut eval, vec![pos, Value::NIL]), "listp", pos);
+        assert_wta(
+            builtin_x_popup_menu(&mut eval, vec![pos, Value::NIL]),
+            "listp",
+            pos,
+        );
     }
 
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
-            Value::NIL,
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
+                Value::NIL,
+            ],
+        ),
         "listp",
         Value::fixnum(0),
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
-            basic_menu,
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
+                basic_menu,
+            ],
+        ),
         "listp",
         Value::fixnum(0),
     );
@@ -2096,212 +2106,266 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         Value::T,
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::symbol("menu-bar")]),
-            Value::NIL,
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![Value::list(vec![Value::symbol("menu-bar")]), Value::NIL],
+        ),
         "stringp",
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::symbol("menu-bar")]),
-            basic_menu,
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![Value::list(vec![Value::symbol("menu-bar")]), basic_menu],
+        ),
         "consp",
         Value::T,
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::symbol("mouse-1")]),
-            Value::NIL,
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![Value::list(vec![Value::symbol("mouse-1")]), Value::NIL],
+        ),
         "stringp",
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::symbol("mouse-1")]),
-            basic_menu,
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![Value::list(vec![Value::symbol("mouse-1")]), basic_menu],
+        ),
         "consp",
         Value::T,
     );
 
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![Value::list(vec![Value::NIL, Value::NIL]), Value::NIL]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![Value::list(vec![Value::NIL, Value::NIL]), Value::NIL],
+        ),
         "stringp",
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![Value::list(vec![Value::NIL, Value::NIL]), basic_menu]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![Value::list(vec![Value::NIL, Value::NIL]), basic_menu],
+        ),
         "consp",
         Value::T,
     );
     assert!(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::list(vec![Value::string("A")]),
-        ])
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::NIL, Value::NIL]),
+                Value::list(vec![Value::string("A")]),
+            ]
+        )
         .unwrap()
         .is_nil()
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::list(vec![Value::string("A"), Value::fixnum(1)]),
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::NIL, Value::NIL]),
+                Value::list(vec![Value::string("A"), Value::fixnum(1)]),
+            ],
+        ),
         "listp",
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::list(vec![
-                Value::fixnum(1),
-                Value::cons(Value::string("Yes"), Value::T),
-            ]),
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::NIL, Value::NIL]),
+                Value::list(vec![
+                    Value::fixnum(1),
+                    Value::cons(Value::string("Yes"), Value::T),
+                ]),
+            ],
+        ),
         "stringp",
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::list(vec![Value::cons(Value::string("A"), Value::T)]),
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::NIL, Value::NIL]),
+                Value::list(vec![Value::cons(Value::string("A"), Value::T)]),
+            ],
+        ),
         "stringp",
         Value::cons(Value::string("A"), Value::T),
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::fixnum(1),
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![Value::list(vec![Value::NIL, Value::NIL]), Value::fixnum(1)],
+        ),
         "listp",
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::string("x"),
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::NIL, Value::NIL]),
+                Value::string("x"),
+            ],
+        ),
         "listp",
         Value::string("x"),
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::list(vec![Value::string("A"), Value::NIL]),
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::NIL, Value::NIL]),
+                Value::list(vec![Value::string("A"), Value::NIL]),
+            ],
+        ),
         "stringp",
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::list(vec![
-                Value::string("A"),
-                Value::list(vec![Value::string("Pane")]),
-            ]),
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::NIL, Value::NIL]),
+                Value::list(vec![
+                    Value::string("A"),
+                    Value::list(vec![Value::string("Pane")]),
+                ]),
+            ],
+        ),
         "consp",
         Value::NIL,
     );
     assert!(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::list(vec![
-                Value::string("A"),
-                Value::list(vec![Value::string("Pane"), Value::NIL]),
-            ]),
-        ])
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::NIL, Value::NIL]),
+                Value::list(vec![
+                    Value::string("A"),
+                    Value::list(vec![Value::string("Pane"), Value::NIL]),
+                ]),
+            ]
+        )
         .unwrap()
         .is_nil()
     );
     assert!(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::list(vec![
-                Value::string("A"),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::NIL, Value::NIL]),
                 Value::list(vec![
-                    Value::string("Pane"),
-                    Value::cons(Value::string("Y"), Value::T),
+                    Value::string("A"),
+                    Value::list(vec![
+                        Value::string("Pane"),
+                        Value::cons(Value::string("Y"), Value::T),
+                    ]),
                 ]),
-            ]),
-        ])
+            ]
+        )
         .unwrap()
         .is_nil()
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::list(vec![
-                Value::string("A"),
-                Value::cons(Value::string("Pane"), Value::fixnum(1)),
-            ]),
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::NIL, Value::NIL]),
+                Value::list(vec![
+                    Value::string("A"),
+                    Value::cons(Value::string("Pane"), Value::fixnum(1)),
+                ]),
+            ],
+        ),
         "consp",
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::NIL, Value::NIL]),
-            Value::list(vec![
-                Value::string("A"),
-                Value::cons(Value::fixnum(1), Value::fixnum(2)),
-            ]),
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::NIL, Value::NIL]),
+                Value::list(vec![
+                    Value::string("A"),
+                    Value::cons(Value::fixnum(1), Value::fixnum(2)),
+                ]),
+            ],
+        ),
         "stringp",
         Value::fixnum(1),
     );
 
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::list(vec![Value::fixnum(0), Value::fixnum(0)])]),
-            Value::NIL,
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::list(vec![Value::fixnum(0), Value::fixnum(0)])]),
+                Value::NIL,
+            ],
+        ),
         "windowp",
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![Value::list(vec![Value::fixnum(0), Value::fixnum(0)])]),
-            basic_menu,
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![Value::list(vec![Value::fixnum(0), Value::fixnum(0)])]),
+                basic_menu,
+            ],
+        ),
         "windowp",
         Value::NIL,
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![
-                Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
-                Value::fixnum(1),
-            ]),
-            Value::NIL,
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![
+                    Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
+                    Value::fixnum(1),
+                ]),
+                Value::NIL,
+            ],
+        ),
         "windowp",
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::list(vec![
-                Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
-                Value::fixnum(1),
-            ]),
-            basic_menu,
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::list(vec![
+                    Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
+                    Value::fixnum(1),
+                ]),
+                basic_menu,
+            ],
+        ),
         "windowp",
         Value::fixnum(1),
     );
     assert_wta(
-        builtin_x_popup_menu(&mut eval, vec![
-            Value::cons(
-                Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
-                Value::fixnum(0),
-            ),
-            Value::NIL,
-        ]),
+        builtin_x_popup_menu(
+            &mut eval,
+            vec![
+                Value::cons(
+                    Value::list(vec![Value::fixnum(0), Value::fixnum(0)]),
+                    Value::fixnum(0),
+                ),
+                Value::NIL,
+            ],
+        ),
         "listp",
         Value::fixnum(0),
     );
@@ -2367,12 +2431,24 @@ fn x_popup_menu_position_window_slot_accepts_a_frame_like_gnu() {
     };
 
     // A frame in the window slot: GNU puts the menu at the frame origin.
-    assert_eq!(probe(&mut eval, "(list (list 0 0) (selected-frame))"), "nil");
-    assert_eq!(probe(&mut eval, "(list (list 5 7) (selected-frame))"), "nil");
+    assert_eq!(
+        probe(&mut eval, "(list (list 0 0) (selected-frame))"),
+        "nil"
+    );
+    assert_eq!(
+        probe(&mut eval, "(list (list 5 7) (selected-frame))"),
+        "nil"
+    );
     // A live window is equally acceptable.
-    assert_eq!(probe(&mut eval, "(list (list 5 7) (selected-window))"), "nil");
+    assert_eq!(
+        probe(&mut eval, "(list (list 5 7) (selected-window))"),
+        "nil"
+    );
     // Both coordinates nil: GNU never inspects the designator at all.
-    assert_eq!(probe(&mut eval, "(list (list nil nil) 'not-a-window)"), "nil");
+    assert_eq!(
+        probe(&mut eval, "(list (list nil nil) 'not-a-window)"),
+        "nil"
+    );
     assert_eq!(probe(&mut eval, "(list (list nil nil))"), "nil");
     // Anything that is neither a frame nor a window is still `windowp`.
     assert_eq!(

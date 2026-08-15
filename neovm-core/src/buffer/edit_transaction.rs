@@ -588,14 +588,12 @@ impl Buffer {
             return;
         }
 
-        let record_change = |undo_list: &mut Value,
-                             start_char: CharPos0,
-                             deleted: LispString,
-                             pt: CharPos0| {
-            let len_chars = CharLen::new(deleted.schars());
-            undo::undo_list_record_delete(undo_list, start_char, deleted, pt);
-            undo::undo_list_record_insert(undo_list, start_char, len_chars);
-        };
+        let record_change =
+            |undo_list: &mut Value, start_char: CharPos0, deleted: LispString, pt: CharPos0| {
+                let len_chars = CharLen::new(deleted.schars());
+                undo::undo_list_record_delete(undo_list, start_char, deleted, pt);
+                undo::undo_list_record_insert(undo_list, start_char, len_chars);
+            };
 
         if transposition.same_char_len() {
             if transposition.adjacent() {
