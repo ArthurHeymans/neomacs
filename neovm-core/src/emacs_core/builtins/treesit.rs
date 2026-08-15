@@ -658,6 +658,9 @@ struct ParserReparseRequest {
     current_revision: ParserInputRevision,
     kind: ParserReparseKind,
     source: LispString,
+    /// Buffer byte window the new tree will cover -- GNU's `visible_beg` /
+    /// `visible_end` after `treesit_sync_visible_region`.
+    visible: EmacsByteRange,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -691,6 +694,18 @@ fn parser_reparse_request(
         ParserInputRevision::for_buffer(buffer)
     };
 
+    // GNU catches up with the narrowing situation before it consults
+    // `need_reparse`, because syncing can set it (`src/treesit.c:1908-1914`).
+    {
+        let buffer = eval.buffers.get(orig_buffer_id).ok_or_else(|| {
+            signal(
+                "error",
+                vec![Value::string("Parser buffer has been killed")],
+            )
+        })?;
+        eval.treesit.sync_visible_region(parser_id, buffer);
+    }
+
     let reparse_kind = {
         let parser = eval
             .treesit
@@ -704,20 +719,24 @@ fn parser_reparse_request(
     let Some(reparse_kind) = reparse_kind else {
         return Ok(None);
     };
-    let source = {
+    let (source, visible) = {
         let buffer = eval.buffers.get(orig_buffer_id).ok_or_else(|| {
             signal(
                 "error",
                 vec![Value::string("Parser buffer has been killed")],
             )
         })?;
-        treesit_buffer_source(buffer)
+        (
+            treesit_buffer_source(buffer),
+            buffer.accessible_emacs_byte_range(),
+        )
     };
     Ok(Some(ParserReparseRequest {
         parser_value,
         current_revision,
         kind: reparse_kind,
         source,
+        visible,
     }))
 }
 
@@ -735,8 +754,11 @@ fn ensure_parser_reparsed(
             .treesit
             .parser_mut(parser_id)
             .ok_or_else(|| signal("error", vec![Value::string("Missing tree-sitter parser")]))?;
+        // GNU always hands the previous tree back to tree-sitter
+        // (`treesit_ensure_parsed`, `src/treesit.c:1925`); `Full` is reached
+        // only for a parser that has no usable tree at all.
         let old_tree = match request.kind {
-            ParserReparseKind::Incremental => parser.tree.clone(),
+            ParserReparseKind::Incremental => parser.tree.as_ref().map(|tree| tree.tree().clone()),
             ParserReparseKind::Full => None,
         };
         // Issue #131: feed the parser the exact Emacs bytes so byte offsets
@@ -765,7 +787,7 @@ fn ensure_parser_reparsed(
                 }
             }
         };
-        parser.tree = Some(tree);
+        parser.tree = Some(runtime::ParsedTree::new(tree, request.visible));
         parser.last_source = Some(request.source);
         parser.freshness = ParserFreshness::Clean(request.current_revision);
         parser.generation = parser.generation.saturating_add(1);
@@ -1050,7 +1072,7 @@ fn resolve_node_input(
             parser
                 .tree
                 .as_ref()
-                .map(|tree| tree.root_node().into_raw())
+                .map(|tree| tree.tree().root_node().into_raw())
                 .ok_or_else(|| treesit_parse_error(value))?
         };
         let node_value = make_node_value_for_parser(eval, parser_id, unsafe {
@@ -2229,7 +2251,7 @@ pub(crate) fn builtin_treesit_parser_root_node(
         parser
             .tree
             .as_ref()
-            .map(|tree| tree.root_node())
+            .map(|tree| tree.tree().root_node())
             .map(tree_sitter::Node::into_raw)
             .ok_or_else(|| treesit_parse_error(args[0]))?
     };
@@ -2313,6 +2335,25 @@ pub(crate) fn builtin_treesit_parser_set_included_ranges(
         ranges
     };
 
+    // GNU catches up with the narrowing situation before it changes the ranges
+    // (`Ftreesit_parser_set_included_ranges`, `src/treesit.c:2744-2746`).
+    let current_revision = {
+        let orig_buffer_id = eval
+            .treesit
+            .parser(parser_id)
+            .ok_or_else(|| parser_deleted_error(args[0]))?
+            .orig_buffer_id;
+        let buffer = eval.buffers.get(orig_buffer_id).ok_or_else(|| {
+            signal(
+                "error",
+                vec![Value::string("Parser buffer has been killed")],
+            )
+        })?;
+        let revision = ParserInputRevision::for_buffer(buffer);
+        eval.treesit.sync_visible_region(parser_id, buffer);
+        revision
+    };
+
     let parser = eval
         .treesit
         .parser_mut(parser_id)
@@ -2329,9 +2370,15 @@ pub(crate) fn builtin_treesit_parser_set_included_ranges(
                 ],
             )
         })?;
-    parser.tree = None;
-    parser.last_source = None;
-    parser.freshness = ParserFreshness::Unparsed;
+    // GNU only flags a reparse here and keeps the tree (`src/treesit.c:2770`).
+    // The next parse diffs the new ranges against it, which is what keeps the
+    // affected ranges reported to `treesit--font-lock-mark-ranges-to-fontify`
+    // down to the text the range change really touched.
+    parser.freshness = if parser.tree.is_some() {
+        ParserFreshness::ReparsePending(current_revision)
+    } else {
+        ParserFreshness::Unparsed
+    };
     parser.last_changed_ranges.clear();
     if !args[0].set_record_slot(runtime::PARSER_SLOT_INCLUDED_RANGES, args[1]) {
         return Err(signal(
