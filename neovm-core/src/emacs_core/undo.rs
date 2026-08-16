@@ -150,7 +150,7 @@ fn compact_one_buffer_for_gc(ctx: &mut super::eval::Context, id: crate::buffer::
     if ctx.set_current_buffer_unrecorded(id).is_err() {
         return;
     }
-    let Some(limits) = UndoLimits::read(ctx) else {
+    let Some(mut limits) = UndoLimits::read(ctx) else {
         return;
     };
 
@@ -167,12 +167,23 @@ fn compact_one_buffer_for_gc(ctx: &mut super::eval::Context, id: crate::buffer::
             // buffer-undo-list." (src/undo.c:362-368)
             return;
         }
+        // GNU reads `undo_limit' and `undo_strong_limit' during the walk that
+        // follows (src/undo.c:386-389), so a function that lowers them and
+        // answers nil has its new values applied.  They are C globals, so it
+        // reads them from whatever buffer the function left current -- both
+        // halves measured under GNU 31.0.90: a function that lowers this
+        // buffer's limits and stays truncates 21 entries to 2; the same
+        // function ending in `(set-buffer "H")' leaves all 21, because H's
+        // values are what the globals then hold.
+        let Some(reread) = UndoLimits::read(ctx) else {
+            return;
+        };
+        limits = reread;
     }
 
-    // Re-read: `undo-outer-limit-function' is arbitrary Lisp and may have
-    // replaced the list before answering nil.
+    // Re-read the list: the function may have replaced it before answering nil.
     let Some(undo_list) = ctx.buffers.get(id).map(|buffer| buffer.get_undo_list()) else {
-        return;
+        return; // the function killed the buffer
     };
     if UndoRecording::of(&undo_list) == UndoRecording::Disabled {
         return;
