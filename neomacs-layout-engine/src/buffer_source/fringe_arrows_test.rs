@@ -241,8 +241,10 @@ fn resolve_bitmaps_from_standard_indicator_alist() {
                (continuation left-curly-arrow right-curly-arrow))",
         )
         .expect("alist");
-    let mut buf =
-        neovm_core::buffer::Buffer::new_standalone(neovm_core::buffer::BufferId(42), Value::string("*f*"));
+    let mut buf = neovm_core::buffer::Buffer::new_standalone(
+        neovm_core::buffer::BufferId(42),
+        Value::string("*f*"),
+    );
     buf.set_buffer_local("fringe-indicator-alist", alist);
 
     let resolved = FringeArrowBitmaps::resolve(&buf, &ctx);
