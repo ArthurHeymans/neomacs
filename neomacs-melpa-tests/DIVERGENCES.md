@@ -6463,7 +6463,134 @@ buffer.
 
 Status: FIXED.
 
-## 120. `color-distance` rejected the "unspecified-fg"/"unspecified-bg" sentinel color names
+## 124. `get-pos-property` never checked the position it was given, and `previous-property-change` reported an out-of-range one in the wrong shape -- FIXED
+
+Found while checking an old side note that claimed our `validate_interval_range`
+compares values where GNU compares pointers.  **That premise is refuted** -- see
+the end of this entry -- but the probe written to test it turned up three real
+divergences instead.
+
+```elisp
+(with-temp-buffer
+  (insert "hello")
+  (list (condition-case e (get-pos-property 500 'face) (error e))
+        (condition-case e (get-pos-property 500 'syntax-table) (error e))
+        (condition-case e (previous-property-change 500) (error e))))
+;; GNU                => ((args-out-of-range 499 499)
+;;                        (args-out-of-range 500 500)
+;;                        (args-out-of-range 500 500))
+;; Neomacs before fix => (nil
+;;                        nil
+;;                        (args-out-of-range 500))
+```
+
+### GNU has two out-of-range shapes here, and they are not interchangeable
+
+`validate_interval_range` (src/textprop.c:128-186) is the one validator the
+whole text-property family goes through.  Its bounds failure is
+`args_out_of_range (begin0, end0)` (:158), and a POINT call passes one pointer
+for both parameters -- `validate_interval_range (object, &position, &position,
+soft)` -- so the payload carries the position **twice**.
+
+`get_char_property_and_overlay` (src/textprop.c:642-644) does not use that
+function.  It has its own bounds check that signals with `xsignal1`, so its
+payload carries the position **once**.
+
+Which shape a builtin produces is therefore not a style choice; it is which GNU
+function that builtin goes through.  Our string branch of
+`previous-property-change` already used the interval shape while its buffer
+branch used the char-property shape, and nothing could notice, because both
+validators took the same arguments and returned the same type.
+`previous-char-property-change` inherited the wrong payload for free, since it
+delegates exactly as GNU does (src/textprop.c:767).
+
+### `get-pos-property`'s range check is emergent, which is why we had none
+
+`Fget_pos_property` (src/editfns.c:275-349) contains no bounds check at all.
+Its error comes from `text_property_stickiness` (src/textprop.c:1901), which
+reads text properties through `Fget_text_property` twice -- at POS-1 (:1919)
+and at POS (:1931) -- and GNU's own comment above the second read records the
+consequence: "This signals an arg-out-of-range error if pos is outside the
+buffer's accessible range."
+
+So *which* position appears in the signal follows GNU's branch structure, and
+that is measurable:
+
+| call | GNU | why |
+|---|---|---|
+| `(get-pos-property 500 'face)` | `(args-out-of-range 499 499)` | POS-1 is read first |
+| `(get-pos-property 500 'syntax-table)` | `(args-out-of-range 500 500)` | default-nonsticky PROPs skip the POS-1 read (:1914) |
+| `(get-pos-property 0 'face)` | `(args-out-of-range 0 0)` | `POS <= BEGV` skips it too (:1912) |
+| `(get-pos-property 7 'face)` in a 5-char buffer | `(args-out-of-range 7 7)` | POS-1 == ZV is in range, so POS is what fails |
+| narrowed to (3,6), `(get-pos-property 9 'face)` | `(args-out-of-range 8 8)` | bounds are BEGV/ZV, not BEG/Z (:156-157) |
+
+We reimplemented the read that GNU delegates, through a **clamping** accessor,
+so every one of those answered `nil` instead.  A caller could not tell a
+position outside the buffer from a position with no property there.
+
+The fix makes the two reads go through validation, and names what GNU's C
+returns as an integer: `Stickiness::{FromFollowing, FromPreceding, Neither}`
+(GNU's 1 / -1 / 0), returned as `Result<Stickiness, Flow>` so that "this
+function can signal" is in the type rather than in a comment, and so the call
+site is a total match instead of `1 => ..., -1 if ... => ..., _ => nil`.
+
+### The premise this started from, refuted
+
+The side note said GNU's `validate_interval_range` distinguishes a point call
+from a range call by comparing POINTERS (`EQ (*begin, *end) && begin != end`,
+src/textprop.c:141) where we compare values, and that we might therefore
+mis-handle an empty range.  We do not: the distinction is already carried by
+having two separate functions, which is the same information in the type system
+instead of in pointer identity.  Thirty probe cases spanning buffers, strings,
+empty objects, narrowing, reversed ranges and two markers at one position agree
+with GNU byte for byte, including the cases the pointer test exists for --
+`(put-text-property 500 500 'a 'b)` returns nil quietly in both, because the
+empty-range test runs BEFORE the bounds check.
+
+Status: FIXED.
+
+## 125. One text-property default was written in four places, so correcting it corrected nothing -- FIXED
+
+The same probe run showed a fourth difference, in a variable rather than a
+function:
+
+```elisp
+text-property-default-nonsticky
+;; GNU                => ((composition . t) (syntax-table . t) (display . t))
+;; Neomacs before fix => ((syntax-table . t) (display . t))
+```
+
+GNU assembles this default in **two** C files, and neither one alone is the
+answer: `syms_of_textprop` seeds the alist with syntax-table and display
+(src/textprop.c:2426-2429), then `syms_of_composite` conses `composition` onto
+the front of whatever is already there (src/composite.c:2212-2213).  We ported
+the first file and not the second, so `composition` was sticky: text inserted
+next to a composed sequence inherited a `composition` property that GNU would
+never give it.
+
+What made this worth its own entry is the shape of the miss.  Our value was
+spelled out at **four** separate installation sites -- `textprop.rs` twice
+(control-variable registration and bootstrap registration), `xdisp.rs`, and
+`load.rs`.  The first correction, made in `load.rs`, changed nothing observable,
+because a later site overwrote it; the test still failed with the old value
+after a verified cache miss and a freshly written pdump, which is what exposed
+the duplication.  One of the four even carried a comment asserting the GNU
+default -- accurately quoting src/textprop.c, and wrong about the effective
+value, because it had never been checked against src/composite.c.
+
+The value now exists once, in `default_text_property_nonsticky_alist`, cited to
+both C files, and the four sites call it.
+
+Status: FIXED.
+
+## 126. `color-distance` rejected the "unspecified-fg"/"unspecified-bg" sentinel color names
+
+RENUMBERED at integration: this entry was published as 120 in 2a6c6b093, a
+number that entry 120 above already held, so the ledger carried two entries
+numbered 120 and both the ascending and the no-duplicates invariants were
+broken.  Renumbering the later-published of the two is the same resolution used
+when 119 collided earlier.  Nothing else about the entry changed; if you
+followed a reference to "ledger 120 (color-distance)", this is it.
 
 GNU accepts the internal sentinel strings that `face-background' returns
 for unspecified colors on a TTY frame; Neomacs signals `error'
