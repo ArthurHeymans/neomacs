@@ -1774,6 +1774,64 @@ fn a_command_in_another_buffer_supersedes_the_saved_point() {
 }
 
 #[test]
+fn an_undo_boundary_in_an_undo_disabled_buffer_saves_no_point() {
+    crate::test_utils::init_test_tracing();
+    // `Fundo_boundary` returns BEFORE it touches the globals when the buffer
+    // has undo turned off (`if (EQ (BVAR (current_buffer, undo_list), Qt))
+    // return Qnil;`, src/undo.c:252-255; the assignment is at :278-279).  A
+    // buffer that records nothing must not be able to spend another buffer's
+    // saved point, and `undo-auto--boundaries` walks changed buffers with each
+    // one made current, so a disabled buffer in that list is ordinary.
+    //
+    // Measured on GNU 31.0.90: buffer A has undo off; B saves a point of 1 via
+    // `undo-boundary`; `undo-boundary` runs in A; then B deletes chars 3..5.
+    //   GNU                => (("rl" . 3) 1 (t . 0) nil (1 . 6) (t . 0))
+    //   Neomacs before fix => (("rl" . 3)   (t . 0) nil (1 . 6) (t . 0))
+    let mut mgr = BufferManager::new();
+    let recording = mgr.current_buffer_id().expect("scratch buffer");
+    let disabled = mgr.create_buffer("undo-off");
+    {
+        let buf = mgr.get_mut(disabled).expect("undo-off buffer");
+        buf.set_undo_list(Value::T);
+        buf.insert("hello");
+    }
+    {
+        let buf = mgr.get_mut(recording).expect("scratch buffer");
+        buf.set_undo_list(Value::NIL);
+        buf.insert("world");
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    // The saved point that must survive: point 1 in the recording buffer.
+    mgr.add_undo_boundary(recording)
+        .expect("boundary in the recording buffer");
+    // GNU's early return: this must not touch the editor-global pair.
+    mgr.add_undo_boundary(disabled)
+        .expect("boundary in the undo-disabled buffer");
+
+    mgr.goto_buffer_emacs_byte_pos(recording, crate::buffer::EmacsBytePos::new(2))
+        .expect("goto");
+    mgr.delete_buffer_emacs_byte_range(recording, crate::buffer::EmacsByteRange::from_usize(2, 4))
+        .expect("delete region");
+
+    let ul = mgr.get(recording).expect("scratch buffer").get_undo_list();
+    let delete_entry = undo_nth(ul, 0);
+    assert_eq!(delete_entry.cons_car().as_utf8_str(), Some("rl"));
+    assert_eq!(
+        undo_point_entries(ul),
+        vec![1],
+        "a boundary in an undo-disabled buffer must leave the saved point alone"
+    );
+    // The disabled buffer still records nothing at all.
+    assert!(
+        mgr.get(disabled)
+            .expect("undo-off buffer")
+            .get_undo_list()
+            .is_t(),
+        "undo-boundary must not turn recording back on"
+    );
+}
+
+#[test]
 fn marker_inside_deleted_range_collapses() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
