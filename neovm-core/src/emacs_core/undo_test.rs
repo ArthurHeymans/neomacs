@@ -1031,3 +1031,296 @@ fn auto_fill_typing_then_undo_takes_back_only_the_last_command_group() {
         "OK (\"aaaa bbbb cccc dddd\neeee \" \"aaaa bbbb cccc dddd e\" 22)"
     );
 }
+
+// ===========================================================================
+// GC-time undo-list truncation
+//
+// GNU truncates undo lists from `garbage_collect' (`src/alloc.c:5797-5800'),
+// which walks every live buffer through `compact_buffer'
+// (`src/buffer.c:1854-1885') into `truncate_undo_list' (`src/undo.c:289-419').
+// `Fundo_boundary' (`src/undo.c:251-282') never truncates.
+//
+// Every expected value below was measured by running the same fixture under
+// GNU Emacs 31.0.90 `--batch'.
+// ===========================================================================
+
+use crate::emacs_core::eval::Context;
+
+/// GROUPS one-entry undo groups in a buffer whose own `undo-limit' and
+/// `undo-strong-limit' are LIMIT and STRONG.
+fn undo_limit_fixture(eval: &mut Context, name: &str, limit: i64, strong: i64, groups: usize) {
+    let src = format!(
+        r#"(progn
+             (set-buffer (get-buffer-create "{name}"))
+             (buffer-enable-undo)
+             (setq buffer-undo-list nil)
+             (make-local-variable 'undo-limit)
+             (make-local-variable 'undo-strong-limit)
+             (setq undo-limit {limit})
+             (setq undo-strong-limit {strong})
+             (setq neo-undo-probe-i 0)
+             (while (< neo-undo-probe-i {groups})
+               (insert "hello")
+               (undo-boundary)
+               (setq neo-undo-probe-i (1+ neo-undo-probe-i))))"#
+    );
+    eval.eval_str(&src).expect("undo limit fixture");
+}
+
+fn printed_undo_list(eval: &mut Context, name: &str) -> String {
+    let value = eval
+        .eval_str(&format!(
+            r#"(buffer-local-value 'buffer-undo-list (get-buffer "{name}"))"#
+        ))
+        .expect("read buffer-undo-list");
+    crate::emacs_core::print::print_value(&value)
+}
+
+fn undo_list_length(eval: &mut Context, name: &str) -> i64 {
+    let value = eval
+        .eval_str(&format!(
+            r#"(length (buffer-local-value 'buffer-undo-list (get-buffer "{name}")))"#
+        ))
+        .expect("length of buffer-undo-list");
+    match value.kind() {
+        ValueKind::Fixnum(n) => n,
+        other => panic!("length returned {other:?}"),
+    }
+}
+
+/// GNU truncates at GC, never at `undo-boundary'.
+///
+/// GNU Emacs -Q --batch, same fixture: before=21, after=2.
+#[test]
+fn undo_boundary_does_not_truncate_and_gc_does() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    undo_limit_fixture(&mut eval, "A", 1, 1, 10);
+
+    // Ten `undo-boundary' calls with a 1-byte limit: GNU still has the whole
+    // list, because `Fundo_boundary' does not truncate.
+    assert_eq!(undo_list_length(&mut eval, "A"), 21);
+
+    eval.gc_collect_exact();
+
+    assert_eq!(undo_list_length(&mut eval, "A"), 2);
+    assert_eq!(printed_undo_list(&mut eval, "A"), "(nil (46 . 51))");
+}
+
+/// The buffer's OWN `undo-limit' governs, not the global default: GNU makes
+/// the buffer current before reading them (`src/undo.c:301-304').
+///
+/// GNU Emacs -Q --batch, same fixture: A-len=2 B-len=21.
+#[test]
+fn gc_truncation_reads_each_buffers_own_undo_limit() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    undo_limit_fixture(&mut eval, "A", 1, 1, 10);
+    eval.eval_str(
+        r#"(progn
+             (set-buffer (get-buffer-create "B"))
+             (buffer-enable-undo)
+             (setq buffer-undo-list nil)
+             (setq neo-undo-probe-i 0)
+             (while (< neo-undo-probe-i 10)
+               (insert "hello")
+               (undo-boundary)
+               (setq neo-undo-probe-i (1+ neo-undo-probe-i))))"#,
+    )
+    .expect("global-limit fixture");
+
+    eval.gc_collect_exact();
+
+    assert_eq!(undo_list_length(&mut eval, "A"), 2);
+    assert_eq!(undo_list_length(&mut eval, "B"), 21);
+}
+
+/// Truncation lands on a group edge, never inside a group.
+///
+/// GNU Emacs -Q --batch, same fixture:
+///   after=10 (nil (46 . 51) nil (41 . 46) nil (36 . 41) nil (31 . 36) nil (26 . 31))
+#[test]
+fn gc_truncation_cuts_at_a_group_boundary() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    undo_limit_fixture(&mut eval, "B", 200, 1000, 10);
+
+    eval.gc_collect_exact();
+
+    assert_eq!(
+        printed_undo_list(&mut eval, "B"),
+        "(nil (46 . 51) nil (41 . 46) nil (36 . 41) nil (31 . 36) nil (26 . 31))"
+    );
+}
+
+/// The most recent record survives however small the limits are: GNU scans
+/// past the first group before it starts making truncation decisions
+/// (`src/undo.c:323-347').
+///
+/// GNU Emacs -Q --batch, same fixture: before=9, after=9.
+#[test]
+fn gc_truncation_always_keeps_the_most_recent_record() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"(progn
+             (set-buffer (get-buffer-create "C"))
+             (buffer-enable-undo)
+             (setq buffer-undo-list nil)
+             (make-local-variable 'undo-limit)
+             (make-local-variable 'undo-strong-limit)
+             (setq undo-limit 1)
+             (setq undo-strong-limit 1)
+             (setq neo-undo-probe-i 0)
+             (while (< neo-undo-probe-i 8)
+               (insert "hello")
+               (goto-char (point-min))
+               (setq neo-undo-probe-i (1+ neo-undo-probe-i))))"#,
+    )
+    .expect("single-group fixture");
+    assert_eq!(undo_list_length(&mut eval, "C"), 9);
+
+    eval.gc_collect_exact();
+
+    assert_eq!(undo_list_length(&mut eval, "C"), 9);
+}
+
+/// A buffer not modified since the last compaction is skipped, so a list the
+/// user installed by hand is left alone (GNU `compact_buffer''s
+/// `BUF_COMPACT (buffer) != BUF_MODIFF (buffer)' guard, `src/buffer.c:1861').
+///
+/// GNU Emacs -Q --batch, same fixture:
+///   after-first-gc=2, after-second-gc=6.
+#[test]
+fn gc_skips_a_buffer_unmodified_since_the_last_compaction() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    undo_limit_fixture(&mut eval, "D", 1, 1, 10);
+    eval.gc_collect_exact();
+    assert_eq!(undo_list_length(&mut eval, "D"), 2);
+
+    eval.eval_str(
+        r#"(progn
+             (set-buffer (get-buffer "D"))
+             (setq buffer-undo-list
+                   (list nil (cons 1 2) nil (cons 2 3) nil (cons 3 4))))"#,
+    )
+    .expect("hand-installed undo list");
+    eval.gc_collect_exact();
+
+    assert_eq!(undo_list_length(&mut eval, "D"), 6);
+}
+
+/// `undo-outer-limit' asks `undo-outer-limit-function' first, with the buffer
+/// current and the measured size as the sole argument; a non-nil answer means
+/// "handled" and GNU touches nothing else (`src/undo.c:349-369').
+///
+/// GNU Emacs -Q --batch, same fixture:
+///   fn size=64 buf=E, after=2 ((1 . 6) (t . 0)).
+#[test]
+fn gc_consults_undo_outer_limit_function_with_the_buffer_current() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"(progn
+             (set-buffer (get-buffer-create "E"))
+             (buffer-enable-undo)
+             (setq buffer-undo-list nil)
+             (make-local-variable 'undo-outer-limit)
+             (setq undo-outer-limit 1)
+             (setq neo-undo-outer-calls nil)
+             (setq undo-outer-limit-function
+                   (lambda (size)
+                     (setq neo-undo-outer-calls
+                           (cons (cons size (buffer-name)) neo-undo-outer-calls))
+                     t))
+             (insert "hello"))"#,
+    )
+    .expect("outer-limit fixture");
+
+    eval.gc_collect_exact();
+
+    let calls = eval.eval_str("neo-undo-outer-calls").expect("calls recorded");
+    assert_eq!(
+        crate::emacs_core::print::print_value(&calls),
+        r#"((64 . "E"))"#
+    );
+    assert_eq!(printed_undo_list(&mut eval, "E"), "((1 . 6) (t . 0))");
+}
+
+/// A nil answer from `undo-outer-limit-function' falls through to the ordinary
+/// `undo-limit' truncation (`src/undo.c:362-368').
+///
+/// GNU Emacs -Q --batch, same fixture:
+///   fn-called-with=(64 "D") list-len-after=2.
+#[test]
+fn nil_from_undo_outer_limit_function_falls_through_to_normal_truncation() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"(progn
+             (set-buffer (get-buffer-create "D"))
+             (buffer-enable-undo)
+             (setq buffer-undo-list nil)
+             (make-local-variable 'undo-outer-limit)
+             (setq undo-outer-limit 1)
+             (setq neo-undo-outer-size nil)
+             (setq undo-outer-limit-function
+                   (lambda (size) (setq neo-undo-outer-size size) nil))
+             (insert "hello"))"#,
+    )
+    .expect("outer-limit fallthrough fixture");
+
+    eval.gc_collect_exact();
+
+    let size = eval.eval_str("neo-undo-outer-size").expect("size recorded");
+    assert_eq!(size, Value::fixnum(64));
+    assert_eq!(undo_list_length(&mut eval, "D"), 2);
+}
+
+/// `undo-outer-limit' alone does nothing: GNU only acts through the function
+/// (`src/undo.c:356').
+///
+/// GNU Emacs -Q --batch, same fixture: after=2.
+#[test]
+fn undo_outer_limit_without_a_function_does_nothing() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"(progn
+             (set-buffer (get-buffer-create "E"))
+             (buffer-enable-undo)
+             (setq buffer-undo-list nil)
+             (make-local-variable 'undo-outer-limit)
+             (setq undo-outer-limit 1)
+             (setq undo-outer-limit-function nil)
+             (insert "hello"))"#,
+    )
+    .expect("outer-limit-without-function fixture");
+
+    eval.gc_collect_exact();
+
+    assert_eq!(undo_list_length(&mut eval, "E"), 2);
+}
+
+/// A buffer with undo turned off keeps `t': calling `truncate_undo_list' on
+/// `t' would turn undo back on, which is exactly why GNU guards the call
+/// (`src/buffer.c:1865-1870').
+///
+/// GNU Emacs -Q --batch, same fixture: after=t.
+#[test]
+fn gc_leaves_a_buffer_with_undo_disabled_alone() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"(progn
+             (set-buffer (get-buffer-create "F"))
+             (setq buffer-undo-list t)
+             (insert "hello"))"#,
+    )
+    .expect("undo-disabled fixture");
+
+    eval.gc_collect_exact();
+
+    assert_eq!(printed_undo_list(&mut eval, "F"), "t");
+}
