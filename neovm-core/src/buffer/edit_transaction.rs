@@ -825,7 +825,7 @@ impl Buffer {
             undo::undo_list_record_first_change(&mut ul, self.visited_file_modtime_value());
             self.undo_state.set_recorded_first_change(true);
         }
-        // GNU `record_point` (src/undo.c:73-75) takes the saved point only when
+        // GNU `record_point` (src/undo.c:73-78) takes the saved point only when
         // it is still the SAME buffer: `buffer_before_last_command_or_undo ==
         // current_buffer`.  There is one saved point for the whole editor, so
         // this asks a real question -- the last command may have run in the

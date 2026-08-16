@@ -40,7 +40,7 @@ struct PointBeforeCommand {
 /// (src/keyboard.c:1536-1537, src/undo.c:278-279).  So a command-loop
 /// iteration in ANY buffer -- every minibuffer keystroke of an `M-x` read is
 /// one -- supersedes the point saved for every other buffer, and
-/// `record_point`'s buffer guard (src/undo.c:73-75) is what turns that into a
+/// `record_point`'s buffer guard (src/undo.c:73-78) is what turns that into a
 /// dropped point entry.
 ///
 /// Modelling it as per-buffer state cannot express "superseded": a buffer's own
@@ -77,7 +77,7 @@ impl SavedPointBeforeCommand {
         self.cell.set(Some(PointBeforeCommand { buffer, point }));
     }
 
-    /// GNU's paired read (src/undo.c:73-75): the saved point is usable only by
+    /// GNU's paired read (src/undo.c:73-78): the saved point is usable only by
     /// the buffer it was saved in.  Returns `None` when the last command ran
     /// somewhere else -- "we must not do this if the buffer has changed since
     /// the last command, since the value of point that we have will be for that
