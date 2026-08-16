@@ -2333,6 +2333,21 @@ fn interpreter_aux_stack_materializes_only_nonempty_suspended_frames() {
 }
 
 #[test]
+fn interpreter_aux_stack_empty_restore_preserves_reusable_storage() {
+    let mut aux = InterpreterFrameAuxStack::new(HandlerStack::new(), BindStack::new());
+    let current = aux.current_mut();
+    current.bind_stack.extend(0..16);
+    current.bind_stack.clear();
+    let storage = current.bind_stack.as_ptr();
+    let capacity = current.bind_stack.capacity();
+
+    aux.restore_current(InterpreterDriverDepth::ROOT);
+
+    assert_eq!(aux.current_mut().bind_stack.as_ptr(), storage);
+    assert_eq!(aux.current_mut().bind_stack.capacity(), capacity);
+}
+
+#[test]
 fn vm_bcall_max_eval_depth_reports_error_like_gnu_bytecode() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new_minimal_vm_harness();

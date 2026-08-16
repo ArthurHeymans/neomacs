@@ -991,35 +991,57 @@ struct SuspendedInterpreterFrameAux {
 /// a sparse stack containing only suspended callers whose state is nonempty.
 /// The common Bcall/Breturn path changes only `current`'s empty state and never
 /// pushes the 96-byte pair of inline `SmallVec`s.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum InterpreterFrameAuxOccupancy {
+    KnownEmpty,
+    MayContainState,
+}
+
 struct InterpreterFrameAuxStack {
     current: InterpreterFrameAux,
+    current_occupancy: InterpreterFrameAuxOccupancy,
     suspended: Vec<SuspendedInterpreterFrameAux>,
 }
 
 impl InterpreterFrameAuxStack {
     fn new(handlers: HandlerStack, bind_stack: BindStack) -> Self {
+        let current = InterpreterFrameAux::new(handlers, bind_stack);
+        let current_occupancy = if current.is_empty() {
+            InterpreterFrameAuxOccupancy::KnownEmpty
+        } else {
+            InterpreterFrameAuxOccupancy::MayContainState
+        };
         Self {
-            current: InterpreterFrameAux::new(handlers, bind_stack),
+            current,
+            current_occupancy,
             suspended: Vec::new(),
         }
     }
 
     fn current_mut(&mut self) -> &mut InterpreterFrameAux {
+        // A mutable borrow can make either auxiliary stack nonempty.  Record
+        // that possibility before lending it out; paths that subsequently
+        // observe both stacks empty refine the state back to KnownEmpty.
+        self.current_occupancy = InterpreterFrameAuxOccupancy::MayContainState;
         &mut self.current
     }
 
     fn suspend_current(&mut self, depth: InterpreterDriverDepth) {
+        if self.current_occupancy == InterpreterFrameAuxOccupancy::KnownEmpty {
+            return;
+        }
         if self.current.is_empty() {
+            self.current_occupancy = InterpreterFrameAuxOccupancy::KnownEmpty;
             return;
         }
         self.suspended.push(SuspendedInterpreterFrameAux {
             depth,
             state: std::mem::replace(&mut self.current, InterpreterFrameAux::empty()),
         });
+        self.current_occupancy = InterpreterFrameAuxOccupancy::KnownEmpty;
     }
 
     fn restore_current(&mut self, depth: InterpreterDriverDepth) {
-        self.current = InterpreterFrameAux::empty();
         if self
             .suspended
             .last()
@@ -1030,6 +1052,7 @@ impl InterpreterFrameAuxStack {
                 .pop()
                 .expect("matching sparse auxiliary frame must exist")
                 .state;
+            self.current_occupancy = InterpreterFrameAuxOccupancy::MayContainState;
         } else {
             debug_assert!(
                 self.suspended
@@ -1037,12 +1060,24 @@ impl InterpreterFrameAuxStack {
                     .is_none_or(|suspended| suspended.depth < depth),
                 "sparse auxiliary frames must remain ordered by driver depth"
             );
+            // The ordinary Breturn path has neither current nor suspended
+            // auxiliary state.  Keep that already-empty state in place: in
+            // addition to avoiding two SmallVec resets on every return, this
+            // preserves any reusable spilled storage left by an earlier
+            // handler or dynamic binding in the same driver frame.
+            if self.current_occupancy == InterpreterFrameAuxOccupancy::MayContainState {
+                if !self.current.is_empty() {
+                    self.current = InterpreterFrameAux::empty();
+                }
+                self.current_occupancy = InterpreterFrameAuxOccupancy::KnownEmpty;
+            }
         }
     }
 
     fn take_entry(&mut self) -> (HandlerStack, BindStack) {
         debug_assert!(self.suspended.is_empty());
         let entry = std::mem::replace(&mut self.current, InterpreterFrameAux::empty());
+        self.current_occupancy = InterpreterFrameAuxOccupancy::KnownEmpty;
         (entry.handlers, entry.bind_stack)
     }
 
