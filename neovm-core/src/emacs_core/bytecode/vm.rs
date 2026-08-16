@@ -880,6 +880,7 @@ impl InterpreterFunction {
 /// locals saved by `Bcall`. Keeping them in one Rust value makes a recursive
 /// interpreter entry unrepresentable on the iterative path: callers are moved
 /// onto the driver stack and can only be resumed through `Breturn` handling.
+#[derive(Clone, Copy)]
 struct InterpreterFrame {
     function: InterpreterFunction,
     frame_base: usize,
@@ -1166,6 +1167,100 @@ const _: () = {
 struct BytecodeCallContinuation {
     stack_after_call: usize,
     backtrace: BytecodeBacktraceFrame,
+}
+
+/// GNU-shaped storage for suspended Tier-0 register snapshots.
+///
+/// `Vec::push`/`pop` materialize a whole 64-byte value before and after the
+/// capacity branch.  This wrapper keeps that branch at one boundary and lets
+/// LLVM copy directly between the active frame and the already-proven spare
+/// slot.  The register snapshot is `Copy`, while the deliberately non-`Copy`
+/// backtrace token is moved exactly once during restore.
+struct InterpreterCallerStack {
+    frames: Vec<SuspendedInterpreterFrame>,
+}
+
+impl InterpreterCallerStack {
+    fn new() -> Self {
+        Self { frames: Vec::new() }
+    }
+
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.frames.is_empty()
+    }
+
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.frames.len()
+    }
+
+    #[inline(always)]
+    fn suspend_and_enter(
+        &mut self,
+        current: &mut InterpreterFrame,
+        child: InterpreterFrame,
+        continuation: BytecodeCallContinuation,
+    ) {
+        if self.frames.len() == self.frames.capacity() {
+            self.reserve_one_slow();
+        }
+
+        let len = self.frames.len();
+        // SAFETY: the capacity check above proves slot `len` is allocated.
+        // The vector length is published only after the complete suspended
+        // frame has been initialized.
+        unsafe {
+            self.frames
+                .as_mut_ptr()
+                .add(len)
+                .write(SuspendedInterpreterFrame {
+                    frame: *current,
+                    continuation,
+                });
+            self.frames.set_len(len + 1);
+        }
+        *current = child;
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn reserve_one_slow(&mut self) {
+        self.frames.reserve(1);
+    }
+
+    #[inline(always)]
+    fn restore_current(
+        &mut self,
+        current: &mut InterpreterFrame,
+    ) -> Option<BytecodeCallContinuation> {
+        if self.is_empty() {
+            return None;
+        }
+        // SAFETY: the nonempty check above proves a suspended caller exists.
+        Some(unsafe { self.restore_current_unchecked(current) })
+    }
+
+    /// Restore one caller after a separate nonempty proof.
+    ///
+    /// # Safety
+    /// `self` must contain at least one suspended frame.
+    #[inline(always)]
+    unsafe fn restore_current_unchecked(
+        &mut self,
+        current: &mut InterpreterFrame,
+    ) -> BytecodeCallContinuation {
+        let new_len = self.frames.len() - 1;
+        // SAFETY: required by this method's contract.  Copy the register
+        // snapshot, move the single-use backtrace token, then remove the fully
+        // moved slot without running a destructor for it.
+        let suspended = unsafe { self.frames.as_ptr().add(new_len) };
+        let frame = unsafe { (*suspended).frame };
+        let continuation = unsafe { std::ptr::read(&(*suspended).continuation) };
+        unsafe { self.frames.set_len(new_len) };
+        *current = frame;
+        continuation
+    }
 }
 
 enum InterpreterStackCall {
@@ -2558,14 +2653,14 @@ impl<'a> Vm<'a> {
     fn complete_interpreter_frame_chain(
         &mut self,
         current: &mut InterpreterFrame,
-        callers: &mut Vec<SuspendedInterpreterFrame>,
+        callers: &mut InterpreterCallerStack,
         aux_stack: &mut InterpreterFrameAuxStack,
         mut result: EvalResult,
     ) -> InterpreterFrameCompletion {
         loop {
             result = self.finish_interpreter_frame(current, callers.is_empty(), result);
 
-            let Some(suspended) = callers.pop() else {
+            let Some(continuation) = callers.restore_current(current) else {
                 return InterpreterFrameCompletion::Exit(result);
             };
 
@@ -2579,17 +2674,14 @@ impl<'a> Vm<'a> {
             // pop behind the typed iterative continuation prevents the
             // generic release/unbind machinery from becoming a per-call tax.
             self.ctx
-                .pop_fast_bytecode_backtrace_frame(suspended.continuation.backtrace);
-            *current = suspended.frame;
+                .pop_fast_bytecode_backtrace_frame(continuation.backtrace);
             aux_stack.restore_current(InterpreterDriverDepth::from_suspended_callers(
                 callers.len(),
             ));
 
             match result {
                 Ok(value) => {
-                    self.ctx
-                        .bc_buf
-                        .truncate(suspended.continuation.stack_after_call);
+                    self.ctx.bc_buf.truncate(continuation.stack_after_call);
                     debug_assert!(self.ctx.bc_buf.len() < current.frame_limit);
                     self.ctx.bc_buf.push(value);
                     return InterpreterFrameCompletion::Resume;
@@ -2626,7 +2718,7 @@ impl<'a> Vm<'a> {
     fn complete_interpreter_frame_value(
         &mut self,
         current: &mut InterpreterFrame,
-        callers: &mut Vec<SuspendedInterpreterFrame>,
+        callers: &mut InterpreterCallerStack,
         aux_stack: &mut InterpreterFrameAuxStack,
         value: Value,
     ) -> InterpreterValueCompletion {
@@ -2655,17 +2747,14 @@ impl<'a> Vm<'a> {
         // SAFETY: the empty caller stack returned `Exit` above, and no code
         // between that proof and this pop can mutate `callers`.  GNU's
         // `Breturn` likewise restores its already-proven saved frame directly.
-        let suspended = unsafe { callers.pop().unwrap_unchecked() };
+        let continuation = unsafe { callers.restore_current_unchecked(current) };
         self.leave_bytecode_call_depth();
         self.ctx
-            .pop_fast_bytecode_backtrace_frame(suspended.continuation.backtrace);
-        *current = suspended.frame;
+            .pop_fast_bytecode_backtrace_frame(continuation.backtrace);
         aux_stack.restore_current(InterpreterDriverDepth::from_suspended_callers(
             callers.len(),
         ));
-        self.ctx
-            .bc_buf
-            .truncate(suspended.continuation.stack_after_call);
+        self.ctx.bc_buf.truncate(continuation.stack_after_call);
         debug_assert!(self.ctx.bc_buf.len() < current.frame_limit);
         self.ctx.bc_buf.push(value);
         InterpreterValueCompletion::Resume
@@ -2802,7 +2891,7 @@ impl<'a> Vm<'a> {
         // allocating. The first iterative Bcall grows this once and thereafter
         // gets Vec's single-representation push/pop path; SmallVec's repeated
         // inline-vs-spilled branch was measurable on every Bcall/Breturn.
-        let mut callers = Vec::new();
+        let mut callers = InterpreterCallerStack::new();
         // GNU bytecode.c keeps one unsigned quit counter for the whole
         // exec_byte_code driver. setup_frame/Breturn do not save or reset it.
         let mut quitcounter = 1;
@@ -2833,7 +2922,7 @@ impl<'a> Vm<'a> {
     fn run_interpreter_driver(
         &mut self,
         current: &mut InterpreterFrame,
-        callers: &mut Vec<SuspendedInterpreterFrame>,
+        callers: &mut InterpreterCallerStack,
         aux_stack: &mut InterpreterFrameAuxStack,
         driver_quitcounter: &mut u8,
     ) -> EvalResult {
@@ -3436,15 +3525,15 @@ impl<'a> Vm<'a> {
                                         InterpreterDriverDepth::from_suspended_callers(
                                             callers.len(),
                                         );
-                                    let parent = std::mem::replace(current, child);
                                     aux_stack.suspend_current(caller_depth);
-                                    callers.push(SuspendedInterpreterFrame {
-                                        frame: parent,
-                                        continuation: BytecodeCallContinuation {
+                                    callers.suspend_and_enter(
+                                        current,
+                                        child,
+                                        BytecodeCallContinuation {
                                             stack_after_call,
                                             backtrace,
                                         },
-                                    });
+                                    );
                                     continue 'frame;
                                 }
                                 InterpreterStackCall::Complete(result) => {
