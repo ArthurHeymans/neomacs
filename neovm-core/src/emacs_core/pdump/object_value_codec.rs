@@ -591,6 +591,7 @@ const OP_SAVE_WINDOW_EXCURSION: u8 = 85;
 const OP_MAKE_CLOSURE: u8 = 86;
 const OP_CALL_BUILTIN: u8 = 87;
 const OP_CALL_BUILTIN_SYM: u8 = 88;
+const OP_TRAP_OUT_OF_RANGE_CONSTANT: u8 = 89;
 
 fn write_ops(out: &mut Vec<u8>, ops: &[DumpOp]) {
     write_u64(out, ops.len() as u64);
@@ -699,6 +700,9 @@ fn write_ops(out: &mut Vec<u8>, ops: &[DumpOp]) {
                 write_u8(out, OP_CALL_BUILTIN_SYM);
                 write_u32(out, sym.0);
                 write_u8(out, *argc);
+            }
+            DumpOp::TrapOutOfRangeConstant(value) => {
+                write_op_u16(out, OP_TRAP_OUT_OF_RANGE_CONSTANT, *value);
             }
         }
     }
@@ -1304,6 +1308,9 @@ impl<'a> Cursor<'a> {
                 OP_CALL_BUILTIN_SYM => DumpOp::CallBuiltinSym(
                     DumpSymId(self.read_u32("call-builtin-sym op symbol")?),
                     self.read_u8("call-builtin-sym op argc")?,
+                ),
+                OP_TRAP_OUT_OF_RANGE_CONSTANT => DumpOp::TrapOutOfRangeConstant(
+                    self.read_u16("trap-out-of-range-constant op index")?,
                 ),
                 other => {
                     return Err(DumpError::ImageFormatError(format!(

@@ -390,6 +390,7 @@ fn op_debug_is_canonical(op: &Op) -> bool {
         // / immediates (u8) / no payload — all session-independent. Listed
         // explicitly (no `_`) so a new variant forces a decision here.
         Op::Constant(..)
+        | Op::TrapOutOfRangeConstant(..)
         | Op::Nil
         | Op::True
         | Op::Pop

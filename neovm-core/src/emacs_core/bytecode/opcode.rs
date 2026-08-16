@@ -195,6 +195,13 @@ pub enum Op {
     /// template) silently shifts Op::Constant(N) references into the
     /// appended builtin symbols.
     CallBuiltinSym(crate::emacs_core::intern::SymId, u8),
+    /// A `Constant` whose pool index was proven out of range at decode time.
+    ///
+    /// `seal_ops` rewrites such instructions so the hot `Constant` arm can
+    /// read the pool unchecked; executing this op reproduces the exact
+    /// runtime error the checked arm used to raise. GNU reads its constant
+    /// vector unchecked here, so this shape only exists in malformed input.
+    TrapOutOfRangeConstant(u16),
 }
 
 impl Op {
@@ -207,6 +214,9 @@ impl Op {
                     .map(|v| format!("{}", v))
                     .unwrap_or_else(|| "???".to_string());
                 format!("constant {} ; {}", idx, val)
+            }
+            Op::TrapOutOfRangeConstant(idx) => {
+                format!("constant {} ; <out of range>", idx)
             }
             Op::Nil => "nil".to_string(),
             Op::True => "true".to_string(),

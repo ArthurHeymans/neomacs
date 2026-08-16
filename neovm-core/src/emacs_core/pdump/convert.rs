@@ -2290,6 +2290,7 @@ pub(crate) fn dump_op(op: &Op) -> DumpOp {
         Op::MakeClosure(n) => DumpOp::MakeClosure(n),
         Op::CallBuiltin(a, b) => DumpOp::CallBuiltin(a, b),
         Op::CallBuiltinSym(sym, b) => DumpOp::CallBuiltinSym(dump_sym_id(sym), b),
+        Op::TrapOutOfRangeConstant(n) => DumpOp::TrapOutOfRangeConstant(n),
     }
 }
 
@@ -3960,6 +3961,7 @@ pub(crate) fn load_op(op: &DumpOp) -> Result<Op, DumpError> {
         DumpOp::MakeClosure(n) => Op::MakeClosure(n),
         DumpOp::CallBuiltin(a, b) => Op::CallBuiltin(a, b),
         DumpOp::CallBuiltinSym(sym, b) => Op::CallBuiltinSym(load_sym_id(&sym), b),
+        DumpOp::TrapOutOfRangeConstant(n) => Op::TrapOutOfRangeConstant(n),
     };
     Ok(op)
 }

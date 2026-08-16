@@ -332,6 +332,7 @@ pub enum DumpOp {
     /// mirror). Serialized as the symbol's name so SymId mapping
     /// survives across dump/load.
     CallBuiltinSym(DumpSymId, u8),
+    TrapOutOfRangeConstant(u16),
 }
 
 // ---------------------------------------------------------------------------

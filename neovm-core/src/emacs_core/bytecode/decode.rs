@@ -102,26 +102,56 @@ pub fn decode_gnu_bytecode_with_offset_map(
     constants: &mut Vec<Value>,
 ) -> Result<(Vec<Op>, Vec<GnuByteOffsetMapEntry>), DecodeError> {
     let (raw_ops, offset_map, jump_patches) = decode_pass1(bytecodes, constants)?;
-    let ops = seal_ops(patch_jumps(
-        raw_ops,
-        &offset_map,
-        &jump_patches,
-        bytecodes.len(),
-    )?);
-    if !ops.iter().any(|op| matches!(op, Op::Switch)) {
-        return Ok((ops, Vec::new()));
+    let ops = seal_ops(
+        patch_jumps(raw_ops, &offset_map, &jump_patches, bytecodes.len())?,
+        constants.len(),
+    );
+    let entries = offset_map_entries(ops_have_switch(&ops), offset_map);
+    Ok((ops, entries))
+}
+
+/// Decode against an already-published, immutable constant pool.
+///
+/// The deferred-decode path cannot lend its Lisp constants mutably merely to
+/// decode IR; the decoder is known not to extend the pool (asserted below),
+/// so the published pool length is enough to seal `Constant` indices.
+pub fn decode_gnu_bytecode_for_published_pool(
+    bytecodes: &[u8],
+    published_constants_len: usize,
+) -> Result<(Vec<Op>, Vec<GnuByteOffsetMapEntry>), DecodeError> {
+    let mut scratch_constants = Vec::new();
+    let (raw_ops, offset_map, jump_patches) = decode_pass1(bytecodes, &mut scratch_constants)?;
+    debug_assert!(
+        scratch_constants.is_empty(),
+        "deferred decode must not extend a published constant pool"
+    );
+    let ops = seal_ops(
+        patch_jumps(raw_ops, &offset_map, &jump_patches, bytecodes.len())?,
+        published_constants_len,
+    );
+    let entries = offset_map_entries(ops_have_switch(&ops), offset_map);
+    Ok((ops, entries))
+}
+
+fn ops_have_switch(ops: &[Op]) -> bool {
+    ops.iter().any(|op| matches!(op, Op::Switch))
+}
+
+fn offset_map_entries(
+    have_switch: bool,
+    offset_map: HashMap<usize, usize>,
+) -> Vec<GnuByteOffsetMapEntry> {
+    if !have_switch {
+        return Vec::new();
     }
     let mut offset_pairs: Vec<_> = offset_map.into_iter().collect();
     offset_pairs.sort_unstable_by_key(|(byte_offset, _)| *byte_offset);
-    Ok((
-        ops,
-        offset_pairs
-            .into_iter()
-            .map(|(byte_offset, instruction_index)| {
-                GnuByteOffsetMapEntry::new(byte_offset, instruction_index)
-            })
-            .collect(),
-    ))
+    offset_pairs
+        .into_iter()
+        .map(|(byte_offset, instruction_index)| {
+            GnuByteOffsetMapEntry::new(byte_offset, instruction_index)
+        })
+        .collect()
 }
 
 /// Seal decoded instructions so the dispatch loop needs no per-fetch bound
@@ -140,7 +170,13 @@ pub fn decode_gnu_bytecode_with_offset_map(
 /// (runtime `Switch` targets come from the byte-offset map, which only holds
 /// instruction starts).  `Vm::run_loop` relies on this invariant for its
 /// unchecked instruction fetch.
-fn seal_ops(mut ops: Vec<Op>) -> Vec<Op> {
+///
+/// The same pass proves every `Constant` pool index in range so the hot
+/// dispatch arm can read the pool unchecked (GNU's `Bconstant` is an
+/// unchecked vector read); an out-of-range index — impossible in compiler
+/// output — is rewritten to [`Op::TrapOutOfRangeConstant`], which raises
+/// exactly the runtime error the checked arm used to raise.
+fn seal_ops(mut ops: Vec<Op>, constants_len: usize) -> Vec<Op> {
     if !matches!(ops.last(), Some(Op::Return)) {
         ops.push(Op::Return);
     }
@@ -157,6 +193,11 @@ fn seal_ops(mut ops: Vec<Op>) -> Vec<Op> {
             | Op::PushCatch(target) => {
                 if *target > last {
                     *target = last;
+                }
+            }
+            Op::Constant(idx) => {
+                if *idx as usize >= constants_len {
+                    *op = Op::TrapOutOfRangeConstant(*idx);
                 }
             }
             _ => {}

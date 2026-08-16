@@ -3268,9 +3268,12 @@ impl<'a> Vm<'a> {
                 match op {
                     // -- Constants and stack --
                     Op::Constant(idx) => {
-                        let Some(value) = constants.get(*idx as usize).copied() else {
-                            invalid_bytecode!("constant-index-out-of-range");
-                        };
+                        // SAFETY: seal_ops proved every surviving `Constant`
+                        // index in range at decode time (out-of-range ones
+                        // became `TrapOutOfRangeConstant`); the published
+                        // constant pool never shrinks. GNU's Bconstant is the
+                        // same unchecked vector read.
+                        let value = unsafe { *constants.get_unchecked(*idx as usize) };
                         stk_push!(value);
 
                         // GNU's threaded interpreter executes Bconstant and
@@ -3300,6 +3303,9 @@ impl<'a> Vm<'a> {
                                 invalid_bytecode!("stack-ref-out-of-range");
                             }
                         }
+                    }
+                    Op::TrapOutOfRangeConstant(_) => {
+                        invalid_bytecode!("constant-index-out-of-range");
                     }
                     Op::Nil => stk_push!(Value::NIL),
                     Op::True => stk_push!(Value::T),

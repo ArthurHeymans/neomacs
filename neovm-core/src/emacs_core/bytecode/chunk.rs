@@ -49,18 +49,16 @@ impl LazyGnuCode {
 
     #[cold]
     #[inline(never)]
-    fn decode(&self, raw_bytes: &[u8]) -> &DecodedGnuCode {
+    fn decode(&self, raw_bytes: &[u8], published_constants_len: usize) -> &DecodedGnuCode {
         self.decoded.get_or_init(|| {
-            // The decoder currently does not modify the constant pool. Keep
-            // the compatibility argument local so cold functions need not
-            // clone or synchronize their Lisp constants merely to decode IR.
-            let mut unused_constants = Vec::new();
-            let (ops, byte_offset_map) = super::decode::decode_gnu_bytecode_with_offset_map(
+            // The published pool length lets `seal_ops` prove `Constant`
+            // indices without lending the immutable Lisp constants mutably
+            // merely to decode IR.
+            let (ops, byte_offset_map) = super::decode::decode_gnu_bytecode_for_published_pool(
                 raw_bytes,
-                &mut unused_constants,
+                published_constants_len,
             )
             .expect("validated GNU bytecode failed deferred decoding");
-            debug_assert!(unused_constants.is_empty());
             DecodedGnuCode {
                 ops,
                 byte_offset_map,
@@ -291,7 +289,7 @@ impl ByteCodeFunction {
                             .gnu_bytecode_bytes
                             .as_deref()
                             .expect("lazy GNU bytecode lost its original bytes");
-                        lazy.decode(raw_bytes)
+                        lazy.decode(raw_bytes, self.constants.len())
                     }
                 };
                 &decoded.ops
@@ -312,7 +310,7 @@ impl ByteCodeFunction {
                             .gnu_bytecode_bytes
                             .as_deref()
                             .expect("lazy GNU bytecode lost its original bytes");
-                        lazy.decode(raw_bytes)
+                        lazy.decode(raw_bytes, self.constants.len())
                     }
                 };
                 let map = &decoded.byte_offset_map;
