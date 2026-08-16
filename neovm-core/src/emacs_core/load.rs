@@ -3300,10 +3300,7 @@ fn ensure_startup_compat_variables(eval: &mut super::eval::Context, project_root
         ("inhibit-point-motion-hooks", Value::T),
         (
             "text-property-default-nonsticky",
-            Value::list(vec![
-                Value::cons(Value::symbol("syntax-table"), Value::T),
-                Value::cons(Value::symbol("display"), Value::T),
-            ]),
+            crate::emacs_core::textprop::default_text_property_nonsticky_alist(),
         ),
     ];
     for (name, value) in defaults {

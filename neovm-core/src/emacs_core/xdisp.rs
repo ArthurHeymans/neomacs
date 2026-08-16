@@ -5912,13 +5912,11 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     );
 
     // text-property-default-nonsticky: alist of properties vs non-stickiness.
-    // Official Emacs (textprop.c) initializes to ((syntax-table . t) (display . t)).
+    // The effective GNU default is assembled by two C files, so it is kept in
+    // one place -- see `default_text_property_nonsticky_alist'.
     obarray.set_symbol_value(
         "text-property-default-nonsticky",
-        Value::list(vec![
-            Value::cons(Value::symbol("syntax-table"), Value::T),
-            Value::cons(Value::symbol("display"), Value::T),
-        ]),
+        crate::emacs_core::textprop::default_text_property_nonsticky_alist(),
     );
 }
 

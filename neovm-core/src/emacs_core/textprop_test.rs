@@ -2872,3 +2872,162 @@ fn previous_single_char_property_change_resolves_window_object_to_buffer() {
         .collect::<Vec<_>>();
     assert_eq!(results, vec!["OK 6".to_string()]);
 }
+
+// -----------------------------------------------------------------------
+// GNU position validation in the text-property family
+//
+// Expectations below were MEASURED by running tmp/coord-textprop-range-probe*.el
+// under GNU Emacs 31.0.90, never derived.  GNU has two out-of-range shapes for
+// a single text-property position and they are not interchangeable:
+//
+//   validate_interval_range          src/textprop.c:141,158 -- a point call
+//     passes `&position' as BOTH `begin' and `end', so `args_out_of_range
+//     (begin0, end0)' carries the position TWICE.
+//   get_char_property_and_overlay    src/textprop.c:642-644 -- its own bounds
+//     check uses `xsignal1', carrying the position ONCE.
+//
+// Which one a builtin gets is not a style choice; it is which GNU function the
+// builtin goes through.
+//
+// GNU prints the whole error object, `(args-out-of-range 500 500)';
+// `format_eval_result' prints the signal symbol and then its DATA as a list,
+// `ERR (args-out-of-range (500 500))'.  Same signal, different rendering -- the
+// payload to compare against GNU is what is inside the inner parens.
+// -----------------------------------------------------------------------
+
+#[test]
+fn previous_property_change_out_of_range_signal_uses_gnu_point_range_payload() {
+    // GNU `Fprevious_property_change' validates through
+    // `validate_interval_range (object, &position, &position, soft)'
+    // (src/textprop.c:1090), so the payload is the position twice.  The buffer
+    // branch used to validate through the `get-char-property' shape instead and
+    // signalled it once.
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("hello");
+    let results = eval
+        .eval_str_each(
+            r#"(previous-property-change 500)
+               (previous-char-property-change 500)
+               (previous-char-property-change -7)
+               (previous-property-change 500 "abc")"#,
+        )
+        .into_iter()
+        .map(|r| crate::emacs_core::error::format_eval_result(&r))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        results,
+        vec![
+            "ERR (args-out-of-range (500 500))".to_string(),
+            "ERR (args-out-of-range (500 500))".to_string(),
+            "ERR (args-out-of-range (-7 -7))".to_string(),
+            "ERR (args-out-of-range (500 500))".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn get_pos_property_validates_position_through_its_stickiness_reads() {
+    // GNU `Fget_pos_property' has no bounds check of its own (src/editfns.c:285).
+    // Its out-of-range signal is EMERGENT: `text_property_stickiness' reads text
+    // properties twice through `Fget_text_property' -- at POS-1
+    // (src/textprop.c:1919) and at POS (src/textprop.c:1931, whose comment says
+    // "This signals an arg-out-of-range error if pos is outside the buffer's
+    // accessible range") -- and each of those validates.  So WHICH position
+    // appears in the error follows GNU's branch structure: the POS-1 read is
+    // skipped when POS <= BEGV or when PROP is default-nonsticky
+    // (src/textprop.c:1912-1914), and then POS names itself.
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("hello");
+    let results = eval
+        .eval_str_each(
+            r#"(setq text-property-default-nonsticky
+                     '((composition . t) (syntax-table . t) (display . t)))
+               (get-pos-property 500 'face)
+               (get-pos-property 500 'syntax-table)
+               (get-pos-property 500 'display)
+               (get-pos-property 0 'face)
+               (get-pos-property -7 'face)
+               (get-pos-property 7 'face)
+               (progn (put-text-property 2 4 'face 'bold) nil)
+               (get-pos-property 1 'face)
+               (get-pos-property 2 'face)
+               (get-pos-property 3 'face)
+               (get-pos-property 4 'face)
+               (get-pos-property 6 'face)"#,
+        )
+        .into_iter()
+        .map(|r| crate::emacs_core::error::format_eval_result(&r))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        results,
+        vec![
+            "OK ((composition . t) (syntax-table . t) (display . t))".to_string(),
+            // PROP is not default-nonsticky and POS > BEGV, so the POS-1 read
+            // runs first and names 499.
+            "ERR (args-out-of-range (499 499))".to_string(),
+            // Default-nonsticky PROPs skip the POS-1 read entirely.
+            "ERR (args-out-of-range (500 500))".to_string(),
+            "ERR (args-out-of-range (500 500))".to_string(),
+            // POS <= BEGV also skips the POS-1 read.
+            "ERR (args-out-of-range (0 0))".to_string(),
+            "ERR (args-out-of-range (-7 -7))".to_string(),
+            // POS-1 == 6 == ZV is in range, so the POS read is the one to fail.
+            "ERR (args-out-of-range (7 7))".to_string(),
+            "OK nil".to_string(),
+            // In-range answers are unchanged by validation.
+            "OK nil".to_string(),
+            "OK nil".to_string(),
+            "OK bold".to_string(),
+            "OK bold".to_string(),
+            "OK nil".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn get_pos_property_validates_against_the_accessible_portion() {
+    // `validate_interval_range' bounds against BEGV/ZV, not BEG/Z
+    // (src/textprop.c:156-157), and BEGV is also what decides whether the POS-1
+    // read happens at all (src/textprop.c:1912), so narrowing moves both.
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("hello world");
+    let results = eval
+        .eval_str_each(
+            r#"(progn (narrow-to-region 3 6) nil)
+               (get-pos-property 3 'face)
+               (get-pos-property 2 'face)
+               (get-pos-property 1 'face)
+               (get-pos-property 9 'face)"#,
+        )
+        .into_iter()
+        .map(|r| crate::emacs_core::error::format_eval_result(&r))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        results,
+        vec![
+            "OK nil".to_string(),
+            "OK nil".to_string(),
+            // POS <= BEGV: the POS-1 read is skipped and POS names itself.
+            "ERR (args-out-of-range (2 2))".to_string(),
+            "ERR (args-out-of-range (1 1))".to_string(),
+            // POS-1 == 8 is outside the restriction even though it exists in
+            // the buffer, so 8 is what fails.
+            "ERR (args-out-of-range (8 8))".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn text_property_default_nonsticky_carries_the_composition_entry() {
+    // GNU builds this default in two places: `syms_of_textprop' seeds it with
+    // syntax-table and display (src/textprop.c:2428-2429), and
+    // `syms_of_composite' CONSES composition onto the front
+    // (src/composite.c:2212-2213).  Porting only the first leaves composition
+    // sticky, so text inserted next to a composed sequence inherits a
+    // composition that GNU would not give it.
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        crate::test_utils::runtime_startup_eval_one("text-property-default-nonsticky"),
+        "OK ((composition . t) (syntax-table . t) (display . t))"
+    );
+}

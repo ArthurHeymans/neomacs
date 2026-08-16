@@ -127,10 +127,7 @@ pub(crate) fn init_textprop_vars(
     let default_nonsticky_name = default_nonsticky.name();
     obarray.set_symbol_value(
         default_nonsticky_name,
-        Value::list(vec![
-            Value::cons(Value::symbol("syntax-table"), Value::T),
-            Value::cons(Value::symbol("display"), Value::T),
-        ]),
+        default_text_property_nonsticky_alist(),
     );
     obarray.make_special(default_nonsticky_name);
     // Mirrors GNU `Fmake_variable_buffer_local` (`data.c:2142-2207`):
@@ -245,11 +242,25 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("inhibit-point-motion-hooks", Value::T);
     obarray.set_symbol_value(
         TextPropertyControlVariable::TextPropertyDefaultNonsticky.name(),
-        Value::list(vec![
-            Value::cons(Value::symbol("syntax-table"), Value::T),
-            Value::cons(Value::symbol("display"), Value::T),
-        ]),
+        default_text_property_nonsticky_alist(),
     );
+}
+
+/// GNU's effective default for `text-property-default-nonsticky', which is
+/// assembled in TWO C files and is therefore not what either one alone says:
+/// `syms_of_textprop' seeds the alist with syntax-table and display
+/// (src/textprop.c:2426-2429), and `syms_of_composite' conses `composition'
+/// onto the FRONT of whatever is already there (src/composite.c:2212-2213).
+///
+/// This lives in one function because the value used to be spelled out at four
+/// separate installation sites, so correcting one of them was silently undone
+/// by the next one to run.
+pub(crate) fn default_text_property_nonsticky_alist() -> Value {
+    Value::list(vec![
+        Value::cons(Value::symbol("composition"), Value::T),
+        Value::cons(Value::symbol("syntax-table"), Value::T),
+        Value::cons(Value::symbol("display"), Value::T),
+    ])
 }
 
 fn current_textprop_variable_value(
@@ -824,7 +835,15 @@ pub(crate) fn validate_buffer_point_emacs_byte_pos_raw(
     Ok(elisp_pos_to_byte(buf, validated_lisp_char_pos(pos)))
 }
 
-fn validate_buffer_property_point_emacs_byte_pos_raw(
+pub(crate) fn validate_buffer_property_point_raw(
+    buf: &crate::buffer::buffer::Buffer,
+    pos: i64,
+    pos0: Value,
+) -> Result<usize, Flow> {
+    validate_buffer_property_point_emacs_byte_pos_raw(buf, pos, pos0).map(EmacsBytePos::get)
+}
+
+pub(crate) fn validate_buffer_property_point_emacs_byte_pos_raw(
     buf: &crate::buffer::buffer::Buffer,
     pos: i64,
     pos0: Value,
