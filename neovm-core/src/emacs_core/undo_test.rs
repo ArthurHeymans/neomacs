@@ -1240,7 +1240,9 @@ fn gc_consults_undo_outer_limit_function_with_the_buffer_current() {
 
     eval.gc_collect_exact();
 
-    let calls = eval.eval_str("neo-undo-outer-calls").expect("calls recorded");
+    let calls = eval
+        .eval_str("neo-undo-outer-calls")
+        .expect("calls recorded");
     assert_eq!(
         crate::emacs_core::print::print_value(&calls),
         r#"((64 . "E"))"#
@@ -1323,4 +1325,49 @@ fn gc_leaves_a_buffer_with_undo_disabled_alone() {
     eval.gc_collect_exact();
 
     assert_eq!(printed_undo_list(&mut eval, "F"), "t");
+}
+
+/// The exact domain of `undo-outer-limit': GNU's guard is
+/// `INTEGERP (V) && (integer_to_intmax (V, &l) ? l < size : NILP (Fnatnump (V)))'
+/// (`src/undo.c:352-355'), so a float is not a limit at all, a bignum too big
+/// for `intmax_t' fires only when it is negative, and a positive one never
+/// fires.
+///
+/// GNU Emacs -Q --batch, same fixture: only `neg-bignum' calls the function.
+#[test]
+fn undo_outer_limit_domain_matches_gnus_integer_guard() {
+    crate::test_utils::init_test_tracing();
+    for (name, limit, expected_calls) in [
+        ("neg-bignum", "(- (* most-positive-fixnum 8))", 1),
+        ("pos-bignum", "(* most-positive-fixnum 8)", 0),
+        ("not-an-integer", "\"nope\"", 0),
+        ("float", "1.0", 0),
+        ("small", "1", 1),
+    ] {
+        let mut eval = Context::new();
+        eval.eval_str(&format!(
+            r#"(progn
+                 (set-buffer (get-buffer-create "{name}"))
+                 (buffer-enable-undo)
+                 (setq buffer-undo-list nil)
+                 (make-local-variable 'undo-outer-limit)
+                 (setq undo-outer-limit {limit})
+                 (setq neo-undo-outer-calls 0)
+                 (setq undo-outer-limit-function
+                       (lambda (_size)
+                         (setq neo-undo-outer-calls (1+ neo-undo-outer-calls))
+                         t))
+                 (insert "hello"))"#
+        ))
+        .unwrap_or_else(|error| panic!("{name} fixture: {error:?}"));
+
+        eval.gc_collect_exact();
+
+        let calls = eval.eval_str("neo-undo-outer-calls").expect("call count");
+        assert_eq!(
+            calls,
+            Value::fixnum(expected_calls),
+            "undo-outer-limit = {limit}"
+        );
+    }
 }

@@ -4294,6 +4294,12 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
         // GNU emacs.c raises this after initialization for batch jobs so
         // short-lived noninteractive commands spend less time in GC.
         eval.set_variable("gc-cons-percentage", Value::make_float(1.0));
+    } else {
+        // GNU `syms_of_undo' (src/undo.c:459-474) gives `undo-outer-limit' a
+        // 24MB default and `--batch' clears it (src/emacs.c:1700-1707). A bare
+        // evaluator is a batch evaluator, so neovm-core defaults it to nil and
+        // the 24MB last-ditch limit is installed here for real sessions.
+        eval.set_variable("undo-outer-limit", Value::fixnum(24_000_000));
     }
     // Mirror GNU's C-side `no_site_lisp` / `build_details` globals as
     // Lisp variables. GNU itself does not expose them as Lisp vars (the
