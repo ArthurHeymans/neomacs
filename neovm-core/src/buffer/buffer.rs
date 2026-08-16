@@ -5891,16 +5891,28 @@ impl BufferManager {
         Some(buf.kill_buffer_local(name))
     }
 
+    /// GNU `Fundo_boundary` (src/undo.c:250-282).
+    ///
+    /// The whole body is guarded by one early return: a buffer whose
+    /// `buffer-undo-list` is `t` gets neither the boundary nor the
+    /// editor-global saved point.  That guard is load-bearing for the *other*
+    /// buffers -- `undo-auto--boundaries` walks the changed-buffer list with
+    /// each buffer made current, so a disabled buffer in that walk would
+    /// otherwise spend a point saved for a buffer that does record.
     pub fn add_undo_boundary(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         let mut ul = buf.get_undo_list();
+        match undo::UndoRecording::of(&ul) {
+            undo::UndoRecording::Disabled => return Some(()),
+            undo::UndoRecording::Enabled => {}
+        }
         undo::undo_list_boundary(&mut ul);
         // Periodically truncate the undo list to avoid unbounded growth.
         // Default limits match GNU Emacs: undo-limit=160000, undo-strong-limit=240000.
         ul = undo::truncate_undo_list(ul, 160_000, 240_000);
         buf.set_undo_list(ul);
-        // GNU `Fundo_boundary` saves point AND buffer into the editor-global
-        // pair (src/undo.c:278-279), overwriting whatever was there.
+        // GNU saves point AND buffer into the editor-global pair
+        // (src/undo.c:278-279), overwriting whatever was there.
         buf.saved_point_before_command
             .save(id, buf.point_char_pos());
         Some(())
