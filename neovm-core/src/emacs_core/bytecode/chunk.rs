@@ -47,7 +47,9 @@ impl LazyGnuCode {
         }
     }
 
-    fn get_or_decode(&self, raw_bytes: &[u8]) -> &DecodedGnuCode {
+    #[cold]
+    #[inline(never)]
+    fn decode(&self, raw_bytes: &[u8]) -> &DecodedGnuCode {
         self.decoded.get_or_init(|| {
             // The decoder currently does not modify the constant pool. Keep
             // the compatibility argument local so cold functions need not
@@ -282,11 +284,17 @@ impl ByteCodeFunction {
     pub fn executable_ops(&self) -> &[Op] {
         match &self.lazy_gnu_code {
             Some(lazy) => {
-                let raw_bytes = self
-                    .gnu_bytecode_bytes
-                    .as_deref()
-                    .expect("lazy GNU bytecode lost its original bytes");
-                &lazy.get_or_decode(raw_bytes).ops
+                let decoded = match lazy.decoded.get() {
+                    Some(decoded) => decoded,
+                    None => {
+                        let raw_bytes = self
+                            .gnu_bytecode_bytes
+                            .as_deref()
+                            .expect("lazy GNU bytecode lost its original bytes");
+                        lazy.decode(raw_bytes)
+                    }
+                };
+                &decoded.ops
             }
             None => &self.ops,
         }
@@ -297,11 +305,17 @@ impl ByteCodeFunction {
     pub fn executable_gnu_byte_offset_map(&self) -> Option<&[GnuByteOffsetMapEntry]> {
         match &self.lazy_gnu_code {
             Some(lazy) => {
-                let raw_bytes = self
-                    .gnu_bytecode_bytes
-                    .as_deref()
-                    .expect("lazy GNU bytecode lost its original bytes");
-                let map = &lazy.get_or_decode(raw_bytes).byte_offset_map;
+                let decoded = match lazy.decoded.get() {
+                    Some(decoded) => decoded,
+                    None => {
+                        let raw_bytes = self
+                            .gnu_bytecode_bytes
+                            .as_deref()
+                            .expect("lazy GNU bytecode lost its original bytes");
+                        lazy.decode(raw_bytes)
+                    }
+                };
+                let map = &decoded.byte_offset_map;
                 (!map.is_empty()).then_some(map)
             }
             None => self.gnu_byte_offset_map.as_deref(),
