@@ -105,6 +105,11 @@ struct SharedUndoStateInner {
     list: Value,
     in_progress: bool,
     recorded_first_change: bool,
+    /// GNU `BUF_COMPACT` (`src/buffer.h:139,267`): the modification tick this
+    /// text had when `compact_buffer` last ran on it.  Zero-initialised like
+    /// GNU's calloc'd `struct buffer_text`, so the first collection after a
+    /// buffer is created always compacts it (modification ticks start at 1).
+    compacted_modified_tick: i64,
 }
 
 impl Default for SharedUndoState {
@@ -124,6 +129,7 @@ impl SharedUndoState {
                 list,
                 in_progress,
                 recorded_first_change,
+                compacted_modified_tick: 0,
             })),
         }
     }
@@ -146,6 +152,16 @@ impl SharedUndoState {
 
     pub fn set_in_progress(&self, in_progress: bool) {
         self.inner.borrow_mut().in_progress = in_progress;
+    }
+
+    /// GNU `BUF_COMPACT (b)` — the modification tick at the last compaction.
+    pub fn compacted_modified_tick(&self) -> i64 {
+        self.inner.borrow().compacted_modified_tick
+    }
+
+    /// GNU `BUF_COMPACT (buffer) = BUF_MODIFF (buffer)` (`src/buffer.c:1884`).
+    pub fn set_compacted_modified_tick(&self, tick: i64) {
+        self.inner.borrow_mut().compacted_modified_tick = tick;
     }
 
     pub fn recorded_first_change(&self) -> bool {

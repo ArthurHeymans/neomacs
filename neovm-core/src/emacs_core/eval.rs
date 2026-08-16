@@ -3982,7 +3982,8 @@ impl Context {
             "treesit-languages-require-line-column-tracking",
             "treesit-major-mode-remap-alist",
             "treesit-thing-settings",
-            "undo-outer-limit",
+            // undo-outer-limit is registered (with its GNU src/undo.c init and
+            // the src/emacs.c batch override) by undo::register_bootstrap_vars.
             "unibyte-display-via-language-environment",
             "use-short-answers",
             "visible-bell",
@@ -8045,6 +8046,21 @@ impl Context {
     }
 
     fn gc_collect_from_current_roots_body(&mut self, force_complete: bool) {
+        // GNU `garbage_collect' shortens every live buffer's undo list before
+        // it marks anything: "Don't keep undo information around forever. Do
+        // this early on, so it is no problem if the user quits."
+        // (src/alloc.c:5796-5800). This is the only place undo lists are
+        // truncated -- `undo-boundary' does not do it.
+        //
+        // GNU compacts once per `garbage_collect' call. This collector slices
+        // one collection across several safe points, so compact only when a
+        // new cycle is about to start: an in-flight mark or sweep is the
+        // continuation of a collection whose compaction already ran.
+        if force_complete
+            || !(self.tagged_heap.mark_in_progress() || self.tagged_heap.sweep_in_progress())
+        {
+            crate::emacs_core::undo::compact_buffers_for_gc(self);
+        }
         let start = std::time::Instant::now();
         self.lexenv_assq_cache.clear();
         self.lexenv_special_cache.clear();
@@ -8464,7 +8480,7 @@ impl Context {
         }
     }
 
-    fn with_gc_inhibited<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+    pub(crate) fn with_gc_inhibited<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
         let mut guard = GcInhibitGuard::enter(self);
         f(guard.context())
     }
@@ -17126,6 +17142,21 @@ impl Context {
             return value;
         }
         Value::NIL
+    }
+
+    /// Read one of the variables `truncate_undo_list' consults, the way GNU's
+    /// C code sees it.
+    ///
+    /// GNU reads C globals reached through `DEFVAR_INT' / `DEFVAR_LISP'
+    /// symbols, so no lexical binding of the same name can shadow them; only
+    /// the dynamic value visible in the current buffer counts. Void reads back
+    /// as nil, which is the "no limit" / "no function" case at
+    /// `src/undo.c:352-356`.
+    pub(crate) fn undo_truncation_variable(&self, name: &str) -> Value {
+        self.visible_runtime_variable_value_by_id(intern(name))
+            .ok()
+            .flatten()
+            .unwrap_or(Value::NIL)
     }
 
     pub(crate) fn visible_runtime_variable_value_by_id(

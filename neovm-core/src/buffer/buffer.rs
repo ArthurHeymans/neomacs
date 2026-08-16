@@ -5907,9 +5907,10 @@ impl BufferManager {
             undo::UndoRecording::Enabled => {}
         }
         undo::undo_list_boundary(&mut ul);
-        // Periodically truncate the undo list to avoid unbounded growth.
-        // Default limits match GNU Emacs: undo-limit=160000, undo-strong-limit=240000.
-        ul = undo::truncate_undo_list(ul, 160_000, 240_000);
+        // No truncation here: GNU's `Fundo_boundary' (src/undo.c:251-282)
+        // only conses the boundary on.  Undo lists are shortened at garbage
+        // collection, from `compact_buffer' (src/buffer.c:1854-1885) — see
+        // `crate::emacs_core::undo::compact_buffers_for_gc'.
         buf.set_undo_list(ul);
         // GNU saves point AND buffer into the editor-global pair
         // (src/undo.c:278-279), overwriting whatever was there.

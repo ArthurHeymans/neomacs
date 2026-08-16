@@ -361,71 +361,250 @@ pub fn undo_list_has_trailing_boundary(undo_list: &Value) -> bool {
     undo_list.is_cons() && undo_list.cons_car().is_nil()
 }
 
-/// Estimate the byte size of one undo entry for truncation purposes.
-/// Each cons cell counts as 16 bytes; strings count their byte length.
-fn undo_entry_size(entry: &Value) -> usize {
-    match entry.kind() {
-        ValueKind::Nil => 0,
-        ValueKind::Fixnum(_) => 8,
-        ValueKind::String => entry.as_lisp_string().map(|s| s.sbytes()).unwrap_or(8),
-        _ if entry.is_cons() => {
-            let car = entry.cons_car();
-            let cdr = entry.cons_cdr();
-            let car_size = match car.kind() {
-                ValueKind::String => car.as_lisp_string().map(|s| s.sbytes()).unwrap_or(8),
-                _ => 8,
-            };
-            let cdr_size = match cdr.kind() {
-                ValueKind::String => cdr.as_lisp_string().map(|s| s.sbytes()).unwrap_or(8),
-                _ => 8,
-            };
-            16 + car_size + cdr_size
+// ---------------------------------------------------------------------------
+// Truncation (GNU `truncate_undo_list', src/undo.c:284-419)
+// ---------------------------------------------------------------------------
+
+/// `sizeof (struct Lisp_Cons)` on a 64-bit build — the unit GNU charges for
+/// every list link and every record cons (`src/undo.c:316,335,338`).
+const GNU_CONS_BYTES: i64 = 16;
+
+/// `sizeof (struct Lisp_String) - 1` on a 64-bit build (four pointer-sized
+/// fields: size, size_byte, intervals, data), the constant part of the charge
+/// GNU makes for a saved deletion string (`src/undo.c:340-341`).
+const GNU_STRING_HEADER_BYTES: i64 = 31;
+
+/// Bytes GNU charges for one undo list element plus its chain link.
+///
+/// `src/undo.c:334-342`: the link is always one cons; a cons-shaped record
+/// costs a second cons; and a record whose car is a string (a recorded
+/// deletion) additionally costs the string header plus one byte per
+/// *character* (`SCHARS`, not bytes).
+fn undo_element_bytes(element: Value) -> i64 {
+    let mut size = GNU_CONS_BYTES;
+    if element.is_cons() {
+        size += GNU_CONS_BYTES;
+        let car = element.cons_car();
+        if matches!(car.kind(), ValueKind::String) {
+            let chars = car.as_lisp_string().map(|s| s.schars()).unwrap_or(0);
+            size += GNU_STRING_HEADER_BYTES + chars as i64;
         }
-        _ => 8,
+    }
+    size
+}
+
+/// The value of a GNU `DEFVAR_INT` variable.
+///
+/// `store_symval_forwarding` (`src/data.c:1475-1483`) rejects anything that is
+/// not an integer fitting `intmax_t`, so the C slot behind `undo-limit` can
+/// only ever hold an `intmax_t`.  Neomacs still backs both size limits as
+/// plain obarray values — `forward::LispIntFwd` is declared but not yet wired
+/// into `find_symbol_value` — so a Lisp program can leave a string or a bignum
+/// there.  That state has no GNU counterpart, and naming it keeps it from
+/// silently standing in for some invented number.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GnuIntVariable {
+    /// An integer that fits `intmax_t`, exactly as GNU's slot would hold it.
+    Int(i64),
+    /// Not something GNU's `DEFVAR_INT` slot could contain.
+    NotAnIntSlotValue,
+}
+
+impl GnuIntVariable {
+    fn of(value: Value) -> Self {
+        match value.kind() {
+            ValueKind::Fixnum(n) => Self::Int(n),
+            _ => Self::NotAnIntSlotValue,
+        }
     }
 }
 
-/// Truncate an undo list to stay within size limits.
+/// What `undo-outer-limit` says about a single command's undo record.
 ///
-/// Walks the list counting approximate byte size.  After exceeding
-/// `undo_limit`, looks for the next nil boundary to truncate at.
-/// After exceeding `undo_strong_limit`, truncates immediately.
-///
-/// Returns the truncated list.
-pub fn truncate_undo_list(undo_list: Value, undo_limit: usize, undo_strong_limit: usize) -> Value {
-    if undo_list_is_disabled(&undo_list) || undo_list.is_nil() {
-        return undo_list;
+/// Mirrors the three outcomes GNU's guard at `src/undo.c:352-356` can produce
+/// for a `DEFVAR_LISP` variable that is documented to hold "a size, or nil for
+/// no limit".
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OuterUndoLimit {
+    /// `undo-outer-limit` is not an integer (nil is the documented "no limit"
+    /// value, and `--batch` installs it — `src/emacs.c:1700-1707`), or it is a
+    /// positive bignum too large for `intmax_t`, for which `Fnatnump` is
+    /// non-nil and GNU's guard stays false.
+    NoLimit,
+    /// An integer that fits `intmax_t`: exceeded when the first undo group is
+    /// strictly larger.
+    Bytes(i64),
+    /// A negative integer too large in magnitude for `intmax_t`:
+    /// `integer_to_intmax` fails and `Fnatnump` is nil, so GNU's guard is
+    /// unconditionally true.
+    AlwaysExceeded,
+}
+
+impl OuterUndoLimit {
+    fn of(value: Value) -> Self {
+        match value.kind() {
+            ValueKind::Fixnum(n) => Self::Bytes(n),
+            _ => match value.as_bignum() {
+                Some(big) if *big < 0 => Self::AlwaysExceeded,
+                // A bignum that big is not a limit any undo record can reach,
+                // and a non-integer fails GNU's `INTEGERP` guard outright.
+                _ => Self::NoLimit,
+            },
+        }
     }
 
-    let mut total_size: usize = 0;
-    let mut past_limit = false;
-    let mut scan = undo_list;
-
-    while scan.is_cons() {
-        let entry = scan.cons_car();
-        total_size += undo_entry_size(&entry) + 16; // 16 for the cons cell itself
-
-        if total_size > undo_strong_limit {
-            // Immediate truncation: cut here.
-            scan.set_cdr(Value::NIL);
-            return undo_list;
+    fn is_exceeded_by(self, size_so_far: i64) -> bool {
+        match self {
+            Self::NoLimit => false,
+            Self::Bytes(limit) => limit < size_so_far,
+            Self::AlwaysExceeded => true,
         }
+    }
+}
 
-        if total_size > undo_limit {
-            past_limit = true;
-        }
+/// The four Lisp variables `truncate_undo_list` consults.
+///
+/// GNU reads them only *after* `set_buffer_internal (b)` (`src/undo.c:296-306`
+/// — "Make the buffer current to get its local values of variables such as
+/// undo_limit"), so what governs a buffer's truncation is the binding visible
+/// in that buffer: its own buffer-local value, or a `let` binding, or the
+/// global default, in the ordinary Lisp order.
+///
+/// Implementing this trait is the *only* way to obtain an [`UndoLimits`], so a
+/// caller cannot truncate with a number nobody configured.
+pub trait UndoLimitBindings {
+    fn undo_limit(&self) -> Value;
+    fn undo_strong_limit(&self) -> Value;
+    fn undo_outer_limit(&self) -> Value;
+    fn undo_outer_limit_function(&self) -> Value;
+}
 
-        if past_limit && entry.is_nil() {
-            // Found a boundary past the limit — truncate after this boundary.
-            scan.set_cdr(Value::NIL);
-            return undo_list;
-        }
+/// One buffer's truncation limits, read at the moment GNU reads them.
+#[derive(Clone, Copy, Debug)]
+pub struct UndoLimits {
+    /// `undo-limit`: truncate *after* the boundary that pushes the list past
+    /// this size (`src/undo.c:380-390`).
+    limit: i64,
+    /// `undo-strong-limit`: truncate *before* it instead (`src/undo.c:386`).
+    strong_limit: i64,
+    outer: OuterUndoLimit,
+    outer_function: Value,
+}
 
-        scan = scan.cons_cdr();
+impl UndoLimits {
+    /// Read the limits through BINDINGS, which must already be positioned on
+    /// the buffer being truncated.
+    ///
+    /// `None` means `undo-limit` or `undo-strong-limit` holds something GNU's
+    /// `DEFVAR_INT` slot could never hold; there is no defensible number to
+    /// truncate with in that state, so the caller leaves the list alone.
+    pub fn read(bindings: &impl UndoLimitBindings) -> Option<Self> {
+        let (GnuIntVariable::Int(limit), GnuIntVariable::Int(strong_limit)) = (
+            GnuIntVariable::of(bindings.undo_limit()),
+            GnuIntVariable::of(bindings.undo_strong_limit()),
+        ) else {
+            return None;
+        };
+        Some(Self {
+            limit,
+            strong_limit,
+            outer: OuterUndoLimit::of(bindings.undo_outer_limit()),
+            outer_function: bindings.undo_outer_limit_function(),
+        })
     }
 
-    // Never exceeded any limit — return as-is.
-    undo_list
+    /// The function GNU offers the oversized record to, when there is both an
+    /// exceeded `undo-outer-limit` and an `undo-outer-limit-function`
+    /// (`src/undo.c:352-356`). `None` means GNU would not call anything.
+    pub fn outer_limit_function_for(self, first_group_bytes: i64) -> Option<Value> {
+        if !self.outer.is_exceeded_by(first_group_bytes) || self.outer_function.is_nil() {
+            return None;
+        }
+        Some(self.outer_function)
+    }
+}
+
+/// Bytes occupied by the leading boundary plus the most recent undo record —
+/// the size GNU has accumulated when it tests `undo-outer-limit`, and the
+/// number it passes to `undo-outer-limit-function` (`src/undo.c:312-361`).
+pub fn undo_first_group_bytes(undo_list: Value) -> i64 {
+    let mut size_so_far = 0;
+    let mut next = undo_list;
+
+    if next.is_cons() && next.cons_car().is_nil() {
+        size_so_far += GNU_CONS_BYTES;
+        next = next.cons_cdr();
+    }
+    while next.is_cons() && !next.cons_car().is_nil() {
+        size_so_far += undo_element_bytes(next.cons_car());
+        next = next.cons_cdr();
+    }
+    size_so_far
+}
+
+/// Truncate an undo list at the end, returning the truncated list.
+///
+/// A direct port of GNU `truncate_undo_list` (`src/undo.c:289-419`) minus its
+/// `undo-outer-limit-function` call, which needs the evaluator and is made by
+/// the caller between [`undo_first_group_bytes`] and this call.
+///
+/// The shape that matters, and that a "cut as soon as the running total
+/// exceeds the limit" loop does not have: the most recent record is always
+/// kept whole, and every cut lands on a group edge, so an undo list is never
+/// left holding half of a command's changes.
+pub fn truncate_undo_list(undo_list: Value, limits: &UndoLimits) -> Value {
+    let mut size_so_far: i64 = 0;
+    let mut prev = Value::NIL;
+    let mut next = undo_list;
+    let mut last_boundary = Value::NIL;
+
+    // If the first element is an undo boundary, skip past it.
+    if next.is_cons() && next.cons_car().is_nil() {
+        size_so_far += GNU_CONS_BYTES;
+        prev = next;
+        next = next.cons_cdr();
+    }
+
+    // Always preserve at least the most recent undo record.
+    while next.is_cons() && !next.cons_car().is_nil() {
+        size_so_far += undo_element_bytes(next.cons_car());
+        prev = next;
+        next = next.cons_cdr();
+    }
+
+    if next.is_cons() {
+        last_boundary = prev;
+    }
+
+    // Keep additional undo data, if it fits in the limits.
+    while next.is_cons() {
+        let element = next.cons_car();
+        // At a boundary, decide whether to truncate before or after it: the
+        // lower threshold truncates after, the higher one before.
+        if element.is_nil() {
+            if size_so_far > limits.strong_limit {
+                break;
+            }
+            last_boundary = prev;
+            if size_so_far > limits.limit {
+                break;
+            }
+        }
+        size_so_far += undo_element_bytes(element);
+        prev = next;
+        next = next.cons_cdr();
+    }
+
+    if next.is_nil() {
+        // The whole list fits; leave it exactly as it is.
+        undo_list
+    } else if last_boundary.is_cons() {
+        last_boundary.set_cdr(Value::NIL);
+        undo_list
+    } else {
+        // Nothing was worth keeping.
+        Value::NIL
+    }
 }
 
 // ===========================================================================
