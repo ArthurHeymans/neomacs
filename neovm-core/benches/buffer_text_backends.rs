@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use neovm_core::buffer::{
     Buffer, BufferId, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange,
+    SavedPointBeforeCommand,
 };
 use neovm_core::emacs_core::value::Value;
 
@@ -38,9 +39,15 @@ fn sample_text(lines: usize) -> String {
 }
 
 fn buffer_with_backend(text: &str, kind: BufferTextBackendKind) -> Buffer {
-    let mut buffer =
-        Buffer::try_new_with_text_backend_kind(BufferId(1), Value::string("*bench*"), kind)
-            .expect("backend should be implemented");
+    // A standalone buffer is its own editor: nothing else can supersede its
+    // saved point-before-command, so it mints its own cell.
+    let mut buffer = Buffer::try_new_with_text_backend_kind(
+        BufferId(1),
+        Value::string("*bench*"),
+        kind,
+        SavedPointBeforeCommand::new_editor_global(),
+    )
+    .expect("backend should be implemented");
     buffer.insert(text);
     buffer
 }

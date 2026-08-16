@@ -1770,8 +1770,12 @@ fn make_test_buffer(text: &str) -> Buffer {
 
 fn make_test_buffer_with_backend(text: &str, kind: BufferTextBackendKind) -> Buffer {
     let implemented_kind = kind.implemented().expect("test backend is implemented");
-    let mut buf =
-        Buffer::new_with_text_backend_kind(BufferId(1), Value::string("test"), implemented_kind);
+    let mut buf = Buffer::new_with_text_backend_kind(
+        BufferId(1),
+        Value::string("test"),
+        implemented_kind,
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buf.insert(text);
     // Reset point to beginning
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
@@ -1989,8 +1993,12 @@ fn replace_match_backend_trace(kind: BufferTextBackendKind) -> BufferSearchSnaps
 
 fn make_unibyte_search_buffer(kind: BufferTextBackendKind) -> Buffer {
     let implemented_kind = kind.implemented().expect("test backend is implemented");
-    let mut buf =
-        Buffer::new_with_text_backend_kind(BufferId(1), Value::string("raw"), implemented_kind);
+    let mut buf = Buffer::new_with_text_backend_kind(
+        BufferId(1),
+        Value::string("raw"),
+        implemented_kind,
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buf.set_multibyte_value(false);
     buf.insert_lisp_string(&LispString::from_unibyte(vec![0xFF, b'a', b'b', 0x80]));
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
@@ -2663,7 +2671,11 @@ fn replace_match_with_backref() {
 #[test]
 fn replace_match_buffer_preserves_unibyte_raw_bytes() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("raw"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("raw"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buf.set_multibyte_value(false);
     buf.insert_lisp_string(&crate::heap_types::LispString::from_unibyte(vec![0xFF]));
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));

@@ -25,7 +25,7 @@ pub use position::{
     AccessibleCharRange, AccessibleEmacsByteRange, CharLen, CharPos0, CharRange, DisplayColumn,
     EmacsByteLen, EmacsBytePos, EmacsByteRange, LispBytePos1, LispCharPos1, TextPositionAnchor,
 };
-pub use shared::SharedUndoState;
+pub use shared::{SavedPointBeforeCommand, SharedUndoState};
 pub use text::{
     BufferTextBackendKind, TextChange, TextEditRange, TextExtent, TextInsertion, TextMetrics,
     TextReplacement, TextTransposition,

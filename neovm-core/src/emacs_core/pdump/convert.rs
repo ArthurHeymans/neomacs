@@ -13,7 +13,7 @@ use super::value_fixups::{self, RawValueFixup};
 use crate::buffer::buffer::{Buffer, BufferDumpParts, BufferId, BufferManager};
 use crate::buffer::buffer_text::BufferText;
 use crate::buffer::overlay::{Overlay, OverlayList};
-use crate::buffer::shared::SharedUndoState;
+use crate::buffer::shared::{SavedPointBeforeCommand, SharedUndoState};
 use crate::buffer::text::{BufferTextBytesSnapshot, ImplementedBufferTextBackendKind};
 use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
 use crate::buffer::{CharPos0, EmacsBytePos, LispCharPos1, TextPositionAnchor};
@@ -4386,7 +4386,11 @@ fn dump_text_position_anchor(char_pos: usize, byte_pos: usize) -> TextPositionAn
     TextPositionAnchor::new(CharPos0::new(char_pos), dump_emacs_byte_pos(byte_pos))
 }
 
-fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
+fn load_buffer(
+    decoder: &mut LoadDecoder,
+    db: &DumpBuffer,
+    saved_point_before_command: SavedPointBeforeCommand,
+) -> Buffer {
     let text = BufferText::from_snapshot_with_backend_kind(
         BufferTextBytesSnapshot::new(db.text.text.clone(), db.multibyte),
         load_buffer_text_backend_kind(db.text.backend_kind),
@@ -4747,6 +4751,7 @@ fn load_buffer(decoder: &mut LoadDecoder, db: &DumpBuffer) -> Buffer {
         ),
         overlay_modified_tick: 1,
         undo_state: SharedUndoState::from_parts(undo_list, false, false),
+        saved_point_before_command,
     })
 }
 
@@ -4754,10 +4759,19 @@ pub(crate) fn load_buffer_manager(
     decoder: &mut LoadDecoder,
     dbm: &DumpBufferManager,
 ) -> BufferManager {
+    // GNU's `point_before_last_command_or_undo` pair are plain statics: they
+    // start over on each startup and no command has run yet.  Mint the one
+    // cell here and hand every restored buffer a clone of it.
+    let saved_point_before_command = SavedPointBeforeCommand::new_editor_global();
     let buffers: FxHashMap<BufferId, Buffer> = dbm
         .buffers
         .iter()
-        .map(|(id, buf)| (BufferId(id.0), load_buffer(decoder, buf)))
+        .map(|(id, buf)| {
+            (
+                BufferId(id.0),
+                load_buffer(decoder, buf, saved_point_before_command.clone()),
+            )
+        })
         .collect();
     // New in the current dump format: `buffer_defaults` ride through
     // pdump so runtime `setq-default` writes survive. Older dumps
@@ -4788,6 +4802,7 @@ pub(crate) fn load_buffer_manager(
         dumped_order,
         dumped_defaults,
         load_buffer_text_backend_kind(dbm.default_text_backend_kind),
+        saved_point_before_command,
     )
 }
 

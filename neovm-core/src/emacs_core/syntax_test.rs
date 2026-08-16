@@ -5,7 +5,11 @@ use crate::emacs_core::value::eq_value;
 
 /// Helper: create a buffer with given text, point at start, full accessible range.
 fn buf_with_text(text: &str) -> Buffer {
-    let mut buf = Buffer::new(BufferId(99), Value::string("test-syntax"));
+    let mut buf = Buffer::new(
+        BufferId(99),
+        Value::string("test-syntax"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buf.insert(text);
     buf.widen();
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
