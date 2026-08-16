@@ -1665,6 +1665,17 @@ impl TaggedValue {
 
     /// Allocate a bytecode function.
     pub fn make_bytecode(bc: super::bytecode::ByteCodeFunction) -> Self {
+        // Test builds hand-assemble instruction vectors all over the suite;
+        // route them through the real sealing normalizer so they may enter
+        // the unchecked-fetch driver. Production sealing happens exclusively
+        // in the decode installers — this branch must never widen to release
+        // builds, or the `ops_sealed` marker would stop proving anything.
+        #[cfg(test)]
+        let bc = {
+            let mut bc = bc;
+            bc.seal_hand_assembled_ops_for_test();
+            bc
+        };
         with_tagged_heap(|h| h.alloc_bytecode(bc))
     }
 

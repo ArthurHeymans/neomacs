@@ -1716,6 +1716,7 @@ fn test_restore_snapshot_rejects_legacy_unwind_protect_dump_opcode() {
             interactive: None,
             closure_slot_count: 4,
             extra_slots: vec![],
+            ops_sealed: false,
         }));
     let result = restore_snapshot(&snapshot);
     match result {

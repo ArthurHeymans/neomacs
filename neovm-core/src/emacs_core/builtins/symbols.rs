@@ -6692,6 +6692,8 @@ fn make_byte_code_from_parts_with_slots(
     let mut bc = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         ops,
+        // The instructions above came straight from the sealing decoder.
+        ops_sealed: true,
         constants,
         max_stack,
         params,

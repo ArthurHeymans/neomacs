@@ -484,6 +484,7 @@ fn write_byte_code(out: &mut Vec<u8>, function: &DumpByteCodeFunction) -> Result
     write_opt_value(out, function.interactive.as_ref())?;
     write_usize(out, function.closure_slot_count)?;
     write_values(out, &function.extra_slots)?;
+    write_bool(out, function.ops_sealed);
     Ok(())
 }
 
@@ -1179,6 +1180,7 @@ impl<'a> Cursor<'a> {
             interactive: self.read_opt_value()?,
             closure_slot_count: self.read_usize("bytecode closure slot count")?,
             extra_slots: self.read_values()?,
+            ops_sealed: self.read_bool("bytecode ops sealed flag")?,
         })
     }
 
@@ -1540,6 +1542,7 @@ mod tests {
                 interactive: Some(DumpValue::Nil),
                 closure_slot_count: 6,
                 extra_slots: vec![],
+                ops_sealed: false,
             }),
             DumpHeapObject::ByteCode(DumpByteCodeFunction {
                 instructions: DumpByteCodeInstructions::Decoded(vec![
@@ -1566,6 +1569,7 @@ mod tests {
                 interactive: Some(DumpValue::Nil),
                 closure_slot_count: 6,
                 extra_slots: vec![],
+                ops_sealed: false,
             }),
             DumpHeapObject::HashTable(DumpLispHashTable {
                 test: DumpHashTableTest::Equal,

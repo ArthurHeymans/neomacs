@@ -1143,6 +1143,9 @@ fn vm_records_call_feedback_for_named_callee() {
         Op::Return,
     ];
     caller.max_stack = 3;
+    // Seal in place: the assertions below inspect THIS object's runtime
+    // feedback, so the execute harness must not run a sealed clone instead.
+    caller.seal_hand_assembled_ops_for_test();
 
     // No feedback before execution.
     assert_eq!(caller.runtime.call_feedback(2), CallFeedback::Uninit);
@@ -1727,6 +1730,9 @@ fn vm_bytecoded_call_executes_heap_bytecode_without_cloning_function() {
     let inner_idx = outer.add_constant(inner_value);
     outer.ops = vec![Op::Constant(inner_idx), Op::Call(0), Op::Return];
     outer.max_stack = 1;
+    // Seal before the clone counter arms: the counter measures the VM's
+    // execution path, not the test harness's sealing normalization.
+    outer.seal_hand_assembled_ops_for_test();
 
     crate::emacs_core::bytecode::chunk::reset_bytecode_function_clone_count_for_test();
     let result = {
@@ -2783,6 +2789,9 @@ fn vm_switch_branches_using_hash_table_jump_table() {
 
     let func = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
+        // Hand-built but seal-shaped by construction (trailing Return,
+        // in-bounds targets/constants); the marker vouches for that.
+        ops_sealed: true,
         ops: vec![
             Op::Constant(1),
             Op::Constant(0),
@@ -2947,6 +2956,9 @@ fn vm_throw_restores_saved_stack_before_resuming_catch() {
     crate::test_utils::init_test_tracing();
     let func = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
+        // Hand-built but seal-shaped by construction (trailing Return,
+        // in-bounds targets/constants); the marker vouches for that.
+        ops_sealed: true,
         ops: vec![
             Op::Constant(0),
             Op::Constant(1),
@@ -10739,6 +10751,9 @@ fn vm_gnu_arg_descriptor_preserves_optional_and_rest_slots() {
     let arg_descriptor = 3 | (4 << 8) | 128;
     let func = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
+        // Hand-built but seal-shaped by construction (trailing Return,
+        // in-bounds targets/constants); the marker vouches for that.
+        ops_sealed: true,
         ops: vec![
             Op::StackRef(4),
             Op::StackRef(4),

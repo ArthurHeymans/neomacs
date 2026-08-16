@@ -107,6 +107,13 @@ pub struct ByteCodeFunction {
     pub(crate) source_id: u64,
     /// The bytecode instructions.
     pub ops: Vec<Op>,
+    /// Whether `ops` is `seal_ops`-normalized (trailing `Return`, in-bounds
+    /// branch targets, in-range `Constant` indices). Set exclusively by the
+    /// decode installers; the unchecked-fetch driver refuses eager
+    /// instruction vectors without it, so a hand-assembled chunk can never
+    /// reach an unchecked read. Lazy GNU-backed IR needs no marker: the
+    /// deferred decoder is its only writer.
+    pub(crate) ops_sealed: bool,
     /// Constant pool: values referenced by Constant/VarRef/VarSet/etc.
     pub constants: Vec<Value>,
     /// Maximum stack depth needed (for pre-allocation).
@@ -186,6 +193,7 @@ impl Clone for ByteCodeFunction {
         Self {
             source_id: self.source_id,
             ops: self.ops.clone(),
+            ops_sealed: self.ops_sealed,
             constants: self.constants.clone(),
             max_stack: self.max_stack,
             params: self.params.clone(),
@@ -216,6 +224,7 @@ impl ByteCodeFunction {
         Self {
             source_id: fresh_bytecode_source_id(),
             ops: Vec::new(),
+            ops_sealed: false,
             constants: Vec::new(),
             max_stack: 0,
             params,
@@ -246,8 +255,38 @@ impl ByteCodeFunction {
             "deferred GNU decode requires original bytecode bytes"
         );
         self.ops = Vec::new();
+        self.ops_sealed = false;
         self.gnu_byte_offset_map = None;
         self.lazy_gnu_code = Some(Box::new(LazyGnuCode::new()));
+    }
+
+    /// Whether `executable_ops` returns `seal_ops`-normalized instructions.
+    ///
+    /// This is the release-safety gate for the unchecked-fetch dispatch
+    /// driver; see the field documentation on [`Self::ops_sealed`].
+    #[inline]
+    pub(crate) fn executes_sealed_ops(&self) -> bool {
+        self.lazy_gnu_code.is_some() || self.ops_sealed
+    }
+
+    /// Run hand-assembled instructions through the real sealing normalizer
+    /// so synthesized chunks may enter the unchecked-fetch driver. For the
+    /// lib-internal AOT testkit and the unit-test harness only — production
+    /// bytecode is sealed exclusively by the decode installers. Call after
+    /// `ops` and `constants` are both in place; no-op for GNU-backed or
+    /// already-sealed functions.
+    pub(crate) fn seal_hand_assembled_ops(&mut self) {
+        if self.executes_sealed_ops() || self.gnu_bytecode_bytes.is_some() {
+            return;
+        }
+        self.ops = super::decode::seal_ops(std::mem::take(&mut self.ops), self.constants.len());
+        self.ops_sealed = true;
+    }
+
+    /// Unit-test alias for [`Self::seal_hand_assembled_ops`].
+    #[cfg(test)]
+    pub(crate) fn seal_hand_assembled_ops_for_test(&mut self) {
+        self.seal_hand_assembled_ops();
     }
 
     /// Restore GNU bytecode from its canonical byte stream using the active
@@ -268,9 +307,11 @@ impl ByteCodeFunction {
             let (ops, byte_offset_map) =
                 super::decode::decode_gnu_bytecode_with_offset_map(raw_bytes, &mut self.constants)?;
             self.ops = ops;
+            self.ops_sealed = true;
             self.gnu_byte_offset_map = Some(byte_offset_map);
         } else {
             self.ops.clear();
+            self.ops_sealed = false;
             self.gnu_byte_offset_map = None;
             self.lazy_gnu_code = Some(Box::new(LazyGnuCode::new()));
         }

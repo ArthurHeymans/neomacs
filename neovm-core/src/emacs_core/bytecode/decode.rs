@@ -176,7 +176,7 @@ fn offset_map_entries(
 /// unchecked vector read); an out-of-range index — impossible in compiler
 /// output — is rewritten to [`Op::TrapOutOfRangeConstant`], which raises
 /// exactly the runtime error the checked arm used to raise.
-fn seal_ops(mut ops: Vec<Op>, constants_len: usize) -> Vec<Op> {
+pub(crate) fn seal_ops(mut ops: Vec<Op>, constants_len: usize) -> Vec<Op> {
     if !matches!(ops.last(), Some(Op::Return)) {
         ops.push(Op::Return);
     }

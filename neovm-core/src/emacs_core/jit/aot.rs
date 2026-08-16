@@ -1866,6 +1866,7 @@ pub fn testkit_call_bearing_selftest(dir: &std::path::Path) -> Result<(), String
         f.ops = ops;
         f.constants = constants;
         f.max_stack = 32;
+        f.seal_hand_assembled_ops();
         f
     };
     let sym = |name: &str| -> (Value, SymId) {
@@ -2032,6 +2033,7 @@ pub fn testkit_baseline_aot_selftest(dir: &std::path::Path) -> Result<(), String
         f.ops = ops.clone();
         f.constants = constants.clone();
         f.max_stack = 16;
+        f.seal_hand_assembled_ops();
         f
     };
 
@@ -2175,6 +2177,7 @@ pub fn testkit_baseline_deep_rawslot_deopt_selftest(dir: &std::path::Path) -> Re
         f.ops = ops.clone();
         f.constants = constants.clone();
         f.max_stack = 16;
+        f.seal_hand_assembled_ops();
         f
     };
 
@@ -2318,6 +2321,7 @@ pub fn testkit_callbuiltinsym_aot_selftest(dir: &std::path::Path) -> Result<(), 
         f.ops = ops.clone();
         f.constants = constants.clone();
         f.max_stack = 16;
+        f.seal_hand_assembled_ops();
         f
     };
 
@@ -2435,6 +2439,7 @@ fn cbsym_aot_serve_and_check(
         f.ops = ops.to_vec();
         f.constants = constants.to_vec();
         f.max_stack = 16;
+        f.seal_hand_assembled_ops();
         f
     };
 
@@ -2710,6 +2715,7 @@ pub fn testkit_baseline_op_symbol_reloc_selftest(dir: &std::path::Path) -> Resul
             f.ops = b.ops.clone();
             f.constants = b.constants.clone();
             f.max_stack = 16;
+            f.seal_hand_assembled_ops();
             f
         };
 
@@ -2840,6 +2846,7 @@ pub fn testkit_spec_aot_selftest(dir: &std::path::Path) -> Result<(), String> {
         f.ops = ops;
         f.constants = vec![Value::symbol(intern(alias_name))];
         f.max_stack = 16;
+        f.seal_hand_assembled_ops();
         f
     };
 
@@ -3134,6 +3141,7 @@ pub fn testkit_pgo_roundtrip_selftest(dir: &std::path::Path) -> Result<(), Strin
         f.ops = ops;
         f.constants = vec![Value::symbol(intern(alias_name))];
         f.max_stack = 16;
+        f.seal_hand_assembled_ops();
         f
     };
 
@@ -3250,6 +3258,7 @@ pub fn testkit_pgo_drain_selftest(dir: &std::path::Path) -> Result<(), String> {
         f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
         f.constants = vec![Value::symbol(intern(callee))];
         f.max_stack = 16;
+        f.seal_hand_assembled_ops();
         f
     };
 
@@ -6033,11 +6042,14 @@ mod tests {
             f.ops = ops;
             f.constants = consts;
             f.max_stack = 16;
+            f.seal_hand_assembled_ops();
             f
         };
         let member_ops = vec![Op::Constant(0), Op::Add, Op::Return];
         let member_consts = vec![Value::make_int(5)];
-        let throw_ops = vec![Op::Constant(0), Op::Constant(1), Op::Throw];
+        let throw_ops = vec![Op::Constant(0), Op::Constant(1), Op::Throw, Op::Return];
+        // The trailing Return is unreachable Throw padding, but it keeps the
+        // vector seal-shaped so the pipeline hashes exactly these ops.
         let throw_consts = vec![Value::symbol("prod-pf-tag"), Value::make_int(1)];
         for (name, f) in [
             (
@@ -6105,7 +6117,7 @@ mod tests {
             map.get("prod-pf-nonmember-throw"),
             Some(&ManifestPreKey {
                 member: false,
-                ops_len: 3,
+                ops_len: 4,
                 arity: 1,
                 hash: throw_hash
             }),
@@ -6140,6 +6152,7 @@ mod tests {
             f.ops = ops;
             f.constants = consts;
             f.max_stack = 16;
+            f.seal_hand_assembled_ops();
             f
         };
         let member_ops = vec![Op::Constant(0), Op::Add, Op::Return];

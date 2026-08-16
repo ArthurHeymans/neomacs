@@ -12818,6 +12818,8 @@ impl Context {
         let bc = ByteCodeFunction {
             source_id: super::bytecode::fresh_bytecode_source_id(),
             ops,
+            // The instructions above came straight from the sealing decoder.
+            ops_sealed: true,
             constants,
             max_stack,
             params: LambdaParams::simple(vec![]),

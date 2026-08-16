@@ -1377,6 +1377,7 @@ impl<'a> LoadDecoder<'a> {
             DumpHeapObject::ByteCode(_) => Value::make_bytecode(ByteCodeFunction {
                 source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
                 ops: Vec::new(),
+                ops_sealed: false,
                 constants: Vec::new(),
                 max_stack: 0,
                 params: LambdaParams::simple(Vec::new()),
@@ -2335,6 +2336,7 @@ pub(crate) fn dump_bytecode(
             .iter()
             .map(|value| encoder.dump_value(value))
             .collect(),
+        ops_sealed: bc.ops_sealed,
     }
 }
 
@@ -4013,6 +4015,7 @@ fn load_bytecode_owned(
         doc_form: decoder.load_opt_value_owned(bc.doc_form),
         interactive: decoder.load_opt_value_owned(bc.interactive),
         closure_slot_count: bc.closure_slot_count,
+        ops_sealed: bc.ops_sealed,
         extra_slots: bc
             .extra_slots
             .into_iter()

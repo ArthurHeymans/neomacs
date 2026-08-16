@@ -223,6 +223,12 @@ pub struct DumpByteCodeFunction {
     pub closure_slot_count: usize,
     #[serde(default)]
     pub extra_slots: Vec<DumpValue>,
+    /// Whether decoded instructions are seal_ops-normalized (see
+    /// `ByteCodeFunction::ops_sealed`). Meaningful only for
+    /// [`DumpByteCodeInstructions::Decoded`]; GNU byte streams re-decode and
+    /// re-seal on load.
+    #[serde(default)]
+    pub ops_sealed: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -12059,6 +12059,7 @@ mod tests {
             ];
             f.constants = vec![Value::make_int(0)];
             f.max_stack = 16;
+            f.seal_hand_assembled_ops();
             f
         };
         let n = 2000i64;
@@ -13275,6 +13276,7 @@ mod tests {
         f.ops = ops.clone();
         f.constants = constants.clone();
         f.max_stack = 16;
+        f.seal_hand_assembled_ops();
         let leaf = lower_nullary_leaf(&ops, &constants).expect("guard after call compiles now");
         let native = match leaf.call(ctx_ptr, &[]) {
             NativeRun::DeoptAt {

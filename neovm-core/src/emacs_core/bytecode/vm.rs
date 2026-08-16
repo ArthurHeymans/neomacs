@@ -2051,6 +2051,16 @@ impl<'a> Vm<'a> {
 
     /// Execute a bytecode function with given arguments.
     pub(crate) fn execute(&mut self, func: &ByteCodeFunction, args: Vec<Value>) -> EvalResult {
+        // Suite chunks are often hand-assembled and passed here directly,
+        // bypassing `Value::make_bytecode`'s test-only sealing; normalize a
+        // clone so they may enter the unchecked-fetch driver. Production
+        // sealing remains exclusive to the decode installers.
+        #[cfg(test)]
+        if !func.executes_sealed_ops() {
+            let mut sealed = func.clone();
+            sealed.seal_hand_assembled_ops_for_test();
+            return self.execute_with_func_value(&sealed, args, Value::NIL);
+        }
         self.execute_with_func_value(func, args, Value::NIL)
     }
 
@@ -2573,7 +2583,7 @@ impl<'a> Vm<'a> {
             // the entry gate in `run_loop`: only `seal_ops`-normalized code
             // may enter the unchecked-fetch driver. Evaluated at (cacheable)
             // classification time, never on the per-call hot path.
-            && matches!(func.executable_ops().last(), Some(Op::Return))
+            && func.executes_sealed_ops()
     }
 
     /// Install one already-validated env-less interpreter frame in place.
@@ -2917,10 +2927,13 @@ impl<'a> Vm<'a> {
 
         // Sealed-dispatch safety gate. The driver fetches instructions without
         // a per-op bound check, which is sound only for `seal_ops`-normalized
-        // code (trailing `Return`, in-bounds branch targets). Every production
-        // function decodes through `seal_ops`; a hand-assembled unsealed chunk
-        // is rejected here, once per driver entry, before any unchecked fetch.
-        if !matches!(entry_func.executable_ops().last(), Some(Op::Return)) {
+        // code (trailing `Return`, in-bounds branch targets, in-range
+        // constant indices). The `ops_sealed` marker is set exclusively by
+        // the decode installers, so a hand-assembled chunk is rejected here,
+        // once per driver entry, before any unchecked fetch — inferring
+        // sealedness from the instructions themselves would trust exactly the
+        // data the seal exists to prove.
+        if !entry_func.executes_sealed_ops() {
             return Err(invalid_bytecode_flow());
         }
 
