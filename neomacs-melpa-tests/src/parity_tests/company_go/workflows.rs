@@ -30,7 +30,9 @@ fn loading_registers_the_backend_and_its_configuration() -> ParityBatchCase {
     company-go-insert-arguments
     company-go-gocode-command
     company-go-gocode-args)))"####,
-        expect![[r##"TODO"##]],
+        expect![[
+            r#"OK (:source (:upstream-tree "6a38841c337f3615d18392d0d2d6d3292b9b1092" :feature t :version "20170825.1643" :company "20260721.100" :go-mode "20260510.1707") :entry-points (:backend-command t :prefix t :candidates t :annotation nil :meta nil :location t :doc-buffer nil) :options ((:option company-go-show-annotation :custom-variable-p t :standard nil :type boolean) (:option company-go-begin-after-member-access :custom-variable-p t :standard t :type boolean) (:option company-go-insert-arguments :custom-variable-p t :standard t :type boolean) (:option company-go-gocode-command :custom-variable-p t :standard "gocode" :type string) (:option company-go-gocode-args :custom-variable-p t :standard nil :type (repeat string))))"#
+        ]],
     )
 }
 
@@ -59,7 +61,9 @@ fn the_csv_candidate_pipeline_formats_meta_and_packages() -> ParityBatchCase {
             '("func,,Println,,func(a ...interface{}),,fmt"
               "const,,Pi,,float64,,math"
               "package,,fmt,,package,,")))))"####,
-        expect![[r##"TODO"##]],
+        expect![[
+            r#"OK (:format-meta ((:raw "func(a ...interface{})" :formatted "func Println(a ...interface{})") (:raw "func(a ...interface{}) string" :formatted "func Sprint(a ...interface{}) string") (:raw "package" :formatted "package fmt package") (:raw "float64" :formatted "const Pi float64")) :candidates ((:text "Println" :meta "func Println(a ...interface{})" :package "fmt") (:text "Pi" :meta "const Pi float64" :package "math") (:text "fmt" :meta "package fmt package" :package "")))"#
+        ]],
     )
 }
 
@@ -105,7 +109,9 @@ fn the_invocation_contract_through_a_fake_gocode() -> ParityBatchCase {
                                   (expand-file-name "argv.txt" root))
                                  (buffer-string)))))))))
   (cgo319-test-reset))"####,
-        expect![[r##"TODO"##]],
+        expect![[
+            r#"OK (:argv "-s\n-f=csv-with-package\nautocomplete\n[ORACLE-SANDBOX]/company-go-fixture/main.go\nc34\n" :candidates ((:text "Println" :meta "func Println(a ...interface{})" :package "fmt")) :offset-arg-passed 162)"#
+        ]],
     )
 }
 
@@ -135,7 +141,9 @@ fn the_prefix_contract_at_member_access_dots() -> ParityBatchCase {
                     :at-dot-begin at-dot-begin
                     :at-symbol-plain at-symbol-plain))))))
   (cgo319-test-reset))"####,
-        expect![[r##"TODO"##]],
+        expect![[
+            r#"OK (:at-symbol ("P" "rint" t) :at-dot-begin ("" "Print" t) :at-symbol-plain "P")"#
+        ]],
     )
 }
 

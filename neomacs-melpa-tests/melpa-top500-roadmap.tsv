@@ -452,7 +452,7 @@ rank	package	downloads	status
 451	info+	193519	removed
 452	add-node-modules-path	193375	covered
 453	company-auctex	193099	todo
-454	company-go	191132	todo
+454	company-go	191132	covered
 455	xcscope	190930	covered
 456	magit-todos	190470	todo
 457	easy-kill	190313	todo
