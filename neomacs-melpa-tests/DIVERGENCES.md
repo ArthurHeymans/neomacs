@@ -6462,3 +6462,36 @@ compiler rejected all four fixtures that had been saving a point with no
 buffer.
 
 Status: FIXED.
+
+## 120. `color-distance` rejected the "unspecified-fg"/"unspecified-bg" sentinel color names
+
+GNU accepts the internal sentinel strings that `face-background' returns
+for unspecified colors on a TTY frame; Neomacs signals `error'
+("Invalid color").  Surfaced by the smart-mode-line suite:
+`sml/-automatically-decide-theme' measures the distance of the frame
+background from white and black to pick the dark or light mode-line
+theme, and on a batch frame the default face's background IS the
+"unspecified-bg" string -- GNU resolves it (to the tty default,
+black/white) and picks 'dark, Neomacs errors inside `ignore-errors' and
+picks 'light.
+
+```sh
+emacs -Q --batch --eval '(prin1 (color-distance "white" "unspecified-bg"))'
+./target/release/neomacs -Q --batch --eval '(prin1 (color-distance "white" "unspecified-bg"))'
+```
+
+GNU: `589805'; Neomacs: `error ("Invalid color" "unspecified-bg")'.
+Same for "unspecified-fg" (GNU 589805).  A GENUINELY invalid name
+("not-a-color") signals in BOTH editors, so GNU's acceptance is the
+sentinel mapping, not lenient parsing.
+
+The mechanism is `tty_lookup_color' (src/xfaces.c:1155-1170): when the
+color-name lookup on a TTY frame yields `FACE_TTY_DEFAULT_COLOR', GNU
+maps the strings "unspecified-fg"/"unspecified-bg" to
+`FACE_TTY_DEFAULT_FG_COLOR'/`FACE_TTY_DEFAULT_BG_COLOR' before
+returning success, and `Fcolor_distance' (src/xfaces.c:4792) then
+computes over the tty default fg/bg.  Neomacs' TTY color lookup lacks
+that sentinel branch, so the name stays unresolved and
+`Fcolor_distance' signals.
+
+Status: UNFIXED.

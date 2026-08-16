@@ -3889,6 +3889,13 @@ pub const PYTEST_MELPA_PIN: (&str, &str) = ("pytest", "20230810.1218");
 /// `82d2cf084a19b0c2c3812e0550721f8a61996056`.
 pub const SMARTPARENS_MELPA_PIN: (&str, &str) = ("smartparens", "20260129.1214");
 
+/// The exact Smart Mode Line package selected for practical mode-line
+/// installation through `sml/setup', rendered file-buffer lines, prefix
+/// replacement rules, buffer identification, and the three theme palettes.
+/// MELPA built this archive from upstream commit
+/// `bbed708eb8393697e01ab2474dfb54d7c5ea7905`.
+pub const SMART_MODE_LINE_MELPA_PIN: (&str, &str) = ("smart-mode-line", "20240924.2322");
+
 /// The exact Swiper package selected for practical line search, match search,
 /// query replacement, occur export, visibility, and multi-buffer parity.
 /// MELPA built this archive from upstream commit
@@ -6982,6 +6989,11 @@ pub const DRACULA_THEME_MELPA_PIN: (&str, &str) = ("dracula-theme", "20260719.22
 /// The exact material-theme package selected for practical theme palette parity.
 /// Pinned to upstream commit `6823009bc92f82aa3a90e27e1009f7da8e87b648`.
 pub const MATERIAL_THEME_MELPA_PIN: (&str, &str) = ("material-theme", "20210904.1426");
+
+/// The exact Rich Minority package selected as the smart-mode-line
+/// dependency for minor-mode list rendering. MELPA built this archive from
+/// upstream commit `77cf5ec620aaef18385d2e1d2dad05b4f63dad95`.
+pub const RICH_MINORITY_MELPA_PIN: (&str, &str) = ("rich-minority", "20240924.2317");
 
 /// The exact Robe package selected for practical Ruby completion, ElDoc,
 /// documentation, definition navigation, and server-lifecycle parity. MELPA

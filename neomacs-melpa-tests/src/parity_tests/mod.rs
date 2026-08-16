@@ -659,6 +659,7 @@ mod skewer_mode;
 mod slim_mode;
 mod slime;
 mod sly;
+mod smart_mode_line;
 mod smartparens;
 mod smeargle;
 mod smex;

@@ -443,7 +443,7 @@ rank	package	downloads	status
 442	lsp-haskell	199039	covered
 443	git-gutter-fringe+	198460	covered
 444	rg	198150	covered
-445	smart-mode-line	197854	todo
+445	smart-mode-line	197854	covered
 446	importmagic	196625	todo
 447	rjsx-mode	194993	todo
 448	dired-hacks-utils	194917	todo
