@@ -1686,6 +1686,91 @@ fn delete_records_point_entry_without_marker_adjustment() {
     assert_eq!(undo_nth(ul, 1), Value::fixnum(7));
 }
 
+/// Every bare fixnum in `list` -- `primitive-undo`'s `((integerp next)
+/// (goto-char next))` arm is the only thing that restores point across an
+/// undo, so the presence or absence of such an entry is the whole question.
+fn undo_point_entries(mut list: Value) -> Vec<i64> {
+    let mut points = Vec::new();
+    while list.is_cons() {
+        if let ValueKind::Fixnum(n) = list.cons_car().kind() {
+            points.push(n);
+        }
+        list = list.cons_cdr();
+    }
+    points
+}
+
+#[test]
+fn a_command_in_another_buffer_supersedes_the_saved_point() {
+    crate::test_utils::init_test_tracing();
+    // GNU keeps the saved point in a pair of GLOBALS --
+    // `point_before_last_command_or_undo` / `buffer_before_last_command_or_undo`
+    // (src/keyboard.c:232-233), documented as "the location of point
+    // immediately before THE LAST COMMAND was executed" (src/keyboard.h:257-266)
+    // -- written together by every command-loop iteration
+    // (src/keyboard.c:1536-1537) and by `undo-boundary` (src/undo.c:278-279).
+    // A command that runs in ANOTHER buffer therefore supersedes the point
+    // saved for the buffer that a later command edits, and `record_point`'s
+    // third guard (src/undo.c:73-75) then drops the point entry.
+    //
+    // Every `M-x` is that shape: the minibuffer keystrokes are command-loop
+    // iterations in the minibuffer, and the command they choose runs after
+    // them.  Measured on GNU 31.0.90 with "abcdefghij", point at 1, and a
+    // command whose body is `(save-excursion (goto-char 6) (delete-region 3 6))`:
+    //
+    //   (execute-kbd-macro (kbd "M-x probe-cmd RET"))
+    //     buffer-undo-list => (("cde" . -3) (t . 0))    ; NO point entry
+    //     C-_              => point 6
+    //
+    //   bound to a key instead, so no minibuffer read intervenes:
+    //     buffer-undo-list => (("cde" . -3) 1 (t . 0))
+    //     C-_              => point 1
+    let mut mgr = BufferManager::new();
+    let edited = mgr.current_buffer_id().expect("scratch buffer");
+    {
+        let buf = mgr.get_mut(edited).expect("scratch buffer");
+        buf.set_undo_list(Value::NIL);
+        buf.insert("abcdefghij");
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+        let mut ul = buf.get_undo_list();
+        crate::buffer::undo::undo_list_boundary(&mut ul);
+        buf.set_undo_list(ul);
+    }
+
+    // The `M-x` command-loop iteration: the edited buffer is current, point 1.
+    mgr.record_undo_point_before_command(edited)
+        .expect("save point for the M-x iteration");
+
+    // One minibuffer command-loop iteration.  In GNU this overwrites both
+    // globals, so the point saved above is no longer usable by anything.
+    let minibuffer = mgr.create_buffer(" *Minibuf-1*");
+    mgr.record_undo_point_before_command(minibuffer)
+        .expect("save point for the minibuffer iteration");
+
+    // The chosen command runs back in the edited buffer: point moves to 6 and
+    // chars 3..6 ("cde") are deleted, so `record_delete` stores the negative
+    // position (PT == beg + SCHARS) and `primitive-undo` would restore point
+    // past the reinserted text.
+    mgr.goto_buffer_emacs_byte_pos(edited, crate::buffer::EmacsBytePos::new(5))
+        .expect("goto end of the range about to be deleted");
+    mgr.delete_buffer_emacs_byte_range(
+        edited,
+        crate::buffer::EmacsByteRange::from_usize(2, 5),
+    )
+    .expect("delete region");
+
+    let ul = mgr.get(edited).expect("scratch buffer").get_undo_list();
+    let delete_entry = undo_nth(ul, 0);
+    assert_eq!(delete_entry.cons_car().as_utf8_str(), Some("cde"));
+    assert_eq!(delete_entry.cons_cdr(), Value::fixnum(-3));
+    assert_eq!(
+        undo_point_entries(ul),
+        Vec::<i64>::new(),
+        "the point saved for the M-x iteration was superseded by the \
+         minibuffer's own iteration, so GNU records no point entry"
+    );
+}
+
 #[test]
 fn marker_inside_deleted_range_collapses() {
     crate::test_utils::init_test_tracing();
