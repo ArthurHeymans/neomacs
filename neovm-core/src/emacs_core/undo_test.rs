@@ -1327,6 +1327,89 @@ fn gc_leaves_a_buffer_with_undo_disabled_alone() {
     assert_eq!(printed_undo_list(&mut eval, "F"), "t");
 }
 
+/// Size limits lowered by `undo-outer-limit-function' before it answers nil
+/// still apply: GNU reads `undo_limit' and `undo_strong_limit' during the walk
+/// that follows the call, not before it (`src/undo.c:386-389').
+///
+/// GNU Emacs -Q --batch, same fixture: before=21, after=2.
+#[test]
+fn limits_lowered_by_undo_outer_limit_function_apply_to_the_same_pass() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"(progn
+             (set-buffer (get-buffer-create "G"))
+             (buffer-enable-undo)
+             (setq buffer-undo-list nil)
+             (make-local-variable 'undo-limit)
+             (make-local-variable 'undo-strong-limit)
+             (setq undo-limit 160000)
+             (setq undo-strong-limit 240000)
+             (make-local-variable 'undo-outer-limit)
+             (setq undo-outer-limit 1)
+             (setq undo-outer-limit-function
+                   (lambda (_size)
+                     (setq undo-limit 1)
+                     (setq undo-strong-limit 1)
+                     nil))
+             (setq neo-undo-probe-i 0)
+             (while (< neo-undo-probe-i 10)
+               (insert "hello")
+               (undo-boundary)
+               (setq neo-undo-probe-i (1+ neo-undo-probe-i))))"#,
+    )
+    .expect("relowering fixture");
+    assert_eq!(undo_list_length(&mut eval, "G"), 21);
+
+    eval.gc_collect_exact();
+
+    assert_eq!(undo_list_length(&mut eval, "G"), 2);
+}
+
+/// ...and they are read from whatever buffer the function left current, since
+/// GNU's are C globals that `set_buffer_internal' swaps.  A function that
+/// lowers this buffer's limits but ends in another buffer therefore truncates
+/// nothing: the other buffer's limits are what the walk sees.
+///
+/// GNU Emacs -Q --batch, same fixture: before=21, after=21.
+#[test]
+fn limits_are_reread_from_whatever_buffer_the_outer_limit_function_left_current() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"(progn
+             (set-buffer (get-buffer-create "H"))
+             (buffer-enable-undo)
+             (setq buffer-undo-list nil)
+             (set-buffer (get-buffer-create "G"))
+             (buffer-enable-undo)
+             (setq buffer-undo-list nil)
+             (make-local-variable 'undo-limit)
+             (make-local-variable 'undo-strong-limit)
+             (setq undo-limit 160000)
+             (setq undo-strong-limit 240000)
+             (make-local-variable 'undo-outer-limit)
+             (setq undo-outer-limit 1)
+             (setq undo-outer-limit-function
+                   (lambda (_size)
+                     (setq undo-limit 1)
+                     (setq undo-strong-limit 1)
+                     (set-buffer (get-buffer "H"))
+                     nil))
+             (setq neo-undo-probe-i 0)
+             (while (< neo-undo-probe-i 10)
+               (insert "hello")
+               (undo-boundary)
+               (setq neo-undo-probe-i (1+ neo-undo-probe-i))))"#,
+    )
+    .expect("buffer-switching fixture");
+    assert_eq!(undo_list_length(&mut eval, "G"), 21);
+
+    eval.gc_collect_exact();
+
+    assert_eq!(undo_list_length(&mut eval, "G"), 21);
+}
+
 /// The exact domain of `undo-outer-limit': GNU's guard is
 /// `INTEGERP (V) && (integer_to_intmax (V, &l) ? l < size : NILP (Fnatnump (V)))'
 /// (`src/undo.c:352-355'), so a float is not a limit at all, a bignum too big
