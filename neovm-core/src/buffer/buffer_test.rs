@@ -1778,7 +1778,7 @@ fn an_undo_boundary_in_an_undo_disabled_buffer_saves_no_point() {
     crate::test_utils::init_test_tracing();
     // `Fundo_boundary` returns BEFORE it touches the globals when the buffer
     // has undo turned off (`if (EQ (BVAR (current_buffer, undo_list), Qt))
-    // return Qnil;`, src/undo.c:252-255; the assignment is at :278-279).  A
+    // return Qnil;`, src/undo.c:258-259; the assignment is at :278-279).  A
     // buffer that records nothing must not be able to spend another buffer's
     // saved point, and `undo-auto--boundaries` walks changed buffers with each
     // one made current, so a disabled buffer in that list is ordinary.

@@ -6492,13 +6492,14 @@ package involved:
 ;; Neomacs before fix => ("((\"cde\" . -3) 1 (t . 0))" 1)
 ```
 
-The `1` is a point entry, and `primitive-undo`'s `((integerp next) (goto-char
-next))` arm is processed last in the group, so it overrides the position the
-deletion record had already restored.  The deletion record is `("cde" . -3)` in
-both editors: `record_delete` stores a NEGATIVE position when point sat at the
-end of the deleted text (`if (PT == beg + SCHARS (string)) XSETINT (sbeg,
--beg);`, `src/undo.c:172-179`), and `primitive-undo`'s `(< pos 0)` branch
-reinserts and leaves point past the reinsertion.  That is where GNU's 6 -- and
+The `1` is a point entry, and `primitive-undo`'s `((pred integerp) (goto-char
+next))` arm (`lisp/simple.el:3666-3668`) is processed last in the group, so it
+overrides the position the deletion record had already restored.  The deletion
+record is `("cde" . -3)` in both editors: `record_delete` stores a NEGATIVE
+position when point sat at the end of the deleted text (`if (PT == beg + SCHARS
+(string)) XSETINT (sbeg, -beg);`, `src/undo.c:174-181`), and `primitive-undo`'s
+`(< pos 0)` branch (`lisp/simple.el:3745-3751`) reinserts and leaves point past
+the reinsertion.  That is where GNU's 6 -- and
 scala-mode's 271 -- comes from.  Neomacs computed the same `-3`, then threw the
 result away one entry later.
 
@@ -6517,7 +6518,7 @@ GNU's saved point is a pair of GLOBALS, `point_before_last_command_or_undo` and
 Singular: one saved point for the editor.  Both assignment sites overwrite it
 unconditionally with whatever buffer is current -- the command loop
 (`src/keyboard.c:1536-1537`) and `Fundo_boundary` (`src/undo.c:278-279`) -- and
-`record_point` reads it under three guards (`src/undo.c:71-78`):
+`record_point` reads it under three guards (`src/undo.c:73-78`):
 
 ```c
   if (at_boundary
@@ -6564,10 +6565,10 @@ because a buffer with a private cell is precisely the bug.  Deleting the old
 ### A second finding in the same function
 
 Making the point global exposed a divergence that per-buffer storage had hidden.
-`Fundo_boundary` is one early return over its whole body -- a buffer whose
-`buffer-undo-list` is `t` gets neither the boundary nor the saved point
-(`src/undo.c:252-255`, assignment at `:278-279`) -- and Neomacs saved the point
-unconditionally:
+`Fundo_boundary` (`src/undo.c:251-282`) is one early return over its whole
+body -- a buffer whose `buffer-undo-list` is `t` gets neither the boundary nor
+the saved point (`src/undo.c:258-259`, assignment at `:278-279`) -- and Neomacs
+saved the point unconditionally:
 
 ```elisp
 (let ((a (get-buffer-create "A")) (b (get-buffer-create "B")))

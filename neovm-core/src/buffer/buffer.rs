@@ -5891,7 +5891,7 @@ impl BufferManager {
         Some(buf.kill_buffer_local(name))
     }
 
-    /// GNU `Fundo_boundary` (src/undo.c:250-282).
+    /// GNU `Fundo_boundary` (src/undo.c:251-282).
     ///
     /// The whole body is guarded by one early return: a buffer whose
     /// `buffer-undo-list` is `t` gets neither the boundary nor the
