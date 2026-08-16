@@ -2569,6 +2569,11 @@ impl<'a> Vm<'a> {
             && required <= nargs
             && nargs <= nonrest
             && nonrest <= func.max_stack as usize
+            // Sealed-dispatch safety gate for iterative callees, the twin of
+            // the entry gate in `run_loop`: only `seal_ops`-normalized code
+            // may enter the unchecked-fetch driver. Evaluated at (cacheable)
+            // classification time, never on the per-call hot path.
+            && matches!(func.executable_ops().last(), Some(Op::Return))
     }
 
     /// Install one already-validated env-less interpreter frame in place.
@@ -2910,6 +2915,15 @@ impl<'a> Vm<'a> {
         #[cfg(test)]
         let _run_loop_depth = RunLoopDepthGuard::enter();
 
+        // Sealed-dispatch safety gate. The driver fetches instructions without
+        // a per-op bound check, which is sound only for `seal_ops`-normalized
+        // code (trailing `Return`, in-bounds branch targets). Every production
+        // function decodes through `seal_ops`; a hand-assembled unsealed chunk
+        // is rejected here, once per driver entry, before any unchecked fetch.
+        if !matches!(entry_func.executable_ops().last(), Some(Op::Return)) {
+            return Err(invalid_bytecode_flow());
+        }
+
         let mut current = InterpreterFrame {
             function: InterpreterFunction::new(entry_func),
             frame_base,
@@ -3230,7 +3244,20 @@ impl<'a> Vm<'a> {
                 }};
             }
 
-            while pc_local < ops_len {
+            debug_assert!(
+                matches!(ops.last(), Some(Op::Return)),
+                "unchecked dispatch requires seal_ops-normalized bytecode"
+            );
+            loop {
+                // SAFETY: GNU's FETCH is `*pc++` with no bound check; the
+                // decode-time `seal_ops` invariant makes the same fetch sound
+                // here. `pc_local` starts and resumes at a saved value
+                // `< ops.len()`, every branch target is `< ops.len()`, and the
+                // final instruction is a `Return` that never falls through, so
+                // `pc_local` can never reach `ops.len()`. The entry gate in
+                // `run_loop` and the iterative-callee gate in
+                // `can_enter_interpreter_frame_iteratively` reject unsealed
+                // hand-assembled chunks before dispatch.
                 let op = unsafe { &*ops_ptr.add(pc_local) };
                 pc_local += 1;
                 #[cfg(test)]
@@ -3256,21 +3283,21 @@ impl<'a> Vm<'a> {
                         // directly to the StackRef still uses the ordinary arm
                         // below.  Advance pc before validation, matching GNU's
                         // FETCH-before-handler error position.
-                        if pc_local < ops_len {
-                            let next = unsafe { &*ops_ptr.add(pc_local) };
-                            if let Op::StackRef(n) = next {
-                                pc_local += 1;
-                                #[cfg(feature = "vm-profile")]
-                                vm_profile::bump(next);
+                        // SAFETY: seal_ops — a non-Return op is never last,
+                        // so `pc_local` is in bounds after the increment.
+                        let next = unsafe { &*ops_ptr.add(pc_local) };
+                        if let Op::StackRef(n) = next {
+                            pc_local += 1;
+                            #[cfg(feature = "vm-profile")]
+                            vm_profile::bump(next);
 
-                                let offset = 1 + *n as usize;
-                                let len = stk!().len();
-                                if offset <= len {
-                                    let value = unsafe { *stk!().get_unchecked(len - offset) };
-                                    stk_push!(value);
-                                } else {
-                                    invalid_bytecode!("stack-ref-out-of-range");
-                                }
+                            let offset = 1 + *n as usize;
+                            let len = stk!().len();
+                            if offset <= len {
+                                let value = unsafe { *stk!().get_unchecked(len - offset) };
+                                stk_push!(value);
+                            } else {
+                                invalid_bytecode!("stack-ref-out-of-range");
                             }
                         }
                     }
@@ -3350,15 +3377,15 @@ impl<'a> Vm<'a> {
                             // second Rust dispatch.  Validate the skipped push
                             // first so malformed max-stack metadata retains
                             // Neomacs's existing error behavior and site.
-                            if pc_local < ops_len {
-                                let next = unsafe { &*ops_ptr.add(pc_local) };
-                                if matches!(next, Op::Return) {
-                                    ensure_stack_push_capacity!();
-                                    pc_local += 1;
-                                    #[cfg(feature = "vm-profile")]
-                                    vm_profile::bump(next);
-                                    return_value!(val);
-                                }
+                            // SAFETY: seal_ops — a non-Return op is never
+                            // last, so `pc_local` is in bounds here.
+                            let next = unsafe { &*ops_ptr.add(pc_local) };
+                            if matches!(next, Op::Return) {
+                                ensure_stack_push_capacity!();
+                                pc_local += 1;
+                                #[cfg(feature = "vm-profile")]
+                                vm_profile::bump(next);
+                                return_value!(val);
                             }
                             stk_push!(val);
                         } else {
@@ -4758,10 +4785,9 @@ impl<'a> Vm<'a> {
                 }
             }
 
-            // Fell off the end — return TOS or nil through the same Breturn frame
-            // transition as an explicit Return opcode.
-            let result = stk!().pop().unwrap_or(Value::NIL);
-            return_value!(result);
+            // No fall-off tail: `seal_ops` guarantees the dispatch loop above
+            // only exits through an explicit control transfer (Return, error
+            // flow, or frame transition).
         }
     }
 

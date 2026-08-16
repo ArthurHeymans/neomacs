@@ -102,7 +102,12 @@ pub fn decode_gnu_bytecode_with_offset_map(
     constants: &mut Vec<Value>,
 ) -> Result<(Vec<Op>, Vec<GnuByteOffsetMapEntry>), DecodeError> {
     let (raw_ops, offset_map, jump_patches) = decode_pass1(bytecodes, constants)?;
-    let ops = patch_jumps(raw_ops, &offset_map, &jump_patches, bytecodes.len())?;
+    let ops = seal_ops(patch_jumps(
+        raw_ops,
+        &offset_map,
+        &jump_patches,
+        bytecodes.len(),
+    )?);
     if !ops.iter().any(|op| matches!(op, Op::Switch)) {
         return Ok((ops, Vec::new()));
     }
@@ -117,6 +122,47 @@ pub fn decode_gnu_bytecode_with_offset_map(
             })
             .collect(),
     ))
+}
+
+/// Seal decoded instructions so the dispatch loop needs no per-fetch bound
+/// check (GNU's `FETCH` is `*pc++` with no check).
+///
+/// GNU's byte compiler always ends a function with `Breturn`, so well-formed
+/// bytecode passes through unchanged.  Two malformed shapes are normalized to
+/// exactly today's fall-off semantics instead of an unbounded pc: a body whose
+/// last instruction can fall through gains an explicit trailing [`Op::Return`]
+/// (falling off the end already behaved as an implicit return of TOS-or-nil),
+/// and a `patch_jumps`-validated jump to exactly the end of the stream is
+/// redirected onto that trailing return (jumping past the end also behaved as
+/// an implicit return).  Afterward `pc` provably never leaves `0..ops.len()`:
+/// every dispatch advances `pc` by one, the final instruction is a `Return`
+/// that never falls through, and every branch target is `< ops.len()`
+/// (runtime `Switch` targets come from the byte-offset map, which only holds
+/// instruction starts).  `Vm::run_loop` relies on this invariant for its
+/// unchecked instruction fetch.
+fn seal_ops(mut ops: Vec<Op>) -> Vec<Op> {
+    if !matches!(ops.last(), Some(Op::Return)) {
+        ops.push(Op::Return);
+    }
+    let last = (ops.len() - 1) as u32;
+    for op in &mut ops {
+        match op {
+            Op::Goto(target)
+            | Op::GotoIfNil(target)
+            | Op::GotoIfNotNil(target)
+            | Op::GotoIfNilElsePop(target)
+            | Op::GotoIfNotNilElsePop(target)
+            | Op::PushConditionCase(target)
+            | Op::PushConditionCaseRaw(target)
+            | Op::PushCatch(target) => {
+                if *target > last {
+                    *target = last;
+                }
+            }
+            _ => {}
+        }
+    }
+    ops
 }
 
 /// Intermediate instruction that may contain raw byte-offset jump targets.
