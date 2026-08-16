@@ -1195,11 +1195,15 @@ impl InterpreterCallerStack {
         self.frames.len()
     }
 
+    /// Suspend `current` onto the caller stack.
+    ///
+    /// The caller must immediately install the child frame into `current`
+    /// (GNU's `setup_frame` writes the new frame in place); until then the
+    /// frame register still holds the suspended caller.
     #[inline(always)]
-    fn suspend_and_enter(
+    fn suspend_caller(
         &mut self,
-        current: &mut InterpreterFrame,
-        child: InterpreterFrame,
+        current: &InterpreterFrame,
         continuation: BytecodeCallContinuation,
     ) {
         if self.frames.len() == self.frames.capacity() {
@@ -1220,7 +1224,6 @@ impl InterpreterCallerStack {
                 });
             self.frames.set_len(len + 1);
         }
-        *current = child;
     }
 
     #[cold]
@@ -2568,18 +2571,23 @@ impl<'a> Vm<'a> {
             && nonrest <= func.max_stack as usize
     }
 
-    /// Install one already-validated env-less interpreter frame.
+    /// Install one already-validated env-less interpreter frame in place.
     ///
     /// No Lisp allocation or GC safe point occurs here. The exact callee value
     /// replaces the consumed function-designator operand before any bytecode
     /// executes. That caller slot remains in GC-traced `bc_buf` through child
     /// cleanup, so redefining a symbol cannot collect its executing old value.
-    fn prepare_iterative_interpreter_frame(
+    ///
+    /// `current` must already be suspended on the caller stack; its fields are
+    /// overwritten directly, exactly as GNU's `setup_frame` writes the child
+    /// `bc_frame` in place instead of materializing it elsewhere first.
+    fn install_iterative_interpreter_frame(
         &mut self,
+        current: &mut InterpreterFrame,
         callee: PreparedInterpreterCallee,
         root_slot: ConsumedCallOperandRootSlot,
         nargs: usize,
-    ) -> InterpreterFrame {
+    ) {
         root_slot.install_exact_callee(&mut self.ctx.bc_buf, callee.value);
         let args_start = root_slot.args_start();
         let func = callee.code();
@@ -2606,20 +2614,26 @@ impl<'a> Vm<'a> {
             self.ctx.bc_buf.push(Value::NIL);
         }
 
-        InterpreterFrame {
-            function: callee.function,
-            frame_base,
-            frame_limit,
-            #[cfg(feature = "jit")]
-            resume: InterpreterResumePoint::new(0, false),
-            #[cfg(not(feature = "jit"))]
-            pc: 0,
-            cleanup: InterpreterFrameCleanup {
-                condition_stack_base,
-                specpdl_base,
-            },
-            #[cfg(debug_assertions)]
-            entry_lexenv: self.ctx.lexenv,
+        // Field-wise stores keep the freshly computed values register-resident
+        // instead of materializing a frame temporary and copying it over.
+        current.function = callee.function;
+        current.frame_base = frame_base;
+        current.frame_limit = frame_limit;
+        #[cfg(feature = "jit")]
+        {
+            current.resume = InterpreterResumePoint::new(0, false);
+        }
+        #[cfg(not(feature = "jit"))]
+        {
+            current.pc = 0;
+        }
+        current.cleanup = InterpreterFrameCleanup {
+            condition_stack_base,
+            specpdl_base,
+        };
+        #[cfg(debug_assertions)]
+        {
+            current.entry_lexenv = self.ctx.lexenv;
         }
     }
 
@@ -3518,21 +3532,20 @@ impl<'a> Vm<'a> {
                                 } => {
                                     current.save_execution_state(pc_local, osr_tried);
                                     *driver_quitcounter = quitcounter;
-                                    let child = self.prepare_iterative_interpreter_frame(
-                                        callee, root_slot, nargs,
-                                    );
                                     let caller_depth =
                                         InterpreterDriverDepth::from_suspended_callers(
                                             callers.len(),
                                         );
                                     aux_stack.suspend_current(caller_depth);
-                                    callers.suspend_and_enter(
+                                    callers.suspend_caller(
                                         current,
-                                        child,
                                         BytecodeCallContinuation {
                                             stack_after_call,
                                             backtrace,
                                         },
+                                    );
+                                    self.install_iterative_interpreter_frame(
+                                        current, callee, root_slot, nargs,
                                     );
                                     continue 'frame;
                                 }
