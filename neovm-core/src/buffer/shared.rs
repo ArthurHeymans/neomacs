@@ -13,10 +13,14 @@ use crate::emacs_core::value::Value;
 /// assignment sites write them together -- the command loop
 /// (src/keyboard.c:1536-1537) and `Fundo_boundary` (src/undo.c:278-279) -- and
 /// `record_point` reads them together, refusing the entry unless the buffer
-/// still matches (src/undo.c:73-75).  Keeping them in one value is what makes
+/// still matches (src/undo.c:73-78).  Keeping them in one value is what makes
 /// "saved the point, forgot the buffer" unrepresentable; a bare `CharPos0` let
-/// a point saved in an indirect buffer be spent on an edit in its base, since
-/// the two share this state.
+/// a point saved in one buffer be spent on an edit in another (ledger 121: an
+/// indirect buffer's point spent on its base).
+///
+/// It is private on purpose: the pair is only reachable through
+/// [`SavedPointBeforeCommand`], whose accessors are GNU's paired write and
+/// GNU's paired read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct PointBeforeCommand {
     /// The buffer that was current when the point was saved.

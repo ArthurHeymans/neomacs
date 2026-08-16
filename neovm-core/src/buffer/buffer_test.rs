@@ -1832,6 +1832,40 @@ fn an_undo_boundary_in_an_undo_disabled_buffer_saves_no_point() {
 }
 
 #[test]
+fn every_buffer_of_one_editor_shares_the_saved_point_cell() {
+    crate::test_utils::init_test_tracing();
+    // The superseding behaviour above is only true because there is exactly
+    // ONE saved-point cell per editor, matching GNU's single pair of globals
+    // (src/keyboard.c:232-233).  A buffer that reached the manager with a cell
+    // of its own would silently go back to recording stale point entries, so
+    // pin the sharing for every way a buffer comes into existence.
+    let mut mgr = BufferManager::new();
+    let scratch = mgr.current_buffer_id().expect("scratch buffer");
+    let plain = mgr.create_buffer("plain");
+    let indirect = mgr
+        .create_indirect_buffer(plain, "*indirect*", false)
+        .expect("indirect buffer");
+    let cloned = mgr
+        .create_indirect_buffer(plain, "*clone*", true)
+        .expect("cloned indirect buffer");
+
+    let expected = mgr
+        .get(scratch)
+        .expect("scratch buffer")
+        .saved_point_before_command
+        .clone();
+    for id in [scratch, plain, indirect, cloned] {
+        assert!(
+            mgr.get(id)
+                .expect("live buffer")
+                .saved_point_before_command
+                .shares_cell_with(&expected),
+            "buffer {id:?} must share the editor's one saved-point cell"
+        );
+    }
+}
+
+#[test]
 fn marker_inside_deleted_range_collapses() {
     crate::test_utils::init_test_tracing();
     let mut buf = buf_with_text("abcdef");
