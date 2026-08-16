@@ -449,7 +449,7 @@ rank	package	downloads	status
 448	dired-hacks-utils	194917	todo
 449	diredfl	194179	covered
 450	jedi-core	193743	todo
-451	info+	193519	todo
+451	info+	193519	removed
 452	add-node-modules-path	193375	covered
 453	company-auctex	193099	todo
 454	company-go	191132	todo
@@ -463,7 +463,7 @@ rank	package	downloads	status
 462	flycheck-guile	188261	todo
 463	switch-window	188002	todo
 464	kaolin-themes	187168	todo
-465	hierarchy	187040	todo
+465	hierarchy	187040	removed
 466	string-edit-at-point	186754	todo
 467	general	186705	covered
 468	ample-theme	186324	covered
@@ -472,12 +472,12 @@ rank	package	downloads	status
 471	ido-completing-read+	185921	todo
 472	prescient	185867	todo
 473	scratch	185857	todo
-474	company-tern	184566	todo
+474	company-tern	184566	removed
 475	apropospriate-theme	184374	covered
 476	less-css-mode	184135	todo
 477	caml	183939	todo
 478	all-the-icons-dired	182536	covered
-479	bundler	182228	todo
+479	bundler	182228	removed
 480	tao-theme	181467	todo
 481	aio	180349	covered
 482	request-deferred	179757	todo
@@ -495,7 +495,7 @@ rank	package	downloads	status
 494	sphinx-doc	172522	todo
 495	session	172485	todo
 496	ov	172364	todo
-497	company-lsp	172083	todo
+497	company-lsp	172083	removed
 498	anti-zenburn-theme	171860	covered
 499	disable-mouse	171327	todo
 500	powershell	171075	todo

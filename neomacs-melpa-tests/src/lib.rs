@@ -184,6 +184,95 @@ pub const AUTO_COMPLETE_NXML_MELPA_PIN: (&str, &str) = ("auto-complete-nxml", "2
 /// commit `2595d3dab1ef3549271ca922f212928e9d830eec`.
 pub const AUTO_COMPLETE_PCMP_MELPA_PIN: (&str, &str) = ("auto-complete-pcmp", "20140303.255");
 
+/// The exact biblio-core package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `ee52f6cda82ea6fbc3b400e7b12132595cc0374c`.
+pub const BIBLIO_CORE_MELPA_PIN: (&str, &str) = ("biblio-core", "20230202.1721");
+
+/// The exact biblio package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `bb9d6b4b962fb2a4e965d27888268b66d868766b`.
+pub const BIBLIO_MELPA_PIN: (&str, &str) = ("biblio", "20250812.1408");
+
+/// The exact caml package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `744333dc4c4bd8b93e037efa8f7362b0903b96a2`.
+pub const CAML_MELPA_PIN: (&str, &str) = ("caml", "20250227.1734");
+
+/// The exact cape package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `96c26eb54ef27c404554272489b8f9d78f113a2b`.
+pub const CAPE_MELPA_PIN: (&str, &str) = ("cape", "20260804.2303");
+
+/// The exact company-auctex package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `9400a2ec7459dde8cbf1a5d50dfee4e300ed7e18`.
+pub const COMPANY_AUCTEX_MELPA_PIN: (&str, &str) = ("company-auctex", "20200529.1835");
+
+/// The exact company-go package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `31948b463f2fc18f8801e5a8fe511fef300eb3dd`.
+pub const COMPANY_GO_MELPA_PIN: (&str, &str) = ("company-go", "20170825.1643");
+
+/// The exact darktooth-theme package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `998639b2ce629dbdc0901ed560371f82de7af490`.
+pub const DARKTOOTH_THEME_MELPA_PIN: (&str, &str) = ("darktooth-theme", "20251019.304");
+
+/// The exact dart-mode package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `793d7bcc18a2636ebafe06450356c08ea6d638ca`.
+pub const DART_MODE_MELPA_PIN: (&str, &str) = ("dart-mode", "20260529.1840");
+
+/// The exact default-text-scale package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `bfc0987c37e93742255d3b23d86c17096fda8e7e`.
+pub const DEFAULT_TEXT_SCALE_MELPA_PIN: (&str, &str) = ("default-text-scale", "20191226.2234");
+
+/// The exact dired-hacks-utils package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `63b04d17936c98cb4ad7ce6bc3331cda8e30c55a`.
+pub const DIRED_HACKS_UTILS_MELPA_PIN: (&str, &str) = ("dired-hacks-utils", "20240629.1906");
+
+/// The exact disable-mouse package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `93a55a6453f34049375f97d3cf817b4e6db46f25`.
+pub const DISABLE_MOUSE_MELPA_PIN: (&str, &str) = ("disable-mouse", "20240604.900");
+
+/// The exact disaster package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `0299c129d4153e3a794358159737c3ff9d155654`.
+pub const DISASTER_MELPA_PIN: (&str, &str) = ("disaster", "20250828.2224");
+
+/// The exact easy-kill package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `98cbae5d8c378ad14d612d7c88a78484c49a80b8`.
+pub const EASY_KILL_MELPA_PIN: (&str, &str) = ("easy-kill", "20260121.752");
+
+/// The exact elm-mode package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `90b72cd2c9bc4506f531bcdcd73fa2530d9f4f7c`.
+pub const ELM_MODE_MELPA_PIN: (&str, &str) = ("elm-mode", "20250401.915");
+
+/// The exact flycheck-guile package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `dd7bbdc48fd21cf8d270c913c56cd580f8ec3d03`.
+pub const FLYCHECK_GUILE_MELPA_PIN: (&str, &str) = ("flycheck-guile", "20230405.1154");
+
+/// The exact gruber-darker-theme package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `2e9f99c41fe8ef0557e9ea0f3b94ef50c68b5557`.
+pub const GRUBER_DARKER_THEME_MELPA_PIN: (&str, &str) = ("gruber-darker-theme", "20231026.2031");
+
+/// The exact ido-completing-read+ package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `1609049c0a9b3f674ffff3083adc8f5359746fa9`.
+pub const IDO_COMPLETING_READ_PLUS_MELPA_PIN: (&str, &str) =
+    ("ido-completing-read+", "20240130.30");
+
+/// The exact importmagic package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `e32ee9f6a5eef937b76eba82fdae8bae85d18088`.
+pub const IMPORTMAGIC_MELPA_PIN: (&str, &str) = ("importmagic", "20180520.303");
+
+/// The exact jedi-core package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `94a031d54c55d22aa36ad557f45c972cb3f5833b`.
+pub const JEDI_CORE_MELPA_PIN: (&str, &str) = ("jedi-core", "20250602.2109");
+
+/// The exact jedi package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `0a92f57dcfd76f1daf6d382d1e2eb437784a71e0`.
+pub const JEDI_MELPA_PIN: (&str, &str) = ("jedi", "20250602.2107");
+
+/// The exact kaolin-themes package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `432c6672b16e867ec40eaf312d2fbbeb38673fa9`.
+pub const KAOLIN_THEMES_MELPA_PIN: (&str, &str) = ("kaolin-themes", "20260619.2211");
+
+/// The exact less-css-mode package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `59bf174c4e9f053ec2a7ef8c8a8198490390f6fb`.
+pub const LESS_CSS_MODE_MELPA_PIN: (&str, &str) = ("less-css-mode", "20161001.453");
+
 /// The exact log4e dependency selected for the auto-complete-pcmp corpus and
 /// by the practical logger lifecycle, formatting, messaging, navigation, and
 /// source-instrumentation parity corpus. MELPA built this archive from
@@ -194,6 +283,78 @@ pub const LOG4E_MELPA_PIN: (&str, &str) = ("log4e", "20240123.1313");
 /// buffer logger insertion without interactive messaging. MELPA built this
 /// archive from upstream commit `d5934ce10ba3a70d3fcfb94d742ce3b9136ce124`.
 pub const LOGITO_MELPA_PIN: (&str, &str) = ("logito", "20201226.534");
+
+/// The exact lsp-ivy package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `c0930544948dfdb7bf497fc9e58aa6b4b857e237`.
+pub const LSP_IVY_MELPA_PIN: (&str, &str) = ("lsp-ivy", "20260507.1752");
+
+/// The exact magit-todos package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `7294a95580bddf7232f2d205efae312dc24c5f61`.
+pub const MAGIT_TODOS_MELPA_PIN: (&str, &str) = ("magit-todos", "20250928.1611");
+
+/// The exact noflet package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `7ae84dc3257637af7334101456dafe1759c6b68a`.
+pub const NOFLET_MELPA_PIN: (&str, &str) = ("noflet", "20141102.1454");
+
+/// The exact nov package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `874daf5e4791a6d4f47741422c80e2736e907351`.
+pub const NOV_MELPA_PIN: (&str, &str) = ("nov", "20251213.1501");
+
+/// The exact org-journal package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `6460f6f2b0835b4b8aa87d5fdf40cac7deb319f5`.
+pub const ORG_JOURNAL_MELPA_PIN: (&str, &str) = ("org-journal", "20260413.1401");
+
+/// The exact ov package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `e2971ad986b6ac441e9849031d34c56c980cf40b`.
+pub const OV_MELPA_PIN: (&str, &str) = ("ov", "20230522.1117");
+
+/// The exact powershell package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `ae60e11c96cc1767f05ce0cab6a917240ce2e37a`.
+pub const POWERSHELL_MELPA_PIN: (&str, &str) = ("powershell", "20251122.1430");
+
+/// The exact prescient package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `5649977fa7789e4615efeca09397ed7eccd06dfc`.
+pub const PRESCIENT_MELPA_PIN: (&str, &str) = ("prescient", "20260628.2243");
+
+/// The exact Python Environment package pinned as the jedi-core dependency.
+/// MELPA built this archive from upstream commit `401006584e32864a10c69d29f14414828909362e`.
+pub const PYTHON_ENVIRONMENT_MELPA_PIN: (&str, &str) = ("python-environment", "20150310.853");
+
+/// The exact request-deferred package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `38ed1d2e64138eb16a9d8ed2987cff2e01b4a93b`.
+pub const REQUEST_DEFERRED_MELPA_PIN: (&str, &str) = ("request-deferred", "20220614.1604");
+
+/// The exact rjsx-mode package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `0061587a06cdc2579a8d0e90863498d96bf982d8`.
+pub const RJSX_MODE_MELPA_PIN: (&str, &str) = ("rjsx-mode", "20200224.2149");
+
+/// The exact scratch package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `f000648c9663833a76a8de9b1e78c99a9d698e48`.
+pub const SCRATCH_MELPA_PIN: (&str, &str) = ("scratch", "20220319.1705");
+
+/// The exact session package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `3be207c50dfe964de3cbf5cd8fa9b07fc7d2e609`.
+pub const SESSION_MELPA_PIN: (&str, &str) = ("session", "20210422.53");
+
+/// The exact sphinx-doc package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `1eda612a44ef027e5229895daa77db99a21b8801`.
+pub const SPHINX_DOC_MELPA_PIN: (&str, &str) = ("sphinx-doc", "20210213.1250");
+
+/// The exact string-edit-at-point package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `87936d816ae24184dd83688136531b6b6f1943fe`.
+pub const STRING_EDIT_AT_POINT_MELPA_PIN: (&str, &str) = ("string-edit-at-point", "20230118.1933");
+
+/// The exact sublime-themes package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `60ee40af82eb55b79d5ed4026f1911326311603f`.
+pub const SUBLIME_THEMES_MELPA_PIN: (&str, &str) = ("sublime-themes", "20170606.1844");
+
+/// The exact switch-window package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `1ccbfa53df499cb31d5ebbe21306cdcc6b06c135`.
+pub const SWITCH_WINDOW_MELPA_PIN: (&str, &str) = ("switch-window", "20260316.257");
+
+/// The exact tao-theme package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `33c0d44048afe444e7a8aee30fbc101a00453799`.
+pub const TAO_THEME_MELPA_PIN: (&str, &str) = ("tao-theme", "20250717.347");
 
 /// The exact Yaxception package selected as an auto-complete-pcmp dependency
 /// and by the practical custom-error, catch-selection, nested rethrow, finally,
