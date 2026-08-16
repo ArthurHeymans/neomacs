@@ -6462,3 +6462,176 @@ compiler rejected all four fixtures that had been saving a point with no
 buffer.
 
 Status: FIXED.
+
+## 123. `undo-limit` and every other variable that bounds the undo list did nothing, and truncation ran at the wrong time -- FIXED
+
+The manual tells users that `undo-limit` is how you decide how much undo
+history Emacs keeps.  Setting it changed nothing: undo lists were truncated
+against two literals compiled into Rust, from `undo-boundary`, which is not
+where or when GNU truncates at all.
+
+```elisp
+(let ((b (get-buffer-create "u123")))
+  (set-buffer b)
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (setq-local undo-limit 1)
+  (setq-local undo-strong-limit 1)
+  (dotimes (_ 10) (insert "hello") (undo-boundary))
+  (let ((before (length buffer-undo-list)))
+    (garbage-collect)
+    (list before (length buffer-undo-list) buffer-undo-list)))
+;; GNU                => (21 2 (nil (46 . 51)))
+;; Neomacs before fix => (21 21 (nil (46 . 51) nil (41 . 46) nil (36 . 41) nil (31 . 36) nil (26 . 31) nil (21 . 26) nil (16 . 21) nil (11 . 16) nil (6 . 11) nil (1 . 6) (t . 0)))
+```
+
+The `before` column agreeing at 21 is the important half: it says GNU does NOT
+truncate when the boundary is made, so the ten `undo-boundary` calls are not
+the divergence.  The collection is.
+
+`undo-outer-limit` and `undo-outer-limit-function` existed only as names in a
+defvar table; nothing ever read them:
+
+```elisp
+(let ((b (get-buffer-create "u123b")) (calls nil))
+  (set-buffer b)
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (setq-local undo-outer-limit 1)
+  (setq undo-outer-limit-function (lambda (size) (setq calls size) t))
+  (insert "hello")
+  (garbage-collect)
+  (list calls buffer-undo-list))
+;; GNU                => (64 ((1 . 6) (t . 0)))
+;; Neomacs before fix => (nil ((1 . 6) (t . 0)))
+```
+
+### Where GNU truncates, and why there
+
+`Fundo_boundary` (`src/undo.c:251-282`) conses a `nil` on the front, sets
+`undo-auto--last-boundary-cause`, saves point, and returns.  It has no size
+logic.  Truncation is a garbage-collector job:
+
+```c
+  /* Don't keep undo information around forever.
+     Do this early on, so it is no problem if the user quits.  */
+  FOR_EACH_LIVE_BUFFER (tail, buffer)
+    compact_buffer (XBUFFER (buffer));            /* src/alloc.c:5796-5800 */
+```
+
+`compact_buffer` (`src/buffer.c:1854-1885`) filters before it truncates: dead
+buffers, indirect buffers, and buffers whose `BUF_COMPACT` still equals their
+`BUF_MODIFF` are skipped, and a `t` undo list is never passed on -- "Calling
+truncate_undo_list on Qt tends to return NULL, which effectively turns undo
+back on".  Then `truncate_undo_list` (`src/undo.c:289-419`) does the walk.
+
+Doing it at GC rather than at each boundary is not an implementation detail
+users cannot see.  Three consequences show up in a probe:
+
+- The undo list a program reads right after editing is the untruncated one in
+  both editors.  Truncating at boundary time made Neomacs' list shorter than
+  GNU's at moments GNU has not yet collected -- with realistic limits it also
+  made it *longer* forever, since nothing else ever truncated.
+- `BUF_COMPACT` means a second collection with no intervening modification
+  leaves the list alone.  Measured under GNU: after a collection truncates a
+  buffer to 2 entries, `(setq buffer-undo-list ...)` with 6 entries and another
+  `(garbage-collect)` still reports 6.
+- `undo-outer-limit-function` runs inside the collector, with GC inhibited
+  around it (`src/undo.c:296-298`).
+
+### Which bindings GNU reads
+
+The buffer's own.  `truncate_undo_list` makes the buffer current first, and
+says why (`src/undo.c:296-306`):
+
+```c
+  /* Make the buffer current to get its local values of variables such
+     as undo_limit.  Also so that Vundo_outer_limit_function can
+     tell which buffer to operate on.  */
+  record_unwind_current_buffer ();
+  set_buffer_internal (b);
+```
+
+That matters because `compact_buffer` is called for every live buffer in turn:
+a `setq-local undo-limit 1` in one buffer must not shorten another's history.
+Measured under GNU: buffer A with a local limit of 1 truncates to 2 entries in
+the same collection that leaves buffer B, on the 160000 default, at 21.  It
+also means a `let` binding counts -- which is the whole point of
+`combine-change-calls`, which wraps its body in `(undo-limit
+most-positive-fixnum)` (`lisp/subr.el:4308-4310`).
+
+### What `undo-outer-limit` does that `undo-limit` does not
+
+`undo-limit` bounds the accumulated HISTORY and is applied by discarding old
+groups.  `undo-outer-limit` bounds ONE command's record -- the entries before
+the first boundary -- and is a last-ditch measure against a single command
+consing Emacs to death, which no amount of discarding older groups can help
+with.  It is checked before any of the `undo-limit` walking, against the size
+accumulated up to the first boundary (`src/undo.c:349-369`), and the C code
+does not act on it itself: it calls `undo-outer-limit-function` and stops only
+if that returns non-nil.
+
+What the user observes comes from `lisp/simple.el:4252-4295`, which sets that
+function to `undo-outer-limit-truncate`: a `(undo discard-info)` warning
+naming the buffer and the byte count, and `buffer-undo-list` emptied.  With
+`undo-ask-before-discard` non-nil it asks in the echo area instead.  Measured
+under GNU 31.0.90 with `undo-outer-limit` at 1: "Buffer 'C' undo info was 64
+bytes long. / The undo info was discarded because it exceeded
+`undo-outer-limit'." and the list becomes nil.
+
+Two details a grep does not show.  `--batch` sets `undo-outer-limit` to nil
+before anything runs (`src/emacs.c:1700-1707`), which is why no batch oracle
+run could ever have caught this variable being ignored -- the batch default is
+nil in both editors and always was.  The 24000000 default only exists in a real
+session, and both editors now report the same thing there; measured by running
+each under a pty with `-nw -Q` and writing `undo-outer-limit` and
+`undo-outer-limit-function` to a file: `24000000 undo-outer-limit-truncate`.
+And GNU's guard is an integer test, not a number test (`src/undo.c:352-355`):
+a float is not a limit, a bignum too large for `intmax_t` fires only when it is
+negative.  All four cases were measured rather than reasoned about.
+
+### The fix
+
+Truncation moved to where GNU does it: `compact_buffers_for_gc`
+(neovm-core/src/emacs_core/undo.rs) runs at the top of
+`gc_collect_from_current_roots_body`, with GNU's skips, and `add_undo_boundary`
+no longer truncates.  `SharedUndoState` gained `compacted_modified_tick`, GNU's
+`BUF_COMPACT`, which lives in the shared per-text state exactly as GNU's lives
+in `struct buffer_text`.
+
+The limits are now a value that can only be obtained by reading the variables.
+`UndoLimits` (neovm-core/src/buffer/undo.rs) has private fields and one
+constructor, `UndoLimits::read`, which takes a `UndoLimitBindings` -- a trait
+whose four methods return the *Lisp values* of `undo-limit`,
+`undo-strong-limit`, `undo-outer-limit` and `undo-outer-limit-function`, and
+whose only production implementation reads them off the `Context` after the
+buffer has been made current.  There is no constructor taking numbers, so
+`truncate_undo_list(ul, 160_000, 240_000)` is no longer a thing anyone can
+write.
+
+Two enums carry the states GNU distinguishes and Neomacs previously flattened.
+`OuterUndoLimit::{NoLimit, Bytes, AlwaysExceeded}` is GNU's three-way integer
+guard.  `GnuIntVariable::{Int, NotAnIntSlotValue}` names the state that has no
+GNU counterpart at all: GNU's `store_symval_forwarding` refuses to put a
+non-integer in a `DEFVAR_INT` slot (`src/data.c:1475-1483`, `(setq undo-limit
+"x")` signals `(wrong-type-argument integerp "x")`), so a string in
+`undo-limit` is unreachable there.  Neomacs still backs these as plain obarray
+values, and `UndoLimits::read` returns `None` for that state rather than
+substituting a number nobody configured.
+
+The walk itself is now GNU's, not a running-total cut: it scans past the first
+group before making any decision, so the most recent record survives however
+small the limits are, and every cut lands on a group edge, so an undo list is
+never left holding half of one command's changes.  The byte accounting matches
+too -- 16 per link, 16 more per cons record, `sizeof (struct Lisp_String) - 1
++ SCHARS` for a saved deletion string -- calibrated by having GNU report the
+size through `undo-outer-limit-function`: a lone 100-character deletion record
+is 163 bytes whether those characters are one byte or two.
+
+Left unfixed, and separate: `forward::LispIntFwd` is declared but not wired
+into `find_symbol_value`, so `(setq undo-limit "x")` and `(setq
+gc-cons-threshold "x")` are both accepted here where GNU signals.  That is the
+`DEFVAR_INT` forwarding gap, not an undo bug; `GnuIntVariable` marks exactly
+where undo truncation meets it.
+
+Status: FIXED.
