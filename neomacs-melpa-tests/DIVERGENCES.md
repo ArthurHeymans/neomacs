@@ -6462,3 +6462,138 @@ compiler rejected all four fixtures that had been saving a point with no
 buffer.
 
 Status: FIXED.
+
+## 122. The saved point-before-command was per buffer, so every `M-x` command recorded a point entry GNU had already superseded -- FIXED
+
+scala-mode's import workflow runs `M-x scala-organise`, undoes it with `C-_`,
+then runs the command twice more.  The buffer text agreed with GNU at every
+step; point did not.  GNU leaves point at 271 (line 13, `object Main {` -- the
+end of the import block the command deleted); Neomacs left it at 1, and the
+next `scala-organise`, whose `save-excursion` marker starts wherever the undo
+left point, then reported 1 where GNU reports 15.
+
+The whole difference is one stray entry in `buffer-undo-list`.  Ten lines, no
+package involved:
+
+```elisp
+(defun probe-cmd ()
+  (interactive)
+  (save-excursion (goto-char 6) (delete-region 3 6)))
+(let ((buf (get-buffer-create "probe")))
+  (set-window-buffer (selected-window) buf)   ; M-x runs the command in the
+  (set-buffer buf)                            ; SELECTED window's buffer
+  (buffer-enable-undo) (insert "abcdefghij")
+  (set-buffer-modified-p nil) (setq buffer-undo-list nil) (goto-char 1)
+  (execute-kbd-macro (kbd "M-x probe-cmd RET"))
+  (let ((recorded (prin1-to-string buffer-undo-list)))
+    (execute-kbd-macro (kbd "C-_"))
+    (list recorded (point))))
+;; GNU                => ("((\"cde\" . -3) (t . 0))" 6)
+;; Neomacs before fix => ("((\"cde\" . -3) 1 (t . 0))" 1)
+```
+
+The `1` is a point entry, and `primitive-undo`'s `((integerp next) (goto-char
+next))` arm is processed last in the group, so it overrides the position the
+deletion record had already restored.  The deletion record is `("cde" . -3)` in
+both editors: `record_delete` stores a NEGATIVE position when point sat at the
+end of the deleted text (`if (PT == beg + SCHARS (string)) XSETINT (sbeg,
+-beg);`, `src/undo.c:172-179`), and `primitive-undo`'s `(< pos 0)` branch
+reinserts and leaves point past the reinsertion.  That is where GNU's 6 -- and
+scala-mode's 271 -- comes from.  Neomacs computed the same `-3`, then threw the
+result away one entry later.
+
+Bind the same command to a key instead and BOTH editors record the `1` and both
+end at 1.  The minibuffer read is the whole difference.
+
+### Why the minibuffer read matters
+
+GNU's saved point is a pair of GLOBALS, `point_before_last_command_or_undo` and
+`buffer_before_last_command_or_undo` (`src/keyboard.c:232-233`), described in
+`src/keyboard.h:257-266` as
+
+> The location of point immediately before **the last command** was executed,
+> or the last time the undo-boundary command added a boundary.
+
+Singular: one saved point for the editor.  Both assignment sites overwrite it
+unconditionally with whatever buffer is current -- the command loop
+(`src/keyboard.c:1536-1537`) and `Fundo_boundary` (`src/undo.c:278-279`) -- and
+`record_point` reads it under three guards (`src/undo.c:71-78`):
+
+```c
+  if (at_boundary
+      && point_before_last_command_or_undo != beg
+      && buffer_before_last_command_or_undo == current_buffer )
+```
+
+Every `M-x` is a sequence of command-loop iterations in the MINIBUFFER followed
+by the chosen command, which `execute-extended-command` calls without an
+iteration of its own.  By the time `scala-organise` deletes, the globals hold
+the minibuffer's point and the minibuffer's buffer, so the third guard is false
+and GNU records nothing.  The guard's comment says exactly why: "we must not do
+this if the buffer has changed since the last command, since the value of point
+that we have will be for that buffer, not this."
+
+Ledger 121 added that third guard, but it could not fire: Neomacs kept the pair
+in `SharedUndoState`, i.e. per buffer, where a buffer's own saved point always
+names that buffer.  `saved.buffer == self.id` was a tautology for every
+ordinary buffer, and only ever did work for a base/indirect pair, which is the
+one case that shares one `SharedUndoState`.  Per-buffer storage cannot express
+"superseded" at all -- nothing in it is global enough to be overwritten by a
+command somewhere else.
+
+### The fix
+
+`SavedPointBeforeCommand` (neovm-core/src/buffer/shared.rs) is ONE
+`Rc<Cell<Option<PointBeforeCommand>>>` that a `BufferManager` mints once and
+every buffer it owns clones.  Saving a point therefore discards the previous
+one, exactly as assigning a C global does; there is nothing to keep in sync,
+and `clone`/`buffer-swap-text` cannot fork the cell.  `PointBeforeCommand` is
+now private to that module, so the pair can only be reached through the two
+accessors:
+
+* `save(buffer, point)` -- GNU's paired assignment, the only writer.
+* `point_saved_in(buffer) -> Option<CharPos0>` -- GNU's paired read.  It takes
+  the buffer that is about to record the entry, so the third guard is not
+  something a call site can forget: there is no accessor that hands out a point
+  without a buffer to check it against.
+
+`Buffer::new` takes the cell as a required argument rather than minting one,
+because a buffer with a private cell is precisely the bug.  Deleting the old
+`SharedUndoState` accessors is what pointed the compiler at every site.
+
+### A second finding in the same function
+
+Making the point global exposed a divergence that per-buffer storage had hidden.
+`Fundo_boundary` is one early return over its whole body -- a buffer whose
+`buffer-undo-list` is `t` gets neither the boundary nor the saved point
+(`src/undo.c:252-255`, assignment at `:278-279`) -- and Neomacs saved the point
+unconditionally:
+
+```elisp
+(let ((a (get-buffer-create "A")) (b (get-buffer-create "B")))
+  (with-current-buffer a (setq buffer-undo-list t) (insert "hello") (goto-char 4))
+  (with-current-buffer b
+    (setq buffer-undo-list nil) (insert "world")
+    (set-buffer-modified-p nil) (goto-char 1) (undo-boundary))
+  (with-current-buffer a (undo-boundary))
+  (with-current-buffer b (goto-char 3) (delete-region 3 5) buffer-undo-list))
+;; GNU                => (("rl" . 3) 1 (t . 0) nil (1 . 6) (t . 0))
+;; Neomacs before fix => (("rl" . 3)   (t . 0) nil (1 . 6) (t . 0))
+```
+
+A buffer that records nothing was spending a point saved for a buffer that
+does.  This is reachable in ordinary use because `undo-auto--boundaries` walks
+the changed-buffer list with each buffer made current, so a disabled buffer in
+that walk is not exotic.  The guard is now an exhaustive match on
+`UndoRecording` (the classification added for ledger 120) rather than a bare
+early return, so the disabled arm cannot fall through into the recording body.
+
+Residual, deliberately not fixed here: `Fundo_boundary` also does `Fset
+(Qundo_auto__last_boundary_cause, Qexplicit)` (`src/undo.c:277`) and Neomacs
+leaves that variable nil -- `(progn (insert "x") (undo-boundary)
+undo-auto--last-boundary-cause)` reads `explicit` under GNU and `nil` here.
+Nothing observed depends on it (`undo-auto--last-boundary-amalgamating-number`
+takes `car-safe`, which is nil either way), and both Neomacs callers of the
+boundary sit below the obarray, so it wants its own change.
+
+Status: FIXED.
