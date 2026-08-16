@@ -5896,9 +5896,9 @@ impl BufferManager {
     /// The whole body is guarded by one early return: a buffer whose
     /// `buffer-undo-list` is `t` gets neither the boundary nor the
     /// editor-global saved point.  That guard is load-bearing for the *other*
-    /// buffers -- `undo-auto--boundaries` walks the changed-buffer list with
-    /// each buffer made current, so a disabled buffer in that walk would
-    /// otherwise spend a point saved for a buffer that does record.
+    /// buffers -- `lisp/` calls `(undo-boundary)` unconditionally in three
+    /// dozen places, each in whatever buffer happens to be current, and a
+    /// disabled buffer must not spend a point saved for one that records.
     pub fn add_undo_boundary(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         let mut ul = buf.get_undo_list();

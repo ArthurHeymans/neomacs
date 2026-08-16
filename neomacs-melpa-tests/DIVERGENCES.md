@@ -6583,9 +6583,11 @@ saved the point unconditionally:
 ```
 
 A buffer that records nothing was spending a point saved for a buffer that
-does.  This is reachable in ordinary use because `undo-auto--boundaries` walks
-the changed-buffer list with each buffer made current, so a disabled buffer in
-that walk is not exotic.  The guard is now an exhaustive match on
+does.  The automatic path cannot reach it -- `undo-auto--ensure-boundary` gates
+on `(car-safe buffer-undo-list)` (`lisp/simple.el:4077-4079`), which is nil for
+`t` -- but the thirty-six unconditional `(undo-boundary)` calls in `lisp/`
+(electric.el, replace.el, mouse.el, abbrev.el, ...) can, and every one of them
+runs in whatever buffer is current.  The guard is now an exhaustive match on
 `UndoRecording` (the classification added for ledger 120) rather than a bare
 early return, so the disabled arm cannot fall through into the recording body.
 

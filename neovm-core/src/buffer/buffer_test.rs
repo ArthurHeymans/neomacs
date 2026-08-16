@@ -1780,8 +1780,8 @@ fn an_undo_boundary_in_an_undo_disabled_buffer_saves_no_point() {
     // has undo turned off (`if (EQ (BVAR (current_buffer, undo_list), Qt))
     // return Qnil;`, src/undo.c:258-259; the assignment is at :278-279).  A
     // buffer that records nothing must not be able to spend another buffer's
-    // saved point, and `undo-auto--boundaries` walks changed buffers with each
-    // one made current, so a disabled buffer in that list is ordinary.
+    // saved point, and `lisp/` calls `(undo-boundary)` unconditionally in three
+    // dozen places, each in whatever buffer happens to be current.
     //
     // Measured on GNU 31.0.90: buffer A has undo off; B saves a point of 1 via
     // `undo-boundary`; `undo-boundary` runs in A; then B deletes chars 3..5.
