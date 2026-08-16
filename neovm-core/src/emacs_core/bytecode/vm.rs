@@ -2768,10 +2768,34 @@ impl<'a> Vm<'a> {
         aux_stack.restore_current(InterpreterDriverDepth::from_suspended_callers(
             callers.len(),
         ));
-        self.ctx.bc_buf.truncate(continuation.stack_after_call);
-        debug_assert!(self.ctx.bc_buf.len() < current.frame_limit);
-        self.ctx.bc_buf.push(value);
+        self.deliver_interpreter_return_value(continuation.stack_after_call, value);
+        debug_assert!(self.ctx.bc_buf.len() <= current.frame_limit);
         InterpreterValueCompletion::Resume
+    }
+
+    /// Deliver a bytecode return value into the restored caller's stack.
+    ///
+    /// GNU's `Breturn` is `top = fp->saved_top; PUSH (val)`: the result lands
+    /// in the consumed function-designator slot and everything above it is
+    /// discarded.  Fusing the truncate with the push removes both the truncate
+    /// comparison and the push capacity branch — the vector only ever shrinks
+    /// here.
+    #[inline(always)]
+    fn deliver_interpreter_return_value(&mut self, stack_after_call: usize, value: Value) {
+        let buf = &mut self.ctx.bc_buf;
+        debug_assert!(stack_after_call < buf.len());
+        // SAFETY: `stack_after_call` is the caller's consumed function-operand
+        // slot, strictly below the callee's `frame_base`
+        // (`args_start + nargs <= frame_base` held at frame installation), and
+        // the callee was truncated to exactly that `frame_base` immediately
+        // before the caller was restored with no `bc_buf` mutation in between.
+        // The slot is therefore initialized and in bounds, and the new length
+        // only shrinks the vector, so no capacity or drop concerns exist
+        // (`Value` is `Copy`).
+        unsafe {
+            *buf.as_mut_ptr().add(stack_after_call) = value;
+            buf.set_len(stack_after_call + 1);
+        }
     }
 
     /// Resolve and dispatch one `Op::Call` after the depth guard has entered.
