@@ -12,11 +12,11 @@ fn eval_lisp(eval: &mut neovm_core::emacs_core::Context, source: &str) -> Value 
 }
 
 fn test_buffer(id: u64, name: &str) -> Buffer {
-    Buffer::new(BufferId(id), Value::string(name))
+    Buffer::new_standalone(BufferId(id), Value::string(name))
 }
 
 fn test_buffer_with_backend(id: u64, name: &str, kind: BufferTextBackendKind) -> Buffer {
-    Buffer::try_new_with_text_backend_kind(BufferId(id), Value::string(name), kind)
+    Buffer::try_new_standalone_with_text_backend_kind(BufferId(id), Value::string(name), kind)
         .expect("test backend should be implemented")
 }
 

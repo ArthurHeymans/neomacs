@@ -2308,6 +2308,36 @@ impl Buffer {
         ))
     }
 
+    /// Create a buffer that belongs to no editor, minting a saved-point cell
+    /// for it alone.
+    ///
+    /// This exists for STANDALONE buffers: layout, rendering and bridge tests
+    /// in other crates that need a `Buffer` without a `BufferManager` around
+    /// it.  It is named for that and kept separate from [`Buffer::new`] on
+    /// purpose, because a buffer holding a private cell is exactly the defect
+    /// ledger 122 removed -- the saved point-before-command is editor-global
+    /// (GNU's `point_before_last_command_or_undo`, src/keyboard.c:232-233), and
+    /// a buffer with its own cell can never observe that a command in another
+    /// buffer superseded it.  A buffer an editor owns must come from
+    /// `BufferManager`, which hands out clones of the one cell.
+    pub fn new_standalone(id: BufferId, name: Value) -> Self {
+        Self::new(id, name, SavedPointBeforeCommand::new_editor_global())
+    }
+
+    /// [`Buffer::new_standalone`] with an explicit text backend.
+    pub fn try_new_standalone_with_text_backend_kind(
+        id: BufferId,
+        name: Value,
+        text_backend_kind: BufferTextBackendKind,
+    ) -> Result<Self, BufferTextBackendKind> {
+        Self::try_new_with_text_backend_kind(
+            id,
+            name,
+            text_backend_kind,
+            SavedPointBeforeCommand::new_editor_global(),
+        )
+    }
+
     pub(crate) fn new_with_text_backend_kind(
         id: BufferId,
         name: Value,

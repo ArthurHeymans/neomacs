@@ -1,7 +1,7 @@
 use super::*;
 
 fn window_chrome_test_face(face_resolver: &FaceResolver, origin: &DisplayOrigin) -> ResolvedFace {
-    let buffer = neovm_core::buffer::Buffer::new(
+    let buffer = neovm_core::buffer::Buffer::new_standalone(
         neovm_core::buffer::BufferId(999),
         Value::string("*chrome-face-test*"),
     );

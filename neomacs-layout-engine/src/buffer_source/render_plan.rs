@@ -70,7 +70,7 @@ mod tests {
         let _runtime = neovm_core::emacs_core::Context::new();
         let table = FaceTable::new();
         let resolver = FaceResolver::new(&table, 0x000000, 0xFFFFFF, 14.0, None);
-        let mut buffer = Buffer::new(BufferId(42), Value::string("*default-remap*"));
+        let mut buffer = Buffer::new_standalone(BufferId(42), Value::string("*default-remap*"));
         buffer.set_buffer_local(
             "face-remapping-alist",
             Value::list(vec![Value::list(vec![
