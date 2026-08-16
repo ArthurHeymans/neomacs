@@ -2790,8 +2790,10 @@ fn vm_switch_branches_using_hash_table_jump_table() {
     let func = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         // Hand-built but seal-shaped by construction (trailing Return,
-        // in-bounds targets/constants); the marker vouches for that.
+        // in-bounds targets/constants); the marker vouches for that. Left
+        // unverified so these run in the checked driver instance.
         ops_sealed: true,
+        stack_verified: false,
         ops: vec![
             Op::Constant(1),
             Op::Constant(0),
@@ -2957,8 +2959,10 @@ fn vm_throw_restores_saved_stack_before_resuming_catch() {
     let func = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         // Hand-built but seal-shaped by construction (trailing Return,
-        // in-bounds targets/constants); the marker vouches for that.
+        // in-bounds targets/constants); the marker vouches for that. Left
+        // unverified so these run in the checked driver instance.
         ops_sealed: true,
+        stack_verified: false,
         ops: vec![
             Op::Constant(0),
             Op::Constant(1),
@@ -10752,8 +10756,10 @@ fn vm_gnu_arg_descriptor_preserves_optional_and_rest_slots() {
     let func = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         // Hand-built but seal-shaped by construction (trailing Return,
-        // in-bounds targets/constants); the marker vouches for that.
+        // in-bounds targets/constants); the marker vouches for that. Left
+        // unverified so these run in the checked driver instance.
         ops_sealed: true,
+        stack_verified: false,
         ops: vec![
             Op::StackRef(4),
             Op::StackRef(4),

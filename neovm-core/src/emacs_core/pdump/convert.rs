@@ -1378,6 +1378,7 @@ impl<'a> LoadDecoder<'a> {
                 source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
                 ops: Vec::new(),
                 ops_sealed: false,
+                stack_verified: false,
                 constants: Vec::new(),
                 max_stack: 0,
                 params: LambdaParams::simple(Vec::new()),
@@ -3999,6 +4000,7 @@ fn load_bytecode_owned(
     let mut function = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         ops,
+        stack_verified: false,
         constants: bc
             .constants
             .into_iter()

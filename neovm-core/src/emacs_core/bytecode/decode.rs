@@ -154,6 +154,243 @@ fn offset_map_entries(
         .collect()
 }
 
+/// Statically prove a sealed instruction stream's operand-stack behavior.
+///
+/// GNU trusts the compiler's declared `max_stack` blindly (`PUSH` is an
+/// unchecked store); the memory-safe equivalent is this one-time forward
+/// dataflow over the decoded instructions. It returns `true` iff, starting
+/// from `entry_depth`, every reachable instruction has a single consistent
+/// stack depth (the byte compiler's output is depth-deterministic), no depth
+/// exceeds `max_stack`, and every instruction's minimum operand requirement
+/// is met. `Vm::run_loop`'s verified instantiation relies on this proof to
+/// drop its per-push capacity guard.
+///
+/// Deliberately conservative refusals (the function then simply runs in the
+/// checked driver, with today's exact behavior):
+/// - any [`Op::Switch`]: its targets live in runtime hash-table constants,
+///   which the deferred decode path cannot read;
+/// - any depth inconsistency at a join, or an effect the table below cannot
+///   bound.
+///
+/// Per-edge effects that differ from the fall-through are handled explicitly:
+/// the `*ElsePop` gotos keep TOS on the taken edge and pop on fall-through,
+/// and the three handler-pushing ops flow their recorded resume depth (the
+/// depth at push, after any operand pops, plus one for the delivered value)
+/// into the handler target.
+pub(crate) fn verify_stack_effects(ops: &[Op], entry_depth: usize, max_stack: usize) -> bool {
+    if entry_depth > max_stack || ops.is_empty() {
+        return false;
+    }
+    let mut depths: Vec<Option<usize>> = vec![None; ops.len()];
+    depths[0] = Some(entry_depth);
+    let mut worklist: Vec<(usize, usize)> = vec![(0, entry_depth)];
+
+    // Merge `depth` into pc's state; false = inconsistent or out of bounds.
+    fn flow(
+        depths: &mut [Option<usize>],
+        worklist: &mut Vec<(usize, usize)>,
+        pc: usize,
+        depth: usize,
+        max_stack: usize,
+    ) -> bool {
+        if pc >= depths.len() || depth > max_stack {
+            return false;
+        }
+        match depths[pc] {
+            Some(existing) => existing == depth,
+            None => {
+                depths[pc] = Some(depth);
+                worklist.push((pc, depth));
+                true
+            }
+        }
+    }
+
+    while let Some((pc, depth)) = worklist.pop() {
+        // (min required depth, net delta) for the fall-through edge; branch
+        // and handler edges are pushed onto the worklist explicitly.
+        let (min, net): (usize, isize) = match &ops[pc] {
+            Op::Constant(_) | Op::Nil | Op::True | Op::VarRef(_) | Op::MakeClosure(_) => (0, 1),
+            Op::Dup => (1, 1),
+            Op::StackRef(n) => (*n as usize + 1, 1),
+            Op::Pop | Op::VarSet(_) | Op::VarBind(_) | Op::UnwindProtectPop => (1, -1),
+            Op::StackSet(n) => (*n as usize + 1, -1),
+            Op::DiscardN(raw) => {
+                let n = (*raw & 0x7F) as usize;
+                if n == 0 {
+                    (0, 0)
+                } else if *raw & 0x80 != 0 {
+                    (n + 1, -(n as isize))
+                } else {
+                    (n, -(n as isize))
+                }
+            }
+            Op::Unbind(_) | Op::PopHandler => (0, 0),
+            Op::Call(n) => (*n as usize + 1, -(*n as isize)),
+            Op::Apply(n) => {
+                let n = *n as usize;
+                if n == 0 {
+                    (1, 0)
+                } else {
+                    (n + 1, -(n as isize))
+                }
+            }
+            Op::CallBuiltin(_, n) | Op::CallBuiltinSym(_, n) => (*n as usize, 1 - (*n as isize)),
+            Op::Goto(target) => {
+                if !flow(
+                    &mut depths,
+                    &mut worklist,
+                    *target as usize,
+                    depth,
+                    max_stack,
+                ) {
+                    return false;
+                }
+                continue;
+            }
+            Op::GotoIfNil(target) | Op::GotoIfNotNil(target) => {
+                if depth < 1 {
+                    return false;
+                }
+                if !flow(
+                    &mut depths,
+                    &mut worklist,
+                    *target as usize,
+                    depth - 1,
+                    max_stack,
+                ) {
+                    return false;
+                }
+                (1, -1)
+            }
+            Op::GotoIfNilElsePop(target) | Op::GotoIfNotNilElsePop(target) => {
+                if depth < 1 {
+                    return false;
+                }
+                // Taken edge keeps TOS; fall-through pops it.
+                if !flow(
+                    &mut depths,
+                    &mut worklist,
+                    *target as usize,
+                    depth,
+                    max_stack,
+                ) {
+                    return false;
+                }
+                (1, -1)
+            }
+            Op::Switch => return false,
+            Op::Return | Op::Throw | Op::TrapOutOfRangeConstant(_) => continue,
+            // In-place unary rewrites.
+            Op::Add1
+            | Op::Sub1
+            | Op::Negate
+            | Op::Car
+            | Op::Cdr
+            | Op::CarSafe
+            | Op::CdrSafe
+            | Op::Length
+            | Op::Symbolp
+            | Op::Consp
+            | Op::Stringp
+            | Op::Listp
+            | Op::Integerp
+            | Op::Numberp
+            | Op::Null
+            | Op::Not
+            | Op::Nreverse
+            | Op::SymbolValue
+            | Op::SymbolFunction
+            | Op::SaveWindowExcursion => (1, 0),
+            // Binary: consume two, produce one.
+            Op::Add
+            | Op::Sub
+            | Op::Mul
+            | Op::Div
+            | Op::Rem
+            | Op::Eqlsign
+            | Op::Gtr
+            | Op::Lss
+            | Op::Leq
+            | Op::Geq
+            | Op::Max
+            | Op::Min
+            | Op::Cons
+            | Op::Nth
+            | Op::Nthcdr
+            | Op::Setcar
+            | Op::Setcdr
+            | Op::Elt
+            | Op::Nconc
+            | Op::Member
+            | Op::Memq
+            | Op::Assq
+            | Op::Eq
+            | Op::Equal
+            | Op::StringEqual
+            | Op::StringLessp
+            | Op::Aref
+            | Op::Set
+            | Op::Fset
+            | Op::Get => (2, -1),
+            // Ternary: consume three, produce one.
+            Op::Aset | Op::Put | Op::Substring => (3, -2),
+            Op::List(n) | Op::Concat(n) => (*n as usize, 1 - (*n as isize)),
+            Op::SaveCurrentBuffer | Op::SaveExcursion | Op::SaveRestriction => (0, 0),
+            Op::PushCatch(target) | Op::PushConditionCaseRaw(target) => {
+                if depth < 1 {
+                    return false;
+                }
+                // The recorded resume depth is the post-pop depth; delivery
+                // pushes the thrown/signaled value on top of it.
+                if !flow(
+                    &mut depths,
+                    &mut worklist,
+                    *target as usize,
+                    depth,
+                    max_stack,
+                ) {
+                    return false;
+                }
+                (1, -1)
+            }
+            Op::PushConditionCase(target) => {
+                // Records the current depth with no operand pop; the handler
+                // receives it plus the delivered value.
+                if depth + 1 > max_stack
+                    || !flow(
+                        &mut depths,
+                        &mut worklist,
+                        *target as usize,
+                        depth + 1,
+                        max_stack,
+                    )
+                {
+                    return false;
+                }
+                (0, 0)
+            }
+        };
+        if depth < min {
+            return false;
+        }
+        let next_depth = depth as isize + net;
+        if next_depth < 0 {
+            return false;
+        }
+        if !flow(
+            &mut depths,
+            &mut worklist,
+            pc + 1,
+            next_depth as usize,
+            max_stack,
+        ) {
+            return false;
+        }
+    }
+    true
+}
+
 /// Seal decoded instructions so the dispatch loop needs no per-fetch bound
 /// check (GNU's `FETCH` is `*pc++` with no check).
 ///

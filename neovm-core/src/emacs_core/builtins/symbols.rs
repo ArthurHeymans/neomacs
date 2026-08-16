@@ -6692,8 +6692,11 @@ fn make_byte_code_from_parts_with_slots(
     let mut bc = ByteCodeFunction {
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         ops,
-        // The instructions above came straight from the sealing decoder.
+        // The instructions above came straight from the sealing decoder;
+        // the stack proof is recomputed below once every shape field
+        // (params/lexical/arglist/env/max_stack) is in place.
         ops_sealed: true,
+        stack_verified: false,
         constants,
         max_stack,
         params,
@@ -6723,6 +6726,11 @@ fn make_byte_code_from_parts_with_slots(
         lazy_gnu_code: None,
     };
     bc.defer_gnu_decode();
+    if !bc.ops.is_empty() {
+        // Eager decode policy kept the instructions resident; prove them now
+        // that every shape field is final. (The lazy path proves at decode.)
+        bc.refresh_stack_verification();
+    }
 
     Ok(Value::make_bytecode(bc))
 }

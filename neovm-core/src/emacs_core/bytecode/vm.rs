@@ -2584,6 +2584,12 @@ impl<'a> Vm<'a> {
             // may enter the unchecked-fetch driver. Evaluated at (cacheable)
             // classification time, never on the per-call hot path.
             && func.executes_sealed_ops()
+            // The VERIFIED driver instance additionally relies on the callee's
+            // operand-stack proof, and the call-target cache is shared between
+            // both instances, so admission requires the proof universally. A
+            // refused callee (e.g. Switch-bearing) still runs — through the
+            // generic call path into its own checked driver.
+            && func.executes_verified_ops()
     }
 
     /// Install one already-validated env-less interpreter frame in place.
@@ -2596,6 +2602,11 @@ impl<'a> Vm<'a> {
     /// `current` must already be suspended on the caller stack; its fields are
     /// overwritten directly, exactly as GNU's `setup_frame` writes the child
     /// `bc_frame` in place instead of materializing it elsewhere first.
+    // inline(always): called from both run_interpreter_driver
+    // monomorphizations; without the hint LLVM outlines one shared copy and
+    // every Bcall pays a call/ret + register marshalling (measured +58
+    // Ir/call when the driver split landed).
+    #[inline(always)]
     fn install_iterative_interpreter_frame(
         &mut self,
         current: &mut InterpreterFrame,
@@ -2818,6 +2829,9 @@ impl<'a> Vm<'a> {
     /// `Enter` deliberately leaves the backtrace frame open; the iterative
     /// driver closes it when the callee returns.  Every other target completes
     /// synchronously and preserves the existing call protocol.
+    // inline(always): same both-instantiations story as
+    // install_iterative_interpreter_frame (measured +60 Ir/call outlined).
+    #[inline(always)]
     fn dispatch_interpreter_stack_call(
         &mut self,
         func_val: Value,
@@ -2963,12 +2977,25 @@ impl<'a> Vm<'a> {
         let mut aux_stack =
             InterpreterFrameAuxStack::new(std::mem::take(handlers), std::mem::take(bind_stack));
 
-        let result = self.run_interpreter_driver(
-            &mut current,
-            &mut callers,
-            &mut aux_stack,
-            &mut quitcounter,
-        );
+        // One driver source, two monomorphizations: the VERIFIED instance
+        // drops the per-push capacity guard on the strength of the decode-time
+        // `verify_stack_effects` proof; everything else runs the checked
+        // instance with today's exact behavior. Chosen once per driver entry.
+        let result = if entry_func.executes_verified_ops() {
+            self.run_interpreter_driver::<true>(
+                &mut current,
+                &mut callers,
+                &mut aux_stack,
+                &mut quitcounter,
+            )
+        } else {
+            self.run_interpreter_driver::<false>(
+                &mut current,
+                &mut callers,
+                &mut aux_stack,
+                &mut quitcounter,
+            )
+        };
         *pc = current.pc();
         let (entry_handlers, entry_bind_stack) = aux_stack.take_entry();
         *handlers = entry_handlers;
@@ -2984,7 +3011,7 @@ impl<'a> Vm<'a> {
     /// The `'frame` loop is the typed equivalent of GNU bytecode.c's
     /// `setup_frame`/`Breturn` jumps; the inner loop remains opcode dispatch.
     #[inline(always)]
-    fn run_interpreter_driver(
+    fn run_interpreter_driver<const VERIFIED: bool>(
         &mut self,
         current: &mut InterpreterFrame,
         callers: &mut InterpreterCallerStack,
@@ -3099,7 +3126,11 @@ impl<'a> Vm<'a> {
 
             macro_rules! ensure_stack_push_capacity {
                 () => {{
-                    if cursor.len >= frame_limit {
+                    debug_assert!(
+                        !VERIFIED || cursor.len < frame_limit,
+                        "verified bytecode exceeded its proven max_stack"
+                    );
+                    if !VERIFIED && cursor.len >= frame_limit {
                         let invalid_pc = pc_local.saturating_sub(1);
                         let stack_len = cursor.len;
                         cursor.publish(&mut self.ctx);
@@ -3323,7 +3354,11 @@ impl<'a> Vm<'a> {
                     Op::Nil => stk_push!(Value::NIL),
                     Op::True => stk_push!(Value::T),
                     Op::Pop => {
-                        if stk!().is_empty() {
+                        debug_assert!(
+                            !VERIFIED || !stk!().is_empty(),
+                            "verified bytecode underflowed its proven stack depth"
+                        );
+                        if !VERIFIED && stk!().is_empty() {
                             invalid_bytecode!("pop-empty-stack");
                         }
                         stk!().pop();
@@ -3340,7 +3375,11 @@ impl<'a> Vm<'a> {
                                 if len == 0 {
                                     invalid_bytecode!("dup-lss-gotoifnil-empty-stack");
                                 }
-                                if len >= frame_limit {
+                                debug_assert!(
+                                    !VERIFIED || len < frame_limit,
+                                    "verified bytecode exceeded its proven max_stack"
+                                );
+                                if !VERIFIED && len >= frame_limit {
                                     invalid_bytecode!("dup-lss-gotoifnil-stack-at-frame-limit");
                                 }
 
@@ -3348,7 +3387,13 @@ impl<'a> Vm<'a> {
                                 let after_dup_len = len + 1;
                                 let offset = 1 + *stack_ref as usize;
 
-                                if offset > after_dup_len || after_dup_len >= frame_limit {
+                                debug_assert!(
+                                    !VERIFIED || after_dup_len < frame_limit,
+                                    "verified bytecode exceeded its proven max_stack"
+                                );
+                                if offset > after_dup_len
+                                    || (!VERIFIED && after_dup_len >= frame_limit)
+                                {
                                     // SAFETY: len < frame_limit checked above.
                                     unsafe { cursor.push_unchecked(top) };
                                     pc_local += 1;
@@ -3381,7 +3426,11 @@ impl<'a> Vm<'a> {
                     Op::StackRef(n) => {
                         let offset = 1 + *n as usize;
                         let len = stk!().len();
-                        if offset <= len {
+                        debug_assert!(
+                            !VERIFIED || offset <= len,
+                            "verified bytecode underflowed its proven stack depth"
+                        );
+                        if VERIFIED || offset <= len {
                             // Valid bytecode references an existing stack slot.
                             // Keep the hot path to one explicit check and avoid
                             // the slice indexer's second bounds check.
@@ -3413,7 +3462,11 @@ impl<'a> Vm<'a> {
                     }
                     Op::StackSet(n) => {
                         let len = stk!().len();
-                        if len == 0 {
+                        debug_assert!(
+                            !VERIFIED || len > *n as usize,
+                            "verified bytecode underflowed its proven stack depth"
+                        );
+                        if !VERIFIED && len == 0 {
                             invalid_bytecode!("stack-set-empty-stack");
                         }
                         let n = *n as usize;
@@ -3421,7 +3474,7 @@ impl<'a> Vm<'a> {
                             stk!().pop();
                             continue;
                         }
-                        if n < len {
+                        if VERIFIED || n < len {
                             let val = unsafe { *cursor.get_unchecked(len - 1) };
                             let idx = len - 1 - n;
                             unsafe { *cursor.get_unchecked_mut(idx) = val };
@@ -3750,7 +3803,11 @@ impl<'a> Vm<'a> {
                     }
                     Op::GotoIfNil(addr) => {
                         let len = cursor.len;
-                        if len == 0 {
+                        debug_assert!(
+                            !VERIFIED || len > 0,
+                            "verified bytecode underflowed its proven stack depth"
+                        );
+                        if !VERIFIED && len == 0 {
                             invalid_bytecode!("goto-if-nil-empty-stack");
                         }
                         let val = unsafe { *cursor.get_unchecked(len - 1) };
@@ -3761,7 +3818,11 @@ impl<'a> Vm<'a> {
                     }
                     Op::GotoIfNotNil(addr) => {
                         let len = cursor.len;
-                        if len == 0 {
+                        debug_assert!(
+                            !VERIFIED || len > 0,
+                            "verified bytecode underflowed its proven stack depth"
+                        );
+                        if !VERIFIED && len == 0 {
                             invalid_bytecode!("goto-if-not-nil-empty-stack");
                         }
                         let val = unsafe { *cursor.get_unchecked(len - 1) };
@@ -3772,7 +3833,11 @@ impl<'a> Vm<'a> {
                     }
                     Op::GotoIfNilElsePop(addr) => {
                         let len = cursor.len;
-                        if len == 0 {
+                        debug_assert!(
+                            !VERIFIED || len > 0,
+                            "verified bytecode underflowed its proven stack depth"
+                        );
+                        if !VERIFIED && len == 0 {
                             invalid_bytecode!("goto-if-nil-else-pop-empty-stack");
                         }
                         if unsafe { cursor.get_unchecked(len - 1) }.is_nil() {
@@ -3783,7 +3848,11 @@ impl<'a> Vm<'a> {
                     }
                     Op::GotoIfNotNilElsePop(addr) => {
                         let len = cursor.len;
-                        if len == 0 {
+                        debug_assert!(
+                            !VERIFIED || len > 0,
+                            "verified bytecode underflowed its proven stack depth"
+                        );
+                        if !VERIFIED && len == 0 {
                             invalid_bytecode!("goto-if-not-nil-else-pop-empty-stack");
                         }
                         if unsafe { cursor.get_unchecked(len - 1) }.is_truthy() {

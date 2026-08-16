@@ -12818,8 +12818,11 @@ impl Context {
         let bc = ByteCodeFunction {
             source_id: super::bytecode::fresh_bytecode_source_id(),
             ops,
-            // The instructions above came straight from the sealing decoder.
+            // The instructions above came straight from the sealing decoder;
+            // the stack proof is recomputed below once every shape field
+            // (params/lexical/arglist/env/max_stack) is in place.
             ops_sealed: true,
+            stack_verified: false,
             constants,
             max_stack,
             params: LambdaParams::simple(vec![]),
