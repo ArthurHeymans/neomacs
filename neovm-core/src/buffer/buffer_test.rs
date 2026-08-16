@@ -89,8 +89,12 @@ fn buf_with_text(text: &str) -> Buffer {
 
 fn buf_with_text_backend(text: &str, kind: BufferTextBackendKind) -> Buffer {
     let implemented_kind = require_implemented_kind(kind);
-    let mut buf =
-        Buffer::new_with_text_backend_kind(BufferId(1), Value::string("test"), implemented_kind);
+    let mut buf = Buffer::new_with_text_backend_kind(
+        BufferId(1),
+        Value::string("test"),
+        implemented_kind,
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buf.insert(text);
     buf.widen();
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
@@ -251,7 +255,11 @@ fn register_marker_for_test(
 #[test]
 fn new_buffer_is_empty() {
     crate::test_utils::init_test_tracing();
-    let buf = Buffer::new(BufferId(1), Value::string("*scratch*"));
+    let buf = Buffer::new(
+        BufferId(1),
+        Value::string("*scratch*"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     assert_eq!(buf.name_value(), Value::string("*scratch*"));
     assert_eq!(buf.point_emacs_byte_pos().get(), 0);
     assert_eq!(buf.point_min_emacs_byte_pos().get(), 0);
@@ -364,12 +372,7 @@ fn casify_manager_with_text(text: &str) -> (BufferManager, BufferId) {
     {
         let buf = mgr.get_mut(id).expect("scratch buffer");
         let end_char = buf.point_char_pos();
-        buf.undo_state.set_point_before_command_or_undo(Some(
-            crate::buffer::shared::PointBeforeCommand {
-                buffer: id,
-                point: end_char,
-            },
-        ));
+        buf.saved_point_before_command.save(id, end_char);
         // GNU inserts an undo boundary between the buffer fill and the case op.
         let mut ul = buf.get_undo_list();
         crate::buffer::undo::undo_list_boundary(&mut ul);
@@ -428,12 +431,8 @@ fn casify_region_records_undo_even_when_unchanged() {
         let buf = mgr.get_mut(id).expect("scratch buffer");
         // Point at buffer position 6 (end of region) == Emacs byte pos 5.
         buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(5));
-        buf.undo_state.set_point_before_command_or_undo(Some(
-            crate::buffer::shared::PointBeforeCommand {
-                buffer: id,
-                point: buf.point_char_pos(),
-            },
-        ));
+        buf.saved_point_before_command
+            .save(id, buf.point_char_pos());
         let mut ul = buf.get_undo_list();
         crate::buffer::undo::undo_list_boundary(&mut ul);
         buf.set_undo_list(ul);
@@ -553,6 +552,7 @@ fn from_dump_restores_indirect_buffer_shared_text_state() {
             None,
             None,
             implemented_kind,
+            crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
         );
 
         let base = restored.get(base_id).expect("base buffer");
@@ -588,6 +588,7 @@ fn from_dump_preserves_dumped_buffer_order() {
         Some(&[two, scratch, three, one]),
         None,
         require_implemented_kind(BufferTextBackendKind::GapBuffer),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
     );
 
     assert_eq!(restored.buffer_list(), vec![two, scratch, three, one]);
@@ -1238,7 +1239,11 @@ fn char_position_conversions_clamp_to_buffer_and_accessible_bounds() {
 #[test]
 fn insert_at_point_advances_point() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     // zv starts at 0 for an empty buffer; insert should extend it.
     buf.insert("hello");
     assert_eq!(buf.point_emacs_byte_pos().get(), 5);
@@ -1608,7 +1613,11 @@ fn delete_records_point_entry_before_marker_adjustment() {
     // Mirror the repro flow: the buffer is filled with undo enabled (so it is
     // already modified and the first-change `(t . 0)` is already recorded),
     // then an undo boundary is added, then the delete happens.
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buf.set_undo_list(Value::NIL);
     buf.insert("abcdef");
     // Marker at buffer position 4 (1-indexed) == Emacs byte pos 3.
@@ -1622,12 +1631,8 @@ fn delete_records_point_entry_before_marker_adjustment() {
     }
     // GNU records `point_before_last_command_or_undo`; here point == 7
     // (0-indexed char 6).
-    buf.undo_state.set_point_before_command_or_undo(Some(
-        crate::buffer::shared::PointBeforeCommand {
-            buffer: buf.id,
-            point: crate::buffer::CharPos0::new(6),
-        },
-    ));
+    buf.saved_point_before_command
+        .save(buf.id, crate::buffer::CharPos0::new(6));
 
     // delete-region chars 3..5 (1-indexed) == Emacs bytes [2, 4).
     buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
@@ -1661,7 +1666,11 @@ fn delete_records_point_entry_before_marker_adjustment() {
 fn delete_records_point_entry_without_marker_adjustment() {
     crate::test_utils::init_test_tracing();
     // The no-marker path must keep recording the point entry (no regression).
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buf.set_undo_list(Value::NIL);
     buf.insert("abcdef");
     buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(6));
@@ -1670,12 +1679,8 @@ fn delete_records_point_entry_without_marker_adjustment() {
         crate::buffer::undo::undo_list_boundary(&mut ul);
         buf.set_undo_list(ul);
     }
-    buf.undo_state.set_point_before_command_or_undo(Some(
-        crate::buffer::shared::PointBeforeCommand {
-            buffer: buf.id,
-            point: crate::buffer::CharPos0::new(6),
-        },
-    ));
+    buf.saved_point_before_command
+        .save(buf.id, crate::buffer::CharPos0::new(6));
 
     buf.delete_emacs_byte_range(crate::buffer::EmacsByteRange::from_usize(2, 4));
 
@@ -1753,11 +1758,8 @@ fn a_command_in_another_buffer_supersedes_the_saved_point() {
     // past the reinserted text.
     mgr.goto_buffer_emacs_byte_pos(edited, crate::buffer::EmacsBytePos::new(5))
         .expect("goto end of the range about to be deleted");
-    mgr.delete_buffer_emacs_byte_range(
-        edited,
-        crate::buffer::EmacsByteRange::from_usize(2, 5),
-    )
-    .expect("delete region");
+    mgr.delete_buffer_emacs_byte_range(edited, crate::buffer::EmacsByteRange::from_usize(2, 5))
+        .expect("delete region");
 
     let ul = mgr.get(edited).expect("scratch buffer").get_undo_list();
     let delete_entry = undo_nth(ul, 0);
@@ -2588,7 +2590,11 @@ fn buffer_text_backend_migration_preserves_side_data_and_post_edit_semantics() {
 #[test]
 fn buffer_local_get_set() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     assert!(buf.get_buffer_local("tab-width").is_none());
 
     buf.set_buffer_local("tab-width", Value::fixnum(4));
@@ -2603,7 +2609,11 @@ fn buffer_local_get_set() {
 #[test]
 fn buffer_local_multiple_vars() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buf.set_buffer_local("fill-column", Value::fixnum(80));
     buf.set_buffer_local("major-mode", Value::symbol("text-mode"));
 
@@ -2616,7 +2626,11 @@ fn buffer_local_multiple_vars() {
 fn buffer_local_gated_skips_alist_scan_but_keeps_slot_and_undo() {
     use crate::emacs_core::intern::intern;
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
 
     // A non-slot alist entry.
     let my_local = intern("neo-gate-test-local");
@@ -2656,7 +2670,11 @@ fn buffer_local_gated_skips_alist_scan_but_keeps_slot_and_undo() {
 fn repeated_buffer_local_lookup_indexes_the_lisp_alist_once() {
     use crate::emacs_core::intern::intern;
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     let deepest = intern("neo-index-test-deepest");
     let middle = intern("neo-index-test-middle");
     let head = intern("neo-index-test-head");
@@ -2685,7 +2703,11 @@ fn repeated_buffer_local_lookup_indexes_the_lisp_alist_once() {
 fn buffer_local_lookup_index_stays_coherent_across_value_and_structure_changes() {
     use crate::emacs_core::intern::intern;
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     let first = intern("neo-index-coherence-first");
     let second = intern("neo-index-coherence-second");
     let third = intern("neo-index-coherence-third");
@@ -2728,7 +2750,11 @@ fn buffer_local_lookup_index_stays_coherent_across_value_and_structure_changes()
 #[test]
 fn buffer_local_defaults_include_builtin_per_buffer_vars() {
     crate::test_utils::init_test_tracing();
-    let buf = Buffer::new(BufferId(1), Value::string("test"));
+    let buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
 
     assert_eq!(
         buf.buffer_local_value("major-mode"),
@@ -2761,7 +2787,11 @@ fn buffer_local_defaults_include_builtin_per_buffer_vars() {
 #[test]
 fn ordered_buffer_local_bindings_use_symbol_ids() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buf.set_buffer_local("fill-column", Value::fixnum(80));
     buf.set_buffer_local("major-mode", Value::symbol("text-mode"));
 
@@ -2786,7 +2816,11 @@ fn ordered_buffer_local_bindings_use_symbol_ids() {
 #[test]
 fn buffer_file_name_variable_tracks_slot_backed_state() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     assert_eq!(buf.buffer_local_value("buffer-file-name"), Some(Value::NIL));
 
     buf.set_buffer_local("buffer-file-name", Value::string("/tmp/demo.txt"));
@@ -2808,7 +2842,11 @@ fn buffer_file_name_variable_tracks_slot_backed_state() {
 #[test]
 fn buffer_auto_save_file_name_variable_tracks_slot_backed_state() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     assert_eq!(
         buf.buffer_local_value("buffer-auto-save-file-name"),
         Some(Value::NIL)
@@ -2846,7 +2884,11 @@ fn buffer_auto_save_file_name_variable_tracks_slot_backed_state() {
 #[test]
 fn modified_flag() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     assert!(!buf.is_modified());
     buf.insert("x");
     assert!(buf.is_modified());
@@ -2857,7 +2899,11 @@ fn modified_flag() {
 #[test]
 fn modified_state_tracks_autosaved_semantics() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     assert_eq!(buf.modified_state_value(), Value::NIL);
     assert!(!buf.recent_auto_save_p());
     assert_eq!(buf.modified_tick(), 1);
@@ -2888,7 +2934,11 @@ fn modified_state_tracks_autosaved_semantics() {
 #[test]
 fn modification_ticks_track_content_changes() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     assert_eq!(buf.modified_tick(), 1);
     assert_eq!(buf.chars_modified_tick(), 1);
 
@@ -2910,7 +2960,11 @@ fn modification_ticks_track_content_changes() {
 #[test]
 fn props_modified_tick_tracks_text_property_changes_independently_of_chars() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     assert_eq!(buf.modified_tick(), 1);
     assert_eq!(buf.chars_modified_tick(), 1);
     assert_eq!(buf.props_modified_tick(), 1);
@@ -2947,7 +3001,11 @@ fn props_modified_tick_tracks_text_property_changes_independently_of_chars() {
 #[test]
 fn chars_modified_tick_rejoins_modiff_after_non_char_modification() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("test"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     assert_eq!(buf.restore_modified_state(Value::T), Value::T);
     assert_eq!(buf.modified_tick(), 2);
     assert_eq!(buf.chars_modified_tick(), 1);
@@ -3332,7 +3390,11 @@ fn manager_replace_buffer_contents_resets_narrowing_and_point() {
 #[test]
 fn integration_edit_narrow_widen() {
     crate::test_utils::init_test_tracing();
-    let mut buf = Buffer::new(BufferId(1), Value::string("work"));
+    let mut buf = Buffer::new(
+        BufferId(1),
+        Value::string("work"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buf.insert("abcdefghij");
     assert_eq!(buf.buffer_string(), "abcdefghij");
 

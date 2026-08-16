@@ -827,16 +827,16 @@ impl Buffer {
         }
         // GNU `record_point` (src/undo.c:73-75) takes the saved point only when
         // it is still the SAME buffer: `buffer_before_last_command_or_undo ==
-        // current_buffer`.  A base buffer and its indirect buffer are distinct
-        // `struct buffer`s there, and they share this state here, so without
-        // the buffer check a point saved in one is spent on an edit in the
-        // other.
-        if let Some(saved) = self.undo_state.point_before_command_or_undo()
+        // current_buffer`.  There is one saved point for the whole editor, so
+        // this asks a real question -- the last command may have run in the
+        // minibuffer, in a base buffer, or in an indirect buffer over the same
+        // text -- and `point_saved_in` answers it without ever handing out a
+        // point that is not ours.
+        if let Some(saved_point) = self.saved_point_before_command.point_saved_in(self.id)
             && at_boundary
-            && saved.point != beg
-            && saved.buffer == self.id
+            && saved_point != beg
         {
-            undo::undo_list_record_point(&mut ul, saved.point);
+            undo::undo_list_record_point(&mut ul, saved_point);
         }
         self.set_undo_list(ul);
     }

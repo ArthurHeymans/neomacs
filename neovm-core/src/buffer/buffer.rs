@@ -28,7 +28,7 @@ use super::text::{BufferTextBackendKind, ImplementedBufferTextBackendKind};
 // match either pattern). Mirrors GNU's struct buffer layout in
 // buffer.h:330-462.
 use super::overlay::OverlayList;
-use super::shared::{PointBeforeCommand, SharedUndoState};
+use super::shared::{SavedPointBeforeCommand, SharedUndoState};
 use super::text_props::{ObjectIntervalRun, TextPropertyTable};
 use super::undo;
 use crate::emacs_core::intern::{SymId, intern};
@@ -2101,6 +2101,10 @@ pub(crate) struct BufferDumpParts {
     pub overlays: OverlayList,
     pub overlay_modified_tick: i64,
     pub undo_state: SharedUndoState,
+    /// The editor-global saved-point cell every restored buffer must share.
+    /// The dump does not carry it: GNU's globals are plain statics that start
+    /// over on each startup, and there is no command to have run yet.
+    pub saved_point_before_command: SavedPointBeforeCommand,
 }
 
 // ---------------------------------------------------------------------------
@@ -2208,6 +2212,13 @@ pub struct Buffer {
     pub(crate) overlay_modified_tick: i64,
     /// Shared undo owner for this text.
     pub(crate) undo_state: SharedUndoState,
+    /// Handle on the editor's ONE saved point-before-command-or-undo, GNU's
+    /// `point_before_last_command_or_undo` / `buffer_before_last_command_or_undo`
+    /// globals (src/keyboard.c:232-233).  Every buffer a `BufferManager` owns
+    /// holds a clone of the same cell, so a command-loop iteration in one
+    /// buffer supersedes the point saved for every other one -- see
+    /// [`SavedPointBeforeCommand`].
+    pub(crate) saved_point_before_command: SavedPointBeforeCommand,
 }
 
 impl Buffer {
@@ -2261,23 +2272,47 @@ impl Buffer {
     // -- Construction --------------------------------------------------------
 
     /// Create a new, empty buffer.
-    pub fn new(id: BufferId, name: Value) -> Self {
-        Self::new_with_text_backend_kind(id, name, ImplementedBufferTextBackendKind::GAP_BUFFER)
+    ///
+    /// `saved_point_before_command` is the editor's ONE saved-point cell (GNU's
+    /// `point_before_last_command_or_undo` pair, src/keyboard.c:232-233).  It
+    /// is a required argument rather than something a buffer mints for itself
+    /// precisely because a private cell is the bug this models away: a buffer
+    /// with its own saved point can never observe that a command in another
+    /// buffer superseded it.  Production callers pass
+    /// `BufferManager::saved_point_before_command`.
+    pub(crate) fn new(
+        id: BufferId,
+        name: Value,
+        saved_point_before_command: SavedPointBeforeCommand,
+    ) -> Self {
+        Self::new_with_text_backend_kind(
+            id,
+            name,
+            ImplementedBufferTextBackendKind::GAP_BUFFER,
+            saved_point_before_command,
+        )
     }
 
     pub fn try_new_with_text_backend_kind(
         id: BufferId,
         name: Value,
         text_backend_kind: BufferTextBackendKind,
+        saved_point_before_command: SavedPointBeforeCommand,
     ) -> Result<Self, BufferTextBackendKind> {
         let implemented_kind = text_backend_kind.implemented().ok_or(text_backend_kind)?;
-        Ok(Self::new_with_text_backend_kind(id, name, implemented_kind))
+        Ok(Self::new_with_text_backend_kind(
+            id,
+            name,
+            implemented_kind,
+            saved_point_before_command,
+        ))
     }
 
     pub(crate) fn new_with_text_backend_kind(
         id: BufferId,
         name: Value,
         text_backend_kind: ImplementedBufferTextBackendKind,
+        saved_point_before_command: SavedPointBeforeCommand,
     ) -> Self {
         assert!(name.is_string(), "buffer name must be a Lisp string");
         Self {
@@ -2320,6 +2355,7 @@ impl Buffer {
             overlays: OverlayList::new(),
             overlay_modified_tick: 1,
             undo_state: SharedUndoState::new(),
+            saved_point_before_command,
         }
     }
 
@@ -2352,6 +2388,7 @@ impl Buffer {
             overlays: parts.overlays,
             overlay_modified_tick: parts.overlay_modified_tick,
             undo_state: parts.undo_state,
+            saved_point_before_command: parts.saved_point_before_command,
         }
     }
 
@@ -4367,6 +4404,12 @@ pub struct BufferManager {
     /// `Buffer::local_flags` bit is clear; `setq-default` writes
     /// here directly. Phase 10D wires this in.
     pub buffer_defaults: [crate::emacs_core::value::Value; BUFFER_SLOT_COUNT],
+    /// The editor's ONE saved point-before-command-or-undo (GNU's
+    /// `point_before_last_command_or_undo` / `buffer_before_last_command_or_undo`,
+    /// src/keyboard.c:232-233).  Every buffer this manager creates is handed a
+    /// clone, which is why saving a point in one buffer supersedes the point
+    /// saved in every other one -- see [`SavedPointBeforeCommand`].
+    saved_point_before_command: SavedPointBeforeCommand,
 }
 
 #[derive(Clone)]
@@ -4594,6 +4637,7 @@ impl BufferManager {
             labeled_restrictions: FxHashMap::default(),
             default_text_backend_kind: ImplementedBufferTextBackendKind::GAP_BUFFER,
             buffer_defaults,
+            saved_point_before_command: SavedPointBeforeCommand::new_editor_global(),
         };
         let scratch = mgr.create_buffer("*scratch*");
         if let Some(buf) = mgr.buffers.get_mut(&scratch) {
@@ -4618,8 +4662,12 @@ impl BufferManager {
         let id = BufferId(self.next_id);
         self.next_id += 1;
         let name_value = Value::string(name);
-        let mut buf =
-            Buffer::new_with_text_backend_kind(id, name_value, self.default_text_backend_kind);
+        let mut buf = Buffer::new_with_text_backend_kind(
+            id,
+            name_value,
+            self.default_text_backend_kind,
+            self.saved_point_before_command.clone(),
+        );
         buf.set_last_name_value(name_value);
         // Phase 10D: seed every conditional slot from
         // `BufferManager::buffer_defaults` so a buffer created
@@ -4783,7 +4831,7 @@ impl BufferManager {
             cloned
         } else {
             let name_value = Value::string(name);
-            let mut fresh = Buffer::new(id, name_value);
+            let mut fresh = Buffer::new(id, name_value, self.saved_point_before_command.clone());
             fresh.set_last_name_value(name_value);
             if let Some(default_directory) = self
                 .current
@@ -5851,23 +5899,21 @@ impl BufferManager {
         // Default limits match GNU Emacs: undo-limit=160000, undo-strong-limit=240000.
         ul = undo::truncate_undo_list(ul, 160_000, 240_000);
         buf.set_undo_list(ul);
-        // GNU `Fundo_boundary` saves point AND buffer (src/undo.c:278-279).
-        buf.undo_state
-            .set_point_before_command_or_undo(Some(PointBeforeCommand {
-                buffer: id,
-                point: buf.point_char_pos(),
-            }));
+        // GNU `Fundo_boundary` saves point AND buffer into the editor-global
+        // pair (src/undo.c:278-279), overwriting whatever was there.
+        buf.saved_point_before_command
+            .save(id, buf.point_char_pos());
         Some(())
     }
 
     pub fn record_undo_point_before_command(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
-        // GNU's command loop saves point AND buffer (src/keyboard.c:1536-1537).
-        buf.undo_state
-            .set_point_before_command_or_undo(Some(PointBeforeCommand {
-                buffer: id,
-                point: buf.point_char_pos(),
-            }));
+        // GNU's command loop saves point AND buffer into the editor-global pair
+        // (src/keyboard.c:1536-1537).  It runs for EVERY command-loop
+        // iteration, including the minibuffer's own, which is what supersedes
+        // the point saved for the buffer an `M-x` command later edits.
+        buf.saved_point_before_command
+            .save(id, buf.point_char_pos());
         Some(())
     }
 
@@ -6509,7 +6555,14 @@ impl BufferManager {
         dumped_buffer_order: Option<&[BufferId]>,
         dumped_buffer_defaults: Option<&[crate::emacs_core::value::Value]>,
         default_text_backend_kind: ImplementedBufferTextBackendKind,
+        saved_point_before_command: SavedPointBeforeCommand,
     ) -> Self {
+        // The restored editor gets ONE saved-point cell, like GNU's statics on
+        // a fresh startup.  Attaching here rather than trusting the caller is
+        // what keeps a restored buffer from carrying a private cell forward.
+        for buffer in buffers.values_mut() {
+            buffer.saved_point_before_command = saved_point_before_command.clone();
+        }
         let indirect_buffers: Vec<(BufferId, BufferId)> = buffers
             .iter()
             .filter_map(|(id, buffer)| buffer.base_buffer.map(|base_id| (*id, base_id)))
@@ -6562,6 +6615,7 @@ impl BufferManager {
             dead_buffers: FxHashMap::default(),
             default_text_backend_kind,
             buffer_defaults,
+            saved_point_before_command,
         };
         if let Some(dumped_order) = dumped_buffer_order {
             let mut seen = HashSet::new();

@@ -5,7 +5,11 @@ fn buffer_edit_without_tree_does_not_track_pending_edit() {
     crate::test_utils::init_test_tracing();
     let mut manager = TreeSitterManager::new();
     let buffer_id = BufferId(7);
-    let mut buffer = Buffer::new(buffer_id, Value::string("test"));
+    let mut buffer = Buffer::new(
+        buffer_id,
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buffer.insert("alpha\nbeta\ngamma\n");
     let end = buffer.accessible_emacs_byte_range().end();
 
@@ -21,7 +25,11 @@ fn buffer_edit_without_tree_does_not_track_pending_edit() {
 fn parser_edit_positions_are_relative_to_the_parser_window() {
     crate::test_utils::init_test_tracing();
     let buffer_id = BufferId(7);
-    let mut buffer = Buffer::new(buffer_id, Value::string("test"));
+    let mut buffer = Buffer::new(
+        buffer_id,
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buffer.insert("hidden\nalpha\nbeta\nhidden");
     // The buffer is wide open; only this parser's tree is restricted.
     let window = EmacsByteRange::from_usize(7, 17);
@@ -45,7 +53,11 @@ fn parser_edit_positions_are_relative_to_the_parser_window() {
 fn byte_only_parser_edit_preparation_does_not_scan_for_line_columns() {
     crate::test_utils::init_test_tracing();
     let buffer_id = BufferId(7);
-    let mut buffer = Buffer::new(buffer_id, Value::string("test"));
+    let mut buffer = Buffer::new(
+        buffer_id,
+        Value::string("test"),
+        crate::buffer::shared::SavedPointBeforeCommand::new_editor_global(),
+    );
     buffer.insert("alpha\nbeta\ngamma\n");
     let window = EmacsByteRange::from_usize(0, 17);
 
