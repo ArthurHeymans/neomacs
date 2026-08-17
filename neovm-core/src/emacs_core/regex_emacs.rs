@@ -3985,11 +3985,50 @@ fn match_charset_at(
     let negate = bytecode[charset_op_pos] == RegexOp::CharsetNot as u8;
     let bitmap_len = bytecode[charset_op_pos + 1] as usize & 0x7F;
     let bitmap_start = charset_op_pos + 2;
-    let class_case_mode = PosixClassCaseMode::from_translation(translate.as_ref());
 
     if d >= stop {
         return None;
     }
+
+    // ASCII fast path — GNU's charset op reads the byte and its case
+    // translation directly and bit-tests the bitmap. An ASCII byte decodes
+    // to itself in both text representations, always has length 1, and
+    // (when its translation stays ASCII) needs none of the full path's
+    // decode / unibyte-conversion / case-mode machinery below. The class
+    // check mirrors the full path exactly: classes test the UNTRANSLATED
+    // character. (`stop` may exceed `text.len()`; a past-the-end read is
+    // a plain no-match, matching `re_text_char`'s bounds behavior.)
+    let Some(&first_byte) = text.get(d) else {
+        return None;
+    };
+    if first_byte < 0x80 {
+        let translated = re_tr(translate, first_byte as u32);
+        if translated < 0x80 {
+            let c = translated as usize;
+            let bitmap_hit = (c / 8) < bitmap_len
+                && (bytecode[bitmap_start + c / 8] >> (c % 8)) & 1 != 0;
+            let in_set = bitmap_hit
+                || pattern
+                    .charset_class_bits
+                    .get(&charset_op_pos)
+                    .copied()
+                    .map(|bits| {
+                        let class_case_mode =
+                            PosixClassCaseMode::from_translation(translate.as_ref());
+                        posix_class_matches(
+                            first_byte as u32,
+                            bits,
+                            Some(d),
+                            syntax,
+                            class_case_mode,
+                        )
+                    })
+                    .unwrap_or(false);
+            return if negate != in_set { Some(1) } else { None };
+        }
+    }
+
+    let class_case_mode = PosixClassCaseMode::from_translation(translate.as_ref());
     let (orig_ch, ch_len) = re_text_char(text, d, target_multibyte)?;
     let mut ch = orig_ch;
     let mut unibyte_char = false;
