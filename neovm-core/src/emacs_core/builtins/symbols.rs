@@ -5871,7 +5871,8 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute_from_resource(
     } else {
         match attr_name {
             ":height" => {
-                let number = builtin_string_to_number(vec![Value::string(&resource_value)])?;
+                let number =
+                    builtin_string_to_number(eval, Value::string(&resource_value), Value::NIL)?;
                 match number.kind() {
                     ValueKind::Fixnum(height) if height > 0 => number,
                     _ => {

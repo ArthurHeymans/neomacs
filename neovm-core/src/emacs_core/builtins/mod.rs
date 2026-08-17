@@ -8036,12 +8036,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
-        "string-to-number",
-        |_ctx, args| builtin_string_to_number(args),
-        1,
-        Some(2),
-    );
+    ctx.defsubr_2("string-to-number", builtin_string_to_number, 1);
     ctx.defsubr(
         "number-to-string",
         |ctx, args| builtin_number_to_string(ctx, args),

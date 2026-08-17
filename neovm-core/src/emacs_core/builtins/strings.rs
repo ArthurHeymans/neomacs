@@ -589,14 +589,16 @@ fn decimal_number_prefix_regexes() -> &'static DecimalNumberPrefixRegexes {
     &REGEXES
 }
 
-pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
-    expect_min_args("string-to-number", &args, 1)?;
-    expect_max_args("string-to-number", &args, 2)?;
-    let s = expect_string_lossy(&args[0])?;
-    let base = if args.len() > 1 && !args[1].is_nil() {
-        expect_fixnum(&args[1])?
-    } else {
+pub(crate) fn builtin_string_to_number(
+    _eval: &mut super::eval::Context,
+    string: Value,
+    base_arg: Value,
+) -> EvalResult {
+    let ls = expect_lisp_string(&string)?;
+    let base = if base_arg.is_nil() {
         10
+    } else {
+        expect_fixnum(&base_arg)?
     };
 
     if !(2..=16).contains(&base) {
@@ -606,6 +608,43 @@ pub(crate) fn builtin_string_to_number(args: Vec<Value>) -> EvalResult {
         ));
     }
 
+    // Fast path: a plain base-10 integer prefix scans directly on the
+    // string bytes (ASCII digits are the same bytes in either string
+    // encoding) — GNU string_to_number is exactly such a scan. The
+    // general path below pays a lossy UTF-8 copy plus two regex-engine
+    // searches per call. Bail out whenever the token could be a float,
+    // a special float, or an out-of-i64 magnitude.
+    if base == 10 {
+        let bytes = ls.as_bytes();
+        let mut pos = 0usize;
+        while pos < bytes.len() && matches!(bytes[pos], b' ' | b'\t') {
+            pos += 1;
+        }
+        let mut negative = false;
+        if pos < bytes.len() && matches!(bytes[pos], b'+' | b'-') {
+            negative = bytes[pos] == b'-';
+            pos += 1;
+        }
+        let digit_start = pos;
+        let mut acc: i64 = 0;
+        let mut overflow = false;
+        while pos < bytes.len() && bytes[pos].is_ascii_digit() {
+            let digit = (bytes[pos] - b'0') as i64;
+            match acc.checked_mul(10).and_then(|value| value.checked_add(digit)) {
+                Some(value) => acc = value,
+                None => overflow = true,
+            }
+            pos += 1;
+        }
+        if pos > digit_start
+            && !overflow
+            && !(pos < bytes.len() && matches!(bytes[pos], b'.' | b'e' | b'E'))
+        {
+            return Ok(Value::make_int(if negative { -acc } else { acc }));
+        }
+    }
+
+    let s = expect_string_lossy(&string)?;
     let s = s.trim_start_matches([' ', '\t']);
     if base == 10 {
         let regexes = decimal_number_prefix_regexes();
