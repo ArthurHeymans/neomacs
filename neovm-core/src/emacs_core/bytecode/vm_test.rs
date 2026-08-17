@@ -3820,7 +3820,7 @@ fn vm_macroexpand_preserves_visible_lexical_binding_like_gnu() {
     )
     .expect("install compiled macro expander");
 
-    eval.set_runtime_binding_by_id(
+    let _ = eval.try_set_runtime_binding_by_id(
         crate::emacs_core::intern::intern("lexical-binding"),
         Value::T,
     );

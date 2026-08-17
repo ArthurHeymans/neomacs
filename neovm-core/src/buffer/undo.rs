@@ -397,11 +397,11 @@ fn undo_element_bytes(element: Value) -> i64 {
 ///
 /// `store_symval_forwarding` (`src/data.c:1475-1483`) rejects anything that is
 /// not an integer fitting `intmax_t`, so the C slot behind `undo-limit` can
-/// only ever hold an `intmax_t`.  Neomacs still backs both size limits as
-/// plain obarray values — `forward::LispIntFwd` is declared but not yet wired
-/// into `find_symbol_value` — so a Lisp program can leave a string or a bignum
-/// there.  That state has no GNU counterpart, and naming it keeps it from
-/// silently standing in for some invented number.
+/// only ever hold an `intmax_t`.  Both size limits are now
+/// `forward::LispIntFwd` slots here too, so `NotAnIntSlotValue` is no longer
+/// reachable through them; it stays because this reader is also pointed at
+/// values that reach it from somewhere other than the forwarded slot, and a
+/// silent substitute number is the outcome worth keeping impossible.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum GnuIntVariable {
     /// An integer that fits `intmax_t`, exactly as GNU's slot would hold it.
@@ -414,7 +414,12 @@ impl GnuIntVariable {
     fn of(value: Value) -> Self {
         match value.kind() {
             ValueKind::Fixnum(n) => Self::Int(n),
-            _ => Self::NotAnIntSlotValue,
+            // GNU's `integer_to_intmax` accepts a bignum that fits the slot,
+            // and a forwarded slot can hold one.
+            _ => match value.as_bignum().and_then(|big| i64::try_from(big).ok()) {
+                Some(n) => Self::Int(n),
+                None => Self::NotAnIntSlotValue,
+            },
         }
     }
 }

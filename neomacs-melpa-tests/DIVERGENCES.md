@@ -7966,6 +7966,247 @@ them yet.
 
 Status: FIXED.
 
+## 132. Every `DEFVAR_INT' variable accepted values GNU refuses, because the forward type's rule lived at the assignment sites instead of below them -- FIXED
+
+Handed over by entry 123, which implemented GNU's undo-limit machinery and
+hit this at the boundary: `forward::LispIntFwd' was declared but unwired, so
+a string could sit in `undo-limit'.  Reproduced before touching anything,
+with `-Q --batch' against GNU 31.0.90 and against a verified build of
+origin/main.
+
+```elisp
+(list (condition-case e (setq undo-limit "x") (error e))
+      undo-limit
+      (condition-case e (setq gc-cons-threshold 1.5) (error e))
+      gc-cons-threshold)
+;; GNU                => ((wrong-type-argument integerp "x") 160000
+;;                        (wrong-type-argument integerp 1.5) 800000)
+;; Neomacs before fix => ("x" "x" 1.5 1.5)
+```
+
+Not one spelling of the assignment was checked, including the byte-compiled
+one:
+
+```elisp
+(mapcar (lambda (f) (condition-case e (funcall f) (error (car e))))
+        (list (lambda () (set 'undo-limit "x"))
+              (lambda () (set-default 'undo-limit "x"))
+              (lambda () (let ((undo-limit "x")) undo-limit))
+              (lambda () (with-temp-buffer (setq-local undo-limit "x")))
+              (lambda () (funcall (byte-compile (lambda () (setq undo-limit "x")))))))
+;; GNU                => (wrong-type-argument wrong-type-argument wrong-type-argument
+;;                        wrong-type-argument wrong-type-argument)
+;; Neomacs before fix => ("x" "x" "x" "x" "x")
+```
+
+The premise held, and measuring the neighbouring forward types turned up two
+more holes of the same shape in `Lisp_Fwd_Bool', which Neomacs HAD wired --
+for exactly one variable, `inhibit-message'.  A byte-compiled `setq'
+disagreed about what the variable then held:
+
+```elisp
+(setq inhibit-message nil)
+(list (setq inhibit-message 5)
+      inhibit-message
+      (funcall (byte-compile (lambda () (setq inhibit-message 4) inhibit-message))))
+;; GNU                => (5 t t)
+;; Neomacs before fix => (5 t 4)
+```
+
+That third element is NOT the VM's `varset' skipping the forwarder, which is
+what it looks like and what this entry first assumed.  Disassembling both
+shows the divergence is decided at compile time: GNU compiles the body to
+`constant 4; constant t; return' while Neomacs compiles it to
+`constant 4; dup; return'.  GNU's optimizer folds a `varset X; varref X' pair
+into the stored value only after checking `byte-boolean-vars', "because what
+we put in might not be what we get out"
+(`lisp/emacs-lisp/byte-opt.el:2285-2300'), and substitutes `t' when the
+variable is on that list.  `byte-boolean-vars' is a `DEFVAR_LISP' in
+`src/lread.c:5772' that `defvar_bool' itself conses onto
+(`src/lread.c:5254-5262'), so it is the Boolean forward type's rule reaching
+the compiler.  Measured: GNU lists 117 symbols there, Neomacs listed 0 --
+`define_bool_variable' installed the descriptor and stopped.  The `setq'
+itself was already storing `t'; only the compiled function's own return value
+was the raw 4.
+
+The second hole is the one the VM really did have a hand in: the first
+`make-local-variable' anywhere disarmed the forwarder for the whole session,
+in every buffer:
+
+```elisp
+(setq inhibit-message nil)
+(let ((b (generate-new-buffer "fwd")))
+  (with-current-buffer b (setq-local inhibit-message 3))
+  (kill-buffer b)
+  (setq inhibit-message 7)
+  inhibit-message)
+;; GNU                => t
+;; Neomacs before fix => 7
+```
+
+Two more states GNU's C slot cannot represent were reachable here -- an
+integer past `intmax_t', and unbound:
+
+```elisp
+(list (condition-case e (setq gc-cons-threshold (expt 2 200)) (error (car e)))
+      gc-cons-threshold
+      (condition-case e (makunbound 'gc-cons-threshold) (error e)))
+;; GNU                => (overflow-error 800000
+;;                        (error "Built-in variable may not be unbound : gc-cons-threshold"))
+;; Neomacs before fix => (1606938044258990275541962092341162602522202993782792835301376
+;;                        1606938044258990275541962092341162602522202993782792835301376
+;;                        gc-cons-threshold)
+```
+
+### Which forward types enforce what, and it does not generalise
+
+The whole switch is `store_symval_forwarding' (`src/data.c:1469-1530'), and
+the five arms disagree with each other:
+
+- `Lisp_Fwd_Int' (`data.c:1475-1483') runs `CHECK_INTEGER (newval)' and then
+  `integer_to_intmax', so a non-integer is `(wrong-type-argument integerp
+  VAL)' and an integer too large for the slot is `(overflow-error VAL)' --
+  two different signals, and the second one is not a type error.  Negative
+  values are fine; a bignum is fine as long as it fits `intmax_t'.  Measured
+  under GNU: `(setq gc-cons-threshold (* most-positive-fixnum 4))' => 9223372036854775804.
+- `Lisp_Fwd_Bool' (`data.c:1485-1487') is `*XBOOLVAR (valcontents) = !NILP
+  (newval);' -- it never signals, it COERCES.  The integer rule does not
+  generalise to it at all.  `setq' still returns the value it was handed, so
+  the coercion is only visible on the next read: measured under GNU,
+  `(setq visible-bell 5)' => 5 and `visible-bell' => t.
+- `Lisp_Fwd_Obj' (`data.c:1489-1516') checks nothing; its body is entirely
+  about propagating a `buffer_defaults' slot into buffers with no local
+  value.
+- `Lisp_Fwd_Buffer_Obj' (`data.c:1518-1526') checks the slot's closed
+  predicate -- and only for a non-nil value, so `nil' passes an `integerp'
+  slot.  This is the one arm Neomacs already had.
+- `Lisp_Fwd_Kboard_Obj' (`data.c:1529-1536') checks nothing.
+
+The read side is the mirror-image function `do_symval_forwarding'
+(`data.c:1337-1360'): `Lisp_Fwd_Int' rebuilds a Lisp integer with `make_int',
+`Lisp_Fwd_Bool' rebuilds `t' or `nil'.  That round trip is why a Boolean slot
+given 5 reads back `t' -- GNU does not canonicalise on the way in, it simply
+has nowhere to keep the 5.
+
+`let' is not a separate rule: `specbind' records the binding kind and
+`do_specbind' calls `set_internal' for every forwarded symbol
+(`src/eval.c:3594-3622'), so `(let ((undo-limit "x")) ...)' signals before
+the body runs.  The single exception is a per-buffer slot with no local
+value in the current buffer, which `do_specbind' routes to
+`set_default_internal' instead; that path writes `set_per_buffer_default'
+directly (`data.c:2080-2113') and therefore skips the predicate.
+`set-default' behaves the same way: per-buffer slot, no check; anything else
+forwarded, `set_internal' and the full check (`data.c:2077', `data.c:2123').
+And `makunbound' is refused outright for both a forwarded symbol and a
+localized one that still carries a forwarder (`data.c:1805-1807',
+`data.c:1725-1728') -- "Built-in variable may not be unbound".
+
+### Why GNU's code is shaped this way
+
+`store_symval_forwarding' is `static' and is called from five places, all
+inside `data.c': `set_internal' twice (`1794', `1825'),
+`set_default_internal' (`2077'), `swap_in_global_binding' (`1559') and
+`swap_in_symval_forwarding' (`1603').  Nothing else can reach a forwarded
+slot.  Underneath that, the C declaration does the real
+work: `DEFVAR_INT' (`src/lisp.h:3513-3518') binds the symbol to an
+`intmax_t *', `DEFVAR_BOOL' (`lisp.h:3507-3512') to a `bool *', so "a string
+in `undo-limit'" is not a state the program can be in -- not a state it
+checks for and rejects.  The check exists only to decide which signal to
+raise on the way to a store that could not have been misspelled anyway.
+
+Neomacs had the opposite arrangement.  `undo-limit' and 42 other GNU
+`DEFVAR_INT' variables were ordinary `Plainval' obarray cells holding a
+`Value', so the invariant could only be an opt-in check, and it was written
+out by hand at the sites that happened to remember: `Lisp_Fwd_Bool''s
+`!NILP' coercion lived in one arm of `set_symbol_value_id_inner' and its
+matching read in four more arms of `symbol.rs', and nowhere else -- which is
+why `make-local-variable', which moves the symbol to a different cell
+entirely, dropped it, and why the per-buffer predicate had to be re-asked for
+at `set_runtime_binding', `try_specbind' and the VM's `varset' separately.
+This project has a name for that failure: an opt-in invariant each branch
+must remember.
+
+### The type-level fix
+
+`LispIntFwd' now owns its value, and the only way to put one there is
+`LispIntFwd::set(LispInteger)'.  `LispInteger''s single checking constructor
+is GNU's `CHECK_INTEGER' + `integer_to_intmax' pair, so the descriptor is as
+unable to hold a string as GNU's `intmax_t' is.  Above that,
+`LispFwd::store' is GNU's switch, once, and it is the only producer of a
+`ForwardStore'; `store_runtime_binding' -- the function that decides which
+cell an assignment lands in -- takes a `ForwardChecked' and nothing else, so
+a new assignment path cannot be added without the rule running.  The four
+hand-written `Bool' read arms in `symbol.rs' collapsed into `LispFwd::load' /
+`LispFwd::load_ref', and the scattered per-buffer predicate calls in
+`set_runtime_binding', `try_specbind' and the VM's `varset' into the one
+`check_forwarded_store'.
+
+Three states that had no GNU counterpart are now unrepresentable rather than
+merely unreached:
+
+- a non-integer in a `DEFVAR_INT' slot, because the slot's setter does not
+  take a `Value';
+- an assignment that reaches forwarded storage unchecked, because
+  `ForwardChecked' has one constructor;
+- a forwarder silently dropped by `make-local-variable', because
+  `make_symbol_localized' now copies the descriptor into the BLV's `fwd'
+  field the way GNU's `make_blv' does, and `assignment_forwarder' resolves
+  the rule through either redirect.
+
+`ForwardStoreSite::{Set, Bind, SetDefault}' names the one distinction GNU
+actually makes -- `set_internal' vs `do_specbind' vs `set_default_internal'
+-- instead of leaving "does the per-buffer predicate apply here?" to be
+re-derived at each site; it had already been derived two different ways.
+
+`define_bool_variable' now conses the symbol onto `byte-boolean-vars' the way
+`defvar_bool' does, so the registration function -- not its callers -- is what
+tells the byte optimizer about the coercion.
+
+43 variables changed storage (`neovm-core/src/emacs_core/symbol.rs',
+`define_int_variable').  `undo-limit''s `GnuIntVariable::NotAnIntSlotValue',
+which entry 123 added to name exactly this gap, is now unreachable for the
+forwarded variables and survives only for `undo-outer-limit', which really is
+a `DEFVAR_LISP' that may hold nil.  The pdump format goes to v57 to carry an
+integer forwarder's value, matching what v56 did for the Boolean one.
+
+### Found and NOT fixed
+
+- Neomacs binds four variables GNU leaves unbound on this platform:
+  `dos-hyper-key', `dos-keypad-mode', `dos-super-key' (msdos.c) and
+  `imagemagick-render-type' (HAVE_IMAGEMAGICK), all `nil'.  Measured under
+  GNU 31.0.90 on GNU/Linux: all four `(boundp ...)' => nil.  They are
+  invented existence rather than invented values, and cus-start.el's
+  platform filter is what stops them from erroring today.
+- `display-line-numbers-offset' is `DEFVAR_INT' in GNU (`xdisp.c') but
+  `defvar_buffer_local' here, so it was left out of the conversion; making
+  it forwarded would change its buffer-local nature as well as its type.
+- Eight GNU `DEFVAR_INT' variables have no Neomacs definition at all:
+  `command-line-max-length', `large-hscroll-threshold',
+  `long-line-optimizations-bol-search-limit',
+  `long-line-optimizations-region-size', `max-redisplay-ticks',
+  `strings-consed', `x-color-cache-bucket-size' and
+  `x-mouse-click-focus-ignore-time'.
+- The six allocation counters (`cons-cells-consed' and friends) are
+  forwarded and typed now, but still read 0 -- nothing increments them, so
+  they are the only remaining VALUE differences in the 43-variable table
+  apart from `gcs-done' (1 here against GNU's 0 in the same `--batch' run).
+- `baud-rate' is seeded to 38400 in Rust; GNU computes it in `init_baud_rate'
+  (`src/sysdep.c') at terminal init and reports 0 under `--batch'.  38400 is
+  the value a real pty gets, so the seed is right for a session and wrong for
+  batch -- an invented default of the recurring kind, left alone here because
+  fixing it means porting `init_baud_rate', not changing a forward type.
+- `byte-boolean-vars' now gets an entry from `define_bool_variable', but that
+  is one entry against GNU's 117: the other 116 GNU `DEFVAR_BOOL' variables
+  are still ordinary obarray cells here, so the byte optimizer will keep
+  folding their `varset'/`varref' pairs.  Wiring `Lisp_Fwd_Bool' for all of
+  them is the same shape of work this entry did for `Lisp_Fwd_Int' and is
+  deliberately not attempted here.
+- `Lisp_Fwd_Obj' and `Lisp_Fwd_Kboard_Obj' remain unwired.  Both enforce
+  nothing on assignment, so no divergence follows from that; `DEFVAR_LISP'
+  variables stay ordinary obarray cells, which is observationally identical.
+
+Status: FIXED.
+
 ## 133. The `rg` results-buffer pin was decided by where the kernel split a PTY read, so ripgrep's line buffering -- not either editor -- chose its value -- NOT A DIVERGENCE (racy harness fixture), FIXED
 
 `parity_tests::rg::rg_package_batch` failed in roughly one full-suite run in

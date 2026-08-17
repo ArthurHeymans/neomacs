@@ -18,10 +18,9 @@ use strum::{EnumString, IntoStaticStr};
 
 pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
     // GNU `syms_of_undo' (src/undo.c:437-457).
-    obarray.set_symbol_value("undo-limit", Value::fixnum(160000));
-    obarray.set_symbol_value("undo-strong-limit", Value::fixnum(240000));
-    obarray.make_special("undo-limit");
-    obarray.make_special("undo-strong-limit");
+    obarray.define_int_variable("undo-limit", 160000);
+    obarray.define_int_variable("undo-strong-limit", 240000);
+
     // `undo-outer-limit' (src/undo.c:459-474) defaults to 24000000, but
     // `--batch' replaces it with nil before anything runs
     // (src/emacs.c:1700-1707).  A bare Context is a batch evaluator, so nil is

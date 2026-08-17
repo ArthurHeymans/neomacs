@@ -2566,7 +2566,7 @@ pub(crate) fn builtin_discard_input(
         ctx.specpdl.as_slice(),
         intern("unread-command-events"),
         Value::NIL,
-    );
+    )?;
     Ok(Value::NIL)
 }
 

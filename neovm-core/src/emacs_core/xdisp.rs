@@ -5675,11 +5675,11 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.define_special_variable("tab-bar-truncate", Value::NIL);
     obarray.define_special_variable("tab-bar-border", Value::symbol("internal-border-width"));
     obarray.define_special_variable("tab-bar-button-margin", Value::fixnum(1));
-    obarray.define_special_variable("tab-bar-button-relief", Value::fixnum(1));
+    obarray.define_int_variable("tab-bar-button-relief", 1);
     obarray.define_special_variable("tool-bar-border", Value::symbol("internal-border-width"));
     obarray.define_special_variable("tool-bar-button-margin", Value::fixnum(4));
-    obarray.define_special_variable("tool-bar-button-relief", Value::fixnum(1));
-    obarray.define_special_variable("tool-bar-max-label-size", Value::fixnum(14));
+    obarray.define_int_variable("tool-bar-button-relief", 1);
+    obarray.define_int_variable("tool-bar-max-label-size", 14);
     obarray.set_symbol_value("tool-bar-style", Value::NIL);
     obarray.set_symbol_value("global-font-lock-mode", Value::NIL);
     // GNU xdisp.c registers these as DEFVAR_LISP/INT/BOOL variables and
@@ -5717,18 +5717,18 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // xdisp.c:38898 DEFVAR_BOOL, init false.
     obarray.define_special_variable("message-truncate-lines", Value::NIL);
     // xdisp.c:38514 / 38521 DEFVAR_INT, init 0.
-    obarray.define_special_variable("scroll-step", Value::fixnum(0));
-    obarray.define_special_variable("scroll-conservatively", Value::fixnum(0));
+    obarray.define_int_variable("scroll-step", 0);
+    obarray.define_int_variable("scroll-conservatively", 0);
     // GNU `src/xdisp.c:37835-37841` installs this as a DEFVAR_BOOL with a
     // default of true so lexical GNU Lisp can read it as a dynamic variable.
     obarray.set_symbol_value("scroll-minibuffer-conservatively", Value::T);
     obarray.make_special("scroll-minibuffer-conservatively");
     // xdisp.c:38535 DEFVAR_INT, init 0.
-    obarray.define_special_variable("scroll-margin", Value::fixnum(0));
+    obarray.define_int_variable("scroll-margin", 0);
     // xdisp.c:38541 DEFVAR_LISP, make_float (0.25) -- a float, not a fixnum.
     obarray.define_special_variable("maximum-scroll-margin", Value::make_float(0.25));
     // xdisp.c:38875 DEFVAR_INT, init 5.
-    obarray.define_special_variable("hscroll-margin", Value::fixnum(5));
+    obarray.define_int_variable("hscroll-margin", 5);
     // xdisp.c:38880 DEFVAR_LISP, make_fixnum (0).
     obarray.define_special_variable("hscroll-step", Value::fixnum(0));
     obarray.set_symbol_value("auto-hscroll-mode", Value::T);
@@ -5834,10 +5834,10 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // xdisp.c:38387 DEFVAR_LISP, build_string ("*Messages*").
     obarray.define_special_variable("messages-buffer-name", Value::string("*Messages*"));
     // xdisp.c:38602 DEFVAR_INT, init 200.
-    obarray.define_special_variable("line-number-display-limit-width", Value::fixnum(200));
+    obarray.define_int_variable("line-number-display-limit-width", 200);
     // xdisp.c:39086 / 39092 DEFVAR_INT, init 2 / 1.
-    obarray.define_special_variable("overline-margin", Value::fixnum(2));
-    obarray.define_special_variable("underline-minimum-offset", Value::fixnum(1));
+    obarray.define_int_variable("overline-margin", 2);
+    obarray.define_int_variable("underline-minimum-offset", 1);
     // xdisp.c:39108 DEFVAR_LISP, make_fixnum (DEFAULT_HOURGLASS_DELAY) = 1.
     obarray.define_special_variable("hourglass-delay", Value::fixnum(1));
     // xdisp.c:38827 DEFVAR_LISP, make_float (0.25).
@@ -5848,10 +5848,8 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // to nil here shadowed that defvar, so the region overlay was never created
     // (and `global-hl-line-mode` then `add-hook`'d onto an empty list). Leaving
     // it unbound lets simple.el install GNU's default.
-    obarray.set_symbol_value("display-line-numbers-major-tick", Value::fixnum(0));
-    obarray.make_special("display-line-numbers-major-tick");
-    obarray.set_symbol_value("display-line-numbers-minor-tick", Value::fixnum(0));
-    obarray.make_special("display-line-numbers-minor-tick");
+    obarray.define_int_variable("display-line-numbers-major-tick", 0);
+    obarray.define_int_variable("display-line-numbers-minor-tick", 0);
     // GNU `src/xdisp.c:38428-38438` defines this with DEFVAR_LISP,
     // initializes it to nil, then calls Fmake_variable_buffer_local.
     // `jit-lock.el` installs `jit-lock-function` here buffer-locally.

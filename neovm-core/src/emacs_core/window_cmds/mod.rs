@@ -7124,7 +7124,7 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // window.c:9270 DEFVAR_LISP, init nil.
     obarray.define_special_variable("window-point-insertion-type", Value::NIL);
     // window.c:9247 DEFVAR_INT, init 2.
-    obarray.define_special_variable("next-screen-context-lines", Value::fixnum(2));
+    obarray.define_int_variable("next-screen-context-lines", 2);
     obarray.set_symbol_value("fast-but-imprecise-scrolling", Value::NIL);
     obarray.set_symbol_value("scroll-error-top-bottom", Value::NIL);
     obarray.set_symbol_value(

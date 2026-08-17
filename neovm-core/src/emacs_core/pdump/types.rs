@@ -425,6 +425,10 @@ pub enum DumpSymbolVal {
     /// The stable descriptor pointer is rebuilt on load; only its current
     /// native Boolean value belongs in the portable image.
     BoolForwarded(bool),
+    /// `SymbolRedirect::Forwarded` backed by GNU `Lisp_Intfwd` semantics.
+    /// As with `BoolForwarded`, only the slot's current integer is portable;
+    /// the descriptor is rebuilt on load.
+    IntForwarded(DumpValue),
 }
 
 /// Serialized per-symbol metadata.  Format v21: all legacy fields

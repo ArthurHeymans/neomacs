@@ -168,6 +168,7 @@ const SYMBOL_VAL_ALIAS: u8 = 1;
 const SYMBOL_VAL_LOCALIZED: u8 = 2;
 const SYMBOL_VAL_FORWARDED: u8 = 3;
 const SYMBOL_VAL_BOOL_FORWARDED: u8 = 4;
+const SYMBOL_VAL_INT_FORWARDED: u8 = 5;
 
 fn write_symbol_data(out: &mut Vec<u8>, data: &DumpSymbolData) -> Result<(), DumpError> {
     write_u8(out, data.redirect);
@@ -215,6 +216,10 @@ fn write_symbol_val(out: &mut Vec<u8>, val: &DumpSymbolVal) -> Result<(), DumpEr
             write_u8(out, SYMBOL_VAL_BOOL_FORWARDED);
             write_bool(out, *value);
         }
+        DumpSymbolVal::IntForwarded(value) => {
+            write_u8(out, SYMBOL_VAL_INT_FORWARDED);
+            write_value(out, value)?;
+        }
     }
     Ok(())
 }
@@ -233,6 +238,7 @@ fn read_symbol_val(cursor: &mut Cursor<'_>) -> Result<DumpSymbolVal, DumpError> 
         SYMBOL_VAL_BOOL_FORWARDED => Ok(DumpSymbolVal::BoolForwarded(
             cursor.read_bool("Boolean forwarder value")?,
         )),
+        SYMBOL_VAL_INT_FORWARDED => Ok(DumpSymbolVal::IntForwarded(cursor.read_value()?)),
         other => Err(DumpError::ImageFormatError(format!(
             "unknown symbol value-cell tag {other}"
         ))),

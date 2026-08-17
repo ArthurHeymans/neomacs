@@ -9,8 +9,7 @@ use crate::emacs_core::value::Value;
 
 /// Register bootstrap variables owned by the allocation / GC subsystem.
 pub fn register_bootstrap_vars(obarray: &mut Obarray) {
-    obarray.set_symbol_value("gc-cons-threshold", Value::fixnum(800_000));
-    obarray.make_special("gc-cons-threshold");
+    obarray.define_int_variable("gc-cons-threshold", 800_000);
     obarray.set_symbol_value("gc-cons-percentage", Value::make_float(0.1));
     obarray.make_special("gc-cons-percentage");
     obarray.set_symbol_value("garbage-collection-messages", Value::NIL);
@@ -31,10 +30,8 @@ pub fn register_bootstrap_vars(obarray: &mut Obarray) {
     obarray.make_special("memory-full");
     obarray.set_symbol_value("gc-elapsed", Value::make_float(0.0));
     obarray.make_special("gc-elapsed");
-    obarray.set_symbol_value("gcs-done", Value::fixnum(0));
-    obarray.make_special("gcs-done");
-    obarray.set_symbol_value("pure-bytes-used", Value::fixnum(0));
-    obarray.make_special("pure-bytes-used");
+    obarray.define_int_variable("gcs-done", 0);
+    obarray.define_int_variable("pure-bytes-used", 0);
 }
 
 #[cfg(test)]

@@ -3594,6 +3594,19 @@ impl<'a> Vm<'a> {
         // path below stays populated as a fallback until Phase 10
         // deletes it.
         use crate::emacs_core::symbol::{SetInternalBind, SymbolRedirect};
+        // GNU's bytecode `Bvarset` is `Fset` (`src/bytecode.c`), so it lands in
+        // the same `set_internal` -> `store_symval_forwarding` the tree-walk
+        // interpreter uses. Run the forward type's rule here, once, before any
+        // of the storage fast paths below -- each of which writes a different
+        // cell and would otherwise have to remember the rule itself.
+        let value = crate::emacs_core::eval::check_forwarded_store(
+            &self.ctx.obarray,
+            &self.ctx.buffers,
+            &self.ctx.specpdl,
+            resolved,
+            value,
+        )?
+        .value();
         let redirect = self.ctx.obarray.get_by_id(resolved).map(|s| s.redirect());
         // Phase 10B: FORWARDED writes go to the buffer slot the
         // descriptor points at. Mirrors GNU

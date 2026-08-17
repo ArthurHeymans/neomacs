@@ -142,7 +142,9 @@ use crate::emacs_core::value;
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 // v56: preserve native Boolean (`Lisp_Boolfwd`) symbol storage and rebuild
 // its stable descriptor when loading the obarray image.
-const FORMAT_VERSION: u32 = 56;
+// v57: same for integer (`Lisp_Intfwd`) symbol storage, now that every GNU
+// `DEFVAR_INT` variable is forwarded rather than a plain obarray cell.
+const FORMAT_VERSION: u32 = 57;
 
 const FINGERPRINT_PLACEHOLDER: [u8; 32] = *b"NEOMACS_PDUMP_FINGERPRINT_SLOT!!";
 
