@@ -7776,10 +7776,13 @@ Neomacs had the opposite arrangement.  `undo-limit' and 42 other GNU
 `DEFVAR_INT' variables were ordinary `Plainval' obarray cells holding a
 `Value', so the invariant could only be an opt-in check, and it was written
 out by hand at the sites that happened to remember: `Lisp_Fwd_Bool''s
-`!NILP' coercion appeared in four separate arms of `symbol.rs' and nowhere
-else, which is why the bytecode `varset' and `make-local-variable' -- two
-paths that write a different cell -- skipped it.  This project has a name
-for that failure: an opt-in invariant each branch must remember.
+`!NILP' coercion lived in one arm of `set_symbol_value_id_inner' and its
+matching read in four more arms of `symbol.rs', and nowhere else -- which is
+why `make-local-variable', which moves the symbol to a different cell
+entirely, dropped it, and why the per-buffer predicate had to be re-asked for
+at `set_runtime_binding', `try_specbind' and the VM's `varset' separately.
+This project has a name for that failure: an opt-in invariant each branch
+must remember.
 
 ### The type-level fix
 
