@@ -2668,12 +2668,31 @@ impl<'a> Vm<'a> {
         // regions are disjoint, and every written slot lands below the new
         // length.
         unsafe {
-            std::ptr::copy_nonoverlapping(
-                cursor.base.add(args_start),
-                cursor.base.add(cursor.len),
-                nargs,
-            );
-            cursor.len += nargs;
+            // Word-at-a-time for ordinary arities (GNU setup_frame's PUSH
+            // loop): a libc memcpy dispatch costs more than a handful of
+            // already-capacity-checked stores. Bulk path only for unusually
+            // wide generated functions, mirroring FrameArgumentCopy.
+            match FrameArgumentCopy::for_count(nargs) {
+                FrameArgumentCopy::None => {}
+                FrameArgumentCopy::One => {
+                    *cursor.base.add(cursor.len) = *cursor.base.add(args_start);
+                    cursor.len += 1;
+                }
+                FrameArgumentCopy::Scalar => {
+                    for offset in 0..nargs {
+                        *cursor.base.add(cursor.len) = *cursor.base.add(args_start + offset);
+                        cursor.len += 1;
+                    }
+                }
+                FrameArgumentCopy::Bulk => {
+                    std::ptr::copy_nonoverlapping(
+                        cursor.base.add(args_start),
+                        cursor.base.add(cursor.len),
+                        nargs,
+                    );
+                    cursor.len += nargs;
+                }
+            }
             for _ in nargs..nonrest {
                 *cursor.base.add(cursor.len) = Value::NIL;
                 cursor.len += 1;
