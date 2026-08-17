@@ -7624,3 +7624,232 @@ behind it.
 
 
 Status: FIXED.
+
+## 133. The `rg` results-buffer pin was decided by where the kernel split a PTY read, so ripgrep's line buffering -- not either editor -- chose its value -- NOT A DIVERGENCE (racy harness fixture), FIXED
+
+`parity_tests::rg::rg_package_batch` failed in roughly one full-suite run in
+two and passed every time in isolation.  The failure named ONE editor:
+
+```
+snapshot mismatches: a_search_populates_the_results_buffer_and_navigates_files (Neomacs)
+```
+
+In this suite a mismatch naming both editors is a stale or path-dependent pin
+(entries 127 and 129); a mismatch naming one is that editor really producing
+different bytes.  It did.  The difference was one newline after the first
+`File:` heading, and everything after it shifted:
+
+```elisp
+;; GNU / pin => "...\n\nFile: ./a.txt\n   1   1 widget one\n   3   3 a widget two\n..."
+;; Neomacs   => "...\n\nFile: ./a.txt\n\n   1   1 widget one\n   3   3 a widget two\n..."
+;;              :point-offset 272 -> 273, navigation lines 2 -> 3, 2 -> 3, 0 -> 1
+```
+
+The one-editor reading was right about the bytes and wrong about the cause.
+Under load GNU Emacs 31.0.90 produces that same extra newline, at a HIGHER
+rate than Neomacs.  Whichever editor loses the race on a given run is the one
+the batch names.
+
+### rg.el inserts a newline per filter call, not per search
+
+`rg-filter' runs from `compilation-filter-hook' and opens with
+
+```elisp
+(goto-char compilation-filter-start)
+(forward-line 0)
+(setq beg (point))
+(when (zerop rg-hit-count)
+  (newline))
+;; Only operate on whole lines so we don't get caught with part of an
+;; escape sequence in one chunk and the rest in another.
+(when (< (point) end)
+  ...)
+```
+
+(`rg-result.el:451-458` in the pinned 20260517.1310 build; `rg-hit-count' is
+bumped only where a match escape is rewritten, at `:482`).  The `newline' at
+`:454-455` sits OUTSIDE the whole-lines guard at `:458`, so it fires on every
+filter invocation until
+the first COMPLETE match line has been seen -- including an invocation whose
+chunk carries no complete line at all.  One invocation before the first match
+gives the pinned blank line between the command line and the first heading.
+Two give a second blank line.  Where the second one lands depends on where the
+chunk boundary fell:
+
+```
+;; chunk lengths     ;; result
+;;   (205)           pinned:      "...\n\nFile: ./a.txt\n   1   1 widget one"
+;;   (73 132)        heading gap: "...\n\nFile: ./a.txt\n\n   1   1 widget one"
+;;   (21 184)        heading gap: same as above
+;;   (20 185)        command gap: "...\n\n\nFile: ./a.txt\n   1   1 widget one"
+```
+
+73 is `20` (the escape-wrapped `./a.txt`) + `1` (its newline) + `52` (the first
+match line WITHOUT its newline): the heading is a complete line, the match line
+is not, so the hit count is still zero when the second chunk arrives and its
+`beg` is the start of the match row.  That is the reported failure exactly.
+
+Package-free reduction of the rule -- the same child text delivered in one
+write and in two, through a filter carrying rg-filter's shape:
+
+```elisp
+(let ((probe
+       (lambda (command)
+         (let* ((hits 0)
+                (buffer (generate-new-buffer "*probe*"))
+                (proc (start-process "probe" buffer "sh" "-c" command)))
+           (set-process-sentinel proc #'ignore)
+           (set-process-filter
+            proc
+            (lambda (p string)
+              (with-current-buffer (process-buffer p)
+                (let ((start (point-max)))
+                  (goto-char start)
+                  (insert string)
+                  (save-excursion
+                    (goto-char start)
+                    (forward-line 0)
+                    (when (zerop hits) (newline)))
+                  (when (string-match-p "MATCH" string) (setq hits 1))))))
+           (while (accept-process-output proc 0.5))
+           (prog1 (with-current-buffer buffer (buffer-string))
+             (kill-buffer buffer))))))
+  (prin1 (list :one-write (funcall probe "printf 'HEAD\\nMATCH\\n'")
+               :two-writes
+               (funcall probe "printf 'HEAD\\n'; sleep 0.2; printf 'MATCH\\n'"))))
+```
+
+```elisp
+;; GNU     => (:one-write "\nHEAD\nMATCH\n" :two-writes "\nHEAD\n\nMATCH\n")
+;; Neomacs => (:one-write "\nHEAD\nMATCH\n" :two-writes "\nHEAD\n\nMATCH\n")
+```
+
+Byte-identical.  Nothing about which editor is running changes the answer;
+only how many times the filter was called does.
+
+### The chunk boundary is ripgrep's line buffering, and it only exists because the search runs on a PTY
+
+`compilation-start' spawns through `start-file-process-shell-command'
+(GNU lisp/progmodes/compile.el:2190), which is `start-process', which takes its
+device from `process-connection-type' -- default `t', i.e. a pty
+(GNU src/process.c:8923-8929, consulted by `is_pty_from_symbol' at
+src/process.c:1345-1354).  GNU defaults it to a pty on purpose: interactive
+compilations want job control and terminal-aware children, and a pty is the
+only way a child can be told it is talking to a terminal.
+
+ripgrep reads exactly that signal.  Its output for this fixture is 205 bytes,
+and the number of `write(2)` calls it takes to emit them depends entirely on
+whether stdout is a terminal:
+
+```
+$ strace -e trace=write rg ... > pipe          # 1 write
+write(1, "\33[0m\33[35m./a.txt\33[0m\n\33[0m\33[32m1\33"..., 205) = 205
+
+$ script -q -c 'strace -e trace=write rg ...'  # 11 writes
+write(1, "\33[0m\33[35m./a.txt\33[0m", 20) = 20
+write(1, "\n", 1)                       = 1
+write(1, "\33[0m\33[32m1\33[0m:\33[0m1\33[0m:\33[0m\33[1"..., 52) = 52
+write(1, "\n", 1)                       = 1
+...
+```
+
+Eleven writes give ten places for a reader to land between, and nothing in
+either editor decides which one it hits: `read_process_output' issues one
+`emacs_read' of up to `read-process-output-max' bytes per call
+(GNU src/process.c:6229-6282) and gets whatever the tty layer has buffered at
+that instant.  Both editors read 65536 at a time and both drain what is there.
+
+### Measured, with both editors running at once
+
+`tmp/abc-rgreal-probe.el` runs the fixture's real workflow -- `rg-run' through
+`compilation-start' on the pinned rg build -- and records the chunk lengths
+`compilation-filter' was handed, how many times `rg-filter' ran its `newline',
+and whether the results buffer ends up with the extra blank line.  GNU Emacs
+31.0.90, the current Neomacs build, and the pre-entry-128 reference binary were
+run SIMULTANEOUSLY, 8 workers each, against 16 CPU burners on a 32-thread box:
+
+```
+;; PTY (the fixture as committed)
+;; GNU Emacs 31.0.90 => 11 diverged / 920 runs  (6x (73 132), 3x (21 184), 2x other)
+;; Neomacs (current) =>  7 diverged / 920 runs  (4x (73 132), 3x other)
+;; Neomacs pre-128   =>  1 diverged / 720 runs  (1x (20 185))
+```
+
+GNU also split its reads far more often than Neomacs did -- 60 split reads per
+400 runs against Neomacs's 12 in the three-way round -- it simply survived more
+of those splits by landing past the first match line.  The failure is not
+Neomacs's, and it does not belong to entry 128 either: the reference binary
+built before that wave, swapped in and run under the same load, produced the
+same divergence.
+
+### The fix removes the choice instead of surviving it
+
+A pipe is not a workaround here, it is the only topology in which the pinned
+value exists.  ripgrep block-buffers to a non-terminal, so the fixture's whole
+result leaves the child in ONE 205-byte write, which is below `PIPE_BUF` and
+therefore reaches the reader whole: one write, one chunk, one filter call, one
+newline, in any editor and under any scheduling.
+
+Every search this suite starts now goes through one prelude helper, and the
+helper is the guard:
+
+```elisp
+(defun rg-test-run (pattern root)
+  (let ((process-connection-type nil))
+    (rg-run pattern "everything" root nil nil (list "--sort" "path" ".")))
+  (let* ((buffer (get-buffer (rg-buffer-name)))
+         (process (and buffer (get-buffer-process buffer)))
+         (tty (and process (process-tty-name process))))
+    (when tty
+      (error "rg-test-run: search is PTY-connected (%s); its output would \
+arrive in scheduling-dependent chunks" tty))
+    buffer))
+```
+
+There is no longer an expression in this suite that reaches an `rg-mode'
+buffer without having gone through it, so "pin a results buffer fed by a
+line-buffering child" is not reachable from a case.  A future edit that
+restores the pty fails loudly at the `error' -- in both editors, on the first
+run -- instead of intermittently in a snapshot months later.  `process-tty-name'
+was verified to answer `"/dev/pts/N"` for a pty and `nil` for a pipe,
+identically in GNU Emacs and Neomacs, so the guard cannot itself become a
+divergence.
+
+The pinned values did not move: the same `:content`, `:point-offset 272`,
+`:first-match-faces` and `:file-tags` that the pty produced on a good run are
+what the pipe produces on every run.  That is the point -- the pin was always
+recording the single-chunk answer, it just had no way to insist on it.
+
+Evidence for the fix, same harness, same load, three binaries at once:
+
+```
+;; pipe (the fixture as fixed), 1840 runs total
+;; GNU Emacs 31.0.90 =>   0 diverged, 0 split reads / 720 runs
+;; Neomacs (current) =>   0 diverged, 0 split reads / 720 runs
+;; Neomacs pre-128   =>   0 diverged, 0 split reads / 400 runs
+```
+
+Not one read was split in any of them: every run delivered the whole 205
+bytes in a single filter call.
+
+`cargo nextest run -p neomacs-melpa-tests --release -E 'test(rg_package_batch)'`
+passed 14/14 consecutive runs, 12 of them with CPU burners applied.
+
+### The rule, and what else was checked
+
+An upstream `compilation-filter-hook' function that mutates the buffer OUTSIDE
+its own whole-lines guard makes the rendered buffer a function of read
+boundaries, and read boundaries are not a parity signal.  Before pinning a
+compilation-derived buffer fed by a real external tool, read the package's
+filter for writes that are not under the `(when (< (point) end) ...)' guard.
+
+`ag.el` 20201031.2202, the closest sibling suite, was read for the same shape
+and is clean: `ag-filter' (`ag.el:632-664`) performs every one of its
+substitutions inside the guard and its escape stripping is idempotent across
+chunk boundaries, so the `ag` suite's rendered-buffer pins are chunk-independent
+even though its stand-in binary is a shell script that `printf`s line by line.
+
+
+Status: FIXED (harness defect).  The underlying `rg-filter' behaviour is
+upstream rg.el's and is unchanged; it is reproduced identically by GNU Emacs
+and Neomacs, so there is nothing to fix in the engine.
