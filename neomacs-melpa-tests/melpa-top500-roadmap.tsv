@@ -458,7 +458,7 @@ rank	package	downloads	status
 457	easy-kill	190313	todo
 458	lsp-ivy	190236	todo
 459	nov	190062	todo
-460	biblio	188927	todo
+460	biblio	188927	covered
 461	dart-mode	188350	covered
 462	flycheck-guile	188261	todo
 463	switch-window	188002	covered
