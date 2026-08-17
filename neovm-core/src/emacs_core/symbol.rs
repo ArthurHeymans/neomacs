@@ -1395,7 +1395,7 @@ impl Obarray {
                 sym.flags.set_trapped_write(SymbolTrappedWrite::NoWrite);
                 // Only initialize if not already set (idempotent).
                 // Phase F: check val.plain (UNBOUND = not yet set).
-                if unsafe { sym.val.plain } == Value::UNBOUND {
+                if unsafe { sym.val.plain }.is_unbound() {
                     let kw = Value::keyword_id(id);
                     sym.flags.set_redirect(SymbolRedirect::Plainval);
                     sym.val = SymbolVal { plain: kw };
@@ -1708,7 +1708,7 @@ impl Obarray {
                 // Safety: redirect=Plainval guarantees val.plain is
                 // the live value field. UNBOUND sentinel = unbound.
                 let value = unsafe { sym.val.plain };
-                if value == Value::UNBOUND {
+                if value.is_unbound() {
                     None
                 } else {
                     Some(value)
@@ -1720,7 +1720,7 @@ impl Obarray {
             }
             SymbolRedirect::Localized => {
                 let value = self.blv(id)?.defcell.cons_cdr();
-                if value == Value::UNBOUND {
+                if value.is_unbound() {
                     None
                 } else {
                     Some(value)
@@ -1750,7 +1750,7 @@ impl Obarray {
                     // Safety: redirect=Plainval guarantees val.plain is
                     // the live value field. UNBOUND sentinel = unbound.
                     let v = unsafe { sym.val.plain };
-                    if v == Value::UNBOUND {
+                    if v.is_unbound() {
                         return None;
                     }
                     return Some(v);
@@ -1760,7 +1760,7 @@ impl Obarray {
                 }
                 SymbolRedirect::Localized => {
                     let value = self.blv(current)?.defcell.cons_cdr();
-                    if value == Value::UNBOUND {
+                    if value.is_unbound() {
                         return None;
                     }
                     return Some(value);
@@ -1800,7 +1800,7 @@ impl Obarray {
                     // Safety: redirect=Plainval guarantees val.plain is
                     // the live value field. UNBOUND sentinel = unbound.
                     let v = unsafe { &sym.val.plain };
-                    if *v == Value::UNBOUND {
+                    if v.is_unbound() {
                         return None;
                     }
                     return Some(v);
@@ -1824,7 +1824,7 @@ impl Obarray {
                             let cons_ptr = blv.defcell.xcons_ptr();
                             &(*cons_ptr).cdr_or_next.cdr
                         };
-                        if *cdr_ref == Value::UNBOUND {
+                        if cdr_ref.is_unbound() {
                             None
                         } else {
                             Some(cdr_ref)
@@ -2321,7 +2321,7 @@ impl Obarray {
                 SymbolRedirect::Plainval => {
                     // Read val.plain directly. UNBOUND sentinel means void.
                     let v = unsafe { sym.val.plain };
-                    if v == Value::UNBOUND {
+                    if v.is_unbound() {
                         return None;
                     }
                     return Some(v);
@@ -3400,7 +3400,7 @@ impl Obarray {
                 SymbolRedirect::Plainval => {
                     // Safety: redirect=Plainval guarantees val.plain is live.
                     let v = unsafe { &sym.val.plain };
-                    if *v == Value::UNBOUND {
+                    if v.is_unbound() {
                         return None;
                     }
                     return Some(v);
@@ -3416,7 +3416,7 @@ impl Obarray {
                             let cons_ptr = blv.defcell.xcons_ptr();
                             &(*cons_ptr).cdr_or_next.cdr
                         };
-                        if *cdr_ref == Value::UNBOUND {
+                        if cdr_ref.is_unbound() {
                             None
                         } else {
                             Some(cdr_ref)

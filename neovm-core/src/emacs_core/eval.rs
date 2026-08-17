@@ -11050,6 +11050,24 @@ impl Context {
             return Ok(SymbolValueLookup::Bound(value));
         }
 
+        // Fast path — GNU `find_symbol_value`'s SYMBOL_PLAINVAL leaf: an
+        // ordinary global with a bound plain cell answers from one slot
+        // read. Aliases, localized/forwarded symbols, unbound cells (where
+        // the keyword/t/nil fallbacks below may still bind), and
+        // `buffer-undo-list` (stored in SharedUndoState, special-cased
+        // below) all fall through to the full walk. Everything the slow
+        // path consults per read (keyword memo, alias resolution, canonical
+        // checks) is per-call TLS traffic this leaf never needs.
+        if sym_id != buffer_undo_list_symbol()
+            && let Some(sym) = self.obarray.get_by_id(sym_id)
+            && sym.redirect() == crate::emacs_core::symbol::SymbolRedirect::Plainval
+        {
+            let value = unsafe { sym.val.plain };
+            if !value.is_unbound() {
+                return Ok(SymbolValueLookup::Bound(value));
+            }
+        }
+
         // GNU keywords are self-valued constants installed by `intern_sym`;
         // keep lexenv lookup first, then use the same self-value directly.
         if is_keyword_id(sym_id) {
