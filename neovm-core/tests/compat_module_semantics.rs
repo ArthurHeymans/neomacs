@@ -15,17 +15,30 @@ use neovm_core::emacs_core::load::{
 mod common;
 
 /// Build the test cdylib, returning the path to the .so file.
+///
+/// The nested build is told where to put its output instead of being allowed
+/// to inherit it.  `cargo` reads `CARGO_TARGET_DIR` from the environment, and
+/// this test process inherits whatever the outer run was given -- so whenever
+/// the outer build directs its artifacts elsewhere (every agent working in a
+/// git worktree with a private target directory does exactly that), the module
+/// landed there while the search below still looked under the crate, and all
+/// fourteen tests here failed with a missing `.so`.  That misfire has been
+/// reported as a regression three separate times.  `--target-dir` is the
+/// argument form of the same setting and takes precedence over the variable,
+/// so the build and the search cannot disagree.
 fn build_test_module() -> PathBuf {
     let module_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/test-module");
+    let target_dir = module_dir.join("target");
     let status = Command::new("cargo")
-        .args(["build", "--release"])
+        .args(["build", "--release", "--target-dir"])
+        .arg(&target_dir)
         .current_dir(&module_dir)
         .status()
         .expect("failed to build test module");
 
     assert!(status.success(), "test module build failed");
 
-    let target_dir = module_dir.join("target/release");
+    let target_dir = target_dir.join("release");
     for entry in std::fs::read_dir(&target_dir).expect("read target dir") {
         let entry = entry.unwrap();
         let name = entry.file_name();
