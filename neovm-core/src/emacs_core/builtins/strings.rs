@@ -1456,6 +1456,39 @@ fn format_integer_digits(
 
 /// Format an integer with the given spec.
 fn format_int_spec(n: i64, spec: &FormatSpec) -> String {
+    // Fast path for a plain `%d`/`%i`: one backward stack-buffer digit
+    // pass and one allocation. The general path below runs 128-bit
+    // `core::fmt` digit rendering plus two more String-building passes
+    // (`format_integer_digits` → `apply_integer_width`) — several hundred
+    // Ir per conversion, all avoidable when no flag/width/precision is set.
+    if matches!(spec.conversion, 'd' | 'i')
+        && spec.width.is_none()
+        && spec.precision.is_none()
+        && !spec.minus
+        && !spec.plus
+        && !spec.space
+        && !spec.zero
+        && !spec.sharp
+    {
+        // i64::MIN-safe: widen before unsigned_abs; the magnitude fits u64.
+        let mut val = (n as i128).unsigned_abs() as u64;
+        let mut buf = [0u8; 21];
+        let mut pos = buf.len();
+        loop {
+            pos -= 1;
+            buf[pos] = b'0' + (val % 10) as u8;
+            val /= 10;
+            if val == 0 {
+                break;
+            }
+        }
+        if n < 0 {
+            pos -= 1;
+            buf[pos] = b'-';
+        }
+        // Digits and '-' only — always valid UTF-8.
+        return unsafe { std::str::from_utf8_unchecked(&buf[pos..]) }.to_owned();
+    }
     let negative = n < 0;
     let abs_val = (n as i128).unsigned_abs();
     let digits = match spec.conversion {
