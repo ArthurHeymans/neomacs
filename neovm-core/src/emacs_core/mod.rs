@@ -34,6 +34,7 @@ pub mod comp;
 #[cfg(test)]
 pub mod compat_regressions;
 pub mod composite;
+pub mod cus_start_platform_vars;
 pub mod custom;
 pub mod data;
 pub mod dbus;

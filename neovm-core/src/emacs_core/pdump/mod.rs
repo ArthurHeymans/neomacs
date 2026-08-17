@@ -144,7 +144,11 @@ use crate::emacs_core::value;
 // its stable descriptor when loading the obarray image.
 // v57: same for integer (`Lisp_Intfwd`) symbol storage, now that every GNU
 // `DEFVAR_INT` variable is forwarded rather than a plain obarray cell.
-const FORMAT_VERSION: u32 = 57;
+// v58: a `Localized` symbol records WHICH forwarder `make_blv` copied into its
+// BLV (`src/data.c:2112-2140`), so a `DEFVAR_BOOL`/`DEFVAR_INT` variable Lisp
+// made buffer-local gets an equivalent descriptor back from the image instead
+// of from a hand-maintained name list.
+const FORMAT_VERSION: u32 = 58;
 
 const FINGERPRINT_PLACEHOLDER: [u8; 32] = *b"NEOMACS_PDUMP_FINGERPRINT_SLOT!!";
 

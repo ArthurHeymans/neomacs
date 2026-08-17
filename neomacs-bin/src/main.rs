@@ -3055,6 +3055,10 @@ fn run_gui_evaluator_worker(
         set_graphical_terminal_display_name(display_name);
     }
     evaluator.set_variable("dump-mode", Value::NIL);
+    // GNU's window-system terminal inits do not measure a line speed, they
+    // assert one: `baud_rate = 19200' in `x_term_init' (src/xterm.c:32279) and
+    // in `pgtk_term_init' (src/pgtkterm.c:7034). Same place, same constant.
+    evaluator.set_variable("baud-rate", Value::fixnum(19200));
     load_neomacs_gui_term_layer(&mut evaluator);
     tracing::info!("GUI evaluator context initialized");
 
@@ -3571,6 +3575,14 @@ pub fn run(mode: RuntimeMode) {
             "tty-erase-char",
             tty_init::tty_erase_char_value(tty_init::detect_tty_erase_char()),
         );
+        // GNU `init_tty' calls `init_baud_rate (fileno (tty->input))'
+        // (src/term.c:4755) while setting the terminal up, which is the only
+        // thing that ever writes the `baud-rate' DEFVAR_INT on a tty. Read the
+        // line speed here, from the same still-cooked stdin the ERASE character
+        // came from. Under `--batch' GNU creates no tty terminal at all, so
+        // this must NOT run there -- `baud-rate' stays at the 0 the bootstrap
+        // seeded, which is what GNU reports.
+        evaluator.set_variable("baud-rate", Value::fixnum(tty_init::detect_baud_rate()));
     } else {
         reset_terminal_host();
         reset_terminal_runtime();

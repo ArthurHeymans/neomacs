@@ -136,6 +136,47 @@ pub fn detect_tty_erase_char() -> Option<u8> {
     }
 }
 
+/// GNU's `baud_convert` table (`src/sysdep.c:146-150`): termios speed code to
+/// bits per second.
+const BAUD_CONVERT: [i64; 16] = [
+    0, 50, 75, 110, 135, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400,
+];
+
+/// GNU `init_baud_rate` (`src/sysdep.c:413-437`), for the interactive tty case.
+///
+/// `init_tty` calls it with the terminal's input descriptor
+/// (`src/term.c:4755`, `4923`), so this must run while stdin still describes
+/// the user's terminal -- before raw mode, like `detect_tty_erase_char`.
+/// GNU reads `cfgetospeed` from the termios, indexes `baud_convert`, falls back
+/// to 9600 for a speed code past the end of the table, and substitutes 1200 for
+/// a zero result (a hung-up line).
+///
+/// The `noninteractive` arm of GNU's function is deliberately not ported: under
+/// `--batch` GNU never creates a tty terminal, so `init_baud_rate` is never
+/// reached at all and `baud-rate` keeps the C global's 0.  Calling this only
+/// from the live-tty path is what reproduces that.
+pub fn detect_baud_rate() -> i64 {
+    #[cfg(unix)]
+    {
+        // SAFETY: tcgetattr only writes the termios out-parameter, and STDIN is
+        // a borrowed descriptor we do not close.
+        let mut termios = std::mem::MaybeUninit::<libc::termios>::uninit();
+        if unsafe { libc::tcgetattr(libc::STDIN_FILENO, termios.as_mut_ptr()) } != 0 {
+            // GNU would have `tcgetattr` fail into the `B9600` it pre-filled
+            // `sg.c_cflag` with (`src/sysdep.c:426-431`).
+            return 9600;
+        }
+        let termios = unsafe { termios.assume_init() };
+        let ospeed = unsafe { libc::cfgetospeed(&termios) };
+        let converted = BAUD_CONVERT.get(ospeed as usize).copied().unwrap_or(9600);
+        if converted == 0 { 1200 } else { converted }
+    }
+    #[cfg(not(unix))]
+    {
+        9600
+    }
+}
+
 pub fn detect_tty_background_mode() -> &'static str {
     let Some(colorfgbg) = std::env::var("COLORFGBG").ok() else {
         return "dark";

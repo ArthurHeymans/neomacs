@@ -2158,7 +2158,10 @@ impl Obarray {
             // descriptor into the BLV (`src/data.c:2112-2140`); flipping the
             // redirect back to `Forwarded` here would orphan every per-buffer
             // binding.  Declare into the BLV instead.
-            self.reattach_localized_bool_forwarder(name);
+            self.reattach_localized_forwarder(
+                id,
+                crate::emacs_core::pdump::types::DumpLocalizedForwarder::Bool,
+            );
             self.set_symbol_value_id(id, if initial { Value::T } else { Value::NIL });
         } else {
             match self.forwarder(id).and_then(|fwd| fwd.as_bool_fwd()) {
@@ -2188,30 +2191,56 @@ impl Obarray {
         self.make_special_id(list_id);
     }
 
-    /// Give a localized symbol back the Boolean descriptor `make_blv` would
-    /// have copied into its BLV (`src/data.c:2112-2140`).
+    /// Give a localized symbol back the descriptor `make_blv` copied into its
+    /// BLV (`src/data.c:2112-2140`).
     ///
     /// A no-op unless the symbol is `Localized` with no forwarder, which is
     /// only reachable after loading a portable dump: the descriptor is a
     /// process-lifetime pointer, so a localized symbol's image carries its
-    /// default value and nothing else.  The new descriptor is seeded from that
-    /// restored default rather than from a declaration's initial value, so a
-    /// variable the bootstrap changed keeps what the dump recorded.
-    pub fn reattach_localized_bool_forwarder(&mut self, name: &str) {
-        let id = intern(name);
+    /// default value plus the KIND of forwarder to rebuild
+    /// ([`DumpLocalizedForwarder`](crate::emacs_core::pdump::types::DumpLocalizedForwarder)),
+    /// never the pointer.  The new descriptor is seeded from that restored
+    /// default rather than from a declaration's initial value, so a variable
+    /// the bootstrap changed keeps what the dump recorded.
+    ///
+    /// The default is then canonicalised the way `do_symval_forwarding` would
+    /// have rebuilt it on the way out (`src/data.c:1337-1360`): `t`/`nil` for a
+    /// Boolean slot, and for an integer slot a value that failed
+    /// `LispInteger::check` is impossible to have stored, so a corrupt image
+    /// falls back to the slot's zero rather than smuggling a non-integer in.
+    pub fn reattach_localized_forwarder(
+        &mut self,
+        id: SymId,
+        kind: crate::emacs_core::pdump::types::DumpLocalizedForwarder,
+    ) {
+        use crate::emacs_core::pdump::types::DumpLocalizedForwarder as Kind;
         let Some(blv) = self.blv_mut(id) else { return };
         if blv.fwd.is_some() {
             return;
         }
-        let current = blv.defcell.cons_cdr().is_truthy();
-        let fwd = crate::emacs_core::forward::alloc_boolfwd(current);
-        blv.fwd = Some(unsafe {
-            &*(fwd as *const crate::emacs_core::forward::LispBoolFwd
-                as *const crate::emacs_core::forward::LispFwd)
-        });
-        // `do_symval_forwarding` would have rebuilt `t`/`nil` on the way out,
-        // so canonicalise the cells the dump restored verbatim.
-        let canonical = if current { Value::T } else { Value::NIL };
+        let restored = blv.defcell.cons_cdr();
+        let (fwd, canonical) = match kind {
+            Kind::Bool => {
+                let flag = restored.is_truthy();
+                let fwd = crate::emacs_core::forward::alloc_boolfwd(flag);
+                let fwd = unsafe {
+                    &*(fwd as *const crate::emacs_core::forward::LispBoolFwd
+                        as *const crate::emacs_core::forward::LispFwd)
+                };
+                (fwd, if flag { Value::T } else { Value::NIL })
+            }
+            Kind::Int => {
+                let integer = crate::emacs_core::forward::LispInteger::check(restored)
+                    .unwrap_or_else(|_| crate::emacs_core::forward::LispInteger::from_i64(0));
+                let fwd = crate::emacs_core::forward::alloc_intfwd(integer);
+                let fwd = unsafe {
+                    &*(fwd as *const crate::emacs_core::forward::LispIntFwd
+                        as *const crate::emacs_core::forward::LispFwd)
+                };
+                (fwd, integer.value())
+            }
+        };
+        blv.fwd = Some(fwd);
         blv.defcell.set_cdr(canonical);
         if super::value::eq_value(&blv.valcell, &blv.defcell) {
             blv.valcell.set_cdr(canonical);
@@ -2252,6 +2281,20 @@ impl Obarray {
         // Idempotent, like re-running a `DEFVAR_INT` would be: several
         // bootstrap tables register the same variable, and installing a second
         // descriptor would leave the first one still reachable from a BLV.
+        if self.blv(id).is_some() {
+            // Already localized, so `make_blv` moved the descriptor into the
+            // BLV (`src/data.c:2112-2140`); flipping the redirect back to
+            // `Forwarded` here would orphan every per-buffer binding.  Declare
+            // into the BLV instead -- the case `display-line-numbers-offset`
+            // reaches, being both `DEFVAR_INT` and `Fmake_variable_buffer_local`
+            // (`src/xdisp.c:38999-39005`).
+            self.reattach_localized_forwarder(
+                id,
+                crate::emacs_core::pdump::types::DumpLocalizedForwarder::Int,
+            );
+            self.set_symbol_value_id(id, value.value());
+            return;
+        }
         if let Some(existing) = self.forwarder(id).and_then(|fwd| fwd.as_int_fwd()) {
             existing.set(value);
             return;
