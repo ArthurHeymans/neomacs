@@ -9490,17 +9490,18 @@ wrong is how the first version of this fix introduced a divergence of its own:
 ;; GNU => file-error      ; the connect loses first; the coding is never checked
 ```
 
-For the network primitive that meant giving both steps a home.  The fourteen
-socket paths (TCP, local, datagram, listening, deferred DNS, TLS, explicit
-`:local`/`:remote` address) used to be handed the `:coding` keyword and an
-environment and to resolve for themselves at the bottom.  They are now handed a
-`ProcessCodingSystems`, resolved at the two points where the environment is
-final -- before the `:local`/`:remote` early return, which cannot reach the
-alist because it has no HOST and SERVICE, and after the alist lookup for
-everything else -- and they create their process record through one
-`create_network_process_record`, which is where the check runs.  None of the
-fourteen can resolve differently, and none can create a record without the check
-having happened at GNU's moment.
+For the network primitive that meant giving both steps a home.  Five connection
+strategies (TCP, local socket, datagram, listening, explicit `:local`/`:remote`
+address) build a process record at twenty-four points between them -- once per
+socket family, per `:nowait` branch, per TLS branch -- and every one of them
+used to be handed the `:coding` keyword plus an environment and to resolve for
+itself at the bottom.  They are now handed a `ProcessCodingSystems`, resolved at
+the two points where the environment is final -- before the `:local`/`:remote`
+early return, which cannot reach the alist because it has no HOST and SERVICE,
+and after the alist lookup for everything else -- and all twenty-four create
+their record through one `create_network_process_record`, which is where the
+check runs.  None of them can resolve differently, and none can create a record
+without the check having happened at GNU's moment.
 
 `builtin_make_process_impl`'s `:stderr` pipe goes through
 `MakeProcessCodingEnvironment::connection_variables()` rather than through
@@ -9558,7 +9559,12 @@ race rather than a divergence -- it signals a `sleep 30` child and gives it one
 second to be reaped, and the red run recorded `(run 0)`, meaning the signal had
 not landed yet.  It touches no coding system.
 `cargo check --workspace --all-targets` and `cargo fmt --all --check` are
-clean.
+clean.  The nine MELPA suites that build a pipe process -- `vterm`, `sly`,
+`slime`, `ivy_rich`, `all_the_icons_ivy_rich`, `async_http_queue`,
+`auto_pause`, `git_rebase_mode` and the `diredfl` suite entry 128 came from --
+are 13/13 green; all of them create their pipe with `:buffer nil` and no
+`:coding`, where GNU's answer is the car and cdr of
+`default-process-coding-system` and so is unchanged by this entry.
 
 One pinned expectation moved, and it moved because it was recording the literal
 this entry deleted.  `vm_process_coding_and_tty_builtins_use_shared_runtime_state`
