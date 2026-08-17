@@ -2086,6 +2086,22 @@ fn do_format(
         i += 1;
         format_char_pos += 1;
         if code != '%' as u32 {
+            // ASCII literal without quote translation: one byte push. The
+            // general helper encodes through push_emacs_char per character,
+            // an out-of-line call that dominated copying literal runs.
+            if code < 0x80 && matches!(quoting_style, FormatMessageQuotingStyle::None) {
+                result.push(code as u8);
+                if track_props {
+                    source_spans.push(FormatSourceSpan {
+                        source_char_start: source_start,
+                        source_char_end: format_char_pos,
+                        result_char_start: result_char_pos,
+                        result_char_end: result_char_pos + 1,
+                    });
+                    result_char_pos += 1;
+                }
+                continue;
+            }
             let pushed = push_format_literal_code(&mut result, code, quoting_style);
             force_multibyte_result |= pushed.multibyte;
             new_result |= pushed.translated;
