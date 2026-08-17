@@ -3944,9 +3944,56 @@ fn resolve_color_distance_rgb(
     {
         return Ok((r, g, b));
     }
+    // GNU consults the terminal-default sentinels only AFTER the palette
+    // lookup has failed to resolve a pixel (src/xfaces.c:1160-1167), so the
+    // order here matters: a palette entry named `unspecified-bg' would win.
+    if let Some(default) = TtyDefaultColor::from_name(&color) {
+        return Ok(default.rgb());
+    }
     parse_color_16bit_any(&color)
         .map(approximate_tty_color)
         .ok_or_else(|| invalid_color_error(value))
+}
+
+/// The two colour names that stand for "whatever this terminal's default is",
+/// which `face-foreground'/`face-background' return for an unspecified face
+/// attribute on a TTY frame.
+///
+/// GNU keeps them out of the colour tables entirely: `tty_defined_color'
+/// (src/xfaces.c:1143-1174) seeds its `Emacs_Color' with
+/// `pixel = FACE_TTY_DEFAULT_COLOR' and RGB (0, 0, 0) (:1150-1153), tries
+/// `tty_lookup_color', and only if that left the pixel unresolved maps these
+/// two names to `FACE_TTY_DEFAULT_FG_COLOR'/`FACE_TTY_DEFAULT_BG_COLOR'
+/// (:1163-1166).  Assigning the pixel is what makes the lookup succeed
+/// (:1170-1171) -- the RGB triple is never touched, which is why GNU measures
+/// both sentinels as black rather than as the terminal's actual colours.
+///
+/// This is deliberately NOT wired into `tty-color-alist' or the Lisp
+/// `color-values'/`color-defined-p', which answer nil for these names in GNU
+/// too: the sentinel branch exists only in the C `defined_color_hook'.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TtyDefaultColor {
+    /// `unspecified-fg' -> `FACE_TTY_DEFAULT_FG_COLOR'.
+    Foreground,
+    /// `unspecified-bg' -> `FACE_TTY_DEFAULT_BG_COLOR'.
+    Background,
+}
+
+impl TtyDefaultColor {
+    pub(crate) fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "unspecified-fg" => Some(Self::Foreground),
+            "unspecified-bg" => Some(Self::Background),
+            _ => None,
+        }
+    }
+
+    /// GNU's zero defaults, left untouched by the sentinel branch
+    /// (src/xfaces.c:1151-1153).  Both sentinels therefore carry the same
+    /// colour value, so the distance between them is zero.
+    pub(crate) fn rgb(self) -> (i64, i64, i64) {
+        (0, 0, 0)
+    }
 }
 
 fn color_distance_metric(lhs: (i64, i64, i64), rhs: (i64, i64, i64)) -> i64 {

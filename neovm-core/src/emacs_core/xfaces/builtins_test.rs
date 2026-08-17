@@ -2837,3 +2837,67 @@ fn color_values_dark_gray_approximates_to_white() {
     assert_eq!(rgb[1].as_int(), Some(65535));
     assert_eq!(rgb[2].as_int(), Some(65535));
 }
+
+#[test]
+fn color_distance_accepts_the_terminal_default_sentinels() {
+    // GNU's `tty_defined_color' (src/xfaces.c:1143-1174) seeds its Emacs_Color
+    // with pixel = FACE_TTY_DEFAULT_COLOR and RGB (0, 0, 0) (:1150-1153), runs
+    // `tty_lookup_color', and THEN -- only if the lookup left the pixel
+    // unresolved -- maps the two sentinel names `face-background' returns on a
+    // TTY frame to the terminal's default fg/bg pixels (:1160-1167).  Setting
+    // the pixel is what makes the lookup succeed (:1170-1171); the RGB triple
+    // stays at its zero defaults, which is why GNU measures both sentinels as
+    // black.  `color-values' and `color-defined-p' still answer nil for them in
+    // both editors, because those are Lisp and consult `tty-color-alist'; the
+    // sentinel branch exists only in the C defined_color_hook, so
+    // `color-distance' is the function that sees it.
+    //
+    // Expectations measured under GNU Emacs 31.0.90, not derived
+    // (tmp/coord-colordist-probe.el).
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    for sentinel in ["unspecified-fg", "unspecified-bg"] {
+        assert_eq!(
+            builtin_color_distance(
+                &mut eval,
+                vec![Value::string("black"), Value::string(sentinel)],
+            )
+            .unwrap_or_else(|e| panic!("{sentinel} must resolve, got {e:?}")),
+            Value::fixnum(0),
+            "{sentinel} resolves to the zero RGB defaults, so it measures as black"
+        );
+    }
+
+    // Both sentinels are the same colour value, so the distance between them
+    // is zero even though they name opposite ends of the frame.
+    assert_eq!(
+        builtin_color_distance(
+            &mut eval,
+            vec![
+                Value::string("unspecified-fg"),
+                Value::string("unspecified-bg"),
+            ],
+        )
+        .expect("both sentinels resolve"),
+        Value::fixnum(0)
+    );
+
+    // A genuinely unknown name still signals in GNU, so the sentinel branch
+    // must not turn into lenient parsing.
+    match builtin_color_distance(
+        &mut eval,
+        vec![Value::string("black"), Value::string("not-a-color")],
+    )
+    .expect_err("an unknown colour name still signals")
+    {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string("Invalid color"), Value::string("not-a-color")]
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+}
