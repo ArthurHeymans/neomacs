@@ -295,27 +295,12 @@ pub fn register_bootstrap_vars(obarray: &mut Obarray) {
     }
 }
 
-/// Rebuild the Boolean descriptors a portable dump cannot carry.
-///
-/// `make_blv` copies the symbol's forwarder into the BLV
-/// (`src/data.c:2112-2140`), which is why a `DEFVAR_BOOL` variable that Lisp
-/// made buffer-local -- `indent-tabs-mode` (`bindings.el:1048`),
-/// `case-symbols-as-words`, `comment-end-can-be-escaped`,
-/// `display-line-numbers-widen`, `display-fill-column-indicator` -- still
-/// coerces once it is localized.  A localized symbol dumps as its default plus
-/// `local_if_set`; the descriptor is a process-lifetime pointer and cannot
-/// travel, so the BLV comes back without one and the coercion would be lost
-/// for exactly those variables.  GNU needs no equivalent step because its
-/// `bool` slots are C statics the dumper relocates.
-///
-/// The rebuild takes the value from the restored default rather than from the
-/// table, so a variable `loadup.el` or `startup.el` changed keeps the value
-/// the dump recorded.
-pub fn reattach_localized_bool_forwarders(obarray: &mut Obarray) {
-    for var in GNU_BOOL_VARIABLES {
-        obarray.reattach_localized_bool_forwarder(var.name);
-    }
-}
+// The Boolean descriptors a portable dump cannot carry used to be rebuilt from
+// this table on load.  They are not any more: `DumpSymbolVal::Localized` records
+// which forwarder `make_blv` copied into the BLV (`src/data.c:2112-2140`) and
+// `load_obarray` rebuilds it from the image, so a variable Lisp localized keeps
+// its coercion without anyone having to remember to list it here.  See
+// `DumpLocalizedForwarder` (pdump format v58).
 
 #[cfg(test)]
 mod tests {

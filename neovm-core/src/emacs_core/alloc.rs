@@ -30,6 +30,11 @@ pub fn register_bootstrap_vars(obarray: &mut Obarray) {
     obarray.make_special("gc-elapsed");
     obarray.define_int_variable("gcs-done", 0);
     obarray.define_int_variable("pure-bytes-used", 0);
+    // `src/alloc.c:7448' DEFVAR_INT, no initializer -- the C global starts at 0
+    // and `allocate_string' counts up from there.  Neomacs does not track it
+    // yet, like its five siblings in `eval.rs' (`cons-cells-consed' and
+    // friends), so it reads 0 where GNU reads whatever it has allocated.
+    obarray.define_int_variable("strings-consed", 0);
 }
 
 #[cfg(test)]

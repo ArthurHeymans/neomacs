@@ -151,8 +151,12 @@ fn frame_window_terminal_defvars_are_special_with_gnu_defaults() {
         ("after-delete-frame-select-mru-frame", "(eq v t)"),
         // window.c:9243 DEFVAR_BOOL, init true.
         ("auto-window-vscroll", "(eq v t)"),
-        // dispnew.c:7488 DEFVAR_INT; init_baud_rate supplies 38400 on ptys.
-        ("baud-rate", "(eq v 38400)"),
+        // dispnew.c:7488 DEFVAR_INT, and the only one in the tree with no
+        // initializer: the C global starts at 0 and only `init_baud_rate' from
+        // `init_tty' (term.c:4755) or a window system's `baud_rate = 19200'
+        // (xterm.c:32279) ever writes it.  A `Context' has no terminal, which
+        // is the `--batch' case GNU reports 0 for.
+        ("baud-rate", "(eq v 0)"),
         // frame.c:7451 DEFVAR_LISP; toolkit GUI builds init Qright.
         ("default-frame-scroll-bars", "(eq v 'right)"),
         // terminal.c:700 DEFVAR_LISP, init nil.

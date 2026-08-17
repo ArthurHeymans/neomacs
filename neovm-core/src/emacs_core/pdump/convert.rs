@@ -2590,6 +2590,24 @@ pub(crate) fn dump_symbol_table() -> DumpSymbolTable {
 
 // --- Symbol / Obarray ---
 
+/// Which of a BLV's possible forwarders the image has to rebuild.
+///
+/// `None` for the forward types whose storage is not the descriptor
+/// (`Lisp_Fwd_Obj`, `Lisp_Fwd_Buffer_Obj`, `Lisp_Fwd_Kboard_Obj`): those are
+/// re-installed from `BUFFER_SLOT_INFO` and from the registration tables, and
+/// carry no per-symbol state a dump could lose.
+fn dump_localized_forwarder(
+    ty: crate::emacs_core::forward::LispFwdType,
+) -> Option<crate::emacs_core::pdump::types::DumpLocalizedForwarder> {
+    use crate::emacs_core::forward::LispFwdType;
+    use crate::emacs_core::pdump::types::DumpLocalizedForwarder as Kind;
+    match ty {
+        LispFwdType::Bool => Some(Kind::Bool),
+        LispFwdType::Int => Some(Kind::Int),
+        LispFwdType::Obj | LispFwdType::BufferObj | LispFwdType::KboardObj => None,
+    }
+}
+
 pub(crate) fn dump_symbol_data(
     encoder: &mut DumpEncoder,
     sd: &LispSymbol,
@@ -2614,12 +2632,13 @@ pub(crate) fn dump_symbol_data(
             DumpSymbolVal::Alias(dump_sym_id(target))
         }
         SymbolRedirect::Localized => {
-            // Read the BLV to get the global default and local_if_set flag.
+            // Read the BLV to get the global default, the local_if_set flag and
+            // the forwarder `make_blv` copied across (`src/data.c:2112-2140`).
             // The BLV is heap-allocated and valid while sd is alive.
-            let (default_val, local_if_set) = unsafe {
+            let (default_val, local_if_set, forwarder) = unsafe {
                 let blv = &*sd.val.blv;
                 let default_val = blv.defcell.cons_cdr();
-                (default_val, blv.local_if_set)
+                (default_val, blv.local_if_set, blv.fwd.map(|fwd| fwd.ty))
             };
             let default_val = match dynamic_default {
                 Some(Some(value)) => value,
@@ -2629,6 +2648,7 @@ pub(crate) fn dump_symbol_data(
             DumpSymbolVal::Localized {
                 default: encoder.dump_value(&default_val),
                 local_if_set,
+                forwarder: forwarder.and_then(dump_localized_forwarder),
             }
         }
         SymbolRedirect::Forwarded => {
@@ -4318,12 +4338,23 @@ pub(crate) fn load_obarray(
         if let DumpSymbolVal::Localized {
             default,
             local_if_set,
+            forwarder,
         } = &sd.val
         {
             let default_val = decoder.load_value(default);
             obarray.make_symbol_localized(*sym_id, default_val);
             if *local_if_set {
                 obarray.set_blv_local_if_set(*sym_id, true);
+            }
+            // `make_blv` moved the declaration's descriptor into the BLV
+            // (`src/data.c:2112-2140`) and a process-lifetime pointer cannot
+            // travel in the image, so give the BLV an equivalent one back,
+            // seeded from the default the dump did carry.  Without this a
+            // `DEFVAR_BOOL`/`DEFVAR_INT` variable Lisp localized would come
+            // back as an ordinary buffer-local cell that neither coerces nor
+            // type-checks.
+            if let Some(kind) = forwarder {
+                obarray.reattach_localized_forwarder(*sym_id, *kind);
             }
             // Restore non-redirect flags from the dump — make_symbol_localized
             // only sets the redirect bit, leaving trapped_write / interned /
@@ -4359,13 +4390,6 @@ pub(crate) fn load_obarray(
         let fwd = crate::emacs_core::forward::alloc_intfwd(checked);
         obarray.install_intfwd(sym_id, fwd);
     }
-
-    // A `DEFVAR_BOOL` variable Lisp made buffer-local dumps as `Localized`,
-    // not as a forwarder: `make_blv` moved the descriptor into the BLV
-    // (`src/data.c:2112-2140`) and the image can only carry the value it held.
-    // Rebuild those descriptors from GNU's declaration table so the coercion
-    // survives a dump the way it survives GNU's relocated C statics.
-    crate::emacs_core::defvar_bool::reattach_localized_bool_forwarders(&mut obarray);
 
     Ok(obarray)
 }

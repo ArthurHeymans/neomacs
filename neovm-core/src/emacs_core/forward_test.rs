@@ -490,3 +490,176 @@ fn defvar_bool_coercion_survives_let_set_default_and_buffer_local_like_gnu() {
         in_fresh_buffer("(progn (set (make-local-variable 'indent-tabs-mode) 4) indent-tabs-mode)");
     assert_eq!(format_eval_result(&eval.eval_str(&form)), "OK t");
 }
+
+/// `display-line-numbers-offset` is GNU's one variable that is `DEFVAR_INT`
+/// AND `Fmake_variable_buffer_local`, in that order (`src/xdisp.c:38999-39005`).
+/// `make_blv` copies the descriptor into the BLV (`src/data.c:2112-2140`), so
+/// the integer rule has to survive into the per-buffer binding.  Measured under
+/// GNU 31.0.90, `-Q --batch`:
+///
+/// ```elisp
+/// (local-variable-if-set-p 'display-line-numbers-offset)     ;; => t
+/// (set-default 'display-line-numbers-offset "x")             ;; => wrong-type-argument
+/// (with-temp-buffer (setq-local display-line-numbers-offset 3)
+///                   (list display-line-numbers-offset
+///                         (default-value 'display-line-numbers-offset)))  ;; => (3 0)
+/// ```
+#[test]
+fn buffer_local_defvar_int_keeps_its_type_rule_like_gnu() {
+    use crate::emacs_core::intern::intern;
+    let mut eval = ev();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str("(default-value 'display-line-numbers-offset)")),
+        "OK 0"
+    );
+    assert!(
+        eval.obarray()
+            .blv(intern("display-line-numbers-offset"))
+            .is_some_and(|blv| blv.local_if_set && blv.fwd.is_some()),
+        "the BLV must carry the descriptor `make_blv' copied into it"
+    );
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(condition-case e (set-default 'display-line-numbers-offset \"x\") (error (car e)))"
+        )),
+        "OK wrong-type-argument"
+    );
+    let form = in_fresh_buffer(
+        "(progn (set (make-local-variable 'display-line-numbers-offset) 3)
+                (list display-line-numbers-offset
+                      (default-value 'display-line-numbers-offset)))",
+    );
+    assert_eq!(format_eval_result(&eval.eval_str(&form)), "OK (3 0)");
+    let refuse = in_fresh_buffer(
+        "(condition-case e
+             (set (make-local-variable 'display-line-numbers-offset) \"x\")
+           (error (car e)))",
+    );
+    assert_eq!(
+        format_eval_result(&eval.eval_str(&refuse)),
+        "OK wrong-type-argument"
+    );
+
+    // GNU's other `DEFVAR_INT' + `Fmake_variable_buffer_local' pair
+    // (`src/syntax.c:3773-3778').  Measured under GNU:
+    // `(set-default 'syntax-propertize--done "x")' => wrong-type-argument,
+    // `(default-value 'syntax-propertize--done)' => -1.
+    assert!(
+        eval.obarray()
+            .blv(intern("syntax-propertize--done"))
+            .is_some_and(|blv| blv.local_if_set && blv.fwd.is_some())
+    );
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(condition-case e (set-default 'syntax-propertize--done \"x\") (error (car e)))"
+        )),
+        "OK wrong-type-argument"
+    );
+    assert_eq!(
+        format_eval_result(&eval.eval_str("(default-value 'syntax-propertize--done)")),
+        "OK -1"
+    );
+}
+
+/// The eight `DEFVAR_INT` variables entry 132 recorded as having no Neomacs
+/// declaration at all.  Values measured under GNU 31.0.90, `-Q --batch`;
+/// `command-line-max-length` and `strings-consed` are asserted by shape because
+/// one is `sysconf (_SC_ARG_MAX) / 4` and the other is a live counter.
+#[test]
+fn the_remaining_gnu_defvar_int_variables_are_declared_with_gnus_values() {
+    let mut eval = ev();
+
+    for (name, expected) in [
+        ("large-hscroll-threshold", "OK 10000"),
+        ("long-line-optimizations-bol-search-limit", "OK 128"),
+        ("long-line-optimizations-region-size", "OK 500000"),
+        ("max-redisplay-ticks", "OK 0"),
+        ("x-color-cache-bucket-size", "OK 128"),
+        ("x-mouse-click-focus-ignore-time", "OK 200"),
+    ] {
+        assert_eq!(format_eval_result(&eval.eval_str(name)), expected, "{name}");
+    }
+    assert_eq!(
+        format_eval_result(
+            &eval
+                .eval_str("(and (integerp command-line-max-length) (> command-line-max-length 0))")
+        ),
+        "OK t"
+    );
+    assert_eq!(format_eval_result(&eval.eval_str("strings-consed")), "OK 0");
+    // Each one is a real forwarder, not a plain cell that happens to hold an
+    // integer: `(setq X "x")` is GNU's `wrong-type-argument`.
+    for name in [
+        "command-line-max-length",
+        "large-hscroll-threshold",
+        "long-line-optimizations-bol-search-limit",
+        "long-line-optimizations-region-size",
+        "max-redisplay-ticks",
+        "strings-consed",
+        "x-color-cache-bucket-size",
+        "x-mouse-click-focus-ignore-time",
+    ] {
+        let form = format!("(condition-case e (setq {name} \"x\") (error (car e)))");
+        assert_eq!(
+            format_eval_result(&eval.eval_str(&form)),
+            "OK wrong-type-argument",
+            "{name}"
+        );
+    }
+}
+
+/// `baud-rate` is the only `DEFVAR_INT` GNU declares with no initializer
+/// (`src/dispnew.c:7488`): the C global starts at 0 and only a terminal
+/// initialization ever writes it.  A [`Context`] has no terminal, which is the
+/// `--batch` case GNU reports 0 for.
+#[test]
+fn baud_rate_starts_at_the_c_globals_zero_like_gnu() {
+    let mut eval = ev();
+
+    assert_eq!(format_eval_result(&eval.eval_str("baud-rate")), "OK 0");
+    assert_eq!(
+        format_eval_result(
+            &eval.eval_str("(condition-case e (setq baud-rate \"x\") (error (car e)))")
+        ),
+        "OK wrong-type-argument"
+    );
+    assert_eq!(format_eval_result(&eval.eval_str("baud-rate")), "OK 0");
+}
+
+/// The platform names `cus-start.el` mentions but this build does not declare.
+/// GNU leaves all of them unbound on GNU/Linux, so binding them is invented
+/// existence -- `(boundp 'dos-hyper-key)` must answer `nil`.
+#[test]
+fn platform_variables_gnu_leaves_unbound_here_are_not_bound() {
+    let mut eval = ev();
+
+    for name in [
+        "dos-hyper-key",
+        "dos-super-key",
+        "dos-keypad-mode",
+        "imagemagick-render-type",
+        "xwidget-internal",
+        "ns-antialias-text",
+        "w32-follow-system-dark-mode",
+        "haiku-use-system-tooltips",
+    ] {
+        assert_eq!(
+            format_eval_result(&eval.eval_str(&format!("(boundp '{name})"))),
+            "OK nil",
+            "{name} is unbound under GNU on this platform"
+        );
+    }
+    // The `cus-start.el` platform names GNU DOES bind here stay bound.
+    for name in [
+        "window-combination-limit",
+        "void-text-area-pointer",
+        "vertical-centering-font-regexp",
+    ] {
+        assert_eq!(
+            format_eval_result(&eval.eval_str(&format!("(boundp '{name})"))),
+            "OK t",
+            "{name} is bound under GNU on this platform"
+        );
+    }
+}

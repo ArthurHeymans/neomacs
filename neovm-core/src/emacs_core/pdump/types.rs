@@ -412,9 +412,12 @@ pub enum DumpSymbolVal {
     /// `SymbolRedirect::Localized` — buffer-local variable with a BLV.
     /// `default` is the global default value (the `defcell` cdr).
     /// `local_if_set` mirrors `LispBufferLocalValue::local_if_set`.
+    /// `forwarder` mirrors `LispBufferLocalValue::fwd` — see
+    /// [`DumpLocalizedForwarder`].
     Localized {
         default: DumpValue,
         local_if_set: bool,
+        forwarder: Option<DumpLocalizedForwarder>,
     },
     /// `SymbolRedirect::Forwarded` — forwarded to a Rust-side variable.
     /// These are re-installed from `BUFFER_SLOT_INFO` at load time, so
@@ -429,6 +432,28 @@ pub enum DumpSymbolVal {
     /// As with `BoolForwarded`, only the slot's current integer is portable;
     /// the descriptor is rebuilt on load.
     IntForwarded(DumpValue),
+}
+
+/// The forward types a `Localized` symbol's BLV can be carrying.
+///
+/// GNU's `make_blv` copies the symbol's forwarder into the BLV
+/// (`src/data.c:2112-2140`), so a `DEFVAR_BOOL` or `DEFVAR_INT` variable that
+/// Lisp then made buffer-local -- `indent-tabs-mode`,
+/// `display-line-numbers-offset` -- keeps its coercion and its type check per
+/// buffer.  GNU needs nothing in its dump for that, because its slots are C
+/// statics the dumper relocates; here the descriptor is a process-lifetime
+/// pointer that cannot travel, so the image has to say which kind to rebuild.
+///
+/// Only the two forward types whose storage IS the descriptor appear:
+/// `Lisp_Fwd_Obj` / `Lisp_Fwd_Buffer_Obj` / `Lisp_Fwd_Kboard_Obj` keep their
+/// value elsewhere, which is the same distinction `LispFwd::clone_stateful`
+/// makes.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DumpLocalizedForwarder {
+    /// GNU `Lisp_Fwd_Bool` — `*XBOOLVAR (valcontents) = !NILP (newval)`.
+    Bool,
+    /// GNU `Lisp_Fwd_Int` — `CHECK_INTEGER` then `integer_to_intmax`.
+    Int,
 }
 
 /// Serialized per-symbol metadata.  Format v21: all legacy fields

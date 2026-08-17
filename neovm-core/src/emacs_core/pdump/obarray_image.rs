@@ -9,7 +9,7 @@ use bytemuck::{Pod, Zeroable};
 
 use super::DumpError;
 use super::object_value_codec::{Cursor, write_bool, write_u8, write_u32, write_value};
-use super::types::{DumpObarray, DumpSymId, DumpSymbolData, DumpSymbolVal};
+use super::types::{DumpLocalizedForwarder, DumpObarray, DumpSymId, DumpSymbolData, DumpSymbolVal};
 
 const OBARRAY_MAGIC: [u8; 16] = *b"NEOOBARRAY\0\0\0\0\0\0";
 const OBARRAY_FORMAT_VERSION: u32 = 2;
@@ -193,6 +193,35 @@ fn read_symbol_data(cursor: &mut Cursor<'_>) -> Result<DumpSymbolData, DumpError
     })
 }
 
+/// Tag byte for the forwarder a `Localized` symbol's BLV carries (pdump v58).
+///
+/// `make_blv` copies the declaration's descriptor into the BLV
+/// (`src/data.c:2112-2140`), and the descriptor is a process-lifetime pointer,
+/// so the image records the KIND and `load_obarray` rebuilds an equivalent one
+/// from the default it also carries.
+const LOCALIZED_FWD_NONE: u8 = 0;
+const LOCALIZED_FWD_BOOL: u8 = 1;
+const LOCALIZED_FWD_INT: u8 = 2;
+
+fn encode_localized_forwarder(kind: Option<DumpLocalizedForwarder>) -> u8 {
+    match kind {
+        None => LOCALIZED_FWD_NONE,
+        Some(DumpLocalizedForwarder::Bool) => LOCALIZED_FWD_BOOL,
+        Some(DumpLocalizedForwarder::Int) => LOCALIZED_FWD_INT,
+    }
+}
+
+fn decode_localized_forwarder(tag: u8) -> Result<Option<DumpLocalizedForwarder>, DumpError> {
+    match tag {
+        LOCALIZED_FWD_NONE => Ok(None),
+        LOCALIZED_FWD_BOOL => Ok(Some(DumpLocalizedForwarder::Bool)),
+        LOCALIZED_FWD_INT => Ok(Some(DumpLocalizedForwarder::Int)),
+        other => Err(DumpError::ImageFormatError(format!(
+            "unknown localized forwarder tag {other}"
+        ))),
+    }
+}
+
 fn write_symbol_val(out: &mut Vec<u8>, val: &DumpSymbolVal) -> Result<(), DumpError> {
     match val {
         DumpSymbolVal::Plain(value) => {
@@ -206,10 +235,12 @@ fn write_symbol_val(out: &mut Vec<u8>, val: &DumpSymbolVal) -> Result<(), DumpEr
         DumpSymbolVal::Localized {
             default,
             local_if_set,
+            forwarder,
         } => {
             write_u8(out, SYMBOL_VAL_LOCALIZED);
             write_value(out, default)?;
             write_bool(out, *local_if_set);
+            write_u8(out, encode_localized_forwarder(*forwarder));
         }
         DumpSymbolVal::Forwarded => write_u8(out, SYMBOL_VAL_FORWARDED),
         DumpSymbolVal::BoolForwarded(value) => {
@@ -233,6 +264,7 @@ fn read_symbol_val(cursor: &mut Cursor<'_>) -> Result<DumpSymbolVal, DumpError> 
         SYMBOL_VAL_LOCALIZED => Ok(DumpSymbolVal::Localized {
             default: cursor.read_value()?,
             local_if_set: cursor.read_bool("localized local-if-set")?,
+            forwarder: decode_localized_forwarder(cursor.read_u8("localized forwarder kind")?)?,
         }),
         SYMBOL_VAL_FORWARDED => Ok(DumpSymbolVal::Forwarded),
         SYMBOL_VAL_BOOL_FORWARDED => Ok(DumpSymbolVal::BoolForwarded(
@@ -276,6 +308,7 @@ mod tests {
                         val: DumpSymbolVal::Localized {
                             default: DumpValue::Symbol(DumpSymId(1)),
                             local_if_set: true,
+                            forwarder: Some(DumpLocalizedForwarder::Int),
                         },
                         function: DumpValue::Nil,
                         plist: DumpValue::Unbound,

@@ -5687,7 +5687,16 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("display-line-numbers-current-absolute", Value::T);
     obarray.make_special("display-line-numbers-current-absolute");
     defvar_buffer_local(obarray, "display-line-numbers-widen", Value::NIL);
-    defvar_buffer_local(obarray, "display-line-numbers-offset", Value::fixnum(0));
+    // `display-line-numbers-offset' is BOTH, and in this order
+    // (`src/xdisp.c:38999-39005'): `DEFVAR_INT' first, then
+    // `Fmake_variable_buffer_local'.  `make_blv' copies the descriptor into the
+    // BLV (`src/data.c:2112-2140'), so the integer rule applies to a per-buffer
+    // binding as well as to the default -- `(setq-local
+    // display-line-numbers-offset "x")' is `(wrong-type-argument integerp "x")'
+    // in GNU.  Registering it as a plain buffer-local cell got the locality and
+    // dropped the type.
+    obarray.define_int_variable("display-line-numbers-offset", 0);
+    obarray.make_buffer_local("display-line-numbers-offset", true);
     defvar_buffer_local(obarray, "display-fill-column-indicator", Value::NIL);
     // GNU `src/xdisp.c:38644-38652` defines this with DEFVAR_LISP,
     // initializes it to Qt, then calls Fmake_variable_buffer_local.
@@ -5833,6 +5842,9 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // it unbound lets simple.el install GNU's default.
     obarray.define_int_variable("display-line-numbers-major-tick", 0);
     obarray.define_int_variable("display-line-numbers-minor-tick", 0);
+    // xdisp.c:39295 DEFVAR_INT, init 0 ("The default value is zero, which
+    // disables this feature").
+    obarray.define_int_variable("max-redisplay-ticks", 0);
     // GNU `src/xdisp.c:38428-38438` defines this with DEFVAR_LISP,
     // initializes it to nil, then calls Fmake_variable_buffer_local.
     // `jit-lock.el` installs `jit-lock-function` here buffer-locally.

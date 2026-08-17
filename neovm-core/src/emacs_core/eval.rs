@@ -4076,45 +4076,16 @@ impl Context {
         // debug-on-event is registered (init sigusr2, keyboard.c:14358) by
         // keyboard::pure::register_bootstrap_vars.
         obarray.set_symbol_value("debug-on-signal", Value::NIL);
-        // Remaining cus-start.el variables (general + platform stubs)
-        for name in [
-            "imagemagick-render-type",
-            "window-combination-limit",
-            "void-text-area-pointer",
-            "x-bitmap-file-path",
-            "x-gtk-use-system-tooltips",
-            "x-scroll-event-delta-factor",
-            "x-auto-preserve-selections",
-            "xwidget-internal",
-            "temporary-file-directory",
-            "vertical-centering-font-regexp",
-            "ns-control-modifier",
-            "ns-right-control-modifier",
-            "ns-command-modifier",
-            "ns-right-command-modifier",
-            "ns-alternate-modifier",
-            "ns-right-alternate-modifier",
-            "ns-function-modifier",
-            "ns-antialias-text",
-            "ns-auto-hide-menu-bar",
-            "ns-confirm-quit",
-            "ns-use-native-fullscreen",
-            "ns-use-fullscreen-animation",
-            "ns-use-srgb-colorspace",
-            "ns-scroll-event-delta-factor",
-            "ns-click-through",
-            "w32-follow-system-dark-mode",
-            "dos-display-scancodes",
-            "dos-hyper-key",
-            "dos-super-key",
-            "dos-keypad-mode",
-            "dos-unsupported-char-glyph",
-            "haiku-debug-on-fatal-error",
-            "haiku-use-system-tooltips",
-            "xwidget-webkit-disable-javascript",
-        ] {
-            obarray.set_symbol_value(name, Value::NIL);
-        }
+        // Remaining cus-start.el variables (general + platform names).
+        // `temporary-file-directory' is not one of the platform names -- GNU
+        // declares it in `filelock.c:814' for every build, with the same nil
+        // init -- so it keeps its own seed here.
+        obarray.set_symbol_value("temporary-file-directory", Value::NIL);
+        // The 32 names whose C declaration belongs to a platform are a table
+        // now, because 25 of them are ones GNU leaves UNBOUND in a build like
+        // this one; seeding those made `boundp' disagree with GNU.  See
+        // `cus_start_platform_vars::GnuBinding'.
+        super::cus_start_platform_vars::register_bootstrap_vars(obarray);
 
         // GNU DEFVAR_LISP variables from lread.c that must be bound to nil
         // before any Elisp runs (code may test `boundp` or read them directly).
@@ -4202,12 +4173,30 @@ impl Context {
         obarray.make_special("debugger");
         obarray.set_symbol_value("standard-output", Value::T);
         // GNU DEFVAR_INT from dispnew.c — used by bytecomp.el
-        // dispnew.c:7488 DEFVAR_INT; the live value comes from init_baud_rate
-        // (sysdep.c) at terminal init -- 38400 is the modern-pty value.
-        obarray.define_int_variable("baud-rate", 38400);
+        // `src/dispnew.c:7488' DEFVAR_INT -- declared with NO initializer
+        // beside it and no `init_*' that supplies one either, which is the
+        // whole point: the C global lives in `globals' and starts at 0, and the
+        // only things that
+        // ever write it are `init_baud_rate' from `init_tty'
+        // (`src/term.c:4755', `4923') and the `baud_rate = 19200' a window
+        // system's terminal init does (`src/xterm.c:32279',
+        // `src/pgtkterm.c:7034').  `--batch' creates no terminal, so GNU
+        // reports 0 there.  `neomacs-bin' does those two assignments at the
+        // same two places; this seed is the zero underneath them.
+        obarray.define_int_variable("baud-rate", 0);
         obarray.set_symbol_value("search-slow-speed", Value::fixnum(1200));
         // GNU startup.el sets these based on --debug-init
         obarray.set_symbol_value("init-file-debug", Value::NIL);
+        // `src/callproc.c:2240-2252' DEFVAR_INT: `sysconf (_SC_ARG_MAX) / 4'
+        // where that is available, else 4096.  GNU divides by four "as a crude
+        // way to go bytes->characters"; `multiple-command-partition-arguments'
+        // is the caller.  Computed here rather than pinned to a constant for
+        // the same reason GNU asks the C library: it is a property of the
+        // machine, not of the editor.
+        obarray.define_int_variable(
+            "command-line-max-length",
+            super::callproc::command_line_max_length(),
+        );
         // GNU callproc.c: exec-path is built from PATH env var.
         // exec-directory is the directory containing helper programs.
         let exec_path: Vec<Value> = super::load::exec_path_dirs_from_env()
@@ -5191,6 +5180,13 @@ impl Context {
         obarray.make_special("post-self-insert-hook");
 
         // --- src/buffer.c: syms_of_buffer ---
+        // The three long-line DEFVAR_INTs, in GNU's declaration order
+        // (`src/buffer.c:6007', `6025', `6043').  `long-line-optimizations-p'
+        // consults the first two through `narrow-to-region' around the command
+        // hooks and the third through the hscroll shortcut.
+        obarray.define_int_variable("long-line-optimizations-region-size", 500_000);
+        obarray.define_int_variable("long-line-optimizations-bol-search-limit", 128);
+        obarray.define_int_variable("large-hscroll-threshold", 10_000);
         // GNU registers overlay hook property names with DEFSYM.  They are
         // globally interned symbols, not variables.
         for name in ["insert-in-front-hooks", "insert-behind-hooks"] {
@@ -5246,6 +5242,9 @@ impl Context {
         obarray.set_symbol_value("cairo-version-string", Value::string("1.18.4"));
         obarray.make_special("cairo-version-string");
         obarray.define_int_variable("x-selection-timeout", 0);
+        // `src/xterm.c:32704' / `32922' DEFVAR_INT, inits 200 and 128.
+        obarray.define_int_variable("x-mouse-click-focus-ignore-time", 200);
+        obarray.define_int_variable("x-color-cache-bucket-size", 128);
         obarray.set_symbol_value("x-session-id", Value::NIL);
         obarray.make_special("x-session-id");
         obarray.set_symbol_value("x-session-previous-id", Value::NIL);
