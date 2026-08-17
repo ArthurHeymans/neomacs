@@ -682,6 +682,18 @@ impl StackCursor {
         unsafe { ctx.bc_buf.set_len(self.len) }
     }
 
+    /// Debug-only: mirror the live length into the context so
+    /// Context-side debug assertions (which cannot see the cursor) stay
+    /// accurate while the cursor remains live across the iterative call
+    /// transition. Release builds never observe the stale length on this
+    /// path.
+    #[cfg(debug_assertions)]
+    fn debug_sync_len(&self, ctx: &mut crate::emacs_core::eval::Context) {
+        debug_assert!(self.len <= ctx.bc_buf.capacity());
+        // SAFETY: same initialization argument as `publish`.
+        unsafe { ctx.bc_buf.set_len(self.len) }
+    }
+
     #[inline(always)]
     fn pop(&mut self) -> Option<Value> {
         if self.len == 0 {
@@ -2609,18 +2621,28 @@ impl<'a> Vm<'a> {
     #[inline(always)]
     fn install_iterative_interpreter_frame(
         &mut self,
+        cursor: &mut StackCursor,
         current: &mut InterpreterFrame,
         callee: PreparedInterpreterCallee,
         root_slot: ConsumedCallOperandRootSlot,
         nargs: usize,
     ) {
-        root_slot.install_exact_callee(&mut self.ctx.bc_buf, callee.value);
+        // Every stack mutation below goes through the LIVE cursor (GNU's
+        // setup_frame works on its register `top` the same way); the context
+        // is only consulted for capacity and, on the cold growth branch,
+        // synchronized around the reallocation.
+        // SAFETY: the root slot indexes a consumed caller operand strictly
+        // below the live length.
+        root_slot.install_exact_callee(
+            unsafe { std::slice::from_raw_parts_mut(cursor.base, cursor.len) },
+            callee.value,
+        );
         let args_start = root_slot.args_start();
         let func = callee.code();
         debug_assert!(self.can_enter_interpreter_frame_iteratively(func, nargs));
         let condition_stack_base = self.ctx.condition_stack_len();
         let specpdl_base = self.ctx.specpdl.len();
-        let frame_base = self.ctx.bc_buf.len();
+        let frame_base = cursor.len;
         debug_assert!(args_start + nargs <= frame_base);
         let frame_limit = frame_base
             .checked_add(func.max_stack as usize)
@@ -2629,15 +2651,33 @@ impl<'a> Vm<'a> {
         #[cfg(test)]
         observe_iterative_context_bc_frames_len(self.ctx.bc_frames.len());
         if self.ctx.bc_buf.capacity() < frame_limit {
-            self.ctx
-                .bc_buf
-                .reserve_exact(frame_limit - self.ctx.bc_buf.len());
+            // Cold growth: sync the live length, let the Vec reallocate,
+            // rearm the base pointer.
+            // SAFETY: same initialization argument as `StackCursor::publish`.
+            unsafe { self.ctx.bc_buf.set_len(cursor.len) };
+            self.ctx.bc_buf.reserve_exact(frame_limit - cursor.len);
+            cursor.base = self.ctx.bc_buf.as_mut_ptr();
         }
 
         let nonrest = func.params.required.len() + func.params.optional.len();
-        copy_frame_arguments(&mut self.ctx.bc_buf, args_start, nargs);
-        for _ in nargs..nonrest {
-            self.ctx.bc_buf.push(Value::NIL);
+        // GNU setup_frame's PUSH loop on the live cursor: copy the incoming
+        // arguments into the fresh frame, then nil-fill missing optionals.
+        // SAFETY: capacity >= frame_limit >= frame_base + nonrest
+        // (`can_enter` proved `nonrest <= max_stack`), the source span
+        // [args_start, args_start + nargs) sits at or below frame_base so the
+        // regions are disjoint, and every written slot lands below the new
+        // length.
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                cursor.base.add(args_start),
+                cursor.base.add(cursor.len),
+                nargs,
+            );
+            cursor.len += nargs;
+            for _ in nargs..nonrest {
+                *cursor.base.add(cursor.len) = Value::NIL;
+                cursor.len += 1;
+            }
         }
 
         // Field-wise stores keep the freshly computed values register-resident
@@ -2755,8 +2795,14 @@ impl<'a> Vm<'a> {
     /// handed back to `complete_interpreter_frame_chain`; this fast path never
     /// approximates or skips an unwind.
     #[inline(always)]
+    /// The cursor stays LIVE through this fast path (GNU keeps `top` in a
+    /// register across `Breturn`): every stack mutation goes through it, the
+    /// context sees nothing, and only the `Exit`/`NeedsSlowCleanup` outcomes
+    /// require the caller to publish before leaving the driver's register
+    /// state. Nothing here allocates or reaches a GC safe point.
     fn complete_interpreter_frame_value(
         &mut self,
+        cursor: &mut StackCursor,
         current: &mut InterpreterFrame,
         callers: &mut InterpreterCallerStack,
         aux_stack: &mut InterpreterFrameAuxStack,
@@ -2782,7 +2828,7 @@ impl<'a> Vm<'a> {
             return InterpreterValueCompletion::NeedsSlowCleanup(value);
         }
 
-        self.ctx.bc_buf.truncate(current.frame_base);
+        cursor.truncate(current.frame_base);
 
         // SAFETY: the empty caller stack returned `Exit` above, and no code
         // between that proof and this pop can mutate `callers`.  GNU's
@@ -2794,8 +2840,17 @@ impl<'a> Vm<'a> {
         aux_stack.restore_current(InterpreterDriverDepth::from_suspended_callers(
             callers.len(),
         ));
-        self.deliver_interpreter_return_value(continuation.stack_after_call, value);
-        debug_assert!(self.ctx.bc_buf.len() <= current.frame_limit);
+        // GNU Breturn value delivery on the live cursor: the result lands in
+        // the consumed function-operand slot, everything above is discarded.
+        // SAFETY: `stack_after_call = args_start - 1 < frame_base`, and the
+        // truncate above set the cursor exactly to that frame_base.
+        let after = continuation.stack_after_call;
+        debug_assert!(after < cursor.len);
+        unsafe {
+            *cursor.base.add(after) = value;
+        }
+        cursor.len = after + 1;
+        debug_assert!(cursor.len <= current.frame_limit);
         InterpreterValueCompletion::Resume
     }
 
@@ -3018,6 +3073,12 @@ impl<'a> Vm<'a> {
         aux_stack: &mut InterpreterFrameAuxStack,
         driver_quitcounter: &mut u8,
     ) -> EvalResult {
+        // A6, extended across frames: base+len of the operand stack live in
+        // registers for the whole DRIVER, not just one frame (GNU keeps
+        // top/pc in locals across setup_frame/Breturn, bytecode.c). Escapes
+        // publish and reacquire; the iterative Bcall/Breturn transitions keep
+        // the cursor live.
+        let mut cursor = StackCursor::acquire(self.ctx);
         'frame: loop {
             let func = current.function.code();
             let frame_base = current.frame_base;
@@ -3041,12 +3102,6 @@ impl<'a> Vm<'a> {
             let mut osr_tried = current.resume.osr_tried();
             #[cfg(not(feature = "jit"))]
             let osr_tried = false;
-
-            // A6: base+len of the operand stack live in registers for the whole
-            // dispatch loop (GNU keeps top/pc in locals, bytecode.c). Every
-            // escape into Context/eval publishes first and reacquires after; the
-            // publish is a move, so a stale cursor use is a compile error.
-            let mut cursor = StackCursor::acquire(self.ctx);
 
             macro_rules! stk {
                 () => {
@@ -3084,7 +3139,10 @@ impl<'a> Vm<'a> {
                                 aux_stack,
                                 Err(flow),
                             ) {
-                                InterpreterFrameCompletion::Resume => continue 'frame,
+                                InterpreterFrameCompletion::Resume => {
+                                    cursor = StackCursor::acquire(self.ctx);
+                                    continue 'frame;
+                                }
                                 InterpreterFrameCompletion::Exit(result) => return result,
                             }
                         }
@@ -3097,18 +3155,33 @@ impl<'a> Vm<'a> {
                     let value = $value;
                     current.save_execution_state(pc_local, osr_tried);
                     *driver_quitcounter = quitcounter;
-                    match self.complete_interpreter_frame_value(current, callers, aux_stack, value)
-                    {
+                    // The fast Breturn keeps the cursor live; only leaving the
+                    // driver (Exit) or entering the generic unwind machinery
+                    // (chain) publishes, and a chain Resume reacquires.
+                    match self.complete_interpreter_frame_value(
+                        &mut cursor,
+                        current,
+                        callers,
+                        aux_stack,
+                        value,
+                    ) {
                         InterpreterValueCompletion::Resume => continue 'frame,
-                        InterpreterValueCompletion::Exit(value) => return Ok(value),
+                        InterpreterValueCompletion::Exit(value) => {
+                            cursor.publish(self.ctx);
+                            return Ok(value);
+                        }
                         InterpreterValueCompletion::NeedsSlowCleanup(value) => {
+                            cursor.publish(self.ctx);
                             match self.complete_interpreter_frame_chain(
                                 current,
                                 callers,
                                 aux_stack,
                                 Ok(value),
                             ) {
-                                InterpreterFrameCompletion::Resume => continue 'frame,
+                                InterpreterFrameCompletion::Resume => {
+                                    cursor = StackCursor::acquire(self.ctx);
+                                    continue 'frame;
+                                }
                                 InterpreterFrameCompletion::Exit(result) => return result,
                             }
                         }
@@ -3119,7 +3192,6 @@ impl<'a> Vm<'a> {
             macro_rules! return_value {
                 ($value:expr) => {{
                     let value = $value;
-                    cursor.publish(self.ctx);
                     complete_value!(value)
                 }};
             }
@@ -3248,6 +3320,10 @@ impl<'a> Vm<'a> {
                                     ctx_ptr, func, target, &snapshot,
                                 ) {
                                     Some(crate::emacs_core::jit::compile::NativeRun::Ok(bits)) => {
+                                        // Cold OSR exit: the native run left the
+                                        // context authoritative; rearm the cursor
+                                        // for the shared completion path.
+                                        cursor = StackCursor::acquire(&mut self.ctx);
                                         complete_value!(Value::from_bits(bits));
                                     }
                                     Some(crate::emacs_core::jit::compile::NativeRun::Signal) => {
@@ -3640,6 +3716,51 @@ impl<'a> Vm<'a> {
                             .as_ref()
                             .map(|_| stk!()[args_start..].iter().copied().collect::<LispArgVec>());
                         let result = if writeback_names.is_none() {
+                            if let ResolvedStackCallTarget::Interpreter { call } = target {
+                                // Iterative Bcall keeps the cursor LIVE across
+                                // the whole transition (GNU keeps `top` in a
+                                // register through setup_frame): no publish, no
+                                // reacquire, nothing here reaches a GC safe
+                                // point. The classify gate already proved the
+                                // callee sealed and stack-verified.
+                                if let Err(flow) = self.enter_bytecode_call_depth() {
+                                    cursor.publish(self.ctx);
+                                    resume_flow!(flow)
+                                }
+                                let prepared = call.callee();
+                                let callee_code = prepared.code();
+                                let callee_value = prepared.value();
+                                #[cfg(debug_assertions)]
+                                cursor.debug_sync_len(self.ctx);
+                                // The compact span always fits: nargs comes
+                                // from Op::Call(u16) and the operand index is
+                                // far below the span's start bound, so the
+                                // oversized fallback (which would read the
+                                // stale context stack) is unreachable here.
+                                let backtrace = self
+                                    .ctx
+                                    .push_backtrace_frame_from_bc_stack(func_val, args_start, n);
+                                current.save_execution_state(pc_local, osr_tried);
+                                *driver_quitcounter = quitcounter;
+                                let caller_depth =
+                                    InterpreterDriverDepth::from_suspended_callers(callers.len());
+                                aux_stack.suspend_current(caller_depth);
+                                callers.suspend_caller(
+                                    current,
+                                    BytecodeCallContinuation {
+                                        stack_after_call,
+                                        backtrace,
+                                    },
+                                );
+                                self.install_iterative_interpreter_frame(
+                                    &mut cursor,
+                                    current,
+                                    PreparedInterpreterCallee::new(callee_value, callee_code),
+                                    ConsumedCallOperandRootSlot::from_args_start(args_start),
+                                    n,
+                                );
+                                continue 'frame;
+                            }
                             cursor.publish(self.ctx);
                             if let Err(flow) = self.enter_bytecode_call_depth() {
                                 resume_flow!(flow)
@@ -3653,6 +3774,13 @@ impl<'a> Vm<'a> {
                                     nargs,
                                     backtrace,
                                 } => {
+                                    // Uncached ByteCode targets route through
+                                    // the tier dispatcher (heat/feedback) and
+                                    // may still enter iteratively; the cursor
+                                    // was published for that escape, so rearm
+                                    // it and take the same live-cursor
+                                    // installation as the cached fast path.
+                                    cursor = StackCursor::acquire(self.ctx);
                                     current.save_execution_state(pc_local, osr_tried);
                                     *driver_quitcounter = quitcounter;
                                     let caller_depth =
@@ -3668,7 +3796,11 @@ impl<'a> Vm<'a> {
                                         },
                                     );
                                     self.install_iterative_interpreter_frame(
-                                        current, callee, root_slot, nargs,
+                                        &mut cursor,
+                                        current,
+                                        callee,
+                                        root_slot,
+                                        nargs,
                                     );
                                     continue 'frame;
                                 }
