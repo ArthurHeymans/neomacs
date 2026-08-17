@@ -7659,8 +7659,8 @@ one:
 
 The premise held, and measuring the neighbouring forward types turned up two
 more holes of the same shape in `Lisp_Fwd_Bool', which Neomacs HAD wired --
-for exactly one variable, `inhibit-message'.  The bytecode `varset' never
-consulted the forwarder:
+for exactly one variable, `inhibit-message'.  A byte-compiled `setq'
+disagreed about what the variable then held:
 
 ```elisp
 (setq inhibit-message nil)
@@ -7670,6 +7670,22 @@ consulted the forwarder:
 ;; GNU                => (5 t t)
 ;; Neomacs before fix => (5 t 4)
 ```
+
+That third element is NOT the VM's `varset' skipping the forwarder, which is
+what it looks like and what this entry first assumed.  Disassembling both
+shows the divergence is decided at compile time: GNU compiles the body to
+`constant 4; constant t; return' while Neomacs compiles it to
+`constant 4; dup; return'.  GNU's optimizer folds a `varset X; varref X' pair
+into the stored value only after checking `byte-boolean-vars', "because what
+we put in might not be what we get out"
+(`lisp/emacs-lisp/byte-opt.el:2285-2300'), and substitutes `t' when the
+variable is on that list.  `byte-boolean-vars' is a `DEFVAR_LISP' in
+`src/lread.c:5772' that `defvar_bool' itself conses onto
+(`src/lread.c:5254-5262'), so it is the Boolean forward type's rule reaching
+the compiler.  Measured: GNU lists 117 symbols there, Neomacs listed 0 --
+`define_bool_variable' installed the descriptor and stopped.  The `setq'
+itself was already storing `t'; only the compiled function's own return value
+was the raw 4.
 
 and the first `make-local-variable' anywhere disarmed the forwarder for the
 whole session, in every buffer:
@@ -7796,6 +7812,10 @@ actually makes -- `set_internal' vs `do_specbind' vs `set_default_internal'
 -- instead of leaving "does the per-buffer predicate apply here?" to be
 re-derived at each site; it had already been derived two different ways.
 
+`define_bool_variable' now conses the symbol onto `byte-boolean-vars' the way
+`defvar_bool' does, so the registration function -- not its callers -- is what
+tells the byte optimizer about the coercion.
+
 43 variables changed storage (`neovm-core/src/emacs_core/symbol.rs',
 `define_int_variable').  `undo-limit''s `GnuIntVariable::NotAnIntSlotValue',
 which entry 123 added to name exactly this gap, is now unreachable for the
@@ -7822,6 +7842,12 @@ integer forwarder's value, matching what v56 did for the Boolean one.
   `x-mouse-click-focus-ignore-time'.
 - The six allocation counters (`cons-cells-consed' and friends) are
   forwarded and typed now, but still read 0 -- nothing increments them.
+- `byte-boolean-vars' now gets an entry from `define_bool_variable', but that
+  is one entry against GNU's 117: the other 116 GNU `DEFVAR_BOOL' variables
+  are still ordinary obarray cells here, so the byte optimizer will keep
+  folding their `varset'/`varref' pairs.  Wiring `Lisp_Fwd_Bool' for all of
+  them is the same shape of work this entry did for `Lisp_Fwd_Int' and is
+  deliberately not attempted here.
 - `Lisp_Fwd_Obj' and `Lisp_Fwd_Kboard_Obj' remain unwired.  Both enforce
   nothing on assignment, so no divergence follows from that; `DEFVAR_LISP'
   variables stay ordinary obarray cells, which is observationally identical.
