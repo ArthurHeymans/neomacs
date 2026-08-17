@@ -7862,8 +7862,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr_slice("-", super::builtins::arithmetic::builtin_sub_slice, 0, None);
     ctx.defsubr("*", |_ctx, args| builtin_mul(args), 0, None);
     ctx.defsubr("/", |_ctx, args| builtin_div(args), 1, None);
-    ctx.defsubr("%", |_ctx, args| builtin_percent(args), 2, Some(2));
-    ctx.defsubr("mod", |_ctx, args| builtin_mod(args), 2, Some(2));
+    ctx.defsubr_2("%", builtin_percent, 2);
+    ctx.defsubr_2("mod", builtin_mod, 2);
     ctx.defsubr_1("1+", builtin_add1_1, 1);
     ctx.defsubr_1("1-", builtin_sub1_1, 1);
     ctx.defsubr_slice("max", builtin_max_slice, 1, None);

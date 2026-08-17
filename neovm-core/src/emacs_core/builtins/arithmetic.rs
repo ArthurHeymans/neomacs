@@ -485,20 +485,55 @@ fn continue_bignum_div(rest: &[Value], mut acc: Integer) -> EvalResult {
 /// `(% X Y)` — integer remainder, mirrors GNU `Frem` (`src/data.c:3402`).
 ///
 /// Result has the same sign as the dividend (`mpz_tdiv_r` semantics).
-pub(crate) fn builtin_percent(args: Vec<Value>) -> EvalResult {
-    expect_args("%", &args, 2)?;
-    integer_remainder(&args[0], &args[1], false)
+pub(crate) fn builtin_percent(
+    _eval: &mut super::eval::Context,
+    num: Value,
+    den: Value,
+) -> EvalResult {
+    if let (Some(a), Some(b)) = (num.as_fixnum(), den.as_fixnum())
+        && b != 0
+    {
+        // |a % b| < |b|, so the result always fits a fixnum.
+        return Ok(Value::fixnum(a.checked_rem(b).unwrap_or_default()));
+    }
+    let num = check_integer_coerce_marker(&num)?;
+    let den = check_integer_coerce_marker(&den)?;
+    integer_remainder(&num, &den, false)
+}
+
+/// GNU `check_integer_coerce_marker` (`src/data.c`): fixnums and bignums
+/// pass through, markers coerce to their position, anything else signals
+/// `integer-or-marker-p` (floats included — `%` is integer-only, unlike
+/// `mod`).
+fn check_integer_coerce_marker(value: &Value) -> Result<Value, Flow> {
+    match value.kind() {
+        ValueKind::Fixnum(_) | ValueKind::Veclike(VecLikeType::Bignum) => Ok(*value),
+        _ if super::marker::is_marker(value) => Ok(Value::fixnum(
+            super::marker::marker_position_as_int(value)?,
+        )),
+        _ => Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("integer-or-marker-p"), *value],
+        )),
+    }
 }
 
 /// `(mod X Y)` — modulo, mirrors GNU `Fmod` (`src/data.c:3412`).
 ///
 /// Result has the same sign as the divisor.
-pub(crate) fn builtin_mod(args: Vec<Value>) -> EvalResult {
-    expect_args("mod", &args, 2)?;
-    if args[0].is_float() || args[1].is_float() {
+pub(crate) fn builtin_mod(_eval: &mut super::eval::Context, num: Value, den: Value) -> EvalResult {
+    if let (Some(a), Some(b)) = (num.as_fixnum(), den.as_fixnum())
+        && b != 0
+    {
+        let r = a.checked_rem(b).unwrap_or_default();
+        // Sign fixup toward the divisor; |r + b| < |b|, no overflow.
+        let r = if r != 0 && (r < 0) != (b < 0) { r + b } else { r };
+        return Ok(Value::fixnum(r));
+    }
+    if num.is_float() || den.is_float() {
         // GNU `fmod_float` path — float-modulo. Existing behavior.
-        let a = expect_number_or_marker_f64(&args[0])?;
-        let b = expect_number_or_marker_f64(&args[1])?;
+        let a = expect_number_or_marker_f64(&num)?;
+        let b = expect_number_or_marker_f64(&den)?;
         let r = a % b;
         let mut r = if r != 0.0 && (r < 0.0) != (b < 0.0) {
             r + b
@@ -510,7 +545,7 @@ pub(crate) fn builtin_mod(args: Vec<Value>) -> EvalResult {
         }
         return Ok(Value::make_float(r));
     }
-    integer_remainder(&args[0], &args[1], true)
+    integer_remainder(&num, &den, true)
 }
 
 /// Shared integer remainder for `%` and `mod`. Mirrors GNU
