@@ -12777,6 +12777,70 @@ fn c_defvar_lisp_hook_state_is_bound_and_special_like_gnu() {
     );
 }
 
+/// GNU `src/minibuf.c:2553-2559` DEFVARs `minibuffer-setup-hook' and
+/// `minibuffer-exit-hook' and initializes both to `Qnil'.  Every entry those
+/// hooks carry in a running Emacs is put there by an `add-hook' call in
+/// preloaded Lisp (simple.el, minibuffer.el, rfn-eshadow.el) while loadup
+/// runs, so the C level owns the *variable* and Lisp owns the *contents*.
+///
+/// `minibuffer-regexp-mode' has no C definition at all: it is the
+/// `define-minor-mode' at `lisp/minibuffer.el:5641', whose `defcustom' is
+/// initialized by `custom-initialize-after-file-load'.  That initializer ends
+/// in `custom-initialize-set' (`lisp/custom.el:68-82'), which does nothing at
+/// all when the symbol *already* has a default top-level value -- so a C-level
+/// seed does not merely duplicate the Lisp default, it suppresses the whole
+/// `:set' path and with it the mode body that installs the hooks.
+#[test]
+fn minibuffer_hooks_and_regexp_mode_are_lisp_owned_at_the_c_level_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        "(list (delq nil
+                    (mapcar (lambda (sym)
+                              (and (default-value sym) sym))
+                            '(after-insert-file-functions
+                              delete-terminal-functions
+                              display-monitors-changed-functions
+                              kbd-macro-termination-hook
+                              kill-emacs-hook
+                              minibuffer-exit-hook
+                              minibuffer-setup-hook
+                              mouse-leave-buffer-hook
+                              post-command-hook
+                              post-select-region-hook
+                              pre-command-hook
+                              resume-tty-functions
+                              suspend-tty-functions
+                              write-region-annotate-functions)))
+               (boundp 'minibuffer-regexp-mode))",
+    );
+    assert_eq!(results[0], "OK (nil nil)");
+}
+
+/// The preloaded value the two hooks reach once loadup has run every
+/// `add-hook' in the preloaded Lisp, in GNU's order.  `add-hook' conses onto
+/// the front, so the list reads newest-first: rfn-eshadow.el last,
+/// minibuffer.el's two delayed global modes before it (nonselected registers
+/// its `after-load-functions' closure after regexp's, so it runs first and
+/// ends up behind it), minibuffer.el's top-level `add-hook' before those, and
+/// simple.el's three at the tail.
+#[test]
+fn preloaded_minibuffer_hooks_match_gnu_add_hook_order() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        "(list (default-value 'minibuffer-setup-hook)
+               (default-value 'minibuffer-exit-hook))",
+    );
+    assert_eq!(
+        results[0],
+        "OK ((rfn-eshadow-setup-minibuffer minibuffer--regexp-setup \
+         minibuffer--nonselected-setup minibuffer-setup-on-screen-keyboard \
+         minibuffer-error-initialize minibuffer-history-isearch-setup \
+         minibuffer-history-initialize) \
+         (minibuffer--regexp-exit minibuffer--nonselected-exit \
+         minibuffer-exit-on-screen-keyboard minibuffer-restore-windows))"
+    );
+}
+
 #[test]
 fn system_type_matches_gnu_host_platform_symbol() {
     crate::test_utils::init_test_tracing();

@@ -4598,14 +4598,11 @@ impl Context {
         obarray.set_symbol_value("minibuffer--require-match", Value::NIL);
         obarray.set_symbol_value("minibuffer-auto-raise", Value::NIL);
         // minibuffer-follows-selected-frame is registered earlier in bootstrap.
-        obarray.define_special_variable(
-            "minibuffer-exit-hook",
-            Value::list(vec![
-                Value::symbol("minibuffer--regexp-exit"),
-                Value::symbol("minibuffer-exit-on-screen-keyboard"),
-                Value::symbol("minibuffer-restore-windows"),
-            ]),
-        );
+        // GNU src/minibuf.c:2557-2559 DEFVARs this hook and sets it to Qnil.
+        // minibuffer.el's `minibuffer--regexp-exit', `minibuffer--nonselected-exit'
+        // and `minibuffer-exit-on-screen-keyboard', plus `minibuffer-restore-windows',
+        // are all put here by `add-hook' while loadup runs.
+        obarray.define_c_hook_variable("minibuffer-exit-hook");
         obarray.set_symbol_value("minibuffer-completion-table", Value::NIL);
         obarray.set_symbol_value("minibuffer-completion-predicate", Value::NIL);
         obarray.set_symbol_value("minibuffer-completion-confirm", Value::NIL);
@@ -4615,7 +4612,15 @@ impl Context {
         obarray.set_symbol_value("minibuffer-completion-base", Value::NIL);
         obarray.set_symbol_value("minibuffer-help-form", Value::NIL);
         obarray.set_symbol_value("minibuffer-completing-file-name", Value::NIL);
-        obarray.set_symbol_value("minibuffer-regexp-mode", Value::T);
+        // `minibuffer-regexp-mode` belongs to lisp/minibuffer.el:5641, a global
+        // `define-minor-mode` whose `defcustom` is initialized by
+        // `custom-initialize-after-file-load`.  That initializer ends in
+        // `custom-initialize-set` (lisp/custom.el:68-82), which returns without
+        // doing anything when the symbol already has a default top-level value.
+        // A Rust seed here does not merely duplicate the Lisp default: it
+        // suppresses the `:set` function, so the mode body never runs and the
+        // mode never installs `minibuffer--regexp-setup` /
+        // `minibuffer--regexp-exit`, while the variable still reads t.
         obarray.set_symbol_value("minibuffer-regexp-mode-hook", Value::NIL);
         obarray.set_symbol_value(
             "minibuffer-regexp-prompts",
@@ -4686,17 +4691,11 @@ impl Context {
         obarray.set_symbol_value("minibuffer-history-case-insensitive-variables", Value::NIL);
         obarray.set_symbol_value("minibuffer-on-screen-keyboard-displayed", Value::NIL);
         obarray.set_symbol_value("minibuffer-on-screen-keyboard-timer", Value::NIL);
-        obarray.define_special_variable(
-            "minibuffer-setup-hook",
-            Value::list(vec![
-                Value::symbol("rfn-eshadow-setup-minibuffer"),
-                Value::symbol("minibuffer--regexp-setup"),
-                Value::symbol("minibuffer-setup-on-screen-keyboard"),
-                Value::symbol("minibuffer-error-initialize"),
-                Value::symbol("minibuffer-history-isearch-setup"),
-                Value::symbol("minibuffer-history-initialize"),
-            ]),
-        );
+        // GNU src/minibuf.c:2553-2555 DEFVARs this hook and sets it to Qnil.
+        // rfn-eshadow.el, minibuffer.el and simple.el `add-hook' their entries
+        // onto it while loadup runs, and `add-hook' conses onto the front, so
+        // the resulting order is a record of that preload order.
+        obarray.define_c_hook_variable("minibuffer-setup-hook");
         obarray.set_symbol_value("regexp-search-ring", Value::NIL);
         obarray.set_symbol_value("regexp-search-ring-max", Value::fixnum(16));
         obarray.set_symbol_value("regexp-search-ring-yank-pointer", Value::NIL);
