@@ -3090,17 +3090,36 @@ fn buffer_insert_lisp_string_from_lisp_string(
     string: &crate::heap_types::LispString,
     target_multibyte: bool,
 ) -> crate::heap_types::LispString {
-    let codes = buffer_insert_char_codes(string, target_multibyte);
+    // GNU `insert_from_string_1`/`copy_text`: when source and target share
+    // multibyteness the text copies verbatim — and GNU does NOT normalize
+    // the bytes, so a byte copy is also the faithful behavior. The previous
+    // decode-all-chars → re-encode-each-char round trip was an identity
+    // transform costing one Vec per character.
+    if string.is_multibyte() == target_multibyte {
+        return string.clone();
+    }
     if target_multibyte {
-        let mut bytes = Vec::new();
-        for code in codes {
-            bytes.extend_from_slice(
-                &encode_char_code_for_buffer_bytes(code, true)
-                    .expect("valid Emacs character code must encode into buffer bytes"),
-            );
+        let bytes = string.as_bytes();
+        // Unibyte ASCII is already valid canonical multibyte content.
+        if bytes.iter().all(|&byte| byte < 0x80) {
+            return crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
         }
-        lisp_string_from_buffer_bytes(bytes, true)
+        // Real conversion: raw 128-255 bytes become their (byte8) chars.
+        // Encode through one reused stack buffer, not a Vec per char.
+        let codes = buffer_insert_char_codes(string, true);
+        let mut out: Vec<u8> = Vec::with_capacity(bytes.len() * 2);
+        let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
+        for code in codes {
+            assert!(
+                code <= crate::emacs_core::emacs_char::MAX_CHAR,
+                "valid Emacs character code must encode into buffer bytes"
+            );
+            let len = crate::emacs_core::emacs_char::char_string(code, &mut buf);
+            out.extend_from_slice(&buf[..len]);
+        }
+        lisp_string_from_buffer_bytes(out, true)
     } else {
+        let codes = buffer_insert_char_codes(string, false);
         let bytes: Vec<u8> = codes
             .into_iter()
             .map(|code| {
