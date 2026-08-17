@@ -7333,6 +7333,22 @@ buffer is read with the same accept-process-output timing epc.el uses
 (the exec-failure line lands before the exit message); it was verified
 end-to-end through `epc:start-epc' with a nonexistent program.
 
+### nov-mode flow hangs in Neomacs batch
+
+The nov EPUB mode flow (find-file on an EPUB -> nov-mode -> work-dir
+initialization -> container/OPF parsing -> shr render) hangs in Neomacs
+--batch: the harness run stalls with the case active at the mode entry
+for the full 180s timeout, while the identical flow completes in GNU
+Emacs in milliseconds.  Bisecting the flow points at the require chain
+or the mode initialization, not at the unzip subprocess (a recording
+unzip stand-in does not change the hang) and not at a bare missing
+require (`(require 'definitely-not-a-feature)' completes in both
+editors).  The nov parity suite (7 GNU-green workflows: archive
+validation, container parse, mode init + metadata + rendered TOC,
+chapter navigation, metadata buffer, view-source, saved-place round
+trip, link parsing) is therefore not registered; it is shelved at the
+stub until the hang is root-caused.
+
 ### Found and NOT fixed here
 
 `make-process` has the same gap on its own precedence chain
