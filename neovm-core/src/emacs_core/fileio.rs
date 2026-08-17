@@ -7066,8 +7066,8 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.make_special("file-name-handler-alist");
     // fileio.c:6856-6944 DEFVAR_LISP cluster, all initialized to nil.
     obarray.define_special_variable("set-auto-coding-function", Value::NIL);
-    obarray.define_special_variable("after-insert-file-functions", Value::NIL);
-    obarray.define_special_variable("write-region-annotate-functions", Value::NIL);
+    obarray.define_c_hook_variable("after-insert-file-functions");
+    obarray.define_c_hook_variable("write-region-annotate-functions");
     obarray.define_special_variable("write-region-post-annotation-function", Value::NIL);
     obarray.define_special_variable("write-region-annotations-so-far", Value::NIL);
     obarray.set_symbol_value("inhibit-file-name-handlers", Value::NIL);

@@ -4354,7 +4354,7 @@ impl Context {
         obarray.make_special("executing-kbd-macro");
         obarray.set_symbol_value("executing-kbd-macro-index", Value::fixnum(0));
         obarray.make_special("executing-kbd-macro-index");
-        obarray.define_special_variable("kbd-macro-termination-hook", Value::NIL);
+        obarray.define_c_hook_variable("kbd-macro-termination-hook");
         obarray.set_symbol_value("command-history", Value::NIL);
         obarray.make_special("command-history");
         obarray.set_symbol_value("extended-command-history", Value::NIL);
@@ -4794,9 +4794,9 @@ impl Context {
         // registered by keyboard::pure::register_bootstrap_vars.
         obarray.set_symbol_value("echo-area-clear-hook", Value::NIL);
         // terminal.c:700 / term.c:5233 / term.c:5240 DEFVAR_LISP, init nil.
-        obarray.define_special_variable("delete-terminal-functions", Value::NIL);
-        obarray.define_special_variable("suspend-tty-functions", Value::NIL);
-        obarray.define_special_variable("resume-tty-functions", Value::NIL);
+        obarray.define_c_hook_variable("delete-terminal-functions");
+        obarray.define_c_hook_variable("suspend-tty-functions");
+        obarray.define_c_hook_variable("resume-tty-functions");
         obarray.set_symbol_value("overriding-local-map", Value::NIL);
         obarray.make_special("overriding-local-map");
         obarray.set_symbol_value("overriding-local-map-menu-flag", Value::NIL);
@@ -5282,8 +5282,7 @@ impl Context {
 
         // --- src/emacs.c: syms_of_emacs ---
         // DEFVAR_LISP, default nil. Run by kill-emacs.
-        obarray.set_symbol_value("kill-emacs-hook", Value::NIL);
-        obarray.make_special("kill-emacs-hook");
+        obarray.define_c_hook_variable("kill-emacs-hook");
 
         // --- src/cmds.c: syms_of_cmds ---
         // DEFVAR_LISP, default nil. `newline' dynamically binds this in
@@ -5305,8 +5304,8 @@ impl Context {
         // special before Lisp loadup: package functions compiled with lexical
         // binding rely on surrounding `let` forms remaining dynamically
         // visible while add-hook/remove-hook update the active value cell.
-        obarray.define_special_variable("pre-command-hook", Value::NIL);
-        obarray.define_special_variable("post-command-hook", Value::NIL);
+        obarray.define_c_hook_variable("pre-command-hook");
+        obarray.define_c_hook_variable("post-command-hook");
 
         // GNU registers this command-loop restriction label with DEFSYM.
         {
@@ -5325,7 +5324,7 @@ impl Context {
 
         // --- src/callint.c: syms_of_callint ---
         // DEFVAR_LISP, default nil.
-        obarray.define_special_variable("mouse-leave-buffer-hook", Value::NIL);
+        obarray.define_c_hook_variable("mouse-leave-buffer-hook");
 
         // --- src/xterm.c: syms_of_xterm / src/pgtkterm.c: syms_of_pgtkterm ---
         // GNU defines these from the compiled window-system backend before
