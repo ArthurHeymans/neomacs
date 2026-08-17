@@ -7665,7 +7665,12 @@ character-code conversion applied to it at all -- got it anyway:
 
 Measured with `-Q --batch` against GNU Emacs 31.0.90 and against a verified
 build of origin/main (`tmp/refbin/neomacs`); the probes are
-`tmp/pw131/pin.el` and `tmp/pw131/pin2.el`.
+`tmp/pw131/pin.el` and `tmp/pw131/pin2.el`.  After the fix the same probes run
+under a `cargo xtask fresh-build --release` binary answer byte-for-byte what
+GNU answers on every form above -- and on the two orderings below, and on the
+`set-process-buffer` case further down.  The only residue is the `raw-text-*`
+NAME `process-coding-system` reports for a unibyte buffer, which is the
+write-back recorded at the end of this entry; the decoded TEXT agrees.
 
 ### Why nothing noticed
 
