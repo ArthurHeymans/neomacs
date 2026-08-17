@@ -2094,7 +2094,7 @@ fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
     let deadline = std::time::Instant::now() + Duration::from_secs(1);
     let mut output = String::new();
     while std::time::Instant::now() < deadline && !output.contains('\n') {
-        if let Some(chunk) = processes.read_process_output(pid) {
+        if let Some(chunk) = processes.read_process_output(pid, ProcessOutputSink::DecodedText) {
             output.push_str(&process_output_runtime_string(&chunk));
         }
         processes.check_child_status_change(pid);
@@ -6376,11 +6376,17 @@ fn process_coding_tty_and_kill_buffer_query_runtime_surface() {
     let results = eval_all(&format!(
         // Bind `default-process-coding-system` to its real-startup value
         // (mule-cmds.el sets it to (utf-8-unix . utf-8-unix); the minimal unit
-        // bootstrap leaves the C default nil). A buffer-less network process
-        // with no :coding derives its coding from this variable, exactly like
-        // GNU `set_network_socket_coding_system`.
-        r#"(let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
-                 (p (start-process "proc-coding-tty-query" nil "{cat}")))
+        // bootstrap leaves it at (undecided-unix . utf-8-unix)). A buffer-less
+        // network process with no :coding derives its coding from this
+        // variable, exactly like GNU `set_network_socket_coding_system`.
+        //
+        // `let*`, not `let`: plain `let` evaluates every init form before any
+        // binding takes effect, so `start-process` would run under the ambient
+        // value and never see the one this form exists to establish.  That was
+        // invisible while `make-process` ignored the variable outright
+        // (DIVERGENCES.md entry 131) and the process coding was a Rust literal.
+        r#"(let* ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                  (p (start-process "proc-coding-tty-query" nil "{cat}")))
              (unwind-protect
                  (list
                   (equal (process-coding-system p) '(utf-8-unix . utf-8-unix))
@@ -8862,4 +8868,237 @@ fn accept_process_output_inside_a_kbd_macro_waits_like_gnu() {
         .expect("keyboard macro should execute");
 
     assert_eq!(format!("{result}"), "(t t)");
+}
+
+/// GNU `Fmake_process` resolves the coding system its child's output is
+/// DECODED with through a four-step chain (src/process.c:1950-1976): the
+/// `:coding` keyword's car, then `coding-system-for-read`, then the car of
+/// `(find-operation-coding-system 'start-process NAME BUFFER COMMAND...)` --
+/// i.e. `process-coding-system-alist` matched against the PROGRAM, because
+/// `start-process`'s `target-idx` is 2 (src/coding.c:11784) -- and finally the
+/// car of `default-process-coding-system`.
+///
+/// Every expected value below was measured by running tmp/pw131/pin2.el under
+/// GNU Emacs 31.0.90; none was derived.
+#[test]
+fn make_process_decode_coding_follows_gnu_precedence_chain() {
+    crate::test_utils::init_test_tracing();
+    let printf = find_bin("printf");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw131-chars (setup)
+               (let ((buf (generate-new-buffer " *pw131*")))
+                 (unwind-protect
+                     (let ((p (funcall setup buf)))
+                       (while (accept-process-output p 1))
+                       (while (process-live-p p) (accept-process-output p 0.05))
+                       (append (with-current-buffer buf (buffer-string)) nil))
+                   (kill-buffer buf))))
+             (defun pw131-spawn (buf &rest keys)
+               (apply #'make-process :name "pw131" :buffer buf :sentinel #'ignore
+                      :command (list "{printf}" "caf\\303\\251") keys))
+             (list
+              ;; `coding-system-for-read' wins outright, and a byte-faithful
+              ;; coding leaves the child's bytes as eight-bit characters.
+              (pw131-chars (lambda (b) (let ((coding-system-for-read 'binary))
+                                         (pw131-spawn b))))
+              ;; ... including a coding that really converts.
+              (pw131-chars (lambda (b) (let ((coding-system-for-read 'latin-1))
+                                         (pw131-spawn b))))
+              ;; `process-coding-system-alist', matched against the PROGRAM.
+              (pw131-chars (lambda (b)
+                             (let ((process-coding-system-alist
+                                    '(("printf" binary . binary))))
+                               (pw131-spawn b))))
+              ;; `default-process-coding-system'.
+              (pw131-chars (lambda (b)
+                             (let ((default-process-coding-system '(binary . binary)))
+                               (pw131-spawn b))))
+              ;; An explicit `:coding' beats `coding-system-for-read'.
+              (pw131-chars (lambda (b) (let ((coding-system-for-read 'binary))
+                                         (pw131-spawn b :coding 'utf-8))))
+              ;; `:coding (nil . X)' is still a PRESENT `:coding', so the nil car
+              ;; does NOT fall back to `coding-system-for-read' -- GNU's `else'
+              ;; branch at src/process.c:1957 is skipped and the chain resumes at
+              ;; the alist (src/process.c:1959-1976).
+              (pw131-chars (lambda (b) (let ((coding-system-for-read 'binary))
+                                         (pw131-spawn b :coding '(nil . latin-1)))))
+              ;; An undefined coding system signals rather than falling back.
+              (condition-case e
+                  (pw131-chars (lambda (b)
+                                 (let ((coding-system-for-read 'no-such-coding-xyz))
+                                   (pw131-spawn b))))
+                (error (list (car e) (cadr e))))
+              ;; With no PROGRAM there is nothing to match, so GNU never calls
+              ;; `find-operation-coding-system' at all (src/process.c:1970) and
+              ;; the chain lands on `default-process-coding-system', which is
+              ;; bound here rather than inherited so the pin does not encode the
+              ;; locale the test happens to run under.
+              (let* ((process-coding-system-alist '(("." binary . binary)))
+                     (default-process-coding-system '(utf-8-unix . utf-8-unix))
+                     (p (make-process :name "printf" :buffer nil :command nil)))
+                (prog1 (process-coding-system p) (delete-process p)))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(99 97 102 4194243 4194217) ",
+            "(99 97 102 195 169) ",
+            "(99 97 102 4194243 4194217) ",
+            "(99 97 102 4194243 4194217) ",
+            "(99 97 102 233) ",
+            "(99 97 102 233) ",
+            "(coding-system-error no-such-coding-xyz) ",
+            "(utf-8-unix . utf-8-unix))",
+        )
+    );
+}
+
+/// GNU decides an asynchronous process's decoder in TWO stages.  The chain
+/// above stores a coding system on the process; `setup_process_coding_systems`
+/// (src/process.c:8380-8409) then turns that into the decoder the bytes really
+/// go through, and it is there -- not in any of the five creation-time
+/// resolvers -- that a UNIBYTE destination drops character-code conversion
+/// while KEEPING end-of-line conversion (`raw_text_coding_system`,
+/// src/process.c:8398-8399).  The rule applies only when the process's filter
+/// is the internal default one and its buffer is a live unibyte buffer, so a
+/// Lisp filter never sees it.
+///
+/// Every expected value below was measured under GNU Emacs 31.0.90.
+#[test]
+fn make_process_unibyte_buffer_drops_character_conversion_but_keeps_eol() {
+    crate::test_utils::init_test_tracing();
+    let printf = find_bin("printf");
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw131-crlf (unibyte coding &optional filter)
+               (let ((buf (generate-new-buffer " *pw131*"))
+                     (seen nil))
+                 (unwind-protect
+                     (progn
+                       (when unibyte
+                         (with-current-buffer buf (set-buffer-multibyte nil)))
+                       (let ((p (apply #'make-process
+                                       :name "pw131" :buffer buf :sentinel #'ignore
+                                       :coding coding
+                                       :command (list "{printf}" "caf\\303\\251\\r\\n")
+                                       (when filter
+                                         (list :filter
+                                               (lambda (_p s)
+                                                 (setq seen (concat seen s))))))))
+                         (while (accept-process-output p 1))
+                         (while (process-live-p p) (accept-process-output p 0.05))
+                         (append (or seen (with-current-buffer buf (buffer-string)))
+                                 nil)))
+                   (kill-buffer buf))))
+             (list
+              ;; unibyte destination, DOS eol: no character conversion, but the
+              ;; CR is still eaten.
+              (pw131-crlf t 'utf-8-dos)
+              ;; unibyte destination, UNIX eol: no character conversion AND the
+              ;; CR survives -- the two halves disagree, so neither is guessable.
+              (pw131-crlf t 'utf-8-unix)
+              ;; multibyte destination: both halves apply.
+              (pw131-crlf nil 'utf-8-dos)
+              ;; a Lisp filter is handed decoded text, so the downgrade does not
+              ;; apply even though the process buffer is unibyte.
+              (pw131-crlf t 'utf-8-dos t)
+              ;; the rule also applies to the coding the CHAIN produced, not
+              ;; just to an explicit `:coding'.
+              (let ((buf (generate-new-buffer " *pw131*")))
+                (unwind-protect
+                    (progn
+                      (with-current-buffer buf (set-buffer-multibyte nil))
+                      (let ((p (make-process :name "pw131" :buffer buf
+                                             :sentinel #'ignore
+                                             :command (list "{printf}" "caf\\303\\251"))))
+                        (while (accept-process-output p 1))
+                        (while (process-live-p p) (accept-process-output p 0.05))
+                        (append (with-current-buffer buf (buffer-string)) nil)))
+                  (kill-buffer buf)))
+              ;; and it is re-decided against the process's CURRENT buffer.
+              ;; This process was created against a multibyte buffer and handed
+              ;; a unibyte one afterwards, which is why GNU re-runs
+              ;; `setup_process_coding_systems' from `set-process-buffer'
+              ;; (src/process.c:1312) rather than freezing the answer.
+              (let ((mb (generate-new-buffer " *pw131-mb*"))
+                    (ub (generate-new-buffer " *pw131-ub*")))
+                (unwind-protect
+                    (progn
+                      (with-current-buffer ub (set-buffer-multibyte nil))
+                      (let ((p (make-process
+                                :name "pw131" :buffer mb :sentinel #'ignore
+                                :coding 'utf-8-dos
+                                :command (list "{sh}" "-c"
+                                               "sleep 0.3; printf 'caf\\303\\251\\r\\n'"))))
+                        (set-process-buffer p ub)
+                        (while (accept-process-output p 1))
+                        (while (process-live-p p) (accept-process-output p 0.05))
+                        (append (with-current-buffer ub (buffer-string)) nil)))
+                  (kill-buffer mb)
+                  (kill-buffer ub)))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(99 97 102 195 169 10) ",
+            "(99 97 102 195 169 13 10) ",
+            "(99 97 102 233 10) ",
+            "(99 97 102 233 10) ",
+            "(99 97 102 195 169) ",
+            "(99 97 102 195 169 10))",
+        )
+    );
+}
+
+/// The ENCODE half of the same C block (src/process.c:1979-2007) runs the
+/// mirror-image chain -- `:coding`'s cdr, `coding-system-for-write`, the cdr of
+/// the `find-operation-coding-system` answer, the cdr of
+/// `default-process-coding-system` -- and `process-coding-system` reports both
+/// halves.
+///
+/// Every expected value below was measured under GNU Emacs 31.0.90.
+#[test]
+fn make_process_encode_coding_follows_gnu_precedence_chain() {
+    crate::test_utils::init_test_tracing();
+    let cat = find_bin("cat");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw131-coding (thunk)
+               (let ((p (funcall thunk)))
+                 (prog1 (process-coding-system p) (delete-process p))))
+             (list
+              ;; The decode half falls through to
+              ;; `default-process-coding-system', bound here so the pin does not
+              ;; encode the locale the test happens to run under.
+              (pw131-coding (lambda ()
+                              (let ((coding-system-for-write 'latin-1)
+                                    (default-process-coding-system
+                                     '(utf-8-unix . utf-8-unix)))
+                                (make-process :name "pw131" :buffer nil
+                                              :sentinel #'ignore
+                                              :command (list "{cat}")))))
+              (pw131-coding (lambda ()
+                              (let ((default-process-coding-system
+                                     '(latin-1 . koi8-r)))
+                                (make-process :name "pw131" :buffer nil
+                                              :sentinel #'ignore
+                                              :command (list "{cat}")))))
+              (pw131-coding (lambda ()
+                              (let ((process-coding-system-alist
+                                     '(("cat" latin-1 . koi8-r))))
+                                (make-process :name "pw131" :buffer nil
+                                              :sentinel #'ignore
+                                              :command (list "{cat}")))))))"#
+    ));
+
+    assert_eq!(
+        result,
+        "OK ((utf-8-unix . latin-1) (latin-1 . koi8-r) (latin-1 . koi8-r))"
+    );
 }

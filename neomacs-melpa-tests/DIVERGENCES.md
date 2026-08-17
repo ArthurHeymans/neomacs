@@ -7645,6 +7645,327 @@ behind it.
 
 Status: FIXED.
 
+## 131. Asynchronous subprocess output was decoded by a coding system invented in Rust, so `make-process` ignored `coding-system-for-read` and a unibyte process buffer still converted characters -- FIXED
+
+The half of entry 128 that entry 128 scoped out and handed on.  `call-process`
+now resolves its output coding system; `make-process`, `start-process` and
+everything built on them did not, and the reason they looked fine is that the
+answer they never computed happened to coincide with a literal.
+
+```elisp
+(let ((buf (generate-new-buffer " *p*")))
+  (let ((p (let ((coding-system-for-read 'binary))
+             (make-process :name "p" :buffer buf :sentinel #'ignore
+                           :command '("printf" "caf\\303\\251")))))
+    (while (accept-process-output p 1))
+    (while (process-live-p p) (accept-process-output p 0.05)))
+  (append (with-current-buffer buf (buffer-string)) nil))
+;; GNU                => (99 97 102 4194243 4194217)
+;; Neomacs before fix => (99 97 102 233)
+```
+
+4194243 and 4194217 are the eight-bit characters for the raw bytes `0xC3` and
+`0xA9`.  Every step of the chain was equally inert, an undefined coding system
+was accepted silently, and a unibyte process buffer -- which must not have
+character-code conversion applied to it at all -- got it anyway:
+
+| form (each ran `printf` through `make-process` into a process buffer) | GNU | Neomacs before fix |
+|---|---|---|
+| `coding-system-for-read` = `binary` / `no-conversion` / `raw-text` | `(99 97 102 4194243 4194217)` | `(99 97 102 233)` |
+| `coding-system-for-read` = `latin-1` | `(99 97 102 195 169)` | `(99 97 102 233)` |
+| `process-coding-system-alist` = `(("printf" binary . binary))` | `(99 97 102 4194243 4194217)` | `(99 97 102 233)` |
+| `default-process-coding-system` = `(binary . binary)` | `(99 97 102 4194243 4194217)` | `(99 97 102 233)` |
+| `:coding '(nil . latin-1)` under `coding-system-for-read` = `binary` | `(99 97 102 233)` | `(99 97 102 4194243 4194217)` |
+| `coding-system-for-read` = `no-such-coding-xyz` | `(coding-system-error no-such-coding-xyz)` | no error |
+| `:coding 'utf-8-dos`, UNIBYTE process buffer, child writes `caf<c3><a9>\r\n` | `(99 97 102 195 169 10)` | `(99 97 102 233 10)` |
+| `:coding 'utf-8-unix`, UNIBYTE process buffer, same child | `(99 97 102 195 169 13 10)` | `(99 97 102 233 13 10)` |
+| `coding-system-for-write` = `latin-1`, then `(process-coding-system p)` | `(utf-8-unix . latin-1)` | `(utf-8-unix . utf-8-unix)` |
+| `default-process-coding-system` = `(latin-1 . koi8-r)`, same | `(latin-1 . koi8-r)` | `(utf-8-unix . utf-8-unix)` |
+| `:coding 'no-such-xyz` with `:command '("no-such-program-xyz")` | `(file-missing "Searching for program")` | `(coding-system-error no-such-xyz)` |
+
+Measured with `-Q --batch` against GNU Emacs 31.0.90 and against a verified
+build of origin/main (`tmp/refbin/neomacs`); the probes are
+`tmp/pw131/pin.el` and `tmp/pw131/pin2.el`.  After the fix the same probes run
+under a `cargo xtask fresh-build --release` binary answer byte-for-byte what
+GNU answers on every form above -- and on the two orderings below, and on the
+`set-process-buffer` case further down.  The only residue is the `raw-text-*`
+NAME `process-coding-system` reports for a unibyte buffer, which is the
+write-back recorded at the end of this entry; the decoded TEXT agrees.
+
+### Why nothing noticed
+
+`neovm-core/src/emacs_core/process.rs` created every process with
+
+```rust
+coding_decode: Value::symbol("utf-8-unix"),
+coding_encode: Value::symbol("utf-8-unix"),
+```
+
+and `make-process` overwrote it only when the caller passed `:coding`.  That
+literal is not a neutral placeholder -- it is a plausible-looking *answer*, and
+it is the answer the chain produces in the common case, because
+`default-process-coding-system` really is `(utf-8-unix . utf-8-unix)` in both
+editors under a UTF-8 locale.  So the missing chain was invisible for every
+caller who did not bind anything, and visible only to the callers who bind
+something precisely because they must: `insert-directory` binding
+`coding-system-for-read` to `no-conversion`, `url-open-stream` binding it to
+`binary`, every "give me the bytes" helper in the tree.  This is the recurring
+shape recorded for `completion-ignored`, `resize-mini-windows`,
+`normal-erase-is-backspace` and ledgers 125 and 130: a value Lisp owns,
+answered by a Rust literal.
+
+`start-process` had the same hole through a second door.  GNU's is Lisp that
+does nothing but call `make-process` (lisp/subr.el:3466-3472); Neomacs has a
+separate Rust `builtin_start_process` that built its own process record and
+never touched coding at all, so it too rode on the literal.
+
+### Four resolvers that rhyme -- where they really agree
+
+Entry 128 warned that unifying `Fcall_process`, `Fmake_process`,
+`Fmake_pipe_process` and `set_network_socket_coding_system` would be wrong.
+Read side by side that is right, and there are FIVE of them, not four --
+`Fmake_serial_process` (src/process.c:3247-3275) spells the chain out a fifth
+time.  They share a precedence *spine* -- explicit override, then
+`coding-system-for-read`, then `(find-operation-coding-system ...)`, then
+`default-process-coding-system`, then nil -- and differ in four independent
+ways, none of which is a policy flag:
+
+| | explicit override | dynamic override | unibyte buffer short-circuit | `find-operation-coding-system` | `default-process-coding-system` | validates |
+|---|---|---|---|---|---|---|
+| `Fcall_process` (callproc.c:729-763) | none | :732 | no | `call-process` + the whole argument vector, :741-744 | :748 | `Fcheck_coding_system`, :753 |
+| `Fmake_process` (process.c:1950-1977) | `:coding` car, :1950-1956 | :1958 | no -- see :1942-1944 | `start-process` + NAME BUFFER COMMAND, and only if PROGRAM, :1965-1971 | :1974 | no |
+| `Fmake_pipe_process` (process.c:2523-2548) | `:coding` car, :2523-2530 | :2531 | **yes**, val = nil, :2533-2539 | never -- `coding_systems` is `Qt` at :2520 and never assigned | :2544 | no |
+| `Fmake_serial_process` (process.c:3247-3261) | `:coding` car, :3250-3255 | :3256 | **yes**, val = nil, :3258-3260 | never -- same dead `Qt`, :3298 | **never** | no |
+| `set_network_socket_coding_system` (process.c:3301-3337) | `:coding` car, :3306-3311 | :3312 | **yes**, val = nil, :3314-3322 | `open-network-stream` + NAME BUFFER HOST SERVICE, and only if both, :3325-3330 | :3333 | no |
+
+Those are different *inputs*, not different settings of one input.  A shared
+core parameterised by all five columns would have a parameter per caller, which
+is another way of saying there is nothing left to share.  Two of the columns are
+worth stating outright because they are easy to read past: the pipe and serial
+resolvers can never reach `process-coding-system-alist` at all (the
+`CONSP (coding_systems)` arm is unreachable code in both), and the serial one
+never reaches `default-process-coding-system` either.
+
+The one column that is NOT a difference is the interesting one.  Entry 128 found
+the unibyte-destination rule inline in `Fcall_process` (src/callproc.c:757-759)
+and read the pipe/network `val = Qnil` branches as the same rule with the
+opposite sign.  They are not the same rule.  `Fcall_process` has no process
+object and no file-descriptor table, so it must apply the rule on the spot; the
+four asynchronous resolvers do not apply it at all, and `Fmake_process` says so
+in its own comment:
+
+```c
+    /* Decide coding systems for communicating with the process.  Here
+       we don't setup the structure coding_system nor pay attention to
+       unibyte mode.  They are done in create_process.  */   /* :1942-1944 */
+```
+
+For every asynchronous process the rule lives in exactly ONE place,
+`setup_process_coding_systems` (src/process.c:8380-8409):
+
+```c
+  coding_system = p->decode_coding_system;
+  if (EQ (p->filter, Qinternal_default_process_filter)      /* :8395 */
+      && BUFFERP (p->buffer))
+    {
+      if (NILP (BVAR (XBUFFER (p->buffer), enable_multibyte_characters)))
+	coding_system = raw_text_coding_system (coding_system);   /* :8399 */
+    }
+  setup_coding_system (coding_system, proc_decode_coding_system[inch]);
+```
+
+That is the *same* `raw_text_coding_system` call `Fcall_process` makes, keyed on
+the process's CURRENT buffer and filter, and GNU re-runs it from
+`set-process-buffer` (:1312), `set-process-filter` (:1404), `create_process`
+(:2277) and `set-process-coding-system` (:8036).  So the `val = Qnil` branches
+in pipe/serial/network are not an EOL policy: they are a short-circuit that
+skips the alist and default lookup and leaves the user-visible
+`process-coding-system` nil, while the fd-level downgrade still happens
+underneath whenever the default filter is inserting into a unibyte buffer.
+
+Both halves are measurable, and the re-evaluation is measurable too:
+
+```elisp
+;; created against a MULTIBYTE buffer, handed a UNIBYTE one afterwards
+(let ((mb (generate-new-buffer " *mb*")) (ub (generate-new-buffer " *ub*")))
+  (with-current-buffer ub (set-buffer-multibyte nil))
+  (let ((p (let ((coding-system-for-read 'utf-8-dos))
+             (make-process :name "z" :buffer mb :sentinel #'ignore
+                           :command '("sh" "-c" "sleep 0.3; printf 'a\\r\\nb\\r\\n'")))))
+    (set-process-buffer p ub)
+    (while (accept-process-output p 1))
+    (car (process-coding-system p))))
+;; GNU => raw-text-dos       ; not utf-8-dos: the rule ran against the NEW buffer
+```
+
+So: five honest resolvers, and one shared second stage.  That is the shape the
+fix takes.
+
+### The two counter-intuitive facts hold here too
+
+Entry 128 had to measure both rather than reason about them.  Both hold on the
+asynchronous path, and one of them was being got wrong in the opposite direction:
+
+`nil` means DETECT, not "copy the bytes".  `setup_coding_system` rewrites nil to
+`undecided` (src/coding.c:5675-5676), and `raw_text_coding_system (Qnil)` returns
+bare `raw-text` (src/coding.c:5939-5940), not a byte-faithful subsidiary.
+`decode_process_output_bytes` believed the opposite, citing the pipe/network CR LF
+comment for it:
+
+```elisp
+(let ((buf (generate-new-buffer " *p*")))
+  (let ((p (make-process :name "z" :buffer buf :sentinel #'ignore
+                         :command '("sh" "-c" "sleep 0.3; printf 'caf\\303\\251'"))))
+    (set-process-coding-system p nil nil)
+    (while (accept-process-output p 1))
+    (while (process-live-p p) (accept-process-output p 0.05)))
+  (with-current-buffer buf (buffer-size)))
+;; GNU                => 4    ; undecided, detected as UTF-8
+;; Neomacs before fix => 5    ; bytes copied through
+```
+
+A unibyte destination drops character conversion but KEEPS end-of-line
+conversion.  The two halves disagree, so neither can be guessed:
+
+```
+;; child writes  caf <c3> <a9> CR LF  into a UNIBYTE process buffer
+;; :coding utf-8-dos  => GNU (99 97 102 195 169 10)      ; no chars converted, CR eaten
+;; :coding utf-8-unix => GNU (99 97 102 195 169 13 10)   ; no chars converted, CR kept
+```
+
+### The type-level fix
+
+The decision was a hole in a signature.  `decode_process_output_bytes` took
+`(proc, bytes, flush)`, reached into `proc.coding_decode` and classified it
+inline, so "which decoder" was answered at the point of insertion by whatever
+that one function believed -- exactly the shape entry 128 removed from the
+synchronous path.
+
+GNU's two stages are now two types.
+
+`ProcessOutputSink` (`neovm-core/src/emacs_core/process.rs`) is
+`setup_process_coding_systems`' question, and it has GNU's two answers and no
+others: `UnibyteProcessBuffer` (the internal default filter is inserting into a
+live unibyte buffer) or `DecodedText` (a multibyte buffer, no buffer, or a Lisp
+filter -- a filter is handed a decoded string, so GNU leaves the coding system
+alone for it).  It is a REQUIRED parameter of `decode_process_output_bytes`,
+`read_process_output` and every read helper between them, so there is no
+signature left in which process output can be turned into text without the call
+site first naming where it is going.  It is derived per read from the process's
+live buffer and filter rather than cached, which is the same function GNU
+computes with nothing left to invalidate -- and that is what makes
+`set-process-buffer` behave, above.  `ProcessOutputDecoding::for_process` is the
+one place the `raw_text_coding_system` downgrade is applied, reusing the
+`without_character_conversion` entry 128 already measured.
+
+`MakeProcessCodingEnvironment` is `Fmake_process`'s chain, and it is a required
+parameter of the process creator.  A real subprocess can no longer be created
+without its ambient coding environment being supplied, so the Rust literal
+cannot stand in for a resolution that never ran.  The chain itself is
+`resolve_make_process_coding_systems`, written once over a `ProcessCodingHalf`
+because GNU writes the decode and encode blocks as near-mirrors
+(src/process.c:1950-1977 and :1979-2008) -- the two blocks differ only in which
+half of a cons they take and which dynamic variable overrides.  That is the only
+sharing in the fix; the five per-caller resolvers stay five.  `ProcessCodingSystems`
+has no `Default` and no field-wise constructor for the same reason.
+
+Three details of the chain are load-bearing and each was measured, not derived:
+
+* A SUPPLIED `:coding` shuts the dynamic override out even when its own half is
+  nil.  GNU's `else` at :1957 is reached only when `tem` itself is nil, so
+  `:coding '(nil . latin-1)` resumes at the alist and never consults
+  `coding-system-for-read`.
+* The alist is matched against the PROGRAM, not the process name --
+  `start-process` has `target-idx` 2 (src/coding.c:11784), so
+  `find-operation-coding-system` picks `args[3]`, the car of `:command`
+  (src/coding.c:10822).  An entry keyed on the process name does not fire.
+* GNU does not validate in the resolver.  The `coding-system-error` comes from
+  `setup_coding_system` (src/coding.c:5678) reached through
+  `create_process` -> `setup_process_coding_systems` (src/process.c:2277,
+  commented "This may signal an error"), which is AFTER the program has been
+  found.  Neomacs validated `:coding` eagerly, before the executable search, and
+  so reported the wrong one of two errors; the check now sits where GNU's
+  effect is, next to the resolver and after the search.  Nothing is left behind
+  when it fires: measured, GNU's process count is unchanged across the signal.
+
+`builtin_start_process` rebuilds its arguments in keyword form and runs the same
+resolver, because GNU's `start-process` IS `make-process`.  The right long-term
+answer is that the Rust `start-process` should not exist at all -- it is a Rust
+shadow of a nine-line Lisp function in subr.el, and this is the second time it
+has drifted -- but deleting a registered subr is its own change with its own
+blast radius, and it is recorded here rather than folded in.
+
+`coding_explicitly_set` deliberately still means "the caller passed `:coding`",
+not "a coding system was resolved": a PTY status-reporting heuristic keys off
+it, and the resolver answering for an absent `:coding` must not look like an
+explicit one.
+
+Three tests pin the three faces of this: the decode chain including the
+`(nil . X)` and no-PROGRAM cases, the unibyte-destination rule with its
+disagreeing halves, its Lisp-filter exemption and the `set-process-buffer`
+re-evaluation above, and the encode chain.  Every expected value in them was
+taken by running the probe under GNU.  Two of them bind
+`default-process-coding-system` explicitly rather than inheriting it: the unit
+bootstrap leaves it at `(undecided-unix . utf-8-unix)` while both shipped
+editors have `(utf-8-unix . utf-8-unix)`, and a pin that inherits it would be
+recording the runtime rather than the behaviour.
+
+One pre-existing test moved from `let` to `let*`
+(`process_coding_tty_and_kill_buffer_query_runtime_surface`): it binds
+`default-process-coding-system` and then calls `start-process` in the same
+binding list, so the process was created before the binding took effect.  Its
+own comment says the binding exists to be seen by the process.  That was
+invisible for exactly as long as the process coding was a literal.
+
+### Found and NOT fixed here
+
+**End-of-line DETECTION is missing from the decoder.**  A coding system whose
+eol_type is unspecified detects the child's line endings in GNU; Neomacs applies
+only explicit `-dos`/`-mac`/`-unix` subsidiaries.  This is not specific to
+processes -- it is the shared string decoder:
+
+```elisp
+(mapcar (lambda (cs) (append (decode-coding-string "a\r\nb\r\n" cs) nil))
+        '(raw-text undecided utf-8 raw-text-dos raw-text-unix binary))
+;; GNU     => ((97 10 98 10) (97 10 98 10) (97 10 98 10)
+;;             (97 10 98 10) (97 13 10 98 13 10) (97 13 10 98 13 10))
+;; Neomacs => ((97 13 10 98 13 10) (97 13 10 98 13 10) (97 13 10 98 13 10)
+;;             (97 10 98 10) (97 13 10 98 13 10) (97 13 10 98 13 10))
+```
+
+Only the first three diverge, and they are exactly the undecided-eol cases.  It
+reaches `call-process` and `make-process` through the same decoder, so entry
+128's `coding-system-for-read` = `raw-text` row would read `(97 10 98 10)` in
+GNU and `(97 13 10 98 13 10)` here.  It also means
+`ProcessOutputDecoding::Bytes` currently conflates `raw-text` (which detects
+EOL) with `binary`/`no-conversion` (which do not) without any measurable
+consequence -- the conflation becomes wrong the moment detection lands, and the
+type is deliberately left in place so that it does.  Fixing detection changes
+every `decode-coding-string`, `insert-file-contents` and file-visiting path in
+the editor and belongs to its own entry with its own gate run.
+
+**`Vlast_coding_system_used` is not written back onto the process.**  After
+decoding, GNU replaces `p->decode_coding_system` with the coding actually used
+(`read_process_output_set_last_coding_system`, src/process.c:6417-6425), so
+`(process-coding-system p)` reports `raw-text-unix` for a unibyte buffer and the
+detected coding for an `undecided` one.  Neomacs reports the coding that was
+resolved.  The decoded TEXT is unaffected -- this is the reporting slot only --
+and it is a separate mechanism from the chain fixed here.
+
+**`make-pipe-process`, `make-serial-process` and `make-network-process` still
+owe their own resolvers.**  The table above is what each of them has to
+implement; none of them is `Fmake_process`'s, and the network one is partly
+there already (`network_process_coding_pair`).  The
+`(utf-8-unix . utf-8-unix)` initialiser survives as their stand-in and now says
+so in a comment: for a multibyte buffer with no `:coding`, and given that
+neither pipe nor serial can reach `find-operation-coding-system`, GNU's answer
+really is the car and cdr of `default-process-coding-system`, whose value here
+is that pair.  It is a stand-in, not a default.  No MELPA pin depends on any of
+them yet.
+
+
+Status: FIXED.
+
 ## 133. The `rg` results-buffer pin was decided by where the kernel split a PTY read, so ripgrep's line buffering -- not either editor -- chose its value -- NOT A DIVERGENCE (racy harness fixture), FIXED
 
 `parity_tests::rg::rg_package_batch` failed in roughly one full-suite run in
