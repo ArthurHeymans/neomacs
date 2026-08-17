@@ -471,7 +471,7 @@ rank	package	downloads	status
 470	biblio-core	186070	todo
 471	ido-completing-read+	185921	todo
 472	prescient	185867	covered
-473	scratch	185857	todo
+473	scratch	185857	covered
 474	company-tern	184566	removed
 475	apropospriate-theme	184374	covered
 476	less-css-mode	184135	todo
