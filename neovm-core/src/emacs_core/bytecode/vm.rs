@@ -3287,6 +3287,24 @@ impl<'a> Vm<'a> {
             // safe point, no Lisp): evaluates $expr with the cursor live so it
             // may read operands straight off the stack slice; publishes only on
             // the error path (resume_flow requires it).
+            // GNU's Bcall runs maybe_quit unconditionally; its fast path is
+            // loads-only, so evaluate that condition with the cursor LIVE and
+            // pay the publish/reacquire pair only when the poll actually has
+            // work (quit pending, profiler tick, throw-on-input armed).
+            macro_rules! poll_quit {
+                () => {{
+                    if !self.ctx.maybe_quit_hot_ok() {
+                        cursor.publish(self.ctx);
+                        match self.ctx.maybe_quit() {
+                            Ok(()) => {
+                                cursor = StackCursor::acquire(self.ctx);
+                            }
+                            Err(flow) => resume_flow!(flow),
+                        }
+                    }
+                }};
+            }
+
             macro_rules! vm_try_pure {
                 ($expr:expr) => {{
                     match $expr {
@@ -3713,7 +3731,7 @@ impl<'a> Vm<'a> {
                         // entering the callee. This is observable when bytecode
                         // sets `quit-flag` immediately before a call: the callee
                         // must not run.
-                        vm_try!(self.ctx.maybe_quit());
+                        poll_quit!();
                         let target = self.resolve_interpreter_stack_call_target(func_val, n);
                         let writeback_names = if matches!(
                             target,
@@ -3861,7 +3879,7 @@ impl<'a> Vm<'a> {
                     }
                     Op::Apply(n) => {
                         let n = *n as usize;
-                        vm_try!(self.ctx.maybe_quit());
+                        poll_quit!();
                         if n == 0 {
                             let stack_after_call = stk!().len().saturating_sub(1);
                             let func_val = stk!().last().copied().unwrap_or(Value::NIL);
@@ -4976,7 +4994,7 @@ impl<'a> Vm<'a> {
                         }
                         stk!().truncate(args_start);
                         stk_push!(result);
-                        vm_try!(self.ctx.maybe_quit());
+                        poll_quit!();
                     }
                     // Mirrors GNU bytecode.c inline dispatch of opcodes
                     // 0140-0177 etc. — the symbol name is encoded in the
@@ -5019,7 +5037,7 @@ impl<'a> Vm<'a> {
                         }
                         stk!().truncate(args_start);
                         stk_push!(result);
-                        vm_try!(self.ctx.maybe_quit());
+                        poll_quit!();
                     }
                 }
             }

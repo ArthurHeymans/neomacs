@@ -8868,6 +8868,24 @@ impl Context {
     /// host channel, so this semantic safe point must perform that promotion
     /// itself.  Restrict the channel poll to an active `throw-on-input`
     /// binding; the normal `maybe_quit` hot path remains a flag/atomic check.
+    /// The pure fast-path condition of [`Self::maybe_quit`]: true when the
+    /// poll would do nothing. Loads only — no mutation, no allocation, no
+    /// Lisp — so bytecode dispatch may evaluate it with its operand-stack
+    /// cursor still live and only publish for the cold slow path.
+    #[inline(always)]
+    pub(crate) fn maybe_quit_hot_ok(&self) -> bool {
+        !crate::emacs_core::profiler::profiler_sample_due()
+            && self.quit_flag.is_nil()
+            && !self
+                .quit_requested
+                .load(std::sync::atomic::Ordering::Relaxed)
+            && (!self.has_throw_on_input_poll_source()
+                || self
+                    .obarray
+                    .symbol_value_id_or_nil(self.throw_on_input_symbol)
+                    .is_nil())
+    }
+
     #[inline(always)]
     pub(crate) fn maybe_quit(&mut self) -> Result<(), Flow> {
         // Profiler sampling rides the quit poll (GNU samples in a SIGPROF
