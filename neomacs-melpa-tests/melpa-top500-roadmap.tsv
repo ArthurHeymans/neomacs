@@ -461,7 +461,7 @@ rank	package	downloads	status
 460	biblio	188927	todo
 461	dart-mode	188350	covered
 462	flycheck-guile	188261	todo
-463	switch-window	188002	todo
+463	switch-window	188002	covered
 464	kaolin-themes	187168	todo
 465	hierarchy	187040	removed
 466	string-edit-at-point	186754	todo
