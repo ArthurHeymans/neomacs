@@ -1844,3 +1844,230 @@ fn eol_conversion_applies_to_every_encoder_not_just_some() {
          the four codec arms that happened to call decode_eol_text"
     );
 }
+
+/// GNU decides end-of-line conversion on a SECOND axis of the coding system,
+/// and that axis has an "undecided" state which DETECTS rather than skips.
+///
+/// A coding system's spec carries `eol_type` in slot 2, and the slot may hold a
+/// VECTOR of the three subsidiaries instead of `Qunix`/`Qdos`/`Qmac`.
+/// `decode_coding` (src/coding.c:7478-7480) runs `decode_eol` for every coding
+/// system whose eol_type is not `Qunix`, and `decode_eol`'s first act
+/// (src/coding.c:6783-6806) is to resolve a VECTOR by scanning the text it just
+/// decoded:
+///
+/// ```c
+///   if (VECTORP (eol_type))
+///     {
+///       int eol_seen = EOL_SEEN_NONE;
+///       for (p = pbeg; p < pend; p++) { ... eol_seen |= ...; }
+///       if ((eol_seen & EOL_SEEN_CRLF) != 0 && (eol_seen & EOL_SEEN_CR) != 0
+///           && (eol_seen & EOL_SEEN_LF) == 0)
+///         eol_seen = EOL_SEEN_CRLF;
+///       else if (eol_seen != EOL_SEEN_NONE && eol_seen != EOL_SEEN_LF
+///                && eol_seen != EOL_SEEN_CRLF && eol_seen != EOL_SEEN_CR)
+///         eol_seen = EOL_SEEN_LF;
+///       if (eol_seen != EOL_SEEN_NONE)
+///         eol_type = adjust_coding_eol_type (coding, eol_seen);
+///     }
+/// ```
+///
+/// Neomacs converted only for an EXPLICIT `-dos`/`-mac` subsidiary and treated
+/// the undecided state as "no conversion", so `raw-text`, `undecided`, `utf-8`
+/// and `latin-1` all left CR LF in the decoded text.  Measured against GNU
+/// 31.0.90 (`(decode-coding-string "a\r\nb\r\n" 'raw-text)`):
+///
+///     GNU                => (97 10 98 10)
+///     Neomacs before fix => (97 13 10 98 13 10)
+///
+/// `binary` and `no-conversion` are the only shipped coding systems whose
+/// eol_type is concrete without the name saying so -- verified by listing
+/// `coding-system-eol-type` over all 269 systems in GNU -- so they are the rows
+/// that must NOT move, and they are asserted alongside the ones that must.
+///
+/// `last-coding-system-used` moves with the conversion because it is the SAME
+/// C function that moves it: `adjust_coding_eol_type` (src/coding.c:6471-6497)
+/// rewrites `coding->id` to the chosen subsidiary, and `code_convert_string`
+/// reports `CODING_ID_NAME (coding.id)` (src/coding.c:9622).
+#[test]
+fn decode_eol_detects_when_the_coding_systems_eol_type_is_undecided() {
+    crate::test_utils::init_test_tracing();
+    let by_coding = crate::test_utils::runtime_startup_eval_one(
+        r#"(mapcar (lambda (cs)
+                     (list cs (string-to-list (decode-coding-string "a\r\nb\r\n" cs))
+                           last-coding-system-used))
+                  '(raw-text undecided utf-8 latin-1 utf-8-emacs
+                    binary no-conversion
+                    raw-text-dos raw-text-unix raw-text-mac
+                    utf-8-dos utf-8-unix utf-8-mac))"#,
+    );
+    assert_eq!(
+        by_coding,
+        "OK ((raw-text (97 10 98 10) raw-text-dos) \
+             (undecided (97 10 98 10) undecided-dos) \
+             (utf-8 (97 10 98 10) utf-8-dos) \
+             (latin-1 (97 10 98 10) iso-latin-1-dos) \
+             (utf-8-emacs (97 10 98 10) utf-8-emacs-dos) \
+             (binary (97 13 10 98 13 10) binary) \
+             (no-conversion (97 13 10 98 13 10) no-conversion) \
+             (raw-text-dos (97 10 98 10) raw-text-dos) \
+             (raw-text-unix (97 13 10 98 13 10) raw-text-unix) \
+             (raw-text-mac (97 10 10 98 10 10) raw-text-mac) \
+             (utf-8-dos (97 10 98 10) utf-8-dos) \
+             (utf-8-unix (97 13 10 98 13 10) utf-8-unix) \
+             (utf-8-mac (97 10 10 98 10 10) utf-8-mac))",
+        "an undecided eol_type detects; binary and no-conversion are Qunix and \
+         must copy the CR through"
+    );
+
+    // The resolution rules are not "first EOL wins".  `decode_eol` scans the
+    // WHOLE decoded text with a bitmask (no MAX_EOL_CHECK_COUNT -- that limit
+    // belongs to `detect_eol`, src/coding.c:6373, which serves
+    // `detect-coding-string` instead), so four CR LFs followed by one bare LF
+    // are MIXED and select unix, while CR LF mixed with a stray CR selects dos.
+    // Every value below was taken by running the probe under GNU 31.0.90.
+    let by_shape = crate::test_utils::runtime_startup_eval_one(
+        r#"(mapcar (lambda (s) (list (string-to-list (decode-coding-string s 'undecided))
+                                     last-coding-system-used))
+                  '("a\nb\r\nc\n" "a\r\nb\nc\r\n" "a\rb\rc\r" "a\rb\r\nc\r\n" "a\rb\nc\n"
+                    "a\r\nb\r\nc\r\nd\r\ne\nf" "a\r\nb\r\nc\rd" "abc" "a\rb"))"#,
+    );
+    assert_eq!(
+        by_shape,
+        "OK (((97 10 98 13 10 99 10) undecided-unix) \
+             ((97 13 10 98 10 99 13 10) undecided-unix) \
+             ((97 10 98 10 99 10) undecided-mac) \
+             ((97 13 98 10 99 10) undecided-dos) \
+             ((97 13 98 10 99 10) undecided-unix) \
+             ((97 13 10 98 13 10 99 13 10 100 13 10 101 10 102) undecided-unix) \
+             ((97 10 98 10 99 13 100) undecided-dos) \
+             ((97 98 99) undecided) \
+             ((97 10 98) undecided-mac))",
+        "mixed line endings select unix; CR LF plus a stray CR selects dos; a \
+         text with no line ending at all leaves the eol type undecided"
+    );
+
+    // Detection runs on the text the decoder PRODUCED, and it fires for a unix
+    // result too -- which is visible in `last-coding-system-used' as soon as the
+    // input is not pure ASCII, because pure-ASCII input without a CR takes GNU's
+    // identity fast path (src/coding.c:9609-9628) and reports the argument name
+    // unresolved instead.
+    let eight_bit = crate::test_utils::runtime_startup_eval_one(
+        r#"(mapcar (lambda (cs)
+                     (mapcar (lambda (s)
+                               (list (string-to-list (decode-coding-string s cs))
+                                     last-coding-system-used))
+                             '("caf\303\251\r\n" "caf\303\251\n" "caf\303\251\r" "caf\303\251")))
+                  '(raw-text utf-8))"#,
+    );
+    assert_eq!(
+        eight_bit,
+        "OK ((((99 97 102 195 169 10) raw-text-dos) \
+              ((99 97 102 195 169 10) raw-text-unix) \
+              ((99 97 102 195 169 10) raw-text-mac) \
+              ((99 97 102 195 169) raw-text)) \
+             (((99 97 102 233 10) utf-8-dos) \
+              ((99 97 102 233 10) utf-8-unix) \
+              ((99 97 102 233 10) utf-8-mac) \
+              ((99 97 102 233) utf-8)))",
+        "raw-text keeps the two UTF-8 bytes and still converts the line ending; \
+         utf-8 converts both"
+    );
+}
+
+/// `decode-coding-string` and `decode-coding-region` do not report the same
+/// name for the same text, and the difference is GNU's identity fast path.
+///
+/// `code_convert_string` (src/coding.c:9578) opens with
+///
+/// ```c
+///   if (! NILP (CODING_ATTR_ASCII_COMPAT (attrs))
+///       && (STRING_MULTIBYTE (string) ? (chars == bytes) : string_ascii_p (string))
+///       && (EQ (CODING_ID_EOL_TYPE (coding.id), Qunix)
+///           || inhibit_eol_conversion
+///           || ! memchr (SDATA (string), encodep ? '\n' : '\r', bytes)))
+///     { if (! norecord) Vlast_coding_system_used = coding_system; return ... }
+/// ```
+///
+/// -- but only when `dst_object` is `Qt` (:9608).  `code_convert_region`
+/// (src/coding.c:9455) has no such path and always records the resolved
+/// `CODING_ID_NAME (coding.id)` (:9497), and file I/O reaches
+/// `decode_coding_object` directly, so neither ever takes it.  That is why the
+/// same ASCII text answers `undecided' through one entry and `undecided-unix'
+/// through the other, and it is also what keeps `binary' -- whose eol_type IS
+/// `Qunix' -- returning a MULTIBYTE string with its CRs intact.
+///
+/// Every value below was taken by running the probe under GNU Emacs 31.0.90.
+#[test]
+fn the_identity_fast_path_belongs_to_code_convert_string_only() {
+    crate::test_utils::init_test_tracing();
+    let by_string = crate::test_utils::runtime_startup_eval_one(
+        r#"(mapcar (lambda (row)
+                     (let ((d (decode-coding-string (car row) (cadr row))))
+                       (list (string-to-list d) last-coding-system-used
+                             (and (multibyte-string-p d) t))))
+                  '(("a\nb\n" undecided) ("abc" undecided) ("a\r\nb\r\n" undecided)
+                    ("a\nb\n" raw-text) ("a\r\nb\r\n" raw-text)
+                    ("a\r\nb\r\n" binary) ("abc" binary)
+                    ("a\r\nb\r\n" raw-text-unix)))"#,
+    );
+    assert_eq!(
+        by_string,
+        "OK (((97 10 98 10) undecided t) \
+             ((97 98 99) undecided t) \
+             ((97 10 98 10) undecided-dos t) \
+             ((97 10 98 10) raw-text t) \
+             ((97 10 98 10) raw-text-dos nil) \
+             ((97 13 10 98 13 10) binary t) \
+             ((97 98 99) binary t) \
+             ((97 13 10 98 13 10) raw-text-unix t))",
+        "pure-ASCII text that needs no CR collapse is returned as a multibyte \
+         string under the argument's own name, without detection; the last row \
+         is the one that proves the eol test reads the RESOLVED system's type -- \
+         `raw-text-unix` is Qunix even though its base `raw-text` is a vector"
+    );
+
+    let by_region = crate::test_utils::runtime_startup_eval_one(
+        r#"(mapcar (lambda (row)
+                     (with-temp-buffer
+                       (set-buffer-multibyte nil)
+                       (insert (car row))
+                       (decode-coding-region (point-min) (point-max) (cadr row))
+                       (list (string-to-list (buffer-string)) last-coding-system-used)))
+                  '(("a\nb\n" undecided) ("abc" undecided) ("a\r\nb\r\n" undecided)
+                    ("a\nb\n" raw-text) ("a\r\nb\r\n" raw-text)
+                    ("a\r\nb\r\n" binary) ("abc" binary)))"#,
+    );
+    assert_eq!(
+        by_region,
+        "OK (((97 10 98 10) undecided-unix) \
+             ((97 98 99) undecided) \
+             ((97 10 98 10) undecided-dos) \
+             ((97 10 98 10) raw-text-unix) \
+             ((97 10 98 10) raw-text-dos) \
+             ((97 13 10 98 13 10) binary) \
+             ((97 98 99) binary))",
+        "the region entry has no fast path, so a detected unix end of line is \
+         reported as the -unix subsidiary; text with no line ending at all \
+         still leaves the eol type undecided"
+    );
+
+    // A BUFFER destination turns `decode-coding-string` into the same
+    // no-fast-path case, because GNU's test is on `dst_object`, not on which
+    // Lisp function was called.
+    let into_buffer = crate::test_utils::runtime_startup_eval_one(
+        r#"(mapcar (lambda (row)
+                     (with-temp-buffer
+                       (decode-coding-string (car row) (cadr row) nil (current-buffer))
+                       (list (string-to-list (buffer-string)) last-coding-system-used)))
+                  '(("a\nb\n" undecided) ("abc" undecided)
+                    ("a\nb\n" utf-8) ("abc" utf-8)))"#,
+    );
+    assert_eq!(
+        into_buffer,
+        "OK (((97 10 98 10) undecided-unix) \
+             ((97 98 99) undecided) \
+             ((97 10 98 10) utf-8-unix) \
+             ((97 98 99) utf-8))",
+        "dst_object is what selects the fast path"
+    );
+}

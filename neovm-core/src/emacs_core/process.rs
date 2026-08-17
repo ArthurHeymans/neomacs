@@ -1513,7 +1513,30 @@ fn process_coding_symbol_name(value: Value) -> &'static str {
     }
 }
 
-fn process_coding_is_binary(coding: Value) -> bool {
+/// The codings that convert NOTHING -- neither the character code nor the end
+/// of line.
+///
+/// `raw-text` is deliberately absent.  It drops character conversion like
+/// `binary` does, but its eol_type is a VECTOR, so GNU's `decode_eol` DETECTS
+/// the child's line endings for it (src/coding.c:6783-6806); measured under GNU
+/// 31.0.90, a child writing `a\r\nb\r\n` read with `coding-system-for-read`
+/// bound to `raw-text` lands as `(97 10 98 10)` while the same child read as
+/// `binary` lands as `(97 13 10 98 13 10)`.  `binary` and `no-conversion` are
+/// the only two shipped codings whose eol_type is `Qunix` without their name
+/// saying so, which is exactly what makes them -- and only them -- the
+/// convert-nothing case.  DIVERGENCES.md entry 131 recorded this conflation in
+/// advance; entry 134 removed it.
+fn process_coding_converts_nothing(coding: Value) -> bool {
+    matches!(coding.as_symbol_name(), Some("binary" | "no-conversion"))
+}
+
+/// The ENCODE-side twin, where `raw-text` DOES belong.
+///
+/// The two axes are not symmetric: encoders never detect.  `consume_chars`
+/// (src/coding.c:7623-7625) resolves a VECTOR eol_type to `Qunix` before any
+/// encoder sees a character, so `raw-text`'s undecided end-of-line writes bare
+/// LF -- which is what "convert nothing" means on this side.
+fn process_encode_coding_converts_nothing(coding: Value) -> bool {
     coding.is_nil()
         || matches!(
             coding.as_symbol_name(),
@@ -1537,9 +1560,11 @@ fn process_coding_is_binary(coding: Value) -> bool {
 /// ignore `coding-system-for-read` entirely; see DIVERGENCES.md entry 128.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ProcessOutputDecoding {
-    /// One of the byte-faithful `binary`/`no-conversion`/`raw-text` codings:
-    /// the child's bytes reach the buffer unchanged (raw bytes become
-    /// eight-bit characters in a multibyte buffer).
+    /// `binary` / `no-conversion`: the child's bytes reach the buffer
+    /// unchanged (raw bytes become eight-bit characters in a multibyte
+    /// buffer).  Both halves of the coding system are nil here -- the character
+    /// code AND the end of line -- which is what separates these two from
+    /// `raw-text`, whose eol_type is undecided and therefore detects.
     Bytes,
     /// Decode under this coding system.
     Coding(&'static str),
@@ -1557,7 +1582,7 @@ impl ProcessOutputDecoding {
         if coding.is_nil() {
             return Self::Coding("undecided");
         }
-        if process_coding_is_binary(coding) {
+        if process_coding_converts_nothing(coding) {
             Self::Bytes
         } else {
             Self::Coding(process_coding_symbol_name(coding))
@@ -1674,8 +1699,22 @@ fn process_coding_uses_utf8_carryover(name: &str) -> bool {
         || name.starts_with("undecided")
 }
 
+/// Whether a trailing CR at a read boundary has to wait for the next chunk.
+///
+/// GNU never has to ask: a subprocess is decoded through ONE
+/// `struct coding_system` whose `carryover` spans reads, so a CR that lands at
+/// the end of a read is simply not consumed yet.  Here each read decodes on its
+/// own, so the boundary has to be named.
+///
+/// It is not only the `-dos` codings.  A coding system whose eol_type is
+/// UNDECIDED may RESOLVE to dos -- that is what `decode_eol` does
+/// (src/coding.c:6783-6806) -- so splitting a CR LF across two reads would hand
+/// the first read a lone CR to classify.  The undecided ones therefore hold a
+/// trailing CR back too.  Holding one back costs nothing when the coding turns
+/// out to be unix or mac: the CR simply arrives with the next chunk, and `flush`
+/// releases it at end of output.
 fn process_coding_uses_dos_eol_carryover(name: &str) -> bool {
-    name == "dos" || name.ends_with("-dos")
+    name == "dos" || name.ends_with("-dos") || crate::encoding::coding_name_eol_is_undecided(name)
 }
 
 fn utf8_expected_sequence_len(lead: u8) -> Option<usize> {
@@ -1742,7 +1781,7 @@ fn encode_process_send_input(
         .get_any(id)
         .map(|proc| proc.coding_encode)
         .unwrap_or(Value::NIL);
-    if process_coding_is_binary(coding) {
+    if process_encode_coding_converts_nothing(coding) {
         return input.clone();
     }
     let bytes = crate::encoding::encode_lisp_string(input, process_coding_symbol_name(coding));

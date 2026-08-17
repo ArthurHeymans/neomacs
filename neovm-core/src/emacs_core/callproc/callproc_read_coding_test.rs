@@ -286,3 +286,54 @@ fn call_process_region_output_honors_coding_system_for_read() {
         "OK (5 4194243 4194217)"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn call_process_output_eol_is_detected_for_an_undecided_eol_coding_system() {
+    // A coding system has TWO axes, and `coding-system-for-read` sets both.
+    // `raw-text` drops character-code conversion but its eol_type is a VECTOR,
+    // so GNU's `decode_eol` (src/coding.c:6783-6806) scans the decoded output
+    // and converts the child's CR LF; `binary` and `no-conversion` are `Qunix`
+    // on that axis and copy every CR through.  Neomacs read the undecided state
+    // as "no conversion" and left CR LF in the buffer for all of them -- the
+    // residual DIVERGENCES.md entry 131 recorded, and the reason entry 128's
+    // `raw-text` row was understated.
+    //
+    // The child writes `caf <c3> <a9> CR LF x CR LF`.  Every expected value was
+    // taken by running the probe under GNU Emacs 31.0.90; 4194243 and 4194217
+    // are the eight-bit characters for the raw bytes 0xC3 and 0xA9.
+    let printf = find_bin("printf");
+    for (coding, expected) in [
+        ("raw-text", "OK (99 97 102 4194243 4194217 10 120 10)"),
+        ("undecided", "OK (99 97 102 233 10 120 10)"),
+        ("utf-8", "OK (99 97 102 233 10 120 10)"),
+        ("latin-1", "OK (99 97 102 195 169 10 120 10)"),
+        ("utf-8-dos", "OK (99 97 102 233 10 120 10)"),
+        // The three that must NOT move: both convert-nothing codings, and the
+        // raw-text subsidiary that names `unix` outright.
+        ("binary", "OK (99 97 102 4194243 4194217 13 10 120 13 10)"),
+        (
+            "no-conversion",
+            "OK (99 97 102 4194243 4194217 13 10 120 13 10)",
+        ),
+        (
+            "raw-text-unix",
+            "OK (99 97 102 4194243 4194217 13 10 120 13 10)",
+        ),
+    ] {
+        crate::test_utils::init_test_tracing();
+        let mut eval = Context::new();
+        let observed = eval.eval_str(&format!(
+            r#"(progn
+                 (set-buffer-multibyte t)
+                 (let ((coding-system-for-read '{coding}))
+                   (call-process "{printf}" nil t nil "caf\\303\\251\\r\\nx\\r\\n"))
+                 (append (buffer-string) nil))"#
+        ));
+        assert_eq!(
+            format_eval_result(&observed),
+            expected,
+            "coding-system-for-read {coding}"
+        );
+    }
+}
