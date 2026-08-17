@@ -7149,6 +7149,18 @@ coding system was accepted silently instead of signalling:
 | `coding-system-for-read` = `no-such-coding-xyz` | `(coding-system-error no-such-coding-xyz)` | no error |
 | into a UNIBYTE destination buffer, `utf-8` | `(5 (99 97 102 195 169))` | `(4 (99 97 102 233))` |
 
+> **Correction, 2026-08-17 (entry 134).**  The
+> `no-conversion` / `binary` / `raw-text` row above groups three coding systems
+> that do not behave alike.  They agree on this entry's payload, which has no
+> line ending in it, and they disagree on the end-of-line axis: `raw-text`'s
+> `eol_type` is a VECTOR, so GNU DETECTS the child's line endings for it, while
+> `binary` and `no-conversion` are `Qunix` and copy every CR through.  Measured
+> under GNU 31.0.90 with a child writing `caf <c3> <a9> CR LF x CR LF`:
+> `raw-text` lands as `(99 97 102 4194243 4194217 10 120 10)` and `binary` as
+> `(99 97 102 4194243 4194217 13 10 120 13 10)`.  Entry 131 flagged the row as
+> understated; entry 134 measured and fixed it.  Nothing else in this entry
+> changes.
+
 ### Why this lands on Dired, of all places
 
 `insert-directory` (lisp/files.el:8398-8528) is built entirely on the guarantee
@@ -7973,6 +7985,15 @@ type is deliberately left in place so that it does.  Fixing detection changes
 every `decode-coding-string`, `insert-file-contents` and file-visiting path in
 the editor and belongs to its own entry with its own gate run.
 
+> **Closed, 2026-08-17, by entry 134.**  Detection landed, and the
+> `ProcessOutputDecoding::Bytes` prediction above held exactly as written: the
+> type now covers only `binary` and `no-conversion`, and `raw-text` goes through
+> the shared decoder.  Entry 134 also carries the correction to entry 128's
+> `raw-text` row that this paragraph predicted.  The second residual below --
+> `Vlast_coding_system_used` written back onto the process -- is NOT closed and
+> is still open; entry 134 fixes `last-coding-system-used` for strings, regions
+> and files, which is a different slot from `(process-coding-system P)`.
+
 **`Vlast_coding_system_used` is not written back onto the process.**  After
 decoding, GNU replaces `p->decode_coding_system` with the coding actually used
 (`read_process_output_set_last_coding_system`, src/process.c:6417-6425), so
@@ -8464,3 +8485,377 @@ even though its stand-in binary is a shell script that `printf`s line by line.
 Status: FIXED (harness defect).  The underlying `rg-filter' behaviour is
 upstream rg.el's and is unchanged; it is reproduced identically by GNU Emacs
 and Neomacs, so there is nothing to fix in the engine.
+
+## 134. An undecided end-of-line type meant "leave it alone" where GNU means "detect it", so every file, string and subprocess read as `raw-text`, `undecided` or `utf-8` kept its CR LF -- FIXED
+
+Handed over by entry 131, which met this while fixing the asynchronous
+subprocess decoder and scoped it out as its own entry.  Reproduced first, with
+`-Q --batch` against GNU Emacs 31.0.90 and against a verified build of
+origin/main (`tmp/refbin/neomacs`), before anything was touched.
+
+```elisp
+(mapcar (lambda (cs) (append (decode-coding-string "a\r\nb\r\n" cs) nil))
+        '(raw-text undecided utf-8 latin-1 binary no-conversion))
+;; GNU                => ((97 10 98 10) (97 10 98 10) (97 10 98 10) (97 10 98 10)
+;;                        (97 13 10 98 13 10) (97 13 10 98 13 10))
+;; Neomacs before fix => ((97 13 10 98 13 10) (97 13 10 98 13 10) (97 13 10 98 13 10)
+;;                        (97 13 10 98 13 10) (97 13 10 98 13 10) (97 13 10 98 13 10))
+```
+
+The first four rows are the divergence.  The last two are the control, and they
+matter as much: `binary` and `no-conversion` really do copy a CR through, so a
+fix that makes them convert is as wrong as the bug it replaces.
+
+### End of line is a SECOND axis, and its third state is a verb
+
+A GNU coding system carries `eol_type` in slot 2 of its spec, independently of
+the character code, and that slot has three concrete values -- `Qunix`, `Qdos`,
+`Qmac` -- plus a fourth state that is not a value at all: a **VECTOR** of the
+three subsidiaries.  `setup_coding_system` reads the vector as a demand for work
+rather than as an absence of it:
+
+```c
+  if (VECTORP (eol_type))
+    coding->common_flags = (CODING_REQUIRE_DECODING_MASK
+			    | CODING_REQUIRE_DETECTION_MASK);   /* src/coding.c:5685-5687 */
+```
+
+The two directions then resolve it in opposite ways, and both resolutions happen
+BEFORE any byte is touched.  Encoding forces unix -- `consume_chars`
+(src/coding.c:7623-7625) and `encode_coding_iso_2022` (src/coding.c:4384-4386)
+open with the same two lines:
+
+```c
+  eol_type = inhibit_eol_conversion ? Qunix : CODING_ID_EOL_TYPE (coding->id);
+  if (VECTORP (eol_type))
+    eol_type = Qunix;
+```
+
+Decoding DETECTS.  `decode_coding` runs `decode_eol` once, outside every
+`decode_coding_*` (src/coding.c:7478-7480), and `decode_eol`'s first act is to
+replace a vector with a concrete type by scanning the text the decoder has just
+produced (src/coding.c:6783-6806), then to hand that concrete type to
+`adjust_coding_eol_type`.  So "undecided" on the decode side is an instruction,
+not a gap -- and Neomacs's `EolType::Undecided` was implemented as a gap:
+
+```rust
+    match eol {
+        EolType::Dos => { /* collapse CR LF */ }
+        EolType::Mac => { /* CR -> LF */ }
+        EolType::Unix | EolType::Undecided => bytes.to_vec(),
+    }
+```
+
+`Undecided` sitting in the same arm as `Unix` is the whole bug, in one line.
+
+### Four questions the fix had to answer by measurement
+
+**Which coding systems convert, and which are genuinely byte-preserving.**  Not
+the ones whose names suggest it.  Listing `coding-system-eol-type` over all 269
+systems GNU 31.0.90 defines: exactly three come back concrete while their name
+carries no `-unix`/`-dos`/`-mac` suffix -- `binary`, `no-conversion` and
+`no-conversion-multibyte` -- and no suffixed system comes back a vector.  So
+`raw-text` DOES convert end of line (it drops the character half only), and
+`binary` does not, and the two differ on exactly this axis:
+
+```elisp
+(list (append (decode-coding-string "a\rb" 'raw-text) nil)
+      (append (decode-coding-string "a\rb" 'binary) nil))
+;; GNU => ((97 10 98) (97 13 98))
+```
+
+**What detection reads, and what it does with mixed line endings.**  It reads
+the DECODED text -- not the source bytes, because in UTF-16 a CR is the byte
+pair `0D 00` -- and it reads ALL of it, ORing one flag per terminator.  Then it
+folds: CR LF together with a stray CR and no LF is a DOS text with stray ^Ms
+(src/coding.c:6798-6801); ANY other mixture is unix (src/coding.c:6800-6804).
+Measured, every row by running it:
+
+| input, decoded as `undecided` | GNU text | GNU `last-coding-system-used` |
+|---|---|---|
+| `a\nb\r\nc\n` | unchanged | `undecided-unix` |
+| `a\r\nb\nc\r\n` | unchanged | `undecided-unix` |
+| `a\rb\rc\r` | `(97 10 98 10 99 10)` | `undecided-mac` |
+| `a\rb\r\nc\r\n` | `(97 13 98 10 99 10)` | `undecided-dos` |
+| `a\rb\nc\n` | unchanged | `undecided-unix` |
+| `a\r\nb\r\nc\r\nd\r\ne\nf` | unchanged | `undecided-unix` |
+| `a\r\nb\r\nc\rd` | `(97 10 98 10 99 13 100)` | `undecided-dos` |
+| `abc` | unchanged | `undecided` |
+
+The sixth row is the one worth staring at.  Four CR LFs and then one bare LF,
+and GNU converts NOTHING.  There is a second EOL function in `coding.c` that
+would have answered `dos` for it -- `detect_eol` (src/coding.c:6376), which
+stops after `MAX_EOL_CHECK_COUNT` (3) terminators and settles a disagreement the
+moment it meets one -- but that function serves `Fdetect_coding_region`
+(src/coding.c:8944) and never runs on a decode.  The two really do disagree, in
+GNU, on the same input:
+
+```elisp
+(list (detect-coding-string "a\r\nb\r\nc\r\nd\r\ne\nf")
+      (append (decode-coding-string "a\r\nb\r\nc\r\nd\r\ne\nf" 'undecided) nil))
+;; GNU => ((undecided-dos) (97 13 10 98 13 10 99 13 10 100 13 10 101 10 102))
+```
+
+**Whether a lone CR converts.**  Yes, when CR is the only kind of terminator in
+the text (row 3 above); no, when the text also contains an LF (rows 1, 5); and
+in the CR-plus-CRLF case the text is treated as DOS, which collapses the pairs
+and leaves the lone CR alone (rows 4 and 7).  A coding system whose eol_type is
+already `Qunix` never converts one at all.
+
+**Whether the three consumers share the code.**  Strings and processes did.
+Files did NOT: `insert-file-contents` had its own EOL detector,
+`DetectedFileEol` in `neovm-core/src/emacs_core/fileio.rs`, which scanned the
+RAW bytes with `detect_eol`'s three-terminator window and attached the answer to
+the coding-system NAME before calling the shared decoder.  That is a faithful
+port of the wrong function, and it is measurably wrong:
+
+```elisp
+;; a file holding  a CR LF b CR LF c CR LF d LF
+(with-temp-buffer (insert-file-contents f)
+  (list (append (buffer-string) nil) buffer-file-coding-system))
+;; GNU                => ((97 13 10 98 13 10 99 13 10 100 10) undecided-unix)
+;; Neomacs before fix => ((97 10 98 10 99 10 100 10) undecided-dos)
+```
+
+### `last-coding-system-used` moves with the text, because it is the same function
+
+`adjust_coding_eol_type` (src/coding.c:6471-6497) does two things in one call:
+it picks the eol type the conversion runs with, and it rewrites `coding->id` to
+the subsidiary that carries it.  `code_convert_region` then reports that id
+(`Vlast_coding_system_used = CODING_ID_NAME (coding.id)`, src/coding.c:9497), so
+a detected end of line is observable by NAME as well as by text -- and through
+an ALIAS it is observable as the canonical subsidiary, because the vector in the
+alias's shared spec holds canonical names:
+
+```elisp
+(list (append (decode-coding-string "a\r\nb\r\n" 'latin-1) nil) last-coding-system-used)
+;; GNU                => ((97 10 98 10) iso-latin-1-dos)
+;; Neomacs before fix => ((97 13 10 98 13 10) latin-1)
+```
+
+Neomacs reported the argument's own name for every case, and
+`decode-coding-region` went further: it OVERWROTE whatever the conversion had
+recorded with the argument's name, in all three of its destination branches.
+
+There is one exception, and it is not a special case for end of line -- it is
+`code_convert_string`'s identity fast path (src/coding.c:9609-9628), which
+returns the string without running the conversion at all when the coding is
+ASCII-compatible, the text is pure ASCII, and no EOL work is owed:
+
+```c
+      if (! NILP (CODING_ATTR_ASCII_COMPAT (attrs))
+          && (STRING_MULTIBYTE (string) ? (chars == bytes) : string_ascii_p (string))
+          && (EQ (CODING_ID_EOL_TYPE (coding.id), Qunix)
+              || inhibit_eol_conversion
+              || ! memchr (SDATA (string), encodep ? '\n' : '\r', bytes)))
+        {
+          if (! norecord)
+            Vlast_coding_system_used = coding_system;
+          return (nocopy ? string
+                  : (encodep ? make_unibyte_string (SSDATA (string), bytes)
+                             : make_multibyte_string (SSDATA (string), bytes, bytes)));
+        }
+```
+
+It is guarded by `EQ (dst_object, Qt)` (:9608), so it is available to
+`decode-coding-string` returning a string and to nothing else.
+`code_convert_region` has no such path, and `insert-file-contents` reaches
+`decode_coding_object` directly.  The same ASCII text therefore answers two
+different names depending on which door it came in, and that is measurable too:
+
+```elisp
+;; the text "a\nb\n", decoded as `undecided'
+;; (decode-coding-string ...)                       => last-coding-system-used  undecided
+;; (decode-coding-string ... nil (current-buffer))  => last-coding-system-used  undecided-unix
+;; (decode-coding-region ...)                       => last-coding-system-used  undecided-unix
+;; (insert-file-contents ...)                       => last-coding-system-used  undecided-unix
+```
+
+The fast path also decides the RESULT'S multibyteness, which is how `binary`
+came into it: its eol_type IS `Qunix`, so a CR does not block the path, and GNU
+hands back a multibyte string where Neomacs built a unibyte one.
+
+```elisp
+(let ((d (decode-coding-string "a\r\nb\r\n" 'binary))) (list (append d nil) (multibyte-string-p d)))
+;; GNU                => ((97 13 10 98 13 10) t)
+;; Neomacs before fix => ((97 13 10 98 13 10) nil)
+```
+
+Neomacs's own fast path had the ASCII and the newline test but not the
+`EQ (eol_type, Qunix)` escape, because until now nothing here knew that
+`binary`'s eol type was concrete.  It also read the eol type of the coding's
+BASE, so `raw-text-unix` -- whose own type is `Qunix` while `raw-text`'s is a
+vector -- was refused the path and came back unibyte where GNU returns multibyte.
+
+### The type-level fix
+
+`EolType` keeps its four states, because it models GNU's slot and the vector is
+one of them.  What changes is that the four-state type can no longer reach a
+byte transformation.  `ResolvedEol` (`neovm-core/src/emacs_core/coding.rs`) has
+GNU's three concrete answers and NO undecided variant, and `decode_eol_bytes`
+now takes one:
+
+```rust
+pub(crate) enum ResolvedEol { Unix, Dos, Mac }
+
+impl EolType {
+    pub(crate) fn for_encode(self) -> ResolvedEol;                 // VECTOR -> Qunix
+    pub(crate) fn for_decode(self, decoded: &[u8]) -> ResolvedEol; // VECTOR -> detect
+}
+```
+
+The two resolvers are GNU's two, spelled as the only two ways to get a
+`ResolvedEol` out of an `EolType`.  Reading the vector as "nothing to do" is not
+a mistake that can be made again: there is no arm to write it in, and a caller
+that has not chosen `for_encode` or `for_decode` has no value to pass.
+`for_decode` takes the DECODED bytes as an argument for the same reason -- GNU
+scans the produced text, and a signature that accepted the source could not.
+
+`detected_decoded_eol` is the VECTOR branch of `decode_eol`, whole-text bitmask
+and both fold rules, and `DecodeEolSeen` names the fold's RESULT rather than the
+raw mask, so the mixture states cannot leak out of it into a conversion.  It
+sits next to the existing `detect_eol_seen` port -- which keeps serving
+`detect-coding-string`, and whose doc comment now says which of GNU's two
+functions it is and why the answers differ.
+
+`CodingEntry` (`neovm-core/src/encoding.rs`) is GNU's `dst_object == Qt` guard
+promoted to a parameter: `CodeConvertString` for the two string builtins,
+`CodingObject` for the region path and for file I/O, which reach
+`encode_coding_object` / `decode_coding_object` directly.  The identity fast
+path is available only to the first, and the reporting difference above falls
+out of it instead of being a rule each call site remembers.
+
+Three duplicate decisions are gone with it.  `DetectedFileEol` is deleted --
+`insert-file-contents` now hands the coding-system name to the shared decoder
+and lets `decode_eol` do what it does for strings and processes.
+`builtin_coding_region` no longer re-writes `last-coding-system-used`; the
+conversion below it already recorded GNU's answer.  And
+`ProcessOutputDecoding::Bytes` -- which entry 131 deliberately left conflating
+`raw-text` with `binary`/`no-conversion` so that the conflation would become
+wrong the moment detection landed -- now covers only the two codings that
+convert NOTHING, character code and end of line alike; `raw-text` goes through
+the shared decoder like any other name.  The encode side keeps `raw-text` in its
+own convert-nothing set, and says why: encoders never detect.
+
+One boundary had to move with it.  A subprocess read that ends on a CR can no
+longer be decoded on its own, because the coding system it belongs to may still
+resolve to dos; the trailing-CR carryover that only `-dos` codings used now
+covers every undecided-eol coding as well.
+
+### Two pinned expectations moved, and both were re-derived by running GNU
+
+`decode_insert_file_contents_defaults_to_gnu_ascii_undecided_codings` pinned
+`b"a\r\nb\r\nc\r\nd\n"` as `undecided-dos` under the name
+`only_first_three_eols_are_evidence`.  It was recording Neomacs's own answer:
+GNU reads that file back with every CR intact and `last-coding-system-used`
+`undecided-unix`.  The case is kept, renamed for what it actually shows, and now
+asserts the TEXT as well as the name.
+
+`decode_insert_file_contents_accepts_chinese_gb2312_coding` pinned
+`chinese-iso-8bit-unix` for `coding-system-for-read` `cn-gb-2312-unix`.  GNU
+answers `cn-gb-2312-unix` -- an alias whose eol type is already concrete is
+reported verbatim, because `Fdefine_coding_system_alias` puts the alias in the
+coding-system hash table as a key of its own and `adjust_coding_eol_type`
+returns "Already adjusted" without rewriting the id (src/coding.c:6477-6479).
+`chinese-iso-8bit-unix` is what `buffer-file-coding-system` holds, which Lisp
+canonicalises separately; the field this test reads is
+`last-coding-system-used`.  Measured both, in one run, under GNU 31.0.90.
+
+No other pinned expectation moved.  The blast radius was measured rather than
+assumed, because a core primitive with three consumers is exactly where it can
+be large: `cargo nextest run -p neovm-oracle-tests` is 38765/38765 green after
+the change, unchanged from before it, and `neovm-core` is 9002/9002.  The MELPA
+suite is 921/928 with 7 red; running the seven against a verified build of
+origin/main (`tmp/refbin/neomacs`, via `NEOMACS_BIN`) reproduces three of them
+-- `auto_save_buffers_enhanced`, `jedi` and `quelpa` are red on both builds --
+and the other four pass on both when run on their own.  Two of those four
+(`closql`, `org_roam`) failed the full run on an external `make all` that raced
+another suite building the SAME `sqlite3-api.so`, and the remaining two are the
+comint-echo and TUI timing shapes ledger 133 already characterised.  Zero
+regressions.
+
+Against the rebuilt release binary (`cargo xtask fresh-build --release`), the
+probes in `tmp/pw42/` -- the coding-system matrix, the mixed-line-ending shapes,
+the two entry points and their `last-coding-system-used`, the
+`insert-file-contents` matrix, the `decode-coding-region` matrix and the
+`call-process` matrix -- are byte-identical to GNU Emacs 31.0.90 on every row
+except the ones recorded below as not fixed.
+
+### Corrections to earlier entries
+
+Entry 128, dated 2026-08-17: its `coding-system-for-read` = `no-conversion` /
+`binary` / `raw-text` row groups three codings that do not behave alike.  For
+the payload that entry used they agree, but on the end-of-line axis they do not:
+GNU converts CR LF under `raw-text` and copies it under the other two.  Entry
+131 already flagged the row as understated; it is now measured, and
+`call_process_output_eol_is_detected_for_an_undecided_eol_coding_system` pins
+the difference.  Its `utf-8-dos`, unibyte-destination and `latin-1` rows are
+unaffected.
+
+Entry 131, dated 2026-08-17: the "End-of-line DETECTION is missing from the
+decoder" residual is closed here.  Its `ProcessOutputDecoding::Bytes` prediction
+held exactly as written.  Its second residual -- `Vlast_coding_system_used` is
+not written back onto the process object -- is NOT closed here and is still
+open; this entry fixes what `last-coding-system-used` reports for strings,
+regions and files, which is a different slot from `(process-coding-system P)`.
+
+### Found and NOT fixed here
+
+**`inhibit-eol-conversion` is inert, in both directions.**  It appears in every
+one of GNU's EOL sites as the first term of the same expression
+(`setup_coding_system` src/coding.c:5681, `consume_chars` :7623, `decode_eol`
+:6765, the identity fast path :9613), and Neomacs implements none of them.  It
+was already inert before this entry -- the `-dos` rows below diverged on
+origin/main too -- and it stays inert after:
+
+```elisp
+(let ((inhibit-eol-conversion t))
+  (list (append (decode-coding-string "a\r\nb\r\n" 'utf-8-dos) nil)
+        (append (encode-coding-string "a\nb" 'utf-8-dos) nil)))
+;; GNU     => ((97 13 10 98 13 10) (97 10 98))
+;; Neomacs => ((97 10 98 10) (97 13 10 98))
+```
+
+It is left out deliberately.  Honouring it means reading a dynamic Lisp variable
+at every EOL resolution, including the context-free entries (`decode_bytes`,
+`encode_lisp_string`) that process output and the file-name decoder reach
+without a `Context`; that is a threading change across the whole coding seam,
+not a flag.  Doing half of it -- the sites that happen to have a `ctx` -- would
+leave the variable working for strings and silently ignored for processes, which
+is the shape this ledger keeps having to undo.
+
+**`decode_bytes` runs its EOL pass before the decoder, not after.**  For every
+family it reaches that is ASCII-transparent for `0x0D`/`0x0A` -- UTF-8, the
+single-byte charsets, Big5 and GBK, whose trail-byte ranges exclude both -- the
+two orders agree, which is why nothing measures.  UTF-16 is the family where
+they do not, and `decode_bytes` returns before its EOL pass for UTF-16 anyway,
+so a UTF-16 process filter still gets no EOL conversion.  `decode-coding-string`
+is unaffected: its pass is the outer one, after the decoder, and the UTF-16 rows
+of the existing round-trip test cover it.
+
+**Detection on a process read is per chunk, not per process.**  GNU decodes
+every run of a subprocess's output through ONE `struct coding_system`, so once
+`adjust_coding_eol_type` has fired the choice is sticky for that process; here
+each read resolves again.  The carryover above closes the case that would
+otherwise misread a split CR LF; what remains is that a later chunk with no
+evidence of its own inherits unix rather than the earlier answer.  Making it
+sticky means writing the resolved coding back onto the process, which is entry
+131's other open residual, so the two belong together.
+
+**`load`'s source-EOL detector is a third copy.**  `source_emacs_coding`
+(`neovm-core/src/emacs_core/load.rs`) resolves the end of line itself and always
+hands the decoder a concrete `-unix`/`-dos`/`-mac` name, so it is unaffected by
+this change.  Its rules are GNU's minus the stray-^M-in-a-DOS-file case, which
+no `.el` file in the tree exercises.  It could be deleted the way
+`DetectedFileEol` was; it is left because the bootstrap loads through it and the
+change has no measurable payoff.
+
+**`utf-16` with a BOM still reports the wrong BASE name.**  Decoding a
+BOM-prefixed UTF-16 string leaves `last-coding-system-used` at `utf-16-dos` here
+and `utf-16be-with-signature-dos` in GNU.  The end-of-line half is now right on
+both sides; the divergence is in which concrete system the BOM selects, which is
+`detect_coding`'s `coding_category_utf_16_auto` arm (src/coding.c:6724-6742) and
+not this axis.
+
+
+Status: FIXED.
