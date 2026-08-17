@@ -1838,6 +1838,14 @@ fn decode_emacs_codes(data: &[u8]) -> Vec<u32> {
     let mut codes = Vec::with_capacity(data.len());
     let mut pos = 0usize;
     while pos < data.len() {
+        let byte = data[pos];
+        // ASCII needs no decode; skip the out-of-line `string_char` call
+        // that dominated decoding typical (ASCII) format strings.
+        if byte < 0x80 {
+            codes.push(byte as u32);
+            pos += 1;
+            continue;
+        }
         let (code, len) = crate::emacs_core::emacs_char::string_char(&data[pos..]);
         codes.push(code);
         pos += len;
@@ -2186,14 +2194,20 @@ fn build_format_result(
     // a genuine (non eight-bit) multibyte character, since %S/printer output can
     // introduce one without a multibyte argument string. Eight-bit raw bytes do
     // NOT promote (issue #131: a raw unibyte byte stays unibyte).
+    // An all-ASCII result (the common case) needs neither the per-char
+    // multibyte probe nor the unibyte down-conversion — both were decoding
+    // every result character out of line on every `format` call.
+    let all_ascii = bytes.iter().all(|&byte| byte < 0x80);
     let multibyte = force_multibyte_result
         || args.iter().any(|value| value.string_is_multibyte())
-        || result_bytes_imply_multibyte(&bytes);
+        || (!all_ascii && result_bytes_imply_multibyte(&bytes));
     // `bytes` are canonical multibyte Emacs encoding. A unibyte result has no
     // genuine multibyte character, so down-convert eight-bit chars back to raw
     // bytes (preserving e.g. a raw unibyte payload passed through verbatim).
     let result = Value::heap_string(if multibyte {
         crate::heap_types::LispString::from_emacs_bytes(bytes)
+    } else if all_ascii {
+        crate::heap_types::LispString::from_unibyte(bytes)
     } else {
         crate::heap_types::LispString::from_unibyte(emacs_bytes_to_unibyte(&bytes))
     });
