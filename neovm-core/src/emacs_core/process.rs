@@ -1564,6 +1564,33 @@ impl ProcessOutputDecoding {
         }
     }
 
+    /// The same decoding with character-code conversion removed but the
+    /// end-of-line conversion kept — GNU's `raw_text_coding_system` (src/coding.c),
+    /// which returns the `raw-text` subsidiary carrying CODING's own EOL type.
+    ///
+    /// `Fcall_process` applies this when the destination buffer is unibyte
+    /// (src/callproc.c:754-759).  Measured into a unibyte buffer: a child
+    /// writing CR LF under `utf-8-dos` still lands as bare LF, while the same
+    /// child under `utf-8-unix` keeps its CR — so dropping the EOL half here
+    /// would be as wrong as keeping the character half.
+    pub(crate) fn without_character_conversion(self) -> Self {
+        let coding = match self {
+            // Already byte-faithful.
+            Self::Bytes => return self,
+            Self::Coding(name) => name,
+        };
+        Self::Coding(if coding == "dos" || coding.ends_with("-dos") {
+            "raw-text-dos"
+        } else if coding == "mac" || coding.ends_with("-mac") {
+            "raw-text-mac"
+        } else if coding == "unix" || coding.ends_with("-unix") {
+            "raw-text-unix"
+        } else {
+            // No EOL type of its own: GNU's `raw-text`, whose EOL is undecided.
+            "raw-text"
+        })
+    }
+
     /// Turn a run of child output bytes into the text that is inserted.
     pub(crate) fn decode(self, bytes: &[u8]) -> LispString {
         match self {

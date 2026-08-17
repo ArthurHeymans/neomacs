@@ -806,7 +806,8 @@ fn run_process_command_in_state(
         .output()
         .map_err(|e| super::process::signal_process_io("Searching for program", None, e))?;
 
-    let decoding = resolve_call_process_output_decoding(eval, operation_args)?;
+    let decoding =
+        resolve_call_process_output_decoding(eval, operation_args, &destination_spec)?;
     route_captured_output_in_state(
         eval,
         &destination_spec,
@@ -984,6 +985,7 @@ fn resolve_call_process_arg_coding(eval: &super::eval::Context, cmd_args: &[Lisp
 fn resolve_call_process_output_decoding(
     eval: &mut super::eval::Context,
     operation_args: &[Value],
+    destination: &DestinationSpec,
 ) -> Result<ProcessOutputDecoding, Flow> {
     let for_read = eval.visible_variable_value_or_nil("coding-system-for-read");
     let resolved = if for_read.is_truthy() {
@@ -1006,7 +1008,40 @@ fn resolve_call_process_output_decoding(
     // coding system there (`Fcoding_system_p` accepts it), so this only
     // rejects a name that no coding system defines.
     super::coding::builtin_check_coding_system(&eval.coding_systems, vec![resolved])?;
-    Ok(ProcessOutputDecoding::for_coding(resolved))
+
+    let decoding = ProcessOutputDecoding::for_coding(resolved);
+    if destination_buffer_is_multibyte(eval, &destination.stdout) {
+        return Ok(decoding);
+    }
+    // GNU src/callproc.c:754-759, verbatim: "In unibyte mode, character code
+    // conversion should not take place but EOL conversion should.  So, setup
+    // raw-text or one of the subsidiary according to the information just
+    // setup."  `Fset_buffer (buffer)` at :722-723 means the buffer this asks
+    // about is the DESTINATION buffer, not the caller's.
+    Ok(decoding.without_character_conversion())
+}
+
+/// Whether the buffer a synchronous subprocess's stdout lands in is multibyte.
+///
+/// A destination that is not a buffer at all answers `true`, because the
+/// unibyte rule above then has nothing to weaken: the bytes are written to a
+/// file or discarded without ever being decoded.  A named buffer that does not
+/// exist yet also answers `true` — it will be created multibyte.
+fn destination_buffer_is_multibyte(eval: &super::eval::Context, target: &OutputTarget) -> bool {
+    let OutputTarget::Buffer(destination) = target else {
+        return true;
+    };
+    let buffer_id = match destination {
+        BufferOutputTarget::Current => eval.buffers.current_buffer_id(),
+        BufferOutputTarget::Named(name) => {
+            let name = crate::emacs_core::emacs_char::to_utf8_lossy(name.as_bytes());
+            eval.buffers.find_buffer_by_name(&name)
+        }
+        BufferOutputTarget::Existing(buffer_id) => Some(*buffer_id),
+    };
+    buffer_id
+        .and_then(|id| eval.buffers.get(id))
+        .map_or(true, |buffer| buffer.get_multibyte())
 }
 
 /// `(find-operation-coding-system 'call-process PROGRAM ...)`, guarded on a
@@ -1311,7 +1346,8 @@ fn builtin_call_process_region_impl(
         args.get(5).copied().unwrap_or(Value::NIL),
     ];
     operation_args.extend_from_slice(args.get(6..).unwrap_or(&[]));
-    let decoding = resolve_call_process_output_decoding(eval, &operation_args)?;
+    let decoding =
+        resolve_call_process_output_decoding(eval, &operation_args, &destination_spec)?;
     route_captured_output_in_state(
         eval,
         &destination_spec,

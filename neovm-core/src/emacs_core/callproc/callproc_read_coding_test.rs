@@ -198,6 +198,81 @@ fn call_process_signals_coding_system_error_for_an_unknown_read_coding() {
     );
 }
 
+/// Run BODY with a UNIBYTE current buffer and report `(BUFFER-SIZE BYTES)`.
+fn unibyte_probe(body: &str) -> String {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let printf = find_bin("printf");
+    let form = format!(
+        r#"(progn
+             (set-buffer-multibyte nil)
+             {body}
+             (list (buffer-size) (append (buffer-string) nil)))"#
+    );
+    let form = form.replace("PRINTF", &printf).replace("PAYLOAD", PAYLOAD);
+    format_eval_result(&eval.eval_str(&form))
+}
+
+#[cfg(unix)]
+#[test]
+fn a_unibyte_destination_buffer_gets_no_character_code_conversion() {
+    // GNU src/callproc.c:754-759 — "In unibyte mode, character code conversion
+    // should not take place but EOL conversion should."  Every coding system
+    // therefore leaves the same five raw bytes in a unibyte buffer.
+    for coding in [
+        "'(utf-8-unix . utf-8-unix)-DEFAULT",
+        "'utf-8",
+        "'no-conversion",
+        "'latin-1",
+    ] {
+        let body = if let Some(default) = coding.strip_suffix("-DEFAULT") {
+            format!(
+                r#"(let ((default-process-coding-system {default}))
+                     (call-process "PRINTF" nil t nil PAYLOAD))"#
+            )
+        } else {
+            format!(
+                r#"(let ((coding-system-for-read {coding}))
+                     (call-process "PRINTF" nil t nil PAYLOAD))"#
+            )
+        };
+        assert_eq!(
+            unibyte_probe(&body),
+            "OK (5 (99 97 102 195 169))",
+            "unibyte destination, {coding}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_unibyte_destination_buffer_still_gets_the_eol_conversion() {
+    // The other half of src/callproc.c:754-759: GNU downgrades to the `raw-text`
+    // subsidiary carrying the resolved coding's OWN end-of-line type, so a
+    // `-dos` read coding still folds CR LF while a `-unix` one does not.
+    crate::test_utils::init_test_tracing();
+    for (coding, expected) in [
+        ("utf-8-dos", "OK (4 (97 10 98 10))"),
+        ("utf-8-unix", "OK (6 (97 13 10 98 13 10))"),
+        ("no-conversion", "OK (6 (97 13 10 98 13 10))"),
+    ] {
+        let mut eval = Context::new();
+        let printf = find_bin("printf");
+        let observed = eval.eval_str(&format!(
+            r#"(progn
+                 (set-buffer-multibyte nil)
+                 (let ((coding-system-for-read '{coding}))
+                   (call-process "{printf}" nil t nil "a\\r\\nb\\r\\n"))
+                 (list (buffer-size) (append (buffer-string) nil)))"#
+        ));
+        assert_eq!(
+            format_eval_result(&observed),
+            expected,
+            "unibyte destination EOL, {coding}"
+        );
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn call_process_region_output_honors_coding_system_for_read() {
