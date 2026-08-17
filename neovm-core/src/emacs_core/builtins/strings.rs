@@ -1833,7 +1833,9 @@ struct FormatLiteralPush {
 ///
 /// Decode `data` (Emacs internal encoding) into its character codes.
 fn decode_emacs_codes(data: &[u8]) -> Vec<u32> {
-    let mut codes = Vec::new();
+    // Chars never outnumber bytes; one exact-enough reservation instead of
+    // doubling growth on every few pushes.
+    let mut codes = Vec::with_capacity(data.len());
     let mut pos = 0usize;
     while pos < data.len() {
         let (code, len) = crate::emacs_core::emacs_char::string_char(&data[pos..]);
@@ -1961,14 +1963,15 @@ fn do_format(
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
-    let fmt_emacs = if fmt_ls.is_multibyte() {
-        fmt_ls.as_bytes().to_vec()
+    let fmt_codes = if fmt_ls.is_multibyte() {
+        decode_emacs_codes(fmt_ls.as_bytes())
     } else {
-        crate::emacs_core::emacs_char::str_to_multibyte(fmt_ls.as_bytes())
+        decode_emacs_codes(&crate::emacs_core::emacs_char::str_to_multibyte(
+            fmt_ls.as_bytes(),
+        ))
     };
-    let fmt_codes = decode_emacs_codes(&fmt_emacs);
 
-    let mut result: Vec<u8> = Vec::new();
+    let mut result: Vec<u8> = Vec::with_capacity(fmt_ls.as_bytes().len() + 32);
     let mut spans: Vec<FormatPropSpan> = Vec::new();
     let mut source_spans: Vec<FormatSourceSpan> = Vec::new();
     let mut force_multibyte_result = false;
@@ -1982,6 +1985,20 @@ fn do_format(
     let mut result_char_pos = 0usize;
     let fmt_has_props =
         crate::emacs_core::value::get_string_text_properties_table_for_value(args[0]).is_some();
+    // GNU `styled_format` only does interval bookkeeping when the format
+    // string or some argument actually carries text properties
+    // (editfns.c `arg_intervals` / `spec->intervals`). The spans collected
+    // below feed `apply_format_string_prop_spans`/`apply_format_prop_spans`,
+    // which are no-ops without a source property table — so skip all span
+    // and char-position accounting for the plain propertyless call.
+    let track_props = fmt_has_props
+        || args[1..].iter().any(|arg| {
+            // A symbol argument becomes its NAME string under %s, and that
+            // name can carry text properties — probe the same source value
+            // the %s arm formats.
+            let source = super::misc_pure::symbol_name_string_for_format(*arg).unwrap_or(*arg);
+            crate::emacs_core::value::get_string_text_properties_table_for_value(source).is_some()
+        });
 
     while i < fmt_codes.len() {
         let code = fmt_codes[i];
@@ -1992,14 +2009,16 @@ fn do_format(
             let pushed = push_format_literal_code(&mut result, code, quoting_style);
             force_multibyte_result |= pushed.multibyte;
             new_result |= pushed.translated;
-            source_spans.push(FormatSourceSpan {
-                source_char_start: source_start,
-                source_char_end: format_char_pos,
-                result_char_start: result_char_pos,
-                result_char_end: result_char_pos + 1,
-                kind: FormatSpanKind::Literal,
-            });
-            result_char_pos += 1;
+            if track_props {
+                source_spans.push(FormatSourceSpan {
+                    source_char_start: source_start,
+                    source_char_end: format_char_pos,
+                    result_char_start: result_char_pos,
+                    result_char_end: result_char_pos + 1,
+                    kind: FormatSpanKind::Literal,
+                });
+                result_char_pos += 1;
+            }
             continue;
         }
 
@@ -2012,14 +2031,16 @@ fn do_format(
         new_result = true;
         if spec.conversion == '%' {
             result.push(b'%');
-            source_spans.push(FormatSourceSpan {
-                source_char_start: source_start,
-                source_char_end: spec_source_end,
-                result_char_start: result_char_pos,
-                result_char_end: result_char_pos + 1,
-                kind: FormatSpanKind::PercentEscape,
-            });
-            result_char_pos += 1;
+            if track_props {
+                source_spans.push(FormatSourceSpan {
+                    source_char_start: source_start,
+                    source_char_end: spec_source_end,
+                    result_char_start: result_char_pos,
+                    result_char_end: result_char_pos + 1,
+                    kind: FormatSpanKind::PercentEscape,
+                });
+                result_char_pos += 1;
+            }
             continue;
         }
 
@@ -2055,7 +2076,9 @@ fn do_format(
                 };
                 let (formatted, content_byte_start_in_formatted, content_byte_end_in_formatted) =
                     format_string_spec_tracked(&s, src_multibyte, &spec);
-                if arg_is_string && content_byte_start_in_formatted < content_byte_end_in_formatted
+                if track_props
+                    && arg_is_string
+                    && content_byte_start_in_formatted < content_byte_end_in_formatted
                 {
                     let formatted_chars = emacs_chars_count(&formatted);
                     let content_char_start_in_formatted =
@@ -2126,17 +2149,19 @@ fn do_format(
             }
         };
         arg_idx = this_arg_idx + 1;
-        let formatted_chars = emacs_chars_count(&formatted);
-        if formatted_chars > 0 {
-            source_spans.push(FormatSourceSpan {
-                source_char_start: source_start,
-                source_char_end: spec_source_end,
-                result_char_start: result_char_pos,
-                result_char_end: result_char_pos + formatted_chars,
-                kind: FormatSpanKind::Conversion,
-            });
+        if track_props {
+            let formatted_chars = emacs_chars_count(&formatted);
+            if formatted_chars > 0 {
+                source_spans.push(FormatSourceSpan {
+                    source_char_start: source_start,
+                    source_char_end: spec_source_end,
+                    result_char_start: result_char_pos,
+                    result_char_end: result_char_pos + formatted_chars,
+                    kind: FormatSpanKind::Conversion,
+                });
+            }
+            result_char_pos += formatted_chars;
         }
-        result_char_pos += formatted_chars;
         result.extend_from_slice(&formatted);
     }
 
