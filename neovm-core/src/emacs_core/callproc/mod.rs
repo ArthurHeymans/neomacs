@@ -806,8 +806,7 @@ fn run_process_command_in_state(
         .output()
         .map_err(|e| super::process::signal_process_io("Searching for program", None, e))?;
 
-    let decoding =
-        resolve_call_process_output_decoding(eval, operation_args, &destination_spec)?;
+    let decoding = resolve_call_process_output_decoding(eval, operation_args, &destination_spec)?;
     route_captured_output_in_state(
         eval,
         &destination_spec,
@@ -1346,8 +1345,7 @@ fn builtin_call_process_region_impl(
         args.get(5).copied().unwrap_or(Value::NIL),
     ];
     operation_args.extend_from_slice(args.get(6..).unwrap_or(&[]));
-    let decoding =
-        resolve_call_process_output_decoding(eval, &operation_args, &destination_spec)?;
+    let decoding = resolve_call_process_output_decoding(eval, &operation_args, &destination_spec)?;
     route_captured_output_in_state(
         eval,
         &destination_spec,
@@ -1382,7 +1380,8 @@ pub(crate) fn builtin_call_process_shell_command(
     let shell_program = obarray_lisp_string_variable(eval.obarray(), "shell-file-name", "sh")?;
     let shell_switch = obarray_lisp_string_variable(eval.obarray(), "shell-command-switch", "-c")?;
     let shell_args = vec![shell_switch, shell_command];
-    let operation_args = shell_call_process_operation_args(&shell_program, &shell_args, destination);
+    let operation_args =
+        shell_call_process_operation_args(&shell_program, &shell_args, destination);
     let result = run_process_command_in_state(
         eval,
         &shell_program,
@@ -1410,11 +1409,7 @@ fn shell_call_process_operation_args(
         destination,
         Value::NIL,
     ];
-    operation_args.extend(
-        shell_args
-            .iter()
-            .map(|arg| Value::heap_string(arg.clone())),
-    );
+    operation_args.extend(shell_args.iter().map(|arg| Value::heap_string(arg.clone())));
     operation_args
 }
 
@@ -1459,7 +1454,8 @@ pub(crate) fn builtin_process_file_shell_command(
     let shell_program = obarray_lisp_string_variable(eval.obarray(), "shell-file-name", "sh")?;
     let shell_switch = obarray_lisp_string_variable(eval.obarray(), "shell-command-switch", "-c")?;
     let shell_args = vec![shell_switch, shell_command];
-    let operation_args = shell_call_process_operation_args(&shell_program, &shell_args, destination);
+    let operation_args =
+        shell_call_process_operation_args(&shell_program, &shell_args, destination);
     let result = run_process_command_in_state(
         eval,
         &shell_program,
