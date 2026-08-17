@@ -485,7 +485,7 @@ rank	package	downloads	status
 484	cape	177896	todo
 485	elm-mode	177436	todo
 486	alect-themes	177365	covered
-487	default-text-scale	177226	todo
+487	default-text-scale	177226	covered
 488	noflet	175903	covered
 489	darktooth-theme	175095	todo
 490	org-journal	174977	todo
