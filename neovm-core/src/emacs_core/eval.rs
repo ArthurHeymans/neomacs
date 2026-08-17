@@ -13389,6 +13389,45 @@ impl Context {
         });
     }
 
+    /// Backtrace push for a native (JIT) caller: args live in the generated
+    /// code's call-args slot. Reads them in place — the common 1-2 arity
+    /// cases go straight into the compact specpdl forms with no intermediate
+    /// collection (the SmallVec built merely to pass `&[Value]` was a
+    /// measured ~30 Ir/call tax on native-to-native recursion).
+    ///
+    /// # Safety
+    /// `args_ptr` must address `nargs` valid tagged words, alive for the
+    /// duration of this call (the caller's call-args slot).
+    pub(crate) unsafe fn push_backtrace_frame_from_native_args(
+        &mut self,
+        function: Value,
+        args_ptr: *const i64,
+        nargs: usize,
+    ) {
+        // SAFETY: caller contract.
+        let read = |i: usize| Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        match nargs {
+            1 => {
+                self.specpdl.push(SpecBinding::Backtrace1 {
+                    function,
+                    arg: read(0),
+                    debug_on_exit: false,
+                });
+            }
+            2 => {
+                self.specpdl.push(SpecBinding::Backtrace2 {
+                    function,
+                    arg0: read(0),
+                    arg1: read(1),
+                });
+            }
+            _ => {
+                let args: smallvec::SmallVec<[Value; 4]> = (0..nargs).map(read).collect();
+                self.push_backtrace_frame(function, &args);
+            }
+        }
+    }
+
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn push_backtrace_frame_owned(&mut self, function: Value, args: LispArgVec) {
         match args.as_slice() {

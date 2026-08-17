@@ -6360,12 +6360,15 @@ impl<'a> Vm<'a> {
         // be used in a file". Args are read from the caller's call-args slot
         // (small-arity inline via SmallVec — no heap for the common ≤4-arg case).
         let bt_count = self.ctx.specpdl.len();
-        let bt_args: smallvec::SmallVec<[Value; 4]> = (0..nargs)
-            // SAFETY: args_ptr addresses `nargs` valid tagged words (the caller's
-            // call-args slot), same contract the native run below relies on.
-            .map(|i| Value::from_bits(unsafe { *args_ptr.add(i) } as usize))
-            .collect();
-        self.ctx.push_backtrace_frame(callee, &bt_args);
+        // SAFETY: args_ptr addresses `nargs` valid tagged words (the caller's
+        // call-args slot), same contract the native run below relies on. This
+        // push also ROOTS `callee` (the frame's function field is GC-traced)
+        // for the whole native run — the shim's separate scratch-root push
+        // became redundant with it.
+        unsafe {
+            self.ctx
+                .push_backtrace_frame_from_native_args(callee, args_ptr, nargs);
+        }
         let res = self.with_bytecode_call_depth(|vm| {
             let ctx_ptr = core::ptr::from_mut(&mut *vm.ctx);
             let ran = if pure {
@@ -6375,8 +6378,10 @@ impl<'a> Vm<'a> {
                     ctx_ptr, bc, callee, leaf, args_ptr,
                 )?
             } else {
-                // Marshaled (callee has &optional/&rest): build + root args.
-                // The spec shim's outer scratch-root scope bounds these pushes.
+                // Marshaled (callee has &optional/&rest): build + root args in
+                // this branch's OWN scratch-root scope (the shim's armed fast
+                // path no longer opens one).
+                let saved = crate::emacs_core::eval::save_scratch_gc_roots();
                 let mut args = LispArgVec::new();
                 for i in 0..nargs {
                     // SAFETY: args_ptr addresses `nargs` valid words.
@@ -6384,7 +6389,11 @@ impl<'a> Vm<'a> {
                     crate::emacs_core::eval::push_scratch_gc_root(v);
                     args.push(v);
                 }
-                crate::emacs_core::jit::cache::run_resolved_leaf(ctx_ptr, bc, callee, leaf, &args)?
+                let ran = crate::emacs_core::jit::cache::run_resolved_leaf(
+                    ctx_ptr, bc, callee, leaf, &args,
+                );
+                crate::emacs_core::eval::restore_scratch_gc_roots(saved);
+                ran?
             };
             match ran {
                 Some(bits) => Ok(Value::from_bits(bits)),

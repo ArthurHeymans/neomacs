@@ -1290,10 +1290,10 @@ pub extern "C" fn neovm_jit_call_spec(
         #[cfg(debug_assertions)]
         SPEC_CALL_COUNT.fetch_add(1, Ordering::Relaxed);
         let nargs = nargs as usize;
-        let saved = save_scratch_gc_roots();
         // Build a rooted LispArgVec from the caller's call-args slot — used only by
-        // the strict-call fallback paths (call_for_jit). The native-to-native fast
-        // path passes `args_ptr` straight through and never materializes this.
+        // the strict-call fallback paths (call_for_jit), inside their own
+        // scratch-root scope. The native-to-native fast path passes `args_ptr`
+        // straight through and touches no scratch-root state at all.
         let read_rooted_args = || {
             let mut args = LispArgVec::new();
             for i in 0..nargs {
@@ -1307,7 +1307,14 @@ pub extern "C" fn neovm_jit_call_spec(
         };
         // SAFETY: see neovm_jit_call's function-level contract.
         let ctx = unsafe { &mut *(ctx as *mut Context) };
-        let status = match ctx.maybe_quit() {
+        // Same split as the interpreter's Op::Call poll: the loads-only fast
+        // condition runs first; the full poll only when it has work.
+        let quit = if ctx.maybe_quit_hot_ok() {
+            Ok(())
+        } else {
+            ctx.maybe_quit()
+        };
+        let status = match quit {
             Err(flow) => {
                 stash_pending_flow(flow);
                 STATUS_SIGNAL
@@ -1351,15 +1358,28 @@ pub extern "C" fn neovm_jit_call_spec(
                 let mut vm = Vm::from_context(ctx);
                 let outcome = if armed {
                     let target = Value::from_bits(expected as usize);
-                    push_scratch_gc_root(target);
+                    // No scratch rooting on the armed fast path: nothing
+                    // between the epoch proof and the callee's backtrace push
+                    // (which roots the target for the whole native run) can
+                    // reach a GC safe point, and the epoch proof keeps the
+                    // object obarray-reachable until then.
                     match vm.call_armed_callee_native(target, &slot.leaf, args_ptr, nargs) {
                         Some(res) => res,
-                        None => vm.call_for_jit(target, read_rooted_args()),
+                        None => {
+                            let saved = save_scratch_gc_roots();
+                            push_scratch_gc_root(target);
+                            let res = vm.call_for_jit(target, read_rooted_args());
+                            restore_scratch_gc_roots(saved);
+                            res
+                        }
                     }
                 } else {
                     let target = Value::from_sym_id(SymId(sym as u32));
+                    let saved = save_scratch_gc_roots();
                     push_scratch_gc_root(target);
-                    vm.call_for_jit(target, read_rooted_args())
+                    let res = vm.call_for_jit(target, read_rooted_args());
+                    restore_scratch_gc_roots(saved);
+                    res
                 };
                 match outcome {
                     Ok(value) => {
@@ -1374,7 +1394,6 @@ pub extern "C" fn neovm_jit_call_spec(
                 }
             }
         };
-        restore_scratch_gc_roots(saved);
         status
     })
 }
