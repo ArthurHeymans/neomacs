@@ -6318,8 +6318,12 @@ impl<'a> Vm<'a> {
     /// types, so it must be gated too — otherwise the no-jit production build
     /// (workspace `neovm-core` is `default-features = false`) fails to compile.
     #[cfg(feature = "jit")]
+    /// Takes the CONTEXT, not a `Vm`: this is the JIT shim's per-call fast
+    /// path, and `Vm::from_context` eagerly zero-fills its call caches — a
+    /// measured ~22 Ir/call tax the armed path must not pay. Only the cold
+    /// defensive deopt fallback below builds a `Vm`.
     pub(crate) fn call_armed_callee_native(
-        &mut self,
+        ctx: &mut crate::emacs_core::eval::Context,
         callee: Value,
         leaf_slot: &core::sync::atomic::AtomicU64,
         args_ptr: *const i64,
@@ -6330,7 +6334,7 @@ impl<'a> Vm<'a> {
         let mut ptr = leaf_slot.load(Ordering::Relaxed)
             as *const crate::emacs_core::jit::compile::CompiledLeaf;
         if ptr.is_null() {
-            let ctx_ptr = core::ptr::from_mut(&mut *self.ctx);
+            let ctx_ptr = core::ptr::from_mut(&mut *ctx);
             ptr = crate::emacs_core::jit::cache::resolve_compiled_leaf_ptr(ctx_ptr, bc)?;
             leaf_slot.store(ptr as usize as u64, Ordering::Relaxed);
         }
@@ -6359,18 +6363,34 @@ impl<'a> Vm<'a> {
         // fails to detect the compiling file and raises "c-lang-defconst can only
         // be used in a file". Args are read from the caller's call-args slot
         // (small-arity inline via SmallVec — no heap for the common ≤4-arg case).
-        let bt_count = self.ctx.specpdl.len();
+        let bt_count = ctx.specpdl.len();
         // SAFETY: args_ptr addresses `nargs` valid tagged words (the caller's
         // call-args slot), same contract the native run below relies on. This
         // push also ROOTS `callee` (the frame's function field is GC-traced)
         // for the whole native run — the shim's separate scratch-root push
         // became redundant with it.
         unsafe {
-            self.ctx
-                .push_backtrace_frame_from_native_args(callee, args_ptr, nargs);
+            ctx.push_backtrace_frame_from_native_args(callee, args_ptr, nargs);
         }
-        let res = self.with_bytecode_call_depth(|vm| {
-            let ctx_ptr = core::ptr::from_mut(&mut *vm.ctx);
+        // Inline `with_bytecode_call_depth` at the ctx level (GNU's Bcall
+        // depth protocol, floor-raise included) — the Vm wrapper exists only
+        // for its caches, which this path deliberately avoids constructing.
+        ctx.depth += 1;
+        if ctx.depth > ctx.max_depth {
+            if ctx.max_depth < 100 {
+                ctx.max_depth = 100;
+            }
+            if ctx.depth > ctx.max_depth {
+                ctx.depth -= 1;
+                let err = Err(signal(
+                    "error",
+                    vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")],
+                ));
+                return Some(ctx.pop_bytecode_backtrace_frame_with_result(bt_count, err));
+            }
+        }
+        let res = (|| {
+            let ctx_ptr = core::ptr::from_mut(&mut *ctx);
             let ran = if pure {
                 // NATIVE-TO-NATIVE: pass the caller's call-args slot straight
                 // through (no LispArgVec, no rooting, no re-marshal).
@@ -6405,16 +6425,16 @@ impl<'a> Vm<'a> {
                         // SAFETY: args_ptr addresses `nargs` valid words.
                         args.push(Value::from_bits(unsafe { *args_ptr.add(i) } as usize));
                     }
+                    // Cold defensive path: a full Vm is fine here.
+                    let mut vm = Vm::from_context(unsafe { &mut *ctx_ptr });
                     vm.execute_with_func_value(bc, args, callee)
                 }
             }
-        });
+        })();
+        ctx.depth -= 1;
         // Pop the callee's backtrace frame (balanced single-entry pop; falls back
         // to the general unwinder if a nested imbalance occurred).
-        Some(
-            self.ctx
-                .pop_bytecode_backtrace_frame_with_result(bt_count, res),
-        )
+        Some(ctx.pop_bytecode_backtrace_frame_with_result(bt_count, res))
     }
 
     fn call_function_from_stack_args(

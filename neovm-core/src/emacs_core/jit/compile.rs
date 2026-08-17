@@ -1355,19 +1355,20 @@ pub extern "C" fn neovm_jit_call_spec(
                 // fast-pathed (arity / not compilable). Not armed: strict call on
                 // the SYMBOL (resolves the new binding — fset/advice take effect
                 // immediately).
-                let mut vm = Vm::from_context(ctx);
                 let outcome = if armed {
                     let target = Value::from_bits(expected as usize);
-                    // No scratch rooting on the armed fast path: nothing
-                    // between the epoch proof and the callee's backtrace push
-                    // (which roots the target for the whole native run) can
-                    // reach a GC safe point, and the epoch proof keeps the
-                    // object obarray-reachable until then.
-                    match vm.call_armed_callee_native(target, &slot.leaf, args_ptr, nargs) {
+                    // No scratch rooting and no Vm construction on the armed
+                    // fast path: nothing between the epoch proof and the
+                    // callee's backtrace push (which roots the target for the
+                    // whole native run) can reach a GC safe point, and
+                    // `Vm::from_context`'s eager cache zero-fill was a
+                    // measured per-call tax.
+                    match Vm::call_armed_callee_native(ctx, target, &slot.leaf, args_ptr, nargs) {
                         Some(res) => res,
                         None => {
                             let saved = save_scratch_gc_roots();
                             push_scratch_gc_root(target);
+                            let mut vm = Vm::from_context(ctx);
                             let res = vm.call_for_jit(target, read_rooted_args());
                             restore_scratch_gc_roots(saved);
                             res
@@ -1377,6 +1378,7 @@ pub extern "C" fn neovm_jit_call_spec(
                     let target = Value::from_sym_id(SymId(sym as u32));
                     let saved = save_scratch_gc_roots();
                     push_scratch_gc_root(target);
+                    let mut vm = Vm::from_context(ctx);
                     let res = vm.call_for_jit(target, read_rooted_args());
                     restore_scratch_gc_roots(saved);
                     res
