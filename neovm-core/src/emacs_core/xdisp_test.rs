@@ -63,10 +63,8 @@ fn test_register_bootstrap_vars_include_tab_bar_display_vars() {
         obarray.symbol_value("auto-resize-tab-bars"),
         Some(&Value::T)
     );
-    assert_eq!(
-        obarray.symbol_value("auto-raise-tab-bar-buttons"),
-        Some(&Value::T)
-    );
+    // `auto-raise-tab-bar-buttons' is a GNU `DEFVAR_BOOL' (`src/xdisp.c:38704'),
+    // so it is declared by `defvar_bool::GNU_BOOL_VARIABLES' rather than here.
     assert_eq!(
         obarray.symbol_value("tab-bar-border"),
         Some(&Value::symbol("internal-border-width"))

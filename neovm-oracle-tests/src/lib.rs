@@ -84,6 +84,7 @@ mod define;
 mod defmacro;
 mod defun_comprehensive_patterns;
 mod defvar;
+mod defvar_bool_byte_boolean_vars;
 mod delayed_warning_semantics;
 mod delete;
 mod delq;

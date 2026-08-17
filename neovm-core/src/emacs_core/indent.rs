@@ -1275,10 +1275,6 @@ pub fn init_indent_vars(obarray: &mut super::symbol::Obarray) {
     obarray.set_symbol_value("tab-width", Value::fixnum(8));
     obarray.make_special("tab-width");
 
-    // indent-tabs-mode: default t
-    obarray.set_symbol_value("indent-tabs-mode", Value::T);
-    obarray.make_special("indent-tabs-mode");
-
     // standard-indent: default 4
     obarray.set_symbol_value("standard-indent", Value::fixnum(4));
     obarray.make_special("standard-indent");

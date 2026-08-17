@@ -18,8 +18,6 @@ use crate::face::{LFACE_VECTOR_SIZE, LFaceAttr};
 
 /// Register bootstrap variables owned by the face subsystem.
 pub fn register_bootstrap_vars(obarray: &mut Obarray) {
-    // xfaces.c:7612 DEFVAR_BOOL, zero-init false.
-    obarray.define_special_variable("face-filters-always-match", Value::NIL);
     obarray.set_symbol_value(
         "face--new-frame-defaults",
         bootstrap_face_new_frame_defaults_table(),

@@ -319,3 +319,174 @@ fn defvar_bool_registration_lists_the_symbol_in_byte_boolean_vars_like_gnu() {
         "OK t"
     );
 }
+
+/// `defvar_bool` conses the symbol onto `byte-boolean-vars`
+/// (`src/lread.c:5261`), but `syms_of_lread` then writes
+/// `Vbyte_boolean_vars = Qnil` (`src/lread.c:5774`), which throws away every
+/// cons `main` had made before it got there.  Measured under GNU 31.0.90,
+/// `emacs -Q --batch`:
+///
+/// ```elisp
+/// (length byte-boolean-vars)                          ;; => 117
+/// (and (memq 'visible-bell byte-boolean-vars) t)      ;; => t   (dispnew.c, after)
+/// (and (memq 'use-short-answers byte-boolean-vars) t) ;; => nil (fns.c, before)
+/// ```
+#[test]
+fn byte_boolean_vars_holds_gnus_117_and_not_the_31_erased_ones() {
+    let mut eval = ev();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str("(length byte-boolean-vars)")),
+        "OK 117"
+    );
+    for name in [
+        "visible-bell",
+        "inhibit-message",
+        "indent-tabs-mode",
+        "print-quoted",
+        "noninteractive",
+        "font-use-system-font",
+        "load-dangerous-libraries",
+    ] {
+        assert_eq!(
+            format_eval_result(
+                &eval.eval_str(&format!("(and (memq '{name} byte-boolean-vars) t)"))
+            ),
+            "OK t",
+            "{name} should be on byte-boolean-vars"
+        );
+    }
+    for name in [
+        "use-short-answers",
+        "use-dialog-box",
+        "garbage-collection-messages",
+        "symbols-with-pos-enabled",
+        "load-in-progress",
+        "load-force-doc-strings",
+        "write-region-inhibit-fsync",
+        "inhibit-eol-conversion",
+    ] {
+        assert_eq!(
+            format_eval_result(
+                &eval.eval_str(&format!("(and (memq '{name} byte-boolean-vars) t)"))
+            ),
+            "OK nil",
+            "{name} is erased by syms_of_lread's own initializer"
+        );
+    }
+}
+
+/// The list is in reverse declaration order because `defvar_bool` prepends.
+/// Measured under GNU 31.0.90: `(car byte-boolean-vars)` is the last
+/// `DEFVAR_BOOL` `main` reaches (`xsettings.c`) and `(nth 116 ...)` the first
+/// one after `syms_of_lread` cleared the list (`lread.c`, immediately below
+/// the `DEFVAR_LISP` for the list itself).
+#[test]
+fn byte_boolean_vars_is_in_gnus_reverse_declaration_order() {
+    let mut eval = ev();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str("(car byte-boolean-vars)")),
+        "OK font-use-system-font"
+    );
+    assert_eq!(
+        format_eval_result(&eval.eval_str("(nth 116 byte-boolean-vars)")),
+        "OK load-dangerous-libraries"
+    );
+}
+
+/// `store_symval_forwarding`'s `Lisp_Fwd_Bool` arm never signals -- it is
+/// `*XBOOLVAR (valcontents) = !NILP (newval);` (`src/data.c:1485-1487`), so
+/// `setq` returns what it was handed and the next read is `t` or `nil`.  The
+/// coercion is a property of the declaration, not of the list: it applies to
+/// the 31 variables `byte-boolean-vars` does not mention too.  Measured under
+/// GNU 31.0.90:
+///
+/// ```elisp
+/// (list (setq visible-bell 5) visible-bell)           ;; => (5 t)
+/// (list (setq use-short-answers 5) use-short-answers) ;; => (5 t)
+/// (list (setq create-lockfiles nil) create-lockfiles) ;; => (nil nil)
+/// (list (setq print-quoted (list 1)) print-quoted)    ;; => ((1) t)
+/// ```
+#[test]
+fn defvar_bool_coerces_every_variable_in_the_table_like_gnu() {
+    let mut eval = ev();
+
+    for (form, expected) in [
+        ("(list (setq visible-bell 5) visible-bell)", "OK (5 t)"),
+        (
+            "(list (setq use-short-answers 5) use-short-answers)",
+            "OK (5 t)",
+        ),
+        (
+            "(list (setq create-lockfiles nil) create-lockfiles)",
+            "OK (nil nil)",
+        ),
+        (
+            "(list (setq print-quoted (list 1)) print-quoted)",
+            "OK ((1) t)",
+        ),
+    ] {
+        assert_eq!(format_eval_result(&eval.eval_str(form)), expected, "{form}");
+    }
+}
+
+/// Every row of the table is registered, is `special`, and still holds the
+/// value the table gives it once the rest of the bootstrap has run -- which is
+/// what stops a leftover plain-cell seed elsewhere from quietly deciding a
+/// `DEFVAR_BOOL` variable's default.
+#[test]
+fn every_gnu_defvar_bool_variable_is_bound_and_reads_back_canonically() {
+    use crate::emacs_core::defvar_bool::GNU_BOOL_VARIABLES;
+    let mut eval = ev();
+
+    for var in GNU_BOOL_VARIABLES {
+        let name = var.name;
+        assert_eq!(
+            format_eval_result(&eval.eval_str(&format!("(boundp '{name})"))),
+            "OK t",
+            "{name} should be bound"
+        );
+        assert_eq!(
+            format_eval_result(&eval.eval_str(&format!("(special-variable-p '{name})"))),
+            "OK t",
+            "{name} should be special"
+        );
+        assert_eq!(
+            format_eval_result(&eval.eval_str(&format!("(default-value '{name})"))),
+            if var.initial { "OK t" } else { "OK nil" },
+            "{name} default"
+        );
+    }
+}
+
+/// The coercion has to survive `let`, `set-default` and a buffer-local
+/// binding, because `do_specbind` and `set_default_internal` both route a
+/// forwarded symbol through `store_symval_forwarding` (`src/eval.c:3594-3622`,
+/// `src/data.c:2077`).  Measured under GNU 31.0.90:
+///
+/// ```elisp
+/// (let ((inverse-video 3)) inverse-video)                   ;; => t
+/// (progn (set-default 'inverse-video 9)
+///        (default-value 'inverse-video))                    ;; => t
+/// (with-temp-buffer (setq-local indent-tabs-mode 4)
+///                   indent-tabs-mode)                       ;; => t
+/// ```
+#[test]
+fn defvar_bool_coercion_survives_let_set_default_and_buffer_local_like_gnu() {
+    let mut eval = ev();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str("(let ((inverse-video 3)) inverse-video)")),
+        "OK t"
+    );
+    assert_eq!(
+        format_eval_result(
+            &eval.eval_str("(progn (set-default 'inverse-video 9) (default-value 'inverse-video))")
+        ),
+        "OK t"
+    );
+    let form =
+        in_fresh_buffer("(progn (set (make-local-variable 'indent-tabs-mode) 4) indent-tabs-mode)");
+    assert_eq!(format_eval_result(&eval.eval_str(&form)), "OK t");
+}

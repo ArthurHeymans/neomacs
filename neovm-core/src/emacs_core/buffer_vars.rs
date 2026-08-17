@@ -13,7 +13,6 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("combine-after-change-calls", Value::NIL);
     // GNU `src/buffer.c` defines this with DEFVAR_LISP and initializes it to nil.
     obarray.set_symbol_value("inhibit-read-only", Value::NIL);
-    obarray.set_symbol_value("inhibit-modification-hooks", Value::NIL);
     for name in [
         "first-change-hook",
         "before-change-functions",
@@ -74,7 +73,6 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("ctl-arrow", Value::T);
     obarray.set_symbol_value("truncate-lines", Value::NIL);
     obarray.set_symbol_value("word-wrap", Value::NIL);
-    obarray.set_symbol_value("word-wrap-by-category", Value::NIL);
     // GNU `xdisp.c` defines these as nil, buffer-local display variables.
     obarray.set_symbol_value("wrap-prefix", Value::NIL);
     obarray.set_symbol_value("line-prefix", Value::NIL);

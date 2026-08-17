@@ -604,12 +604,6 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     obarray.define_special_variable("last-event-frame", Value::NIL);
     // keyboard.c:13913 DEFVAR_LISP, init nil.
     obarray.define_special_variable("last-event-device", Value::NIL);
-    // keyboard.c DEFVAR_BOOL (Emacs 31.1), default false. NeoMacs drives a
-    // single GUI terminal so the multi-terminal keyboard-merge behavior is
-    // moot, but the variable must be bound or cus-start.el signals
-    // "built-in variable `multiple-terminals-merge-keyboards' not bound".
-    obarray.set_symbol_value("multiple-terminals-merge-keyboards", Value::NIL);
-    obarray.make_special("multiple-terminals-merge-keyboards");
     // keyboard.c:13925 DEFVAR_LISP, with the comment "This variable is set up
     // in sysdep.c": `init_sys_modes' (src/sysdep.c:1112) starts it at Qnil and
     // assigns c_cc[VERASE] only for a live tty (src/sysdep.c:1130). Off a
