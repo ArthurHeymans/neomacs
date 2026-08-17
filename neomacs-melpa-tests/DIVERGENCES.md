@@ -6931,4 +6931,51 @@ computes over the tty default fg/bg.  Neomacs' TTY color lookup lacks
 that sentinel branch, so the name stays unresolved and
 `Fcolor_distance' signals.
 
-Status: UNFIXED.
+### Fixed 2026-08-17, with two corrections to the above
+
+**The citation.** The sentinel branch is not in `tty_lookup_color'; it is in
+its caller `tty_defined_color' (src/xfaces.c:1143-1174), at :1160-1167.  The
+distinction matters, because the branch is guarded on what
+`tty_lookup_color' LEFT BEHIND -- it fires only when the palette lookup
+returned without resolving a pixel, so a palette entry actually named
+`unspecified-bg' would still win.  The fix preserves that order.
+
+**What the sentinels are worth.** The entry says GNU "computes over the tty
+default fg/bg", which implies the terminal's real colours.  It does not.
+`tty_defined_color' seeds its `Emacs_Color' with RGB (0, 0, 0) at :1150-1153
+and the sentinel branch assigns only `pixel'; the RGB triple is never
+touched.  Assigning the pixel is what makes the lookup succeed (:1170-1171).
+So both sentinels carry the value BLACK, which is measurable and was measured:
+
+```elisp
+(list (color-distance "black" "unspecified-bg")
+      (color-distance "black" "unspecified-fg")
+      (color-distance "unspecified-fg" "unspecified-bg")
+      (color-distance "white" "unspecified-bg"))
+;; GNU                => (0 0 0 589805)
+;; Neomacs before fix => error ("Invalid color" "unspecified-bg")
+```
+
+The two names are opposite ends of the frame and their distance from each
+other is nevertheless 0.  A fix that resolved them to the frame's actual
+foreground and background would match the one number the original entry
+recorded (589805 against white, on a dark frame) and be wrong about the other
+three.
+
+Worth knowing where this does NOT apply: `color-values' and `color-defined-p'
+answer nil for both sentinels in GNU as well, because they are Lisp and
+consult `tty-color-alist'.  The sentinel branch exists only in the C
+`defined_color_hook', so `color-distance' is the function that sees it, and
+the fix is scoped to that path rather than added to the colour tables.
+
+Shape: `TtyDefaultColor::{Foreground, Background}`
+(neovm-core/src/emacs_core/xfaces/mod.rs) names the two sentinels and owns
+the zero RGB, so "resolved to a terminal default" is a state the resolver
+states rather than a magic string comparison inline, and the fact that both
+carry black lives with the enum that explains why.
+
+Verified: the 14-case probe in tmp/coord-colordist-probe.el is byte-identical
+between GNU 31.0.90 and Neomacs, and
+`parity_tests::smart_mode_line::smart_mode_line_package_batch` passes.
+
+Status: FIXED.
