@@ -482,7 +482,7 @@ rank	package	downloads	status
 481	aio	180349	covered
 482	request-deferred	179757	todo
 483	gruber-darker-theme	178888	todo
-484	cape	177896	todo
+484	cape	177896	covered
 485	elm-mode	177436	todo
 486	alect-themes	177365	covered
 487	default-text-scale	177226	covered
