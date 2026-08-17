@@ -112,6 +112,36 @@ by the oracle's grace.
 Found by the mutation matrix, which has now caught its author twice rather than
 the package.
 
+**SILENT — an *index into* sandbox-bearing text escapes the normaliser too, and
+it escapes silently because a number does not look like a path.** The normaliser
+rewrites the sandbox root inside strings; it cannot rewrite a number that was
+*computed from* one. company-go recorded
+`(string-match-p "c[0-9]+" <the fake gocode's recorded argv>)` to assert that a
+`c<offset>` cursor argument was passed, and that argv quotes the path of the
+visited file, so the pinned number was `36 + (length <path>) + 1`. It was 162
+where it was written, 154 in the main checkout and 196 in a worktree of the same
+commit — and the `:argv` field sitting right beside it, masked to
+`[ORACLE-SANDBOX]/…`, hid the very length the number was made of. It is flaky in
+place as well: `tempfile` gives each sandbox six random alphanumerics, and a
+suffix that puts a `c` next to a digit (about one run in eighty) moves the first
+match into the directory name and changes the value by tens.
+
+Record the matched **argument**, not where it was found —
+`(cl-find-if (lambda (a) (string-match-p "\\`c[0-9]+\\'" a)) (split-string argv "\n" t))`
+pins `"c34"`, the offset the package actually computed, which is also a stronger
+claim than any index. Same family as ace_link's avy labels, recorded as buffer
+offsets past a quoted sandbox root and re-recorded as line and column
+(DIVERGENCES.md 127 and the eleven-suites table).
+
+Two tells. First, **both editors are red** — a Neomacs bug cannot move GNU's
+side, so a red GNU pin is always the harness or a stale expectation.
+Second, `NEOMACS_MELPA_AUDIT_BATCH_ISOLATION=1` already catches the class as a
+side effect: it re-runs the case under a second sandbox whose *label* is a
+different length, so a path-length record shows up as `is not batch-safe` with
+the two numbers differing by exactly the label-length difference. When that audit
+fires and both editors move together, suspect a path-length record before you go
+looking for leaked batch state.
+
 **SILENT — scrub a string as a string, before anything formats or prints it.**
 A normaliser applied to the *printed* form of a value silently matches nothing,
 and **fails open rather than closed**: the volatile data stays in the
