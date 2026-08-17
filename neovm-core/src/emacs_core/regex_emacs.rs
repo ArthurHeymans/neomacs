@@ -3971,6 +3971,12 @@ fn match_exactn_char_at(
 /// the `Charset | CharsetNot` arm exactly.
 #[inline]
 #[allow(clippy::too_many_arguments)] // mirrors GNU execute_charset's inputs
+/// Charset test at `d`. The ASCII case — GNU's charset op shape: read the
+/// byte, case-translate it, bit-test the bitmap — inlines into both matcher
+/// call sites; everything else goes through the outlined
+/// [`match_charset_at_slow`]. The call boundary itself measured ~40 of the
+/// ~67 Ir per test, on millions of tests per workload.
+#[inline(always)]
 fn match_charset_at(
     pattern: &CompiledPattern,
     charset_op_pos: usize,
@@ -3982,28 +3988,27 @@ fn match_charset_at(
     syntax: &dyn SyntaxLookup,
 ) -> Option<usize> {
     let bytecode = &pattern.buffer;
-    let negate = bytecode[charset_op_pos] == RegexOp::CharsetNot as u8;
-    let bitmap_len = bytecode[charset_op_pos + 1] as usize & 0x7F;
-    let bitmap_start = charset_op_pos + 2;
 
     if d >= stop {
         return None;
     }
 
-    // ASCII fast path — GNU's charset op reads the byte and its case
-    // translation directly and bit-tests the bitmap. An ASCII byte decodes
-    // to itself in both text representations, always has length 1, and
-    // (when its translation stays ASCII) needs none of the full path's
-    // decode / unibyte-conversion / case-mode machinery below. The class
-    // check mirrors the full path exactly: classes test the UNTRANSLATED
-    // character. (`stop` may exceed `text.len()`; a past-the-end read is
-    // a plain no-match, matching `re_text_char`'s bounds behavior.)
+    // ASCII fast path — an ASCII byte decodes to itself in both text
+    // representations, always has length 1, and (when its translation
+    // stays ASCII) needs none of the slow path's decode /
+    // unibyte-conversion / case-mode machinery. The class check mirrors
+    // the slow path exactly: classes test the UNTRANSLATED character.
+    // (`stop` may exceed `text.len()`; a past-the-end read is a plain
+    // no-match, matching `re_text_char`'s bounds behavior.)
     let Some(&first_byte) = text.get(d) else {
         return None;
     };
     if first_byte < 0x80 {
         let translated = re_tr(translate, first_byte as u32);
         if translated < 0x80 {
+            let negate = bytecode[charset_op_pos] == RegexOp::CharsetNot as u8;
+            let bitmap_len = bytecode[charset_op_pos + 1] as usize & 0x7F;
+            let bitmap_start = charset_op_pos + 2;
             let c = translated as usize;
             let bitmap_hit = (c / 8) < bitmap_len
                 && (bytecode[bitmap_start + c / 8] >> (c % 8)) & 1 != 0;
@@ -4026,6 +4031,40 @@ fn match_charset_at(
                     .unwrap_or(false);
             return if negate != in_set { Some(1) } else { None };
         }
+    }
+
+    match_charset_at_slow(
+        pattern,
+        charset_op_pos,
+        text,
+        d,
+        stop,
+        target_multibyte,
+        translate,
+        syntax,
+    )
+}
+
+/// Non-ASCII / translation-escapes-ASCII remainder of the charset test.
+#[allow(clippy::too_many_arguments)] // mirrors the wrapper's seam
+#[inline(never)]
+fn match_charset_at_slow(
+    pattern: &CompiledPattern,
+    charset_op_pos: usize,
+    text: &[u8],
+    d: usize,
+    stop: usize,
+    target_multibyte: bool,
+    translate: &Option<CaseTranslation>,
+    syntax: &dyn SyntaxLookup,
+) -> Option<usize> {
+    let bytecode = &pattern.buffer;
+    let negate = bytecode[charset_op_pos] == RegexOp::CharsetNot as u8;
+    let bitmap_len = bytecode[charset_op_pos + 1] as usize & 0x7F;
+    let bitmap_start = charset_op_pos + 2;
+
+    if d >= stop {
+        return None;
     }
 
     let class_case_mode = PosixClassCaseMode::from_translation(translate.as_ref());
@@ -4496,10 +4535,18 @@ fn re_match_internal(
     // not allocate register scratch space.
     let has_subexpressions = pattern.re_nsub > 0;
     let scratch_regs = if has_subexpressions { num_regs } else { 0 };
-    regstart.clear();
-    regstart.resize(scratch_regs, None);
-    regend.clear();
-    regend.resize(scratch_regs, None);
+    // The scratch arrays are reused across every match call; when the
+    // length already fits, reset in place — four out-of-line
+    // SmallVec::resize calls per match measured ~275 Ir of pure setup.
+    if regstart.len() == scratch_regs {
+        regstart.fill(None);
+        regend.fill(None);
+    } else {
+        regstart.clear();
+        regstart.resize(scratch_regs, None);
+        regend.clear();
+        regend.resize(scratch_regs, None);
+    }
 
     // Best match tracking for POSIX longest-match (audit #2).
     //
@@ -4514,10 +4561,15 @@ fn re_match_internal(
     let posix_longest = pattern.posix;
     let mut best_regs_set = false;
     let mut best_match_end: usize = pos;
-    best_regstart.clear();
-    best_regstart.resize(scratch_regs, None);
-    best_regend.clear();
-    best_regend.resize(scratch_regs, None);
+    if best_regstart.len() == scratch_regs {
+        best_regstart.fill(None);
+        best_regend.fill(None);
+    } else {
+        best_regstart.clear();
+        best_regstart.resize(scratch_regs, None);
+        best_regend.clear();
+        best_regend.resize(scratch_regs, None);
+    }
 
     let mut pc = 0usize; // Bytecode program counter
     let mut d = pos; // Data position in text
