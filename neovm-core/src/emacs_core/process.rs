@@ -1601,10 +1601,71 @@ impl ProcessOutputDecoding {
             Self::Coding(name) => crate::encoding::decode_bytes_to_lisp_string(bytes, name),
         }
     }
+
+    /// GNU's `setup_process_coding_systems` (src/process.c:8380-8409): turn the
+    /// coding system STORED on an asynchronous process into the decoder its
+    /// bytes actually go through.
+    ///
+    /// This is the second of GNU's two stages, and it is the only part the five
+    /// creation-time resolvers share.  `Fmake_process` says so in its own
+    /// comment (src/process.c:1942-1944): "Here we don't setup the structure
+    /// coding_system nor pay attention to unibyte mode.  They are done in
+    /// create_process."
+    pub(crate) fn for_process(decode_coding: Value, sink: ProcessOutputSink) -> Self {
+        let decoding = Self::for_coding(decode_coding);
+        match sink {
+            ProcessOutputSink::DecodedText => decoding,
+            // src/process.c:8398-8399, the same `raw_text_coding_system` call
+            // `Fcall_process` makes inline at src/callproc.c:757-759.
+            ProcessOutputSink::UnibyteProcessBuffer => decoding.without_character_conversion(),
+        }
+    }
 }
 
-fn process_coding_uses_utf8_carryover(coding: Value) -> bool {
-    let name = process_coding_symbol_name(coding);
+/// Where an asynchronous process's bytes land, reduced to the single
+/// distinction GNU's `setup_process_coding_systems` draws
+/// (src/process.c:8395-8400).
+///
+/// GNU re-runs that function on every `set-process-buffer`
+/// (src/process.c:1312), `set-process-filter` (:1404) and
+/// `set-process-coding-system` (:8036), so the answer is a function of the
+/// process's CURRENT buffer and filter, never of the ones it happened to be
+/// created with -- measured: a process created against a multibyte buffer and
+/// then handed a unibyte one by `set-process-buffer` decodes as `raw-text-dos`.
+/// Deriving it at read time, as this type does, is that same function with no
+/// cache left to invalidate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProcessOutputSink {
+    /// The internal default filter is inserting into a live UNIBYTE buffer, so
+    /// character-code conversion is dropped and only the EOL conversion of the
+    /// resolved coding survives.
+    UnibyteProcessBuffer,
+    /// Everything else: a multibyte process buffer, no process buffer at all,
+    /// or a Lisp filter -- a filter is handed a decoded string, so GNU leaves
+    /// the coding system alone for it (`EQ (p->filter,
+    /// Qinternal_default_process_filter)`, src/process.c:8395).
+    DecodedText,
+}
+
+impl ProcessOutputSink {
+    fn of(proc: &Process, buffers: &BufferManager) -> Self {
+        if !matches!(
+            ProcessFilterDispatch::from_lisp(proc.filter),
+            ProcessFilterDispatch::Default
+        ) {
+            return Self::DecodedText;
+        }
+        let Some(buffer_id) = proc.buffer.as_buffer_id() else {
+            return Self::DecodedText;
+        };
+        match buffers.get(buffer_id) {
+            Some(buffer) if !buffer.get_multibyte() => Self::UnibyteProcessBuffer,
+            _ => Self::DecodedText,
+        }
+    }
+}
+
+fn process_coding_uses_utf8_carryover(name: &str) -> bool {
     name == "emacs-internal"
         || name == "mule-utf-8"
         || name == "cp65001"
@@ -1613,8 +1674,7 @@ fn process_coding_uses_utf8_carryover(coding: Value) -> bool {
         || name.starts_with("undecided")
 }
 
-fn process_coding_uses_dos_eol_carryover(coding: Value) -> bool {
-    let name = process_coding_symbol_name(coding);
+fn process_coding_uses_dos_eol_carryover(name: &str) -> bool {
     name == "dos" || name.ends_with("-dos")
 }
 
@@ -1648,7 +1708,7 @@ fn utf8_complete_prefix_len(bytes: &[u8]) -> usize {
     len
 }
 
-fn process_output_decode_prefix_len(coding: Value, bytes: &[u8], flush: bool) -> usize {
+fn process_output_decode_prefix_len(coding: &str, bytes: &[u8], flush: bool) -> usize {
     if flush {
         return bytes.len();
     }
@@ -1689,31 +1749,41 @@ fn encode_process_send_input(
     LispString::from_unibyte(bytes)
 }
 
-fn decode_process_output_bytes(proc: &mut Process, bytes: &[u8], flush: bool) -> LispString {
-    let coding = proc.coding_decode;
-    // NOT `ProcessOutputDecoding::for_coding`: an asynchronous process treats a
-    // nil decode coding as raw, because GNU deliberately leaves it nil for a
-    // unibyte process buffer so that "the existing Emacs Lisp libraries ...
-    // receive bare code including a sequence of CR LF" (src/process.c:2535-2539).
-    let decoding = if process_coding_is_binary(coding) {
-        ProcessOutputDecoding::Bytes
-    } else {
-        ProcessOutputDecoding::Coding(process_coding_symbol_name(coding))
-    };
-    if decoding == ProcessOutputDecoding::Bytes {
-        proc.decoding_carryover.clear();
-        decoding.decode(bytes)
-    } else {
-        let mut combined = Vec::with_capacity(proc.decoding_carryover.len() + bytes.len());
-        combined.append(&mut proc.decoding_carryover);
-        combined.extend_from_slice(bytes);
-        let decode_len = process_output_decode_prefix_len(coding, &combined, flush);
-        if decode_len < combined.len() {
-            proc.decoding_carryover
-                .extend_from_slice(&combined[decode_len..]);
+/// Decode one run of an asynchronous process's output.
+///
+/// SINK is a required parameter, not something this function may work out for
+/// itself: GNU decides it in `setup_process_coding_systems` against the
+/// process's live buffer and filter, and the answer changes under
+/// `set-process-buffer` / `set-process-filter`.  Naming it at the call site is
+/// what keeps the two stages of GNU's decision from collapsing into one
+/// invented rule here -- the previous code read `proc.coding_decode` and
+/// classified it inline, which is how `nil` came to mean "copy the bytes"
+/// (GNU's `setup_coding_system` rewrites nil to `undecided`, i.e. DETECT,
+/// src/coding.c:5675-5676) and how the unibyte rule went missing entirely.
+fn decode_process_output_bytes(
+    proc: &mut Process,
+    sink: ProcessOutputSink,
+    bytes: &[u8],
+    flush: bool,
+) -> LispString {
+    let decoding = ProcessOutputDecoding::for_process(proc.coding_decode, sink);
+    match decoding {
+        ProcessOutputDecoding::Bytes => {
+            proc.decoding_carryover.clear();
+            decoding.decode(bytes)
         }
+        ProcessOutputDecoding::Coding(name) => {
+            let mut combined = Vec::with_capacity(proc.decoding_carryover.len() + bytes.len());
+            combined.append(&mut proc.decoding_carryover);
+            combined.extend_from_slice(bytes);
+            let decode_len = process_output_decode_prefix_len(name, &combined, flush);
+            if decode_len < combined.len() {
+                proc.decoding_carryover
+                    .extend_from_slice(&combined[decode_len..]);
+            }
 
-        decoding.decode(&combined[..decode_len])
+            decoding.decode(&combined[..decode_len])
+        }
     }
 }
 
@@ -1756,6 +1826,7 @@ fn reset_adaptive_read_delay_after_process_write(proc: &mut Process) {
 
 fn process_output_read_from_io_result(
     proc: &mut Process,
+    sink: ProcessOutputSink,
     result: std::io::Result<usize>,
     bytes: &[u8],
     full_read_len: usize,
@@ -1765,14 +1836,14 @@ fn process_output_read_from_io_result(
         Ok(0) => {
             let bytes_read = proc.decoding_carryover.len();
             ProcessOutputRead::Data {
-                data: decode_process_output_bytes(proc, &[], true),
+                data: decode_process_output_bytes(proc, sink, &[], true),
                 bytes_read,
             }
         }
         Ok(n) => {
             update_process_adaptive_read_buffering(proc, n, n == full_read_len);
             ProcessOutputRead::Data {
-                data: decode_process_output_bytes(proc, &bytes[..n], false),
+                data: decode_process_output_bytes(proc, sink, &bytes[..n], false),
                 bytes_read: n,
             }
         }
@@ -2228,6 +2299,169 @@ fn explicit_process_coding_pair(coding: Value) -> (Value, Value) {
         (coding.cons_car(), coding.cons_cdr())
     } else {
         (coding, coding)
+    }
+}
+
+/// Which direction of a coding pair a resolution step is answering.
+///
+/// GNU writes the two directions out twice, as near-mirror blocks
+/// (src/process.c:1950-1977 and :1979-2008), and the only differences are which
+/// half of a cons is taken and which dynamic variable acts as the override.
+/// Naming the direction lets the one function stand for both blocks without
+/// inviting the far more dangerous kind of sharing -- between the five
+/// different per-caller resolvers, which genuinely disagree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProcessCodingHalf {
+    Decode,
+    Encode,
+}
+
+impl ProcessCodingHalf {
+    fn of(self, pair: Value) -> Value {
+        if !pair.is_cons() {
+            return pair;
+        }
+        match self {
+            Self::Decode => pair.cons_car(),
+            Self::Encode => pair.cons_cdr(),
+        }
+    }
+}
+
+/// The decode/encode coding systems an asynchronous subprocess is created with.
+///
+/// There is deliberately no `Default` and no field-wise constructor: GNU has
+/// FIVE creation-time resolvers for this pair -- `Fcall_process`
+/// (src/callproc.c:729-763), `Fmake_process` (src/process.c:1950-2008),
+/// `Fmake_pipe_process` (:2523-2548), `Fmake_serial_process` (:3247-3275) and
+/// `set_network_socket_coding_system` (:3301-3360) -- and they disagree about
+/// the explicit override, about which operation symbol (if any) reaches
+/// `process-coding-system-alist`, about whether a unibyte buffer short-circuits
+/// the lookup, and about whether `default-process-coding-system` applies at
+/// all.  A pair that does not say which resolver produced it is a pair nobody
+/// can check, which is exactly how `make-process` came to ship a coding system
+/// invented in Rust.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ProcessCodingSystems {
+    decode: Value,
+    encode: Value,
+}
+
+/// The ambient inputs GNU's `Fmake_process` coding resolver reads
+/// (src/process.c:1950-2008).
+///
+/// It is a bundle rather than four arguments because the resolution has to run
+/// at GNU's point in the creation sequence -- after the executable search, so
+/// that a missing program still signals `file-missing` before a bad coding
+/// system signals `coding-system-error` (measured on both editors) -- while
+/// `find-operation-coding-system` can run arbitrary Lisp and therefore cannot
+/// run under the split `&mut ProcessManager` / `&mut BufferManager` borrows the
+/// creator holds.  Making it a REQUIRED parameter of the creator is what stops
+/// a real subprocess from being created with a coding system nobody resolved.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct MakeProcessCodingEnvironment {
+    coding_system_for_read: Value,
+    coding_system_for_write: Value,
+    default_process_coding_system: Value,
+    /// What `(find-operation-coding-system 'start-process NAME BUFFER
+    /// COMMAND...)` answered, or nil when GNU would not have asked -- see
+    /// `make_process_consults_coding_alist`.
+    operation_coding_system: Value,
+}
+
+impl MakeProcessCodingEnvironment {
+    /// The environment of an editor in which none of the coding variables is
+    /// set.  Only for callers that have no evaluator to read them from; a real
+    /// `make-process` always goes through `builtin_make_process`.
+    fn unbound() -> Self {
+        Self {
+            coding_system_for_read: Value::NIL,
+            coding_system_for_write: Value::NIL,
+            default_process_coding_system: Value::NIL,
+            operation_coding_system: Value::NIL,
+        }
+    }
+
+    fn override_for(self, half: ProcessCodingHalf) -> Value {
+        match half {
+            ProcessCodingHalf::Decode => self.coding_system_for_read,
+            ProcessCodingHalf::Encode => self.coding_system_for_write,
+        }
+    }
+}
+
+/// GNU consults `process-coding-system-alist` only when the chain reaches it:
+/// `:coding` did not answer this half AND the matching `coding-system-for-*`
+/// override is nil (src/process.c:1959 for decode, :1987 for encode).  Keeping
+/// the predicate beside the resolver is what stops a function-valued alist
+/// entry from running when GNU would never have called it -- measured: with
+/// `:command nil` GNU skips the lookup entirely (src/process.c:1970), and with
+/// `:coding 'utf-8` bound over a matching alist entry it never asks.
+fn make_process_consults_coding_alist(coding: Value, env: MakeProcessCodingEnvironment) -> bool {
+    [ProcessCodingHalf::Decode, ProcessCodingHalf::Encode]
+        .into_iter()
+        .any(|half| make_process_coding_override(coding, half, env).is_nil())
+}
+
+/// Step one of GNU's `Fmake_process` chain, for one direction: the `:coding`
+/// keyword when it was supplied at all (its car for decode, its cdr for encode,
+/// itself when it is not a cons), else the dynamic
+/// `coding-system-for-read`/`-write` override (src/process.c:1950-1958 and
+/// :1979-1986).
+///
+/// Note that a SUPPLIED `:coding` shuts the dynamic override out even when its
+/// own half is nil -- GNU's `else` at :1957 is only reached when `tem` itself is
+/// nil.  Measured: `:coding '(nil . latin-1)` under `coding-system-for-read`
+/// bound to `binary` decodes as `utf-8-unix`, not as `binary`.
+fn make_process_coding_override(
+    coding: Value,
+    half: ProcessCodingHalf,
+    env: MakeProcessCodingEnvironment,
+) -> Value {
+    if coding.is_nil() {
+        env.override_for(half)
+    } else {
+        half.of(coding)
+    }
+}
+
+/// GNU `Fmake_process`'s coding resolver, src/process.c:1950-2008.
+///
+/// This is `Fmake_process`'s chain and no other's.  `Fcall_process` has no
+/// `:coding` step and validates its answer on the spot (src/callproc.c:732,
+/// :753); `Fmake_pipe_process` and `Fmake_serial_process` never reach
+/// `find-operation-coding-system` at all -- their `coding_systems` is
+/// initialised to `Qt` and never assigned (src/process.c:2520, :3298), so the
+/// `CONSP (coding_systems)` arm is dead code there -- and they, like
+/// `set_network_socket_coding_system`, short-circuit the whole tail to nil when
+/// the buffer is unibyte, deliberately, so that "the existing Emacs Lisp
+/// libraries ... receive bare code including a sequence of CR LF"
+/// (src/process.c:2535-2539).  `Fmake_process` has no such short-circuit: its
+/// comment at :1942-1944 says the unibyte question is settled later, in
+/// `create_process`.  Sharing one implementation between them would have to
+/// parameterise every one of those differences, which is another way of saying
+/// there is nothing left to share.
+fn resolve_make_process_coding_systems(
+    coding: Value,
+    env: MakeProcessCodingEnvironment,
+) -> ProcessCodingSystems {
+    let resolve = |half: ProcessCodingHalf| {
+        let chosen = make_process_coding_override(coding, half, env);
+        if !chosen.is_nil() {
+            return chosen;
+        }
+        // src/process.c:1972-1975 (decode) and :2003-2006 (encode).
+        if env.operation_coding_system.is_cons() {
+            half.of(env.operation_coding_system)
+        } else if env.default_process_coding_system.is_cons() {
+            half.of(env.default_process_coding_system)
+        } else {
+            Value::NIL
+        }
+    };
+    ProcessCodingSystems {
+        decode: resolve(ProcessCodingHalf::Decode),
+        encode: resolve(ProcessCodingHalf::Encode),
     }
 }
 
@@ -4048,6 +4282,18 @@ impl ProcessManager {
             log: Value::NIL,
             plist: Value::NIL,
             stderrproc: Value::NIL,
+            // GNU's `make_process` leaves both slots nil and lets the
+            // creating primitive's own resolver fill them in.  `make-process`
+            // now does exactly that (`resolve_make_process_coding_systems`
+            // installs its pair unconditionally), so for `ProcessKind::Real`
+            // this initialiser is never observed.  It survives as the stand-in
+            // that `make-pipe-process` (src/process.c:2523-2548) and
+            // `make-serial-process` (:3247-3275) still owe their own resolvers:
+            // neither reaches `find-operation-coding-system`, so with a
+            // multibyte buffer and no `:coding` GNU's answer is exactly the car
+            // and cdr of `default-process-coding-system`, whose value here is
+            // `(utf-8-unix . utf-8-unix)`.  It is a stand-in, not a default --
+            // see DIVERGENCES.md entry 131.
             coding_decode: Value::symbol("utf-8-unix"),
             decoding_carryover: Vec::new(),
             coding_encode: Value::symbol("utf-8-unix"),
@@ -4673,7 +4919,11 @@ impl ProcessManager {
 
     /// Read available output from a child process's stdout.
     /// Returns the data read (may be empty if nothing available).
-    fn read_child_stdout_result(&mut self, id: ProcessId) -> ProcessOutputRead {
+    fn read_child_stdout_result(
+        &mut self,
+        id: ProcessId,
+        sink: ProcessOutputSink,
+    ) -> ProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return ProcessOutputRead::NoSource;
         };
@@ -4694,7 +4944,7 @@ impl ProcessManager {
         let mut buf = vec![0u8; read_len];
         let full_read_len = buf.len();
         let result = stdout.read(&mut buf);
-        let read = process_output_read_from_io_result(proc, result, &buf, full_read_len);
+        let read = process_output_read_from_io_result(proc, sink, result, &buf, full_read_len);
         if let Some(data) = read.data() {
             proc.stdout.push_str(&process_output_runtime_string(data));
         }
@@ -4706,7 +4956,11 @@ impl ProcessManager {
     /// Mirrors GNU's `create_process` :stderr wiring: the stderr pipe-process
     /// reads from the child's separate stderr pipe.  The read end lives in this
     /// (the stderr pipe-process's) `child_stderr` slot.
-    fn read_child_stderr_result(&mut self, id: ProcessId) -> ProcessOutputRead {
+    fn read_child_stderr_result(
+        &mut self,
+        id: ProcessId,
+        sink: ProcessOutputSink,
+    ) -> ProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return ProcessOutputRead::NoSource;
         };
@@ -4725,7 +4979,7 @@ impl ProcessManager {
         let mut buf = vec![0u8; read_len];
         let full_read_len = buf.len();
         let result = stderr.read(&mut buf);
-        let read = process_output_read_from_io_result(proc, result, &buf, full_read_len);
+        let read = process_output_read_from_io_result(proc, sink, result, &buf, full_read_len);
         if let Some(data) = read.data() {
             proc.stderr.push_str(&process_output_runtime_string(data));
         }
@@ -4735,7 +4989,11 @@ impl ProcessManager {
     /// Read available output from a PTY master reader.
     /// Returns the data read (may be empty if nothing available).
     /// PTY combines stdout and stderr into a single stream.
-    fn read_pty_output_result(&mut self, id: ProcessId) -> ProcessOutputRead {
+    fn read_pty_output_result(
+        &mut self,
+        id: ProcessId,
+        sink: ProcessOutputSink,
+    ) -> ProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return ProcessOutputRead::NoSource;
         };
@@ -4747,14 +5005,18 @@ impl ProcessManager {
         let mut buf = vec![0u8; read_len];
         let full_read_len = buf.len();
         let result = reader.read(&mut buf);
-        let read = process_output_read_from_io_result(proc, result, &buf, full_read_len);
+        let read = process_output_read_from_io_result(proc, sink, result, &buf, full_read_len);
         if let Some(data) = read.data() {
             proc.stdout.push_str(&process_output_runtime_string(data));
         }
         read
     }
 
-    fn read_network_output_result(&mut self, id: ProcessId) -> ProcessOutputRead {
+    fn read_network_output_result(
+        &mut self,
+        id: ProcessId,
+        sink: ProcessOutputSink,
+    ) -> ProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return ProcessOutputRead::NoSource;
         };
@@ -4764,7 +5026,7 @@ impl ProcessManager {
             let mut buf = vec![0u8; read_len];
             let full_read_len = buf.len();
             let result = tls.read_process_output(&mut buf);
-            let read = process_output_read_from_io_result(proc, result, &buf, full_read_len);
+            let read = process_output_read_from_io_result(proc, sink, result, &buf, full_read_len);
             if let Some(data) = read.data() {
                 proc.stdout.push_str(&process_output_runtime_string(data));
             }
@@ -4800,7 +5062,7 @@ impl ProcessManager {
             };
             let read = match raw_read {
                 RawNetworkRead::Stream(result) => {
-                    process_output_read_from_io_result(proc, result, &buf, full_read_len)
+                    process_output_read_from_io_result(proc, sink, result, &buf, full_read_len)
                 }
                 RawNetworkRead::Udp(result) => match result {
                     Ok((n, addr)) => {
@@ -4808,7 +5070,7 @@ impl ProcessManager {
                         proc.datagram_socket_addr = Some(addr);
                         proc.datagram_address = socket_addr_to_lisp_value(addr);
                         ProcessOutputRead::Data {
-                            data: decode_process_output_bytes(proc, &buf[..n], false),
+                            data: decode_process_output_bytes(proc, sink, &buf[..n], false),
                             bytes_read: n,
                         }
                     }
@@ -4829,7 +5091,7 @@ impl ProcessManager {
                             );
                         }
                         ProcessOutputRead::Data {
-                            data: decode_process_output_bytes(proc, &buf[..n], false),
+                            data: decode_process_output_bytes(proc, sink, &buf[..n], false),
                             bytes_read: n,
                         }
                     }
@@ -5971,7 +6233,11 @@ impl ProcessManager {
     /// Read available output from a process — child stdout or network socket.
     /// Returns `Some(data)` with available data (possibly empty on WouldBlock),
     /// or `None` on EOF / connection closed.
-    fn read_process_output_result(&mut self, id: ProcessId) -> ProcessOutputRead {
+    fn read_process_output_result(
+        &mut self,
+        id: ProcessId,
+        sink: ProcessOutputSink,
+    ) -> ProcessOutputRead {
         if self
             .processes
             .get(&id)
@@ -5982,10 +6248,10 @@ impl ProcessManager {
         let source = self.processes.get(&id).and_then(process_output_source);
 
         match source {
-            Some(ProcessOutputSource::Pty) => self.read_pty_output_result(id),
-            Some(ProcessOutputSource::ChildStdout) => self.read_child_stdout_result(id),
-            Some(ProcessOutputSource::ChildStderr) => self.read_child_stderr_result(id),
-            Some(ProcessOutputSource::Network) => self.read_network_output_result(id),
+            Some(ProcessOutputSource::Pty) => self.read_pty_output_result(id, sink),
+            Some(ProcessOutputSource::ChildStdout) => self.read_child_stdout_result(id, sink),
+            Some(ProcessOutputSource::ChildStderr) => self.read_child_stderr_result(id, sink),
+            Some(ProcessOutputSource::Network) => self.read_network_output_result(id, sink),
             None => ProcessOutputRead::NoSource,
         }
     }
@@ -5993,8 +6259,13 @@ impl ProcessManager {
     /// Read available output from a process — child stdout or network socket.
     /// Returns `Some(data)` with available data (possibly empty on WouldBlock),
     /// or `None` on EOF / connection closed.
-    pub fn read_process_output(&mut self, id: ProcessId) -> Option<LispString> {
-        self.read_process_output_result(id).into_legacy_option()
+    pub fn read_process_output(
+        &mut self,
+        id: ProcessId,
+        sink: ProcessOutputSink,
+    ) -> Option<LispString> {
+        self.read_process_output_result(id, sink)
+            .into_legacy_option()
     }
 
     /// Get stdout output from a process.
@@ -6309,6 +6580,16 @@ impl super::eval::Context {
     /// wait for the owner must not run the pipe's sentinel early -- but
     /// deferring the STATUS with it left the pipe reading as `open` to the
     /// owner's sentinel, which is ledger entry 54.
+    /// GNU's `setup_process_coding_systems` (src/process.c:8380-8409) re-reads
+    /// the process's buffer and filter every time either changes, so this is
+    /// evaluated per read rather than cached on the process.
+    fn process_output_sink(&self, id: ProcessId) -> ProcessOutputSink {
+        self.processes
+            .get(id)
+            .map(|proc| ProcessOutputSink::of(proc, &self.buffers))
+            .unwrap_or(ProcessOutputSink::DecodedText)
+    }
+
     fn drain_associated_stderr_output_without_notifying(
         &mut self,
         stderr_id: ProcessId,
@@ -6318,7 +6599,8 @@ impl super::eval::Context {
         let is_target = target_process.is_none_or(|target| target == stderr_id);
 
         loop {
-            match self.processes.read_process_output_result(stderr_id) {
+            let sink = self.process_output_sink(stderr_id);
+            match self.processes.read_process_output_result(stderr_id, sink) {
                 ProcessOutputRead::Data { data, bytes_read } => {
                     if bytes_read > 0 {
                         outcome.record_activity(is_target);
@@ -6351,7 +6633,8 @@ impl super::eval::Context {
         let is_target = target_process == Some(pid);
 
         loop {
-            match self.processes.read_process_output_result(pid) {
+            let sink = self.process_output_sink(pid);
+            match self.processes.read_process_output_result(pid, sink) {
                 ProcessOutputRead::Data { data, bytes_read } => {
                     if bytes_read > 0 {
                         saw_output = true;
@@ -6728,7 +7011,10 @@ impl super::eval::Context {
                 })
                 .unwrap_or(false);
 
-            let mut read_result = self.processes.read_process_output_result(pid);
+            let mut read_result = {
+                let sink = self.process_output_sink(pid);
+                self.processes.read_process_output_result(pid, sink)
+            };
             let mut saw_output = false;
             let mut saw_eof_after_output = false;
             let mut handled_terminal_eof = false;
@@ -6845,7 +7131,10 @@ impl super::eval::Context {
                 // target output (`wait = MINIMUM`), which vacuums up immediately
                 // available bytes and EOF/status transitions before returning.
                 // Keep this non-blocking: stop as soon as the source would block.
-                read_result = self.processes.read_process_output_result(pid);
+                read_result = {
+                    let sink = self.process_output_sink(pid);
+                    self.processes.read_process_output_result(pid, sink)
+                };
             }
 
             if handled_terminal_eof {
@@ -6977,9 +7266,10 @@ impl super::eval::Context {
         // status.  In GNU this happens while `status_notify` walks every
         // process whose tick changed.
         let mut saw_owner_output = false;
-        while let ProcessOutputRead::Data { data, bytes_read } =
-            self.processes.read_process_output_result(pid)
-        {
+        while let ProcessOutputRead::Data { data, bytes_read } = {
+            let sink = self.process_output_sink(pid);
+            self.processes.read_process_output_result(pid, sink)
+        } {
             if bytes_read > 0 {
                 saw_owner_output = true;
                 outcome.record_activity(owner_is_target);
@@ -12390,6 +12680,32 @@ pub(crate) fn builtin_start_process(
         Some(resolve_async_process_program(lookup, &program)?)
     };
 
+    // GNU's `start-process` is Lisp and does nothing but hand its arguments to
+    // `make-process` (lisp/subr.el:3466-3472), so it runs the very same coding
+    // resolver -- including `find-operation-coding-system`, whose operation
+    // symbol here really is `start-process` (src/process.c:1965).  Rebuilding
+    // the keyword form is what keeps this Rust shadow of a Lisp function from
+    // acquiring a coding chain of its own.
+    let mut coding_plist = vec![
+        ProcessKeyword::Name.value(),
+        args[0],
+        ProcessKeyword::Buffer.value(),
+        args[1],
+    ];
+    if !args[2].is_nil() {
+        coding_plist.push(ProcessKeyword::Command.value());
+        coding_plist.push(Value::list(args[2..].to_vec()));
+    }
+    let coding_environment = make_process_coding_environment(eval, &coding_plist)?;
+    let resolved_coding = resolve_make_process_coding_systems(Value::NIL, coding_environment);
+    validate_process_coding_component(Some(&eval.coding_systems), resolved_coding.decode)?;
+    validate_process_coding_component(Some(&eval.coding_systems), resolved_coding.encode)?;
+    // See `builtin_make_process`: the resolved pair can be freshly consed, and
+    // everything below here allocates.
+    let roots = eval.save_specpdl_roots();
+    eval.push_specpdl_root(resolved_coding.decode);
+    eval.push_specpdl_root(resolved_coding.encode);
+
     let use_pty = process_connection_type_is_pty(&eval.obarray);
     let subprocess_cwd = super::callproc::subprocess_default_directory(eval);
     let child_environment = Some(super::environment::ChildEnvironment::materialize(
@@ -12399,6 +12715,11 @@ pub(crate) fn builtin_start_process(
     let id = eval
         .processes
         .create_process_lisp_resolved(name, buffer, program, proc_args, executable);
+    if let Some(proc) = eval.processes.get_mut(id) {
+        proc.coding_decode = resolved_coding.decode;
+        proc.coding_encode = resolved_coding.encode;
+    }
+    eval.restore_specpdl_roots(roots);
     if let Some(cwd) = &subprocess_cwd
         && let Some(proc) = eval.processes.get_mut(id)
     {
@@ -13117,7 +13438,7 @@ pub(crate) fn builtin_make_process(
 ) -> EvalResult {
     if !args.is_empty() {
         check_keyword_arg_pairs(&args)?;
-        if make_process_file_handler_arg(&args).is_truthy() {
+        if make_process_keyword_arg(&args, ProcessKeyword::FileHandler).is_truthy() {
             let default_directory = visible_default_directory_lisp(eval);
             if let Some(default_directory) = default_directory {
                 let operation = Value::symbol("make-process");
@@ -13148,8 +13469,16 @@ pub(crate) fn builtin_make_process(
         eval,
         subprocess_cwd.as_deref(),
     ));
+    let coding_environment = make_process_coding_environment(eval, &args)?;
     eval.sync_process_read_config_from_visible_variables();
-    builtin_make_process_impl_with_environment(
+    // `find-operation-coding-system` can hand back a cons this call just
+    // allocated (`Fcons (val, val)` at src/coding.c:10861, or whatever a
+    // function-valued alist entry returned), and process creation allocates.
+    // The other three inputs are values of live symbols and are reachable
+    // through the obarray.
+    let roots = eval.save_specpdl_roots();
+    eval.push_specpdl_root(coding_environment.operation_coding_system);
+    let process = builtin_make_process_impl_with_environment(
         &mut eval.processes,
         &mut eval.buffers,
         &eval.threads,
@@ -13159,13 +13488,82 @@ pub(crate) fn builtin_make_process(
         Some(lookup),
         subprocess_cwd,
         Some(&eval.coding_systems),
-    )
+        coding_environment,
+    );
+    eval.restore_specpdl_roots(roots);
+    process
 }
 
-fn make_process_file_handler_arg(args: &[Value]) -> Value {
+/// Read the ambient half of GNU's `Fmake_process` coding chain, including the
+/// one step that can run Lisp.
+///
+/// `(find-operation-coding-system 'start-process NAME BUFFER COMMAND...)` is
+/// asked only when the chain would reach it and only when there is a PROGRAM to
+/// match, because `start-process` has `target-idx` 2 (src/coding.c:11784) --
+/// the alist is matched against the program, not against the process name
+/// (measured: an entry keyed on the name does not fire).  GNU guards the call
+/// the same way at src/process.c:1970.
+fn make_process_coding_environment(
+    eval: &mut super::eval::Context,
+    args: &[Value],
+) -> Result<MakeProcessCodingEnvironment, Flow> {
+    let mut env = MakeProcessCodingEnvironment {
+        coding_system_for_read: eval.visible_variable_value_or_nil("coding-system-for-read"),
+        coding_system_for_write: eval.visible_variable_value_or_nil("coding-system-for-write"),
+        default_process_coding_system: eval
+            .visible_variable_value_or_nil("default-process-coding-system"),
+        operation_coding_system: Value::NIL,
+    };
+    let coding = make_process_keyword_arg(args, ProcessKeyword::Coding);
+    if !make_process_consults_coding_alist(coding, env)
+        || eval
+            .visible_variable_value_or_nil("process-coding-system-alist")
+            .is_nil()
+    {
+        return Ok(env);
+    }
+    let command = make_process_keyword_arg(args, ProcessKeyword::Command);
+    if !command.is_cons() {
+        return Ok(env);
+    }
+
+    let name = make_process_keyword_arg(args, ProcessKeyword::Name);
+    let buffer_arg = make_process_keyword_arg(args, ProcessKeyword::Buffer);
+    // GNU has already run `Fget_buffer_create` on `:buffer` by this point
+    // (src/process.c:1849-1851), so a function-valued alist entry sees the
+    // buffer object rather than its name.
+    let buffer = if buffer_arg.is_nil() {
+        Value::NIL
+    } else {
+        parse_make_process_buffer(eval, &buffer_arg)?
+    };
+
+    let mut operation_args = vec![Value::symbol("start-process"), name, buffer];
+    let mut rest = command;
+    while rest.is_cons() {
+        operation_args.push(rest.cons_car());
+        rest = rest.cons_cdr();
+    }
+
+    // Root every heap value: a function-valued alist entry runs arbitrary Lisp
+    // and can trigger GC.
+    let roots = eval.save_specpdl_roots();
+    for value in &operation_args {
+        eval.push_specpdl_root(*value);
+    }
+    let result = super::builtins::builtin_find_operation_coding_system(eval, operation_args);
+    eval.restore_specpdl_roots(roots);
+    env.operation_coding_system = result?;
+    Ok(env)
+}
+
+/// The first value a `make-process`-shaped keyword list gives for KEYWORD, or
+/// nil -- GNU's `plist_get (contact, ...)`, which every one of `Fmake_process`'s
+/// reads goes through (src/process.c:1849-1910).
+fn make_process_keyword_arg(args: &[Value], keyword: ProcessKeyword) -> Value {
     let mut i = 0usize;
     while i + 1 < args.len() {
-        if ProcessKeyword::from_value(&args[i]) == Some(ProcessKeyword::FileHandler) {
+        if ProcessKeyword::from_value(&args[i]) == Some(keyword) {
             return args[i + 1];
         }
         i += 2;
@@ -13191,6 +13589,7 @@ pub(crate) fn builtin_make_process_impl(
         None,
         None,
         None,
+        MakeProcessCodingEnvironment::unbound(),
     )
 }
 
@@ -13205,6 +13604,7 @@ fn builtin_make_process_impl_with_environment(
     lookup: Option<ProcessExecLookup<'_>>,
     subprocess_cwd: Option<PathBuf>,
     coding_systems: Option<&super::coding::CodingSystemManager>,
+    coding_environment: MakeProcessCodingEnvironment,
 ) -> EvalResult {
     if args.is_empty() {
         return Ok(Value::NIL);
@@ -13286,9 +13686,11 @@ fn builtin_make_process_impl_with_environment(
             vec![Value::symbol("null"), stop_val],
         ));
     }
-    if let Some(coding) = coding_val {
-        validate_process_coding_value(coding_systems, coding)?;
-    }
+    // NOTE: `:coding` is deliberately NOT validated here.  GNU validates the
+    // RESOLVED pair, and it does so inside `create_process`, after the program
+    // has been found -- measured, `(make-process :coding 'no-such-xyz :command
+    // '("no-such-program-xyz"))` signals `file-missing`, not
+    // `coding-system-error`.  The check now lives beside the resolver below.
     let (program, argv) = if command.is_empty() {
         (LispString::from_utf8(""), Vec::new())
     } else {
@@ -13301,6 +13703,18 @@ fn builtin_make_process_impl_with_environment(
     } else {
         None
     };
+
+    // GNU resolves the pair at src/process.c:1950-2008 and only validates it
+    // later, inside `create_process` -> `setup_process_coding_systems` ->
+    // `setup_coding_system` (src/process.c:2277, src/coding.c:5678).  That
+    // ordering is measurable and this is the point that reproduces it: a
+    // program that cannot be found still signals `file-missing` first, an
+    // undefined coding system signals `coding-system-error`, and neither leaves
+    // a process behind.
+    let resolved_coding =
+        resolve_make_process_coding_systems(coding_val.unwrap_or(Value::NIL), coding_environment);
+    validate_process_coding_component(coding_systems, resolved_coding.decode)?;
+    validate_process_coding_component(coding_systems, resolved_coding.encode)?;
     let stderrproc = if stderr_target.is_nil() {
         Value::NIL
     } else if let Some(stderr_id) = process_value_to_id(&stderr_target) {
@@ -13372,26 +13786,18 @@ fn builtin_make_process_impl_with_environment(
         }
     }
 
-    // GNU `make-process` (src/process.c): when :coding is a non-nil value, it
-    // supplies the DECODE coding (its car if it is a cons, else the whole
-    // value) and the ENCODE coding (its cdr if a cons, else the whole value);
-    // a single symbol is used for both directions. make-process does NOT run
-    // these through `coding_inherit_eol_type` (unlike set-process-coding-system).
-    // When :coding is absent/nil we keep the process default
-    // (utf-8-unix . utf-8-unix), matching GNU's `default-process-coding-system`.
-    if let Some(coding) = coding_val
-        && !coding.is_nil()
-    {
-        let (decode, encode) = if coding.is_cons() {
-            (coding.cons_car(), coding.cons_cdr())
-        } else {
-            (coding, coding)
-        };
-        if let Some(proc) = processes.get_mut(id) {
-            proc.coding_decode = decode;
-            proc.coding_encode = encode;
-            proc.coding_explicitly_set = true;
-        }
+    // The pair resolved above is installed unconditionally: there is no branch
+    // in which a real subprocess keeps a coding system nobody resolved.  GNU
+    // does NOT run these through `coding_inherit_eol_type` here (unlike
+    // `set-process-coding-system`).
+    //
+    // `coding_explicitly_set` stays a record of whether the CALLER passed
+    // `:coding`, because a PTY status heuristic keys off it; the resolver
+    // answering for an absent `:coding` must not look like an explicit one.
+    if let Some(proc) = processes.get_mut(id) {
+        proc.coding_decode = resolved_coding.decode;
+        proc.coding_encode = resolved_coding.encode;
+        proc.coding_explicitly_set = coding_val.is_some_and(|coding| !coding.is_nil());
     }
 
     if let Err(e) = processes.spawn_child_with_environment(id, use_pty, child_environment) {
