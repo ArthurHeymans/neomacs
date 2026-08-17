@@ -1521,6 +1521,61 @@ fn process_coding_is_binary(coding: Value) -> bool {
         )
 }
 
+/// The decode half of a subprocess's coding system, reduced to the single
+/// decision the "bytes become buffer text" step actually needs.
+///
+/// GNU resolves this once per subprocess — `setup_coding_system (val,
+/// &process_coding)` in `Fcall_process` (src/callproc.c:760) for a synchronous
+/// child, `setup_process_coding_systems` (src/process.c:2573) for an
+/// asynchronous one — and every byte the child writes afterwards goes through
+/// that one `struct coding_system`.  Making the choice a value that the
+/// insertion path *takes as an argument* is what keeps a decoder from being
+/// invented at the point of insertion: there is no way to write subprocess
+/// output into a buffer without first naming, in the type, how it is decoded.
+///
+/// (The hard-coded `utf-8-unix` that this type replaced made `call-process`
+/// ignore `coding-system-for-read` entirely; see DIVERGENCES.md entry 128.)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProcessOutputDecoding {
+    /// One of the byte-faithful `binary`/`no-conversion`/`raw-text` codings:
+    /// the child's bytes reach the buffer unchanged (raw bytes become
+    /// eight-bit characters in a multibyte buffer).
+    Bytes,
+    /// Decode under this coding system.
+    Coding(&'static str),
+}
+
+impl ProcessOutputDecoding {
+    /// Reduce a resolved decode coding-system value the way GNU's
+    /// `setup_coding_system` (src/coding.c:5668-5676) does.
+    ///
+    /// Note the nil case: GNU rewrites a nil coding system to `undecided`,
+    /// i.e. DETECT the coding — it does NOT mean "copy the bytes".  Measured,
+    /// `(let ((default-process-coding-system nil)) (call-process "printf" nil t
+    /// nil "caf\\303\\251"))` leaves GNU with four characters, not five.
+    pub(crate) fn for_coding(coding: Value) -> Self {
+        if coding.is_nil() {
+            return Self::Coding("undecided");
+        }
+        if process_coding_is_binary(coding) {
+            Self::Bytes
+        } else {
+            Self::Coding(process_coding_symbol_name(coding))
+        }
+    }
+
+    /// Turn a run of child output bytes into the text that is inserted.
+    pub(crate) fn decode(self, bytes: &[u8]) -> LispString {
+        match self {
+            Self::Bytes => LispString::from_unibyte(bytes.to_vec()),
+            // Issue #131: decode straight to Emacs bytes so process output
+            // keeps real PUA glyphs and eight-bit raw bytes instead of
+            // round-tripping through the lossy storage-string form.
+            Self::Coding(name) => crate::encoding::decode_bytes_to_lisp_string(bytes, name),
+        }
+    }
+}
+
 fn process_coding_uses_utf8_carryover(coding: Value) -> bool {
     let name = process_coding_symbol_name(coding);
     name == "emacs-internal"
@@ -1609,9 +1664,18 @@ fn encode_process_send_input(
 
 fn decode_process_output_bytes(proc: &mut Process, bytes: &[u8], flush: bool) -> LispString {
     let coding = proc.coding_decode;
-    if process_coding_is_binary(coding) {
+    // NOT `ProcessOutputDecoding::for_coding`: an asynchronous process treats a
+    // nil decode coding as raw, because GNU deliberately leaves it nil for a
+    // unibyte process buffer so that "the existing Emacs Lisp libraries ...
+    // receive bare code including a sequence of CR LF" (src/process.c:2535-2539).
+    let decoding = if process_coding_is_binary(coding) {
+        ProcessOutputDecoding::Bytes
+    } else {
+        ProcessOutputDecoding::Coding(process_coding_symbol_name(coding))
+    };
+    if decoding == ProcessOutputDecoding::Bytes {
         proc.decoding_carryover.clear();
-        LispString::from_unibyte(bytes.to_vec())
+        decoding.decode(bytes)
     } else {
         let mut combined = Vec::with_capacity(proc.decoding_carryover.len() + bytes.len());
         combined.append(&mut proc.decoding_carryover);
@@ -1622,13 +1686,7 @@ fn decode_process_output_bytes(proc: &mut Process, bytes: &[u8], flush: bool) ->
                 .extend_from_slice(&combined[decode_len..]);
         }
 
-        // Issue #131: decode straight to Emacs bytes so process output keeps real
-        // PUA glyphs and eight-bit raw bytes instead of round-tripping through the
-        // lossy storage-string form (the old `from_utf8(decode_bytes(..))`).
-        crate::encoding::decode_bytes_to_lisp_string(
-            &combined[..decode_len],
-            process_coding_symbol_name(coding),
-        )
+        decoding.decode(&combined[..decode_len])
     }
 }
 

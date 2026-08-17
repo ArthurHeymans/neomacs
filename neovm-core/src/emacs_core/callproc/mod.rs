@@ -14,6 +14,7 @@ use std::process::{Command, Stdio};
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
+use super::process::ProcessOutputDecoding;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use crate::buffer::BufferManager;
 use crate::heap_types::LispString;
@@ -593,16 +594,17 @@ fn insert_process_output_in_state(
 fn write_output_target_in_state(
     eval: &mut super::eval::Context,
     target: &OutputTarget,
+    decoding: ProcessOutputDecoding,
     output: &[u8],
     append: bool,
 ) -> Result<(), Flow> {
     match target {
         OutputTarget::Discard => Ok(()),
         OutputTarget::Buffer(destination) => {
-            // Issue #131: decode to Emacs bytes + insert via the LispString path so
-            // process output keeps real PUA glyphs / eight-bit bytes (the old
-            // decode_bytes->insert_into_buffer storage path corrupted them).
-            let text = crate::encoding::decode_bytes_to_lisp_string(output, "utf-8-unix");
+            // Only the BUFFER destination decodes.  GNU hands a `(:file NAME)`
+            // destination straight to the child as its stdout fd
+            // (src/callproc.c:570), so those bytes are never converted.
+            let text = decoding.decode(output);
             insert_process_output_in_state(eval, destination, &text)
         }
         OutputTarget::File(path) => {
@@ -637,14 +639,15 @@ fn write_output_target_in_state(
 fn route_captured_output_in_state(
     eval: &mut super::eval::Context,
     destination: &DestinationSpec,
+    decoding: ProcessOutputDecoding,
     stdout: &[u8],
     stderr: &[u8],
 ) -> Result<(), Flow> {
-    write_output_target_in_state(eval, &destination.stdout, stdout, false)?;
+    write_output_target_in_state(eval, &destination.stdout, decoding, stdout, false)?;
     match destination.stderr {
         StderrTarget::Discard => Ok(()),
         StderrTarget::ToStdoutTarget => {
-            write_output_target_in_state(eval, &destination.stdout, stderr, true)
+            write_output_target_in_state(eval, &destination.stdout, decoding, stderr, true)
         }
         StderrTarget::File => {
             let path = destination
@@ -652,7 +655,7 @@ fn route_captured_output_in_state(
                 .as_ref()
                 .ok_or_else(|| signal("error", vec![Value::string("Missing stderr file target")]))?
                 .clone();
-            write_output_target_in_state(eval, &OutputTarget::File(path), stderr, false)
+            write_output_target_in_state(eval, &OutputTarget::File(path), decoding, stderr, false)
         }
     }
 }
@@ -735,6 +738,7 @@ fn run_process_command_in_state(
     infile: Option<LispString>,
     destination: &Value,
     cmd_args: &[LispString],
+    operation_args: &[Value],
 ) -> EvalResult {
     let destination_spec = parse_call_process_destination(&eval.buffers, destination)?;
     // GNU `Fcall_process`: validate the cwd via `get_current_directory` (signals
@@ -802,7 +806,14 @@ fn run_process_command_in_state(
         .output()
         .map_err(|e| super::process::signal_process_io("Searching for program", None, e))?;
 
-    route_captured_output_in_state(eval, &destination_spec, &output.stdout, &output.stderr)?;
+    let decoding = resolve_call_process_output_decoding(eval, operation_args)?;
+    route_captured_output_in_state(
+        eval,
+        &destination_spec,
+        decoding,
+        &output.stdout,
+        &output.stderr,
+    )?;
     Ok(call_process_status_value(output.status))
 }
 
@@ -947,6 +958,89 @@ fn resolve_call_process_arg_coding(eval: &super::eval::Context, cmd_args: &[Lisp
     }
 }
 
+/// Resolve the coding system that DECODES a synchronous subprocess's output
+/// into the destination buffer, mirroring GNU `Fcall_process`
+/// (src/callproc.c:729-763) exactly:
+///
+///   * `coding-system-for-read`, when non-nil, wins outright;
+///   * else the car of `(find-operation-coding-system 'call-process ARGS...)`,
+///     i.e. the `process-coding-system-alist` entry matching PROGRAM;
+///   * else the car of `default-process-coding-system`;
+///   * else nil, which GNU turns into a byte-faithful raw copy.
+///
+/// GNU then runs `Fcheck_coding_system (val)` on the winner, so an unknown
+/// coding system signals `coding-system-error` here rather than being silently
+/// replaced by a default.
+///
+/// This runs AFTER the child has been reaped, which is where GNU decides it
+/// too — `coding_systems` is only computed lazily at src/callproc.c:736, once
+/// the pipe is ready to be read.  Anything that reads the coding variables
+/// while the child runs therefore observes the same values GNU would.
+///
+/// `operation_args` is the GNU-shaped `call-process` argument vector
+/// (PROGRAM INFILE BUFFER DISPLAY &rest ARGS); `find-operation-coding-system`
+/// matches its regexps against PROGRAM and hands the whole vector to a
+/// function-valued alist entry.
+fn resolve_call_process_output_decoding(
+    eval: &mut super::eval::Context,
+    operation_args: &[Value],
+) -> Result<ProcessOutputDecoding, Flow> {
+    let for_read = eval.visible_variable_value_or_nil("coding-system-for-read");
+    let resolved = if for_read.is_truthy() {
+        for_read
+    } else {
+        let operation = find_call_process_operation_coding_system(eval, operation_args)?;
+        if operation.is_cons() {
+            operation.cons_car()
+        } else {
+            let default_cs = eval.visible_variable_value_or_nil("default-process-coding-system");
+            if default_cs.is_cons() {
+                default_cs.cons_car()
+            } else {
+                Value::NIL
+            }
+        }
+    };
+
+    // GNU `Fcheck_coding_system (val)` (src/callproc.c:753).  nil is a valid
+    // coding system there (`Fcoding_system_p` accepts it), so this only
+    // rejects a name that no coding system defines.
+    super::coding::builtin_check_coding_system(&eval.coding_systems, vec![resolved])?;
+    Ok(ProcessOutputDecoding::for_coding(resolved))
+}
+
+/// `(find-operation-coding-system 'call-process PROGRAM ...)`, guarded on a
+/// non-nil `process-coding-system-alist` the way the network path guards on
+/// `network-coding-system-alist`: with an empty chain GNU's lookup can only
+/// return nil, and skipping it keeps a user callback from being invited to run
+/// arbitrary Lisp on every subprocess.
+fn find_call_process_operation_coding_system(
+    eval: &mut super::eval::Context,
+    operation_args: &[Value],
+) -> EvalResult {
+    if operation_args.is_empty()
+        || eval
+            .visible_variable_value_or_nil("process-coding-system-alist")
+            .is_nil()
+    {
+        return Ok(Value::NIL);
+    }
+
+    let mut args = Vec::with_capacity(operation_args.len() + 1);
+    args.push(Value::symbol("call-process"));
+    args.extend_from_slice(operation_args);
+
+    // Root every heap value: a function-valued alist entry runs arbitrary Lisp
+    // and can trigger GC.
+    let roots = eval.save_specpdl_roots();
+    for value in &args {
+        eval.push_specpdl_root(*value);
+    }
+    let result = super::builtins::builtin_find_operation_coding_system(eval, args);
+    eval.restore_specpdl_roots(roots);
+    result
+}
+
 /// Extract the symbol name from a coding-system Lisp value (a symbol), or None
 /// if it is not a symbol we can name.
 fn resolve_sym_value_name(value: &Value) -> Option<String> {
@@ -982,14 +1076,24 @@ fn builtin_call_process_impl(eval: &mut super::eval::Context, args: Vec<Value>) 
     expect_min_args("call-process", &args, 1)?;
     let program = super::builtins::expect_lisp_string(&args[0])?.clone();
     let infile = parse_optional_infile(&args, 1)?;
-    let destination = args.get(2).unwrap_or(&Value::NIL);
+    let destination = args.get(2).copied().unwrap_or(Value::NIL);
     let cmd_args = if args.len() > 4 {
         let parsed = super::process::parse_lisp_string_args_strict(&args[4..])?;
         encode_call_process_args(eval, &parsed)
     } else {
         Vec::new()
     };
-    run_process_command_in_state(eval, &program, infile, destination, &cmd_args)
+    // GNU passes `Fcall_process`'s own argument vector to
+    // `find-operation-coding-system` (src/callproc.c:740-744).
+    let operation_args = args.clone();
+    run_process_command_in_state(
+        eval,
+        &program,
+        infile,
+        &destination,
+        &cmd_args,
+        &operation_args,
+    )
 }
 
 fn builtin_call_process_region_impl(
@@ -1194,7 +1298,27 @@ fn builtin_call_process_region_impl(
         .wait_with_output()
         .map_err(|e| super::process::signal_process_io("Process error", None, e))?;
 
-    route_captured_output_in_state(eval, &destination_spec, &output.stdout, &output.stderr)?;
+    // GNU `Fcall_process_region` reshapes its arguments into `call_process`'s
+    // own vector — PROGRAM, the temp INFILE, BUFFER, DISPLAY, then ARGS
+    // (src/callproc.c:1149-1163) — and it is that vector which reaches
+    // `find-operation-coding-system`.  The temp file's name is an
+    // implementation detail neither GNU nor a coding callback can rely on, so
+    // this passes nil in its place.
+    let mut operation_args = vec![
+        Value::heap_string(program.clone()),
+        Value::NIL,
+        *destination,
+        args.get(5).copied().unwrap_or(Value::NIL),
+    ];
+    operation_args.extend_from_slice(args.get(6..).unwrap_or(&[]));
+    let decoding = resolve_call_process_output_decoding(eval, &operation_args)?;
+    route_captured_output_in_state(
+        eval,
+        &destination_spec,
+        decoding,
+        &output.stdout,
+        &output.stderr,
+    )?;
     Ok(call_process_status_value(output.status))
 }
 
@@ -1222,10 +1346,40 @@ pub(crate) fn builtin_call_process_shell_command(
     let shell_program = obarray_lisp_string_variable(eval.obarray(), "shell-file-name", "sh")?;
     let shell_switch = obarray_lisp_string_variable(eval.obarray(), "shell-command-switch", "-c")?;
     let shell_args = vec![shell_switch, shell_command];
-    let result =
-        run_process_command_in_state(eval, &shell_program, infile, &destination, &shell_args)?;
+    let operation_args = shell_call_process_operation_args(&shell_program, &shell_args, destination);
+    let result = run_process_command_in_state(
+        eval,
+        &shell_program,
+        infile,
+        &destination,
+        &shell_args,
+        &operation_args,
+    )?;
     maybe_redisplay_sync_output(eval, &destination, display)?;
     Ok(result)
+}
+
+/// The GNU-shaped `call-process` argument vector a `*-shell-command' wrapper
+/// hands down: these wrappers reach `call-process` with the SHELL as PROGRAM
+/// and the assembled command line as its arguments (see `call-process-shell-command'
+/// in lisp/subr.el), so that is the vector `find-operation-coding-system' sees.
+fn shell_call_process_operation_args(
+    shell_program: &LispString,
+    shell_args: &[LispString],
+    destination: Value,
+) -> Vec<Value> {
+    let mut operation_args = vec![
+        Value::heap_string(shell_program.clone()),
+        Value::NIL,
+        destination,
+        Value::NIL,
+    ];
+    operation_args.extend(
+        shell_args
+            .iter()
+            .map(|arg| Value::heap_string(arg.clone())),
+    );
+    operation_args
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -1243,7 +1397,15 @@ pub(crate) fn builtin_process_file(
     } else {
         Vec::new()
     };
-    let result = run_process_command_in_state(eval, &program, infile, &destination, &cmd_args)?;
+    let operation_args = args.clone();
+    let result = run_process_command_in_state(
+        eval,
+        &program,
+        infile,
+        &destination,
+        &cmd_args,
+        &operation_args,
+    )?;
     maybe_redisplay_sync_output(eval, &destination, display)?;
     Ok(result)
 }
@@ -1261,8 +1423,15 @@ pub(crate) fn builtin_process_file_shell_command(
     let shell_program = obarray_lisp_string_variable(eval.obarray(), "shell-file-name", "sh")?;
     let shell_switch = obarray_lisp_string_variable(eval.obarray(), "shell-command-switch", "-c")?;
     let shell_args = vec![shell_switch, shell_command];
-    let result =
-        run_process_command_in_state(eval, &shell_program, infile, &destination, &shell_args)?;
+    let operation_args = shell_call_process_operation_args(&shell_program, &shell_args, destination);
+    let result = run_process_command_in_state(
+        eval,
+        &shell_program,
+        infile,
+        &destination,
+        &shell_args,
+        &operation_args,
+    )?;
     maybe_redisplay_sync_output(eval, &destination, display)?;
     Ok(result)
 }
@@ -1343,6 +1512,10 @@ fn parse_output_lines(stdout: &[u8]) -> Value {
 #[cfg(test)]
 #[path = "callproc_raw_bytes_test.rs"]
 mod raw_bytes_tests;
+
+#[cfg(test)]
+#[path = "callproc_read_coding_test.rs"]
+mod read_coding_tests;
 
 #[cfg(test)]
 #[path = "callproc_working_dir_infile_test.rs"]

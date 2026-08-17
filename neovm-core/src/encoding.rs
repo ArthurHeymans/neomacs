@@ -1377,6 +1377,22 @@ pub(crate) fn decode_bytes_emacs(bytes: &[u8], coding_system: &str) -> Vec<u8> {
     if matches!(coding_system_family(coding_system), "utf-8" | "utf-8-emacs") {
         return decode_utf8_coding_to_emacs_bytes(bytes, coding_system);
     }
+    if is_byte_preserving_coding_system(coding_system) {
+        // `binary`/`no-conversion`/`raw-text*` perform NO character-code
+        // conversion: GNU's `setup_coding_system` gives them
+        // `decode_coding_raw_text`, which copies the source bytes and (with
+        // `dst_multibyte`) turns every byte >= 0x80 into an eight-bit
+        // character (src/coding.c, `decode_coding_raw_text`).  Routing them
+        // through `decode_bytes` instead would hand the bytes to
+        // `String::from_utf8_lossy`, which silently *decodes* well-formed
+        // UTF-8 — the very conversion the caller asked us not to do.  The EOL
+        // half of the coding system still applies, because GNU runs
+        // `decode_eol` after every decoder.
+        return crate::emacs_core::emacs_char::str_to_multibyte(&decode_eol_text(
+            bytes,
+            coding_system,
+        ));
+    }
     decode_bytes(bytes, coding_system).into_bytes()
 }
 
