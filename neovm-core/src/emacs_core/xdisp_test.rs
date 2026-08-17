@@ -927,6 +927,7 @@ fn test_format_mode_line_size_and_process_specs_match_gnu() {
         Value::make_buffer(buffer_id),
         "cat".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     let with_process =
         builtin_format_mode_line_ctx(&mut eval, vec![Value::string("%i|%I|%s")]).expect("specs");

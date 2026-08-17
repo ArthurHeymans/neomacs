@@ -1691,6 +1691,7 @@ fn read_char_prefers_ready_keypress_over_process_filter_callback() {
         Value::NIL,
         echo,
         vec!["out".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     ev.processes
         .spawn_child(pid, false)
