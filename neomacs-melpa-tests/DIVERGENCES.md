@@ -7349,6 +7349,19 @@ chapter navigation, metadata buffer, view-source, saved-place round
 trip, link parsing) is therefore not registered; it is shelved at the
 stub until the hang is root-caused.
 
+### self-insert-command inside a case body kills the GNU batch process
+
+The caml electric-pipe workflow (a case body that runs
+`self-insert-command' -- both via `execute-kbd-macro' and via a direct
+call with `last-command-event' bound -- inside the shared batch's eval)
+kills the GNU Emacs batch process deterministically: the process exits
+255 with an empty ERR outcome and a `void-variable neomacs--oracle-error'
+in the harness's error handler.  The same case passes standalone
+(`-Q --batch -l').  The powershell selection-helper cases that showed
+the identical signature were transient (they pass consistently now);
+the caml one reproduces on every run in both invocation variants, so
+the workflow is left unexercised.
+
 ### Found and NOT fixed here
 
 `make-process` has the same gap on its own precedence chain

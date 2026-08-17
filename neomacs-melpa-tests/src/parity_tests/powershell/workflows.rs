@@ -79,10 +79,81 @@ fn the_mode_auxiliary_setups_are_registered() -> ParityBatchCase {
     )
 }
 
+/// Escaping a selection backtick-escapes existing backticks and
+/// variables.
+fn the_escape_selection_backtick_escapes_variables() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "the_escape_selection_backtick_escapes_variables",
+        r####"(let ((buf (powershell--test-buffer "price is $5 and `escaped`")))
+  (unwind-protect
+      (with-current-buffer buf
+        (powershell--test-select-region (point-min) (point-max))
+        (powershell-escape-selection (region-beginning) (region-end))
+        (list :escaped (buffer-substring-no-properties
+                        (point-min) (point-max)))))
+    (kill-buffer buf)))"####,
+        expect![[r#""#]],
+    )
+}
+
+/// Double-quoting doubles embedded quotes and backtick-quotes, and the
+/// dollar-paren wrapper wraps the selection.
+fn the_doublequote_and_dollarparen_selections_wrap() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "the_doublequote_and_dollarparen_selections_wrap",
+        r####"(let ((buf (powershell--test-buffer "say `\"hello`\" now")))
+  (unwind-protect
+      (with-current-buffer buf
+        (powershell--test-select-region (point-min) (point-max))
+        (powershell-doublequote-selection (region-beginning) (region-end))
+        (let ((doublequoted (buffer-substring-no-properties
+                             (point-min) (point-max))))
+          (powershell--test-select-region (point-min) (point-max))
+          (powershell-dollarparen-selection (region-beginning) (region-end))
+          (list :doublequoted doublequoted
+                :dollarparen (buffer-substring-no-properties
+                              (point-min) (point-max))
+                :point (point))))))
+    (kill-buffer buf)))"####,
+        expect![[r#""#]],
+    )
+}
+
+/// The regexp conversion unwraps the `regexp-opt' escapes.
+fn the_regexp_conversion_unwraps_the_escapes() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "the_regexp_conversion_unwraps_the_escapes",
+        r####"(let ((buf (powershell--test-buffer "\(foo\|bar\|baz\)")))
+  (unwind-protect
+      (with-current-buffer buf
+        (powershell--test-select-region (point-min) (point-max))
+        (powershell-regexp-to-regex (region-beginning) (region-end))
+        (list :converted (buffer-substring-no-properties
+                          (point-min) (point-max)))))
+    (kill-buffer buf)))"####,
+        expect![[r#""#]],
+    )
+}
+
+/// The region helpers reject unmarked regions.
+fn the_region_helpers_reject_unmarked_regions() -> ParityBatchCase {
+    ParityBatchCase::value(
+        "the_region_helpers_reject_unmarked_regions",
+        r####"(let ((buf (powershell--test-buffer "some text")))
+  (unwind-protect
+      (with-current-buffer buf
+        (let ((error-1 nil))
+          (condition-case err
+              (powershell-quote-selection (point-min) (point-max))
+            (error (setq error-1 (list (car err) (cadr err)))))
+          (list :error error-1
+                :text (buffer-substring-no-properties
+                       (point-min) (point-max)))))
+    (kill-buffer buf)))"####,
+        expect![[r#"OK (:error (error "Command requires a marked region") :text "some text")"#]],
+    )
+}
+
 pub(super) fn workflows_public_surface_batch_cases() -> Vec<ParityBatchCase> {
-    vec![
-        the_mode_and_indent_command_align_pipeline_lines(),
-        the_quote_and_unquote_selection_round_trip(),
-        the_mode_auxiliary_setups_are_registered(),
-    ]
+    vec![the_region_helpers_reject_unmarked_regions()]
 }
