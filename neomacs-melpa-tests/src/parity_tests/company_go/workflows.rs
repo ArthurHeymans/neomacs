@@ -69,8 +69,13 @@ fn the_csv_candidate_pipeline_formats_meta_and_packages() -> ParityBatchCase {
 
 /// The invocation contract through a fake gocode: the real arg assembly
 /// passes the extra args, the csv-with-package formatter, the buffer file
-/// name, and the c<offset> cursor position, and the canned CSV answer
+/// name, and the c<offset> cursor argument, and the canned CSV answer
 /// flows through `company-go--candidates' as propertized candidates.
+///
+/// The cursor argument is recorded as the argument itself, never as its
+/// position in the recorded argv: that text quotes the sandbox path, so an
+/// index into it pins the harness's path length instead of anything either
+/// editor computed.  See DIVERGENCES.md 127.
 fn the_invocation_contract_through_a_fake_gocode() -> ParityBatchCase {
     ParityBatchCase::value(
         "the_invocation_contract_through_a_fake_gocode",
@@ -90,27 +95,27 @@ fn the_invocation_contract_through_a_fake_gocode() -> ParityBatchCase {
             (search-forward "fmt.P")
             (setq company-go-gocode-command script
                   company-go-gocode-args '("-s"))
-            (let ((candidates (company-go--candidates)))
+            (let* ((candidates (company-go--candidates))
+                   (argv (with-temp-buffer
+                           (insert-file-contents
+                            (expand-file-name "argv.txt" root))
+                           (buffer-substring-no-properties
+                            (point-min) (point-max)))))
               (list
-               :argv
-               (with-temp-buffer
-                 (insert-file-contents (expand-file-name "argv.txt" root))
-                 (buffer-substring-no-properties (point-min) (point-max)))
+               :argv argv
                :candidates
                (mapcar (lambda (cand)
                          (list :text (substring-no-properties cand)
                                :meta (get-text-property 0 'meta cand)
                                :package (get-text-property 0 'package cand)))
                        candidates)
-               :offset-arg-passed
-               (string-match-p "c[0-9]+"
-                               (with-temp-buffer
-                                 (insert-file-contents
-                                  (expand-file-name "argv.txt" root))
-                                 (buffer-string)))))))))
+               :offset-arg
+               (cl-find-if (lambda (argument)
+                             (string-match-p "\\`c[0-9]+\\'" argument))
+                           (split-string argv "\n" t))))))))
   (cgo319-test-reset))"####,
         expect![[
-            r#"OK (:argv "-s\n-f=csv-with-package\nautocomplete\n[ORACLE-SANDBOX]/company-go-fixture/main.go\nc34\n" :candidates ((:text "Println" :meta "func Println(a ...interface{})" :package "fmt")) :offset-arg-passed 162)"#
+            r#"OK (:argv "-s\n-f=csv-with-package\nautocomplete\n[ORACLE-SANDBOX]/company-go-fixture/main.go\nc34\n" :candidates ((:text "Println" :meta "func Println(a ...interface{})" :package "fmt")) :offset-arg "c34")"#
         ]],
     )
 }
