@@ -493,7 +493,7 @@ rank	package	downloads	status
 492	jedi	172842	covered
 493	sublime-themes	172727	todo
 494	sphinx-doc	172522	todo
-495	session	172485	todo
+495	session	172485	covered
 496	ov	172364	covered
 497	company-lsp	172083	removed
 498	anti-zenburn-theme	171860	covered
