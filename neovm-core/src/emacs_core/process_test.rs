@@ -533,6 +533,7 @@ fn process_manager_create_and_query() {
         Value::NIL,
         "/bin/echo".into(),
         vec!["hello".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     assert!(id > 0);
     assert!(pm.get(id).is_some());
@@ -550,7 +551,13 @@ fn process_manager_create_and_query() {
 fn process_manager_kill() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
-    let id = pm.create_process("p".into(), Value::NIL, "prog".into(), vec![]);
+    let id = pm.create_process(
+        "p".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     assert!(pm.kill_process(id));
     assert_eq!(
         pm.process_status(id),
@@ -566,7 +573,13 @@ fn process_manager_kill() {
 fn process_manager_delete() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
-    let id = pm.create_process("p".into(), Value::NIL, "prog".into(), vec![]);
+    let id = pm.create_process(
+        "p".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     assert!(pm.delete_process(id));
     assert!(pm.get(id).is_none());
 }
@@ -575,7 +588,13 @@ fn process_manager_delete() {
 fn process_manager_send_input() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
-    let id = pm.create_process("p".into(), Value::NIL, "prog".into(), vec![]);
+    let id = pm.create_process(
+        "p".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     assert!(pm.send_input(id, &LispString::from_utf8("hello ")).unwrap());
     assert!(pm.send_input(id, &LispString::from_utf8("world")).unwrap());
     let expected = Value::list(vec![
@@ -600,7 +619,13 @@ fn builtin_process_send_string_preserves_raw_unibyte_write_queue_entries() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
     let buffers = crate::buffer::BufferManager::new();
-    let id = pm.create_process("p".into(), Value::NIL, "prog".into(), vec![]);
+    let id = pm.create_process(
+        "p".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     let raw = Value::heap_string(LispString::from_unibyte(vec![0xFF, b'A']));
     builtin_process_send_string_impl(&mut pm, &buffers, vec![Value::make_process(id), raw])
         .expect("process-send-string");
@@ -628,6 +653,7 @@ fn process_send_string_accepts_get_process_designators_like_gnu() {
         Value::make_buffer(buffer_id),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
 
     for (target, text) in [
@@ -676,6 +702,7 @@ fn process_send_region_accepts_get_process_designators_like_gnu() {
         Value::make_buffer(buffer_id),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
 
     for target in [
@@ -718,6 +745,7 @@ fn process_send_eof_accepts_get_process_designators_like_gnu() {
         Value::make_buffer(buffer_id),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
 
     let buffer_value = Value::make_buffer(buffer_id);
@@ -752,6 +780,7 @@ fn process_controls_accept_get_process_designators_like_gnu() {
         String::new(),
         vec![],
         ProcessKind::Pipe,
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
 
     let buffer_value = Value::make_buffer(buffer_id);
@@ -811,7 +840,13 @@ fn continue_process_cancels_a_pending_stop_transition_like_gnu() {
     crate::test_utils::init_test_tracing();
     let buffers = crate::buffer::BufferManager::new();
     let mut processes = ProcessManager::new();
-    let id = processes.create_process("stopped".into(), Value::NIL, "prog".into(), vec![]);
+    let id = processes.create_process(
+        "stopped".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     {
         let process = processes.get_mut(id).expect("process");
         process.status = process_status_run_value();
@@ -850,6 +885,7 @@ fn internal_default_signal_process_targets_only_the_named_pid_like_gnu() {
         Value::NIL,
         python,
         vec!["-c".into(), parent],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     processes.spawn_child(id, false).expect("spawn parent");
     for _ in 0..100 {
@@ -894,24 +930,28 @@ fn delete_process_accepts_get_process_designators_like_gnu() {
         Value::make_buffer(object_buffer),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     let name_id = pm.create_process(
         "delete-name-proc".into(),
         Value::make_buffer(name_buffer),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     let nil_id = pm.create_process(
         "delete-nil-proc".into(),
         Value::make_buffer(nil_buffer),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     let message_id = pm.create_process(
         "delete-message-proc".into(),
         Value::make_buffer(message_buffer),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
 
     builtin_delete_process_impl(&mut pm, &buffers, vec![Value::make_buffer(object_buffer)])
@@ -938,7 +978,13 @@ fn delete_process_accepts_get_process_designators_like_gnu() {
 fn process_manager_find_by_name() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
-    let id = pm.create_process("my-proc".into(), Value::NIL, "prog".into(), vec![]);
+    let id = pm.create_process(
+        "my-proc".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     assert_eq!(pm.find_by_name("my-proc"), Some(id));
     assert_eq!(pm.find_by_name("nonexistent"), None);
 }
@@ -1040,7 +1086,13 @@ fn make_process_non_executable_program_reports_gnu_errno_data() {
 fn builtin_process_name_uses_lisp_value_storage() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
-    let id = pm.create_process("my-proc".into(), Value::NIL, "prog".into(), vec![]);
+    let id = pm.create_process(
+        "my-proc".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
 
     let value = builtin_process_name_impl(&pm, vec![Value::make_process(id)])
         .expect("process-name should succeed");
@@ -1063,6 +1115,7 @@ fn process_type_and_contact_use_stored_lisp_fields() {
         String::new(),
         vec![],
         ProcessKind::Network,
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     {
         let proc = pm.get_mut(network).expect("network process");
@@ -1127,6 +1180,7 @@ fn connection_process_mutators_keep_childp_plist_in_sync() {
         String::new(),
         vec![],
         ProcessKind::Network,
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     {
         let proc = pm.get_mut(id).expect("network process");
@@ -1229,6 +1283,7 @@ fn process_buffer_storage_uses_buffer_objects() {
         Value::make_buffer(buffer_id),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
 
     assert_eq!(pm.find_by_buffer_id(buffer_id), Some(id));
@@ -1255,7 +1310,13 @@ fn process_mark_storage_uses_marker_objects() {
     let _ = buffers.insert_into_buffer(second, "z");
 
     let mut pm = ProcessManager::new();
-    let id = pm.create_process("my-proc".into(), Value::NIL, "prog".into(), vec![]);
+    let id = pm.create_process(
+        "my-proc".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     let mark = builtin_process_mark_impl(&pm, &buffers, vec![Value::make_process(id)])
         .expect("process-mark should succeed");
     assert!(mark.is_marker());
@@ -1314,6 +1375,7 @@ fn internal_default_process_filter_moves_stored_process_mark() {
         Value::make_buffer(buffer_id),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     ev.processes
         .sync_process_mark(&mut ev.buffers, pid)
@@ -1394,6 +1456,7 @@ fn internal_default_process_sentinel_inserts_status_at_process_mark() {
         Value::make_buffer(buffer_id),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     ev.processes
         .sync_process_mark(&mut ev.buffers, pid)
@@ -1445,6 +1508,7 @@ fn process_status_notification_runs_default_sentinel_and_reaps() {
         Value::make_buffer(buffer_id),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     ev.processes
         .sync_process_mark(&mut ev.buffers, pid)
@@ -1470,13 +1534,20 @@ fn process_status_notification_runs_default_sentinel_and_reaps() {
 fn builtin_process_tty_name_uses_value_slot() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
-    let real_id = pm.create_process("tty-proc".into(), Value::NIL, "prog".into(), vec![]);
+    let real_id = pm.create_process(
+        "tty-proc".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     let pipe_id = pm.create_process_with_kind(
         "pipe-proc".into(),
         Value::NIL,
         String::new(),
         vec![],
         ProcessKind::Pipe,
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
 
     let tty_value =
@@ -1703,6 +1774,7 @@ fn make_process_accepts_existing_pipe_process_for_stderr() {
         &mut buffers,
         &threads,
         None,
+        crate::emacs_core::process::ConnectionProcessCodingVariables::unbound(),
         vec![
             Value::keyword(":name"),
             Value::string("proc-existing-stderr"),
@@ -1740,6 +1812,7 @@ fn builtin_process_command_uses_value_slot() {
         Value::NIL,
         "/bin/echo".into(),
         vec!["hello".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     let pipe_id = pm.create_process_with_kind(
         "pipe-proc".into(),
@@ -1747,6 +1820,7 @@ fn builtin_process_command_uses_value_slot() {
         String::new(),
         vec![],
         ProcessKind::Pipe,
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
 
     let command =
@@ -1765,8 +1839,20 @@ fn builtin_process_command_uses_value_slot() {
 fn process_manager_list() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();
-    let id1 = pm.create_process("a".into(), Value::NIL, "p".into(), vec![]);
-    let id2 = pm.create_process("b".into(), Value::NIL, "q".into(), vec![]);
+    let id1 = pm.create_process(
+        "a".into(),
+        Value::NIL,
+        "p".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
+    let id2 = pm.create_process(
+        "b".into(),
+        Value::NIL,
+        "q".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     let ids = pm.list_processes();
     // Newest-first, like GNU's `process-list` (front-insertion `Vprocess_alist`).
     assert_eq!(ids, vec![id2, id1]);
@@ -2088,6 +2174,7 @@ fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
             LispString::from_utf8("-c"),
             LispString::from_utf8("printf 'x\n'"),
         ],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     processes.spawn_child(pid, true).expect("spawn PTY process");
 
@@ -2191,6 +2278,7 @@ fn deleted_pty_process_releases_live_io_and_reaps_child() {
         Value::NIL,
         sh,
         vec!["-c".into(), "sleep 300".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     processes.spawn_child(id, true).expect("spawn PTY process");
     let os_pid = processes
@@ -2226,6 +2314,7 @@ fn dropping_process_manager_terminates_and_reaps_live_child() {
         Value::NIL,
         sh,
         vec!["-c".into(), "sleep 300".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     processes.spawn_child(id, false).expect("spawn pipe child");
     let os_pid = processes
@@ -4212,6 +4301,7 @@ fn accept_process_output_drains_ready_output_before_yielding_to_command_input() 
         Value::NIL,
         printf,
         vec!["READY".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     ev.processes
         .spawn_child(pid, false)
@@ -4721,7 +4811,13 @@ fn accept_process_output_request_uses_gnu_wait_deadlines() {
     assert!(timeout.wait_timing_is_finite());
     assert!(timeout.completes_on_any_process_activity());
 
-    let id = processes.create_process("target".into(), Value::NIL, "cat".into(), vec![]);
+    let id = processes.create_process(
+        "target".into(),
+        Value::NIL,
+        "cat".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     let target =
         parse_accept_process_output_request(&mut processes, &[Value::make_process(id), Value::NIL])
             .expect("parse target accept-process-output")
@@ -4989,9 +5085,13 @@ fn accept_process_output_integer_just_this_one_suppresses_timers() {
     )
     .expect("install timer callback");
 
-    let pid = ev
-        .processes
-        .create_process("apio-wait-target".into(), Value::NIL, cat, Vec::new());
+    let pid = ev.processes.create_process(
+        "apio-wait-target".into(),
+        Value::NIL,
+        cat,
+        Vec::new(),
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     ev.processes
         .spawn_child(pid, false)
         .expect("spawn target child");
@@ -5100,9 +5200,13 @@ fn accept_process_output_runs_timer_before_filter_and_sentinel_like_gnu() {
         )]),
     );
 
-    let pid =
-        ev.processes
-            .create_process("apio-order".into(), Value::NIL, echo, vec!["out".into()]);
+    let pid = ev.processes.create_process(
+        "apio-order".into(),
+        Value::NIL,
+        echo,
+        vec!["out".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     ev.processes
         .spawn_child(pid, false)
         .expect("spawn ordering process");
@@ -5203,6 +5307,7 @@ fn accept_process_output_runs_gnu_timer_then_internal_timer_before_process_callb
         Value::NIL,
         echo,
         vec!["out".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     ev.processes
         .spawn_child(pid, false)
@@ -5273,6 +5378,7 @@ fn accept_process_output_runs_default_process_filter() {
         ),
         echo,
         vec!["out".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     ev.processes
         .spawn_child(pid, false)
@@ -5322,6 +5428,7 @@ fn accept_process_output_discards_output_when_filter_is_t() {
         Value::make_buffer(buffer_id),
         echo,
         vec!["discarded".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     builtin_set_process_filter(&mut ev, vec![Value::make_process(pid), Value::T])
         .expect("set t process filter");
@@ -5366,6 +5473,7 @@ fn process_filter_t_suspends_output_until_filter_is_resumed() {
         Value::make_buffer(buffer_id),
         shell,
         vec!["-c".into(), "printf held; sleep 0.3; printf later".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     builtin_set_process_filter(&mut ev, vec![Value::make_process(pid), Value::T])
         .expect("suspend process output");
@@ -5789,9 +5897,13 @@ fn accept_process_output_restores_current_buffer_and_match_data() {
         .expect("capture match-data before callback");
     let before_buffer = ev.buffers.current_buffer_id();
 
-    let pid =
-        ev.processes
-            .create_process("apio-restore".into(), Value::NIL, echo, vec!["out".into()]);
+    let pid = ev.processes.create_process(
+        "apio-restore".into(),
+        Value::NIL,
+        echo,
+        vec!["out".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     ev.processes
         .spawn_child(pid, false)
         .expect("spawn restore process");
@@ -5984,9 +6096,13 @@ fn sleep_for_uses_shared_wait_request_for_process_output_and_timers() {
     )
     .expect("install sleep-for callback setup");
 
-    let pid =
-        ev.processes
-            .create_process("sleep-shared".into(), Value::NIL, echo, vec!["out".into()]);
+    let pid = ev.processes.create_process(
+        "sleep-shared".into(),
+        Value::NIL,
+        echo,
+        vec!["out".into()],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     ev.processes
         .spawn_child(pid, false)
         .expect("spawn sleep-for process");
@@ -6300,6 +6416,7 @@ fn pipe_process_send_after_eof_discards_input_like_gnu() {
         LispString::from_utf8(&cat),
         vec![],
         ProcessKind::Real,
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     pm.spawn_child(id, false).expect("spawn pipe child");
 
@@ -7123,6 +7240,7 @@ fn make_network_process_nowait_hostname_dns_failure_is_async_like_gnu() {
         LispString::from_utf8("network"),
         Vec::new(),
         ProcessKind::Network,
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     let (sender, receiver) = std::sync::mpsc::channel();
     sender
@@ -7302,6 +7420,7 @@ fn process_contact_no_block_returns_nil_for_pending_nowait_network_like_gnu() {
         LispString::from_utf8("network"),
         Vec::new(),
         ProcessKind::Network,
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     let proc = eval.processes.get_mut(id).expect("network process");
     proc.status = process_status_connect_value();
@@ -7482,6 +7601,7 @@ fn process_send_string_rejects_network_server_like_gnu() {
         "network".into(),
         vec![],
         ProcessKind::Network,
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     pm.get_mut(id).expect("server process").childp = Value::list(vec![
         ProcessKeyword::Server.value(),
@@ -8506,7 +8626,13 @@ fn adaptive_read_buffering_updates_delay_with_gnu_thresholds() {
         readmax: 1024,
         adaptive_read_buffering: 1,
     });
-    let id = processes.create_process("adaptive-read".into(), Value::NIL, "prog".into(), vec![]);
+    let id = processes.create_process(
+        "adaptive-read".into(),
+        Value::NIL,
+        "prog".into(),
+        vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
     let process = processes.get_mut(id).expect("process");
 
     update_process_adaptive_read_buffering(process, 42, false);
@@ -8543,6 +8669,7 @@ fn internal_default_process_filter_inserts_while_another_buffer_is_read_only() {
         Value::make_buffer(process_buffer),
         "prog".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     ev.processes
         .sync_process_mark(&mut ev.buffers, pid)
@@ -9100,5 +9227,466 @@ fn make_process_encode_coding_follows_gnu_precedence_chain() {
     assert_eq!(
         result,
         "OK ((utf-8-unix . latin-1) (latin-1 . koi8-r) (latin-1 . koi8-r))"
+    );
+}
+
+/// GNU `Fmake_pipe_process` has its own coding resolver
+/// (src/process.c:2517-2570), and it is NOT `Fmake_process`'s.  It cannot reach
+/// `process-coding-system-alist` at all -- `coding_systems` is initialised to
+/// `Qt` at :2520 and never assigned, so the `CONSP (coding_systems)` arm is
+/// dead code -- and it short-circuits to nil when a buffer is unibyte, asking
+/// the PROCESS buffer for the decode half (:2533-2534) and `current_buffer`
+/// for the encode half (:2559-2560).
+///
+/// Every expected value below was measured by running tmp/pw137/pin.el under
+/// GNU Emacs 31.0.90; none was derived.  `default-process-coding-system` is
+/// bound explicitly wherever it is the answer, because the unit bootstrap
+/// leaves it at `(undecided-unix . utf-8-unix)` while both shipped editors
+/// hold `(utf-8-unix . utf-8-unix)`; a pin that inherited it would be recording
+/// the runtime rather than the behaviour.
+#[test]
+fn make_pipe_process_coding_follows_gnus_pipe_chain() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (defvar pw137-n 0)
+             (defun pw137-pipe-cs (&rest args)
+               (setq pw137-n (1+ pw137-n))
+               (let ((p (apply #'make-pipe-process :name (format "pw137p-%d" pw137-n)
+                               :noquery t :sentinel #'ignore args)))
+                 (prog1 (process-coding-system p) (delete-process p))))
+             (list
+              ;; Nothing bound: both halves land on `default-process-coding-system'.
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix)))
+                (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")))
+              ;; The two dynamic overrides, one half each.
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                    (coding-system-for-read 'binary))
+                (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")))
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                    (coding-system-for-write 'latin-1))
+                (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")))
+              ;; A SUPPLIED `:coding' ENDS the chain, even for the half whose
+              ;; value is nil: GNU writes the connection primitives as one
+              ;; `else if' chain, so a non-nil `tem' skips every later arm.
+              ;; `make-process' is written with a separate `if (NILP (val))'
+              ;; for its tail and therefore answers `utf-8-unix' for this same
+              ;; form -- see `make_process_decode_coding_follows_gnu_precedence_chain'.
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                    (coding-system-for-read 'binary))
+                (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")
+                               :coding '(nil . latin-1)))
+              (pw137-pipe-cs :buffer (generate-new-buffer " *mb*") :coding 'utf-8-dos)
+              ;; A unibyte PROCESS buffer short-circuits the DECODE half only.
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                    (b (generate-new-buffer " *ub*")))
+                (with-current-buffer b (set-buffer-multibyte nil))
+                (pw137-pipe-cs :buffer b))
+              ;; ... and the override still beats it.
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                    (coding-system-for-read 'latin-1)
+                    (b (generate-new-buffer " *ub*")))
+                (with-current-buffer b (set-buffer-multibyte nil))
+                (pw137-pipe-cs :buffer b))
+              ;; A unibyte CURRENT buffer short-circuits the ENCODE half, and
+              ;; the two halves therefore answer for DIFFERENT buffers.  This
+              ;; row is the one a single "the buffer is unibyte" flag cannot
+              ;; express.
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                    (cur (generate-new-buffer " *cur*"))
+                    (pb (generate-new-buffer " *mb*")))
+                (with-current-buffer cur
+                  (set-buffer-multibyte nil)
+                  (pw137-pipe-cs :buffer pb)))
+              ;; The tail really is `default-process-coding-system', both halves.
+              (let ((default-process-coding-system '(latin-1 . koi8-r)))
+                (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")))
+              (let ((default-process-coding-system nil))
+                (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")))
+              ;; Neither alist is reachable from a pipe process.
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                    (process-coding-system-alist '(("pw137p" binary . binary))))
+                (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")))
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                    (network-coding-system-alist '(("pw137p" binary . binary))))
+                (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")))
+              ;; GNU checks the value the CHAIN produced, not the `:coding'
+              ;; keyword, because the check is `setup_coding_system' reached
+              ;; through `setup_process_coding_systems' (src/process.c:2573).
+              (condition-case e
+                  (pw137-pipe-cs :buffer (generate-new-buffer " *mb*") :coding 'no-such-xyz)
+                (error (list (car e) (cadr e))))
+              (condition-case e
+                  (let ((coding-system-for-read 'no-such-xyz))
+                    (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")))
+                (error (list (car e) (cadr e))))
+              (condition-case e
+                  (let ((coding-system-for-write 'no-such-xyz))
+                    (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")))
+                (error (list (car e) (cadr e))))
+              (condition-case e
+                  (let ((default-process-coding-system '(no-such-xyz . no-such-xyz)))
+                    (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")))
+                (error (list (car e) (cadr e))))
+              ;; Nothing is left behind when it fires.
+              (let ((before (length (process-list))))
+                (ignore-errors
+                  (pw137-pipe-cs :buffer (generate-new-buffer " *mb*")
+                                 :coding 'no-such-xyz))
+                (- (length (process-list)) before))))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(utf-8-unix . utf-8-unix) ",
+            "(binary . utf-8-unix) ",
+            "(utf-8-unix . latin-1) ",
+            "(nil . latin-1) ",
+            "(utf-8-dos . utf-8-dos) ",
+            "(nil . utf-8-unix) ",
+            "(latin-1 . utf-8-unix) ",
+            "(utf-8-unix) ",
+            "(latin-1 . koi8-r) ",
+            "(nil) ",
+            "(utf-8-unix . utf-8-unix) ",
+            "(utf-8-unix . utf-8-unix) ",
+            "(coding-system-error no-such-xyz) ",
+            "(coding-system-error no-such-xyz) ",
+            "(coding-system-error no-such-xyz) ",
+            "(coding-system-error no-such-xyz) ",
+            "0)",
+        )
+    );
+}
+
+/// The pipe chain's answer is what the BYTES go through, not just what
+/// `process-coding-system` reports.
+///
+/// A pipe process is fed by handing it to `make-process` as `:stderr` -- which
+/// is also how GNU itself builds one when `:stderr` names a buffer
+/// (`CALLN (Fmake_pipe_process, ...)`, src/process.c:1883) -- so the child's
+/// stderr is decoded by the PIPE's resolver, under whatever was bound when the
+/// pipe was created rather than when the child was spawned.
+///
+/// The last three rows are the shared second stage on top of it:
+/// `setup_process_coding_systems` drops character-code conversion for a unibyte
+/// process buffer while KEEPING end-of-line conversion (src/process.c:8395-8399,
+/// entry 131), and it applies to the coding the chain produced -- nil, i.e.
+/// `raw_text_coding_system (Qnil)` = bare `raw-text`, which DETECTS the line
+/// endings (entry 134).
+///
+/// Every expected value below was measured under GNU Emacs 31.0.90.
+#[test]
+fn make_pipe_process_stderr_bytes_go_through_the_pipes_own_chain() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defvar pw137-n 0)
+             (defun pw137-stderr (bind-fn coding unibyte)
+               (setq pw137-n (1+ pw137-n))
+               (let* ((buf (generate-new-buffer " *err*"))
+                      (_ (when unibyte
+                           (with-current-buffer buf (set-buffer-multibyte nil))))
+                      (pipe (funcall bind-fn
+                                     (lambda ()
+                                       (apply #'make-pipe-process
+                                              :name (format "pw137e-%d" pw137-n)
+                                              :noquery t :sentinel #'ignore :buffer buf
+                                              (if coding (list :coding coding) nil)))))
+                      (p (make-process :name (format "pw137c-%d" pw137-n) :noquery t
+                                       :buffer nil :sentinel #'ignore :stderr pipe
+                                       :command (list "{sh}" "-c"
+                                                      "printf 'caf\\303\\251\\r\\nx\\r\\n' >&2"))))
+                 (while (accept-process-output p 1))
+                 (while (process-live-p p) (accept-process-output p 0.05))
+                 (dotimes (_ 20) (accept-process-output pipe 0.05))
+                 (prog1 (append (with-current-buffer buf (buffer-string)) nil)
+                   (delete-process pipe))))
+             (list
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix)))
+                (pw137-stderr #'funcall nil nil))
+              (pw137-stderr (lambda (f) (let ((coding-system-for-read 'binary)) (funcall f)))
+                            nil nil)
+              (pw137-stderr (lambda (f) (let ((coding-system-for-read 'raw-text)) (funcall f)))
+                            nil nil)
+              (pw137-stderr (lambda (f) (let ((coding-system-for-read 'latin-1)) (funcall f)))
+                            nil nil)
+              (pw137-stderr (lambda (f)
+                              (let ((default-process-coding-system '(binary . binary)))
+                                (funcall f)))
+                            nil nil)
+              (pw137-stderr #'funcall 'utf-8-dos nil)
+              (pw137-stderr #'funcall 'utf-8-dos t)
+              (pw137-stderr #'funcall 'utf-8-unix t)
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix)))
+                (pw137-stderr #'funcall nil t))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(99 97 102 233 13 10 120 13 10) ",
+            "(99 97 102 4194243 4194217 13 10 120 13 10) ",
+            "(99 97 102 4194243 4194217 10 120 10) ",
+            "(99 97 102 195 169 10 120 10) ",
+            "(99 97 102 4194243 4194217 13 10 120 13 10) ",
+            "(99 97 102 233 10 120 10) ",
+            "(99 97 102 195 169 10 120 10) ",
+            "(99 97 102 195 169 13 10 120 13 10) ",
+            "(99 97 102 195 169 10 120 10))",
+        )
+    );
+}
+
+/// GNU `Fmake_serial_process`'s coding chain (src/process.c:3247-3275) is the
+/// shortest of the five: the `:coding` keyword, then
+/// `coding-system-for-read`/`-write`, and then NOTHING.  `val` is left at the
+/// `Qnil` it was initialised to, so `(nil . nil)` is a serial process's normal
+/// answer rather than an omission -- `setup_coding_system` reads nil as
+/// `undecided`, which detects (src/coding.c:5675-5676).
+///
+/// It reaches neither `process-coding-system-alist` (there is not even a
+/// `coding_systems` variable in the function) nor
+/// `default-process-coding-system` (there is no arm that reads it), and its
+/// unibyte-buffer short circuit cannot change an answer that is already nil.
+///
+/// `/dev/ptmx` is the port because it is a real character device that
+/// `serial_open` + `tcgetattr` accept on any Linux, which is what GNU needs to
+/// get as far as the coding chain: `/dev/null` fails `tcgetattr` and a
+/// nonexistent path signals `file-missing`.  Every expected value below was
+/// measured on that port under GNU Emacs 31.0.90.
+#[cfg(unix)]
+#[test]
+fn make_serial_process_coding_is_the_overrides_and_nothing_else() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (defvar pw137-n 0)
+             (defun pw137-serial-cs (&rest args)
+               (setq pw137-n (1+ pw137-n))
+               (let ((p (apply #'make-serial-process :port "/dev/ptmx" :speed 9600
+                               :name (format "pw137s-%d" pw137-n) :noquery t
+                               :sentinel #'ignore args)))
+                 (prog1 (process-coding-system p) (delete-process p))))
+             (list
+              ;; Nothing bound: nil, which means DETECT.
+              (let ((default-process-coding-system '(utf-8-unix . utf-8-unix)))
+                (pw137-serial-cs :buffer (generate-new-buffer " *mb*")))
+              (let ((coding-system-for-read 'binary))
+                (pw137-serial-cs :buffer (generate-new-buffer " *mb*")))
+              (let ((coding-system-for-write 'latin-1))
+                (pw137-serial-cs :buffer (generate-new-buffer " *mb*")))
+              (let ((coding-system-for-read 'binary))
+                (pw137-serial-cs :buffer (generate-new-buffer " *mb*")
+                                 :coding '(nil . latin-1)))
+              (pw137-serial-cs :buffer (generate-new-buffer " *mb*") :coding 'utf-8-dos)
+              ;; A unibyte process buffer cannot change an answer already nil.
+              (let ((b (generate-new-buffer " *ub*")))
+                (with-current-buffer b (set-buffer-multibyte nil))
+                (pw137-serial-cs :buffer b))
+              ;; Neither tail exists.
+              (let ((default-process-coding-system '(latin-1 . koi8-r)))
+                (pw137-serial-cs :buffer (generate-new-buffer " *mb*")))
+              (let ((process-coding-system-alist '(("pw137s" binary . binary))))
+                (pw137-serial-cs :buffer (generate-new-buffer " *mb*")))
+              ;; The check is on what the chain produced.
+              (condition-case e
+                  (pw137-serial-cs :buffer (generate-new-buffer " *mb*") :coding 'no-such-xyz)
+                (error (list (car e) (cadr e))))
+              (condition-case e
+                  (let ((coding-system-for-read 'no-such-xyz))
+                    (pw137-serial-cs :buffer (generate-new-buffer " *mb*")))
+                (error (list (car e) (cadr e))))
+              ;; ... and an undefined `default-process-coding-system' is not an
+              ;; error here, because a serial process never looks at it.
+              (let ((default-process-coding-system '(no-such-xyz . no-such-xyz)))
+                (pw137-serial-cs :buffer (generate-new-buffer " *mb*")))))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(nil) ",
+            "(binary) ",
+            "(nil . latin-1) ",
+            "(nil . latin-1) ",
+            "(utf-8-dos . utf-8-dos) ",
+            "(nil) ",
+            "(nil) ",
+            "(nil) ",
+            "(coding-system-error no-such-xyz) ",
+            "(coding-system-error no-such-xyz) ",
+            "(nil))",
+        )
+    );
+}
+
+/// `set_network_socket_coding_system` (src/process.c:3291-3367) is the one of
+/// the three connection resolvers that was already right, and this pins the
+/// columns that distinguish it so it stays that way: it DOES reach
+/// `find-operation-coding-system`, with `open-network-stream`, whose
+/// `target-idx` is 3 (src/coding.c:11788) -- so `network-coding-system-alist`
+/// is matched against the SERVICE, not the process name, and
+/// `process-coding-system-alist` is the wrong alist entirely.
+///
+/// The fifth row is the asymmetry: a unibyte process buffer short-circuits the
+/// DECODE half past the alist while the ENCODE half, which asks
+/// `current_buffer` (:3347-3348), still reaches it.
+///
+/// What was NOT right is the check.  GNU validates the value the chain
+/// produced, so a bad `coding-system-for-read`, a bad
+/// `default-process-coding-system` and a bad alist entry all signal
+/// `coding-system-error`; Neomacs checked only the `:coding` keyword and
+/// installed the undefined name for the other three.
+///
+/// Every expected value below was measured under GNU Emacs 31.0.90 against a
+/// real loopback listener, which is also how this test gets a port.
+#[cfg(unix)]
+#[test]
+fn make_network_process_coding_reaches_the_service_alist_per_half() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (defvar pw137-n 0)
+             (defvar pw137-srv
+               (make-network-process :name "pw137-srv" :server t :host "127.0.0.1"
+                                     :service t :family 'ipv4 :noquery t :buffer nil
+                                     :filter (lambda (_p _s) nil)))
+             (defvar pw137-port (plist-get (process-contact pw137-srv t) :service))
+             (defun pw137-net-cs (&rest args)
+               (setq pw137-n (1+ pw137-n))
+               (let ((p (apply #'make-network-process :name (format "pw137n-%d" pw137-n)
+                               :host "127.0.0.1" :service pw137-port :family 'ipv4
+                               :noquery t :sentinel #'ignore args)))
+                 (prog1 (process-coding-system p)
+                   (delete-process p)
+                   (dotimes (_ 4) (accept-process-output nil 0.02))
+                   (dolist (q (process-list))
+                     (when (string-prefix-p "pw137-srv <" (process-name q))
+                       (delete-process q))))))
+             (unwind-protect
+                 (list
+                  (let ((default-process-coding-system '(utf-8-unix . utf-8-unix)))
+                    (pw137-net-cs :buffer (generate-new-buffer " *mb*")))
+                  (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                        (b (generate-new-buffer " *ub*")))
+                    (with-current-buffer b (set-buffer-multibyte nil))
+                    (pw137-net-cs :buffer b))
+                  (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                        (cur (generate-new-buffer " *cur*"))
+                        (pb (generate-new-buffer " *mb*")))
+                    (with-current-buffer cur
+                      (set-buffer-multibyte nil)
+                      (pw137-net-cs :buffer pb)))
+                  ;; The alist is keyed on the SERVICE, and a fixnum service
+                  ;; matches by `BASE_EQ' (src/coding.c:10851).
+                  (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                        (network-coding-system-alist
+                         (list (cons pw137-port (cons 'binary 'koi8-r)))))
+                    (pw137-net-cs :buffer (generate-new-buffer " *mb*")))
+                  ;; The unibyte short circuit takes the DECODE half past the
+                  ;; alist; the ENCODE half asks `current_buffer' and still
+                  ;; reaches it.
+                  (let* ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                         (network-coding-system-alist
+                          (list (cons pw137-port (cons 'binary 'koi8-r))))
+                         (b (generate-new-buffer " *ub*")))
+                    (with-current-buffer b (set-buffer-multibyte nil))
+                    (pw137-net-cs :buffer b))
+                  ;; Keyed on the NAME it does not fire, and
+                  ;; `process-coding-system-alist' is the wrong alist.
+                  (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                        (network-coding-system-alist '(("pw137n" binary . koi8-r))))
+                    (pw137-net-cs :buffer (generate-new-buffer " *mb*")))
+                  (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                        (process-coding-system-alist
+                         (list (cons pw137-port (cons 'binary 'koi8-r)))))
+                    (pw137-net-cs :buffer (generate-new-buffer " *mb*")))
+                  ;; The check is on the value the chain produced.
+                  (condition-case e
+                      (let ((coding-system-for-read 'no-such-xyz))
+                        (pw137-net-cs :buffer (generate-new-buffer " *mb*")))
+                    (error (list (car e) (cadr e))))
+                  (condition-case e
+                      (let ((default-process-coding-system '(no-such-xyz . no-such-xyz)))
+                        (pw137-net-cs :buffer (generate-new-buffer " *mb*")))
+                    (error (list (car e) (cadr e))))
+                  (condition-case e
+                      (let ((network-coding-system-alist
+                             (list (cons pw137-port (cons 'no-such-xyz 'no-such-xyz)))))
+                        (pw137-net-cs :buffer (generate-new-buffer " *mb*")))
+                    (error (list (car e) (cadr e))))
+                  ;; ... and it happens where GNU's happens: after the socket
+                  ;; exists.  `connect_network_socket' calls
+                  ;; `setup_process_coding_systems' only once the connect has
+                  ;; succeeded (src/process.c:3761), so a refused port beats an
+                  ;; undefined coding system to the signal.
+                  (let ((dead (let ((s (make-network-process
+                                        :name "pw137-dead" :server t
+                                        :host "127.0.0.1" :service t
+                                        :family 'ipv4 :noquery t)))
+                                (prog1 (plist-get (process-contact s t) :service)
+                                  (delete-process s)))))
+                    (condition-case e
+                        (let ((coding-system-for-read 'no-such-xyz))
+                          (make-network-process :name "pw137-refused"
+                                                :host "127.0.0.1" :service dead
+                                                :family 'ipv4 :noquery t
+                                                :sentinel #'ignore))
+                      (error (car e))))
+                  ;; A listening process runs the same chain.
+                  (let* ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                         (coding-system-for-read 'binary)
+                         (s (make-network-process :name "pw137-srvB" :server t
+                                                  :host "127.0.0.1" :service t
+                                                  :family 'ipv4 :noquery t
+                                                  :buffer (generate-new-buffer " *mb*"))))
+                    (prog1 (process-coding-system s) (delete-process s)))
+                  ;; An accepted connection does NOT re-run it: it copies the
+                  ;; server's pair, "as the coding system of the new process
+                  ;; should reflect the settings at the time the server socket
+                  ;; was opened" (src/process.c:5152-5158).
+                  (let* ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                         (srv (let ((coding-system-for-read 'koi8-r))
+                                (make-network-process :name "pw137-srvC" :server t
+                                                      :host "127.0.0.1" :service t
+                                                      :family 'ipv4 :noquery t :buffer nil
+                                                      :filter (lambda (_p _s) nil))))
+                         (port (plist-get (process-contact srv t) :service))
+                         (accepted nil))
+                    (make-network-process :name "pw137-probe" :host "127.0.0.1"
+                                          :service port :family 'ipv4 :noquery t
+                                          :buffer nil :coding 'binary :sentinel #'ignore)
+                    (dotimes (_ 20) (accept-process-output nil 0.05))
+                    (dolist (q (process-list))
+                      (when (string-prefix-p "pw137-srvC <" (process-name q))
+                        (setq accepted (process-coding-system q))))
+                    (prog1 accepted (delete-process srv))))
+               (delete-process pw137-srv)))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(utf-8-unix . utf-8-unix) ",
+            "(nil . utf-8-unix) ",
+            "(utf-8-unix) ",
+            "(binary . koi8-r) ",
+            "(nil . koi8-r) ",
+            "(utf-8-unix . utf-8-unix) ",
+            "(utf-8-unix . utf-8-unix) ",
+            "(coding-system-error no-such-xyz) ",
+            "(coding-system-error no-such-xyz) ",
+            "(coding-system-error no-such-xyz) ",
+            "file-error ",
+            "(binary . utf-8-unix) ",
+            "(koi8-r . utf-8-unix))",
+        )
     );
 }

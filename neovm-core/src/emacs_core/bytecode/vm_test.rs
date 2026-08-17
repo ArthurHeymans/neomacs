@@ -5364,6 +5364,7 @@ fn vm_simple_process_builtins_use_shared_runtime_state() {
                 ),
                 "/bin/echo".into(),
                 vec!["hello".into()],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
         },
     );
@@ -5400,6 +5401,7 @@ fn vm_stale_process_builtins_use_shared_runtime_state() {
                 ),
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pid, 1);
         },
@@ -5439,6 +5441,7 @@ fn vm_process_introspection_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pid, 1);
             // Simulate a spawned child: `create_process` only registers the
@@ -5479,6 +5482,7 @@ fn vm_stale_process_introspection_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pid, 1);
             // Simulate a spawned child before the test deletes it: GNU keeps the
@@ -5503,7 +5507,13 @@ fn vm_process_coding_and_tty_builtins_use_shared_runtime_state() {
                  (pp (get-process "vm-proc-pipe"))
                  (np (get-process "vm-proc-network")))
              (list
-              (equal (process-coding-system p) '(utf-8-unix . utf-8-unix))
+              ;; This fixture is a raw process record, built through
+              ;; `ProcessManager::create_process' rather than through any of
+              ;; GNU's five creation primitives, so no coding resolver has run
+              ;; on it.  That state is GNU's `make_process' state: both slots
+              ;; nil.  It used to read `(utf-8-unix . utf-8-unix)' because the
+              ;; constructor invented one -- see DIVERGENCES.md entry 137.
+              (equal (process-coding-system p) '(nil . nil))
               (null (process-datagram-address p))
               (null (process-inherit-coding-system-flag p))
               (null (set-process-coding-system p 'utf-16le 'utf-8-unix))
@@ -5534,6 +5544,7 @@ fn vm_process_coding_and_tty_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pid, 1);
             let pipe_id = eval.processes.create_process_with_kind(
@@ -5542,6 +5553,7 @@ fn vm_process_coding_and_tty_builtins_use_shared_runtime_state() {
                 String::new(),
                 vec![],
                 crate::emacs_core::process::ProcessKind::Pipe,
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pipe_id, 2);
             let network_id = eval.processes.create_process_with_kind(
@@ -5550,6 +5562,7 @@ fn vm_process_coding_and_tty_builtins_use_shared_runtime_state() {
                 String::new(),
                 vec![],
                 crate::emacs_core::process::ProcessKind::Network,
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(network_id, 3);
         },
@@ -5586,6 +5599,7 @@ fn vm_stale_process_coding_and_tty_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pid, 1);
         },
@@ -5617,6 +5631,7 @@ fn vm_process_status_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(real, 1);
             let pipe = eval.processes.create_process_with_kind(
@@ -5625,6 +5640,7 @@ fn vm_process_status_builtins_use_shared_runtime_state() {
                 String::new(),
                 vec![],
                 ProcessKind::Pipe,
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pipe, 2);
             let network = eval.processes.create_process_with_kind(
@@ -5633,6 +5649,7 @@ fn vm_process_status_builtins_use_shared_runtime_state() {
                 String::new(),
                 vec![],
                 ProcessKind::Network,
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(network, 3);
             // Mark as server so process-status returns 'listen (not 'open).
@@ -5643,6 +5660,7 @@ fn vm_process_status_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(stopped, 4);
             let signaled = eval.processes.create_process(
@@ -5650,6 +5668,7 @@ fn vm_process_status_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(signaled, 5);
             eval.processes.get_any_mut(stopped).unwrap().status =
@@ -5679,6 +5698,7 @@ fn vm_stale_process_status_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pid, 1);
             eval.processes.get_any_mut(pid).unwrap().status =
@@ -5705,6 +5725,7 @@ fn vm_process_control_and_send_builtins_use_shared_runtime_state() {
         Value::make_buffer(buffer_id),
         "/bin/cat".into(),
         vec![],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     assert_eq!(current_id, 1);
     eval.processes
@@ -5718,6 +5739,7 @@ fn vm_process_control_and_send_builtins_use_shared_runtime_state() {
             Value::NIL,
             "/bin/cat".into(),
             vec![],
+            crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
         );
         assert_eq!(id, expected);
     }
@@ -5840,6 +5862,7 @@ fn vm_stale_process_control_and_send_builtins_use_shared_runtime_state() {
                 Value::make_buffer(buffer_id),
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pid, 1);
         },
@@ -5874,6 +5897,7 @@ fn vm_delete_process_builtin_uses_shared_runtime_state() {
                 Value::make_buffer(buffer_id),
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pid, 1);
         },
@@ -5955,6 +5979,7 @@ fn vm_set_process_thread_builtin_uses_shared_runtime_state() {
                 Value::NIL,
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pid, 1);
         },
@@ -6027,6 +6052,7 @@ fn vm_network_and_serial_process_config_builtins_use_shared_runtime_state() {
                 String::new(),
                 vec![],
                 ProcessKind::Serial,
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(serial_id, 1);
             let real_id = eval.processes.create_process(
@@ -6034,6 +6060,7 @@ fn vm_network_and_serial_process_config_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(real_id, 2);
             let network_id = eval.processes.create_process_with_kind(
@@ -6042,6 +6069,7 @@ fn vm_network_and_serial_process_config_builtins_use_shared_runtime_state() {
                 String::new(),
                 vec![],
                 ProcessKind::Network,
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(network_id, 3);
         },
@@ -6236,6 +6264,7 @@ fn vm_accept_process_output_uses_shared_runtime_and_callbacks() {
                 Value::NIL,
                 "echo".into(),
                 vec!["out".into()],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pid, 1);
             eval.processes.spawn_child(pid, false).expect("spawn child");
@@ -7155,6 +7184,7 @@ fn vm_internal_default_process_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 "/bin/cat".into(),
                 vec![],
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pid, 1);
         },
@@ -7519,6 +7549,7 @@ fn vm_format_mode_line_size_and_process_specs_match_gnu() {
                     Value::make_buffer(buffer_id),
                     "cat".into(),
                     vec![],
+                    crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
                 );
             }
         ),

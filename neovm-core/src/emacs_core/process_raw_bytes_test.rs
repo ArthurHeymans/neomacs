@@ -84,6 +84,7 @@ fn spawn_child_with_environment_uses_process_environment_list() {
             LispString::from_utf8("-c"),
             LispString::from_utf8("printf %s \"$NEOMACS_CHILD_ENV\""),
         ],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     let mut eval = Context::new();
     eval.obarray.set_symbol_value(

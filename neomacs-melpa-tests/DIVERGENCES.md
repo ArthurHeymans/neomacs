@@ -7779,6 +7779,35 @@ ways, none of which is a policy flag:
 | `Fmake_serial_process` (process.c:3247-3261) | `:coding` car, :3250-3255 | :3256 | **yes**, val = nil, :3258-3260 | never -- same dead `Qt`, :3298 | **never** | no |
 | `set_network_socket_coding_system` (process.c:3301-3337) | `:coding` car, :3306-3311 | :3312 | **yes**, val = nil, :3314-3322 | `open-network-stream` + NAME BUFFER HOST SERVICE, and only if both, :3325-3330 | :3333 | no |
 
+> **Corrected and extended, 2026-08-17, by entry 137**, which implemented the
+> three rows this table was written as a spec for and re-read the C for each.
+> Every conclusion holds; four cells do not, and one column is missing.
+>
+> * The **unibyte buffer short-circuit** column is not one column.  GNU asks a
+>   DIFFERENT buffer for the two halves: pipe and network ask the process buffer
+>   for decode and `current_buffer` for encode, serial asks the process buffer
+>   for both.  Measured -- `make-pipe-process` with a unibyte CURRENT buffer and
+>   a multibyte process buffer answers `(utf-8-unix . nil)`.
+> * Serial's **`find-operation-coding-system`** cell says "same dead `Qt`,
+>   :3298".  :3298 is `set_network_socket_coding_system`'s `coding_systems`,
+>   where the variable is alive; only `Fmake_pipe_process`'s (:2520) is the dead
+>   one.  `Fmake_serial_process` has no `coding_systems` variable at all.  The
+>   conclusion -- neither reaches the alist -- is right for both, by two
+>   different mechanisms.
+> * The **validates** column is right about the resolvers and misleading about
+>   the primitives: all four asynchronous ones signal `coding-system-error` for
+>   an undefined RESOLVED coding, from `setup_process_coding_systems` ->
+>   `setup_coding_system`.  Read as "an undefined name is accepted" it is wrong,
+>   and that is the reading `make-network-process` shipped.
+> * A **missing column**: whether a supplied `:coding` whose half is nil falls
+>   through to the tail.  `Fmake_process` yes (its tail is a separate
+>   `if (NILP (val))` at :1958); pipe, serial and network no (one `else if`
+>   chain).  Measured, `:coding '(nil . latin-1)` under `coding-system-for-read`
+>   `binary`: `(utf-8-unix . latin-1)` for `make-process`, `(nil . latin-1)` for
+>   the other three.
+> * Line ranges have drifted about ten lines.  Current: pipe :2517-2570, serial
+>   :3247-3275, network :3291-3373.
+
 Those are different *inputs*, not different settings of one input.  A shared
 core parameterised by all five columns would have a parameter per caller, which
 is another way of saying there is nothing left to share.  Two of the columns are
@@ -8012,6 +8041,19 @@ neither pipe nor serial can reach `find-operation-coding-system`, GNU's answer
 really is the car and cdr of `default-process-coding-system`, whose value here
 is that pair.  It is a stand-in, not a default.  No MELPA pin depends on any of
 them yet.
+
+> **Closed, 2026-08-17, by entry 137.**  All three have their resolvers, the
+> `utf-8-unix` initialiser is gone from the tree, and the pair is now a required
+> parameter of every process constructor.  Two of the three notes above were
+> right and one was not.  `make-network-process` was more than "partly there":
+> its chain was byte-identical to GNU on every row, and what it lacked was the
+> CHECK, not the resolution.  The stand-in's justification -- that for a
+> multibyte buffer with no `:coding` GNU's answer is the car and cdr of
+> `default-process-coding-system` -- is true of `make-pipe-process` and FALSE of
+> `make-serial-process`, whose chain has no such step: GNU answers `(nil . nil)`
+> there, in every configuration that does not bind `:coding` or
+> `coding-system-for-read`/`-write`.  See entry 137 for the measurements and for
+> four corrections to the table above.
 
 
 Status: FIXED.
@@ -9126,5 +9168,458 @@ behaviour goes missing.
 
 Verified: the six-case probe in tmp/coord-boundary-cause-probe.el is
 byte-identical between GNU 31.0.90 and Neomacs.
+
+Status: FIXED.
+
+## 137. `make-pipe-process` and `make-serial-process` never resolved a coding system at all, so one Rust literal answered two chains -- one of which does not exist -- while `make-network-process` resolved correctly and then failed to check the answer -- FIXED
+
+The last of the three entry 131 scoped out and handed on.  `make-process` got
+its resolver there; these did not, and the `utf-8-unix` initialiser 131 left
+behind as their acknowledged stand-in went on answering for both.
+
+```elisp
+;; a serial port, opened on a real character device
+(let ((p (make-serial-process :port "/dev/ptmx" :speed 9600 :name "s" :noquery t
+                              :buffer (generate-new-buffer " *mb*"))))
+  (process-coding-system p))
+;; GNU                => (nil . nil)
+;; Neomacs before fix => (utf-8-unix . utf-8-unix)
+```
+
+`(nil . nil)` is not an omission on GNU's side.  `Fmake_serial_process`'s chain
+is the shortest of the five: the `:coding` keyword, then
+`coding-system-for-read`/`-write`, and then nothing at all -- `val` is left at
+the `Qnil` it was initialised to at src/process.c:3249 and :3263.  A serial
+process has no alist step and no `default-process-coding-system` step, so nil is
+its normal answer, and nil means DETECT (`setup_coding_system` rewrites it to
+`undecided`, src/coding.c:5675-5676).  The stand-in was not a near-miss for that;
+it was the opposite of it.
+
+Every row below was measured with `-Q --batch` against GNU Emacs 31.0.90 and
+against the pre-fix build of this branch (`cargo xtask fresh-build --release`);
+the probe is `tmp/pw137/pin.el` and its output is `tmp/pw137/pin-gnu.txt` and
+`tmp/pw137/pin-before.txt`.
+
+| `make-pipe-process`, `(process-coding-system P)` | GNU | Neomacs before fix |
+|---|---|---|
+| nothing bound, multibyte buffer | `(utf-8-unix . utf-8-unix)` | `(utf-8-unix . utf-8-unix)` |
+| `coding-system-for-read` = `binary` | `(binary . utf-8-unix)` | `(utf-8-unix . utf-8-unix)` |
+| `coding-system-for-write` = `latin-1` | `(utf-8-unix . latin-1)` | `(utf-8-unix . utf-8-unix)` |
+| UNIBYTE process buffer | `(nil . utf-8-unix)` | `(utf-8-unix . utf-8-unix)` |
+| UNIBYTE process buffer + `coding-system-for-read` = `latin-1` | `(latin-1 . utf-8-unix)` | `(utf-8-unix . utf-8-unix)` |
+| UNIBYTE **current** buffer, multibyte process buffer | `(utf-8-unix . nil)` | `(utf-8-unix . utf-8-unix)` |
+| `default-process-coding-system` = `(latin-1 . koi8-r)` | `(latin-1 . koi8-r)` | `(utf-8-unix . utf-8-unix)` |
+| `default-process-coding-system` = nil | `(nil . nil)` | `(utf-8-unix . utf-8-unix)` |
+| `process-coding-system-alist` = `(("pw137p" binary . binary))` | `(utf-8-unix . utf-8-unix)` | `(utf-8-unix . utf-8-unix)` |
+| `:coding '(nil . latin-1)` under `coding-system-for-read` = `binary` | `(nil . latin-1)` | `(nil . latin-1)` |
+| `coding-system-for-read` = `no-such-xyz` | `(coding-system-error no-such-xyz)` | no error |
+| `default-process-coding-system` = `(no-such-xyz . no-such-xyz)` | `(coding-system-error no-such-xyz)` | no error |
+
+| `make-serial-process` on `/dev/ptmx`, `(process-coding-system P)` | GNU | Neomacs before fix |
+|---|---|---|
+| nothing bound | `(nil . nil)` | `(utf-8-unix . utf-8-unix)` |
+| `coding-system-for-read` = `binary` | `(binary . nil)` | `(utf-8-unix . utf-8-unix)` |
+| `coding-system-for-write` = `latin-1` | `(nil . latin-1)` | `(utf-8-unix . utf-8-unix)` |
+| UNIBYTE process buffer | `(nil . nil)` | `(utf-8-unix . utf-8-unix)` |
+| `default-process-coding-system` = `(latin-1 . koi8-r)` | `(nil . nil)` | `(utf-8-unix . utf-8-unix)` |
+| `process-coding-system-alist` = `(("pw137s" binary . binary))` | `(nil . nil)` | `(utf-8-unix . utf-8-unix)` |
+| `coding-system-for-read` = `no-such-xyz` | `(coding-system-error no-such-xyz)` | no error |
+| `default-process-coding-system` = `(no-such-xyz . no-such-xyz)` | `(nil . nil)` | `(utf-8-unix . utf-8-unix)` |
+
+That last serial row is the whole shape of the primitive in one line: an
+UNDEFINED `default-process-coding-system` is not an error for a serial process,
+because a serial process never looks at it.
+
+### The bytes, not just the reporting slot
+
+A pipe process cannot be written to from Lisp and read back -- its two pipes do
+not join -- so the way to make one carry bytes is the way GNU itself makes one:
+hand it to `make-process` as `:stderr`.  That is not a contrivance for the test;
+it is the same call GNU makes internally when `:stderr` names a buffer
+(`CALLN (Fmake_pipe_process, ...)`, src/process.c:1883).  The child's stderr is
+then decoded by the PIPE's chain, resolved with whatever was bound when the pipe
+was created rather than when the child was spawned.  Child writes
+`c a f <c3> <a9> CR LF x CR LF`:
+
+| binding at `make-pipe-process` time | GNU | Neomacs before fix |
+|---|---|---|
+| none | `(99 97 102 233 13 10 120 13 10)` | `(99 97 102 233 13 10 120 13 10)` |
+| `coding-system-for-read` = `binary` | `(99 97 102 4194243 4194217 13 10 120 13 10)` | `(99 97 102 233 13 10 120 13 10)` |
+| `coding-system-for-read` = `raw-text` | `(99 97 102 4194243 4194217 10 120 10)` | `(99 97 102 233 13 10 120 13 10)` |
+| `coding-system-for-read` = `latin-1` | `(99 97 102 195 169 10 120 10)` | `(99 97 102 233 13 10 120 13 10)` |
+| `default-process-coding-system` = `(binary . binary)` | `(99 97 102 4194243 4194217 13 10 120 13 10)` | `(99 97 102 233 13 10 120 13 10)` |
+| UNIBYTE pipe buffer, nothing bound | `(99 97 102 195 169 10 120 10)` | `(99 97 102 195 169 13 10 120 13 10)` |
+
+The last row is the shared second stage catching the first stage's error.  The
+downgrade `setup_process_coding_systems` applies for a unibyte process buffer
+(entry 131) was already right here; what it was handed was wrong.  GNU hands it
+nil, `raw_text_coding_system (Qnil)` returns bare `raw-text`, and bare
+`raw-text` DETECTS the line endings (entry 134), so the CR goes.  Neomacs handed
+it `utf-8-unix`, whose end-of-line type is concrete, so the CR stayed.  Two
+entries' worth of correct machinery, fed one literal.
+
+### `make-network-process` was already right, and that is the finding
+
+The third of the three does not belong in the tables above.  Its resolver,
+`network_process_coding_pair`, was built when `set_network_socket_coding_system`
+was first ported, and re-measuring it row by row against GNU found no
+divergence at all in the chain -- including the two rows that are easiest to get
+wrong:
+
+```elisp
+;; a unibyte process buffer, and an alist entry that matches the SERVICE
+(let ((network-coding-system-alist (list (cons PORT (cons 'binary 'koi8-r))))
+      (b (generate-new-buffer " *ub*")))
+  (with-current-buffer b (set-buffer-multibyte nil))
+  (process-coding-system (make-network-process :name "n" :host "127.0.0.1"
+                                               :service PORT :buffer b ...)))
+;; GNU     => (nil . koi8-r)
+;; Neomacs => (nil . koi8-r)     ; before the fix as well as after
+```
+
+The decode half short-circuits past the alist because the PROCESS buffer is
+unibyte; the encode half reaches it anyway because it asks `current_buffer`,
+which is not.  Neomacs answered that, and answered the `open-network-stream`
+`target-idx` question with it (the alist is keyed on the SERVICE, not the
+process name -- src/coding.c:11788), and the accepted-connection rule
+(`server_accept_connection` copies the listener's pair rather than re-running
+the chain, src/process.c:5152-5158).  Twelve rows, byte-identical, before any of
+this entry's changes.
+
+What it did NOT do was check the answer:
+
+```elisp
+(let ((coding-system-for-read 'no-such-xyz))
+  (make-network-process :name "n" :host "127.0.0.1" :service PORT
+                        :buffer (generate-new-buffer " *mb*")))
+;; GNU                => (coding-system-error no-such-xyz)
+;; Neomacs before fix => a live process whose decode coding is `no-such-xyz'
+```
+
+The same three rows -- a bad `coding-system-for-read`, a bad
+`default-process-coding-system`, a bad `network-coding-system-alist` entry --
+were all silently accepted, and so were the corresponding rows on
+`make-pipe-process` and `make-serial-process`.
+
+Neomacs validated the `:coding` KEYWORD, eagerly, before creating anything.  GNU
+validates the value the CHAIN produced, and it does so in a place none of the
+five resolvers can see: `setup_process_coding_systems` runs `setup_coding_system`
+on each half, and that is what signals (src/coding.c:5678, reached from
+src/process.c:2573, :3277, :3761).  So a bad `coding-system-for-read`, a bad
+`default-process-coding-system` and a bad `network-coding-system-alist` entry all
+signal in GNU and none of them signalled here.  The same hole was in the pipe and
+serial creators.
+
+### Verifying entry 131's table against the C
+
+131's table is the spec this entry implemented, and it was read against
+`src/process.c` at emacs-mirror `0ee48ac4df2` before anything was built.  It
+holds on every conclusion.  Four cells needed correcting, and one of the four is
+the reason the network primitive was left with a hole.
+
+* **The unibyte short circuit is not one column.**  131 has a single
+  "unibyte buffer short-circuit" cell reading **yes** for pipe, serial and
+  network.  GNU asks a DIFFERENT buffer for the two halves, and which buffer it
+  asks differs between the three: pipe and network ask the process buffer for
+  decode (:2533-2534, :3314-3317) and `current_buffer` for encode
+  (:2559-2560, :3348-3349); serial asks the process buffer for both
+  (:3258-3260, :3272-3274).  Measured, and the row is unrepresentable in one
+  flag:
+
+  ```elisp
+  ;; unibyte CURRENT buffer, multibyte process buffer
+  ;; make-pipe-process   => GNU (utf-8-unix . nil)
+  ;; make-serial-process => GNU (nil . nil)
+  ```
+
+* **Serial's alist arm is not "the same dead `Qt`".**  131 says pipe and serial
+  both initialise `coding_systems` to `Qt` and never assign it, citing
+  ":2520, :3298".  :2520 is right -- that is `Fmake_pipe_process`'s, and the
+  `CONSP (coding_systems)` arms at :2542 and :2563 really are dead code.  :3298
+  is `set_network_socket_coding_system`'s, where the variable is very much
+  alive.  `Fmake_serial_process` has no `coding_systems` variable at all and no
+  alist arm to make dead; its chain simply ends.  The conclusion 131 drew --
+  neither can reach `find-operation-coding-system` -- is right for both, by two
+  different mechanisms.
+
+* **"validates: no" is right about the resolver and wrong about the primitive.**
+  131's last column marks `Fcall_process` as the only one that validates,
+  because it is the only one that calls `Fcheck_coding_system` inline.  That is
+  true of the resolvers and false of the calls: all four asynchronous primitives
+  signal `coding-system-error` for an undefined resolved coding, from the shared
+  second stage.  Read the first way it is a note about where a check lives; read
+  the second way it says an undefined name is accepted, and that second reading
+  is what `make-network-process` shipped.
+
+* **A supplied `:coding` whose half is nil does not mean the same thing in all
+  five.**  This one is not in 131's table at all, and it is the row that caught
+  the first version of this fix.  GNU writes the three connection primitives as
+  ONE `else if` chain, so a non-nil `tem` skips every later arm and a nil half
+  answers nil.  `Fmake_process` writes the same first two arms and then a
+  SEPARATE `if (NILP (val))` for its tail (:1958), so there a nil half falls
+  through to the alist and the default.  Measured, all four under GNU 31.0.90,
+  with `coding-system-for-read` bound to `binary` and `:coding '(nil . latin-1)`:
+
+  ```text
+  make-pipe-process    => (nil . latin-1)
+  make-serial-process  => (nil . latin-1)
+  make-network-process => (nil . latin-1)
+  make-process         => (utf-8-unix . latin-1)     ; the tail ran
+  ```
+
+  131 states the shared half of this correctly -- a supplied `:coding` shuts the
+  dynamic override out even when its own half is nil -- and its
+  `make-process` measurement of the fall-through is right.  What is new is that
+  the other three do NOT fall through.  The first version of the pipe resolver
+  written for this entry reused one helper for the step and answered
+  `(utf-8-unix . latin-1)` for a pipe; running the probe is what found it, and
+  the shape of the C is what explained it.
+
+* Line ranges have drifted about ten lines.  Current: pipe :2517-2570, serial
+  :3247-3275, network :3291-3373.
+
+Two cells 131 flagged as easy to read past were checked hardest and are exactly
+right.  Pipe and serial really cannot reach `process-coding-system-alist`, and
+serial really never reaches `default-process-coding-system` -- both measured
+above, both by binding the variable to something that would be visible and
+finding it invisible.
+
+### Why GNU's code is shaped this way
+
+The `val = Qnil` arms carry their own explanation, at src/process.c:2535-2538:
+
+```c
+      /* We dare not decode end-of-line format by setting VAL to
+	 Qraw_text, because the existing Emacs Lisp libraries
+	 assume that they receive bare code including a sequence of
+	 CR LF.  */
+```
+
+That is a statement about the SLOT, not about the bytes.  Leaving
+`process-coding-system` nil is what stops a library from reading `raw-text` out
+of it and concluding that end-of-line conversion has been turned off; the
+fd-level downgrade in `setup_process_coding_systems` still happens underneath
+whenever the default filter is inserting into a unibyte buffer, and it converts
+end-of-line, which is precisely the last payload row above.  The comment and the
+behaviour disagree by design, and only measurement separates them.
+
+The serial chain's missing tail has a reason too.  A serial port is a byte pipe
+to a device with no notion of a locale; `default-process-coding-system` is about
+subprocesses that inherit the user's environment.  Detecting is the honest
+default for a device, and detecting is what nil buys.
+
+### The type-level fix
+
+The hole was a required decision with no required parameter -- the same hole
+entry 131 removed from `make-process`, still open two doors down.
+`create_process_with_kind_lisp` initialised both coding slots from a literal,
+and the pipe and serial creators overwrote them only when the caller passed
+`:coding`.  Nothing in any signature said a resolution was owed.
+
+`ProcessCodingSystems` is now a **required parameter of every process
+constructor** (`neovm-core/src/emacs_core/process.rs`).  There is no signature
+left in which a process record can come into existence without a caller naming
+where its pair came from, and since the type still has no `Default` and no
+field-wise constructor, the only ways to name one are the five resolvers plus
+two constructors that say what they are: `inherited_from_server` (GNU's
+`server_accept_connection`, which deliberately does not re-resolve) and
+`gnu_make_process_initial` (both slots nil -- GNU's `make_process` state before
+any resolver has run, for internal records and test fixtures that never carry
+bytes).  The `utf-8-unix` literal is gone from the tree.
+
+The three resolvers are three functions, not one parameterised one, and what
+they may consult is expressed as what their environments HAVE:
+
+```rust
+struct PipeProcessCodingEnvironment {           // no operation_coding_system
+    coding_system_for_read: Value,
+    coding_system_for_write: Value,
+    default_process_coding_system: Value,
+    short_circuit: ConnectionProcessUnibyteShortCircuit,
+}
+
+struct SerialProcessCodingEnvironment {         // and no default, and no short circuit
+    coding_system_for_read: Value,
+    coding_system_for_write: Value,
+}
+```
+
+A pipe resolver cannot consult `process-coding-system-alist` because it has no
+field holding one; a serial resolver cannot reach the process default or the
+buffer for the same reason.  Those are the two cells of 131's table that are
+easiest to read past, and they are now facts about the types rather than
+comments next to an `if`.  Serial's missing `short_circuit` is the third: GNU
+does spell the arm out for both halves, but since its fallthrough is also nil
+the arm cannot change an answer -- and a field that cannot change an answer is a
+field someone will eventually key something real off.
+
+`ConnectionProcessUnibyteShortCircuit` is the column 131's table collapsed.  It
+has one bool per HALF, and it is built by a constructor named after the
+primitive, so choosing which buffer answers for which half is a decision with a
+name and a citation instead of an argument order:
+
+```rust
+fn pipe(multibyte: ProcessBufferMultibyteness) -> Self     // process buffer, current buffer
+fn network(multibyte: ProcessBufferMultibyteness) -> Self  // process buffer, current buffer
+```
+
+`ProcessBufferMultibyteness` carries both buffers rather than "the" buffer, for
+the same reason: a single flag cannot express the `(utf-8-unix . nil)` row.
+
+The step the three DO share returns a two-state `ConnectionCodingStep`
+(`Answered(Value)` / `Continue`) rather than a `Value`, and that is the
+correction above made unrepresentable.  For the connection primitives
+`Answered(nil)` and "nothing answered" are different outcomes -- the first ends
+the chain, the second runs the tail -- and a helper returning a bare `Value`
+cannot tell them apart.  `Fmake_process` keeps its own two-line step returning a
+`Value`, precisely because there the two ARE the same thing.  The first version
+of this fix shared one `Value`-returning helper between all four and was wrong
+in exactly the row a shared helper cannot express.
+
+The check moved to where GNU's effect is.  `validate_resolved_process_coding_systems`
+takes the resolved PAIR rather than the `:coding` keyword, and it runs where
+`setup_process_coding_systems` runs -- which for pipe and serial is immediately
+after the resolver (src/process.c:2573, :3277) and for network is only after the
+socket exists (:3761).  That last distinction is measurable, and getting it
+wrong is how the first version of this fix introduced a divergence of its own:
+
+```elisp
+;; a port nobody is listening on, and an undefined coding system
+(let ((coding-system-for-read 'no-such-xyz))
+  (make-network-process :name "x" :host "127.0.0.1" :service DEAD-PORT))
+;; GNU => file-error      ; the connect loses first; the coding is never checked
+```
+
+For the network primitive that meant giving both steps a home.  The fourteen
+socket paths (TCP, local, datagram, listening, deferred DNS, TLS, explicit
+`:local`/`:remote` address) used to be handed the `:coding` keyword and an
+environment and to resolve for themselves at the bottom.  They are now handed a
+`ProcessCodingSystems`, resolved at the two points where the environment is
+final -- before the `:local`/`:remote` early return, which cannot reach the
+alist because it has no HOST and SERVICE, and after the alist lookup for
+everything else -- and they create their process record through one
+`create_network_process_record`, which is where the check runs.  None of the
+fourteen can resolve differently, and none can create a record without the check
+having happened at GNU's moment.
+
+`builtin_make_process_impl`'s `:stderr` pipe goes through
+`MakeProcessCodingEnvironment::connection_variables()` rather than through
+`Fmake_process`'s own answer, because GNU builds that pipe with
+`CALLN (Fmake_pipe_process, ...)` and it therefore runs the PIPE chain.  That is
+measurable -- it is the payload table above, every row of which binds around the
+`make-pipe-process` call and not around the `make-process` one.
+
+### How the two hard ones were actually run
+
+A network process needs a listener and a serial process needs a device, and
+neither was skipped.
+
+The network pins run against a real loopback listener created in the same test:
+`:server t :host "127.0.0.1" :service t :family 'ipv4`, with the port read back
+out of `(process-contact SERVER t)`.  The accepted-connection row connects to a
+second listener and then finds the `SERVER <N>` process in `process-list`.
+
+The serial pins run against `/dev/ptmx`, which is a real character device that
+`serial_open` and the `tcgetattr` in `serial_configure` both accept on any
+Linux; `/dev/null` fails `tcgetattr` (`(file-error "Failed tcgetattr")`) and a
+nonexistent path signals `file-missing`, both measured.  For the PAYLOAD half a
+pty PAIR was built instead -- `tmp/pw137/ptyhelper.py` holds the master open and
+prints the slave's path, `make-serial-process` opens the slave, and the helper
+writes the bytes -- and GNU decodes them exactly as the chain predicts:
+
+```
+;; child writes  c a f <c3> <a9> CR LF x CR LF  through a pty into a serial process
+;; nothing bound             => GNU (99 97 102 233 10 120 10)          ; nil = detect
+;; coding-system-for-read binary => GNU (99 97 102 4194243 4194217 13 10 120 13 10)
+;; :coding latin-1           => GNU (99 97 102 195 169 10 120 10)
+;; default-process-coding-system (binary . binary) => GNU (99 97 102 233 10 120 10)
+```
+
+That last row is the serial chain's missing tail, measured on real bytes rather
+than on a reporting slot.  **It is not pinned**, because Neomacs cannot run it:
+`make-serial-process` here creates a process record without opening the port, so
+no bytes ever arrive and the buffer stays empty on every row.  Pinning it would
+have recorded the fixture, not the behaviour.  The device gap is recorded below.
+
+### Measured after
+
+Against a `cargo xtask fresh-build --release` binary, `tmp/pw137/pin.el` --
+seventeen `make-pipe-process` rows, nine pipe payload rows, eleven
+`make-serial-process` rows and twelve `make-network-process` rows -- is
+byte-identical to GNU Emacs 31.0.90, `diff` clean.  So are the four wider probes
+it was cut down from (`tmp/pw137/pipe.el`, `serial.el`, `network.el`,
+`netvalid.el`).
+
+`cargo nextest run -p neovm-core` is 9014/9014 green.  `cargo nextest run -p
+neovm-oracle-tests` is 38770/38770 green.  An earlier run of the oracle suite,
+mid-change, was 38769/38770 with `div_cx27_process_exit_code_various_signals`
+red; it passes on its own and it passed on the final run, and its shape is a
+race rather than a divergence -- it signals a `sleep 30` child and gives it one
+second to be reaped, and the red run recorded `(run 0)`, meaning the signal had
+not landed yet.  It touches no coding system.
+`cargo check --workspace --all-targets` and `cargo fmt --all --check` are
+clean.
+
+One pinned expectation moved, and it moved because it was recording the literal
+this entry deleted.  `vm_process_coding_and_tty_builtins_use_shared_runtime_state`
+asserted `(utf-8-unix . utf-8-unix)` for a fixture built through
+`ProcessManager::create_process` rather than through any of GNU's five
+primitives -- a process no resolver has run on.  It now asserts `(nil . nil)`,
+which is what GNU's `make_process` leaves in those slots.
+
+### Found and NOT fixed here
+
+**`make-serial-process` does not open its port.**  It builds the process record,
+runs the coding chain, honours `serial-process-configure`, and never touches the
+device.  So `(make-serial-process :port "/dev/no-such-tty" :speed 9600)` succeeds
+where GNU signals `(file-missing "Opening serial port")`, `:port "/dev/null"`
+succeeds where GNU signals `(file-error "Failed tcgetattr")`, and no serial
+process ever delivers output.  The coding chain fixed here is correct in advance
+of the I/O it will decode; the I/O is its own change, with a PAL question in it
+(termios lives in `process/sys/`), and no MELPA pin depends on it.
+
+**GNU Emacs 31.0.90 segfaults on an invalid coding system for a unibyte process
+buffer.**  Reproduced on the shipped 31.0.90 binary, four ways, always
+immediately at creation and before any Lisp can observe it:
+
+```elisp
+(let ((b (generate-new-buffer " *ub*")))
+  (with-current-buffer b (set-buffer-multibyte nil))
+  (let ((coding-system-for-read 'no-such-xyz))
+    (make-pipe-process :name "x" :noquery t :buffer b)))
+;; GNU => SIGSEGV
+```
+
+`make-network-process` with a unibyte buffer does the same, and so does an
+explicit `:coding 'no-such-xyz`.  The multibyte-buffer form of all three signals
+`coding-system-error` cleanly.  The cause is visible in the C:
+`setup_process_coding_systems` applies `raw_text_coding_system` BEFORE
+`setup_coding_system` gets to validate (src/process.c:8395-8399), and
+`raw_text_coding_system` does `AREF (CODING_SYSTEM_SPEC (coding_system), 0)`
+(src/coding.c:5941-5942) on a spec that is nil for an undefined name.  Neomacs
+signals `coding-system-error` for these, which is what the multibyte form does
+and is strictly better than crashing -- but those rows are deliberately NOT
+pinned, because there is no GNU answer to pin them against.
+
+**`Vlast_coding_system_used` is still not written back onto the process.**  Entry
+131's second residual, still open, and it now has a second witness: the serial
+payload probe above shows GNU reporting `utf-8-dos` from
+`(process-coding-system P)` after a read that started from nil, because
+`read_process_output_set_last_coding_system` (src/process.c:6417-6425) replaced
+the slot with the coding actually used.  Every pin in this entry therefore reads
+the slot BEFORE any output arrives, which is the only way to measure the chain
+rather than the write-back.
+
+**A function-valued `network-coding-system-alist` entry can run when GNU would
+not have called it.**  GNU computes the alist answer lazily, inside the `else`
+arm of each half, so when BOTH halves short-circuit -- a unibyte process buffer
+and a unibyte current buffer -- `find-operation-coding-system` is never called at
+all.  Neomacs calls it once, up front, whenever `:coding` is absent.  Only a
+function-valued entry with side effects can tell, and a function value has to be
+a SYMBOL naming a function to be called at all (`if (! SYMBOLP (val)) return
+Qnil;`, src/coding.c:10858), so a lambda in the alist is inert in both.  Left
+alone: making it lazy means running arbitrary Lisp from inside the resolver,
+which is exactly the borrow the resolvers were separated from the evaluator to
+avoid.
 
 Status: FIXED.

@@ -2211,91 +2211,422 @@ fn process_status_code_message(code: Value) -> String {
         .unwrap_or_else(|| "0".to_string())
 }
 
-/// The ambient inputs GNU's `set_network_socket_coding_system` consults when
-/// `make-network-process :coding` is nil.  Keeping them together prevents a
-/// connection path (TCP, local, datagram, deferred DNS/TLS) from silently
-/// omitting one level of the coding-system precedence chain.
-#[derive(Clone, Copy)]
-struct NetworkProcessCodingDefaults {
+/// The multibyteness of the two buffers GNU's connection-process coding
+/// resolvers ask about.
+///
+/// Two fields rather than one, because GNU asks a DIFFERENT buffer for the two
+/// halves of the pair.  Measured under GNU Emacs 31.0.90: `make-pipe-process`
+/// with a unibyte CURRENT buffer and a multibyte process buffer answers
+/// `(utf-8-unix . nil)` -- the encode half short-circuited and the decode half
+/// did not.  A single "the buffer is unibyte" flag cannot express that row.
+///
+/// `Fmake_serial_process` asks the process buffer for both halves
+/// (:3258-3260, :3272-3274), which is a third combination, but it cannot be
+/// observed: serial's fallthrough is nil too.  That is why
+/// `SerialProcessCodingEnvironment` has no short-circuit field and this type
+/// never reaches it.
+#[derive(Clone, Copy, Debug)]
+struct ProcessBufferMultibyteness {
+    /// The process's own buffer, or -- when it has none -- `buffer-defaults`,
+    /// which is the fallback GNU spells out in every one of the three
+    /// primitives (`NILP (buffer) && NILP (BVAR (&buffer_defaults, ...))`,
+    /// src/process.c:2534, :3259, :3316-3317).
+    process_buffer: bool,
+    /// The buffer that was current when the primitive ran.
+    current_buffer: bool,
+}
+
+/// Whether each half of a connection process's chain takes GNU's
+/// unibyte-buffer short circuit -- the `val = Qnil` arm that skips the alist
+/// and the process default outright.
+///
+/// GNU's comment says why the arm exists at all (src/process.c:2535-2538):
+///
+/// ```text
+///   /* We dare not decode end-of-line format by setting VAL to
+///      Qraw_text, because the existing Emacs Lisp libraries
+///      assume that they receive bare code including a sequence of
+///      CR LF.  */
+/// ```
+///
+/// It is NOT `Fcall_process`'s unibyte rule with the opposite sign.  That one
+/// downgrades to `raw_text_coding_system (val)` and belongs to the SECOND
+/// stage, `setup_process_coding_systems` (src/process.c:8395-8399), which every
+/// asynchronous process still runs -- see entry 131.  This one only decides
+/// what the user-visible `process-coding-system` slot holds.
+///
+/// The constructors are the two primitives that can observe it, because
+/// choosing which buffer answers for which half is the whole content of this
+/// type.
+#[derive(Clone, Copy, Debug)]
+struct ConnectionProcessUnibyteShortCircuit {
+    decode: bool,
+    encode: bool,
+}
+
+impl ConnectionProcessUnibyteShortCircuit {
+    /// `Fmake_pipe_process`: decode asks the process buffer
+    /// (src/process.c:2533-2534), encode asks `current_buffer`
+    /// (src/process.c:2559-2560).
+    fn pipe(multibyte: ProcessBufferMultibyteness) -> Self {
+        Self {
+            decode: !multibyte.process_buffer,
+            encode: !multibyte.current_buffer,
+        }
+    }
+
+    /// `set_network_socket_coding_system`: decode asks the process buffer
+    /// (src/process.c:3314-3317), encode asks `current_buffer`
+    /// (src/process.c:3348-3349).
+    fn network(multibyte: ProcessBufferMultibyteness) -> Self {
+        Self {
+            decode: !multibyte.process_buffer,
+            encode: !multibyte.current_buffer,
+        }
+    }
+
+    fn takes(self, half: ProcessCodingHalf) -> bool {
+        match half {
+            ProcessCodingHalf::Decode => self.decode,
+            ProcessCodingHalf::Encode => self.encode,
+        }
+    }
+}
+
+/// The dynamic Lisp variables the connection primitives can consult, captured
+/// before the primitive starts creating anything.
+///
+/// It exists because `builtin_make_pipe_process_impl` and
+/// `builtin_make_serial_process_impl` run below the evaluator, on split
+/// `&mut ProcessManager` / `&mut BufferManager` borrows, and so cannot read a
+/// dynamic variable themselves.  Making it a REQUIRED parameter of both is
+/// what stops a pipe or serial process from being created without its ambient
+/// coding environment being supplied -- the same hole entry 131 closed for
+/// `make-process` and left open here.
+///
+/// The per-primitive environments are built from it, and each drops what its
+/// resolver may not see.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ConnectionProcessCodingVariables {
+    coding_system_for_read: Value,
+    coding_system_for_write: Value,
+    default_process_coding_system: Value,
+}
+
+impl ConnectionProcessCodingVariables {
+    /// The environment of an editor in which none of the coding variables is
+    /// set.  Only for callers that have no evaluator to read them from; a real
+    /// `make-pipe-process` / `make-serial-process` always goes through the
+    /// `builtin_make_*` wrapper.  Nothing outside the tests has one, and the
+    /// `cfg` says so rather than leaving a way to create a pipe process with a
+    /// blank environment by accident.
+    #[cfg(test)]
+    pub(crate) fn unbound() -> Self {
+        Self {
+            coding_system_for_read: Value::NIL,
+            coding_system_for_write: Value::NIL,
+            default_process_coding_system: Value::NIL,
+        }
+    }
+
+    fn pipe(self, multibyte: ProcessBufferMultibyteness) -> PipeProcessCodingEnvironment {
+        PipeProcessCodingEnvironment {
+            coding_system_for_read: self.coding_system_for_read,
+            coding_system_for_write: self.coding_system_for_write,
+            default_process_coding_system: self.default_process_coding_system,
+            short_circuit: ConnectionProcessUnibyteShortCircuit::pipe(multibyte),
+        }
+    }
+
+    /// `default-process-coding-system` is dropped here, and no buffer is asked
+    /// about: `Fmake_serial_process`'s chain has neither step.
+    fn serial(self) -> SerialProcessCodingEnvironment {
+        SerialProcessCodingEnvironment {
+            coding_system_for_read: self.coding_system_for_read,
+            coding_system_for_write: self.coding_system_for_write,
+        }
+    }
+}
+
+/// The ambient inputs GNU's `Fmake_pipe_process` coding resolver reads
+/// (src/process.c:2517-2570).
+///
+/// There is deliberately no `operation_coding_system` field.  A pipe process
+/// can never reach `process-coding-system-alist`: GNU initialises
+/// `coding_systems` to `Qt` at src/process.c:2520 and never assigns it, so the
+/// `CONSP (coding_systems)` arm at :2542 and :2563 is dead code.  Measured --
+/// `(let ((process-coding-system-alist '(("pw137" binary . binary)))) ...)`
+/// leaves GNU at `(utf-8-unix . utf-8-unix)`.  Leaving the field out is what
+/// stops the dead arm from being revived by a well-meaning reader who noticed
+/// that `Fmake_process` has one.
+#[derive(Clone, Copy, Debug)]
+struct PipeProcessCodingEnvironment {
+    coding_system_for_read: Value,
+    coding_system_for_write: Value,
+    default_process_coding_system: Value,
+    short_circuit: ConnectionProcessUnibyteShortCircuit,
+}
+
+/// The ambient inputs GNU's `Fmake_serial_process` coding resolver reads
+/// (src/process.c:3247-3275) -- which is to say, the two dynamic overrides and
+/// nothing else.
+///
+/// Three fields the other two environments carry are missing, and each omission
+/// is load-bearing:
+///
+/// * no `operation_coding_system`: there is not even a `coding_systems`
+///   variable in `Fmake_serial_process` to make an alist lookup out of, so a
+///   serial process can never reach `process-coding-system-alist`;
+/// * no `default_process_coding_system`: the chain has no tail at all.  After
+///   the overrides `val` is simply left at the `Qnil` it was initialised to at
+///   src/process.c:3249 and :3263.  Measured -- with
+///   `default-process-coding-system` bound to `(latin-1 . koi8-r)` GNU still
+///   answers `(nil . nil)`;
+/// * no `short_circuit`: GNU does spell the unibyte-buffer arm out for both
+///   halves (:3258-3260, :3272-3274), but since the fallthrough is also `Qnil`
+///   the arm cannot change the answer.  It is unobservable, and a field that
+///   cannot change an answer is a field a reader will eventually key something
+///   real off.  Measured: a unibyte process buffer and a multibyte one give
+///   the same `(nil . nil)`.
+#[derive(Clone, Copy, Debug)]
+struct SerialProcessCodingEnvironment {
+    coding_system_for_read: Value,
+    coding_system_for_write: Value,
+}
+
+/// The ambient inputs GNU's `set_network_socket_coding_system` consults
+/// (src/process.c:3291-3367).  Keeping them together prevents a connection path
+/// (TCP, local, datagram, deferred DNS/TLS) from silently omitting one level of
+/// the precedence chain.
+///
+/// This is the only one of the three with an `operation_coding_system` field:
+/// the network resolver really does call `find-operation-coding-system`, with
+/// `open-network-stream` and only when HOST and SERVICE are both non-nil
+/// (src/process.c:3325-3330).  `open-network-stream`'s `target-idx` is 3
+/// (src/coding.c:11788), so `network-coding-system-alist` is matched against
+/// the SERVICE, not the process name.
+#[derive(Clone, Copy, Debug)]
+struct NetworkProcessCodingEnvironment {
     coding_system_for_read: Value,
     coding_system_for_write: Value,
     operation_coding_system: Value,
     default_process_coding_system: Value,
-    current_buffer_multibyte: bool,
+    short_circuit: ConnectionProcessUnibyteShortCircuit,
 }
 
-/// Resolve the (decode . encode) coding pair for a network process, mirroring
-/// GNU `set_network_socket_coding_system` (src/process.c:3291-3367).
+/// What step one of a connection primitive's chain answered, and whether the
+/// chain goes on.
 ///
-/// * An explicit `:coding` value supplies both directions (its car/cdr if a
-///   cons, else the whole symbol for both).
-/// * When `:coding` is nil GNU does NOT immediately fall back to the process
-///   default.  It first consults `coding-system-for-read/write`, then the
-///   process/current buffer's multibyteness, then the operation coding pair,
-///   and finally `default-process-coding-system`.
+/// The distinction is not decoration: it is where `Fmake_process` and the three
+/// connection primitives genuinely part company, and the difference is
+/// invisible unless the two states are separated.  GNU writes the connection
+/// primitives as ONE `else if` chain, so a non-nil `tem` skips every later arm
+/// and a `:coding` whose half is nil answers NIL:
 ///
-/// In particular, `url-open-stream` dynamically binds
-/// `coding-system-for-read` to `binary`; losing that binding decodes font bytes
-/// as UTF-8 and makes the URL buffer shorter than its HTTP Content-Length.
+/// ```c
+///     if (!NILP (tem))            { val = tem; if (CONSP (val)) val = XCAR (val); }
+///     else if (!NILP (Vcoding_system_for_read))  val = Vcoding_system_for_read;
+///     else if (/* unibyte buffer */)             val = Qnil;
+///     else                        { /* alist, default */ }        /* :2523-2548 */
+/// ```
 ///
-/// The buffer-dependent fallbacks are:
-///     - DECODE: if the process buffer (or, when absent, the default buffer)
-///       is UNIBYTE, decode is left nil/raw so libraries receive bare CR LF;
-///       otherwise decode comes from `find-operation-coding-system` or the car
-///       of `default-process-coding-system` (`utf-8-unix`).
-///     - ENCODE: a unibyte current buffer stays raw; otherwise use the operation
-///       coding or the default process coding's cdr.
-fn network_process_coding_pair(
+/// `Fmake_process` writes the same first two arms and then a SEPARATE
+/// `if (NILP (val))` for the tail (src/process.c:1950-1976), so there a
+/// `:coding` whose half is nil falls through to the alist and the default.
+/// Measured, both under GNU 31.0.90, with `coding-system-for-read` bound to
+/// `binary` and `:coding '(nil . latin-1)`:
+///
+/// ```text
+/// make-pipe-process    => (nil . latin-1)
+/// make-serial-process  => (nil . latin-1)
+/// make-network-process => (nil . latin-1)
+/// make-process         => (utf-8-unix . latin-1)     ; the tail ran
+/// ```
+///
+/// A helper that returned a bare `Value` could not say which of those two it
+/// meant, and the first thing built on one that did was wrong in exactly this
+/// row.
+enum ConnectionCodingStep {
+    /// The chain is over.  A supplied `:coding` ends it whatever its half holds;
+    /// a non-nil dynamic override ends it too.
+    Answered(Value),
+    /// Nothing has answered yet, so the rest of THIS primitive's chain runs.
+    Continue,
+}
+
+/// Step one of a connection primitive's chain, for one direction
+/// (src/process.c:2523-2532, :3247-3257, :3301-3313).
+fn connection_process_coding_step(
     coding: Value,
-    defaults: NetworkProcessCodingDefaults,
-    process_buffer_multibyte: bool,
-) -> (Value, Value) {
-    if coding.is_cons() {
-        return (coding.cons_car(), coding.cons_cdr());
-    }
+    half: ProcessCodingHalf,
+    read_override: Value,
+    write_override: Value,
+) -> ConnectionCodingStep {
     if !coding.is_nil() {
-        return (coding, coding);
+        return ConnectionCodingStep::Answered(half.of(coding));
     }
-    let (default_decode, default_encode) = if defaults.default_process_coding_system.is_cons() {
-        (
-            defaults.default_process_coding_system.cons_car(),
-            defaults.default_process_coding_system.cons_cdr(),
-        )
-    } else {
-        (Value::NIL, Value::NIL)
+    let dynamic = match half {
+        ProcessCodingHalf::Decode => read_override,
+        ProcessCodingHalf::Encode => write_override,
     };
-
-    let decode = if !defaults.coding_system_for_read.is_nil() {
-        defaults.coding_system_for_read
-    } else if !process_buffer_multibyte {
-        Value::NIL
-    } else if defaults.operation_coding_system.is_cons() {
-        defaults.operation_coding_system.cons_car()
+    if dynamic.is_nil() {
+        ConnectionCodingStep::Continue
     } else {
-        default_decode
-    };
-    let encode = if !defaults.coding_system_for_write.is_nil() {
-        defaults.coding_system_for_write
-    } else if !defaults.current_buffer_multibyte {
-        Value::NIL
-    } else if defaults.operation_coding_system.is_cons() {
-        defaults.operation_coding_system.cons_cdr()
-    } else {
-        default_encode
-    };
-    (decode, encode)
+        ConnectionCodingStep::Answered(dynamic)
+    }
 }
 
-fn set_network_process_coding(
-    proc: &mut Process,
+/// The two buffers a connection primitive's short circuit can ask about, read
+/// out of the buffer table.
+///
+/// A process with no buffer answers GNU's `buffer_defaults` arm, which is
+/// multibyte in every editor this runs in.
+fn process_buffer_multibyteness(
+    buffers: &BufferManager,
+    process_buffer: Value,
+) -> ProcessBufferMultibyteness {
+    ProcessBufferMultibyteness {
+        process_buffer: process_buffer
+            .as_buffer_id()
+            .and_then(|id| buffers.get(id))
+            .map(|buffer| buffer.get_multibyte())
+            .unwrap_or(true),
+        current_buffer: buffers
+            .current_buffer()
+            .map(|buffer| buffer.get_multibyte())
+            .unwrap_or(true),
+    }
+}
+
+/// GNU validates a connection process's coding systems where it INSTALLS them,
+/// not where it parses `:coding`: `setup_process_coding_systems` runs
+/// `setup_coding_system` on each half, and that is what signals
+/// `coding-system-error` for an undefined name (src/coding.c:5678, reached from
+/// src/process.c:2573, :3277).  So the value that has to be checked is the one
+/// the chain produced -- a bad `coding-system-for-read` signals for
+/// `make-pipe-process` exactly as a bad `:coding` does.  Measured under GNU
+/// 31.0.90.
+fn validate_resolved_process_coding_systems(
+    coding_systems: Option<&super::coding::CodingSystemManager>,
+    resolved: ProcessCodingSystems,
+) -> Result<(), Flow> {
+    validate_process_coding_component(coding_systems, resolved.decode)?;
+    validate_process_coding_component(coding_systems, resolved.encode)
+}
+
+/// GNU `Fmake_pipe_process`'s coding resolver, src/process.c:2517-2570.
+fn resolve_pipe_process_coding_systems(
     coding: Value,
-    defaults: NetworkProcessCodingDefaults,
-    process_buffer_multibyte: bool,
-) {
-    let (decode, encode) = network_process_coding_pair(coding, defaults, process_buffer_multibyte);
-    proc.coding_decode = decode;
-    proc.decoding_carryover.clear();
-    proc.coding_encode = encode;
+    env: PipeProcessCodingEnvironment,
+) -> ProcessCodingSystems {
+    let resolve = |half: ProcessCodingHalf| {
+        match connection_process_coding_step(
+            coding,
+            half,
+            env.coding_system_for_read,
+            env.coding_system_for_write,
+        ) {
+            ConnectionCodingStep::Answered(value) => value,
+            ConnectionCodingStep::Continue if env.short_circuit.takes(half) => Value::NIL,
+            // src/process.c:2542-2547 (decode) and :2563-2568 (encode); the
+            // `CONSP (coding_systems)` arm above each is dead, so what is left
+            // is `default-process-coding-system` and then nil.
+            ConnectionCodingStep::Continue if env.default_process_coding_system.is_cons() => {
+                half.of(env.default_process_coding_system)
+            }
+            ConnectionCodingStep::Continue => Value::NIL,
+        }
+    };
+    ProcessCodingSystems {
+        decode: resolve(ProcessCodingHalf::Decode),
+        encode: resolve(ProcessCodingHalf::Encode),
+    }
+}
+
+/// GNU `Fmake_serial_process`'s coding resolver, src/process.c:3247-3275.
+///
+/// The whole chain is the override.  Everything after it in GNU's C lands on
+/// the `Qnil` the variable already held, so `nil` -- which
+/// `setup_coding_system` reads as `undecided`, i.e. DETECT (src/coding.c:
+/// 5675-5676) -- is a serial process's normal answer, not an omission.
+fn resolve_serial_process_coding_systems(
+    coding: Value,
+    env: SerialProcessCodingEnvironment,
+) -> ProcessCodingSystems {
+    let resolve = |half: ProcessCodingHalf| match connection_process_coding_step(
+        coding,
+        half,
+        env.coding_system_for_read,
+        env.coding_system_for_write,
+    ) {
+        ConnectionCodingStep::Answered(value) => value,
+        ConnectionCodingStep::Continue => Value::NIL,
+    };
+    ProcessCodingSystems {
+        decode: resolve(ProcessCodingHalf::Decode),
+        encode: resolve(ProcessCodingHalf::Encode),
+    }
+}
+
+/// Create a network process record, running GNU's check on its coding pair at
+/// GNU's moment: after the socket exists.
+///
+/// Every one of the socket strategies reaches this after its connect, listen or
+/// bind has succeeded, which is where `connect_network_socket` calls
+/// `setup_process_coding_systems` (src/process.c:3761).  The ordering is
+/// measurable and it is the reason the check is not done up front with the
+/// resolution: against a refused port, with `coding-system-for-read` bound to
+/// an undefined name, GNU reports `(file-error "make client process failed")`
+/// and never gets as far as the coding system.
+fn create_network_process_record(
+    eval: &mut super::eval::Context,
+    name: LispString,
+    buffer: Value,
+    coding: ProcessCodingSystems,
+) -> Result<ProcessId, Flow> {
+    validate_resolved_process_coding_systems(Some(&eval.coding_systems), coding)?;
+    Ok(eval.processes.create_process_with_kind_lisp(
+        name,
+        buffer,
+        LispString::from_utf8("network"),
+        Vec::new(),
+        ProcessKind::Network,
+        coding,
+    ))
+}
+
+/// GNU `set_network_socket_coding_system`'s resolver, src/process.c:3291-3367.
+///
+/// `url-open-stream` dynamically binds `coding-system-for-read` to `binary`;
+/// losing that binding decodes response bytes as UTF-8 and makes the URL buffer
+/// shorter than its HTTP Content-Length.
+fn resolve_network_process_coding_systems(
+    coding: Value,
+    env: NetworkProcessCodingEnvironment,
+) -> ProcessCodingSystems {
+    let resolve = |half: ProcessCodingHalf| {
+        match connection_process_coding_step(
+            coding,
+            half,
+            env.coding_system_for_read,
+            env.coding_system_for_write,
+        ) {
+            ConnectionCodingStep::Answered(value) => value,
+            ConnectionCodingStep::Continue if env.short_circuit.takes(half) => Value::NIL,
+            // src/process.c:3325-3336 (decode) and :3352-3366 (encode).
+            ConnectionCodingStep::Continue if env.operation_coding_system.is_cons() => {
+                half.of(env.operation_coding_system)
+            }
+            ConnectionCodingStep::Continue if env.default_process_coding_system.is_cons() => {
+                half.of(env.default_process_coding_system)
+            }
+            ConnectionCodingStep::Continue => Value::NIL,
+        }
+    };
+    ProcessCodingSystems {
+        decode: resolve(ProcessCodingHalf::Decode),
+        encode: resolve(ProcessCodingHalf::Encode),
+    }
 }
 
 fn find_network_operation_coding_system(
@@ -2333,14 +2664,6 @@ fn find_network_operation_coding_system(
     result
 }
 
-fn explicit_process_coding_pair(coding: Value) -> (Value, Value) {
-    if coding.is_cons() {
-        (coding.cons_car(), coding.cons_cdr())
-    } else {
-        (coding, coding)
-    }
-}
-
 /// Which direction of a coding pair a resolution step is answering.
 ///
 /// GNU writes the two directions out twice, as near-mirror blocks
@@ -2372,18 +2695,56 @@ impl ProcessCodingHalf {
 /// There is deliberately no `Default` and no field-wise constructor: GNU has
 /// FIVE creation-time resolvers for this pair -- `Fcall_process`
 /// (src/callproc.c:729-763), `Fmake_process` (src/process.c:1950-2008),
-/// `Fmake_pipe_process` (:2523-2548), `Fmake_serial_process` (:3247-3275) and
-/// `set_network_socket_coding_system` (:3301-3360) -- and they disagree about
+/// `Fmake_pipe_process` (:2517-2570), `Fmake_serial_process` (:3247-3275) and
+/// `set_network_socket_coding_system` (:3291-3367) -- and they disagree about
 /// the explicit override, about which operation symbol (if any) reaches
 /// `process-coding-system-alist`, about whether a unibyte buffer short-circuits
-/// the lookup, and about whether `default-process-coding-system` applies at
-/// all.  A pair that does not say which resolver produced it is a pair nobody
-/// can check, which is exactly how `make-process` came to ship a coding system
-/// invented in Rust.
+/// the lookup, about WHICH buffer answers that question for each half, and
+/// about whether `default-process-coding-system` applies at all.  A pair that
+/// does not say which resolver produced it is a pair nobody can check, which is
+/// exactly how `make-process` came to ship a coding system invented in Rust --
+/// and how `make-pipe-process` and `make-serial-process` went on shipping one
+/// after entry 131 fixed `make-process`.
+///
+/// It is a REQUIRED parameter of every process constructor, so there is no
+/// signature left in which a process can come into existence without a caller
+/// naming where its pair came from.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ProcessCodingSystems {
     decode: Value,
     encode: Value,
+}
+
+impl ProcessCodingSystems {
+    /// The pair GNU's `make_process` leaves behind before any of the five
+    /// resolvers has run: both slots nil, which `setup_coding_system` reads as
+    /// `undecided` -- DETECT (src/coding.c:5675-5676).
+    ///
+    /// This is for process records that are not one of GNU's five primitives:
+    /// internal bookkeeping records and unit-test fixtures that never carry
+    /// bytes.  It is not a fallback for a resolver that was not written; that
+    /// mistake is what entries 128, 131 and 137 are about, and the reason this
+    /// constructor is named after GNU's initial state rather than after a
+    /// default is so that using it says which claim is being made.  Today only
+    /// test fixtures make that claim, and the `cfg` keeps it that way until
+    /// something in the runtime has a reason to.
+    #[cfg(test)]
+    pub(crate) fn gnu_make_process_initial() -> Self {
+        Self {
+            decode: Value::NIL,
+            encode: Value::NIL,
+        }
+    }
+
+    /// The pair an accepted connection takes from its server.
+    ///
+    /// `server_accept_connection` does NOT re-run the network resolver: it
+    /// copies the listening process's slots, "as the coding system of the new
+    /// process should reflect the settings at the time the server socket was
+    /// opened; not the current settings" (src/process.c:5152-5158).
+    pub(crate) fn inherited_from_server(decode: Value, encode: Value) -> Self {
+        Self { decode, encode }
+    }
 }
 
 /// The ambient inputs GNU's `Fmake_process` coding resolver reads
@@ -2421,10 +2782,16 @@ impl MakeProcessCodingEnvironment {
         }
     }
 
-    fn override_for(self, half: ProcessCodingHalf) -> Value {
-        match half {
-            ProcessCodingHalf::Decode => self.coding_system_for_read,
-            ProcessCodingHalf::Encode => self.coding_system_for_write,
+    /// What `Fmake_process` hands on when `:stderr` is a BUFFER and it builds a
+    /// pipe process for it with `CALLN (Fmake_pipe_process, ...)`
+    /// (src/process.c:1883): the ambient variables, not its own answer.  The
+    /// operation coding is dropped because `Fmake_pipe_process` cannot reach
+    /// `find-operation-coding-system` at all.
+    fn connection_variables(self) -> ConnectionProcessCodingVariables {
+        ConnectionProcessCodingVariables {
+            coding_system_for_read: self.coding_system_for_read,
+            coding_system_for_write: self.coding_system_for_write,
+            default_process_coding_system: self.default_process_coding_system,
         }
     }
 }
@@ -2445,20 +2812,28 @@ fn make_process_consults_coding_alist(coding: Value, env: MakeProcessCodingEnvir
 /// Step one of GNU's `Fmake_process` chain, for one direction: the `:coding`
 /// keyword when it was supplied at all (its car for decode, its cdr for encode,
 /// itself when it is not a cons), else the dynamic
-/// `coding-system-for-read`/`-write` override (src/process.c:1950-1958 and
-/// :1979-1986).
+/// `coding-system-for-read`/`-write` override (src/process.c:1950-1957 and
+/// :1978-1985).
 ///
-/// Note that a SUPPLIED `:coding` shuts the dynamic override out even when its
-/// own half is nil -- GNU's `else` at :1957 is only reached when `tem` itself is
-/// nil.  Measured: `:coding '(nil . latin-1)` under `coding-system-for-read`
-/// bound to `binary` decodes as `utf-8-unix`, not as `binary`.
+/// A SUPPLIED `:coding` shuts the dynamic override out even when its own half
+/// is nil -- GNU's `else` at :1956 is only reached when `tem` itself is nil.
+/// But unlike the three connection primitives, `Fmake_process` then runs its
+/// tail from a SEPARATE `if (NILP (val))` at :1958, so a nil half does fall
+/// through to the alist and the default.  It returns a bare `Value` rather than
+/// a `ConnectionCodingStep` precisely because "nil" and "nothing answered" are
+/// the same thing here and are NOT the same thing there.  Measured:
+/// `:coding '(nil . latin-1)` under `coding-system-for-read` bound to `binary`
+/// decodes as `utf-8-unix` for `make-process` and as nil for the other three.
 fn make_process_coding_override(
     coding: Value,
     half: ProcessCodingHalf,
     env: MakeProcessCodingEnvironment,
 ) -> Value {
     if coding.is_nil() {
-        env.override_for(half)
+        match half {
+            ProcessCodingHalf::Decode => env.coding_system_for_read,
+            ProcessCodingHalf::Encode => env.coding_system_for_write,
+        }
     } else {
         half.of(coding)
     }
@@ -2518,26 +2893,6 @@ fn validate_process_coding_component(
             vec![Value::symbol("symbolp"), value],
         ))
     }
-}
-
-fn validate_process_coding_value(
-    coding_systems: Option<&super::coding::CodingSystemManager>,
-    coding: Value,
-) -> Result<(), Flow> {
-    let (decode, encode) = explicit_process_coding_pair(coding);
-    validate_process_coding_component(coding_systems, decode)?;
-    validate_process_coding_component(coding_systems, encode)
-}
-
-fn set_explicit_process_coding(proc: &mut Process, coding: Value) {
-    if coding.is_nil() {
-        return;
-    }
-    let (decode, encode) = explicit_process_coding_pair(coding);
-    proc.coding_decode = decode;
-    proc.decoding_carryover.clear();
-    proc.coding_encode = encode;
-    proc.coding_explicitly_set = true;
 }
 
 fn copy_process_plist(plist: Value) -> EvalResult {
@@ -4189,12 +4544,13 @@ impl ProcessManager {
     }
 
     /// Create a new process record.  Returns the process id.
-    pub fn create_process(
+    pub(crate) fn create_process(
         &mut self,
         name: String,
         buffer: Value,
         command: String,
         args: Vec<String>,
+        coding: ProcessCodingSystems,
     ) -> ProcessId {
         self.create_process_lisp(
             LispString::from_utf8(&name),
@@ -4203,26 +4559,29 @@ impl ProcessManager {
             args.into_iter()
                 .map(|arg| LispString::from_utf8(&arg))
                 .collect(),
+            coding,
         )
     }
 
-    pub fn create_process_lisp(
+    pub(crate) fn create_process_lisp(
         &mut self,
         name: LispString,
         buffer: Value,
         command: LispString,
         args: Vec<LispString>,
+        coding: ProcessCodingSystems,
     ) -> ProcessId {
-        self.create_process_with_kind_lisp(name, buffer, command, args, ProcessKind::Real)
+        self.create_process_with_kind_lisp(name, buffer, command, args, ProcessKind::Real, coding)
     }
 
-    pub fn create_process_lisp_resolved(
+    pub(crate) fn create_process_lisp_resolved(
         &mut self,
         name: LispString,
         buffer: Value,
         command: LispString,
         args: Vec<LispString>,
         executable: Option<LispString>,
+        coding: ProcessCodingSystems,
     ) -> ProcessId {
         self.create_process_with_kind_lisp_resolved(
             name,
@@ -4231,17 +4590,19 @@ impl ProcessManager {
             args,
             ProcessKind::Real,
             executable,
+            coding,
         )
     }
 
     /// Create a new process record with an explicit process kind.
-    pub fn create_process_with_kind(
+    pub(crate) fn create_process_with_kind(
         &mut self,
         name: String,
         buffer: Value,
         command: String,
         args: Vec<String>,
         kind: ProcessKind,
+        coding: ProcessCodingSystems,
     ) -> ProcessId {
         self.create_process_with_kind_lisp(
             LispString::from_utf8(&name),
@@ -4251,21 +4612,23 @@ impl ProcessManager {
                 .map(|arg| LispString::from_utf8(&arg))
                 .collect(),
             kind,
+            coding,
         )
     }
 
-    pub fn create_process_with_kind_lisp(
+    pub(crate) fn create_process_with_kind_lisp(
         &mut self,
         name: LispString,
         buffer: Value,
         command: LispString,
         args: Vec<LispString>,
         kind: ProcessKind,
+        coding: ProcessCodingSystems,
     ) -> ProcessId {
-        self.create_process_with_kind_lisp_resolved(name, buffer, command, args, kind, None)
+        self.create_process_with_kind_lisp_resolved(name, buffer, command, args, kind, None, coding)
     }
 
-    pub fn create_process_with_kind_lisp_resolved(
+    pub(crate) fn create_process_with_kind_lisp_resolved(
         &mut self,
         name: LispString,
         buffer: Value,
@@ -4273,6 +4636,7 @@ impl ProcessManager {
         args: Vec<LispString>,
         kind: ProcessKind,
         executable: Option<LispString>,
+        coding: ProcessCodingSystems,
     ) -> ProcessId {
         // GNU `make_process` owns process-name allocation for every process
         // kind.  Probe the live process registry and append the smallest free
@@ -4321,21 +4685,19 @@ impl ProcessManager {
             log: Value::NIL,
             plist: Value::NIL,
             stderrproc: Value::NIL,
-            // GNU's `make_process` leaves both slots nil and lets the
-            // creating primitive's own resolver fill them in.  `make-process`
-            // now does exactly that (`resolve_make_process_coding_systems`
-            // installs its pair unconditionally), so for `ProcessKind::Real`
-            // this initialiser is never observed.  It survives as the stand-in
-            // that `make-pipe-process` (src/process.c:2523-2548) and
-            // `make-serial-process` (:3247-3275) still owe their own resolvers:
-            // neither reaches `find-operation-coding-system`, so with a
-            // multibyte buffer and no `:coding` GNU's answer is exactly the car
-            // and cdr of `default-process-coding-system`, whose value here is
-            // `(utf-8-unix . utf-8-unix)`.  It is a stand-in, not a default --
-            // see DIVERGENCES.md entry 131.
-            coding_decode: Value::symbol("utf-8-unix"),
+            // There is no initialiser to write here any more.  GNU's
+            // `make_process` leaves both slots nil and lets the creating
+            // primitive's own resolver fill them in; each of the five
+            // primitives now supplies its resolver's answer as an argument, so
+            // the pair arrives already attributed.  The `utf-8-unix` literal
+            // that used to sit here was not a neutral placeholder -- it was the
+            // answer `default-process-coding-system` happens to hold under a
+            // UTF-8 locale, which is why nothing noticed that
+            // `make-pipe-process` and `make-serial-process` never resolved
+            // anything.  See DIVERGENCES.md entries 131 and 137.
+            coding_decode: coding.decode,
             decoding_carryover: Vec::new(),
-            coding_encode: Value::symbol("utf-8-unix"),
+            coding_encode: coding.encode,
             coding_explicitly_set: false,
             explicit_coding_status_deferred_once: false,
             inherit_coding_system_flag: false,
@@ -6237,6 +6599,7 @@ impl ProcessManager {
                 LispString::from_utf8("network"),
                 Vec::new(),
                 ProcessKind::Network,
+                ProcessCodingSystems::inherited_from_server(coding_decode, coding_encode),
             );
             if let Some(client) = self.get_mut(client_id) {
                 client.live_io.network_socket = Some(socket);
@@ -6245,8 +6608,6 @@ impl ProcessManager {
                 client.filter = server_filter;
                 client.sentinel = server_sentinel;
                 client.plist = server_plist;
-                client.coding_decode = coding_decode;
-                client.coding_encode = coding_encode;
                 client.inherit_coding_system_flag = inherit_coding_system_flag;
                 client.thread = server_thread;
                 client.query_on_exit_flag = query_on_exit_flag;
@@ -10149,7 +10510,7 @@ fn connect_network_process_at_explicit_address(
     filter_val: Value,
     sentinel_val: Value,
     log_val: Value,
-    coding_val: Value,
+    resolved_coding: ProcessCodingSystems,
     buffer: Value,
     plist_val: Value,
     nowait: bool,
@@ -10161,8 +10522,6 @@ fn connect_network_process_at_explicit_address(
     socket_options: Vec<NetworkSocketOptionSpec>,
     tls_parameters: Option<super::tls::GnutlsBootParameters>,
     tls_parameters_value: Value,
-    default_process_coding: NetworkProcessCodingDefaults,
-    network_buffer_multibyte: bool,
 ) -> EvalResult {
     let address = parse_network_address_spec(&explicit_address)?;
     match address {
@@ -10206,22 +10565,10 @@ fn connect_network_process_at_explicit_address(
                         datagram_address,
                     )?;
 
-                    let id = eval.processes.create_process_with_kind_lisp(
-                        name,
-                        buffer,
-                        LispString::from_utf8("network"),
-                        Vec::new(),
-                        ProcessKind::Network,
-                    );
+                    let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                     if let Some(proc) = eval.processes.get_mut(id) {
                         proc.childp = contact;
-                        set_network_process_coding(
-                            proc,
-                            coding_val,
-                            default_process_coding,
-                            network_buffer_multibyte,
-                        );
                         proc.thread = current_thread_handle(&eval.threads);
                         proc.plist = plist_val;
                         proc.status = ProcessStatusSymbol::Open.value();
@@ -10277,13 +10624,7 @@ fn connect_network_process_at_explicit_address(
                     socket_addr_to_lisp_value(udp_unspecified_addr_for(addr)),
                 )?;
 
-                let id = eval.processes.create_process_with_kind_lisp(
-                    name,
-                    buffer,
-                    LispString::from_utf8("network"),
-                    Vec::new(),
-                    ProcessKind::Network,
-                );
+                let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
                     proc.live_io.network_socket = Some(NetworkSocket::UdpSocket(socket));
@@ -10292,12 +10633,6 @@ fn connect_network_process_at_explicit_address(
                     proc.status = ProcessStatusSymbol::Open.value();
                     proc.childp = contact;
                     proc.plist = plist_val;
-                    set_network_process_coding(
-                        proc,
-                        coding_val,
-                        default_process_coding,
-                        network_buffer_multibyte,
-                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     if !filter_val.is_nil() {
                         proc.filter = filter_val;
@@ -10360,22 +10695,10 @@ fn connect_network_process_at_explicit_address(
                     socket_addr_to_lisp_value(local_addr),
                 )?;
 
-                let id = eval.processes.create_process_with_kind_lisp(
-                    name,
-                    buffer,
-                    LispString::from_utf8("network"),
-                    Vec::new(),
-                    ProcessKind::Network,
-                );
+                let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
                     proc.childp = contact;
-                    set_network_process_coding(
-                        proc,
-                        coding_val,
-                        default_process_coding,
-                        network_buffer_multibyte,
-                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     proc.plist = plist_val;
                     proc.live_io.network_socket = Some(NetworkSocket::TcpListener(listener));
@@ -10418,24 +10741,12 @@ fn connect_network_process_at_explicit_address(
 
             if nowait {
                 let start = start_pending_tcp_stream_connect(vec![addr], &socket_options)?;
-                let id = eval.processes.create_process_with_kind_lisp(
-                    name,
-                    buffer,
-                    LispString::from_utf8("network"),
-                    Vec::new(),
-                    ProcessKind::Network,
-                );
+                let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
                     proc.status = process_status_connect_value();
                     proc.childp = contact;
                     proc.plist = plist_val;
-                    set_network_process_coding(
-                        proc,
-                        coding_val,
-                        default_process_coding,
-                        network_buffer_multibyte,
-                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     if !filter_val.is_nil() {
                         proc.filter = filter_val;
@@ -10499,13 +10810,7 @@ fn connect_network_process_at_explicit_address(
             let remote_addr = stream.peer_addr().ok();
             let local_addr = stream.local_addr().ok();
 
-            let id = eval.processes.create_process_with_kind_lisp(
-                name,
-                buffer,
-                LispString::from_utf8("network"),
-                Vec::new(),
-                ProcessKind::Network,
-            );
+            let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
             eval.processes.sync_process_mark(&mut eval.buffers, id)?;
             if let Some(addr) = remote_addr {
                 contact = process_contact_plist_put(
@@ -10526,12 +10831,6 @@ fn connect_network_process_at_explicit_address(
                 proc.status = process_status_run_value();
                 proc.childp = contact;
                 proc.plist = plist_val;
-                set_network_process_coding(
-                    proc,
-                    coding_val,
-                    default_process_coding,
-                    network_buffer_multibyte,
-                );
                 proc.thread = current_thread_handle(&eval.threads);
                 if !filter_val.is_nil() {
                     proc.filter = filter_val;
@@ -10607,22 +10906,10 @@ fn connect_network_process_at_explicit_address(
                         datagram_address,
                     )?;
 
-                    let id = eval.processes.create_process_with_kind_lisp(
-                        name,
-                        buffer,
-                        LispString::from_utf8("network"),
-                        Vec::new(),
-                        ProcessKind::Network,
-                    );
+                    let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                     if let Some(proc) = eval.processes.get_mut(id) {
                         proc.childp = contact;
-                        set_network_process_coding(
-                            proc,
-                            coding_val,
-                            default_process_coding,
-                            network_buffer_multibyte,
-                        );
                         proc.thread = current_thread_handle(&eval.threads);
                         proc.plist = plist_val;
                         proc.status = ProcessStatusSymbol::Open.value();
@@ -10675,25 +10962,13 @@ fn connect_network_process_at_explicit_address(
                     Value::string(""),
                 )?;
 
-                let id = eval.processes.create_process_with_kind_lisp(
-                    name,
-                    buffer,
-                    LispString::from_utf8("network"),
-                    Vec::new(),
-                    ProcessKind::Network,
-                );
+                let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
                     proc.live_io.network_socket = Some(NetworkSocket::UnixDatagram(socket));
                     proc.status = ProcessStatusSymbol::Open.value();
                     proc.childp = contact;
                     proc.plist = plist_val;
-                    set_network_process_coding(
-                        proc,
-                        coding_val,
-                        default_process_coding,
-                        network_buffer_multibyte,
-                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     proc.datagram_address = path_value;
                     proc.datagram_unix_path = Some(path);
@@ -10741,22 +11016,10 @@ fn connect_network_process_at_explicit_address(
                         )),
                     )?;
 
-                    let id = eval.processes.create_process_with_kind_lisp(
-                        name,
-                        buffer,
-                        LispString::from_utf8("network"),
-                        Vec::new(),
-                        ProcessKind::Network,
-                    );
+                    let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                     if let Some(proc) = eval.processes.get_mut(id) {
                         proc.childp = contact;
-                        set_network_process_coding(
-                            proc,
-                            coding_val,
-                            default_process_coding,
-                            network_buffer_multibyte,
-                        );
                         proc.thread = current_thread_handle(&eval.threads);
                         proc.plist = plist_val;
                         proc.live_io.network_socket =
@@ -10810,25 +11073,13 @@ fn connect_network_process_at_explicit_address(
                     Value::string(""),
                 )?;
 
-                let id = eval.processes.create_process_with_kind_lisp(
-                    name,
-                    buffer,
-                    LispString::from_utf8("network"),
-                    Vec::new(),
-                    ProcessKind::Network,
-                );
+                let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
                     proc.live_io.network_socket = Some(NetworkSocket::SeqpacketStream(socket));
                     proc.status = process_status_run_value();
                     proc.childp = contact;
                     proc.plist = plist_val;
-                    set_network_process_coding(
-                        proc,
-                        coding_val,
-                        default_process_coding,
-                        network_buffer_multibyte,
-                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     if !filter_val.is_nil() {
                         proc.filter = filter_val;
@@ -10870,22 +11121,10 @@ fn connect_network_process_at_explicit_address(
                     Value::heap_string(crate::emacs_core::fileio::path_to_lisp_file_name(&path)),
                 )?;
 
-                let id = eval.processes.create_process_with_kind_lisp(
-                    name,
-                    buffer,
-                    LispString::from_utf8("network"),
-                    Vec::new(),
-                    ProcessKind::Network,
-                );
+                let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
                     proc.childp = contact;
-                    set_network_process_coding(
-                        proc,
-                        coding_val,
-                        default_process_coding,
-                        network_buffer_multibyte,
-                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     proc.plist = plist_val;
                     proc.live_io.network_socket = Some(NetworkSocket::UnixListener(listener));
@@ -10939,24 +11178,12 @@ fn connect_network_process_at_explicit_address(
 
             if nowait {
                 let start = start_nonblocking_unix_stream_socket(&path, &socket_options)?;
-                let id = eval.processes.create_process_with_kind_lisp(
-                    name,
-                    buffer,
-                    LispString::from_utf8("network"),
-                    Vec::new(),
-                    ProcessKind::Network,
-                );
+                let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
                     proc.status = process_status_connect_value();
                     proc.childp = contact;
                     proc.plist = plist_val;
-                    set_network_process_coding(
-                        proc,
-                        coding_val,
-                        default_process_coding,
-                        network_buffer_multibyte,
-                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     if !filter_val.is_nil() {
                         proc.filter = filter_val;
@@ -10997,25 +11224,13 @@ fn connect_network_process_at_explicit_address(
             }
 
             let stream = connect_unix_stream_socket(&path, &socket_options)?;
-            let id = eval.processes.create_process_with_kind_lisp(
-                name,
-                buffer,
-                LispString::from_utf8("network"),
-                Vec::new(),
-                ProcessKind::Network,
-            );
+            let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
             eval.processes.sync_process_mark(&mut eval.buffers, id)?;
             if let Some(proc) = eval.processes.get_mut(id) {
                 proc.live_io.network_socket = Some(NetworkSocket::UnixStream(stream));
                 proc.status = process_status_run_value();
                 proc.childp = contact;
                 proc.plist = plist_val;
-                set_network_process_coding(
-                    proc,
-                    coding_val,
-                    default_process_coding,
-                    network_buffer_multibyte,
-                );
                 proc.thread = current_thread_handle(&eval.threads);
                 if !filter_val.is_nil() {
                     proc.filter = filter_val;
@@ -11065,7 +11280,7 @@ fn connect_datagram_network_process(
     filter_val: Value,
     sentinel_val: Value,
     log_val: Value,
-    coding_val: Value,
+    resolved_coding: ProcessCodingSystems,
     buffer: Value,
     plist_val: Value,
     server: bool,
@@ -11073,8 +11288,6 @@ fn connect_datagram_network_process(
     stop: bool,
     socket_type: NetworkSocketType,
     socket_options: Vec<NetworkSocketOptionSpec>,
-    default_process_coding: NetworkProcessCodingDefaults,
-    network_buffer_multibyte: bool,
 ) -> EvalResult {
     let port = parse_network_service_port(&service, server, socket_type)?;
     let host_str = host
@@ -11103,22 +11316,10 @@ fn connect_datagram_network_process(
         contact =
             process_contact_plist_put(contact, ProcessKeyword::Remote.value(), zero_datagram)?;
 
-        let id = eval.processes.create_process_with_kind_lisp(
-            name,
-            buffer,
-            LispString::from_utf8("network"),
-            Vec::new(),
-            ProcessKind::Network,
-        );
+        let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
         eval.processes.sync_process_mark(&mut eval.buffers, id)?;
         if let Some(proc) = eval.processes.get_mut(id) {
             proc.childp = contact;
-            set_network_process_coding(
-                proc,
-                coding_val,
-                default_process_coding,
-                network_buffer_multibyte,
-            );
             proc.thread = current_thread_handle(&eval.threads);
             proc.plist = plist_val;
             proc.status = ProcessStatusSymbol::Open.value();
@@ -11169,13 +11370,7 @@ fn connect_datagram_network_process(
         socket_addr_to_lisp_value(udp_unspecified_addr_for(remote_addr)),
     )?;
 
-    let id = eval.processes.create_process_with_kind_lisp(
-        name,
-        buffer,
-        LispString::from_utf8("network"),
-        Vec::new(),
-        ProcessKind::Network,
-    );
+    let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
     if let Some(proc) = eval.processes.get_mut(id) {
         proc.live_io.network_socket = Some(NetworkSocket::UdpSocket(socket));
@@ -11184,12 +11379,6 @@ fn connect_datagram_network_process(
         proc.status = ProcessStatusSymbol::Open.value();
         proc.childp = contact;
         proc.plist = plist_val;
-        set_network_process_coding(
-            proc,
-            coding_val,
-            default_process_coding,
-            network_buffer_multibyte,
-        );
         proc.thread = current_thread_handle(&eval.threads);
         if !filter_val.is_nil() {
             proc.filter = filter_val;
@@ -11231,7 +11420,7 @@ fn listen_stream_network_process(
     filter_val: Value,
     sentinel_val: Value,
     log_val: Value,
-    coding_val: Value,
+    resolved_coding: ProcessCodingSystems,
     buffer: Value,
     plist_val: Value,
     noquery: bool,
@@ -11239,8 +11428,6 @@ fn listen_stream_network_process(
     server_backlog: Option<i32>,
     socket_type: NetworkSocketType,
     socket_options: Vec<NetworkSocketOptionSpec>,
-    default_process_coding: NetworkProcessCodingDefaults,
-    network_buffer_multibyte: bool,
 ) -> EvalResult {
     let port = parse_network_service_port(&service, true, socket_type)?;
     let host_str = host
@@ -11265,22 +11452,10 @@ fn listen_stream_network_process(
     contact = process_contact_plist_put(contact, ProcessKeyword::Service.value(), actual_service)?;
     contact = process_contact_plist_put(contact, ProcessKeyword::Local.value(), local)?;
 
-    let id = eval.processes.create_process_with_kind_lisp(
-        name,
-        buffer,
-        LispString::from_utf8("network"),
-        Vec::new(),
-        ProcessKind::Network,
-    );
+    let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
     if let Some(proc) = eval.processes.get_mut(id) {
         proc.childp = contact;
-        set_network_process_coding(
-            proc,
-            coding_val,
-            default_process_coding,
-            network_buffer_multibyte,
-        );
         proc.thread = current_thread_handle(&eval.threads);
         proc.plist = plist_val;
         proc.live_io.network_socket = Some(NetworkSocket::TcpListener(listener));
@@ -11332,7 +11507,7 @@ fn connect_local_socket_process(
     filter_val: Value,
     sentinel_val: Value,
     log_val: Value,
-    coding_val: Value,
+    resolved_coding: ProcessCodingSystems,
     buffer: Value,
     plist_val: Value,
     nowait: bool,
@@ -11343,8 +11518,6 @@ fn connect_local_socket_process(
     socket_type: NetworkSocketType,
     socket_options: Vec<NetworkSocketOptionSpec>,
     tls_parameters: Option<super::tls::GnutlsBootParameters>,
-    default_process_coding: NetworkProcessCodingDefaults,
-    network_buffer_multibyte: bool,
     remote_address_value: Value,
 ) -> EvalResult {
     #[cfg(not(unix))]
@@ -11395,22 +11568,10 @@ fn connect_local_socket_process(
                     datagram_address,
                 )?;
 
-                let id = eval.processes.create_process_with_kind_lisp(
-                    name,
-                    buffer,
-                    LispString::from_utf8("network"),
-                    Vec::new(),
-                    ProcessKind::Network,
-                );
+                let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
                     proc.childp = contact;
-                    set_network_process_coding(
-                        proc,
-                        coding_val,
-                        default_process_coding,
-                        network_buffer_multibyte,
-                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     proc.plist = plist_val;
                     proc.status = ProcessStatusSymbol::Open.value();
@@ -11466,25 +11627,13 @@ fn connect_local_socket_process(
                 Value::string(""),
             )?;
 
-            let id = eval.processes.create_process_with_kind_lisp(
-                name,
-                buffer,
-                LispString::from_utf8("network"),
-                Vec::new(),
-                ProcessKind::Network,
-            );
+            let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
             eval.processes.sync_process_mark(&mut eval.buffers, id)?;
             if let Some(proc) = eval.processes.get_mut(id) {
                 proc.live_io.network_socket = Some(NetworkSocket::UnixDatagram(socket));
                 proc.status = ProcessStatusSymbol::Open.value();
                 proc.childp = contact;
                 proc.plist = plist_val;
-                set_network_process_coding(
-                    proc,
-                    coding_val,
-                    default_process_coding,
-                    network_buffer_multibyte,
-                );
                 proc.thread = current_thread_handle(&eval.threads);
                 proc.datagram_address = service_path_value;
                 proc.datagram_unix_path = Some(service_path);
@@ -11533,22 +11682,10 @@ fn connect_local_socket_process(
                     )),
                 )?;
 
-                let id = eval.processes.create_process_with_kind_lisp(
-                    name,
-                    buffer,
-                    LispString::from_utf8("network"),
-                    Vec::new(),
-                    ProcessKind::Network,
-                );
+                let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
                 eval.processes.sync_process_mark(&mut eval.buffers, id)?;
                 if let Some(proc) = eval.processes.get_mut(id) {
                     proc.childp = contact;
-                    set_network_process_coding(
-                        proc,
-                        coding_val,
-                        default_process_coding,
-                        network_buffer_multibyte,
-                    );
                     proc.thread = current_thread_handle(&eval.threads);
                     proc.plist = plist_val;
                     proc.live_io.network_socket = Some(NetworkSocket::SeqpacketListener(listener));
@@ -11603,25 +11740,13 @@ fn connect_local_socket_process(
                 Value::string(""),
             )?;
 
-            let id = eval.processes.create_process_with_kind_lisp(
-                name,
-                buffer,
-                LispString::from_utf8("network"),
-                Vec::new(),
-                ProcessKind::Network,
-            );
+            let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
             eval.processes.sync_process_mark(&mut eval.buffers, id)?;
             if let Some(proc) = eval.processes.get_mut(id) {
                 proc.live_io.network_socket = Some(NetworkSocket::SeqpacketStream(socket));
                 proc.status = process_status_run_value();
                 proc.childp = contact;
                 proc.plist = plist_val;
-                set_network_process_coding(
-                    proc,
-                    coding_val,
-                    default_process_coding,
-                    network_buffer_multibyte,
-                );
                 proc.thread = current_thread_handle(&eval.threads);
                 if !filter_val.is_nil() {
                     proc.filter = filter_val;
@@ -11668,22 +11793,10 @@ fn connect_local_socket_process(
                 )),
             )?;
 
-            let id = eval.processes.create_process_with_kind_lisp(
-                name,
-                buffer,
-                LispString::from_utf8("network"),
-                Vec::new(),
-                ProcessKind::Network,
-            );
+            let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
             eval.processes.sync_process_mark(&mut eval.buffers, id)?;
             if let Some(proc) = eval.processes.get_mut(id) {
                 proc.childp = contact;
-                set_network_process_coding(
-                    proc,
-                    coding_val,
-                    default_process_coding,
-                    network_buffer_multibyte,
-                );
                 proc.thread = current_thread_handle(&eval.threads);
                 proc.plist = plist_val;
                 proc.live_io.network_socket = Some(NetworkSocket::UnixListener(listener));
@@ -11745,24 +11858,12 @@ fn connect_local_socket_process(
 
         if nowait {
             let start = start_nonblocking_unix_stream_socket(&service_path, &socket_options)?;
-            let id = eval.processes.create_process_with_kind_lisp(
-                name,
-                buffer,
-                LispString::from_utf8("network"),
-                Vec::new(),
-                ProcessKind::Network,
-            );
+            let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
             eval.processes.sync_process_mark(&mut eval.buffers, id)?;
             if let Some(proc) = eval.processes.get_mut(id) {
                 proc.status = process_status_connect_value();
                 proc.childp = contact;
                 proc.plist = plist_val;
-                set_network_process_coding(
-                    proc,
-                    coding_val,
-                    default_process_coding,
-                    network_buffer_multibyte,
-                );
                 proc.thread = current_thread_handle(&eval.threads);
                 if !filter_val.is_nil() {
                     proc.filter = filter_val;
@@ -11809,25 +11910,13 @@ fn connect_local_socket_process(
         }
 
         let stream = connect_unix_stream_socket(&service_path, &socket_options)?;
-        let id = eval.processes.create_process_with_kind_lisp(
-            name,
-            buffer,
-            LispString::from_utf8("network"),
-            Vec::new(),
-            ProcessKind::Network,
-        );
+        let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
         eval.processes.sync_process_mark(&mut eval.buffers, id)?;
         if let Some(proc) = eval.processes.get_mut(id) {
             proc.live_io.network_socket = Some(NetworkSocket::UnixStream(stream));
             proc.status = process_status_run_value();
             proc.childp = contact;
             proc.plist = plist_val;
-            set_network_process_coding(
-                proc,
-                coding_val,
-                default_process_coding,
-                network_buffer_multibyte,
-            );
             proc.thread = current_thread_handle(&eval.threads);
             if !filter_val.is_nil() {
                 proc.filter = filter_val;
@@ -11944,7 +12033,6 @@ pub(crate) fn builtin_make_network_process(
             vec![Value::string("`:server' is incompatible with `:nowait'")],
         ));
     }
-    validate_process_coding_value(Some(&eval.coding_systems), coding_val)?;
     let plist_val = copy_process_plist(plist_val)?;
     let stop = stop_val.is_truthy();
     let server_backlog = if server {
@@ -11965,28 +12053,34 @@ pub(crate) fn builtin_make_network_process(
     // connection strategy.  GNU's `set_network_socket_coding_system` gives
     // `coding-system-for-read/write` precedence over the operation/default
     // codings; URL binds the read side to `binary` around this call.
-    let mut default_process_coding = NetworkProcessCodingDefaults {
-        coding_system_for_read: eval.visible_variable_value_or_nil("coding-system-for-read"),
-        coding_system_for_write: eval.visible_variable_value_or_nil("coding-system-for-write"),
-        operation_coding_system: Value::NIL,
-        default_process_coding_system: eval
-            .visible_variable_value_or_nil("default-process-coding-system"),
-        current_buffer_multibyte: eval
-            .buffers
-            .current_buffer()
-            .map(|buffer| buffer.get_multibyte())
-            .unwrap_or(true),
-    };
-    let network_buffer_multibyte =
-        match resolve_buffer_for_process_lookup_in_state(&eval.frames, &eval.buffers, &buffer) {
+    let multibyte = ProcessBufferMultibyteness {
+        process_buffer: match resolve_buffer_for_process_lookup_in_state(
+            &eval.frames,
+            &eval.buffers,
+            &buffer,
+        ) {
             Ok(Some(bid)) => eval
                 .buffers
                 .get(bid)
                 .map(|b| b.get_multibyte())
                 .unwrap_or(true),
-            // No buffer (or unresolved) -> default buffer is multibyte in GNU.
+            // No buffer (or unresolved) -> `buffer_defaults` is multibyte.
             _ => true,
-        };
+        },
+        current_buffer: eval
+            .buffers
+            .current_buffer()
+            .map(|buffer| buffer.get_multibyte())
+            .unwrap_or(true),
+    };
+    let mut coding_environment = NetworkProcessCodingEnvironment {
+        coding_system_for_read: eval.visible_variable_value_or_nil("coding-system-for-read"),
+        coding_system_for_write: eval.visible_variable_value_or_nil("coding-system-for-write"),
+        operation_coding_system: Value::NIL,
+        default_process_coding_system: eval
+            .visible_variable_value_or_nil("default-process-coding-system"),
+        short_circuit: ConnectionProcessUnibyteShortCircuit::network(multibyte),
+    };
 
     let explicit_address = if server {
         local_address_value
@@ -11994,6 +12088,11 @@ pub(crate) fn builtin_make_network_process(
         remote_address_value
     };
     if !explicit_address.is_nil() {
+        // A `:local`/`:remote` address carries no HOST and SERVICE, so GNU's
+        // `NILP (host) || NILP (service)` guard leaves `coding_systems` nil and
+        // the alist is never reached (src/process.c:3325-3330).
+        let resolved_coding =
+            resolve_network_process_coding_systems(coding_val, coding_environment);
         return connect_network_process_at_explicit_address(
             eval,
             explicit_address,
@@ -12003,7 +12102,7 @@ pub(crate) fn builtin_make_network_process(
             filter_val,
             sentinel_val,
             log_val,
-            coding_val,
+            resolved_coding,
             buffer,
             plist_val,
             nowait,
@@ -12015,8 +12114,6 @@ pub(crate) fn builtin_make_network_process(
             socket_options,
             tls_parameters,
             tls_parameters_val,
-            default_process_coding,
-            network_buffer_multibyte,
         );
     }
 
@@ -12028,9 +12125,10 @@ pub(crate) fn builtin_make_network_process(
         return Err(signal_wrong_type_string(Value::NIL));
     }
     if coding_val.is_nil() {
-        default_process_coding.operation_coding_system =
+        coding_environment.operation_coding_system =
             find_network_operation_coding_system(eval, &name, buffer, host_value, service)?;
     }
+    let resolved_coding = resolve_network_process_coding_systems(coding_val, coding_environment);
 
     if family.is_local() {
         return connect_local_socket_process(
@@ -12043,7 +12141,7 @@ pub(crate) fn builtin_make_network_process(
             filter_val,
             sentinel_val,
             log_val,
-            coding_val,
+            resolved_coding,
             buffer,
             plist_val,
             nowait,
@@ -12054,8 +12152,6 @@ pub(crate) fn builtin_make_network_process(
             socket_type,
             socket_options,
             tls_parameters,
-            default_process_coding,
-            network_buffer_multibyte,
             remote_address_value,
         );
     }
@@ -12071,7 +12167,7 @@ pub(crate) fn builtin_make_network_process(
             filter_val,
             sentinel_val,
             log_val,
-            coding_val,
+            resolved_coding,
             buffer,
             plist_val,
             server,
@@ -12079,8 +12175,6 @@ pub(crate) fn builtin_make_network_process(
             stop,
             socket_type,
             socket_options,
-            default_process_coding,
-            network_buffer_multibyte,
         );
     }
 
@@ -12103,7 +12197,7 @@ pub(crate) fn builtin_make_network_process(
             filter_val,
             sentinel_val,
             log_val,
-            coding_val,
+            resolved_coding,
             buffer,
             plist_val,
             noquery,
@@ -12111,8 +12205,6 @@ pub(crate) fn builtin_make_network_process(
             server_backlog,
             socket_type,
             socket_options,
-            default_process_coding,
-            network_buffer_multibyte,
         );
     }
 
@@ -12137,24 +12229,12 @@ pub(crate) fn builtin_make_network_process(
             None
         };
 
-        let id = eval.processes.create_process_with_kind_lisp(
-            name,
-            buffer,
-            LispString::from_utf8("network"),
-            Vec::new(),
-            ProcessKind::Network,
-        );
+        let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
         eval.processes.sync_process_mark(&mut eval.buffers, id)?;
         if let Some(proc) = eval.processes.get_mut(id) {
             proc.status = process_status_connect_value();
             proc.childp = contact;
             proc.plist = plist_val;
-            set_network_process_coding(
-                proc,
-                coding_val,
-                default_process_coding,
-                network_buffer_multibyte,
-            );
             proc.thread = current_thread_handle(&eval.threads);
             if !filter_val.is_nil() {
                 proc.filter = filter_val;
@@ -12218,13 +12298,7 @@ pub(crate) fn builtin_make_network_process(
     let remote_addr = stream.peer_addr().ok();
     let local_addr = stream.local_addr().ok();
 
-    let id = eval.processes.create_process_with_kind_lisp(
-        name,
-        buffer,
-        LispString::from_utf8("network"),
-        Vec::new(),
-        ProcessKind::Network,
-    );
+    let id = create_network_process_record(eval, name, buffer, resolved_coding)?;
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
     if let Some(addr) = remote_addr {
         contact = process_contact_plist_put(
@@ -12245,12 +12319,6 @@ pub(crate) fn builtin_make_network_process(
         proc.status = process_status_run_value();
         proc.childp = contact;
         proc.plist = plist_val;
-        set_network_process_coding(
-            proc,
-            coding_val,
-            default_process_coding,
-            network_buffer_multibyte,
-        );
         proc.thread = current_thread_handle(&eval.threads);
         if !filter_val.is_nil() {
             proc.filter = filter_val;
@@ -12298,13 +12366,28 @@ pub(crate) fn builtin_make_pipe_process(
     args: Vec<Value>,
 ) -> EvalResult {
     eval.sync_process_read_config_from_visible_variables();
+    let coding_variables = read_connection_process_coding_variables(eval);
     builtin_make_pipe_process_impl(
         &mut eval.processes,
         &mut eval.buffers,
         &eval.threads,
         Some(&eval.coding_systems),
+        coding_variables,
         args,
     )
+}
+
+/// Capture the dynamic coding variables the way GNU reads them: at the moment
+/// the primitive runs, in the buffer that is current then.
+fn read_connection_process_coding_variables(
+    eval: &mut super::eval::Context,
+) -> ConnectionProcessCodingVariables {
+    ConnectionProcessCodingVariables {
+        coding_system_for_read: eval.visible_variable_value_or_nil("coding-system-for-read"),
+        coding_system_for_write: eval.visible_variable_value_or_nil("coding-system-for-write"),
+        default_process_coding_system: eval
+            .visible_variable_value_or_nil("default-process-coding-system"),
+    }
 }
 
 pub(crate) fn builtin_make_pipe_process_impl(
@@ -12312,6 +12395,7 @@ pub(crate) fn builtin_make_pipe_process_impl(
     buffers: &mut BufferManager,
     threads: &ThreadManager,
     coding_systems: Option<&super::coding::CodingSystemManager>,
+    coding_variables: ConnectionProcessCodingVariables,
     args: Vec<Value>,
 ) -> EvalResult {
     if args.is_empty() {
@@ -12384,9 +12468,16 @@ pub(crate) fn builtin_make_pipe_process_impl(
             Value::make_buffer(id)
         }
     };
-    if coding_present {
-        validate_process_coding_value(coding_systems, coding)?;
-    }
+    // GNU runs `Fmake_pipe_process`'s own chain here (src/process.c:2517-2570)
+    // and then validates the RESULT, not the `:coding` keyword, by handing it
+    // to `setup_process_coding_systems` -> `setup_coding_system`
+    // ("This may signal an error", :2573).  So a bad `coding-system-for-read`
+    // signals too -- measured under GNU 31.0.90.
+    let resolved_coding = resolve_pipe_process_coding_systems(
+        coding,
+        coding_variables.pipe(process_buffer_multibyteness(buffers, resolved_buffer)),
+    );
+    validate_resolved_process_coding_systems(coding_systems, resolved_coding)?;
     let plist = copy_process_plist(plist)?;
 
     let id = processes.create_process_with_kind_lisp(
@@ -12395,6 +12486,7 @@ pub(crate) fn builtin_make_pipe_process_impl(
         LispString::from_utf8("pipe"),
         Vec::new(),
         ProcessKind::Pipe,
+        resolved_coding,
     );
     processes.sync_process_mark(buffers, id)?;
     if let Some(proc) = processes.get_mut(id) {
@@ -12407,9 +12499,7 @@ pub(crate) fn builtin_make_pipe_process_impl(
         if !sentinel.is_nil() {
             proc.sentinel = sentinel;
         }
-        if coding_present {
-            set_explicit_process_coding(proc, coding);
-        }
+        proc.coding_explicitly_set = coding_present;
         apply_connection_process_flags(proc, noquery, stop);
     }
     Ok(Value::make_process(id))
@@ -12421,11 +12511,13 @@ pub(crate) fn builtin_make_serial_process(
     args: Vec<Value>,
 ) -> EvalResult {
     eval.sync_process_read_config_from_visible_variables();
+    let coding_variables = read_connection_process_coding_variables(eval);
     builtin_make_serial_process_impl(
         &mut eval.processes,
         &mut eval.buffers,
         &eval.threads,
         Some(&eval.coding_systems),
+        coding_variables,
         args,
     )
 }
@@ -12435,6 +12527,7 @@ pub(crate) fn builtin_make_serial_process_impl(
     buffers: &mut BufferManager,
     threads: &ThreadManager,
     coding_systems: Option<&super::coding::CodingSystemManager>,
+    coding_variables: ConnectionProcessCodingVariables,
     args: Vec<Value>,
 ) -> EvalResult {
     if args.is_empty() {
@@ -12518,9 +12611,10 @@ pub(crate) fn builtin_make_serial_process_impl(
     if speed.is_none() {
         return Err(signal("error", vec![Value::string(":speed not specified")]));
     }
-    if coding_present {
-        validate_process_coding_value(coding_systems, coding)?;
-    }
+    // GNU resolves and then validates through `setup_process_coding_systems`
+    // (src/process.c:3277), the same two steps `make-pipe-process` takes.
+    let resolved_coding = resolve_serial_process_coding_systems(coding, coding_variables.serial());
+    validate_resolved_process_coding_systems(coding_systems, resolved_coding)?;
     let plist = copy_process_plist(plist)?;
     let name = name.unwrap_or_else(|| port_name.clone().expect("port is present after validation"));
     let resolved_buffer = match buffer {
@@ -12540,6 +12634,7 @@ pub(crate) fn builtin_make_serial_process_impl(
         LispString::from_utf8("serial"),
         Vec::new(),
         ProcessKind::Serial,
+        resolved_coding,
     );
     processes.sync_process_mark(buffers, id)?;
     if let Some(proc) = processes.get_mut(id) {
@@ -12553,9 +12648,7 @@ pub(crate) fn builtin_make_serial_process_impl(
         if !sentinel.is_nil() {
             proc.sentinel = sentinel;
         }
-        if coding_present {
-            set_explicit_process_coding(proc, coding);
-        }
+        proc.coding_explicitly_set = coding_present;
         apply_connection_process_flags(proc, noquery, stop);
         if !process_contact_plist_get(proc.childp, ProcessKeyword::Speed.value()).is_nil() {
             proc.childp = configure_serial_contact(proc.childp, contact)?;
@@ -12742,13 +12835,14 @@ pub(crate) fn builtin_start_process(
         eval,
         subprocess_cwd.as_deref(),
     ));
-    let id = eval
-        .processes
-        .create_process_lisp_resolved(name, buffer, program, proc_args, executable);
-    if let Some(proc) = eval.processes.get_mut(id) {
-        proc.coding_decode = resolved_coding.decode;
-        proc.coding_encode = resolved_coding.encode;
-    }
+    let id = eval.processes.create_process_lisp_resolved(
+        name,
+        buffer,
+        program,
+        proc_args,
+        executable,
+        resolved_coding,
+    );
     eval.restore_specpdl_roots(roots);
     if let Some(cwd) = &subprocess_cwd
         && let Some(proc) = eval.processes.get_mut(id)
@@ -13766,6 +13860,11 @@ fn builtin_make_process_impl_with_environment(
             buffers,
             threads,
             coding_systems,
+            // GNU builds this pipe with `CALLN (Fmake_pipe_process, ...)`
+            // (src/process.c:1883), so the stderr pipe runs the PIPE chain --
+            // it is not handed `Fmake_process`'s answer.  Measured: a
+            // `coding-system-for-read` binding decodes the child's stderr.
+            coding_environment.connection_variables(),
             vec![
                 ProcessKeyword::Name.value(),
                 Value::heap_string(name.concat(&LispString::from_unibyte(b" stderr".to_vec()))),
@@ -13782,6 +13881,7 @@ fn builtin_make_process_impl_with_environment(
         program,
         argv,
         executable,
+        resolved_coding,
     );
     processes.sync_process_mark(buffers, id)?;
 
