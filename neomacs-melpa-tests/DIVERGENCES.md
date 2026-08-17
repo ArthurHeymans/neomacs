@@ -7115,6 +7115,221 @@ case `the_invocation_contract_through_a_fake_gocode` is not batch-safe:
 batch state.  The audit passes on the fixed suite.  So when that audit says
 "not batch-safe" and both editors move together, suspect a path-length record
 before suspecting leaked state.
+
+## 128. Synchronous subprocess output was always decoded as UTF-8, so `coding-system-for-read` did nothing and Dired lost the file name of every entry listed after a non-ASCII one -- FIXED
+
+Surfaced by the `diredfl` suite (rank 449), whose whole subject is the face runs
+`diredfl`'s `font-lock-keywords` paint onto Dired lines.  The fixture contains a
+file named `café 界.md`, and every line *after* it lost its file name.
+
+```elisp
+(with-temp-buffer
+  (let ((coding-system-for-read 'no-conversion))
+    (call-process "printf" nil t nil "caf\\303\\251"))
+  (list (buffer-size) (char-after 4) (char-after 5)))
+;; GNU                => (5 4194243 4194217)
+;; Neomacs before fix => (4 233 nil)
+```
+
+4194243 and 4194217 are the eight-bit characters for the raw bytes `0xC3` and
+`0xA9`.  GNU leaves them alone because it was told not to convert; Neomacs
+decoded them as UTF-8 into one `é`, and the buffer came out a character short.
+`binary`, `raw-text`, `latin-1`, `utf-8-dos`, `default-process-coding-system`
+and `process-coding-system-alist` were all equally inert, and an undefined
+coding system was accepted silently instead of signalling:
+
+| form (abbreviated; each ran `printf` into a temp buffer) | GNU | Neomacs before fix |
+|---|---|---|
+| no binding at all | `(4 233 nil)` | `(4 233 nil)` |
+| `coding-system-for-read` = `no-conversion` / `binary` / `raw-text` | `(5 4194243 4194217)` | `(4 233 nil)` |
+| `coding-system-for-read` = `latin-1` | `(5 195 169)` | `(4 233 nil)` |
+| `default-process-coding-system` = `(binary . binary)` | `(5 4194243 4194217)` | `(4 233 nil)` |
+| `process-coding-system-alist` = `(("printf" binary . binary))` | `(5 4194243 4194217)` | `(4 233 nil)` |
+| `coding-system-for-read` = `utf-8-dos`, child writes `a\r\nb\r\n` (chars listed) | `(4 (97 10 98 10))` | `(6 (97 13 10 98 13 10))` |
+| `coding-system-for-read` = `no-such-coding-xyz` | `(coding-system-error no-such-coding-xyz)` | no error |
+| into a UNIBYTE destination buffer, `utf-8` | `(5 (99 97 102 195 169))` | `(4 (99 97 102 233))` |
+
+### Why this lands on Dired, of all places
+
+`insert-directory` (lisp/files.el:8398-8528) is built entirely on the guarantee
+this broke.  It runs `ls --dired`, whose trailing `//DIRED//` line gives the
+**byte** offsets of every file name in the output.  For `(+ beg OFFSET)` to be a
+buffer position, the bytes must enter the buffer one-for-one, so GNU reads the
+child with `coding-system-for-read` bound to `no-conversion` (:8406), marks the
+names with `dired-filename` from those offsets (`insert-directory-clean`,
+:8332-8336), and only THEN decodes the buffer chunk by chunk, re-applying
+`dired-filename` after each `decode-coding-region` (:8517-8528).
+
+Ignoring the binding makes the buffer shorter than the byte offsets by exactly
+the byte/character excess of each non-ASCII name -- three for `café 界.md`.
+Every later offset therefore points into the wrong text, and
+`insert-directory-clean`'s guard `(memq (char-after end) '(?\n ?\s ?/ ?* ?@ ?%
+?= ?|))` (:8334) then decides at random whether to skip the name entirely or
+stamp `dired-filename` onto a three-character-shifted slice.  Measured over the
+suite's own fixture (`(dired-move-to-filename)` at each line's beginning-of-line,
+as an offset from it):
+
+```
+;; line                                                    GNU  Neomacs before fix
+;;   -rw-r--r-- ... café 界.md                               44  44
+;;   -rw-r--r-- ... compiled.elc                             44  44
+;;   lrwxrwxrwx ... link-to-notes -> notes.org               44  47
+;;   -rwxr-xr-x ... script.sh*                               44  47
+;;   drwxr-xr-x ... subdir/                                  44   1
+```
+
+`dired-move-to-filename` (lisp/dired.el:3475-3501) tries the `dired-filename`
+property FIRST -- `(next-single-property-change (point) 'dired-filename nil
+eol)` (:3488) -- precisely because `ls --dired` is the authoritative answer and
+`directory-listing-before-filename-regexp` is the fallback for `ls` builds that
+lack it.  A shifted property is worse than no property: the fallback regexp
+would have found the right column.
+
+That is what the failing pins show.  `diredfl`'s directory rule is a
+match-anchored highlighter whose PRE-MATCH-FORM is `(dired-move-to-filename)`:
+
+```elisp
+(list (concat dired-re-maybe-mark dired-re-inode-size "\\(d\\)[^:]")
+      '(1 diredfl-dir-priv t)
+      '(".+" (dired-move-to-filename) nil (0 diredfl-dir-name t)))
+```
+
+`font-lock-fontify-anchored-keywords` (lisp/font-lock.el) searches `".+"` from
+wherever that form left point, to end of line.  With point misplaced at
+column 1, `".+"` matched the whole line and `(0 diredfl-dir-name t)` -- override
+`t` -- painted it, which also suppressed every later privilege keyword, since
+those use the default no-override:
+
+```
+;; subdir line, per-character face runs
+;; GNU                => (("  " nil) ("d" (diredfl-dir-priv)) ("r" (diredfl-read-priv))
+;;                        ("w" (diredfl-write-priv)) ... ("subdir/" (diredfl-dir-name)))
+;; Neomacs before fix => ((" " nil)
+;;                        (" drwxr-xr-x 2 exec users 4096 Jan 15  2026 subdir/" (diredfl-dir-name)))
+```
+
+So the visible symptom was in font-lock, and font-lock was innocent: the
+per-character runs, the anchored-highlighter limit, and the `keep`/`t`/`prepend`
+override composition all already matched GNU.  Only the position handed to the
+PRE-MATCH-FORM was wrong, and it was wrong because of a subprocess decoder.
+
+### What GNU does, and why the chain has five steps
+
+`Fcall_process` (src/callproc.c:729-763) resolves the decode coding system once,
+after the child's pipe is ready to read:
+
+```c
+      if (!NILP (Vcoding_system_for_read))          /* :732 */
+	val = Vcoding_system_for_read;
+      else
+	{
+	  if (EQ (coding_systems, Qt))                /* :736 */
+	    ...
+	      coding_systems = Ffind_operation_coding_system (nargs + 1, args2);
+	  if (CONSP (coding_systems))                 /* :746 */
+	    val = XCAR (coding_systems);
+	  else if (CONSP (Vdefault_process_coding_system))
+	    val = XCAR (Vdefault_process_coding_system);
+	  else
+	    val = Qnil;
+	}
+      Fcheck_coding_system (val);                   /* :753 */
+```
+
+The order is not decoration.  `coding-system-for-read` is the dynamic override a
+caller binds around one call -- `insert-directory` is exactly that caller, and so
+is `url-open-stream`, and so is every "give me the bytes" helper in the tree.
+`process-coding-system-alist` is the per-program rule a user configures.
+`default-process-coding-system` is the ambient default.  A resolver that skips
+the first level does not merely lose a feature; it breaks callers that *rely* on
+being able to turn conversion off for one call, which is why the damage showed
+up as mislaid text properties rather than as mojibake.
+
+`Fcheck_coding_system` at the end is the reason an unknown name signals
+`coding-system-error` rather than quietly falling back -- nil is a valid coding
+system there (`Fcoding_system_p` accepts it), a typo is not.
+
+### The type-level fix
+
+`write_output_target_in_state` in `neovm-core/src/emacs_core/callproc/mod.rs`
+took `(target, output_bytes, append)` and named its coding system inline:
+
+```rust
+let text = crate::encoding::decode_bytes_to_lisp_string(output, "utf-8-unix");
+```
+
+Nothing in the signature said a decision was owed, so the literal read as a
+default rather than as an omission, and every synchronous subprocess in the
+editor inherited it.
+
+The decision is now a value, `ProcessOutputDecoding`
+(`neovm-core/src/emacs_core/process.rs`), with the two shapes GNU's
+`setup_coding_system` reduces to: `Bytes` (a `binary` / `no-conversion` /
+`raw-text` coding, copied through as eight-bit characters) and `Coding(name)`.
+The nil case belongs to the second, not the first: `setup_coding_system`
+rewrites nil to `undecided` (src/coding.c:5675-5676), so the last resort
+DETECTS.  Measured -- `(let ((default-process-coding-system nil)) ...)` leaves
+GNU with four characters, not five -- which is the sort of thing "nil means no
+coding system, so copy the bytes" gets wrong by reasoning instead of running.
+It is a **required parameter** of `route_captured_output_in_state` and
+`write_output_target_in_state`, so subprocess output cannot reach a buffer
+without the call site first naming how it is decoded -- there is no signature
+left that lets a decoder be invented at the point of insertion.  The
+asynchronous reader (`decode_process_output_bytes`) now goes through the same
+type, so the sync and async paths can no longer drift apart.
+
+`resolve_call_process_output_decoding` implements that chain,
+including `Fcheck_coding_system`, and runs where GNU runs it: after the child is
+reaped, so a coding variable rebound while the child ran is observed exactly as
+GNU observes it.
+
+It also carries the fifth step, which is easy to read past in the C:
+
+```c
+      if (NILP (BVAR (current_buffer, enable_multibyte_characters))   /* :757 */
+	  && !NILP (val))
+	val = raw_text_coding_system (val);
+```
+
+`Fset_buffer (buffer)` ran at :722-723, so `current_buffer` there is the
+DESTINATION buffer.  Into a unibyte one, GNU does no character-code conversion
+at all -- but it keeps the resolved coding's end-of-line type, which is what
+`raw_text_coding_system` returns.  Both halves are measurable, and they
+disagree, so neither can be guessed:
+
+```
+;; child writes CR LF, destination buffer is unibyte
+;; coding-system-for-read utf-8-dos  => GNU (4 (97 10 98 10))
+;; coding-system-for-read utf-8-unix => GNU (6 (97 13 10 98 13 10))
+```
+
+`ProcessOutputDecoding::without_character_conversion` is that one function, and
+the resolver applies it exactly when the destination buffer is unibyte.
+
+One more thing had to be true for `no-conversion` to mean anything.
+`decode_bytes_emacs` (`neovm-core/src/encoding.rs`) routed every non-UTF-8
+coding system through `String::from_utf8_lossy`, which *decodes* well-formed
+UTF-8 -- so even a correctly resolved `no-conversion` would have converted.  The
+byte-preserving family now short-circuits to `str_to_multibyte` after EOL
+conversion, which is what GNU's `decode_coding_raw_text` does.
+
+### Found and NOT fixed here
+
+`make-process` has the same gap on its own precedence chain
+(src/process.c:1953-1976): with `:coding` absent it ignores
+`coding-system-for-read` too. Measured, printing a 12-byte UTF-8 name through
+`printf` into a multibyte process buffer, with `coding-system-for-read` bound to
+`binary`: GNU 34 characters, Neomacs 31.  An explicit `:coding 'binary` is
+honoured in both, so only the fallback chain is missing.  `make-pipe-process`
+(src/process.c:2526-2548) and `set_network_socket_coding_system`
+(src/process.c:3245-3261) each spell the chain out again with a
+buffer-multibyteness rule of their own -- and theirs is NOT `Fcall_process`'s:
+where `Fcall_process` downgrades to `raw_text_coding_system (val)`, those leave
+`val` nil outright, deliberately, so that "the existing Emacs Lisp libraries ...
+receive bare code including a sequence of CR LF" (:2535-2539).  So these are
+several separate resolvers that happen to rhyme, not one shared omission, and
+sharing one implementation between them would be the wrong move.  No MELPA pin
+depends on any of them yet; left for its own entry rather than folded in here.
 ## 129. The `rg` results-buffer pin recorded raw buffer positions, so it encoded where the checkout lives and failed for BOTH editors -- NOT A DIVERGENCE (harness defect), FIXED
 
 The `rg` MELPA suite arrived red at
