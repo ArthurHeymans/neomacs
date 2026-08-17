@@ -4704,6 +4704,107 @@ fn emit_gc_push_many(fb: &mut FunctionBuilder, rt: &RtCtx, vals: &[ClifValue]) {
     fb.ins().call(rt.refs.gc_push_many, &[addr, count]);
 }
 
+/// Bracketing state for CONDITIONAL residual rooting: `rooted == false`
+/// means the site emitted no rooting code at all (statically empty to-root
+/// set); otherwise inline tag tests decide at RUN TIME whether the
+/// save/push pair executes, recording the saved scratch depth (or the -1
+/// sentinel) in `rt.gc_saved_slot` for the post-call restore branch.
+/// Empirically most Unknown-typed residuals are fixnum accumulators or
+/// symbols, so the common path skips all three rooting shims.
+#[derive(Clone, Copy)]
+struct CondRoots {
+    rooted: bool,
+}
+
+impl CondRoots {
+    const NONE: Self = Self { rooted: false };
+}
+
+fn emit_cond_residual_roots_pre(
+    fb: &mut FunctionBuilder,
+    rt: &RtCtx,
+    values: &[ClifValue],
+) -> CondRoots {
+    let on = jit_lever1_on();
+    let mut to_root: Vec<ClifValue> = Vec::with_capacity(values.len());
+    for &v in values {
+        if on && is_nonheap_const(fb, v) {
+            continue; // provably non-heap immediate: nothing to root.
+        }
+        to_root.push(v);
+    }
+    if to_root.is_empty() {
+        return CondRoots::NONE;
+    }
+    if !on {
+        // A/B baseline: unconditional save + per-value push (pre-lever
+        // behavior), routed through the slot so the post helper is uniform.
+        let c = fb.ins().call(rt.refs.gc_save, &[]);
+        let sv = fb.inst_results(c)[0];
+        fb.ins().stack_store(types::I64, sv, rt.gc_saved_slot, 0);
+        for &v in &to_root {
+            fb.ins().call(rt.refs.gc_push, &[v]);
+        }
+        return CondRoots { rooted: true };
+    }
+    // `!(is_fixnum | is_symbol)` is the exact layout-anchored
+    // `is_heap_object` (see the lever-1 correctness note); the shim's own
+    // re-test keeps any over-approximation harmless.
+    let mut any_heap: Option<ClifValue> = None;
+    for &v in &to_root {
+        let fixbits = fb.ins().band_imm_u(v, FIXNUM_CHECK_MASK as i64);
+        let is_fix = fb
+            .ins()
+            .icmp_imm_u(IntCC::Equal, fixbits, FIXNUM_CHECK_VALUE as i64);
+        let symbits = fb.ins().band_imm_u(v, TAG_MASK as i64);
+        let is_sym = fb
+            .ins()
+            .icmp_imm_u(IntCC::Equal, symbits, TAG_SYMBOL as i64);
+        let nonheap = fb.ins().bor(is_fix, is_sym);
+        let heap = fb.ins().bxor_imm(nonheap, 1);
+        any_heap = Some(match any_heap {
+            Some(acc) => fb.ins().bor(acc, heap),
+            None => heap,
+        });
+    }
+    let any_heap = any_heap.expect("to_root nonempty");
+    let sentinel = fb.ins().iconst(types::I64, -1);
+    fb.ins()
+        .stack_store(types::I64, sentinel, rt.gc_saved_slot, 0);
+    let root_blk = fb.create_block();
+    let cont_blk = fb.create_block();
+    fb.ins().brif(any_heap, root_blk, &[], cont_blk, &[]);
+    fb.switch_to_block(root_blk);
+    fb.seal_block(root_blk);
+    let c = fb.ins().call(rt.refs.gc_save, &[]);
+    let sv = fb.inst_results(c)[0];
+    fb.ins().stack_store(types::I64, sv, rt.gc_saved_slot, 0);
+    emit_gc_push_many(fb, rt, &to_root);
+    fb.ins().jump(cont_blk, &[]);
+    fb.switch_to_block(cont_blk);
+    fb.seal_block(cont_blk);
+    CondRoots { rooted: true }
+}
+
+fn emit_cond_residual_roots_post(fb: &mut FunctionBuilder, rt: &RtCtx, cr: CondRoots) {
+    if !cr.rooted {
+        return;
+    }
+    let sv = fb
+        .ins()
+        .stack_load(rt.ptr_ty, types::I64, rt.gc_saved_slot, 0);
+    let took = fb.ins().icmp_imm_u(IntCC::NotEqual, sv, -1);
+    let rest_blk = fb.create_block();
+    let done_blk = fb.create_block();
+    fb.ins().brif(took, rest_blk, &[], done_blk, &[]);
+    fb.switch_to_block(rest_blk);
+    fb.seal_block(rest_blk);
+    fb.ins().call(rt.refs.gc_restore, &[sv]);
+    fb.ins().jump(done_blk, &[]);
+    fb.switch_to_block(done_blk);
+    fb.seal_block(done_blk);
+}
+
 /// Baseline residual-rooting (all ~16 `lower_op` sites): collect the to-root
 /// operand-stack slice — skipping compile-time non-heap constants
 /// ([`is_nonheap_const`]) when the opt is on — and batch-root it via
@@ -5194,6 +5295,8 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                 (max_residual.max(1) * 8) as u32,
                 3,
             ));
+            let gc_saved_slot =
+                fb.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
             Some(RtCtx {
                 refs,
                 vmctx_var,
@@ -5201,6 +5304,7 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                 call_args_slot,
                 call_result_slot,
                 residual_buf_slot,
+                gc_saved_slot,
             })
         } else {
             None
@@ -5484,27 +5588,69 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                         // pre-op stack below func+args). Root them (force-tagged) so a
                         // GC inside the callee can trace them.
                         let residual_len = inst.pre_stack.len().saturating_sub(n + 1);
-                        let saved = if residual_len == 0 {
-                            None
-                        } else {
-                            let c = fb.ins().call(rt.refs.gc_save, &[]);
-                            let s = fb.inst_results(c)[0];
-                            // Lever 2: gather the to-root residuals (force-tag ALL
-                            // so downstream `cval` state never moves; skip provably-
-                            // immediate MIR types when the opt is on) and batch-root
-                            // via one `neovm_jit_gc_push_many` call.
-                            let on = jit_lever1_on();
-                            let mut to_root: Vec<ClifValue> = Vec::with_capacity(residual_len);
-                            for k in 0..residual_len {
-                                let rv = inst.pre_stack[k];
-                                let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
-                                if on && m.value_type(rv).never_needs_gc_root() {
-                                    continue;
-                                }
-                                to_root.push(v);
+                        // Gather the to-root residuals (force-tag ALL so
+                        // downstream `cval` state never moves; skip provably-
+                        // immediate MIR types when the opt is on).
+                        let on = jit_lever1_on();
+                        let mut to_root: Vec<ClifValue> = Vec::with_capacity(residual_len);
+                        for k in 0..residual_len {
+                            let rv = inst.pre_stack[k];
+                            let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
+                            if on && m.value_type(rv).never_needs_gc_root() {
+                                continue;
                             }
+                            to_root.push(v);
+                        }
+                        // CONDITIONAL ROOTING: residuals here are typed
+                        // Unknown/Any but empirically resolve to immediates
+                        // (fixnum accumulators, symbols) on the hot paths, so
+                        // test the tags INLINE and branch around all three
+                        // rooting shims (save + push_many + restore) when
+                        // nothing is heap. `!(is_fixnum | is_symbol)` is the
+                        // exact layout-anchored `is_heap_object` (see the
+                        // lever-1 correctness note); the shim's own re-test
+                        // keeps any over-approximation harmless. The saved
+                        // depth crosses the callee via `gc_saved_slot`, with
+                        // -1 marking "nothing rooted".
+                        let rooted = if to_root.is_empty() {
+                            false
+                        } else {
+                            let mut any_heap: Option<ClifValue> = None;
+                            for &v in &to_root {
+                                let fixbits = fb.ins().band_imm_u(v, FIXNUM_CHECK_MASK as i64);
+                                let is_fix = fb.ins().icmp_imm_u(
+                                    IntCC::Equal,
+                                    fixbits,
+                                    FIXNUM_CHECK_VALUE as i64,
+                                );
+                                let symbits = fb.ins().band_imm_u(v, TAG_MASK as i64);
+                                let is_sym =
+                                    fb.ins()
+                                        .icmp_imm_u(IntCC::Equal, symbits, TAG_SYMBOL as i64);
+                                let nonheap = fb.ins().bor(is_fix, is_sym);
+                                let heap = fb.ins().bxor_imm(nonheap, 1);
+                                any_heap = Some(match any_heap {
+                                    Some(acc) => fb.ins().bor(acc, heap),
+                                    None => heap,
+                                });
+                            }
+                            let any_heap = any_heap.expect("to_root nonempty");
+                            let sentinel = fb.ins().iconst(types::I64, -1);
+                            fb.ins()
+                                .stack_store(types::I64, sentinel, rt.gc_saved_slot, 0);
+                            let root_blk = fb.create_block();
+                            let cont_blk = fb.create_block();
+                            fb.ins().brif(any_heap, root_blk, &[], cont_blk, &[]);
+                            fb.switch_to_block(root_blk);
+                            fb.seal_block(root_blk);
+                            let c = fb.ins().call(rt.refs.gc_save, &[]);
+                            let sv = fb.inst_results(c)[0];
+                            fb.ins().stack_store(types::I64, sv, rt.gc_saved_slot, 0);
                             emit_gc_push_many(&mut fb, rt, &to_root);
-                            Some(s)
+                            fb.ins().jump(cont_blk, &[]);
+                            fb.switch_to_block(cont_blk);
+                            fb.seal_block(cont_blk);
+                            true
                         };
                         let vmctx = fb.use_var(rt.vmctx_var);
                         let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
@@ -5519,8 +5665,21 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                             .ins()
                             .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr]);
                         let status = fb.inst_results(call)[0];
-                        if let Some(s) = saved {
-                            fb.ins().call(rt.refs.gc_restore, &[s]);
+                        if rooted {
+                            // Restore only when the site actually rooted.
+                            let sv =
+                                fb.ins()
+                                    .stack_load(rt.ptr_ty, types::I64, rt.gc_saved_slot, 0);
+                            let took = fb.ins().icmp_imm_u(IntCC::NotEqual, sv, -1);
+                            let rest_blk = fb.create_block();
+                            let done_blk = fb.create_block();
+                            fb.ins().brif(took, rest_blk, &[], done_blk, &[]);
+                            fb.switch_to_block(rest_blk);
+                            fb.seal_block(rest_blk);
+                            fb.ins().call(rt.refs.gc_restore, &[sv]);
+                            fb.ins().jump(done_blk, &[]);
+                            fb.switch_to_block(done_blk);
+                            fb.seal_block(done_blk);
                         }
                         // STATUS_OK -> continue; anything else is STATUS_SIGNAL.
                         let se = *signal_exit.get_or_insert_with(|| fb.create_block());
@@ -5556,35 +5715,25 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                         // Residual = operand-stack values live across the allocation
                         // (pre-op stack below car+cdr). Cons pops exactly 2.
                         let residual_len = inst.pre_stack.len().saturating_sub(2);
-                        let saved = if residual_len == 0 {
-                            None
-                        } else {
-                            let c = fb.ins().call(rt.refs.gc_save, &[]);
-                            let s = fb.inst_results(c)[0];
-                            // Lever 2: gather the to-root residuals (force-tag ALL
-                            // so downstream `cval` state never moves; skip provably-
-                            // immediate MIR types when the opt is on) and batch-root
-                            // via one `neovm_jit_gc_push_many` call.
-                            let on = jit_lever1_on();
-                            let mut to_root: Vec<ClifValue> = Vec::with_capacity(residual_len);
-                            for k in 0..residual_len {
-                                let rv = inst.pre_stack[k];
-                                let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
-                                if on && m.value_type(rv).never_needs_gc_root() {
-                                    continue;
-                                }
-                                to_root.push(v);
+                        // Gather the to-root residuals (force-tag ALL so
+                        // downstream `cval` state never moves; the helper
+                        // applies the compile-time skip and the RUNTIME tag
+                        // test around the save/push/restore trio).
+                        let mut vals: Vec<ClifValue> = Vec::with_capacity(residual_len);
+                        for k in 0..residual_len {
+                            let rv = inst.pre_stack[k];
+                            let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
+                            if m.value_type(rv).never_needs_gc_root() && jit_lever1_on() {
+                                continue;
                             }
-                            emit_gc_push_many(&mut fb, rt, &to_root);
-                            Some(s)
-                        };
+                            vals.push(v);
+                        }
+                        let saved = emit_cond_residual_roots_pre(&mut fb, rt, &vals);
                         // The shim self-roots car+cdr; infallible + context-free (no
                         // status, no vmctx) — no STATUS branch / signal exit.
                         let call = fb.ins().call(rt.refs.cons, &[car_v, cdr_v]);
                         let result = fb.inst_results(call)[0];
-                        if let Some(s) = saved {
-                            fb.ins().call(rt.refs.gc_restore, &[s]);
-                        }
+                        emit_cond_residual_roots_post(&mut fb, rt, saved);
                         cval[r] = Some(result);
                         cval_raw[r] = false;
                     }
@@ -5711,6 +5860,11 @@ struct RtCtx {
     /// Reused per residual-rooting site — `neovm_jit_gc_push_many` reads it
     /// synchronously, so the next site's stores may overwrite it.
     residual_buf_slot: StackSlot,
+    /// Conditional-rooting saved scratch depth for the current call site:
+    /// `-1` when the site's runtime tag tests found no heap residual (all
+    /// three rooting shims skipped), else the `gc_save` result the post-call
+    /// restore consumes. Written and read within one site — reusable.
+    gc_saved_slot: StackSlot,
 }
 
 /// Callable references to every runtime shim, declared into one function.
@@ -6314,12 +6468,9 @@ fn emit_pending_dispatches(
         fb.switch_to_block(pd.block);
         fb.seal_block(pd.block);
         let saved = if pd.stack.is_empty() {
-            None
+            CondRoots::NONE
         } else {
-            let c = fb.ins().call(rt.refs.gc_save, &[]);
-            let s = fb.inst_results(c)[0];
-            emit_residual_roots(fb, rt, &pd.stack);
-            Some(s)
+            emit_cond_residual_roots_pre(fb, rt, &pd.stack)
         };
         let vmctx = fb.use_var(rt.vmctx_var);
         let ours = fb.ins().iconst(types::I64, pd.handlers.len() as i64);
@@ -6328,9 +6479,7 @@ fn emit_pending_dispatches(
             .ins()
             .call(rt.refs.match_handler, &[vmctx, ours, out_addr]);
         let idx = fb.inst_results(call)[0];
-        if let Some(s) = saved {
-            fb.ins().call(rt.refs.gc_restore, &[s]);
-        }
+        emit_cond_residual_roots_post(fb, rt, saved);
         // Compare chain over the (small) static handler list: shim ordinal
         // m counts misses from the top, so m maps to handlers[len-1-m].
         let k = pd.handlers.len();
@@ -6807,21 +6956,16 @@ fn lower_simple_op(
             let sym = const_sym_id(constants, *idx)?;
             // Root live stack values: variable access may allocate.
             let saved = if stack.is_empty() {
-                None
+                CondRoots::NONE
             } else {
-                let c = fb.ins().call(rt.refs.gc_save, &[]);
-                let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt, stack.as_slice());
-                Some(s)
+                emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
             };
             let vmctx = fb.use_var(rt.vmctx_var);
             let sym_v = materialize_op_sym_id(fb, reloc_base, reloc_index, sym);
             let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
             let call = fb.ins().call(rt.refs.varref, &[vmctx, sym_v, out_addr]);
             let status = fb.inst_results(call)[0];
-            if let Some(s) = saved {
-                fb.ins().call(rt.refs.gc_restore, &[s]);
-            }
+            emit_cond_residual_roots_post(fb, rt, saved);
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
             let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
@@ -6840,20 +6984,15 @@ fn lower_simple_op(
             let sym = const_sym_id(constants, *idx)?;
             let val = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let saved = if stack.is_empty() {
-                None
+                CondRoots::NONE
             } else {
-                let c = fb.ins().call(rt.refs.gc_save, &[]);
-                let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt, stack.as_slice());
-                Some(s)
+                emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
             };
             let vmctx = fb.use_var(rt.vmctx_var);
             let sym_v = materialize_op_sym_id(fb, reloc_base, reloc_index, sym);
             let call = fb.ins().call(rt.refs.varset, &[vmctx, sym_v, val]);
             let status = fb.inst_results(call)[0];
-            if let Some(s) = saved {
-                fb.ins().call(rt.refs.gc_restore, &[s]);
-            }
+            emit_cond_residual_roots_post(fb, rt, saved);
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
             let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
@@ -6968,12 +7107,9 @@ fn lower_simple_op(
             // to the fallback block rather than run anything that could
             // allocate), and the fallback block roots for itself.
             let saved = if stack.is_empty() || reg_args.is_some() {
-                None
+                CondRoots::NONE
             } else {
-                let c = fb.ins().call(rt.refs.gc_save, &[]);
-                let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt, stack.as_slice());
-                Some(s)
+                emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
             };
             let vmctx = fb.use_var(rt.vmctx_var);
             let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
@@ -7070,9 +7206,7 @@ fn lower_simple_op(
                     .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr]),
             };
             let status = fb.inst_results(call)[0];
-            if let Some(s) = saved {
-                fb.ins().call(rt.refs.gc_restore, &[s]);
-            }
+            emit_cond_residual_roots_post(fb, rt, saved);
             // STATUS_OK -> continue with the result; STATUS_NEED_GENERIC (subr
             // spec sites only) -> the generic fallback block; anything else is
             // STATUS_SIGNAL -> propagate via the handler-aware signal target.
@@ -7102,21 +7236,16 @@ fn lower_simple_op(
                     }
                 }
                 let saved_gen = if stack.is_empty() {
-                    None
+                    CondRoots::NONE
                 } else {
-                    let c = fb.ins().call(rt.refs.gc_save, &[]);
-                    let s = fb.inst_results(c)[0];
-                    emit_residual_roots(fb, rt, stack.as_slice());
-                    Some(s)
+                    emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
                 };
                 let vmctx_gen = fb.use_var(rt.vmctx_var);
                 let call_gen = fb
                     .ins()
                     .call(shim, &[vmctx_gen, func_val, args_addr, n_val, out_addr]);
                 let status_gen = fb.inst_results(call_gen)[0];
-                if let Some(s) = saved_gen {
-                    fb.ins().call(rt.refs.gc_restore, &[s]);
-                }
+                emit_cond_residual_roots_post(fb, rt, saved_gen);
                 let se_gen = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
                 let ok_gen = fb.ins().icmp_imm_u(IntCC::Equal, status_gen, STATUS_OK);
                 fb.ins().brif(ok_gen, cont, &[], se_gen, &[]);
@@ -7170,18 +7299,13 @@ fn lower_simple_op(
             // (mirrors VarRef/VarSet). This is an exact-root GC: a live Value
             // unrooted across a GC-capable call is a use-after-free.
             let saved = if stack.is_empty() {
-                None
+                CondRoots::NONE
             } else {
-                let c = fb.ins().call(rt.refs.gc_save, &[]);
-                let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt, stack.as_slice());
-                Some(s)
+                emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
             };
             let call = fb.ins().call(rt.refs.varbind, &[vmctx, sym_v, val]);
             let status = fb.inst_results(call)[0];
-            if let Some(s) = saved {
-                fb.ins().call(rt.refs.gc_restore, &[s]);
-            }
+            emit_cond_residual_roots_post(fb, rt, saved);
             let cont = fb.create_block();
             let signal =
                 signal_target_for_site(fb, signal_exit, handlers, pending, stack.as_slice());
@@ -7199,17 +7323,12 @@ fn lower_simple_op(
             // The shim runs unwind-protect cleanups (arbitrary lisp -> GC); root
             // the whole live operand stack across the call.
             let saved = if stack.is_empty() {
-                None
+                CondRoots::NONE
             } else {
-                let c = fb.ins().call(rt.refs.gc_save, &[]);
-                let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt, stack.as_slice());
-                Some(s)
+                emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
             };
             fb.ins().call(rt.refs.unbind, &[vmctx, n_v]);
-            if let Some(s) = saved {
-                fb.ins().call(rt.refs.gc_restore, &[s]);
-            }
+            emit_cond_residual_roots_post(fb, rt, saved);
         }
         Op::SaveCurrentBuffer | Op::SaveExcursion | Op::SaveRestriction => {
             // Infallible specpdl records (the interpreter arms mirrored in the
@@ -7239,12 +7358,9 @@ fn lower_simple_op(
             let body = stack.pop().ok_or(CompileError::StackUnderflow)?;
             // Root remaining live values: the body runs arbitrary lisp.
             let saved = if stack.is_empty() {
-                None
+                CondRoots::NONE
             } else {
-                let c = fb.ins().call(rt.refs.gc_save, &[]);
-                let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt, stack.as_slice());
-                Some(s)
+                emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
             };
             let vmctx = fb.use_var(rt.vmctx_var);
             let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
@@ -7252,9 +7368,7 @@ fn lower_simple_op(
                 .ins()
                 .call(rt.refs.save_window_excursion, &[vmctx, body, out_addr]);
             let status = fb.inst_results(call)[0];
-            if let Some(s) = saved {
-                fb.ins().call(rt.refs.gc_restore, &[s]);
-            }
+            emit_cond_residual_roots_post(fb, rt, saved);
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
             let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
@@ -7316,12 +7430,9 @@ fn lower_simple_op(
             // contract, so its fast path needs NO residual rooting; its
             // NEED_GENERIC fallback block re-roots for the general call.
             let saved = if stack.is_empty() || cbsym_a_which.is_some() {
-                None
+                CondRoots::NONE
             } else {
-                let c = fb.ins().call(rt.refs.gc_save, &[]);
-                let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt, stack.as_slice());
-                Some(s)
+                emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
             };
             let vmctx = fb.use_var(rt.vmctx_var);
             // R2-E (must-nail #2): the named-builtin callee SymId is session-specific.
@@ -7378,9 +7489,7 @@ fn lower_simple_op(
                 )
             };
             let status = fb.inst_results(call)[0];
-            if let Some(s) = saved {
-                fb.ins().call(rt.refs.gc_restore, &[s]);
-            }
+            emit_cond_residual_roots_post(fb, rt, saved);
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
             let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
@@ -7402,12 +7511,9 @@ fn lower_simple_op(
                 fb.switch_to_block(gen_block);
                 fb.seal_block(gen_block);
                 let saved_gen = if stack.is_empty() {
-                    None
+                    CondRoots::NONE
                 } else {
-                    let c = fb.ins().call(rt.refs.gc_save, &[]);
-                    let s = fb.inst_results(c)[0];
-                    emit_residual_roots(fb, rt, stack.as_slice());
-                    Some(s)
+                    emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
                 };
                 let vmctx_gen = fb.use_var(rt.vmctx_var);
                 let variant_gen = fb.ins().iconst(types::I64, variant);
@@ -7416,9 +7522,7 @@ fn lower_simple_op(
                     &[vmctx_gen, variant_gen, sym_v, args_addr, n_val, out_addr],
                 );
                 let status_gen = fb.inst_results(call_gen)[0];
-                if let Some(s) = saved_gen {
-                    fb.ins().call(rt.refs.gc_restore, &[s]);
-                }
+                emit_cond_residual_roots_post(fb, rt, saved_gen);
                 let se_gen = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
                 let ok_gen = fb.ins().icmp_imm_u(IntCC::Equal, status_gen, STATUS_OK);
                 fb.ins().brif(ok_gen, cont, &[], se_gen, &[]);
@@ -7449,20 +7553,15 @@ fn lower_simple_op(
             // Root remaining live values (the allocation may GC; the shim
             // roots the operands themselves).
             let saved = if stack.is_empty() {
-                None
+                CondRoots::NONE
             } else {
-                let c = fb.ins().call(rt.refs.gc_save, &[]);
-                let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt, stack.as_slice());
-                Some(s)
+                emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
             };
             let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
             let n_val = fb.ins().iconst(types::I64, n as i64);
             let call = fb.ins().call(rt.refs.list, &[args_addr, n_val]);
             let result = fb.inst_results(call)[0];
-            if let Some(s) = saved {
-                fb.ins().call(rt.refs.gc_restore, &[s]);
-            }
+            emit_cond_residual_roots_post(fb, rt, saved);
             stack.push(result);
         }
         other => {
@@ -7482,12 +7581,9 @@ fn lower_simple_op(
                 }
                 stack.truncate(at);
                 let saved = if stack.is_empty() {
-                    None
+                    CondRoots::NONE
                 } else {
-                    let c = fb.ins().call(rt.refs.gc_save, &[]);
-                    let s = fb.inst_results(c)[0];
-                    emit_residual_roots(fb, rt, stack.as_slice());
-                    Some(s)
+                    emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
                 };
                 let idx_v = fb.ins().iconst(types::I64, idx as i64);
                 let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
@@ -7497,9 +7593,7 @@ fn lower_simple_op(
                     .ins()
                     .call(rt.refs.builtin_slice, &[idx_v, args_addr, n_val, out_addr]);
                 let status = fb.inst_results(call)[0];
-                if let Some(s) = saved {
-                    fb.ins().call(rt.refs.gc_restore, &[s]);
-                }
+                emit_cond_residual_roots_post(fb, rt, saved);
                 let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
                 let cont = fb.create_block();
                 let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
@@ -7530,12 +7624,9 @@ fn lower_simple_op(
             // Root remaining live values (the builtin may allocate/GC; the
             // shim roots the operands themselves).
             let saved = if stack.is_empty() {
-                None
+                CondRoots::NONE
             } else {
-                let c = fb.ins().call(rt.refs.gc_save, &[]);
-                let s = fb.inst_results(c)[0];
-                emit_residual_roots(fb, rt, stack.as_slice());
-                Some(s)
+                emit_cond_residual_roots_pre(fb, rt, stack.as_slice())
             };
             let vmctx = fb.use_var(rt.vmctx_var);
             let idx_v = fb.ins().iconst(types::I64, idx as i64);
@@ -7550,9 +7641,7 @@ fn lower_simple_op(
             call_args.push(out_addr);
             let call = fb.ins().call(shim, &call_args);
             let status = fb.inst_results(call)[0];
-            if let Some(s) = saved {
-                fb.ins().call(rt.refs.gc_restore, &[s]);
-            }
+            emit_cond_residual_roots_post(fb, rt, saved);
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
             let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
@@ -9071,19 +9160,14 @@ fn emit_backedge_jump(
     // in a protected extent (condition-case catching `quit` around a loop).
     let vals: Vec<ClifValue> = (0..target_depth).map(|k| fb.use_var(vars[k])).collect();
     let saved = if vals.is_empty() {
-        None
+        CondRoots::NONE
     } else {
-        let call = fb.ins().call(rt.refs.gc_save, &[]);
-        let s = fb.inst_results(call)[0];
-        emit_residual_roots(fb, rt, &vals);
-        Some(s)
+        emit_cond_residual_roots_pre(fb, rt, &vals)
     };
     let vmctx = fb.use_var(rt.vmctx_var);
     let call = fb.ins().call(rt.refs.backedge, &[vmctx]);
     let status = fb.inst_results(call)[0];
-    if let Some(s) = saved {
-        fb.ins().call(rt.refs.gc_restore, &[s]);
-    }
+    emit_cond_residual_roots_post(fb, rt, saved);
     let se = signal_target_for_site(fb, signal_exit, handlers, pending, &vals);
     let ok = fb.ins().icmp_imm_u(IntCC::Equal, status, STATUS_OK);
     fb.ins().brif(ok, target_block, &[], se, &[]);
@@ -9708,6 +9792,8 @@ fn build_leaf_fn<M: Module>(
                 (cfg.max_depth.max(1) * 8) as u32,
                 3,
             ));
+            let gc_saved_slot =
+                fb.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
             Some(RtCtx {
                 refs,
                 vmctx_var,
@@ -9715,6 +9801,7 @@ fn build_leaf_fn<M: Module>(
                 call_args_slot,
                 call_result_slot,
                 residual_buf_slot,
+                gc_saved_slot,
             })
         } else {
             None
