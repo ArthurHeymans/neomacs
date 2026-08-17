@@ -297,3 +297,25 @@ fn defvar_bool_survives_make_local_variable_like_gnu() {
         "OK t"
     );
 }
+
+/// Registering a `DEFVAR_BOOL` variable also puts its symbol on
+/// `byte-boolean-vars` -- GNU does it inside `defvar_bool` itself
+/// (`src/lread.c:5261`).  The byte optimizer reads that list before folding a
+/// `varset X; varref X` pair back into the stored value, because "what we put
+/// in might not be what we get out"
+/// (`lisp/emacs-lisp/byte-opt.el:2285-2300`).  Measured under GNU 31.0.90:
+/// `(memq 'inhibit-message byte-boolean-vars)` is non-nil, and
+/// `(special-variable-p 'byte-boolean-vars)` is t.
+#[test]
+fn defvar_bool_registration_lists_the_symbol_in_byte_boolean_vars_like_gnu() {
+    let mut eval = ev();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str("(and (memq 'inhibit-message byte-boolean-vars) t)")),
+        "OK t"
+    );
+    assert_eq!(
+        format_eval_result(&eval.eval_str("(special-variable-p 'byte-boolean-vars)")),
+        "OK t"
+    );
+}

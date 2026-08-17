@@ -2122,11 +2122,33 @@ impl Obarray {
     }
 
     /// Define a global Lisp variable with GNU `DEFVAR_BOOL` storage.
+    ///
+    /// Registration has a second effect in GNU, inside `defvar_bool` itself
+    /// (`src/lread.c:5254-5262`): the symbol is consed onto `byte-boolean-vars`.
+    /// The byte optimizer reads that list to decide it may NOT fold a
+    /// `varset X; varref X` pair back into the value it stored -- "what we put
+    /// in might not be what we get out" (`lisp/emacs-lisp/byte-opt.el:2285-2300`)
+    /// -- which is the coercion rule reaching the compiler.  Doing it here
+    /// rather than at the call site keeps it a property of the declaration.
     pub fn define_bool_variable(&mut self, name: &str, initial: bool) {
         let id = intern(name);
         self.mark_global_member(id);
         let fwd = crate::emacs_core::forward::alloc_boolfwd(initial);
         self.install_boolfwd(id, fwd);
+
+        let list_id = intern("byte-boolean-vars");
+        let current = self.find_symbol_value(list_id).unwrap_or(Value::NIL);
+        let symbol = Value::from_sym_id(id);
+        let mut tail = current;
+        while tail.is_cons() {
+            if super::value::eq_value(&tail.cons_car(), &symbol) {
+                return;
+            }
+            tail = tail.cons_cdr();
+        }
+        let updated = Value::cons(symbol, current);
+        self.set_symbol_value_id(list_id, updated);
+        self.make_special_id(list_id);
     }
 
     /// Install a GNU `Lisp_Intfwd`-equivalent descriptor on a symbol

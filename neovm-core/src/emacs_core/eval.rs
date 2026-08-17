@@ -4218,7 +4218,16 @@ impl Context {
         obarray.make_special("current-load-list");
         obarray.set_symbol_value("preloaded-file-list", Value::NIL);
         obarray.make_special("preloaded-file-list");
-        obarray.set_symbol_value("byte-boolean-vars", Value::NIL);
+        // `Obarray::define_bool_variable` conses onto this list, the way GNU's
+        // `defvar_bool` does (`src/lread.c:5261`), so only seed the empty list
+        // when nothing has registered yet -- otherwise bootstrap ordering would
+        // decide whether the registrations survive.
+        if obarray
+            .find_symbol_value(intern("byte-boolean-vars"))
+            .is_none()
+        {
+            obarray.set_symbol_value("byte-boolean-vars", Value::NIL);
+        }
         obarray.make_special("byte-boolean-vars");
         obarray.set_symbol_value(
             "bytecomp-version-regexp",
