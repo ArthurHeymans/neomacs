@@ -325,9 +325,7 @@ pub(crate) fn builtin_undo_boundary(
 /// case -- `undo-auto--undoably-changed-buffers' processing localizes it.
 /// Delegating also picks up alias resolution, the constant check and variable
 /// watchers, all of which GNU gets for free from the same call.
-pub(crate) fn set_last_boundary_cause_explicit(
-    ctx: &mut super::eval::Context,
-) -> Result<(), Flow> {
+pub(crate) fn set_last_boundary_cause_explicit(ctx: &mut super::eval::Context) -> Result<(), Flow> {
     super::builtins::symbols::builtin_set_2(
         ctx,
         Value::symbol("undo-auto--last-boundary-cause"),
