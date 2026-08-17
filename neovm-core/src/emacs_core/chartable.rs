@@ -71,7 +71,7 @@ pub fn is_char_table(v: &Value) -> bool {
         vec.len() >= CT_EXTRA_START
             && vec[0]
                 .as_symbol_id()
-                .is_some_and(|id| resolve_sym(id) == CHAR_TABLE_TAG)
+                .is_some_and(|id| id == char_table_tag_sym_id())
     } else {
         false
     }
@@ -153,7 +153,7 @@ pub(crate) fn char_table_length(v: &Value) -> Option<i64> {
     if vec.len() >= CT_EXTRA_START
         && vec[0]
             .as_symbol_id()
-            .is_some_and(|id| resolve_sym(id) == CHAR_TABLE_TAG)
+            .is_some_and(|id| id == char_table_tag_sym_id())
     {
         Some(CT_LOGICAL_LENGTH)
     } else {
@@ -571,7 +571,7 @@ fn is_sub_char_table_literal(v: &Value) -> bool {
     vec.len() >= 3
         && vec[0]
             .as_symbol_id()
-            .is_some_and(|id| resolve_sym(id) == SUB_CHAR_TABLE_TAG)
+            .is_some_and(|id| id == sub_char_table_tag_sym_id())
 }
 
 fn sub_char_table_depth_min_contents(v: &Value) -> Option<(usize, i64, Vec<Value>)> {
@@ -670,6 +670,20 @@ fn set_char_table_extra_slot(table: &Value, idx: usize, value: Value) {
 fn char_code_property_table_sym_id() -> SymId {
     static ID: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
     *ID.get_or_init(|| intern("char-code-property-table"))
+}
+
+/// Cached SymId of [`CHAR_TABLE_TAG`] — `is_char_table` runs per case-table
+/// probe on string/buffer search paths, and resolving + strcmp'ing the tag
+/// symbol's name there dominated the check.
+fn char_table_tag_sym_id() -> SymId {
+    static ID: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+    *ID.get_or_init(|| intern(CHAR_TABLE_TAG))
+}
+
+/// Cached SymId of [`SUB_CHAR_TABLE_TAG`], same rationale.
+fn sub_char_table_tag_sym_id() -> SymId {
+    static ID: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+    *ID.get_or_init(|| intern(SUB_CHAR_TABLE_TAG))
 }
 
 fn is_char_code_property_table(table: &Value) -> bool {

@@ -1488,6 +1488,18 @@ fn logxor_sym_id() -> SymId {
     *LOGXOR.get_or_init(|| intern("logxor"))
 }
 
+#[inline]
+fn fillarray_sym_id() -> SymId {
+    static FILLARRAY: OnceLock<SymId> = OnceLock::new();
+    *FILLARRAY.get_or_init(|| intern("fillarray"))
+}
+
+#[inline]
+fn aset_sym_id() -> SymId {
+    static ASET: OnceLock<SymId> = OnceLock::new();
+    *ASET.get_or_init(|| intern("aset"))
+}
+
 /// A tiny direct-mapped cache for symbol function cells proven to contain
 /// bytecode. It lives only for one [`Vm`] invocation: it is neither a Lisp/GC
 /// root nor persisted in pdump state.
@@ -5085,6 +5097,14 @@ impl<'a> Vm<'a> {
         name == "fillarray" || name == "aset"
     }
 
+    /// Same predicate as [`Self::mutates_first_arg_name`] as one SymId
+    /// compare — the per-call classification below must not resolve and
+    /// string-compare symbol names on the hot path.
+    #[inline(always)]
+    fn mutates_first_arg_sym(id: SymId) -> bool {
+        id == fillarray_sym_id() || id == aset_sym_id()
+    }
+
     #[inline]
     fn writeback_mutating_callable_names(
         &self,
@@ -5097,13 +5117,11 @@ impl<'a> Vm<'a> {
                 if func_val.as_subr_id().is_some() =>
             {
                 let id = func_val.as_subr_id().unwrap();
-                let name = resolve_sym(id);
-                Self::mutates_first_arg_name(name).then_some((name, None))
+                Self::mutates_first_arg_sym(id).then(|| (resolve_sym(id), None))
             }
             ValueKind::Symbol(id) => {
-                let name = resolve_sym(id);
-                if Self::mutates_first_arg_name(name) {
-                    return Some((name, None));
+                if Self::mutates_first_arg_sym(id) {
+                    return Some((resolve_sym(id), None));
                 }
                 let alias_target =
                     self.ctx
@@ -5111,17 +5129,15 @@ impl<'a> Vm<'a> {
                         .symbol_function_id(id)
                         .and_then(|bound| match bound.kind() {
                             ValueKind::Symbol(tid) => {
-                                let target = resolve_sym(tid);
-                                Self::mutates_first_arg_name(target).then_some(target)
+                                Self::mutates_first_arg_sym(tid).then(|| resolve_sym(tid))
                             }
                             ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => {
                                 let tid = bound.as_subr_id().unwrap();
-                                let target = resolve_sym(tid);
-                                Self::mutates_first_arg_name(target).then_some(target)
+                                Self::mutates_first_arg_sym(tid).then(|| resolve_sym(tid))
                             }
                             _ => None,
                         });
-                alias_target.map(|target| (name, Some(target)))
+                alias_target.map(|target| (resolve_sym(id), Some(target)))
             }
             _ => None,
         }
