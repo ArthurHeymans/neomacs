@@ -13,7 +13,9 @@ const RG_TEST_TIMEOUT: Duration = Duration::from_secs(240);
 
 /// Every workflow enters the documented way: `rg-run' a pattern over a real
 /// fixture tree, which starts the pinned `rg' executable through
-/// `compilation-start' and lands in an `rg-mode' results buffer.  A batch
+/// `compilation-start' and lands in an `rg-mode' results buffer -- always
+/// through `rg-test-run', whose docstring explains why a search that reaches
+/// a pin may not be PTY-connected (DIVERGENCES.md entry 133).  A batch
 /// editor runs asynchronous processes through `accept-process-output', so
 /// the workflows wait for the search process the same way an interactive
 /// session's sentinel would.  The suite pins the grouped results buffer
@@ -99,6 +101,57 @@ const RG_TEST_PRELUDE: &str = r####"
   (make-directory (file-name-directory file) t)
   (let ((coding-system-for-write 'utf-8-unix))
     (with-temp-file file (insert contents))))
+
+(defun rg-test-run (pattern root)
+  "Start a search for PATTERN under ROOT and return the results buffer.
+
+Every search this suite starts goes through here, because the results
+buffer's TEXT is only well-defined when the whole `rg' output reaches
+`rg-filter' as ONE chunk, and that is a property of the process's I/O
+topology rather than of the editor under test.
+
+`rg-filter' inserts a newline on EVERY invocation until the first match
+is counted:
+
+    (when (zerop rg-hit-count)
+      (newline))
+
+(rg-result.el:454-455 in the pinned 20260517.1310 build) sits OUTSIDE
+the `(when (< (point) end) ...)' guard at :458 that skips a chunk with
+no complete line, and `rg-hit-count' is bumped only where a match escape
+is rewritten, at :482.  One filter call before the first complete match
+line therefore yields the pinned blank line between the command line and
+the first `File:' heading; TWO yield a second blank line, after it.
+
+`compilation-start' spawns through `start-file-process-shell-command'
+(GNU lisp/progmodes/compile.el:2190), so with the default
+`process-connection-type' of t (GNU src/process.c:8923-8929, consulted
+by `is_pty_from_symbol' at src/process.c:1345-1354) the search runs on a
+PTY.  ripgrep line-buffers to a terminal: the fixture's 205 bytes leave
+the child as ELEVEN writes, so where the editor's reads fall between
+them is decided by kernel scheduling.  Measured under load, GNU Emacs
+31.0.90 splits before the first complete match line as readily as
+Neomacs does -- both editors then print the extra blank line -- so a
+pinned buffer string is not a parity signal while the search is
+PTY-connected.
+
+A pipe removes the choice instead of hiding it: ripgrep block-buffers to
+a non-terminal, emitting the fixture's output in a single 205-byte
+write, which is below PIPE_BUF and therefore reaches the reader whole.
+One write, one chunk, one filter call, in either editor.
+
+The `error' below is the point of the indirection: a search that is
+PTY-connected again cannot reach a pin, so the racy shape fails loudly
+here rather than intermittently in a snapshot."
+  (let ((process-connection-type nil))
+    (rg-run pattern "everything" root nil nil (list "--sort" "path" ".")))
+  (let* ((buffer (get-buffer (rg-buffer-name)))
+         (process (and buffer (get-buffer-process buffer)))
+         (tty (and process (process-tty-name process))))
+    (when tty
+      (error "rg-test-run: search is PTY-connected (%s); its output would \
+arrive in scheduling-dependent chunks" tty))
+    buffer))
 
 (defun rg-test-wait (buffer)
   "Wait until BUFFER's compilation process has exited and run its sentinel."

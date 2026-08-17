@@ -20,9 +20,7 @@ fn a_search_populates_the_results_buffer_and_navigates_files() -> ParityBatchCas
         (rg-test-write a "widget one\nplain\na widget two\n")
         (rg-test-write b "line\nwidget here\n")
         (rg-test-write c "nothing to see\n")
-        (let* ((buffer (progn
-                         (rg-run "widget" "everything" root nil nil (list "--sort" "path" "."))
-                         (get-buffer (rg-buffer-name))))
+        (let* ((buffer (rg-test-run "widget" root))
                (first-match-pos
                 (progn
                   (rg-test-wait buffer)
@@ -108,9 +106,7 @@ fn wgrep_editing_round_trips_through_the_disk() -> ParityBatchCase {
       (let* ((root (rg-test-root "wgrep"))
              (a (expand-file-name "a.txt" root)))
         (rg-test-write a "widget one\nplain\n")
-        (let* ((buffer (progn
-                         (rg-run "widget" "everything" root nil nil (list "--sort" "path" "."))
-                         (get-buffer (rg-buffer-name)))))
+        (let* ((buffer (rg-test-run "widget" root)))
           (rg-test-wait buffer)
           (with-current-buffer buffer
             (goto-char (point-min))
