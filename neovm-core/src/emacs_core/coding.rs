@@ -185,6 +185,153 @@ impl EolType {
             None
         }
     }
+
+    /// The eol type an ENCODE converts with.
+    ///
+    /// GNU spends the decision before any encoder runs, and it spends an
+    /// undecided one as `unix`: `consume_chars` (src/coding.c:7623-7625) and
+    /// `encode_coding_iso_2022` (src/coding.c:4384-4386) both open with
+    ///
+    /// ```c
+    ///   eol_type = inhibit_eol_conversion ? Qunix : CODING_ID_EOL_TYPE (coding->id);
+    ///   if (VECTORP (eol_type))
+    ///     eol_type = Qunix;
+    /// ```
+    ///
+    /// so encoding never detects.  Only decoding does.
+    pub(crate) fn for_encode(self) -> ResolvedEol {
+        match self {
+            EolType::Dos => ResolvedEol::Dos,
+            EolType::Mac => ResolvedEol::Mac,
+            EolType::Unix | EolType::Undecided => ResolvedEol::Unix,
+        }
+    }
+
+    /// The eol type a DECODE converts with, given the text the decoder produced.
+    ///
+    /// GNU's `decode_eol` (src/coding.c:6760) never converts with a vector: its
+    /// first act is to resolve one by scanning the decoded text
+    /// (src/coding.c:6783-6806) and calling `adjust_coding_eol_type`.  An
+    /// undecided eol type therefore means DETECT, not "leave alone" -- the
+    /// distinction this whole type exists to keep visible.
+    pub(crate) fn for_decode(self, decoded: &[u8]) -> ResolvedEol {
+        match self {
+            EolType::Unix => ResolvedEol::Unix,
+            EolType::Dos => ResolvedEol::Dos,
+            EolType::Mac => ResolvedEol::Mac,
+            EolType::Undecided => detected_decoded_eol(decoded).unwrap_or(ResolvedEol::Unix),
+        }
+    }
+}
+
+/// The end-of-line type a conversion actually runs with.
+///
+/// GNU's `eol_type` slot may hold a VECTOR of the three subsidiaries, which is
+/// `EolType::Undecided` here; every conversion site in `coding.c` resolves that
+/// vector before it converts a single byte -- encoders by forcing `Qunix`
+/// (src/coding.c:7623), the decoder by detecting (src/coding.c:6785).  This type
+/// is what remains after the resolution, so an unresolved eol type cannot reach
+/// a byte transformation: there is no `Undecided` variant to pass.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ResolvedEol {
+    /// `Qunix`: `decode_eol` returns immediately (src/coding.c:6765).
+    Unix,
+    /// `Qdos`: CR LF collapses to LF (src/coding.c:6815-6847).
+    Dos,
+    /// `Qmac`: every CR becomes LF (src/coding.c:6809-6813).
+    Mac,
+}
+
+impl ResolvedEol {
+    /// The name suffix of the subsidiary `adjust_coding_eol_type` selects
+    /// (src/coding.c:6480-6493, `AREF (eol_type, 0/1/2)`).
+    pub(crate) fn suffix(self) -> &'static str {
+        match self {
+            ResolvedEol::Unix => "-unix",
+            ResolvedEol::Dos => "-dos",
+            ResolvedEol::Mac => "-mac",
+        }
+    }
+}
+
+/// GNU's `EOL_SEEN_*` bitmask (src/coding.c:1099-1102) reduced to the four
+/// outcomes `decode_eol` can end its scan with.
+///
+/// `decode_eol` ORs a flag per line terminator over the WHOLE decoded text and
+/// then folds the mask down: CR LF together with a stray CR is a DOS text
+/// (src/coding.c:6798-6801), and any other mixture is unix
+/// (src/coding.c:6800-6804).  Representing the fold's *result* rather than the
+/// raw mask is what stops a caller from converting with a mixture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DecodeEolSeen {
+    Lf,
+    Crlf,
+    Cr,
+}
+
+impl DecodeEolSeen {
+    /// GNU `adjust_coding_eol_type` (src/coding.c:6471-6497): LF wins over
+    /// CR LF wins over CR.  The fold in `detect_decoded_eol` has already made
+    /// the outcome a single flag, so the priority is a total function here.
+    fn adjust(self) -> ResolvedEol {
+        match self {
+            DecodeEolSeen::Lf => ResolvedEol::Unix,
+            DecodeEolSeen::Crlf => ResolvedEol::Dos,
+            DecodeEolSeen::Cr => ResolvedEol::Mac,
+        }
+    }
+}
+
+/// Port of the VECTOR branch of GNU `decode_eol` (src/coding.c:6783-6806).
+///
+/// Note what this is NOT: `detect_eol` (src/coding.c:6373) stops after
+/// `MAX_EOL_CHECK_COUNT` (3) terminators and resolves a disagreement the moment
+/// it meets one.  That function serves `Fdetect_coding_region`
+/// (src/coding.c:8944) and answers a different question -- measured under GNU
+/// 31.0.90, `(detect-coding-string "a\r\nb\r\nc\r\nd\r\ne\nf")` is
+/// `(undecided-dos)` while `(decode-coding-string "a\r\nb\r\nc\r\nd\r\ne\nf"
+/// 'undecided)` leaves every CR in place, because the decoder saw the fifth,
+/// bare LF and called the text mixed.  Returns `None` for GNU's
+/// `EOL_SEEN_NONE`, which leaves the coding system's eol type undecided -- the
+/// case where `decode_eol` skips `adjust_coding_eol_type` altogether
+/// (src/coding.c:6805) and the coding system's reported NAME keeps no suffix.
+pub(crate) fn detected_decoded_eol(bytes: &[u8]) -> Option<ResolvedEol> {
+    detect_decoded_eol_seen(bytes).map(DecodeEolSeen::adjust)
+}
+
+fn detect_decoded_eol_seen(bytes: &[u8]) -> Option<DecodeEolSeen> {
+    const SEEN_LF: u8 = 1;
+    const SEEN_CR: u8 = 2;
+    const SEEN_CRLF: u8 = 4;
+    let mut eol_seen = 0u8;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\n' => eol_seen |= SEEN_LF,
+            b'\r' => {
+                if bytes.get(i + 1) == Some(&b'\n') {
+                    eol_seen |= SEEN_CRLF;
+                    i += 1;
+                } else {
+                    eol_seen |= SEEN_CR;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    // "Handle DOS-style EOLs in a file with stray ^M characters."
+    if eol_seen & SEEN_CRLF != 0 && eol_seen & SEEN_CR != 0 && eol_seen & SEEN_LF == 0 {
+        return Some(DecodeEolSeen::Crlf);
+    }
+    match eol_seen {
+        0 => None,
+        SEEN_LF => Some(DecodeEolSeen::Lf),
+        SEEN_CRLF => Some(DecodeEolSeen::Crlf),
+        SEEN_CR => Some(DecodeEolSeen::Cr),
+        // Any other mixture: GNU falls back to EOL_SEEN_LF.
+        _ => Some(DecodeEolSeen::Lf),
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
@@ -1666,7 +1813,17 @@ fn compute_coding_ascii_compat(info: &CodingSystemInfo) -> bool {
         ),
         "emacs-mule" | "raw-text" => true,
         "shift-jis" | "big5" => first_ascii(),
-        _ => info.ascii_compatible_p, // ccl, undecided
+        // `undecided` is defined in C with `:ascii-compatible-p t`
+        // (src/coding.c `syms_of_coding`), which is what
+        // `coding-system-plist` already reports for it here.  Its attribute has
+        // to agree, because `code_convert_string`'s identity fast path tests
+        // `CODING_ATTR_ASCII_COMPAT` (src/coding.c:9610) and an `undecided`
+        // decode of pure ASCII must take it.  `prefer-utf-8` shares the
+        // `undecided` coding TYPE but is defined in mule-conf.el WITHOUT the
+        // attribute -- measured, GNU 31.0.90 answers t for `undecided` and nil
+        // for `prefer-utf-8` -- so this is keyed on the name, not the type.
+        "undecided" if strip_eol_suffix(resolve_sym(info.name)) == "undecided" => true,
+        _ => info.ascii_compatible_p, // ccl, prefer-utf-8
     }
 }
 

@@ -3946,10 +3946,26 @@ fn decode_insert_file_contents_defaults_to_gnu_ascii_undecided_codings() {
             .expect("decode GNU-compatible mixed CR and CRLF text");
     assert_eq!(stray_cr_in_dos.coding, "undecided-dos");
 
-    let only_first_three_eols_are_evidence =
+    // No bounded evidence window: `decode_eol` (src/coding.c:6785-6806) ORs a
+    // flag per line terminator over the WHOLE decoded text, so a fourth, bare
+    // LF after three CR LFs makes the text MIXED and selects unix.  The three-
+    // terminator limit belongs to `detect_eol` (src/coding.c:6373), which
+    // serves `detect-coding-string` and never runs on this path.  Re-derived by
+    // running the case under GNU Emacs 31.0.90: a file holding
+    // `a\r\nb\r\nc\r\nd\n` reads back with every CR intact and
+    // `last-coding-system-used' `undecided-unix'; the previous `undecided-dos'
+    // pin recorded Neomacs's own answer.
+    let a_fourth_bare_lf_makes_the_text_mixed =
         super::decode_insert_file_contents(&mut eval, b"a\r\nb\r\nc\r\nd\n", true, None)
-            .expect("decode using GNU's bounded EOL evidence window");
-    assert_eq!(only_first_three_eols_are_evidence.coding, "undecided-dos");
+            .expect("decode text whose line endings disagree");
+    assert_eq!(
+        a_fourth_bare_lf_makes_the_text_mixed.text().as_utf8_str(),
+        Some("a\r\nb\r\nc\r\nd\n")
+    );
+    assert_eq!(
+        a_fourth_bare_lf_makes_the_text_mixed.coding,
+        "undecided-unix"
+    );
 }
 
 #[test]
@@ -4082,7 +4098,18 @@ fn decode_insert_file_contents_accepts_chinese_gb2312_coding() {
     .expect("decode GB2312 file bytes");
 
     assert_eq!(decoded.text().as_utf8_str(), Some("一\r\n"));
-    assert_eq!(decoded.coding, "chinese-iso-8bit-unix");
+    // `coding` here is `last-coding-system-used', and GNU reports the ALIAS the
+    // caller named when its end-of-line type is already concrete:
+    // `Fdefine_coding_system_alias` puts the alias in the coding-system hash
+    // table as a KEY of its own (src/coding.c), so `CODING_ID_NAME (coding.id)`
+    // (src/coding.c:9497) is the alias, and `adjust_coding_eol_type` returns
+    // "Already adjusted" without rewriting the id (src/coding.c:6477-6479).
+    // Re-derived by running the case under GNU Emacs 31.0.90:
+    // `last-coding-system-used' is `cn-gb-2312-unix' while
+    // `buffer-file-coding-system' -- which Lisp canonicalises separately -- is
+    // `chinese-iso-8bit-unix'.  The bare `cn-gb-2312' spelling, whose eol type
+    // IS undecided, does report the canonical `chinese-iso-8bit-dos'.
+    assert_eq!(decoded.coding, "cn-gb-2312-unix");
 }
 
 #[test]
