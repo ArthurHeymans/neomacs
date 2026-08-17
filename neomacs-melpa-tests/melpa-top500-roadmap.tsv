@@ -444,7 +444,7 @@ rank	package	downloads	status
 443	git-gutter-fringe+	198460	covered
 444	rg	198150	covered
 445	smart-mode-line	197854	covered
-446	importmagic	196625	todo
+446	importmagic	196625	covered
 447	rjsx-mode	194993	todo
 448	dired-hacks-utils	194917	todo
 449	diredfl	194179	covered
