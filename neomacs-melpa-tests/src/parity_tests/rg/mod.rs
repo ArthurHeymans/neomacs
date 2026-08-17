@@ -124,6 +124,23 @@ agree on them modulo the second the search ran)."
            " at [A-Z][a-z][a-z] [A-Z][a-z][a-z] [0-9]+ [0-9:]+" " at [TIME]" masked))
     masked))
 
+(defun rg-test-offset (position)
+  "POSITION as an offset from the end of the results header line.
+
+`compilation-start' opens the results buffer with a mode-setter line
+that spells out the absolute `default-directory' (GNU
+lisp/progmodes/compile.el:2115-2121), and the sandbox that directory
+lives in is created below the workspace root, so its length depends on
+where this checkout sits on disk.  A raw buffer position from an
+`rg-mode' buffer therefore carries the length of the checkout path and
+cannot be pinned: the same editor answers a different number from a
+worktree than from the main checkout.  Offsets from the end of that one
+line are free of it, so every position this suite reports goes through
+here."
+  (- position (save-excursion
+                (goto-char (point-min))
+                (line-end-position))))
+
 (defun rg-test-reset ()
   "Kill result buffers and remove fixture roots."
   (dolist (buffer (buffer-list))

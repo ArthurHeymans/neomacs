@@ -57,7 +57,7 @@ fn a_search_populates_the_results_buffer_and_navigates_files() -> ParityBatchCas
                                    faces)
                              (forward-char))
                            (nreverse faces))
-                         :point (point)
+                         :point-offset (rg-test-offset (point))
                          :file-tags
                          (let (tags)
                            (goto-char (point-min))
@@ -67,7 +67,7 @@ fn a_search_populates_the_results_buffer_and_navigates_files() -> ParityBatchCas
                              (forward-line))
                            (length tags)))))
               (rg-next-file 1)
-              (let ((next-file (list :point (point)
+              (let ((next-file (list :point-offset (rg-test-offset (point))
                                      :line (buffer-substring-no-properties
                                             (line-beginning-position)
                                             (line-end-position)))))
@@ -75,13 +75,13 @@ fn a_search_populates_the_results_buffer_and_navigates_files() -> ParityBatchCas
                 (list :initial initial
                       :next-file next-file
                       :prev-file
-                      (list :point (point)
+                      (list :point-offset (rg-test-offset (point))
                             :line (buffer-substring-no-properties
                                    (line-beginning-position)
                                    (line-end-position))))))))))
   (rg-test-reset))"####,
         expect![[
-            r#"OK (:initial (:mode rg-mode :grouped t :content "-*- mode: rg; default-directory: \"[ORACLE-SANDBOX]/rg-fixture-widgets/\" -*-\nrg started at [TIME]\n\n/etc/profiles/per-user/exec/bin/rg --color=always --colors=match:fg:red --colors=path:fg:magenta --colors=line:fg:green --colors=column:none -n --column -i --sort path . --heading --no-config -e widget\n\nFile: ./a.txt\n   1   1 widget one\n   3   3 a widget two\n\nFile: ./b.txt\n   2   1 widget here\n\nrg finished (3 matches found) at [TIME], duration [N] s\n" :command-hidden nil :first-match-faces (("w") ("i") ("d") ("g") ("e") ("t") ("s") ("/") ("\"") (" ") ("-") ("*") ("-")) :point 168 :file-tags 2) :next-file (:point 570 :line "") :prev-file (:point 478 :line "   2   1 widget here"))"#
+            r#"OK (:initial (:mode rg-mode :grouped t :content "-*- mode: rg; default-directory: \"[ORACLE-SANDBOX]/rg-fixture-widgets/\" -*-\nrg started at [TIME]\n\n/etc/profiles/per-user/exec/bin/rg --color=always --colors=match:fg:red --colors=path:fg:magenta --colors=line:fg:green --colors=column:none -n --column -i --sort path . --heading --no-config -e widget\n\nFile: ./a.txt\n   1   1 widget one\n   3   3 a widget two\n\nFile: ./b.txt\n   2   1 widget here\n\nrg finished (3 matches found) at [TIME], duration [N] s\n" :command-hidden nil :first-match-faces (("w") ("i") ("d") ("g") ("e") ("t") ("s") ("/") ("\"") (" ") ("-") ("*") ("-")) :point-offset 0 :file-tags 2) :next-file (:point-offset 402 :line "") :prev-file (:point-offset 310 :line "   2   1 widget here"))"#
         ]],
     )
 }
