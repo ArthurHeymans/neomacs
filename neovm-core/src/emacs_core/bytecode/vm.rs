@@ -1503,14 +1503,19 @@ const EMPTY_FUNCTION_EPOCH: u64 = u64::MAX;
 #[derive(Clone, Copy)]
 struct SymbolByteCodeCallCacheEntry {
     function_epoch: u64,
-    callee: ResolvedByteCodeCallee,
+    /// Raw classified callee. Populated ONLY through the typed
+    /// `insert_bytecode`/`insert_builtin` proofs, whose value kinds are
+    /// disjoint: a bytecode callee is always a ByteCode veclike, a builtin
+    /// callee is always a subr object or the static-table symbol fallback.
+    /// `get` maps the stored value back to its wrapper class by that kind.
+    callee: Value,
     symbol: SymId,
 }
 
 impl SymbolByteCodeCallCacheEntry {
     const EMPTY: Self = Self {
         function_epoch: EMPTY_FUNCTION_EPOCH,
-        callee: ResolvedByteCodeCallee(Value::NIL),
+        callee: Value::NIL,
         symbol: crate::emacs_core::intern::NIL_SYM_ID,
     };
 }
@@ -1588,13 +1593,38 @@ impl SymbolByteCodeCallCache {
     }
 
     #[inline(always)]
-    fn get(&self, symbol: SymId, function_epoch: u64) -> Option<ResolvedByteCodeCallee> {
+    fn get(&self, symbol: SymId, function_epoch: u64) -> Option<ResolvedStackCallTarget> {
         let entry = self.entries[Self::index(symbol)];
-        (entry.function_epoch == function_epoch && entry.symbol == symbol).then_some(entry.callee)
+        if entry.function_epoch != function_epoch || entry.symbol != symbol {
+            return None;
+        }
+        // Insert-side value kinds are disjoint (see the `callee` field doc),
+        // so one kind test recovers the wrapper class proven at insert.
+        Some(
+            if matches!(entry.callee.kind(), ValueKind::Veclike(VecLikeType::ByteCode)) {
+                ResolvedStackCallTarget::ByteCode {
+                    callee: ResolvedByteCodeCallee(entry.callee),
+                }
+            } else {
+                ResolvedStackCallTarget::Builtin {
+                    callee: ResolvedBuiltinCallee(entry.callee),
+                }
+            },
+        )
     }
 
     #[inline(always)]
-    fn insert(&mut self, symbol: SymId, function_epoch: u64, callee: ResolvedByteCodeCallee) {
+    fn insert_bytecode(&mut self, symbol: SymId, function_epoch: u64, callee: ResolvedByteCodeCallee) {
+        self.store(symbol, function_epoch, callee.0);
+    }
+
+    #[inline(always)]
+    fn insert_builtin(&mut self, symbol: SymId, function_epoch: u64, callee: ResolvedBuiltinCallee) {
+        self.store(symbol, function_epoch, callee.0);
+    }
+
+    #[inline(always)]
+    fn store(&mut self, symbol: SymId, function_epoch: u64, callee: Value) {
         self.entries[Self::index(symbol)] = SymbolByteCodeCallCacheEntry {
             function_epoch,
             callee,
@@ -6989,8 +7019,8 @@ impl<'a> Vm<'a> {
                     return ResolvedStackCallTarget::Generic;
                 }
                 let function_epoch = self.ctx.obarray.function_epoch();
-                if let Some(callee) = self.symbol_bytecode_call_cache.get(sym_id, function_epoch) {
-                    return ResolvedStackCallTarget::ByteCode { callee };
+                if let Some(target) = self.symbol_bytecode_call_cache.get(sym_id, function_epoch) {
+                    return target;
                 }
                 match self.ctx.obarray.symbol_function_id(sym_id) {
                     Some(value) => {
@@ -7000,26 +7030,40 @@ impl<'a> Vm<'a> {
                                 value.kind(),
                                 ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr)
                             ) {
-                                ResolvedBuiltinCallee::from_subr_value(value)
-                                    .map_or(ResolvedStackCallTarget::Generic, |callee| {
+                                match ResolvedBuiltinCallee::from_subr_value(value) {
+                                    Some(callee) => {
+                                        self.symbol_bytecode_call_cache.insert_builtin(
+                                            sym_id,
+                                            function_epoch,
+                                            callee,
+                                        );
                                         ResolvedStackCallTarget::Builtin { callee }
-                                    })
+                                    }
+                                    None => ResolvedStackCallTarget::Generic,
+                                }
                             } else {
                                 ResolvedStackCallTarget::Generic
                             };
                         };
                         self.symbol_bytecode_call_cache
-                            .insert(sym_id, function_epoch, callee);
+                            .insert_bytecode(sym_id, function_epoch, callee);
                         ResolvedStackCallTarget::ByteCode { callee }
                     }
                     // GNU bytecode.c:Bcall resolves a symbol's live function
                     // cell and calls SUBRP function cells directly. Use the
                     // same resolved subr object here instead of consulting the
                     // static table again on the hot path.
-                    None => ResolvedBuiltinCallee::from_static_symbol(sym_id)
-                        .map_or(ResolvedStackCallTarget::Generic, |callee| {
+                    None => match ResolvedBuiltinCallee::from_static_symbol(sym_id) {
+                        Some(callee) => {
+                            self.symbol_bytecode_call_cache.insert_builtin(
+                                sym_id,
+                                function_epoch,
+                                callee,
+                            );
                             ResolvedStackCallTarget::Builtin { callee }
-                        }),
+                        }
+                        None => ResolvedStackCallTarget::Generic,
+                    },
                 }
             }
             ValueKind::Veclike(VecLikeType::Subr) | ValueKind::Subr(_) => {
