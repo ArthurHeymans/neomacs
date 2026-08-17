@@ -7,7 +7,9 @@
 //! autocomplete invocation contract through a fake gocode script that
 //! records its argv and answers canned CSV (so the real arg assembly --
 //! buffer file name, the `c<offset>' cursor argument, the csv-with-package
-//! formatter, and the user's extra arguments -- is exercised end to end),
+//! formatter, and the user's extra arguments -- is exercised end to end;
+//! the cursor argument is recorded as the argument, never as an index into
+//! the recorded argv, which quotes the sandbox path -- DIVERGENCES.md 127),
 //! and the prefix contract at member-access dots.
 
 use std::time::Duration;

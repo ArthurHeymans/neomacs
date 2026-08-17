@@ -6978,6 +6978,136 @@ Verified: the 14-case probe in tmp/coord-colordist-probe.el is byte-identical
 between GNU 31.0.90 and Neomacs, and
 `parity_tests::smart_mode_line::smart_mode_line_package_batch` passes.
 
+## 127. A snapshot pinned `string-match-p`'s INDEX into text that quotes the sandbox path, so company-go's invocation contract counts the harness's path length -- NOT A DIVERGENCE (harness defect), FIXED
+
+`cargo nextest run -p neomacs-melpa-tests --release -E 'test(/company_go/)'`
+fails on one field of one case, and it fails **in both editors**, which the
+eleven-suites table above already names as the signature of a stale
+expectation (ace_link, fixed 5dd14bf22, was the same shape):
+
+```
+snapshot mismatches: the_invocation_contract_through_a_fake_gocode (GNU Emacs),
+                     the_invocation_contract_through_a_fake_gocode (Neomacs)
+Expect: ... :offset-arg-passed 162)
+Actual: ... :offset-arg-passed 196)     <- run in a .claude/worktrees/agent-… worktree
+Actual: ... :offset-arg-passed 154)     <- run in the main checkout
+```
+
+Same suite, same commit, same binaries; only the directory the harness runs in
+differs.  No harness code has changed since the pin was written (5920b0788),
+so nothing but the path moved.
+
+There is no third value.  The `16254` that appears in the same report's `Diff:`
+block, and reads like a wild Neomacs answer, is expect-test's **character-level**
+diff with the ANSI colours stripped: `162` against `154` shares only the `1`, so
+it renders `1` + `62` + `54`.  In this worktree the same block reads `1962`
+(`162` against `196`, sharing `1` and `6`).  Anyone chasing 16254 as a value is
+chasing a rendering.
+
+The field is the last one in the record:
+
+```elisp
+:offset-arg-passed
+(string-match-p "c[0-9]+" <the fake gocode's recorded argv>)
+```
+
+and the recorded argv is one argument per line, the fourth of which is the
+visited file inside the per-case sandbox.  Reduced to that concatenation, run
+under both editors:
+
+```elisp
+(let ((root "<checkout>/tmp/melpa"))
+  (dolist (sandbox '("company-go-package-batch-Ab3xYz"           ; a real sandbox name
+                     "xxxxxxxxcompany-go-package-batch-Ab3xYz"   ; 8 characters longer
+                     "company-go-package-batch-Ac1xYz"))         ; same length, "c1" in the suffix
+    (princ (format "%-40s %S\n"
+                   sandbox
+                   (string-match-p
+                    "c[0-9]+"
+                    (concat "-s\n-f=csv-with-package\nautocomplete\n"
+                            root "/" sandbox "/company-go-fixture/main.go\n"
+                            "c34\n"))))))
+;; GNU                => 154, 162, 121
+;; Neomacs before fix => 154, 162, 121
+```
+
+The two editors agree at every path length, and the value is
+`36 + (length <path to main.go>) + 1` -- 36 being
+`"-s\n-f=csv-with-package\nautocomplete\n"` -- and nothing else.  The pinned 162
+is simply a checkout whose sandbox path was eight characters longer than the
+main one; 154 is the main checkout today; 196 is a `.claude/worktrees/agent-…`
+worktree of the same commit.  Nobody changed any code between them.
+
+GNU's shape is why an index is the wrong thing to record here.
+`string-match-p` is `string-match` with the match data inhibited
+(lisp/subr.el:5941-5945), and `string-match` is "Return index of start of first
+match for REGEXP in STRING" (src/search.c:442-444).  `string_match_1` ends at
+`return make_fixnum (string_byte_to_char (string, val));` (src/search.c:437):
+an absolute character index into the *whole* subject, counted from 0.  It has to
+be absolute, because that is the number `substring`, `match-end` and a resumed
+`string-match` all consume -- GNU has no notion of a position relative to the
+interesting part of the subject, so every character in front of the match counts,
+including a filesystem path the caller happened to concatenate in.  Our oracle
+normaliser rewrites the sandbox root *inside strings*
+(neomacs-test-oracle/src/lib.rs:256-271, the pair at 267-268); a number
+computed from one of those strings passes through it untouched and carries the
+path length into the snapshot, where the `:argv` field beside it -- normalised to
+`[ORACLE-SANDBOX]/company-go-fixture/main.go` -- hides the very length the number
+is made of.
+
+Two independent ways this goes red with nobody touching a line of code:
+
+* **Move the checkout.** 154 in the main checkout, 196 in a worktree, 162
+  wherever the pin was written.
+* **Stay put.** `MelpaSandbox::new` names each sandbox with `tempfile`'s six
+  random alphanumerics (neomacs-melpa-test-support/src/lib.rs:121-131;
+  `fastrand::alphanumeric`, tempfile-3.27.0/src/util.rs:15).  A suffix that
+  happens to put a `c` next to a digit -- about one run in eighty -- moves the
+  first `c[0-9]+` match into the directory name: 121 instead of 154 above, from
+  `Ac1xYz` instead of `Ab3xYz`.  The pin was flaky in place as well as
+  unportable.
+
+Nothing here is byte-versus-char arithmetic, which is what it first looks like.
+`company-go--invoke-autocomplete` builds the cursor argument as
+`(concat "c" (int-to-string (- (point) 1)))` -- a plain character position;
+`position-bytes` appears nowhere in the package -- and both editors compute
+`c34` for the same buffer, which the record's own `:argv` field already pins.
+
+The fix records the cursor *argument* instead of where it was found:
+
+```elisp
+:offset-arg
+(cl-find-if (lambda (argument) (string-match-p "\\`c[0-9]+\\'" argument))
+            (split-string argv "\n" t))
+;; => "c34"
+```
+
+This is the only sense in which an elisp probe can make the bad state
+unrepresentable: the field no longer holds a number derived from harness text at
+all.  Every field of the record is now either a value the package computed
+(`"c34"`, the candidate, its meta and package) or a string the normaliser can
+rewrite (`:argv`).  It is also strictly stronger than what it replaced -- `162`
+never asserted that the offset was 34, only that some `c<digits>` existed
+somewhere in the file; `"c34"` pins the offset company-go actually computed, and
+would catch an off-by-one that the old field could not see.
+
+Worth knowing for the next one: **the existing batch-isolation audit already
+detects this whole class**, because it re-runs the case under a second sandbox
+whose label is a different length.  On the unfixed suite,
+`NEOMACS_MELPA_AUDIT_BATCH_ISOLATION=1` reports
+
+```
+case `the_invocation_contract_through_a_fake_gocode` is not batch-safe:
+  batched GNU Emacs:  … :offset-arg-passed 212)
+  isolated GNU Emacs: … :offset-arg-passed 217)
+```
+
+-- exactly the five-character difference between the labels
+`company-go-package-batch-isolation-audit` (40) and
+`the-invocation-contract-through-a-fake-gocode` (45), and nothing to do with
+batch state.  The audit passes on the fixed suite.  So when that audit says
+"not batch-safe" and both editors move together, suspect a path-length record
+before suspecting leaked state.
 ## 129. The `rg` results-buffer pin recorded raw buffer positions, so it encoded where the checkout lives and failed for BOTH editors -- NOT A DIVERGENCE (harness defect), FIXED
 
 The `rg` MELPA suite arrived red at
