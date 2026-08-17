@@ -7845,7 +7845,14 @@ integer forwarder's value, matching what v56 did for the Boolean one.
   `strings-consed', `x-color-cache-bucket-size' and
   `x-mouse-click-focus-ignore-time'.
 - The six allocation counters (`cons-cells-consed' and friends) are
-  forwarded and typed now, but still read 0 -- nothing increments them.
+  forwarded and typed now, but still read 0 -- nothing increments them, so
+  they are the only remaining VALUE differences in the 43-variable table
+  apart from `gcs-done' (1 here against GNU's 0 in the same `--batch' run).
+- `baud-rate' is seeded to 38400 in Rust; GNU computes it in `init_baud_rate'
+  (`src/sysdep.c') at terminal init and reports 0 under `--batch'.  38400 is
+  the value a real pty gets, so the seed is right for a session and wrong for
+  batch -- an invented default of the recurring kind, left alone here because
+  fixing it means porting `init_baud_rate', not changing a forward type.
 - `byte-boolean-vars' now gets an entry from `define_bool_variable', but that
   is one entry against GNU's 117: the other 116 GNU `DEFVAR_BOOL' variables
   are still ordinary obarray cells here, so the byte optimizer will keep
