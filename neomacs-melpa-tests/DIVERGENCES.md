@@ -6932,3 +6932,128 @@ that sentinel branch, so the name stays unresolved and
 `Fcolor_distance' signals.
 
 Status: UNFIXED.
+
+## 129. The `rg` results-buffer pin recorded raw buffer positions, so it encoded where the checkout lives and failed for BOTH editors -- NOT A DIVERGENCE (harness defect), FIXED
+
+The `rg` MELPA suite arrived red at
+`neomacs-melpa-tests/src/parity_tests/rg/workflows.rs:83`, in the case that
+runs a real `rg` subprocess with `--color=always` and pins the `rg-mode'
+results buffer.  ANSI-to-face translation is not involved.  Under nextest the
+batch reports the mismatch for BOTH editors and both report the SAME actual
+value:
+
+```
+snapshot mismatches: a_search_populates_the_results_buffer_and_navigates_files (GNU Emacs),
+                     a_search_populates_the_results_buffer_and_navigates_files (Neomacs)
+```
+
+Every field agreed with the pin -- `:content`, `:command-hidden`,
+`:first-match-faces`, `:file-tags`, and both navigation `:line` strings.  Three
+integers did not:
+
+```
+;; pinned                       :point 168   :next-file 570   :prev-file 478
+;; GNU Emacs, this worktree     :point 202   :next-file 604   :prev-file 512
+;; Neomacs,   this worktree     :point 202   :next-file 604   :prev-file 512
+```
+
+Those are absolute buffer positions in a buffer whose first line spells out an
+absolute directory.  `compilation-start' opens a results buffer with a
+mode-setter line built from `default-directory'
+(lisp/progmodes/compile.el:2115-2121):
+
+```elisp
+(when (zerop (buffer-size))
+  ;; Output a mode setter, for saving and later reloading this buffer.
+  (compilation-insert-annotation
+   "-*- mode: " name-of-mode
+   "; default-directory: "
+   (prin1-to-string (abbreviate-file-name default-directory))
+   " -*-\n"))
+```
+
+GNU writes it for a documented reason: the line is a file-local-variables
+cookie, so a saved `*compilation*' buffer reopens in the right mode with the
+right directory and its relative filenames still resolve.  It has to be the
+absolute directory for that to work: `abbreviate-file-name'
+(lisp/files.el:2298-2330) only applies `directory-abbrev-alist' and substitutes
+`~' for the home directory, and the sandbox fixture root is under neither.  The
+oracle sandbox is created below the workspace root
+(`MelpaSandbox::new', `neomacs-melpa-test-support/src/lib.rs:121-136`), so the
+line is as long as the checkout path is deep, and every position after it moves
+with it.
+
+The mechanism reproduces in ten lines with no package involved, and the two
+editors agree exactly:
+
+```sh
+FORM='(progn (require (quote compile))
+  (let ((default-directory (car (last command-line-args))))
+    (with-current-buffer (compilation-start "true" nil (lambda (_) "*probe*"))
+      (while (get-buffer-process (current-buffer)) (accept-process-output nil 0.05))
+      (prin1 (list :dir-length (length default-directory) :point-max (point-max))))))'
+for d in ./tmp/dir-a/ ./tmp/dir-aaaaaaaa/; do mkdir -p $d; EDITOR -Q --batch --eval "$FORM" $d; done
+```
+
+```elisp
+;; GNU               => (:dir-length 107 :point-max 259) (:dir-length 114 :point-max 266)
+;; Neomacs before fix => (:dir-length 107 :point-max 259) (:dir-length 114 :point-max 266)
+```
+
+Seven more characters of directory, seven more of buffer, in both editors.
+Measured the same way through the suite's own probe: a 104-character sandbox
+path yields `:point 164`, a 108-character one yields `:point 168`, and the
+142-character sandbox nextest builds from an agent worktree yields `:point
+202` -- in GNU Emacs and in Neomacs alike, `point = 60 + (length sandbox)`.
+
+So the pinned `168` was never a statement about either editor.  It records a
+56-character workspace root, which is neither the main checkout
+(`/home/exec/Projects/github.com/eval-exec/neomacs`, 48 characters, which would
+pin `160`) nor any worktree under it.  The case could not have passed where it
+was committed; it was generated somewhere else and the number travelled.  This
+is the integer form of the leak the harness already masks for strings -- the
+oracle rewrites the sandbox path to `[ORACLE-SANDBOX]` in `:content` -- and a
+mask cannot fix an integer, because by the time the position is a number the
+path it encodes is gone.
+
+The fix removes the raw position rather than masking it.  A new prelude helper
+takes every position the suite reports:
+
+```elisp
+(defun rg-test-offset (position)
+  (- position (save-excursion (goto-char (point-min)) (line-end-position))))
+```
+
+and the snapshot keys are renamed `:point-offset`, so the pin says what it
+holds.  Subtracting the end of the one line that carries the environment makes
+the checkout path unrepresentable in the recorded value: there is no longer a
+number in this suite's snapshot that any absolute path can reach.  The offsets
+are `272 / 402 / 310` and were verified identical across two sandbox path
+lengths and between the two editors.
+
+The rule for anyone adding a package case: a raw `(point)` out of a
+`compilation-mode' buffer -- rg, ag, grep, rgrep, quickrun, any of them -- is
+not a pinnable value.  Report it relative to something inside the buffer.
+
+A second defect surfaced while measuring the first, in the field that looked
+most interesting.  The case's docstring promises that "the first match on each
+row carries `rg-match-face'", and the probe located that match with
+`(search-forward "widget")` from `point-min'.  The first hit is inside the
+fixture directory name on the header line, so the pinned `:first-match-faces`
+walked the tail of that header -- `("w") ("i") ("d") ("g") ("e") ("t") ("s")
+("/") ("\"") (" ") ("-") ("*") ("-")` -- and reported `nil` for all thirteen
+characters.  It also read the wrong property: `rg-filter' writes the highlight
+as `(propertize TEXT 'face nil 'font-lock-face 'rg-match-face)'
+(`rg-result.el:475-478` in the pinned 20260517.1310 build), so `'face' is `nil'
+on a real match row too.  The field named after the match highlight could not
+have detected a lost highlight, a highlight on the wrong span, or a highlight
+written to the wrong property.  It now locates the row by its full match text
+-- as the `wgrep` case in the same file already did, for the same reason -- and
+records both properties, pinning `("w" nil rg-match-face)` for each of the six
+match characters and `("o" nil nil)` for the trailing text.  Measured
+identical in GNU Emacs 31.0.90 and Neomacs.
+
+Nothing in this entry is a Neomacs defect.  Every field of the record, before
+and after both changes, is byte-identical between the two editors.
+
+Status: FIXED.
