@@ -9128,3 +9128,369 @@ Verified: the six-case probe in tmp/coord-boundary-cause-probe.el is
 byte-identical between GNU 31.0.90 and Neomacs.
 
 Status: FIXED.
+
+## 138. Twenty-six variables existed only here, eight GNU declares did not exist at all, `baud-rate` held a terminal's answer in a session that has no terminal, and both variables GNU declares `DEFVAR_INT` *and* buffer-local kept only the buffer-local half -- FIXED
+
+The residual list entries 132 and 135 left behind.  Every item was reproduced
+before anything was touched, `-Q --batch`, against GNU 31.0.90 and against a
+`cargo xtask fresh-build --release` binary of `42fe3dd71` (ledger 134's merge,
+which contains 132 and 135).  All four items diverge.  Two of them are bigger
+than the residual said -- item 1 is 26 names, not four -- and one diverges on a
+different axis than the residual predicted.
+
+```elisp
+(list (mapcar #'boundp '(dos-hyper-key dos-keypad-mode dos-super-key
+                         imagemagick-render-type))
+      baud-rate
+      (mapcar #'boundp '(command-line-max-length large-hscroll-threshold
+                         long-line-optimizations-bol-search-limit
+                         long-line-optimizations-region-size max-redisplay-ticks
+                         strings-consed x-color-cache-bucket-size
+                         x-mouse-click-focus-ignore-time))
+      (condition-case e (set-default 'display-line-numbers-offset "x") (error (car e))))
+;; GNU                => ((nil nil nil nil) 0 (t t t t t t t t) wrong-type-argument)
+;; Neomacs before fix => ((t t t t)         38400 (nil nil nil nil nil nil nil nil) "x")
+```
+
+### Item 1: invented existence, and it was 26 names rather than four
+
+`lisp/cus-start.el` lists every variable GNU's C layer can define across all the
+platforms GNU builds for.  When one is not bound it consults a `native-p` test
+before complaining -- `dos-` needs `(eq system-type 'ms-dos)`, `ns-` needs
+`(featurep 'ns)`, `imagemagick-` needs `(fboundp 'imagemagick-types)`,
+`xwidget-` needs `(boundp 'xwidget-internal)` -- and only then signals
+"built-in variable `%S' not bound" (`lisp/cus-start.el:893-951`).  So a build
+without MS-DOS support does not need `dos-hyper-key` to exist.  It needs it to
+NOT exist.
+
+Neomacs had one `for name in [...]` loop in `eval.rs` seeding 34 such names to
+nil.  Probed name by name under GNU 31.0.90 on GNU/Linux: GNU binds **8** of
+them and leaves **26** unbound, so 26 of the 34 were invented existence and the
+four the residual named were a sample of them.
+
+Two of the 34 leave the loop without becoming table rows.
+`temporary-file-directory` is not a platform name at all -- `filelock.c:814`
+declares it for every build, with the same nil init -- so it keeps a seed of its
+own.  And `xwidget-webkit-disable-javascript` stays bound, because
+`neovm-core/src/emacs_core/xwidget.rs` declares it beside `xwidget-list` and
+`xwidget-view-list` as part of an xwidget layer Neomacs really has and this GNU
+build does not: that is a build-feature difference, the same kind as
+`(featurep 'x)`, not a stub.  The table is therefore 32 rows -- 7 GNU binds
+here, 25 it does not.
+
+```elisp
+(mapcar #'boundp '(dos-hyper-key ns-antialias-text w32-follow-system-dark-mode
+                   haiku-use-system-tooltips xwidget-internal
+                   imagemagick-render-type))
+;; GNU                => (nil nil nil nil nil nil)
+;; Neomacs before fix => (t   t   t   t   t   t)
+```
+
+The four the residual named are all `special-variable-p` => nil here, so nothing
+even marked them special; they were plain cells whose only job was to keep
+`cus-start.el` quiet, and `cus-start.el` was never going to complain.
+
+### Item 2: nothing in GNU's startup ever writes `baud-rate` under `--batch`
+
+The residual said "GNU computes it in `init_baud_rate` at terminal init and
+reports 0 under `--batch`".  Half right, and the other half is the whole
+mechanism.  `init_baud_rate` cannot return 0: with `noninteractive` it sets
+`emacs_ospeed = 0`, and `baud_convert[0]` is 0, and the next two lines are
+`if (baud_rate == 0) baud_rate = 1200;` (`src/sysdep.c:413-437`).  GNU reports 0
+under `--batch` because `init_baud_rate` is **never called** -- its only callers
+are inside `init_tty` (`src/term.c:4755`, `4923`), and `--batch` creates no tty
+terminal.
+
+`DEFVAR_INT ("baud-rate", baud_rate, ...)` (`src/dispnew.c:7488`) is one of
+twenty of GNU's 74 `DEFVAR_INT` declarations with no assignment beside it, and
+the only one of those twenty that no `init_*` supplies either -- `alloc.c`'s
+eleven get theirs from `init_alloc_once` or are counters that start at zero,
+`internal-when-entered-debugger` from `init_eval`, and so on.  `baud-rate`'s
+slot is `globals.f_baud_rate` (`src/globals.h:1018`), zero-initialized like any
+C global, and exactly three kinds of code ever write it: `init_baud_rate` from a
+tty terminal init, a window system's flat `baud_rate = 19200`
+(`src/xterm.c:32279`, `src/pgtkterm.c:7034`, and the same constant in the w32,
+Haiku and Android terminal inits), and Lisp.  Nothing in `syms_of_dispnew` does.
+
+38400 was therefore not a wrong constant, it was a right constant in the wrong
+place: it is what `cfgetospeed` reports for a modern pty, hoisted up into the
+declaration where a session with no terminal at all can see it.  The eighth
+instance of this project's recurring invented-default class -- entry 135's two,
+in the same `eval.rs` neighbourhood, are the ninth and tenth -- and the variant
+where the value is right for one session kind and the bug is that it is
+unconditional.
+
+### Item 3: `display-line-numbers-offset` -- the residual named the wrong axis
+
+The residual expected making it forwarded to "change its buffer-local nature as
+well as its type".  Measured, it does not: GNU declares it BOTH ways and in this
+order (`src/xdisp.c:38999-39005`),
+
+```c
+  DEFVAR_INT ("display-line-numbers-offset", display_line_numbers_offset, ...);
+  display_line_numbers_offset = 0;
+  DEFSYM (Qdisplay_line_numbers_offset, "display-line-numbers-offset");
+  Fmake_variable_buffer_local (Qdisplay_line_numbers_offset);
+```
+
+and `make_blv` copies the symbol's forwarder into the BLV
+(`src/data.c:2112-2140`), so the two are orthogonal.  Exactly two variables in
+GNU's tree are `DEFVAR_INT` plus `Fmake_variable_buffer_local` -- this one and
+`syntax-propertize--done` (`src/syntax.c:3773-3778`) -- against the six of the
+same shape entry 135 found among the `DEFVAR_BOOL`s.  Neomacs's
+`defvar_buffer_local` already produced the right locality, and the whole cost of
+the wrong kind was the type rule and the unbind refusal:
+
+```elisp
+(list (local-variable-if-set-p 'display-line-numbers-offset)
+      (condition-case e (let ((display-line-numbers-offset "x")) t) (error (car e)))
+      (with-temp-buffer
+        (list (condition-case e (setq-local display-line-numbers-offset "x") (error (car e)))
+              display-line-numbers-offset))
+      (condition-case e (makunbound 'display-line-numbers-offset) (error (car e))))
+;; GNU                => (t wrong-type-argument (wrong-type-argument 0) error)
+;; Neomacs before fix => (t "x"                 ("x" "x")               nil)
+```
+
+`local-variable-if-set-p` agreed before and after; `setq-default` and
+`default-value` agreed before and after.  The divergence was entirely item 2's
+neighbour -- a slot that accepted a string -- reached through a redirect entry
+132 had wired for the non-localized case only.
+
+Looking for the other member of the pair turned up the same symptom with a
+different cause, and it is the more instructive one.  `syntax-propertize--done`
+was ALREADY declared with `define_int_variable` and localized by a
+`make_symbol_localized` that copies the descriptor across (`syntax.rs:264-271`),
+so a fresh `Context` refused a string exactly like GNU.  A binary that had gone
+through a portable dump did not:
+
+```elisp
+(list (default-value 'syntax-propertize--done)
+      (condition-case e (set-default 'syntax-propertize--done "x") (error (car e))))
+;; GNU                => (-1 wrong-type-argument)
+;; Neomacs before fix => (-1 "x")           ; only after a pdump round trip
+```
+
+A `Localized` symbol serialized as its default plus `local_if_set` and nothing
+else, so the descriptor `make_blv` had copied in was gone on the way back.  That
+is the hole entry 135 patched for `DEFVAR_BOOL` by rebuilding from
+`GNU_BOOL_VARIABLES` on load -- a list that, being a list of Booleans, could not
+have covered this.
+
+### Item 4: eight `DEFVAR_INT` variables with no declaration here
+
+All eight bound under GNU, none bound here.  GNU's values, read out of the C and
+then confirmed by running GNU:
+
+| variable | GNU | GNU `file:line` |
+| --- | --- | --- |
+| `command-line-max-length` | `sysconf (_SC_ARG_MAX) / 4` (626432 here) | `callproc.c:2240` |
+| `large-hscroll-threshold` | 10000 | `buffer.c:6043` |
+| `long-line-optimizations-bol-search-limit` | 128 | `buffer.c:6025` |
+| `long-line-optimizations-region-size` | 500000 | `buffer.c:6007` |
+| `max-redisplay-ticks` | 0 | `xdisp.c:39295` |
+| `strings-consed` | a live allocation counter | `alloc.c:7448` |
+| `x-color-cache-bucket-size` | 128 | `xterm.c:32922` |
+| `x-mouse-click-focus-ignore-time` | 200 | `xterm.c:32704` |
+
+Two of the eight are not constants and neither is pinned as one.
+`command-line-max-length` is `sysconf (_SC_ARG_MAX) / 4` -- "divide it by 4 as a
+crude way to go bytes->characters" -- so it describes the machine, and it is
+computed here by asking the same `sysconf`, with GNU's own 4096 fallback.
+`strings-consed` moved between two consecutive GNU runs in this session (69765,
+then 70960), which is why the pin asserts its shape.
+
+### Why GNU's code is shaped this way
+
+The four items are one shape seen from four sides: in GNU a variable's existence,
+its type and its storage are all consequences of a C declaration, and there is
+nowhere else for any of them to be decided.  `DEFVAR_INT` binds the symbol to an
+`intmax_t *` (`src/lisp.h:3513-3518`), so the slot's type is the slot; the
+declaration sits inside a `syms_of_*` that a platform's `#ifdef` either compiles
+or does not, so existence is the build; and the initializer is a plain
+assignment on the next line, so "no initializer" means "0", not "whatever seems
+reasonable".  `Fmake_variable_buffer_local` on the line after does not replace
+any of that -- `make_blv` carries the forwarder into the BLV precisely so it
+does not.
+
+Neomacs has no `#ifdef` and no C globals, so each of those four facts had to be
+written down somewhere, and each was written down in the shape that loses it: a
+flat list of names to seed nil (existence), a `Value` cell (type), a
+plausible-looking literal (the initializer), and `defvar_buffer_local` (which
+answered the locality question and silently answered the type question too).
+
+### The type-level fix
+
+**Existence.** `neovm-core/src/emacs_core/cus_start_platform_vars.rs` is the 32
+platform names as a table whose every row carries `GnuBinding::{BoundHere,
+UnboundHere}`, measured under GNU rather than derived from the `#ifdef`s.  It is
+a required field, so a row cannot be added without answering "does GNU bind this
+in a build like this one?", and only `BoundHere` rows are registered.  The 25
+`UnboundHere` rows stay in the table on purpose: deleting them would delete the
+answer, and the next author would find `ns-antialias-text` in `cus-start.el` and
+seed it again.  This is entry 135's `ByteBooleanVars` applied to the other
+question a declaration answers.
+
+**`baud-rate`.** The bootstrap seed is 0 -- GNU's zero-initialized global -- and
+`init_baud_rate` is ported to where GNU calls it from.
+`tty_init::detect_baud_rate` is `src/sysdep.c:413-437` including the
+`baud_convert` table, the 9600 fallback for a speed code past its end and the
+1200 substitution for zero, and `neomacs-bin` calls it from the live-tty branch
+next to the `tty-erase-char` read, which is the same "while stdin is still
+cooked" window `init_sys_modes` uses.  The GUI branch does what
+`x_term_init`/`pgtk_term_init` do: assigns 19200.  `--batch` reaches neither, so
+it keeps the 0, which is what makes the batch answer right for GNU's reason
+rather than by choosing a different constant.
+
+**`display-line-numbers-offset`** is now `define_int_variable` followed by
+`make_buffer_local`, in GNU's order, and `define_int_variable` grew the
+already-localized branch `define_bool_variable` has had since entry 135, so
+declaring an already-localized symbol declares into the BLV instead of orphaning
+it.
+
+**The eight** are declared through entry 132's `define_int_variable` at the
+Neomacs counterpart of the `syms_of_*` each belongs to, not as plain cells.
+
+One thing entry 135 built is now gone rather than duplicated.  A `Localized`
+symbol could not carry its forwarder through a portable dump, so 135 rebuilt the
+Boolean ones from `GNU_BOOL_VARIABLES` on load; adding a buffer-local
+`DEFVAR_INT` would have meant a second hand-maintained name list beside it --
+the opt-in invariant each branch must remember, which is the failure mode entry
+132 named.  Instead `DumpSymbolVal::Localized` now records WHICH forwarder
+`make_blv` copied in, as `Option<DumpLocalizedForwarder>` whose two variants are
+exactly the forward types that own their value (the same distinction
+`LispFwd::clone_stateful` already makes), and `load_obarray` rebuilds it from the
+image.  `defvar_bool::reattach_localized_bool_forwarders` is deleted.  A
+localized forwarded symbol that came back from a dump without its descriptor is
+no longer a state a future declaration can reach, and `syntax-propertize--done`
+-- which nobody had noticed was in it -- came out fixed without being named
+anywhere.  The pdump format goes to v58.
+
+### Measured after
+
+The same probes, `-Q --batch`, against a `cargo xtask fresh-build --release`
+binary.  The sweep is over all 74 names `grep DEFVAR_INT src/*.c` finds, asking
+each one `boundp` and then whether `(set-default X "x")` is GNU's
+`wrong-type-argument`:
+
+```
+                                          GNU     before   after
+DEFVAR_INT names bound                    52      48       52
+  ... unbound (w32/Android/MS-DOS/pgtk/
+      ImageMagick/GLYPH_DEBUG)            22      26       22
+  ... bound but accepting a string        0       6        0
+`boundp' of the 25 platform names GNU
+   omits from cus-start.el                0       25       0
+`boundp' of the 7 platform names GNU
+   keeps                                  7       7        7
+baud-rate                                 0       38400    0
+display-line-numbers-offset local-if-set  t       t        t
+```
+
+The 74-name sweep is byte-identical between the two editors, `unbound` list
+included.  The wider probe -- `boundp`, `special-variable-p`, `default-value`,
+`local-variable-if-set-p` and a wrong-typed `set-default` over all four items
+plus the `cus-start.el` platform names -- differs on eight lines, all of them
+recorded under "found and not fixed" below: two values that describe the process
+rather than the editor, four `x-` defaults that were nil before this entry and
+still are, one missing `special` bit, and one build-feature difference.  Every
+line this entry set out to change agrees.
+
+The six that accepted a string before were `dos-hyper-key`, `dos-keypad-mode`,
+`dos-super-key` and `imagemagick-render-type` -- plain cells that GNU does not
+declare here at all -- plus the two buffer-local ones,
+`display-line-numbers-offset` and `syntax-propertize--done`.  Item 1 and item 3
+are the same six names seen from two directions.
+
+Blast radius, measured rather than assumed: nine variables changed storage or
+existence and 26 stopped existing, so the suites were the gate.
+`cargo nextest run -p neovm-oracle-tests`: **38778/38778 green**, which is the
+previous 38770 plus the eight pins added here
+(`neovm-oracle-tests/src/defvar_int_declarations.rs`) -- the platform names GNU
+omits, `baud-rate` in batch, both buffer-local `DEFVAR_INT`s, the eight new
+declarations' boundness and typing, their GNU values, the `overflow-error` /
+`wrong-type-argument` pair, and a sweep over all 74 `DEFVAR_INT` names asserting
+Neomacs binds exactly the 52 GNU binds.  **No pin moved.**
+`cargo nextest run -p neovm-core`: **9016/9016 green**, including four new
+`forward_test.rs` cases and the two table-shape tests in
+`cus_start_platform_vars.rs`.  One existing assertion changed rather than being
+deleted: `gnu_defvar_special_test.rs` pinned `baud-rate` at 38400 with the
+comment "init_baud_rate supplies 38400 on ptys", which is the third comment
+asserting parity that was itself the bug in a week.
+
+One trap worth recording, because it produced a red test that was right about
+the editors and wrong about the harness.  The first version of the
+`overflow-error` pin ended with `(setq large-hscroll-threshold
+most-positive-fixnum)`, and its expectation was taken by running GNU directly:
+2305843009213693951.  Neomacs answered 0.  Both editors are in fact identical
+there -- the oracle's own normalizer rewrites any fixnum past 10^12 to 0
+("large fixnums in error data are implementation artefacts",
+`neovm-oracle-tests/src/common.rs`), and the GNU value had been measured outside
+it.  "Take the expected value by running GNU" has to mean running it the way the
+harness will.  The pin uses 999999 now.
+
+### Corrections to earlier entries
+
+- Entry 132's residual "`display-line-numbers-offset` is `DEFVAR_INT` in GNU
+  (`xdisp.c`) but `defvar_buffer_local` here, so it was left out of the
+  conversion; making it forwarded would change its buffer-local nature as well
+  as its type" is wrong on the second half, corrected 2026-08-17: GNU declares
+  it `DEFVAR_INT` **and** `Fmake_variable_buffer_local`
+  (`src/xdisp.c:38999-39005`), the two are independent because `make_blv` copies
+  the forwarder into the BLV, and the measured buffer-local behaviour
+  (`local-variable-if-set-p`, `setq-default`, `default-value`, a per-buffer
+  integer binding) was identical before and after the conversion.
+- Entry 132's residual "GNU computes it in `init_baud_rate` (`src/sysdep.c`) at
+  terminal init and reports 0 under `--batch`" is corrected 2026-08-17:
+  `init_baud_rate` cannot report 0 -- its floor is 1200 (`src/sysdep.c:435-436`)
+  -- and GNU reports 0 under `--batch` because `init_tty` never runs, so nothing
+  ever writes the slot.  The fix is therefore two assignments at two terminal
+  inits plus a zero seed, not a port of the `noninteractive` arm.
+- Entry 132's residual "Neomacs binds four variables GNU leaves unbound on this
+  platform" is corrected 2026-08-17 to 26 of the 34 names in that one seed loop;
+  the four named were a sample of them.
+- Entry 135's "Registration runs FIRST among the bootstrap registrations ... so
+  a variable that gets localized later ... has to be forwarded before that
+  happens or the coercion is dropped on the floor" still holds, but the dump
+  half of it -- "`reattach_localized_bool_forwarders` rebuilds them from the
+  value the image did carry" -- is superseded 2026-08-17: the image now carries
+  the forwarder KIND per symbol and that function is deleted.
+
+### Found and NOT fixed here
+
+- Five of the seven platform names GNU DOES bind here are `special-variable-p`
+  => nil against GNU's `t`, and four of those five hold nil where GNU holds a
+  value: `x-bitmap-file-path` (GNU `("/usr/include/X11/bitmaps")`),
+  `x-gtk-use-system-tooltips` (`t`, and in GNU it is `term/x-win.el`'s
+  `defvaralias` onto the `DEFVAR_BOOL` `use-system-tooltips`),
+  `x-scroll-event-delta-factor` (`1.0`) and `x-auto-preserve-selections`
+  (`(CLIPBOARD PRIMARY)`); `vertical-centering-font-regexp` already has GNU's
+  regexp and only lacks the special bit.  That is the invented-default class
+  rather than the invented-existence class this entry closes, and each wants its
+  own `syms_of_*` counterpart rather than a seed -- which is what
+  `window-combination-limit` and `void-text-area-pointer` already have, and both
+  measure identical to GNU.
+- `command-line-max-length` is 1572864 here against GNU's 626432 on this
+  machine, and the declaration is not what differs.  glibc derives
+  `_SC_ARG_MAX` from `RLIMIT_STACK` -- `MAX (ARG_MAX, MIN (stack / 4, 6 MiB))`
+  -- so GNU's own answer is not a constant either: it is 626432 whether the
+  shell's `ulimit -s` is 8192 or `unlimited`, because Emacs sets its own stack
+  limit, and Neomacs sets a larger one and lands on the 6 MiB cap.  Two editors
+  with different stack policies, not two different declarations; the pin asserts
+  the shape for exactly that reason.
+- `xwidget-webkit-disable-javascript` is bound here and unbound under GNU,
+  because Neomacs ships an xwidget layer this GNU build was not compiled with.
+  Same class as `(featurep 'x)` being `nil` here and `t` under GNU on this
+  machine -- a build-feature difference, which also changes which branch
+  `cus-start.el`'s `native-p` takes for four names.  Neither is a question about
+  a variable's declaration.
+- `strings-consed` joins the six allocation counters entry 132 left reading 0:
+  the declaration is right, nothing increments it.
+- The 36 other-window-system `DEFVAR_BOOL`s stay out of entry 135's table, and
+  the 22 `DEFVAR_INT`s GNU leaves unbound here stay undeclared -- 21 belonging
+  to w32, Android, MS-DOS, pgtk or ImageMagick builds and `debug-end-pos` to
+  `GLYPH_DEBUG` -- for the same reason the 26 names above were removed.
+- `Lisp_Fwd_Obj` and `Lisp_Fwd_Kboard_Obj` remain unwired, unchanged from 132
+  and 135.
+
+Status: FIXED.
