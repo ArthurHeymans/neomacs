@@ -4410,6 +4410,20 @@ impl Buffer {
 // ---------------------------------------------------------------------------
 
 /// Owns every live buffer, tracks the current buffer, and hands out ids.
+
+/// The outcome of `BufferManager::add_undo_boundary`, mirroring the two paths
+/// through GNU's `Fundo_boundary' (src/undo.c:251-282).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UndoBoundaryOutcome {
+    /// The boundary was consed on and the editor-global saved point updated.
+    /// GNU also sets `undo-auto--last-boundary-cause' to `explicit' on this
+    /// path (:277); a caller that owns the obarray must do that.
+    Recorded,
+    /// `buffer-undo-list' is `t', so GNU returned at :258-259 and touched
+    /// nothing at all -- no boundary, no saved point, no cause.
+    UndoDisabled,
+}
+
 #[derive(Clone)]
 pub struct BufferManager {
     // FxHashMap (not default SipHash): `buffers` is looked up on the hot
@@ -5929,11 +5943,21 @@ impl BufferManager {
     /// buffers -- `lisp/` calls `(undo-boundary)` unconditionally in three
     /// dozen places, each in whatever buffer happens to be current, and a
     /// disabled buffer must not spend a point saved for one that records.
-    pub fn add_undo_boundary(&mut self, id: BufferId) -> Option<()> {
+    /// Which of `Fundo_boundary`'s two paths ran (GNU src/undo.c:251-282).
+    ///
+    /// GNU returns early for a buffer whose `buffer-undo-list' is `t'
+    /// (:258-259) -- before it sets `undo-auto--last-boundary-cause' (:277) and
+    /// before it saves the point/buffer pair (:278-279).  Naming the two
+    /// outcomes is what lets the callers set that variable on exactly the path
+    /// GNU sets it on: the boundary itself runs below the obarray and cannot
+    /// reach a Lisp symbol, so without this the caller would have to guess, and
+    /// the previous `Option<()>' gave it nothing to guess from -- the disabled
+    /// path and the recorded path both returned `Some(())'.
+    pub fn add_undo_boundary(&mut self, id: BufferId) -> Option<UndoBoundaryOutcome> {
         let buf = self.buffers.get_mut(&id)?;
         let mut ul = buf.get_undo_list();
         match undo::UndoRecording::of(&ul) {
-            undo::UndoRecording::Disabled => return Some(()),
+            undo::UndoRecording::Disabled => return Some(UndoBoundaryOutcome::UndoDisabled),
             undo::UndoRecording::Enabled => {}
         }
         undo::undo_list_boundary(&mut ul);
@@ -5946,7 +5970,7 @@ impl BufferManager {
         // (src/undo.c:278-279), overwriting whatever was there.
         buf.saved_point_before_command
             .save(id, buf.point_char_pos());
-        Some(())
+        Some(UndoBoundaryOutcome::Recorded)
     }
 
     pub fn record_undo_point_before_command(&mut self, id: BufferId) -> Option<()> {

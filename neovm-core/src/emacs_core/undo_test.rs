@@ -1454,3 +1454,52 @@ fn undo_outer_limit_domain_matches_gnus_integer_guard() {
         );
     }
 }
+
+#[test]
+fn undo_boundary_records_its_cause_only_on_the_path_gnu_takes() {
+    // GNU's `Fundo_boundary' (src/undo.c:251-282) does
+    // `Fset (Qundo_auto__last_boundary_cause, Qexplicit)' at :277 -- AFTER the
+    // early return for a buffer whose `buffer-undo-list' is t (:258-259), and
+    // immediately before it saves the point/buffer pair (:278-279).  So the
+    // variable records "an explicit boundary happened here", and a buffer that
+    // records nothing leaves it alone.
+    //
+    // `Freplace_buffer_contents' calls `Fundo_boundary' too
+    // (src/editfns.c:2139), so it sets the cause by the same route.
+    //
+    // Expectations measured under GNU Emacs 31.0.90
+    // (tmp/coord-boundary-cause-probe.el), not derived.
+    crate::test_utils::init_test_tracing();
+    // The runtime-startup context is required: `undo-auto--last-boundary-cause`
+    // is a defvar-local in lisp/simple.el, and `with-temp-buffer` is a macro
+    // from the same runtime, so a bare Context has neither.
+    let results = crate::test_utils::runtime_startup_eval_all(
+        r#"(setq undo-auto--last-boundary-cause nil)
+           (with-temp-buffer
+             (buffer-enable-undo) (insert "x") (undo-boundary)
+             undo-auto--last-boundary-cause)
+           (with-temp-buffer
+             (setq buffer-undo-list t) (insert "x")
+             (setq undo-auto--last-boundary-cause nil)
+             (undo-boundary)
+             undo-auto--last-boundary-cause)
+           (with-temp-buffer
+             (buffer-enable-undo) (insert "x")
+             (setq undo-auto--last-boundary-cause 'something-else)
+             (undo-boundary)
+             undo-auto--last-boundary-cause)"#,
+    );
+    assert_eq!(
+        results,
+        vec![
+            // The reset itself.
+            "OK nil".to_string(),
+            "OK explicit".to_string(),
+            // The undo-disabled buffer returns before the assignment, so a
+            // buffer that records nothing does not claim a boundary either.
+            "OK nil".to_string(),
+            // The assignment overwrites whatever was there.
+            "OK explicit".to_string(),
+        ]
+    );
+}

@@ -7,6 +7,7 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
+use crate::buffer::buffer::UndoBoundaryOutcome;
 use crate::buffer::{Buffer, CharPos0, CharRange, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
@@ -303,8 +304,36 @@ pub(crate) fn builtin_undo_boundary(
     let Some(current_id) = ctx.buffers.current_buffer_id() else {
         return Err(signal("error", vec![Value::string("No current buffer")]));
     };
-    let _ = ctx.buffers.add_undo_boundary(current_id);
+    // GNU sets `undo-auto--last-boundary-cause' to `explicit' inside
+    // `Fundo_boundary' (src/undo.c:277), after the early return for an
+    // undo-disabled buffer, so a buffer that records nothing does not claim a
+    // boundary either.  The boundary itself runs below the obarray, so the
+    // assignment lives here, gated on the outcome it reports.
+    if ctx.buffers.add_undo_boundary(current_id) == Some(UndoBoundaryOutcome::Recorded) {
+        set_last_boundary_cause_explicit(ctx)?;
+    }
     Ok(Value::NIL)
+}
+
+/// GNU `Fset (Qundo_auto__last_boundary_cause, Qexplicit)` (src/undo.c:277).
+///
+/// This goes through our `set' builtin rather than a direct obarray write
+/// because GNU goes through `Fset': the variable is a `defvar-local' in
+/// lisp/simple.el, so wherever a buffer-local binding exists the assignment
+/// must land on THAT and not on the default.  Writing the default instead is
+/// invisible until something has made the variable local, which is the ordinary
+/// case -- `undo-auto--undoably-changed-buffers' processing localizes it.
+/// Delegating also picks up alias resolution, the constant check and variable
+/// watchers, all of which GNU gets for free from the same call.
+pub(crate) fn set_last_boundary_cause_explicit(
+    ctx: &mut super::eval::Context,
+) -> Result<(), Flow> {
+    super::builtins::symbols::builtin_set_2(
+        ctx,
+        Value::symbol("undo-auto--last-boundary-cause"),
+        Value::symbol("explicit"),
+    )?;
+    Ok(())
 }
 
 /// (primitive-undo COUNT LIST) -> remainder of LIST

@@ -1883,9 +1883,16 @@ pub(crate) fn builtin_replace_region_contents(
     // then conses ahead of the first change record.  The trivial
     // empty-side/comparison-disabled paths above return before reaching it,
     // matching GNU.
-    eval.buffers
+    // GNU's `Freplace_buffer_contents' calls `Fundo_boundary' (src/editfns.c:2139),
+    // so it sets `undo-auto--last-boundary-cause' by exactly the same route.
+    if eval
+        .buffers
         .add_undo_boundary(current_id)
-        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
+        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?
+        == crate::buffer::buffer::UndoBoundaryOutcome::Recorded
+    {
+        crate::emacs_core::undo::set_last_boundary_cause_explicit(eval)?;
+    }
 
     if runs.is_empty() {
         // Buffers already identical within the region: nothing to do, and no

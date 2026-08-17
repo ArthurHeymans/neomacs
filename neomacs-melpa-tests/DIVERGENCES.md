@@ -8464,3 +8464,75 @@ even though its stand-in binary is a shell script that `printf`s line by line.
 Status: FIXED (harness defect).  The underlying `rg-filter' behaviour is
 upstream rg.el's and is unchanged; it is reproduced identically by GNU Emacs
 and Neomacs, so there is nothing to fix in the engine.
+
+## 136. `undo-boundary` never recorded that it had happened, so `undo-auto--last-boundary-cause` stayed nil -- FIXED
+
+Residual handed back by ledger 122, which fixed `undo-boundary` itself and
+noted that GNU also does `Fset (Qundo_auto__last_boundary_cause, Qexplicit)`
+(src/undo.c:277) where we left the variable alone.
+
+```elisp
+(with-temp-buffer
+  (buffer-enable-undo) (insert "x") (undo-boundary)
+  undo-auto--last-boundary-cause)
+;; GNU                => explicit
+;; Neomacs before fix => nil
+```
+
+`replace-buffer-contents` reaches the same assignment, because GNU calls
+`Fundo_boundary' from `Freplace_buffer_contents' (src/editfns.c:2139) rather
+than consing a boundary itself:
+
+```elisp
+(replace-buffer-contents src)   ; GNU => explicit, Neomacs before fix => nil
+```
+
+### Where the assignment sits is the whole point
+
+It is at :277, which is **after** the early return for a buffer whose
+`buffer-undo-list' is `t' (:258-259) and immediately **before** the saved
+point/buffer pair (:278-279).  So a buffer that records nothing does not claim a
+boundary either -- measured, and already matching before this fix, because
+ledger 122 had put that guard in:
+
+```elisp
+(with-temp-buffer (setq buffer-undo-list t) (insert "x") (undo-boundary)
+                  undo-auto--last-boundary-cause)
+;; GNU => nil, Neomacs => nil   (both, before and after)
+```
+
+### Two things this needed that a one-line assignment would have got wrong
+
+**The outcome had to become a type.** `BufferManager::add_undo_boundary`
+returned `Option<()>`, in which the undo-disabled path and the recorded path
+both answered `Some(())` -- there was nothing for a caller to branch on.  The
+boundary runs below the obarray and cannot reach a Lisp symbol, so the caller
+has to make the assignment, and it can only do that correctly if the boundary
+tells it which of GNU's two paths ran.  It now returns
+`UndoBoundaryOutcome::{Recorded, UndoDisabled}`.
+
+**The write had to go through `set`, not through a default-value write.**  GNU
+calls `Fset`, and this variable is a `defvar-local' in lisp/simple.el, so
+wherever a buffer-local binding exists the assignment must land on THAT.  A
+first attempt wrote the default and still diverged on exactly the case that
+distinguishes them:
+
+```elisp
+(with-temp-buffer
+  (buffer-enable-undo) (insert "x")
+  (setq undo-auto--last-boundary-cause 'something-else)   ; makes it local
+  (undo-boundary)
+  undo-auto--last-boundary-cause)
+;; GNU                    => explicit
+;; first attempt at a fix => something-else
+```
+
+Delegating to the `set' builtin, as GNU delegates to `Fset', also picks up alias
+resolution, the constant check and variable watchers.  This is the same lesson
+as ledgers 110 and 124: reimplementing what GNU delegates is how the delegated
+behaviour goes missing.
+
+Verified: the six-case probe in tmp/coord-boundary-cause-probe.el is
+byte-identical between GNU 31.0.90 and Neomacs.
+
+Status: FIXED.
