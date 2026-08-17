@@ -2642,6 +2642,12 @@ pub(crate) fn dump_symbol_data(
                 }
                 // BUFFER_OBJFWD forwarders are re-installed from
                 // BUFFER_SLOT_INFO in reconstruct_evaluator.
+                crate::emacs_core::forward::LispFwdType::Int => {
+                    let int_fwd = unsafe {
+                        &*(fwd as *const _ as *const crate::emacs_core::forward::LispIntFwd)
+                    };
+                    DumpSymbolVal::IntForwarded(encoder.dump_value(&int_fwd.get()))
+                }
                 crate::emacs_core::forward::LispFwdType::BufferObj => DumpSymbolVal::Forwarded,
                 other => panic!("pdump does not yet encode {other:?} symbol forwarders"),
             }
@@ -4226,6 +4232,12 @@ pub(crate) fn load_symbol_data(
                 plain: crate::emacs_core::value::Value::bool_val(*value),
             };
         }
+        DumpSymbolVal::IntForwarded(value) => {
+            symbol.flags.set_redirect(SymbolRedirect::Plainval);
+            symbol.val = SymbolVal {
+                plain: decoder.load_value(value),
+            };
+        }
     }
 
     symbol.function = decoder.load_value(&sd.function);
@@ -4241,6 +4253,7 @@ pub(crate) fn load_obarray(
     // Collect (sym_id, dump_data) for a second pass over Localized symbols.
     let mut localized_entries: Vec<(SymId, &DumpSymbolData)> = Vec::new();
     let mut bool_forwarded_entries: Vec<(SymId, bool)> = Vec::new();
+    let mut int_forwarded_entries: Vec<(SymId, crate::emacs_core::value::Value)> = Vec::new();
     let mut symbols = Vec::with_capacity(dob.symbols.len());
     for (id, sd) in &dob.symbols {
         let sym_id = load_sym_id(id);
@@ -4255,6 +4268,9 @@ pub(crate) fn load_obarray(
         }
         if let DumpSymbolVal::BoolForwarded(value) = &sd.val {
             bool_forwarded_entries.push((sym_id, *value));
+        }
+        if let DumpSymbolVal::IntForwarded(value) = &sd.val {
+            int_forwarded_entries.push((sym_id, decoder.load_value(value)));
         }
         symbols.push((sym_id, load_symbol_data(decoder, sym_id, sd)));
     }
@@ -4330,6 +4346,18 @@ pub(crate) fn load_obarray(
     for (sym_id, value) in bool_forwarded_entries {
         let fwd = crate::emacs_core::forward::alloc_boolfwd(value);
         obarray.install_boolfwd(sym_id, fwd);
+    }
+
+    // Integer forwarders, same contract as the Boolean ones above. The dumped
+    // value went through `LispInteger::check` when it was stored, so it is
+    // still an integer inside `intmax_t` range on the way back in; a corrupt
+    // image falls back to the slot's zero rather than smuggling a non-integer
+    // into a `DEFVAR_INT` variable.
+    for (sym_id, value) in int_forwarded_entries {
+        let checked = crate::emacs_core::forward::LispInteger::check(value)
+            .unwrap_or_else(|_| crate::emacs_core::forward::LispInteger::from_i64(0));
+        let fwd = crate::emacs_core::forward::alloc_intfwd(checked);
+        obarray.install_intfwd(sym_id, fwd);
     }
 
     Ok(obarray)

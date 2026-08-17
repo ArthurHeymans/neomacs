@@ -195,7 +195,7 @@ fn remove_hook_function_after_error_in_context(
     if let Some(hook_value) = hook_value_by_id(ctx, hook_sym)
         && let Some(new_value) = remove_eq_from_hook_list(hook_value, function)
     {
-        ctx.set_runtime_binding_by_id(hook_sym, new_value);
+        let _ = ctx.try_set_runtime_binding_by_id(hook_sym, new_value);
         return;
     }
 

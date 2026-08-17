@@ -7784,12 +7784,10 @@ pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
     obarray.make_special("signal-process-functions");
     obarray.set_symbol_value("internal--daemon-sockname", Value::NIL);
     obarray.make_special("internal--daemon-sockname");
-    obarray.set_symbol_value("read-process-output-max", Value::fixnum(65536));
-    obarray.make_special("read-process-output-max");
+    obarray.define_int_variable("read-process-output-max", 65536);
     obarray.set_symbol_value("fast-read-process-output", Value::T);
     obarray.make_special("fast-read-process-output");
-    obarray.set_symbol_value("process-error-pause-time", Value::fixnum(1));
-    obarray.make_special("process-error-pause-time");
+    obarray.define_int_variable("process-error-pause-time", 1);
     // GNU `gnutls.c` provides this via `DEFVAR_INT ("gnutls-log-level",
     // global_gnutls_log_level)` (default 0).  `gnutls.el` only forward-declares
     // it (`(defvar gnutls-log-level)  ; gnutls.c`), so without the C-side
@@ -7797,8 +7795,7 @@ pub fn register_bootstrap_vars(obarray: &mut super::symbol::Obarray) {
     // `:loglevel ,gnutls-log-level` before it ever reaches the (working,
     // TLS-capable) `gnutls-boot` -- breaking every package download and
     // thus `use-package`.  See https://github.com/eval-exec/neomacs/issues/121.
-    obarray.set_symbol_value("gnutls-log-level", Value::fixnum(0));
-    obarray.make_special("gnutls-log-level");
+    obarray.define_int_variable("gnutls-log-level", 0);
     // GNU `gnutls.c` always DEFVAR_LISPs `libgnutls-version`; when Emacs is
     // built without libgnutls, the documented value is -1.  Neomacs exposes a
     // `gnutls-boot` compatibility API over Rust TLS rather than linking

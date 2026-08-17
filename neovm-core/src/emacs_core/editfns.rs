@@ -208,7 +208,7 @@ fn run_named_hook_reset_on_error(
     ) {
         Ok(_) => Ok(()),
         Err(flow) => {
-            let _ = ctx.set_runtime_binding_by_id(hook_sym, Value::NIL);
+            let _ = ctx.try_set_runtime_binding_by_id(hook_sym, Value::NIL);
             Err(flow)
         }
     }
@@ -399,7 +399,7 @@ fn deactivate_mark_after_preparing_change(ctx: &mut crate::emacs_core::eval::Con
     // `Fset (Qdeactivate_mark, Qt)` after signaling before-change. Because
     // `deactivate-mark` is buffer-local-when-set, this creates a buffer-local
     // binding on the modified buffer (so it appears in buffer-local-variables).
-    ctx.set_runtime_binding_by_id(
+    let _ = ctx.try_set_runtime_binding_by_id(
         crate::emacs_core::intern::intern("deactivate-mark"),
         Value::T,
     );

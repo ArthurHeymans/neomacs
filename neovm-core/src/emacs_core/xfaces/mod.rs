@@ -32,7 +32,7 @@ pub fn register_bootstrap_vars(obarray: &mut Obarray) {
     obarray.define_special_variable("face-ignored-fonts", Value::NIL);
     obarray.define_special_variable("face-remapping-alist", Value::NIL);
     obarray.define_special_variable("face-font-rescale-alist", Value::NIL);
-    obarray.define_special_variable("face-near-same-color-threshold", Value::fixnum(30_000));
+    obarray.define_int_variable("face-near-same-color-threshold", 30_000);
     obarray.define_special_variable("face-font-lax-matched-attributes", Value::T);
 }
 

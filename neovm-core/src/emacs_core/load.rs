@@ -1644,7 +1644,8 @@ where
     // binding is what preserves a caller's dynamic `(let ((lexical-binding
     // nil)) ...)' across autoload-triggered loads.
     eval.specbind(intern("lexical-binding"), Value::NIL);
-    eval.set_runtime_binding_by_id(intern("lexical-binding"), Value::bool_val(lexical_binding));
+    let _ = eval
+        .try_set_runtime_binding_by_id(intern("lexical-binding"), Value::bool_val(lexical_binding));
 
     // Mirrors GNU readevalloop (lread.c:2220-2222):
     //   specbind(Qinternal_interpreter_environment,

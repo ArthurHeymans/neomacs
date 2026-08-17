@@ -237,7 +237,7 @@ pub fn init_syntax_vars(
 ) {
     obarray.set_symbol_value("parse-sexp-ignore-comments", Value::NIL);
     obarray.set_symbol_value("parse-sexp-lookup-properties", Value::NIL);
-    obarray.set_symbol_value("syntax-propertize--done", Value::fixnum(-1));
+    obarray.define_int_variable("syntax-propertize--done", -1);
     obarray.set_symbol_value("words-include-escapes", Value::NIL);
     obarray.set_symbol_value("multibyte-syntax-as-symbol", Value::NIL);
     obarray.set_symbol_value("open-paren-in-column-0-is-defun-start", Value::T);
@@ -251,7 +251,6 @@ pub fn init_syntax_vars(
     for name in &[
         "parse-sexp-ignore-comments",
         "parse-sexp-lookup-properties",
-        "syntax-propertize--done",
         "words-include-escapes",
         "multibyte-syntax-as-symbol",
         "open-paren-in-column-0-is-defun-start",

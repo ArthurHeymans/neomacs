@@ -586,7 +586,7 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     obarray.set_symbol_value("input-method-previous-message", Value::NIL);
     obarray.make_special("input-method-previous-message");
     // keyboard.c:13841 DEFVAR_INT, init 300.
-    obarray.define_special_variable("auto-save-interval", Value::fixnum(300));
+    obarray.define_int_variable("auto-save-interval", 300);
     // keyboard.c:13850 DEFVAR_LISP, XSETFASTINT 30.
     obarray.define_special_variable("auto-save-timeout", Value::fixnum(30));
     obarray.set_symbol_value("echo-keystrokes", Value::fixnum(1));
@@ -596,10 +596,10 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     // keyboard.c:13876 DEFVAR_LISP, make_fixnum 500.
     obarray.define_special_variable("double-click-time", Value::fixnum(500));
     // keyboard.c:13886 DEFVAR_INT, init 3.
-    obarray.define_special_variable("double-click-fuzz", Value::fixnum(3));
+    obarray.define_int_variable("double-click-fuzz", 3);
     // keyboard.c:13897 / 13903 DEFVAR_INT, init 0.
-    obarray.define_special_variable("num-input-keys", Value::fixnum(0));
-    obarray.define_special_variable("num-nonmacro-input-events", Value::fixnum(0));
+    obarray.define_int_variable("num-input-keys", 0);
+    obarray.define_int_variable("num-nonmacro-input-events", 0);
     // keyboard.c:13908 DEFVAR_LISP, init nil.
     obarray.define_special_variable("last-event-frame", Value::NIL);
     // keyboard.c:13913 DEFVAR_LISP, init nil.
@@ -619,7 +619,7 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     obarray.set_symbol_value("tty-erase-char", Value::NIL);
     obarray.make_special("tty-erase-char");
     // keyboard.c:13993 DEFVAR_INT, init 0.
-    obarray.define_special_variable("extra-keyboard-modifiers", Value::fixnum(0));
+    obarray.define_int_variable("extra-keyboard-modifiers", 0);
     obarray.set_symbol_value("inhibit-local-menu-bar-menus", Value::NIL);
     // keyboard.c:13777 DEFVAR_LISP, XSETINT 033.
     obarray.define_special_variable("meta-prefix-char", Value::fixnum(27));

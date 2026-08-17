@@ -671,7 +671,21 @@ pub(crate) fn builtin_set_default(eval: &mut super::eval::Context, args: Vec<Val
     {
         return result;
     }
-    let value = args[1];
+    // GNU `set_default_internal` reaches `store_symval_forwarding` for a
+    // localized variable's default (`src/data.c:2075`) and, for any other
+    // forwarded variable that is not a per-buffer slot, by delegating to
+    // `set_internal` (`src/data.c:2122`). Both are the same type rule an
+    // ordinary `setq` runs, which is why `(set-default 'undo-limit "x")`
+    // signals `(wrong-type-argument integerp "x")` under GNU.
+    let value = crate::emacs_core::eval::check_forwarded_store_at(
+        eval.obarray(),
+        &eval.buffers,
+        &eval.specpdl,
+        resolved,
+        args[1],
+        crate::emacs_core::eval::ForwardStoreSite::SetDefault,
+    )?
+    .value();
 
     // Phase 10D: route FORWARDED BUFFER_OBJFWD writes through
     // `BufferManager::set_buffer_default_slot`, which updates

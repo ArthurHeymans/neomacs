@@ -4066,10 +4066,10 @@ impl Context {
         // auto-save-interval/timeout, double-click-fuzz/time, meta-prefix-char
         // and polling-period are registered (with GNU keyboard.c values and
         // DEFVAR specialness) by keyboard::pure::register_bootstrap_vars.
-        obarray.set_symbol_value("display-line-numbers-major-tick", Value::fixnum(0));
-        obarray.set_symbol_value("display-line-numbers-minor-tick", Value::fixnum(0));
+        obarray.define_int_variable("display-line-numbers-major-tick", 0);
+        obarray.define_int_variable("display-line-numbers-minor-tick", 0);
         obarray.define_special_variable("echo-keystrokes", Value::fixnum(1));
-        obarray.set_symbol_value("gc-cons-threshold", Value::fixnum(800_000));
+        obarray.define_int_variable("gc-cons-threshold", 800_000);
         obarray.set_symbol_value("help-char", Value::fixnum(8));
         // hourglass-delay, hscroll-margin/step, line-number-display-limit-width,
         // maximum-scroll-margin, messages-buffer-name, scroll-* and the
@@ -4079,7 +4079,7 @@ impl Context {
         // next-screen-context-lines is registered by
         // window_cmds::register_bootstrap_vars; overline-margin by
         // xdisp::register_bootstrap_vars.
-        obarray.set_symbol_value("process-error-pause-time", Value::fixnum(1));
+        obarray.define_int_variable("process-error-pause-time", 1);
         obarray.set_symbol_value("eol-mnemonic-dos", Value::string("\\"));
         obarray.set_symbol_value("eol-mnemonic-mac", Value::string("/"));
         obarray.set_symbol_value("eol-mnemonic-undecided", Value::string(":"));
@@ -4255,8 +4255,7 @@ impl Context {
         obarray.make_special("debug-ignored-errors");
         obarray.set_symbol_value("debugger-may-continue", Value::NIL);
         obarray.make_special("debugger-may-continue");
-        obarray.set_symbol_value("internal-when-entered-debugger", Value::fixnum(-1));
-        obarray.make_special("internal-when-entered-debugger");
+        obarray.define_int_variable("internal-when-entered-debugger", -1);
         obarray.set_symbol_value("signal-hook-function", Value::NIL);
         obarray.make_special("signal-hook-function");
         // GNU `eval.c` defines `internal-interpreter-environment` and then
@@ -4273,7 +4272,7 @@ impl Context {
         // GNU DEFVAR_INT from dispnew.c — used by bytecomp.el
         // dispnew.c:7488 DEFVAR_INT; the live value comes from init_baud_rate
         // (sysdep.c) at terminal init -- 38400 is the modern-pty value.
-        obarray.define_special_variable("baud-rate", Value::fixnum(38400));
+        obarray.define_int_variable("baud-rate", 38400);
         obarray.set_symbol_value("search-slow-speed", Value::fixnum(1200));
         // GNU startup.el sets these based on --debug-init
         obarray.set_symbol_value("init-file-debug", Value::NIL);
@@ -4352,8 +4351,7 @@ impl Context {
         obarray.set_symbol_value("prefix-arg", Value::NIL);
         obarray.set_symbol_value("executing-kbd-macro", Value::NIL);
         obarray.make_special("executing-kbd-macro");
-        obarray.set_symbol_value("executing-kbd-macro-index", Value::fixnum(0));
-        obarray.make_special("executing-kbd-macro-index");
+        obarray.define_int_variable("executing-kbd-macro-index", 0);
         obarray.define_c_hook_variable("kbd-macro-termination-hook");
         obarray.set_symbol_value("command-history", Value::NIL);
         obarray.make_special("command-history");
@@ -4556,7 +4554,7 @@ impl Context {
         obarray.set_symbol_value("read-mail-command", Value::symbol("rmail"));
         obarray.set_symbol_value("read-minibuffer-restore-windows", Value::T);
         obarray.set_symbol_value("read-only-mode-hook", Value::NIL);
-        obarray.set_symbol_value("read-process-output-max", Value::fixnum(65536));
+        obarray.define_int_variable("read-process-output-max", 65536);
         obarray.set_symbol_value("read-quoted-char-radix", Value::fixnum(8));
         obarray.set_symbol_value("read-regexp--case-fold", Value::NIL);
         obarray.set_symbol_value("read-regexp-defaults-function", Value::NIL);
@@ -4818,10 +4816,8 @@ impl Context {
         // Core eval variables (stay in eval.rs)
         obarray.set_symbol_value("purify-flag", Value::NIL);
         obarray.make_special("purify-flag");
-        obarray.set_symbol_value("max-lisp-eval-depth", Value::fixnum(1600));
-        obarray.make_special("max-lisp-eval-depth");
-        obarray.set_symbol_value("lisp-eval-depth-reserve", Value::fixnum(200));
-        obarray.make_special("lisp-eval-depth-reserve");
+        obarray.define_int_variable("max-lisp-eval-depth", 1600);
+        obarray.define_int_variable("lisp-eval-depth-reserve", 200);
         // charset.c:2430 DEFVAR_BOOL, init 0.
         obarray.define_special_variable("inhibit-load-charset-map", Value::NIL);
 
@@ -5208,17 +5204,13 @@ impl Context {
             "string-chars-consed",
             "intervals-consed",
         ] {
-            obarray.set_symbol_value(name, Value::fixnum(0));
-            obarray.make_special(name);
+            obarray.define_int_variable(name, 0);
         }
         // --- src/profiler.c: syms_of_profiler ---
-        obarray.set_symbol_value("profiler-max-stack-depth", Value::fixnum(16));
-        obarray.make_special("profiler-max-stack-depth");
-        obarray.set_symbol_value("profiler-log-size", Value::fixnum(10_000));
-        obarray.make_special("profiler-log-size");
+        obarray.define_int_variable("profiler-max-stack-depth", 16);
+        obarray.define_int_variable("profiler-log-size", 10_000);
         // DEFVAR_INT, default 65536 (bignum digit-width limit).
-        obarray.set_symbol_value("integer-width", Value::fixnum(65536));
-        obarray.make_special("integer-width");
+        obarray.define_int_variable("integer-width", 65536);
 
         // --- src/frame.c: syms_of_frame ---
         // DEFVAR_LISP, default 20 (minimum frame alpha/opacity).
@@ -5346,8 +5338,7 @@ impl Context {
         obarray.make_special("gtk-version-string");
         obarray.set_symbol_value("cairo-version-string", Value::string("1.18.4"));
         obarray.make_special("cairo-version-string");
-        obarray.set_symbol_value("x-selection-timeout", Value::fixnum(0));
-        obarray.make_special("x-selection-timeout");
+        obarray.define_int_variable("x-selection-timeout", 0);
         obarray.set_symbol_value("x-session-id", Value::NIL);
         obarray.make_special("x-session-id");
         obarray.set_symbol_value("x-session-previous-id", Value::NIL);
@@ -9112,7 +9103,8 @@ impl Context {
     /// per-buffer `lexical-binding`, matching GNU where nested eval
     /// calls never clobber the file-level setting.
     pub fn set_lexical_binding(&mut self, enabled: bool) {
-        self.set_runtime_binding_by_id(intern("lexical-binding"), Value::bool_val(enabled));
+        let _ =
+            self.try_set_runtime_binding_by_id(intern("lexical-binding"), Value::bool_val(enabled));
         if enabled {
             if self.lexenv.is_nil() {
                 self.lexenv = top_level_lexenv_sentinel();
@@ -15503,31 +15495,23 @@ impl Context {
 
     /// GNU-compatible signaling wrapper around [`Self::specbind`].
     ///
-    /// `specbind` writes an existing live per-buffer slot through
-    /// `set_internal`, which checks its forwarder predicate. A conditional
-    /// slot without a local value instead binds the shared default and
-    /// deliberately bypasses the predicate.
+    /// GNU's `specbind` reaches the same `store_symval_forwarding` an ordinary
+    /// `setq` does -- it calls `set_internal (..., SET_INTERNAL_BIND)` for
+    /// every forwarded symbol (`src/eval.c:3641-3677`) -- which is why
+    /// `(let ((undo-limit "x")) ...)` signals before the body ever runs.
     pub(crate) fn try_specbind(&mut self, sym_id: SymId, value: Value) -> Result<(), Flow> {
         let resolved =
             builtins::resolve_variable_alias_id_in_obarray(&self.obarray, sym_id).unwrap_or(sym_id);
 
-        use crate::emacs_core::symbol::SymbolRedirect;
-        if self
-            .obarray
-            .get_by_id(resolved)
-            .is_some_and(|symbol| symbol.redirect() == SymbolRedirect::Forwarded)
-            && let Some(buffer_id) = self.buffers.current_buffer_id()
-            && let Some(info) = crate::buffer::buffer::lookup_buffer_slot_by_sym_id(resolved)
-        {
-            let has_local = self.buffers.get(buffer_id).is_some_and(|buffer| {
-                info.local_flags_idx < 0 || buffer.slot_local_flag(info.offset)
-            });
-            if has_local {
-                validate_buffer_slot_write(info.predicate, value)?;
-            }
-        }
-
-        self.specbind(sym_id, value);
+        let checked = check_forwarded_store_at(
+            &self.obarray,
+            &self.buffers,
+            &self.specpdl,
+            resolved,
+            value,
+            ForwardStoreSite::Bind,
+        )?;
+        self.specbind(sym_id, checked.value());
         Ok(())
     }
 
@@ -16105,7 +16089,7 @@ pub(crate) fn set_runtime_binding_in_state(
     sym_id: SymId,
     value: Value,
 ) -> Result<Option<crate::buffer::BufferId>, Flow> {
-    let locus = set_runtime_binding_checked(
+    let locus = set_runtime_binding(
         &mut ctx.obarray,
         &mut ctx.buffers,
         &ctx.custom,
@@ -16151,16 +16135,22 @@ fn let_shadows_buffer_binding_p_in_state(
     })
 }
 
-pub(crate) fn set_runtime_binding(
+/// The storage half of GNU `set_internal` (`src/data.c:1644-1830`): pick the
+/// cell the assignment lands in and write it.
+///
+/// Takes a [`ForwardChecked`] rather than a `Value` so that the forward type's
+/// rule cannot be skipped by adding another assignment path here.
+fn store_runtime_binding(
     obarray: &mut Obarray,
     buffers: &mut BufferManager,
     _custom: &CustomManager,
     specpdl: &[SpecBinding],
     sym_id: SymId,
-    value: Value,
+    checked: ForwardChecked,
 ) -> Option<crate::buffer::BufferId> {
     use crate::emacs_core::symbol::{SetInternalBind, SymbolRedirect};
 
+    let value = checked.value();
     let symbol = obarray.get_by_id(sym_id);
     let symbol_is_interned_global = symbol.is_some_and(|s| s.is_interned_global());
 
@@ -16273,12 +16263,156 @@ pub(crate) fn validate_buffer_slot_write(
     }
 }
 
-/// Signaling counterpart of [`set_runtime_binding`].
+/// Map a forwarded slot's refusal onto GNU's signal data.
+pub(crate) fn forward_store_signal(
+    error: crate::emacs_core::forward::ForwardStoreError,
+    value: Value,
+) -> Flow {
+    use crate::buffer::buffer::BufferSlotPredicateError;
+    use crate::emacs_core::forward::ForwardStoreError;
+
+    match error {
+        ForwardStoreError::WrongType(predicate_name)
+        | ForwardStoreError::Predicate(BufferSlotPredicateError::WrongType(predicate_name)) => {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol(predicate_name), value],
+            )
+        }
+        // GNU `xsignal1 (Qoverflow_error, newval)` (`src/data.c:1480`).
+        ForwardStoreError::Overflow => signal("overflow-error", vec![value]),
+        ForwardStoreError::Predicate(
+            BufferSlotPredicateError::Choice(message) | BufferSlotPredicateError::Range(message),
+        ) => signal(LispCondition::Error, vec![Value::string(message), value]),
+    }
+}
+
+/// A value the forward type governing an assignment has accepted, in the form
+/// that assignment will store.
 ///
-/// GNU checks a forwarded predicate only when this assignment reaches a live
-/// buffer slot. A `setq` shadowed by a conditional slot's default `let`
-/// targets `buffer_defaults` and therefore remains intentionally unchecked.
-pub(crate) fn set_runtime_binding_checked(
+/// [`check_forwarded_store`] is the only constructor and
+/// [`store_runtime_binding`] takes nothing else, so no assignment path can
+/// reach a forwarded symbol's storage without the type's rule having run.
+/// That is the whole point of GNU putting `store_symval_forwarding` *below*
+/// `set_internal` rather than beside it (`src/data.c:1469-1530`): the rule is
+/// not something `Fset`, `set_default`, `specbind` and the bytecode `varset`
+/// each have to remember.
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct ForwardChecked(Value);
+
+impl ForwardChecked {
+    /// The value to store -- which is not always the value handed in: a
+    /// `Lisp_Fwd_Bool` slot coerces to `!NILP (newval)` instead of signalling.
+    #[inline]
+    pub(crate) fn value(self) -> Value {
+        self.0
+    }
+}
+
+/// The forward descriptor an assignment to `sym_id` has to satisfy, if any.
+///
+/// GNU reaches `store_symval_forwarding` two ways for an ordinary `setq`: the
+/// SYMBOL_FORWARDED arm (`src/data.c:1766-1830`) and the SYMBOL_LOCALIZED arm
+/// via `blv->fwd` (`src/data.c:1794`), which is how a `DEFVAR_INT` variable
+/// that some buffer made local keeps its integer slot.  Both are covered here.
+fn assignment_forwarder(
+    obarray: &Obarray,
+    sym_id: SymId,
+) -> Option<&'static crate::emacs_core::forward::LispFwd> {
+    use crate::emacs_core::symbol::SymbolRedirect;
+
+    match obarray.get_by_id(sym_id).map(|symbol| symbol.redirect()) {
+        // Safety: `install_*fwd` leaks every descriptor it installs.
+        Some(SymbolRedirect::Forwarded) => obarray.forwarder(sym_id),
+        Some(SymbolRedirect::Localized) => obarray.blv(sym_id).and_then(|blv| blv.fwd),
+        _ => None,
+    }
+}
+
+/// Which of GNU's two stores an assignment performs.
+///
+/// It matters for exactly one forward variant.  A per-buffer slot that has no
+/// local value in the current buffer is written by `set_default_internal`,
+/// which reaches `set_per_buffer_default` WITHOUT going through
+/// `store_symval_forwarding` (`src/data.c:2080-2113`), so the slot predicate
+/// does not apply there; `do_specbind` routes exactly that case to it
+/// (`src/eval.c:3606-3617`).  Every other variant is checked either way.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ForwardStoreSite {
+    /// An ordinary `setq` / `set`, GNU `set_internal`.
+    Set,
+    /// A `let` binding, GNU `do_specbind`.
+    Bind,
+    /// `set-default` / `setq-default`, GNU `set_default_internal`, which
+    /// writes a per-buffer slot's shared default without the predicate.
+    SetDefault,
+}
+
+/// Run GNU `store_symval_forwarding`'s type switch for this assignment.
+pub(crate) fn check_forwarded_store_at(
+    obarray: &Obarray,
+    buffers: &BufferManager,
+    specpdl: &[SpecBinding],
+    sym_id: SymId,
+    value: Value,
+    site: ForwardStoreSite,
+) -> Result<ForwardChecked, Flow> {
+    use crate::emacs_core::forward::LispFwdType;
+
+    let Some(fwd) = assignment_forwarder(obarray, sym_id) else {
+        return Ok(ForwardChecked(value));
+    };
+    if fwd.ty == LispFwdType::BufferObj {
+        if site == ForwardStoreSite::SetDefault {
+            return Ok(ForwardChecked(value));
+        }
+        let Some(current_id) = buffers.current_buffer_id() else {
+            return Ok(ForwardChecked(value));
+        };
+        let Some(info) = crate::buffer::buffer::lookup_buffer_slot_by_sym_id(sym_id) else {
+            return Ok(ForwardChecked(value));
+        };
+        let has_local = buffers
+            .get(current_id)
+            .is_some_and(|buffer| info.local_flags_idx < 0 || buffer.slot_local_flag(info.offset));
+        let writes_live_slot = match site {
+            ForwardStoreSite::Set => {
+                has_local || !let_shadows_buffer_binding_p_in_state(specpdl, buffers, sym_id)
+            }
+            ForwardStoreSite::Bind => has_local,
+            ForwardStoreSite::SetDefault => unreachable!("returned above"),
+        };
+        if !writes_live_slot {
+            return Ok(ForwardChecked(value));
+        }
+    }
+    match fwd.store(value) {
+        Ok(store) => Ok(ForwardChecked(store.canonical_value())),
+        Err(error) => Err(forward_store_signal(error, value)),
+    }
+}
+
+/// [`check_forwarded_store_at`] for an ordinary assignment.
+pub(crate) fn check_forwarded_store(
+    obarray: &Obarray,
+    buffers: &BufferManager,
+    specpdl: &[SpecBinding],
+    sym_id: SymId,
+    value: Value,
+) -> Result<ForwardChecked, Flow> {
+    check_forwarded_store_at(
+        obarray,
+        buffers,
+        specpdl,
+        sym_id,
+        value,
+        ForwardStoreSite::Set,
+    )
+}
+
+/// The Lisp-visible assignment entry point: check the forward type, then
+/// store. Every `setq` spelling funnels through here.
+pub(crate) fn set_runtime_binding(
     obarray: &mut Obarray,
     buffers: &mut BufferManager,
     custom: &CustomManager,
@@ -16286,26 +16420,32 @@ pub(crate) fn set_runtime_binding_checked(
     sym_id: SymId,
     value: Value,
 ) -> Result<Option<crate::buffer::BufferId>, Flow> {
-    use crate::emacs_core::symbol::SymbolRedirect;
+    let checked = check_forwarded_store(obarray, buffers, specpdl, sym_id, value)?;
+    Ok(store_runtime_binding(
+        obarray, buffers, custom, specpdl, sym_id, checked,
+    ))
+}
 
-    if obarray
-        .get_by_id(sym_id)
-        .is_some_and(|symbol| symbol.redirect() == SymbolRedirect::Forwarded)
-        && let Some(current_id) = buffers.current_buffer_id()
-        && let Some(info) = crate::buffer::buffer::lookup_buffer_slot_by_sym_id(sym_id)
-    {
-        let has_local = buffers
-            .get(current_id)
-            .is_some_and(|buffer| info.local_flags_idx < 0 || buffer.slot_local_flag(info.offset));
-        let writes_live_slot =
-            has_local || !let_shadows_buffer_binding_p_in_state(specpdl, buffers, sym_id);
-        if writes_live_slot {
-            validate_buffer_slot_write(info.predicate, value)?;
-        }
+/// GNU's `set_internal` refuses `unbinding_p` for any symbol whose storage is
+/// a forwarder -- `error ("Built-in variable may not be unbound : %s")` at
+/// `src/data.c:1725-1728` (localized-with-forwarder) and `:1805-1807`
+/// (forwarded).  There is no "unbound" bit pattern in a C slot, so the state
+/// simply does not exist; the same is true of a [`crate::emacs_core::forward::LispIntFwd`]
+/// here, which is why this has to be a signal rather than a silent no-op.
+pub(crate) fn check_forwarded_unbind(
+    obarray: &Obarray,
+    sym_id: SymId,
+    reported: Value,
+) -> Result<(), Flow> {
+    if assignment_forwarder(obarray, sym_id).is_none() {
+        return Ok(());
     }
-
-    Ok(set_runtime_binding(
-        obarray, buffers, custom, specpdl, sym_id, value,
+    Err(signal(
+        LispCondition::Error,
+        vec![Value::string(format!(
+            "Built-in variable may not be unbound : {}",
+            crate::emacs_core::intern::resolve_sym(reported.as_symbol_id().unwrap_or(sym_id))
+        ))],
     ))
 }
 
@@ -16997,27 +17137,15 @@ impl Context {
         &mut self,
         sym_id: SymId,
         value: Value,
-    ) -> Option<crate::buffer::BufferId> {
+    ) -> Result<Option<crate::buffer::BufferId>, Flow> {
         // GNU `setq` follows the same rule as `eval_sub`: if a lexical binding
         // cell exists, mutate it directly. Declared-special affects whether
         // that cell was created, not whether assignment should reuse it.
         if self.try_assign_lexical_binding_by_id(sym_id, value) {
-            return None;
+            return Ok(None);
         }
 
-        let locus = set_runtime_binding(
-            &mut self.obarray,
-            &mut self.buffers,
-            &self.custom,
-            &self.specpdl,
-            sym_id,
-            value,
-        );
-        self.sync_cached_runtime_binding_by_id(sym_id, value);
-        self.sync_keyboard_runtime_binding_by_id(sym_id, value);
-        self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
-        self.mark_redisplay_dirty_if_display_var(sym_id);
-        locus
+        self.try_set_runtime_binding_by_id(sym_id, value)
     }
 
     /// Implement GNU `setq`'s two-stage assignment protocol.
@@ -17061,39 +17189,25 @@ impl Context {
         self.assign_by_id(intern(name), value);
     }
 
-    pub(crate) fn set_runtime_binding_by_id(
-        &mut self,
-        sym_id: SymId,
-        value: Value,
-    ) -> Option<crate::buffer::BufferId> {
-        let locus = set_runtime_binding(
-            &mut self.obarray,
-            &mut self.buffers,
-            &self.custom,
-            &self.specpdl,
-            sym_id,
-            value,
-        );
-        self.sync_cached_runtime_binding_by_id(sym_id, value);
-        self.sync_keyboard_runtime_binding_by_id(sym_id, value);
-        self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
-        self.mark_redisplay_dirty_if_display_var(sym_id);
-        locus
-    }
-
     pub(crate) fn try_set_runtime_binding_by_id(
         &mut self,
         sym_id: SymId,
         value: Value,
     ) -> Result<Option<crate::buffer::BufferId>, Flow> {
-        let locus = set_runtime_binding_checked(
+        let checked =
+            check_forwarded_store(&self.obarray, &self.buffers, &self.specpdl, sym_id, value)?;
+        // A `Lisp_Fwd_Bool` slot stores `!NILP (newval)`, so every mirror of
+        // this write has to see what the forwarder accepted, not what the
+        // caller passed.
+        let value = checked.value();
+        let locus = store_runtime_binding(
             &mut self.obarray,
             &mut self.buffers,
             &self.custom,
             &self.specpdl,
             sym_id,
-            value,
-        )?;
+            checked,
+        );
         self.sync_cached_runtime_binding_by_id(sym_id, value);
         self.sync_keyboard_runtime_binding_by_id(sym_id, value);
         self.refresh_gc_runtime_settings_after_change_by_id(sym_id);

@@ -839,6 +839,7 @@ pub(crate) fn builtin_makunbound(eval: &mut super::eval::Context, args: Vec<Valu
     if eval.obarray().is_constant_id(resolved) {
         return Err(signal(LispCondition::SettingConstant, vec![args[0]]));
     }
+    crate::emacs_core::eval::check_forwarded_unbind(eval.obarray(), resolved, args[0])?;
     eval.note_macro_expansion_mutation();
     eval.run_variable_watchers_by_id(resolved, &Value::NIL, &Value::NIL, "makunbound")?;
     eval.makunbound_runtime_binding_by_id(resolved);
