@@ -7687,8 +7687,9 @@ the compiler.  Measured: GNU lists 117 symbols there, Neomacs listed 0 --
 itself was already storing `t'; only the compiled function's own return value
 was the raw 4.
 
-and the first `make-local-variable' anywhere disarmed the forwarder for the
-whole session, in every buffer:
+The second hole is the one the VM really did have a hand in: the first
+`make-local-variable' anywhere disarmed the forwarder for the whole session,
+in every buffer:
 
 ```elisp
 (setq inhibit-message nil)
