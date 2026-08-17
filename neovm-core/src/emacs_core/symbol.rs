@@ -27,6 +27,7 @@
 //! the legacy `SymbolValue` enum during the transition; Phases 4-8 cut them
 //! over to the redirect dispatch and Phase 10 deletes the legacy enum.
 
+use super::defvar_bool::ByteBooleanVars;
 use super::intern::{
     NameId, SymId, intern, intern_lisp_string, is_canonical_id, lookup_interned,
     lookup_interned_lisp_string, resolve_name, resolve_sym_lisp_string, symbol_name_id,
@@ -2123,6 +2124,10 @@ impl Obarray {
 
     /// Define a global Lisp variable with GNU `DEFVAR_BOOL` storage.
     ///
+    /// The initial value is a `bool` rather than a [`Value`] for the same
+    /// reason GNU's is a `bool *`: there is no way to register a `DEFVAR_BOOL`
+    /// variable seeded with something that is not a Boolean.
+    ///
     /// Registration has a second effect in GNU, inside `defvar_bool` itself
     /// (`src/lread.c:5254-5262`): the symbol is consed onto `byte-boolean-vars`.
     /// The byte optimizer reads that list to decide it may NOT fold a
@@ -2130,12 +2135,44 @@ impl Obarray {
     /// in might not be what we get out" (`lisp/emacs-lisp/byte-opt.el:2285-2300`)
     /// -- which is the coercion rule reaching the compiler.  Doing it here
     /// rather than at the call site keeps it a property of the declaration.
-    pub fn define_bool_variable(&mut self, name: &str, initial: bool) {
+    ///
+    /// Whether that cons survives is not `defvar_bool`'s decision:
+    /// `syms_of_lread` sets the list back to nil when it declares it
+    /// (`src/lread.c:5774`), erasing every registration `main` performed
+    /// earlier.  [`ByteBooleanVars`] is that fact, and it is a required
+    /// argument because the alternative is each caller re-deriving GNU's
+    /// startup order.
+    pub fn define_bool_variable(
+        &mut self,
+        name: &str,
+        initial: bool,
+        byte_boolean_vars: ByteBooleanVars,
+    ) {
         let id = intern(name);
         self.mark_global_member(id);
-        let fwd = crate::emacs_core::forward::alloc_boolfwd(initial);
-        self.install_boolfwd(id, fwd);
+        // Idempotent, like re-running a `DEFVAR_BOOL` would be: installing a
+        // second descriptor would leave the first one still reachable from a
+        // BLV, and would cons the symbol on twice.
+        if self.blv(id).is_some() {
+            // Lisp has already localized it, so `make_blv` moved the
+            // descriptor into the BLV (`src/data.c:2112-2140`); flipping the
+            // redirect back to `Forwarded` here would orphan every per-buffer
+            // binding.  Declare into the BLV instead.
+            self.reattach_localized_bool_forwarder(name);
+            self.set_symbol_value_id(id, if initial { Value::T } else { Value::NIL });
+        } else {
+            match self.forwarder(id).and_then(|fwd| fwd.as_bool_fwd()) {
+                Some(existing) => existing.set(initial),
+                None => {
+                    let fwd = crate::emacs_core::forward::alloc_boolfwd(initial);
+                    self.install_boolfwd(id, fwd);
+                }
+            }
+        }
 
+        if byte_boolean_vars == ByteBooleanVars::ErasedByLreadInit {
+            return;
+        }
         let list_id = intern("byte-boolean-vars");
         let current = self.find_symbol_value(list_id).unwrap_or(Value::NIL);
         let symbol = Value::from_sym_id(id);
@@ -2149,6 +2186,36 @@ impl Obarray {
         let updated = Value::cons(symbol, current);
         self.set_symbol_value_id(list_id, updated);
         self.make_special_id(list_id);
+    }
+
+    /// Give a localized symbol back the Boolean descriptor `make_blv` would
+    /// have copied into its BLV (`src/data.c:2112-2140`).
+    ///
+    /// A no-op unless the symbol is `Localized` with no forwarder, which is
+    /// only reachable after loading a portable dump: the descriptor is a
+    /// process-lifetime pointer, so a localized symbol's image carries its
+    /// default value and nothing else.  The new descriptor is seeded from that
+    /// restored default rather than from a declaration's initial value, so a
+    /// variable the bootstrap changed keeps what the dump recorded.
+    pub fn reattach_localized_bool_forwarder(&mut self, name: &str) {
+        let id = intern(name);
+        let Some(blv) = self.blv_mut(id) else { return };
+        if blv.fwd.is_some() {
+            return;
+        }
+        let current = blv.defcell.cons_cdr().is_truthy();
+        let fwd = crate::emacs_core::forward::alloc_boolfwd(current);
+        blv.fwd = Some(unsafe {
+            &*(fwd as *const crate::emacs_core::forward::LispBoolFwd
+                as *const crate::emacs_core::forward::LispFwd)
+        });
+        // `do_symval_forwarding` would have rebuilt `t`/`nil` on the way out,
+        // so canonicalise the cells the dump restored verbatim.
+        let canonical = if current { Value::T } else { Value::NIL };
+        blv.defcell.set_cdr(canonical);
+        if super::value::eq_value(&blv.valcell, &blv.defcell) {
+            blv.valcell.set_cdr(canonical);
+        }
     }
 
     /// Install a GNU `Lisp_Intfwd`-equivalent descriptor on a symbol

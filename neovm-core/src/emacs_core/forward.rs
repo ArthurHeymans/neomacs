@@ -222,6 +222,12 @@ impl LispFwd {
             .then(|| unsafe { &*(self as *const Self as *const LispIntFwd) })
     }
 
+    /// The descriptor as a Boolean forwarder, if that is what it is.
+    pub fn as_bool_fwd(&'static self) -> Option<&'static LispBoolFwd> {
+        (self.ty == LispFwdType::Bool)
+            .then(|| unsafe { &*(self as *const Self as *const LispBoolFwd) })
+    }
+
     /// Perform the store for the variants whose storage is the descriptor.
     /// Returns the canonical value so callers that also mirror the write into
     /// buffer-local storage do not have to recompute it.

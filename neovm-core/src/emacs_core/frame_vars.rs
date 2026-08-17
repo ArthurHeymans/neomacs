@@ -21,8 +21,6 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.define_special_variable("window-system", Value::NIL);
     obarray.set_symbol_value("handle-args-function", Value::symbol("command-line-1"));
     obarray.set_symbol_value("handle-args-function-alist", Value::NIL);
-    // emacs.c:3597 DEFVAR_BOOL, init 0.
-    obarray.define_special_variable("inhibit-x-resources", Value::NIL);
     // resize-mini-windows is registered by xdisp::register_bootstrap_vars with
     // GNU's real pre-loadup init (nil); lisp/loadup.el:142 assigns `grow-only'
     // right after window.el is loaded, exactly like GNU.
@@ -54,11 +52,6 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // xdisp.c:38621 / 38629 DEFVAR_LISP -- special like every C DEFVAR.
     obarray.define_special_variable("frame-title-format", title_format);
     obarray.define_special_variable("icon-title-format", title_format);
-    obarray.set_symbol_value("frame-resize-pixelwise", Value::NIL);
-    // GNU frame.c DEFVAR_BOOL (Emacs 31.1), default t: `delete-frame' selects
-    // the most recently used frame (vs. the oldest visible one). Exposed here
-    // so cus-start.el does not signal "built-in variable ... not bound".
-    obarray.define_special_variable("after-delete-frame-select-mru-frame", Value::T);
     obarray.set_symbol_value("focus-follows-mouse", Value::NIL);
     // frame.c:7636 DEFVAR_LISP. GNU's GUI default when the tool bar is drawn
     // by Emacs itself (not an external GTK/NS toolkit bar) is

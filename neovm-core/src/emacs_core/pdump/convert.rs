@@ -4360,6 +4360,13 @@ pub(crate) fn load_obarray(
         obarray.install_intfwd(sym_id, fwd);
     }
 
+    // A `DEFVAR_BOOL` variable Lisp made buffer-local dumps as `Localized`,
+    // not as a forwarder: `make_blv` moved the descriptor into the BLV
+    // (`src/data.c:2112-2140`) and the image can only carry the value it held.
+    // Rebuild those descriptors from GNU's declaration table so the coercion
+    // survives a dump the way it survives GNU's relocated C statics.
+    crate::emacs_core::defvar_bool::reattach_localized_bool_forwarders(&mut obarray);
+
     Ok(obarray)
 }
 

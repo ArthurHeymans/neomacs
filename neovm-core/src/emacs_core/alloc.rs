@@ -12,8 +12,6 @@ pub fn register_bootstrap_vars(obarray: &mut Obarray) {
     obarray.define_int_variable("gc-cons-threshold", 800_000);
     obarray.set_symbol_value("gc-cons-percentage", Value::make_float(0.1));
     obarray.make_special("gc-cons-percentage");
-    obarray.set_symbol_value("garbage-collection-messages", Value::NIL);
-    obarray.make_special("garbage-collection-messages");
     obarray.set_symbol_value("post-gc-hook", Value::NIL);
     obarray.make_special("post-gc-hook");
     obarray.set_symbol_value(

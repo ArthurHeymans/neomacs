@@ -12,10 +12,10 @@ fn register_bootstrap_vars_matches_gnu_alloc_defaults() {
         obarray.symbol_value("gc-cons-threshold").copied(),
         Some(Value::fixnum(800_000))
     );
-    assert_eq!(
-        obarray.symbol_value("garbage-collection-messages").copied(),
-        Some(Value::NIL)
-    );
+    // `garbage-collection-messages' is a GNU `DEFVAR_BOOL' (`src/alloc.c:7459'),
+    // so it is declared by `defvar_bool::GNU_BOOL_VARIABLES' rather than here;
+    // `every_gnu_defvar_bool_variable_is_bound_and_reads_back_canonically'
+    // pins its default.
     assert_eq!(
         obarray.symbol_value("post-gc-hook").copied(),
         Some(Value::NIL)

@@ -235,17 +235,11 @@ pub fn init_syntax_vars(
     obarray: &mut super::symbol::Obarray,
     _custom: &mut super::custom::CustomManager,
 ) {
-    obarray.set_symbol_value("parse-sexp-ignore-comments", Value::NIL);
-    obarray.set_symbol_value("parse-sexp-lookup-properties", Value::NIL);
     obarray.define_int_variable("syntax-propertize--done", -1);
-    obarray.set_symbol_value("words-include-escapes", Value::NIL);
-    obarray.set_symbol_value("multibyte-syntax-as-symbol", Value::NIL);
-    obarray.set_symbol_value("open-paren-in-column-0-is-defun-start", Value::T);
     obarray.set_symbol_value(
         "find-word-boundary-function-table",
         super::chartable::make_char_table_value(Value::NIL, Value::NIL),
     );
-    obarray.set_symbol_value("comment-end-can-be-escaped", Value::NIL);
     obarray.set_symbol_value("forward-comment-function", Value::NIL);
 
     for name in &[

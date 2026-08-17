@@ -7082,17 +7082,12 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // fileio.c:6944 DEFVAR_LISP, init nil.
     obarray.define_special_variable("auto-save-include-big-deletions", Value::NIL);
     obarray.set_symbol_value("small-temporary-file-directory", Value::NIL);
-    obarray.set_symbol_value("write-region-inhibit-fsync", Value::T);
-    obarray.make_special("write-region-inhibit-fsync");
-    obarray.set_symbol_value("delete-by-moving-to-trash", Value::NIL);
     obarray.set_symbol_value("auto-save-file-name-transforms", Value::NIL);
     obarray.set_symbol_value(
         "temporary-file-directory",
         Value::string(temporary_file_directory),
     );
     obarray.make_special("temporary-file-directory");
-    obarray.set_symbol_value("create-lockfiles", Value::T);
-    obarray.make_special("create-lockfiles");
 
     // Backup-related variables
     obarray.set_symbol_value("make-backup-files", Value::T);

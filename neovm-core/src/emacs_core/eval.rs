@@ -3671,8 +3671,6 @@ impl Context {
         obarray.set_symbol_value("emacs-build-number", Value::fixnum(1));
         obarray.set_symbol_value("system-type", Value::symbol(gnu_system_type()));
         obarray.make_special("system-type");
-        // term.c:5224 DEFVAR_BOOL, init 1 (TERMINFO builds).
-        obarray.define_special_variable("system-uses-terminfo", Value::T);
         // GNU Emacs uses unibyte for default-directory during dump because
         // the locale isn't set up yet (see init_buffer in buffer.c).
         obarray.set_symbol_value(
@@ -3878,15 +3876,9 @@ impl Context {
         obarray.set_symbol_value("features", initial_features_value());
         super::xwidget::init_xwidget_variables(obarray);
         obarray.set_symbol_value_id(lexical_binding_symbol(), Value::NIL);
-        obarray.set_symbol_value("load-prefer-newer", Value::NIL);
         obarray.set_symbol_value("load-file-name", Value::NIL);
         obarray.make_special("load-file-name");
-        obarray.set_symbol_value("noninteractive", Value::T);
         obarray.set_symbol_value("inhibit-quit", Value::NIL);
-        obarray.set_symbol_value("symbols-with-pos-enabled", Value::NIL);
-        obarray.make_special("symbols-with-pos-enabled");
-        obarray.set_symbol_value("print-symbols-bare", Value::NIL);
-        obarray.make_special("print-symbols-bare");
         obarray.set_symbol_value("float-output-format", Value::NIL);
         obarray.make_special("float-output-format");
         // GNU Emacs print.c: all print-* variables are DEFVAR_BOOL or
@@ -3897,22 +3889,15 @@ impl Context {
             "print-length",
             "print-level",
             "print-circle",
-            "print-quoted",
-            "print-escape-newlines",
-            "print-escape-control-characters",
-            "print-escape-nonascii",
-            "print-escape-multibyte",
             "print-gensym",
             "print-continuous-numbering",
             "print-number-table",
             "print-charset-text-property",
-            "print-integers-as-characters",
             "print-unreadable-function",
         ] {
             obarray.set_symbol_value(name, Value::NIL);
             obarray.make_special(name);
         }
-        obarray.set_symbol_value("print-quoted", Value::T);
         obarray.set_symbol_value("text-quoting-style", Value::NIL);
         obarray.make_special("text-quoting-style");
         // GNU DEFVAR_LISP variables needed by loadup.el and early .el files.
@@ -3926,43 +3911,19 @@ impl Context {
         // GNU Emacs -Q. Default values match GNU's init_*() functions.
         for name in [
             "alter-fullscreen-frames",
-            "auto-save-no-message",
             "auto-save-visited-file-name",
             "blink-cursor-alist",
-            "composition-break-at-point",
-            "debug-on-quit",
-            "debugger-stack-frame-as-list",
             "default-frame-alist",
-            "delete-by-moving-to-trash",
-            "display-fill-column-indicator",
             "display-fill-column-indicator-character",
             "display-line-numbers",
-            "display-line-numbers-widen",
             "display-line-numbers-width",
-            "display-raw-bytes-as-hex",
             "enable-character-translation",
-            "enable-recursive-minibuffers",
-            "fast-but-imprecise-scrolling",
             "focus-follows-mouse",
-            "font-use-system-font",
-            "frame-resize-pixelwise",
-            "garbage-collection-messages",
-            "highlight-nonselected-windows",
-            "history-delete-duplicates",
-            "inhibit-eol-conversion",
-            "inverse-video",
-            "kill-buffer-delete-auto-save-files",
             "line-number-display-limit",
             "make-pointer-invisible",
             "menu-bar-mode",
-            "minibuffer-auto-raise",
             "mode-line-compact",
             "mouse-autoselect-window",
-            "mouse-prefer-closest-glyph",
-            "no-redraw-on-reenter",
-            "parse-sexp-ignore-comments",
-            "read-buffer-completion-ignore-case",
-            "record-all-keys",
             "resize-mini-frames",
             "ring-bell-function",
             "scalable-fonts-allowed",
@@ -3973,7 +3934,6 @@ impl Context {
             "temp-buffer-show-function",
             "tool-bar-mode",
             "tool-bar-style",
-            "tooltip-reuse-hidden-frame",
             "treesit-extra-load-path",
             "treesit-auto-install-grammar",
             "treesit-enabled-modes",
@@ -3984,20 +3944,7 @@ impl Context {
             "treesit-thing-settings",
             // undo-outer-limit is registered (with its GNU src/undo.c init and
             // the src/emacs.c batch override) by undo::register_bootstrap_vars.
-            "unibyte-display-via-language-environment",
-            "use-short-answers",
-            "visible-bell",
             "window-combination-resize",
-            "window-resize-pixelwise",
-            "word-wrap-by-category",
-            "words-include-escapes",
-            "x-dnd-disable-motif-drag",
-            "x-gtk-show-hidden-files",
-            "x-gtk-use-native-input",
-            "x-gtk-use-old-file-dialog",
-            "x-stretch-cursor",
-            "x-underline-at-descent-line",
-            "x-use-underline-position-properties",
             // Mouse pointer shapes — GNU defines these in
             // src/xfns.c (and parallel files w32fns.c, pgtkfns.c,
             // haikufns.c, androidfns.c) as integer Lisp_Object
@@ -4036,28 +3983,12 @@ impl Context {
         obarray.set_symbol_value("tool-bar-mode", Value::T);
         for name in [
             "auto-hscroll-mode",
-            "create-lockfiles",
-            "delete-auto-save-files",
-            "delete-exited-processes",
             "display-fill-column-indicator-column",
-            "display-hourglass",
-            "echo-keystrokes-help",
             "display-line-numbers-current-absolute",
             "make-cursor-line-fully-visible",
-            "menu-prompting",
-            "mode-line-in-non-selected-windows",
             "mouse-highlight",
-            "open-paren-in-column-0-is-defun-start",
             "overflow-newline-into-fringe",
-            "read-minibuffer-restore-windows",
-            "scroll-bar-adjust-thumb-portion",
             "select-active-regions",
-            "translate-upper-case-key-bindings",
-            "use-dialog-box",
-            "use-file-dialog",
-            "use-system-tooltips",
-            "visible-cursor",
-            "x-gtk-file-dialog-help-text",
             "x-select-enable-clipboard-manager",
         ] {
             obarray.set_symbol_value(name, Value::T);
@@ -4102,8 +4033,6 @@ impl Context {
         obarray.define_special_variable("image-cache-eviction-delay", Value::fixnum(300));
         // Display engine C variables (xdisp.c)
         obarray.define_special_variable("global-mode-string", Value::NIL);
-        obarray.set_symbol_value("redisplay-adhoc-scroll-in-resize-mini-windows", Value::T);
-        obarray.make_special("redisplay-adhoc-scroll-in-resize-mini-windows");
         // Fringe C variable (fringe.c `syms_of_fringe`: `Vfringe_bitmaps = Qnil`).
         // GNU binds this to nil; `lisp/fringe.el` then guards its standard-bitmap
         // seeding and `fringe-indicator-alist`/`fringe-cursor-alist` defaults on
@@ -4113,8 +4042,6 @@ impl Context {
         obarray.set_symbol_value("fringe-bitmaps", Value::NIL);
         obarray.make_special("fringe-bitmaps");
         // File loading C variables (lread.c)
-        // lread.c:5670 DEFVAR_BOOL, zero-init false.
-        obarray.define_special_variable("load-in-progress", Value::NIL);
         // Process/daemon C variables (process.c)
         obarray.set_symbol_value("internal--daemon-sockname", Value::NIL);
         // Other missing C variables cus-start.el checks
@@ -4256,14 +4183,10 @@ impl Context {
         obarray.make_special("inhibit-debugger");
         obarray.set_symbol_value("debug-on-error", Value::NIL);
         obarray.make_special("debug-on-error");
-        obarray.set_symbol_value("debug-on-quit", Value::NIL);
-        obarray.make_special("debug-on-quit");
         obarray.set_symbol_value("debug-on-signal", Value::NIL);
         obarray.make_special("debug-on-signal");
         obarray.set_symbol_value("debug-ignored-errors", Value::NIL);
         obarray.make_special("debug-ignored-errors");
-        obarray.set_symbol_value("debugger-may-continue", Value::NIL);
-        obarray.make_special("debugger-may-continue");
         obarray.define_int_variable("internal-when-entered-debugger", -1);
         obarray.set_symbol_value("signal-hook-function", Value::NIL);
         obarray.make_special("signal-hook-function");
@@ -4351,8 +4274,6 @@ impl Context {
         obarray.set_symbol_value("current-locale-environment", Value::string("C.UTF-8"));
         obarray.set_symbol_value("current-minibuffer-command", Value::NIL);
         obarray.make_special("current-minibuffer-command");
-        // timefns.c:2112 DEFVAR_BOOL, init CURRENT_TIME_LIST = true.
-        obarray.define_special_variable("current-time-list", Value::T);
         obarray.set_symbol_value("current-transient-input-method", Value::NIL);
         obarray.set_symbol_value("real-last-command", Value::NIL);
         // last-repeatable-command, this-original-command and defining-kbd-macro
@@ -4365,10 +4286,6 @@ impl Context {
         obarray.set_symbol_value("command-history", Value::NIL);
         obarray.make_special("command-history");
         obarray.set_symbol_value("extended-command-history", Value::NIL);
-        obarray.set_symbol_value("completion-ignore-case", Value::NIL);
-        obarray.make_special("completion-ignore-case");
-        obarray.set_symbol_value("read-buffer-completion-ignore-case", Value::NIL);
-        obarray.make_special("read-buffer-completion-ignore-case");
         obarray.set_symbol_value("read-file-name-completion-ignore-case", Value::NIL);
         obarray.make_special("read-file-name-completion-ignore-case");
         obarray.set_symbol_value("completion-regexp-list", Value::NIL);
@@ -4527,11 +4444,8 @@ impl Context {
         obarray.set_symbol_value("completion-pcm-word-delimiters", Value::string("-_./:| "));
         obarray.set_symbol_value("completion-reference-buffer", Value::NIL);
         obarray.set_symbol_value("completion-tab-width", Value::NIL);
-        obarray.set_symbol_value("enable-recursive-minibuffers", Value::NIL);
         obarray.set_symbol_value("history-length", Value::fixnum(100));
         obarray.make_special("history-length");
-        obarray.set_symbol_value("history-delete-duplicates", Value::NIL);
-        obarray.make_special("history-delete-duplicates");
         obarray.set_symbol_value("history-add-new-input", Value::T);
         obarray.make_special("history-add-new-input");
         // read-buffer-function is registered above (minibuf.c:2533).
@@ -4559,9 +4473,7 @@ impl Context {
         obarray.set_symbol_value("read-extended-command-mode-hook", Value::NIL);
         obarray.set_symbol_value("read-extended-command-predicate", Value::NIL);
         obarray.set_symbol_value("read-hide-char", Value::NIL);
-        obarray.set_symbol_value("inhibit-interaction", Value::NIL);
         obarray.set_symbol_value("read-mail-command", Value::symbol("rmail"));
-        obarray.set_symbol_value("read-minibuffer-restore-windows", Value::T);
         obarray.set_symbol_value("read-only-mode-hook", Value::NIL);
         obarray.define_int_variable("read-process-output-max", 65536);
         obarray.set_symbol_value("read-quoted-char-radix", Value::fixnum(8));
@@ -4603,7 +4515,6 @@ impl Context {
             ),
         );
         obarray.set_symbol_value("minibuffer--require-match", Value::NIL);
-        obarray.set_symbol_value("minibuffer-auto-raise", Value::NIL);
         // minibuffer-follows-selected-frame is registered earlier in bootstrap.
         // GNU src/minibuf.c:2557-2559 DEFVARs this hook and sets it to Qnil.
         // minibuffer.el's `minibuffer--regexp-exit', `minibuffer--nonselected-exit'
@@ -4670,7 +4581,6 @@ impl Context {
             "minibuffer-prompt-properties",
             Value::list(vec![Value::symbol("read-only"), Value::T]),
         );
-        obarray.set_symbol_value("minibuffer-allow-text-properties", Value::NIL);
         obarray.set_symbol_value("minibuffer-scroll-window", Value::NIL);
         obarray.make_special("minibuffer-scroll-window");
         obarray.set_symbol_value("other-window-scroll-buffer", Value::NIL);
@@ -4754,8 +4664,6 @@ impl Context {
             ]),
         );
         obarray.make_special("while-no-input-ignore-events");
-        obarray.set_symbol_value("input-pending-p-filter-events", Value::T);
-        obarray.make_special("input-pending-p-filter-events");
         if cfg!(target_os = "linux") {
             // GNU dbusbind.c DEFVARs.  The compatibility transport currently
             // models successful local method replies.
@@ -4827,8 +4735,6 @@ impl Context {
         obarray.make_special("purify-flag");
         obarray.define_int_variable("max-lisp-eval-depth", 1600);
         obarray.define_int_variable("lisp-eval-depth-reserve", 200);
-        // charset.c:2430 DEFVAR_BOOL, init 0.
-        obarray.define_special_variable("inhibit-load-charset-map", Value::NIL);
 
         // Terminal/display variables (C-level DEFVAR in official Emacs)
         // `standard-display-table' is a DEFVAR_LISP in dispnew.c (default nil),
@@ -4861,7 +4767,15 @@ impl Context {
         // Frame parameters (C DEFVAR in official Emacs)
         obarray.set_symbol_value("frame--special-parameters", Value::NIL);
 
-        // Initialize distributed bootstrap variables
+        // Initialize distributed bootstrap variables.
+        //
+        // GNU's `DEFVAR_BOOL' table comes first, for the reason `main' runs
+        // every `syms_of_*' before Lisp: `Fmake_variable_buffer_local' copies
+        // the symbol's forwarder into the BLV (`src/data.c:2112-2140'), so a
+        // variable that is going to be localized below -- `indent-tabs-mode',
+        // `display-fill-column-indicator', `display-line-numbers-widen' --
+        // has to be forwarded before that happens or the coercion is dropped.
+        super::defvar_bool::register_bootstrap_vars(obarray);
         super::alloc::register_bootstrap_vars(obarray);
         super::load::register_bootstrap_vars(obarray);
         super::fileio::register_bootstrap_vars(obarray);
@@ -5235,25 +5149,10 @@ impl Context {
         obarray.make_special("where-is-preferred-modifier");
 
         // --- src/coding.c: syms_of_coding ---
-        // DEFVAR_BOOL, default nil.
-        obarray.set_symbol_value("coding-system-require-warning", Value::NIL);
-        obarray.make_special("coding-system-require-warning");
-        obarray.set_symbol_value("inhibit-iso-escape-detection", Value::NIL);
-        obarray.make_special("inhibit-iso-escape-detection");
         // `coding-category-utf-8' holds the coding system for the UTF-8 detection
         // category; its default is the `utf-8' coding system symbol.
         obarray.set_symbol_value("coding-category-utf-8", Value::symbol("utf-8"));
         obarray.make_special("coding-category-utf-8");
-
-        // --- src/lread.c: syms_of_lread ---
-        // DEFVAR_BOOL, default nil.
-        obarray.set_symbol_value("load-dangerous-libraries", Value::NIL);
-        obarray.make_special("load-dangerous-libraries");
-
-        // --- src/xdisp.c: syms_of_xdisp ---
-        // DEFVAR_BOOL, default nil.
-        obarray.set_symbol_value("redisplay-skip-fontification-on-input", Value::NIL);
-        obarray.make_special("redisplay-skip-fontification-on-input");
 
         // --- src/charset.c: syms_of_charset ---
         // `charset-list' is a DEFVAR_LISP (the list of defined charsets), NOT a
@@ -5276,7 +5175,6 @@ impl Context {
         {
             let id = crate::emacs_core::intern::intern("case-symbols-as-words");
             // DEFVAR_BOOL marks the symbol special like every C DEFVAR.
-            obarray.define_special_variable("case-symbols-as-words", Value::NIL);
             obarray.make_symbol_localized(id, Value::NIL);
             obarray.set_blv_local_if_set(id, true);
         }

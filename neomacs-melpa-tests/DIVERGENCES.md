@@ -8465,6 +8465,206 @@ Status: FIXED (harness defect).  The underlying `rg-filter' behaviour is
 upstream rg.el's and is unchanged; it is reproduced identically by GNU Emacs
 and Neomacs, so there is nothing to fix in the engine.
 
+## 135. 147 of GNU's 148 `DEFVAR_BOOL` variables did not coerce, and `byte-boolean-vars` held one symbol where GNU holds 117, so the byte optimizer folded the coercion away even for the one that did -- FIXED
+
+Handed over by entry 132, which wired `Lisp_Fwd_Bool` for one variable and
+measured that GNU lists 117 symbols on `byte-boolean-vars` where Neomacs
+listed one.  Reproduced before touching anything, `-Q --batch`, against GNU
+31.0.90 and against a release build of origin/main
+(`f24ca50ff`, `cargo xtask fresh-build --release`).
+
+```elisp
+(list (length byte-boolean-vars)
+      (funcall (byte-compile (lambda () (setq visible-bell 4) visible-bell)))
+      (progn (setq visible-bell nil) (list (setq visible-bell 5) visible-bell))
+      (let ((inverse-video 3)) inverse-video)
+      (progn (set-default 'inverse-video 9) (default-value 'inverse-video))
+      (with-temp-buffer (setq-local indent-tabs-mode 4) indent-tabs-mode))
+;; GNU                => (117 t (5 t) t t t)
+;; Neomacs before fix => (1   4 (5 5) 3 9 4)
+```
+
+The forwarder was also still droppable by the first buffer-local binding, for
+every variable except `inhibit-message`:
+
+```elisp
+(setq print-escape-newlines nil)
+(let ((b (generate-new-buffer "fwd")))
+  (with-current-buffer b (setq-local print-escape-newlines 3))
+  (kill-buffer b)
+  (setq print-escape-newlines 7)
+  print-escape-newlines)
+;; GNU                => t
+;; Neomacs before fix => 7
+```
+
+### What the set actually is, measured rather than counted from the source
+
+`grep DEFVAR_BOOL src/*.c` finds 184 distinct names, but 36 of them belong to
+builds this one is not -- w32, Haiku, Android, `sfntfont`, xwidgets, native
+compilation -- and GNU leaves those unbound here too.  Probed name by name
+under GNU 31.0.90 on GNU/Linux: **148 are bound**, and every one of them
+coerces (`(set-default 'X 5)` then `(default-value 'X)` is `t`).  Of those
+148, Neomacs bound 100 and left **48 unbound entirely**.
+
+`(length byte-boolean-vars)` is 117, not 148, and the 31-symbol shortfall is
+not a build difference.  `defvar_bool` conses unconditionally
+(`src/lread.c:5261`), but `syms_of_lread` declares the list and then writes
+`Vbyte_boolean_vars = Qnil;` immediately below it (`src/lread.c:5772-5774`),
+which throws away every cons made so far.  `main` calls thirteen `syms_of_*`
+functions before `syms_of_lread` (`src/emacs.c:1976-2306`), and
+`syms_of_lread` itself declares two `DEFVAR_BOOL`s above the list.  The 31
+erased symbols map exactly onto that: `keyboard.c` 14, `coding.c` 6, `fns.c`
+3, `fileio.c` 2, `lread.c` 2 (`load-in-progress`, `load-force-doc-strings`),
+`xfaces.c`, `data.c`, `alloc.c`, `charset.c` 1 each.  Nothing decides this per
+variable; it falls out of the order `main` happens to use.
+
+That accident is observable, and being right about it in the other direction
+would be a divergence of its own.  Measured under GNU:
+
+```elisp
+(list (funcall (byte-compile (lambda () (setq use-short-answers 4) use-short-answers)))
+      use-short-answers)
+;; GNU => (4 t)
+```
+
+`use-short-answers` is `fns.c`, declared before `syms_of_lread`, so it is not
+on the list; the optimizer folds the `varset`/`varref` pair and the compiled
+function returns the raw 4 -- while the variable itself holds `t`, because the
+slot coerced anyway.  A Neomacs that put all 148 on the list would return `t`
+there and disagree with GNU.
+
+### Why GNU's code is shaped this way
+
+`byte-optimize-lapcode` is willing to rewrite `varset X; varref X` into
+`dup; varset X`, keeping the stored value on the stack, because for an
+ordinary variable the value read back is the value written.  For a
+`DEFVAR_BOOL` variable it is not: `store_symval_forwarding`'s `Lisp_Fwd_Bool`
+arm is `*XBOOLVAR (valcontents) = !NILP (newval);` (`src/data.c:1485-1487`)
+and `do_symval_forwarding` rebuilds `t` or `nil` (`src/data.c:1337-1360`), so
+the compiler substitutes `t` for any variable on the list -- "because varset
+may change the value" (`lisp/emacs-lisp/byte-opt.el:2285-2300`).  The list is
+the only channel the C declaration has into the compiler, which is why
+`defvar_bool` maintains it rather than a caller.  Unlike `Lisp_Fwd_Int`, this
+arm cannot fail: there is no signal to raise, only a slot with nowhere to keep
+the 5.
+
+Neomacs had the coercion written out at one arm of `set_symbol_value_id_inner`
+and its reads in four arms of `symbol.rs`, reached by exactly one variable,
+and the registration of the other 99 spread across twelve files as ordinary
+`set_symbol_value(name, Value::NIL)` pairs -- three of the eval.rs tables were
+general-purpose "mark these special and give them a default" lists that
+happened to contain them.  Nothing at any of those sites recorded that GNU
+declares the variable with `DEFVAR_BOOL`, so nothing could act on it, and the
+remaining 48 had no site at all.
+
+### The type-level fix
+
+`neovm-core/src/emacs_core/defvar_bool.rs` is GNU's 148 declarations as one
+table: name, initial value as a `bool` (not a `Value` -- a `DEFVAR_BOOL`
+variable seeded with a string is not a state either program can be in), and
+`ByteBooleanVars::{Listed, ErasedByLreadInit}`.  That enum is the fact GNU
+leaves to its startup order, and it is a required field, so a new row cannot
+be added without answering it; `define_bool_variable` takes it as a required
+argument for the same reason.  Registering the table in order reproduces GNU's
+list exactly, order included, because `defvar_bool` prepends and the table is
+in declaration order -- `(car byte-boolean-vars)` is `font-use-system-font`
+and `(nth 116 byte-boolean-vars)` is `load-dangerous-libraries` in both
+editors.
+
+The plain-cell seeds those variables used to have were deleted -- 62 value
+seeds, 23 `make_special` companions and 60 entries in three general-purpose
+seed tables, across 12 files -- so the table is the only place a `DEFVAR_BOOL`
+default is written.  Registration runs FIRST among the bootstrap
+registrations, for the reason `main` runs every `syms_of_*` before Lisp:
+`Fmake_variable_buffer_local` copies the symbol's forwarder into the BLV
+(`src/data.c:2112-2140`), so a variable that gets localized later --
+`indent-tabs-mode` (`bindings.el:1048`), `case-symbols-as-words`,
+`comment-end-can-be-escaped`, `display-fill-column-indicator`,
+`display-line-numbers-widen` -- has to be forwarded before that happens or the
+coercion is dropped on the floor.  Everything downstream, including the argv
+seed for `noninteractive` and `startup.el`'s `inhibit-x-resources`, now writes
+through the forwarder instead of past it.
+
+The dump needed a matching step.  A localized symbol serializes as its default
+plus `local_if_set` -- the descriptor is a process-lifetime pointer and cannot
+travel -- so those five came back from a pdump with a BLV and no forwarder,
+which is a `Localized`-shaped hole entry 132 could not have seen with one
+non-buffer-local variable wired.  `reattach_localized_bool_forwarders` rebuilds
+them from the value the image did carry, and `define_bool_variable` refuses to
+flip an already-localized symbol's redirect back to `Forwarded` at all, so the
+orphaned-BLV state is not reachable from either direction.
+
+Two invented defaults fell out of the comparison, both from the eval.rs table
+whose comment claims "Default values match GNU's init_*() functions":
+
+- `debugger-may-continue` was `nil`; GNU's is `debugger_may_continue = 1`
+  (`src/eval.c:4508`).
+- `x-use-underline-position-properties` was `nil`; GNU's is
+  `x_use_underline_position_properties = true` (`src/xterm.c:32675`).
+
+Six of the 148 are additionally buffer-local -- five because the `syms_of_*`
+that declares them calls `Fmake_variable_buffer_local` on the next line
+(`src/xdisp.c:38735`, `38997`, `39015`, `src/syntax.c:3815`,
+`src/casefiddle.c:751`) and `indent-tabs-mode` because `bindings.el:1048`
+does.  `make-window-start-visible` was one of the 48 Neomacs did not define at
+all, so its buffer-locality had to be added with it.
+
+### Measured after
+
+The same probes, `-Q --batch`, against a `cargo xtask fresh-build --release`
+binary:
+
+```
+                                        GNU        before      after
+DEFVAR_BOOL variables bound             148        100         148
+default value differs from GNU          --         2           0
+byte-boolean-vars membership differs    --         116         0
+byte-boolean-vars length                117        1           117
+```
+
+`(length byte-boolean-vars)`, `(car byte-boolean-vars)`,
+`(nth 116 byte-boolean-vars)` and the whole fold/coercion probe above are now
+character-identical between the two editors.
+
+Blast radius, measured on the whole oracle suite rather than assumed: 148
+variables changed storage and the coercion started firing where it never had,
+so the suite was the gate.  `cargo nextest run -p neovm-oracle-tests`:
+38770/38770 green, which is the previous 38765 plus the five pins added here
+(`neovm-oracle-tests/src/defvar_bool_byte_boolean_vars.rs`) -- the list's
+contents and order, the byte-compiled fold on and off the list, the coercion
+through `setq` / `set-default` / `let` / a buffer-local binding / a killed
+buffer's binding, GNU's six buffer-local `DEFVAR_BOOL`s, and a sweep asserting
+all 147 probeable variables are bound, special and canonical.  No pin moved.
+`cargo nextest run -p neovm-core`: 9006/9006, including five new
+`forward_test.rs` cases and a table-shape test.  Three unit tests that asserted
+a variable's default at the site the declaration moved away from
+(`alloc_test.rs`, `indent_test.rs`, `xdisp_test.rs`) had their assertion
+deleted rather than relocated, since `every_gnu_defvar_bool_variable_is_bound_
+and_reads_back_canonically` now pins all 148 in one place.
+
+### Found and NOT fixed
+
+- `debug-on-next-call` is the one variable of the 148 whose probe still
+  disagrees, and not over the forward type.  Measured under GNU,
+  `(progn (set-default 'debug-on-next-call 5) (default-value 'debug-on-next-call))`
+  => `nil`; here it is `t`.  GNU's answer is `nil` because setting the variable
+  non-nil is what arms the debugger, the very next `funcall` enters it, and
+  `Fbacktrace_debug`/`debug` clear the flag again -- the slot coerced to `t`
+  first and was then reset.  Neomacs has no `debug-on-next-call` mechanism at
+  all, so nothing clears it.  That is a debugger gap, pre-existing and now
+  merely visible; the variable is excluded from the oracle sweep for the same
+  reason GNU's own value is unstable.
+- `noninteractive` is seeded `t` in the table where GNU's C default is the
+  parsed argv (`noninteractive1 = noninteractive`, `src/emacs.c:1953`).  That
+  matches what Neomacs already did, and the binary still overwrites it from
+  the command line, but a `Context` built without one reports a batch session.
+- The 36 `DEFVAR_BOOL`s belonging to other window systems stay out of the
+  table; GNU leaves them unbound here too, so adding them would be invented
+  existence of the kind entry 132 recorded for `dos-hyper-key`.
+- `Lisp_Fwd_Obj` and `Lisp_Fwd_Kboard_Obj` remain unwired, unchanged from 132:
+  neither enforces anything on assignment.
+
 ## 136. `undo-boundary` never recorded that it had happened, so `undo-auto--last-boundary-cause` stayed nil -- FIXED
 
 Residual handed back by ledger 122, which fixed `undo-boundary` itself and
