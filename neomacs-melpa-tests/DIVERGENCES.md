@@ -7313,6 +7313,26 @@ UTF-8 -- so even a correctly resolved `no-conversion` would have converted.  The
 byte-preserving family now short-circuits to `str_to_multibyte` after EOL
 conversion, which is what GNU's `decode_coding_raw_text` does.
 
+### start-process failure text in the process buffer
+
+When `start-process' is given a program that does not exist, GNU Emacs 31
+writes the exec failure into the process buffer before the process dies:
+
+    <emacs-binary>: <program>: No such file or directory
+
+    Process x exited abnormally with code 127
+
+Neomacs writes only the exit message.  Surfaced by the jedi suite's broken
+server command workflow, where `jedi:epc--start-epc' reports the buffer
+content in its startup error: GNU's report contains the `<emacs-binary>:'
+line, Neomacs's starts directly with `Process epc:server:N exited
+abnormally with code 127'.  The workflow asserts GNU's full report (with
+the emacs-binary path normalized to `@@EMACS@@'), so the case stays red
+in Neomacs.  The bare `start-process' reduction reproduces only when the
+buffer is read with the same accept-process-output timing epc.el uses
+(the exec-failure line lands before the exit message); it was verified
+end-to-end through `epc:start-epc' with a nonexistent program.
+
 ### Found and NOT fixed here
 
 `make-process` has the same gap on its own precedence chain
