@@ -4354,7 +4354,7 @@ impl Context {
         obarray.make_special("executing-kbd-macro");
         obarray.set_symbol_value("executing-kbd-macro-index", Value::fixnum(0));
         obarray.make_special("executing-kbd-macro-index");
-        obarray.define_special_variable("kbd-macro-termination-hook", Value::NIL);
+        obarray.define_c_hook_variable("kbd-macro-termination-hook");
         obarray.set_symbol_value("command-history", Value::NIL);
         obarray.make_special("command-history");
         obarray.set_symbol_value("extended-command-history", Value::NIL);
@@ -4598,14 +4598,11 @@ impl Context {
         obarray.set_symbol_value("minibuffer--require-match", Value::NIL);
         obarray.set_symbol_value("minibuffer-auto-raise", Value::NIL);
         // minibuffer-follows-selected-frame is registered earlier in bootstrap.
-        obarray.define_special_variable(
-            "minibuffer-exit-hook",
-            Value::list(vec![
-                Value::symbol("minibuffer--regexp-exit"),
-                Value::symbol("minibuffer-exit-on-screen-keyboard"),
-                Value::symbol("minibuffer-restore-windows"),
-            ]),
-        );
+        // GNU src/minibuf.c:2557-2559 DEFVARs this hook and sets it to Qnil.
+        // minibuffer.el's `minibuffer--regexp-exit', `minibuffer--nonselected-exit'
+        // and `minibuffer-exit-on-screen-keyboard', plus `minibuffer-restore-windows',
+        // are all put here by `add-hook' while loadup runs.
+        obarray.define_c_hook_variable("minibuffer-exit-hook");
         obarray.set_symbol_value("minibuffer-completion-table", Value::NIL);
         obarray.set_symbol_value("minibuffer-completion-predicate", Value::NIL);
         obarray.set_symbol_value("minibuffer-completion-confirm", Value::NIL);
@@ -4615,7 +4612,15 @@ impl Context {
         obarray.set_symbol_value("minibuffer-completion-base", Value::NIL);
         obarray.set_symbol_value("minibuffer-help-form", Value::NIL);
         obarray.set_symbol_value("minibuffer-completing-file-name", Value::NIL);
-        obarray.set_symbol_value("minibuffer-regexp-mode", Value::T);
+        // `minibuffer-regexp-mode` belongs to lisp/minibuffer.el:5641, a global
+        // `define-minor-mode` whose `defcustom` is initialized by
+        // `custom-initialize-after-file-load`.  That initializer ends in
+        // `custom-initialize-set` (lisp/custom.el:68-82), which returns without
+        // doing anything when the symbol already has a default top-level value.
+        // A Rust seed here does not merely duplicate the Lisp default: it
+        // suppresses the `:set` function, so the mode body never runs and the
+        // mode never installs `minibuffer--regexp-setup` /
+        // `minibuffer--regexp-exit`, while the variable still reads t.
         obarray.set_symbol_value("minibuffer-regexp-mode-hook", Value::NIL);
         obarray.set_symbol_value(
             "minibuffer-regexp-prompts",
@@ -4686,17 +4691,11 @@ impl Context {
         obarray.set_symbol_value("minibuffer-history-case-insensitive-variables", Value::NIL);
         obarray.set_symbol_value("minibuffer-on-screen-keyboard-displayed", Value::NIL);
         obarray.set_symbol_value("minibuffer-on-screen-keyboard-timer", Value::NIL);
-        obarray.define_special_variable(
-            "minibuffer-setup-hook",
-            Value::list(vec![
-                Value::symbol("rfn-eshadow-setup-minibuffer"),
-                Value::symbol("minibuffer--regexp-setup"),
-                Value::symbol("minibuffer-setup-on-screen-keyboard"),
-                Value::symbol("minibuffer-error-initialize"),
-                Value::symbol("minibuffer-history-isearch-setup"),
-                Value::symbol("minibuffer-history-initialize"),
-            ]),
-        );
+        // GNU src/minibuf.c:2553-2555 DEFVARs this hook and sets it to Qnil.
+        // rfn-eshadow.el, minibuffer.el and simple.el `add-hook' their entries
+        // onto it while loadup runs, and `add-hook' conses onto the front, so
+        // the resulting order is a record of that preload order.
+        obarray.define_c_hook_variable("minibuffer-setup-hook");
         obarray.set_symbol_value("regexp-search-ring", Value::NIL);
         obarray.set_symbol_value("regexp-search-ring-max", Value::fixnum(16));
         obarray.set_symbol_value("regexp-search-ring-yank-pointer", Value::NIL);
@@ -4795,9 +4794,9 @@ impl Context {
         // registered by keyboard::pure::register_bootstrap_vars.
         obarray.set_symbol_value("echo-area-clear-hook", Value::NIL);
         // terminal.c:700 / term.c:5233 / term.c:5240 DEFVAR_LISP, init nil.
-        obarray.define_special_variable("delete-terminal-functions", Value::NIL);
-        obarray.define_special_variable("suspend-tty-functions", Value::NIL);
-        obarray.define_special_variable("resume-tty-functions", Value::NIL);
+        obarray.define_c_hook_variable("delete-terminal-functions");
+        obarray.define_c_hook_variable("suspend-tty-functions");
+        obarray.define_c_hook_variable("resume-tty-functions");
         obarray.set_symbol_value("overriding-local-map", Value::NIL);
         obarray.make_special("overriding-local-map");
         obarray.set_symbol_value("overriding-local-map-menu-flag", Value::NIL);
@@ -5283,8 +5282,7 @@ impl Context {
 
         // --- src/emacs.c: syms_of_emacs ---
         // DEFVAR_LISP, default nil. Run by kill-emacs.
-        obarray.set_symbol_value("kill-emacs-hook", Value::NIL);
-        obarray.make_special("kill-emacs-hook");
+        obarray.define_c_hook_variable("kill-emacs-hook");
 
         // --- src/cmds.c: syms_of_cmds ---
         // DEFVAR_LISP, default nil. `newline' dynamically binds this in
@@ -5306,8 +5304,8 @@ impl Context {
         // special before Lisp loadup: package functions compiled with lexical
         // binding rely on surrounding `let` forms remaining dynamically
         // visible while add-hook/remove-hook update the active value cell.
-        obarray.define_special_variable("pre-command-hook", Value::NIL);
-        obarray.define_special_variable("post-command-hook", Value::NIL);
+        obarray.define_c_hook_variable("pre-command-hook");
+        obarray.define_c_hook_variable("post-command-hook");
 
         // GNU registers this command-loop restriction label with DEFSYM.
         {
@@ -5326,7 +5324,7 @@ impl Context {
 
         // --- src/callint.c: syms_of_callint ---
         // DEFVAR_LISP, default nil.
-        obarray.define_special_variable("mouse-leave-buffer-hook", Value::NIL);
+        obarray.define_c_hook_variable("mouse-leave-buffer-hook");
 
         // --- src/xterm.c: syms_of_xterm / src/pgtkterm.c: syms_of_pgtkterm ---
         // GNU defines these from the compiled window-system backend before

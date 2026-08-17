@@ -6324,7 +6324,14 @@ time, not from the elisp sources.  Neomacs loads GNU's own `.el' files, so
 the difference has to be in the custom/after-load machinery or in how the
 dump-time initialization is replayed at startup.
 
-Status: UNFIXED.
+Root cause found and fixed in entry 130.  The guess in the paragraph above is
+refuted: the custom/after-load machinery is byte-for-byte correct in Neomacs.
+The engine seeded `minibuffer-setup-hook' (and `minibuffer-exit-hook', which
+rfn-eshadow.el never touches) in Rust with a frozen function list, so every
+`add-hook' that builds those lists during loadup was a no-op.
+
+Status: FIXED (see 130).
+
 ## 120. `buffer-enable-undo` erased the history it was asked to keep, destroying a base buffer's undo through an indirect buffer -- FIXED
 
 Enabling undo in an indirect buffer threw away the BASE buffer's entire undo
@@ -7230,5 +7237,175 @@ identical in GNU Emacs 31.0.90 and Neomacs.
 
 Nothing in this entry is a Neomacs defect.  Every field of the record, before
 and after both changes, is byte-identical between the two editors.
+
+## 130. Two C-level minibuffer hooks were shipped pre-populated, so the `add-hook' calls that build them in GNU were no-ops -- FIXED
+
+Root cause and fix for entry 119, which recorded the symptom and guessed
+wrong about the cause.  The window-numbering parity suite
+(`neomacs-melpa-tests/src/parity_tests/window_numbering/workflows.rs:52`)
+compares the whole `minibuffer-setup-hook' after the package prepends
+`window-numbering-update' to it; every function on the hook is identical in
+both editors and only the ORDER differs, so the package itself is a
+bystander.
+
+```elisp
+(list (default-value 'minibuffer-setup-hook)
+      (default-value 'minibuffer-exit-hook))
+;; GNU                => ((rfn-eshadow-setup-minibuffer minibuffer--regexp-setup
+;;                         minibuffer--nonselected-setup
+;;                         minibuffer-setup-on-screen-keyboard
+;;                         minibuffer-error-initialize
+;;                         minibuffer-history-isearch-setup
+;;                         minibuffer-history-initialize)
+;;                        (minibuffer--regexp-exit minibuffer--nonselected-exit
+;;                         minibuffer-exit-on-screen-keyboard
+;;                         minibuffer-restore-windows))
+;; Neomacs before fix => ((minibuffer--nonselected-setup
+;;                         rfn-eshadow-setup-minibuffer minibuffer--regexp-setup
+;;                         minibuffer-setup-on-screen-keyboard
+;;                         minibuffer-error-initialize
+;;                         minibuffer-history-isearch-setup
+;;                         minibuffer-history-initialize)
+;;                        (minibuffer--nonselected-exit minibuffer--regexp-exit
+;;                         minibuffer-exit-on-screen-keyboard
+;;                         minibuffer-restore-windows))
+```
+
+Measured with `-Q --batch` against GNU 31.0.90 and against a verified build
+of origin/main.  Note the exit hook, which entry 119 did not look at: it is
+wrong in the same way and rfn-eshadow.el never touches it, which already
+rules out the "after-load sequencing" hypothesis -- `minibuffer--regexp-exit'
+and `minibuffer--nonselected-exit' are added by two modes in the SAME file.
+
+### The variable belongs to C; the list belongs to Lisp
+
+GNU `src/minibuf.c:2553-2559` DEFVARs both hooks and sets each to `Qnil':
+
+```c
+  DEFVAR_LISP ("minibuffer-setup-hook", Vminibuffer_setup_hook, ...);
+  Vminibuffer_setup_hook = Qnil;
+
+  DEFVAR_LISP ("minibuffer-exit-hook", Vminibuffer_exit_hook, ...);
+  Vminibuffer_exit_hook = Qnil;
+```
+
+Every entry a running Emacs finds there is put on by an `add-hook' in
+preloaded Lisp while loadup runs: simple.el:2888, 3271 and 3392;
+minibuffer.el:3048, 5498 and 5499; and the three `:global' minor modes
+`minibuffer-regexp-mode' (minibuffer.el:5641), `minibuffer-nonselected-mode'
+(minibuffer.el:5738) and `file-name-shadow-mode' (rfn-eshadow.el:207).
+`add-hook' conses onto the FRONT (subr.el:2378) and does nothing when the
+function is already a member, so the finished list is a verbatim record of
+preload order, read newest-first.  loadup.el loads simple (251), then
+minibuffer (254), then rfn-eshadow (273), which is exactly the order GNU's
+list reports.
+
+Neomacs seeded the two variables in Rust
+(`neovm-core/src/emacs_core/eval.rs`, `minibuffer-setup-hook' and
+`minibuffer-exit-hook') with a literal function list -- GNU's post-loadup
+value as it stood BEFORE `minibuffer-nonselected-mode' was added in Emacs
+31.1.  Every `add-hook' above then found its function already present and
+did nothing, so the seeded order survived untouched; the one function NOT in
+the frozen snapshot, `minibuffer--nonselected-setup', was genuinely consed
+on and therefore landed at the HEAD instead of third.  The seed did not
+merely duplicate the Lisp default: it froze the list against every future
+preloaded mode.
+
+### The seed underneath the seed
+
+Deleting the two hook seeds alone made things worse, and finding out why is
+the second half of this entry.  Instrumenting `lisp/loadup.el' in a copied
+runtime tree and running the real dump stage
+(`neomacs-temacs --batch -l loadup --temacs=pdump`) printed the hook after
+each preloaded file; with only the hooks cleared, `minibuffer--regexp-setup'
+and `minibuffer--regexp-exit' never appeared at all.
+
+The cause is a THIRD invented default, `minibuffer-regexp-mode', seeded to
+`t' in the same Rust function.  That symbol has no C definition in GNU at
+all: it is the `define-minor-mode' at minibuffer.el:5641, whose generated
+`defcustom' carries `:set #'custom-set-minor-mode' and
+`:initialize #'custom-initialize-after-file-load' (easy-mmode.el:304 and
+336).  The initializer defers to after the file loads (custom.el:163-182,
+via `after-load-functions', run by `do-after-load-evaluation',
+subr.el:6422-6456) and then calls `custom-initialize-set', which is
+(custom.el:68-82):
+
+```elisp
+(defun custom-initialize-set (symbol exp)
+  (condition-case nil
+      (default-toplevel-value symbol)          ; already has a default?
+    (error                                     ; only then:
+     (funcall (or (get symbol 'custom-set) #'set-default-toplevel-value) ...))))
+```
+
+If the symbol already has a default top-level value the function returns
+having done nothing, so `custom-set-minor-mode' is never called -- and
+`custom-set-minor-mode' is the ONLY thing that ever calls the mode function,
+which is where the mode's `add-hook' calls live.  Measured in both editors,
+so the semantics are not in dispute:
+
+```elisp
+;; A stand-in global minor mode, declared twice: once with the variable
+;; unbound (GNU's state before minibuffer.el runs), once pre-bound the way
+;; the Rust seed left it.
+(defun probe (pre-bound)
+  (let ((sym (if pre-bound 'seeded-mode 'clean-mode)) (log nil))
+    (when pre-bound (set-default sym t))
+    (fset sym (lambda (&optional arg)
+                (set-default sym (and arg (> arg 0)))
+                (push 'mode-body-ran log)))
+    (custom-declare-variable sym (lambda () t) "Stand-in global minor mode."
+                             :set #'custom-set-minor-mode
+                             :initialize #'custom-initialize-set
+                             :type 'boolean)
+    (list :pre-bound pre-bound :value (default-value sym)
+          :effects (nreverse log))))
+(list (probe nil) (probe t))
+;; GNU     => ((:pre-bound nil :value t :effects (mode-body-ran))
+;;             (:pre-bound t   :value t :effects nil))
+;; Neomacs => ((:pre-bound nil :value t :effects (mode-body-ran))
+;;             (:pre-bound t   :value t :effects nil))
+```
+
+So `minibuffer-regexp-mode' read `t' in Neomacs while its machinery had
+never been installed -- a mode that reports itself on and is off.  It was
+invisible only because the hook seed happened to contain the very two
+functions the suppressed mode body would have added.  `file-name-shadow-mode'
+and `minibuffer-nonselected-mode' were unaffected because nothing pre-bound
+them.  This is the same failure shape as ledger 125 and the
+`completion-ignored'/`resize-mini-windows' cases: a Rust default invented for
+a symbol Lisp owns.
+
+### The fix
+
+The three seeds are gone.  A hook whose variable lives in C is now created
+through `Obarray::define_c_hook_variable(name)`
+(`neovm-core/src/emacs_core/symbol.rs`), which takes NO value argument and
+always installs nil, so "seed a C hook with a function list" is not
+expressible through it; every C-level hook DEFVAR in the engine
+(`after-insert-file-functions', `delete-terminal-functions',
+`display-monitors-changed-functions', `kbd-macro-termination-hook',
+`kill-emacs-hook', `minibuffer-exit-hook', `minibuffer-setup-hook',
+`mouse-leave-buffer-hook', `post-command-hook', `post-select-region-hook',
+`pre-command-hook', `resume-tty-functions', `suspend-tty-functions',
+`write-region-annotate-functions') now goes through it.
+`minibuffer-regexp-mode' is simply not registered in Rust any more, next to
+the `minibuffer-completion-auto-choose' comment that already warned about
+this exact hazard three lines away.
+
+Two tests pin it: one bare-context test asserting every C-level hook starts
+nil and `minibuffer-regexp-mode' starts unbound, and one bootstrap test
+asserting the post-loadup order of both hooks equals GNU's.
+
+Checked and deliberately left alone: the engine's other non-nil `...-mode'
+seeds (`menu-bar-mode', `tool-bar-mode', `auto-composition-mode',
+`auto-hscroll-mode', `indent-tabs-mode') are all genuine C DEFVARs in GNU
+with the same values -- `Vmenu_bar_mode = Qt' and `Vtool_bar_mode = Qt' at
+src/frame.c:7527-7550 -- and their `define-minor-mode' forms pass
+`:variable' precisely so the macro does not redeclare them ("It's defined in
+C/cus-start, this stops the d-m-m macro defining it again", menu-bar.el:2631).
+`minibuffer-regexp-mode' was the only one of that group with no C definition
+behind it.
+
 
 Status: FIXED.

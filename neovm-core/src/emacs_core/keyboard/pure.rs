@@ -631,13 +631,13 @@ pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::O
     // keyboard.c:14340 DEFVAR_LISP, init nil.
     obarray.define_special_variable("saved-region-selection", Value::NIL);
     // keyboard.c:14446 DEFVAR_LISP, init nil.
-    obarray.define_special_variable("post-select-region-hook", Value::NIL);
+    obarray.define_c_hook_variable("post-select-region-hook");
     // keyboard.c:14459 DEFVAR_LISP, init nil.
     obarray.define_special_variable("current-key-remap-sequence", Value::NIL);
     // keyboard.c:14358 DEFVAR_LISP, init Qsigusr2.
     obarray.define_special_variable("debug-on-event", Value::symbol("sigusr2"));
     // keyboard.c:14422 DEFVAR_LISP, init nil.
-    obarray.define_special_variable("display-monitors-changed-functions", Value::NIL);
+    obarray.define_c_hook_variable("display-monitors-changed-functions");
     // keyboard.c:14287 DEFVAR_LISP, make_fixnum 2.
     obarray.define_special_variable("minibuffer-message-timeout", Value::fixnum(2));
     // keyboard.c:13834 DEFVAR_LISP, init nil.

@@ -2868,6 +2868,26 @@ impl Obarray {
         self.make_special(name);
     }
 
+    /// Define a C-level hook variable, the way GNU's `DEFVAR_LISP` does for
+    /// every hook that lives in C: the variable is bound and special from the
+    /// first Lisp form, and its value is `nil`.
+    ///
+    /// A hook's *variable* belongs to the engine; its *contents* belong to
+    /// Lisp.  Every function a running Emacs finds on a C-level hook was put
+    /// there by an `add-hook` in preloaded Lisp -- see GNU
+    /// `src/minibuf.c:2553-2559`, which DEFVARs `minibuffer-setup-hook' and
+    /// `minibuffer-exit-hook' and sets both to `Qnil'.  Because `add-hook'
+    /// conses onto the front and does nothing when the function is already a
+    /// member, the list's ORDER is a record of preload order, and any seed
+    /// here would both turn the matching `add-hook' calls into no-ops and
+    /// freeze an order that stops tracking GNU as new modes are preloaded.
+    ///
+    /// This constructor therefore takes no value: the seeded state is not
+    /// expressible through it.
+    pub fn define_c_hook_variable(&mut self, name: &str) {
+        self.define_special_variable(name, Value::NIL);
+    }
+
     /// Mark a symbol as special by identity.
     pub fn make_special_id(&mut self, id: SymId) {
         self.ensure_global_member_if_canonical(id);
