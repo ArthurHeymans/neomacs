@@ -633,6 +633,20 @@ pub(crate) enum SpecBinding {
         arg0: Value,
         arg1: Value,
     },
+    /// Backtrace frame whose arguments live in the JIT caller's native
+    /// frame — GNU `specbinding.bt` exactly (`Lisp_Object *args` +
+    /// nargs pointing at the caller's stack). Pushed only by
+    /// `push_backtrace_frame_from_native_args` for arities the inline
+    /// variants can't hold; the args span outlives the entry (the frame
+    /// is popped before the native caller's call-args slot dies), and
+    /// the stop-the-world root snapshot may read through the pointer.
+    /// Like the other inline variants, `debug_on_exit` is structurally
+    /// false.
+    BacktraceNative {
+        function: Value,
+        args_ptr: *const i64,
+        nargs: u32,
+    },
     /// unwind-protect cleanup. Matches GNU SPECPDL_UNWIND.
     /// For interpreter: forms is a cons list, unbind_to calls sf_progn_value.
     /// For VM: forms is a callable (bytecode fn), unbind_to calls apply.
@@ -980,7 +994,9 @@ fn trivial_spec_binding_pop(binding: &SpecBinding) -> Option<TrivialSpecBindingP
             debug_on_exit: false,
             ..
         }
-        | SpecBinding::Backtrace2 { .. } => Some(TrivialSpecBindingPop::NoOwnedArgs),
+        | SpecBinding::Backtrace2 { .. }
+        | SpecBinding::BacktraceNative { .. }
+        | SpecBinding::BacktraceNative { .. } => Some(TrivialSpecBindingPop::NoOwnedArgs),
         SpecBinding::Backtrace {
             args,
             debug_on_exit: false,
@@ -6191,6 +6207,20 @@ impl Context {
                     visit(*function);
                     visit(*arg0);
                     visit(*arg1);
+                }
+                SpecBinding::BacktraceNative {
+                    function,
+                    args_ptr,
+                    nargs,
+                } => {
+                    visit(*function);
+                    // SAFETY: the variant's contract — the caller's
+                    // call-args slot stays alive (and unmutated) while
+                    // this entry exists, and root seeding runs with the
+                    // mutator stopped.
+                    for i in 0..*nargs as usize {
+                        visit(Value::from_bits(unsafe { *args_ptr.add(i) } as usize));
+                    }
                 }
                 SpecBinding::UnwindProtect { forms, lexenv } => {
                     visit(*forms);
@@ -13440,8 +13470,16 @@ impl Context {
                 });
             }
             _ => {
-                let args: smallvec::SmallVec<[Value; 4]> = (0..nargs).map(read).collect();
-                self.push_backtrace_frame(function, &args);
+                // GNU stores exactly this: a pointer into the caller's
+                // frame plus the count. The 3+-arity path previously
+                // copied the args twice and parked them on the owned
+                // side-stack — ~100 Ir per call on 3-arg native
+                // recursion (tak).
+                self.specpdl.push(SpecBinding::BacktraceNative {
+                    function,
+                    args_ptr,
+                    nargs: nargs as u32,
+                });
             }
         }
     }
@@ -13715,6 +13753,18 @@ impl Context {
                 arg0,
                 arg1,
             } => Some((*function, smallvec::smallvec![*arg0, *arg1], false, false)),
+            SpecBinding::BacktraceNative {
+                function,
+                args_ptr,
+                nargs,
+            } => {
+                // SAFETY: variant contract — the caller's call-args slot
+                // outlives this entry.
+                let args = (0..*nargs as usize)
+                    .map(|i| Value::from_bits(unsafe { *args_ptr.add(i) } as usize))
+                    .collect();
+                Some((*function, args, false, false))
+            }
             _ => None,
         }
     }
@@ -14879,6 +14929,17 @@ impl Context {
                 1 => *arg1,
                 _ => Value::NIL,
             },
+            Some(SpecBinding::BacktraceNative {
+                args_ptr, nargs, ..
+            }) => {
+                if index < *nargs as usize {
+                    // SAFETY: variant contract — the caller's call-args
+                    // slot outlives this entry.
+                    Value::from_bits(unsafe { *args_ptr.add(index) } as usize)
+                } else {
+                    Value::NIL
+                }
+            }
             Some(other) => panic!(
                 "backtrace_evaluated_arg_or_nil: expected EVALD Backtrace at specpdl[{count}], got {other:?}"
             ),
@@ -16021,6 +16082,7 @@ impl Context {
             | SpecBinding::Backtrace { .. }
             | SpecBinding::Backtrace1 { .. }
             | SpecBinding::Backtrace2 { .. }
+        | SpecBinding::BacktraceNative { .. }
             | SpecBinding::Nop
             | SpecBinding::UnwindProtect { .. }
             | SpecBinding::SaveExcursion { .. }
@@ -16393,7 +16455,9 @@ impl Context {
                     self.release_backtrace_args(&args);
                     // No-op, matches GNU SPECPDL_BACKTRACE
                 }
-                SpecBinding::Backtrace1 { .. } | SpecBinding::Backtrace2 { .. } => {
+                SpecBinding::Backtrace1 { .. }
+                | SpecBinding::Backtrace2 { .. }
+                | SpecBinding::BacktraceNative { .. } => {
                     // Inline evaluated backtraces own no side-stack payload.
                 }
                 SpecBinding::Nop => {
@@ -16474,6 +16538,7 @@ fn default_toplevel_binding(specpdl: &[SpecBinding], sym_id: SymId) -> Option<&S
         | SpecBinding::Backtrace { .. }
         | SpecBinding::Backtrace1 { .. }
         | SpecBinding::Backtrace2 { .. }
+        | SpecBinding::BacktraceNative { .. }
         | SpecBinding::Nop
         | SpecBinding::UnwindProtect { .. }
         | SpecBinding::SaveExcursion { .. }
@@ -16500,6 +16565,7 @@ pub(crate) fn default_toplevel_value_in_state(
         | Some(SpecBinding::Backtrace { .. })
         | Some(SpecBinding::Backtrace1 { .. })
         | Some(SpecBinding::Backtrace2 { .. })
+        | Some(SpecBinding::BacktraceNative { .. })
         | Some(SpecBinding::Nop)
         | Some(SpecBinding::UnwindProtect { .. })
         | Some(SpecBinding::SaveExcursion { .. })
@@ -16562,6 +16628,7 @@ pub(crate) fn set_default_toplevel_value_in_state(
             | SpecBinding::Backtrace { .. }
             | SpecBinding::Backtrace1 { .. }
             | SpecBinding::Backtrace2 { .. }
+        | SpecBinding::BacktraceNative { .. }
             | SpecBinding::Nop
             | SpecBinding::UnwindProtect { .. }
             | SpecBinding::SaveExcursion { .. }
@@ -16617,6 +16684,7 @@ fn let_shadows_buffer_binding_p_in_state(
         | SpecBinding::Backtrace { .. }
         | SpecBinding::Backtrace1 { .. }
         | SpecBinding::Backtrace2 { .. }
+        | SpecBinding::BacktraceNative { .. }
         | SpecBinding::Nop
         | SpecBinding::UnwindProtect { .. }
         | SpecBinding::SaveExcursion { .. }

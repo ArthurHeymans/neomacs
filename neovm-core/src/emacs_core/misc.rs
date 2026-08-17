@@ -728,7 +728,8 @@ fn collect_backtrace_frame_indices(eval: &super::eval::Context) -> Vec<usize> {
         .filter_map(|(index, entry)| match entry {
             super::eval::SpecBinding::Backtrace { .. }
             | super::eval::SpecBinding::Backtrace1 { .. }
-            | super::eval::SpecBinding::Backtrace2 { .. } => Some(index),
+            | super::eval::SpecBinding::Backtrace2 { .. }
+            | super::eval::SpecBinding::BacktraceNative { .. } => Some(index),
             _ => None,
         })
         .collect()
