@@ -46,6 +46,17 @@ pub(crate) mod gnu_table;
 /// documentation-query paths, never from `eval`/`funcall`/dispatch.
 #[inline]
 pub(crate) fn lookup(name: &str) -> Option<&'static str> {
+    // `gnu_table' is generated from ALL of GNU's `src/*.c', the platform files
+    // included, but a `DEFVAR_*' attaches the doc string and binds the symbol
+    // in the same statement -- so a variable whose C file this build does not
+    // compile has no `variable-documentation' either.  Measured under GNU
+    // 31.0.90, `-Q --batch': `(documentation-property 'dos-hyper-key
+    // 'variable-documentation)' is nil, and so is
+    // `(boundp 'dos-hyper-key)'.  The one table that already answers "does any
+    // build reachable from here declare this name" answers this too.
+    if crate::emacs_core::cus_start_platform_vars::is_name_gnu_leaves_unbound_here(name) {
+        return None;
+    }
     gnu_table::GNU_VAR_DOCS
         .iter()
         .find(|(n, _)| *n == name)

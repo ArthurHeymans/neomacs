@@ -73,6 +73,7 @@ mod count_lines_patterns;
 mod coverage;
 mod coverage_manifest;
 mod current;
+mod cus_start_platform_declarations;
 mod cxxr_semantics;
 mod data_construction_strict_edge_semantics;
 mod dbus_inhibitor_lock_semantics;

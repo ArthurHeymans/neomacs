@@ -270,6 +270,53 @@ impl ImageArea {
     }
 }
 
+/// GNU's `PATH_BITMAPS`, the `--bitmapdir` configure value that
+/// `src/epaths.in:67` defaults to and `src/epaths.h:67` carries into the build.
+///
+/// It is a compiled-in path, not a probe of the running system: GNU installs
+/// the same list on a machine that has no `/usr/include/X11/bitmaps` at all.
+const PATH_BITMAPS: &str = "/usr/include/X11/bitmaps";
+
+/// GNU's `decode_env_path (NULL, defalt, false)` (`src/emacs.c:3262-3300`),
+/// restricted to the no-environment-variable case `syms_of_image` uses.
+///
+/// With `evarname == 0` nothing is read from the environment, so the whole
+/// function is "split `defalt` on `SEPCHAR` and turn each element into a
+/// string, substituting `.` for an empty one" -- the `empty` argument is false
+/// at this call site, which is what selects `.` rather than nil.
+fn decode_env_path_default(defalt: &str) -> Value {
+    Value::list(
+        defalt
+            .split(':')
+            .map(|element| Value::string(if element.is_empty() { "." } else { element }))
+            .collect(),
+    )
+}
+
+/// The Neomacs counterpart of GNU's `syms_of_image` (`src/image.c:13024`).
+///
+/// GNU compiles `syms_of_image` under `#ifdef HAVE_WINDOW_SYSTEM`
+/// (`src/emacs.c:2364-2366`), which every window-system build satisfies, and
+/// `lisp/cus-start.el` probes the same fact with `(fboundp 'x-create-frame)` --
+/// the test `lisp/loadup.el` also uses to decide whether to preload `image.el`.
+/// Neomacs answers `t` to it, so these variables must exist here, and with
+/// GNU's initializers: a `DEFVAR_LISP` supplies the value and the
+/// `declared_special` bit in one statement, so a bound-but-not-special
+/// placeholder is a state GNU cannot be in.
+pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
+    // image.c:13265, `Vx_bitmap_file_path = decode_env_path (0, PATH_BITMAPS, 0)'.
+    obarray.define_special_variable("x-bitmap-file-path", decode_env_path_default(PATH_BITMAPS));
+    // image.c:13034 DEFVAR_LISP, make_float (MAX_IMAGE_SIZE) = 10.0.
+    obarray.define_special_variable("max-image-size", Value::make_float(10.0));
+    // image.c:13269 DEFVAR_LISP, make_fixnum (300).
+    obarray.define_special_variable("image-cache-eviction-delay", Value::fixnum(300));
+    // image.c:13279 DEFVAR_LISP, Qauto.
+    obarray.define_special_variable("image-scaling-factor", Value::symbol("auto"));
+    // image.c:13028 DEFVAR_LISP; GNU's define_image_type fills the list at
+    // C init, our equivalent enumerates the built-in decoders.
+    obarray.define_special_variable("image-types", supported_image_types_value());
+}
+
 pub(crate) fn supported_image_types_value() -> Value {
     Value::list(
         ImageType::AVAILABLE_IN_GNU_LIST_ORDER

@@ -663,3 +663,110 @@ fn platform_variables_gnu_leaves_unbound_here_are_not_bound() {
         );
     }
 }
+
+/// The whole `cus-start.el` platform table, walked row by row against a live
+/// [`Context`].
+///
+/// The table is the record of two GNU measurements -- "does GNU bind this in a
+/// build like this one" and "where is it declared here" -- and nothing else
+/// enforces it, because the module deliberately seeds nothing.  This is that
+/// enforcement: an `UnboundHere` row must not be bound, and a `DeclaredInC`
+/// row must be bound AND special, since in GNU one `DEFVAR_LISP` produces both
+/// and a row cannot claim a declaration site while behaving like a bare
+/// obarray cell.  A `DeclaredInPreloadedLisp` row is deliberately absent from
+/// a bare [`Context`] -- its declaration is a `defvaralias` in
+/// `lisp/term/neo-preload.el`, which only loadup runs -- so this test asserts
+/// that absence, and the oracle pins the post-loadup state.
+#[test]
+fn every_cus_start_platform_row_matches_its_declaration_claim() {
+    use crate::emacs_core::cus_start_platform_vars::{CUS_START_PLATFORM_VARIABLES, GnuBinding};
+
+    let mut eval = ev();
+
+    for var in CUS_START_PLATFORM_VARIABLES {
+        let bound = format_eval_result(&eval.eval_str(&format!("(boundp '{})", var.name)));
+        match var.binding {
+            GnuBinding::UnboundHere => {
+                assert_eq!(bound, "OK nil", "{} ({})", var.name, var.gnu);
+                // Nothing declares it, so nothing documents it either.
+                assert_eq!(
+                    format_eval_result(&eval.eval_str(&format!(
+                        "(documentation-property '{} 'variable-documentation)",
+                        var.name
+                    ))),
+                    "OK nil",
+                    "{} has documentation but no declaration",
+                    var.name
+                );
+            }
+            GnuBinding::DeclaredInC { site } => {
+                assert_eq!(
+                    bound, "OK t",
+                    "{} ({}) declared at {site}",
+                    var.name, var.gnu
+                );
+                assert_eq!(
+                    format_eval_result(
+                        &eval.eval_str(&format!("(special-variable-p '{})", var.name))
+                    ),
+                    "OK t",
+                    "{} is bound but not special; {site} owes it a declaration",
+                    var.name
+                );
+            }
+            GnuBinding::DeclaredInPreloadedLisp { site } => {
+                assert_eq!(
+                    bound, "OK nil",
+                    "{} ({}) is declared by {site}, which loadup runs, so a bare \
+                     Context must not have it",
+                    var.name, var.gnu
+                );
+            }
+        }
+    }
+}
+
+/// The five platform names entry 141 gave a declaration to, measured under GNU
+/// Emacs 31.0.90, `-Q --batch`:
+///
+/// ```elisp
+/// x-bitmap-file-path             ;; => ("/usr/include/X11/bitmaps")
+/// x-scroll-event-delta-factor    ;; => 1.0
+/// x-auto-preserve-selections     ;; => (CLIPBOARD PRIMARY)
+/// ```
+///
+/// `vertical-centering-font-regexp` and `x-gtk-use-system-tooltips` get their
+/// values from preloaded Lisp (`international/fontset.el:1266` and the
+/// `defvaralias` in `term/neo-preload.el`), so a bare [`Context`] sees the C
+/// initializers instead and they are checked in the oracle rather than here.
+#[test]
+fn the_x_platform_variables_hold_gnus_defaults_and_bind_dynamically() {
+    let mut eval = ev();
+
+    for (name, value) in [
+        ("x-bitmap-file-path", r#"("/usr/include/X11/bitmaps")"#),
+        ("x-scroll-event-delta-factor", "1.0"),
+        ("x-auto-preserve-selections", "(CLIPBOARD PRIMARY)"),
+    ] {
+        assert_eq!(
+            format_eval_result(&eval.eval_str(name)),
+            format!("OK {value}"),
+            "{name}"
+        );
+        // The declaration is what makes `let' dynamic: a plain obarray cell
+        // gets a lexical binding under lexical-binding and `symbol-value'
+        // inside the `let' still answers the global.
+        assert_eq!(
+            format_eval_result(
+                &eval.eval_str(&format!("(let (({name} 'probe)) (symbol-value '{name}))"))
+            ),
+            "OK probe",
+            "{name} binds lexically, so it has no declaration"
+        );
+        assert_eq!(
+            format_eval_result(&eval.eval_str(name)),
+            format!("OK {value}"),
+            "{name} did not restore after the let"
+        );
+    }
+}

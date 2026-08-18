@@ -4024,13 +4024,10 @@ impl Context {
         obarray.define_special_variable("yes-or-no-prompt", Value::string("(yes or no) "));
         // Float-valued C variables
         obarray.set_symbol_value("gc-cons-percentage", Value::make_float(0.1));
-        // image.c:13034 DEFVAR_LISP, make_float (MAX_IMAGE_SIZE) = 10.0.
-        obarray.define_special_variable("max-image-size", Value::make_float(10.0));
         // max-mini-window-height is registered by xdisp::register_bootstrap_vars.
-        obarray.set_symbol_value("image-scaling-factor", Value::symbol("auto"));
-        obarray.make_special("image-scaling-factor");
-        // image.c:13269 DEFVAR_LISP, make_fixnum (300).
-        obarray.define_special_variable("image-cache-eviction-delay", Value::fixnum(300));
+        // `max-image-size', `image-scaling-factor', `image-cache-eviction-delay',
+        // `image-types' and `x-bitmap-file-path' are registered by
+        // image::register_bootstrap_vars, GNU's `syms_of_image'.
         // Display engine C variables (xdisp.c)
         obarray.define_special_variable("global-mode-string", Value::NIL);
         // Fringe C variable (fringe.c `syms_of_fringe`: `Vfringe_bitmaps = Qnil`).
@@ -4082,10 +4079,13 @@ impl Context {
         // init -- so it keeps its own seed here.
         obarray.set_symbol_value("temporary-file-directory", Value::NIL);
         // The 32 names whose C declaration belongs to a platform are a table
-        // now, because 25 of them are ones GNU leaves UNBOUND in a build like
-        // this one; seeding those made `boundp' disagree with GNU.  See
-        // `cus_start_platform_vars::GnuBinding'.
-        super::cus_start_platform_vars::register_bootstrap_vars(obarray);
+        // in `cus_start_platform_vars', and that table seeds NOTHING.  25 of
+        // them are ones GNU leaves UNBOUND in a build like this one, so
+        // seeding those made `boundp' disagree with GNU (entry 138); the other
+        // 7 GNU declares with a `DEFVAR_LISP' that supplies a value AND the
+        // `declared_special' bit, so a nil seed disagreed with GNU on both
+        // (entry 141).  Each of the 7 is declared at the Neomacs counterpart
+        // of its `syms_of_*', named in its table row.
 
         // GNU DEFVAR_LISP variables from lread.c that must be bound to nil
         // before any Elisp runs (code may test `boundp` or read them directly).
@@ -4743,11 +4743,8 @@ impl Context {
                 Value::symbol("data-directory"),
             ]),
         );
-        // image.c:13028 DEFVAR_LISP; GNU's define_image_type fills the list at
-        // C init, our equivalent enumerates the built-in decoders.
-        obarray.define_special_variable("image-types", super::image::supported_image_types_value());
-        obarray.set_symbol_value("image-scaling-factor", Value::symbol("auto"));
-        obarray.make_special("image-scaling-factor");
+        // `image-types' and `image-scaling-factor' are registered by
+        // image::register_bootstrap_vars, GNU's `syms_of_image'.
 
         // User init / startup (C DEFVAR in official Emacs)
         obarray.set_symbol_value("user-init-file", Value::NIL);
@@ -4780,6 +4777,8 @@ impl Context {
         super::xfaces::register_bootstrap_vars(obarray);
         super::frame_vars::register_bootstrap_vars(obarray);
         super::buffer_vars::register_bootstrap_vars(obarray);
+        super::image::register_bootstrap_vars(obarray);
+        super::fontset::register_bootstrap_vars(obarray);
 
         // ---- end C-level bootstrap variables ----
 
@@ -5245,6 +5244,21 @@ impl Context {
         // `src/xterm.c:32704' / `32922' DEFVAR_INT, inits 200 and 128.
         obarray.define_int_variable("x-mouse-click-focus-ignore-time", 200);
         obarray.define_int_variable("x-color-cache-bucket-size", 128);
+        // `src/xterm.c:32833' DEFVAR_LISP, `make_float (1.0)' -- a float, not
+        // the fixnum 1: `handle_one_xevent' scales the XInput 2 scroll unit by
+        // it with `XFLOATINT' after a `NUMBERP' test
+        // (`src/xterm.c:22802-22803').
+        obarray.define_special_variable("x-scroll-event-delta-factor", Value::make_float(1.0));
+        // `src/xterm.c:32976' DEFVAR_LISP, `list2 (QCLIPBOARD, QPRIMARY)'.  The
+        // list is not decoration: `x_should_preserve_selection' preserves only
+        // the selections named in it when the value is a cons, and nothing at
+        // all when the value is nil (`src/xselect.c:1385-1401'), so a nil
+        // default is the opposite of GNU's behaviour rather than a milder
+        // version of it.
+        obarray.define_special_variable(
+            "x-auto-preserve-selections",
+            Value::list(vec![Value::symbol("CLIPBOARD"), Value::symbol("PRIMARY")]),
+        );
         obarray.set_symbol_value("x-session-id", Value::NIL);
         obarray.make_special("x-session-id");
         obarray.set_symbol_value("x-session-previous-id", Value::NIL);
