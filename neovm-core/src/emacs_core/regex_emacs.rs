@@ -320,6 +320,13 @@ pub(crate) struct CompiledPattern {
     /// backtracker with identical output.
     pub pike_eligible: bool,
 
+    /// True once [`validate_sealed_buffer`] proved every opcode byte valid,
+    /// every operand span in-bounds, and every jump target on an op
+    /// boundary — the backtracker then dispatches with unchecked fetches
+    /// (the seal-then-trust protocol the bytecode VM uses for `seal_ops`).
+    /// False (e.g. a hand-assembled test buffer) keeps the checked loop.
+    pub buffer_sealed: bool,
+
     /// Pike-only view of the bytecode: identical to `buffer` except that
     /// smart keep-string loops (`OnFailureKeepStringJump` whose jump-back
     /// targets the loop body) are de-optimized back to the equivalent
@@ -501,6 +508,7 @@ impl CompiledPattern {
             charset_class_bits: HashMap::new(),
             has_nongreedy_optional: false,
             pike_eligible: false,
+            buffer_sealed: false,
             pike_buffer: None,
             prefilter: None,
         }
@@ -1695,7 +1703,91 @@ pub(crate) fn regex_compile_lisp_with_translation(
         }
     }
 
+    // Seal: prove the buffer safe for unchecked backtracker dispatch. Runs
+    // LAST — after every post-compile rewrite (fusion, splices) — so the
+    // validated bytes are exactly what the matcher executes. A compiler bug
+    // fails closed to the checked loop (and loudly in debug builds).
+    buf.buffer_sealed = validate_sealed_buffer(&buf);
+    debug_assert!(
+        buf.buffer_sealed,
+        "regex compiler produced an unsealable buffer for this pattern"
+    );
+
     Ok(buf)
+}
+
+/// Prove the compiled buffer safe for the backtracker's SEALED (unchecked)
+/// dispatch: a linear decode must consume the buffer exactly, every opcode
+/// byte must name a real [`RegexOp`], every operand span stays in-bounds
+/// (via [`opcode_len`]), charsets carry no in-buffer range table (neomacs
+/// stores multibyte ranges in side maps; the matcher's `pc` advance would
+/// walk into an in-buffer table), and every jump target and counter
+/// position lands on an op boundary / in-bounds. Runtime `pc` values are
+/// closed over {linear advances, validated jump targets, fail-frame
+/// resumes derived from those}, so a sealed loop's fetches never leave the
+/// buffer.
+fn validate_sealed_buffer(pattern: &CompiledPattern) -> bool {
+    let bytecode = &pattern.buffer;
+    let len = bytecode.len();
+    let mut is_boundary = vec![false; len + 1];
+    is_boundary[len] = true;
+
+    // Pass 1: linear decode — boundaries, opcode validity, operand spans.
+    let mut pc = 0usize;
+    while pc < len {
+        is_boundary[pc] = true;
+        let Some(op) = RegexOp::from_byte(bytecode[pc]) else {
+            return false;
+        };
+        let Some(op_len) = opcode_len(bytecode, pc) else {
+            return false;
+        };
+        if pc + op_len > len {
+            return false;
+        }
+        if matches!(op, RegexOp::Charset | RegexOp::CharsetNot) && bytecode[pc + 1] & 0x80 != 0 {
+            return false;
+        }
+        pc += op_len;
+    }
+    if pc != len {
+        return false;
+    }
+
+    // Pass 2: every jump target on a boundary; counter positions in-bounds.
+    let mut pc = 0usize;
+    while pc < len {
+        let op = RegexOp::from_byte(bytecode[pc]).expect("pass 1 validated opcodes");
+        match op {
+            RegexOp::Jump
+            | RegexOp::OnFailureJump
+            | RegexOp::OnFailureKeepStringJump
+            | RegexOp::OnFailureJumpLoop
+            | RegexOp::OnFailureJumpNastyloop
+            | RegexOp::OnFailureJumpSmart
+            | RegexOp::SucceedN
+            | RegexOp::JumpN => {
+                // Matcher convention: target = op_pc + 3 + offset.
+                let offset = extract_number(bytecode, pc + 1);
+                let target = pc as i64 + 3 + offset as i64;
+                if target < 0 || target > len as i64 || !is_boundary[target as usize] {
+                    return false;
+                }
+            }
+            RegexOp::SetNumberAt => {
+                // Matcher convention: counter position = op_pc + 1 + offset,
+                // read/written as a 2-byte number.
+                let offset = extract_number(bytecode, pc + 1);
+                let target = pc as i64 + 1 + offset as i64;
+                if target < 0 || target + 2 > len as i64 {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+        pc += opcode_len(bytecode, pc).expect("pass 1 validated operand spans");
+    }
+    true
 }
 
 /// Build the Pike-only bytecode view: de-optimize every keep-string smart
@@ -4483,6 +4575,45 @@ fn re_match_internal(
     stop: usize,
     syntax: &dyn SyntaxLookup,
     point: usize,
+    enable_pike_fallback: bool,
+) -> Option<(usize, MatchRegisters)> {
+    // SEALED selects unchecked bytecode fetches inside the loop, justified
+    // by `validate_sealed_buffer`. Hand-assembled (unsealed) buffers take
+    // the fully checked instantiation.
+    if pattern.buffer_sealed {
+        re_match_loop::<true>(
+            scratch,
+            pattern,
+            text,
+            pos,
+            stop,
+            syntax,
+            point,
+            enable_pike_fallback,
+        )
+    } else {
+        re_match_loop::<false>(
+            scratch,
+            pattern,
+            text,
+            pos,
+            stop,
+            syntax,
+            point,
+            enable_pike_fallback,
+        )
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn re_match_loop<const SEALED: bool>(
+    scratch: &mut MatchScratch,
+    pattern: &CompiledPattern,
+    text: &[u8],
+    pos: usize,
+    stop: usize,
+    syntax: &dyn SyntaxLookup,
+    point: usize,
     // When true, abort with `set_pike_fallback()` if backtracking exceeds a
     // linear budget — the caller then re-runs on the Pike VM.  Only set for
     // `pike_eligible` patterns (the fallback is byte-exact there).
@@ -4653,6 +4784,39 @@ fn re_match_internal(
         };
     }
 
+    // Sealed-gated bytecode fetches for the loop below. SAFETY of the
+    // SEALED arms: `validate_sealed_buffer` proved every operand span
+    // in-bounds at every op boundary, and runtime `pc` values are closed
+    // over validated boundaries (linear advances, validated jump targets,
+    // fail-frame resumes derived from those).
+    macro_rules! bc_num {
+        ($pos:expr) => {{
+            let pos = $pos;
+            if SEALED {
+                debug_assert!(pos + 1 < bytecode.len());
+                unsafe {
+                    i16::from_le_bytes([
+                        *bytecode.get_unchecked(pos),
+                        *bytecode.get_unchecked(pos + 1),
+                    ])
+                }
+            } else {
+                extract_number(bytecode, pos)
+            }
+        }};
+    }
+    macro_rules! bc_byte {
+        ($pos:expr) => {{
+            let pos = $pos;
+            if SEALED {
+                debug_assert!(pos < bytecode.len());
+                unsafe { *bytecode.get_unchecked(pos) }
+            } else {
+                bytecode[pos]
+            }
+        }};
+    }
+
     'main_loop: loop {
         // End of pattern = potential match.
         //
@@ -4695,10 +4859,20 @@ fn re_match_internal(
         }
 
         let op_pc = pc;
-        let op_byte = bytecode[pc];
-        let Some(op) = RegexOp::from_byte(op_byte) else {
-            // Invalid opcode — treat as match failure
-            return None;
+        // SEALED: `pc < len` was just checked, validation proved every
+        // in-buffer op boundary carries a valid opcode byte, and runtime
+        // `pc` values are closed over validated boundaries.
+        let op = if SEALED {
+            let op_byte = unsafe { *bytecode.get_unchecked(pc) };
+            debug_assert!(RegexOp::from_byte(op_byte).is_some());
+            unsafe { std::mem::transmute::<u8, RegexOp>(op_byte) }
+        } else {
+            let op_byte = bytecode[pc];
+            let Some(op) = RegexOp::from_byte(op_byte) else {
+                // Invalid opcode — treat as match failure
+                return None;
+            };
+            op
         };
         pc += 1;
 
@@ -4725,7 +4899,7 @@ fn re_match_internal(
             }
 
             RegexOp::Exactn => {
-                let count = bytecode[pc] as usize;
+                let count = bc_byte!(pc) as usize;
                 pc += 1;
                 let literal_start = pc;
                 let literal_end = literal_start + count;
@@ -4770,7 +4944,7 @@ fn re_match_internal(
 
             RegexOp::Charset | RegexOp::CharsetNot => {
                 let charset_op_pos = pc - 1; // bytecode position of the opcode
-                let bitmap_len = bytecode[pc] as usize & 0x7F;
+                let bitmap_len = (bc_byte!(pc) & 0x7F) as usize;
                 pc += 1;
                 // The shared helper (see `match_charset_at`) holds the full
                 // GNU `execute_charset` logic — the mutually-exclusive
@@ -4796,7 +4970,7 @@ fn re_match_internal(
             }
 
             RegexOp::StartMemory => {
-                let group = bytecode[pc] as usize;
+                let group = bc_byte!(pc) as usize;
                 pc += 1;
                 if group < num_regs && group < regstart.len() {
                     // GNU start_memory: "In case we need to undo this
@@ -4812,7 +4986,7 @@ fn re_match_internal(
             }
 
             RegexOp::StopMemory => {
-                let group = bytecode[pc] as usize;
+                let group = bc_byte!(pc) as usize;
                 pc += 1;
                 if group < num_regs
                     && let Some(end) = regend.get_mut(group)
@@ -4827,7 +5001,7 @@ fn re_match_internal(
             }
 
             RegexOp::Duplicate => {
-                let group = bytecode[pc] as usize;
+                let group = bc_byte!(pc) as usize;
                 pc += 1;
 
                 let Some(start) = regstart.get(group).copied().flatten() else {
@@ -4990,26 +5164,26 @@ fn re_match_internal(
                 if crate::emacs_core::eval::tls_quit_pending() {
                     return None;
                 }
-                let offset = extract_number(bytecode, pc);
+                let offset = bc_num!(pc);
                 pc = ((pc as i64) + 2 + (offset as i64)) as usize;
             }
 
             RegexOp::OnFailureJump => {
-                let offset = extract_number(bytecode, pc);
+                let offset = bc_num!(pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
                 push_failure_point!(op_pc, fail_pc, FailureInput::Restore(d));
             }
 
             RegexOp::OnFailureKeepStringJump => {
-                let offset = extract_number(bytecode, pc);
+                let offset = bc_num!(pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
                 push_failure_point!(op_pc, fail_pc, FailureInput::KeepCurrent);
             }
 
             RegexOp::OnFailureJumpLoop => {
-                let offset = extract_number(bytecode, pc);
+                let offset = bc_num!(pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
                 // Check for infinite loop (empty match detection).
@@ -5023,7 +5197,7 @@ fn re_match_internal(
 
             RegexOp::OnFailureJumpNastyloop => {
                 // Same as OnFailureJumpLoop but for non-greedy
-                let offset = extract_number(bytecode, pc);
+                let offset = bc_num!(pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
                 push_failure_point!(op_pc, fail_pc, FailureInput::Restore(d));
@@ -5035,7 +5209,7 @@ fn re_match_internal(
                 // the same rewrite lazily at first execution,
                 // regex-emacs.c:4864-4906).  Fall back to the safe plain
                 // on_failure_jump semantics if one survives.
-                let offset = extract_number(bytecode, pc);
+                let offset = bc_num!(pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
                 push_failure_point!(op_pc, fail_pc, FailureInput::Restore(d));
@@ -5063,7 +5237,7 @@ fn re_match_internal(
                 } else {
                     // Counter exhausted — behave like on_failure_jump_loop.
                     // Read the jump offset and push a failure point.
-                    let offset = extract_number(bytecode, pc);
+                    let offset = bc_num!(pc);
                     pc += 2; // skip the offset field
                     let fail_pc = ((pc as i64) + (offset as i64)) as usize;
                     pc += 2; // skip the counter field
@@ -5091,7 +5265,7 @@ fn re_match_internal(
                         val: count,
                     });
                     set_counter(counters, counter_pos, count.saturating_sub(1));
-                    let offset = extract_number(bytecode, pc);
+                    let offset = bc_num!(pc);
                     pc = ((pc as i64) + 2 + (offset as i64)) as usize;
                 } else {
                     pc += 4; // Skip past offset + counter fields
@@ -5102,7 +5276,7 @@ fn re_match_internal(
                 // GNU: set_number_at  <offset-to-counter:2> <value:2>
                 // Sets the counter at the given offset to the given value.
                 // Used to reset interval counters at the start of a loop.
-                let rel_offset = extract_number(bytecode, pc);
+                let rel_offset = bc_num!(pc);
                 pc += 2; // advance past the offset field
                 let value = extract_number_u16(bytecode, pc);
                 pc += 2; // advance past the value field
