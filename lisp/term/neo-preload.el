@@ -17,4 +17,13 @@
 ;; expose the same command even before the GUI terminal layer is loaded.
 (global-set-key [XF86WakeUp] #'ignore)
 
+;; `x-gtk-use-system-tooltips' has no C declaration in any GNU build: it is an
+;; alias that term/x-win.el installs onto the `use-system-tooltips' DEFVAR_BOOL
+;; in src/frame.c (term/x-win.el:1572, and term/pgtk-win.el:372 for pgtk), and
+;; loadup.el preloads that file into the dump.  Aliasing rather than declaring
+;; is what gives the name `use-system-tooltips' default of t, its docstring, and
+;; the Boolean coercion the DEFVAR_BOOL slot performs -- a separate variable
+;; here would have all three subtly wrong and would let the two names disagree.
+(defvaralias 'x-gtk-use-system-tooltips 'use-system-tooltips)
+
 ;;; neo-preload.el ends here
