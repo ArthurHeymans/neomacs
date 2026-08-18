@@ -565,6 +565,37 @@ pub extern "C" fn neovm_jit_call(
     jit_shim_contain!(ctx, STATUS_SIGNAL, {
         let func_val = Value::from_bits(func_bits as usize);
         let nargs = nargs as usize;
+        {
+            // Fast path: plain builtin symbol callee — no Vm, no scratch
+            // roots (interned symbol callees are obarray-rooted; the args
+            // are staged on the GC-traced bc_buf), loads-only quit check.
+            // Falls through to the full path on any other callee shape.
+            // SAFETY: seam-provided dormant Context (fn-level contract).
+            let ctx = unsafe { &mut *(ctx as *mut Context) };
+            if func_val.is_symbol() && ctx.maybe_quit_hot_ok() {
+                let args_start = ctx.bc_buf.len();
+                for i in 0..nargs {
+                    // SAFETY: generated code stored `nargs` words at args_ptr.
+                    let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+                    ctx.bc_buf.push(v);
+                }
+                let fast = Vm::call_builtin_symbol_for_jit(ctx, func_val, args_start, nargs);
+                ctx.bc_buf.truncate(args_start);
+                if let Some(res) = fast {
+                    return match res {
+                        Ok(value) => {
+                            // SAFETY: `out` is the generated code's result slot.
+                            unsafe { *out = value.bits() as i64 };
+                            STATUS_OK
+                        }
+                        Err(flow) => {
+                            stash_pending_flow(flow);
+                            STATUS_SIGNAL
+                        }
+                    };
+                }
+            }
+        }
         let saved = save_scratch_gc_roots();
         // The callee is not on bc_buf, so it needs an explicit scratch root across
         // the call (which may GC); the arguments go straight onto the GC-traced

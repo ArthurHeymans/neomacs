@@ -3005,7 +3005,7 @@ impl<'a> Vm<'a> {
                 }
             }
             ResolvedStackCallTarget::Builtin { callee } => InterpreterStackCall::Complete(
-                self.call_resolved_builtin_from_stack_args(func_val, args_start, nargs, callee),
+                Self::call_resolved_builtin_from_stack_args(self.ctx, func_val, args_start, nargs, callee),
             ),
             ResolvedStackCallTarget::Generic => {
                 let backtrace = self
@@ -6320,8 +6320,8 @@ impl<'a> Vm<'a> {
             } else {
                 match entry.function {
                     Some(function) => {
-                        vm.dispatch_builtin_subr_from_stack_args_unchecked(
-                            function, args_start, nargs,
+                        Vm::dispatch_builtin_subr_from_stack_args_unchecked(
+                            vm.ctx, function, args_start, nargs,
                         )
                         .unwrap_or_else(|| Err(signal(LispCondition::VoidFunction, vec![func_val])))
                     }
@@ -6497,7 +6497,8 @@ impl<'a> Vm<'a> {
         if allow_direct_builtin_subr {
             match self.resolve_stack_call_target(func_val) {
                 ResolvedStackCallTarget::Builtin { callee } => {
-                    return self.call_resolved_builtin_from_stack_args(
+                    return Self::call_resolved_builtin_from_stack_args(
+                        self.ctx,
                         func_val, args_start, nargs, callee,
                     );
                 }
@@ -6632,6 +6633,66 @@ impl<'a> Vm<'a> {
         }
     }
 
+    /// JIT generic-call fast path: a SYMBOL callee that resolves to a plain
+    /// builtin dispatches at the Context level — no Vm construction (the
+    /// per-shim `Vm::from_context` zero-fills the call caches, so nothing is
+    /// gained by them here) and no scratch roots (an interned symbol callee
+    /// is obarray-rooted; the arguments are staged on the GC-traced bc_buf).
+    /// Returns `None` for anything else — non-symbol callees, bytecode/
+    /// lambda/alias/advice cells, compiler overrides, and the
+    /// fillarray/aset writeback shapes (including alias-to-subr, read off
+    /// the resolved cell) — the caller then takes the full Vm path.
+    /// Mirrors the spec shim's stage-2 ctx-level dispatch precedent.
+    pub(crate) fn call_builtin_symbol_for_jit(
+        ctx: &mut crate::emacs_core::eval::Context,
+        func_val: Value,
+        args_start: usize,
+        nargs: usize,
+    ) -> Option<EvalResult> {
+        let sym_id = func_val.as_symbol_id()?;
+        if ctx.compiler_function_overrides_active() {
+            return None;
+        }
+        let cell = ctx.obarray.symbol_function_id(sym_id);
+        let callee = match cell {
+            Some(value) => {
+                if !matches!(
+                    value.kind(),
+                    ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr)
+                ) {
+                    return None;
+                }
+                ResolvedBuiltinCallee::from_subr_value(value)?
+            }
+            None => ResolvedBuiltinCallee::from_static_symbol(sym_id)?,
+        };
+        if nargs > 0 && ctx.bc_buf[args_start].is_string() {
+            let target_id = cell.and_then(|value| value.as_subr_id()).unwrap_or(sym_id);
+            if Self::mutates_first_arg_sym(sym_id) || Self::mutates_first_arg_sym(target_id) {
+                return None;
+            }
+        }
+        // Inline ctx-level bytecode-call depth protocol (GNU's Bcall depth,
+        // floor-raise included) — the spec shim's stage-2 shape.
+        ctx.depth += 1;
+        if ctx.depth > ctx.max_depth {
+            if ctx.max_depth < 100 {
+                ctx.max_depth = 100;
+            }
+            if ctx.depth > ctx.max_depth {
+                ctx.depth -= 1;
+                return Some(Err(signal(
+                    "error",
+                    vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")],
+                )));
+            }
+        }
+        let result =
+            Self::call_resolved_builtin_from_stack_args(ctx, func_val, args_start, nargs, callee);
+        ctx.depth -= 1;
+        Some(result)
+    }
+
     fn try_call_builtin_subr_from_stack_args(
         &mut self,
         func_val: Value,
@@ -6642,20 +6703,18 @@ impl<'a> Vm<'a> {
         else {
             return None;
         };
-        Some(self.call_resolved_builtin_from_stack_args(func_val, args_start, nargs, callee))
+        Some(Self::call_resolved_builtin_from_stack_args(self.ctx, func_val, args_start, nargs, callee))
     }
 
     fn call_resolved_builtin_from_stack_args(
-        &mut self,
+        ctx: &mut crate::emacs_core::eval::Context,
         func_val: Value,
         args_start: usize,
         nargs: usize,
         callee: ResolvedBuiltinCallee,
     ) -> EvalResult {
         let (sym_id, entry) = callee.entry();
-        let backtrace = self
-            .ctx
-            .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
+        let backtrace = ctx.push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
         let result = if nargs < entry.min_args as usize
             || entry.max_args.is_some_and(|max| nargs > max as usize)
         {
@@ -6664,15 +6723,16 @@ impl<'a> Vm<'a> {
                 vec![callee.wrong_arity_value(), Value::fixnum(nargs as i64)],
             ))
         } else {
-            if let Some(value) =
-                self.try_dispatch_builtin_subr_fast_value_from_stack_args(sym_id, args_start, nargs)
-            {
-                self.ctx.pop_fast_bytecode_backtrace_frame(backtrace);
+            if let Some(value) = Self::try_dispatch_builtin_subr_fast_value_from_stack_args(
+                ctx, sym_id, args_start, nargs,
+            ) {
+                ctx.pop_fast_bytecode_backtrace_frame(backtrace);
                 return Ok(value);
             }
             match entry.function {
-                Some(function) => self
-                    .dispatch_builtin_subr_from_stack_args_unchecked(function, args_start, nargs)
+                Some(function) => Self::dispatch_builtin_subr_from_stack_args_unchecked(
+                    ctx, function, args_start, nargs,
+                )
                     .unwrap_or_else(|| {
                         Err(signal(
                             LispCondition::VoidFunction,
@@ -6685,40 +6745,39 @@ impl<'a> Vm<'a> {
                 )),
             }
         };
-        let result = self.ctx.dispatch_signal_result_if_needed(result);
-        self.ctx
-            .pop_bytecode_backtrace_token_with_result(backtrace, result)
+        let result = ctx.dispatch_signal_result_if_needed(result);
+        ctx.pop_bytecode_backtrace_token_with_result(backtrace, result)
     }
 
     #[inline]
     fn try_dispatch_builtin_subr_fast_value_from_stack_args(
-        &self,
+        ctx: &crate::emacs_core::eval::Context,
         sym_id: SymId,
         args_start: usize,
         nargs: usize,
     ) -> Option<Value> {
         if sym_id == plus_sym_id() {
-            return self.try_fast_fixnum_add_value_from_stack_args(args_start, nargs);
+            return Self::try_fast_fixnum_add_value_from_stack_args(ctx, args_start, nargs);
         }
         if sym_id == logand_sym_id() {
-            return self.try_fast_fixnum_logand_value_from_stack_args(args_start, nargs);
+            return Self::try_fast_fixnum_logand_value_from_stack_args(ctx, args_start, nargs);
         }
         if sym_id == logior_sym_id() {
-            return self.try_fast_fixnum_logior_value_from_stack_args(args_start, nargs);
+            return Self::try_fast_fixnum_logior_value_from_stack_args(ctx, args_start, nargs);
         }
         if sym_id == logxor_sym_id() {
-            return self.try_fast_fixnum_logxor_value_from_stack_args(args_start, nargs);
+            return Self::try_fast_fixnum_logxor_value_from_stack_args(ctx, args_start, nargs);
         }
         None
     }
 
     #[inline]
     fn try_fast_fixnum_add_value_from_stack_args(
-        &self,
+        ctx: &crate::emacs_core::eval::Context,
         args_start: usize,
         nargs: usize,
     ) -> Option<Value> {
-        let args = &self.ctx.bc_buf;
+        let args = &ctx.bc_buf;
         match nargs {
             0 => return Some(Value::fixnum(0)),
             1 => {
@@ -6758,11 +6817,11 @@ impl<'a> Vm<'a> {
 
     #[inline]
     fn try_fast_fixnum_logand_value_from_stack_args(
-        &self,
+        ctx: &crate::emacs_core::eval::Context,
         args_start: usize,
         nargs: usize,
     ) -> Option<Value> {
-        let args = &self.ctx.bc_buf;
+        let args = &ctx.bc_buf;
         let mut acc = if nargs == 0 {
             -1
         } else {
@@ -6777,11 +6836,11 @@ impl<'a> Vm<'a> {
 
     #[inline]
     fn try_fast_fixnum_logior_value_from_stack_args(
-        &self,
+        ctx: &crate::emacs_core::eval::Context,
         args_start: usize,
         nargs: usize,
     ) -> Option<Value> {
-        let args = &self.ctx.bc_buf;
+        let args = &ctx.bc_buf;
         let mut acc = if nargs == 0 {
             0
         } else {
@@ -6796,11 +6855,11 @@ impl<'a> Vm<'a> {
 
     #[inline]
     fn try_fast_fixnum_logxor_value_from_stack_args(
-        &self,
+        ctx: &crate::emacs_core::eval::Context,
         args_start: usize,
         nargs: usize,
     ) -> Option<Value> {
-        let args = &self.ctx.bc_buf;
+        let args = &ctx.bc_buf;
         let mut acc = if nargs == 0 {
             0
         } else {
@@ -6814,12 +6873,12 @@ impl<'a> Vm<'a> {
     }
 
     fn dispatch_builtin_subr_from_stack_args_unchecked(
-        &mut self,
+        ctx: &mut crate::emacs_core::eval::Context,
         func: SubrFn,
         args_start: usize,
         nargs: usize,
     ) -> Option<EvalResult> {
-        let args = &self.ctx.bc_buf;
+        let args = &ctx.bc_buf;
         macro_rules! stack_arg {
             ($idx:expr) => {{
                 let idx = $idx;
@@ -6831,28 +6890,28 @@ impl<'a> Vm<'a> {
             }};
         }
         match func {
-            SubrFn::A0(func) => Some(func(self.ctx)),
+            SubrFn::A0(func) => Some(func(ctx)),
             SubrFn::A1(func) => {
                 let arg0 = stack_arg!(0);
-                Some(func(self.ctx, arg0))
+                Some(func(ctx, arg0))
             }
             SubrFn::A2(func) => {
                 let arg0 = stack_arg!(0);
                 let arg1 = stack_arg!(1);
-                Some(func(self.ctx, arg0, arg1))
+                Some(func(ctx, arg0, arg1))
             }
             SubrFn::A3(func) => {
                 let arg0 = stack_arg!(0);
                 let arg1 = stack_arg!(1);
                 let arg2 = stack_arg!(2);
-                Some(func(self.ctx, arg0, arg1, arg2))
+                Some(func(ctx, arg0, arg1, arg2))
             }
             SubrFn::A4(func) => {
                 let arg0 = stack_arg!(0);
                 let arg1 = stack_arg!(1);
                 let arg2 = stack_arg!(2);
                 let arg3 = stack_arg!(3);
-                Some(func(self.ctx, arg0, arg1, arg2, arg3))
+                Some(func(ctx, arg0, arg1, arg2, arg3))
             }
             SubrFn::A5(func) => {
                 let arg0 = stack_arg!(0);
@@ -6860,7 +6919,7 @@ impl<'a> Vm<'a> {
                 let arg2 = stack_arg!(2);
                 let arg3 = stack_arg!(3);
                 let arg4 = stack_arg!(4);
-                Some(func(self.ctx, arg0, arg1, arg2, arg3, arg4))
+                Some(func(ctx, arg0, arg1, arg2, arg3, arg4))
             }
             SubrFn::A6(func) => {
                 let arg0 = stack_arg!(0);
@@ -6869,7 +6928,7 @@ impl<'a> Vm<'a> {
                 let arg3 = stack_arg!(3);
                 let arg4 = stack_arg!(4);
                 let arg5 = stack_arg!(5);
-                Some(func(self.ctx, arg0, arg1, arg2, arg3, arg4, arg5))
+                Some(func(ctx, arg0, arg1, arg2, arg3, arg4, arg5))
             }
             SubrFn::A7(func) => {
                 let arg0 = stack_arg!(0);
@@ -6879,7 +6938,7 @@ impl<'a> Vm<'a> {
                 let arg4 = stack_arg!(4);
                 let arg5 = stack_arg!(5);
                 let arg6 = stack_arg!(6);
-                Some(func(self.ctx, arg0, arg1, arg2, arg3, arg4, arg5, arg6))
+                Some(func(ctx, arg0, arg1, arg2, arg3, arg4, arg5, arg6))
             }
             SubrFn::A8(func) => {
                 let arg0 = stack_arg!(0);
@@ -6891,49 +6950,49 @@ impl<'a> Vm<'a> {
                 let arg6 = stack_arg!(6);
                 let arg7 = stack_arg!(7);
                 Some(func(
-                    self.ctx, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
+                    ctx, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
                 ))
             }
             SubrFn::Many(func) => {
                 let args = args[args_start..args_start + nargs].to_vec();
-                Some(func(self.ctx, args))
+                Some(func(ctx, args))
             }
             SubrFn::ManySlice(func) => {
-                Some(self.call_many_slice_subr_from_stack_args(func, args_start, nargs))
+                Some(Self::call_many_slice_subr_from_stack_args(ctx, func, args_start, nargs))
             }
         }
     }
 
     fn call_many_slice_subr_from_stack_args(
-        &mut self,
+        ctx: &mut crate::emacs_core::eval::Context,
         func: crate::tagged::header::SubrFnManySlice,
         args_start: usize,
         nargs: usize,
     ) -> EvalResult {
-        let args = &self.ctx.bc_buf;
+        let args = &ctx.bc_buf;
         match nargs {
-            0 => func(self.ctx, &[]),
+            0 => func(ctx, &[]),
             1 => {
                 let arg0 = args[args_start];
-                func(self.ctx, &[arg0])
+                func(ctx, &[arg0])
             }
             2 => {
                 let arg0 = args[args_start];
                 let arg1 = args[args_start + 1];
-                func(self.ctx, &[arg0, arg1])
+                func(ctx, &[arg0, arg1])
             }
             3 => {
                 let arg0 = args[args_start];
                 let arg1 = args[args_start + 1];
                 let arg2 = args[args_start + 2];
-                func(self.ctx, &[arg0, arg1, arg2])
+                func(ctx, &[arg0, arg1, arg2])
             }
             4 => {
                 let arg0 = args[args_start];
                 let arg1 = args[args_start + 1];
                 let arg2 = args[args_start + 2];
                 let arg3 = args[args_start + 3];
-                func(self.ctx, &[arg0, arg1, arg2, arg3])
+                func(ctx, &[arg0, arg1, arg2, arg3])
             }
             5 => {
                 let arg0 = args[args_start];
@@ -6941,7 +7000,7 @@ impl<'a> Vm<'a> {
                 let arg2 = args[args_start + 2];
                 let arg3 = args[args_start + 3];
                 let arg4 = args[args_start + 4];
-                func(self.ctx, &[arg0, arg1, arg2, arg3, arg4])
+                func(ctx, &[arg0, arg1, arg2, arg3, arg4])
             }
             6 => {
                 let arg0 = args[args_start];
@@ -6950,7 +7009,7 @@ impl<'a> Vm<'a> {
                 let arg3 = args[args_start + 3];
                 let arg4 = args[args_start + 4];
                 let arg5 = args[args_start + 5];
-                func(self.ctx, &[arg0, arg1, arg2, arg3, arg4, arg5])
+                func(ctx, &[arg0, arg1, arg2, arg3, arg4, arg5])
             }
             7 => {
                 let arg0 = args[args_start];
@@ -6960,7 +7019,7 @@ impl<'a> Vm<'a> {
                 let arg4 = args[args_start + 4];
                 let arg5 = args[args_start + 5];
                 let arg6 = args[args_start + 6];
-                func(self.ctx, &[arg0, arg1, arg2, arg3, arg4, arg5, arg6])
+                func(ctx, &[arg0, arg1, arg2, arg3, arg4, arg5, arg6])
             }
             8 => {
                 let arg0 = args[args_start];
@@ -6971,11 +7030,11 @@ impl<'a> Vm<'a> {
                 let arg5 = args[args_start + 5];
                 let arg6 = args[args_start + 6];
                 let arg7 = args[args_start + 7];
-                func(self.ctx, &[arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7])
+                func(ctx, &[arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7])
             }
             _ => {
                 let args = LispArgVec::from_slice(&args[args_start..args_start + nargs]);
-                func(self.ctx, &args)
+                func(ctx, &args)
             }
         }
     }
