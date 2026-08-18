@@ -79,15 +79,8 @@ fn compiles_a_saved_weather_station_sketch_from_the_live_minor_mode_keymap() -> 
                                    (key-binding
                                     (kbd "C-c C-a c"))))
                               (call-interactively command)
-                              (let ((process
-                                     (get-buffer-process
-                                      arduino-cli--compilation-buffer)))
-                                (while
-                                    (and process
-                                         (process-live-p process))
-                                  (accept-process-output process 0.05))
-                                (when process
-                                  (accept-process-output process 0.05)))
+                              (acli-test-await-compilation
+                                     arduino-cli--compilation-buffer)
                               (list
                                command
                                (with-temp-buffer
@@ -196,15 +189,8 @@ fn uploads_a_file_local_default_board_through_the_live_mode_menu() -> ParityBatc
                                     [menu-bar arduino-cli
                                               Upload\ Project])))
                               (call-interactively menu-command)
-                              (let ((process
-                                     (get-buffer-process
-                                      arduino-cli--compilation-buffer)))
-                                (while
-                                    (and process
-                                         (process-live-p process))
-                                  (accept-process-output process 0.05))
-                                (when process
-                                  (accept-process-output process 0.05)))
+                              (acli-test-await-compilation
+                                     arduino-cli--compilation-buffer)
                               (list
                                menu-command
                                (list
@@ -318,15 +304,8 @@ fn selects_the_nonfirst_connected_board_then_uploads_through_real_completion() -
                                 (kbd "C-c C-a u")
                                 "Arduino Nano @ /dev/ttyUSB"
                                 (kbd "TAB RET")))
-                              (let ((process
-                                     (get-buffer-process
-                                      arduino-cli--compilation-buffer)))
-                                (while
-                                    (and process
-                                         (process-live-p process))
-                                  (accept-process-output process 0.05))
-                                (when process
-                                  (accept-process-output process 0.05)))
+                              (acli-test-await-compilation
+                                     arduino-cli--compilation-buffer)
                               (list
                                command
                                (nreverse prompts)
@@ -422,15 +401,8 @@ fn installs_a_selected_library_version_through_real_minibuffer_completion() -> P
                               (kbd "C-u C-c C-a i")
                               "ArduinoJson@7.3"
                               (kbd "TAB RET")))
-                            (let ((process
-                                   (get-buffer-process
-                                    arduino-cli--compilation-buffer)))
-                              (while
-                                  (and process
-                                       (process-live-p process))
-                                (accept-process-output process 0.05))
-                              (when process
-                                (accept-process-output process 0.05)))
+                            (acli-test-await-compilation
+                                   arduino-cli--compilation-buffer)
                             (list
                              command
                              (nreverse prompts)
@@ -756,19 +728,8 @@ fn compile_and_upload_stops_then_restarts_the_live_serial_monitor() -> ParityBat
                                 (let ((active-before
                                        (arduino-cli--serial-monitor-is-active)))
                                   (call-interactively command)
-                                  (let ((compile-process
-                                         (get-buffer-process
-                                          arduino-cli--compilation-buffer)))
-                                    (while
-                                        (and
-                                         compile-process
-                                         (process-live-p
-                                          compile-process))
-                                      (accept-process-output
-                                       compile-process 0.05))
-                                    (when compile-process
-                                      (accept-process-output
-                                       compile-process 0.05)))
+                                  (acli-test-await-compilation
+                                         arduino-cli--compilation-buffer)
                                   (let ((restarted-process
                                          (get-buffer-process
                                           arduino-cli--monitor-buffer))

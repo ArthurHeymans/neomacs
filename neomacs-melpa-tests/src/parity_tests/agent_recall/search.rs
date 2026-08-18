@@ -74,19 +74,40 @@ fn agent_recall_reindexes_then_searches_real_transcript_files_with_builtin_grep(
                                   "needle-token")
                                  (let ((process
                                         (get-buffer-process
-                                         "*grep*")))
+                                         "*grep*"))
+                                       (waited 0))
+                                   ;; `process-live-p' going nil is not the
+                                   ;; same fact as grep's output having been
+                                   ;; read.  Emacs drains a dying process's
+                                   ;; remaining reads BEFORE it runs the
+                                   ;; sentinel (GNU src/process.c:7896-7910),
+                                   ;; the sentinel is what calls
+                                   ;; `compilation-handle-exit', and that
+                                   ;; function marks the text it writes with a
+                                   ;; `compilation-handle-exit' text property
+                                   ;; (GNU lisp/progmodes/compile.el:2630).
+                                   ;; The property is therefore the causal end
+                                   ;; of the output; a pin taken at process
+                                   ;; death records a prefix of it chosen by
+                                   ;; the scheduler.  See DIVERGENCES.md 144.
                                    (while
-                                       (and process
-                                            (process-live-p process))
-                                     (accept-process-output
-                                      process
-                                      0.05))
-                                   (when process
-                                     (accept-process-output
-                                      process
-                                      0.05))
+                                       (and (< waited 1200)
+                                            (with-current-buffer "*grep*"
+                                              (not
+                                               (text-property-not-all
+                                                (point-min) (point-max)
+                                                'compilation-handle-exit nil))))
+                                     (accept-process-output nil 0.05)
+                                     (setq waited (1+ waited)))
                                    (with-current-buffer
                                        "*grep*"
+                                     (unless
+                                         (text-property-not-all
+                                          (point-min) (point-max)
+                                          'compilation-handle-exit nil)
+                                       (error "agent-recall search never \
+reached `compilation-handle-exit'; *grep* records only as much of grep's \
+output as had been read"))
                                      (let ((matches
                                             (seq-filter
                                              (lambda (line)

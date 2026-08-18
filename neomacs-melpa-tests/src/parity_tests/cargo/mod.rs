@@ -150,28 +150,88 @@ printf '# Error code E0425\\n\\nAn unresolved name was used.\\n\\n```rust\\nmiss
                      (cadr fields)))))
          (split-string (string-trim-right (buffer-string)) "\n" t))))))
 
+(defmacro cargo389-test-piped (&rest body)
+  "Evaluate BODY with the Cargo child on a pipe, not on a PTY.
+`cargo-process--add-errno-buttons' runs from `compilation-filter-hook' and
+searches only `compilation-filter-start' .. `(point)' for
+`cargo-process--errno-regex' (cargo-process.el:469-479, installed at :292).
+A match straddling that boundary is never found again, so whether the E0425
+button exists at all is decided by where a read landed -- and this suite pins
+the button.  `compilation-start' gives the child a PTY by default
+\(GNU src/process.c:8923-8929), and a PTY's line discipline is the only
+topology here that can hand Emacs half a line; over a pipe each of the
+stand-in's `printf' writes is atomic and below PIPE_BUF.  See DIVERGENCES.md
+entries 133 and 144."
+  (declare (indent 0))
+  `(let ((process-connection-type nil)) ,@body))
+
+(defun cargo389-test-assert-piped (process)
+  "Signal unless PROCESS is connected through a pipe.
+`cargo389-test-wait' is the only way this suite reaches a finished Cargo
+buffer, so checking here means no call site can skip the guard: one that
+forgets `cargo389-test-piped' fails on its first run, in both editors."
+  (unless (processp process)
+    (error "cargo389-test-assert-piped: %S is not a process, so the pipe \
+guard could not be checked" process))
+  (when (process-tty-name process)
+    (error "cargo389-test-assert-piped: %S is PTY-connected (%s); its output \
+would arrive in scheduling-dependent chunks"
+           process (process-tty-name process))))
+
+(defun cargo389-test-compilation-complete-p (buffer)
+  "Non-nil once `compilation-handle-exit' has written BUFFER's last line.
+That line is the causal end of the output rather than a guess about it: Emacs
+drains a dying process's remaining reads before it runs the sentinel
+\(GNU src/process.c:7896-7910), the sentinel is what calls
+`compilation-handle-exit', and that function marks the text it writes with a
+`compilation-handle-exit' text property (GNU lisp/progmodes/compile.el:2630)."
+  (and (buffer-live-p (get-buffer buffer))
+       (with-current-buffer buffer
+         (and (text-property-not-all (point-min) (point-max)
+                                     'compilation-handle-exit nil)
+              t))))
+
+(defun cargo389-test-wait-sentinel (process)
+  "Wait until PROCESS's own sentinel has run, or signal.
+`cargo-process-new' replaces the compilation sentinel with a lambda of its own
+\(cargo-process.el:606-618) that never calls `compilation-handle-exit', so
+`*Cargo New*' wears `cargo-process-mode' but that marker never appears in it.
+Which gate a pin needs is decided by the sentinel that drives the buffer, not
+by the major mode it wears; for a buffer driven by the package's own sentinel
+the causal fact is that this sentinel has run.  Attaching the observer here
+cannot miss it -- Emacs runs process sentinels only from the event loop, and
+nothing has pumped it between the spawn and this call."
+  (cargo389-test-assert-piped process)
+  (let ((seen nil) (waited 0))
+    (add-function :after (process-sentinel process)
+                  (lambda (&rest _) (setq seen t)))
+    (while (and (< waited 1200) (not seen))
+      (accept-process-output nil 0.05)
+      (setq waited (1+ waited)))
+    (unless seen
+      (error "cargo389-test-wait-sentinel: %S's own sentinel never ran, so \
+whatever it was going to write is not in the buffer yet" process))
+    (list :status (process-status process)
+          :exit (process-exit-status process))))
+
 (defun cargo389-test-wait (process)
-  (let ((remaining 400)
-        (buffer (process-buffer process))
-        previous
-        (stable 0))
-    (while (and (> remaining 0) (process-live-p process))
-      (accept-process-output process 0.05)
-      (setq remaining (1- remaining)))
-    (when (process-live-p process)
-      (error "Cargo process did not finish: %S" process))
-    (while (and (> remaining 0) (< stable 3))
-      (accept-process-output process 0.05)
-      (let ((current
-             (and (buffer-live-p buffer)
-                  (with-current-buffer buffer
-                    (buffer-substring-no-properties (point-min) (point-max))))))
-        (if (equal current previous)
-            (setq stable (1+ stable))
-          (setq previous current stable 0)))
-      (setq remaining (1- remaining)))
-    (unless (= stable 3)
-      (error "Cargo process output did not settle: %S" process))
+  "Wait until PROCESS's buffer holds all of its compilation output, or signal.
+Neither `process-live-p' going nil nor N identical samples of the buffer is
+that condition: a process can be gone with reads still queued, and identical
+samples only say the sentinel has not run YET.  Both were what this helper
+used to wait for, and the pin it guards records the sentinel's own closing
+line."
+  (let ((buffer (process-buffer process))
+        (waited 0))
+    (cargo389-test-assert-piped process)
+    (while (and (< waited 1200)
+                (not (cargo389-test-compilation-complete-p buffer)))
+      (accept-process-output nil 0.05)
+      (setq waited (1+ waited)))
+    (unless (cargo389-test-compilation-complete-p buffer)
+      (error "cargo389-test-wait: %S never reached `compilation-handle-exit'; \
+its buffer records only as much of the child's output as had been read"
+             process))
     (when (and (buffer-live-p buffer) (get-buffer-process buffer))
       (error "Cargo process remained attached after exit: %S" process))
     (list :status (process-status process)
@@ -367,7 +427,7 @@ fn cases() -> Vec<ParityBatchCase> {
           first-outcome first-state button-state explain-state repeat-outcome)
      (with-current-buffer source
        (cargo-minor-mode 1)
-       (setq first-outcome (cargo389-test-wait (cargo-process-build))))
+       (setq first-outcome (cargo389-test-wait (cargo389-test-piped (cargo-process-build)))))
      (let ((build-buffer (get-buffer "*Cargo Build*")))
        (setq first-state (cargo389-test-compilation-state build-buffer root))
        (with-current-buffer build-buffer
@@ -381,7 +441,7 @@ fn cases() -> Vec<ParityBatchCase> {
      (setq explain-state
            (cargo389-test-buffer-state (get-buffer "*rust errno*") root))
      (with-current-buffer source
-       (setq repeat-outcome (cargo389-test-wait (cargo-process-repeat))))
+       (setq repeat-outcome (cargo389-test-wait (cargo389-test-piped (cargo-process-repeat)))))
      (list :mode (with-current-buffer source cargo-minor-mode)
            :keys (with-current-buffer source
                    (list (key-binding (kbd "C-c C-c C-b"))
@@ -428,15 +488,15 @@ fn cases() -> Vec<ParityBatchCase> {
        (goto-char (point-min))
        (search-forward "fn works_界")
        (beginning-of-line)
-       (setq current-test (cargo389-test-wait (cargo-process-current-test)))
-       (setq current-file (cargo389-test-wait (cargo-process-current-file-tests)))
+       (setq current-test (cargo389-test-wait (cargo389-test-piped (cargo-process-current-test))))
+       (setq current-file (cargo389-test-wait (cargo389-test-piped (cargo-process-current-file-tests))))
        (let ((current-prefix-arg '(4)))
          (cl-letf (((symbol-function 'read-shell-command)
                     (lambda (actual-prompt actual-default &rest _)
                       (setq prompt actual-prompt default actual-default)
                       (concat cargo-process--custom-path-to-bin
                               " check --manifest-path " manifest " --release"))))
-           (setq edited (cargo389-test-wait (call-interactively #'cargo-process-check))))))
+           (setq edited (cargo389-test-wait (cargo389-test-piped (call-interactively #'cargo-process-check)))))))
      (list :current-test current-test
            :current-file current-file
            :edited edited
@@ -500,9 +560,9 @@ fn cases() -> Vec<ParityBatchCase> {
           (cargo-process--open-file-after-new t)
           (default-directory root)
           new-process new-outcome opened selected search-outcome prompt)
-     (cargo-process-new "demo-界" t)
+     (cargo389-test-piped (cargo-process-new "demo-界" t))
      (setq new-process (get-buffer-process "*Cargo New*")
-           new-outcome (cargo389-test-wait new-process)
+           new-outcome (cargo389-test-wait-sentinel new-process)
            opened (get-file-buffer opened-path)
            selected (eq (window-buffer (selected-window)) opened))
      (unless (buffer-live-p opened)
@@ -515,7 +575,7 @@ fn cases() -> Vec<ParityBatchCase> {
                     (setq prompt actual-prompt)
                     "serde")))
          (setq search-outcome
-               (cargo389-test-wait (call-interactively #'cargo-process-search)))))
+               (cargo389-test-wait (cargo389-test-piped (call-interactively #'cargo-process-search))))))
      (list :new new-outcome
            :selected selected
            :opened (cargo389-test-buffer-state opened root)

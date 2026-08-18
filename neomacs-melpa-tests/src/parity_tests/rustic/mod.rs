@@ -311,25 +311,68 @@ printf 'fn main() {\\n    println!(\"café 界\");\\n}\\n'
                     :rustflags (caddr fields)))))
          (split-string (string-trim-right (buffer-string)) "\n" t))))))
 
+(defun rustic419-test-compilation-complete-p (buffer)
+  "Non-nil once `compilation-handle-exit' has written BUFFER's last line.
+That line is the causal end of the output rather than a guess about it: Emacs
+drains a dying process's remaining reads before it runs the sentinel
+\(GNU src/process.c:7896-7910), the sentinel is what calls
+`compilation-handle-exit', and that function marks the text it writes with a
+`compilation-handle-exit' text property (GNU lisp/progmodes/compile.el:2630)."
+  (and (buffer-live-p buffer)
+       (with-current-buffer buffer
+         (and (text-property-not-all (point-min) (point-max)
+                                     'compilation-handle-exit nil)
+              t))))
+
+(defvar rustic419-test-format-sentinel-processes nil
+  "Every rustfmt process whose own sentinel has run.")
+
+(defun rustic419-test-note-format-sentinel (process &rest _)
+  "Record that `rustic-format-sentinel' has run for PROCESS."
+  (cl-pushnew process rustic419-test-format-sentinel-processes :test #'eq))
+
+(advice-add 'rustic-format-sentinel :after
+            #'rustic419-test-note-format-sentinel)
+
+(defun rustic419-test-wait-format (process)
+  "Wait until rustic's own rustfmt sentinel has run for PROCESS, or signal.
+`*rustfmt*' is a `rustic-compilation-mode' buffer, so it looks like a
+compilation buffer -- but `rustic-format-buffer' installs
+`rustic-format-sentinel' rather than `compilation-sentinel'
+\(rustic-rustfmt.el:311-321), so `compilation-handle-exit' never runs for it
+and its marker never appears.  The causal fact here is that rustic's own
+sentinel has run, which is what the advice above records; recording it from
+the sentinel itself, installed once at prelude time, means there is no window
+in which the sentinel could have fired before this helper started watching.
+Which gate a pin needs is decided by the sentinel that drives the buffer, not
+by the major mode it wears.  See DIVERGENCES.md 144."
+  (let ((waited 0))
+    (while (and (< waited 1200)
+                (not (memq process rustic419-test-format-sentinel-processes)))
+      (accept-process-output nil 0.05)
+      (setq waited (1+ waited)))
+    (unless (memq process rustic419-test-format-sentinel-processes)
+      (error "rustic419-test-wait-format: %S's sentinel never ran; the buffer \
+records only as much of rustfmt's output as had been read" process))
+    (list :status (process-status process) :exit (process-exit-status process))))
+
 (defun rustic419-test-wait (process)
-  (let ((remaining 400) previous (stable 0)
-        (buffer (process-buffer process)))
-    (while (and (> remaining 0) (process-live-p process))
-      (accept-process-output process 0.05)
-      (setq remaining (1- remaining)))
-    (when (process-live-p process)
-      (error "Rustic process did not finish: %S" process))
-    (while (and (> remaining 0) (< stable 3))
-      (accept-process-output process 0.05)
-      (let ((current
-             (and (buffer-live-p buffer)
-                  (with-current-buffer buffer
-                    (buffer-substring-no-properties (point-min) (point-max))))))
-        (if (equal current previous)
-            (setq stable (1+ stable))
-          (setq previous current stable 0)))
-      (setq remaining (1- remaining)))
-    (unless (= stable 3) (error "Rustic process output did not settle"))
+  "Wait until PROCESS's buffer holds all of its compilation output, or signal.
+Neither `process-live-p' going nil nor N identical samples of the buffer is
+that condition, and both were what this helper used to wait for: a process can
+be gone with reads still queued, and identical samples only say the sentinel
+has not run YET.  The compilation text this suite pins ends with the
+sentinel's own line.  See DIVERGENCES.md entries 133, 140 and 144."
+  (let ((buffer (process-buffer process))
+        (waited 0))
+    (while (and (< waited 1200)
+                (not (rustic419-test-compilation-complete-p buffer)))
+      (accept-process-output nil 0.05)
+      (setq waited (1+ waited)))
+    (unless (rustic419-test-compilation-complete-p buffer)
+      (error "rustic419-test-wait: %S never reached `compilation-handle-exit'; \
+its buffer records only as much of the child's output as had been read"
+             process))
     (list :status (process-status process) :exit (process-exit-status process))))
 
 (defun rustic419-test-buffer-state (buffer)
@@ -837,7 +880,7 @@ fn public_rustfmt_failure_is_atomic_then_successfully_recovers() -> ParityBatchC
            (let ((before (rustic419-test-buffer-state buffer)))
              (call-interactively #'rustic-format-buffer)
              (let* ((first-process (get-process rustic-format-process-name))
-                    (failure-completion (rustic419-test-wait first-process))
+                    (failure-completion (rustic419-test-wait-format first-process))
                     (after-failure (rustic419-test-buffer-state buffer))
                     (failure-stdin-sha
                      (rustic419-test-file-sha
@@ -852,7 +895,7 @@ fn public_rustfmt_failure_is_atomic_then_successfully_recovers() -> ParityBatchC
                (let ((repaired (rustic419-test-buffer-state buffer)))
                  (call-interactively #'rustic-format-buffer)
                  (let* ((second-process (get-process rustic-format-process-name))
-                        (success-completion (rustic419-test-wait second-process))
+                        (success-completion (rustic419-test-wait-format second-process))
                         (after-success (rustic419-test-buffer-state buffer)))
                    (list :before before :failure failure-completion
                          :after-failure after-failure
