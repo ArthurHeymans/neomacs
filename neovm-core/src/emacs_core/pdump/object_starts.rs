@@ -110,7 +110,9 @@ fn write_object_span(
         | DumpHeapObject::Macro(_)
         | DumpHeapObject::Record(_)
         | DumpHeapObject::Marker(_)
-        | DumpHeapObject::Overlay(_) => {
+        | DumpHeapObject::Overlay(_)
+        | DumpHeapObject::CharTable { .. }
+        | DumpHeapObject::SubCharTable { .. } => {
             let vl = heap.mapped_veclikes.get(index).and_then(|s| *s);
             let sl = heap.mapped_slots.get(index).and_then(|s| *s);
             if let Some(vl) = vl {
@@ -131,8 +133,6 @@ fn write_object_span(
         // Category C: no HeapImage representation.
         DumpHeapObject::HashTable(_)
         | DumpHeapObject::Obarray { .. }
-        | DumpHeapObject::CharTable { .. }
-        | DumpHeapObject::SubCharTable { .. }
         | DumpHeapObject::ByteCode(_)
         | DumpHeapObject::Subr { .. }
         | DumpHeapObject::Buffer(_)

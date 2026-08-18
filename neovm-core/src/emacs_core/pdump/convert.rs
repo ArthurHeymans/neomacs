@@ -66,8 +66,9 @@ use crate::face::{
 use crate::heap_types::LispString;
 use crate::tagged::gc::with_tagged_heap;
 use crate::tagged::header::{
-    ByteCodeObj, CLOSURE_MIN_SLOTS, ConsCell, FloatObj, HeapObjectKind, LambdaObj, LispValueVec,
-    MacroObj, MarkerObj, OverlayObj, RecordObj, StringObj, SubrObj, VecLikeHeader, VectorObj,
+    ByteCodeObj, CLOSURE_MIN_SLOTS, CharTableObj, ConsCell, FloatObj, HeapObjectKind, LambdaObj,
+    LispValueVec, MacroObj, MarkerObj, OverlayObj, RecordObj, StringObj, SubCharTableObj, SubrObj,
+    VecLikeHeader, VectorObj,
 };
 use crate::tagged::value::TaggedValue;
 
@@ -798,6 +799,48 @@ impl<'a> LoadDecoder<'a> {
                             data,
                         },
                     );
+                    Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
+                }
+            }
+            VecLikeType::CharTable => {
+                let ptr = self
+                    .mapped_typed_object_for_object::<CharTableObj>(id, "char-table")?
+                    .ok_or_else(|| {
+                        DumpError::ImageFormatError(
+                            "mapped char-table span disappeared during restore".into(),
+                        )
+                    })?;
+                let extras = self
+                    .mapped_slots_for_object_without_copy(id, slot_count)?
+                    .unwrap_or_else(|| LispValueVec::owned(vec![Value::NIL; slot_count]));
+                // The four fixed slots and the 64 top-level contents were
+                // baked into the image span at dump time and patched by the
+                // value fixups — write ONLY the runtime header and the
+                // extras storage, never the inline value words.
+                unsafe {
+                    std::ptr::addr_of_mut!((*ptr).header)
+                        .write(VecLikeHeader::new(VecLikeType::CharTable));
+                    std::ptr::addr_of_mut!((*ptr).extras).write(extras);
+                    Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
+                }
+            }
+            VecLikeType::SubCharTable => {
+                let ptr = self
+                    .mapped_typed_object_for_object::<SubCharTableObj>(id, "sub-char-table")?
+                    .ok_or_else(|| {
+                        DumpError::ImageFormatError(
+                            "mapped sub-char-table span disappeared during restore".into(),
+                        )
+                    })?;
+                let contents = self
+                    .mapped_slots_for_object_without_copy(id, slot_count)?
+                    .unwrap_or_else(|| LispValueVec::owned(vec![Value::NIL; slot_count]));
+                // depth/min_char were baked raw at dump time; write only the
+                // runtime header and the contents storage.
+                unsafe {
+                    std::ptr::addr_of_mut!((*ptr).header)
+                        .write(VecLikeHeader::new(VecLikeType::SubCharTable));
+                    std::ptr::addr_of_mut!((*ptr).contents).write(contents);
                     Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
                 }
             }

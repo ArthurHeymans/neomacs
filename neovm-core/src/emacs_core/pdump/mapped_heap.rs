@@ -15,8 +15,8 @@ use super::types::{
 use super::value_fixups::RawValueFixup;
 use crate::heap_types::LispString;
 use crate::tagged::header::{
-    ConsCell, FloatObj, GcHeader, HeapObjectKind, LambdaObj, MacroObj, MarkerObj, OverlayObj,
-    RecordObj, StringObj, VecLikeHeader, VecLikeType, VectorObj,
+    CharTableObj, ConsCell, FloatObj, GcHeader, HeapObjectKind, LambdaObj, MacroObj, MarkerObj,
+    OverlayObj, RecordObj, StringObj, SubCharTableObj, VecLikeHeader, VecLikeType, VectorObj,
 };
 use crate::tagged::value::TaggedValue;
 use bytemuck::{Pod, Zeroable};
@@ -614,6 +614,13 @@ fn extract_tagged_heap_payloads(heap: &mut DumpTaggedHeap) -> MappedHeapPayload 
             DumpHeapObject::Overlay(_) => {
                 heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<OverlayObj>());
             }
+            DumpHeapObject::CharTable { .. } => {
+                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<CharTableObj>());
+            }
+            DumpHeapObject::SubCharTable { .. } => {
+                heap.mapped_veclikes[index] =
+                    Some(builder.reserve_typed_object::<SubCharTableObj>());
+            }
             _ => {}
         }
 
@@ -638,6 +645,12 @@ fn extract_tagged_heap_payloads(heap: &mut DumpTaggedHeap) -> MappedHeapPayload 
             | DumpHeapObject::Lambda(slots)
             | DumpHeapObject::Macro(slots)
             | DumpHeapObject::Record(slots) => Some(slots.len()),
+            // Char-table trailing storage: the four fixed slots and the
+            // 64 top-level contents live INLINE in the CharTableObj span;
+            // only `extras` needs external slot storage. Sub-char-table
+            // contents are the external storage.
+            DumpHeapObject::CharTable { extras, .. } => Some(extras.len()),
+            DumpHeapObject::SubCharTable { contents, .. } => Some(contents.len()),
             _ => None,
         };
         if let Some(slot_count) = slot_count {
@@ -857,6 +870,83 @@ impl MappedHeapBuilder {
                             _ => unreachable!(),
                         };
                         self.write_raw_veclike_header(span.offset as usize, type_tag);
+                    }
+                }
+                DumpHeapObject::CharTable {
+                    defalt,
+                    parent,
+                    purpose,
+                    ascii,
+                    contents,
+                    extras,
+                } => {
+                    if let Some(span) = heap.mapped_veclikes.get(index).copied().flatten() {
+                        let base = span.offset as usize;
+                        self.write_raw_veclike_header(base, VecLikeType::CharTable);
+                        // The four fixed slots and the 64 top-level contents
+                        // are INLINE TaggedValue fields of CharTableObj: bake
+                        // their value words (immediates directly, symbols and
+                        // heap refs via the fixup machinery, exactly like
+                        // mapped cons car/cdr words).
+                        self.write_dump_value_word(
+                            base + std::mem::offset_of!(CharTableObj, defalt),
+                            defalt,
+                            heap,
+                        );
+                        self.write_dump_value_word(
+                            base + std::mem::offset_of!(CharTableObj, parent),
+                            parent,
+                            heap,
+                        );
+                        self.write_dump_value_word(
+                            base + std::mem::offset_of!(CharTableObj, purpose),
+                            purpose,
+                            heap,
+                        );
+                        self.write_dump_value_word(
+                            base + std::mem::offset_of!(CharTableObj, ascii),
+                            ascii,
+                            heap,
+                        );
+                        let mut offset = base + std::mem::offset_of!(CharTableObj, contents);
+                        for slot in contents {
+                            self.write_dump_value_word(offset, slot, heap);
+                            offset += std::mem::size_of::<TaggedValue>();
+                        }
+                    }
+                    if let Some(span) = heap.mapped_slots.get(index).copied().flatten() {
+                        let mut offset = span.offset as usize;
+                        for slot in extras {
+                            self.write_dump_value_word(offset, slot, heap);
+                            offset += std::mem::size_of::<TaggedValue>();
+                        }
+                    }
+                }
+                DumpHeapObject::SubCharTable {
+                    depth,
+                    min_char,
+                    contents,
+                } => {
+                    if let Some(span) = heap.mapped_veclikes.get(index).copied().flatten() {
+                        let base = span.offset as usize;
+                        self.write_raw_veclike_header(base, VecLikeType::SubCharTable);
+                        // depth/min_char are plain i32 fields; live objects
+                        // guarantee the range, so bake them raw.
+                        self.write_bytes(
+                            base + std::mem::offset_of!(SubCharTableObj, depth),
+                            &(*depth as i32).to_ne_bytes(),
+                        );
+                        self.write_bytes(
+                            base + std::mem::offset_of!(SubCharTableObj, min_char),
+                            &(*min_char as i32).to_ne_bytes(),
+                        );
+                    }
+                    if let Some(span) = heap.mapped_slots.get(index).copied().flatten() {
+                        let mut offset = span.offset as usize;
+                        for slot in contents {
+                            self.write_dump_value_word(offset, slot, heap);
+                            offset += std::mem::size_of::<TaggedValue>();
+                        }
                     }
                 }
                 DumpHeapObject::Str {

@@ -25,7 +25,7 @@ use super::{DumpError, types::*};
 use crate::tagged::header::VecLikeType;
 
 const OBJECT_EXTRA_MAGIC: [u8; 16] = *b"NEOOBJEXTRA\0\0\0\0\0";
-const OBJECT_EXTRA_FORMAT_VERSION: u32 = 6;
+const OBJECT_EXTRA_FORMAT_VERSION: u32 = 7;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
@@ -368,6 +368,8 @@ fn object_needs_extra(obj: &DumpHeapObject) -> bool {
             | DumpHeapObject::Lambda(_)
             | DumpHeapObject::Macro(_)
             | DumpHeapObject::Record(_)
+            | DumpHeapObject::CharTable { .. }
+            | DumpHeapObject::SubCharTable { .. }
     )
 }
 
@@ -546,7 +548,9 @@ fn mapped_object_is_self_contained(
                 VecLikeType::Vector
                 | VecLikeType::Lambda
                 | VecLikeType::Macro
-                | VecLikeType::Record => Ok(true),
+                | VecLikeType::Record
+                | VecLikeType::CharTable
+                | VecLikeType::SubCharTable => Ok(true),
                 VecLikeType::Marker | VecLikeType::Overlay => Ok(false),
                 other => Err(DumpError::ImageFormatError(format!(
                     "unexpected mapped vectorlike type {other:?} in object-starts"
