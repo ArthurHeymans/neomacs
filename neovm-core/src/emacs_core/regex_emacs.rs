@@ -5023,7 +5023,56 @@ fn re_match_loop<const SEALED: bool>(
                 }
                 pc = literal_end;
                 if !matched {
+                    // NOTE: try_fail! FALLS THROUGH after a successful pop
+                    // (it only breaks the loop on total failure), so the
+                    // fusion below must stay inside this else-less arm's
+                    // matched path — hence the explicit continue here.
                     try_fail!('main_loop);
+                    continue 'main_loop;
+                }
+                // Greedy exactn-loop fusion: `a+` / `a*` compiles to
+                // `Exactn; OnFailureJump exit; Jump back` — the same
+                // triple as the charset loops, with the same protocol:
+                // one failure frame per iteration (original count and
+                // payload) and the back-edge quit poll preserved. The
+                // literal is re-matched whole each iteration, exactly
+                // as jumping back to the Exactn op would.
+                if SEALED
+                    && unsafe { *bytecode.get_unchecked(pc) } == RegexOp::OnFailureJump as u8
+                    && unsafe { *bytecode.get_unchecked(pc + 3) } == RegexOp::Jump as u8
+                    && ((pc as i64) + 6 + bc_num!(pc + 4) as i64) as usize == op_pc
+                {
+                    let ofj_pc = pc;
+                    let exit = ((ofj_pc as i64) + 3 + bc_num!(ofj_pc + 1) as i64) as usize;
+                    'fused_exactn: loop {
+                        push_failure_point!(ofj_pc, exit, FailureInput::Restore(d));
+                        if crate::emacs_core::eval::tls_quit_pending() {
+                            return None;
+                        }
+                        let mut lit_off = 0usize;
+                        let mut dd = d;
+                        while lit_off < count {
+                            match match_exactn_char_at(
+                                lit,
+                                lit_off,
+                                pattern_multibyte,
+                                target_multibyte,
+                                translate,
+                                text,
+                                dd,
+                                stop,
+                            ) {
+                                Some((pat_advance, text_advance)) => {
+                                    lit_off += pat_advance;
+                                    dd += text_advance;
+                                }
+                                None => break 'fused_exactn,
+                            }
+                        }
+                        d = dd;
+                    }
+                    try_fail!('main_loop);
+                    continue 'main_loop;
                 }
             }
 
