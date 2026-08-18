@@ -4615,7 +4615,11 @@ impl<'a> Vm<'a> {
                         let len = stk!().len();
                         let cdr_val = stk!()[len - 1];
                         let car_val = stk!()[len - 2];
-                        stk!()[len - 2] = Value::cons(car_val, cdr_val);
+                        // The Context owns the heap: allocate through it
+                        // directly instead of Value::cons's thread-local
+                        // heap lookup (a TLS access per cons on the hottest
+                        // allocation opcode).
+                        stk!()[len - 2] = self.ctx.tagged_heap.alloc_cons(car_val, cdr_val);
                         stk!().pop();
                     }
                     Op::List(n) => {
