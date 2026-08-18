@@ -3266,6 +3266,43 @@ impl CompiledLeaf {
             PENDING_ROOT_SWEEP_FLOOR.with(|f| f.set(None));
         }
         if status == STATUS_DEOPT_AT {
+            return self.deopt_at_outcome(vmctx, bind_frame, cond_base);
+        }
+        if status == STATUS_SIGNAL || cond_base.is_some() || bind_frame.is_some() {
+            // Everything below the fast path is a no-op unless a signal is
+            // pending or this leaf registered frames — outlined so the hot
+            // OK-exit stops paying their register spills.
+            self.cold_frame_exit(vmctx, status, out, bind_frame, cond_base, bases.as_ref());
+        }
+        return match status {
+            STATUS_OK => NativeRun::Ok(out as usize),
+            STATUS_SIGNAL => NativeRun::Signal,
+            _ => {
+                // STATUS_DEOPT = rerun-from-start. A side-effecting body must never
+                // reach here: the calls-slice routes EVERY guard in a call-bearing
+                // body to precise STATUS_DEOPT_AT (the all-precise rule that closes
+                // the loop-back-edge double-side-effect hole). Defensive assert.
+                assert!(
+                    !self.has_side_effects,
+                    "side-effecting JIT leaf must use precise deopt, not rerun-from-start"
+                );
+                NativeRun::Deopt
+            }
+        };
+    }
+
+    /// Precise-deopt outcome construction — cold by definition (a failed
+    /// speculation guard), outlined so `invoke_native`'s hot exit carries
+    /// none of its Vec/TLS frame weight.
+    #[cold]
+    #[inline(never)]
+    fn deopt_at_outcome(
+        &self,
+        vmctx: *mut u8,
+        bind_frame: Option<(usize, usize)>,
+        cond_base: Option<usize>,
+    ) -> NativeRun {
+        {
             // Precise deopt: NO frame unwind — the resumed interpreter frame
             // takes ownership of the registered binds/handlers and unwinds to
             // the entry bases itself on every exit. With a null vmctx (shim-
@@ -3308,15 +3345,34 @@ impl CompiledLeaf {
                 Some(base) => base,
                 None => unsafe { (*(vmctx as *const Context)).condition_stack_len() },
             };
-            return NativeRun::DeoptAt(Box::new(DeoptResume {
+            NativeRun::DeoptAt(Box::new(DeoptResume {
                 pc,
                 stack,
                 handlers,
                 binds,
                 spec_base,
                 cond_base,
-            }));
+            }))
         }
+    }
+
+    /// Signal / frame-registered exit path of [`Self::invoke_native`],
+    /// outlined (see the call site). Contents and ORDER are exactly the old
+    /// inline tail: park a contained panic, heal against the leaf bases,
+    /// condition-frame truncation, dynamic-binding unwind (result rooted
+    /// across cleanups on OK), then un-park.
+    #[cold]
+    #[inline(never)]
+    #[allow(clippy::too_many_arguments)] // mirrors invoke_native's locals
+    fn cold_frame_exit(
+        &self,
+        vmctx: *mut u8,
+        status: i64,
+        out: i64,
+        bind_frame: Option<(usize, usize)>,
+        cond_base: Option<usize>,
+        bases: Option<&JitLeafBases>,
+    ) {
         // A contained shim panic exiting this leaf (no leaf-local handler
         // matched it): heal the panicked extent's evaluator residue against
         // the leaf-entry bases BEFORE the parity unwinds below run lisp
@@ -3344,7 +3400,7 @@ impl CompiledLeaf {
         };
         if parked_panic.is_some() {
             PENDING_FLOW.with(|p| p.borrow_mut().take());
-            if let Some(b) = &bases {
+            if let Some(b) = bases {
                 // SAFETY: the native call has returned; truncations/scalar
                 // writes only.
                 unsafe {
@@ -3390,21 +3446,6 @@ impl CompiledLeaf {
         // done with the pending slots.
         if let Some(msg) = parked_panic {
             PENDING_SHIM_PANIC.with(|p| *p.borrow_mut() = Some(msg));
-        }
-        match status {
-            STATUS_OK => NativeRun::Ok(out as usize),
-            STATUS_SIGNAL => NativeRun::Signal,
-            _ => {
-                // STATUS_DEOPT = rerun-from-start. A side-effecting body must never
-                // reach here: the calls-slice routes EVERY guard in a call-bearing
-                // body to precise STATUS_DEOPT_AT (the all-precise rule that closes
-                // the loop-back-edge double-side-effect hole). Defensive assert.
-                assert!(
-                    !self.has_side_effects,
-                    "side-effecting JIT leaf must use precise deopt, not rerun-from-start"
-                );
-                NativeRun::Deopt
-            }
         }
     }
 
