@@ -667,6 +667,9 @@ mod replace_region_contents_test;
 mod lisp_only_predicates_and_aliases_test;
 
 #[cfg(test)]
+mod lisp_only_undo_commands_test;
+
+#[cfg(test)]
 mod rust_subrs_shadowed_by_lisp_test;
 
 // -----------------------------------------------------------------------
@@ -4086,13 +4089,14 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(0),
         ),
     );
-    ctx.defsubr("undo", super::undo::builtin_undo, 0, Some(1));
-    ctx.defsubr(
-        "buffer-disable-undo",
-        builtin_buffer_disable_undo,
-        0,
-        Some(1),
-    );
+    // No `undo' and no `buffer-disable-undo' subr: GNU has neither in C.
+    // `syms_of_undo' (src/undo.c:423-490) registers only `&Sundo_boundary'
+    // (:435); `undo' is (defun undo (&optional arg) ...) at
+    // lisp/simple.el:3466 and `buffer-disable-undo' is
+    // (defun buffer-disable-undo (&optional buffer) ...) at
+    // lisp/simple.el:3591.  Its partner `buffer-enable-undo' IS in C
+    // (src/buffer.c:1829) and is registered above -- the pair is asymmetric
+    // in GNU, and copying that asymmetry is the point.  DIVERGENCES.md 150.
     ctx.defsubr("maphash", super::hashtab::builtin_maphash, 2, Some(2));
     ctx.defsubr("mapatoms", super::hashtab::builtin_mapatoms, 1, Some(2));
     // GNU `Sunintern` is `2, 2, 0`: the OBARRAY argument is mandatory (it may

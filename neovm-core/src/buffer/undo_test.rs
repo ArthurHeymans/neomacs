@@ -8,6 +8,21 @@ fn clen(len: usize) -> CharLen {
     CharLen::new(len)
 }
 
+/// The recorded list, newest first, as a flat vector.
+///
+/// The tests below are about what the RECORDER produces, so they read the
+/// list itself.  There is no "pop a group" step here any more: grouping was
+/// a replay-side idea, and replay is `primitive-undo' (lisp/simple.el:3645),
+/// which is Lisp.  DIVERGENCES.md 150.
+fn entries(mut list: Value) -> Vec<Value> {
+    let mut out = Vec::new();
+    while list.is_cons() {
+        out.push(list.cons_car());
+        list = list.cons_cdr();
+    }
+    out
+}
+
 #[test]
 fn basic_insert_undo() {
     crate::test_utils::init_test_tracing();
@@ -16,13 +31,13 @@ fn basic_insert_undo() {
     undo_list_record_insert(&mut list, c(5), clen(3));
     undo_list_boundary(&mut list);
 
-    // Should have: nil, (1 . 9) [merged], at minimum
-    // Actually the second insert merges with the first: (1 . 9)
+    // The second insert merges with the first, so the whole list is the
+    // boundary and one (1 . 9) record.
     assert!(undo_list_has_trailing_boundary(&list));
-
-    let group = undo_list_pop_group(&mut list);
-    assert_eq!(group.len(), 1); // merged into one entry
-    let entry = group[0];
+    let recorded = entries(list);
+    assert_eq!(recorded.len(), 2);
+    assert!(recorded[0].is_nil());
+    let entry = recorded[1];
     assert!(entry.is_cons());
     assert_eq!(entry.cons_car(), Value::fixnum(1));
     assert_eq!(entry.cons_cdr(), Value::fixnum(9));
@@ -40,9 +55,10 @@ fn delete_records_text() {
     );
     undo_list_boundary(&mut list);
 
-    let group = undo_list_pop_group(&mut list);
-    assert_eq!(group.len(), 1);
-    let entry = group[0];
+    let recorded = entries(list);
+    assert_eq!(recorded.len(), 2);
+    assert!(recorded[0].is_nil());
+    let entry = recorded[1];
     assert!(entry.is_cons());
     let car = entry.cons_car();
     assert!(car.is_string());
@@ -59,16 +75,19 @@ fn boundary_separates_groups() {
     undo_list_record_insert(&mut list, c(1), clen(1));
     undo_list_boundary(&mut list);
 
-    let g2 = undo_list_pop_group(&mut list);
-    assert_eq!(g2.len(), 1);
-    let entry = g2[0];
+    // (nil (2 . 3) nil (1 . 2)): one boundary between the two records, and
+    // one in front, exactly as GNU's `record_boundary' leaves it.
+    let recorded = entries(list);
+    assert_eq!(recorded.len(), 4);
+    assert!(recorded[0].is_nil());
+    assert!(recorded[2].is_nil());
+
+    let entry = recorded[1];
     assert!(entry.is_cons());
     assert_eq!(entry.cons_car(), Value::fixnum(2)); // 1+1
     assert_eq!(entry.cons_cdr(), Value::fixnum(3)); // 1+1+1
 
-    let g1 = undo_list_pop_group(&mut list);
-    assert_eq!(g1.len(), 1);
-    let entry = g1[0];
+    let entry = recorded[3];
     assert!(entry.is_cons());
     assert_eq!(entry.cons_car(), Value::fixnum(1)); // 0+1
     assert_eq!(entry.cons_cdr(), Value::fixnum(2)); // 0+1+1
@@ -108,11 +127,12 @@ fn no_double_boundary() {
     undo_list_boundary(&mut list);
     undo_list_boundary(&mut list);
     undo_list_boundary(&mut list);
-    // Only one boundary after the insert
+    // Only one boundary after the insert: (nil (1 . 2)), not three nils.
     assert!(undo_list_has_trailing_boundary(&list));
-    // Pop it: boundary + insert = 1 record in group
-    let group = undo_list_pop_group(&mut list);
-    assert_eq!(group.len(), 1);
+    let recorded = entries(list);
+    assert_eq!(recorded.len(), 2);
+    assert!(recorded[0].is_nil());
+    assert!(recorded[1].is_cons());
 }
 
 /// GNU `record_insert` (src/undo.c:98-112) coalesces a new insertion into the
@@ -166,7 +186,7 @@ fn undoing_flag_not_needed() {
 
     let mut list2 = Value::NIL; // enabled
     undo_list_record_insert(&mut list2, c(0), clen(5));
-    assert!(!undo_list_is_empty(&list2));
+    assert!(!list2.is_nil());
 }
 
 // ---------------------------------------------------------------------------

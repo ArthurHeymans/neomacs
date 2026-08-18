@@ -4348,15 +4348,31 @@ fn byte_position_and_clear_bitmap_semantics() {
     }
 }
 
+/// `buffer-enable-undo' only.  Its partner `buffer-disable-undo' used to be
+/// asserted here too, on the same bare `Context', but GNU has no C version of
+/// it -- `buffer-enable-undo' is `DEFUN ("buffer-enable-undo", ...)' at
+/// src/buffer.c:1829 while `buffer-disable-undo' is a `defun' at
+/// lisp/simple.el:3591.  Its arms moved to `buffer_disable_undo_arms_match_gnu'
+/// (`lisp_only_undo_commands_test.rs'), which asks the runtime.
+/// DIVERGENCES.md 150.
 #[test]
 fn buffer_undo_designators_match_deleted_and_missing_buffer_semantics() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();
 
-    let disable_current =
-        builtin_buffer_disable_undo(&mut eval, vec![]).expect("buffer-disable-undo should work");
-    assert_eq!(disable_current, Value::T);
+    // A bare `Context' is GNU before `loadup.el', so the disable half is void
+    // here exactly as it is there.
+    assert_eq!(
+        crate::emacs_core::print::print_value(
+            &eval.eval_str("(fboundp 'buffer-disable-undo)").unwrap()
+        ),
+        "nil",
+    );
+
     let current_id = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.buffers
+        .configure_buffer_undo_list(current_id, Value::T)
+        .expect("current buffer");
     let current = eval.buffers.get(current_id).expect("current buffer");
     assert!(crate::buffer::undo_list_is_disabled(
         &current.get_undo_list()
@@ -4389,33 +4405,10 @@ fn buffer_undo_designators_match_deleted_and_missing_buffer_semantics() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let disable_missing_name =
-        builtin_buffer_disable_undo(&mut eval, vec![Value::string("*undo-disable-missing*")])
-            .expect_err("buffer-disable-undo missing string should signal wrong-type-argument");
-    match disable_missing_name {
-        Flow::Signal(sig) => {
-            assert_eq!(sig.symbol_name(), "wrong-type-argument");
-            assert_eq!(sig.data, vec![Value::symbol("stringp"), Value::NIL]);
-        }
-        other => panic!("unexpected flow: {other:?}"),
-    }
-
     let dead_for_enable = create_unique_test_buffer(&mut eval, "*undo-enable-deleted*");
     let _ = builtin_kill_buffer(&mut eval, vec![dead_for_enable]).unwrap();
     let enable_deleted = builtin_buffer_enable_undo(&mut eval, vec![dead_for_enable]).unwrap();
     assert_eq!(enable_deleted, Value::NIL);
-
-    let dead_for_disable = create_unique_test_buffer(&mut eval, "*undo-disable-deleted*");
-    let _ = builtin_kill_buffer(&mut eval, vec![dead_for_disable]).unwrap();
-    let disable_deleted = builtin_buffer_disable_undo(&mut eval, vec![dead_for_disable])
-        .expect_err("buffer-disable-undo should reject deleted buffer objects");
-    match disable_deleted {
-        Flow::Signal(sig) => {
-            assert_eq!(sig.symbol_name(), "error");
-            assert_eq!(sig.data, vec![Value::string("Selecting deleted buffer")]);
-        }
-        other => panic!("unexpected flow: {other:?}"),
-    }
 }
 
 #[test]

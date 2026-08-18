@@ -34,9 +34,8 @@ pub use text::{
 pub use text_props::{ObjectIntervalPlistRun, ObjectIntervalRun, TextPropertyTable};
 pub use undo::{
     OuterUndoLimit, UndoLimitBindings, UndoLimits, UndoRecording, truncate_undo_list,
-    undo_first_group_bytes, undo_list_boundary, undo_list_contains_boundary,
-    undo_list_has_trailing_boundary, undo_list_is_disabled, undo_list_is_empty,
-    undo_list_pop_group, undo_list_record_delete, undo_list_record_first_change,
+    undo_first_group_bytes, undo_list_boundary, undo_list_has_trailing_boundary,
+    undo_list_is_disabled, undo_list_record_delete, undo_list_record_first_change,
     undo_list_record_insert, undo_list_record_point, undo_list_record_property_change,
 };
 pub use visited_file_modtime::{FirstChangeModtime, VisitedFileModtime, VisitedFileModtimeSlot};

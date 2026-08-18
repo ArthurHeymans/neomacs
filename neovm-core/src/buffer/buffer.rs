@@ -4657,39 +4657,6 @@ impl BufferSwapTextError {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct UndoExecutionResult {
-    pub had_any_records: bool,
-    pub had_boundary: bool,
-    pub applied_any: bool,
-    pub skipped_apply: bool,
-}
-
-fn undo_char_pos1_to_char0(pos1: LispCharPos1) -> CharPos0 {
-    pos1.to_char_pos()
-}
-
-fn undo_char_pos1_to_byte_clamped(buf: &Buffer, pos1: LispCharPos1) -> EmacsBytePos {
-    buf.char_pos_to_emacs_byte_pos_clamped(undo_char_pos1_to_char0(pos1))
-}
-
-fn undo_lisp_char_position_is_visible(buf: &Buffer, pos1: LispCharPos1) -> bool {
-    let accessible = buf.accessible_char_region();
-    let point_min = accessible.start_lisp().as_i64();
-    let point_max = accessible.end_lisp().as_i64();
-    let pos1 = pos1.as_i64();
-    point_min <= pos1 && pos1 <= point_max
-}
-
-fn undo_lisp_range_is_visible(buf: &Buffer, beg1: LispCharPos1, end1: LispCharPos1) -> bool {
-    let accessible = buf.accessible_char_region();
-    let point_min = accessible.start_lisp().as_i64();
-    let point_max = accessible.end_lisp().as_i64();
-    let beg1 = beg1.as_i64();
-    let end1 = end1.as_i64();
-    beg1 >= point_min && end1 <= point_max
-}
-
 impl BufferManager {
     /// Create a new `BufferManager` pre-populated with a `*scratch*` buffer.
     pub fn new() -> Self {
@@ -6261,153 +6228,15 @@ impl BufferManager {
         }
     }
 
-    pub fn undo_buffer(&mut self, id: BufferId, mut count: i64) -> Option<UndoExecutionResult> {
-        let (had_any_records, had_boundary, previous_undoing, groups) = {
-            let buffer = self.buffers.get_mut(&id)?;
-            let ul = buffer.get_undo_list();
-
-            let had_any_records = !undo::undo_list_is_empty(&ul);
-            let had_boundary = undo::undo_list_contains_boundary(&ul);
-            let had_trailing_boundary = undo::undo_list_has_trailing_boundary(&ul);
-
-            if count <= 0 && had_boundary {
-                return Some(UndoExecutionResult {
-                    had_any_records,
-                    had_boundary,
-                    applied_any: false,
-                    skipped_apply: true,
-                });
-            }
-            if count <= 0 {
-                count = 1;
-            }
-
-            let previous_undoing = buffer.undo_state.in_progress();
-            buffer.undo_state.set_in_progress(true);
-            let groups_to_undo = if had_trailing_boundary {
-                count as usize
-            } else {
-                (count as usize).saturating_add(1)
-            };
-
-            let mut current_ul = ul;
-            let mut groups = Vec::new();
-            for _ in 0..groups_to_undo {
-                let group = undo::undo_list_pop_group(&mut current_ul);
-                if group.is_empty() {
-                    break;
-                }
-                groups.push(group);
-            }
-            buffer.set_undo_list(current_ul);
-
-            (had_any_records, had_boundary, previous_undoing, groups)
-        };
-
-        let mut applied_any = false;
-        for group in groups {
-            applied_any = true;
-            for entry in group {
-                if let Some(pt1) = entry.as_fixnum() {
-                    // Cursor position (1-indexed)
-                    let pt1 = LispCharPos1::new(pt1);
-                    let byte_pos = self
-                        .buffers
-                        .get(&id)
-                        .map(|buffer| undo_char_pos1_to_byte_clamped(buffer, pt1))?;
-                    self.goto_buffer_emacs_byte_pos(id, byte_pos)?;
-                } else if entry.is_cons() {
-                    let car = entry.cons_car();
-                    let cdr = entry.cons_cdr();
-                    match (car.kind(), cdr.kind()) {
-                        (ValueKind::Fixnum(beg1), ValueKind::Fixnum(end1)) => {
-                            // Insert record: (BEG . END) — to undo, delete [beg, end)
-                            let beg1 = LispCharPos1::new(beg1);
-                            let end1 = LispCharPos1::new(end1);
-                            let range = {
-                                let buffer = self.buffers.get(&id)?;
-                                if !undo_lisp_range_is_visible(buffer, beg1, end1) {
-                                    return None;
-                                }
-                                buffer.edit_range_for_char_range(CharRange::new(
-                                    undo_char_pos1_to_char0(beg1),
-                                    undo_char_pos1_to_char0(end1),
-                                ))
-                            };
-                            self.delete_buffer_measured_region(id, range)?;
-                        }
-                        (ValueKind::String, ValueKind::Fixnum(pos1)) => {
-                            // Delete record: (TEXT . POS) — to undo, re-insert text
-                            // faithfully so eight-bit content survives undo.
-                            let text = car
-                                .as_lisp_string()
-                                .expect("ValueKind::String must carry LispString payload");
-                            let apos1 = LispCharPos1::new(pos1.abs());
-                            let byte_pos = {
-                                let buffer = self.buffers.get(&id)?;
-                                if !undo_lisp_char_position_is_visible(buffer, apos1) {
-                                    return None;
-                                }
-                                undo_char_pos1_to_byte_clamped(buffer, apos1)
-                            };
-                            self.goto_buffer_emacs_byte_pos(id, byte_pos)?;
-                            self.insert_lisp_string_into_buffer(id, text)?;
-                            if pos1 > 0 {
-                                self.goto_buffer_emacs_byte_pos(id, byte_pos)?;
-                            }
-                        }
-                        (ValueKind::T, ValueKind::Fixnum(_)) => {
-                            // First-change sentinel (t . MODTIME) — skip
-                        }
-                        (ValueKind::Nil, _) if cdr.is_cons() => {
-                            let prop = cdr.cons_car();
-                            let rest1 = cdr.cons_cdr();
-                            if rest1.is_cons() {
-                                let value = rest1.cons_car();
-                                let rest2 = rest1.cons_cdr();
-                                if rest2.is_cons() {
-                                    let beg = rest2.cons_car().as_fixnum();
-                                    let end = rest2.cons_cdr().as_fixnum();
-                                    if let (Some(beg1), Some(end1)) = (beg, end) {
-                                        let beg1 = LispCharPos1::new(beg1);
-                                        let end1 = LispCharPos1::new(end1);
-                                        let byte_range = {
-                                            let buf = self.buffers.get(&id)?;
-                                            if !undo_lisp_range_is_visible(buf, beg1, end1) {
-                                                return None;
-                                            }
-                                            EmacsByteRange::new(
-                                                undo_char_pos1_to_byte_clamped(buf, beg1),
-                                                undo_char_pos1_to_byte_clamped(buf, end1),
-                                            )
-                                        };
-                                        let _ = self.put_buffer_text_property_in_emacs_byte_range(
-                                            id, byte_range, prop, value,
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        _ => {
-                            // Other cons entries (e.g. property changes) — skip
-                        }
-                    }
-                }
-                // nil entries (boundaries within a group) are skipped
-            }
-        }
-
-        self.buffers
-            .get_mut(&id)?
-            .undo_state
-            .set_in_progress(previous_undoing);
-        Some(UndoExecutionResult {
-            had_any_records,
-            had_boundary,
-            applied_any,
-            skipped_apply: false,
-        })
-    }
+    // No `undo_buffer' here.  There used to be a third undo replay loop at
+    // this spot, reachable only through a Rust `undo' subr that preloaded
+    // Lisp shadowed in every real session (DIVERGENCES.md 150).  It popped
+    // groups off `buffer-undo-list' DESTRUCTIVELY, where GNU's `undo'
+    // (lisp/simple.el:3466) never removes anything from that list -- it
+    // walks `pending-undo-list' and pushes redo records -- and it could not
+    // run an `apply' entry at all, because this layer has no evaluator.
+    // Replay belongs to `primitive-undo' (lisp/simple.el:3645), which is
+    // Lisp, and this layer's job is RECORDING.
 
     /// Generate a unique buffer name.  If `base` is not taken, returns it
     /// unchanged; otherwise follows GNU `generate-new-buffer-name`.

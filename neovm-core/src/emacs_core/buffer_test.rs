@@ -186,7 +186,10 @@ fn buffer_enable_undo_still_clears_a_disabled_list_through_an_indirect_buffer() 
             r#"(let* ((base (get-buffer-create "b5")) disabled)
                  (set-buffer base) (buffer-enable-undo) (insert "hello")
                  (let ((ind (make-indirect-buffer base "i5")))
-                   (set-buffer ind) (buffer-disable-undo)
+                   ;; `buffer-disable-undo' is Lisp in GNU (lisp/simple.el:3591)
+                   ;; and has no subr here, so a bare evaluator writes its
+                   ;; body: (setq buffer-undo-list t).  DIVERGENCES.md 150.
+                   (set-buffer ind) (setq buffer-undo-list t)
                    (set-buffer base) (setq disabled (prin1-to-string buffer-undo-list))
                    (set-buffer ind) (buffer-enable-undo)
                    (set-buffer base)

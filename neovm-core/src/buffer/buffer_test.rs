@@ -519,55 +519,72 @@ fn casify_region_records_undo_even_when_unchanged() {
     assert_eq!(undo_nth(ul, 2), Value::fixnum(6));
 }
 
+/// `casify_region_undo_restores_original_text' used to drive
+/// `BufferManager::undo_buffer' -- the third undo replay loop, deleted with
+/// the Rust `undo' subr that was its only caller (DIVERGENCES.md 150).
+/// Replay is `primitive-undo' (lisp/simple.el:3645), which is Lisp, so the
+/// round trip is asked of the runtime.  The test above still pins what
+/// casification RECORDS, which is this layer's actual job.
+///
+/// Measured under GNU Emacs 31.0.90 `-Q --batch' first
+/// (tmp/pw56-moved-tests-gnu.txt).
 #[test]
-fn casify_region_undo_restores_original_text() {
+fn casify_region_undo_restores_original_text_like_gnu() {
     crate::test_utils::init_test_tracing();
-    // Applying the recorded undo group restores the original lower-case text.
-    let (mut mgr, id) = casify_manager_with_text("hello world");
-    mgr.casify_replace_buffer_emacs_byte_range_lisp_string(
-        id,
-        crate::buffer::EmacsByteRange::from_usize(0, 5),
-        &LispString::from_utf8("HELLO"),
+    assert_eq!(
+        crate::test_utils::runtime_startup_eval_all(
+            r#"
+(with-temp-buffer
+  (insert "hello world")
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (upcase-region 1 6)
+  (let ((after (buffer-string)))
+    (undo-boundary)
+    (setq last-command nil)
+    (undo)
+    (list after (buffer-string))))
+"#,
+        ),
+        vec!["OK (\"HELLO world\" \"hello world\")"],
     );
-    assert_eq!(mgr.get(id).unwrap().buffer_string(), "HELLO world");
-
-    // GNU's `undo` command pushes a boundary before undoing so exactly one
-    // group is reverted; mirror that here.
-    {
-        let buf = mgr.get_mut(id).expect("buffer");
-        let mut ul = buf.get_undo_list();
-        crate::buffer::undo::undo_list_boundary(&mut ul);
-        buf.set_undo_list(ul);
-    }
-    let result = mgr.undo_buffer(id, 1).expect("undo result");
-    assert!(result.applied_any);
-    assert_eq!(mgr.get(id).unwrap().buffer_string(), "hello world");
 }
 
+/// An indirect buffer sees its base buffer's undo history and undoing through
+/// it edits the shared text.
+///
+/// GNU keeps that true by copying `undo_list' between base and indirect on
+/// every `set_buffer_internal_1' (src/buffer.c:2357,2367), so this is a
+/// property of the pair, not of either buffer.  It used to be asserted
+/// against `BufferManager::undo_buffer'; that loop is gone
+/// (DIVERGENCES.md 150) and the replay is `lisp/simple.el's' `undo'.
+///
+/// Measured under GNU Emacs 31.0.90 `-Q --batch' first
+/// (tmp/pw56-moved-tests-gnu.txt).
 #[test]
-fn indirect_buffers_keep_undo_state_in_sync() {
+fn indirect_buffers_keep_undo_state_in_sync_like_gnu() {
     crate::test_utils::init_test_tracing();
-    let mut mgr = BufferManager::new();
-    let base_id = mgr.current_buffer_id().expect("scratch buffer");
-    let indirect_id = mgr
-        .create_indirect_buffer(base_id, "*indirect-undo*", false)
-        .expect("indirect buffer");
-
-    let _ = mgr.insert_into_buffer(base_id, "abc");
-    {
-        let undo_val = mgr
-            .get(indirect_id)
-            .and_then(|buf| buf.buffer_local_value("buffer-undo-list"));
-        assert!(
-            undo_val.is_some() && !undo_val.unwrap().is_nil(),
-            "indirect buffer should observe the base buffer's undo history"
-        );
-    }
-
-    let result = mgr.undo_buffer(indirect_id, 1).expect("undo result");
-    assert!(result.applied_any);
-    assert_eq!(mgr.get(base_id).unwrap().buffer_string(), "");
-    assert_eq!(mgr.get(indirect_id).unwrap().buffer_string(), "");
+    assert_eq!(
+        crate::test_utils::runtime_startup_eval_all(
+            r#"
+(let ((base (generate-new-buffer "neo-base")))
+  (with-current-buffer base (buffer-enable-undo) (setq buffer-undo-list nil))
+  (let ((ind (make-indirect-buffer base "neo-ind")))
+    (with-current-buffer base (insert "abc"))
+    (prog1
+        (with-current-buffer ind
+          (let ((seen (and buffer-undo-list (not (eq buffer-undo-list t)))))
+            (undo-boundary)
+            (setq last-command nil)
+            (undo)
+            (list seen
+                  (with-current-buffer base (buffer-string))
+                  (buffer-string))))
+      (kill-buffer ind) (kill-buffer base))))
+"#,
+        ),
+        vec!["OK (t \"\" \"\")"],
+    );
 }
 
 #[test]
@@ -2214,109 +2231,62 @@ fn undo_list_snapshot(mut list: Value) -> Vec<UndoEntrySnapshot> {
     entries
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct BackendUndoSnapshot {
-    undo_before: Vec<UndoEntrySnapshot>,
-    undo_result: UndoExecutionResult,
-    undo_after: Vec<UndoEntrySnapshot>,
-    buffer_string: String,
-    point_byte: usize,
-    point_char: usize,
-    mark_byte: Option<usize>,
-    mark_char: Option<usize>,
-    marker_position: Option<TextPositionAnchor>,
-    text_properties: Vec<ObjectIntervalRun>,
-}
-
-fn run_backend_undo_script(kind: BufferTextBackendKind) -> BackendUndoSnapshot {
-    let mut mgr = manager_with_text_backend(kind);
-    let id = mgr.current_buffer_id().expect("scratch buffer");
-    let face = Value::symbol("face");
-    let bold = Value::symbol("bold");
-    let italic = Value::symbol("italic");
-
-    {
-        let buf = mgr.get_mut(id).expect("scratch buffer");
-        buf.insert("aébc日本z");
-        buf.widen();
-        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
-        buf.set_mark_emacs_byte_pos(crate::buffer::EmacsBytePos::new(byte_pos_for_char(&buf, 2)));
-        let prop_start = byte_pos_for_char(&buf, 1);
-        let prop_end = byte_pos_for_char(&buf, 5);
-        assert!(buf.text_props_put_property_in_emacs_byte_range(
-            crate::buffer::EmacsByteRange::from_usize(prop_start, prop_end),
-            face,
-            bold
-        ));
-        let marker_pos = byte_pos_for_char(&buf, 4);
-        register_marker_for_test(buf, 88, marker_pos, InsertionType::After);
-        buf.set_undo_list(Value::NIL);
-    }
-
-    mgr.record_undo_point_before_command(id)
-        .expect("record point before command");
-    let insert_pos = buffer_byte_pos_for_char(&mgr, id, 2);
-    mgr.goto_buffer_emacs_byte_pos(id, crate::buffer::EmacsBytePos::new(insert_pos))
-        .expect("goto insert");
-    mgr.insert_into_buffer(id, "Ω").expect("insert text");
-
-    let prop_start = buffer_byte_pos_for_char(&mgr, id, 1);
-    let prop_end = buffer_byte_pos_for_char(&mgr, id, 6);
-    mgr.put_buffer_text_property_in_emacs_byte_range(
-        id,
-        EmacsByteRange::from_usize(prop_start, prop_end),
-        face,
-        italic,
-    )
-    .expect("put text property");
-
-    let delete_start = buffer_byte_pos_for_char(&mgr, id, 4);
-    let delete_end = buffer_byte_pos_for_char(&mgr, id, 6);
-    mgr.delete_buffer_emacs_byte_range(
-        id,
-        crate::buffer::EmacsByteRange::from_usize(delete_start, delete_end),
-    )
-    .expect("delete region");
-
-    let replace_start = buffer_byte_pos_for_char(&mgr, id, 1);
-    let replace_end = buffer_byte_pos_for_char(&mgr, id, 3);
-    mgr.replace_buffer_region_lisp_string(
-        id,
-        replace_start,
-        replace_end,
-        &LispString::from_utf8("qλ"),
-    )
-    .expect("replace region");
-
-    let undo_before = undo_list_snapshot(mgr.get(id).expect("scratch buffer").get_undo_list());
-    let undo_result = mgr.undo_buffer(id, 1).expect("undo result");
-    let buf = mgr.get(id).expect("scratch buffer");
-    let marker_position = marker_chain_anchor_for_test(&buf, 88);
-    assert_eq!(buf.text_backend_kind(), kind);
-
-    BackendUndoSnapshot {
-        undo_before,
-        undo_result,
-        undo_after: undo_list_snapshot(buf.get_undo_list()),
-        buffer_string: buf.buffer_string(),
-        point_byte: buf.point_emacs_byte_pos().get(),
-        point_char: buf.point_char_pos().get(),
-        mark_byte: buf.mark_emacs_byte_pos().map(|pos| pos.get()),
-        mark_char: buf.mark_char_pos().map(|pos| pos.get()),
-        marker_position,
-        text_properties: buffer_text_property_snapshot(buf),
-    }
-}
-
+/// The three text backends must record AND replay undo identically.
+///
+/// This used to run the edit script against `BufferManager` and replay it
+/// with `BufferManager::undo_buffer'.  That loop is deleted
+/// (DIVERGENCES.md 150): replay is `primitive-undo' (lisp/simple.el:3645),
+/// which is Lisp, so the script now runs in the runtime with the backend
+/// chosen through `neomacs-set-default-buffer-text-backend'.
+///
+/// The move makes the test stronger rather than weaker.  Before, the three
+/// backends were compared only with each other, so all three could have been
+/// wrong together.  Now the gap-buffer answer is pinned to GNU Emacs 31.0.90
+/// `-Q --batch' (tmp/pw56-moved-tests-gnu.txt) and the other two are required
+/// to equal it -- multibyte text, a marker, the mark, point, a text property
+/// laid down across the edited region, an insert, a delete and a replace.
 #[test]
 fn implemented_text_backends_match_undo_recording_and_execution() {
     crate::test_utils::init_test_tracing();
-    let baseline = run_backend_undo_script(BufferTextBackendKind::GapBuffer);
+
+    const UNDO_SCRIPT: &str = r#"
+(progn
+  (neomacs-set-default-buffer-text-backend '{backend})
+  (with-temp-buffer
+    (insert "aébc日本z")
+    (set-mark 3)
+    (deactivate-mark)
+    (put-text-property 2 6 'face 'bold)
+    (let ((mk (copy-marker 5)))
+      (buffer-enable-undo)
+      (setq buffer-undo-list nil)
+      (goto-char 3)
+      (insert "Ω")
+      (put-text-property 2 7 'face 'italic)
+      (delete-region 5 7)
+      (goto-char 2)
+      (delete-region 2 4)
+      (insert "qλ")
+      (undo-boundary)
+      (setq last-command nil)
+      (undo)
+      (list (neomacs-buffer-text-backend)
+            (buffer-substring-no-properties (point-min) (point-max))
+            (point)
+            (marker-position (mark-marker))
+            (marker-position mk)
+            (mapcar (lambda (i) (get-text-property i 'face))
+                    (number-sequence 1 (1- (point-max))))))))
+"#;
+
     for kind in implemented_text_backends() {
+        let backend = kind.symbol_name();
+        let result =
+            crate::test_utils::runtime_startup_eval_one(&UNDO_SCRIPT.replace("{backend}", backend));
         assert_eq!(
-            run_backend_undo_script(kind),
-            baseline,
-            "{kind:?} undo semantics diverged from gap buffer"
+            result,
+            format!("OK ({backend} \"aébc日本z\" 3 3 5 (nil bold bold bold bold nil nil))"),
+            "{kind:?} undo semantics diverged from GNU",
         );
     }
 }

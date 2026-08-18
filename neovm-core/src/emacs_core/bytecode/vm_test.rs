@@ -8991,7 +8991,11 @@ fn vm_insert_byte_and_buffer_undo_toggles_use_shared_runtime_state() {
                          (buffer-enable-undo)
                          buffer-undo-list)
                        (progn
-                         (buffer-disable-undo)
+                         ;; `buffer-disable-undo' is a `defun' in GNU
+                         ;; (lisp/simple.el:3591) with no C version, so on a
+                         ;; bare evaluator we write its body.
+                         ;; DIVERGENCES.md 150.
+                         (setq buffer-undo-list t)
                          buffer-undo-list)))"#
         ),
         // `buffer-enable-undo` does NOT clear a live history -- GNU's

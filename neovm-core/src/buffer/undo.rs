@@ -323,49 +323,11 @@ pub fn undo_list_boundary(undo_list: &mut Value) {
     prepend_undo_entry(undo_list, Value::NIL);
 }
 
-/// Pop one undo group from the front of the list.
-///
-/// Skips leading nil boundaries, then collects entries until the next
-/// nil boundary (or end of list).  Returns the collected entries in
-/// the order they were popped (most recent first).
-///
-/// Mutates `undo_list` in place to remove the consumed entries.
-pub fn undo_list_pop_group(undo_list: &mut Value) -> Vec<Value> {
-    // Skip leading boundaries.
-    while undo_list.is_cons() && undo_list.cons_car().is_nil() {
-        *undo_list = undo_list.cons_cdr();
-    }
-
-    let mut group = Vec::new();
-    while undo_list.is_cons() {
-        let head = undo_list.cons_car();
-        if head.is_nil() {
-            // Hit the next boundary — stop.
-            break;
-        }
-        group.push(head);
-        *undo_list = undo_list.cons_cdr();
-    }
-    group
-}
-
-/// Check whether the undo list is non-empty (has actual records, not
-/// just nil).
-pub fn undo_list_is_empty(undo_list: &Value) -> bool {
-    undo_list.is_nil()
-}
-
-/// Check whether the undo list contains at least one nil boundary.
-pub fn undo_list_contains_boundary(undo_list: &Value) -> bool {
-    let mut cursor = *undo_list;
-    while cursor.is_cons() {
-        if cursor.cons_car().is_nil() {
-            return true;
-        }
-        cursor = cursor.cons_cdr();
-    }
-    false
-}
+// No `undo_list_pop_group', `undo_list_is_empty' or
+// `undo_list_contains_boundary' here.  All three existed only for a Rust
+// replay loop (`BufferManager::undo_buffer') that preloaded Lisp shadowed and
+// entry 150 deleted; grouping the list for replay is `primitive-undo''s job
+// (lisp/simple.el:3645), and it is Lisp.  This module RECORDS.
 
 /// Check whether the most recent entry is a nil boundary.
 pub fn undo_list_has_trailing_boundary(undo_list: &Value) -> bool {
