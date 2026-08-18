@@ -335,7 +335,11 @@ fn replace_buffer_contents_deletion_run_marker_placement_matches_gnu() {
 /// FORM's value with `buffer-undo-list` freshly enabled for the replacement
 /// only.
 fn replace_region_contents_undo_probe(orig: &str, new: &str, form: &str) -> String {
-    eval_one(&format!(
+    eval_one(&replace_region_contents_undo_source(orig, new, form))
+}
+
+fn replace_region_contents_undo_source(orig: &str, new: &str, form: &str) -> String {
+    format!(
         r#"(with-temp-buffer
               (insert {orig})
               (setq buffer-undo-list nil)
@@ -344,7 +348,7 @@ fn replace_region_contents_undo_probe(orig: &str, new: &str, form: &str) -> Stri
                 (replace-region-contents (point-min) (point-max)
                                          (lambda (&rest _) temp)))
               {form})"#
-    ))
+    )
 }
 
 #[test]
@@ -361,11 +365,15 @@ fn replace_region_contents_undo_restores_the_original_text() {
         (r#""abcde""#, r#""aZZcYYe""#),
         (r#""abc""#, r#""aXbYc""#),
     ] {
-        let restored = replace_region_contents_undo_probe(
-            orig,
-            new,
-            "(progn (primitive-undo 1 buffer-undo-list) (buffer-string))",
-        );
+        // Replaying the records is lisp/simple.el's `primitive-undo', which
+        // has no Rust implementation (GNU has no C one either), so this row
+        // is asked of the loaded runtime rather than of a bare evaluator.
+        let restored =
+            crate::test_utils::runtime_startup_eval_one(&replace_region_contents_undo_source(
+                orig,
+                new,
+                "(progn (primitive-undo 1 buffer-undo-list) (buffer-string))",
+            ));
         assert_eq!(restored, format!("OK {orig}"), "undoing {orig} -> {new}");
     }
 }

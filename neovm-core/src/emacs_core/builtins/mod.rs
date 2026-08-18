@@ -4080,12 +4080,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(0),
         ),
     );
-    ctx.defsubr(
-        "primitive-undo",
-        super::undo::builtin_primitive_undo,
-        2,
-        Some(2),
-    );
     ctx.defsubr("undo", super::undo::builtin_undo, 0, Some(1));
     ctx.defsubr(
         "buffer-disable-undo",
