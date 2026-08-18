@@ -292,7 +292,7 @@ pub fn take_pending_flow() -> Option<Flow> {
     }
 }
 
-fn stash_pending_flow(flow: Flow) {
+pub(crate) fn stash_pending_flow(flow: Flow) {
     PENDING_FLOW.with(|p| *p.borrow_mut() = Some(flow));
 }
 
@@ -1386,6 +1386,7 @@ pub extern "C" fn neovm_jit_call_spec(
                 // fast-pathed (arity / not compilable). Not armed: strict call on
                 // the SYMBOL (resolves the new binding — fset/advice take effect
                 // immediately).
+                use crate::emacs_core::jit::cache::NativeCallOutcome;
                 let outcome = if armed {
                     let target = Value::from_bits(expected as usize);
                     // No scratch rooting and no Vm construction on the armed
@@ -1395,14 +1396,14 @@ pub extern "C" fn neovm_jit_call_spec(
                     // `Vm::from_context`'s eager cache zero-fill was a
                     // measured per-call tax.
                     match Vm::call_armed_callee_native(ctx, target, &slot.leaf, args_ptr, nargs) {
-                        Some(res) => res,
+                        Some(o) => o,
                         None => {
                             let saved = save_scratch_gc_roots();
                             push_scratch_gc_root(target);
                             let mut vm = Vm::from_context(ctx);
                             let res = vm.call_for_jit(target, read_rooted_args());
                             restore_scratch_gc_roots(saved);
-                            res
+                            NativeCallOutcome::from_result(res)
                         }
                     }
                 } else {
@@ -1412,17 +1413,19 @@ pub extern "C" fn neovm_jit_call_spec(
                     let mut vm = Vm::from_context(ctx);
                     let res = vm.call_for_jit(target, read_rooted_args());
                     restore_scratch_gc_roots(saved);
-                    res
+                    NativeCallOutcome::from_result(res)
                 };
                 match outcome {
-                    Ok(value) => {
+                    NativeCallOutcome::Value(value) => {
                         // SAFETY: `out` is the generated code's result stack slot.
                         unsafe { *out = value.bits() as i64 };
                         STATUS_OK
                     }
-                    Err(flow) => {
-                        stash_pending_flow(flow);
-                        STATUS_SIGNAL
+                    NativeCallOutcome::FlowStashed => STATUS_SIGNAL,
+                    // from_result never produces Fallback, and
+                    // call_armed_callee_native resolves its Fallbacks itself.
+                    NativeCallOutcome::Fallback => {
+                        unreachable!("Fallback outcome at the spec-shim boundary")
                     }
                 }
             }

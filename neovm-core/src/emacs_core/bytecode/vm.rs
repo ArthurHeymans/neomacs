@@ -6394,7 +6394,7 @@ impl<'a> Vm<'a> {
         leaf_slot: &core::sync::atomic::AtomicU64,
         args_ptr: *const i64,
         nargs: usize,
-    ) -> Option<Result<Value, Flow>> {
+    ) -> Option<crate::emacs_core::jit::cache::NativeCallOutcome> {
         use core::sync::atomic::Ordering;
         let bc = callee.get_bytecode_data()?;
         let mut ptr = leaf_slot.load(Ordering::Relaxed)
@@ -6452,17 +6452,36 @@ impl<'a> Vm<'a> {
                     "error",
                     vec![Value::string("Lisp nesting exceeds ‘max-lisp-eval-depth’")],
                 ));
-                return Some(ctx.pop_bytecode_backtrace_frame_with_result(bt_count, err));
+                let res = ctx.pop_bytecode_backtrace_frame_with_result(bt_count, err);
+                return Some(crate::emacs_core::jit::cache::NativeCallOutcome::from_result(res));
             }
         }
-        let res = (|| {
+        use crate::emacs_core::jit::cache::NativeCallOutcome;
+        // Defensive interpreter rerun for the Fallback outcomes (a plain
+        // Deopt only arises with a null ctx — never here).
+        let interp_fallback = |ctx_ptr: *mut crate::emacs_core::eval::Context| {
+            let mut args = Vec::with_capacity(nargs);
+            for i in 0..nargs {
+                // SAFETY: args_ptr addresses `nargs` valid words.
+                args.push(Value::from_bits(unsafe { *args_ptr.add(i) } as usize));
+            }
+            // Cold defensive path: a full Vm is fine here.
+            let mut vm = Vm::from_context(unsafe { &mut *ctx_ptr });
+            NativeCallOutcome::from_result(vm.execute_with_func_value(bc, args, callee))
+        };
+        let outcome = {
             let ctx_ptr = core::ptr::from_mut(&mut *ctx);
-            let ran = if pure {
+            if pure {
                 // NATIVE-TO-NATIVE: pass the caller's call-args slot straight
-                // through (no LispArgVec, no rooting, no re-marshal).
-                crate::emacs_core::jit::cache::run_resolved_leaf_native(
+                // through (no LispArgVec, no rooting, no re-marshal) — and a
+                // register-sized outcome back (no Result<_, Flow> sret moves;
+                // a signalling Flow stays in the pending slot).
+                match crate::emacs_core::jit::cache::run_resolved_leaf_native(
                     ctx_ptr, bc, callee, leaf, args_ptr,
-                )?
+                ) {
+                    NativeCallOutcome::Fallback => interp_fallback(ctx_ptr),
+                    o => o,
+                }
             } else {
                 // Marshaled (callee has &optional/&rest): build + root args in
                 // this branch's OWN scratch-root scope (the shim's armed fast
@@ -6479,33 +6498,39 @@ impl<'a> Vm<'a> {
                     ctx_ptr, bc, callee, leaf, &args,
                 );
                 crate::emacs_core::eval::restore_scratch_gc_roots(saved);
-                ran?
-            };
-            match ran {
-                Some(bits) => Ok(Value::from_bits(bits)),
-                None => {
-                    // Plain Deopt only arises with a null ctx (not here);
-                    // defensively run the callee on the interpreter.
-                    let mut args = Vec::with_capacity(nargs);
-                    for i in 0..nargs {
-                        // SAFETY: args_ptr addresses `nargs` valid words.
-                        args.push(Value::from_bits(unsafe { *args_ptr.add(i) } as usize));
+                match ran {
+                    Ok(Some(bits)) => NativeCallOutcome::Value(Value::from_bits(bits)),
+                    Ok(None) => interp_fallback(ctx_ptr),
+                    Err(flow) => {
+                        crate::emacs_core::jit::compile::stash_pending_flow(flow);
+                        NativeCallOutcome::FlowStashed
                     }
-                    // Cold defensive path: a full Vm is fine here.
-                    let mut vm = Vm::from_context(unsafe { &mut *ctx_ptr });
-                    vm.execute_with_func_value(bc, args, callee)
                 }
             }
-        })();
+        };
         ctx.depth -= 1;
         // Pop the callee's backtrace frame (balanced single-entry pop; falls back
         // to the general unwinder if a nested imbalance occurred). The fast pop
-        // never touches `res` — the general path's by-value Result round-trip
-        // was a measured per-call tax on the native->native transition.
+        // never touches the outcome — the general path's by-value Result
+        // round-trip was a measured per-call tax on the native->native
+        // transition.
         if ctx.pop_native_backtrace_frame(bt_count) {
-            return Some(res);
+            return Some(outcome);
         }
-        Some(ctx.pop_bytecode_backtrace_frame_with_result(bt_count, res))
+        // Imbalanced (rare): materialize the EvalResult the general unwinder
+        // needs, then re-compact.
+        let res = match outcome {
+            NativeCallOutcome::Value(v) => Ok(v),
+            NativeCallOutcome::FlowStashed => {
+                Err(crate::emacs_core::jit::compile::take_pending_flow()
+                    .expect("FlowStashed implies a pending flow"))
+            }
+            // Both Fallback sources were resolved through interp_fallback above.
+            NativeCallOutcome::Fallback => unreachable!("Fallback resolved before the pop"),
+        };
+        Some(NativeCallOutcome::from_result(
+            ctx.pop_bytecode_backtrace_frame_with_result(bt_count, res),
+        ))
     }
 
     fn call_function_from_stack_args(

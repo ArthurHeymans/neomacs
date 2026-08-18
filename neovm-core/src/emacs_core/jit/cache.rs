@@ -21,7 +21,9 @@ use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Instant;
 
-use super::compile::{CompiledLeaf, NativeRun, compile_bytecode_function_with, take_pending_flow};
+use super::compile::{
+    CompiledLeaf, NativeRun, compile_bytecode_function_with, stash_pending_flow, take_pending_flow,
+};
 use super::stats;
 use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::error::Flow;
@@ -712,13 +714,78 @@ pub(crate) fn run_resolved_leaf_native(
     func_value: Value,
     leaf: &CompiledLeaf,
     args_ptr: *const i64,
-) -> Result<Option<usize>, Flow> {
-    finish_native_run(
-        ctx,
-        func,
-        func_value,
-        leaf.call_premarshaled(ctx as *mut u8, args_ptr),
-    )
+) -> NativeCallOutcome {
+    match leaf.call_premarshaled(ctx as *mut u8, args_ptr) {
+        NativeRun::Ok(bits) => NativeCallOutcome::Value(Value::from_bits(bits)),
+        // call_premarshaled maps null-vmctx deopts to Deopt; defensive only —
+        // the caller re-runs the callee on the interpreter.
+        NativeRun::Deopt => NativeCallOutcome::Fallback,
+        // Fold a contained shim panic into its signal flow at exactly the
+        // boundary the old Result-shaped path did (take_pending_flow owns the
+        // panic-wins conversion), then put the flow straight back — the shim
+        // reads STATUS from the compact outcome without re-materializing the
+        // Flow. Cold path: signals only.
+        NativeRun::Signal => {
+            let flow = take_pending_flow()
+                .expect("STATUS_SIGNAL from compiled code implies a stashed Flow");
+            stash_pending_flow(flow);
+            NativeCallOutcome::FlowStashed
+        }
+        NativeRun::DeoptAt(resume) => {
+            let crate::emacs_core::jit::compile::DeoptResume {
+                pc,
+                stack,
+                handlers,
+                binds,
+                spec_base,
+                cond_base,
+            } = *resume;
+            if ctx.is_null() {
+                return NativeCallOutcome::Fallback;
+            }
+            // Precise deopt: resume the Tier-0 interpreter mid-function.
+            // SAFETY: the seam-provided &mut Context is dormant during the
+            // native call — the same contract every runtime shim uses.
+            let ctx = unsafe { &mut *ctx };
+            let mut vm = crate::emacs_core::bytecode::Vm::from_context(ctx);
+            match vm.run_resumed_frame(
+                func, func_value, pc, &stack, handlers, &binds, spec_base, cond_base,
+            ) {
+                Ok(v) => NativeCallOutcome::Value(v),
+                Err(flow) => {
+                    stash_pending_flow(flow);
+                    NativeCallOutcome::FlowStashed
+                }
+            }
+        }
+    }
+}
+
+/// Register-sized outcome of a native-to-native call: the hot chain never
+/// moves a fat `Result<_, Flow>` through sret. A signalling Flow stays in the
+/// pending-flow slot ([`NativeCallOutcome::FlowStashed`]); the shim reports
+/// STATUS_SIGNAL and the generated code's signal path consumes it as usual.
+pub(crate) enum NativeCallOutcome {
+    /// The callee returned this value.
+    Value(Value),
+    /// Could not run natively — the caller takes its strict/interpreter path.
+    Fallback,
+    /// A Flow is stashed in the pending slot (signal, or a deopt-resume error).
+    FlowStashed,
+}
+
+impl NativeCallOutcome {
+    /// Compact an `EvalResult`: the error flow goes into the pending slot.
+    #[inline]
+    pub(crate) fn from_result(res: Result<Value, Flow>) -> Self {
+        match res {
+            Ok(v) => NativeCallOutcome::Value(v),
+            Err(flow) => {
+                stash_pending_flow(flow);
+                NativeCallOutcome::FlowStashed
+            }
+        }
+    }
 }
 
 /// Map a [`NativeRun`] outcome to the `try_run_compiled` return shape, resuming
