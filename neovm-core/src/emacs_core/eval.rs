@@ -14233,7 +14233,24 @@ impl Context {
                     debug_on_exit: false,
                     ..
                 }) if args.is_evaluated()
-            );
+            )
+            || self.specpdl.len() == count + 1
+                && matches!(
+                    self.specpdl.last(),
+                    // The inline evaluated variants (structurally
+                    // debug_on_exit: false) own no side-stack payload —
+                    // pointer-decrement pop, same as GNU specpdl_ptr--.
+                    // BacktraceNative in particular is what every JIT
+                    // native call's frame is; without this arm each pop
+                    // took the full unbind_to fallback (~44 Ir measured).
+                    Some(
+                        SpecBinding::Backtrace1 {
+                            debug_on_exit: false,
+                            ..
+                        } | SpecBinding::Backtrace2 { .. }
+                            | SpecBinding::BacktraceNative { .. }
+                    )
+                );
 
         if can_pop {
             let binding = self.specpdl.pop().expect("can_pop checked len");
