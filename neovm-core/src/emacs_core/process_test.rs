@@ -5596,7 +5596,7 @@ fn accept_process_output_runs_pty_status_notification_after_output() {
                    (accept-process-output proc 1)
                    (let ((first-status (process-status proc)))
                      (accept-process-output proc 1)
-                     (list (not (null (memq first-status '(run exit signal))))
+                     (list (if (memq first-status '(run exit signal)) t)
                            (process-status proc)
                            (buffer-string)
                            (kill-buffer buf)))))"#
@@ -5698,7 +5698,7 @@ fn accept_process_output_direct_pty_reports_gnu_output_status_invariants() {
                    (accept-process-output proc 1)
                    (prog1 (list (process-type proc)
                                 (process-status proc)
-                                (not (null (process-tty-name proc)))
+                                (if (process-tty-name proc) t)
                                 (memq proc (process-list))
                                 (save-current-buffer
                                   (set-buffer buf)

@@ -12447,6 +12447,9 @@ registered Rust subr entry AND a function cell that is no longer a subr -- i.e.
 every Rust subr preloaded Lisp shadows.  It was 50 before this change and is 49
 after.
 
+> Note, 2026-08-18: 38 after entry 148, which deleted the type predicates and
+> the `defalias` names below.  See 148 for the corrections to this entry.
+
 GNU has exactly ONE name in that shape, and it labels itself:
 
 ```c
@@ -12475,11 +12478,15 @@ a Rust reimplementation of Lisp we ship:
 * **Type predicates (6)** -- `booleanp`, `char-uppercase-p`,
   `integer-or-null-p`, `list-of-strings-p`, `macrop`, `string-or-null-p`.
   One-line `defun`s in `subr.el` over predicates that are in C.  The cheapest
-  place to start.
+  place to start.  DELETED by entry 148, 2026-08-18, which
+  also corrects this bullet: `char-uppercase-p` is in `simple.el`, is not one
+  line, and its Rust version gave a different ANSWER from GNU's for U+0130.
 * **`defalias` names (5)** -- `move-marker`, `not`, `string<`, `string=`,
   `string>`.  These are the ones an observer can tell apart without running
   anything: in GNU `symbol-function` answers a SYMBOL (`subr.el:71`,
-  `:2277-2280`), and ours answered a subr object until the alias overwrote it.
+  `:2277-2280`), and ours answered a subr object until the alias overwrote it.  DELETED by entry 148, 2026-08-18, which
+  also corrects this bullet: `string>`'s target `string-greaterp` is Lisp in
+  GNU too, so four of the five indirect to a C subr and the fifth does not.
 * **Process launchers (4)** -- `start-process`, `start-process-shell-command`,
   `start-file-process`, `start-file-process-shell-command`.  Ledger 131's find;
   see the correction below.
@@ -13018,5 +13025,312 @@ pinned in `a_serial_process_decodes_the_bytes_its_port_delivers`.  Everything
 two cells it checked hardest: with real bytes flowing,
 `default-process-coding-system` and `process-coding-system-alist` are still
 invisible to a serial process.
+
+Status: FIXED.
+
+## 148. Eleven more Rust subrs of functions GNU has no C version of: five of the six type predicates reported the wrong arity, `char-uppercase-p` disagreed with GNU about U+0130, and the five `defalias` names answered a subr where GNU answers a SYMBOL -- FIXED
+
+Ledger 146 deleted `primitive-undo` and then counted the rest of its class: 49
+names with a registered Rust subr whose function cell, after `loadup.el`, is
+no longer that subr.  It ranked the two cheapest groups first and this entry
+takes them: the six type predicates and the five names GNU creates with
+`defalias`.
+
+The class test is
+`neovm-core/src/emacs_core/builtins/rust_subrs_shadowed_by_lisp_test.rs`,
+which walks a booted runtime's obarray and asserts the list exactly, in both
+directions.  It was 50 before 146, 49 after it, and is 38 after this entry.
+
+### Where GNU defines each of the eleven, and what an observer can tell
+
+`grep 'DEFUN ("NAME"' src/*.c` against emacs-mirror 31.0.90 (`0ee48ac4df2`)
+finds NOTHING for any of the eleven.  Every one is Lisp we already ship.  The
+`symbol-function`, `subrp`, `func-arity` and `indirect-function` columns are
+measured on GNU 31.0.90 `-Q --batch` (`documentation` is below, with the rest
+of what diverged):
+
+| name | GNU defines it | `symbol-function` | `subrp` | `func-arity` | `indirect-function` |
+| --- | --- | --- | --- | --- | --- |
+| `booleanp` | `defun`, `lisp/subr.el:4775` | byte-code fn | nil | `(1 . 1)` | byte-code fn |
+| `char-uppercase-p` | `defun`, `lisp/simple.el:6683` | byte-code fn | nil | `(1 . 1)` | byte-code fn |
+| `integer-or-null-p` | `defun`, `lisp/subr.el:4809` | byte-code fn | nil | `(1 . 1)` | byte-code fn |
+| `list-of-strings-p` | `defun`, `lisp/subr.el:4768` | byte-code fn | nil | `(1 . 1)` | byte-code fn |
+| `macrop` | `defun`, `lisp/subr.el:4793` | byte-code fn | nil | `(1 . 1)` | byte-code fn |
+| `string-or-null-p` | `defun`, `lisp/subr.el:4762` | byte-code fn | nil | `(1 . 1)` | byte-code fn |
+| `move-marker` | `defalias`, `lisp/subr.el:2280` | `set-marker` | nil | `(2 . 3)` | `#<subr set-marker>` |
+| `not` | `defalias`, `lisp/subr.el:71` | `null` | nil | `(1 . 1)` | `#<subr null>` |
+| `string<` | `defalias`, `lisp/subr.el:2278` | `string-lessp` | nil | `(2 . 2)` | `#<subr string-lessp>` |
+| `string=` | `defalias`, `lisp/subr.el:2277` | `string-equal` | nil | `(2 . 2)` | `#<subr string-equal>` |
+| `string>` | `defalias`, `lisp/subr.el:2279` | `string-greaterp` | nil | `(2 . 2)` | byte-code fn |
+
+The `defalias` half is what 146 flagged as observable without running
+anything, and it is: `(symbol-function 'not)` is the SYMBOL `null`, not a
+function object.  The last row is the one that pays for measuring rather than
+reasoning -- `string>`'s target `string-greaterp` is ITSELF Lisp
+(`lisp/subr.el:6283`, and its own Rust subr is still on the shadow list), so
+`string>` indirects to a byte-code function while the other four indirect to C
+subrs (`null` `src/data.c:177`, `set-marker` `src/marker.c:607`,
+`string-equal` `src/fns.c:337`, `string-lessp` `src/fns.c:557`).
+
+**Byte-compiled callers.**  Four of the five aliases never read the cell at
+all, because GNU's byte compiler names them itself:
+`(byte-defop-compiler not 1)` (`lisp/emacs-lisp/bytecomp.el:3985`),
+`(byte-defop-compiler string= 2)` (`:4026`),
+`(byte-defop-compiler string< 2)` (`:4027`) and
+`(byte-defop-compiler (move-marker byte-set-marker) 2-3)` (`:4020`) put a
+`byte-compile` property on the ALIAS name, so `(not x)` becomes opcode 63
+`Bnot` and `(move-marker m p)` becomes opcode 147 `Bset_marker`.  `string>`
+gets there by a different door: it has no `byte-compile` property, but
+`string-greaterp` carries a `compiler-macro` (`lisp/subr.el:6287-6290`) and
+`function-get` follows `defalias` chains, so `(string> a b)` compiles to a
+swapped `Bstringlss`.  Measured byte-for-byte, GNU vs this runtime with
+`lexical-binding` t:
+
+| form | GNU codes | Neomacs codes |
+| --- | --- | --- |
+| `(lambda (x) (not x))` | `(63 135)` | `(63 135)` |
+| `(lambda (a b) (string= a b))` | `(1 1 152 135)` | `(1 1 152 135)` |
+| `(lambda (a b) (string< a b))` | `(1 1 153 135)` | `(1 1 153 135)` |
+| `(lambda (a b) (string> a b))` | `(137 2 153 135)` | `(137 2 153 135)` |
+| `(lambda (m p) (move-marker m p))` | `(1 1 192 147 135)` | `(1 1 192 147 135)` |
+| `(lambda (x) (booleanp x))` | `(192 1 33 135)` | `(192 1 33 135)` |
+
+The six predicates are ordinary calls in GNU and here alike -- their constants
+vector names the function, so a compiled caller DOES read the cell, and the
+cell holds `subr.el`'s definition.
+
+### Who was reaching the Rust subrs: nobody, measured
+
+The same three doors 146 checked, checked again for these eleven:
+
+* **The function cell.**  Being on the shadow list IS the measurement: the
+  test collects exactly those names whose cell, in a fully booted runtime, is
+  not a subr.  All eleven were on it.  Measured directly before the deletion,
+  in the loaded runtime: `(symbol-function 'not)` `null`,
+  `(symbol-function 'string=)` `string-equal`, `(symbol-function
+  'move-marker)` `set-marker`, `(subrp (symbol-function 'booleanp))` `nil`,
+  `(func-arity 'macrop)` `(1 . 1)` -- GNU's answers, from `subr.el`.
+* **The static subr table.**  `ResolvedBuiltinCallee::from_static_symbol`
+  (`neovm-core/src/emacs_core/bytecode/vm.rs:1368`) still has exactly two
+  callers, and both still reach it only from a `None` function cell
+  (`vm.rs:6679`, whose other arm requires a subr-valued cell, and `vm.rs:7150`,
+  reached from the `None` arm of `symbol_function_id`).  A name `loadup.el`
+  writes a cell for cannot arrive there.
+* **Rust callers.**  There were none.  After deleting the eleven registrations
+  the library compiled with no errors -- only the test tree broke -- and the
+  three helpers that then went dead (`macrop_check`, `is_macro_object`,
+  `autoload_macro_marker` in `subr_info.rs`, plus the always-`None` stub
+  `startup_virtual_autoload_function_cell` in `builtins/symbols.rs`) existed
+  for `macrop` alone.
+
+That leaves the bootstrap window, and it is the reason this group is safe:
+GNU itself has nothing here before `subr.el` loads, and `subr.el` is the third
+file `loadup.el` loads (`lisp/loadup.el:123-125`: `byte-run`, `backquote`,
+`subr`).  Four of the five aliases are at `subr.el:71` and `:2277-2280`, and
+`char-uppercase-p` waits for `simple.el`.  The suite confirms it: every
+bootstrap and runtime-startup test passes with all eleven void until their
+`.el` runs.
+
+### What the Rust versions did differently
+
+The subrs answered on a bare `Context` and nowhere else, which is where the
+divergences lived.  GNU column measured on GNU 31.0.90 `-Q --batch`; Neomacs
+column measured by calling the subr on a bare evaluator before the deletion.
+
+**Arity.**  Five of the six predicates were registered `0, None`:
+
+```elisp
+(list (func-arity 'macrop) (func-arity 'string-or-null-p)
+      (func-arity 'integer-or-null-p) (func-arity 'list-of-strings-p)
+      (func-arity 'char-uppercase-p))
+;; GNU                => ((1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1))
+;; Neomacs before fix => ((0 . many) (0 . many) (0 . many) (0 . many) (0 . many))
+```
+
+`booleanp` was the one registered `1, 1` and it matched.  The arity was
+enforced anyway -- by `expect_args` inside each body -- so the wrong number of
+arguments still signalled; it signalled the wrong DATUM:
+
+```elisp
+(condition-case e (booleanp) (error e))
+;; GNU                => (wrong-number-of-arguments (1 . 1) 0)
+;; Neomacs before fix => (wrong-number-of-arguments booleanp 0)
+```
+
+A `defun` reports its arity cons; a subr reports its own symbol.  (`not` is
+the exception that proves it: GNU's `not` IS a subr once the alias resolves,
+so GNU answers `(wrong-number-of-arguments not 0)` -- exactly what ours
+answered.)
+
+**`char-uppercase-p` and U+0130.**  This is the one real behavioural
+divergence.  GNU asks the Unicode `lowercase` property
+(`lisp/simple.el:6687-6689`, over `unicode-property-table-internal`,
+`src/chartab.c:1292`, and `get-char-code-property`,
+`lisp/international/mule-cmds.el:2976`); the Rust subr compared the case
+table's downcase mapping against the input.  U+0130 LATIN CAPITAL LETTER I
+WITH DOT ABOVE has a `lowercase` property but is left alone by the downcase
+mapping:
+
+```elisp
+(char-uppercase-p 304)          ; U+0130 LATIN CAPITAL LETTER I WITH DOT ABOVE
+;; GNU                => t
+;; Neomacs before fix => nil
+```
+
+`?A`, `?a`, `?1`, U+01C4, U+01C5 and U+00DF all agreed, and the three
+`wrong-type-argument characterp` refusals agreed.
+
+**`list-of-strings-p` and a circular list.**  GNU's body is
+`(while (and (consp object) (stringp (car object))) (setq object (cdr object)))`
+(`lisp/subr.el:4771-4773`) with no cycle check, so a circular list of strings
+hangs it -- verified, `timeout 10` kills GNU with SIGTERM.  The Rust subr
+carried a `HashSet` of visited conses and answered `nil`.  Better, and not
+GNU; the deletion adopts GNU's answer, hang included.
+
+**`documentation`.**  On a bare evaluator the subrs answered
+`"Built-in function."` -- the generic subr string -- where GNU has the real
+docstring; measured for `not`, `move-marker` and `booleanp`.  In the loaded
+runtime `(documentation 'booleanp)` already answered `subr.el`'s own text.
+
+Everything else matched: all the `booleanp` / `string-or-null-p` /
+`integer-or-null-p` / `list-of-strings-p` answer arms, all seven `macrop`
+arms including the two autoload markers that return `(macro t)` and `(t)`, and
+`not` / `string=` / `string<` / `string>` on strings and symbol designators.
+
+### The fix
+
+The eleven `defsubr` registrations are deleted, with a comment at each site
+saying which `.el` line owns the name.  Deleted with them:
+`builtin_not_1`, `builtin_booleanp_1`, `builtin_list_of_strings_p`,
+`builtin_integer_or_null_p`, `builtin_string_or_null_p`,
+`builtin_char_uppercase_p` (`builtins/types.rs`), `builtin_macrop`
+(`builtins/symbols.rs`), `builtin_move_marker` and
+`builtin_move_marker_in_buffers` (`marker.rs`), and the four helpers that had
+no other reader.  `string=`, `string<` and `string>` shared their function
+pointers with `string-equal`, `string-lessp` and `string-greaterp`, which GNU
+does DEFUN (the first two) or which is a separate shadow-list entry (the
+third), so only the alias registrations went.
+
+Nothing was shimmed.  Forty-one tests and one assertion row reached the
+deleted subrs, and every one was moved, repointed or deleted -- none propped
+up:
+
+* The seven `macrop_check` tests in `subr_info_test.rs` and the
+  keyword-designator test in `builtins/tests.rs` became one runtime test,
+  `macrop_arms_match_gnu`, whose thirteen rows were measured under GNU first.
+* `builtin_move_marker_matches_set_marker_behavior` (`marker_test.rs`) became
+  `move_marker_is_the_set_marker_alias_like_gnu`, which asks the runtime for
+  `(eq (move-marker m 3) m)`, the position and the buffer.
+* `pure_dispatch_typed_string_equal_aliases_match` (`builtins/tests.rs`)
+  asserted that two REGISTERED subrs dispatched to the same Rust function.
+  That is no longer a fact about this runtime, and the identity worth stating
+  is the alias one, which
+  `the_five_alias_cells_hold_a_symbol_in_the_loaded_runtime_like_gnu` states:
+  `(eq (indirect-function 'string=) (symbol-function 'string-equal))`, t in
+  GNU and here.
+* Two more `dispatch_builtin_pure` tests were repointed from `string<` /
+  `string=` / `string>` to `string-lessp` / `string-equal` /
+  `string-greaterp`, the names GNU actually has -- the eight-bit ordering and
+  symbol-designator behaviour they measure is the primitive's, not the alias's.
+* `assert_subr_arity("move-marker", 2, Some(3))` (`subr_info_test.rs:502`) is
+  gone: there is no subr to have an arity.  `(func-arity 'move-marker)` is
+  `(2 . 3)` in the runtime, which the new test pins.
+* Twenty-one bare-evaluator tests used `(not ...)`, `(string= ...)` or
+  `(move-marker ...)` as INCIDENTAL vocabulary -- their subjects are VM
+  dispatch clusters, shared buffer state, GC stress, keymap lookup, window
+  cycling and process status, not these names.  They were repointed at the
+  primitive GNU has in C: `null` (`src/data.c:177`), `string-equal`,
+  `string-lessp`, `set-marker`, and `(not (null X))` -- the idiom that needs
+  both -- became `(if X t)`.  A bare `Context` is GNU before `loadup.el`, and
+  what you can write there is what GNU DEFUNs.
+* Seven tests in `navigation_test.rs` and `indent_test.rs` are different: they
+  read FORMS out of `lisp/simple.el` and `lisp/indent.el` and evaluate them on
+  a bare evaluator, so the `not` and `move-marker` come from GNU's own source
+  and cannot be rewritten.  Both files already carry an
+  `install_bare_elisp_shims` prelude of Lisp `defalias`es standing in for the
+  `subr.el` those forms assume (`defun`, `defmacro`, `when`, `unless`,
+  `with-temp-buffer`).  The five `subr.el` aliases were added to it verbatim
+  -- `(defalias 'not #'null)` and the other four, exactly as `subr.el:71` and
+  `:2277-2280` write them.  That is not a shim for the deleted subrs; it is
+  the `.el` line the prelude exists to supply, and it is Lisp, not Rust.
+* `compat_source_bootstrap_macro_surface_is_minimal`
+  (`neovm-core/tests/compat_source_bootstrap_macro_surface.rs`) asserts that a
+  bare evaluator has NO Lisp macros defined -- and asked with `macrop`, which
+  was part of the surface it measures.  It now asks the way `subr.el:4796-4799`
+  does, over `indirect-function` (`src/data.c:2557`).
+
+Nine new tests state the parity fact
+(`neovm-core/src/emacs_core/builtins/lisp_only_predicates_and_aliases_test.rs`):
+all eleven void on a bare evaluator, with `null`, `set-marker`, `string-equal`
+and `string-lessp` as controls; the six predicates `(1 . 1)` and not subrs in
+the loaded runtime; the five alias cells holding their target symbol and
+indirecting to its definition; `char-uppercase-p` on the six characters above;
+the byte-code table above; the thirteen `macrop` arms; `move-marker` really
+moving a marker; the predicates' answer and arity-datum arms; and
+`lookup_global_subr_entry` empty for all eleven while the six primitives they
+delegate to are still registered.  The standing check gains an explicit
+`SHADOWED_BY_PRELOADED_LISP.len() == 38`, so the count cannot be restored by
+editing the list.
+
+### The shipped binary, after the deletion, against GNU
+
+Not the test harness: a `cargo xtask fresh-build --release` binary, run
+`-Q --batch` side by side with GNU 31.0.90 on the same four probe files.
+
+* The observables table above, re-asked of the binary: every cell matches,
+  `string>`'s byte-code `indirect-function` included.  `(symbol-function
+  'not)` is `null`; `(symbol-function 'move-marker)` is `set-marker`;
+  `(func-arity 'macrop)` is `(1 . 1)`; every `documentation` string is
+  `subr.el`'s own, read out of the byte-compiled `subr.elc` we ship.
+* The 51 behaviour probes (the answer arms, the `wrong-type-argument`
+  refusals, the `wrong-number-of-arguments` data, `move-marker` on a real
+  marker): `diff` of the two outputs is empty.
+* The 14 `macrop` probes: `diff` empty.
+* The 11 byte-compilation probes, compared as raw opcode byte lists and
+  constants vectors: `diff` empty.
+
+### What nothing observable changed, and the performance question
+
+For a loaded session this deletion changes nothing observable, for the same
+reason as 146 and by the same measurement: the cells already held `subr.el`'s
+definitions, `func-arity`, `subrp`, `symbol-function`, `indirect-function` and
+`documentation` already answered from them, and byte-compiled callers already
+emitted the same opcode bytes GNU emits.  What changes is the bare evaluator,
+where all eleven are now void exactly as they are in GNU before `subr.el`, and
+the tests, which now measure the Lisp that runs.
+
+`not`, `string=` and the predicates are hot names, so the performance question
+was asked explicitly.  It answers itself from the reachability measurement
+rather than from a benchmark: in a loaded session no call to any of the eleven
+could reach the Rust subr, because the interpreter reads the function cell
+(which held Lisp), the VM's static-table fast path is gated on a VOID cell
+(`vm.rs:6679`, `:7150`), and a compiled caller of the four aliases emits an
+opcode and never looks anything up.  Deleting a registration that no dispatch
+path consulted cannot move a benchmark; the only thing that got cheaper is
+`init_builtins`, by eleven entries.
+
+### Correction to entry 146, 2026-08-18
+
+146's grouping is right and its two rankings are confirmed: the type
+predicates really were the cheapest place to start, and the `defalias` names
+really are the ones an observer can tell apart without running anything.  Two
+refinements it could not have made:
+
+* 146 describes the six predicates as "one-line `defun`s in `subr.el` over
+  predicates that are in C".  `char-uppercase-p` is not in `subr.el` (it is
+  `lisp/simple.el:6683`, as 146's own list comment says) and it is not
+  one-line: it is a Unicode-property lookup with an ASCII bootstrap fallback,
+  and it is the one of the eleven whose Rust version gave a different ANSWER,
+  not merely a different shape.  "Cheapest to delete" was true; "harmless
+  while shadowed" would not have been, had anything reached it.
+* 146 says of the five `defalias` names that "ours answered a subr object
+  until the alias overwrote it".  True, and incomplete in one row: `string>`
+  aliases `string-greaterp`, which is Lisp in GNU too, so GNU's
+  `indirect-function` for `string>` is a byte-code function and not a subr at
+  all.  The generalisation "a `defalias` resolves to a C primitive" holds for
+  four of the five.
+
+146's count line -- "It was 50 before this change and is 49 after" -- is
+extended rather than corrected: 38 after this one.
 
 Status: FIXED.

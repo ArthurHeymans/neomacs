@@ -664,6 +664,9 @@ mod tests;
 mod replace_region_contents_test;
 
 #[cfg(test)]
+mod lisp_only_predicates_and_aliases_test;
+
+#[cfg(test)]
 mod rust_subrs_shadowed_by_lisp_test;
 
 // -----------------------------------------------------------------------
@@ -4096,12 +4099,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // be nil to default to `obarray`, but it must be supplied).
     ctx.defsubr("unintern", super::hashtab::builtin_unintern, 2, Some(2));
     ctx.defsubr("set-marker", super::marker::builtin_set_marker, 2, Some(3));
-    ctx.defsubr(
-        "move-marker",
-        super::marker::builtin_move_marker,
-        2,
-        Some(3),
-    );
+    // No `move-marker' here: GNU has no DEFUN of that name.  It is
+    // `(defalias 'move-marker #'set-marker)' at lisp/subr.el:2280, so the
+    // function cell holds the SYMBOL `set-marker' (DIVERGENCES.md 148).
     ctx.defsubr(
         "marker-position",
         super::marker::builtin_marker_position,
@@ -4448,7 +4448,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr("char-equal", builtin_char_equal, 2, Some(2));
-    ctx.defsubr("macrop", super::builtins::symbols::builtin_macrop, 0, None);
+    // No `macrop' here: GNU has no DEFUN of that name.  It is a `defun' at
+    // lisp/subr.el:4793 over `indirect-function', which IS in C
+    // (src/data.c:2557) -- DIVERGENCES.md 148.
     ctx.defsubr(
         "set-process-inherit-coding-system-flag",
         super::process::builtin_set_process_inherit_coding_system_flag,
@@ -7884,33 +7886,16 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
 
     // -- Type predicates --
     ctx.defsubr_1("null", builtin_null_1, 1);
-    ctx.defsubr_1("not", builtin_not_1, 1);
+    // No `not': GNU has no DEFUN of that name.  `(defalias 'not #'null)'
+    // (lisp/subr.el:71) puts the SYMBOL `null' in the cell, and a compiled
+    // caller emits the Bnot opcode instead -- DIVERGENCES.md 148.
     ctx.defsubr_1("atom", builtin_atom_1, 1);
     ctx.defsubr_1("consp", builtin_consp_1, 1);
     ctx.defsubr_1("listp", builtin_listp_1, 1);
-    ctx.defsubr(
-        "list-of-strings-p",
-        |_ctx, args| builtin_list_of_strings_p(args),
-        0,
-        None,
-    );
     ctx.defsubr_1("nlistp", builtin_nlistp_1, 1);
     ctx.defsubr_1("symbolp", builtin_symbolp_1, 1);
-    ctx.defsubr_1("booleanp", builtin_booleanp_1, 1);
     ctx.defsubr_1("numberp", builtin_numberp_1, 1);
     ctx.defsubr_1("integerp", builtin_integerp_1, 1);
-    ctx.defsubr(
-        "integer-or-null-p",
-        |_ctx, args| builtin_integer_or_null_p(args),
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "string-or-null-p",
-        |_ctx, args| builtin_string_or_null_p(args),
-        0,
-        None,
-    );
     ctx.defsubr_1("floatp", builtin_floatp_1, 1);
     ctx.defsubr_1("stringp", builtin_stringp_1, 1);
     ctx.defsubr_1("vectorp", builtin_vectorp_1, 1);
@@ -7920,12 +7905,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(2),
     );
-    ctx.defsubr(
-        "char-uppercase-p",
-        |_ctx, args| builtin_char_uppercase_p(args),
-        0,
-        None,
-    );
+    // No `booleanp', `integer-or-null-p', `string-or-null-p',
+    // `list-of-strings-p' or `char-uppercase-p': GNU has no DEFUN for any of
+    // the six type predicates.  They are `defun's at lisp/subr.el:4762-4812
+    // and lisp/simple.el:6683 over primitives that ARE in C
+    // (`stringp', `integerp', `indirect-function',
+    // `get-char-code-property') -- DIVERGENCES.md 148.
     ctx.defsubr_1("keywordp", builtin_keywordp_1, 1);
     ctx.defsubr(
         "hash-table-p",
@@ -8014,12 +7999,15 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
 
     // -- String --
+    // GNU DEFUNs `string-equal' and `string-lessp' (src/fns.c) and nothing
+    // else here: `string=', `string<' and `string>' are `defalias'es at
+    // lisp/subr.el:2277-2279, so their cells hold the TARGET SYMBOL, and a
+    // compiled caller emits Bstringeqlsign / Bstringlss instead
+    // (DIVERGENCES.md 148).  `string-greaterp' is itself Lisp
+    // (lisp/subr.el:6283); its Rust subr is still on the shadow list.
     ctx.defsubr_2("string-equal", builtin_string_equal_2, 2);
-    ctx.defsubr_2("string=", builtin_string_equal_2, 2);
     ctx.defsubr_2("string-lessp", builtin_string_lessp_2, 2);
-    ctx.defsubr_2("string<", builtin_string_lessp_2, 2);
     ctx.defsubr_2("string-greaterp", builtin_string_greaterp_2, 2);
-    ctx.defsubr_2("string>", builtin_string_greaterp_2, 2);
     ctx.defsubr_slice(
         "substring",
         |_ctx, args| builtin_substring_slice(args),

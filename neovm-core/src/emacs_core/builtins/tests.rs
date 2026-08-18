@@ -858,20 +858,13 @@ fn compiled_literal_reifier_preserves_cperl_key_vector_shape() {
     );
 }
 
-#[test]
-fn pure_dispatch_typed_string_equal_aliases_match() {
-    crate::test_utils::init_test_tracing();
-    let a = Value::string("neo");
-    let b = Value::string("neo");
-    let full = dispatch_builtin_pure("string-equal", vec![a, b])
-        .expect("builtin string-equal should resolve")
-        .expect("builtin string-equal should evaluate");
-    let short = dispatch_builtin_pure("string=", vec![a, b])
-        .expect("builtin string= should resolve")
-        .expect("builtin string= should evaluate");
-    assert_eq!(full, short);
-    assert!(full.is_truthy());
-}
+// `pure_dispatch_typed_string_equal_aliases_match' is gone: it asserted that
+// two REGISTERED subrs, `string-equal' and `string=', dispatched to the same
+// Rust function.  GNU has only the first; `string=' is
+// `(defalias 'string= #'string-equal)' at lisp/subr.el:2277, so the identity
+// to state is the alias one, and it is stated of the loaded runtime in
+// `the_five_alias_cells_hold_a_symbol_in_the_loaded_runtime_like_gnu'
+// (`builtins/lisp_only_predicates_and_aliases_test.rs').  DIVERGENCES.md 148.
 
 #[test]
 fn string_comparison_orders_eight_bit_above_ascii_and_keeps_unibyte_distinct() {
@@ -886,16 +879,20 @@ fn string_comparison_orders_eight_bit_above_ascii_and_keeps_unibyte_distinct() {
     ));
 
     // An eight-bit char sorts above ASCII (char-code order, matching GNU).
-    let lt = dispatch_builtin_pure("string<", vec![Value::string("a"), multibyte_eight_bit])
-        .expect("string< resolves")
-        .expect("string< evaluates");
+    let lt = dispatch_builtin_pure(
+        "string-lessp",
+        vec![Value::string("a"), multibyte_eight_bit],
+    )
+    .expect("string-lessp resolves")
+    .expect("string-lessp evaluates");
     assert!(lt.is_truthy(), "ASCII should sort before an eight-bit char");
 
-    // string= keeps a unibyte raw byte distinct from the multibyte eight-bit char.
+    // string-equal keeps a unibyte raw byte distinct from the multibyte
+    // eight-bit char.
     let unibyte = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
-    let eq = dispatch_builtin_pure("string=", vec![unibyte, multibyte_eight_bit])
-        .expect("string= resolves")
-        .expect("string= evaluates");
+    let eq = dispatch_builtin_pure("string-equal", vec![unibyte, multibyte_eight_bit])
+        .expect("string-equal resolves")
+        .expect("string-equal evaluates");
     assert!(
         !eq.is_truthy(),
         "unibyte 0xFF must not equal the multibyte eight-bit char"
@@ -905,9 +902,12 @@ fn string_comparison_orders_eight_bit_above_ascii_and_keeps_unibyte_distinct() {
 #[test]
 fn pure_dispatch_typed_string_comparisons_accept_symbol_designators() {
     crate::test_utils::init_test_tracing();
-    let less = dispatch_builtin_pure("string<", vec![Value::symbol("foo"), Value::string("g")])
-        .expect("builtin string< should resolve")
-        .expect("builtin string< should evaluate");
+    let less = dispatch_builtin_pure(
+        "string-lessp",
+        vec![Value::symbol("foo"), Value::string("g")],
+    )
+    .expect("builtin string-lessp should resolve")
+    .expect("builtin string-lessp should evaluate");
     assert!(less.is_truthy());
 
     let equal = dispatch_builtin_pure("string-equal", vec![Value::T, Value::string("t")])
@@ -915,14 +915,17 @@ fn pure_dispatch_typed_string_comparisons_accept_symbol_designators() {
         .expect("builtin string-equal should evaluate");
     assert!(equal.is_truthy());
 
-    let greater = dispatch_builtin_pure("string>", vec![Value::NIL, Value::string("a")])
-        .expect("builtin string> should resolve")
-        .expect("builtin string> should evaluate");
+    let greater = dispatch_builtin_pure("string-greaterp", vec![Value::NIL, Value::string("a")])
+        .expect("builtin string-greaterp should resolve")
+        .expect("builtin string-greaterp should evaluate");
     assert!(greater.is_truthy());
 
-    let err = dispatch_builtin_pure("string>", vec![Value::fixnum(7), Value::string("a")])
-        .expect("builtin string> should resolve")
-        .expect_err("string> should reject non string/symbol designators");
+    let err = dispatch_builtin_pure(
+        "string-greaterp",
+        vec![Value::fixnum(7), Value::string("a")],
+    )
+    .expect("builtin string-greaterp should resolve")
+    .expect_err("string-greaterp should reject non string/symbol designators");
     match err {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
@@ -15376,36 +15379,12 @@ fn indirect_function_follows_t_and_keyword_alias_values() {
         .expect("restore alias function cell");
 }
 
-#[test]
-fn macrop_eval_resolves_keyword_designators() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = crate::emacs_core::eval::Context::new();
-
-    let keyword = Value::keyword(":vm-macrop-keyword");
-    let orig_keyword = builtin_symbol_function(&mut eval, vec![keyword])
-        .expect("symbol-function should read keyword function cell");
-    // Create a macro value directly (when is no longer a built-in macro)
-    let test_macro = Value::make_macro(LambdaData {
-        params: LambdaParams {
-            required: vec![],
-            optional: vec![],
-            rest: Some(crate::emacs_core::intern::intern("args")),
-        },
-        body: vec![].into(),
-        env: None,
-        docstring: None,
-        doc_form: None,
-        interactive: None,
-    });
-
-    builtin_fset(&mut eval, vec![keyword, test_macro])
-        .expect("fset should bind keyword function cell");
-    let keyword_result =
-        builtin_macrop(&mut eval, vec![keyword]).expect("macrop should resolve keyword designator");
-    assert!(keyword_result.is_truthy());
-
-    builtin_fset(&mut eval, vec![keyword, orig_keyword]).expect("restore keyword function cell");
-}
+// `macrop_eval_resolves_keyword_designators' is gone with the `macrop' subr
+// it called.  GNU has no DEFUN `macrop'; the keyword-designator arm is asked
+// of the loaded runtime in `macrop_arms_match_gnu'
+// (`builtins/lisp_only_predicates_and_aliases_test.rs'), where GNU's own
+// `(fset :KEYWORD (cons 'macro ...))' probe was measured first.
+// DIVERGENCES.md 148.
 
 #[test]
 fn macroexpand_runtime_environment_overrides_and_shadows_global_macros() {

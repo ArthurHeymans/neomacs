@@ -70,6 +70,15 @@ fn eval_first_form_after_marker(eval: &mut Context, source: &str, marker: &str) 
 /// evaluator can evaluate forms extracted from GNU `.el` source files.
 fn install_bare_elisp_shims(ev: &mut Context) {
     let shims = r#"
+;; `subr.el' creates these five with `defalias'; GNU has no C version of any
+;; of them (lisp/subr.el:71 and :2277-2280), so a bare evaluator standing in
+;; for a loaded one has to be given the same aliases subr.el gives it.
+;; DIVERGENCES.md 148.
+(defalias 'not #'null)
+(defalias 'string= #'string-equal)
+(defalias 'string< #'string-lessp)
+(defalias 'string> #'string-greaterp)
+(defalias 'move-marker #'set-marker)
 (defalias 'defun (cons 'macro #'(lambda (name arglist &rest body)
   (list 'defalias (list 'quote name) (cons 'function (list (cons 'lambda (cons arglist body))))))))
 (defalias 'defmacro (cons 'macro #'(lambda (name arglist &rest body)
@@ -756,7 +765,10 @@ fn skip_chars_forward_line_scans_do_not_rescan_from_buffer_start() {
     let visited = eval_int(
         &mut ev,
         r#"(let ((n 0))
-             (while (not (eobp))
+             ;; `not' is lisp/subr.el:71 and does not exist on a bare
+             ;; evaluator (DIVERGENCES.md 148); `null' is the C subr it
+             ;; aliases (src/data.c:177).
+             (while (null (eobp))
                (skip-chars-forward "^ \t")
                (skip-chars-forward " \t")
                (skip-chars-forward "^\r\n")

@@ -1590,10 +1590,10 @@ fn window_list_1_all_frames_includes_other_frame_windows() {
                  (w2 (progn (select-frame f2) (selected-window))))
              (prog1
                  (list (null (memq w2 (window-list-1 w1 nil nil)))
-                       (not (null (memq w2 (window-list-1 w1 nil t))))
-                       (not (null (memq w2 (window-list-1 w1 nil 'visible))))
-                       (not (null (memq w2 (window-list-1 w1 nil 0))))
-                       (not (null (memq w2 (window-list-1 w1 nil f2))))
+                       (if (memq w2 (window-list-1 w1 nil t)) t)
+                       (if (memq w2 (window-list-1 w1 nil 'visible)) t)
+                       (if (memq w2 (window-list-1 w1 nil 0)) t)
+                       (if (memq w2 (window-list-1 w1 nil f2)) t)
                        (null (memq w2 (window-list-1 w1 nil :bad))))
                (select-frame f1)
                (delete-frame f2))))",
@@ -3398,7 +3398,7 @@ fn next_window_cycles() {
         "(let ((w1 (selected-window)))
            (split-window-internal (selected-window) nil nil nil)
            (let ((w2 (next-window)))
-             (not (eq w1 w2))))",
+             (null (eq w1 w2))))",
     );
     assert_eq!(results[0], "OK t");
 }

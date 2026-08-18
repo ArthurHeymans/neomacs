@@ -164,25 +164,11 @@ fn builtin_copy_marker_from_integer_clips_like_set_marker() {
     assert_eq!(marker_position_value(&after_max), Value::fixnum(4));
 }
 
-#[test]
-fn builtin_move_marker_matches_set_marker_behavior() {
-    crate::test_utils::init_test_tracing();
-    let mut eval = super::super::eval::Context::new();
-    // Insert content so the buffer is long enough for position 3.
-    if let Some(buf) = eval.buffers.current_buffer_mut() {
-        buf.insert("abcdef");
-    }
-    let marker = builtin_make_marker(vec![]).expect("make marker");
-    let buffer = Value::make_buffer(eval.buffers.current_buffer_id().unwrap());
-    let moved = builtin_move_marker(&mut eval, vec![marker, Value::fixnum(3), buffer])
-        .expect("move marker");
-    assert!(is_marker(&moved));
-    assert_eq!(call_marker_position(vec![moved]).unwrap(), Value::fixnum(3));
-    assert_eq!(
-        call_marker_buffer(vec![moved]).unwrap(),
-        Value::make_buffer(eval.buffers.current_buffer_id().unwrap())
-    );
-}
+// `builtin_move_marker_matches_set_marker_behavior' is gone with the subr it
+// called.  GNU has no DEFUN `move-marker'; `lisp/subr.el:2280' aliases it to
+// `set-marker', so the behaviour is asked of the loaded runtime in
+// `move_marker_is_the_set_marker_alias_like_gnu'
+// (`builtins/lisp_only_predicates_and_aliases_test.rs').  DIVERGENCES.md 148.
 
 #[test]
 fn builtin_make_marker_returns_empty() {

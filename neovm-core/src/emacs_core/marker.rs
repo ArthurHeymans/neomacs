@@ -591,21 +591,10 @@ pub(crate) fn builtin_set_marker_in_buffers(
     Ok(args[0])
 }
 
-/// (move-marker MARKER POSITION &optional BUFFER) -> MARKER
-///
-/// GNU Emacs exposes `move-marker` as the marker-moving primitive used by
-/// Lisp code such as `indent.el`. Its observable behavior matches
-/// `set-marker`, so reuse that implementation.
-pub(crate) fn builtin_move_marker(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_move_marker_in_buffers(&mut eval.buffers, args)
-}
-
-pub(crate) fn builtin_move_marker_in_buffers(
-    buffers: &mut BufferManager,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_set_marker_in_buffers(buffers, args)
-}
+// `move-marker' is NOT a subr.  GNU has no DEFUN of that name; it is
+// `(defalias 'move-marker #'set-marker)' at lisp/subr.el:2280, so
+// `symbol-function' answers the SYMBOL `set-marker' and a compiled caller
+// emits the Bset_marker opcode.  DIVERGENCES.md 148.
 
 /// Register a Lisp marker in the target buffer's marker list so that
 /// insert/delete operations automatically adjust its position.
