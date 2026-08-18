@@ -2865,23 +2865,35 @@ pub enum NativeRun {
     Deopt,
     /// A guard failed at a precise bytecode pc with the live operand stack
     /// and frame state captured — resume the Tier-0 interpreter MID-FUNCTION
-    /// via `Vm::run_resumed_frame`. The native call performed NO frame
-    /// unwind: `binds` (pre-push specpdl depths, this frame's JIT bind-stack
-    /// segment) and the `handlers` condition frames remain registered and
-    /// their ownership transfers to the resumed frame, which unwinds to
-    /// `spec_base`/`cond_base` (the native frame's entry bases) on exit.
-    DeoptAt {
-        pc: usize,
-        stack: Vec<Value>,
-        handlers: usize,
-        binds: Vec<usize>,
-        spec_base: usize,
-        cond_base: usize,
-    },
+    /// via `Vm::run_resumed_frame`. Boxed: the payload is exceptional-path
+    /// only, and carrying it inline made every hot `Ok` return move an
+    /// ~88-byte enum through three call boundaries.
+    DeoptAt(Box<DeoptResume>),
     /// A runtime call inside the body raised a non-local `Flow` (signal/throw);
     /// take it with [`take_pending_flow`] and propagate it.
     Signal,
 }
+
+/// Payload of [`NativeRun::DeoptAt`]. The native call performed NO frame
+/// unwind: `binds` (pre-push specpdl depths, this frame's JIT bind-stack
+/// segment) and the `handlers` condition frames remain registered and
+/// their ownership transfers to the resumed frame, which unwinds to
+/// `spec_base`/`cond_base` (the native frame's entry bases) on exit.
+#[derive(Debug, PartialEq, Eq)]
+pub struct DeoptResume {
+    pub pc: usize,
+    pub stack: Vec<Value>,
+    pub handlers: usize,
+    pub binds: Vec<usize>,
+    pub spec_base: usize,
+    pub cond_base: usize,
+}
+
+const _: () = {
+    // The hot-path contract this Box exists for: a NativeRun return must
+    // stay two words.
+    assert!(std::mem::size_of::<NativeRun>() <= 16);
+};
 
 impl CompiledLeaf {
     /// The number of fixed slots the native code reads (see the field doc).
@@ -3265,14 +3277,14 @@ impl CompiledLeaf {
                 Some(base) => base,
                 None => unsafe { (*(vmctx as *const Context)).condition_stack_len() },
             };
-            return NativeRun::DeoptAt {
+            return NativeRun::DeoptAt(Box::new(DeoptResume {
                 pc,
                 stack,
                 handlers,
                 binds,
                 spec_base,
                 cond_base,
-            };
+            }));
         }
         // A contained shim panic exiting this leaf (no leaf-local handler
         // matched it): heal the panicked extent's evaluator residue against
@@ -3373,7 +3385,7 @@ impl CompiledLeaf {
     pub(crate) fn call_for_test(&self, args: &[Value]) -> Option<usize> {
         match self.call(core::ptr::null_mut(), args) {
             NativeRun::Ok(bits) => Some(bits),
-            NativeRun::Deopt | NativeRun::DeoptAt { .. } => None,
+            NativeRun::Deopt | NativeRun::DeoptAt(_) => None,
             NativeRun::Signal => panic!("unexpected STATUS_SIGNAL from a test body"),
         }
     }
@@ -11147,7 +11159,7 @@ mod tests {
                     Value::make_int(a * a).bits(),
                     "inlined (* a a) for a={a}"
                 ),
-                NativeRun::Deopt | NativeRun::DeoptAt { .. } => {}
+                NativeRun::Deopt | NativeRun::DeoptAt(_) => {}
                 other => panic!("a={a}: unexpected {other:?}"),
             }
         }
@@ -11667,7 +11679,8 @@ mod tests {
         // Non-fixnum operand: precise deopt at the Max op with the operands
         // still on the captured stack.
         match run2(Op::Max, Value::make_float(1.5), Value::make_int(7), ctx_ptr) {
-            NativeRun::DeoptAt { pc, stack, .. } => {
+            NativeRun::DeoptAt(resume) => {
+                let DeoptResume { pc, ref stack, .. } = *resume;
                 assert_eq!(pc, 2, "deopt at the Max op");
                 assert_eq!(stack[1], Value::make_int(7));
             }
@@ -12072,7 +12085,7 @@ mod tests {
         assert!(
             matches!(
                 leaf.call(ctx, &[cons, int(5)]),
-                NativeRun::Deopt | NativeRun::DeoptAt { .. }
+                NativeRun::Deopt | NativeRun::DeoptAt(_)
             ),
             "(logand '(1) 5) must deopt, not compute inline"
         );
@@ -13387,14 +13400,15 @@ mod tests {
         f.seal_hand_assembled_ops();
         let leaf = lower_nullary_leaf(&ops, &constants).expect("guard after call compiles now");
         let native = match leaf.call(ctx_ptr, &[]) {
-            NativeRun::DeoptAt {
-                pc,
-                stack,
-                handlers,
-                binds,
-                spec_base,
-                cond_base,
-            } => {
+            NativeRun::DeoptAt(resume) => {
+                    let DeoptResume {
+                        pc,
+                        stack,
+                        handlers,
+                        binds,
+                        spec_base,
+                        cond_base,
+                    } = *resume;
                 assert_eq!(pc, 3, "deopt at the 1+ after the call");
                 assert_eq!(
                     cell.cons_car(),
@@ -13464,13 +13478,14 @@ mod tests {
         )
         .unwrap();
         match leaf2.call(ctx_ptr, &[]) {
-            NativeRun::DeoptAt {
-                pc,
-                stack,
-                handlers,
-                binds,
-                ..
-            } => {
+            NativeRun::DeoptAt(resume) => {
+                    let DeoptResume {
+                        pc,
+                        stack,
+                        handlers,
+                        binds,
+                        ..
+                    } = *resume;
                 assert_eq!(pc, 2, "deopt at the Add1 op");
                 assert_eq!(stack.len(), 2, "pre-op stack: [callee-sym, arg]");
                 assert_eq!(stack[1], Value::make_int(Value::MOST_POSITIVE_FIXNUM));
@@ -14154,14 +14169,15 @@ mod tests {
                 NativeRun::Deopt => {
                     // The seam reruns the interpreter; nothing further to hold.
                 }
-                NativeRun::DeoptAt {
-                    pc,
-                    stack,
-                    handlers,
-                    binds,
-                    spec_base,
-                    cond_base,
-                } => {
+                NativeRun::DeoptAt(resume) => {
+                        let DeoptResume {
+                            pc,
+                            stack,
+                            handlers,
+                            binds,
+                            spec_base,
+                            cond_base,
+                        } = *resume;
                     // Precise deopt: resume mid-function and the result must
                     // match the pure-interpreter run exactly.
                     let mut vm = crate::emacs_core::bytecode::Vm::from_context(&mut ev);
@@ -14211,7 +14227,7 @@ mod tests {
                                 );
                             }
                         }
-                        NativeRun::Deopt | NativeRun::DeoptAt { .. } => {}
+                        NativeRun::Deopt | NativeRun::DeoptAt(_) => {}
                         NativeRun::Signal => {
                             let _ = take_pending_flow();
                         }
@@ -14415,14 +14431,15 @@ mod tests {
                         other => panic!("seed {seed}: deopt-rerun mismatch {other:?}: {ops:?}"),
                     }
                 }
-                NativeRun::DeoptAt {
-                    pc,
-                    stack,
-                    handlers,
-                    binds,
-                    spec_base,
-                    cond_base,
-                } => {
+                NativeRun::DeoptAt(resume) => {
+                        let DeoptResume {
+                            pc,
+                            stack,
+                            handlers,
+                            binds,
+                            spec_base,
+                            cond_base,
+                        } = *resume;
                     // Precise deopt: resume mid-function on the MUTATED state.
                     let resumed = {
                         let mut vm = Vm::from_context(&mut ev);
@@ -14489,7 +14506,7 @@ mod tests {
                                 "seed {seed}: MIR rerun-deopt after a side effect on {ops:?}"
                             );
                         }
-                        NativeRun::DeoptAt { .. } => {}
+                        NativeRun::DeoptAt(_) => {}
                         NativeRun::Signal => {
                             let _ = take_pending_flow();
                         }

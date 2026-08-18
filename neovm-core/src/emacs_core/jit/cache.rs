@@ -733,14 +733,15 @@ fn finish_native_run(
     match outcome {
         NativeRun::Ok(bits) => Ok(Some(bits)),
         NativeRun::Deopt => Ok(None),
-        NativeRun::DeoptAt {
-            pc,
-            stack,
-            handlers,
-            binds,
-            spec_base,
-            cond_base,
-        } => {
+        NativeRun::DeoptAt(resume) => {
+            let crate::emacs_core::jit::compile::DeoptResume {
+                pc,
+                stack,
+                handlers,
+                binds,
+                spec_base,
+                cond_base,
+            } = *resume;
             if ctx.is_null() {
                 // call() maps null-vmctx deopts to Deopt; defensive only.
                 return Ok(None);
