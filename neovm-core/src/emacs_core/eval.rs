@@ -14213,6 +14213,29 @@ impl Context {
     }
 
     #[inline]
+    /// GNU `specpdl_ptr--` for the JIT native-call exit: pop the call's own
+    /// `BacktraceNative` frame without touching the result value at all.
+    /// Returns false when the stack is not in the balanced single-frame
+    /// state (nested imbalance, debug residue) — the caller then takes the
+    /// general [`Self::pop_bytecode_backtrace_frame_with_result`] path.
+    #[inline]
+    pub(crate) fn pop_native_backtrace_frame(&mut self, count: usize) -> bool {
+        if self.specpdl.len() == count + 1
+            && matches!(
+                self.specpdl.last(),
+                Some(SpecBinding::BacktraceNative { .. })
+            )
+        {
+            // SAFETY: BacktraceNative owns no heap payload (a Value plus a
+            // raw pointer and a length), so the length store alone is the
+            // pointer-decrement pop; no drop glue needs to run.
+            unsafe { self.specpdl.set_len(count) };
+            true
+        } else {
+            false
+        }
+    }
+
     pub(crate) fn pop_bytecode_backtrace_frame_with_result(
         &mut self,
         count: usize,

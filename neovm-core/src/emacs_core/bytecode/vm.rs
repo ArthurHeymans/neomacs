@@ -6499,7 +6499,12 @@ impl<'a> Vm<'a> {
         })();
         ctx.depth -= 1;
         // Pop the callee's backtrace frame (balanced single-entry pop; falls back
-        // to the general unwinder if a nested imbalance occurred).
+        // to the general unwinder if a nested imbalance occurred). The fast pop
+        // never touches `res` — the general path's by-value Result round-trip
+        // was a measured per-call tax on the native->native transition.
+        if ctx.pop_native_backtrace_frame(bt_count) {
+            return Some(res);
+        }
         Some(ctx.pop_bytecode_backtrace_frame_with_result(bt_count, res))
     }
 
