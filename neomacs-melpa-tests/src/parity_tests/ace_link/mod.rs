@@ -36,6 +36,39 @@ const ACE_LINK_TEST_PRELUDE: &str = r##"
   "Return the absolute sandbox path of NAME."
   (expand-file-name name (getenv "NEOMACS_TEST_SANDBOX_ROOT")))
 
+(defun ace-link-test-compilation-complete-p (buffer)
+  "Non-nil once `compilation-handle-exit' has written BUFFER's last line.
+That is the causal end of the child's output rather than a guess about
+it: Emacs drains a dying process's remaining reads before it runs the
+sentinel, the sentinel is what calls `compilation-handle-exit', and that
+function marks the text it writes with a `compilation-handle-exit' text
+property (lisp/progmodes/compile.el:2630).  The property cannot appear
+until every byte the child wrote has been through `compilation-filter'."
+  (and (buffer-live-p (get-buffer buffer))
+       (with-current-buffer buffer
+         (and (text-property-not-all (point-min) (point-max)
+                                     'compilation-handle-exit nil)
+              t))))
+
+(defun ace-link-test-await-compilation (buffer)
+  "Wait until BUFFER holds all of its compilation's output, or signal.
+The child's process dying is not that condition: it can be gone with
+reads still queued, and the link candidates `ace-link-compilation'
+collects from a half-filled buffer are a fact about the kernel's
+scheduling rather than about either editor -- the defect DIVERGENCES.md
+133 removed from the `rg' suite.  Signalling rather than returning means a
+future edit that reintroduces the race fails on its first run."
+  (let ((rounds 0))
+    (while (and (< rounds 1200)
+                (not (ace-link-test-compilation-complete-p buffer)))
+      (accept-process-output nil 0.05)
+      (setq rounds (1+ rounds)))
+    (unless (ace-link-test-compilation-complete-p buffer)
+      (error "ace-link-test-await-compilation: %s never reached \
+`compilation-handle-exit'; its links would describe only as much of the \
+child's output as had been read" buffer))
+    :finished))
+
 (defun ace-link-test-write (name text)
   "Write TEXT to sandbox file NAME and return its path."
   (let ((path (ace-link-test-path name)))

@@ -113,15 +113,38 @@ MARKER, when given, is an extra project-root file to create."
         (push (match-string-no-properties 1) arguments))
       (nreverse arguments))))
 
+(defun ameba-test-complete-p (buffer)
+  "Non-nil once `compilation-handle-exit' has written BUFFER's last line.
+That line is the causal end of the output rather than a guess about it:
+Emacs drains a dying process's remaining reads before it runs the
+sentinel, the sentinel is what calls `compilation-handle-exit', and that
+function marks the text it writes with a `compilation-handle-exit' text
+property (lisp/progmodes/compile.el:2630).  The property cannot appear
+until every byte the linter wrote has been through `compilation-filter'."
+  (and (buffer-live-p (get-buffer buffer))
+       (with-current-buffer buffer
+         (and (text-property-not-all (point-min) (point-max)
+                                     'compilation-handle-exit nil)
+              t))))
+
 (defun ameba-test-wait (buffer)
-  "Wait for BUFFER's compilation to finish."
-  (let ((limit 400))
-    (while (and (> limit 0)
-                (get-buffer-process buffer)
-                (process-live-p (get-buffer-process buffer)))
+  "Wait until BUFFER holds all of its compilation's output, or signal.
+The linter's process dying is not that condition: it can be gone with
+reads still queued, and a buffer pinned at that moment records however
+much of its output the kernel happened to have delivered -- a fact about
+scheduling rather than about either editor, which is the defect
+DIVERGENCES.md 133 removed from the `rg' suite.  Signalling rather than
+returning keeps a future edit that reintroduces the race from being
+recorded as a snapshot."
+  (let ((limit 1200))
+    (while (and (> limit 0) (not (ameba-test-complete-p buffer)))
       (accept-process-output nil 0.05)
       (setq limit (1- limit)))
-    (accept-process-output nil 0.1)))
+    (unless (ameba-test-complete-p buffer)
+      (error "ameba-test-wait: %s never reached `compilation-handle-exit'; \
+its text records only as much of the linter's output as had been read"
+             buffer))
+    :finished))
 
 (defun ameba-test-relative (text root)
   "TEXT with ROOT written as `PROJECT/', in plain and abbreviated spellings.

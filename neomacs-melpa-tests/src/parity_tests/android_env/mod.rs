@@ -103,7 +103,9 @@ Return the SDK root, which is also left in `ANDROID_SDK_ROOT'."
   (split-string (aenv-test-read aenv-test-argv-log) "\n" t))
 
 (defun aenv-test-await (buffer)
-  "Wait for BUFFER's process to finish, then return how the wait ended."
+  "Wait for BUFFER's process to finish, then return how the wait ended.
+For a compilation buffer use `aenv-test-await-compilation' instead: a
+compilation's text is not complete when its process dies."
   (let ((waited 0))
     (while (and (< waited 600)
                 (get-buffer-process buffer)
@@ -111,6 +113,42 @@ Return the SDK root, which is also left in `ANDROID_SDK_ROOT'."
       (accept-process-output nil 0.05)
       (setq waited (1+ waited)))
     (if (< waited 600) :finished :timed-out)))
+
+(defun aenv-test-compilation-complete-p (buffer)
+  "Non-nil once `compilation-handle-exit' has written BUFFER's last line.
+That line is the causal end of the output, not a guess about it: Emacs
+drains a dying process's remaining reads before it runs the sentinel, the
+sentinel is what calls `compilation-handle-exit', and that function marks
+the text it writes with a `compilation-handle-exit' text property
+\(lisp/progmodes/compile.el:2630).  The property therefore cannot appear
+until every byte the child wrote has already been through
+`compilation-filter'."
+  (and (buffer-live-p (get-buffer buffer))
+       (with-current-buffer buffer
+         (and (text-property-not-all (point-min) (point-max)
+                                     'compilation-handle-exit nil)
+              t))))
+
+(defun aenv-test-await-compilation (buffer)
+  "Wait until BUFFER holds all of its compilation's output, or signal.
+`process-live-p' going nil is NOT that condition.  A process can be gone
+with reads still queued, and a pin taken at that moment records however
+much of the child's output the kernel happened to have delivered -- a fact
+about scheduling rather than about either editor, which is the defect
+DIVERGENCES.md 133 removed from the `rg' suite.  Waiting for the sentinel's
+own end marker removes the choice here the same way, and signalling rather
+than returning means a future edit that reintroduces the race fails on its
+first run instead of moving a snapshot months later."
+  (let ((waited 0))
+    (while (and (< waited 1200)
+                (not (aenv-test-compilation-complete-p buffer)))
+      (accept-process-output nil 0.05)
+      (setq waited (1+ waited)))
+    (unless (aenv-test-compilation-complete-p buffer)
+      (error "aenv-test-await-compilation: %s never reached \
+`compilation-handle-exit'; its text records only as much of the child's \
+output as had been read" buffer))
+    :finished))
 
 (defun aenv-test-settle (buffer)
   "Wait for BUFFER's process to die and its output and sentinel to land.

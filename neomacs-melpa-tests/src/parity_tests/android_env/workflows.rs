@@ -24,7 +24,7 @@ fn compiling_runs_gradlew_from_the_project_root_it_finds_above_the_open_file() -
                      :entry-command-with-hydra-off (android-env)
                      :project-root (locate-dominating-file "." "gradlew"))))
     (android-env-compile "assembleDevDebug")
-    (let ((first (list :wait (aenv-test-await "*android-env-compile*")
+    (let ((first (list :wait (aenv-test-await-compilation "*android-env-compile*")
                        :buffer (aenv-test-compilation-text
                                 "*android-env-compile*")
                        :mode (with-current-buffer "*android-env-compile*"
@@ -35,10 +35,10 @@ fn compiling_runs_gradlew_from_the_project_root_it_finds_above_the_open_file() -
       ;; The two task-specific commands go through the same route with the
       ;; configured gradle tasks.
       (android-env-unit-test)
-      (aenv-test-await "*android-env-compile*")
+      (aenv-test-await-compilation "*android-env-compile*")
       (let ((unit (aenv-test-compilation-text "*android-env-compile*")))
         (android-env-test)
-        (aenv-test-await "*android-env-compile*")
+        (aenv-test-await-compilation "*android-env-compile*")
         (let ((instrumented (aenv-test-compilation-text
                              "*android-env-compile*")))
           ;; A file with no gradlew anywhere above it is reported, not run.
@@ -92,7 +92,7 @@ fn javac_and_kotlinc_errors_in_the_build_output_become_navigable_locations() -> 
    t)
   (find-file (aenv-test-path "app/app/src/main/java/com/example/Checkout.java"))
   (android-env-compile "assembleDevDebug")
-  (let ((wait (aenv-test-await "*android-env-compile*")))
+  (let ((wait (aenv-test-await-compilation "*android-env-compile*")))
     (list :wait wait
           :buffer (aenv-test-compilation-text "*android-env-compile*")
           ;; Three of the five diagnostic lines resolve.  The two real javac
