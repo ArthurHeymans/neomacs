@@ -534,6 +534,34 @@ const GGTAGS_TEST_PRELUDE: &str = r####"
         (json-key-type 'symbol))
     (json-read-file (plist-get fixture :state))))
 
+(defun ggt-test-piped-global-start (original &rest arguments)
+  "Start Global over a pipe rather than a PTY, or signal.
+`ggtags-global-filter' runs from `compilation-filter-hook' and mutates outside
+any whole-lines guard: it deletes a \"Using config file ...\" line with a
+`re-search-backward' bounded BELOW by `compilation-filter-start', and it feeds
+`ggtags-global-output-lines' with `(count-lines compilation-filter-start
+\(point))', which counts a partial line as a whole one (ggtags.el:1580-1608).
+Both the deletion and the auto-jump that consumes that count are therefore
+decided by where a read landed, and read boundaries are not a parity signal.
+`compilation-start' gives the child a PTY by default (GNU
+src/process.c:8923-8929) and a PTY's line discipline is the only topology here
+that can deliver half a line.  This advice is the suite's single chokepoint:
+every Ggtags entry point reaches Global through `ggtags-global-start', so no
+case can start a search that skips the guard.  See DIVERGENCES.md 133 and 144."
+  (let* ((buffer (let ((process-connection-type nil))
+                   (apply original arguments)))
+         (process (and (buffer-live-p buffer) (get-buffer-process buffer))))
+    (unless process
+      (error "ggt-test-piped-global-start: no Global process is attached to \
+%S, so the pipe guard could not be checked" buffer))
+    (when (process-tty-name process)
+      (error "ggt-test-piped-global-start: Global is PTY-connected (%s); its \
+output would arrive in scheduling-dependent chunks"
+             (process-tty-name process)))
+    buffer))
+
+(advice-add 'ggtags-global-start :around #'ggt-test-piped-global-start)
+
 (defun ggt-test-wait-index (fixture expected-index)
   "Pump the real process loop until replay state reaches EXPECTED-INDEX."
   (let ((deadline (+ (float-time) 15.0))

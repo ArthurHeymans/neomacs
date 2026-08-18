@@ -11241,3 +11241,352 @@ the process's stderr, but it can pin the truth table, including the
 tmp/coord-echo-probe2.el is byte-identical to GNU 31.0.90.
 
 Status: FIXED.
+
+## 144. The rest of entry 133's population audited -- three of the fourteen remaining packages mutate a compilation buffer outside any guard and their suites really spawn -- and six more suites gated a compilation pin on the clock, two of them on a buffer that only looks like a compilation buffer -- NOT A DIVERGENCE (racy harness fixtures), FIXED
+
+Entry 140 left two screens and a list of names.  This entry runs both screens
+to the end of the corpus and reports what each one caught.
+
+### The population, re-derived rather than inherited
+
+140's necessary condition for entry 133's hazard is that the *package* puts a
+function on `compilation-filter-hook`, and one grep answers it for the whole
+corpus:
+
+```
+$ grep -rl --include='*.el' compilation-filter-hook tmp/melpa/source-package-cache/
+ag  arduino-cli-mode  buttercup  cargo  embark  embark-consult  ggtags
+go-mode(go-guru.el)  haskell-mode(haskell-compile.el)  inf-ruby  overseer
+rake  rg (x2)  rspec-mode  rustic  scala-mode  tree-sitter(core/tsc-dyn-get.el)
+tsc(core/tsc-dyn-get.el)                        # 19 files, 18 packages of 792
+```
+
+19 files, and **18** packages -- not the 17 140's prose gives.  That is an
+off-by-one in the sentence and not in the work: the list 140 itself prints at
+the end names eighteen.  `ag`, `rg` and `rustic` were settled in 133 and `rake`
+in 140, so **fourteen** packages remained unaudited, not thirteen.
+
+### Per-package verdict
+
+The rule applied is 140's sufficient condition rather than 133's literal
+wording: a filter is exposed when its mutation is *neither* confined to
+complete lines *nor* resumable across a read boundary.
+
+| package | function on the hook | verdict |
+|---|---|---|
+| `ggtags` | `ggtags-global-filter` (ggtags.el:1580-1608) | **exposed** -- deletes a "Using config file ..." line with `re-search-backward` bounded below by `compilation-filter-start`, and feeds `ggtags-global-output-lines` with `(count-lines compilation-filter-start (point))`, which counts a partial line as a whole one.  That count gates both the `>30`-line display and the history auto-jump (:1598-1608) |
+| `cargo` | `cargo-process--add-errno-buttons` (cargo-process.el:469-479, installed at :292) | **exposed** -- searches only `compilation-filter-start` .. `(point)` for `"\\bE[0-9]\\{4\\}\\b"`; a match straddling that bound is never looked for again.  Its sibling `cargo-process--fix-missing-subcommand` (:442-466) re-reads from the line start and is resumable |
+| `overseer` | `overseer--remove-header` (overseer.el:79-81, installed at :138) | **exposed** -- `delete-matching-lines` over `(point-min)` .. `(point-max)` on every call, unanchored, so a partial line that already contains the header text is deleted whole and its tail arrives orphaned |
+| `haskell-mode` | `haskell-compilation-filter-hook` (haskell-compile.el:129-140) | **exposed, latent** -- `delete-matching-lines` with a `$`-anchored regexp over a region ending at `(point)`, and `$` matches at the end of the buffer, so an incomplete line matches.  The `haskell_mode` suite never loads `haskell-compile` and starts no process |
+| `go-mode` (`go-guru.el`) | `go-guru--compilation-filter-hook` (go-guru.el:212-239) | **not exposed, and unreachable** -- see below |
+| `arduino-cli-mode` | `arduino-cli--compilation-filter` (:138-141) | not exposed -- `ansi-color-apply-on-region`, resumable for `rake`'s reason |
+| `rspec-mode` | `rspec-colorize-compilation-buffer` (:961-962) | not exposed -- same |
+| `scala-mode` | `scala--compile-ansi-color` (scala-compile.el:112-113) | not exposed -- same |
+| `inf-ruby` | `inf-ruby-auto-enter` (:1303-1315) | not exposed -- it mutates no text (it switches major mode), it re-reads from `beginning-of-line` so a partial line simply fails and is retried on the next call, and it is installed only by the interactive opt-in `inf-ruby-enable-auto-breakpoint` (:1335-1337), never by a mode |
+| `tree-sitter`, `tsc` | anonymous `ansi-color` lambda (core/tsc-dyn-get.el:266-270) | not exposed twice over -- `ansi-color` is resumable, and the hook is added only `(unless noninteractive)` (:265), which is false in every batch this harness runs.  Neither package has a suite |
+| `buttercup` | none | not applicable -- two comments (:1794, :1995) that mention the hook to explain why buttercup does not colourize a trailing newline |
+| `embark`, `embark-consult` | none | not applicable -- `embark-consult--export-grep` states in a comment (embark-consult.el:222-227) that it deliberately does NOT `run-hooks` on it, and runs only `grep--heading-filter` |
+
+### `go-guru` is the interesting negative: the upstream TODO is real, the bug is not
+
+140 recorded `go-guru--compilation-filter-hook` as exposed on the strength of
+its own source comment -- "the filter may be called with chunks of output
+containing incomplete lines.  Moving to beginning-of-line may cause duplicate
+post-processing" (go-guru.el:219-222).  Two things are wrong with reading that
+as a finding here.
+
+It is unreachable.  The installed MELPA `go-mode` package ships `go-mode.el`
+alone; `go-guru.el` exists only inside the upstream checkout the corpus caches,
+`go-guru` is not a package in this corpus at all, and the `go_mode` suite
+requires `go-mode` and never loads it.  The grep that produced the population
+searches the checkout, so this row is a false positive of the screen.
+
+And the duplicate post-processing is harmless.  What the filter does to a line
+is `(put-text-property start p 'display filename)` (:236); running it again
+over a line it has already processed puts the same property with the same
+value.  Driven through every delivery regime with a realistic guru payload --
+and with `display` among the captured properties, without which a probe cannot
+see this filter at all -- the render is **invariant**.  A documented TODO is a
+reason to look, not a finding.
+
+### A probe that can fail, run in both editors
+
+Reading is not proof.  `tmp/pw50-regime-probe.el` feeds one payload to a mode
+through four delivery regimes -- the whole read; re-split at line boundaries;
+cut once after the first character; one character per call -- plus, where a pin
+names a token, a fifth regime that places a single read boundary two characters
+into that token.  It compares the buffer text, every `face`, `display`,
+`help-echo` and `compilation-message` run, and every overlay button.  The
+`rg-filter` shape is included as a control so that "invariant" can mean
+something:
+
+```
+CONTROL rg-filter shape   CHUNK-DEPENDENT in (:line :split1 :char)
+overseer-buffer-mode      CHUNK-DEPENDENT in (:char :mid-token "ignored")
+cargo-process-mode        CHUNK-DEPENDENT in (:line :char :mid-token "E0425")
+ggtags-global-mode        CHUNK-DEPENDENT in (:split1 :char)
+haskell-compilation-mode  CHUNK-DEPENDENT in (:char)
+go-guru-output-mode       invariant over :whole :line :split1 :char
+```
+
+GNU Emacs 31.0.90 and Neomacs produced that table, and the full rendered value
+behind every line of it, byte for byte identically -- the two logs `diff` to
+nothing.  Nothing below implicates either engine.
+
+The two `:mid-token` rows are the ones that matter, because a single mid-line
+read boundary is the only one of these regimes a real PTY produces.  One
+boundary two characters into `ignored`:
+
+```elisp
+;; overseer, whole read     => "ARGS:--verbose\nRESULT:failed invoice-retries\nFinished in 0.02 seconds\n"
+;; overseer, one boundary   => "nored\nARGS:--verbose\nRESULT:failed invoice-retries\nFinished in 0.02 seconds\n"
+```
+
+`overseer--remove-header` matched the partial line `ert-runner started at ig`,
+deleted it whole, and the tail `nored` arrived as a line of its own.  One
+boundary two characters into `E0425`:
+
+```elisp
+;; cargo, whole read        => 2 rustc-errno buttons
+;; cargo, one boundary      => 1
+;; cargo, one call per char => 0
+```
+
+and the `cargo` suite pins the first of those buttons by name --
+`(search-forward "E0425")` then `(button-label (button-at (1- (point))))`
+(cargo/mod.rs:435-438), which signals when there is no button.  That is not a
+snapshot that would quietly drift; it is a case that would fail outright, on
+whichever editor lost the race.
+
+### The fix removes the choice, exactly as 133 did
+
+The number of `write(2)` calls each stand-in makes is the same to a pipe and to
+a PTY: `bash`'s `printf` builtin flushes per invocation, so overseer's runner
+writes five times either way and cargo's six.  133's mechanism -- a child that
+block-buffers to a pipe and line-buffers to a terminal -- is therefore not what
+is at work here.  What a PTY adds is its line discipline: it can hand Emacs
+*half a line*, and a pipe cannot, because a write of at most `PIPE_BUF` bytes
+reaches the reader whole.  Over a pipe a chunk boundary can only fall between
+lines, which is the `:whole`/`:line` column of the table above, where every
+mode agrees with itself.
+
+So all three suites now start their children with `process-connection-type`
+bound to nil, behind a guard that signals:
+
+```elisp
+(defun neomacs-overseer-test-assert-piped ()
+  (let* ((buffer (get-buffer overseer-buffer-name))
+         (process (and buffer (get-buffer-process buffer))))
+    (unless process
+      (error "neomacs-overseer-test-piped: no runner is attached to %s, so \
+the pipe guard could not be checked" overseer-buffer-name))
+    (when (process-tty-name process)
+      (error "neomacs-overseer-test-piped: the runner is PTY-connected (%s); \
+its output would arrive in scheduling-dependent chunks"
+             (process-tty-name process)))))
+```
+
+The "no process" arm is the half that is easy to leave out: a guard that
+quietly passes when it had nothing to check is not a guard.  `cargo` puts the
+same assertion inside `cargo389-test-wait`, which is the only route this suite
+has to a finished Cargo buffer, so a call site that forgets the pipe fails
+rather than silently reverting -- and that is not hypothetical: on the first
+run after the change, `cargo389-test-assert-piped` failed on
+`public_new_and_interactive_search_...` with `#<process > is PTY-connected
+(/dev/pts/7)`, in both editors, because `(cargo-process-new "demo-界" t)` was a
+spawn site the first pass had missed.  `ggtags` reaches Global from a dozen
+entry points but through exactly one function, so its guard is `:around` advice
+on `ggtags-global-start`.
+
+No pinned value moved in any of the three.
+
+### The second screen: the gate, not the package
+
+140's other condition needs no package reading -- "does the fixture gate a
+compilation pin on anything other than `compilation-handle-exit` having
+happened?"  Applied to all 792 suites in three mechanical passes: fixtures
+carrying a process-wait idiom (`process-live-p`, `get-buffer-process`,
+`accept-process-output`, `process-status`) -- **141** suites -- intersected
+with those whose package touches `compilation-start`,
+`define-compilation-mode`, `(compilation-mode)`, `grep-mode` or
+`compilation-shell-minor-mode` -- **33**; plus a third pass for fixtures that
+compile without their package doing so (`(compilation-start`, `(compile "`,
+`(grep "`, `(rgrep`, `(lgrep`), which added nothing: its 13 extra names all
+matched `(compile` inside `byte-compile` and none of them starts a compilation.
+Each of the 33 was then read.
+
+Reading them needs a rule about which facts are causal, and compile.el gives
+one.  `compilation-sentinel` (compile.el:2652-2670) calls
+`compilation-handle-exit` inside an `unwind-protect`; that function calls
+`compilation-exit-message-function` first, writes its annotation and marks it
+with a `compilation-handle-exit` text property (:2630), and runs
+`compilation-finish-functions` last; only when it returns do the unwind forms
+remove the process from `compilation-in-progress` and `delete-process` it.  All
+of that happens after GNU has drained the dying process's remaining reads
+(src/process.c:7896-7910).  So:
+
+* **causal** -- the `compilation-handle-exit` property; a flag set from
+  `compilation-finish-functions`; a flag set from
+  `compilation-exit-message-function`; `(get-buffer-process BUF)` going nil;
+  the process leaving `compilation-in-progress`.
+* **the clock** -- `process-live-p` going nil, `process-status` reaching
+  `exit`, N identical samples of the buffer, `sit-for`, and "drain until
+  `accept-process-output` returns nil".
+
+Eleven of the thirty-three were already causal: the four 140 fixed, plus
+`abs_mode` through `compilation-finish-functions` (abs_mode/mod.rs:229-238),
+`ant` and `rg` through `get-buffer-process` going nil (ant/mod.rs:100-109,
+rg/mod.rs:158-163), `scala_mode` through `compilation-in-progress`
+(scala_mode/mod.rs:1047-1051), `android_mode` through a search for the child's
+own last token (android_mode/workflows.rs:59-64), and `ggtags` through
+`ggtags-global-exit-info`, which `ggtags-global-exit-message-function` sets
+(ggtags.el:1485-1489) and which is therefore written inside
+`compilation-handle-exit` itself.  `rspec_mode` gates on a
+`compilation-finish-functions` counter (rspec_mode/mod.rs:296, :379-395).
+
+Six were on the clock, across eleven pin sites, and all six are fixed:
+
+| suite | what it waited for | where |
+|---|---|---|
+| `ag` | every ag-mode process dead, then `(sit-for 0.05)` | ag/mod.rs:109-123 |
+| `rustic` | `process-live-p` nil, then 3 identical buffer samples | rustic/mod.rs:314-332 |
+| `arduino_cli_mode` | `process-live-p` nil, then one more `accept-process-output` -- inline, five times | arduino_cli_mode/workflows.rs:82-90, :199-207, :321-329, :425-433, :759-771 |
+| `cargo` | `process-live-p` nil, then 3 identical samples, then an assertion that the process had detached | cargo/mod.rs:153-174 |
+| `overseer` | `process-live-p` nil, then one more `accept-process-output` | overseer.rs:36-43 |
+| `agent_recall` | `process-live-p` nil, then one more `accept-process-output`, on a real `grep` into `*grep*` | agent_recall/search.rs:75-87 |
+
+Each now waits for the property and signals rather than returning.  `ag` is
+worth naming separately: the text it pins ends with a second `<STATUS>`, the
+normalised form of the sentinel's own closing line, so the pin was already
+asserting a fact its wait could not deliver.  `cargo`'s old shape could fail
+the other way too -- three identical samples can be reached while the sentinel
+is still pending, and the next form then raised "Cargo process remained
+attached after exit" for no reason but load.  `arduino_cli_mode` had no prelude
+at all, so its wait had been copied into five cases by hand; it has one prelude
+and one helper now.
+
+### The correction this pass forced: the gate follows the sentinel, not the mode
+
+Replacing those waits wholesale broke two cases, and the way they broke is the
+most useful thing in this entry.
+
+`rustic`'s `public_rustfmt_failure_is_atomic_then_successfully_recovers` began
+failing with `#<process rustic-rustfmt-process> never reached
+'compilation-handle-exit'` -- in both editors, identically.  `*rustfmt*` is
+`rustic-format-mode`, which `define-derived-mode` derives from
+`rustic-compilation-mode` and thus from `compilation-mode`
+(rustic-rustfmt.el:222), so it passes every "is this a compilation buffer"
+test.  But `rustic-format-buffer` installs `rustic-format-sentinel`
+(rustic-rustfmt.el:311-321, :159), which never calls
+`compilation-handle-exit`, so the marker cannot appear.  `cargo`'s
+`public_new_and_interactive_search_...` then failed the same way: `*Cargo New*`
+is `cargo-process-mode`, but `cargo-process-new` *replaces* the sentinel
+`cargo-process--start` installed with a lambda of its own
+(cargo-process.el:606-618) that only calls `find-file`.
+
+So the screen's real question is not "is the pinned buffer compilation-derived"
+but **"which sentinel drives it"**.  Where the package owns the sentinel, the
+causal fact is that *that* sentinel has run, and it can be observed without
+replacing it:
+
+```elisp
+(advice-add 'rustic-format-sentinel :after #'rustic419-test-note-format-sentinel)
+```
+
+for a named sentinel, and
+
+```elisp
+(add-function :after (process-sentinel process)
+              (lambda (&rest _) (setq seen t)))
+```
+
+for cargo's anonymous one.  Neither can miss the event: Emacs runs process
+sentinels only from the event loop, so an observer attached before the first
+`accept-process-output` -- or, for the advice, before any process exists -- is
+in place before the sentinel can run.  Both helpers signal if it never does.
+
+### What the screen deliberately did not touch
+
+Ten of the thirty-three spawn a real child that never reaches a compilation
+buffer -- `ahg`, `ai_code`, `ast_grep`, `embark_consult`, `flycheck`,
+`helm_git_grep`, `projectile`, `python_mode`, `quickrun`, `scss_mode` -- and
+seven more stub every spawn primitive: `arduino_mode`, `ein`, `lua_mode`,
+`rake`, `skewer_mode`, `slime`, `vterm`.
+
+Two of them carry the same *shape* in a buffer that has no compilation marker,
+and are recorded here rather than changed, because each needs its own
+reproduction before its own gate can be chosen:
+
+* `abs_mode` pins `*erlang*`'s text -- including the line
+  `Process inferior-erlang finished` that `internal-default-process-sentinel`
+  writes -- behind `abs-test-wait-for-process`, which is `process-live-p` plus
+  "drain until nothing arrives for 50ms" (abs_mode/mod.rs:241-250, used at
+  workflows.rs:167).  Its *compilation* pins are causal; this comint one is not.
+* `helm_git_grep` waits on the real `git grep` child with `process-live-p` and
+  two identical samples (helm_git_grep/mod.rs:266-287).  Its `*hggrep*` buffer
+  is `helm-git-grep-mode`, which IS a `define-compilation-mode`, but no process
+  is ever attached to it -- the git output lands in a plain buffer and
+  `*hggrep*` is filled synchronously -- so this is the same
+  mode-versus-sentinel distinction again, and waiting for the marker there
+  would hang.
+
+`rg` and `ant` gate causally on `get-buffer-process` going nil but return
+quietly if their deadline expires rather than signalling.  That is a weaker
+failure mode than the one this entry is about -- a timeout produces a visible
+mismatch, not a plausible wrong value -- so it is recorded and left.
+
+### Proving the guards can fire
+
+A guard that cannot fire is not a guard, so both kinds were broken on purpose,
+in both editors.
+
+Renaming the marker to one that is never set, in all six fixtures
+(`tmp/pw50-engagement.sh break-marker`), made every affected batch fail with
+the fixture's own message and nothing else.  Putting the three guarded children
+back on a PTY (`process-connection-type` bound to `t`) made `cargo`, `overseer`
+and `ggtags` fail with `... is PTY-connected (/dev/pts/N)`.  The pipe guard had
+already proved itself unprompted, on the `cargo-process-new` site described
+above.
+
+Repetition, because a race is not disproved by one green run:
+
+```
+;; the seven touched batches, after the fix
+;;   20 consecutive runs, 140 batch runs, 0 red
+;;   10 of those 20 with 16 CPU burners on a 32-thread box, 0 red
+```
+
+And an honest negative about the second hazard, because a rate is what 140
+reported and a rate is what this pass owes.  `ag`'s old gate was instrumented
+to record, at the moment it would have returned, whether the causal marker was
+yet present -- for both of the shapes this entry replaced, `process-live-p`
+plus one `accept-process-output` and that plus `(sit-for 0.05)`:
+
+```
+;; 10 batch runs, 180 waits, 16 CPU burners, per-character delivery
+;;   early after one accept-process-output : 0
+;;   early after (sit-for 0.05)            : 0
+```
+
+The per-character advice was proved live the way 140 proved its own -- replacing
+its body with an `error` made the batch fail with four copies of `pw50
+engagement check` -- so that zero is a measurement and not a silence.  The
+reason it is zero is worth stating: GNU's `wait_reading_process_output` calls
+`status_notify` before it returns, so the `accept-process-output` that first
+observes a process dead has usually already run its sentinel.  The window 140
+measured at 3 in 15 for `android_env` opens when enough output is still queued
+that draining it takes several more reads, and `ag`'s stand-in never writes
+that much.
+
+So the case for these six changes is not "we watched them fail"; it is that
+`ag`, `cargo`, `overseer` and `arduino_cli_mode` all pin text the sentinel
+itself writes, which by construction cannot be present when a wait on process
+death returns, and 140 measured that exact window costing three runs in
+fifteen in a suite whose child wrote more.  The fixtures now assert the fact
+they depend on instead of hoping for it.
+
+Status: FIXED (harness defect, in eight fixtures -- three for entry 133's
+read-boundary hazard and six for 140's gate hazard, with `cargo` and `overseer`
+carrying both).  No package behaviour changed and no engine behaviour is
+implicated: every measurement above was reproduced identically by GNU Emacs
+31.0.90 and Neomacs.

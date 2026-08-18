@@ -106,22 +106,57 @@ exit 0
             (nreverse calls)))
       nil)))
 
+(defun ag-test-compilation-complete-p (buffer)
+  "Non-nil once `compilation-handle-exit' has written BUFFER's last line.
+That line is the causal end of the output rather than a guess about it: Emacs
+drains a dying process's remaining reads before it runs the sentinel
+\(GNU src/process.c:7896-7910), the sentinel is what calls
+`compilation-handle-exit', and that function marks the text it writes with a
+`compilation-handle-exit' text property (GNU lisp/progmodes/compile.el:2630).
+The property therefore cannot appear until every byte ag wrote has already
+been through `compilation-filter'."
+  (and (buffer-live-p buffer)
+       (with-current-buffer buffer
+         (and (text-property-not-all (point-min) (point-max)
+                                     'compilation-handle-exit nil)
+              t))))
+
+(defun ag-test-result-buffers ()
+  "Every live `ag-mode' buffer, in `buffer-list' order."
+  (cl-remove-if-not
+   (lambda (buffer)
+     (with-current-buffer buffer (eq major-mode 'ag-mode)))
+   (buffer-list)))
+
 (defun ag-test-wait-for-search ()
-  "Wait until the compilation process ag started has finished."
-  ;; A workflow can retain both regexp and text result buffers, so do not pick
-  ;; whichever `*ag search' buffer happens to appear first.  Wait until every
-  ;; live process attached to an ag-mode buffer has finished, and drain all
-  ;; descriptors while doing so.  The Rust oracle's outer timeout bounds a
-  ;; genuinely stuck command.
-  (while (cl-find-if
-          (lambda (process)
-            (let ((buffer (process-buffer process)))
-              (and (process-live-p process)
-                   (buffer-live-p buffer)
-                   (with-current-buffer buffer (eq major-mode 'ag-mode)))))
-          (process-list))
-    (accept-process-output nil 0.05))
-  (sit-for 0.05))
+  "Wait until every ag-mode buffer holds all of its search's output, or signal.
+A workflow can retain both regexp and text result buffers, so do not pick
+whichever `*ag search' buffer happens to appear first.  This helper used to
+wait for every live ag process to die and then `sit-for' 0.05 -- but a process
+being dead is not the same fact as its output having been read, and 0.05
+seconds is a statement about the clock, not about the output.  The rendered
+text this suite pins ends with the sentinel's own line, which by construction
+cannot have been written when a `process-live-p' wait returns.  Signalling
+rather than returning means a future edit that goes back to the clock fails on
+its first run instead of moving a snapshot months later.  See DIVERGENCES.md
+entries 133, 140 and 144."
+  (let ((waited 0))
+    (while (and (< waited 1200)
+                (let ((buffers (ag-test-result-buffers)))
+                  (or (null buffers)
+                      (cl-find-if-not #'ag-test-compilation-complete-p buffers))))
+      (accept-process-output nil 0.05)
+      (setq waited (1+ waited)))
+    (let ((buffers (ag-test-result-buffers)))
+      (unless buffers
+        (error "ag-test-wait-for-search: no `ag-mode' buffer exists, so no \
+search's output could have ended"))
+      (let ((pending (cl-remove-if #'ag-test-compilation-complete-p buffers)))
+        (when pending
+          (error "ag-test-wait-for-search: %S never reached \
+`compilation-handle-exit'; their text records only as much of ag's output as \
+had been read" (mapcar #'buffer-name pending)))))
+    :finished))
 
 (defun ag-test-results-buffer ()
   (cl-find-if (lambda (b) (string-prefix-p "*ag search" (buffer-name b)))

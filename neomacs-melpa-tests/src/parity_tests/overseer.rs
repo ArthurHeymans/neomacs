@@ -33,13 +33,68 @@ const PRELUDE: &str = r####"
   (write-region content nil file nil 'silent)
   file)
 
+(defmacro neomacs-overseer-test-piped (&rest body)
+  "Evaluate BODY with the ert-runner child on a pipe, not on a PTY.
+`overseer--remove-header' runs from `compilation-filter-hook' and calls
+`delete-matching-lines' over the WHOLE buffer on every invocation, with no
+whole-lines guard and no state carried across a chunk boundary
+\(overseer.el:79-81, installed at :137-138).  A read that lands inside one of
+the header lines therefore deletes a partial line and leaves its tail behind,
+so the rendered buffer becomes a function of where the kernel split a read --
+which is not a parity signal.  `compilation-start' gives the child a PTY by
+default (GNU src/process.c:8923-8929), and a PTY's line discipline is the only
+topology here that can hand Emacs half a line.  Over a pipe every one of the
+runner's `printf' writes is atomic and below PIPE_BUF, so a chunk boundary can
+only ever fall between lines.  See DIVERGENCES.md entries 133 and 144."
+  (declare (indent 0))
+  `(prog1 (let ((process-connection-type nil)) ,@body)
+     (neomacs-overseer-test-assert-piped)))
+
+(defun neomacs-overseer-test-assert-piped ()
+  "Signal unless the runner just started is connected through a pipe.
+Signalling is the load-bearing half: an edit that restores the PTY fails on
+its first run in both editors instead of moving a snapshot months later."
+  (let* ((buffer (get-buffer overseer-buffer-name))
+         (process (and buffer (get-buffer-process buffer))))
+    (unless process
+      (error "neomacs-overseer-test-piped: no runner is attached to %s, so \
+the pipe guard could not be checked" overseer-buffer-name))
+    (when (process-tty-name process)
+      (error "neomacs-overseer-test-piped: the runner is PTY-connected (%s); \
+its output would arrive in scheduling-dependent chunks"
+             (process-tty-name process)))))
+
+(defun neomacs-overseer-test-compilation-complete-p (buffer)
+  "Non-nil once `compilation-handle-exit' has written BUFFER's last line.
+That line is the causal end of the output rather than a guess about it: Emacs
+drains a dying process's remaining reads before it runs the sentinel
+\(GNU src/process.c:7896-7910), the sentinel is what calls
+`compilation-handle-exit', and that function marks the text it writes with a
+`compilation-handle-exit' text property (GNU lisp/progmodes/compile.el:2630).
+The property therefore cannot appear until every byte the child wrote has
+already been through `compilation-filter'."
+  (and (buffer-live-p (get-buffer buffer))
+       (with-current-buffer buffer
+         (and (text-property-not-all (point-min) (point-max)
+                                     'compilation-handle-exit nil)
+              t))))
+
 (defun neomacs-overseer-test-wait (buffer)
-  "Wait for BUFFER's compilation process and return its final status."
-  (let ((process (get-buffer-process buffer)))
-    (while (and process (process-live-p process))
-      (accept-process-output process 0.1))
+  "Wait until BUFFER holds all of its compilation's output; return the status.
+`process-live-p' going nil is NOT that condition.  A process can be gone with
+reads still queued, and a pin taken at that moment records however much of the
+runner's output the kernel happened to have delivered."
+  (let ((process (get-buffer-process buffer))
+        (waited 0))
+    (while (and (< waited 1200)
+                (not (neomacs-overseer-test-compilation-complete-p buffer)))
+      (accept-process-output nil 0.05)
+      (setq waited (1+ waited)))
+    (unless (neomacs-overseer-test-compilation-complete-p buffer)
+      (error "neomacs-overseer-test-wait: %s never reached \
+`compilation-handle-exit'; its text records only as much of the runner's \
+output as had been read" buffer))
     (when process
-      (accept-process-output process 0.01)
       (process-status process))))
 
 (defun neomacs-overseer-test-output-rows (buffer)
@@ -260,7 +315,7 @@ fn real_compilation_cleans_runner_output_and_preserves_unsaved_source() -> Parit
         (with-current-buffer source-buffer
           (goto-char (point-max))
           (insert "(setq invoice-retries 3)\n"))
-        (setq command-result (overseer-test-verbose)
+        (setq command-result (neomacs-overseer-test-piped (overseer-test-verbose))
               compilation-buffer (get-buffer overseer-buffer-name)
               process-status
               (neomacs-overseer-test-wait compilation-buffer))
