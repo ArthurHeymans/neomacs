@@ -6459,16 +6459,28 @@ impl<'a> Vm<'a> {
         use crate::emacs_core::jit::cache::NativeCallOutcome;
         // Defensive interpreter rerun for the Fallback outcomes (a plain
         // Deopt only arises with a null ctx — never here).
-        let interp_fallback = |ctx_ptr: *mut crate::emacs_core::eval::Context| {
+        // Cold defensive path: a full Vm is fine here. A plain fn, not a
+        // closure — the closure's environment setup was a measured per-call
+        // cost on the hot path that never takes this branch.
+        #[cold]
+        #[inline(never)]
+        fn interp_fallback(
+            ctx_ptr: *mut crate::emacs_core::eval::Context,
+            bc: &ByteCodeFunction,
+            callee: Value,
+            args_ptr: *const i64,
+            nargs: usize,
+        ) -> crate::emacs_core::jit::cache::NativeCallOutcome {
             let mut args = Vec::with_capacity(nargs);
             for i in 0..nargs {
                 // SAFETY: args_ptr addresses `nargs` valid words.
                 args.push(Value::from_bits(unsafe { *args_ptr.add(i) } as usize));
             }
-            // Cold defensive path: a full Vm is fine here.
             let mut vm = Vm::from_context(unsafe { &mut *ctx_ptr });
-            NativeCallOutcome::from_result(vm.execute_with_func_value(bc, args, callee))
-        };
+            crate::emacs_core::jit::cache::NativeCallOutcome::from_result(
+                vm.execute_with_func_value(bc, args, callee),
+            )
+        }
         let outcome = {
             let ctx_ptr = core::ptr::from_mut(&mut *ctx);
             if pure {
@@ -6479,7 +6491,9 @@ impl<'a> Vm<'a> {
                 match crate::emacs_core::jit::cache::run_resolved_leaf_native(
                     ctx_ptr, bc, callee, leaf, args_ptr,
                 ) {
-                    NativeCallOutcome::Fallback => interp_fallback(ctx_ptr),
+                    NativeCallOutcome::Fallback => {
+                        interp_fallback(ctx_ptr, bc, callee, args_ptr, nargs)
+                    }
                     o => o,
                 }
             } else {
@@ -6500,7 +6514,7 @@ impl<'a> Vm<'a> {
                 crate::emacs_core::eval::restore_scratch_gc_roots(saved);
                 match ran {
                     Ok(Some(bits)) => NativeCallOutcome::Value(Value::from_bits(bits)),
-                    Ok(None) => interp_fallback(ctx_ptr),
+                    Ok(None) => interp_fallback(ctx_ptr, bc, callee, args_ptr, nargs),
                     Err(flow) => {
                         crate::emacs_core::jit::compile::stash_pending_flow(flow);
                         NativeCallOutcome::FlowStashed
