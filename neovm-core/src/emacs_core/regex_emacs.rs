@@ -5056,7 +5056,47 @@ fn re_match_loop<const SEALED: bool>(
                 );
                 pc += bitmap_len;
                 match result {
-                    Some(ch_len) => d += ch_len,
+                    Some(ch_len) => {
+                        d += ch_len;
+                        // Greedy charset-loop fusion: `Charset;
+                        // OnFailureJump exit; Jump back` is the compiled
+                        // shape of `[...]+` / `[...]*`. Run the loop here,
+                        // skipping two dispatches per matched character —
+                        // with per-iteration failure frames (push AFTER
+                        // each success, exactly the original count and
+                        // payload) and the back-edge quit poll preserved.
+                        // Sealed only: the peeks rely on validated bounds.
+                        if SEALED
+                            && unsafe { *bytecode.get_unchecked(pc) }
+                                == RegexOp::OnFailureJump as u8
+                            && unsafe { *bytecode.get_unchecked(pc + 3) } == RegexOp::Jump as u8
+                            && ((pc as i64) + 6 + bc_num!(pc + 4) as i64) as usize == charset_op_pos
+                        {
+                            let ofj_pc = pc;
+                            let exit = ((ofj_pc as i64) + 3 + bc_num!(ofj_pc + 1) as i64) as usize;
+                            loop {
+                                push_failure_point!(ofj_pc, exit, FailureInput::Restore(d));
+                                if crate::emacs_core::eval::tls_quit_pending() {
+                                    return None;
+                                }
+                                match match_charset_at(
+                                    pattern,
+                                    charset_op_pos,
+                                    text,
+                                    d,
+                                    stop,
+                                    target_multibyte,
+                                    translate,
+                                    syntax,
+                                ) {
+                                    Some(ch_len) => d += ch_len,
+                                    None => break,
+                                }
+                            }
+                            try_fail!('main_loop);
+                            continue 'main_loop;
+                        }
+                    }
                     None => {
                         try_fail!('main_loop);
                     }
