@@ -6,10 +6,6 @@ pub(crate) fn builtin_null_1(_eval: &mut super::eval::Context, arg: Value) -> Ev
     Ok(Value::bool_val(arg.is_nil()))
 }
 
-pub(crate) fn builtin_not_1(_eval: &mut super::eval::Context, arg: Value) -> EvalResult {
-    Ok(Value::bool_val(arg.is_nil()))
-}
-
 pub(crate) fn builtin_atom_1(_eval: &mut super::eval::Context, arg: Value) -> EvalResult {
     Ok(Value::bool_val(!arg.is_cons()))
 }
@@ -29,10 +25,6 @@ pub(crate) fn builtin_nlistp_1(_eval: &mut super::eval::Context, arg: Value) -> 
 pub(crate) fn builtin_symbolp_1(eval: &mut super::eval::Context, arg: Value) -> EvalResult {
     let is_sym = arg.is_symbol() || (eval.symbols_with_pos_enabled && arg.is_symbol_with_pos());
     Ok(Value::bool_val(is_sym))
-}
-
-pub(crate) fn builtin_booleanp_1(_eval: &mut super::eval::Context, arg: Value) -> EvalResult {
-    Ok(Value::bool_val(arg.is_nil() || arg.is_t()))
 }
 
 pub(crate) fn builtin_numberp_1(_eval: &mut super::eval::Context, arg: Value) -> EvalResult {
@@ -90,39 +82,9 @@ pub(crate) fn builtin_eq_2(
 // Type predicates
 // ===========================================================================
 
-pub(crate) fn builtin_list_of_strings_p(args: Vec<Value>) -> EvalResult {
-    expect_args("list-of-strings-p", &args, 1)?;
-    let mut seen = HashSet::new();
-    let mut cursor = args[0];
-    loop {
-        match cursor.kind() {
-            ValueKind::Nil => return Ok(Value::T),
-            ValueKind::Cons => {
-                let ptr = cursor.bits();
-                if !seen.insert(ptr) {
-                    return Ok(Value::NIL);
-                }
-                let pair_car = cursor.cons_car();
-                let pair_cdr = cursor.cons_cdr();
-                if !pair_car.is_string() {
-                    return Ok(Value::NIL);
-                }
-                cursor = pair_cdr;
-            }
-            _ => return Ok(Value::NIL),
-        }
-    }
-}
-
-pub(crate) fn builtin_integer_or_null_p(args: Vec<Value>) -> EvalResult {
-    expect_args("integer-or-null-p", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_nil() || args[0].is_integer()))
-}
-
-pub(crate) fn builtin_string_or_null_p(args: Vec<Value>) -> EvalResult {
-    expect_args("string-or-null-p", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_nil() || args[0].is_string()))
-}
+// `list-of-strings-p', `integer-or-null-p' and `string-or-null-p' are NOT
+// here: GNU has no DEFUN for them, only `defun's at lisp/subr.el:4768, :4809
+// and :4762.  DIVERGENCES.md 148.
 
 pub(crate) fn builtin_integer_or_marker_p(args: Vec<Value>) -> EvalResult {
     expect_args("integer-or-marker-p", &args, 1)?;
@@ -162,13 +124,10 @@ pub(crate) fn builtin_characterp(args: Vec<Value>) -> EvalResult {
     Ok(Value::bool_val(is_char))
 }
 
-pub(crate) fn builtin_char_uppercase_p(args: Vec<Value>) -> EvalResult {
-    expect_args("char-uppercase-p", &args, 1)?;
-    let code = expect_character_code(&args[0])?;
-    Ok(Value::bool_val(
-        downcase_char_code_emacs_compat(code) != code,
-    ))
-}
+// `char-uppercase-p' is NOT here either: it is `(defun char-uppercase-p
+// (char) ...)' at lisp/simple.el:6683, and it asks the Unicode `lowercase'
+// property rather than the case table's downcase mapping -- the two disagree
+// for U+0130.  DIVERGENCES.md 148.
 
 pub(super) fn is_lambda_form_list(value: &Value, symbols_with_pos_enabled: bool) -> bool {
     match value.kind() {

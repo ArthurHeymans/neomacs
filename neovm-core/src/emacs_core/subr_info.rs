@@ -320,32 +320,6 @@ pub(crate) fn dispatch_subr_arity_value(name: &str) -> Value {
     subr_arity_value(name)
 }
 
-fn is_macro_object(value: &Value) -> bool {
-    match value.kind() {
-        ValueKind::Veclike(VecLikeType::Macro) => true,
-        ValueKind::Cons => value.cons_car().as_symbol_name() == Some("macro"),
-        _ => false,
-    }
-}
-
-fn autoload_macro_marker(value: &Value) -> Option<Value> {
-    if !super::autoload::is_autoload_value(value) {
-        return None;
-    }
-
-    let items = list_to_vec(value)?;
-    let autoload_type = items.get(4)?;
-    if autoload_type.as_symbol_name() == Some("macro") {
-        Some(Value::list(vec![Value::symbol("macro"), Value::T]))
-    } else if autoload_type.is_t() {
-        // GNU Emacs uses `t` as a legacy macro marker for some startup
-        // autoloads (notably `pcase-dolist`), and `macrop` returns `(t)`.
-        Some(Value::list(vec![Value::T]))
-    } else {
-        None
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Pure builtins (no evaluator access)
 // ---------------------------------------------------------------------------
@@ -531,13 +505,9 @@ pub(crate) fn subr_is_callable_function_value(value: &Value) -> bool {
     subr_dispatch_kind_from_value(value).is_some_and(|kind| kind != SubrDispatchKind::SpecialForm)
 }
 
-/// Check if a single value is a macro.  Shared by `builtin_macrop` and tests.
-pub(crate) fn macrop_check(obj: &Value) -> EvalResult {
-    if let Some(marker) = autoload_macro_marker(obj) {
-        return Ok(marker);
-    }
-    Ok(Value::bool_val(is_macro_object(obj)))
-}
+// `macrop_check' is gone with the `macrop' subr it existed for: GNU has no
+// C `macrop', only `(defun macrop (object) ...)' at lisp/subr.el:4793.
+// DIVERGENCES.md 148.
 
 /// `(commandp FUNCTION &optional FOR-CALL-INTERACTIVELY)` -- return t if
 /// FUNCTION is an interactive command.

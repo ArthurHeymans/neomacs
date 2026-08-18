@@ -20003,7 +20003,7 @@ fn gc_stress_aref_on_closure_survives_closure_vector_conversion() {
     let result = format_eval_result(&ev.eval_str(
         r#"(let ((payload (list 1 2 3)))
              (let ((closure (lambda () payload)))
-               (not (null (aref closure 2)))))"#,
+               (if (aref closure 2) t)))"#,
     ));
     assert_eq!(result, "OK t");
 }
@@ -21497,20 +21497,23 @@ fn string_equal_unibyte_high_byte_vs_multibyte_char() {
     crate::test_utils::init_test_tracing();
     // GNU: these are all nil because the raw unibyte byte (1 byte) and the
     // multibyte char of the same number (2 bytes) differ in internal-form bytes.
-    assert_eq!(eval_one(r#"(string= "é" (unibyte-string 233))"#), "OK nil");
     assert_eq!(
-        eval_one(r#"(string= (unibyte-string 200) (char-to-string 200))"#),
+        eval_one(r#"(string-equal "é" (unibyte-string 233))"#),
         "OK nil"
     );
     assert_eq!(
-        eval_one(r#"(string= (unibyte-string 233 234) "éê")"#),
+        eval_one(r#"(string-equal (unibyte-string 200) (char-to-string 200))"#),
+        "OK nil"
+    );
+    assert_eq!(
+        eval_one(r#"(string-equal (unibyte-string 233 234) "éê")"#),
         "OK nil"
     );
     // Sanity: identical multibyte strings and pure-ASCII unibyte/multibyte
     // still compare equal, matching GNU.
-    assert_eq!(eval_one(r#"(string= "éê" "éê")"#), "OK t");
+    assert_eq!(eval_one(r#"(string-equal "éê" "éê")"#), "OK t");
     assert_eq!(
-        eval_one(r#"(string= (string-to-unibyte "abc") (string-to-multibyte "abc"))"#),
+        eval_one(r#"(string-equal (string-to-unibyte "abc") (string-to-multibyte "abc"))"#),
         "OK t"
     );
 }

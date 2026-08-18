@@ -24,7 +24,13 @@ fn compat_source_bootstrap_macro_surface_is_minimal() {
    (lambda (sym)
      (list sym
            (fboundp sym)
-           (macrop sym)))
+           ;; `macrop' is itself part of the surface this test measures: GNU
+           ;; has no C version, only `(defun macrop (object) ...)' at
+           ;; lisp/subr.el:4793 (DIVERGENCES.md 148).  Ask it the way that
+           ;; `defun' does, over `indirect-function', which IS a C subr
+           ;; (src/data.c:2557).
+           (let ((def (indirect-function sym)))
+             (if (consp def) (eq 'macro (car def))))))
    symbols))"#,
     );
     let rendered = format_eval_result(&result);

@@ -2139,7 +2139,7 @@ fn key_binding_activates_minor_mode_maps_keyed_by_uninterned_symbols_like_gnu() 
                   (set mode t)
                   (define-key map "\x01" 'forward-char)
                   (list (key-binding "\x01")
-                        (not (null (memq map (current-active-maps))))))"#
+                        (if (memq map (current-active-maps)) t)))"#
         ),
         "OK (forward-char t)"
     );

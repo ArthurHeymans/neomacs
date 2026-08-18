@@ -29,6 +29,15 @@ fn eval_first_form_after_marker(eval: &mut Context, source: &str, marker: &str) 
 /// by these tests are wrapped in `(with-temp-buffer ...)` blocks.
 fn install_bare_elisp_shims(ev: &mut Context) {
     let shims = r#"
+;; `subr.el' creates these five with `defalias'; GNU has no C version of any
+;; of them (lisp/subr.el:71 and :2277-2280), so a bare evaluator standing in
+;; for a loaded one has to be given the same aliases subr.el gives it.
+;; DIVERGENCES.md 148.
+(defalias 'not #'null)
+(defalias 'string= #'string-equal)
+(defalias 'string< #'string-lessp)
+(defalias 'string> #'string-greaterp)
+(defalias 'move-marker #'set-marker)
 (defalias 'defun (cons 'macro #'(lambda (name arglist &rest body)
   (list 'defalias (list 'quote name) (cons 'function (list (cons 'lambda (cons arglist body))))))))
 (defalias 'defmacro (cons 'macro #'(lambda (name arglist &rest body)

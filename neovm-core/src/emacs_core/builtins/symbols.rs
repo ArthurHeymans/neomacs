@@ -611,13 +611,6 @@ pub(crate) fn builtin_symbol_value_1(
     }
 }
 
-pub(super) fn startup_virtual_autoload_function_cell(
-    _eval: &super::eval::Context,
-    _name: &str,
-) -> Option<Value> {
-    None
-}
-
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_symbol_function(
     eval: &mut super::eval::Context,
@@ -1429,24 +1422,9 @@ pub(super) fn resolve_indirect_symbol(eval: &super::eval::Context, name: &str) -
     resolve_indirect_symbol_with_name(eval, name).map(|(_, value)| value)
 }
 
-pub(crate) fn builtin_macrop(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_args("macrop", &args, 1)?;
-    if let Some(symbol) = symbol_id(&args[0]) {
-        if is_canonical_symbol_id(symbol)
-            && let Some(function) =
-                startup_virtual_autoload_function_cell(eval, resolve_sym(symbol))
-        {
-            return super::subr_info::macrop_check(&function);
-        }
-        if let Some(function) = resolve_indirect_symbol_by_id(eval, symbol).map(|(_, value)| value)
-        {
-            return super::subr_info::macrop_check(&function);
-        }
-        return Ok(Value::NIL);
-    }
-
-    super::subr_info::macrop_check(&args[0])
-}
+// `macrop' is not implemented here.  GNU has no DEFUN of that name: it is
+// `(defun macrop (object) ...)' at lisp/subr.el:4793, built on
+// `indirect-function' and `autoloadp'.  DIVERGENCES.md 148.
 
 /// Hash a string for custom obarray bucket index.
 pub(crate) fn obarray_hash_lisp_string(s: &crate::heap_types::LispString, len: usize) -> usize {

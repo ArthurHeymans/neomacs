@@ -4596,7 +4596,7 @@ fn vm_window_tree_and_list_builtins_use_shared_runtime_state() {
                        (eq (window-prev-sibling bottom) right)
                        (length (window-list))
                        (length (window-list nil t))
-                       (not (null (memq bottom (window-list-1 left nil nil))))
+                       (if (memq bottom (window-list-1 left nil nil)) t)
                        (windowp (window-at 0 0))
                        (windowp (window-at 79 0))
                        (let ((m (window-at 0 24))) (and m (window-minibuffer-p m)))
@@ -4897,7 +4897,7 @@ fn vm_keymap_structure_builtins_use_shared_runtime_state() {
                  (setq vm-minor-mode t)
                  (use-local-map child)
                  (list (keymapp parent)
-                       (not (eq child parent))
+                       (null (eq child parent))
                        (eq (keymap-parent child) parent)
                        (eq (set-keymap-parent child parent) parent)
                        (let ((maps (current-active-maps)))
@@ -4908,7 +4908,7 @@ fn vm_keymap_structure_builtins_use_shared_runtime_state() {
                        (let ((root (make-sparse-keymap))
                              (desc (make-sparse-keymap)))
                          (define-key root [24] desc)
-                         (not (null (accessible-keymaps root [24]))))
+                         (if (accessible-keymaps root [24]) t))
                        (lookup-key child [1])
                        (lookup-key child [2])
                        (lookup-key child [24 97])))"#
@@ -5612,7 +5612,7 @@ fn vm_time_builtins_use_direct_timefns_dispatch() {
                  (time-less-p '(0 1 0 0) '(0 2 0 0))
                  (time-equal-p '(0 1 0 0) '(0 1 0 0))
                  (time-equal-p nil nil)
-                 (not (time-equal-p nil '(0 0 0 0)))
+                 (null (time-equal-p nil '(0 0 0 0)))
                  (time-equal-p 'not-a-time 'not-a-time)
                  (equal (current-time-string '(0 0 0 0) t)
                         "Thu Jan  1 00:00:00 1970")
@@ -5786,7 +5786,7 @@ fn vm_prin1_to_string_prints_killed_buffers_in_nested_values_like_gnu() {
                  (list
                   (equal (prin1-to-string rec)
                          "#s(vm-print-owner #<killed buffer>)")
-                  (not (null (string-match-p "#<killed buffer>" (prin1-to-string text))))))"##
+                  (if (string-match-p "#<killed buffer>" (prin1-to-string text)) t)))"##
         ),
         "OK (t t)"
     );
@@ -5925,7 +5925,7 @@ fn vm_case_table_builtins_use_shared_buffer_state() {
                       (custom (copy-sequence standard)))
                  (list
                   (eq (current-case-table) standard)
-                  (not (eq standard custom))
+                  (null (eq standard custom))
                   (progn (set-case-table custom) (eq (current-case-table) custom))
                   (progn (set-buffer other) (eq (current-case-table) standard))
                   (progn (set-buffer buf) (eq (current-case-table) custom))
@@ -5958,7 +5958,7 @@ fn vm_simple_process_builtins_use_shared_runtime_state() {
         r#"(let ((p (get-process "vm-proc")))
              (list
               (processp p)
-              (not (processp 99))
+              (null (processp 99))
               (eq (get-process "vm-proc") p)
               (eq (get-buffer-process "*vm-proc*") p)
               (equal (process-name p) "vm-proc")
@@ -6762,7 +6762,7 @@ fn vm_make_thread_runs_body_on_shared_runtime() {
                                  "vm-worker")))
                    (list
                     (threadp worker)
-                    (not (eq main worker))
+                    (null (eq main worker))
                     (eq vm-thread-seen worker)
                     (eq (thread-join worker) worker)
                     (eq (current-thread) main))))"#
@@ -7574,35 +7574,35 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
     assert_eq!(
         vm_eval_str(
             r##"(list
-                 (not (fboundp 'debug-timer-check))
+                 (null (fboundp 'debug-timer-check))
                  (let ((w (inotify-add-watch "/tmp" nil nil)))
                    (list (consp w)
                          (inotify-valid-p w)
                          (inotify-rm-watch w)))
-                 (not (fboundp 'inotify-watch-list))
-                 (not (fboundp 'inotify-allocated-p))
+                 (null (fboundp 'inotify-watch-list))
+                 (null (fboundp 'inotify-allocated-p))
                  (eq (condition-case err
                          (dbus-make-inhibitor-lock "session" "app")
                        (void-function (car err)))
                      'void-function)
-                 (not (fboundp 'dbus-close-inhibitor-lock))
-                 (not (fboundp 'dbus-registered-inhibitor-locks))
+                 (null (fboundp 'dbus-close-inhibitor-lock))
+                 (null (fboundp 'dbus-registered-inhibitor-locks))
                  (if (featurep 'lcms2) (lcms2-available-p)
-                   (not (fboundp 'lcms2-available-p)))
+                   (null (fboundp 'lcms2-available-p)))
                  (if (featurep 'lcms2) (fboundp 'lcms-cie-de2000)
-                   (not (fboundp 'lcms-cie-de2000)))
+                   (null (fboundp 'lcms-cie-de2000)))
                  (if (featurep 'lcms2) (fboundp 'lcms-xyz->jch)
-                   (not (fboundp 'lcms-xyz->jch)))
+                   (null (fboundp 'lcms-xyz->jch)))
                  (if (featurep 'lcms2) (fboundp 'lcms-jch->xyz)
-                   (not (fboundp 'lcms-jch->xyz)))
+                   (null (fboundp 'lcms-jch->xyz)))
                  (if (featurep 'lcms2) (fboundp 'lcms-jch->jab)
-                   (not (fboundp 'lcms-jch->jab)))
+                   (null (fboundp 'lcms-jch->jab)))
                  (if (featurep 'lcms2) (fboundp 'lcms-jab->jch)
-                   (not (fboundp 'lcms-jab->jch)))
+                   (null (fboundp 'lcms-jab->jch)))
                  (if (featurep 'lcms2) (fboundp 'lcms-cam02-ucs)
-                   (not (fboundp 'lcms-cam02-ucs)))
+                   (null (fboundp 'lcms-cam02-ucs)))
                  (if (featurep 'lcms2) (fboundp 'lcms-temp->white-point)
-                   (not (fboundp 'lcms-temp->white-point)))
+                   (null (fboundp 'lcms-temp->white-point)))
                  (null (neomacs-frame-geometry))
                  (null (neomacs-frame-edges))
                  (equal (neomacs-mouse-absolute-pixel-position) '(0 . 0))
@@ -7613,14 +7613,14 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                  (null (neomacs-primary-selection-set "x"))
                  (equal (neomacs-primary-selection-get) "x")
                  (equal (neomacs-core-backend) "rust")
-                 (not (null (memq 'gnutls (gnutls-available-p))))
-                 (not (null (memq 'gnutls3 (gnutls-available-p))))
+                 (if (memq 'gnutls (gnutls-available-p)) t)
+                 (if (memq 'gnutls3 (gnutls-available-p)) t)
                  (neomacs-tls-available-p)
-                 (not (featurep 'tls))
+                 (null (featurep 'tls))
                  (fboundp 'open-tls-stream)
-                 (not (null (assq 'AES-256-CBC (gnutls-ciphers))))
-                 (not (null (assq 'SHA256 (gnutls-digests))))
-                 (not (null (assq 'SHA256 (gnutls-macs))))
+                 (if (assq 'AES-256-CBC (gnutls-ciphers)) t)
+                 (if (assq 'SHA256 (gnutls-digests)) t)
+                 (if (assq 'SHA256 (gnutls-macs)) t)
                  (gnutls-errorp nil)
                  (equal (gnutls-error-string 0) "Success.")
                  (null (gnutls-error-fatalp 1))
@@ -7682,7 +7682,7 @@ fn vm_base64_json_ccl_and_runtime_clusters_use_direct_dispatch() {
                  (null (comp--register-lambda nil nil nil nil nil nil nil))
                  (null (comp--register-subr nil nil nil nil nil nil nil))
                  (comp--release-ctxt)
-                 (not (fboundp 'comp-libgccjit-version))
+                 (null (fboundp 'comp-libgccjit-version))
                  (comp-native-compiler-options-effective-p)
                  (comp-native-driver-options-effective-p)
                  (= (dbus--init-bus :session) 2)
@@ -7833,11 +7833,11 @@ fn vm_category_charset_and_case_table_builtins_use_shared_runtime_state() {
                      (eq (category-table) tmp))
                    (progn
                      (set-buffer (get-buffer-create "*scratch*"))
-                     (not (eq (category-table) tmp)))
+                     (null (eq (category-table) tmp)))
                    (progn
                      (define-category ?x "doc")
                      (equal (category-docstring ?x) "doc"))
-                   (string= (category-set-mnemonics (make-category-set "xa")) "ax")
+                   (string-equal (category-set-mnemonics (make-category-set "xa")) "ax")
                    (characterp (get-unused-category))
                    (charsetp 'ascii)
                    (eq (char-charset ?A) 'ascii)
@@ -8502,7 +8502,7 @@ fn vm_kill_buffer_uses_shared_manager_and_frame_state() {
                   (kill-buffer nil)
                   (buffer-live-p a)
                   (let ((current (current-buffer)))
-                    (list (not (eq current a))
+                    (list (null (eq current a))
                           (buffer-live-p current)))
                   (condition-case err
                       (kill-buffer "vm-kill-missing")
@@ -9616,7 +9616,7 @@ fn vm_bytecode_rest_wrong_arity_reports_nonrest_descriptor_like_gnu() {
 #[test]
 fn vm_string_compare_type_errors_match_oracle() {
     crate::test_utils::init_test_tracing();
-    with_vm_eval("(string= \"ab\" 1)", false, |result| match result {
+    with_vm_eval("(string-equal \"ab\" 1)", false, |result| match result {
         Err(EvalError::Signal { symbol, data, .. }) => {
             assert_eq!(resolve_sym(symbol), "wrong-type-argument");
             assert_eq!(data, vec![Value::symbol("stringp"), Value::fixnum(1)]);
@@ -10433,7 +10433,7 @@ fn vm_marker_builtins_use_shared_live_buffer_state() {
                     (marker-position maxm)
                     (marker-position cm)
                     (progn (set-marker pm 2) (marker-position pm))
-                    (progn (move-marker pm nil) (marker-position pm)))))"#
+                    (progn (set-marker pm nil) (marker-position pm)))))"#
         ),
         "OK (4 1 7 5 2 nil)"
     );

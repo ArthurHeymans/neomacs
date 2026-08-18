@@ -499,7 +499,8 @@ fn subr_arity_mark_marker_primitives_match_oracle() {
     assert_subr_arity("marker-position", 1, Some(1));
     assert_subr_arity("markerp", 1, Some(1));
     assert_subr_arity("set-marker", 2, Some(3));
-    assert_subr_arity("move-marker", 2, Some(3));
+    // No `move-marker' row: GNU has no DEFUN of that name, only
+    // `(defalias 'move-marker #'set-marker)' at lisp/subr.el:2280.
     assert_subr_arity("set-marker-insertion-type", 2, Some(2));
 }
 
@@ -1987,79 +1988,13 @@ fn special_form_p_false_for_int() {
 }
 
 // -- macrop --
-
-#[test]
-fn macrop_true_for_macro() {
-    crate::test_utils::init_test_tracing();
-    let m = make_macro(vec!["form"]);
-    let result = macrop_check(&m).unwrap();
-    assert!(result.is_truthy());
-}
-
-#[test]
-fn macrop_false_for_lambda() {
-    crate::test_utils::init_test_tracing();
-    let lam = make_lambda(vec!["x"], vec![], None);
-    let result = macrop_check(&lam).unwrap();
-    assert!(result.is_nil());
-}
-
-#[test]
-fn macrop_false_for_nil() {
-    crate::test_utils::init_test_tracing();
-    let result = macrop_check(&Value::NIL).unwrap();
-    assert!(result.is_nil());
-}
-
-#[test]
-fn macrop_true_for_macro_cons_marker() {
-    crate::test_utils::init_test_tracing();
-    let marker = Value::cons(Value::symbol("macro"), Value::fixnum(1));
-    let result = macrop_check(&marker).unwrap();
-    assert!(result.is_truthy());
-}
-
-#[test]
-fn macrop_autoload_macro_returns_macro_marker_list() {
-    crate::test_utils::init_test_tracing();
-    let autoload_macro = Value::list(vec![
-        Value::symbol("autoload"),
-        Value::string("dummy-file"),
-        Value::NIL,
-        Value::NIL,
-        Value::symbol("macro"),
-    ]);
-    let result = macrop_check(&autoload_macro).unwrap();
-    assert_eq!(result, Value::list(vec![Value::symbol("macro"), Value::T]));
-}
-
-#[test]
-fn macrop_autoload_function_is_nil() {
-    crate::test_utils::init_test_tracing();
-    let autoload_function = Value::list(vec![
-        Value::symbol("autoload"),
-        Value::string("dummy-file"),
-        Value::NIL,
-        Value::T,
-        Value::NIL,
-    ]);
-    let result = macrop_check(&autoload_function).unwrap();
-    assert!(result.is_nil());
-}
-
-#[test]
-fn macrop_autoload_t_marker_returns_single_t_list() {
-    crate::test_utils::init_test_tracing();
-    let autoload_t_marker = Value::list(vec![
-        Value::symbol("autoload"),
-        Value::string("dummy-file"),
-        Value::NIL,
-        Value::NIL,
-        Value::T,
-    ]);
-    let result = macrop_check(&autoload_t_marker).unwrap();
-    assert_eq!(result, Value::list(vec![Value::T]));
-}
+//
+// `macrop' has no Rust implementation any more: GNU has no DEFUN of that
+// name, only `(defun macrop (object) ...)' at lisp/subr.el:4793, and the
+// helper these tests exercised (`macrop_check') existed only for it.  The
+// seven arms moved to `macrop_arms_match_gnu' in
+// `builtins/lisp_only_predicates_and_aliases_test.rs', where they are asked
+// of the loaded runtime instead.  DIVERGENCES.md 148.
 
 // -- commandp --
 

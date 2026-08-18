@@ -57,21 +57,10 @@ const SHADOWED_BY_PRELOADED_LISP: &[&str] = &[
     "window-edges",                 // lisp/window.el:3839
     "window-pixel-edges",           // lisp/window.el:3922
     "window-tree",                  // lisp/window.el:3999
-    // -- Type predicates.  One-line `defun's over primitives that are in C.
-    "booleanp",          // lisp/subr.el:4775
-    "char-uppercase-p",  // lisp/simple.el:6683
-    "integer-or-null-p", // lisp/subr.el:4809
-    "list-of-strings-p", // lisp/subr.el:4768
-    "macrop",            // lisp/subr.el:4793
-    "string-or-null-p",  // lisp/subr.el:4762
-    // -- Names GNU creates with `defalias', so the shadowing cell is a
-    // SYMBOL, not a function: `symbol-function' answers differently here
-    // whichever way round it is.
-    "move-marker", // lisp/subr.el:2280 -> set-marker
-    "not",         // lisp/subr.el:71   -> null
-    "string<",     // lisp/subr.el:2278 -> string-lessp
-    "string=",     // lisp/subr.el:2277 -> string-equal
-    "string>",     // lisp/subr.el:2279 -> string-greaterp
+    // -- The six type predicates and the five `defalias' names that used to
+    // sit here are GONE: their Rust subrs were deleted (DIVERGENCES.md 148),
+    // so the count fell from 49 to 38.  See
+    // `lisp_only_predicates_and_aliases_test.rs' for the per-name statement.
     // -- Process launchers.  All four are thin Lisp wrappers over
     // `make-process', which IS in C (src/process.c:1767).  DIVERGENCES.md 131
     // and 146: the Rust ones answer only in unit tests.
@@ -153,5 +142,15 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
         lookup_global_subr_entry(intern("primitive-undo")).is_none(),
         "primitive-undo must have no Rust subr: GNU implements it in \
          lisp/simple.el:3645 and nowhere in src/",
+    );
+
+    // The list must shrink, not just stay reviewed.  146 left 49 entries and
+    // 148 deleted eleven of them; this pins the arithmetic so a re-added
+    // subr cannot be absorbed by editing the list alone.
+    assert_eq!(
+        SHADOWED_BY_PRELOADED_LISP.len(),
+        38,
+        "the reviewed shadow list is 38 names after DIVERGENCES.md 148 \
+         (50 before 146, 49 after it, 38 after 148)",
     );
 }
