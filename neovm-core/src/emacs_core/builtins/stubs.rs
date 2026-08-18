@@ -779,8 +779,9 @@ pub(crate) fn builtin_external_debugging_output(
             explicit
         }
     };
+    let eol_conversion = eval.eol_conversion();
     let bytes = match coding.as_symbol_name() {
-        Some(name) => crate::encoding::encode_lisp_string(&internal, name),
+        Some(name) => crate::encoding::encode_lisp_string(&internal, name, eol_conversion),
         None => internal.as_bytes().to_vec(),
     };
     if let Some(file) = eval.debugging_output_file.as_mut() {

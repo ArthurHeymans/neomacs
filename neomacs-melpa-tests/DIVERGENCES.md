@@ -8892,6 +8892,16 @@ not a flag.  Doing half of it -- the sites that happen to have a `ctx` -- would
 leave the variable working for strings and silently ignored for processes, which
 is the shape this ledger keeps having to undo.
 
+> **Closed, 2026-08-18, by entry 143.**  The cost estimate here is right and
+> the conclusion drawn from it is wrong.  "Reading a dynamic Lisp variable at
+> every EOL resolution ... a threading change across the whole coding seam, not
+> a flag" IS the correct model, because GNU's C global is likewise read at every
+> resolution -- eleven sites in `coding.c` -- and a parameter is the only
+> faithful way to spell a process-wide read in a runtime that has no
+> process-wide variables.  The half-done shape this paragraph feared was avoided
+> by making the parameter REQUIRED rather than optional: there is no spelling of
+> a coding conversion left that has decided the answer without asking.
+
 **`decode_bytes` runs its EOL pass before the decoder, not after.**  For every
 family it reaches that is ASCII-transparent for `0x0D`/`0x0A` -- UTF-8, the
 single-byte charsets, Big5 and GBK, whose trail-byte ranges exclude both -- the
@@ -10494,6 +10504,27 @@ to the wrong half.  It lands in its own entry, with the design above already
 settled and the fourth measurement in the block above -- that the variable
 suppresses the NAME ADJUSTMENT as well as the conversion -- as its first pin.
 
+> **Closed, 2026-08-18, by entry 143.**  The design above survived contact
+> unchanged: a required parameter of the two resolvers, un-parameterised
+> spellings kept `#[cfg(test)]`.  Four details did not hold.  "About seventy
+> call sites" is **21** -- this paragraph counted the call sites of the
+> context-free ENTRY POINTS, and what needs the value is the sites that READ
+> it, with the entry points merely carrying it.  The `#[cfg(test)]` doors are
+> not the resolvers (those have five call sites, all in `encoding.rs`) but the
+> four `Context`-free BUILTIN entries, each of which carried an
+> `#[allow(dead_code)] // ... delete or wire up` invitation to inherit an
+> assumption silently.  The "first pin" offered here is confirmed but is not
+> the whole shape: the flag is read at CONVERSION time, not resolution time --
+> a subprocess created inside the binding and read outside it CONVERTS in GNU
+> -- and it does NOT suppress the character-code detection, so an `undecided`
+> decode of non-ASCII bytes still reports `utf-8`.  And this paragraph expected
+> the fix to be uniform across strings, processes and FILES; it is uniform
+> here and is not uniform in GNU, because `decode_coding_gap`'s ASCII
+> optimization applies a concrete eol type with no `inhibit_eol_conversion`
+> term at all (src/coding.c:7963-7990).  Entry 143 records that with the proof
+> that it is an accident: setting GNU's own `disable-ascii-optimization` makes
+> `insert-file-contents` agree with `decode-coding-string` again.
+
 ## 140. Eight suites audited for entry 133's read-boundary hazard: none carries it, but four gated a compilation pin on the process dying rather than on the output ending, which is the same race by a different door -- NOT A DIVERGENCE (racy harness fixtures), FIXED
 
 Entry 133 fixed one suite and left a rule: an upstream `compilation-filter-hook'
@@ -11257,6 +11288,365 @@ the process's stderr, but it can pin the truth table, including the
 tmp/coord-echo-probe2.el is byte-identical to GNU 31.0.90.
 
 Status: FIXED.
+
+## 143. `inhibit-eol-conversion` was inert in both directions, because the one thing GNU needs in order to honour it -- a process-wide variable -- is the one thing this runtime cannot have -- FIXED
+
+The residual entry 134 opened, entry 139 restated with a design, and this entry
+closes on a gate run of its own.  Reproduced first, with `-Q --batch` against
+GNU Emacs 31.0.90 and against this branch's own pre-fix
+`cargo xtask fresh-build --release` binary (kept as `tmp/pw49/refbin/neomacs`).
+The probes are `tmp/pw49/probe.el` (the whole matrix), `tmp/pw49/probe2.el` and
+`tmp/pw49/probe4.el` (`insert-file-contents`) and `tmp/pw49/probe3.el`
+(`disable-ascii-optimization`), each with its `gnu`, `before` and `after`
+output.
+
+```elisp
+(let ((inhibit-eol-conversion t))
+  (list (append (decode-coding-string "a\r\nb\r\n" 'utf-8-dos) nil)
+        (append (encode-coding-string "a\nb\n" 'utf-8-dos) nil)
+        (append (decode-coding-string "a\r\nb\r\n" 'undecided) nil)
+        last-coding-system-used))
+;; GNU                => ((97 13 10 98 13 10) (97 10 98 10) (97 13 10 98 13 10) undecided)
+;; Neomacs before fix => ((97 10 98 10) (97 13 10 98 13 10) (97 10 98 10) undecided-dos)
+```
+
+The variable was inert in the strongest sense available.  `tmp/pw49/probe.el`
+runs 116 rows -- strings, buffers, regions, files, subprocesses, `call-process`,
+`process-send-string` and detection, each under both settings -- and in
+`tmp/pw49/diff-before.txt` EVERY `inhibit=t` row was byte-identical to its
+`inhibit=nil` twin, while every `inhibit=nil` row already matched GNU.  Nothing
+had to be un-done; the flag had simply never been wired.
+
+### What it suppresses, measured before anything was designed
+
+**One: the conversion, the NAME ADJUSTMENT, and nothing else.**  `decode_eol`'s
+first line returns before the VECTOR branch:
+
+```c
+  eol_type = CODING_ID_EOL_TYPE (coding->id);
+  if (EQ (eol_type, Qunix) || inhibit_eol_conversion)
+    return;                                        /* src/coding.c:6765-6768 */
+```
+
+so `adjust_coding_eol_type` -- which is what rewrites `coding->id`, and
+therefore what `last-coding-system-used` reports (src/coding.c:9644) -- never
+runs.  Encode and decode differ: the encode side spends the decision by forcing
+`Qunix` (`consume_chars`, src/coding.c:7623-7625, and the same two lines in
+`encode_coding_iso_2022` at :4384-4386), but an encoder never adjusted a name to
+begin with, so only the bytes move there.
+
+What it does NOT suppress is the CHARACTER-CODE detection, and one row shows it:
+
+```elisp
+;; source bytes  C3 A9 61 0D 0A 62 0D 0A , decoded as `undecided'
+(let ((inhibit-eol-conversion t))
+  (list (append (decode-coding-string "\303\251a\r\nb\r\n" 'undecided) nil)
+        last-coding-system-used))
+;; GNU => ((233 97 13 10 98 13 10) utf-8)
+```
+
+`utf-8`, not `undecided`: `detect_coding` still re-based the coding system
+(src/coding.c:6743-6754) on an axis the flag is not on.  The remaining reads are
+all on the eol axis: the eight decoders' `eol_dos` (src/coding.c:1250-1251 plus
+seven copies), which is the trailing-CR hold-back at a read boundary; and
+`check_ascii` (:6181) with `detect_coding` (:6569), which stop ACCUMULATING
+CR/CRLF evidence and leave only `EOL_SEEN_LF`.
+
+**Two: conversion time, not resolution time.**  Every site above re-reads the
+global.  `setup_coding_system` reads it too (src/coding.c:5681), but only to
+compute `common_flags`; it does not touch `coding->id`, so the eol type the
+later reads see is still the real one.  A subprocess is where the two times can
+be told apart, because the coding system is resolved at `make-process` and the
+bytes arrive later:
+
+```elisp
+;; a child writing  a CRLF b CRLF , `coding-system-for-read' `utf-8-dos',
+;; :connection-type 'pipe
+;; bound around make-process only, read outside => GNU (97 10 98 10)
+;; bound around the reads only                  => GNU (97 13 10 98 13 10)
+```
+
+The binding that counts is the one live when the bytes arrive.  A fix that
+stored the flag on the process at creation would have those two rows exactly
+backwards.
+
+**Three: a concrete eol type is suppressed too.**  `decode_eol` returns before
+it distinguishes them, and `eol_dos` is
+`!inhibit_eol_conversion && EQ (..., Qdos)`, so `utf-8-dos` keeps its CR LF and
+`utf-8-mac` keeps its CR:
+
+```elisp
+(let ((inhibit-eol-conversion t))
+  (list (append (decode-coding-string "a\r\nb\r\n" 'utf-8-mac) nil)
+        (append (encode-coding-string "a\nb\n" 'utf-8-mac) nil)))
+;; GNU => ((97 13 10 98 13 10) (97 10 98 10))
+```
+
+`binary` and `no-conversion` are the control: their eol type is concrete
+`Qunix`, so they copy CR LF through whatever the flag holds.
+
+**Four: two GNU paths ignore it, one on purpose and one by accident.**  The
+deliberate one is `Fdetect_coding_region`.  Its end-of-line half is `detect_eol`
+(src/coding.c:6376) -- a DIFFERENT function from `decode_eol`, the one entry 134
+identified as stopping after three terminators -- and `inhibit_eol_conversion`
+appears nowhere in it (src/coding.c:8930-8960).  So the flag changes what a
+decode DOES without changing what a detection REPORTS:
+
+```elisp
+(let ((inhibit-eol-conversion t))
+  (list (detect-coding-string "a\r\nb\r\n") (coding-system-eol-type 'utf-8-dos)))
+;; GNU => ((undecided-dos) 1)
+```
+
+The accidental one is `insert-file-contents`, recorded below under what is not
+fixed here.
+
+### Why GNU can do this with a global and this cannot
+
+`inhibit_eol_conversion` is a `DEFVAR_BOOL` C global (src/coding.c:12022) read
+directly by eleven sites.  That works because GNU has one obarray, one set of
+variable cells and one Lisp thread of control.  Here the obarray is owned by a
+`Context`, `LispBoolFwd` cells are copied per thread
+(`neovm-core/src/emacs_core/forward.rs`), and the unit suite runs many
+`Context`s on parallel threads: a static would be read by the wrong session.
+The flag has to travel as a value, and entry 139 worked out where.
+
+### The type-level fix
+
+Entry 139 made `EolType::for_encode` and `EolType::resolve_for_decode` the ONLY
+two ways to get a `ResolvedEol` out of an `EolType`.  This entry makes
+`EolConversion` a REQUIRED parameter of both, so there is no spelling of an
+end-of-line resolution left that has decided what the variable holds without
+asking.
+
+```rust
+pub(crate) enum EolConversion { Enabled, Inhibited }
+
+impl EolType {
+    fn for_encode(self, eol_conversion: EolConversion) -> ResolvedEol;
+    fn resolve_for_decode(self, decoded: &[u8], c: EolConversion) -> DecodeEolResolution;
+}
+```
+
+`DecodeEolResolution` grows a fourth state rather than reusing one.  GNU's three
+are `Specified` / `Adjusted` / `NotSeen`; the new one is `Inhibited`, and it is
+not `NotSeen` because the two have different causes and only one of them is a
+property of the text: `NotSeen` says the decoded bytes held no terminator,
+`Inhibited` says nobody was allowed to look.  Both answer `eol() == Unix` and
+`adjusted() == None`, which is exactly what `decode_eol`'s early return does.
+
+`Context::eol_conversion()` is the one reader, and it reads the way GNU's C code
+sees a `DEFVAR_BOOL`: the dynamic value through
+`visible_runtime_variable_value_by_id`, which no lexical binding of the name can
+shadow, nil when unbound.  It is called at the point of CONVERSION at every one
+of its 21 production sites -- never stored on an object, never resolved early --
+because that is what question two measured.
+
+Four un-parameterised spellings survive, all `#[cfg(test)]` and all named for
+what they are: `builtin_encode_coding_string` / `builtin_decode_coding_string`
+(the no-`Context` codec doors, used by fifty-odd fixtures) and
+`builtin_process_send_string_impl` / `builtin_process_send_region_impl` (the
+`ProcessManager`-only send doors).  Every one of them carried
+`#[allow(dead_code)] // grandfathered ... delete or wire up`, which is precisely
+the invitation this entry has to withdraw: wiring one up later would have
+inherited its `EolConversion::Enabled` in silence.
+`read_process_output_without_recording_coding` -- entry 139's fixture door --
+now says in its doc that the second thing it does not have is a variable to
+read.
+
+One duplicated decision went with it.  `report_detected_eol` re-derived the
+end-of-line answer by scanning the decoded text a SECOND time, next to the
+resolution the conversion had already run, and under this flag the two would
+have disagreed -- the conversion suppressed and the reported name still
+adjusted.  It is deleted; `builtin_coding_string_in_context` now takes both
+halves out of the one `DecodeEolResolution`, through the function entry 139 had
+already written for the process path.  That function is renamed
+`adjusted_coding_name` (from `process_run_coding_name`), because
+`last-coding-system-used` and `(process-coding-system P)` are one field of one
+object in GNU and are now one function here.
+
+`process_coding_uses_dos_eol_carryover` -- entry 139's `eol_dos` port -- takes
+the flag too, because the C expression it quotes has two terms and it was
+carrying only one.  The bytes that reach the buffer are the same either way (an
+inhibited decode copies a trailing CR through, and a held-back CR is flushed at
+EOF), but a Lisp filter sees the run boundaries, so the split has to be GNU's.
+
+### Blast radius, measured
+
+`EolConversion` reaches 8 files and 21 call sites of `Context::eol_conversion()`
+in production: `encoding.rs` (both string builtins, both region builtins, the
+pre-write/post-read hook path and the identity fast path), `process.rs` (the
+whole read chain down to `decode_process_output_bytes`, and both send paths),
+`callproc/mod.rs` (`call-process` output, `call-process-region` input, argument
+encoding), `fileio.rs` (file-name decode and encode), `load.rs`, `fns.rs`
+(`md5`), `builtins/stubs.rs` and `keyboard.rs`.  `insert-file-contents` and
+`write-region` need no site of their own: both reach
+`builtin_coding_string_in_context` through `decode_file_bytes_in_context` /
+`encode_external_text_with_boundary`, which is the seam entry 134 built.
+
+`keyboard_input.rs` is the site entry 139 said would be reachable and an earlier
+note had said would not: its `push` now takes the flag, handed to it by
+`Context::handle_read_char_input_event` (`neovm-core/src/keyboard.rs`).
+
+Three production call sites name `EolConversion::Enabled` outright, and all
+three are the same kind: `load.rs`'s two bootstrap-cleanup surface scanners,
+which read fixed files out of our own `lisp/` tree into a THROWAWAY obarray to
+work out what the bootstrap must clean up.  They are not conversions any Lisp
+binding can be in effect for, and they must read the same source whatever the
+session holds.
+
+### The pins
+
+`inhibit_eol_conversion_suppresses_the_conversion_and_the_name_adjustment`
+(thirteen rows: decode and encode, ASCII and non-ASCII, concrete and undecided,
+with `binary` as the control and `raw-text` as the row where the flag is visible
+in the string's STORAGE FORM, because GNU's identity fast path returns a
+multibyte string where the `raw-text` decoder builds a unibyte one).
+`inhibit_eol_conversion_reaches_the_region_and_buffer_doors_but_not_detection`
+(seven rows through `decode_coding_object`'s doors, plus the `detect_eol` row
+that must NOT move).
+`inhibit_eol_conversion_is_read_when_process_output_arrives_not_when_it_is_resolved`
+(eight rows, the four that separate creation time from read time among them).
+`call_process_output_honours_inhibit_eol_conversion` (six rows).
+`eol_resolution_requires_being_told_about_inhibit_eol_conversion` and
+`context_eol_conversion_reads_the_defvar_bool_dynamically` at the type level.
+Every expected value was measured by running the probe under GNU Emacs 31.0.90.
+
+GNU's own suite pins the same rule from the other side, and agreeing with it was
+not planned: `coding-nocopy-ascii` (`test/src/coding-tests.el:387-421`) asserts
+that under `inhibit-eol-conversion` a NOCOPY `decode-coding-string` with
+`us-ascii` / `iso-latin-1` / `utf-8` returns the argument itself, which is the
+identity fast path taken because the flag cleared the eol test.
+
+### Measured after
+
+Against a `cargo xtask fresh-build --release` binary (61.7 MB, pdump 13,627,586
+bytes and newer than it), `tmp/pw49/probe.el`'s 116 rows are byte-identical to
+GNU Emacs 31.0.90 except eight (`tmp/pw49/diff-after.txt`): two
+`insert-file-contents` rows, which are the ASCII-arm quirk recorded below, and
+six `write-region` read-back rows whose TEXT matches and whose reported
+coding-system NAME is the unrelated unibyte-destination difference also recorded
+below.  Every subprocess row, every `call-process` row, every string, buffer and
+region row and every detection row agrees.  `tmp/pw49/probe2.el`'s 42
+`insert-file-contents` rows and `tmp/pw49/probe4.el`'s 24 agree except six and
+five respectively -- the same ASCII-arm rows in both, with every NON-ASCII row
+and every invalid-UTF-8 row agreeing outright, which is the evidence that the
+arm is the whole of it.
+
+`cargo nextest run -p neovm-core` is 9036/9036 green (51 skipped).
+`cargo nextest run -p neovm-oracle-tests` is 38783/38783 green, with no pin
+moved and no pin re-derived: the flag is nil in every oracle form, so every
+conversion resolves exactly as it did.  One run of it did stop on
+`div_cx27_process_exit_code_various_signals` -- a `sleep 30` child sent SIGQUIT,
+`(process-status p)` read back `run` instead of `signal` after a one-second
+`accept-process-output` -- which passes on its own and passed on the re-run.
+That form contains no coding system at all; it is entry 140's class, a pin gated
+on the process DYING rather than on the output ending, met here under a load
+average of 38.
+`cargo check --workspace --all-targets` and `cargo fmt --all --check` are clean.
+The bootstrap itself is a load-bearing test of the change: `fresh-build`
+byte-compiles all 1735 `.el` files and dumps with the new binary, and every one
+of those loads now reads `inhibit-eol-conversion` on its way through
+`decode_emacs_utf8_source_lisp`.
+
+### Found and NOT fixed here
+
+**`insert-file-contents` ignores the flag for an ASCII file, and GNU's own
+optimization switch proves it is an accident.**  This is the second path from
+question four, and it is the one divergence this entry leaves.
+`decode-coding-string` and `call-process` honour the flag;
+`insert-file-contents` does not, when the file is ASCII-clean and the coding
+system's eol type is CONCRETE:
+
+```elisp
+;; a file holding  a CR LF b CR LF c CR LF
+(let ((inhibit-eol-conversion t) (coding-system-for-read 'utf-8-dos))
+  (with-temp-buffer (insert-file-contents f) (append (buffer-string) nil)))
+;; GNU     => (97 10 98 10 99 10)              ; CONVERTED
+;; Neomacs => (97 13 10 98 13 10 99 13 10)     ; not converted
+```
+
+The mechanism is `decode_coding_gap`'s ASCII-optimization arm
+(src/coding.c:7929-8000, its end-of-line block at :7963-8000).  When the source
+is all ASCII -- or fully valid UTF-8
+for a utf-8-type coding -- it does not call `decode_coding` at all; it applies
+the end of line itself, reading `CODING_ID_EOL_TYPE (coding->id)` directly and
+converting `Qmac`/`Qdos` with **no `inhibit_eol_conversion` term anywhere**.  Its
+VECTOR case is inhibit-aware only indirectly, through `coding->eol_seen`, which
+`check_ascii` (src/coding.c:6181-6189) and `detect_coding` (:6569) fill in under
+the guard -- so an undecided coding is not converted, but its name IS adjusted to
+the `-unix` subsidiary where the general path leaves it bare.
+
+GNU ships the switch that shows this is unintended.
+`disable-ascii-optimization` (src/coding.c:12222) exists to turn that arm off,
+and turning it off makes `insert-file-contents` agree with
+`decode-coding-string` exactly -- measured, `tmp/pw49/gnu3.txt`:
+
+```elisp
+;; the same file, the same binding, inhibit-eol-conversion t
+;; cs=utf-8-dos, disable-ascii-optimization nil => GNU (97 10 98 10 99 10)
+;; cs=utf-8-dos, disable-ascii-optimization t   => GNU (97 13 10 98 13 10 99 13 10)
+;; cs=utf-8,     disable-ascii-optimization nil => GNU last-coding-system-used utf-8-unix
+;; cs=utf-8,     disable-ascii-optimization t   => GNU last-coding-system-used utf-8
+```
+
+An optimization whose whole documented purpose is to be a no-op changes both the
+text and the reported name.  Reproducing it here would mean adding a FOURTH copy
+of the end-of-line decision -- one whose only observable effect is to disagree
+with the other three -- to a file path from which entry 134 deleted
+`DetectedFileEol` and entry 139 deleted `load`'s `detect_source_eol` for exactly
+that reason.  Neomacs therefore behaves as GNU does with
+`disable-ascii-optimization` set, which is GNU's own statement of what the arm
+is supposed to preserve.  The divergent rows are all and only these, and all
+only under the flag:
+
+| ASCII file, `inhibit-eol-conversion` t | GNU | Neomacs |
+|---|---|---|
+| `coding-system-for-read` `utf-8-dos` | text converted | text kept |
+| `coding-system-for-read` `utf-8-mac` | text converted | text kept |
+| `coding-system-for-read` `utf-8` | `last-coding-system-used` `utf-8-unix` | `utf-8` |
+| `coding-system-for-read` `latin-1` | `iso-latin-1-unix` | `latin-1` |
+| `coding-system-for-read` `raw-text` | `raw-text-unix` | `raw-text` |
+
+`buffer-file-coding-system` agrees on every one of those rows, because
+`after-insert-file-set-buffer-file-coding-system` forces the eol type to unix in
+Lisp when the flag is set (`lisp/international/mule.el:2102`), and both editors
+run that.  Every NON-ASCII file row agrees outright, because the ASCII arm is
+refused and GNU falls through to the inhibit-aware `decode_coding`; so does
+every row with the flag nil, which is why nothing in the suites moves.
+
+**`insert-file-contents` into a UNIBYTE buffer reports `no-conversion` for
+every coding system.**  Met while measuring the `write-region` rows above,
+unrelated to this entry, and identical before and after it on both settings of
+the flag (`tmp/pw49/probe5.el`, `before5.txt` and `after5.txt` agree):
+
+```elisp
+;; a file holding  a CR LF b , read into a buffer with (set-buffer-multibyte nil)
+;; coding-system-for-read `binary' => GNU binary        Neomacs no-conversion
+;; coding-system-for-read `utf-8'  => GNU raw-text-dos  Neomacs no-conversion
+;; the same file into a MULTIBYTE buffer, `binary'  => both binary
+```
+
+GNU's unibyte-destination downgrade is `raw_text_coding_system`
+(src/fileio.c:4428-4431, "We must suppress all character code conversion except
+for end-of-line conversion" -- the same call `Fcall_process` makes at
+src/callproc.c:757-759).  Its definition (src/coding.c:5934-5954) returns
+`raw-text` or the SUBSIDIARY of it carrying the same eol type, so the character
+half is dropped and the end-of-line half survives and is still detected:
+`raw-text-dos`, exactly as entry 139 pinned for a unibyte PROCESS buffer.  It
+also returns a `raw-text`-typed argument unchanged, which is why `binary` stays
+`binary`.  Neomacs's file path downgrades to `no-conversion` for everything,
+which is entry 134's distinction between `raw-text` and `binary` un-drawn for
+one destination.  It belongs with the unibyte-destination work, not here.
+
+### Corrections to earlier entries
+
+Entry 134, dated 2026-08-18: its "`inhibit-eol-conversion` is inert, in both
+directions" residual is closed here, with a note on it in place.
+
+Entry 139, dated 2026-08-18: its restatement of the same residual is closed
+here, with a note on it in place.  Its design survived contact unchanged; four
+of its details did not, and the note records them.
 
 ## 144. The rest of entry 133's population audited -- three of the fourteen remaining packages mutate a compilation buffer outside any guard and their suites really spawn -- and six more suites gated a compilation pin on the clock, two of them on a buffer that only looks like a compilation buffer -- NOT A DIVERGENCE (racy harness fixtures), FIXED
 

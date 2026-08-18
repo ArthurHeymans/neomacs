@@ -17191,6 +17191,29 @@ impl Context {
             .unwrap_or(Value::NIL)
     }
 
+    /// What `inhibit-eol-conversion` holds right now, for the coding
+    /// conversion that is about to run.
+    ///
+    /// GNU's `inhibit_eol_conversion` is a `DEFVAR_BOOL` C global
+    /// (src/coding.c:12022), so it is read through the same dynamic value in
+    /// every conversion and no lexical binding of the name can shadow it --
+    /// hence `visible_runtime_variable_value_by_id` and not
+    /// `visible_variable_value_or_nil`.  Void reads back as nil, which is the
+    /// variable's own initial value (src/coding.c:12027).
+    ///
+    /// Call this at the point of CONVERSION, never at the point where a coding
+    /// system is chosen: see
+    /// [`EolConversion`](crate::emacs_core::coding::EolConversion) for the
+    /// measurement that pins the difference.
+    pub(crate) fn eol_conversion(&self) -> crate::emacs_core::coding::EolConversion {
+        crate::emacs_core::coding::EolConversion::from_lisp(
+            self.visible_runtime_variable_value_by_id(intern("inhibit-eol-conversion"))
+                .ok()
+                .flatten()
+                .unwrap_or(Value::NIL),
+        )
+    }
+
     pub(crate) fn visible_runtime_variable_value_by_id(
         &self,
         sym_id: SymId,

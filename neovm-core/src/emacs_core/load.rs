@@ -113,8 +113,11 @@ fn load_hist_file_name(
 /// stray-^M-in-a-DOS-file case included, which is why deleting it is a
 /// deduplication and not a behaviour change; the equivalence is pinned by
 /// `load_source_eol_detection_matches_the_shared_decoder`.
-pub(crate) fn decode_emacs_utf8_source_lisp(bytes: &[u8]) -> LispString {
-    crate::encoding::decode_bytes_to_lisp_string(bytes, "utf-8-emacs")
+pub(crate) fn decode_emacs_utf8_source_lisp(
+    bytes: &[u8],
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> LispString {
+    crate::encoding::decode_bytes_to_lisp_string(bytes, "utf-8-emacs", eol_conversion)
 }
 
 pub(crate) fn decode_emacs_utf8(bytes: &[u8]) -> String {
@@ -2284,7 +2287,7 @@ fn load_file_body(
         let src_bytes = raw_bytes
             .strip_prefix(&[0xEF, 0xBB, 0xBF])
             .unwrap_or(raw_bytes.as_slice());
-        let content = decode_emacs_utf8_source_lisp(src_bytes);
+        let content = decode_emacs_utf8_source_lisp(src_bytes, eval.eol_conversion());
         let lexical_binding = source_lexical_binding_for_lisp_source(
             eval,
             &content,
@@ -3565,7 +3568,15 @@ fn collect_source_surface_from_paths(
             ))],
             raw_data: None,
         })?;
-        let source = decode_emacs_utf8_source_lisp(&bytes);
+        // Not GNU's `load`: this scans fixed files out of our own `lisp/`
+        // tree into a THROWAWAY obarray to work out what the bootstrap must
+        // clean up.  It is not a conversion any Lisp binding can be in effect
+        // for, and it must read the same source whatever the session holds, so
+        // it names its answer instead of asking.
+        let source = decode_emacs_utf8_source_lisp(
+            &bytes,
+            crate::emacs_core::coding::EolConversion::Enabled,
+        );
         let obarray = crate::emacs_core::symbol::Obarray::new();
         let forms = crate::emacs_core::value_reader::read_all_lisp_source(&source, &obarray)
             .map_err(|err| EvalError::Signal {
@@ -3744,7 +3755,15 @@ fn collect_loaddefs_surface_from_paths(
             ))],
             raw_data: None,
         })?;
-        let source = decode_emacs_utf8_source_lisp(&bytes);
+        // Not GNU's `load`: this scans fixed files out of our own `lisp/`
+        // tree into a THROWAWAY obarray to work out what the bootstrap must
+        // clean up.  It is not a conversion any Lisp binding can be in effect
+        // for, and it must read the same source whatever the session holds, so
+        // it names its answer instead of asking.
+        let source = decode_emacs_utf8_source_lisp(
+            &bytes,
+            crate::emacs_core::coding::EolConversion::Enabled,
+        );
         let obarray = crate::emacs_core::symbol::Obarray::new();
         let forms = crate::emacs_core::value_reader::read_all_lisp_source(&source, &obarray)
             .map_err(|err| EvalError::Signal {
@@ -4126,7 +4145,7 @@ pub(crate) fn apply_ldefs_boot_autoloads_for_names(
         ))],
         raw_data: None,
     })?;
-    let source = decode_emacs_utf8_source_lisp(&bytes);
+    let source = decode_emacs_utf8_source_lisp(&bytes, eval.eol_conversion());
     let forms = crate::emacs_core::value_reader::read_all_lisp_source(&source, &eval.obarray)
         .map_err(|err| EvalError::Signal {
             symbol: intern("error"),

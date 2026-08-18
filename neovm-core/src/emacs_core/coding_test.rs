@@ -2310,10 +2310,18 @@ fn set_priority_moves_charset_category_to_front() {
 fn encode_lisp_string_prepends_bom_for_signature() {
     crate::test_utils::init_test_tracing();
     let s = crate::heap_types::LispString::from_unibyte(b"x".to_vec());
-    let bytes = crate::encoding::encode_lisp_string(&s, "utf-8-with-signature");
+    let bytes = crate::encoding::encode_lisp_string(
+        &s,
+        "utf-8-with-signature",
+        crate::emacs_core::coding::EolConversion::Enabled,
+    );
     assert_eq!(bytes, vec![0xEF, 0xBB, 0xBF, b'x']);
     // Plain utf-8 must NOT prepend a BOM.
-    let plain = crate::encoding::encode_lisp_string(&s, "utf-8");
+    let plain = crate::encoding::encode_lisp_string(
+        &s,
+        "utf-8",
+        crate::emacs_core::coding::EolConversion::Enabled,
+    );
     assert_eq!(plain, vec![b'x']);
 }
 
@@ -2685,4 +2693,102 @@ fn unencodable_char_position_swaps_reversed_region() {
         ),
         "OK 2"
     );
+}
+
+/// DIVERGENCES.md entry 143: the two resolvers cannot be called without being
+/// told what `inhibit-eol-conversion` holds, and `Inhibited` collapses BOTH
+/// halves of GNU's `adjust_coding_eol_type` -- the eol type the conversion runs
+/// with AND the name rewrite -- for every `EolType`, concrete or vector.
+///
+/// The point of the enum rather than a `bool` is the middle assertion: an
+/// inhibited resolution is `DecodeEolResolution::Inhibited`, a state of its own
+/// and not `NotSeen`, because `NotSeen` is a property of the TEXT (GNU's
+/// `EOL_SEEN_NONE`) while this one is a property of the SESSION.
+#[test]
+fn eol_resolution_requires_being_told_about_inhibit_eol_conversion() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::coding::{DecodeEolResolution, EolConversion, EolType, ResolvedEol};
+
+    let crlf = b"a\r\nb\r\n";
+    let cr = b"a\rb\r";
+    let none = b"abc";
+
+    // ENABLED: GNU's three states, unchanged from entry 139.
+    assert_eq!(
+        EolType::Dos.resolve_for_decode(crlf, EolConversion::Enabled),
+        DecodeEolResolution::Specified(ResolvedEol::Dos)
+    );
+    assert_eq!(
+        EolType::Undecided.resolve_for_decode(crlf, EolConversion::Enabled),
+        DecodeEolResolution::Adjusted(ResolvedEol::Dos)
+    );
+    assert_eq!(
+        EolType::Undecided.resolve_for_decode(cr, EolConversion::Enabled),
+        DecodeEolResolution::Adjusted(ResolvedEol::Mac)
+    );
+    assert_eq!(
+        EolType::Undecided.resolve_for_decode(none, EolConversion::Enabled),
+        DecodeEolResolution::NotSeen
+    );
+
+    // INHIBITED: `decode_eol` returns on its first line (src/coding.c:6767),
+    // so every one of them answers the same thing, and it is neither
+    // `Specified(Unix)` nor `NotSeen`.
+    for eol in [
+        EolType::Unix,
+        EolType::Dos,
+        EolType::Mac,
+        EolType::Undecided,
+    ] {
+        for text in [&crlf[..], &cr[..], &none[..]] {
+            let resolution = eol.resolve_for_decode(text, EolConversion::Inhibited);
+            assert_eq!(resolution, DecodeEolResolution::Inhibited, "{eol:?}");
+            // Converts nothing...
+            assert_eq!(resolution.eol(), ResolvedEol::Unix, "{eol:?}");
+            // ...and moves no name.
+            assert_eq!(resolution.adjusted(), None, "{eol:?}");
+        }
+    }
+
+    // The encode side is GNU's `inhibit_eol_conversion ? Qunix : ...`
+    // (src/coding.c:7625): it never detected, so `Inhibited` only forces unix.
+    assert_eq!(
+        EolType::Dos.for_encode(EolConversion::Enabled),
+        ResolvedEol::Dos
+    );
+    assert_eq!(
+        EolType::Mac.for_encode(EolConversion::Enabled),
+        ResolvedEol::Mac
+    );
+    for eol in [
+        EolType::Unix,
+        EolType::Dos,
+        EolType::Mac,
+        EolType::Undecided,
+    ] {
+        assert_eq!(
+            eol.for_encode(EolConversion::Inhibited),
+            ResolvedEol::Unix,
+            "{eol:?}"
+        );
+    }
+}
+
+/// DIVERGENCES.md entry 143: `Context::eol_conversion` reads the variable the
+/// way GNU's C code sees a `DEFVAR_BOOL` -- the dynamic value, which no lexical
+/// binding of the name can shadow, and nil when unbound (src/coding.c:12027).
+#[test]
+fn context_eol_conversion_reads_the_defvar_bool_dynamically() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::coding::EolConversion;
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(eval.eol_conversion(), EolConversion::Enabled);
+    let _ = eval.eval_str("(setq inhibit-eol-conversion t)");
+    assert_eq!(eval.eol_conversion(), EolConversion::Inhibited);
+    let _ = eval.eval_str("(setq inhibit-eol-conversion nil)");
+    assert_eq!(eval.eol_conversion(), EolConversion::Enabled);
+    // A non-nil, non-`t` value inhibits too: GNU tests the C bool.
+    let _ = eval.eval_str("(setq inhibit-eol-conversion 'anything)");
+    assert_eq!(eval.eol_conversion(), EolConversion::Inhibited);
 }

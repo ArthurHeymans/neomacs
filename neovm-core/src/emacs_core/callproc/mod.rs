@@ -624,7 +624,7 @@ fn write_output_target_in_state(
             // Only the BUFFER destination decodes.  GNU hands a `(:file NAME)`
             // destination straight to the child as its stdout fd
             // (src/callproc.c:570), so those bytes are never converted.
-            let run = decoding.decode(output);
+            let run = decoding.decode(output, eval.eol_conversion());
             // `Vlast_coding_system_used = CODING_ID_NAME (process_coding.id)`
             // (src/callproc.c:913).  It sits inside the branch that READ the
             // child's output into a buffer, so a `(:file ...)` or discarded
@@ -633,7 +633,7 @@ fn write_output_target_in_state(
             // nil "-c" "printf 'a\\r\\n'")` does not move it.  The name is the
             // one `decode_eol` left in `coding->id`, so an undecided end of
             // line reports the subsidiary it detected.
-            let used = crate::encoding::process_run_coding_name(
+            let used = crate::encoding::adjusted_coding_name(
                 &eval.coding_systems,
                 run.coding_name(),
                 run.coding_eol(),
@@ -759,12 +759,20 @@ fn configure_call_process_stdin(
     }
 }
 
-fn encode_call_process_region_string_input(input: &LispString, coding: &str) -> Vec<u8> {
-    crate::encoding::encode_lisp_string(input, coding)
+fn encode_call_process_region_string_input(
+    input: &LispString,
+    coding: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> Vec<u8> {
+    crate::encoding::encode_lisp_string(input, coding, eol_conversion)
 }
 
-fn encode_call_process_region_buffer_text(text: &LispString, coding: &str) -> Vec<u8> {
-    crate::encoding::encode_lisp_string(text, coding)
+fn encode_call_process_region_buffer_text(
+    text: &LispString,
+    coding: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> Vec<u8> {
+    crate::encoding::encode_lisp_string(text, coding, eol_conversion)
 }
 
 /// Resolve the coding system that encodes the region text sent to a
@@ -1149,10 +1157,11 @@ fn encode_call_process_args(
         return Vec::new();
     }
     let coding = resolve_call_process_arg_coding(eval, cmd_args);
+    let eol_conversion = eval.eol_conversion();
     cmd_args
         .iter()
         .map(|arg| {
-            let bytes = crate::encoding::encode_lisp_string(arg, &coding);
+            let bytes = crate::encoding::encode_lisp_string(arg, &coding, eol_conversion);
             LispString::from_unibyte(bytes)
         })
         .collect()
@@ -1212,6 +1221,7 @@ fn builtin_call_process_region_impl(
     // temp file, which also precedes the DELETE.
     let write_coding = resolve_call_process_region_write_coding(eval);
 
+    let eol_conversion = eval.eol_conversion();
     let region_text = match args[0].kind() {
         ValueKind::Nil => {
             let (text, maybe_delete_range) = {
@@ -1224,6 +1234,7 @@ fn builtin_call_process_region_impl(
                     encode_call_process_region_buffer_text(
                         &buf.buffer_substring_lisp_string_range(range),
                         &write_coding,
+                        eol_conversion,
                     ),
                     range,
                 )
@@ -1251,6 +1262,7 @@ fn builtin_call_process_region_impl(
                     .as_lisp_string()
                     .expect("ValueKind::String must carry LispString payload"),
                 &write_coding,
+                eol_conversion,
             )
         }
         _ => {
@@ -1266,6 +1278,7 @@ fn builtin_call_process_region_impl(
                     encode_call_process_region_buffer_text(
                         &buf.buffer_substring_lisp_string_range(region),
                         &write_coding,
+                        eol_conversion,
                     ),
                     region,
                 )

@@ -1,6 +1,28 @@
 use super::*;
+use crate::emacs_core::coding::EolConversion;
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::value::{Value, get_string_text_properties_for_value};
+
+// The three coding entry points, with end-of-line conversion ENABLED.
+//
+// Entry 143 made `inhibit-eol-conversion' a REQUIRED parameter of every
+// resolution, because GNU reads a process-wide C global (src/coding.c:12022)
+// that cannot exist here.  These shims shadow the production spellings for the
+// whole fixture file, so the fixtures below read as they always did and the
+// answer they assume -- the variable's own initial value, src/coding.c:12027 --
+// is stated once, here, instead of once per assertion.
+
+fn encode_string(s: &str, coding_system: &str) -> Vec<u8> {
+    super::encode_string(s, coding_system, EolConversion::Enabled)
+}
+
+fn decode_bytes(bytes: &[u8], coding_system: &str) -> String {
+    super::decode_bytes(bytes, coding_system, EolConversion::Enabled)
+}
+
+fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str) -> Vec<u8> {
+    super::encode_lisp_string(s, coding_system, EolConversion::Enabled)
+}
 
 #[test]
 fn ascii_width() {
@@ -2154,6 +2176,170 @@ fn utf_16_and_utf_8_auto_pick_a_concrete_base_from_the_bom() {
             "((97 10 98) utf-8-dos) ",
             "((233 10) utf-8-dos) ",
             "((4194303 4194302 65) utf-8-auto))",
+        )
+    );
+}
+
+/// DIVERGENCES.md entry 143: `inhibit-eol-conversion` suppresses the
+/// end-of-line CONVERSION and the coding system's NAME ADJUSTMENT together,
+/// and it suppresses nothing else.
+///
+/// GNU's `decode_eol` returns on its first line when the variable is set
+/// (src/coding.c:6767), BEFORE the VECTOR branch, so `adjust_coding_eol_type`
+/// -- which is what rewrites `coding->id` and therefore what
+/// `last-coding-system-used` reports (src/coding.c:9644) -- never runs.  The
+/// encode side spends the decision the same way, by forcing `Qunix`
+/// (`consume_chars`, src/coding.c:7625), but it never adjusted a name to begin
+/// with, so only the bytes move there.
+///
+/// What it does NOT suppress is the CHARACTER-CODE detection: the `undecided`
+/// non-ASCII row below still reports `utf-8`, because `detect_coding` re-bases
+/// the coding system (src/coding.c:6743-6754) on an axis the flag is not on.
+///
+/// Every expected value was measured by running `tmp/pw49/probe.el` under GNU
+/// Emacs 31.0.90 (`tmp/pw49/gnu.txt`).
+#[test]
+fn inhibit_eol_conversion_suppresses_the_conversion_and_the_name_adjustment() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(progn
+             (defun pw143d (bytes coding)
+               (setq last-coding-system-used 'unset)
+               (let* ((s (apply #'unibyte-string bytes))
+                      (d (let ((inhibit-eol-conversion t))
+                           (decode-coding-string s coding))))
+                 (list (append d nil) last-coding-system-used
+                       (and (multibyte-string-p d) t))))
+             (defun pw143e (chars coding)
+               (setq last-coding-system-used 'unset)
+               (let* ((s (apply #'string chars))
+                      (e (let ((inhibit-eol-conversion t))
+                           (encode-coding-string s coding))))
+                 (list (append e nil) last-coding-system-used
+                       (and (multibyte-string-p e) t))))
+             (let ((crlf '(97 13 10 98 13 10))
+                   (nonascii '(195 169 97 13 10 98 13 10)))
+               (list
+                ;; DECODE, pure ASCII "a CRLF b CRLF".  A concrete `-dos'/`-mac'
+                ;; eol converts nothing, and the undecided ones do not grow a
+                ;; suffix -- `decode_eol' returned before `adjust_coding_eol_type'.
+                (pw143d crlf 'utf-8-dos)
+                (pw143d crlf 'utf-8-mac)
+                (pw143d crlf 'utf-8)
+                (pw143d crlf 'undecided)
+                (pw143d crlf 'latin-1)
+                ;; `raw-text' is the row where the flag is visible in the
+                ;; STORAGE FORM as well: with no EOL work owed, GNU's identity
+                ;; fast path applies (`inhibit_eol_conversion' is the middle
+                ;; term at src/coding.c:9613-9615) and returns a MULTIBYTE
+                ;; string, where the `raw-text' decoder builds a unibyte one.
+                (pw143d crlf 'raw-text)
+                ;; `binary' converts nothing either way: its eol type is
+                ;; concrete `Qunix'.  The control row.
+                (pw143d crlf 'binary)
+                ;; DECODE, non-ASCII source: the fast path is refused, so these
+                ;; run the real decoder.  `undecided' still reports `utf-8',
+                ;; because CHARACTER-CODE detection is a different axis and the
+                ;; flag is not on it.
+                (pw143d nonascii 'utf-8-dos)
+                (pw143d nonascii 'undecided)
+                (pw143d nonascii 'raw-text)
+                ;; ENCODE: `consume_chars' forces `Qunix', so no CR is written;
+                ;; the reported name never moved on this side anyway.
+                (pw143e '(97 10 98 10) 'utf-8-dos)
+                (pw143e '(97 10 98 10) 'utf-8-mac)
+                (pw143e '(233 97 10 98 10) 'utf-8-dos))))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((97 13 10 98 13 10) utf-8-dos t) ",
+            "((97 13 10 98 13 10) utf-8-mac t) ",
+            "((97 13 10 98 13 10) utf-8 t) ",
+            "((97 13 10 98 13 10) undecided t) ",
+            "((97 13 10 98 13 10) latin-1 t) ",
+            "((97 13 10 98 13 10) raw-text t) ",
+            "((97 13 10 98 13 10) binary t) ",
+            "((233 97 13 10 98 13 10) utf-8-dos t) ",
+            "((233 97 13 10 98 13 10) utf-8 t) ",
+            "((195 169 97 13 10 98 13 10) raw-text nil) ",
+            "((97 10 98 10) utf-8-dos nil) ",
+            "((97 10 98 10) utf-8-mac nil) ",
+            "((195 169 97 10 98 10) utf-8-dos nil))",
+        )
+    );
+}
+
+/// DIVERGENCES.md entry 143: the same flag through the doors that are NOT
+/// `code_convert_string`'s -- a buffer destination and both region builtins --
+/// and the one detection builtin that deliberately ignores it.
+///
+/// `decode-coding-region` and a buffer destination reach
+/// `decode_coding_object` directly, with no identity fast path
+/// (src/coding.c:9608), so these rows show the flag reaching the CONVERSION
+/// rather than the escape hatch above it.
+///
+/// `detect-coding-string` is the deliberate ignore.  Its end-of-line half is
+/// `detect_eol` (src/coding.c:6376), a different function from `decode_eol`,
+/// serving `Fdetect_coding_region` (src/coding.c:8944), and
+/// `inhibit_eol_conversion` appears nowhere in it -- so the flag changes what a
+/// decode DOES without changing what a detection REPORTS.
+///
+/// Measured under GNU Emacs 31.0.90 (`tmp/pw49/gnu.txt`).
+#[test]
+fn inhibit_eol_conversion_reaches_the_region_and_buffer_doors_but_not_detection() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(progn
+             (defun pw143b (coding)
+               (with-temp-buffer
+                 (setq last-coding-system-used 'unset)
+                 (let ((inhibit-eol-conversion t))
+                   (decode-coding-string (unibyte-string 97 13 10 98 13 10)
+                                         coding nil (current-buffer)))
+                 (list (append (buffer-string) nil) last-coding-system-used)))
+             (defun pw143dr (coding)
+               (with-temp-buffer
+                 (set-buffer-multibyte nil)
+                 (insert (unibyte-string 97 13 10 98 13 10))
+                 (setq last-coding-system-used 'unset)
+                 (let ((inhibit-eol-conversion t))
+                   (decode-coding-region (point-min) (point-max) coding))
+                 (list (append (buffer-string) nil) last-coding-system-used)))
+             (defun pw143er (coding)
+               (with-temp-buffer
+                 (insert "a\nb\n")
+                 (setq last-coding-system-used 'unset)
+                 (let ((inhibit-eol-conversion t))
+                   (encode-coding-region (point-min) (point-max) coding))
+                 (list (append (buffer-string) nil) last-coding-system-used)))
+             (list
+              (pw143b 'utf-8-dos)
+              (pw143b 'undecided)
+              (pw143b 'utf-8)
+              (pw143dr 'utf-8-dos)
+              (pw143dr 'undecided)
+              (pw143er 'utf-8-dos)
+              ;; `detect_eol' has no `inhibit_eol_conversion' term at all.
+              (let ((inhibit-eol-conversion t))
+                (list (detect-coding-string (unibyte-string 97 13 10 98 13 10))
+                      (detect-coding-string (unibyte-string 97 13 98 13))
+                      (coding-system-eol-type 'utf-8-dos)))))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((97 13 10 98 13 10) utf-8-dos) ",
+            "((97 13 10 98 13 10) undecided) ",
+            "((97 13 10 98 13 10) utf-8) ",
+            "((97 13 10 98 13 10) utf-8-dos) ",
+            "((97 13 10 98 13 10) undecided) ",
+            "((97 10 98 10) utf-8-dos) ",
+            "((undecided-dos) (undecided-mac) 1))",
         )
     );
 }

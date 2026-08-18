@@ -2372,7 +2372,9 @@ pub(crate) fn decode_file_name_lisp(
                 )
             });
     let decoded = match coding {
-        Some(name) => crate::encoding::decode_bytes_to_lisp_string(bytes, &name),
+        Some(name) => {
+            crate::encoding::decode_bytes_to_lisp_string(bytes, &name, eval.eol_conversion())
+        }
         // Both variables nil: GNU returns the name unchanged (unibyte bytes).
         None => crate::heap_types::LispString::from_unibyte(bytes.to_vec()),
     };
@@ -2410,10 +2412,11 @@ fn make_temp_file_internal_impl(
                     &eval.visible_variable_value_or_nil("default-file-name-coding-system"),
                 )
             });
+    let eol_conversion = eval.eol_conversion();
     let encode_file = |s: &crate::heap_types::LispString| -> crate::heap_types::LispString {
         match &file_name_coding {
             Some(name) => crate::heap_types::LispString::from_unibyte(
-                crate::encoding::encode_lisp_string(s, name),
+                crate::encoding::encode_lisp_string(s, name, eol_conversion),
             ),
             None => crate::heap_types::LispString::from_unibyte(s.as_bytes().to_vec()),
         }

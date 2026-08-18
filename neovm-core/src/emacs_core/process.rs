@@ -1635,7 +1635,7 @@ impl ProcessOutputDecoding {
     /// `struct coding_system` decodes with from then on, which is why a
     /// subprocess's second chunk is decoded by whatever its first chunk
     /// resolved.  `NAME` is the name the rewrite produced (already canonical,
-    /// see `process_run_coding_name`); an unadjusted resolution leaves the
+    /// see `adjusted_coding_name`); an unadjusted resolution leaves the
     /// decoding exactly as it was.
     pub(crate) fn adjusted_to(
         self,
@@ -1663,7 +1663,11 @@ impl ProcessOutputDecoding {
     /// `coding->id` IS the record.  Here each run is a separate call, so the
     /// answer has to be returned, and
     /// [`ProcessRunCoding`] is what the caller must then do something with.
-    pub(crate) fn decode(self, bytes: &[u8]) -> ProcessDecodedRun {
+    pub(crate) fn decode(
+        self,
+        bytes: &[u8],
+        eol_conversion: crate::emacs_core::coding::EolConversion,
+    ) -> ProcessDecodedRun {
         use crate::emacs_core::coding::{DecodeEolResolution, ResolvedEol};
         match self {
             // `binary` and `no-conversion` have a CONCRETE `Qunix` eol type
@@ -1680,7 +1684,7 @@ impl ProcessOutputDecoding {
             // keeps real PUA glyphs and eight-bit raw bytes instead of
             // round-tripping through the lossy storage-string form.
             Self::Coding(name) => {
-                let run = crate::encoding::decode_process_run(bytes, name);
+                let run = crate::encoding::decode_process_run(bytes, name, eol_conversion);
                 ProcessDecodedRun {
                     text: run.text,
                     coding: ProcessRunCoding {
@@ -1830,11 +1834,22 @@ fn process_coding_uses_utf8_carryover(name: &str) -> bool {
 /// `(97 10 10 98 10 10)` in GNU -- the first chunk detected `mac` on its own and
 /// the choice then STUCK, which is the same stickiness this entry adds
 /// everywhere else.
-fn process_coding_uses_dos_eol_carryover(name: &str) -> bool {
-    matches!(
-        crate::encoding::coding_name_eol(name),
-        crate::emacs_core::coding::EolType::Dos
-    )
+///
+/// The `!inhibit_eol_conversion` half is the other thing the C expression says,
+/// and it is why EOL_CONVERSION is a parameter: with the flag set, GNU's
+/// decoder never looks past a CR, so nothing is held back.  The bytes that
+/// finally reach the buffer are the same either way -- an inhibited decode
+/// copies the CR through and a held-back CR is flushed at EOF -- but a Lisp
+/// filter sees the run boundaries, so the split has to be GNU's.
+fn process_coding_uses_dos_eol_carryover(
+    name: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> bool {
+    eol_conversion == crate::emacs_core::coding::EolConversion::Enabled
+        && matches!(
+            crate::encoding::coding_name_eol(name),
+            crate::emacs_core::coding::EolType::Dos
+        )
 }
 
 fn utf8_expected_sequence_len(lead: u8) -> Option<usize> {
@@ -1867,7 +1882,12 @@ fn utf8_complete_prefix_len(bytes: &[u8]) -> usize {
     len
 }
 
-fn process_output_decode_prefix_len(coding: &str, bytes: &[u8], flush: bool) -> usize {
+fn process_output_decode_prefix_len(
+    coding: &str,
+    bytes: &[u8],
+    flush: bool,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> usize {
     if flush {
         return bytes.len();
     }
@@ -1877,7 +1897,7 @@ fn process_output_decode_prefix_len(coding: &str, bytes: &[u8], flush: bool) -> 
     } else {
         bytes.len()
     };
-    if process_coding_uses_dos_eol_carryover(coding)
+    if process_coding_uses_dos_eol_carryover(coding, eol_conversion)
         && decode_len > 0
         && bytes[decode_len - 1] == b'\r'
     {
@@ -1896,6 +1916,7 @@ fn encode_process_send_input(
     processes: &ProcessManager,
     id: ProcessId,
     input: &LispString,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> LispString {
     let coding = processes
         .get_any(id)
@@ -1904,7 +1925,11 @@ fn encode_process_send_input(
     if process_encode_coding_converts_nothing(coding) {
         return input.clone();
     }
-    let bytes = crate::encoding::encode_lisp_string(input, process_coding_symbol_name(coding));
+    let bytes = crate::encoding::encode_lisp_string(
+        input,
+        process_coding_symbol_name(coding),
+        eol_conversion,
+    );
     LispString::from_unibyte(bytes)
 }
 
@@ -1924,24 +1949,26 @@ fn decode_process_output_bytes(
     sink: ProcessOutputSink,
     bytes: &[u8],
     flush: bool,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> ProcessDecodedRun {
     let decoding = ProcessOutputDecoding::for_process(proc.coding_decode, sink);
     match decoding {
         ProcessOutputDecoding::Bytes(_) => {
             proc.decoding_carryover.clear();
-            decoding.decode(bytes)
+            decoding.decode(bytes, eol_conversion)
         }
         ProcessOutputDecoding::Coding(name) => {
             let mut combined = Vec::with_capacity(proc.decoding_carryover.len() + bytes.len());
             combined.append(&mut proc.decoding_carryover);
             combined.extend_from_slice(bytes);
-            let decode_len = process_output_decode_prefix_len(name, &combined, flush);
+            let decode_len =
+                process_output_decode_prefix_len(name, &combined, flush, eol_conversion);
             if decode_len < combined.len() {
                 proc.decoding_carryover
                     .extend_from_slice(&combined[decode_len..]);
             }
 
-            decoding.decode(&combined[..decode_len])
+            decoding.decode(&combined[..decode_len], eol_conversion)
         }
     }
 }
@@ -1989,20 +2016,21 @@ fn process_output_read_from_io_result(
     result: std::io::Result<usize>,
     bytes: &[u8],
     full_read_len: usize,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> DecodedProcessOutputRead {
     match result {
         Ok(0) if proc.decoding_carryover.is_empty() => DecodedProcessOutputRead::Eof,
         Ok(0) => {
             let bytes_read = proc.decoding_carryover.len();
             DecodedProcessOutputRead::Data {
-                run: decode_process_output_bytes(proc, sink, &[], true),
+                run: decode_process_output_bytes(proc, sink, &[], true, eol_conversion),
                 bytes_read,
             }
         }
         Ok(n) => {
             update_process_adaptive_read_buffering(proc, n, n == full_read_len);
             DecodedProcessOutputRead::Data {
-                run: decode_process_output_bytes(proc, sink, &bytes[..n], false),
+                run: decode_process_output_bytes(proc, sink, &bytes[..n], false, eol_conversion),
                 bytes_read: n,
             }
         }
@@ -5469,6 +5497,7 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         sink: ProcessOutputSink,
+        eol_conversion: crate::emacs_core::coding::EolConversion,
     ) -> DecodedProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return DecodedProcessOutputRead::NoSource;
@@ -5490,7 +5519,14 @@ impl ProcessManager {
         let mut buf = vec![0u8; read_len];
         let full_read_len = buf.len();
         let result = stdout.read(&mut buf);
-        let read = process_output_read_from_io_result(proc, sink, result, &buf, full_read_len);
+        let read = process_output_read_from_io_result(
+            proc,
+            sink,
+            result,
+            &buf,
+            full_read_len,
+            eol_conversion,
+        );
         if let Some(data) = read.data() {
             proc.stdout.push_str(&process_output_runtime_string(data));
         }
@@ -5506,6 +5542,7 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         sink: ProcessOutputSink,
+        eol_conversion: crate::emacs_core::coding::EolConversion,
     ) -> DecodedProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return DecodedProcessOutputRead::NoSource;
@@ -5525,7 +5562,14 @@ impl ProcessManager {
         let mut buf = vec![0u8; read_len];
         let full_read_len = buf.len();
         let result = stderr.read(&mut buf);
-        let read = process_output_read_from_io_result(proc, sink, result, &buf, full_read_len);
+        let read = process_output_read_from_io_result(
+            proc,
+            sink,
+            result,
+            &buf,
+            full_read_len,
+            eol_conversion,
+        );
         if let Some(data) = read.data() {
             proc.stderr.push_str(&process_output_runtime_string(data));
         }
@@ -5539,6 +5583,7 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         sink: ProcessOutputSink,
+        eol_conversion: crate::emacs_core::coding::EolConversion,
     ) -> DecodedProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return DecodedProcessOutputRead::NoSource;
@@ -5551,7 +5596,14 @@ impl ProcessManager {
         let mut buf = vec![0u8; read_len];
         let full_read_len = buf.len();
         let result = reader.read(&mut buf);
-        let read = process_output_read_from_io_result(proc, sink, result, &buf, full_read_len);
+        let read = process_output_read_from_io_result(
+            proc,
+            sink,
+            result,
+            &buf,
+            full_read_len,
+            eol_conversion,
+        );
         if let Some(data) = read.data() {
             proc.stdout.push_str(&process_output_runtime_string(data));
         }
@@ -5562,6 +5614,7 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         sink: ProcessOutputSink,
+        eol_conversion: crate::emacs_core::coding::EolConversion,
     ) -> DecodedProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return DecodedProcessOutputRead::NoSource;
@@ -5572,7 +5625,14 @@ impl ProcessManager {
             let mut buf = vec![0u8; read_len];
             let full_read_len = buf.len();
             let result = tls.read_process_output(&mut buf);
-            let read = process_output_read_from_io_result(proc, sink, result, &buf, full_read_len);
+            let read = process_output_read_from_io_result(
+                proc,
+                sink,
+                result,
+                &buf,
+                full_read_len,
+                eol_conversion,
+            );
             if let Some(data) = read.data() {
                 proc.stdout.push_str(&process_output_runtime_string(data));
             }
@@ -5607,16 +5667,27 @@ impl ProcessManager {
                 }
             };
             let read = match raw_read {
-                RawNetworkRead::Stream(result) => {
-                    process_output_read_from_io_result(proc, sink, result, &buf, full_read_len)
-                }
+                RawNetworkRead::Stream(result) => process_output_read_from_io_result(
+                    proc,
+                    sink,
+                    result,
+                    &buf,
+                    full_read_len,
+                    eol_conversion,
+                ),
                 RawNetworkRead::Udp(result) => match result {
                     Ok((n, addr)) => {
                         update_process_adaptive_read_buffering(proc, n, n == full_read_len);
                         proc.datagram_socket_addr = Some(addr);
                         proc.datagram_address = socket_addr_to_lisp_value(addr);
                         DecodedProcessOutputRead::Data {
-                            run: decode_process_output_bytes(proc, sink, &buf[..n], false),
+                            run: decode_process_output_bytes(
+                                proc,
+                                sink,
+                                &buf[..n],
+                                false,
+                                eol_conversion,
+                            ),
                             bytes_read: n,
                         }
                     }
@@ -5637,7 +5708,13 @@ impl ProcessManager {
                             );
                         }
                         DecodedProcessOutputRead::Data {
-                            run: decode_process_output_bytes(proc, sink, &buf[..n], false),
+                            run: decode_process_output_bytes(
+                                proc,
+                                sink,
+                                &buf[..n],
+                                false,
+                                eol_conversion,
+                            ),
                             bytes_read: n,
                         }
                     }
@@ -6782,6 +6859,7 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         sink: ProcessOutputSink,
+        eol_conversion: crate::emacs_core::coding::EolConversion,
     ) -> DecodedProcessOutputRead {
         if self
             .processes
@@ -6793,10 +6871,16 @@ impl ProcessManager {
         let source = self.processes.get(&id).and_then(process_output_source);
 
         match source {
-            Some(ProcessOutputSource::Pty) => self.read_pty_output_result(id, sink),
-            Some(ProcessOutputSource::ChildStdout) => self.read_child_stdout_result(id, sink),
-            Some(ProcessOutputSource::ChildStderr) => self.read_child_stderr_result(id, sink),
-            Some(ProcessOutputSource::Network) => self.read_network_output_result(id, sink),
+            Some(ProcessOutputSource::Pty) => self.read_pty_output_result(id, sink, eol_conversion),
+            Some(ProcessOutputSource::ChildStdout) => {
+                self.read_child_stdout_result(id, sink, eol_conversion)
+            }
+            Some(ProcessOutputSource::ChildStderr) => {
+                self.read_child_stderr_result(id, sink, eol_conversion)
+            }
+            Some(ProcessOutputSource::Network) => {
+                self.read_network_output_result(id, sink, eol_conversion)
+            }
             None => DecodedProcessOutputRead::NoSource,
         }
     }
@@ -6817,7 +6901,12 @@ impl ProcessManager {
         id: ProcessId,
         sink: ProcessOutputSink,
     ) -> Option<LispString> {
-        self.read_process_output_result(id, sink)
+        // It names the other thing it does not have, too: with no `Context`
+        // there is no `inhibit-eol-conversion' to read, so it decodes the way
+        // an unbound variable would (`EolConversion::Enabled`, GNU's initial
+        // value at src/coding.c:12027).  Fixtures that need the other answer
+        // must drive a `Context`.
+        self.read_process_output_result(id, sink, crate::emacs_core::coding::EolConversion::Enabled)
             .into_legacy_option()
     }
 
@@ -7171,7 +7260,11 @@ impl super::eval::Context {
         id: ProcessId,
         sink: ProcessOutputSink,
     ) -> ProcessOutputRead {
-        match self.processes.read_process_output_result(id, sink) {
+        let eol_conversion = self.eol_conversion();
+        match self
+            .processes
+            .read_process_output_result(id, sink, eol_conversion)
+        {
             DecodedProcessOutputRead::Data { run, bytes_read } => {
                 self.record_process_run_coding(id, run.coding);
                 ProcessOutputRead::Data {
@@ -7187,11 +7280,8 @@ impl super::eval::Context {
 
     /// The write-back itself.
     fn record_process_run_coding(&mut self, id: ProcessId, coding: ProcessRunCoding) {
-        let used = crate::encoding::process_run_coding_name(
-            &self.coding_systems,
-            coding.coding,
-            coding.eol,
-        );
+        let used =
+            crate::encoding::adjusted_coding_name(&self.coding_systems, coding.coding, coding.eol);
         let used_symbol = Value::symbol(&used);
         self.set_variable("last-coding-system-used", used_symbol);
 
@@ -14347,12 +14437,19 @@ pub(crate) fn builtin_process_send_string(
     {
         return Err(signal_process_not_running_in_manager(&eval.processes, id));
     }
-    let encoded = encode_process_send_input(&eval.processes, id, &input);
+    let encoded = encode_process_send_input(&eval.processes, id, &input, eval.eol_conversion());
     eval.send_process_input_reentrant(id, &encoded)?;
     Ok(Value::NIL)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+/// The `ProcessManager`-only spelling of `process-send-string`, for unit
+/// fixtures that have no `Context`.
+///
+/// `#[cfg(test)]` since entry 143: with no `Context` there is no
+/// `inhibit-eol-conversion' to read, so it names `EolConversion::Enabled`
+/// below.  A production caller must not be able to inherit that assumption by
+/// reaching for the shorter spelling.
+#[cfg(test)]
 pub(crate) fn builtin_process_send_string_impl(
     processes: &mut ProcessManager,
     buffers: &BufferManager,
@@ -14381,7 +14478,12 @@ pub(crate) fn builtin_process_send_string_impl(
     // whose output coding requests CRLF/CR (e.g. `dos`/`mac`/`utf-8-dos`) sends
     // the converted bytes; binary/raw-text encode systems pass the bytes
     // through unchanged.
-    let encoded = encode_process_send_input(processes, id, &input);
+    let encoded = encode_process_send_input(
+        processes,
+        id,
+        &input,
+        crate::emacs_core::coding::EolConversion::Enabled,
+    );
     if !processes.send_input(id, &encoded)? {
         return Err(signal("error", vec![Value::string("Process not found")]));
     }
@@ -15016,12 +15118,15 @@ pub(crate) fn builtin_process_send_region(
         buf.buffer_substring_lisp_string_range(region)
     };
 
-    let encoded = encode_process_send_input(&eval.processes, id, &region_text);
+    let encoded =
+        encode_process_send_input(&eval.processes, id, &region_text, eval.eol_conversion());
     eval.send_process_input_reentrant(id, &encoded)?;
     Ok(Value::NIL)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+/// The `ProcessManager`-only spelling of `process-send-region`; `#[cfg(test)]`
+/// for the reason [`builtin_process_send_string_impl`] gives.
+#[cfg(test)]
 pub(crate) fn builtin_process_send_region_impl(
     processes: &mut ProcessManager,
     buffers: &mut BufferManager,
@@ -15055,7 +15160,12 @@ pub(crate) fn builtin_process_send_region_impl(
 
     // Encode the region text through the process's ENCODE coding system, exactly
     // like `process-send-string` (GNU `send_process`).
-    let encoded = encode_process_send_input(processes, id, &region_text);
+    let encoded = encode_process_send_input(
+        processes,
+        id,
+        &region_text,
+        crate::emacs_core::coding::EolConversion::Enabled,
+    );
     if !processes.send_input(id, &encoded)? {
         return Err(signal("error", vec![Value::string("Process not found")]));
     }

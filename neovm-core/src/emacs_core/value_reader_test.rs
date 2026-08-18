@@ -1164,7 +1164,10 @@ fn runtime_reader_reads_utf8_emacs_extended_char_literal() {
     // Faithful Emacs-bytes LispString source (issue #131): the non-Unicode
     // ethiopic literal keeps its real code instead of round-tripping through
     // the lossy storage-string form.
-    let source = crate::emacs_core::load::decode_emacs_utf8_source_lisp(b"?\xF6\xA0\x87\x8A");
+    let source = crate::emacs_core::load::decode_emacs_utf8_source_lisp(
+        b"?\xF6\xA0\x87\x8A",
+        crate::emacs_core::coding::EolConversion::Enabled,
+    );
     let read_source = crate::emacs_core::value_reader::LispReadSource::new(&source);
 
     let (form, end_pos) = read_source
@@ -1180,8 +1183,10 @@ fn runtime_reader_reads_utf8_emacs_extended_char_literal() {
 fn runtime_reader_steps_utf8_emacs_extended_chars_as_single_source_chars() {
     crate::test_utils::init_test_tracing();
     let code = 0x1A_01CA;
-    let source =
-        crate::emacs_core::load::decode_emacs_utf8_source_lisp(b"(list ?\xF6\xA0\x87\x8A 1)");
+    let source = crate::emacs_core::load::decode_emacs_utf8_source_lisp(
+        b"(list ?\xF6\xA0\x87\x8A 1)",
+        crate::emacs_core::coding::EolConversion::Enabled,
+    );
     let read_source = crate::emacs_core::value_reader::LispReadSource::new(&source);
 
     let (form, _) = read_source
@@ -1201,7 +1206,10 @@ fn runtime_reader_steps_utf8_emacs_extended_chars_as_single_source_chars() {
 fn runtime_reader_reads_utf8_emacs_extended_string_literal() {
     crate::test_utils::init_test_tracing();
     let code = 0x1A_01CA;
-    let source = crate::emacs_core::load::decode_emacs_utf8_source_lisp(b"\"\xF6\xA0\x87\x8A\"");
+    let source = crate::emacs_core::load::decode_emacs_utf8_source_lisp(
+        b"\"\xF6\xA0\x87\x8A\"",
+        crate::emacs_core::coding::EolConversion::Enabled,
+    );
     let read_source = crate::emacs_core::value_reader::LispReadSource::new(&source);
 
     let (form, _) = read_source
