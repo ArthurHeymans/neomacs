@@ -715,6 +715,24 @@ pub(crate) fn run_resolved_leaf_native(
     leaf: &CompiledLeaf,
     args_ptr: *const i64,
 ) -> NativeCallOutcome {
+    // Direct handler-free path: a body with no binds, no handler frames and
+    // no sidecar runs WITHOUT its own invoke_native frame — no bases
+    // snapshot, no CURRENT_LEAF_BASES publish, no NativeRun materialization.
+    // It executes inside the CALLER leaf's extent exactly like any runtime
+    // shim the caller invokes (see CompiledLeaf::direct_call_eligible for the
+    // containment/soundness argument). Non-OK statuses are routed through
+    // the same machinery invoke_native would use, out of line.
+    if leaf.direct_call_eligible() {
+        let mut out: i64 = 0;
+        // SAFETY: args_ptr addresses leaf.arity live words (the caller's
+        // call-args slot, pure passthrough — checked by our caller); ctx is
+        // the dormant seam Context.
+        let status = unsafe { leaf.entry_call_raw(ctx as *mut u8, args_ptr, &mut out) };
+        if status == super::compile::STATUS_OK {
+            return NativeCallOutcome::Value(Value::from_bits(out as usize));
+        }
+        return direct_call_cold(ctx, func, func_value, leaf, status);
+    }
     match leaf.call_premarshaled(ctx as *mut u8, args_ptr) {
         NativeRun::Ok(bits) => NativeCallOutcome::Value(Value::from_bits(bits)),
         // call_premarshaled maps null-vmctx deopts to Deopt; defensive only —
@@ -731,34 +749,77 @@ pub(crate) fn run_resolved_leaf_native(
             stash_pending_flow(flow);
             NativeCallOutcome::FlowStashed
         }
-        NativeRun::DeoptAt(resume) => {
-            let crate::emacs_core::jit::compile::DeoptResume {
-                pc,
-                stack,
-                handlers,
-                binds,
-                spec_base,
-                cond_base,
-            } = *resume;
-            if ctx.is_null() {
-                return NativeCallOutcome::Fallback;
-            }
-            // Precise deopt: resume the Tier-0 interpreter mid-function.
-            // SAFETY: the seam-provided &mut Context is dormant during the
-            // native call — the same contract every runtime shim uses.
-            let ctx = unsafe { &mut *ctx };
-            let mut vm = crate::emacs_core::bytecode::Vm::from_context(ctx);
-            match vm.run_resumed_frame(
-                func, func_value, pc, &stack, handlers, &binds, spec_base, cond_base,
-            ) {
-                Ok(v) => NativeCallOutcome::Value(v),
-                Err(flow) => {
-                    stash_pending_flow(flow);
-                    NativeCallOutcome::FlowStashed
-                }
-            }
+        NativeRun::DeoptAt(resume) => deopt_resume_outcome(ctx, func, func_value, resume),
+    }
+}
+
+/// Precise-deopt resume shared by the wrapped and direct native paths: run
+/// the Tier-0 interpreter mid-function off the [`DeoptResume`] payload.
+fn deopt_resume_outcome(
+    ctx: *mut Context,
+    func: &ByteCodeFunction,
+    func_value: Value,
+    resume: Box<crate::emacs_core::jit::compile::DeoptResume>,
+) -> NativeCallOutcome {
+    let crate::emacs_core::jit::compile::DeoptResume {
+        pc,
+        stack,
+        handlers,
+        binds,
+        spec_base,
+        cond_base,
+    } = *resume;
+    if ctx.is_null() {
+        return NativeCallOutcome::Fallback;
+    }
+    // SAFETY: the seam-provided &mut Context is dormant during the
+    // native call — the same contract every runtime shim uses.
+    let ctx = unsafe { &mut *ctx };
+    let mut vm = crate::emacs_core::bytecode::Vm::from_context(ctx);
+    match vm.run_resumed_frame(
+        func, func_value, pc, &stack, handlers, &binds, spec_base, cond_base,
+    ) {
+        Ok(v) => NativeCallOutcome::Value(v),
+        Err(flow) => {
+            stash_pending_flow(flow);
+            NativeCallOutcome::FlowStashed
         }
     }
+}
+
+/// Non-OK statuses of a direct handler-free native call, routed through the
+/// same machinery `invoke_native` would apply — out of the hot path.
+#[cold]
+#[inline(never)]
+fn direct_call_cold(
+    ctx: *mut Context,
+    func: &ByteCodeFunction,
+    func_value: Value,
+    leaf: &CompiledLeaf,
+    status: i64,
+) -> NativeCallOutcome {
+    use super::compile::{STATUS_DEOPT_AT, STATUS_SIGNAL};
+    if status == STATUS_SIGNAL {
+        // Same panic-fold boundary as the wrapped path: take_pending_flow
+        // owns the panic-wins conversion; the flow goes straight back.
+        let flow =
+            take_pending_flow().expect("STATUS_SIGNAL from compiled code implies a stashed Flow");
+        stash_pending_flow(flow);
+        return NativeCallOutcome::FlowStashed;
+    }
+    if status == STATUS_DEOPT_AT {
+        // Precise deopt: no bind/cond frames exist on the direct path (the
+        // eligibility gate excludes them).
+        return match leaf.deopt_at_outcome(ctx as *mut u8, None, None) {
+            NativeRun::DeoptAt(resume) => deopt_resume_outcome(ctx, func, func_value, resume),
+            // deopt_at_outcome only degrades to plain Deopt with a null vmctx.
+            _ => NativeCallOutcome::Fallback,
+        };
+    }
+    // STATUS_DEOPT: rerun-from-start — sound only for side-effect-free bodies
+    // (the same defensive rule invoke_native applies).
+    leaf.assert_rerunnable();
+    NativeCallOutcome::Fallback
 }
 
 /// Register-sized outcome of a native-to-native call: the hot chain never

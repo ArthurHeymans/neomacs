@@ -3157,6 +3157,55 @@ impl CompiledLeaf {
         !self.has_rest && nargs == self.arity
     }
 
+    /// Whether the body may run WITHOUT its own [`invoke_native`] frame,
+    /// called directly from the caller leaf's extent: it registers no dynamic
+    /// bindings and no handler frames (nothing for the wrapper's parity
+    /// unwinds to restore) and reads no sidecar (JIT leaf). Such a body
+    /// behaves exactly like any runtime shim the caller invokes: a contained
+    /// panic in ITS shims heals against the caller's published leaf bases —
+    /// the caller's extent — which is correct because with no handler frames
+    /// nothing inside it can catch, so every non-OK exit leaves the caller
+    /// too. The pending-root-sweep floor is likewise swept at the caller's
+    /// exit (the callee's entry floor is >= the caller's).
+    pub(crate) fn direct_call_eligible(&self) -> bool {
+        !self.has_binds && !self.has_handlers && self.sidecar.is_none()
+    }
+
+    /// Raw native entry invocation for [`Self::direct_call_eligible`] bodies:
+    /// no bases snapshot, no `CURRENT_LEAF_BASES` publish, no bind/handler
+    /// frame bookkeeping — the caller owns all of that (its own
+    /// `invoke_native` published its bases; this callee runs inside that
+    /// extent). The caller must route non-OK statuses through the same
+    /// machinery `invoke_native` would (see `run_resolved_leaf_native`).
+    ///
+    /// SAFETY: same contract as [`Self::call_premarshaled`] — `args_ptr`
+    /// addresses `self.arity` live tagged words, `vmctx` is the dormant
+    /// seam Context.
+    pub(crate) unsafe fn entry_call_raw(
+        &self,
+        vmctx: *mut u8,
+        args_ptr: *const i64,
+        out: &mut i64,
+    ) -> i64 {
+        debug_assert!(self.direct_call_eligible());
+        // SAFETY: `entry` is finalized native code with the 4-param entry ABI
+        // (see `invoke_native`); JIT leaves ignore the sidecar param.
+        unsafe {
+            let f: extern "C" fn(*mut u8, *const i64, *mut i64, *const LeafSidecar) -> i64 =
+                core::mem::transmute(self.entry);
+            f(vmctx, args_ptr, out as *mut i64, core::ptr::null())
+        }
+    }
+
+    /// Rerun-from-start soundness assert for a direct-call STATUS_DEOPT (the
+    /// same defensive rule `invoke_native` applies).
+    pub(crate) fn assert_rerunnable(&self) {
+        assert!(
+            !self.has_side_effects,
+            "side-effecting JIT leaf must use precise deopt, not rerun-from-start"
+        );
+    }
+
     /// Native-to-native fast path: invoke the body with `args_ptr` addressing
     /// EXACTLY `self.arity` pre-marshaled argument words (the caller's native
     /// call-args slot). Valid only when [`is_pure_passthrough`](Self::is_pure_passthrough)
@@ -3299,7 +3348,7 @@ impl CompiledLeaf {
     /// none of its Vec/TLS frame weight.
     #[cold]
     #[inline(never)]
-    fn deopt_at_outcome(
+    pub(crate) fn deopt_at_outcome(
         &self,
         vmctx: *mut u8,
         bind_frame: Option<(usize, usize)>,
