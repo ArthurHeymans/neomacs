@@ -639,7 +639,7 @@ pub fn is_multibyte_string(s: &str) -> bool {
 /// concrete without a suffix.  Reading them as undecided was harmless for as
 /// long as undecided meant "do nothing"; it stops being harmless the moment it
 /// means "detect", which is why entry 131 recorded the conflation in advance.
-fn coding_name_eol(coding_system: &str) -> crate::emacs_core::coding::EolType {
+pub(crate) fn coding_name_eol(coding_system: &str) -> crate::emacs_core::coding::EolType {
     use crate::emacs_core::coding::EolType;
     match coding_system {
         "unix" => EolType::Unix,
@@ -759,20 +759,111 @@ fn expand_source_eol(
     })
 }
 
-/// Whether a coding-system NAME leaves its end-of-line type for the decoder to
-/// detect (GNU's `VECTORP (eol_type)`).
-pub(crate) fn coding_name_eol_is_undecided(coding_system: &str) -> bool {
-    matches!(
-        coding_name_eol(coding_system),
-        crate::emacs_core::coding::EolType::Undecided
-    )
-}
-
 /// GNU's whole `decode_eol` (src/coding.c:6760) for a coding-system NAME:
 /// resolve the eol type against the text -- detecting when the name leaves it
 /// undecided -- and then convert.
 pub(crate) fn decode_eol_text(bytes: &[u8], coding_system: &str) -> Vec<u8> {
     decode_eol_bytes(bytes, coding_name_eol(coding_system).for_decode(bytes))
+}
+
+/// One run of a subprocess's output, decoded and with its end of line resolved
+/// -- and the resolution kept.
+///
+/// This is GNU's `decode_coding` (src/coding.c:7398-7484) for the one caller
+/// that has to REPORT what it decoded with: the decoder runs first, then
+/// `decode_eol` scans the text the decoder produced (:7481), and
+/// `read_process_output_set_last_coding_system` (src/process.c:6417-6425) reads
+/// the resulting `coding->id` back out into `Vlast_coding_system_used` and into
+/// the process's own decode slot.
+///
+/// Returning the resolution rather than only the text is the whole point.  A
+/// subprocess is decoded through ONE `struct coding_system` in GNU, so once
+/// `adjust_coding_eol_type` has fired the choice is sticky for that process; the
+/// only way to be sticky here -- where each read is a separate call -- is for
+/// the call to hand its answer back to the process record.
+#[derive(Debug)]
+pub(crate) struct DecodedProcessRun {
+    /// The text to insert, after both conversions.
+    pub(crate) text: crate::heap_types::LispString,
+    /// What `decode_eol` decided, including whether the coding system's NAME
+    /// moved with it.
+    pub(crate) eol: crate::emacs_core::coding::DecodeEolResolution,
+}
+
+/// Decode one run of subprocess output under CODING_SYSTEM.
+///
+/// The coding-system name handed to the decoder has its EOL leg spent
+/// (`coding_name_with_eol_spent`), so the single end-of-line pass is the one
+/// below, on the text the decoder PRODUCED.  That is GNU's order -- `decode_eol`
+/// runs outside every `decode_coding_*` (src/coding.c:7481) -- and it is the
+/// order the resolution has to be computed in for the answer to be reportable:
+/// the scan has to see the same bytes the conversion will touch.
+pub(crate) fn decode_process_run(bytes: &[u8], coding_system: &str) -> DecodedProcessRun {
+    use crate::emacs_core::coding::ResolvedEol;
+    let eol = coding_name_eol(coding_system);
+    let body = coding_name_with_eol_spent(coding_system);
+    let decoded = decode_bytes_to_lisp_string(bytes, &body);
+    let resolution = eol.resolve_for_decode(decoded.as_bytes());
+    let text = match resolution.eol() {
+        ResolvedEol::Unix => decoded,
+        // Rebuilt the way `decode_bytes_to_lisp_string` built it above, so the
+        // conversion cannot change the string's storage form.  CR and LF are
+        // ASCII and no Emacs multibyte sequence contains an ASCII byte, so
+        // substituting at the byte level is exactly a substitution at the
+        // character level.
+        converting => crate::heap_types::LispString::from_emacs_bytes(decode_eol_bytes(
+            decoded.as_bytes(),
+            converting,
+        )),
+    };
+    DecodedProcessRun {
+        text,
+        eol: resolution,
+    }
+}
+
+/// GNU `CODING_ID_NAME (coding->id)` after one run of process output
+/// (src/process.c:6421): the coding system a decode reports having used.
+///
+/// When `adjust_coding_eol_type` fired, that is the SUBSIDIARY it rewrote the
+/// id to -- and the subsidiary comes out of the coding system's own eol vector,
+/// which holds canonical names, so an alias reports its base's subsidiary
+/// (measured under GNU 31.0.90: `coding-system-for-read` `latin-1` over a
+/// CR-only child answers `iso-latin-1-mac`).  When it did not fire, the name is
+/// the one the coding system was set up with, verbatim.
+pub(crate) fn process_run_coding_name(
+    coding_systems: &crate::emacs_core::coding::CodingSystemManager,
+    coding_system: &str,
+    eol: crate::emacs_core::coding::DecodeEolResolution,
+) -> String {
+    match eol.adjusted() {
+        Some(resolved) => coding_systems
+            .canonical_name_for_detected_eol(coding_system, resolved.suffix())
+            .unwrap_or_else(|| coding_system.to_owned()),
+        None => coding_system.to_owned(),
+    }
+}
+
+/// GNU `coding_inherit_eol_type (CODING_SYSTEM, Qnil)` (src/coding.c:5972-6008).
+///
+/// A coding system whose eol type is already concrete is returned unchanged; a
+/// VECTOR one takes the SYSTEM's end-of-line type, which is `Qunix` everywhere
+/// but DOS/Windows, i.e. `AREF (eol_type, 0)`.  `read_process_output_set_last_coding_system`
+/// uses it to complete a process's ENCODE coding system from the coding its
+/// output was just decoded with (src/process.c:6442-6444).
+pub(crate) fn coding_inherit_unix_eol_type(
+    coding_systems: &crate::emacs_core::coding::CodingSystemManager,
+    coding_system: &str,
+) -> String {
+    if !matches!(
+        coding_name_eol(coding_system),
+        crate::emacs_core::coding::EolType::Undecided
+    ) {
+        return coding_system.to_owned();
+    }
+    coding_systems
+        .canonical_name_for_detected_eol(coding_system, "-unix")
+        .unwrap_or_else(|| coding_system.to_owned())
 }
 
 /// The decode-side mirror of `expand_source_eol`, keyed on the RESOLVED EOL type
@@ -862,17 +953,38 @@ enum Utf16Endian {
     Little,
 }
 
-fn utf16_coding_variant(coding_system: &str) -> Option<(Utf16Endian, bool)> {
+/// GNU's `enum utf_bom_type` (src/coding.c) for the UTF-16 family, which has
+/// all THREE of its values in play -- measured under GNU 31.0.90 as
+/// `(coding-system-get CS :bom)` over the six shipped systems.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Utf16Bom {
+    /// `:bom nil` -- `utf-16be`, `utf-16le`.  A leading `FE FF` is DATA.
+    Without,
+    /// `:bom t` -- `utf-16be-with-signature`, `utf-16le-with-signature` and
+    /// their `utf-16-be`/`utf-16-le` aliases.  `decode_coding_utf_16` reads two
+    /// bytes and consumes them ONLY if they are the BOM for the system's own
+    /// endianness, rewinding otherwise (src/coding.c:1594-1609).
+    Declared,
+    /// `:bom (LE . BE)` -- `utf-16`, the auto system.  The decoder consumes
+    /// nothing: "We have already tried to detect BOM and failed in
+    /// detect_coding" (src/coding.c:1612-1617).  A BOM is consumed only because
+    /// `detect_coding` re-based the coding system to one of the two
+    /// `-with-signature` systems first, and those are [`Utf16Bom::Declared`].
+    Detect,
+}
+
+fn utf16_coding_variant(coding_system: &str) -> Option<(Utf16Endian, Utf16Bom)> {
     let base = coding_system
         .strip_suffix("-unix")
         .or_else(|| coding_system.strip_suffix("-dos"))
         .or_else(|| coding_system.strip_suffix("-mac"))
         .unwrap_or(coding_system);
     match base {
-        "utf-16" | "utf-16-be" | "utf-16be-with-signature" => Some((Utf16Endian::Big, true)),
-        "utf-16-le" | "utf-16le-with-signature" => Some((Utf16Endian::Little, true)),
-        "utf-16be" => Some((Utf16Endian::Big, false)),
-        "utf-16le" => Some((Utf16Endian::Little, false)),
+        "utf-16" => Some((Utf16Endian::Big, Utf16Bom::Detect)),
+        "utf-16-be" | "utf-16be-with-signature" => Some((Utf16Endian::Big, Utf16Bom::Declared)),
+        "utf-16-le" | "utf-16le-with-signature" => Some((Utf16Endian::Little, Utf16Bom::Declared)),
+        "utf-16be" => Some((Utf16Endian::Big, Utf16Bom::Without)),
+        "utf-16le" => Some((Utf16Endian::Little, Utf16Bom::Without)),
         _ => None,
     }
 }
@@ -938,10 +1050,33 @@ fn encode_utf16_text(s: &str, endian: Utf16Endian, bom: bool) -> Vec<u8> {
     out
 }
 
-fn decode_utf16_bytes(bytes: &[u8], default_endian: Utf16Endian) -> String {
-    let (endian, body) = match bytes {
-        [0xFE, 0xFF, rest @ ..] => (Utf16Endian::Big, rest),
-        [0xFF, 0xFE, rest @ ..] => (Utf16Endian::Little, rest),
+/// GNU `decode_coding_utf_16` (src/coding.c:1580-1690).
+///
+/// The BOM rule is the coding system's, not the bytes': only a
+/// [`Utf16Bom::Declared`] system reads a signature, and only when it is the
+/// signature for that system's OWN endianness -- otherwise the two bytes are
+/// rewound and decoded as data (:1601-1609).  Measured under GNU 31.0.90:
+///
+/// ```text
+/// (decode-coding-string "\xff\xfe a\0 \r\0 \n\0 b\0" 'utf-16le)  => (65279 97 10 98)
+/// (decode-coding-string "\xff\xfe a\0 b\0"           'utf-16-be) => (65534 24832 25088)
+/// ```
+///
+/// The first keeps U+FEFF because `utf-16le`'s `:bom` is nil; the second reads
+/// the little-endian signature big-endianly, as U+FFFE, because `utf-16-be`
+/// declares a BIG-endian one and this is not it.
+fn decode_utf16_bytes(bytes: &[u8], default_endian: Utf16Endian, bom: Utf16Bom) -> String {
+    let (endian, body) = match (bom, bytes) {
+        (Utf16Bom::Declared, [0xFE, 0xFF, rest @ ..])
+            if matches!(default_endian, Utf16Endian::Big) =>
+        {
+            (Utf16Endian::Big, rest)
+        }
+        (Utf16Bom::Declared, [0xFF, 0xFE, rest @ ..])
+            if matches!(default_endian, Utf16Endian::Little) =>
+        {
+            (Utf16Endian::Little, rest)
+        }
         _ => (default_endian, bytes),
     };
 
@@ -954,8 +1089,19 @@ fn decode_utf16_bytes(bytes: &[u8], default_endian: Utf16Endian) -> String {
             Utf16Endian::Little => u16::from_le_bytes(pair),
         });
     }
-    if !chunks.remainder().is_empty() {
-        units.push(0xFFFD);
+    if let &[trailing] = chunks.remainder() {
+        // An odd trailing byte is not a unit.  GNU runs out of source mid-pair,
+        // and the last block flushes the byte as a character of its own
+        // (src/coding.c:7433-7458): `ASCII_CHAR_P (c) ? c : BYTE8_TO_CHAR (c)`.
+        // Measured, `(decode-coding-string "\xfe\xff\0" 'utf-16)` is
+        // `(65279 0)`.  A trailing byte >= 0x80 becomes an eight-bit character
+        // in GNU, which this `String`-returning decoder cannot represent; that
+        // one case still answers U+FFFD.
+        units.push(if trailing < 0x80 {
+            u16::from(trailing)
+        } else {
+            0xFFFD
+        });
     }
 
     std::char::decode_utf16(units)
@@ -1223,7 +1369,10 @@ pub fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str
 /// nothing here may perform EOL conversion.
 fn encode_lisp_string_eol_spent(s: &crate::heap_types::LispString, coding_system: &str) -> Vec<u8> {
     if let Some((endian, bom)) = utf16_coding_variant(coding_system) {
-        return encode_utf16_lisp_string(s, endian, bom);
+        // GNU `encode_coding_utf_16` writes a signature whenever the coding
+        // system's `:bom` is not nil (src/coding.c), so the auto `utf-16` -- whose
+        // `:bom` is a cons -- writes one too, in its own big-endian order.
+        return encode_utf16_lisp_string(s, endian, bom != Utf16Bom::Without);
     }
 
     let family = coding_system_family(coding_system);
@@ -1320,7 +1469,7 @@ fn encode_lisp_string_eol_spent(s: &crate::heap_types::LispString, coding_system
 pub fn encode_string(s: &str, coding_system: &str) -> Vec<u8> {
     let eol_text = expand_source_eol_text(s, coding_system);
     if let Some((endian, bom)) = utf16_coding_variant(coding_system) {
-        return encode_utf16_text(&eol_text, endian, bom);
+        return encode_utf16_text(&eol_text, endian, bom != Utf16Bom::Without);
     }
 
     if let Some(charset) = SingleByteCharset::for_coding_system(coding_system) {
@@ -1357,8 +1506,8 @@ pub fn encode_string(s: &str, coding_system: &str) -> Vec<u8> {
 /// Decode bytes to a string using the specified coding system.
 /// Currently only UTF-8 is supported.
 pub fn decode_bytes(bytes: &[u8], coding_system: &str) -> String {
-    if let Some((endian, _bom)) = utf16_coding_variant(coding_system) {
-        return decode_utf16_bytes(bytes, endian);
+    if let Some((endian, bom)) = utf16_coding_variant(coding_system) {
+        return decode_utf16_bytes(bytes, endian, bom);
     }
 
     let mut bytes = decode_eol_text(bytes, coding_system);
@@ -3416,6 +3565,66 @@ fn detect_undecided_coding(
     crate::emacs_core::coding::detect_highest_coding_system_for_unibyte_bytes(coding_systems, bytes)
 }
 
+/// The BOM-detecting arms of GNU's `detect_coding` (src/coding.c:6702-6742).
+///
+/// Two coding systems are "auto" in a way `undecided` is not: their `:bom`
+/// property is a CONS of the two concrete systems the byte-order mark chooses
+/// between, and their detection category is `coding_category_utf_8_auto` /
+/// `coding_category_utf_16_auto` rather than `coding_category_undecided`.
+/// `detect_coding` gives each its own arm, and each arm ends in
+/// `setup_coding_system (found, coding)` -- so the coding system a `utf-16`
+/// decode actually RUNS with, and reports, is one of the two concrete ones.
+/// Measured under GNU 31.0.90:
+///
+/// ```text
+/// (decode-coding-string "\xfe\xff\0a\0\r\0\n\0b" 'utf-16) => last-coding-system-used  utf-16be-with-signature-dos
+/// (decode-coding-string "\xff\xfe" ... 'utf-16)           => last-coding-system-used  utf-16le-with-signature-dos
+/// (decode-coding-string "\0a\0\r\0\n\0b" 'utf-16)         => last-coding-system-used  utf-16-dos
+/// ```
+///
+/// The third row is the one that says what "found" means: with no BOM,
+/// `detect_coding_utf_16` sets neither `CATEGORY_MASK_UTF_16_LE` nor `_BE` --
+/// those two flags come ONLY from the two BOM branches (src/coding.c:1513-1526)
+/// -- so `found` stays nil and the coding system keeps its own name and its own
+/// default (big-endian) byte order.  The `_NOSIG` categories that the pattern
+/// scan below those branches can set are a different pair of flags and the auto
+/// arm does not look at them.
+///
+/// Returns `None` when GNU's `found` would be nil, i.e. when nothing re-bases.
+fn detect_bom_auto_coding(base: &str, bytes: &[u8]) -> Option<&'static str> {
+    match base {
+        // src/coding.c:6724-6742.  `coding->head_ascii = 0` and then
+        // `detect_coding_utf_16`, which REFUSES an odd-length last block
+        // outright (src/coding.c:1501-1507) before it looks at a signature --
+        // measured, `(decode-coding-string "\xfe\xff\0" 'utf-16)` answers
+        // `utf-16` and keeps U+FEFF as a character.
+        "utf-16" if bytes.len() % 2 == 1 => None,
+        "utf-16" => match bytes {
+            [0xFF, 0xFE, ..] => Some("utf-16le-with-signature"),
+            [0xFE, 0xFF, ..] => Some("utf-16be-with-signature"),
+            _ => None,
+        },
+        // src/coding.c:6702-6722.  All-ASCII takes `XCDR` without even running
+        // the detector; otherwise `detect_coding_utf_8` decides, and a BOM
+        // takes `XCAR`.  Either way `found` is non-nil whenever the text is
+        // valid UTF-8, so `utf-8-auto` re-bases to a system that is not `auto`.
+        "utf-8-auto" => {
+            if bytes.iter().all(|byte| byte.is_ascii()) {
+                return Some("utf-8");
+            }
+            if std::str::from_utf8(bytes).is_err() {
+                return None;
+            }
+            if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                Some("utf-8-with-signature")
+            } else {
+                Some("utf-8")
+            }
+        }
+        _ => None,
+    }
+}
+
 /// Re-attach an explicit (concrete) eol_type to a detected base coding system,
 /// so a bare EOL alias (`dos`/`mac`/`unix`) still forces its EOL after the
 /// character code has been detected (GNU forces the specified eol_type in
@@ -3547,13 +3756,13 @@ fn builtin_coding_string_in_context(
     // code but forces that eol in `decode_eol` rather than auto-detecting it, so
     // re-attach the explicit EOL suffix to the detected coding system.
     if !encode {
-        let base = coding_system_base(&coding);
+        let base = coding_system_base(&coding).to_owned();
         if (base == "undecided" || base == "prefer-utf-8")
             && let Some(src) = args[0].as_lisp_string()
         {
             let bytes = lisp_string_coding_source_bytes(src);
             let detected =
-                detect_undecided_coding(&ctx.coding_systems, &bytes, base == "prefer-utf-8")
+                detect_undecided_coding(&ctx.coding_systems, &bytes, base == *"prefer-utf-8")
                     .ok_or_else(|| {
                         signal(
                             LispCondition::CodingSystemError,
@@ -3578,6 +3787,21 @@ fn builtin_coding_string_in_context(
             if coding_system_base(&coding) != "undecided" {
                 reported_coding = coding.clone();
             }
+        }
+        // The other two "not fully specified" categories: `utf-16` and
+        // `utf-8-auto` pick a concrete BASE from the byte-order mark rather
+        // than from the category priority list, and they end in the same
+        // `setup_coding_system (found, coding)` (src/coding.c:6743-6754).
+        // `detect_coding` runs exactly ONE of its three arms, so this is keyed
+        // on the ORIGINAL base: a `undecided` decode that detected `utf-16`
+        // above does not then get re-based a second time.
+        if let Some(src) = args[0].as_lisp_string()
+            && let Some(found) =
+                detect_bom_auto_coding(&base, &lisp_string_coding_source_bytes(src))
+        {
+            coding = apply_explicit_eol_suffix(found, coding_name_eol(&coding));
+            args[1] = Value::symbol(&coding);
+            reported_coding = coding.clone();
         }
     }
     // Charset-type coding systems (cp437, koi8-r, chinese-gbk, …) encode and

@@ -614,7 +614,7 @@ fn insert_process_output_in_state(
 fn write_output_target_in_state(
     eval: &mut super::eval::Context,
     target: &OutputTarget,
-    decoding: ProcessOutputDecoding,
+    decoding: &mut ProcessOutputDecoding,
     output: &[u8],
     append: bool,
 ) -> Result<(), Flow> {
@@ -624,8 +624,31 @@ fn write_output_target_in_state(
             // Only the BUFFER destination decodes.  GNU hands a `(:file NAME)`
             // destination straight to the child as its stdout fd
             // (src/callproc.c:570), so those bytes are never converted.
-            let text = decoding.decode(output);
-            insert_process_output_in_state(eval, destination, &text)
+            let run = decoding.decode(output);
+            // `Vlast_coding_system_used = CODING_ID_NAME (process_coding.id)`
+            // (src/callproc.c:913).  It sits inside the branch that READ the
+            // child's output into a buffer, so a `(:file ...)` or discarded
+            // destination -- where GNU never opens fd0 -- leaves the variable
+            // alone; measured under GNU 31.0.90, `(call-process "sh" nil nil
+            // nil "-c" "printf 'a\\r\\n'")` does not move it.  The name is the
+            // one `decode_eol` left in `coding->id`, so an undecided end of
+            // line reports the subsidiary it detected.
+            let used = crate::encoding::process_run_coding_name(
+                &eval.coding_systems,
+                run.coding_name(),
+                run.coding_eol(),
+            );
+            eval.set_variable("last-coding-system-used", Value::symbol(&used));
+            // `adjust_coding_eol_type` rewrites `coding->id` IN PLACE, and
+            // `Fcall_process` reads the child's stdout and stderr through that
+            // one `struct coding_system` -- when DESTINATION is `t` they are
+            // literally the same file descriptor (`fd_error = fd_output`,
+            // src/callproc.c).  So an end-of-line type resolved by the first
+            // run decodes the rest of the child's output too, and the reported
+            // name does not fall back to the unadjusted one for a second,
+            // possibly EMPTY, run.
+            *decoding = decoding.adjusted_to(&used, run.coding_eol());
+            insert_process_output_in_state(eval, destination, &run.text)
         }
         OutputTarget::File(path) => {
             // GNU opens the `(:file DEST)` output file at spawn time with
@@ -663,11 +686,14 @@ fn route_captured_output_in_state(
     stdout: &[u8],
     stderr: &[u8],
 ) -> Result<(), Flow> {
-    write_output_target_in_state(eval, &destination.stdout, decoding, stdout, false)?;
+    // ONE decoding for the whole call, carried by value from here down, because
+    // GNU has one `struct coding_system` for the whole call.
+    let mut decoding = decoding;
+    write_output_target_in_state(eval, &destination.stdout, &mut decoding, stdout, false)?;
     match destination.stderr {
         StderrTarget::Discard => Ok(()),
         StderrTarget::ToStdoutTarget => {
-            write_output_target_in_state(eval, &destination.stdout, decoding, stderr, true)
+            write_output_target_in_state(eval, &destination.stdout, &mut decoding, stderr, true)
         }
         StderrTarget::File => {
             let path = destination
@@ -675,7 +701,13 @@ fn route_captured_output_in_state(
                 .as_ref()
                 .ok_or_else(|| signal("error", vec![Value::string("Missing stderr file target")]))?
                 .clone();
-            write_output_target_in_state(eval, &OutputTarget::File(path), decoding, stderr, false)
+            write_output_target_in_state(
+                eval,
+                &OutputTarget::File(path),
+                &mut decoding,
+                stderr,
+                false,
+            )
         }
     }
 }

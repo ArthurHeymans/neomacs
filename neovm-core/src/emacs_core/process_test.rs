@@ -2181,7 +2181,9 @@ fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
     let deadline = std::time::Instant::now() + Duration::from_secs(1);
     let mut output = String::new();
     while std::time::Instant::now() < deadline && !output.contains('\n') {
-        if let Some(chunk) = processes.read_process_output(pid, ProcessOutputSink::DecodedText) {
+        if let Some(chunk) = processes
+            .read_process_output_without_recording_coding(pid, ProcessOutputSink::DecodedText)
+        {
             output.push_str(&process_output_runtime_string(&chunk));
         }
         processes.check_child_status_change(pid);
@@ -9687,6 +9689,211 @@ fn make_network_process_coding_reaches_the_service_alist_per_half() {
             "file-error ",
             "(binary . utf-8-unix) ",
             "(koi8-r . utf-8-unix))",
+        )
+    );
+}
+
+/// DIVERGENCES.md entry 139: GNU writes the coding system a run of process
+/// output was ACTUALLY decoded with back onto the process and into
+/// `last-coding-system-used` (`read_process_output_set_last_coding_system`,
+/// src/process.c:6417-6446).
+///
+/// Every expected value below was measured by running `tmp/pw46/final.el` under
+/// GNU Emacs 31.0.90.  All of them use `:connection-type 'pipe`: on a PTY, GNU's
+/// EOF read returns -1 and `read_process_output` bails at src/process.c:6316
+/// before the last block is decoded, which silently drops the decoder's
+/// carryover -- a separate divergence that would otherwise be measured here
+/// instead of the coding chain.
+#[test]
+fn process_output_write_back_reports_the_coding_actually_used() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw139-run (script setup)
+               (let ((buf (generate-new-buffer " *pw139*")))
+                 (unwind-protect
+                     (let ((p (funcall setup buf script)))
+                       (while (accept-process-output p 1))
+                       (while (process-live-p p) (accept-process-output p 0.05))
+                       (list (append (with-current-buffer buf (buffer-string)) nil)
+                             (process-coding-system p)
+                             last-coding-system-used))
+                   (kill-buffer buf))))
+             (defun pw139-spawn (buf script &rest keys)
+               (apply #'make-process :name "pw139" :buffer buf :sentinel #'ignore
+                      :connection-type 'pipe
+                      :command (list "{sh}" "-c" script) keys))
+             (let ((default-process-coding-system '(utf-8-unix . utf-8-unix)))
+               (list
+                ;; An undecided end of line DETECTS, and the answer is written
+                ;; back: the slot and the variable both become the subsidiary.
+                (pw139-run "printf 'a\\r\\nb\\r\\n'"
+                           (lambda (b s) (let ((coding-system-for-read 'utf-8))
+                                           (pw139-spawn b s))))
+                (pw139-run "printf 'a\\rb\\r'"
+                           (lambda (b s) (let ((coding-system-for-read 'utf-8))
+                                           (pw139-spawn b s))))
+                ;; No terminator at all is GNU's EOL_SEEN_NONE: `decode_eol'
+                ;; skips `adjust_coding_eol_type' (src/coding.c:6805), so the
+                ;; name does NOT grow a suffix.
+                (pw139-run "printf 'abc'"
+                           (lambda (b s) (let ((coding-system-for-read 'utf-8))
+                                           (pw139-spawn b s))))
+                ;; nil is `undecided', and with a nil ENCODE half the write-back
+                ;; completes it too (`coding_inherit_eol_type', :6442-6444).
+                (pw139-run "printf 'a\\r\\nb\\r\\n'"
+                           (lambda (b s) (let ((default-process-coding-system nil))
+                                           (pw139-spawn b s))))
+                (pw139-run "printf 'abc'"
+                           (lambda (b s) (let ((default-process-coding-system nil))
+                                           (pw139-spawn b s))))
+                ;; A concrete eol type is not adjusted, so nothing moves.
+                (pw139-run "printf 'a\\r\\nb\\r\\n'"
+                           (lambda (b s) (let ((coding-system-for-read 'utf-8-unix))
+                                           (pw139-spawn b s))))
+                ;; An ALIAS reports its base's subsidiary, because the eol
+                ;; vector in the shared spec holds canonical names.
+                (pw139-run "printf 'a\\rb\\r'"
+                           (lambda (b s) (let ((coding-system-for-read 'latin-1))
+                                           (pw139-spawn b s))))
+                ;; `binary' converts nothing and adjusts nothing, but still
+                ;; reports (GNU sets the variable for every decoded run).
+                (pw139-run "printf 'a\\r\\nb\\r\\n'"
+                           (lambda (b s) (let ((coding-system-for-read 'binary))
+                                           (pw139-spawn b s))))
+                ;; `raw-text' drops the character half and DETECTS the eol half.
+                (pw139-run "printf 'a\\r\\nb\\r\\n'"
+                           (lambda (b s) (let ((coding-system-for-read 'raw-text))
+                                           (pw139-spawn b s)))))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((97 10 98 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((97 10 98 10) (utf-8-mac . utf-8-unix) utf-8-mac) ",
+            "((97 98 99) (utf-8 . utf-8-unix) utf-8) ",
+            "((97 10 98 10) (undecided-dos . undecided-dos) undecided-dos) ",
+            "((97 98 99) (undecided . undecided-unix) undecided) ",
+            "((97 13 10 98 13 10) (utf-8-unix . utf-8-unix) utf-8-unix) ",
+            "((97 10 98 10) (iso-latin-1-mac . utf-8-unix) iso-latin-1-mac) ",
+            "((97 13 10 98 13 10) (binary . utf-8-unix) binary) ",
+            "((97 10 98 10) (raw-text-dos . utf-8-unix) raw-text-dos))",
+        )
+    );
+}
+
+/// DIVERGENCES.md entry 139: a subprocess is decoded through ONE
+/// `struct coding_system` in GNU, so an end-of-line type detected by one chunk
+/// is the type the NEXT chunk decodes with.
+///
+/// The diagnostic shape is not the obvious one.  A first chunk of CR LF
+/// followed by a chunk of bare LF reads the same either way, because DOS
+/// decoding leaves a lone LF alone; what separates sticky from per-chunk is a
+/// later chunk of bare CRs, which a dos process keeps and a freshly-detecting
+/// one would call `mac' and convert.  Measured under GNU 31.0.90.
+#[test]
+fn process_eol_detection_is_sticky_for_the_process_not_the_chunk() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw139s-run (script &optional unibyte)
+               (let ((buf (generate-new-buffer " *pw139s*")))
+                 (unwind-protect
+                     (progn
+                       (when unibyte (with-current-buffer buf (set-buffer-multibyte nil)))
+                       (let ((p (make-process :name "pw139s" :buffer buf :sentinel #'ignore
+                                              :connection-type 'pipe
+                                              :command (list "{sh}" "-c" script))))
+                         (while (accept-process-output p 1))
+                         (while (process-live-p p) (accept-process-output p 0.05))
+                         (list (append (with-current-buffer buf (buffer-string)) nil)
+                               (car (process-coding-system p)))))
+                   (kill-buffer buf))))
+             (let ((default-process-coding-system '(utf-8-unix . utf-8-unix))
+                   (coding-system-for-read 'utf-8))
+               (list
+                ;; dos first, then bare CRs: the CRs SURVIVE.
+                (pw139s-run "printf 'a\\r\\nb\\r\\n'; sleep 0.6; printf 'x\\ry\\r'")
+                ;; mac first, then bare LFs: nothing left to convert.
+                (pw139s-run "printf 'a\\rb\\r'; sleep 0.6; printf 'x\\ny\\n'")
+                ;; dos first, then bare LFs -- the shape that is NOT diagnostic.
+                (pw139s-run "printf 'a\\r\\nb\\r\\n'; sleep 0.6; printf 'x\\ny\\n'")
+                ;; A first chunk with no terminator decides nothing, so the
+                ;; second chunk still detects (GNU's EOL_SEEN_NONE).
+                (pw139s-run "printf 'abc'; sleep 0.6; printf 'x\\ry\\r'")
+                ;; A CR LF split ACROSS the two reads.  GNU holds a trailing CR
+                ;; back only once the eol type is concretely dos, so here the
+                ;; first chunk detects `mac' on its own and the second chunk
+                ;; inherits it -- CR LF becomes two newlines.
+                (pw139s-run "printf 'a\\r'; sleep 0.6; printf '\\nb\\r\\n'")
+                ;; The same split under a CONCRETE dos coding, where GNU's
+                ;; `eol_dos' does hold the CR back (src/coding.c:1348).
+                (let ((coding-system-for-read 'utf-8-dos))
+                  (pw139s-run "printf 'a\\r'; sleep 0.6; printf '\\nb\\r\\n'"))
+                ;; A unibyte process buffer: the raw-text downgrade detects and
+                ;; sticks in exactly the same way.
+                (pw139s-run "printf 'caf\\303\\251\\r\\n'; sleep 0.6; printf 'x\\ry\\r'" t))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((97 10 98 10 120 13 121 13) utf-8-dos) ",
+            "((97 10 98 10 120 10 121 10) utf-8-mac) ",
+            "((97 10 98 10 120 10 121 10) utf-8-dos) ",
+            "((97 98 99 120 10 121 10) utf-8-mac) ",
+            "((97 10 10 98 10 10) utf-8-mac) ",
+            "((97 10 98 10) utf-8-dos) ",
+            "((99 97 102 195 169 10 120 13 121 13) raw-text-dos))",
+        )
+    );
+}
+
+/// DIVERGENCES.md entry 139: `call-process` reports too
+/// (`Vlast_coding_system_used = CODING_ID_NAME (process_coding.id)`,
+/// src/callproc.c:913) -- and only when it read the child's output into a
+/// buffer, because that assignment sits inside the branch guarded by an open
+/// `fd0`.  Measured under GNU Emacs 31.0.90.
+#[test]
+fn call_process_reports_the_coding_its_output_was_decoded_with() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw139c-run (coding script &optional unibyte)
+               (with-temp-buffer
+                 (when unibyte (set-buffer-multibyte nil))
+                 (let ((coding-system-for-read coding))
+                   (call-process "{sh}" nil t nil "-c" script))
+                 (list (append (buffer-string) nil) last-coding-system-used)))
+             (list
+              (pw139c-run 'utf-8 "printf 'a\\r\\nb\\r\\n'")
+              (pw139c-run 'utf-8 "printf 'abc'")
+              (pw139c-run 'latin-1 "printf 'a\\rb\\r'")
+              (pw139c-run 'binary "printf 'a\\r\\nb\\r\\n'")
+              (pw139c-run 'utf-8 "printf 'caf\\303\\251\\r\\n'" t)
+              ;; DESTINATION nil: GNU never opens fd0, so the variable keeps
+              ;; whatever it held.
+              (progn (setq last-coding-system-used 'pw139-untouched)
+                     (call-process "{sh}" nil nil nil "-c" "printf 'a\\r\\n'")
+                     last-coding-system-used)))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((97 10 98 10) utf-8-dos) ",
+            "((97 98 99) utf-8) ",
+            "((97 10 98 10) iso-latin-1-mac) ",
+            "((97 13 10 98 13 10) binary) ",
+            "((99 97 102 195 169 10) raw-text-dos) ",
+            "pw139-untouched)",
         )
     );
 }

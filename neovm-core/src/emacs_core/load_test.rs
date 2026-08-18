@@ -14736,3 +14736,48 @@ fn bootstrap_source_fingerprint_catches_a_same_length_edit_in_one_mtime_tick() {
          filesystem reports an unchanged mtime"
     );
 }
+
+/// DIVERGENCES.md entry 139: `load`'s private end-of-line detector is gone, and
+/// this is the evidence that deleting it changed nothing.
+///
+/// `source_emacs_coding` / `detect_source_eol` were a THIRD copy of GNU's
+/// `decode_eol` fold (src/coding.c:6794-6806), next to the shared
+/// `detected_decoded_eol` and the `detect_eol` port that serves
+/// `detect-coding-string`.  Entry 134 recorded it as "GNU's rules minus the
+/// stray-^M-in-a-DOS-file case"; that is not right -- its `saw_lf` /
+/// `saw_crlf` / `saw_lone_cr` cascade answers `Dos' for exactly the mixture
+/// GNU's stray-^M rule answers `EOL_SEEN_CRLF' for, and it agrees on every
+/// other combination too.  The rows below are the whole truth table of the
+/// fold, and the old detector and the shared one give the same answer on all of
+/// them, which is why the deletion is a deduplication and not a behaviour
+/// change.
+#[test]
+fn load_source_eol_detection_matches_the_shared_decoder() {
+    crate::test_utils::init_test_tracing();
+    let rows: &[(&[u8], &[u8])] = &[
+        // LF only -> unix.
+        (b"a\nb\n", b"a\nb\n"),
+        // CR LF only -> dos.
+        (b"a\r\nb\r\n", b"a\nb\n"),
+        // CR only -> mac.
+        (b"a\rb\r", b"a\nb\n"),
+        // CR LF and a stray CR, with no bare LF: GNU's "DOS-style EOLs in a
+        // file with stray ^M characters" (src/coding.c:6794-6797).
+        (b"a\r\nb\rc\r\n", b"a\nb\rc\n"),
+        // Any other mixture is unix, i.e. nothing converts.
+        (b"a\nb\r\nc\n", b"a\nb\r\nc\n"),
+        (b"a\rb\nc\n", b"a\rb\nc\n"),
+        (b"a\r\nb\rc\nd\r\n", b"a\r\nb\rc\nd\r\n"),
+        // No terminator at all: EOL_SEEN_NONE, nothing converts.
+        (b"abc", b"abc"),
+        (b"", b""),
+    ];
+    for (source, expected) in rows {
+        let decoded = decode_emacs_utf8_source_lisp(source);
+        assert_eq!(
+            decoded.as_bytes(),
+            *expected,
+            "source {source:?} should decode to {expected:?}"
+        );
+    }
+}

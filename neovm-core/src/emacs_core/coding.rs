@@ -215,11 +215,77 @@ impl EolType {
     /// undecided eol type therefore means DETECT, not "leave alone" -- the
     /// distinction this whole type exists to keep visible.
     pub(crate) fn for_decode(self, decoded: &[u8]) -> ResolvedEol {
+        self.resolve_for_decode(decoded).eol()
+    }
+
+    /// The same resolution, keeping GNU's OTHER half of it.
+    ///
+    /// `adjust_coding_eol_type` (src/coding.c:6471-6497) does two things in one
+    /// call: it picks the eol type `decode_eol` converts with, and it REPLACES
+    /// `coding->id` with the subsidiary that carries it.  Only the VECTOR case
+    /// does the second -- `decode_eol` guards the call with
+    /// `if (eol_seen != EOL_SEEN_NONE)` (src/coding.c:6805) -- and every
+    /// reporting slot in Emacs is downstream of that rewrite:
+    /// `last-coding-system-used` (src/coding.c:9497),
+    /// `(process-coding-system P)` (src/process.c:6421-6425) and, through it,
+    /// what the NEXT run of the same process decodes with.
+    ///
+    /// [`for_decode`](Self::for_decode) throws the second half away, which is
+    /// safe only where nothing reports.  Anything that reports must take this
+    /// one, because a `ResolvedEol` on its own cannot say whether the name
+    /// moved with it.
+    pub(crate) fn resolve_for_decode(self, decoded: &[u8]) -> DecodeEolResolution {
         match self {
-            EolType::Unix => ResolvedEol::Unix,
-            EolType::Dos => ResolvedEol::Dos,
-            EolType::Mac => ResolvedEol::Mac,
-            EolType::Undecided => detected_decoded_eol(decoded).unwrap_or(ResolvedEol::Unix),
+            EolType::Unix => DecodeEolResolution::Specified(ResolvedEol::Unix),
+            EolType::Dos => DecodeEolResolution::Specified(ResolvedEol::Dos),
+            EolType::Mac => DecodeEolResolution::Specified(ResolvedEol::Mac),
+            EolType::Undecided => match detected_decoded_eol(decoded) {
+                Some(resolved) => DecodeEolResolution::Adjusted(resolved),
+                None => DecodeEolResolution::NotSeen,
+            },
+        }
+    }
+}
+
+/// What GNU's `decode_eol` (src/coding.c:6760-6806) decided, in one value:
+/// which end-of-line type the conversion runs with, AND whether the coding
+/// system's NAME moved with it.
+///
+/// The two are one decision in GNU because they are one call --
+/// `adjust_coding_eol_type` returns the eol type and rewrites `coding->id` on
+/// the way past.  Splitting them is how a decoder ends up converting CR LF
+/// while still reporting the undecided name it started from, which is entry
+/// 131's `Vlast_coding_system_used` residual and entry 134's per-chunk
+/// detection, both fixed by returning this instead of a bare [`ResolvedEol`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DecodeEolResolution {
+    /// The coding system's eol type was already concrete, so
+    /// `adjust_coding_eol_type` never ran and the name does not move.
+    Specified(ResolvedEol),
+    /// The eol type was a VECTOR and the scan saw a terminator: GNU replaces
+    /// `coding->id` with the subsidiary carrying this type.
+    Adjusted(ResolvedEol),
+    /// The eol type was a VECTOR and the decoded text held no terminator at all
+    /// (GNU `EOL_SEEN_NONE`).  Nothing converts, and -- because
+    /// `adjust_coding_eol_type` is skipped -- the name stays undecided.
+    NotSeen,
+}
+
+impl DecodeEolResolution {
+    /// The eol type the conversion runs with.  `NotSeen` converts nothing,
+    /// which is `Qunix` (`decode_eol` returns immediately, src/coding.c:6765).
+    pub(crate) fn eol(self) -> ResolvedEol {
+        match self {
+            DecodeEolResolution::Specified(eol) | DecodeEolResolution::Adjusted(eol) => eol,
+            DecodeEolResolution::NotSeen => ResolvedEol::Unix,
+        }
+    }
+
+    /// The subsidiary GNU rewrote `coding->id` to, when it rewrote one.
+    pub(crate) fn adjusted(self) -> Option<ResolvedEol> {
+        match self {
+            DecodeEolResolution::Adjusted(eol) => Some(eol),
+            DecodeEolResolution::Specified(_) | DecodeEolResolution::NotSeen => None,
         }
     }
 }
