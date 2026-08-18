@@ -995,7 +995,6 @@ fn trivial_spec_binding_pop(binding: &SpecBinding) -> Option<TrivialSpecBindingP
             ..
         }
         | SpecBinding::Backtrace2 { .. }
-        | SpecBinding::BacktraceNative { .. }
         | SpecBinding::BacktraceNative { .. } => Some(TrivialSpecBindingPop::NoOwnedArgs),
         SpecBinding::Backtrace {
             args,
