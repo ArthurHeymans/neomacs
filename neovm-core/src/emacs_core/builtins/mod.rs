@@ -663,6 +663,9 @@ mod tests;
 #[cfg(test)]
 mod replace_region_contents_test;
 
+#[cfg(test)]
+mod rust_subrs_shadowed_by_lisp_test;
+
 // -----------------------------------------------------------------------
 // Wrapper functions for builtins that need tracing or non-standard access
 // -----------------------------------------------------------------------
