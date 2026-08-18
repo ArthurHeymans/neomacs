@@ -4019,6 +4019,26 @@ fn match_exactn_char_at(
     if d >= stop {
         return None;
     }
+    // ASCII fast path — an ASCII literal byte is the same character in
+    // every representation mix (pattern/text, unibyte/multibyte), always
+    // one byte long on both sides; when the text byte's case translation
+    // also stays ASCII the whole test is one translate + one compare.
+    // Translations that leave ASCII (exotic case tables) fall through to
+    // the full path below, which recomputes from scratch.
+    let ascii_pat_byte = lit[lit_off];
+    if ascii_pat_byte < 0x80
+        && let Some(&text_byte) = text.get(d)
+        && text_byte < 0x80
+    {
+        let translated = re_tr(translate, text_byte as u32);
+        if translated < 0x80 {
+            return if translated as u8 == ascii_pat_byte {
+                Some((1, 1))
+            } else {
+                None
+            };
+        }
+    }
     let (buf_ch, buf_len) = re_text_char(text, d, target_multibyte)?;
     if target_multibyte {
         let (pat_ch, pat_len) = if pattern_multibyte {
