@@ -630,7 +630,10 @@ pub(crate) fn builtin_string_to_number(
         let mut overflow = false;
         while pos < bytes.len() && bytes[pos].is_ascii_digit() {
             let digit = (bytes[pos] - b'0') as i64;
-            match acc.checked_mul(10).and_then(|value| value.checked_add(digit)) {
+            match acc
+                .checked_mul(10)
+                .and_then(|value| value.checked_add(digit))
+            {
                 Some(value) => acc = value,
                 None => overflow = true,
             }
@@ -2062,8 +2065,7 @@ fn do_format(
             }
             // Props/quoting path: step per character, exactly as before.
             while i < run_end {
-                let (code, char_len) =
-                    crate::emacs_core::emacs_char::string_char(&fmt_bytes[i..]);
+                let (code, char_len) = crate::emacs_core::emacs_char::string_char(&fmt_bytes[i..]);
                 let source_start = format_char_pos;
                 i += char_len;
                 format_char_pos += 1;

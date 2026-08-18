@@ -16082,7 +16082,7 @@ impl Context {
             | SpecBinding::Backtrace { .. }
             | SpecBinding::Backtrace1 { .. }
             | SpecBinding::Backtrace2 { .. }
-        | SpecBinding::BacktraceNative { .. }
+            | SpecBinding::BacktraceNative { .. }
             | SpecBinding::Nop
             | SpecBinding::UnwindProtect { .. }
             | SpecBinding::SaveExcursion { .. }
@@ -16628,7 +16628,7 @@ pub(crate) fn set_default_toplevel_value_in_state(
             | SpecBinding::Backtrace { .. }
             | SpecBinding::Backtrace1 { .. }
             | SpecBinding::Backtrace2 { .. }
-        | SpecBinding::BacktraceNative { .. }
+            | SpecBinding::BacktraceNative { .. }
             | SpecBinding::Nop
             | SpecBinding::UnwindProtect { .. }
             | SpecBinding::SaveExcursion { .. }

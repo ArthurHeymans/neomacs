@@ -508,9 +508,9 @@ pub(crate) fn builtin_percent(
 fn check_integer_coerce_marker(value: &Value) -> Result<Value, Flow> {
     match value.kind() {
         ValueKind::Fixnum(_) | ValueKind::Veclike(VecLikeType::Bignum) => Ok(*value),
-        _ if super::marker::is_marker(value) => Ok(Value::fixnum(
-            super::marker::marker_position_as_int(value)?,
-        )),
+        _ if super::marker::is_marker(value) => {
+            Ok(Value::fixnum(super::marker::marker_position_as_int(value)?))
+        }
         _ => Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("integer-or-marker-p"), *value],
@@ -527,7 +527,11 @@ pub(crate) fn builtin_mod(_eval: &mut super::eval::Context, num: Value, den: Val
     {
         let r = a.checked_rem(b).unwrap_or_default();
         // Sign fixup toward the divisor; |r + b| < |b|, no overflow.
-        let r = if r != 0 && (r < 0) != (b < 0) { r + b } else { r };
+        let r = if r != 0 && (r < 0) != (b < 0) {
+            r + b
+        } else {
+            r
+        };
         return Ok(Value::fixnum(r));
     }
     if num.is_float() || den.is_float() {

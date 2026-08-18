@@ -4155,8 +4155,8 @@ fn match_charset_at(
             let bitmap_len = bytecode[charset_op_pos + 1] as usize & 0x7F;
             let bitmap_start = charset_op_pos + 2;
             let c = translated as usize;
-            let bitmap_hit = (c / 8) < bitmap_len
-                && (bytecode[bitmap_start + c / 8] >> (c % 8)) & 1 != 0;
+            let bitmap_hit =
+                (c / 8) < bitmap_len && (bytecode[bitmap_start + c / 8] >> (c % 8)) & 1 != 0;
             let in_set = bitmap_hit
                 || pattern
                     .charset_class_bits
@@ -4969,10 +4969,10 @@ fn re_match_loop<const SEALED: bool>(
                     let better_than_best = !best_regs_set || d > best_match_end;
                     if !frames.is_empty() {
                         if better_than_best {
-                                best_regs_set = true;
-                                best_match_end = d;
-                                best_regstart.clone_from_slice(regstart);
-                                best_regend.clone_from_slice(regend);
+                            best_regs_set = true;
+                            best_match_end = d;
+                            best_regstart.clone_from_slice(regstart);
+                            best_regend.clone_from_slice(regend);
                         }
                         // Force a backtrack to explore alternative paths.
                         // The stack is non-empty so goto_fail cannot fail.
@@ -4984,8 +4984,8 @@ fn re_match_loop<const SEALED: bool>(
                         // it before finalizing.
                         d = best_match_end;
                         for i in 1..num_regs {
-                                regstart[i] = best_regstart[i];
-                                regend[i] = best_regend[i];
+                            regstart[i] = best_regstart[i];
+                            regend[i] = best_regend[i];
                         }
                     }
                 }

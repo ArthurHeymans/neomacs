@@ -13473,14 +13473,14 @@ mod tests {
         let leaf = lower_nullary_leaf(&ops, &constants).expect("guard after call compiles now");
         let native = match leaf.call(ctx_ptr, &[]) {
             NativeRun::DeoptAt(resume) => {
-                    let DeoptResume {
-                        pc,
-                        stack,
-                        handlers,
-                        binds,
-                        spec_base,
-                        cond_base,
-                    } = *resume;
+                let DeoptResume {
+                    pc,
+                    stack,
+                    handlers,
+                    binds,
+                    spec_base,
+                    cond_base,
+                } = *resume;
                 assert_eq!(pc, 3, "deopt at the 1+ after the call");
                 assert_eq!(
                     cell.cons_car(),
@@ -13551,13 +13551,13 @@ mod tests {
         .unwrap();
         match leaf2.call(ctx_ptr, &[]) {
             NativeRun::DeoptAt(resume) => {
-                    let DeoptResume {
-                        pc,
-                        stack,
-                        handlers,
-                        binds,
-                        ..
-                    } = *resume;
+                let DeoptResume {
+                    pc,
+                    stack,
+                    handlers,
+                    binds,
+                    ..
+                } = *resume;
                 assert_eq!(pc, 2, "deopt at the Add1 op");
                 assert_eq!(stack.len(), 2, "pre-op stack: [callee-sym, arg]");
                 assert_eq!(stack[1], Value::make_int(Value::MOST_POSITIVE_FIXNUM));
@@ -14242,14 +14242,14 @@ mod tests {
                     // The seam reruns the interpreter; nothing further to hold.
                 }
                 NativeRun::DeoptAt(resume) => {
-                        let DeoptResume {
-                            pc,
-                            stack,
-                            handlers,
-                            binds,
-                            spec_base,
-                            cond_base,
-                        } = *resume;
+                    let DeoptResume {
+                        pc,
+                        stack,
+                        handlers,
+                        binds,
+                        spec_base,
+                        cond_base,
+                    } = *resume;
                     // Precise deopt: resume mid-function and the result must
                     // match the pure-interpreter run exactly.
                     let mut vm = crate::emacs_core::bytecode::Vm::from_context(&mut ev);
@@ -14504,14 +14504,14 @@ mod tests {
                     }
                 }
                 NativeRun::DeoptAt(resume) => {
-                        let DeoptResume {
-                            pc,
-                            stack,
-                            handlers,
-                            binds,
-                            spec_base,
-                            cond_base,
-                        } = *resume;
+                    let DeoptResume {
+                        pc,
+                        stack,
+                        handlers,
+                        binds,
+                        spec_base,
+                        cond_base,
+                    } = *resume;
                     // Precise deopt: resume mid-function on the MUTATED state.
                     let resumed = {
                         let mut vm = Vm::from_context(&mut ev);

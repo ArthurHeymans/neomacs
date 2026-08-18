@@ -1613,7 +1613,10 @@ impl SymbolByteCodeCallCache {
         // Insert-side value kinds are disjoint (see the `callee` field doc),
         // so one kind test recovers the wrapper class proven at insert.
         Some(
-            if matches!(entry.callee.kind(), ValueKind::Veclike(VecLikeType::ByteCode)) {
+            if matches!(
+                entry.callee.kind(),
+                ValueKind::Veclike(VecLikeType::ByteCode)
+            ) {
                 ResolvedStackCallTarget::ByteCode {
                     callee: ResolvedByteCodeCallee(entry.callee),
                 }
@@ -1626,12 +1629,22 @@ impl SymbolByteCodeCallCache {
     }
 
     #[inline(always)]
-    fn insert_bytecode(&mut self, symbol: SymId, function_epoch: u64, callee: ResolvedByteCodeCallee) {
+    fn insert_bytecode(
+        &mut self,
+        symbol: SymId,
+        function_epoch: u64,
+        callee: ResolvedByteCodeCallee,
+    ) {
         self.store(symbol, function_epoch, callee.0);
     }
 
     #[inline(always)]
-    fn insert_builtin(&mut self, symbol: SymId, function_epoch: u64, callee: ResolvedBuiltinCallee) {
+    fn insert_builtin(
+        &mut self,
+        symbol: SymId,
+        function_epoch: u64,
+        callee: ResolvedBuiltinCallee,
+    ) {
         self.store(symbol, function_epoch, callee.0);
     }
 
@@ -3004,9 +3017,11 @@ impl<'a> Vm<'a> {
                     }
                 }
             }
-            ResolvedStackCallTarget::Builtin { callee } => InterpreterStackCall::Complete(
-                Self::call_resolved_builtin_from_stack_args(self.ctx, func_val, args_start, nargs, callee),
-            ),
+            ResolvedStackCallTarget::Builtin { callee } => {
+                InterpreterStackCall::Complete(Self::call_resolved_builtin_from_stack_args(
+                    self.ctx, func_val, args_start, nargs, callee,
+                ))
+            }
             ResolvedStackCallTarget::Generic => {
                 let backtrace = self
                     .ctx
@@ -6319,12 +6334,10 @@ impl<'a> Vm<'a> {
                 ))
             } else {
                 match entry.function {
-                    Some(function) => {
-                        Vm::dispatch_builtin_subr_from_stack_args_unchecked(
-                            vm.ctx, function, args_start, nargs,
-                        )
-                        .unwrap_or_else(|| Err(signal(LispCondition::VoidFunction, vec![func_val])))
-                    }
+                    Some(function) => Vm::dispatch_builtin_subr_from_stack_args_unchecked(
+                        vm.ctx, function, args_start, nargs,
+                    )
+                    .unwrap_or_else(|| Err(signal(LispCondition::VoidFunction, vec![func_val]))),
                     None => Err(signal(LispCondition::VoidFunction, vec![func_val])),
                 }
             };
@@ -6498,8 +6511,7 @@ impl<'a> Vm<'a> {
             match self.resolve_stack_call_target(func_val) {
                 ResolvedStackCallTarget::Builtin { callee } => {
                     return Self::call_resolved_builtin_from_stack_args(
-                        self.ctx,
-                        func_val, args_start, nargs, callee,
+                        self.ctx, func_val, args_start, nargs, callee,
                     );
                 }
                 ResolvedStackCallTarget::ByteCode { callee } => {
@@ -6703,7 +6715,9 @@ impl<'a> Vm<'a> {
         else {
             return None;
         };
-        Some(Self::call_resolved_builtin_from_stack_args(self.ctx, func_val, args_start, nargs, callee))
+        Some(Self::call_resolved_builtin_from_stack_args(
+            self.ctx, func_val, args_start, nargs, callee,
+        ))
     }
 
     fn call_resolved_builtin_from_stack_args(
@@ -6733,12 +6747,12 @@ impl<'a> Vm<'a> {
                 Some(function) => Self::dispatch_builtin_subr_from_stack_args_unchecked(
                     ctx, function, args_start, nargs,
                 )
-                    .unwrap_or_else(|| {
-                        Err(signal(
-                            LispCondition::VoidFunction,
-                            vec![Value::from_sym_id(sym_id)],
-                        ))
-                    }),
+                .unwrap_or_else(|| {
+                    Err(signal(
+                        LispCondition::VoidFunction,
+                        vec![Value::from_sym_id(sym_id)],
+                    ))
+                }),
                 None => Err(signal(
                     LispCondition::VoidFunction,
                     vec![Value::from_sym_id(sym_id)],
@@ -6949,17 +6963,15 @@ impl<'a> Vm<'a> {
                 let arg5 = stack_arg!(5);
                 let arg6 = stack_arg!(6);
                 let arg7 = stack_arg!(7);
-                Some(func(
-                    ctx, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7,
-                ))
+                Some(func(ctx, arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7))
             }
             SubrFn::Many(func) => {
                 let args = args[args_start..args_start + nargs].to_vec();
                 Some(func(ctx, args))
             }
-            SubrFn::ManySlice(func) => {
-                Some(Self::call_many_slice_subr_from_stack_args(ctx, func, args_start, nargs))
-            }
+            SubrFn::ManySlice(func) => Some(Self::call_many_slice_subr_from_stack_args(
+                ctx, func, args_start, nargs,
+            )),
         }
     }
 
@@ -7124,8 +7136,11 @@ impl<'a> Vm<'a> {
                                 ResolvedStackCallTarget::Generic
                             };
                         };
-                        self.symbol_bytecode_call_cache
-                            .insert_bytecode(sym_id, function_epoch, callee);
+                        self.symbol_bytecode_call_cache.insert_bytecode(
+                            sym_id,
+                            function_epoch,
+                            callee,
+                        );
                         ResolvedStackCallTarget::ByteCode { callee }
                     }
                     // GNU bytecode.c:Bcall resolves a symbol's live function
