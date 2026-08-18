@@ -5029,7 +5029,35 @@ fn re_match_loop<const SEALED: bool>(
 
             RegexOp::AnyChar => {
                 match match_anychar_at(text, d, stop, target_multibyte, translate) {
-                    Some(len) => d += len,
+                    Some(len) => {
+                        d += len;
+                        // Greedy anychar-loop fusion: `.*` / `.+` compiles to
+                        // the same `AnyChar; OnFailureJump exit; Jump back`
+                        // triple as the charset loops — identical protocol
+                        // (see the Charset arm): per-iteration frames with
+                        // the original payload, quit poll on the back edge.
+                        if SEALED
+                            && unsafe { *bytecode.get_unchecked(pc) }
+                                == RegexOp::OnFailureJump as u8
+                            && unsafe { *bytecode.get_unchecked(pc + 3) } == RegexOp::Jump as u8
+                            && ((pc as i64) + 6 + bc_num!(pc + 4) as i64) as usize == op_pc
+                        {
+                            let ofj_pc = pc;
+                            let exit = ((ofj_pc as i64) + 3 + bc_num!(ofj_pc + 1) as i64) as usize;
+                            loop {
+                                push_failure_point!(ofj_pc, exit, FailureInput::Restore(d));
+                                if crate::emacs_core::eval::tls_quit_pending() {
+                                    return None;
+                                }
+                                match match_anychar_at(text, d, stop, target_multibyte, translate) {
+                                    Some(len) => d += len,
+                                    None => break,
+                                }
+                            }
+                            try_fail!('main_loop);
+                            continue 'main_loop;
+                        }
+                    }
                     None => {
                         try_fail!('main_loop);
                     }
