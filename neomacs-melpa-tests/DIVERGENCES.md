@@ -9993,3 +9993,433 @@ harness will.  The pin uses 999999 now.
   and 135.
 
 Status: FIXED.
+
+## 141. Five platform names were bound without being declared, so `let` bound them lexically, four held nil where GNU holds a value, and one of them is not a variable in any GNU build -- FIXED
+
+The residual entry 138 handed over: of the platform names it kept, five are
+`special-variable-p` => nil against GNU's `t`.  Reproduced before anything was
+touched, `-Q --batch`, against GNU 31.0.90 and against a
+`cargo xtask fresh-build --release` binary of `60fe274e1`, which reports its
+own commit through `emacs-repository-version` and answers 138's probes
+(`baud-rate` => 0, `(boundp 'dos-hyper-key)` => nil), so the baseline is this
+entry's parent and not an older build.
+
+```elisp
+(list (mapcar (lambda (s) (list (special-variable-p s) (symbol-value s)))
+              '(x-bitmap-file-path x-gtk-use-system-tooltips
+                x-scroll-event-delta-factor x-auto-preserve-selections))
+      (special-variable-p 'vertical-centering-font-regexp)
+      (let ((x-bitmap-file-path 'probe)) (symbol-value 'x-bitmap-file-path))
+      (indirect-variable 'x-gtk-use-system-tooltips)
+      (and (documentation-property 'dos-hyper-key 'variable-documentation) t))
+;; GNU                => (((t ("/usr/include/X11/bitmaps")) (t t) (t 1.0) (t (CLIPBOARD PRIMARY)))
+;;                        t probe use-system-tooltips nil)
+;; Neomacs before fix => (((nil nil) (nil nil) (nil nil) (nil nil))
+;;                        nil nil x-gtk-use-system-tooltips t)
+```
+
+Five names diverge, three do not, and the fifth element of that probe is a
+sixth divergence this entry found while checking the first five.
+
+### The count, re-derived
+
+Entry 138's "8 kept, 5 wrong-shaped, 4 holding nil" overlaps confusingly.
+Measured, the breakdown is:
+
+- The `eval.rs` seed loop held **34** names.  GNU binds **8** of them here and
+  leaves **26** unbound.
+- Of the 26 GNU leaves unbound, **25** became `UnboundHere` table rows and
+  stopped existing.  The 26th is `xwidget-webkit-disable-javascript`, which
+  stays bound on purpose -- Neomacs ships an xwidget layer this GNU build was
+  not compiled with -- so it is not a table row at all.
+- Of the 8 GNU binds, **7** are `cus-start.el` platform names and are the table
+  rows; the 8th is `temporary-file-directory`, which is not a platform name
+  (`filelock.c:814`, every build) and kept a seed of its own.
+- `temporary-file-directory` measures identical to GNU on `boundp`,
+  `special-variable-p`, value, `default-value` and `local-variable-if-set-p`.
+  So of the 8 kept names, **7** are this entry's subject.
+- Of those 7, **2** already matched GNU exactly -- `window-combination-limit`
+  and `void-text-area-pointer`, which had real declarations in
+  `window_cmds::register_bootstrap_vars` and `xdisp::register_bootstrap_vars`
+  and reached the seed loop only as a redundant nil that the later declaration
+  overwrote.
+- **5** were `special-variable-p` => nil.  **4** of those 5 also held nil where
+  GNU holds a value.  The 4 are a SUBSET of the 5, not a second group: the
+  fifth, `vertical-centering-font-regexp`, already held GNU's regexp because
+  `lisp/international/fontset.el:1266` sets it in both editors, and lacked only
+  the declaration.
+
+So: 7 names in scope, 5 divergent, 3 clean (2 platform names plus
+`temporary-file-directory`).
+
+### Being non-special is not cosmetic, and this is what it cost
+
+A `DEFVAR_LISP` does two things in one statement -- it stores the initializer
+and it sets `declared_special` -- because in GNU they are the same fact: the
+symbol's value cell is redirected at an `Lisp_Object *` and `defvar_lisp_nopro`
+sets `declared_special` on the line after interning the name (`src/lread.c:5269-5277`).  Neomacs's
+seed did the first with a wrong value and skipped the second, and the second is
+observable:
+
+```elisp
+;; Under lexical binding a `let' over a non-special symbol makes a LEXICAL
+;; binding, so `symbol-value' -- which only ever reads the dynamic value --
+;; keeps answering the global.
+(let ((x-bitmap-file-path 'probe)) (symbol-value 'x-bitmap-file-path))
+;; GNU => probe          Neomacs before fix => nil
+```
+
+A third consequence of GNU's declaration is deliberately NOT claimed here, and
+measuring it is what stopped this entry from claiming it.  GNU refuses to
+unbind any `DEFVAR_*` variable -- `makunbound` is `Fset (symbol, Qunbound)`
+(`src/data.c:788`) and `set_internal`'s `SYMBOL_FORWARDED` arm answers an
+unbind with `error ("Built-in variable may not be unbound : %s")`
+(`src/data.c:1805-1808`) -- and the first version of this entry's oracle pin
+asserted it alongside the value and the special bit.  It failed, for a reason
+that is neither the seed nor the declaration:
+
+```elisp
+(let (allowed)
+  (dolist (s '(void-text-area-pointer window-combination-limit x-bitmap-file-path
+               x-scroll-event-delta-factor x-auto-preserve-selections
+               vertical-centering-font-regexp max-image-size global-mode-string
+               glyph-table standard-display-table prefix-help-command
+               gc-cons-threshold visible-bell))
+    (when (condition-case _ (progn (makunbound s) t) (error nil)) (push s allowed)))
+  (nreverse allowed))
+;; GNU                 => nil
+;; Neomacs, before AND after this entry
+;;                     => every one of them except gc-cons-threshold and visible-bell
+```
+
+`gc-cons-threshold` is `Lisp_Fwd_Int` and `visible-bell` is `Lisp_Fwd_Bool` --
+the two forward types entries 132 and 135 wired.  Everything else on that list
+is `Lisp_Fwd_Obj`, which is unwired, and the refusal to be unbound is one of the
+two things `Lisp_Fwd_Obj` still owes (the other being nothing at all: the arm
+enforces no type, which is why the value and the special bit were the whole of
+this entry's fix).  Entry 141 does not change that in either direction; it is
+sized under "found and NOT fixed" below, where 132, 135 and 138 each left it.
+
+### The four invented defaults, and why nil is not a milder version of GNU's
+
+| variable | GNU's initializer | GNU `file:line` |
+| --- | --- | --- |
+| `x-bitmap-file-path` | `decode_env_path (0, PATH_BITMAPS, 0)` | `image.c:13265-13267` |
+| `x-scroll-event-delta-factor` | `make_float (1.0)` | `xterm.c:32833-32837` |
+| `x-auto-preserve-selections` | `list2 (QCLIPBOARD, QPRIMARY)` | `xterm.c:32976-32984` |
+| `x-gtk-use-system-tooltips` | (an alias -- see below) | `term/x-win.el:1572` |
+
+None of the three C ones treats nil as "a smaller version of the default".
+`x_should_preserve_selection` preserves the selections named in the list when
+the value is a cons and preserves **nothing** when it is nil
+(`src/xselect.c:1385-1401`), so a nil default is the opposite of GNU's
+behaviour.  `handle_one_xevent` scales the XInput 2 scroll unit by
+`XFLOATINT (Vx_scroll_event_delta_factor)` only after `NUMBERP` passes
+(`src/xterm.c:22802-22803`), so nil means "no scaling" through a branch GNU
+takes only when a user has deliberately set a non-number.  And
+`x-bitmap-file-path` is the tail of the `openp` search path
+`image_find_image_fd` walks (`src/image.c:892`, `941`, `1033`), which
+`lisp/faces.el:1233` also reads directly for `bitmap-spec-p`; Neomacs's own
+`image_path.rs` documents that path in its module header and had nothing to put
+in it.
+
+`decode_env_path (0, PATH_BITMAPS, 0)` is worth spelling out because it looks
+like a probe and is not one.  With `evarname == 0` nothing is read from the
+environment (`src/emacs.c:3286-3292`), so the whole function is "split
+`PATH_BITMAPS` on `SEPCHAR`, substituting `.` for an empty element" -- and
+`PATH_BITMAPS` is a compiled-in configure value, `${bitmapdir}`, defaulting to
+`/usr/include/X11/bitmaps` (`src/epaths.in:67`).  GNU installs that list on a
+machine with no such directory; it does not check.
+
+### `x-gtk-use-system-tooltips` is not a variable in any GNU build
+
+Grepping `src/*.c` for it finds nothing.  It is
+`(defvaralias 'x-gtk-use-system-tooltips 'use-system-tooltips)` in
+`lisp/term/x-win.el:1572` (and again in `lisp/term/pgtk-win.el:372`), onto the
+`DEFVAR_BOOL` at `src/frame.c:7725-7731` whose initializer is
+`use_system_tooltips = true`.  `loadup.el:304-309` preloads `term/x-win` when
+`(featurep 'x)`, so the alias is in the dump.
+
+Declaring a Rust variable of the same name would have been wrong three ways at
+once, and measurably so:
+
+```elisp
+(list (indirect-variable 'x-gtk-use-system-tooltips)
+      (progn (setq x-gtk-use-system-tooltips 5)
+             (list x-gtk-use-system-tooltips use-system-tooltips))
+      (progn (setq use-system-tooltips nil) x-gtk-use-system-tooltips))
+;; GNU                => (use-system-tooltips (t t) nil)
+;; Neomacs before fix => (x-gtk-use-system-tooltips (5 t) 5)
+```
+
+An alias shares the target's cell, so it inherits the `t`, the docstring, and
+the Boolean coercion `store_symval_forwarding`'s `Lisp_Fwd_Bool` arm performs
+(`src/data.c:1485-1487`) -- entry 135's machinery, which already had
+`use-system-tooltips` right.  A separate variable reproduces none of that and
+lets the two names drift apart, which is exactly what the third element shows.
+The fix is therefore a `defvaralias` in preloaded Lisp, not a declaration:
+`lisp/term/neo-preload.el`, which is where Neomacs already puts the bindings
+"GNU's X-capable build preloads from term/x-win.el".
+
+### `vertical-centering-font-regexp`: the value was right and the declaration was still missing
+
+Its C initializer is `Qnil` (`src/fontset.c:2237-2242`).  The regexp both
+editors report comes from `lisp/international/fontset.el:1266`, which
+`loadup.el` preloads in a window-system build -- Neomacs's `loadup.el:295-302`
+gates that on `(fboundp 'x-create-frame)`, which answers `t` here, the same
+test `cus-start.el:942-944` uses ("any function from fontset.c will do",
+`(fboundp 'new-fontset)`).
+
+What the C declaration supplies and Lisp cannot is the special bit.
+`fontset.el:1259` is `(defvar vertical-centering-font-regexp)` -- the valueless
+form, which marks a variable special only within the file being loaded, not
+globally.  So a Neomacs that seeded the value and skipped the declaration
+agreed with GNU on `symbol-value` and still bound it lexically under `let`.
+This is the one of the five where "the value matches" was the trap: the value
+had never been the seed's doing.
+
+### Found while checking existence: documentation for variables no build defines
+
+The last element of the opening probe.  In GNU the `DEFVAR_*` that binds the
+symbol is the same statement that attaches its doc string, so a name whose C
+file this build does not compile has no `variable-documentation` either.
+Neomacs's `var_docs::gnu_table` is generated by
+`scripts/extract_gnu_defvar_docs.py` from ALL of GNU's `src/*.c`, the MS-DOS
+and ImageMagick files included, so after entry 138 correctly made
+`(boundp 'dos-hyper-key)` answer nil, `(documentation-property 'dos-hyper-key
+'variable-documentation)` still answered a doc string -- documentation for a
+variable that does not exist.  EIGHT of the 25 removed names were in that state
+-- the five `dos-` names, `imagemagick-render-type`,
+`w32-follow-system-dark-mode` and `haiku-debug-on-fatal-error`; the other 17
+have no row in the generated table.
+
+### The case for deleting three of these instead, and why it loses
+
+Three of the five are X-only in GNU's tree, and it is worth recording that this
+was checked rather than assumed.  `x-scroll-event-delta-factor` and
+`x-auto-preserve-selections` are in `syms_of_xterm`, which `main` calls under
+`#ifdef HAVE_X_WINDOWS` (`src/emacs.c:2373-2374`), and
+`x-gtk-use-system-tooltips` comes from a file `loadup.el` loads only when
+`(featurep 'x)`.  `(featurep 'x)` is nil here and `(featurep 'gtk)` is nil here,
+and `cus-start.el`'s `native-p` gates all three on exactly those two tests
+(`lisp/cus-start.el:912-922`), so removing them would not have made
+`cus-start.el` complain.  By the letter of entry 138's rule -- "a build without
+MS-DOS support needs `dos-hyper-key` to NOT exist" -- they look deletable.
+
+They are not, and the measurement that settles it is the whole X-only surface
+rather than these three names.  `grep DEFVAR` over `src/xterm.c`, `src/xfns.c`,
+`src/xselect.c`, `src/xmenu.c`, `src/xsettings.c` and `src/xsmfns.c` finds 76
+names; GNU binds 73 of them here and Neomacs binds 54, including
+`x-mode-pointer-shape` and `x-nontext-pointer-shape`, which GNU leaves unbound.
+Neomacs is a window-system Emacs that presents GNU's X names as its Lisp-facing
+window-system API -- `x-create-frame`, `x-selection-exists-p`, `x-popup-menu`
+(entries 116 and 117 fixed that one for parity) -- and the two names entry 138
+found already correct, `window-combination-limit` and `void-text-area-pointer`,
+are bound for the same reason.  Deleting three of 54 would be an isolated
+inconsistency that also creates three new `boundp` disagreements with the
+reference GNU, in exchange for nothing: the oracle harness's ground truth is
+that binary, and a deliberate disagreement can never be pinned as parity.  The
+justified disagreements are the ones a real build difference forces --
+`xwidget-webkit-disable-javascript`, where Neomacs has a layer GNU lacks, and
+`(featurep 'x)` itself.  Nothing forces this one; Neomacs can hold `1.0` in
+`x-scroll-event-delta-factor` as easily as GNU can.
+
+### Why GNU's code is shaped this way
+
+Everything above is one property of `DEFVAR_LISP` seen from five sides.  The
+macro takes the address of a C global and installs a `Lisp_Fwd_Obj` forwarder
+(`src/lisp.h:3495-3500`), so the value cell IS the global: there is no way to
+have the symbol without the storage, no way to have the storage without the
+initializer on the next line, no way to have either without `declared_special`,
+and no way to take the storage away again -- which is why `set_internal` refuses
+an unbind rather than voiding a slot that other C code still reads.  The doc
+string rides along in the same macro, which is why "declared" and "documented"
+cannot come apart either.
+
+Neomacs has no C globals, so each of those consequences has to be written down
+somewhere, and a `set_symbol_value(name, Value::NIL)` writes down exactly one
+of them -- existence -- while looking like it has written down all five.  Entry
+138 corrected which names got that call.  This entry is about the call itself
+being the wrong instrument for every name that keeps it.
+
+### The type-level fix
+
+`neovm-core/src/emacs_core/cus_start_platform_vars.rs` **no longer seeds
+anything.**  That is the fix: the module used to answer "GNU binds this" with
+`obarray.set_symbol_value(name, Value::NIL)`, and there is now no variant of
+[`GnuBinding`] that carries a value, so "bound to a placeholder GNU never has"
+is not a state a row can express.  The two bound variants each carry a
+`site: &'static str`, so recording "GNU binds this here" is impossible without
+also recording where the declaration lives, and the only route onto the obarray
+is that declaration -- which supplies GNU's value and GNU's `declared_special`
+bit together, the way `DEFVAR_LISP` does.
+
+The variants also split along GNU's own seam, because the seam is real:
+
+- `DeclaredInC { site }` -- GNU has a `DEFVAR_*` in a `syms_of_*` this build
+  compiles.  In place before any Lisp runs, so bound in a bare `Context`.
+- `DeclaredInPreloadedLisp { site }` -- GNU has no C declaration at all and
+  preloaded Lisp installs it.  Exactly one row, `x-gtk-use-system-tooltips`,
+  and it is an alias rather than a variable, which is the reason it must not be
+  declared in Rust.  Present only after loadup.
+- `UnboundHere` -- entry 138's rows, unchanged in meaning.
+
+The declarations went to the Neomacs counterpart of the `syms_of_*` each
+belongs to, which is what entry 138's hand-back asked for:
+
+- `image::register_bootstrap_vars` is new and is `syms_of_image`
+  (`src/image.c:13024`, compiled under `#ifdef HAVE_WINDOW_SYSTEM`,
+  `src/emacs.c:2364-2366`).  It declares `x-bitmap-file-path` through a port of
+  `decode_env_path`'s no-environment-variable case, and the three image.c
+  variables that were loose one-liners in `eval.rs` moved into it --
+  `max-image-size`, `image-cache-eviction-delay`, `image-scaling-factor` (which
+  had been seeded twice) and `image-types`.
+- `fontset::register_bootstrap_vars` is new and is `syms_of_fontset`
+  (`src/fontset.c:2155`), which every window-system branch of `main` calls
+  (`src/emacs.c:2377`, `2403`, `2426`, `2435`, `2447`, `2453`).
+- The two `xterm.c` `DEFVAR_LISP`s joined the two `DEFVAR_INT`s entry 138 put
+  in `eval.rs`'s existing `syms_of_xterm` block.
+- `x-gtk-use-system-tooltips` is a `defvaralias` in
+  `lisp/term/neo-preload.el`.
+
+`var_docs::lookup` consults the same table: a `UnboundHere` name gets `None`,
+so the generated doc table can no longer document a variable no build declares.
+The table therefore has a runtime job again after losing its seeding one, and
+it is the right job -- in GNU, documentation and existence come from the same
+macro.
+
+Nothing else enforces a table that seeds nothing, so
+`forward_test::every_cus_start_platform_row_matches_its_declaration_claim`
+walks every row against a live `Context`: `UnboundHere` must be unbound AND
+undocumented, `DeclaredInC` must be bound AND special, `DeclaredInPreloadedLisp`
+must be absent from a bare `Context`.  A row that lies fails immediately, which
+is how the `DeclaredInPreloadedLisp` variant was discovered rather than
+designed -- the first version of the table claimed `x-gtk-use-system-tooltips`
+was declared in C and the walker said it was not bound.
+
+The pdump format stays at **v58**: no new forward type, no change to what is
+dumped.  The `defvaralias` travels as an ordinary preloaded-Lisp symbol
+redirect, and the post-dump binary is what the oracle measures.
+
+### Measured after
+
+The same probes, `-Q --batch`, against a `cargo xtask fresh-build --release`
+binary:
+
+```
+                                                GNU   before  after
+`special-variable-p' of the 7 platform names
+   GNU binds here                               7     2       7
+   ... of those, value differs from GNU         --    4       0
+`let' binds dynamically (of the same 7)         7     2       7
+`indirect-variable' of x-gtk-use-system-
+   tooltips                                     use-  itself  use-
+                                                sys.          sys.
+`documentation-property' of the 25 platform
+   names GNU omits                              0     8       0
+`boundp' of those 25                            0     0       0
+`makunbound' refused (of the same 7)            7     0       0
+```
+
+The last row is the unwired `Lisp_Fwd_Obj` residual, unchanged on purpose and
+listed so the table is not read as a clean sweep.
+
+Every line of the opening probe is now character-identical between the two
+editors, and so is the wider probe -- `boundp`, `symbol-value`,
+`special-variable-p`, `default-value`, `local-variable-if-set-p`,
+`indirect-variable`, `documentation-property`, a dynamic `let` and a
+`set-default` over all seven names plus `temporary-file-directory` and
+`use-system-tooltips`.  Ten variables, ten identical lines; the only rows that
+still differ in the whole probe are `xwidget-webkit-disable-javascript` and the
+`(featurep 'x)` / `system-configuration-features` build banner.
+
+Blast radius, measured rather than assumed: five variables changed storage,
+four image.c declarations moved module, and a doc-lookup path grew a filter, so
+the suites were the gate.  `cargo nextest run -p neovm-oracle-tests`:
+**38783/38783 green**, which is the previous 38778 plus the five pins added
+here (`neovm-oracle-tests/src/cus_start_platform_declarations.rs`) -- all seven
+names' value/special/default/locality in one shot, the dynamic-`let` probe over
+six of them, the alias's `indirect-variable` and Boolean coercion, the absent
+documentation, and the `x-` defaults' TYPES (a list of strings, a float, a cons
+of selection symbols) rather than only their printed form.  **No pin moved.**
+`cargo nextest run -p neovm-core`: **9024/9024 green**, including two new
+`forward_test.rs` cases and two new table-shape tests.
+
+Every inline expectation in the new oracle file was taken with
+`NEOVM_ORACLE_MODE=refresh`, which runs GNU through the harness's own sandbox
+and normalizer, for the reason entry 138 recorded: an expectation measured by
+running GNU outside the harness is not the harness's GNU.  Four of the five
+matched GNU on the first run; the fifth is where the `makunbound` residual
+above turned up -- it agreed with GNU and then failed against Neomacs, which is
+the useful direction for a pin to fail in, and it was narrowed to the four type
+assertions plus a `let`-restores-the-declaration probe rather than being
+weakened or deleted.
+
+### Corrections to earlier entries
+
+- Entry 138's residual "Five of the seven platform names GNU DOES bind here are
+  `special-variable-p` => nil against GNU's `t`, and four of those five hold
+  nil where GNU holds a value" is confirmed and clarified, 2026-08-17: the four
+  are a subset of the five, not a separate group, and the fifth
+  (`vertical-centering-font-regexp`) already held GNU's value because preloaded
+  Lisp -- not the seed -- put it there.  The counts "8 kept" and "5
+  wrong-shaped" are also over different sets: 8 is the names GNU binds out of
+  the 34-name seed loop, of which one (`temporary-file-directory`) is not a
+  platform name and measures identical to GNU, leaving 7 platform names of
+  which 5 diverged.
+- Entry 138's residual "each wants its own `syms_of_*` counterpart rather than
+  a seed" is right for four of the five and wrong for the fifth, corrected
+  2026-08-17: `x-gtk-use-system-tooltips` has no `syms_of_*` counterpart to
+  want, because GNU declares no such variable -- it is `term/x-win.el:1572`'s
+  `defvaralias` onto `use-system-tooltips`, and the fix is an alias in
+  preloaded Lisp.  Entry 138 named the mechanism correctly in passing and then
+  filed it under the same remedy as the other four.
+- Entry 138's `cus_start_platform_vars` doc comment "the nil seed keeps
+  `cus-start.el` quiet during loadup for the ones Neomacs has no real
+  declaration for yet" is superseded 2026-08-17: `cus-start.el` was never going
+  to complain about any of these, since its `native-p` test either passes (and
+  a real declaration is required) or fails (and absence is fine).  The nil seed
+  bought nothing and cost the special bit.
+
+### Found and NOT fixed here
+
+- `strings-consed` and the six allocation counters entry 132 left reading 0 are
+  unchanged; the declarations are right, nothing increments them.
+- `command-line-max-length` still differs from GNU's answer on this machine for
+  the stack-limit reason entry 138 recorded, which is not a question about a
+  declaration.
+- `xwidget-webkit-disable-javascript` is still bound here and unbound under
+  GNU, and `(featurep 'x)` is still nil here and `t` under GNU.  Both are build
+  differences rather than divergences, and this entry's boundary is that a
+  build difference has to be forced by something real -- an absent layer, an
+  absent toolkit -- not merely permitted by `cus-start.el`'s `native-p`.
+- 21 of the 73 X-only `DEFVAR` names GNU binds here are still unbound here
+  (`x-dnd-targets-list`, `x-input-coding-system`, `x-max-tooltip-size`,
+  `xft-settings` and 17 others), and two Neomacs binds are unbound under GNU
+  (`x-mode-pointer-shape`, `x-nontext-pointer-shape`).  That is the same class
+  as this entry one layer out, sized rather than fixed: it is a 23-name sweep
+  of `syms_of_xterm`/`syms_of_xfns`/`syms_of_xselect`, not a residual of the
+  `cus-start.el` table, and none of the 23 is a `cus-start.el` name.
+- `var_docs::gnu_table` still documents names outside the `cus-start.el` table
+  that this build does not declare -- the w32, NS and Haiku `DEFVAR`s that
+  `cus-start.el` never mentions.  The filter added here is exactly as wide as
+  the table that carries the measurement; widening it needs the same
+  name-by-name GNU probe run over the rest of the generated table, which is its
+  own entry.
+- `Lisp_Fwd_Obj` and `Lisp_Fwd_Kboard_Obj` remain unwired, unchanged from 132,
+  135 and 138 -- but this entry measured the size of it for the first time, in
+  the probe under "Being non-special is not cosmetic".  A `DEFVAR_LISP`
+  variable in GNU is `SYMBOL_FORWARDED` and cannot be unbound; Neomacs declares
+  every one of them as an ordinary special variable, so `makunbound` succeeds
+  on all of them -- the seven names here, and `global-mode-string`,
+  `glyph-table`, `standard-display-table`, `prefix-help-command`,
+  `read-buffer-function`, `iconify-child-frame` and every other
+  `define_special_variable` call in the tree.  Only `Lisp_Fwd_Int` and
+  `Lisp_Fwd_Bool` refuse, because 132 and 135 wired them.  Unlike those two,
+  `Lisp_Fwd_Obj` enforces no type on assignment (`src/data.c:1490` is a plain
+  store), so the whole of what wiring it would buy is the unbind refusal plus
+  the buffer-default fan-out below it -- which is why this entry's fix is the
+  value and the special bit and stops there, and why the residual is worth its
+  own entry rather than a lean-in from this one.
+
+Status: FIXED.
