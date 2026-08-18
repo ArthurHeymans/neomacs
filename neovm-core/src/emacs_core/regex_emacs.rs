@@ -4061,13 +4061,12 @@ fn match_exactn_char_at(
 /// range-table + POSIX class bits of the charset opcode at
 /// `charset_op_pos`.  Returns consumed byte length on success.  Mirrors
 /// the `Charset | CharsetNot` arm exactly.
-#[inline]
-#[allow(clippy::too_many_arguments)] // mirrors GNU execute_charset's inputs
 /// Charset test at `d`. The ASCII case — GNU's charset op shape: read the
 /// byte, case-translate it, bit-test the bitmap — inlines into both matcher
 /// call sites; everything else goes through the outlined
 /// [`match_charset_at_slow`]. The call boundary itself measured ~40 of the
 /// ~67 Ir per test, on millions of tests per workload.
+#[allow(clippy::too_many_arguments)] // mirrors GNU execute_charset's inputs
 #[inline(always)]
 fn match_charset_at(
     pattern: &CompiledPattern,

@@ -1280,7 +1280,13 @@ fn format_string_overflow_error() -> Flow {
 /// conversion code becomes U+FFFD, which falls through to the invalid-operation
 /// error (issue #131: the format string is iterated as Emacs characters, not as
 /// a storage string).
-fn parse_format_spec(codes: &[u32], pos: &mut usize) -> Result<ParsedFormatSpec, Flow> {
+/// Parse the spec after a `%`, on the format string's canonical multibyte
+/// BYTES. Every character the spec grammar consumes before the conversion
+/// (digits, `$`, flags, `.`) is ASCII — one byte per char in either
+/// representation — so `pos` advances in bytes and `consumed_chars` stays
+/// byte-accurate up to the conversion character, which alone may be
+/// multibyte (decoded whole for the error message, counted as one char).
+fn parse_format_spec(bytes: &[u8], pos: &mut usize) -> Result<ParsedFormatSpec, Flow> {
     let start = *pos;
     let mut spec = FormatSpec {
         field_number: None,
@@ -1294,48 +1300,46 @@ fn parse_format_spec(codes: &[u32], pos: &mut usize) -> Result<ParsedFormatSpec,
         conversion: '\0',
     };
 
-    let is_ascii_digit = |code: u32| (b'0' as u32..=b'9' as u32).contains(&code);
+    // Digit-run accumulator; `None` on usize overflow (the caller-visible
+    // behavior of the old String `.parse()` failing).
+    fn digits(bytes: &[u8], pos: &mut usize) -> (bool, Option<usize>) {
+        let mut any = false;
+        let mut value: Option<usize> = Some(0);
+        while let Some(&byte) = bytes.get(*pos) {
+            if !byte.is_ascii_digit() {
+                break;
+            }
+            any = true;
+            value = value
+                .and_then(|v| v.checked_mul(10))
+                .and_then(|v| v.checked_add((byte - b'0') as usize));
+            *pos += 1;
+        }
+        (any, value)
+    }
 
     // GNU `styled_format` first looks for [0-9]+ followed by a literal
     // '$'.  If there is no '$', the digits are left for the flag/width
     // parser, so `%05d` still means zero-padded width 5 rather than
     // field 5.
     let mut look = *pos;
-    let mut field_digits = String::new();
-    while look < codes.len() && is_ascii_digit(codes[look]) {
-        field_digits.push(codes[look] as u8 as char);
-        look += 1;
-    }
-    if !field_digits.is_empty() && codes.get(look) == Some(&('$' as u32)) {
+    let (has_field_digits, field_value) = digits(bytes, &mut look);
+    if has_field_digits && bytes.get(look) == Some(&b'$') {
         *pos = look + 1;
-        spec.field_number = field_digits.parse().ok();
+        spec.field_number = field_value;
     }
 
     // Parse flags
-    loop {
-        match codes.get(*pos).copied() {
-            Some(c) if c == '-' as u32 => {
-                spec.minus = true;
-                *pos += 1;
-            }
-            Some(c) if c == '+' as u32 => {
-                spec.plus = true;
-                *pos += 1;
-            }
-            Some(c) if c == ' ' as u32 => {
-                spec.space = true;
-                *pos += 1;
-            }
-            Some(c) if c == '0' as u32 => {
-                spec.zero = true;
-                *pos += 1;
-            }
-            Some(c) if c == '#' as u32 => {
-                spec.sharp = true;
-                *pos += 1;
-            }
+    while let Some(&byte) = bytes.get(*pos) {
+        match byte {
+            b'-' => spec.minus = true,
+            b'+' => spec.plus = true,
+            b' ' => spec.space = true,
+            b'0' => spec.zero = true,
+            b'#' => spec.sharp = true,
             _ => break,
         }
+        *pos += 1;
     }
 
     // Ignore flags when sprintf ignores them
@@ -1347,59 +1351,40 @@ fn parse_format_spec(codes: &[u32], pos: &mut usize) -> Result<ParsedFormatSpec,
     }
 
     // Parse width
-    let mut width_str = String::new();
-    while let Some(&code) = codes.get(*pos) {
-        if is_ascii_digit(code) {
-            width_str.push(code as u8 as char);
-            *pos += 1;
-        } else {
-            break;
-        }
-    }
-    if !width_str.is_empty() {
-        spec.width = Some(
-            width_str
-                .parse()
-                .map_err(|_| format_string_overflow_error())?,
-        );
+    let (has_width, width_value) = digits(bytes, pos);
+    if has_width {
+        spec.width = Some(width_value.ok_or_else(format_string_overflow_error)?);
     }
 
     // Parse precision
-    if codes.get(*pos) == Some(&('.' as u32)) {
+    if bytes.get(*pos) == Some(&b'.') {
         *pos += 1;
-        let mut prec_str = String::new();
-        while let Some(&code) = codes.get(*pos) {
-            if is_ascii_digit(code) {
-                prec_str.push(code as u8 as char);
-                *pos += 1;
-            } else {
-                break;
-            }
-        }
-        spec.precision = Some(if prec_str.is_empty() {
-            0
+        let (has_prec, prec_value) = digits(bytes, pos);
+        spec.precision = Some(if has_prec {
+            prec_value.ok_or_else(format_string_overflow_error)?
         } else {
-            prec_str
-                .parse()
-                .map_err(|_| format_string_overflow_error())?
+            0
         });
     }
 
-    // Parse conversion character
-    let conversion_code = codes.get(*pos).copied().ok_or_else(|| {
-        signal(
+    // Parse conversion character (the one spec position that may be a
+    // multibyte char — decode it whole).
+    if *pos >= bytes.len() {
+        return Err(signal(
             "error",
             vec![Value::string(
                 "Format string ends in middle of format specifier",
             )],
-        )
-    })?;
-    *pos += 1;
+        ));
+    }
+    let ascii_consumed = *pos - start;
+    let (conversion_code, conversion_len) =
+        crate::emacs_core::emacs_char::string_char(&bytes[*pos..]);
+    *pos += conversion_len;
     spec.conversion = char::from_u32(conversion_code).unwrap_or('\u{FFFD}');
-    let consumed_chars = *pos - start;
     Ok(ParsedFormatSpec {
         spec,
-        consumed_chars,
+        consumed_chars: ascii_consumed + 1,
     })
 }
 
@@ -1899,32 +1884,6 @@ struct FormatLiteralPush {
     translated: bool,
 }
 
-/// Issue #131: `do_format` builds its result directly as canonical Emacs
-/// internal-encoding bytes (no storage-string round-trip), so these helpers walk
-/// and measure Emacs bytes the way `display_width_emacs`/`decode_units_emacs` do.
-///
-/// Decode `data` (Emacs internal encoding) into its character codes.
-fn decode_emacs_codes(data: &[u8]) -> Vec<u32> {
-    // Chars never outnumber bytes; one exact-enough reservation instead of
-    // doubling growth on every few pushes.
-    let mut codes = Vec::with_capacity(data.len());
-    let mut pos = 0usize;
-    while pos < data.len() {
-        let byte = data[pos];
-        // ASCII needs no decode; skip the out-of-line `string_char` call
-        // that dominated decoding typical (ASCII) format strings.
-        if byte < 0x80 {
-            codes.push(byte as u32);
-            pos += 1;
-            continue;
-        }
-        let (code, len) = crate::emacs_core::emacs_char::string_char(&data[pos..]);
-        codes.push(code);
-        pos += len;
-    }
-    codes
-}
-
 /// Count the Emacs characters in canonical multibyte `data`.
 fn emacs_chars_count(data: &[u8]) -> usize {
     let mut count = 0usize;
@@ -2043,15 +2002,20 @@ fn do_format(
             vec![Value::symbol("stringp"), args[0]],
         )
     })?;
-    let fmt_codes = if fmt_ls.is_multibyte() {
-        decode_emacs_codes(fmt_ls.as_bytes())
+    // Iterate the canonical multibyte BYTES directly: literal runs copy
+    // whole (`%` is ASCII and can never occur inside a multibyte
+    // sequence), spec characters are ASCII, and only the props/quoting
+    // paths still step per character. The previous decode of the whole
+    // format string into a `Vec<u32>` per call was a top cost of `format`.
+    let fmt_storage: Vec<u8>;
+    let fmt_bytes: &[u8] = if fmt_ls.is_multibyte() {
+        fmt_ls.as_bytes()
     } else {
-        decode_emacs_codes(&crate::emacs_core::emacs_char::str_to_multibyte(
-            fmt_ls.as_bytes(),
-        ))
+        fmt_storage = crate::emacs_core::emacs_char::str_to_multibyte(fmt_ls.as_bytes());
+        &fmt_storage
     };
 
-    let mut result: Vec<u8> = Vec::with_capacity(fmt_ls.as_bytes().len() + 32);
+    let mut result: Vec<u8> = Vec::with_capacity(fmt_bytes.len() + 32);
     let mut spans: Vec<FormatPropSpan> = Vec::new();
     let mut source_spans: Vec<FormatSourceSpan> = Vec::new();
     let mut force_multibyte_result = false;
@@ -2080,45 +2044,54 @@ fn do_format(
             crate::emacs_core::value::get_string_text_properties_table_for_value(source).is_some()
         });
 
-    while i < fmt_codes.len() {
-        let code = fmt_codes[i];
-        let source_start = format_char_pos;
-        i += 1;
-        format_char_pos += 1;
-        if code != '%' as u32 {
-            // ASCII literal without quote translation: one byte push. The
-            // general helper encodes through push_emacs_char per character,
-            // an out-of-line call that dominated copying literal runs.
-            if code < 0x80 && matches!(quoting_style, FormatMessageQuotingStyle::None) {
-                result.push(code as u8);
+    while i < fmt_bytes.len() {
+        if fmt_bytes[i] != b'%' {
+            // Literal run up to the next `%` (or the end).
+            let run_end = memchr::memchr(b'%', &fmt_bytes[i..])
+                .map(|offset| i + offset)
+                .unwrap_or(fmt_bytes.len());
+            if !track_props && matches!(quoting_style, FormatMessageQuotingStyle::None) {
+                // Verbatim byte copy: no spans, no quote translation, and
+                // plain literals never set `force_multibyte_result` or
+                // `new_result` (see `push_format_literal_code`'s default
+                // arm) — multibyteness is decided from the result bytes in
+                // `build_format_result`.
+                result.extend_from_slice(&fmt_bytes[i..run_end]);
+                i = run_end;
+                continue;
+            }
+            // Props/quoting path: step per character, exactly as before.
+            while i < run_end {
+                let (code, char_len) =
+                    crate::emacs_core::emacs_char::string_char(&fmt_bytes[i..]);
+                let source_start = format_char_pos;
+                i += char_len;
+                format_char_pos += 1;
+                if code < 0x80 && matches!(quoting_style, FormatMessageQuotingStyle::None) {
+                    result.push(code as u8);
+                } else {
+                    let pushed = push_format_literal_code(&mut result, code, quoting_style);
+                    force_multibyte_result |= pushed.multibyte;
+                    new_result |= pushed.translated;
+                }
                 if track_props {
                     source_spans.push(FormatSourceSpan {
                         source_char_start: source_start,
                         source_char_end: format_char_pos,
                         result_char_start: result_char_pos,
                         result_char_end: result_char_pos + 1,
+                        kind: FormatSpanKind::Literal,
                     });
                     result_char_pos += 1;
                 }
-                continue;
-            }
-            let pushed = push_format_literal_code(&mut result, code, quoting_style);
-            force_multibyte_result |= pushed.multibyte;
-            new_result |= pushed.translated;
-            if track_props {
-                source_spans.push(FormatSourceSpan {
-                    source_char_start: source_start,
-                    source_char_end: format_char_pos,
-                    result_char_start: result_char_pos,
-                    result_char_end: result_char_pos + 1,
-                    kind: FormatSpanKind::Literal,
-                });
-                result_char_pos += 1;
             }
             continue;
         }
 
-        let parsed = parse_format_spec(&fmt_codes, &mut i)?;
+        let source_start = format_char_pos;
+        i += 1;
+        format_char_pos += 1;
+        let parsed = parse_format_spec(fmt_bytes, &mut i)?;
         let spec = parsed.spec;
         format_char_pos += parsed.consumed_chars;
         let spec_source_end = format_char_pos;
