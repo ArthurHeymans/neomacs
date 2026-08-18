@@ -5458,6 +5458,17 @@ Residue: GNU's `record_first_change` redirects an indirect buffer to its base
 buffer's modtime.  A `Buffer` here cannot reach the buffer manager, so an
 indirect buffer still records 0 -- strictly narrower than before, when every
 buffer did.
+
+Correction, 2026-08-18 (ledger 145): the residue was closed, and both halves of
+that sentence were off.  An indirect buffer did not record `0`; it recorded its
+OWN `visited-file-modtime`, which is `0` only because the probes here used
+buffers that visit no file -- give the indirect buffer a modtime with
+`(set-visited-file-modtime '(1 2 3 4))` and it recorded `(1 2 3 0)` where GNU
+still records the base's timestamp.  And reaching the buffer manager was never
+the requirement: GNU follows one pointer, `b->base_buffer->modtime`, which is a
+shared cell here (`neovm-core/src/buffer/visited_file_modtime.rs`), so nothing
+had to be plumbed through the edit path.  See 145 for the fix and for three
+further divergences in the same GNU change (Bug#56397).
 ## 106. `end-of-visual-line` stopped one column short on a newline-terminated row -- FIXED
 
 MWIM binds `C-e` to `end-of-visual-line`, so its terminal workflow ends every
@@ -6407,6 +6418,11 @@ buffer to its BASE buffer's visited-file modtime (src/undo.c:211-218), and a
 `Buffer` here still cannot reach the buffer manager, so an indirect buffer
 records 0.  Both probe columns above read `(t . 0)` because the base buffer
 visits no file.
+
+Correction, 2026-08-18 (ledger 145): closed.  The last sentence is the reason
+this residue was described wrongly for two entries running -- with a base that
+visits no file, "records the base's modtime" and "records its own" are the same
+`0`, so the probe could not see that we were reading the wrong buffer at all.
 
 Status: FIXED.
 
@@ -11239,5 +11255,213 @@ cursor_in_echo_area)` so it can be pinned directly: a unit test cannot observe
 the process's stderr, but it can pin the truth table, including the
 `(false, false)` arm that was missing entirely.  The end-to-end probe in
 tmp/coord-echo-probe2.el is byte-identical to GNU 31.0.90.
+
+Status: FIXED.
+
+## 145. An indirect buffer recorded its own missing modtime in the first-change undo entry, so undoing back to the saved text never cleared the modified flag -- FIXED
+
+Ledger 105's residual, carried forward unchanged by 120 and deferred twice as
+"plumbing, not a one-liner".  A base buffer visits a file, an indirect buffer
+over it is edited and the edit is undone: GNU reports the buffer unmodified
+again, Neomacs reported it modified.  That is `clone-indirect-buffer` +
+`C-_`, and org-narrow/writeroom workflows do it constantly.
+
+```elisp
+(let ((f (expand-file-name "tmp/divergence-145.txt")))
+  (with-temp-file f (insert "base\n"))
+  (let* ((base (find-file-noselect f))
+         (base-modtime (with-current-buffer base (visited-file-modtime))))
+    (with-current-buffer base (setq buffer-undo-list nil))
+    (with-current-buffer (make-indirect-buffer base "i145")
+      (insert "X")
+      (let* ((entries buffer-undo-list)
+             (recorded (cdr (assq t entries))))
+        (primitive-undo 1 entries)
+        (list :recorded (if (equal recorded base-modtime) 'base-modtime recorded)
+              :own-modtime (visited-file-modtime)
+              :after-undo (buffer-modified-p))))))
+;; GNU                => (:recorded base-modtime :own-modtime 0 :after-undo nil)
+;; Neomacs before fix => (:recorded 0 :own-modtime 0 :after-undo t)
+```
+
+`:own-modtime` is `0` in BOTH editors and that is not the bug: an indirect
+buffer visits no file, so `visited-file-modtime` reporting "none" is correct
+(GNU `reset_buffer`, `src/buffer.c:1092`, runs on every indirect buffer via
+`Fmake_indirect_buffer`, `src/buffer.c:896`).  The bug is that the undo entry
+is not allowed to read that number.
+
+### What GNU records, and why
+
+`record_first_change` (`src/undo.c:209-223`) resolves the base buffer BEFORE
+reading a modtime, and reads it from there:
+
+```c
+  struct buffer *base_buffer = current_buffer;
+  if (EQ (BVAR (current_buffer, undo_list), Qt))
+    return;
+  if (base_buffer->base_buffer)
+    base_buffer = base_buffer->base_buffer;
+  bset_undo_list (current_buffer,
+                  Fcons (Fcons (Qt, buffer_visited_file_modtime (base_buffer)),
+                         BVAR (current_buffer, undo_list)));
+```
+
+The entry names the save that undoing would return the TEXT to, and an
+indirect buffer's text is its base's -- so the file whose modtime decides
+whether that save is still current is the base's file.  `Fvisited_file_modtime`
+(`src/fileio.c:6165-6175`) keeps reading `current_buffer`, which is why GNU
+split `buffer_visited_file_modtime` out as a separate function taking the
+buffer explicitly: the two readers must not be the same call.
+
+The redirect is unconditional, not a fallback for a missing value.  Under GNU
+31.0.90, giving the indirect buffer a modtime of its own does not displace it:
+
+```elisp
+(let ((f (expand-file-name "tmp/divergence-145.txt")))
+  (with-temp-file f (insert "base\n"))
+  (let ((base (find-file-noselect f)))
+    (with-current-buffer (make-indirect-buffer base "ind")
+      (set-visited-file-modtime '(1 2 3 4))
+      (setq buffer-undo-list nil)
+      (with-current-buffer base (set-buffer-modified-p nil))
+      (insert "Y")
+      (list :own-modtime (visited-file-modtime)
+            :recorded (cdr (assq t buffer-undo-list))
+            :base-modtime (with-current-buffer base (visited-file-modtime))))))
+;; GNU                => (:own-modtime (1 2 3 0) :recorded (27268 5667 305435 672000) :base-modtime (27268 5667 305435 672000))
+;; Neomacs before fix => (:own-modtime (1 2 3 0) :recorded (1 2 3 0)                  :base-modtime (27268 6539 819373 221000))
+```
+
+(The two runs rewrite the fixture, so the raw timestamps differ between the
+rows; what the rows say is which buffer each editor read it from.)
+
+So "records 0" was never the whole defect -- 105 and 120 both described it that
+way because their probe buffers visited no file at all.  Neomacs recorded
+*whatever the changed buffer's own modtime happened to be*, which is `0` in the
+common case and a wrong timestamp as soon as anything set one.
+
+The shape is one 2022 bug fix, GNU commit 74f43f82e6b, "Fix undo of changes in
+cloned indirect buffers" (Bug#56397), and it has three coordinated parts:
+`record_first_change` reads the base's modtime; `primitive-undo` falls back to
+the base's modtime when the indirect buffer's own is the bogus `0`
+(`lisp/simple.el:3676-3688`, comment: "Indirect buffers don't have a visited
+file, so their file-modtime can be bogus"); and `set-visited-file-modtime`
+refuses the no-argument form in an indirect buffer instead of expanding its nil
+file name (`src/fileio.c:6202-6203`).  We shipped GNU's `simple.el`, so we had
+part two and neither of the others -- and part two is what turns part one's
+absence into the visible `:after-undo t`: the fallback replaces our recorded
+`0` with the base's real timestamp on the compare side, so the two sides can
+never agree.
+
+### Was the obstacle still there
+
+Only half of it.  105 recorded that "a `Buffer` here cannot reach the buffer
+manager", and that is still true -- `undo_prepare_change` runs inside
+`&mut Buffer` and there is no map in sight.  But reaching the manager was the
+wrong requirement.  GNU does not consult a table either; it follows one
+pointer, `b->base_buffer->modtime`, and 120/121/122 had already established
+that a base and its indirect buffers share `Rc` state (`SharedUndoState`) and
+that a shared cell is how this codebase spells a GNU pointer that must stay
+live (`SavedPointBeforeCommand`).  The fix is that same shape, one field wide.
+Nothing had to be plumbed through the edit path.
+
+The order 115 established is untouched: `undo_prepare_change` still reads
+`at_boundary` from the list before the first-change step conses onto it
+(`src/undo.c:47-78`), and only the datum changed.
+
+### The fix
+
+`neovm-core/src/buffer/visited_file_modtime.rs` is a new module holding three
+types:
+
+* `VisitedFileModtime` -- GNU's `struct timespec` modtime as an enum:
+  `Unknown` (the `UNKNOWN_MODTIME_NSECS` sentinel, `0` to Lisp), `Nonexistent`
+  (`NONEXISTENT_MODTIME_NSECS`, `-1`), `Known { sec, nsec }`.  It replaces a
+  pair of `Option`s that could represent "seconds but no nanoseconds" and could
+  not represent `-1` at all.
+* `VisitedFileModtimeSlot` -- the buffer's own cell plus, for an indirect
+  buffer, an `Rc` handle on its base's cell.  `Clone` deliberately mints a
+  fresh own cell (a cloned `Buffer` is a different buffer) while carrying the
+  base link, and the link is installed only by
+  `BufferManager::link_indirect_visited_file_modtime`, which reads both slots
+  out of its own map -- the same aliasing trap `from_dump` already documents
+  for `text` and `undo_state`.
+* `FirstChangeModtime` -- the datum the undo recorder takes.  Its field is
+  private and `VisitedFileModtimeSlot::for_first_change` is its only
+  constructor, so `undo_list_record_first_change` cannot be handed the current
+  buffer's own `visited-file-modtime`.  That is the state 105 left
+  representable, and the compiler now rejects it.
+
+`Buffer` exposes exactly GNU's three readers -- `visited_file_modtime`
+(`Fvisited_file_modtime`), `set_visited_file_modtime`, and
+`first_change_modtime` (`record_first_change`) -- and the raw fields are gone.
+
+### Three more from the same GNU change
+
+Measured in both editors while pinning the first:
+
+* `(make-indirect-buffer base "i" t)` copied the base's modtime into the
+  indirect buffer, where GNU's `reset_buffer` leaves it unknown: GNU reports
+  `(:clone-own-modtime 0 :clone-file-name nil)`, Neomacs reported
+  `(:clone-own-modtime (27268 6539 819373 221000) :clone-file-name nil)`.  That
+  is the sharing-wider-than-GNU class ledger 121 named.
+* `(set-visited-file-modtime)` in an indirect buffer answered
+  `(wrong-type-argument stringp nil)` where GNU answers
+  `(error "An indirect buffer does not have a visited file")`.
+* `visited-file-modtime` could not return `-1`.  GNU's
+  `insert-file-contents` records `time_error_value (save_errno)` for a file it
+  was told to visit but could not open (`src/fileio.c:3971-3978,4200`) and
+  signals only afterwards (`src/fileio.c:5307-5313`), so every `find-file` of a
+  NEW file leaves `-1` there and its first change records `(t . -1)`:
+
+```elisp
+(let ((f (expand-file-name "tmp/does-not-exist-145.txt")))
+  (when (file-exists-p f) (delete-file f))
+  (with-current-buffer (find-file-noselect f)
+    (setq buffer-undo-list nil)
+    (set-buffer-modified-p nil)
+    (insert "X")
+    (list :own-modtime (visited-file-modtime)
+          :recorded (cdr (assq t buffer-undo-list))
+          :verify (verify-visited-file-modtime (current-buffer)))))
+;; GNU                => (:own-modtime -1 :recorded -1 :verify t)
+;; Neomacs before fix => (:own-modtime 0 :recorded 0 :verify t)
+```
+
+  `(set-visited-file-modtime -1)` answered `0` for the same reason, and
+  `(set-visited-file-modtime 5)` was accepted where GNU signals
+  `(args-out-of-range 5 -1 0)`: GNU's integer arm is
+  `check_integer_range (time_flag, -1, 0)` followed by
+  `make_timespec (0, UNKNOWN_MODTIME_NSECS - flag)` (`src/fileio.c:6188-6196`),
+  i.e. the two flags are exactly the two non-timestamps `visited-file-modtime`
+  can return.  With `Nonexistent` in the enum all three answers follow.
+
+`verify-visited-file-modtime` was rewritten onto the same enum along the way,
+which fixed a fourth thing: it compared `st_size` against an unrecorded size as
+if that size were `-1`, where GNU skips the size check entirely when it has
+none (`b->modtime_size < 0 || st.st_size == b->modtime_size`,
+`src/fileio.c:6149-6153`).  `set-visited-file-modtime` with an explicit TIME
+sets exactly that unrecorded size (`current_buffer->modtime_size = -1`), so a
+buffer that had used it could never verify again:
+
+```elisp
+(let ((f (expand-file-name "tmp/divergence-145-verify.txt")))
+  (with-temp-file f (insert "hello\n"))
+  (with-current-buffer (find-file-noselect f)
+    (set-visited-file-modtime (visited-file-modtime))
+    (verify-visited-file-modtime (current-buffer))))
+;; GNU                => t
+;; Neomacs before fix => nil
+```
+
+Residue, reported not fixed: `neovm-core/src/emacs_core/undo.rs` carries a Rust
+`primitive-undo` whose `(t . MODTIME)` arm understands only the fixnum `0` and
+skips everything else ("Non-zero modtimes would compare against file modtime;
+for now we just skip those").  Every measurement above went through GNU's
+`lisp/simple.el` definition, which `defun` installs over the subr, so this does
+not affect a real session -- but with `(t . -1)` and `(t . TIMESTAMP)` now
+reachable, that arm is wrong wherever the subr still answers (a bare
+`Context`).  Per the standing "load the .el, do not reimplement it in Rust"
+rule the subr should go, which is a separate change.
 
 Status: FIXED.

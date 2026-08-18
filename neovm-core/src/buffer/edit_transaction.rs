@@ -822,7 +822,7 @@ impl Buffer {
         }
         let at_boundary = undo::undo_list_at_boundary(&ul);
         if self.modified_tick() <= self.save_modified_tick() {
-            undo::undo_list_record_first_change(&mut ul, self.visited_file_modtime_value());
+            undo::undo_list_record_first_change(&mut ul, self.first_change_modtime());
             self.undo_state.set_recorded_first_change(true);
         }
         // GNU `record_point` (src/undo.c:73-78) takes the saved point only when

@@ -19,7 +19,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::buffer::{
     BufferId, CharPos0, EmacsByteLen, EmacsBytePos, EmacsByteRange, LispCharPos1,
-    TextPositionAnchor, text_props::TextPropertyTable,
+    TextPositionAnchor, VisitedFileModtime, text_props::TextPropertyTable,
 };
 use crate::heap_types::LispString;
 
@@ -4028,9 +4028,12 @@ pub(crate) fn builtin_verify_visited_file_modtime(
         .buffers
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-    let Some((ref sec, ref nsec)) = buf.modtime_sec.zip(buf.modtime_nsec) else {
-        return Ok(Value::T); // unknown modtime — never complain (GNU: UNKNOWN_MODTIME_NSECS)
-    };
+    let recorded = buf.visited_file_modtime();
+    // GNU fileio.c:6136: `if (b->modtime.tv_nsec == UNKNOWN_MODTIME_NSECS)
+    // return Qt;` — a buffer with no recorded time never complains.
+    if recorded == VisitedFileModtime::Unknown {
+        return Ok(Value::T);
+    }
     let Some(file_name) = buf.file_name_value().as_lisp_string() else {
         return Ok(Value::T);
     };
@@ -4038,28 +4041,37 @@ pub(crate) fn builtin_verify_visited_file_modtime(
     // filesystem-boundary helper, not the PUA-sentinel storage string, so a
     // non-UTF-8 file name still stats the right file.
     let path = lisp_file_name_to_path_buf(file_name);
-    match std::fs::metadata(&path) {
+    // GNU fileio.c:6145-6148: the disk side is `get_stat_mtime` when the stat
+    // succeeds and `time_error_value (errno)` when it does not — so a buffer
+    // that recorded "this file does not exist" still matches while the file is
+    // still missing, and stops matching the moment it appears.
+    let (disk_modtime, disk_size) = match std::fs::metadata(&path) {
         Ok(meta) => {
-            if let Ok(mtime) = meta.modified() {
-                let dur = mtime
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default();
-                let disk_sec = dur.as_secs() as i64;
-                let disk_nsec = dur.subsec_nanos() as i32;
-                if disk_sec == *sec
-                    && disk_nsec == *nsec
-                    && meta.len() as i64 == buf.modtime_size.unwrap_or(-1)
-                {
-                    Ok(Value::T)
-                } else {
-                    Ok(Value::NIL)
+            let modtime = match meta.modified() {
+                Ok(mtime) => {
+                    let dur = mtime
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default();
+                    VisitedFileModtime::Known {
+                        sec: dur.as_secs() as i64,
+                        nsec: dur.subsec_nanos() as i32,
+                    }
                 }
-            } else {
-                Ok(Value::T) // can't read mtime — don't complain
-            }
+                Err(_) => VisitedFileModtime::Unknown,
+            };
+            (modtime, Some(meta.len() as i64))
         }
-        Err(_) => Ok(Value::T), // can't stat — don't complain
-    }
+        Err(err) => (VisitedFileModtime::from_open_error(&err), None),
+    };
+    // GNU fileio.c:6149-6153: `timespec_cmp (mtime, b->modtime) == 0
+    // && (b->modtime_size < 0 || st.st_size == b->modtime_size)`.  An
+    // unrecorded size means "do not check the size", not "the size is -1".
+    let size_matches = match (buf.modtime_size, disk_size) {
+        (None, _) => true,
+        (Some(recorded_size), Some(size)) => recorded_size == size,
+        (Some(_), None) => false,
+    };
+    Ok(Value::bool(disk_modtime == recorded && size_matches))
 }
 
 /// `(set-visited-file-modtime &optional TIME-LIST)` — set buffer's
@@ -4072,39 +4084,59 @@ pub(crate) fn builtin_set_visited_file_modtime(eval: &mut Context, args: Vec<Val
     {
         // Explicit timestamp argument.
         validate_set_visited_file_modtime_arg(arg)?;
-        // GNU `Fset_visited_file_modtime': an integer "flag" (-1/0) sets the
-        // unknown-modtime sentinel (this is how `clear-visited-file-modtime'
-        // works -- it calls `(set-visited-file-modtime 0)'); any other time
-        // form is decoded (including the 4-element (HIGH LOW USEC PSEC)
-        // list) into one (sec, nsec) via `lisp_time_argument', rather than
-        // taking elements 0 and 1 as raw seconds and nanoseconds.
-        // (neomacs represents an unknown modtime as None.)
-        let decoded = if arg.as_fixnum().is_some() {
-            None
-        } else {
-            Some(crate::emacs_core::timefns::time_value_seconds_and_nanos(
-                arg,
-            )?)
+        // GNU `Fset_visited_file_modtime' (src/fileio.c:6188-6198): an integer
+        // is a "flag", and the accepted flags are exactly the two values
+        // `visited-file-modtime' can return that are not timestamps --
+        // `check_integer_range (time_flag, -1, 0)` then
+        // `make_timespec (0, UNKNOWN_MODTIME_NSECS - flag)`.  0 is the unknown
+        // sentinel (this is how `clear-visited-file-modtime' works) and -1 is
+        // "the visited file does not exist"; anything else is out of range.
+        // Any other time form is decoded (including the 4-element
+        // (HIGH LOW USEC PSEC) list) into one (sec, nsec) via
+        // `lisp_time_argument', rather than taking elements 0 and 1 as raw
+        // seconds and nanoseconds.
+        let modtime = match arg.as_fixnum() {
+            Some(flag) => VisitedFileModtime::from_lisp_flag(flag).ok_or_else(|| {
+                signal(
+                    LispCondition::ArgsOutOfRange,
+                    vec![*arg, Value::fixnum(-1), Value::fixnum(0)],
+                )
+            })?,
+            None => {
+                let (sec, nsec) = crate::emacs_core::timefns::time_value_seconds_and_nanos(arg)?;
+                VisitedFileModtime::Known {
+                    sec,
+                    nsec: nsec as i32,
+                }
+            }
         };
         let buf = eval
             .buffers
             .current_buffer_mut()
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        match decoded {
-            None => {
-                buf.modtime_sec = None;
-                buf.modtime_nsec = None;
-            }
-            Some((sec, nsec)) => {
-                buf.modtime_sec = Some(sec);
-                buf.modtime_nsec = Some(nsec as i32);
-            }
-        }
+        buf.set_visited_file_modtime(modtime);
+        // GNU: `current_buffer->modtime_size = -1;` — an explicitly given time
+        // says nothing about the file's size.
         buf.modtime_size = None;
         return Ok(Value::NIL);
     }
 
-    // No arg — stat the visited file
+    // No arg — stat the visited file.  GNU (src/fileio.c:6202-6203) refuses
+    // here rather than expanding a nil file name: an indirect buffer visits no
+    // file of its own, and this error is half of the same change that made
+    // `record_first_change' read the BASE buffer's modtime (Bug#56397).
+    let current_buffer_is_indirect = eval
+        .buffers
+        .current_buffer()
+        .is_some_and(|buf| buf.base_buffer.is_some());
+    if current_buffer_is_indirect {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                "An indirect buffer does not have a visited file",
+            )],
+        ));
+    }
     let path = eval
         .buffers
         .current_buffer()
@@ -4125,8 +4157,10 @@ pub(crate) fn builtin_set_visited_file_modtime(eval: &mut Context, args: Vec<Val
             let dur = mtime
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default();
-            buf.modtime_sec = Some(dur.as_secs() as i64);
-            buf.modtime_nsec = Some(dur.subsec_nanos() as i32);
+            buf.set_visited_file_modtime(VisitedFileModtime::Known {
+                sec: dur.as_secs() as i64,
+                nsec: dur.subsec_nanos() as i32,
+            });
             buf.modtime_size = Some(meta.len() as i64);
         }
     }
@@ -6099,6 +6133,17 @@ pub(crate) fn builtin_insert_file_contents(
                     .buffers
                     .set_buffer_file_name(current_id, Value::heap_string(resolved.clone()));
                 let _ = eval.buffers.set_buffer_modified_flag(current_id, false);
+                // GNU src/fileio.c:4194-4208: a file it was told to VISIT but
+                // could not open still records a modtime --
+                // `mtime = time_error_value (save_errno)` -- and only signals
+                // after storing it (src/fileio.c:5307-5313).  That is why
+                // `find-file' of a NEW file leaves `visited-file-modtime' at
+                // -1 rather than 0, and why the first change to that buffer
+                // records `(t . -1)'.
+                if let Some(buf) = eval.buffers.get_mut(current_id) {
+                    buf.set_visited_file_modtime(VisitedFileModtime::from_open_error(&err));
+                    buf.modtime_size = None;
+                }
                 if empty_undo_list_p {
                     let _ = eval
                         .buffers
@@ -6243,8 +6288,10 @@ pub(crate) fn builtin_insert_file_contents(
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default();
             if let Some(buf) = eval.buffers.get_mut(current_id) {
-                buf.modtime_sec = Some(dur.as_secs() as i64);
-                buf.modtime_nsec = Some(dur.subsec_nanos() as i32);
+                buf.set_visited_file_modtime(VisitedFileModtime::Known {
+                    sec: dur.as_secs() as i64,
+                    nsec: dur.subsec_nanos() as i32,
+                });
                 buf.modtime_size = Some(meta.len() as i64);
             }
         }
@@ -6633,8 +6680,7 @@ pub(crate) fn builtin_write_region(
         if let Some((sec, nsec, size)) = visiting_modtime
             && let Some(buf) = eval.buffers.get_mut(current_id)
         {
-            buf.modtime_sec = Some(sec);
-            buf.modtime_nsec = Some(nsec);
+            buf.set_visited_file_modtime(VisitedFileModtime::Known { sec, nsec });
             buf.modtime_size = Some(size);
         }
     }
