@@ -12448,7 +12448,9 @@ every Rust subr preloaded Lisp shadows.  It was 50 before this change and is 49
 after.
 
 > Note, 2026-08-18: 38 after entry 148, which deleted the type predicates and
-> the `defalias` names below.  See 148 for the corrections to this entry.
+> the `defalias` names below, and 36 after entry 150, which deleted the two
+> undo names -- and, with them, the third replay loop this entry found.  See
+> 148 and 150 for the corrections to this entry.
 
 GNU has exactly ONE name in that shape, and it labels itself:
 
@@ -12497,7 +12499,14 @@ a Rust reimplementation of Lisp we ship:
   (`neovm-core/src/buffer/buffer.rs:6264`), a third replay loop with its own
   copies of the position helpers -- and one that cannot run `apply` entries at
   all, because the buffer layer has no evaluator.  Deleting `primitive-undo`
-  did not remove it.
+  did not remove it.  BOTH DELETED by entry 150, 2026-08-18, together with
+  `BufferManager::undo_buffer` itself, which had no other caller.  150 also
+  corrects this bullet twice: the enable/disable pair is SPLIT in GNU --
+  `buffer-enable-undo` is `DEFUN ("buffer-enable-undo", ...)` at
+  `src/buffer.c:1829` and keeps its subr -- and the `apply` gap named here is
+  one defect of fourteen, not the largest.  The largest is that the loop
+  consumed `buffer-undo-list`, where GNU's `undo` never removes anything from
+  it.
 * **Everything else (13)** -- `emacs-repository-get-branch`,
   `emacs-repository-get-version`, `global-set-key`, `ignore`, `local-set-key`,
   `make-auto-save-file-name`, `memory-limit`, `read-number`,
@@ -13388,5 +13397,419 @@ Everything below was re-measured on a `cargo xtask fresh-build --release` binary
 GNU 31.0.90; the neighbouring coding, EOL and undo probes unchanged. New tests include a file-name-handler
 dispatch check for `start-file-process` and an opcode-level comparison of byte-compiled callers, following
 148's method.
+
+## 150. `undo` was a Rust subr over a THIRD undo replay loop that ate `buffer-undo-list` instead of walking `pending-undo-list`, could not run an `apply` entry, and had its two error messages swapped -- FIXED
+
+Ledger 146's find, taken.  146 enumerated the class -- Rust subrs whose
+function cell is overwritten by preloaded Lisp -- and left two undo names on
+it: `undo` and `buffer-disable-undo`.  It also recorded, without measuring it,
+that `builtin_undo` does not share the code 146 deleted; it calls
+`BufferManager::undo_buffer` (`neovm-core/src/buffer/buffer.rs:6264`), a
+**third** replay loop.
+
+So three independent undo replays existed: the Rust `primitive-undo` subr
+(deleted by 146, wrong seven measured ways), `lisp/simple.el`'s
+`primitive-undo` (shipped, and the only one that ever ran), and this one.
+This entry deletes the two subrs and, because that made it dead, the third
+loop with them.
+
+### Where GNU defines each name -- 146's grouping, verified
+
+146 grouped `undo` and `buffer-disable-undo` as "same file, same class, same
+argument".  That is right, and the check turned up something 146 did not say
+and that would have made the obvious version of this change wrong.  Against
+emacs-mirror 31.0.90 (`0ee48ac4df2`):
+
+| name | GNU defines it | where |
+| --- | --- | --- |
+| `undo` | `defun` | `lisp/simple.el:3466` |
+| `buffer-disable-undo` | `defun` | `lisp/simple.el:3591` |
+| `buffer-enable-undo` | **`DEFUN`** | **`src/buffer.c:1829`** |
+| `undo-boundary` | `DEFUN` | `src/undo.c:251` |
+| `primitive-undo` | `defun` | `lisp/simple.el:3645` |
+
+`grep 'DEFUN ("undo"' src/*.c` and `grep 'DEFUN ("buffer-disable-undo"'
+src/*.c` find nothing.  But `buffer-enable-undo` -- the name a reader pairs
+with `buffer-disable-undo`, and the one ledger 120 spent an entry on -- IS a C
+`DEFUN`, and `syms_of_buffer` registers it.  The pair is asymmetric in GNU:
+enable is C, disable is Lisp.  Copying that asymmetry is the whole change.
+`buffer-enable-undo` keeps its Rust subr, and the standing check must not
+acquire it.
+
+`syms_of_undo` (`src/undo.c:423-490`) still has exactly one `defsubr`,
+`&Sundo_boundary` (`:435`), so after this entry `undo.rs` registers exactly
+what GNU registers and nothing else.
+
+### Who was reaching the two subrs: nobody, measured
+
+The same three doors 146 and 148 checked:
+
+* **The function cell.**  Being on the shadow list is the measurement: the
+  standing check collects exactly those names whose cell, in a booted runtime,
+  is not a subr, and both were on it.  `loadup.el:251` loads `simple`, whose
+  `defun`s write byte-code functions into both cells, and
+  `should_install_public_subr` (`neovm-core/src/emacs_core/eval.rs`) refuses to
+  clobber a non-subr cell after a pdump restore.
+* **The static subr table.**  `ResolvedBuiltinCallee::from_static_symbol`
+  (`neovm-core/src/emacs_core/bytecode/vm.rs:1368`) still has exactly two
+  callers and both still reach it only from a `None` function cell
+  (`vm.rs:6679`, `:7150`).  A `defun`ed name cannot arrive there.
+* **Rust callers.**  `builtin_undo` and `builtin_buffer_disable_undo` had none
+  outside their own registrations.  After deleting the two the library compiled
+  with no errors; only the test tree broke.
+
+The bootstrap window is where these two differ from 148's eleven, and it is
+worth measuring rather than waving at.  148's names come from `subr.el`, the
+**third** file `loadup.el` loads (`:123-125`).  `undo` and
+`buffer-disable-undo` come from `simple.el`, which is the **64th** of the 110
+unconditional `(load ...)` lines in `lisp/loadup.el` (`:251`) -- a far wider
+window in which GNU itself has nothing at all.  Scanned: of the 63 files
+loaded first, four mention either name, and not one is a load-time call.
+`lisp/international/mule.el:1604` is commented out;
+`lisp/help.el:166` is a datum, `(undo . "undo")` in a tool-bar alist;
+`lisp/files.el:8103` (`list-directory`) and `lisp/help.el:2244`
+(`help--window-setup`) are inside `defun` bodies that nothing runs at load
+time.
+
+**And unlike 148's aliases, a compiled caller here really does read the
+cell.**  That was measured rather than assumed, because it is the difference
+between "the shadow was harmless" and "the shadow was one failed `load` away
+from answering".  Neither name carries a `byte-compile` property or a
+`compiler-macro`, so both compile to an ordinary `Bcall1` whose constants
+vector names the function.  GNU 31.0.90 with `lexical-binding` t, and this
+runtime, byte for byte:
+
+| form | GNU codes | GNU constants | Neomacs |
+| --- | --- | --- | --- |
+| `(lambda (x) (undo x))` | `(192 1 33 135)` | `[undo]` | identical |
+| `(lambda (b) (buffer-disable-undo b))` | `(192 1 33 135)` | `[buffer-disable-undo]` | identical |
+| `(lambda (b) (buffer-enable-undo b))` | `(192 1 33 135)` | `[buffer-enable-undo]` | identical |
+| `(lambda () (undo-boundary))` | `(192 32 135)` | `[undo-boundary]` | identical |
+
+### What an observer could tell, without running anything
+
+GNU column measured on GNU 31.0.90 `-Q --batch`; Neomacs column measured by
+asking the subr on a bare evaluator before the deletion.
+
+| probe | GNU | Neomacs before fix |
+| --- | --- | --- |
+| `(subrp (symbol-function 'undo))` | `nil` | `t` |
+| `(func-arity 'undo)` | `(0 . 1)` | `(0 . 1)` |
+| `(commandp 'undo)` | `t` | **`nil`** |
+| `(interactive-form 'undo)` | `(interactive "*P")` | `nil` |
+| `(documentation 'undo)` | `"Undo some previous changes...."` | `"Built-in function."` |
+| `(subrp (symbol-function 'buffer-disable-undo))` | `nil` | `t` |
+| `(func-arity 'buffer-disable-undo)` | `(0 . 1)` | `(0 . 1)` |
+| `(commandp 'buffer-disable-undo)` | `t` | **`nil`** |
+| `(interactive-form 'buffer-disable-undo)` | `(interactive nil)` | `nil` |
+| `(documentation 'buffer-disable-undo)` | `"Make BUFFER stop keeping undo information...."` | `"Built-in function."` |
+
+`commandp` is the interesting cell.  Both names are commands in GNU -- `undo`
+is `(interactive "*P")`, which is what makes `C-/` and `M-x undo` work and
+what makes it refuse in a read-only buffer -- and neither Rust subr was
+registered interactive at all.  In a loaded session `simple.el` supplies the
+interactive form, so nothing was broken; on the bare evaluator the name was
+callable but not a command, which is not a state GNU has.
+
+### What the third loop did that `primitive-undo` does not
+
+`BufferManager::undo_buffer` was not a port of `primitive-undo`.  It was a
+different algorithm with a different data model, and the difference is one
+line of GNU:
+
+```elisp
+(setq pending-undo-list (primitive-undo n pending-undo-list))
+```
+
+(`lisp/simple.el:3641`).  GNU's `undo` **never removes anything from
+`buffer-undo-list`**.  `undo-start` (`:3792`) points `pending-undo-list` at it,
+`undo-more` walks that cursor, and the replay's own edits push *new* records
+onto `buffer-undo-list` -- which is exactly how `undo-equiv-table` can later
+recognise a redo record.  `undo_buffer` popped groups off `buffer-undo-list`
+destructively, so the history it replayed was consumed:
+
+```elisp
+(with-temp-buffer
+  (buffer-enable-undo) (setq buffer-undo-list nil)
+  (insert "one")
+  (setq buffer-undo-list (cons nil buffer-undo-list))
+  (setq last-command nil)
+  (undo)
+  (list (buffer-string) buffer-undo-list))
+;; GNU                => ("" (("one" . 1) nil (1 . 4) (t . 0)))
+;; Neomacs before fix => ("" (("one" . -1)))
+```
+
+The boundary, the `(1 . 4)` insertion record and the `(t . 0)` first-change
+entry are all still there in GNU and all gone here.  The redo record's `POS`
+sign differs too, and GNU's source says why in a comment: the `(BEG . END)`
+arm does `(goto-char beg)` before `(delete-region beg end)` -- "Set point
+first thing, so that undoing this undo does not send point back to where it is
+now" (`lisp/simple.el:3700-3703`).  The Rust loop deleted without that
+`goto-char`, so point was left at the END of the deleted text and
+`record_delete` (`src/undo.c:118`) charged the deletion the negative sign,
+which means "point was at the end" -- and undoing the undo would have put
+point in the wrong place.
+
+Everything else follows from that model, plus the absence of an evaluator in
+the buffer layer.  All rows measured GNU-first:
+
+| probe | GNU | Neomacs before fix |
+| --- | --- | --- |
+| `(apply set-buffer-multibyte nil)` entry, then `enable-multibyte-characters` | `nil` (the entry ran) | `t` -- **skipped** |
+| `pending-undo-list` after an undo | a list | `(void-variable pending-undo-list)` |
+| `undo-equiv-table` | a hash table | `(void-variable undo-equiv-table)` |
+| two `undo`s in a row, `last-command` untouched | `("one" "one")` | `("one" "two")` |
+| `this-command` after a successful undo | `undo` | `nil` |
+| `(t . 0)` entry in a buffer visiting no file | `("acdef" nil)` | `("acdef" t)` |
+| `buffer-undo-list` is `t` | `(user-error "No undo information in this buffer")` | `(user-error "No further undo information")` |
+| nothing recorded | `(user-error "No further undo information")` | `(user-error "No undo information in this buffer")` |
+| `(undo 1.5)` | `""` -- it works | `(wrong-type-argument integerp 1.5)` |
+| `(undo '(4))` | `(error "The mark is not set now, so there is no region")` | `(wrong-type-argument integerp (4))` |
+| `(funcall 'undo 2 3)` | `(wrong-number-of-arguments (0 . 1) 2)` | `(wrong-number-of-arguments #<subr undo> 2)` |
+| an entry of no known shape, `[1 2]` | `(error "Unrecognized entry in undo list [1 2]")` | `"Undo"` -- **skipped, reported as success** |
+| `(undo 0)` | `("Undo" "one")` | `("Undo" "one")` |
+| a point entry | `("abXYcdef" 3)` | same |
+| a marker-adjustment entry | `("abcdcdef" 6)` | same |
+| a `(nil PROP VAL BEG . END)` entry | `(nil nil nil)` | same |
+
+Four of those deserve a sentence each.
+
+**The `apply` gap 146 named.**  `(apply FUN . ARGS)` and
+`(apply DELTA BEG END FUN . ARGS)` are `funcall`ed by `primitive-undo`
+(`lisp/simple.el:3705-3725`).  `undo_buffer` lives under the evaluator, so it
+could not call one; its `match` ended in `_ => {}` and every `apply` entry was
+silently dropped.  `set-buffer-multibyte` records exactly such an entry
+(`src/buffer.c:2972-2978`), so undoing a multibyte toggle did nothing.
+
+**The `(t . MODTIME)` entry ledger 145 had just fixed.**  145 taught the
+recorder to write the *base* buffer's modtime for an indirect buffer.
+`undo_buffer`'s arm for `(ValueKind::T, ValueKind::Fixnum(_))` was a comment
+saying "skip".  So on the `undo` path the entry 145 fixed was read by nobody,
+and undoing back to the saved text never cleared the modified flag.  146 fixed
+this for `primitive-undo`; this entry fixes the other door to it.
+
+**The two error messages, swapped.**  GNU raises them from two different
+places for two different reasons: `undo-start` signals
+`"No undo information in this buffer"` when `buffer-undo-list` is `t`
+(`lisp/simple.el:3799`), and `undo-more` signals `"No further undo
+information"` when `pending-undo-list` has run out (`:3635`).  `undo_buffer`
+reported an invented three-flag outcome (`had_any_records`, `had_boundary`,
+`skipped_apply`) and `builtin_undo` mapped it onto the two strings the wrong
+way round: an undo-disabled buffer got "No further undo information" and an
+empty history got "No undo information in this buffer".
+
+**No undo chain.**  `pending-undo-list`, `undo-equiv-table`, `last-command`
+and `this-command` are the whole of GNU's chain logic, and the loop had none
+of it.  A second consecutive `undo` re-applied the redo record the first one
+had pushed, so undo and redo alternated instead of walking back through
+history.
+
+### `buffer-disable-undo`: the answers were right and the shape was wrong
+
+Worth recording because it is the opposite of `undo` and the opposite of what
+148 found.  Every behavioural arm agreed with GNU before the deletion -- the
+`t` return value (it is `(setq buffer-undo-list t)`, and `setq` returns its
+value), buffer designators by name and by object, the current buffer left
+alone, and all three refusals, which come from `get-buffer` + `set-buffer`
+inside `with-current-buffer` and so carry `stringp`:
+
+| probe | GNU | Neomacs before fix |
+| --- | --- | --- |
+| `(buffer-disable-undo)` | `t` | `t` |
+| by name / by object | `t` | `t` |
+| current buffer afterwards | the caller's | the caller's |
+| `(buffer-disable-undo "no-such-buffer")` | `(wrong-type-argument stringp nil)` | same |
+| a killed buffer object | `(error "Selecting deleted buffer")` | same |
+| `(buffer-disable-undo 42)` | `(wrong-type-argument stringp 42)` | same |
+| `(buffer-disable-undo 'sym)` | `(wrong-type-argument stringp sym)` | same |
+| `(funcall 'buffer-disable-undo nil nil)` | `(wrong-number-of-arguments (0 . 1) 2)` | `(wrong-number-of-arguments #<subr buffer-disable-undo> 2)` |
+| disabling through an INDIRECT buffer, then the BASE's list | `(t t)` | `(t t)` |
+
+So this half was a faithful reimplementation -- of three lines of Lisp we
+already ship.  It is deleted for the same reason a correct one would be: the
+rule is not "don't write *wrong* Lisp in Rust".
+
+### The fix
+
+The two `defsubr` calls go, with a comment at the site naming the `.el` line
+and the C partner that stays.  `builtin_undo` (`emacs_core/undo.rs`),
+`builtin_buffer_disable_undo` (`emacs_core/buffer.rs`) and the `expect_int`
+helper that existed only for `undo`'s ARG go with them.
+
+Then the prize.  `BufferManager::undo_buffer` had exactly one non-test caller,
+`builtin_undo`, so it and everything that existed only for it are deleted:
+`UndoExecutionResult`, the four position helpers (`undo_char_pos1_to_char0`,
+`undo_char_pos1_to_byte_clamped`, `undo_lisp_char_position_is_visible`,
+`undo_lisp_range_is_visible` -- 146's "its own copies of the position
+helpers"), and three list functions in `buffer/undo.rs`:
+`undo_list_pop_group`, `undo_list_is_empty` and `undo_list_contains_boundary`.
+That last group is the part worth naming.  "Pop one undo group" is not a GNU
+operation; `primitive-undo`'s inner loop is `(while (setq next (pop list)))`
+and it stops at one `nil`.  The function existed because a Rust replay wanted
+to count groups, and counting groups is where 146's boundary-run bug came from
+too.  `undo_list_has_trailing_boundary` stays: it is the recorder's own
+question, GNU's test in `Fundo_boundary` (`src/undo.c:255-257`).
+
+`buffer/undo.rs` is now a recording module and nothing else, which is what the
+C file it mirrors is: `src/undo.c` records, and `lisp/simple.el` replays.
+
+Nothing replaced any of it.  `buffer/buffer.rs` loses 180 lines and gains 9
+(the comment that says where replay went), `emacs_core/undo.rs` loses 72 and
+gains 5, `emacs_core/buffer.rs` loses 56 and gains 5, `buffer/undo.rs` loses
+43 and gains 5.
+
+### Tests: twenty touched, none shimmed
+
+* **Nine bare-`Context` tests in `emacs_core/undo_test.rs`** called
+  `builtin_undo` directly.  FIVE of them pinned shapes the Lisp `defun`
+  answers differently and are deleted, replaced by measured rows in
+  `undo_arms_match_gnu`: `test_undo_no_args`, `test_undo_with_arg`,
+  `test_undo_with_invalid_arg`, `test_undo_with_multiple_args`, and
+  `test_undo_without_boundary_signals_user_error_after_apply` -- that last one
+  pinned the loop's own contradiction, that it performed the undo and THEN
+  signalled, which is not a state GNU can be in.  The FOUR that were really
+  about the recorded entries became one runtime test,
+  `undo_replays_the_recorded_entries_like_gnu`, whose rows were measured under
+  GNU first: a plain insertion, `remove-text-properties` over a range whose
+  start was unpropertied, `set-text-properties` across a partial interval, and
+  `(undo 0)`.
+* **`buffer_undo_designators_match_deleted_and_missing_buffer_semantics`**
+  (`builtins/tests.rs`) asserted both halves of the pair on a bare `Context`.
+  The `buffer-enable-undo` half stays exactly where it is -- it is a C subr in
+  GNU -- and gains one assertion, that `(fboundp 'buffer-disable-undo)` is nil
+  there, which is GNU before `loadup.el`.  The disable half moved to
+  `buffer_disable_undo_arms_match_gnu`.
+* **Three `BufferManager::undo_buffer` tests** in `buffer/buffer_test.rs`.
+  Two of them, `casify_region_undo_restores_original_text` and
+  `indirect_buffers_keep_undo_state_in_sync` became runtime tests over
+  `upcase-region` + `undo` and over `make-indirect-buffer` + `undo`, both
+  re-measured under GNU.  The test above them that pins what casification
+  RECORDS is untouched, because recording is this layer's job.
+* **The third, `implemented_text_backends_match_undo_recording_and_execution`,**
+  got better rather than merely moved.  It ran a multibyte edit
+  script against `BufferManager` under each of the three text backends and
+  compared the three with EACH OTHER -- so all three could have been wrong
+  together.  It now runs the script in the runtime with the backend chosen
+  through `neomacs-set-default-buffer-text-backend`, and the gap-buffer answer
+  is pinned to GNU: `("aébc日本z" 3 3 5 (nil bold bold bold bold nil nil))`,
+  covering point, the mark, a marker, a text property laid across the edited
+  region, an insert, a delete and a replace.  The other two backends must equal
+  it.
+* **Five `undo_list_pop_group` uses in `buffer/undo_test.rs`** were reading the
+  recorded list through the replay helper.  They now read the list itself,
+  which is what they were always about: `(nil (1 . 9))` after two coalescing
+  inserts, `(nil (2 . 3) nil (1 . 2))` across a boundary, and so on.
+* **Two bare-evaluator tests used `(buffer-disable-undo)` as incidental
+  vocabulary** -- `buffer_enable_undo_still_clears_a_disabled_list_through_an_indirect_buffer`
+  (ledger 120's pin, whose subject is the C `buffer-enable-undo`) and
+  `vm_insert_byte_and_buffer_undo_toggles_use_shared_runtime_state`.  Following
+  148's rule, they were repointed at what GNU has below the name: `(setq
+  buffer-undo-list t)`, which is verbatim `buffer-disable-undo`'s body
+  (`lisp/simple.el:3596`).  No Rust shim, and no Lisp shim either -- there was
+  nothing to stand in for.
+
+Every row above matched the runtime the first time it was asked, with the
+Rust subrs still registered -- 19 `undo` arms, 12 `buffer-disable-undo` arms,
+13 observables, 8 byte-compilation assertions.  That is the evidence that
+`lisp/simple.el` was already answering everywhere it mattered -- the same
+check 146 made and for the same reason.
+
+Seven new tests state the parity facts
+(`neovm-core/src/emacs_core/builtins/lisp_only_undo_commands_test.rs`): both
+names void on a bare evaluator with `buffer-enable-undo` and `undo-boundary`
+as controls; no registered subr for either while both C primitives keep
+theirs; the observables above in the loaded runtime; the four
+byte-compilation rows; the nineteen `undo` arms; the `(t . MODTIME)` arm
+against a real visited file; and the twelve `buffer-disable-undo` arms.
+
+The standing check `rust_subrs_shadowed_by_lisp_test.rs` loses the two names
+and its explicit length assertion goes from 38 to **36** (50 before 146, 49
+after it, 38 after 148).  Its "must not come back" clause now names all three
+deleted `simple.el` functions, and gains the opposite clause for the two GNU
+really does implement in C -- `undo-boundary` and `buffer-enable-undo` must
+stay registered.  A deletion spree that took the C one with it now fails the
+same test.
+
+### The shipped binary, after the deletion, against GNU
+
+Not the test harness: a `cargo xtask fresh-build --release` binary (pdump
+regenerated after the link, `target/release/neomacs.pdump` newer than
+`target/release/neomacs`), run `-Q --batch` side by side with GNU 31.0.90 on
+the same probe file.
+
+* **57 probe lines, `diff` empty.**  The observables table above including
+  `commandp`, `interactive-form` and the first line of each `documentation`
+  string read out of the byte-compiled `simple.elc` we ship; the four
+  byte-compilation rows as raw opcode byte lists AND constants vectors; every
+  `undo` arm including the two `apply` shapes, the `(t . MODTIME)` arm against
+  a real visited file on disk, the untouched `buffer-undo-list`, the two
+  `user-error` messages, the arity datum and the `undo-in-region` refusal;
+  the moved tests; and all twelve `buffer-disable-undo` arms.
+* **The coordinator undo probe.**  `tmp/coord-undo-merged-probe.el` is the
+  standing cross-check for this subsystem -- it drives a real `M-x` and a real
+  `C-_` through `execute-kbd-macro`, so it exercises `undo` as a COMMAND, the
+  one path the deleted subr could never have served (`commandp` was nil).  All
+  four of its `=>` lines are byte-identical to `tmp/coord-undo-gnu.txt`:
+
+  ```
+  122 M-x recorded/point             => ("((\"cde\" . -3) (t . 0))" 6)
+  122 disabled-buffer boundary       => (("rl" . 3) 1 (t . 0) nil (1 . 6) (t . 0))
+  123 gc truncation                  => (21 2 (nil (46 . 51)))
+  123 per-buffer limits              => (2 21)
+  ```
+
+### What nothing observable changed
+
+For a loaded session this changes nothing, and that is measured rather than
+asserted: the cells already held `simple.el`'s definitions, so `subrp`,
+`func-arity`, `commandp`, `interactive-form`, `documentation` and every
+behavioural arm above already answered from Lisp, and a byte-compiled caller
+already emitted GNU's opcode bytes against GNU's constants vector.  The
+coordinator undo probe is unchanged, and the shipped binary's 57 probe lines
+`diff` empty against GNU -- both measured above.
+
+What changes is the bare evaluator, where both names are now void exactly as
+they are in GNU before `simple.el`; the third replay loop, which no longer
+exists; and the tests, which now measure the Lisp that runs.
+
+Performance is not a question here for the same reason as in 148 and for one
+extra reason.  In a loaded session no call could reach either Rust subr: the
+interpreter reads the function cell (Lisp), and the VM's static-table fast
+path is gated on a VOID cell (`vm.rs:6679`, `:7150`).  The extra reason is
+that both compile to `Bcall1` through the constants vector, so a compiled
+caller was already going through the cell and already reaching Lisp.  Deleting
+a registration no dispatch path consulted cannot move a benchmark; the only
+thing that got cheaper is `init_builtins`, by two entries, and `buffer.rs`, by
+the dead loop.
+
+### Correction to entry 146, 2026-08-18
+
+146's judgement stands and its find was correct: `builtin_undo` really did
+call a third replay loop, and deleting `primitive-undo` really did not remove
+it.  Three refinements it could not have made without measuring:
+
+* 146 lists the undo group as "`undo` (`lisp/simple.el:3466`) and
+  `buffer-disable-undo` (`lisp/simple.el:3591`).  Same file, same class, same
+  argument as this entry."  True of those two, and incomplete about their
+  neighbourhood: `buffer-enable-undo` is `DEFUN`ed at `src/buffer.c:1829`, so
+  the enable/disable pair is split across C and Lisp in GNU.  "Delete the undo
+  subrs" would have been wrong; "delete the ones GNU has no C version of" is
+  the rule, and it now has a test in both directions.
+* 146 identifies the third loop's defect as "one that cannot run `apply`
+  entries at all, because the buffer layer has no evaluator".  That is one
+  defect of the fourteen measured above, and not the largest.  The largest is that the loop
+  consumed `buffer-undo-list` where GNU's `undo` never removes anything from
+  it -- a data-model difference, not a missing arm, and the reason redo could
+  not work.
+* 146 says of the class generally that a shadowed subr "never answers once the
+  `.el` is loaded", which is true, and adds for 148's aliases that a compiled
+  caller does not even read the cell.  These two are the other case, measured
+  here: neither carries a `byte-compile` property or a `compiler-macro`, so a
+  compiled `(undo n)` emits `Bcall1` and DOES read the cell.  The shadow was
+  the only thing between callers and the Rust subr.
+
+146's count line -- "It was 50 before this change and is 49 after", extended
+by 148 to 38 -- is extended again: **36** after this one.
 
 Status: FIXED.

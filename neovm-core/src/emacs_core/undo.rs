@@ -3,16 +3,16 @@
 //! Provides Emacs-compatible undo functionality:
 //! - `undo-boundary` -- insert an undo boundary marker (GNU `Fundo_boundary`,
 //!   src/undo.c:251, the ONLY subr GNU's `syms_of_undo` defines)
-//! - `undo` -- undo the last change in the current buffer
+//! - undo-list truncation at GC time (GNU `compact_buffer`, src/buffer.c:1856)
 //!
-//! `primitive-undo` is deliberately absent: GNU implements it in Lisp
-//! (`lisp/simple.el:3645`) and has no C version, so the runtime loads the .el.
+//! `primitive-undo` and `undo` are deliberately absent: GNU implements both
+//! in Lisp (`lisp/simple.el:3645` and `:3466`) and has no C version of
+//! either, so the runtime loads the .el (DIVERGENCES.md 146 and 150).
 
 use super::error::{EvalResult, Flow, signal};
 use super::value::*;
 use crate::buffer::buffer::UndoBoundaryOutcome;
-use crate::emacs_core::error::LispCondition;
-use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
+use crate::emacs_core::error::expect_args;
 
 // ---------------------------------------------------------------------------
 // Bootstrap variables
@@ -196,20 +196,6 @@ fn compact_one_buffer_for_gc(ctx: &mut super::eval::Context, id: crate::buffer::
 }
 
 // ---------------------------------------------------------------------------
-// Argument helpers
-// ---------------------------------------------------------------------------
-
-fn expect_int(value: &Value) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _other => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("integerp"), *value],
-        )),
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Pure builtins
 // ---------------------------------------------------------------------------
 
@@ -257,59 +243,6 @@ pub(crate) fn set_last_boundary_cause_explicit(ctx: &mut super::eval::Context) -
 
 // ---------------------------------------------------------------------------
 // Eval-dependent builtins
-// ---------------------------------------------------------------------------
-
-/// (undo &optional ARG) -> nil
-///
-/// Undo the last change in the current buffer.
-/// ARG is the number of undo commands to execute (default 1).
-///
-/// In a full implementation, this would:
-/// 1. Get the current buffer's undo list
-/// 2. Apply primitive-undo to reverse the specified number of actions
-/// 3. Update buffer state accordingly
-///
-pub(crate) fn builtin_undo(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    expect_min_args("undo", &args, 0)?;
-    expect_max_args("undo", &args, 1)?;
-
-    // If ARG is provided, verify it's an integer
-    let mut count = 1i64;
-    if let Some(arg) = args.first() {
-        count = expect_int(arg)?;
-    }
-
-    let Some(current_id) = eval.buffers.current_buffer_id() else {
-        return Err(signal("error", vec![Value::string("No current buffer")]));
-    };
-    let outcome = eval
-        .buffers
-        .undo_buffer(current_id, count)
-        .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-
-    if outcome.skipped_apply {
-        return Ok(Value::string("Undo"));
-    }
-
-    if !outcome.applied_any {
-        let msg = if outcome.had_any_records {
-            "No further undo information"
-        } else {
-            "No undo information in this buffer"
-        };
-        return Err(signal(LispCondition::UserError, vec![Value::string(msg)]));
-    }
-
-    if outcome.had_boundary {
-        Ok(Value::string("Undo"))
-    } else {
-        Err(signal(
-            LispCondition::UserError,
-            vec![Value::string("No further undo information")],
-        ))
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

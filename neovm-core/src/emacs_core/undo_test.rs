@@ -1,5 +1,4 @@
 use super::*;
-use crate::buffer::EmacsByteRange;
 
 /// `primitive-undo` is Lisp, and only Lisp.
 ///
@@ -262,7 +261,6 @@ fn test_delete_records_marker_adjustments_for_primitive_undo() {
 #[test]
 fn replace_match_undo_keeps_overlay_endpoint_like_gnu() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
 
     let result = crate::test_utils::runtime_startup_eval_one(
         r#"(with-temp-buffer
@@ -294,7 +292,6 @@ fn replace_match_undo_keeps_overlay_endpoint_like_gnu() {
 #[test]
 fn transpose_regions_undo_records_equal_regions_like_gnu() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
 
     let result = crate::test_utils::runtime_startup_eval_one(
         r#"(with-temp-buffer
@@ -313,259 +310,82 @@ fn transpose_regions_undo_records_equal_regions_like_gnu() {
     assert_eq!(result, r#"OK (("BBA-AAB-CCC" 1) "AAA-BBB-CCC" 3)"#);
 }
 
+/// The nine bare-`Context` tests that used to sit here called
+/// `builtin_undo` -- a Rust `undo` subr of a function GNU implements only in
+/// `lisp/simple.el:3466`, whose replay was `BufferManager::undo_buffer`, a
+/// third undo loop with no evaluator.  Subr and loop are both deleted
+/// (DIVERGENCES.md 150), so what is left to state is what the RECORDER
+/// produces and what `lisp/simple.el`'s `undo` makes of it.
+///
+/// Four of the nine pinned arity and error shapes the Lisp `defun` answers
+/// differently; those moved to `undo_arms_match_gnu`
+/// (`builtins/lisp_only_undo_commands_test.rs`).  The five that were really
+/// about the recorded entries are below, re-measured under GNU Emacs 31.0.90
+/// `-Q --batch` first (tmp/pw56-moved-tests-gnu.txt).
 #[test]
-fn test_undo_no_args() {
+fn undo_replays_the_recorded_entries_like_gnu() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    let result = builtin_undo(&mut eval, vec![]);
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_undo_with_arg() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    let result = builtin_undo(&mut eval, vec![Value::fixnum(5)]);
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_undo_with_invalid_arg() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    let result = builtin_undo(&mut eval, vec![Value::make_float(1.5)]);
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_undo_with_multiple_args() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    let result = builtin_undo(&mut eval, vec![Value::fixnum(2), Value::fixnum(3)]);
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_undo_reverts_inserted_text() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    {
-        let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
-        buffer.insert("abc");
-        let mut ul = buffer.get_undo_list();
-        crate::buffer::undo::undo_list_boundary(&mut ul);
-        buffer.set_undo_list(ul);
-    }
-    let result = builtin_undo(&mut eval, vec![Value::fixnum(1)]);
-    assert!(result.is_ok());
-    let contents = eval
-        .buffers
-        .current_buffer()
-        .expect("scratch buffer")
-        .buffer_string();
-    assert_eq!(contents, "");
-}
-
-#[test]
-fn test_undo_restores_property_when_range_start_was_unpropertied() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    let id = eval.buffers.current_buffer_id().expect("scratch buffer");
-    let face = Value::symbol("face");
-    let bold = Value::symbol("bold");
-    {
-        let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
-        buffer.insert("abcdef");
-    }
-    eval.buffers
-        .put_buffer_text_property_in_emacs_byte_range(
-            id,
-            EmacsByteRange::from_usize(2, 4),
-            face,
-            bold,
-        )
-        .expect("scratch buffer");
-    eval.buffers
-        .configure_buffer_undo_list(id, Value::NIL)
-        .expect("scratch buffer");
-    eval.buffers
-        .remove_buffer_text_property_in_emacs_byte_range(id, EmacsByteRange::from_usize(0, 4), face)
-        .expect("scratch buffer");
-    {
-        let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
-        let mut ul = buffer.get_undo_list();
-        crate::buffer::undo::undo_list_boundary(&mut ul);
-        buffer.set_undo_list(ul);
-    }
-
-    builtin_undo(&mut eval, vec![]).unwrap();
-
-    let buffer = eval.buffers.current_buffer().expect("scratch buffer");
-    assert!(
-        buffer
-            .text_props_get_properties_ordered_at_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
-                1
-            ))
-            .is_empty()
+    let results = crate::test_utils::runtime_startup_eval_all(
+        r#"
+;; A plain insertion.
+(with-temp-buffer
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (insert "abc")
+  (undo-boundary)
+  (setq last-command nil)
+  (undo)
+  (buffer-string))
+;; `remove-text-properties' over a range whose START was unpropertied: the
+;; recorded entry must restore the property only where it was.
+(with-temp-buffer
+  (insert "abcdef")
+  (put-text-property 3 5 'face 'bold)
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (remove-text-properties 1 5 '(face nil))
+  (undo-boundary)
+  (setq last-command nil)
+  (undo)
+  (list (get-text-property 1 'face) (get-text-property 2 'face)
+        (get-text-property 3 'face) (get-text-property 4 'face)
+        (get-text-property 5 'face)))
+;; `set-text-properties' across a partial interval.
+(with-temp-buffer
+  (insert "abcdef")
+  (put-text-property 1 3 'face 'bold)
+  (put-text-property 3 5 'face 'italic)
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (set-text-properties 2 4 '(face underline))
+  (undo-boundary)
+  (setq last-command nil)
+  (undo)
+  (list (get-text-property 1 'face) (get-text-property 2 'face)
+        (get-text-property 3 'face) (get-text-property 4 'face)
+        (get-text-property 5 'face)))
+;; ARG 0: `prefix-numeric-value' passes it through and `primitive-undo'
+;; compares COUNT with `>', so nothing is undone and `undo' still succeeds.
+(with-temp-buffer
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (insert "one")
+  (undo-boundary)
+  (setq last-command nil)
+  (list (undo 0) (buffer-string)))
+"#,
     );
+
+    // Transcribed from GNU Emacs 31.0.90 -Q --batch.
     assert_eq!(
-        buffer.text_props_get_properties_ordered_at_emacs_byte_pos(
-            crate::buffer::EmacsBytePos::new(2)
-        ),
-        vec![(face, bold)]
+        results,
+        vec![
+            "OK \"\"",
+            "OK (nil nil bold bold nil)",
+            "OK (bold nil nil italic nil)",
+            "OK (\"Undo\" \"one\")",
+        ],
     );
-    assert_eq!(
-        buffer.text_props_get_properties_ordered_at_emacs_byte_pos(
-            crate::buffer::EmacsBytePos::new(3)
-        ),
-        vec![(face, bold)]
-    );
-    assert!(
-        buffer
-            .text_props_get_properties_ordered_at_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
-                4
-            ))
-            .is_empty()
-    );
-}
-
-#[test]
-fn test_set_text_properties_partial_interval_undo_matches_gnu() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    let id = eval.buffers.current_buffer_id().expect("scratch buffer");
-    let face = Value::symbol("face");
-    let bold = Value::symbol("bold");
-    let italic = Value::symbol("italic");
-    let underline = Value::symbol("underline");
-    {
-        let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
-        buffer.insert("abcdef");
-    }
-    eval.buffers
-        .put_buffer_text_property_in_emacs_byte_range(
-            id,
-            EmacsByteRange::from_usize(0, 2),
-            face,
-            bold,
-        )
-        .expect("scratch buffer");
-    eval.buffers
-        .put_buffer_text_property_in_emacs_byte_range(
-            id,
-            EmacsByteRange::from_usize(2, 4),
-            face,
-            italic,
-        )
-        .expect("scratch buffer");
-    eval.buffers
-        .configure_buffer_undo_list(id, Value::NIL)
-        .expect("scratch buffer");
-    eval.buffers
-        .set_buffer_text_properties_in_emacs_byte_range(
-            id,
-            EmacsByteRange::from_usize(1, 3),
-            vec![(face, underline)],
-        )
-        .expect("scratch buffer");
-    {
-        let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
-        let mut ul = buffer.get_undo_list();
-        crate::buffer::undo::undo_list_boundary(&mut ul);
-        buffer.set_undo_list(ul);
-    }
-
-    builtin_undo(&mut eval, vec![]).unwrap();
-
-    let buffer = eval.buffers.current_buffer().expect("scratch buffer");
-    assert_eq!(
-        buffer.text_props_get_properties_ordered_at_emacs_byte_pos(
-            crate::buffer::EmacsBytePos::new(0)
-        ),
-        vec![(face, bold)]
-    );
-    assert_eq!(
-        buffer.text_props_get_properties_ordered_at_emacs_byte_pos(
-            crate::buffer::EmacsBytePos::new(1)
-        ),
-        vec![(face, Value::NIL)]
-    );
-    assert_eq!(
-        buffer.text_props_get_properties_ordered_at_emacs_byte_pos(
-            crate::buffer::EmacsBytePos::new(2)
-        ),
-        vec![(face, Value::NIL)]
-    );
-    assert_eq!(
-        buffer.text_props_get_properties_ordered_at_emacs_byte_pos(
-            crate::buffer::EmacsBytePos::new(3)
-        ),
-        vec![(face, italic)]
-    );
-    assert!(
-        buffer
-            .text_props_get_properties_ordered_at_emacs_byte_pos(crate::buffer::EmacsBytePos::new(
-                4
-            ))
-            .is_empty()
-    );
-}
-
-#[test]
-fn test_undo_without_boundary_signals_user_error_after_apply() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    {
-        let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
-        buffer.insert("x");
-    }
-    let result = builtin_undo(&mut eval, vec![Value::fixnum(1)]);
-    assert!(result.is_err());
-    let contents = eval
-        .buffers
-        .current_buffer()
-        .expect("scratch buffer")
-        .buffer_string();
-    assert_eq!(contents, "");
-}
-
-#[test]
-fn test_undo_with_non_positive_arg_and_boundary_returns_undo() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-
-    let mut eval = Context::new();
-    {
-        let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
-        buffer.insert("x");
-        let mut ul = buffer.get_undo_list();
-        crate::buffer::undo::undo_list_boundary(&mut ul);
-        buffer.set_undo_list(ul);
-    }
-    let result = builtin_undo(&mut eval, vec![Value::fixnum(0)]).unwrap();
-    assert_eq!(result, Value::string("Undo"));
-    let contents = eval
-        .buffers
-        .current_buffer()
-        .expect("scratch buffer")
-        .buffer_string();
-    assert_eq!(contents, "x");
 }
 
 /// Return the printed form of the current buffer's `buffer-undo-list` in a bare
@@ -658,7 +478,6 @@ fn first_change_marker_rearmed_on_each_clean_transition() {
 #[test]
 fn undo_of_descending_adjacent_inserts_restores_the_untouched_text() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
 
     let result = crate::test_utils::runtime_startup_eval_one(
         r#"(with-temp-buffer

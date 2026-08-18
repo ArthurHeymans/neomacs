@@ -62,15 +62,17 @@ const SHADOWED_BY_PRELOADED_LISP: &[&str] = &[
     // so the count fell from 49 to 38.  See
     // `lisp_only_predicates_and_aliases_test.rs' for the per-name statement.
     // -- The four process launchers that used to sit here are GONE: their
-    // Rust subrs were deleted (DIVERGENCES.md 149), so the count fell from 38
-    // to 34.  All four are Lisp over `make-process', which IS in C
-    // (src/process.c:1767); see `process_launchers_are_lisp_only_test.rs' for
-    // the per-name statement.
-    // -- Undo.  `syms_of_undo' (src/undo.c:423-490) has exactly one `defsubr',
-    // `&Sundo_boundary' (:435).  `primitive-undo' was deleted for this reason
-    // (DIVERGENCES.md 146); these two are the same class, not yet done.
-    "buffer-disable-undo", // lisp/simple.el:3591
-    "undo",                // lisp/simple.el:3466
+    // Rust subrs were deleted (DIVERGENCES.md 149).  All four are Lisp over
+    // `make-process', which IS in C (src/process.c:1767); see
+    // `process_launchers_are_lisp_only_test.rs' for the per-name statement.
+    // -- Undo: NOTHING is left here.  `syms_of_undo' (src/undo.c:423-490) has
+    // exactly one `defsubr', `&Sundo_boundary' (:435), and we register that
+    // one and no more.  `primitive-undo' went in DIVERGENCES.md 146; `undo'
+    // and `buffer-disable-undo' went in 150, which also deleted the third
+    // replay loop the `undo' subr reached (`BufferManager::undo_buffer').
+    // `buffer-enable-undo' is NOT in that group and never was: GNU DEFUNs it
+    // at src/buffer.c:1829, so it is a subr here too and does not appear on
+    // this list.  See `lisp_only_undo_commands_test.rs'.
     // -- Everything else.
     "emacs-repository-get-branch",   // lisp/version.el:231
     "emacs-repository-get-version",  // lisp/version.el:183
@@ -134,13 +136,31 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
          the list either way.\n",
     );
 
-    // `primitive-undo' is the deletion DIVERGENCES.md 146 records: GNU has no
-    // C version, so neither do we, and the name must not come back.
-    assert!(
-        lookup_global_subr_entry(intern("primitive-undo")).is_none(),
-        "primitive-undo must have no Rust subr: GNU implements it in \
-         lisp/simple.el:3645 and nowhere in src/",
-    );
+    // The three names GNU implements in lisp/simple.el and nowhere in src/,
+    // deleted by DIVERGENCES.md 146 and 150.  None may come back.
+    for (name, gnu_source) in [
+        ("primitive-undo", "lisp/simple.el:3645"),
+        ("undo", "lisp/simple.el:3466"),
+        ("buffer-disable-undo", "lisp/simple.el:3591"),
+    ] {
+        assert!(
+            lookup_global_subr_entry(intern(name)).is_none(),
+            "{name} must have no Rust subr: GNU implements it in {gnu_source} \
+             and nowhere in src/",
+        );
+    }
+    // ...and the ones GNU DOES implement in C, right next to them, which must
+    // stay registered: deleting the pair above is not a licence to delete
+    // these.
+    for (name, gnu_source) in [
+        ("undo-boundary", "src/undo.c:251"),
+        ("buffer-enable-undo", "src/buffer.c:1829"),
+    ] {
+        assert!(
+            lookup_global_subr_entry(intern(name)).is_some(),
+            "{name} IS a C DEFUN in GNU ({gnu_source}) and must stay a subr",
+        );
+    }
 
     // The list must shrink, not just stay reviewed.  146 left 49 entries, 148
     // deleted eleven of them and 149 the four process launchers; this pins the
@@ -148,8 +168,8 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
     // alone.
     assert_eq!(
         SHADOWED_BY_PRELOADED_LISP.len(),
-        34,
-        "the reviewed shadow list is 34 names after DIVERGENCES.md 149 \
-         (50 before 146, 49 after it, 38 after 148, 34 after 149)",
+        32,
+        "the reviewed shadow list is 32 names after DIVERGENCES.md 149 and 150 \
+         (50 before 146, 49 after it, 38 after 148, 34 after 149, 32 after 150)",
     );
 }

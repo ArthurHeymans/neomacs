@@ -4027,62 +4027,11 @@ pub(crate) fn builtin_buffer_enable_undo(
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_buffer_disable_undo(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    if args.len() > 1 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![
-                Value::symbol("buffer-disable-undo"),
-                Value::fixnum(args.len() as i64),
-            ],
-        ));
-    }
-
-    let id = if args.is_empty() || args[0].is_nil() {
-        eval.buffers
-            .current_buffer()
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?
-            .id
-    } else {
-        match args[0].kind() {
-            ValueKind::Veclike(VecLikeType::Buffer) => {
-                let bid = args[0].as_buffer_id().unwrap();
-                if eval.buffers.get(bid).is_none() {
-                    return Err(signal(
-                        "error",
-                        vec![Value::string("Selecting deleted buffer")],
-                    ));
-                }
-                bid
-            }
-            ValueKind::String => {
-                let name = expect_buffer_name_string(&args[0])?;
-                match eval.buffers.find_buffer_by_name(&name) {
-                    Some(id) => id,
-                    None => {
-                        return Err(signal(
-                            LispCondition::WrongTypeArgument,
-                            vec![Value::symbol("stringp"), Value::NIL],
-                        ));
-                    }
-                }
-            }
-            _other => {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("stringp"), args[0]],
-                ));
-            }
-        }
-    };
-    eval.buffers
-        .configure_buffer_undo_list(id, Value::T)
-        .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-    Ok(Value::T)
-}
+// No `buffer-disable-undo' here.  GNU DEFUNs `buffer-enable-undo'
+// (src/buffer.c:1829, above) but NOT its partner: `buffer-disable-undo' is
+// (defun buffer-disable-undo (&optional buffer) ...) at lisp/simple.el:3591,
+// three lines of `with-current-buffer' + `setq' over `get-buffer'.
+// DIVERGENCES.md 150.
 
 pub(crate) fn builtin_buffer_size(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_max_args("buffer-size", &args, 1)?;
