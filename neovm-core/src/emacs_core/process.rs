@@ -74,7 +74,7 @@ pub enum NetworkSocket {
 
 /// Platform abstraction layer for OS-specific subprocess facilities (currently
 /// the child-status wait source). See `process/sys/mod.rs`.
-mod sys;
+pub(crate) mod sys;
 use sys::ChildStatusSource;
 
 /// GNU-compatible GnuTLS process initialization stage.
@@ -679,6 +679,36 @@ impl ProcessKind {
     }
 }
 
+/// The process kinds whose record can be brought into existence with no OS
+/// device in hand.
+///
+/// `Serial` is deliberately absent.  GNU's `Fmake_serial_process` opens the
+/// port at src/process.c:3212 -- before the buffer, before the coding chain and
+/// before `serial_process_configure` -- and unwinds the whole record if that
+/// open fails.  So a serial process record and an open device are the same
+/// event, and the only constructor that can produce one takes the opened
+/// [`sys::SerialPort`] by value: [`ProcessManager::create_serial_process`].
+/// Before DIVERGENCES.md entry 147 `ProcessKind::Serial` could simply be passed
+/// to the generic constructor, and it was -- which is exactly how
+/// `make-serial-process` came to build process records for ports that were
+/// never opened.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ProcessKindWithoutDevice {
+    Real,
+    Network,
+    Pipe,
+}
+
+impl From<ProcessKindWithoutDevice> for ProcessKind {
+    fn from(kind: ProcessKindWithoutDevice) -> Self {
+        match kind {
+            ProcessKindWithoutDevice::Real => Self::Real,
+            ProcessKindWithoutDevice::Network => Self::Network,
+            ProcessKindWithoutDevice::Pipe => Self::Pipe,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 enum ProcessStatusSymbol {
@@ -848,6 +878,14 @@ struct LiveProcessIo {
     pending_network_connect: Option<PendingNetworkConnect>,
     /// TLS-wrapped stream for encrypted network connections.
     tls_stream: Option<TlsStream>,
+    /// The open device behind a serial process.  GNU keeps one descriptor for
+    /// both directions (`p->infd = fd; p->outfd = fd`, src/process.c:3216-3217),
+    /// so this single slot is the read source AND the write source.
+    ///
+    /// It is `Option` only because `LiveProcessIo` is one struct for every
+    /// process kind and `deactivate_process_io` empties it; a serial process
+    /// cannot be BORN without one -- see [`ProcessManager::create_serial_process`].
+    serial_port: Option<sys::SerialPort>,
 }
 
 enum ChildOutputReader {
@@ -2740,7 +2778,7 @@ fn create_network_process_record(
         buffer,
         LispString::from_utf8("network"),
         Vec::new(),
-        ProcessKind::Network,
+        ProcessKindWithoutDevice::Network,
         coding,
     ))
 }
@@ -3080,11 +3118,79 @@ fn serial_value_eq_symbol(value: Value, symbol: &str) -> bool {
     crate::emacs_core::value::eq_value(&value, &Value::symbol(symbol))
 }
 
-fn configure_serial_contact(current: Value, contact: Value) -> EvalResult {
+/// GNU `serial_open`, src/sysdep.c:2980-2990, plus its error boundary.
+///
+/// `report_file_error ("Opening serial port", port)` (:2984) is the same
+/// errno classification every other failed open in Emacs gets, so a missing
+/// device is `file-missing`, an unreadable one is `permission-denied` and
+/// everything else is `file-error` -- all three measured against GNU 31.0.90.
+fn open_serial_port(port: Value, port_name: &LispString) -> Result<sys::SerialPort, Flow> {
+    sys::SerialPort::open(&lisp_string_to_os_string(port_name)).map_err(|err| {
+        signal_file_errno(
+            "Opening serial port",
+            port,
+            err.raw_os_error().unwrap_or(libc::EIO),
+        )
+    })
+}
+
+/// GNU `serial_configure`, src/sysdep.c:3151-3309: the keyword half, run in the
+/// window [`sys::SerialPort::configure`] opens between `tcgetattr` and
+/// `tcsetattr`.
+///
+/// Returns the new `childp` plist -- GNU's `childp2`, which it writes back only
+/// at the very end (:3308), so a rejected keyword leaves both the device and
+/// the process contact exactly as they were.
+///
+/// The three failure classes are three different Lisp errors and they are
+/// ordered, which is the whole reason this runs inside a closure rather than
+/// before or after the device work:
+///
+/// ```text
+/// :port "/dev/null" :speed 9600 :bytesize 5
+///   GNU => (file-error "Failed tcgetattr" "Inappropriate ioctl for device")
+/// ```
+///
+/// The `:bytesize` message never appears, because the read failed first.
+fn configure_serial_device(device: &sys::SerialPort, current: Value, contact: Value) -> EvalResult {
+    let mut childp = Value::NIL;
+    let outcome = device.configure(|attributes| -> Result<(), Flow> {
+        childp = apply_serial_settings(attributes, current, contact)?;
+        Ok(())
+    });
+    match outcome {
+        Ok(()) => Ok(childp),
+        Err(sys::SerialConfigureFailure::Settings(flow)) => Err(flow),
+        Err(sys::SerialConfigureFailure::Device { step, errno }) => {
+            // GNU names the failing call and passes `Qnil` as the file name for
+            // both (src/sysdep.c:3165-3166, :3304-3305).
+            let message = match step {
+                sys::SerialConfigureStep::ReadAttributes => "Failed tcgetattr",
+                sys::SerialConfigureStep::WriteAttributes => "Failed tcsetattr",
+            };
+            Err(signal_file_errno(message, Value::NIL, errno))
+        }
+    }
+}
+
+/// GNU's five keyword arms, src/sysdep.c:3175-3300, each applied to the local
+/// attribute copy as it is validated -- exactly GNU's interleaving, so an
+/// invalid `:stopbits` still leaves the speed and byte size already applied to
+/// the copy and still never reaches the device.
+fn apply_serial_settings(
+    attributes: &mut sys::SerialAttributes,
+    current: Value,
+    contact: Value,
+) -> EvalResult {
     let mut childp = copy_process_plist(current)?;
 
     let speed = serial_contact_value(contact, current, ProcessKeyword::Speed);
-    serial_expect_fixnum(speed)?;
+    let speed_num = serial_expect_fixnum(speed)?;
+    attributes
+        .set_speed(speed_num)
+        // GNU's only step whose error names the offending value:
+        // `report_file_error ("Failed cfsetspeed", tem)`, src/sysdep.c:3183.
+        .map_err(|err| signal_file_errno("Failed cfsetspeed", speed, err.errno))?;
     childp = process_contact_plist_put(childp, ProcessKeyword::Speed.value(), speed)?;
 
     let mut bytesize = serial_contact_value(contact, current, ProcessKeyword::Bytesize);
@@ -3092,21 +3198,26 @@ fn configure_serial_contact(current: Value, contact: Value) -> EvalResult {
         bytesize = Value::fixnum(8);
     }
     let bytesize_num = serial_expect_fixnum(bytesize)?;
-    if bytesize_num != 7 && bytesize_num != 8 {
-        return Err(signal(
-            "error",
-            vec![Value::string(":bytesize must be nil (8), 7, or 8")],
-        ));
-    }
+    let byte_size = match bytesize_num {
+        7 => sys::SerialByteSize::Seven,
+        8 => sys::SerialByteSize::Eight,
+        _ => {
+            return Err(signal(
+                "error",
+                vec![Value::string(":bytesize must be nil (8), 7, or 8")],
+            ));
+        }
+    };
+    attributes.set_byte_size(byte_size);
     childp = process_contact_plist_put(childp, ProcessKeyword::Bytesize.value(), bytesize)?;
 
-    let parity = serial_contact_value(contact, current, ProcessKeyword::Parity);
-    let parity_summary = if parity.is_nil() {
-        "N"
-    } else if serial_value_eq_symbol(parity, "even") {
-        "E"
-    } else if serial_value_eq_symbol(parity, "odd") {
-        "O"
+    let parity_value = serial_contact_value(contact, current, ProcessKeyword::Parity);
+    let parity = if parity_value.is_nil() {
+        sys::SerialParity::None
+    } else if serial_value_eq_symbol(parity_value, "even") {
+        sys::SerialParity::Even
+    } else if serial_value_eq_symbol(parity_value, "odd") {
+        sys::SerialParity::Odd
     } else {
         return Err(signal(
             "error",
@@ -3115,35 +3226,56 @@ fn configure_serial_contact(current: Value, contact: Value) -> EvalResult {
             )],
         ));
     };
-    childp = process_contact_plist_put(childp, ProcessKeyword::Parity.value(), parity)?;
+    attributes.set_parity(parity);
+    childp = process_contact_plist_put(childp, ProcessKeyword::Parity.value(), parity_value)?;
 
     let mut stopbits = serial_contact_value(contact, current, ProcessKeyword::Stopbits);
     if stopbits.is_nil() {
         stopbits = Value::fixnum(1);
     }
     let stopbits_num = serial_expect_fixnum(stopbits)?;
-    if stopbits_num != 1 && stopbits_num != 2 {
-        return Err(signal(
-            "error",
-            vec![Value::string(":stopbits must be nil (1 stopbit), 1, or 2")],
-        ));
-    }
+    let stop_bits = match stopbits_num {
+        1 => sys::SerialStopBits::One,
+        2 => sys::SerialStopBits::Two,
+        _ => {
+            return Err(signal(
+                "error",
+                vec![Value::string(":stopbits must be nil (1 stopbit), 1, or 2")],
+            ));
+        }
+    };
+    attributes.set_stop_bits(stop_bits);
     childp = process_contact_plist_put(childp, ProcessKeyword::Stopbits.value(), stopbits)?;
 
-    let flowcontrol = serial_contact_value(contact, current, ProcessKeyword::Flowcontrol);
-    if !flowcontrol.is_nil()
-        && !serial_value_eq_symbol(flowcontrol, "hw")
-        && !serial_value_eq_symbol(flowcontrol, "sw")
-    {
+    let flowcontrol_value = serial_contact_value(contact, current, ProcessKeyword::Flowcontrol);
+    let flow_control = if flowcontrol_value.is_nil() {
+        sys::SerialFlowControl::None
+    } else if serial_value_eq_symbol(flowcontrol_value, "hw") {
+        sys::SerialFlowControl::Hardware
+    } else if serial_value_eq_symbol(flowcontrol_value, "sw") {
+        sys::SerialFlowControl::Software
+    } else {
         return Err(signal(
             "error",
             vec![Value::string(
                 ":flowcontrol must be nil (no flowcontrol), `hw', or `sw'",
             )],
         ));
-    }
-    childp = process_contact_plist_put(childp, ProcessKeyword::Flowcontrol.value(), flowcontrol)?;
+    };
+    attributes.set_flow_control(flow_control);
+    childp = process_contact_plist_put(
+        childp,
+        ProcessKeyword::Flowcontrol.value(),
+        flowcontrol_value,
+    )?;
 
+    // GNU's `summary` is built one character at a time as each arm validates
+    // (`summary[0]`, `[1]`, `[2]`), and put into the contact last (:3307).
+    let parity_summary = match parity {
+        sys::SerialParity::None => "N",
+        sys::SerialParity::Even => "E",
+        sys::SerialParity::Odd => "O",
+    };
     let summary = format!("{bytesize_num}{parity_summary}{stopbits_num}");
     process_contact_plist_put(
         childp,
@@ -3217,6 +3349,10 @@ enum ProcessOutputSource {
     /// read end lives in `child_stderr` on the stderr pipe-process record.
     ChildStderr,
     Network,
+    /// The `termios` device a `make-serial-process` opened.  GNU reads it
+    /// through the same `read_process_output` as every other process
+    /// (`p->infd` is the serial fd, src/process.c:3216).
+    Serial,
 }
 
 fn process_output_source(proc: &Process) -> Option<ProcessOutputSource> {
@@ -3228,6 +3364,8 @@ fn process_output_source(proc: &Process) -> Option<ProcessOutputSource> {
         Some(ProcessOutputSource::ChildStderr)
     } else if proc.live_io.tls_stream.is_some() || proc.live_io.network_socket.is_some() {
         Some(ProcessOutputSource::Network)
+    } else if proc.live_io.serial_port.is_some() {
+        Some(ProcessOutputSource::Serial)
     } else {
         None
     }
@@ -3419,6 +3557,7 @@ fn process_is_harness_record_without_write_source(proc: &Process) -> bool {
         && proc.live_io.pty_writer.is_none()
         && proc.live_io.tls_stream.is_none()
         && proc.live_io.network_socket.is_none()
+        && proc.live_io.serial_port.is_none()
 }
 
 impl super::eval::Context {
@@ -4556,6 +4695,18 @@ impl ProcessManager {
             }
             return;
         }
+        if let Some(port) = proc.live_io.serial_port.as_ref() {
+            match event {
+                Some(event) => {
+                    if port.modify_interest(poller, event).is_err() {
+                        let _ = port.register_readable(poller, id);
+                        let _ = port.modify_interest(poller, event);
+                    }
+                }
+                None => port.unregister(poller),
+            }
+            return;
+        }
         #[cfg(unix)]
         if let Some(master) = proc
             .live_io
@@ -4645,6 +4796,9 @@ impl ProcessManager {
         }
         if let Some(socket) = proc.live_io.network_socket.as_ref() {
             socket.unregister_readable(poller);
+        }
+        if let Some(port) = proc.live_io.serial_port.as_ref() {
+            port.unregister(poller);
         }
         #[cfg(unix)]
         if let Some(master) = proc
@@ -4744,7 +4898,14 @@ impl ProcessManager {
         args: Vec<LispString>,
         coding: ProcessCodingSystems,
     ) -> ProcessId {
-        self.create_process_with_kind_lisp(name, buffer, command, args, ProcessKind::Real, coding)
+        self.create_process_with_kind_lisp(
+            name,
+            buffer,
+            command,
+            args,
+            ProcessKindWithoutDevice::Real,
+            coding,
+        )
     }
 
     pub(crate) fn create_process_lisp_resolved(
@@ -4761,7 +4922,7 @@ impl ProcessManager {
             buffer,
             command,
             args,
-            ProcessKind::Real,
+            ProcessKindWithoutDevice::Real,
             executable,
             coding,
         )
@@ -4774,7 +4935,7 @@ impl ProcessManager {
         buffer: Value,
         command: String,
         args: Vec<String>,
-        kind: ProcessKind,
+        kind: ProcessKindWithoutDevice,
         coding: ProcessCodingSystems,
     ) -> ProcessId {
         self.create_process_with_kind_lisp(
@@ -4795,13 +4956,59 @@ impl ProcessManager {
         buffer: Value,
         command: LispString,
         args: Vec<LispString>,
-        kind: ProcessKind,
+        kind: ProcessKindWithoutDevice,
         coding: ProcessCodingSystems,
     ) -> ProcessId {
         self.create_process_with_kind_lisp_resolved(name, buffer, command, args, kind, None, coding)
     }
 
     pub(crate) fn create_process_with_kind_lisp_resolved(
+        &mut self,
+        name: LispString,
+        buffer: Value,
+        command: LispString,
+        args: Vec<LispString>,
+        kind: ProcessKindWithoutDevice,
+        executable: Option<LispString>,
+        coding: ProcessCodingSystems,
+    ) -> ProcessId {
+        self.create_process_record(name, buffer, command, args, kind.into(), executable, coding)
+    }
+
+    /// GNU `Fmake_serial_process`'s record, which cannot exist without the
+    /// device `serial_open` returned (src/process.c:3207-3217: `make_process`,
+    /// then `serial_open`, then `p->infd = fd; p->outfd = fd`, with the whole thing
+    /// under `record_unwind_protect (remove_process, proc)`).
+    ///
+    /// Taking the [`sys::SerialPort`] by value is the whole point: there is no
+    /// other way to reach `ProcessKind::Serial`, and there is no other way to
+    /// obtain a `SerialPort` than to have opened one.
+    pub(crate) fn create_serial_process(
+        &mut self,
+        name: LispString,
+        buffer: Value,
+        port: sys::SerialPort,
+        coding: ProcessCodingSystems,
+    ) -> ProcessId {
+        let id = self.create_process_record(
+            name,
+            buffer,
+            LispString::from_utf8("serial"),
+            Vec::new(),
+            ProcessKind::Serial,
+            None,
+            coding,
+        );
+        if let Some(proc) = self.processes.get_mut(&id) {
+            proc.live_io.serial_port = Some(port);
+            // GNU's `Fmake_serial_process` stores `open`, not `run`
+            // (`process-status` on a live serial port is `open`, measured).
+            proc.status = ProcessStatusSymbol::Open.value();
+        }
+        id
+    }
+
+    fn create_process_record(
         &mut self,
         name: LispString,
         buffer: Value,
@@ -5533,6 +5740,43 @@ impl ProcessManager {
         read
     }
 
+    /// Read available output from a serial process's device.
+    ///
+    /// GNU has no separate path for this: `read_process_output` reads
+    /// `p->infd`, which for a serial process is the descriptor `serial_open`
+    /// returned (src/process.c:3212-3217).  The device was opened
+    /// `O_NONBLOCK`, so an idle port is `WouldBlock` rather than a stall.
+    fn read_serial_output_result(
+        &mut self,
+        id: ProcessId,
+        sink: ProcessOutputSink,
+        eol_conversion: crate::emacs_core::coding::EolConversion,
+    ) -> DecodedProcessOutputRead {
+        let Some(proc) = self.processes.get_mut(&id) else {
+            return DecodedProcessOutputRead::NoSource;
+        };
+        let read_len = process_read_buffer_len(proc);
+        let Some(port) = proc.live_io.serial_port.as_mut() else {
+            return DecodedProcessOutputRead::NoSource;
+        };
+
+        let mut buf = vec![0u8; read_len];
+        let full_read_len = buf.len();
+        let result = port.read(&mut buf);
+        let read = process_output_read_from_io_result(
+            proc,
+            sink,
+            result,
+            &buf,
+            full_read_len,
+            eol_conversion,
+        );
+        if let Some(data) = read.data() {
+            proc.stdout.push_str(&process_output_runtime_string(data));
+        }
+        read
+    }
+
     /// Read available output from a stderr pipe-process's child stderr fd.
     ///
     /// Mirrors GNU's `create_process` :stderr wiring: the stderr pipe-process
@@ -6208,6 +6452,10 @@ impl ProcessManager {
                 Some(result) => result,
                 None => return Ok(ProcessWriteAttempt::NoSource),
             }
+        } else if let Some(port) = proc.live_io.serial_port.as_mut() {
+            // GNU writes a serial process's input to `p->outfd`, which is the
+            // same descriptor it reads from (src/process.c:3216-3217).
+            port.write(bytes)
         } else {
             return Ok(ProcessWriteAttempt::NoSource);
         };
@@ -6253,6 +6501,25 @@ impl ProcessManager {
             socket.register_readable(poller, id)?;
         }
         Ok(())
+    }
+
+    /// GNU `Fmake_serial_process`'s `add_process_read_fd (fd)`,
+    /// src/process.c:3241-3243, which is guarded exactly as this is:
+    /// `if (!EQ (p->command, Qt) && !EQ (p->filter, Qt))` -- a `:stop t` port
+    /// and a port whose filter is `t` are opened and configured but not polled.
+    pub(crate) fn register_serial_read_fd(&self, id: ProcessId) {
+        let Some(poller) = self.wait_backend.poller() else {
+            return;
+        };
+        let Some(proc) = self.processes.get(&id) else {
+            return;
+        };
+        if process_stopped_for_io(proc) || !process_filter_accepts_output(proc) {
+            return;
+        }
+        if let Some(port) = proc.live_io.serial_port.as_ref() {
+            let _ = port.register_readable(poller, id);
+        }
     }
 
     pub fn register_socket_writable_fd(&self, id: ProcessId) -> Result<(), String> {
@@ -6820,7 +7087,7 @@ impl ProcessManager {
                 server_buffer,
                 LispString::from_utf8("network"),
                 Vec::new(),
-                ProcessKind::Network,
+                ProcessKindWithoutDevice::Network,
                 ProcessCodingSystems::inherited_from_server(coding_decode, coding_encode),
             );
             if let Some(client) = self.get_mut(client_id) {
@@ -6880,6 +7147,9 @@ impl ProcessManager {
             }
             Some(ProcessOutputSource::Network) => {
                 self.read_network_output_result(id, sink, eol_conversion)
+            }
+            Some(ProcessOutputSource::Serial) => {
+                self.read_serial_output_result(id, sink, eol_conversion)
             }
             None => DecodedProcessOutputRead::NoSource,
         }
@@ -12799,7 +13069,7 @@ pub(crate) fn builtin_make_pipe_process_impl(
         resolved_buffer,
         LispString::from_utf8("pipe"),
         Vec::new(),
-        ProcessKind::Pipe,
+        ProcessKindWithoutDevice::Pipe,
         resolved_coding,
     );
     processes.sync_process_mark(buffers, id)?;
@@ -12889,22 +13159,8 @@ pub(crate) fn builtin_make_serial_process_impl(
                     port_name = Some(string);
                 }
             }
-            ProcessKeyword::Speed => {
-                if !value.is_nil() && !value.is_fixnum() {
-                    return Err(signal(
-                        LispCondition::WrongTypeArgument,
-                        vec![Value::symbol("fixnump"), value],
-                    ));
-                }
-                speed = Some(value);
-            }
-            ProcessKeyword::Buffer => {
-                buffer = Some(if value.is_nil() {
-                    Value::NIL
-                } else {
-                    parse_make_process_buffer_in_state(buffers, &value)?
-                });
-            }
+            ProcessKeyword::Speed => speed = Some(value),
+            ProcessKeyword::Buffer => buffer = Some(value),
             ProcessKeyword::Filter => filter = value,
             ProcessKeyword::Sentinel => sentinel = value,
             ProcessKeyword::Coding => {
@@ -12919,20 +13175,41 @@ pub(crate) fn builtin_make_serial_process_impl(
         i += 2;
     }
 
-    if port.is_none() {
+    // GNU checks the PORT before it looks at `:speed` at all
+    // (src/process.c:3193-3200), so a missing or non-string port beats a
+    // non-fixnum speed.  Measured, GNU 31.0.90:
+    //   (make-serial-process :speed "x")          => (error "No port specified")
+    //   (make-serial-process :port 1 :speed "x")  => (wrong-type-argument stringp 1)
+    let (Some(port), Some(port_name)) = (port, port_name) else {
         return Err(signal("error", vec![Value::string("No port specified")]));
-    }
-    if speed.is_none() {
+    };
+    let Some(speed) = speed else {
         return Err(signal("error", vec![Value::string(":speed not specified")]));
+    };
+    if !speed.is_nil() && !speed.is_fixnum() {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("fixnump"), speed],
+        ));
     }
-    // GNU resolves and then validates through `setup_process_coding_systems`
-    // (src/process.c:3277), the same two steps `make-pipe-process` takes.
-    let resolved_coding = resolve_serial_process_coding_systems(coding, coding_variables.serial());
-    validate_resolved_process_coding_systems(coding_systems, resolved_coding)?;
-    let plist = copy_process_plist(plist)?;
-    let name = name.unwrap_or_else(|| port_name.clone().expect("port is present after validation"));
+    let name = name.unwrap_or_else(|| port_name.clone());
+
+    // GNU `serial_open`, src/process.c:3212 -- and everything below this line
+    // is downstream of it.  A port that cannot be opened is reported before
+    // the process buffer is created, before the coding chain runs and before
+    // `serial-process-configure` is called, so `:buffer "x" :bytesize 5` on a
+    // nonexistent port still reports `file-missing` and still leaves no buffer
+    // named "x" behind.  All three orderings measured against GNU 31.0.90.
+    let device = open_serial_port(port, &port_name)?;
+
+    // GNU creates the buffer here (:3226), which is why a LATER failure
+    // -- an undefined coding system, an invalid `:bytesize`, a `tcgetattr` on
+    // something that is not a tty -- leaves the buffer behind even though it
+    // unwinds the process record itself.
     let resolved_buffer = match buffer {
-        Some(explicit) if !explicit.is_nil() => explicit,
+        Some(explicit) if !explicit.is_nil() => {
+            parse_make_process_buffer_in_state(buffers, &explicit)?
+        }
         _ => {
             let name_runtime = crate::emacs_core::emacs_char::to_utf8_lossy(name.as_bytes());
             let id = buffers
@@ -12942,19 +13219,29 @@ pub(crate) fn builtin_make_serial_process_impl(
         }
     };
 
-    let id = processes.create_process_with_kind_lisp(
-        name,
-        resolved_buffer,
-        LispString::from_utf8("serial"),
-        Vec::new(),
-        ProcessKind::Serial,
-        resolved_coding,
-    );
+    // GNU resolves and then validates through `setup_process_coding_systems`
+    // (src/process.c:3277), the same two steps `make-pipe-process` takes.
+    let resolved_coding = resolve_serial_process_coding_systems(coding, coding_variables.serial());
+    validate_resolved_process_coding_systems(coding_systems, resolved_coding)?;
+    let plist = copy_process_plist(plist)?;
+
+    // GNU `Fserial_process_configure (nargs, args)`, src/process.c:3284, whose
+    // first act is to return without touching the device when the contact's
+    // `:speed` is nil (:3098-3099, documented as "the serial port is not
+    // configured any further").  That is measurable and not a shortcut: a
+    // `:speed nil` port on `/dev/null` is created successfully, where the same
+    // port with `:speed 9600` reports `Failed tcgetattr`.
+    let childp = if process_contact_plist_get(contact, ProcessKeyword::Speed.value()).is_nil() {
+        contact
+    } else {
+        configure_serial_device(&device, contact, contact)?
+    };
+
+    let id = processes.create_serial_process(name, resolved_buffer, device, resolved_coding);
     processes.sync_process_mark(buffers, id)?;
     if let Some(proc) = processes.get_mut(id) {
-        proc.childp = contact;
+        proc.childp = childp;
         proc.thread = current_thread_handle(threads);
-        proc.status = ProcessStatusSymbol::Open.value();
         proc.plist = plist;
         if !filter.is_nil() {
             proc.filter = filter;
@@ -12964,10 +13251,8 @@ pub(crate) fn builtin_make_serial_process_impl(
         }
         proc.coding_explicitly_set = coding_present;
         apply_connection_process_flags(proc, noquery, stop);
-        if !process_contact_plist_get(proc.childp, ProcessKeyword::Speed.value()).is_nil() {
-            proc.childp = configure_serial_contact(proc.childp, contact)?;
-        }
     }
+    processes.register_serial_read_fd(id);
     Ok(Value::make_process(id))
 }
 
@@ -13004,10 +13289,26 @@ pub(crate) fn builtin_serial_process_configure_impl(
     if proc.kind != ProcessKind::Serial {
         return Err(signal("error", vec![Value::string("Not a serial process")]));
     }
+    // GNU `Fserial_process_configure`, src/process.c:3098-3099: a contact whose
+    // `:speed` is nil means "do not configure the port any further", so the
+    // primitive returns before `serial_configure` and never touches the device.
     if process_contact_plist_get(proc.childp, ProcessKeyword::Speed.value()).is_nil() {
         return Ok(Value::NIL);
     }
-    proc.childp = configure_serial_contact(proc.childp, contact)?;
+    // GNU reaches the device through `p->outfd` (src/sysdep.c:3162, :3303).
+    // A serial process that has been `delete-process`ed has no device left;
+    // GNU would `tcgetattr` a closed descriptor and report `Failed tcgetattr`,
+    // which is what an `EBADF` here produces too.
+    let current = proc.childp;
+    let result = match proc.live_io.serial_port.as_ref() {
+        Some(device) => configure_serial_device(device, current, contact),
+        None => Err(signal_file_errno(
+            "Failed tcgetattr",
+            Value::NIL,
+            libc::EBADF,
+        )),
+    };
+    proc.childp = result?;
     Ok(Value::NIL)
 }
 

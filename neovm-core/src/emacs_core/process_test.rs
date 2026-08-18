@@ -779,7 +779,7 @@ fn process_controls_accept_get_process_designators_like_gnu() {
         Value::make_buffer(buffer_id),
         String::new(),
         vec![],
-        ProcessKind::Pipe,
+        ProcessKindWithoutDevice::Pipe,
         crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
 
@@ -1114,7 +1114,7 @@ fn process_type_and_contact_use_stored_lisp_fields() {
         Value::NIL,
         String::new(),
         vec![],
-        ProcessKind::Network,
+        ProcessKindWithoutDevice::Network,
         crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     {
@@ -1179,7 +1179,7 @@ fn connection_process_mutators_keep_childp_plist_in_sync() {
         Value::make_buffer(buffer_id),
         String::new(),
         vec![],
-        ProcessKind::Network,
+        ProcessKindWithoutDevice::Network,
         crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     {
@@ -1546,7 +1546,7 @@ fn builtin_process_tty_name_uses_value_slot() {
         Value::NIL,
         String::new(),
         vec![],
-        ProcessKind::Pipe,
+        ProcessKindWithoutDevice::Pipe,
         crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
 
@@ -1819,7 +1819,7 @@ fn builtin_process_command_uses_value_slot() {
         Value::NIL,
         String::new(),
         vec![],
-        ProcessKind::Pipe,
+        ProcessKindWithoutDevice::Pipe,
         crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
 
@@ -3673,7 +3673,7 @@ fn serial_configuration_keywords_update_contact_state() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
         r#"(let ((p (make-serial-process
-                    :port "/tmp/neo-serial-config"
+                    :port "/dev/ptmx"
                     :speed 9600
                     :bytesize nil
                     :parity 'even
@@ -3704,7 +3704,7 @@ fn serial_configuration_keywords_update_contact_state() {
     );
     assert_eq!(
         result,
-        "OK ((9600 8 even 2 hw \"8E2\") (9600 7 odd 1 sw \"7O1\") (\"/tmp/neo-serial-config\" 9600))"
+        "OK ((9600 8 even 2 hw \"8E2\") (9600 7 odd 1 sw \"7O1\") (\"/dev/ptmx\" 9600))"
     );
 }
 
@@ -3714,7 +3714,7 @@ fn serial_configuration_validates_option_domains() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
         r#"(let ((p (make-serial-process
-                    :port "/tmp/neo-serial-invalid"
+                    :port "/dev/ptmx"
                     :speed 9600)))
              (unwind-protect
                  (list
@@ -3750,17 +3750,17 @@ fn serial_process_configure_resolves_buffer_and_port_designators() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
         r#"(let ((by-port (make-serial-process
-                           :port "/tmp/neo-serial-by-port"
+                           :port "/dev/ptmx"
                            :speed 9600))
                  (by-buffer (make-serial-process
-                             :port "/tmp/neo-serial-by-buffer"
+                             :port "/dev/ptmx"
                              :name "neo-serial-by-buffer-process"
                              :buffer "neo-serial-by-buffer"
                              :speed 9600)))
              (unwind-protect
                  (progn
                    (serial-process-configure
-                    :port "/tmp/neo-serial-by-port"
+                    :port "/dev/ptmx"
                     :bytesize 7)
                    (serial-process-configure
                     :buffer "neo-serial-by-buffer"
@@ -6417,7 +6417,7 @@ fn pipe_process_send_after_eof_discards_input_like_gnu() {
         Value::NIL,
         LispString::from_utf8(&cat),
         vec![],
-        ProcessKind::Real,
+        ProcessKindWithoutDevice::Real,
         crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     pm.spawn_child(id, false).expect("spawn pipe child");
@@ -6794,7 +6794,7 @@ fn process_constructors_duplicate_keywords_use_first_value_like_gnu() {
                         (process-plist p))
                 (ignore-errors (delete-process p))))
             (let ((p (make-serial-process
-                      :port "/tmp/neo-dup-serial"
+                      :port "/dev/ptmx"
                       :port 1
                       :speed 9600
                       :speed "bad"
@@ -6850,12 +6850,12 @@ fn process_constructors_duplicate_keywords_use_first_value_like_gnu() {
               (error (car err)))
             (condition-case err
                 (make-serial-process
-                 :port 1 :port "/tmp/neo-dup-serial-late" :speed 9600)
+                 :port 1 :port "/dev/ptmx" :speed 9600)
               (error (car err))))"#,
     );
     assert_eq!(
         result,
-        "OK ((\"neo-dup-make\" nil nil nil) (\"neo-dup-pipe\" nil nil stop ignore (:a 1)) ((\"/tmp/neo-dup-serial\" 9600) 7 even 2 hw \"7E2\") (\"neo-dup-network\" nil stop t t ignore (:n 1)) error error error wrong-type-argument)"
+        "OK ((\"neo-dup-make\" nil nil nil) (\"neo-dup-pipe\" nil nil stop ignore (:a 1)) ((\"/dev/ptmx\" 9600) 7 even 2 hw \"7E2\") (\"neo-dup-network\" nil stop t t ignore (:n 1)) error error error wrong-type-argument)"
     );
 }
 
@@ -7241,7 +7241,7 @@ fn make_network_process_nowait_hostname_dns_failure_is_async_like_gnu() {
         Value::NIL,
         LispString::from_utf8("network"),
         Vec::new(),
-        ProcessKind::Network,
+        ProcessKindWithoutDevice::Network,
         crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     let (sender, receiver) = std::sync::mpsc::channel();
@@ -7421,7 +7421,7 @@ fn process_contact_no_block_returns_nil_for_pending_nowait_network_like_gnu() {
         Value::NIL,
         LispString::from_utf8("network"),
         Vec::new(),
-        ProcessKind::Network,
+        ProcessKindWithoutDevice::Network,
         crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     let proc = eval.processes.get_mut(id).expect("network process");
@@ -7602,7 +7602,7 @@ fn process_send_string_rejects_network_server_like_gnu() {
         Value::NIL,
         "network".into(),
         vec![],
-        ProcessKind::Network,
+        ProcessKindWithoutDevice::Network,
         crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
     );
     pm.get_mut(id).expect("server process").childp = Value::list(vec![
@@ -9991,4 +9991,512 @@ fn inhibit_eol_conversion_is_read_when_process_output_arrives_not_when_it_is_res
             "(97 13 10 98 13 10))",
         )
     );
+}
+
+// ---------------------------------------------------------------------------
+// DIVERGENCES.md entry 147: `make-serial-process` opens its port.
+// ---------------------------------------------------------------------------
+
+/// One pty pair, held open from the Rust side, so a serial process can be
+/// created on the SLAVE and fed real bytes through the MASTER.
+///
+/// This is the only way to give `make-serial-process` a device that carries
+/// traffic without real hardware, and it is the fixture DIVERGENCES.md entry
+/// 137 built and then deliberately refused to pin against, because our
+/// `make-serial-process` never opened the port and every row measured an empty
+/// buffer.  The master is put into raw mode BEFORE anything is written, so the
+/// bytes queued for the slave are not rewritten by the line discipline on the
+/// way in (`ICRNL` would eat the CRs this fixture exists to carry) -- and it is
+/// therefore deterministic: the payload is already in the pty's input queue
+/// before the serial process opens the slave, so no row depends on timing.
+///
+/// The pair is a tty, which is what a serial port IS; what it is NOT is a pty
+/// whose master has CLOSED, so none of these rows measure the EOF carryover
+/// quirk DIVERGENCES.md entry 139 found.  The master stays open for the whole
+/// test and is closed by `Drop`.
+#[cfg(unix)]
+struct SerialTestPty {
+    master: std::os::fd::OwnedFd,
+    slave_path: String,
+}
+
+#[cfg(unix)]
+impl SerialTestPty {
+    fn open() -> Self {
+        use std::os::fd::FromRawFd;
+        // SAFETY: each call takes only the descriptor it was handed, and
+        // `ptsname`'s result is copied out before any other libc call runs.
+        unsafe {
+            let master = libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY);
+            assert!(
+                master >= 0,
+                "posix_openpt: {}",
+                std::io::Error::last_os_error()
+            );
+            assert_eq!(libc::grantpt(master), 0, "grantpt");
+            assert_eq!(libc::unlockpt(master), 0, "unlockpt");
+            let name = libc::ptsname(master);
+            assert!(!name.is_null(), "ptsname");
+            let slave_path = std::ffi::CStr::from_ptr(name)
+                .to_str()
+                .expect("pty slave path is ASCII")
+                .to_owned();
+            // Raw BEFORE the first write: the line discipline processes input
+            // as it is written to the master, so `ICRNL` would turn this
+            // fixture's CR LF into LF LF before any coding system sees it.
+            let mut attributes = std::mem::MaybeUninit::<libc::termios>::uninit();
+            assert_eq!(
+                libc::tcgetattr(master, attributes.as_mut_ptr()),
+                0,
+                "tcgetattr"
+            );
+            let mut attributes = attributes.assume_init();
+            libc::cfmakeraw(&raw mut attributes);
+            assert_eq!(
+                libc::tcsetattr(master, libc::TCSANOW, &raw const attributes),
+                0,
+                "tcsetattr"
+            );
+            Self {
+                master: std::os::fd::OwnedFd::from_raw_fd(master),
+                slave_path,
+            }
+        }
+    }
+
+    fn write(&self, bytes: &[u8]) {
+        use std::os::fd::AsRawFd;
+        // SAFETY: writes `bytes.len()` bytes from a live slice to an owned fd.
+        let written = unsafe {
+            libc::write(
+                self.master.as_raw_fd(),
+                bytes.as_ptr().cast::<libc::c_void>(),
+                bytes.len(),
+            )
+        };
+        assert_eq!(written, bytes.len() as isize, "short write to pty master");
+    }
+
+    /// Everything the slave side has written back, waiting up to two seconds
+    /// for the first byte.  Used to prove the WRITE half: `process-send-string`
+    /// on a serial process has to reach the device.
+    fn read_available(&self) -> Vec<u8> {
+        use std::os::fd::AsRawFd;
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            let mut buf = [0u8; 256];
+            // SAFETY: reads at most `buf.len()` bytes into a live buffer.
+            let count = unsafe {
+                libc::read(
+                    self.master.as_raw_fd(),
+                    buf.as_mut_ptr().cast::<libc::c_void>(),
+                    buf.len(),
+                )
+            };
+            if count > 0 {
+                #[allow(clippy::cast_sign_loss)]
+                return buf[..count as usize].to_vec();
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        Vec::new()
+    }
+}
+
+/// GNU `Fmake_serial_process` opens the port at src/process.c:3212 -- BEFORE
+/// the process buffer (:3220), before the coding chain (:3246-3277) and before
+/// `Fserial_process_configure` (:3284), and under a
+/// `record_unwind_protect (remove_process, proc)` (:3207) that removes the
+/// record again if any of those fails.
+///
+/// So the errors are ordered, and every row below says which one wins.  All of
+/// them were measured against GNU Emacs 31.0.90; before this fix neomacs
+/// returned a live process for the first four, because it never opened
+/// anything.
+#[cfg(unix)]
+#[test]
+fn make_serial_process_open_failures_beat_everything_downstream() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (defun pw147-try (thunk) (condition-case err (funcall thunk) (error err)))
+             (list
+              ;; `serial_open' -> `report_file_error ("Opening serial port", port)'
+              ;; (src/sysdep.c:2982-2984): the errno classification is the same
+              ;; one every other failed open in Emacs gets.
+              (pw147-try (lambda () (make-serial-process :port "/nonexistent/pw147-tty"
+                                                   :speed 9600 :name "a" :noquery t)))
+              (pw147-try (lambda () (make-serial-process :port "/dev" :speed 9600
+                                                   :name "b" :noquery t)))
+              (pw147-try (lambda () (make-serial-process :port "/proc/1/mem" :speed 9600
+                                                   :name "c" :noquery t)))
+              ;; `:speed nil' means "do not configure", so an open that succeeds
+              ;; on a device that is not a tty succeeds -- and the same port with
+              ;; a speed reports the `tcgetattr' the configuration needs.
+              (pw147-try (lambda () (make-serial-process :port "/dev/null" :speed 9600
+                                                   :name "d" :noquery t)))
+              (let ((p (make-serial-process :port "/dev/null" :speed nil
+                                            :name "e" :noquery t)))
+                (prog1 (list (process-status p) (process-contact p t))
+                  (delete-process p)))
+              ;; The open beats the coding chain ...
+              (pw147-try (lambda ()
+                     (let ((coding-system-for-read 'pw147-no-such))
+                       (make-serial-process :port "/nonexistent/pw147-tty" :speed 9600
+                                            :name "f" :noquery t))))
+              ;; ... and it beats the configuration.
+              (pw147-try (lambda () (make-serial-process :port "/nonexistent/pw147-tty"
+                                                   :speed 9600 :bytesize 5
+                                                   :name "g" :noquery t)))
+              ;; The coding chain beats the configuration, on a port that opens
+              ;; but is not a tty and on one that is.
+              (pw147-try (lambda ()
+                     (let ((coding-system-for-read 'pw147-no-such))
+                       (make-serial-process :port "/dev/null" :speed 9600 :name "h"
+                                            :noquery t
+                                            :buffer (generate-new-buffer " *h*")))))
+              (pw147-try (lambda ()
+                     (let ((coding-system-for-read 'pw147-no-such))
+                       (make-serial-process :port "/dev/ptmx" :speed 9600 :bytesize 5
+                                            :name "i" :noquery t
+                                            :buffer (generate-new-buffer " *i*")))))
+              ;; `tcgetattr' beats every keyword domain check, because GNU reads
+              ;; the attributes before it validates any of them
+              ;; (src/sysdep.c:3162 vs :3193).
+              (pw147-try (lambda () (make-serial-process :port "/dev/null" :speed 9600
+                                                   :bytesize 5 :name "j" :noquery t)))
+              (pw147-try (lambda () (make-serial-process :port "/dev/null" :speed 9600
+                                                   :parity 'mark :name "k" :noquery t)))
+              ;; ... but the PORT checks beat the `:speed' check, which is why a
+              ;; bad speed cannot be reported for a call with no port at all
+              ;; (src/process.c:3193-3200).
+              (pw147-try (lambda () (make-serial-process :speed "x" :name "l" :noquery t)))
+              (pw147-try (lambda () (make-serial-process :port 1 :speed "x"
+                                                  :name "m" :noquery t)))
+              (pw147-try (lambda () (make-serial-process :port "/nonexistent/pw147-tty"
+                                                   :speed "x" :name "n" :noquery t)))))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(file-missing \"Opening serial port\" \"No such file or directory\" \"/nonexistent/pw147-tty\") ",
+            "(file-error \"Opening serial port\" \"Is a directory\" \"/dev\") ",
+            "(permission-denied \"Opening serial port\" \"Permission denied\" \"/proc/1/mem\") ",
+            "(file-error \"Failed tcgetattr\" \"Inappropriate ioctl for device\") ",
+            "(open (:port \"/dev/null\" :speed nil :name \"e\" :noquery t)) ",
+            "(file-missing \"Opening serial port\" \"No such file or directory\" \"/nonexistent/pw147-tty\") ",
+            "(file-missing \"Opening serial port\" \"No such file or directory\" \"/nonexistent/pw147-tty\") ",
+            "(coding-system-error pw147-no-such) ",
+            "(coding-system-error pw147-no-such) ",
+            "(file-error \"Failed tcgetattr\" \"Inappropriate ioctl for device\") ",
+            "(file-error \"Failed tcgetattr\" \"Inappropriate ioctl for device\") ",
+            "(error \"No port specified\") ",
+            "(wrong-type-argument stringp 1) ",
+            "(wrong-type-argument fixnump \"x\"))",
+        )
+    );
+}
+
+/// What a FAILED `make-serial-process` leaves behind, which is a statement
+/// about WHERE the failure happened.
+///
+/// GNU unwinds the process record in every case (`record_unwind_protect
+/// (remove_process, proc)`, src/process.c:3207), so no failure ever leaks a
+/// process.  The BUFFER is different: `Fget_buffer_create` runs at :3220, after
+/// the open and before the coding chain, so an open failure leaves no buffer
+/// and every later failure leaves one.  Measured under GNU 31.0.90.
+#[cfg(unix)]
+#[test]
+fn a_failed_make_serial_process_leaks_nothing_but_its_buffer() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (defun pw147-aftermath (tag thunk)
+               (let ((before (length (process-list))))
+                 (list (car (condition-case err (funcall thunk) (error err)))
+                       (and (get-buffer tag) t)
+                       (- (length (process-list)) before)
+                       (and (get-process tag) t))))
+             (list
+              (pw147-aftermath "pw147a"
+                         (lambda () (make-serial-process :port "/nonexistent/pw147-tty"
+                                                         :speed 9600 :name "pw147a"
+                                                         :noquery t)))
+              (pw147-aftermath "pw147b"
+                         (lambda () (make-serial-process :port "/dev/ptmx" :speed 9600
+                                                         :bytesize 5 :name "pw147b"
+                                                         :noquery t)))
+              (pw147-aftermath "pw147c"
+                         (lambda ()
+                           (let ((coding-system-for-read 'pw147-no-such))
+                             (make-serial-process :port "/dev/ptmx" :speed 9600
+                                                  :name "pw147c" :noquery t))))
+              (pw147-aftermath "pw147d"
+                         (lambda () (make-serial-process :port "/dev/null" :speed 9600
+                                                         :name "pw147d" :noquery t)))
+              ;; An explicit `:buffer' is created at the same moment, so an open
+              ;; failure does not create it either.
+              (progn (ignore-errors
+                       (make-serial-process :port "/nonexistent/pw147-tty" :speed 9600
+                                            :name "pw147e" :buffer "pw147-buf" :noquery t))
+                     (and (get-buffer "pw147-buf") t))))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(file-missing nil 0 nil) ",
+            "(error t 0 nil) ",
+            "(coding-system-error t 0 nil) ",
+            "(file-error t 0 nil) ",
+            "nil)",
+        )
+    );
+}
+
+/// The payload DIVERGENCES.md entry 137 measured under GNU and refused to pin,
+/// because `make-serial-process` here never opened the port and every row came
+/// back with an empty buffer.  It opens now, so these are real.
+///
+/// Each row gets its OWN pty pair with the bytes `c a f <c3> <a9> CR LF x CR LF`
+/// already queued, and reads the process-coding-system slot AFTER the output,
+/// where GNU's `read_process_output_set_last_coding_system`
+/// (src/process.c:6417-6425) has replaced it with the coding actually used --
+/// the write-back DIVERGENCES.md entry 139 implemented.  Entry 137's own pins
+/// read the slot BEFORE any output for the opposite reason; between them the
+/// chain and the write-back are measured without overlapping.
+///
+/// The last two rows are the serial chain's missing tail on real bytes rather
+/// than on a reporting slot: `default-process-coding-system` and
+/// `process-coding-system-alist` are bound to something that would be plainly
+/// visible, and are invisible.
+#[cfg(unix)]
+#[test]
+fn a_serial_process_decodes_the_bytes_its_port_delivers() {
+    crate::test_utils::init_test_tracing();
+    const PAYLOAD: &[u8] = b"caf\xc3\xa9\r\nx\r\n";
+    let ptys: Vec<SerialTestPty> = (0..7).map(|_| SerialTestPty::open()).collect();
+    for pty in &ptys {
+        pty.write(PAYLOAD);
+    }
+    let port = |index: usize| ptys[index].slave_path.as_str();
+
+    let result = eval_one(&format!(
+        r#"(progn
+             (defvar pw147-n 0)
+             (defun pw147-serial-bytes (port want &rest args)
+               (let* ((b (generate-new-buffer " *pw147*"))
+                      (p (apply #'make-serial-process :port port :speed 9600
+                                :name (format "pw147p-%d" (setq pw147-n (1+ pw147-n)))
+                                :noquery t :buffer b args))
+                      (rounds 60))
+                 (while (and (< (buffer-size b) want) (> rounds 0))
+                   (accept-process-output p 0.05)
+                   (setq rounds (1- rounds)))
+                 (prog1 (list (with-current-buffer b (append (buffer-string) nil))
+                              (process-coding-system p))
+                   (delete-process p))))
+             (list
+              ;; The three rows whose chain answers nil report only their
+              ;; BYTES.  Their coding slot after the read is a residual this
+              ;; entry measured and did NOT fix: GNU replaces an `undecided'
+              ;; decode coding with the system detection actually chose
+              ;; (`utf-8-dos'), and neomacs reports `undecided-dos'.  That is
+              ;; entry 139's write-back, not this entry's port -- it reproduces
+              ;; on `make-process' with `default-process-coding-system' nil,
+              ;; which never opens a serial port at all.
+              (car (pw147-serial-bytes "{p0}" 7))
+              (let ((coding-system-for-read 'binary))
+                (pw147-serial-bytes "{p1}" 10))
+              (let ((coding-system-for-read 'raw-text))
+                (pw147-serial-bytes "{p2}" 8))
+              (let ((coding-system-for-read 'latin-1))
+                (pw147-serial-bytes "{p3}" 8))
+              (pw147-serial-bytes "{p4}" 8 :coding 'latin-1)
+              (let ((default-process-coding-system '(binary . binary)))
+                (car (pw147-serial-bytes "{p5}" 7)))
+              (let ((process-coding-system-alist '(("pw147p" binary . binary))))
+                (car (pw147-serial-bytes "{p6}" 7)))))"#,
+        p0 = port(0),
+        p1 = port(1),
+        p2 = port(2),
+        p3 = port(3),
+        p4 = port(4),
+        p5 = port(5),
+        p6 = port(6),
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(99 97 102 233 10 120 10) ",
+            "((99 97 102 4194243 4194217 13 10 120 13 10) (binary)) ",
+            "((99 97 102 4194243 4194217 10 120 10) (raw-text-dos . raw-text-dos)) ",
+            "((99 97 102 195 169 10 120 10) (iso-latin-1-dos . iso-latin-1-dos)) ",
+            "((99 97 102 195 169 10 120 10) (iso-latin-1-dos . latin-1)) ",
+            "(99 97 102 233 10 120 10) ",
+            "(99 97 102 233 10 120 10))",
+        )
+    );
+}
+
+/// The other direction: GNU gives a serial process ONE descriptor for both
+/// (`p->infd = p->outfd = fd`, src/process.c:3214-3215), so
+/// `process-send-string` has to arrive on the wire.
+#[cfg(unix)]
+#[test]
+fn process_send_string_reaches_a_serial_port() {
+    crate::test_utils::init_test_tracing();
+    let pty = SerialTestPty::open();
+
+    let result = eval_one(&format!(
+        r#"(let ((p (make-serial-process :port "{port}" :speed 9600
+                                         :name "pw147w" :noquery t)))
+             (process-send-string p "pw147-ping")
+             (prog1 (list (process-status p) (process-live-p p))
+               (delete-process p)))"#,
+        port = pty.slave_path,
+    ));
+    assert_eq!(result, "OK (open (open listen connect stop))");
+    assert_eq!(pty.read_available(), b"pw147-ping");
+}
+
+#[cfg(unix)]
+impl SerialTestPty {
+    /// The line settings currently in force on the pair, read from the master.
+    fn attributes(&self) -> libc::termios {
+        use std::os::fd::AsRawFd;
+        // SAFETY: `tcgetattr` initialises the whole struct on success.
+        unsafe {
+            let mut attributes = std::mem::MaybeUninit::<libc::termios>::uninit();
+            assert_eq!(
+                libc::tcgetattr(self.master.as_raw_fd(), attributes.as_mut_ptr()),
+                0,
+                "tcgetattr on pty master"
+            );
+            attributes.assume_init()
+        }
+    }
+}
+
+/// `serial-process-configure` has to configure the DEVICE, not just the
+/// contact plist -- the distinction this entry exists for.
+///
+/// Every assertion below reads the pty's real `termios` back from the master
+/// side, so it fails if the settings only ever reached
+/// `(process-contact P t)`.  Each row is one of GNU's five `serial_configure`
+/// arms (src/sysdep.c:3175-3300); `:speed` goes through GNU's `convert_speed`
+/// (:3131-3143, bug#49524), which is why a plain 9600 has to come back as the
+/// `B9600` constant rather than as the number.
+#[cfg(unix)]
+#[test]
+fn serial_configuration_reaches_the_device() {
+    crate::test_utils::init_test_tracing();
+    let pty = SerialTestPty::open();
+
+    let result = eval_one(&format!(
+        r#"(let ((p (make-serial-process :port "{port}" :speed 9600 :bytesize 7
+                                         :parity 'odd :stopbits 2 :flowcontrol 'hw
+                                         :name "pw147cfg" :noquery t)))
+             (prog1 (plist-get (process-contact p t) :summary)
+               (delete-process p)))"#,
+        port = pty.slave_path,
+    ));
+    assert_eq!(result, "OK \"7O2\"");
+
+    let attributes = pty.attributes();
+    // SAFETY: `cfgetospeed`/`cfgetispeed` only read through the pointer.
+    let (ospeed, ispeed) = unsafe {
+        (
+            libc::cfgetospeed(&raw const attributes),
+            libc::cfgetispeed(&raw const attributes),
+        )
+    };
+    assert_eq!(ospeed, libc::B9600, "GNU convert_speed (9600) is B9600");
+    assert_eq!(ispeed, libc::B9600);
+    // `:bytesize` and `:parity` are deliberately NOT asserted, and the reason
+    // is the fixture rather than the code: Linux's pty driver ends every
+    // termios change with `c_cflag &= ~(CSIZE | PARENB); c_cflag |= CS8 | CREAD`
+    // (drivers/tty/pty.c `pty_set_termios`), so a pty cannot hold CS7 or a
+    // parity bit no matter who writes it -- measured, the CS7 this call sets
+    // reads back as CS8.  Their arms are covered by the `:summary` above and by
+    // the domain pins; asserting them here would pin the pty driver.
+    assert_eq!(
+        attributes.c_cflag & libc::CSTOPB,
+        libc::CSTOPB,
+        ":stopbits 2"
+    );
+    assert_eq!(
+        attributes.c_cflag & libc::CRTSCTS,
+        libc::CRTSCTS,
+        ":flowcontrol hw"
+    );
+    // `cfmakeraw` ran first, and GNU adds CLOCAL|CREAD on top (src/sysdep.c:3166-3172).
+    assert_eq!(attributes.c_lflag & libc::ICANON, 0, "cfmakeraw");
+    assert_eq!(attributes.c_iflag & libc::ICRNL, 0, "cfmakeraw");
+    assert_eq!(attributes.c_oflag & libc::OPOST, 0, "cfmakeraw");
+    assert_eq!(
+        attributes.c_cflag & (libc::CLOCAL | libc::CREAD),
+        libc::CLOCAL | libc::CREAD
+    );
+}
+
+/// The other half of the same statement: a `:speed nil` port is opened and
+/// then LEFT ALONE.
+///
+/// GNU's `Fserial_process_configure` returns before `serial_configure` when the
+/// contact's `:speed` is nil (src/process.c:3098-3099, documented at :3042-3045
+/// as "the serial port is not configured any further"), so nothing is written
+/// to the device -- the pty keeps the canonical-mode settings it was created
+/// with, and `serial-process-configure` on it stays a no-op.
+#[cfg(unix)]
+#[test]
+fn a_speed_nil_serial_port_is_opened_and_not_configured() {
+    crate::test_utils::init_test_tracing();
+    let pty = SerialTestPty::open();
+    // Undo the fixture's raw mode so "left alone" is visible as a difference.
+    // SAFETY: `tcsetattr` only reads through the provided pointer.
+    unsafe {
+        use std::os::fd::AsRawFd;
+        let mut attributes = pty.attributes();
+        attributes.c_lflag |= libc::ICANON;
+        attributes.c_iflag |= libc::ICRNL;
+        assert_eq!(
+            libc::tcsetattr(pty.master.as_raw_fd(), libc::TCSANOW, &raw const attributes),
+            0
+        );
+    }
+
+    let result = eval_one(&format!(
+        r#"(let ((p (make-serial-process :port "{port}" :speed nil
+                                         :name "pw147nil" :noquery t)))
+             (prog1 (list (process-status p)
+                          (process-contact p t)
+                          (serial-process-configure :process p :bytesize 7)
+                          (process-contact p t))
+               (delete-process p)))"#,
+        port = pty.slave_path,
+    ));
+    assert_eq!(
+        result,
+        concat!(
+            "OK (open ",
+            "(:port \"",
+            "{PORT}",
+            "\" :speed nil :name \"pw147nil\" :noquery t) ",
+            "nil ",
+            "(:port \"",
+            "{PORT}",
+            "\" :speed nil :name \"pw147nil\" :noquery t))",
+        )
+        .replace("{PORT}", &pty.slave_path)
+    );
+
+    let attributes = pty.attributes();
+    assert_ne!(attributes.c_lflag & libc::ICANON, 0, "left alone");
+    assert_ne!(attributes.c_iflag & libc::ICRNL, 0, "left alone");
 }

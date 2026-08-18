@@ -10,6 +10,11 @@
 //! `windows` backend (job-object / process-handle wait) and route to it from
 //! the `cfg_select!` below, exactly as GNU adds an `#elif`/`w32proc.c` path.
 //! The `fallback` backend is the portable poll-only path used until then.
+//!
+//! Each per-facility module below is here because GNU splits the SAME facility
+//! the same way. `serial` is the clearest case: `serial_open` and
+//! `serial_configure` are declared once in GNU's `src/systty.h:90-91` and
+//! implemented twice, in `src/sysdep.c` and `src/w32.c`.
 
 use crate::emacs_core::process::{HostInterfaceEntry, ProcessId};
 
@@ -42,6 +47,12 @@ pub use fd::{dup_fd, set_fd_nonblocking};
 
 mod fs;
 pub use fs::executable_path_access;
+
+mod serial;
+pub use serial::{
+    SerialAttributes, SerialByteSize, SerialConfigureFailure, SerialConfigureStep,
+    SerialFlowControl, SerialParity, SerialPort, SerialStopBits,
+};
 
 pub mod net;
 
