@@ -148,10 +148,8 @@ fn ace_link_compilation_jumps_from_a_real_compile_run_to_the_error_site() -> Par
                  "printf 'src/parser.c:2:3: warning: unused value\\nsrc/lexer.c:2:17: error: bad token\\n'"
                  nil
                  (lambda (&rest _) "*compile-fixture*"))))
+   (ace-link-test-await-compilation buffer)
    (with-current-buffer buffer
-     (cl-loop repeat 200
-              while (get-buffer-process (current-buffer))
-              do (accept-process-output nil 0.05))
      (set-window-buffer (selected-window) (current-buffer))
      (goto-char (point-min))
      (let ((compilation (list :mode major-mode

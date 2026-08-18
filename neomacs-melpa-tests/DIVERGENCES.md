@@ -9993,3 +9993,278 @@ harness will.  The pin uses 999999 now.
   and 135.
 
 Status: FIXED.
+
+## 140. Eight suites audited for entry 133's read-boundary hazard: none carries it, but four gated a compilation pin on the process dying rather than on the output ending, which is the same race by a different door -- NOT A DIVERGENCE (racy harness fixtures), FIXED
+
+Entry 133 fixed one suite and left a rule: an upstream `compilation-filter-hook'
+function that mutates the buffer OUTSIDE its own whole-lines guard makes the
+rendered buffer a function of read boundaries, and read boundaries are not a
+parity signal.  This entry applies that rule to the eight suites that were
+still unaudited -- `ace_link', `agtags', `aiken_mode', `ameba', `android_env',
+`anju', `csharp_mode' and `rake' -- and reports what looking for it actually
+found.
+
+None of the eight carries 133's hazard.  Four of them carry a different one,
+and it was found by the probe built to look for the first.
+
+### The necessary condition, and the whole population that meets it
+
+133's hazard needs a *package* function on `compilation-filter-hook'.  Nothing
+else can turn a chunk boundary into buffer text: `compilation-mode' itself
+installs no filter-hook function, and `compilation-filter'
+(lisp/progmodes/compile.el:2673-2712) only inserts and parses.  So the audit
+began by enumerating every package in the corpus that touches that hook at all:
+
+```
+$ grep -rl --include='*.el' compilation-filter-hook tmp/melpa/source-package-cache/
+ag  buttercup  rg (x2)  inf-ruby  rspec-mode  scala-mode  rake  rustic
+go-mode  ggtags  cargo  arduino-cli-mode  overseer  haskell-mode
+tree-sitter  tsc  embark-consult  embark              # 19 files, 17 packages
+```
+
+That is the entire population, out of 792 cached packages.  The eight suites in
+this audit intersect it at exactly one name: `rake'.  `ag', `rg' and `rustic'
+were settled before this entry; the other thirteen are named at the end.
+
+### Per-suite verdict
+
+| suite | spawns into a compilation buffer | package function on `compilation-filter-hook' | verdict |
+|---|---|---|---|
+| `ace_link` | yes -- the fixture's own `compilation-start` (`ace_link/workflows.rs:147`) | none; `ace-link-compilation` (ace-link.el:389-396) only *reads* the buffer | not exposed |
+| `agtags` | yes -- agtags.el:142-143 | grep-mode's `grep-filter` only (grep.el:1026) | not exposed |
+| `aiken_mode` | no -- `compilation-start` and `make-process` are both stubbed (`aiken_mode/workflows.rs:74`, `:256`) | aiken-mode.el has no process or compilation code at all | not applicable |
+| `ameba` | yes -- ameba.el:115-118 and :128-131, both into plain `compilation-mode` | none | not exposed |
+| `android_env` | yes -- android-env.el:107 into `android-env-compile-mode` (`define-compilation-mode`, :81) | none | not exposed |
+| `anju` | no -- the suite never starts a process; it builds `compilation-mode` and `grep-mode` buffers by hand (`anju/utils.rs:88-89`) | anju reaches those modes only through `derived-mode-p` (anju-mode-line.el:148,153) | not applicable |
+| `csharp_mode` | no -- the fixture raises on `call-process`, `process-file`, `start-process`, `start-file-process` and `make-process` (`csharp_mode/mod.rs:218-237`) | none | not applicable |
+| `rake` | no -- `compile` is replaced by `rk429-test-compile` (`rake/mod.rs:157-173`) and every spawn primitive raises (`rake/mod.rs:253-277`) | **yes**: `rake--apply-ansi-color` (rake.el:209-211), installed at rake.el:242, and it has no whole-lines guard | not exposed, twice over |
+
+`grep-filter` is clean for the reason 133 gave for `ag-filter`: every mutation
+sits inside `(when (< (point) end) ...)` (grep.el:648-662), and the regions
+successive calls process tile the buffer without overlap, so `grep-num-matches-
+found' -- which decides whether the footer reads "finished with matches found"
+or "finished with no matches found", and both spellings are pinned -- cannot be
+counted twice or skipped.  `grep--heading-filter', the one grep.el function
+that does insert, is added only when `grep-use-headings' is non-nil, and that
+defaults to nil (grep.el:476).
+
+### `rake' is the interesting one: an unguarded filter that is still chunk-safe
+
+```elisp
+(defun rake--apply-ansi-color ()
+  (let ((inhibit-read-only t))
+    (ansi-color-apply-on-region compilation-filter-start (point))))
+```
+
+No `(when (< (point) end) ...)` anywhere -- by 133's literal wording this is the
+shape to worry about.  It is nevertheless safe, and the reason matters for the
+next audit: `ansi-color-apply-on-region' carries its own cross-chunk state.  It
+opens by resuming from `ansi-color-context-region' -- a saved marker and the
+face vector in force at it -- and closes by saving the tail of any incomplete
+escape sequence back into it (lisp/ansi-color.el:702-726).  A sequence cut in
+half by a read boundary is therefore completed on the next call rather than
+mis-rendered, which is exactly what a whole-lines guard would have bought.
+
+So the rule 133 stated is a necessary condition, not a sufficient one.  The
+sufficient one is: **the mutation is neither confined to complete lines nor
+resumable across a boundary.**  `rg-filter''s `(when (zerop rg-hit-count)
+(newline))' is neither, which is why it was the bug.
+
+And in this suite it is unreachable regardless.  `rk429-test-compile' inserts
+the recorded output with one `insert' and then calls `rake-compilation-mode',
+so the hook is installed and never run; no process exists to run it.
+
+### Measured: three of the four children are not even line-buffering, and one is
+
+133's mechanism needs the child to write more than once.  `strace -f -e
+trace=write` on each suite's stand-in, to a pipe and then to a pty:
+
+```
+ace_link    printf child     2 writes to a pipe, 2 to a pty
+ameba       stand-in linter  2 stdout writes to a pipe, 2 to a pty
+android_env gradlew stand-in 8 writes to a pipe, 8 to a pty
+agtags      global stand-in  1 write to a pipe, 3 to a pty   <- awk | sed
+```
+
+`agtags` has 133's exact topology: the `sed` closing its stand-in's pipeline
+block-buffers to a pipe and line-buffers to a terminal, and `compilation-start`
+gives it a pty.  Its number of filter calls is therefore chosen by the kernel,
+run to run -- and, because `grep-filter` is guarded, its rendered buffer is not.
+The other three write per line in *both* topologies, so their filters have
+always been called more than once; that they have been stable is evidence, not
+luck.
+
+### A probe that can fail, run in both editors
+
+Reading is not proof, and neither is a green run of a rare race.  So the four
+modes were driven through four delivery regimes -- the whole read, re-split at
+line boundaries, cut once after the first character, and one character per
+call -- and their buffers compared: text, every `compilation-message` location,
+every `help-echo` position, every face.  Two known-bad filters were included so
+that "invariant" could mean something:
+
+```
+ace_link    compilation-mode        invariant over :whole :line :split1 :char
+ameba       compilation-mode        invariant over :whole :line :split1 :char
+android_env compile-mode            invariant over :whole :line :split1 :char
+agtags      agtags-grep-mode        invariant over :whole :line :split1 :char
+agtags      agtags-path-mode        invariant over :whole :line :split1 :char
+rake        rake-compilation-mode   invariant over :whole :line :split1 :char
+CONTROL     rg-filter shape         CHUNK-DEPENDENT in (:line :split1 :char)
+CONTROL     ggtags-filter shape     CHUNK-DEPENDENT in (:split1 :char)
+```
+
+GNU Emacs 31.0.90 and Neomacs produced that table, and the full rendered value
+behind every line of it, byte for byte identically -- the two logs `diff` to
+nothing.  The controls are the point: the probe reports a difference when there
+is one, so its six other answers are findings rather than silence.
+
+### What the probe caught instead
+
+The same per-character regime was then injected into the four suites themselves,
+by advising `compilation-filter` inside each prelude, and the advice was proved
+live before anything was concluded from it: replacing its body with an `error`
+made all four batches fail with `error in process filter: pw47 engagement
+check`, so the suites really do route their children through it.
+
+Under that regime `android_env` began failing, three runs in fifteen:
+
+```
+snapshot mismatches: javac_and_kotlinc_errors_in_the_build_output_become_navigable_locations (GNU Emacs)
+;; pin / Neomacs => "...> Task :app:compileDevDebugKotlin\ne: .../Gateway.kt: (23, 9): ...
+;;                   \nGateway.kt:5:16: ...\nBUILD FAILED in 1s\n\nAndroid Compile exited abnormally with code 1 at <TIME>\n"
+;;                   :locations (... 4 entries ...)
+;; GNU Emacs     => "...> Task :app:compileDevDebugKotlin\n"
+;;                   :locations (... 3 entries ...)
+```
+
+Not a different rendering of the child's output -- a *prefix* of it.  The case
+waited with
+
+```elisp
+(defun aenv-test-await (buffer)
+  (while (and (< waited 600)
+              (get-buffer-process buffer)
+              (process-live-p (get-buffer-process buffer)))
+    (accept-process-output nil 0.05) ...))
+```
+
+and a process being dead is not the same fact as its output having been read.
+The fixture already knew this: `aenv-test-settle`, the very next definition in
+the same file, says so in its own docstring -- "A process that has just exited still has output
+queued and its sentinel still to run, so waiting only for `process-live-p'
+captures a buffer that is about to change".  Four compilation pins were gated on
+`aenv-test-await` anyway (`android_env/workflows.rs:27,38,41,95`), and every one
+of them records the sentinel's own closing line, which by construction cannot
+have been written when that wait returns.
+
+`ace_link` had the same shape inline (`cl-loop repeat 200 while
+(get-buffer-process ...)`), and `ameba`'s wait added a single extra
+`accept-process-output` after the process died.  `agtags` waited for four
+consecutive identical samples, which is stronger and still a statement about the
+clock.  Slowing delivery down is what made the window wide enough to see; it is
+the same race 133 measured at 11 in 920, not a new one.
+
+In all three observed mismatches the editor that lost the race was GNU Emacs.
+As in 133, that is not a claim about GNU: it is the reason a one-editor failure
+cannot be read as that editor being wrong.
+
+### The fix removes the choice instead of widening the window
+
+There is a fact that says the output has ended, and it is not a timeout.  GNU
+drains a dying process's remaining reads *before* it runs the sentinel --
+`status_notify` loops `read_process_output` until it returns 0 and only then
+calls `exec_sentinel` (GNU src/process.c:7896-7910 and :7937) -- the sentinel is
+what calls `compilation-handle-exit`, and that function marks every character it
+writes with a `compilation-handle-exit` text property
+(lisp/progmodes/compile.el:2630).  The property therefore cannot exist until the
+last byte the child wrote has already been through `compilation-filter`.  It is
+a fact about the output, not about the clock, which is why it is the condition
+to wait on.
+
+All four suites now wait for that property, and refuse to return without it:
+
+```elisp
+(defun aenv-test-compilation-complete-p (buffer)
+  (and (buffer-live-p (get-buffer buffer))
+       (with-current-buffer buffer
+         (and (text-property-not-all (point-min) (point-max)
+                                     'compilation-handle-exit nil)
+              t))))
+
+(defun aenv-test-await-compilation (buffer)
+  (let ((waited 0))
+    (while (and (< waited 1200)
+                (not (aenv-test-compilation-complete-p buffer)))
+      (accept-process-output nil 0.05)
+      (setq waited (1+ waited)))
+    (unless (aenv-test-compilation-complete-p buffer)
+      (error "aenv-test-await-compilation: %s never reached \
+`compilation-handle-exit'; its text records only as much of the child's \
+output as had been read" buffer))
+    :finished))
+```
+
+`ace-link-test-await-compilation`, `ameba-test-wait` and
+`neomacs-agtags-test-wait-for-buffer` were given the same shape.  The signal is
+the load-bearing half, exactly as `rg-test-run`'s `error' is in 133: a future
+edit that goes back to waiting on the clock fails on its first run rather than
+moving a snapshot months later.  `aenv-test-await` is kept for the logcat and
+emulator buffers, which are not compilation buffers and have no such marker.
+
+The signal was checked to be reachable rather than assumed to be: renaming the
+property to one that is never set made all four batches fail with 54 copies of
+`... never reached `compilation-handle-exit'`, in both editors.  A guard that
+cannot fire is not a guard.
+
+No pinned value moved.  The pins already recorded the complete output --
+including the closing line whose arrival they had no way to insist on.
+
+```
+;; per-character delivery, the four suites that spawn a real child
+;; before  => 3 mismatches / 15 runs   (all `javac_and_kotlinc_...', all GNU Emacs)
+;; after   => 0 mismatches / 20 runs
+;; ordinary delivery, all nine batches of the eight suites => 9/9 green, 5 runs
+```
+
+### The screening criterion, and what is left
+
+"The suite spawns a compilation process and pins buffer content" selects for the
+symptom.  The two conditions worth screening on are narrower and easier:
+
+1. **For 133's hazard** -- does the *package* put a function on
+   `compilation-filter-hook`, and does that function mutate outside a
+   whole-lines guard *without* carrying its own cross-chunk state?  The `grep`
+   above answers the first half for the entire corpus in one command.
+2. **For the hazard this entry found** -- does the fixture gate a compilation
+   pin on anything other than `compilation-handle-exit` having happened?  That
+   one is a property of the fixture, not of the package, so no package reading
+   is needed at all.
+
+Thirteen packages in the corpus meet condition 1's first half and have not been
+audited.  Four already read as exposed and are recorded here so the next pass can
+start from them rather than from the corpus:
+
+- `ggtags-global-filter` (ggtags.el:1580-1592) deletes a "Using config file..."
+  line with `re-search-backward` bounded by `compilation-filter-start`.  Split
+  that line and the bound excludes its start, so the line is never deleted; the
+  same function's `(count-lines compilation-filter-start (point))` counts a
+  partial line as one.  This is the second positive control above, and it fires.
+- `haskell-compilation-filter-hook` (haskell-compile.el:129-140) runs
+  `delete-matching-lines` over a region ending at `(point)`, and its `$`-anchored
+  regexp matches a line that is merely incomplete.
+- `overseer--remove-header` (overseer.el:79-81) deletes matching lines from the
+  whole buffer on every call, which reaches a partial last line the same way.
+- `go-guru--compilation-filter-hook` (go-guru.el:212-224) documents the hazard in
+  its own source: "TODO(adonovan): not quite right: the filter may be called with
+  chunks of output containing incomplete lines.  Moving to beginning-of-line may
+  cause duplicate post-processing."
+
+The rest -- `buttercup`, `inf-ruby`, `rspec-mode`, `scala-mode`, `cargo`,
+`arduino-cli-mode`, `tree-sitter`, `tsc`, `embark`, `embark-consult` -- either
+delegate to `ansi-color` (safe for `rake`'s reason) or only read.  None was run,
+so none is claimed either way.
+
+Status: FIXED (harness defect, in four fixtures).  No package behaviour changed
+and no engine behaviour is implicated: every measurement above was reproduced
+identically by GNU Emacs 31.0.90 and Neomacs.

@@ -342,25 +342,40 @@ own `project-current' would walk up and return the whole checkout."
 (defun neomacs-agtags-test-trace (tools)
   (copy-sequence (neomacs-agtags-test-file-string (plist-get tools :trace))))
 
+(defun neomacs-agtags-test-complete-p (buffer)
+  "Non-nil once `compilation-handle-exit' has written BUFFER's last line.
+`compilation-start' writes that line from the sentinel, so the process
+going away is not the end of the output -- and the text going quiet for a
+few rounds is only evidence that it has been quiet for a few rounds.  The
+line is the causal end instead: Emacs drains a dying process's remaining
+reads before running the sentinel, the sentinel calls
+`compilation-handle-exit', and that function marks what it writes with a
+`compilation-handle-exit' text property (lisp/progmodes/compile.el:2630),
+which therefore cannot appear until every byte GLOBAL wrote has been
+through `compilation-filter'."
+  (and (buffer-live-p buffer)
+       (with-current-buffer buffer
+         (and (text-property-not-all (point-min) (point-max)
+                                     'compilation-handle-exit nil)
+              t))))
+
 (defun neomacs-agtags-test-wait-for-buffer (buffer)
-  "Wait until BUFFER's compilation has finished and its text has settled.
-`compilation-start' writes its own \"finished\" line from the sentinel, so
-the process going away is not the end of the output."
-  (let ((rounds 0)
-        (settled 0)
-        (previous nil))
-    (while (and (< rounds 900)
+  "Wait until BUFFER holds all of its compilation's output, or signal.
+Pinning a results buffer that is still being filled records however much
+of GLOBAL's output the kernel happened to have delivered, which is a fact
+about scheduling rather than about either editor -- the defect
+DIVERGENCES.md 133 removed from the `rg' suite."
+  (let ((rounds 0))
+    (while (and (< rounds 1800)
                 (buffer-live-p buffer)
-                (or (get-buffer-process buffer) (< settled 4)))
+                (not (neomacs-agtags-test-complete-p buffer)))
       (accept-process-output nil 0.02)
-      (let ((current (with-current-buffer buffer (buffer-string))))
-        (if (and (equal current previous) (not (get-buffer-process buffer)))
-            (setq settled (1+ settled))
-          (setq settled 0
-                previous current)))
       (setq rounds (1+ rounds)))
-    (when (and (buffer-live-p buffer) (get-buffer-process buffer))
-      (error "Timed out waiting for %s" (buffer-name buffer))))
+    (unless (neomacs-agtags-test-complete-p buffer)
+      (error "neomacs-agtags-test-wait-for-buffer: %s never reached \
+`compilation-handle-exit'; its text records only as much of GLOBAL's \
+output as had been read"
+             (if (buffer-live-p buffer) (buffer-name buffer) buffer))))
   buffer)
 
 (defun neomacs-agtags-test-result-text (buffer)
