@@ -557,6 +557,36 @@ impl CompiledPattern {
         self.multibyte_charsets.retain(|&pos, _| pos < at);
         self.charset_class_bits.retain(|&pos, _| pos < at);
     }
+
+    /// Copy the charset side-table entries for opcodes in `[from..from_end)`
+    /// to the same relative positions starting at `to`.  Used by the greedy
+    /// `P+` → `PP*` body duplication, which copies already-emitted body
+    /// bytes to the end of the buffer.
+    fn clone_charset_keys(&mut self, from: usize, from_end: usize, to: usize) {
+        clone_charset_keys(&mut self.multibyte_charsets, from, from_end, to);
+        clone_charset_keys(&mut self.charset_class_bits, from, from_end, to);
+    }
+}
+
+/// Copy entries keyed in `[from..from_end)` to `pos - from + to`, keeping the
+/// originals.
+fn clone_charset_keys<V: Clone>(
+    map: &mut HashMap<usize, V>,
+    from: usize,
+    from_end: usize,
+    to: usize,
+) {
+    if map.is_empty() {
+        return;
+    }
+    let cloned: Vec<(usize, V)> = map
+        .iter()
+        .filter(|&(&pos, _)| pos >= from && pos < from_end)
+        .map(|(&pos, v)| (pos - from + to, v.clone()))
+        .collect();
+    for (pos, v) in cloned {
+        map.insert(pos, v);
+    }
 }
 
 /// Shift every key `>= at` in an opcode-position-keyed map by `delta` bytes.
@@ -2322,14 +2352,38 @@ fn compile_repetition(
             // + = one or more
             // Layout: <expr(already emitted)>  OFJL/OFJ  offset(2)  Jump  offset(2)
             if greedy {
+                if simple_one_char_body(buf, laststart, after_last) {
+                    // GNU regex-emacs.c:1937-1957: "we turn P+ into PP* if P
+                    // is simple", i.e. duplicate the one-char body and compile
+                    // the copy as a `*` loop whose head is a smart jump —
+                    // `P; OFJS exit; P'; Jump OFJS; exit:` — so
+                    // `resolve_smart_jumps` can upgrade the loop to a single
+                    // keep-string failure frame for the WHOLE loop (when the
+                    // body and continuation are mutually exclusive) instead of
+                    // one frame per iteration.  A simple body consumes at
+                    // least one char, so the smart opcode is unconditional.
+                    let plen = after_last - laststart;
+                    buf.buffer.extend_from_within(laststart..after_last);
+                    buf.clone_charset_keys(laststart, after_last, after_last);
+                    let copy_start = after_last;
+                    buf.splice_bytecode(copy_start, &[RegexOp::OnFailureJumpSmart as u8, 0, 0]);
+                    buf.buffer.push(RegexOp::Jump as u8);
+                    let jpos = buf.buffer.len();
+                    buf.buffer.push(0);
+                    buf.buffer.push(0);
+                    // Smart-jump fail target: from (copy_start+3) → past the
+                    // Jump = plen + 3 (same arithmetic as the greedy `*`).
+                    store_number(&mut buf.buffer, copy_start + 1, (plen + 3) as i16);
+                    // Jump target: back to the smart-jump opcode.
+                    let jump_offset = copy_start as i16 - (jpos as i16 + 2);
+                    store_number(&mut buf.buffer, jpos, jump_offset);
+                    return Ok(());
+                }
                 // GNU uses on_failure_jump for a body that cannot match
                 // empty and on_failure_jump_loop otherwise (the `ofj`
-                // choice at regex-emacs.c:1929-1934).  GNU additionally
-                // rewrites a simple-body `P+` into `PP*` to enable the
-                // smart loop; we skip that body duplication — the plain
-                // per-iteration on_failure_jump is GNU's own fallback
-                // shape and none of the measured font-lock patterns has
-                // a simple `+` body.
+                // choice at regex-emacs.c:1929-1934).  Non-simple bodies
+                // skip the PP* rewrite, exactly like GNU: the plain
+                // per-iteration on_failure_jump is GNU's own fallback shape.
                 let loop_op = if repeated_body_may_match_empty(&buf.buffer[laststart..after_last]) {
                     RegexOp::OnFailureJumpLoop
                 } else {
@@ -5074,6 +5128,94 @@ fn re_match_loop<const SEALED: bool>(
                     try_fail!('main_loop);
                     continue 'main_loop;
                 }
+                // Keep-string loop fusion: a simple `P+`/`P*` whose
+                // continuation is mutually exclusive with the body resolves
+                // (via the PP* rewrite + resolve_smart_jumps) to
+                // `OFKSJ exit; P; Jump P` — ONE failure frame for the whole
+                // loop, back edge jumping straight to the body.  Run it
+                // inline: no frames, no dispatch, just the match and the
+                // quit poll; on failure the loop-entry OFKSJ frame resumes
+                // at the exit with the string position kept, via try_fail.
+                if SEALED
+                    && unsafe { *bytecode.get_unchecked(pc) } == RegexOp::Jump as u8
+                    && ((pc as i64) + 3 + bc_num!(pc + 1) as i64) as usize == op_pc
+                {
+                    'ks_exactn: loop {
+                        if crate::emacs_core::eval::tls_quit_pending() {
+                            return None;
+                        }
+                        let mut lit_off = 0usize;
+                        let mut dd = d;
+                        while lit_off < count {
+                            match match_exactn_char_at(
+                                lit,
+                                lit_off,
+                                pattern_multibyte,
+                                target_multibyte,
+                                translate,
+                                text,
+                                dd,
+                                stop,
+                            ) {
+                                Some((pat_advance, text_advance)) => {
+                                    lit_off += pat_advance;
+                                    dd += text_advance;
+                                }
+                                None => break 'ks_exactn,
+                            }
+                        }
+                        d = dd;
+                    }
+                    try_fail!('main_loop);
+                    continue 'main_loop;
+                }
+                // Backtracking star-loop fusion: a simple loop whose
+                // continuation is NOT provably exclusive resolves to
+                // `OFJ exit; P; Jump OFJ` — per-iteration frames with the
+                // OFJ at the loop head.  Same frame protocol as the
+                // body-first `+` fusion above, entered from the body arm:
+                // the loop-head OFJ pushed the first frame before this
+                // iteration, so push AFTER each success, before the next
+                // attempt.  (Sealed pass 2 proves the Jump target is an
+                // opcode boundary, so the op_pc-3 peek reads a real op.)
+                if SEALED
+                    && op_pc >= 3
+                    && unsafe { *bytecode.get_unchecked(pc) } == RegexOp::Jump as u8
+                    && ((pc as i64) + 3 + bc_num!(pc + 1) as i64) as usize == op_pc - 3
+                    && unsafe { *bytecode.get_unchecked(op_pc - 3) } == RegexOp::OnFailureJump as u8
+                {
+                    let ofj_pc = op_pc - 3;
+                    let exit = ((ofj_pc as i64) + 3 + bc_num!(ofj_pc + 1) as i64) as usize;
+                    'star_exactn: loop {
+                        push_failure_point!(ofj_pc, exit, FailureInput::Restore(d));
+                        if crate::emacs_core::eval::tls_quit_pending() {
+                            return None;
+                        }
+                        let mut lit_off = 0usize;
+                        let mut dd = d;
+                        while lit_off < count {
+                            match match_exactn_char_at(
+                                lit,
+                                lit_off,
+                                pattern_multibyte,
+                                target_multibyte,
+                                translate,
+                                text,
+                                dd,
+                                stop,
+                            ) {
+                                Some((pat_advance, text_advance)) => {
+                                    lit_off += pat_advance;
+                                    dd += text_advance;
+                                }
+                                None => break 'star_exactn,
+                            }
+                        }
+                        d = dd;
+                    }
+                    try_fail!('main_loop);
+                    continue 'main_loop;
+                }
             }
 
             RegexOp::AnyChar => {
@@ -5092,6 +5234,50 @@ fn re_match_loop<const SEALED: bool>(
                             && ((pc as i64) + 6 + bc_num!(pc + 4) as i64) as usize == op_pc
                         {
                             let ofj_pc = pc;
+                            let exit = ((ofj_pc as i64) + 3 + bc_num!(ofj_pc + 1) as i64) as usize;
+                            loop {
+                                push_failure_point!(ofj_pc, exit, FailureInput::Restore(d));
+                                if crate::emacs_core::eval::tls_quit_pending() {
+                                    return None;
+                                }
+                                match match_anychar_at(text, d, stop, target_multibyte, translate) {
+                                    Some(len) => d += len,
+                                    None => break,
+                                }
+                            }
+                            try_fail!('main_loop);
+                            continue 'main_loop;
+                        }
+                        // Keep-string loop fusion (see the Exactn arm): the
+                        // resolved `OFKSJ exit; AnyChar; Jump AnyChar` loop
+                        // runs inline with no frames and no dispatch.
+                        if SEALED
+                            && unsafe { *bytecode.get_unchecked(pc) } == RegexOp::Jump as u8
+                            && ((pc as i64) + 3 + bc_num!(pc + 1) as i64) as usize == op_pc
+                        {
+                            loop {
+                                if crate::emacs_core::eval::tls_quit_pending() {
+                                    return None;
+                                }
+                                match match_anychar_at(text, d, stop, target_multibyte, translate) {
+                                    Some(len) => d += len,
+                                    None => break,
+                                }
+                            }
+                            try_fail!('main_loop);
+                            continue 'main_loop;
+                        }
+                        // Backtracking star-loop fusion (see the Exactn arm):
+                        // `OFJ exit; AnyChar; Jump OFJ` with per-iteration
+                        // frames, run inline.
+                        if SEALED
+                            && op_pc >= 3
+                            && unsafe { *bytecode.get_unchecked(pc) } == RegexOp::Jump as u8
+                            && ((pc as i64) + 3 + bc_num!(pc + 1) as i64) as usize == op_pc - 3
+                            && unsafe { *bytecode.get_unchecked(op_pc - 3) }
+                                == RegexOp::OnFailureJump as u8
+                        {
+                            let ofj_pc = op_pc - 3;
                             let exit = ((ofj_pc as i64) + 3 + bc_num!(ofj_pc + 1) as i64) as usize;
                             loop {
                                 push_failure_point!(ofj_pc, exit, FailureInput::Restore(d));
@@ -5150,6 +5336,69 @@ fn re_match_loop<const SEALED: bool>(
                             && ((pc as i64) + 6 + bc_num!(pc + 4) as i64) as usize == charset_op_pos
                         {
                             let ofj_pc = pc;
+                            let exit = ((ofj_pc as i64) + 3 + bc_num!(ofj_pc + 1) as i64) as usize;
+                            loop {
+                                push_failure_point!(ofj_pc, exit, FailureInput::Restore(d));
+                                if crate::emacs_core::eval::tls_quit_pending() {
+                                    return None;
+                                }
+                                match match_charset_at(
+                                    pattern,
+                                    charset_op_pos,
+                                    text,
+                                    d,
+                                    stop,
+                                    target_multibyte,
+                                    translate,
+                                    syntax,
+                                ) {
+                                    Some(ch_len) => d += ch_len,
+                                    None => break,
+                                }
+                            }
+                            try_fail!('main_loop);
+                            continue 'main_loop;
+                        }
+                        // Keep-string loop fusion (see the Exactn arm): the
+                        // resolved `OFKSJ exit; Charset; Jump Charset` loop
+                        // runs inline with no frames and no dispatch.
+                        if SEALED
+                            && unsafe { *bytecode.get_unchecked(pc) } == RegexOp::Jump as u8
+                            && ((pc as i64) + 3 + bc_num!(pc + 1) as i64) as usize == charset_op_pos
+                        {
+                            loop {
+                                if crate::emacs_core::eval::tls_quit_pending() {
+                                    return None;
+                                }
+                                match match_charset_at(
+                                    pattern,
+                                    charset_op_pos,
+                                    text,
+                                    d,
+                                    stop,
+                                    target_multibyte,
+                                    translate,
+                                    syntax,
+                                ) {
+                                    Some(ch_len) => d += ch_len,
+                                    None => break,
+                                }
+                            }
+                            try_fail!('main_loop);
+                            continue 'main_loop;
+                        }
+                        // Backtracking star-loop fusion (see the Exactn arm):
+                        // `OFJ exit; Charset; Jump OFJ` with per-iteration
+                        // frames, run inline.
+                        if SEALED
+                            && charset_op_pos >= 3
+                            && unsafe { *bytecode.get_unchecked(pc) } == RegexOp::Jump as u8
+                            && ((pc as i64) + 3 + bc_num!(pc + 1) as i64) as usize
+                                == charset_op_pos - 3
+                            && unsafe { *bytecode.get_unchecked(charset_op_pos - 3) }
+                                == RegexOp::OnFailureJump as u8
+                        {
+                            let ofj_pc = charset_op_pos - 3;
                             let exit = ((ofj_pc as i64) + 3 + bc_num!(ofj_pc + 1) as i64) as usize;
                             loop {
                                 push_failure_point!(ofj_pc, exit, FailureInput::Restore(d));
@@ -6483,18 +6732,20 @@ fn mutually_exclusive_p(buf: &CompiledPattern, body_start: usize, cont: usize) -
 /// - otherwise it becomes a plain `on_failure_jump`.
 fn resolve_smart_jumps(buf: &mut CompiledPattern) {
     let mut pc = 0;
+    let mut prev_start: Option<usize> = None;
     while pc < buf.buffer.len() {
         let Some(len) = opcode_len(&buf.buffer, pc) else {
             return;
         };
         if buf.buffer[pc] == RegexOp::OnFailureJumpSmart as u8 {
-            resolve_one_smart_jump(buf, pc);
+            resolve_one_smart_jump(buf, pc, prev_start);
         }
+        prev_start = Some(pc);
         pc += len;
     }
 }
 
-fn resolve_one_smart_jump(buf: &mut CompiledPattern, p3: usize) {
+fn resolve_one_smart_jump(buf: &mut CompiledPattern, p3: usize, prev_start: Option<usize>) {
     // Expected shape (emitted by `compile_repetition`):
     //   p3: on_failure_jump_smart <offset -> p2>
     //   p3+3: <one-char body>
@@ -6522,7 +6773,40 @@ fn resolve_one_smart_jump(buf: &mut CompiledPattern, p3: usize) {
     if mutually_exclusive_p(buf, p3 + 3, p2) {
         buf.buffer[p3] = RegexOp::OnFailureKeepStringJump as u8;
         store_number(&mut buf.buffer, jump_at + 1, back + 3);
+        return;
     }
+    // Non-exclusive loop: keep-string is off the table, so a PP*-duplicated
+    // body only costs an extra dispatch and loop-head execution per loop
+    // entry.  When the op right before the loop is a verified identical copy
+    // of the body (`P; OFJ exit; P'; Jump OFJ` — PP* by construction, or a
+    // literal `PP*` which is semantically the same `P+`), demote it in place
+    // to the body-first plus shape the matcher fuses at per-iteration-frame
+    // cost with no loop-entry overhead:
+    //   P; OFJ exit; Jump P; <dead NoOps>
+    // The dead NoOps keep the buffer length and every other offset stable;
+    // the OFJ keeps its exit target.  `prev_start` comes from the resolver's
+    // linear walk, so `P` is a real opcode boundary.
+    let body_start = p3 + 3;
+    let plen = jump_at - body_start;
+    let Some(first_p) = prev_start else {
+        return;
+    };
+    if first_p + plen != p3
+        || buf.buffer[first_p..p3] != buf.buffer[body_start..jump_at]
+        || buf.multibyte_charsets.get(&first_p) != buf.multibyte_charsets.get(&body_start)
+        || buf.charset_class_bits.get(&first_p) != buf.charset_class_bits.get(&body_start)
+    {
+        return;
+    }
+    buf.buffer[body_start] = RegexOp::Jump as u8;
+    let back_to_first = first_p as i64 - (body_start as i64 + 3);
+    store_number(&mut buf.buffer, body_start + 1, back_to_first as i16);
+    for byte in &mut buf.buffer[body_start + 3..p2] {
+        *byte = RegexOp::NoOp as u8;
+    }
+    // The demoted copy's charset side entries are dead with it.
+    buf.multibyte_charsets.remove(&body_start);
+    buf.charset_class_bits.remove(&body_start);
 }
 
 // ---------------------------------------------------------------------------
