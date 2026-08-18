@@ -9993,3 +9993,64 @@ harness will.  The pin uses 999999 now.
   and 135.
 
 Status: FIXED.
+
+## 142. An echo-area clear was silent in batch, so a keyboard macro printed nothing where GNU prints a line per keystroke -- FIXED
+
+Noticed while verifying an unrelated undo fix: GNU emitted twelve blank lines
+that Neomacs did not.  It looked cosmetic and turned out to be a primitive with
+no implementation.
+
+```elisp
+;; everything through `message' so it all lands on stderr in true order
+(defun mark (l) (message "[%s]" l))
+(defun probe-noop () (interactive) nil)
+(mark "before") (execute-kbd-macro (kbd "M-x probe-noop RET")) (mark "after")
+(mark "before-nil") (message nil) (mark "after-nil")
+;; GNU                => [before] then TWELVE blank lines then [after],
+;;                       [before-nil] then ONE blank line then [after-nil]
+;; Neomacs before fix => no blank lines at all
+```
+
+Two measurement notes, because the first reading was wrong.  The blank lines go
+to **stderr** while `princ' goes to stdout, so in a `2>&1` capture they appear
+bunched at the top -- that ordering is buffering, not sequence, and it hides
+which call produced them.  Routing everything through `message' puts it on one
+stream in true order.  The count then matches the keystrokes exactly: `M-x
+probe-noop RET` is twelve keys and prints twelve lines, `a b c` prints three.
+
+### GNU
+
+`message_to_stderr` (src/xdisp.c:12579-12602) writes the message text only when
+it is a string, then emits the trailing newline:
+
+```c
+  if (STRINGP (m) || !cursor_in_echo_area)
+    errputc ('\n');
+```
+
+and the comment above the function states the consequence: "Log the message M
+to stderr.  Log an empty line if M is not a string."
+
+`(message nil)` reaches it by the ordinary route -- `Fmessage`'s nil arm calls
+`message1 (0)` (src/editfns.c), which is `message3 (Qnil)`, which logs and then,
+unless `inhibit-message', calls `message3_nolog' -> `message_to_stderr'
+(src/xdisp.c).  So clearing the echo area is **not silent in batch**.
+
+Our `builtin_message` returned early for nil and for the empty string, calling
+only the echo-area clear, so it never reached the stderr path at all.
+
+### Why one fix closed both symptoms
+
+The per-keystroke lines were not a separate feature.  Our command loop already
+cleared the echo area on every iteration; the clear simply had no output.  With
+the primitive fixed, the twelve-line and three-line cases came out right without
+touching the keyboard-macro path -- which is also the evidence that the loop
+structure was already GNU-shaped.
+
+The rule is extracted as `stderr_message_ends_with_newline(message_is_string,
+cursor_in_echo_area)` so it can be pinned directly: a unit test cannot observe
+the process's stderr, but it can pin the truth table, including the
+`(false, false)` arm that was missing entirely.  The end-to-end probe in
+tmp/coord-echo-probe2.el is byte-identical to GNU 31.0.90.
+
+Status: FIXED.

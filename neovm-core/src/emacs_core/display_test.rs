@@ -4369,3 +4369,29 @@ fn tty_frame_supports_the_attributes_the_terminal_can_render() {
 
     crate::emacs_core::terminal::pure::reset_terminal_runtime();
 }
+
+#[test]
+fn a_nil_message_prints_an_empty_line_in_batch_unless_the_cursor_is_in_the_echo_area() {
+    // GNU `message_to_stderr' (src/xdisp.c:12579-12602) writes the message text
+    // only when it is a string, then emits the trailing newline
+    // `if (STRINGP (m) || !cursor_in_echo_area)'.  Its own comment says the
+    // consequence: "Log the message M to stderr.  Log an empty line if M is not
+    // a string."
+    //
+    // `(message nil)' reaches it through Fmessage's nil arm -> message1 (0) ->
+    // message3 (Qnil) -> message3_nolog -> message_to_stderr, so an echo-area
+    // clear is NOT silent in batch.  Measured under GNU 31.0.90
+    // (tmp/coord-echo-probe2.el): `(message nil)' emits one blank line, and a
+    // keyboard macro emits one per keystroke because the command loop clears
+    // the echo area per iteration.
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::builtins::misc_pure::stderr_message_ends_with_newline;
+
+    // A string message always ends with a newline, whatever the cursor does.
+    assert!(stderr_message_ends_with_newline(true, false));
+    assert!(stderr_message_ends_with_newline(true, true));
+    // A nil message prints the bare newline only when the cursor is not in the
+    // echo area -- this is the arm that was missing entirely.
+    assert!(stderr_message_ends_with_newline(false, false));
+    assert!(!stderr_message_ends_with_newline(false, true));
+}

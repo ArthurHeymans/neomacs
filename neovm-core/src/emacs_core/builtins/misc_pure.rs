@@ -293,11 +293,30 @@ fn message_echo_result(
     Ok(EchoMessageSetResult::LispHandled)
 }
 
+/// Whether `message_to_stderr` ends with a newline (GNU src/xdisp.c:12579-12602).
+///
+/// GNU writes the message text only when it is a string, and then emits the
+/// trailing newline `if (STRINGP (m) || !cursor_in_echo_area)`.  The comment
+/// above the function states the consequence plainly: "Log the message M to
+/// stderr.  Log an empty line if M is not a string."  So `(message nil)` in
+/// batch is not silent -- it prints a bare newline unless the cursor is in the
+/// echo area, and that is what makes each keystroke of a keyboard macro visible
+/// on stderr, since the command loop clears the echo area per iteration.
+pub(crate) fn stderr_message_ends_with_newline(
+    message_is_string: bool,
+    cursor_in_echo_area: bool,
+) -> bool {
+    message_is_string || !cursor_in_echo_area
+}
+
 pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("message", &args, 1)?;
     // GNU Emacs: nil or empty string clears the echo area and returns as-is.
+    // GNU routes both through `message1 (0)' -> `message3 (Qnil)', which logs
+    // and then, unless `inhibit-message', reaches `message_to_stderr (Qnil)' in
+    // batch -- so the clear is not silent there.
     if args[0].is_nil() {
-        ctx.clear_echo_area_message();
+        clear_echo_area_and_report_to_stderr(ctx);
         return Ok(Value::NIL);
     }
     if args[0].is_string()
@@ -307,7 +326,7 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
             .as_bytes()
             .is_empty()
     {
-        ctx.clear_echo_area_message();
+        clear_echo_area_and_report_to_stderr(ctx);
         return Ok(args[0]);
     }
     // GNU Emacs's `message` ALWAYS calls `format-message` on the args,
@@ -369,6 +388,31 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
     ctx.restore_vm_roots(root_scope);
     side_effects?;
     Ok(formatted)
+}
+
+/// GNU `message3 (Qnil)` for the echo-area-clearing case: log, then unless
+/// `inhibit-message' reach `message3_nolog' -- which in batch is
+/// `message_to_stderr', printing the empty line described above.
+fn clear_echo_area_and_report_to_stderr(ctx: &mut super::eval::Context) {
+    ctx.clear_echo_area_message();
+    if !ctx.noninteractive() {
+        return;
+    }
+    if ctx
+        .visible_variable_value_or_nil("inhibit-message")
+        .is_truthy()
+    {
+        return;
+    }
+    let cursor_in_echo_area = ctx
+        .visible_variable_value_or_nil("cursor-in-echo-area")
+        .is_truthy();
+    if stderr_message_ends_with_newline(false, cursor_in_echo_area) {
+        use std::io::Write;
+        let mut err = std::io::stderr();
+        let _ = err.write_all(b"\n");
+        let _ = err.flush();
+    }
 }
 
 pub(crate) fn builtin_message_box(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
