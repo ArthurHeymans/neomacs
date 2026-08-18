@@ -96,60 +96,25 @@ fn load_hist_file_name(
     }
 }
 
-/// EOL-aware coding-system name for an Emacs-extended UTF-8 source file.
-fn source_emacs_coding(bytes: &[u8]) -> &'static str {
-    match detect_source_eol(bytes) {
-        SourceEol::Unix => "utf-8-emacs-unix",
-        SourceEol::Dos => "utf-8-emacs-dos",
-        SourceEol::Mac => "utf-8-emacs-mac",
-    }
-}
-
 /// Decode Emacs-extended UTF-8 source straight to a faithful `LispString`
 /// (Emacs internal bytes) — issue #131. Non-Unicode source character literals
 /// (e.g. `?\xF6\xA0\x87\x8A` -> 0x1A01CA) keep their real codes as extended
 /// Emacs bytes instead of the in-Unicode storage sentinels, and the reader's
 /// LispString source mode reads them directly. No storage-string round-trip.
+///
+/// `utf-8-emacs` leaves its end-of-line type UNDECIDED, so the shared decoder
+/// detects it -- GNU's `decode_eol` (src/coding.c:6783-6806), the same function
+/// `insert-file-contents`, `decode-coding-string` and subprocess output all go
+/// through.  This used to be a third, private copy of that detector
+/// (`detect_source_eol` / `source_emacs_coding`, deleted with DIVERGENCES.md
+/// entry 139): it always resolved the eol itself and handed the decoder a
+/// concrete `-unix`/`-dos`/`-mac` name, so a change to the shared rule could not
+/// reach `load`.  The two answered identically on every input, the
+/// stray-^M-in-a-DOS-file case included, which is why deleting it is a
+/// deduplication and not a behaviour change; the equivalence is pinned by
+/// `load_source_eol_detection_matches_the_shared_decoder`.
 pub(crate) fn decode_emacs_utf8_source_lisp(bytes: &[u8]) -> LispString {
-    crate::encoding::decode_bytes_to_lisp_string(bytes, source_emacs_coding(bytes))
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SourceEol {
-    Unix,
-    Dos,
-    Mac,
-}
-
-fn detect_source_eol(bytes: &[u8]) -> SourceEol {
-    let mut saw_lf = false;
-    let mut saw_crlf = false;
-    let mut saw_lone_cr = false;
-    let mut idx = 0;
-    while idx < bytes.len() {
-        match bytes[idx] {
-            b'\n' => saw_lf = true,
-            b'\r' => {
-                if bytes.get(idx + 1) == Some(&b'\n') {
-                    saw_crlf = true;
-                    idx += 1;
-                } else {
-                    saw_lone_cr = true;
-                }
-            }
-            _ => {}
-        }
-        idx += 1;
-    }
-    if saw_lf {
-        SourceEol::Unix
-    } else if saw_crlf {
-        SourceEol::Dos
-    } else if saw_lone_cr {
-        SourceEol::Mac
-    } else {
-        SourceEol::Unix
-    }
+    crate::encoding::decode_bytes_to_lisp_string(bytes, "utf-8-emacs")
 }
 
 pub(crate) fn decode_emacs_utf8(bytes: &[u8]) -> String {

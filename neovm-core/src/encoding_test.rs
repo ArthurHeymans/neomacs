@@ -790,8 +790,19 @@ fn encoding_utf16_gnu_compatible_signatures_and_endianness() {
 
     assert_eq!(decode_bytes(&[0x00, 0x61], "utf-16be"), "a");
     assert_eq!(decode_bytes(&[0x61, 0x00], "utf-16le"), "a");
+    // `utf-16-be' is an alias of `utf-16be-with-signature', so it declares a
+    // BIG-endian signature.  A LITTLE-endian one is not it: GNU rewinds the two
+    // bytes and reads them as data, big-endianly (src/coding.c:1601-1609).  This
+    // row used to assert U+1F600 for the little-endian bytes below, which was
+    // recording Neomacs's own BOM-sniffing rather than GNU's rule; re-derived by
+    // running GNU Emacs 31.0.90 (DIVERGENCES.md entry 139).
     assert_eq!(
         decode_bytes(&[0xff, 0xfe, 0x3d, 0xd8, 0x00, 0xde], "utf-16-be"),
+        "\u{fffe}\u{3dd8}\u{00de}"
+    );
+    // The same character, written the way `utf-16-be' declares it.
+    assert_eq!(
+        decode_bytes(&[0xfe, 0xff, 0xd8, 0x3d, 0xde, 0x00], "utf-16-be"),
         "\u{1f600}"
     );
 
@@ -2069,5 +2080,80 @@ fn the_identity_fast_path_belongs_to_code_convert_string_only() {
              ((97 10 98 10) utf-8-unix) \
              ((97 98 99) utf-8))",
         "dst_object is what selects the fast path"
+    );
+}
+
+/// DIVERGENCES.md entry 139: `utf-16` and `utf-8-auto` pick a concrete BASE
+/// coding system from the byte-order mark.
+///
+/// This is a different axis from the end of line.  `detect_coding` has three
+/// arms, one per "auto" category (src/coding.c:6660-6754), and the two here are
+/// keyed on the coding system's `:bom` being a CONS of the systems the mark
+/// chooses between -- `(utf-16le-with-signature . utf-16be-with-signature)` for
+/// `utf-16`, `(utf-8-with-signature . utf-8)` for `utf-8-auto`.  Each arm ends
+/// in `setup_coding_system (found, coding)`, so the name that reaches
+/// `last-coding-system-used` is the concrete one, and the end-of-line
+/// subsidiary is appended to THAT.
+///
+/// Every expected value was measured by running `tmp/pw46/final.el` under GNU
+/// Emacs 31.0.90.
+#[test]
+fn utf_16_and_utf_8_auto_pick_a_concrete_base_from_the_bom() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(progn
+             (defun pw139d (bytes coding)
+               (let ((d (decode-coding-string (apply #'unibyte-string bytes) coding)))
+                 (list (append d nil) last-coding-system-used)))
+             (list
+              ;; A BOM re-bases `utf-16', and the detected eol goes on the
+              ;; concrete base.
+              (pw139d '(#xfe #xff #x00 #x61 #x00 #x0d #x00 #x0a #x00 #x62) 'utf-16)
+              (pw139d '(#xff #xfe #x61 #x00 #x0d #x00 #x0a #x00 #x62 #x00) 'utf-16)
+              ;; No terminator: the base still moves, the eol does not.
+              (pw139d '(#xfe #xff #x00 #x61 #x00 #x62) 'utf-16)
+              ;; No BOM: `found' stays nil, so `utf-16' keeps its own name and
+              ;; its own default (big-endian) byte order.
+              (pw139d '(#x00 #x61 #x00 #x0d #x00 #x0a #x00 #x62) 'utf-16)
+              ;; `:bom nil' systems treat a signature as DATA.
+              (pw139d '(#xff #xfe #x61 #x00 #x0d #x00 #x0a #x00 #x62 #x00) 'utf-16le)
+              (pw139d '(#xfe #xff #x00 #x61 #x00 #x0d #x00 #x0a #x00 #x62) 'utf-16be)
+              ;; An explicit eol survives the re-base (`utf-16-dos').
+              (pw139d '(#xfe #xff #x00 #x61 #x00 #x0d #x00 #x0a #x00 #x62) 'utf-16-dos)
+              ;; `utf-16-be' is an alias of `utf-16be-with-signature', so it
+              ;; declares a BIG-endian signature; a little-endian one is not it,
+              ;; and the two bytes are rewound and read big-endianly.
+              (pw139d '(#xff #xfe #x61 #x00 #x62 #x00) 'utf-16-be)
+              ;; An odd-length last block is refused outright by
+              ;; `detect_coding_utf_16' (src/coding.c:1501-1507), before it ever
+              ;; looks at a signature.
+              (pw139d '(#xfe #xff #x00) 'utf-16)
+              ;; `utf-8-auto': XCAR with a signature, XCDR without -- and XCDR
+              ;; outright for pure ASCII, which never runs the detector.
+              (pw139d '(#xef #xbb #xbf #x61 #x0d #x0a #x62) 'utf-8-auto)
+              (pw139d '(#x61 #x0d #x0a #x62) 'utf-8-auto)
+              (pw139d '(#xc3 #xa9 #x0d #x0a) 'utf-8-auto)
+              ;; Invalid UTF-8 leaves `found' nil, so the name stays `utf-8-auto'.
+              (pw139d '(#xff #xfe #x41) 'utf-8-auto)))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((97 10 98) utf-16be-with-signature-dos) ",
+            "((97 10 98) utf-16le-with-signature-dos) ",
+            "((97 98) utf-16be-with-signature) ",
+            "((97 10 98) utf-16-dos) ",
+            "((65279 97 10 98) utf-16le-dos) ",
+            "((65279 97 10 98) utf-16be-dos) ",
+            "((97 10 98) utf-16be-with-signature-dos) ",
+            "((65534 24832 25088) utf-16-be) ",
+            "((65279 0) utf-16) ",
+            "((97 10 98) utf-8-with-signature-dos) ",
+            "((97 10 98) utf-8-dos) ",
+            "((233 10) utf-8-dos) ",
+            "((4194303 4194302 65) utf-8-auto))",
+        )
     );
 }

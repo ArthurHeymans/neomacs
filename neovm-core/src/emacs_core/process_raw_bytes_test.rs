@@ -102,7 +102,8 @@ fn spawn_child_with_environment_uses_process_environment_list() {
     for _ in 0..20 {
         let events = processes.wait_for_process_events(Duration::from_millis(20));
         if events.has_ready_process(pid) {
-            let _ = processes.read_process_output(pid, ProcessOutputSink::DecodedText);
+            let _ = processes
+                .read_process_output_without_recording_coding(pid, ProcessOutputSink::DecodedText);
         }
         if processes
             .get_output(pid)

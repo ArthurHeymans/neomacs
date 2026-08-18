@@ -8031,6 +8031,16 @@ detected coding for an `undecided` one.  Neomacs reports the coding that was
 resolved.  The decoded TEXT is unaffected -- this is the reporting slot only --
 and it is a separate mechanism from the chain fixed here.
 
+> **Closed, 2026-08-18, by entry 139.**  Right about the mechanism, and it
+> understates the reach in three ways.  The write-back also completes the
+> process's ENCODE coding system when that was still nil
+> (`coding_inherit_eol_type`, src/process.c:6442-6444).  The same variable is
+> written by `call-process` (src/callproc.c:913), which had no write at all
+> here.  And "the decoded TEXT is unaffected" is true of one read and false of
+> the next: because GNU writes the detected coding back onto the process, the
+> NEXT chunk is decoded with it, which is entry 134's per-chunk residual.  The
+> two really were one mechanism, as 134 predicted.
+
 **`make-pipe-process`, `make-serial-process` and `make-network-process` still
 owe their own resolvers.**  The table above is what each of them has to
 implement; none of them is `Fmake_process`'s, and the network one is partly
@@ -8884,6 +8894,20 @@ evidence of its own inherits unix rather than the earlier answer.  Making it
 sticky means writing the resolved coding back onto the process, which is entry
 131's other open residual, so the two belong together.
 
+> **Closed, 2026-08-18, by entry 139.**  "The two belong together" was exactly
+> right: the stickiness IS the write-back, and neither could be done without the
+> other.  Two details of this paragraph did not hold.  The observable case is
+> not "a later chunk with no evidence of its own": a chunk with no terminator
+> inherits nothing in GNU either, because `decode_eol` skips
+> `adjust_coding_eol_type` for `EOL_SEEN_NONE` and the process is still
+> undecided.  What is observable is a later chunk whose OWN evidence disagrees
+> -- bare CRs after a DOS start, which GNU keeps and per-chunk detection eats.
+> And "the carryover above closes the case that would otherwise misread a split
+> CR LF" closes a case GNU does not close: GNU holds a trailing CR back only for
+> a concrete `Qdos` eol type (`eol_dos`, src/coding.c:1250-1251), so a split
+> CR LF under an undecided coding really is misread there.  The carryover is
+> removed in 139.
+
 **`load`'s source-EOL detector is a third copy.**  `source_emacs_coding`
 (`neovm-core/src/emacs_core/load.rs`) resolves the end of line itself and always
 hands the decoder a concrete `-unix`/`-dos`/`-mac` name, so it is unaffected by
@@ -8892,12 +8916,28 @@ no `.el` file in the tree exercises.  It could be deleted the way
 `DetectedFileEol` was; it is left because the bootstrap loads through it and the
 change has no measurable payoff.
 
+> **Closed, 2026-08-18, by entry 139**, which deleted it -- and the sentence
+> "its rules are GNU's minus the stray-^M-in-a-DOS-file case" is WRONG.
+> `detect_source_eol`'s `saw_lf` / `saw_crlf` / `saw_lone_cr` cascade answers
+> `Dos` when there is a CR LF and no bare LF, which is precisely the mixture
+> GNU's stray-^M rule (src/coding.c:6794-6797) answers `EOL_SEEN_CRLF` for.  The
+> two detectors agree on every input, so the copy really was a pure duplicate --
+> and that is the finding, not a caveat on it.  The equivalence is pinned by
+> `load_source_eol_detection_matches_the_shared_decoder`.
+
 **`utf-16` with a BOM still reports the wrong BASE name.**  Decoding a
 BOM-prefixed UTF-16 string leaves `last-coding-system-used` at `utf-16-dos` here
 and `utf-16be-with-signature-dos` in GNU.  The end-of-line half is now right on
 both sides; the divergence is in which concrete system the BOM selects, which is
 `detect_coding`'s `coding_category_utf_16_auto` arm (src/coding.c:6724-6742) and
 not this axis.
+
+> **Closed, 2026-08-18, by entry 139**, which found the arm's sibling
+> (`coding_category_utf_8_auto`, :6702-6722) diverging the same way, and found
+> that getting the NAME right required getting the BOM RULE right: the `:bom`
+> property has three states, not two, and Neomacs read the bytes where GNU reads
+> the coding system.  `utf-16le` keeps a leading U+FEFF that Neomacs stripped,
+> and `utf-16-be` refuses a little-endian signature that Neomacs accepted.
 
 ## 135. 147 of GNU's 148 `DEFVAR_BOOL` variables did not coerce, and `byte-boolean-vars` held one symbol where GNU holds 117, so the byte optimizer folded the coercion away even for the one that did -- FIXED
 
@@ -9616,6 +9656,11 @@ the slot with the coding actually used.  Every pin in this entry therefore reads
 the slot BEFORE any output arrives, which is the only way to measure the chain
 rather than the write-back.
 
+> **Closed, 2026-08-18, by entry 139.**  The instruction in the last sentence
+> stands and is now load-bearing in the other direction too: 139's pins read the
+> slot AFTER output for exactly the same reason, and the two sets of pins measure
+> the two halves without overlapping.
+
 **A function-valued `network-coding-system-alist` entry can run when GNU would
 not have called it.**  GNU computes the alist answer lazily, inside the `else`
 arm of each half, so when BOTH halves short-circuit -- a unibyte process buffer
@@ -9993,6 +10038,445 @@ harness will.  The pin uses 999999 now.
   and 135.
 
 Status: FIXED.
+
+## 139. A subprocess's decoder was rebuilt from scratch on every read, so the coding system it resolved was never reported and never remembered -- FIXED
+
+The residuals entry 131 opened and entry 134 sharpened, closed together because
+they are one mechanism.  Reproduced first, with `-Q --batch` against GNU Emacs
+31.0.90 and against this branch's own pre-fix `cargo xtask fresh-build --release`
+binary.  The before/after probes are `tmp/pw46/pin.el`, `tmp/pw46/pin2.el` and
+`tmp/pw46/pin5.el`, each with its `-gnu`, `-before` and `-after` output;
+`tmp/pw46/final.el` is the consolidated probe the pins below were cut from, run
+against GNU and against the fixed binary (`final-gnu.txt`, `final-after.txt`).
+
+```elisp
+;; a child writing  a CRLF b CRLF, then after a pause  x CR y CR
+(let* ((buf (generate-new-buffer " *p*"))
+       (p (let ((coding-system-for-read 'utf-8))
+            (make-process :name "p" :buffer buf :sentinel #'ignore
+                          :connection-type 'pipe
+                          :command '("sh" "-c" "printf 'a\\r\\nb\\r\\n'; sleep 0.6; printf 'x\\ry\\r'")))))
+  (while (accept-process-output p 1))
+  (while (process-live-p p) (accept-process-output p 0.05))
+  (list (append (with-current-buffer buf (buffer-string)) nil)
+        (process-coding-system p)
+        last-coding-system-used))
+;; GNU                => ((97 10 98 10 120 13 121 13) (utf-8-dos . utf-8-unix) utf-8-dos)
+;; Neomacs before fix => ((97 10 98 10 120 10 121 10) (utf-8 . utf-8-unix) prefer-utf-8-unix)
+```
+
+(The text is `tmp/pw46/pin5.el`'s pipe row and the two slots are
+`tmp/pw46/pin.el`'s; neither slot depends on the connection type.)
+
+Three separate wrongs in one line.  The second chunk's bare CRs were eaten,
+because it re-detected its end-of-line type from scratch and a chunk of nothing
+but CRs is `mac`.  `(process-coding-system p)` still reported the coding system
+the CHAIN resolved rather than the one the DECODE used.  And
+`last-coding-system-used` was not written at all -- `prefer-utf-8-unix` is
+whatever the last `decode-coding-string` of the bootstrap happened to leave
+there, and it is the same value after a `call-process`, after a
+`make-process`, and after every other subprocess read in the editor.
+
+### GNU has ONE `struct coding_system` per process, and that is the whole story
+
+Everything below follows from a single fact about `src/process.c`: a subprocess's
+output is decoded through `proc_decode_coding_system[channel]`, one object,
+created by `setup_process_coding_systems` and reused for every read.  Three
+things live in that object across reads, and Neomacs had none of them.
+
+**The resolved end-of-line type.**  `decode_eol` resolves a VECTOR eol type by
+scanning the produced text and calling `adjust_coding_eol_type`
+(src/coding.c:6805), which REPLACES `coding->id` with the subsidiary.  The next
+read therefore starts from a concrete type and never detects again.
+
+**The name that replacement produced.**
+`read_process_output_set_last_coding_system` (src/process.c:6417-6446) reads it
+back out after every decoded run and does three writes with it:
+
+```c
+  Vlast_coding_system_used = CODING_ID_NAME (coding->id);
+  /* A new coding system might be found.  */
+  if (!EQ (p->decode_coding_system, Vlast_coding_system_used))
+    {
+      pset_decode_coding_system (p, Vlast_coding_system_used);      /* :6425 */
+      ...
+      if (NILP (p->encode_coding_system) && p->outfd >= 0
+	  && proc_encode_coding_system[p->outfd])
+	{
+	  pset_encode_coding_system
+	    (p, coding_inherit_eol_type (Vlast_coding_system_used, Qnil));  /* :6442 */
+```
+
+It runs for a buffer destination (:6506) and for a Lisp filter (:6565) alike.
+So the reporting slot, the process's own decode slot and -- when it was still
+nil -- the process's ENCODE slot all move together, and the stickiness is a
+consequence of the second write rather than a separate mechanism.
+
+**The unconsumed source bytes.**  `coding->carryover` spans reads
+(src/process.c:6243, :6455).
+
+### What the detection actually does across a chunk boundary, measured
+
+The obvious diagnostic shape is not diagnostic.  A first chunk of CR LF and a
+later chunk of bare LF reads identically whether the type is sticky or
+re-detected, because DOS decoding leaves a lone LF alone.  What separates them
+is a later chunk of bare CRs.  Every row measured under GNU 31.0.90, on a PIPE
+connection (see below), `coding-system-for-read` `utf-8`:
+
+| child output | GNU text | GNU `(car (process-coding-system P))` |
+|---|---|---|
+| `a CRLF b CRLF` / `x CR y CR` | `(97 10 98 10 120 13 121 13)` | `utf-8-dos` |
+| `a CR b CR` / `x LF y LF` | `(97 10 98 10 120 10 121 10)` | `utf-8-mac` |
+| `a CRLF b CRLF` / `x LF y LF` | `(97 10 98 10 120 10 121 10)` | `utf-8-dos` |
+| `abc` / `x CR y CR` | `(97 98 99 120 10 121 10)` | `utf-8-mac` |
+| `a CR` / `LF b CRLF` | `(97 10 10 98 10 10)` | `utf-8-mac` |
+
+The third row is the shape that is invisible; the first is the one that shows
+the bug.  The fourth says the stickiness begins when detection FIRES, not when
+the process starts: a chunk with no terminator is GNU's `EOL_SEEN_NONE`, which
+skips `adjust_coding_eol_type` entirely (src/coding.c:6805), so nothing is
+remembered and the next chunk still detects.
+
+The fifth row is the one that corrects entry 134.  A CR LF split across two
+reads is MANGLED by GNU: the first chunk ends on a CR, nothing holds it back,
+the chunk is classified `mac` on its own, and the second chunk then inherits
+`mac` and turns its LF into a second newline.  Entry 134 introduced a
+trailing-CR carryover for undecided-eol codings precisely to avoid that, on the
+reasoning that the coding "may still resolve to dos".  GNU does not reason that
+way.  The hold-back is `eol_dos`, which every decoder computes as
+
+```c
+  bool eol_dos
+    = !inhibit_eol_conversion && EQ (CODING_ID_EOL_TYPE (coding->id), Qdos);
+```
+
+(src/coding.c:1250-1251 for UTF-8, and the same two lines in seven more
+decoders), and it is compared against `Qdos`, not against "might become dos".
+A concrete `-dos` coding does hold the CR back -- the same split under
+`coding-system-for-read` `utf-8-dos` reads `(97 10 98 10)` in GNU -- and an
+undecided one does not.
+
+### The reported name is the SUBSIDIARY, and an alias reports its base's
+
+`adjust_coding_eol_type` takes the subsidiary out of the coding system's own eol
+VECTOR, which holds canonical names, so the write-back is not a string
+concatenation on the caller's spelling:
+
+```elisp
+;; a child writing  a CR b CR, read with `coding-system-for-read' `latin-1'
+;; GNU => text (97 10 98 10), (process-coding-system P) (iso-latin-1-mac . utf-8-unix)
+```
+
+Nine rows of that table are pinned by
+`process_output_write_back_reports_the_coding_actually_used`, including the two
+that show the write-back is not only about end of line: a unibyte process buffer
+reports `raw-text-dos`, because the slot records the coding the fd-level
+downgrade produced (entry 131) and not the one the creation-time chain resolved;
+and `binary`, whose eol type is concrete `Qunix`, still moves
+`last-coding-system-used` even though it adjusts nothing.
+
+### `call-process` reports too, and only when it read into a buffer
+
+`Fcall_process` has the same assignment, `Vlast_coding_system_used =
+CODING_ID_NAME (process_coding.id)` (src/callproc.c:913), and it sits inside the
+branch guarded by an open `fd0` -- the branch that read the child's output.  So
+a `(:file NAME)` or discarded destination leaves the variable alone:
+
+```elisp
+(setq last-coding-system-used 'untouched)
+(call-process "sh" nil nil nil "-c" "printf 'a\\r\\n'")
+last-coding-system-used
+;; GNU => untouched
+```
+
+```elisp
+(with-temp-buffer
+  (let ((coding-system-for-read 'utf-8)) (call-process "sh" nil t nil "-c" "printf 'a\\r\\nb\\r\\n'"))
+  (list (append (buffer-string) nil) last-coding-system-used))
+;; GNU                => ((97 10 98 10) utf-8-dos)
+;; Neomacs before fix => ((97 10 98 10) prefer-utf-8-unix)
+```
+
+Entry 134 fixed what `last-coding-system-used` reports for strings, regions and
+files.  These are the two doors it did not reach.
+
+One more thing about `Fcall_process` is load-bearing, and the first version of
+this fix got it wrong.  `fd_error = fd_output` (src/callproc.c:605) unless the
+caller named an error destination, so for the ordinary `DESTINATION` = `t` the
+child's stderr is the SAME file descriptor as its stdout, read by the same loop
+through the same `struct coding_system`.  Neomacs captures the two streams
+separately and routes them one after the other; handing each route its own copy
+of the decoding meant the second route -- usually decoding zero bytes of stderr
+-- reported an unadjusted name and overwrote the first.  Measured against GNU,
+`(call-process "sh" nil t nil "-c" "printf 'a\\r\\nb\\r\\n'")` answered
+`utf-8` where GNU answers `utf-8-dos`.  The decoding is now carried by `&mut`
+through both routes, so `adjust_coding_eol_type`'s rewrite reaches the second
+one exactly as it reaches a subprocess's second chunk.
+
+### The type-level fix
+
+`adjust_coding_eol_type` does two things in one call, and Neomacs had thrown one
+of them away at the type level: `EolType::for_decode` returned a `ResolvedEol`,
+which can say WHICH end-of-line type the conversion runs with and cannot say
+whether the coding system's NAME moved with it.  Every reporting slot in Emacs
+is downstream of that second half.
+
+```rust
+pub(crate) enum DecodeEolResolution {
+    Specified(ResolvedEol),   // the eol type was concrete; nothing to adjust
+    Adjusted(ResolvedEol),    // the VECTOR resolved: GNU rewrites coding->id
+    NotSeen,                  // GNU's EOL_SEEN_NONE: no terminator, no rewrite
+}
+```
+
+`EolType::resolve_for_decode` returns one of those, and `for_decode` is now
+`resolve_for_decode(..).eol()` -- kept, because the sites that convert without
+reporting are honest users of the smaller answer.  The three states are GNU's
+three, and `NotSeen` exists as a state of its own rather than as
+`Specified(Unix)` because it is the difference between reporting `utf-8` and
+reporting `utf-8-unix`.
+
+On top of it, `decode_process_run` (`neovm-core/src/encoding.rs`) is GNU's
+`decode_coding` for the one caller that must report: it spends the coding
+system's eol leg before the decoder, runs the decoder, then resolves the end of
+line against the text the decoder PRODUCED -- GNU's order (src/coding.c:7481),
+and the only order in which the answer can be reported, because the scan has to
+see the bytes the conversion will touch.
+
+`ProcessRunCoding` (`neovm-core/src/emacs_core/process.rs`) is that answer
+paired with the name it applies to, and it is what makes the write-back
+unforgettable.  A read off a process fd now produces a `DecodedProcessOutputRead`,
+which carries one; the ONLY way to turn that into the `ProcessOutputRead` every
+driver consumes is `Context::read_process_output_recording_coding`, which is
+GNU's `read_process_output_set_last_coding_system`.  There is no path from
+process bytes to buffer text that does not pass through the write-back, because
+the two are separated by a type rather than by a convention.  The one entry
+point that deliberately skips it says so in its name:
+`read_process_output_without_recording_coding`, for unit fixtures that drive a
+`ProcessManager` with no `Context` to write a variable into.
+
+`ProcessOutputDecoding::Bytes` grew the coding-system NAME for the same reason.
+It converts nothing, but it still reports, and a variant that had thrown its
+name away could not have said `binary`.
+
+`process_coding_uses_dos_eol_carryover` is now `eol_dos` and nothing else --
+`coding_name_eol(name) == EolType::Dos` -- with the C quoted next to it, so the
+undecided case entry 134 added cannot come back as an intuition.
+
+### Two more copies of the same decision, removed and corrected
+
+**`load`'s private detector is deleted.**  `source_emacs_coding` /
+`detect_source_eol` (`neovm-core/src/emacs_core/load.rs`) were a third port of
+GNU's `decode_eol` fold, next to the shared `detected_decoded_eol` and the
+`detect_eol` port that serves `detect-coding-string`.  `decode_emacs_utf8_source_lisp`
+now hands `utf-8-emacs` -- whose eol type is undecided -- to the shared decoder
+and lets it detect.  Entry 134 predicted this was safe "minus the
+stray-^M-in-a-DOS-file case"; that qualification is wrong, and the correction is
+the point of `load_source_eol_detection_matches_the_shared_decoder`, which pins
+the whole truth table of the fold.  `detect_source_eol`'s `saw_lf` / `saw_crlf`
+/ `saw_lone_cr` cascade answers `Dos` for exactly the mixture GNU's stray-^M rule
+answers `EOL_SEEN_CRLF` for, and agrees on every other combination too, so the
+deletion is a deduplication with nothing behind it -- which is the finding.
+
+**`utf-16` and `utf-8-auto` pick a concrete BASE from the byte-order mark.**
+This is a different axis from the end of line, and entry 134 named it as such.
+`detect_coding` has three arms, one per "auto" category, and the two that are
+not `undecided` are keyed on the coding system's `:bom` being a CONS of the two
+systems the mark chooses between -- measured under GNU 31.0.90,
+`(coding-system-get 'utf-16 :bom)` is
+`(utf-16le-with-signature . utf-16be-with-signature)` and
+`(coding-system-get 'utf-8-auto :bom)` is `(utf-8-with-signature . utf-8)`.
+Each arm ends in `setup_coding_system (found, coding)` (src/coding.c:6743-6754),
+so the coding system a `utf-16` decode runs with, and reports, is one of the two
+concrete ones:
+
+```elisp
+(let ((d (decode-coding-string "\xfe\xff\0a\0\r\0\n\0b" 'utf-16)))
+  (list (append d nil) last-coding-system-used))
+;; GNU                => ((97 10 98) utf-16be-with-signature-dos)
+;; Neomacs before fix => ((97 10 98) utf-16-dos)
+```
+
+Getting the NAME right required getting the BOM rule right, and the BOM rule is
+the coding system's, not the bytes'.  `Utf16Bom` is GNU's `enum utf_bom_type`
+with all three of its values in play, because all three are needed:
+
+* `Without` (`utf-16le`, `utf-16be`, `:bom nil`) -- a leading signature is DATA.
+* `Declared` (`utf-16be-with-signature`, `utf-16le-with-signature`, and the
+  `utf-16-be` / `utf-16-le` aliases of those two) -- `decode_coding_utf_16` reads
+  two bytes and consumes them only if they are the signature for its OWN
+  endianness, rewinding otherwise (src/coding.c:1601-1609).
+* `Detect` (`utf-16`) -- the decoder consumes NOTHING: "We have already tried to
+  detect BOM and failed in detect_coding" (src/coding.c:1612-1617).  A `utf-16`
+  decode consumes a signature only because the arm above re-based it to a
+  `Declared` system first.
+
+Neomacs had one bool for the three, and it sniffed the bytes rather than reading
+the coding system, so it stripped a signature `utf-16le` must keep and picked an
+endianness `utf-16-be` must refuse:
+
+```elisp
+(append (decode-coding-string "\xff\xfe" "a\0\r\0\n\0b\0" 'utf-16le) nil)
+;; GNU                => (65279 97 10 98)
+;; Neomacs before fix => (97 10 98)
+```
+
+The `utf-16-be` half of the same rule is what moved a pinned expectation; see
+below.
+
+`detect_bom_auto_coding` carries GNU's refusals as well as its detections: an
+odd-length last block is rejected by `detect_coding_utf_16` outright
+(src/coding.c:1501-1507) before it looks at a signature, so
+`(decode-coding-string "\xfe\xff\0" 'utf-16)` reports plain `utf-16` and keeps
+U+FEFF as a character; and invalid UTF-8 leaves `utf-8-auto`'s `found` nil, so
+that name stays too.  Thirteen rows are pinned by
+`utf_16_and_utf_8_auto_pick_a_concrete_base_from_the_bom`.
+
+### One pinned expectation moved, and it was recording us
+
+`encoding_utf16_gnu_compatible_signatures_and_endianness` asserted that
+`utf-16-be` decodes the LITTLE-endian bytes `FF FE 3D D8 00 DE` as U+1F600.  GNU
+answers `(65534 15832 222)`: `utf-16-be` is an alias of
+`utf-16be-with-signature`, it declares a big-endian signature, and a
+little-endian one is not it.  The row is kept, re-derived by running GNU
+31.0.90, and a second row added for the same character written the way the
+coding system declares it (`FE FF D8 3D DE 00` -> U+1F600), so the pin now shows
+the rule rather than a byte-sniffing accident.
+
+### Corrections to earlier entries
+
+Entry 131, dated 2026-08-18: its second residual,
+"`Vlast_coding_system_used` is not written back onto the process", is closed
+here.  The paragraph is right about the mechanism and understates the blast
+radius: GNU's write-back also moves the process's ENCODE coding system when that
+was still nil, and the same variable is written by `call-process`, which had no
+write at all here.
+
+Entry 134, dated 2026-08-18: three of its four residuals are closed here, one of
+the three carries a correction to what 134 said about it, and a decision INSIDE
+134 is reversed.
+
+* "Detection on a process read is per chunk, not per process" is closed, and its
+  prediction that it "belongs together" with 131's write-back residual held
+  exactly: the stickiness IS the write-back.
+* "`load`'s source-EOL detector is a third copy" is closed by deleting it.  Its
+  claim that the copy implements "GNU's rules minus the stray-^M-in-a-DOS-file
+  case" is WRONG -- the cascade covers that case -- and the two detectors are
+  equivalent on every input, which is why the deletion is safe.
+* "`utf-16` with a BOM still reports the wrong BASE name" is closed.
+* The trailing-CR carryover 134 added for undecided-eol codings ("One boundary
+  had to move with it") is REMOVED.  GNU holds a trailing CR back only for a
+  concrete `Qdos` eol type; measured, a CR LF split across two reads under
+  `coding-system-for-read` `utf-8` reads `(97 10 10 98 10 10)` in GNU, not
+  `(97 10 98 10)`.  The carryover made Neomacs kinder than GNU and therefore
+  wrong.
+* "`inhibit-eol-conversion` is inert, in both directions" is NOT closed; see
+  below.
+
+Entry 137, dated 2026-08-18: its restatement of the write-back residual is closed
+with 131's.  Its instruction that "every pin in this entry therefore reads the
+slot BEFORE any output arrives" stands, and is now half of a pair: 139's pins
+read it AFTER, so the creation-time chain and the write-back are measured by
+disjoint sets of rows.
+
+### Measured after
+
+Against a `cargo xtask fresh-build --release` binary, `tmp/pw46/final.el` -- ten
+`make-process` write-back rows, a Lisp-filter row, eight stickiness rows, six
+`call-process` rows and fourteen BOM rows, each reporting text, coding pair and
+`last-coding-system-used` -- is byte-identical to GNU Emacs 31.0.90 on every row
+but the four `inhibit-eol-conversion` rows recorded below.  `tmp/pw46/pin5.el`,
+which pins the connection type explicitly, agrees on all five PIPE rows and
+differs on the three PTY rows recorded below; `tmp/pw46/pin2.el`'s twenty-one
+boundary rows agree except for the three that are the same pty difference.
+
+`cargo nextest run -p neovm-core` is 9025/9025 green.
+`cargo nextest run -p neovm-oracle-tests` is 38778/38778 green.
+`cargo check --workspace --all-targets` and `cargo fmt --all --check` are clean.
+The MELPA suites that carry real process bytes -- `diredfl` (the suite entry 128
+came from), `rg`, `slime`, `sly`, `ivy_rich`, `all_the_icons_ivy_rich`,
+`async_http_queue`, `auto_pause` and `git_rebase_mode` -- are 32/32 green.  The
+one red in that run was `org_roam`, which the filter pulled in by substring and
+which failed on the concurrent `sqlite3-api.so` build race entry 134 already
+recorded (`cannot find sqlite3-api.o`, another suite building the same source
+directory at the same time); it passes on its own, and it touches no coding
+system.
+
+### Found and NOT fixed here
+
+**A PTY EOF drops the decoder's carryover in GNU, and does not here.**  This is
+why every subprocess row above is measured on a `:connection-type 'pipe`
+connection.  On a pipe, GNU's EOF read returns 0, `read_process_output` sets
+`CODING_MODE_LAST_BLOCK` and decodes the carryover (src/process.c:6316-6321); on
+a pty it returns -1, and the `nbytes < 0` arm returns before decoding anything,
+so whatever was held back is lost:
+
+```elisp
+;; child writes  a CR  under `coding-system-for-read' `utf-8-dos'
+;; :connection-type 'pipe => GNU (97 13)   Neomacs (97 13)
+;; :connection-type 'pty  => GNU (97)      Neomacs (97 13)
+;; child writes  a <c3>  under `utf-8'
+;; :connection-type 'pipe => GNU (97 4194243)   Neomacs (97 4194243)
+;; :connection-type 'pty  => GNU (97)           Neomacs (97 4194243)
+```
+
+Neomacs matches GNU's PIPE behaviour on both, and diverges on the pty because it
+flushes there too.  Reproducing GNU would mean modelling "this EOF came from an
+error read" and then DELETING data the child really wrote, which is a data-losing
+change to make deliberately or not at all; it is recorded rather than made.
+`process-connection-type` defaults to `t`, so this is the common case, and it is
+the reason a pin taken without `:connection-type 'pipe` measures the pty quirk
+instead of the coding chain.
+
+**`inhibit-eol-conversion` is still inert, in both directions.**  Entry 134's
+residual, restated with what this entry learned about its cost.
+
+```elisp
+(let ((inhibit-eol-conversion t))
+  (list (append (decode-coding-string "a\r\nb\r\n" 'utf-8-dos) nil)
+        (append (encode-coding-string "a\nb" 'utf-8-dos) nil)
+        (append (decode-coding-string "a\r\nb\r\n" 'undecided) nil)
+        last-coding-system-used))
+;; GNU     => ((97 13 10 98 13 10) (97 10 98) (97 13 10 98 13 10) undecided)
+;; Neomacs => ((97 10 98 10)       (97 13 10 98) (97 10 98 10)    undecided-dos)
+```
+
+The fourth element is new evidence about its shape: the variable does not only
+suppress the conversion, it suppresses the NAME ADJUSTMENT, because
+`decode_eol`'s first line returns before the VECTOR branch (src/coding.c:6765).
+So it is a flag on the RESOLUTION, which is now exactly two functions here --
+`EolType::for_encode` and `EolType::resolve_for_decode` -- and the honest shape
+is to make it a required parameter of both, so that no site can resolve without
+having been told.
+
+It is left out again, and the reason is not that it cannot be reached -- that
+was checked, and it can.  The resolution is reached through `decode_eol_text`,
+`decode_bytes`, `decode_bytes_emacs`, `encode_lisp_string` and `encode_string`,
+context-free by design and called from eleven places in seven files (plus
+fifty-one test call sites).  Every one of the eleven turns out to have a
+`Context` in reach, including the one that looks like it does not:
+`keyboard_input.rs`'s TTY decoder is driven from
+`Context::handle_read_char_input_event` (`neovm-core/src/keyboard.rs:4580`).  So
+the honest version is buildable.
+
+What is NOT available is GNU's own mechanism.  `inhibit_eol_conversion` is a C
+global behind `DEFVAR_BOOL`, read directly by eight decoders and by
+`decode_eol`; the Neomacs analogue would be a process-wide cell, and there is
+none to be had -- the obarray is owned by a `Context`, `LispBoolFwd` cells are
+copied per thread (`neovm-core/src/emacs_core/forward.rs`), and the unit suite
+runs many `Context`s on parallel threads, so a static would be read by the wrong
+session.  The flag therefore has to travel as a value, and the shape that makes
+it unforgettable is a required parameter of `EolType::for_encode` and
+`EolType::resolve_for_decode` -- the two functions this entry has just made the
+only ways to resolve an eol type -- with the un-parameterised spellings kept
+`#[cfg(test)]` so production code cannot reach them.
+
+That is a mechanical change to about seventy call sites, and it is a change
+whose blast radius is every coding conversion in the editor.  Putting it behind
+four measured behaviour fixes in one gate run is how a regression gets attributed
+to the wrong half.  It lands in its own entry, with the design above already
+settled and the fourth measurement in the block above -- that the variable
+suppresses the NAME ADJUSTMENT as well as the conversion -- as its first pin.
 
 ## 140. Eight suites audited for entry 133's read-boundary hazard: none carries it, but four gated a compilation pin on the process dying rather than on the output ending, which is the same race by a different door -- NOT A DIVERGENCE (racy harness fixtures), FIXED
 
