@@ -4504,17 +4504,13 @@ fn lower_fixnum_mul(
 /// `Op::Div`/`Op::Rem`): both operands fixnums and the divisor nonzero, else
 /// deopt (the interpreter's `/` builtin signals arith-error on zero). Rust and
 /// CLIF `sdiv`/`srem` both truncate toward zero, matching the interpreter; the
-/// operands are <= 61-bit so the i64 ops cannot trap, and the interpreter's
-/// `Value::fixnum` retag of `MOST_NEGATIVE_FIXNUM / -1` (a wrap) produces the
-/// same bits as our retag, so no extra range guard is needed for parity.
+/// operands are <= 61-bit so the i64 ops cannot trap.
 ///
-/// FRAGILE PARITY: this matches a quirk of the interpreter's `Op::Div` fast path
-/// (`vm.rs`), which `Value::fixnum`-wraps `MOST_NEGATIVE_FIXNUM / -1` instead of
-/// promoting to a bignum (the `/` *builtin* does promote). If `Op::Div` is ever
-/// corrected to promote, THIS lowering must change too (it would otherwise return
-/// the wrapped fixnum while the interpreter returns a bignum). The unboxed MIR
-/// analogue `raw_fixnum_divrem` is robust to that fix — it range-checks and deopts
-/// on the overflow rather than wrapping.
+/// STALE PARITY (dead code): the interpreter's `Op::Div` fast path now
+/// range-checks and routes `MOST_NEGATIVE_FIXNUM / -1` to the `/` builtin
+/// (bignum promotion, like GNU), so wiring this lowering up would require the
+/// same range guard the unboxed MIR analogue `raw_fixnum_divrem` already has
+/// (it deopts on the overflow rather than wrapping).
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn lower_fixnum_divrem(
     fb: &mut FunctionBuilder,

@@ -4319,7 +4319,10 @@ impl<'a> Vm<'a> {
                         if a.is_fixnum() && b.is_fixnum() {
                             let av = a.xfixnum();
                             let bv = b.xfixnum();
-                            if bv != 0 {
+                            // The range check matters: most-negative-fixnum / -1
+                            // exceeds most-positive-fixnum and must promote to a
+                            // bignum via the builtin, like GNU.
+                            if bv != 0 && !(av == Value::MOST_NEGATIVE_FIXNUM && bv == -1) {
                                 // Emacs truncation division (towards zero), matching C semantics
                                 let res = av / bv;
                                 stk!()[len - 2] = Value::fixnum(res);
