@@ -477,6 +477,18 @@ fn buffer_disable_undo_arms_match_gnu() {
 (condition-case e (buffer-disable-undo 42) (error e))
 (condition-case e (buffer-disable-undo 'neo-bdu-sym) (error e))
 (condition-case e (funcall 'buffer-disable-undo nil nil) (error e))
+;; Disabling undo through an INDIRECT buffer disables the base buffer's too,
+;; because GNU copies `undo_list' between the two on every
+;; `set_buffer_internal_1' (src/buffer.c:2357,2367) -- ledger 120's machinery,
+;; asked through this door.
+(let ((base (generate-new-buffer "neo-bdu-base")))
+  (with-current-buffer base (buffer-enable-undo) (insert "hello"))
+  (let ((ind (make-indirect-buffer base "neo-bdu-ind")))
+    (with-current-buffer ind (buffer-enable-undo))
+    (buffer-disable-undo ind)
+    (prog1 (list (with-current-buffer ind buffer-undo-list)
+                 (eq t (with-current-buffer base buffer-undo-list)))
+      (kill-buffer ind) (kill-buffer base))))
 "#,
     );
 
@@ -495,6 +507,7 @@ fn buffer_disable_undo_arms_match_gnu() {
             "OK (wrong-type-argument stringp 42)",
             "OK (wrong-type-argument stringp neo-bdu-sym)",
             "OK (wrong-number-of-arguments (0 . 1) 2)",
+            "OK (t t)",
         ],
     );
 }
