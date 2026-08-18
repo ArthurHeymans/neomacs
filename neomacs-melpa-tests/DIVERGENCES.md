@@ -13334,3 +13334,59 @@ refinements it could not have made:
 extended rather than corrected: 38 after this one.
 
 Status: FIXED.
+
+## 149. The four process launchers were Rust subrs that `subr.el` and `simple.el` already define -- FIXED
+
+Third instalment of the class ledger **146** enumerated: Rust subrs whose function cell is overwritten by
+preloaded Lisp. GNU has exactly one such name and documents it as a placeholder
+(`frame-windows-min-size`, src/frame.c:494-502); the rest are invention here. **146** deleted
+`primitive-undo`, **148** deleted eleven, and this entry deletes the four launchers, taking the standing
+check's hard-asserted count from **38 to 34**.
+
+These four were deliberately left twice -- by 131 and again by 146 -- because the three siblings call
+`builtin_start_process` directly, so all four move together, and roughly 25 tests named them on bare
+`Context`s.
+
+### What GNU has
+
+None of the four is a C `DEFUN`. All are preloaded Lisp:
+
+```elisp
+(dolist (n '(start-process start-file-process
+             start-process-shell-command start-file-process-shell-command))
+  (list (subrp (symbol-function n)) (func-arity n)))
+;; GNU => ((nil (3 . many)) (nil (3 . many)) (nil (3 . 3)) (nil (3 . 3)))
+```
+
+`start-process-shell-command` does **not** indirect to a subr, and a byte-compiled call to `start-process`
+is `(192 3 3 3 35 135)` -- an ordinary funcall, not an opcode. Measured in both editors after the fix; the
+probe (tmp/coord-launcher-probe.el) is byte-identical.
+
+### The measurement that reframes ledger 131
+
+Recorded first by 146 and confirmed here: **the `start-process` subr is already shadowed in every loaded
+session**, so the coding resolver 131 added *inside* it was reachable only from unit tests. The half of 131
+that changed shipped behaviour is the `make-process` half. 131 carries a dated note to that effect.
+
+### Provenance of this entry, stated plainly
+
+The implementing agent died on a transient API error before it committed, and its worktree was salvaged into
+the main tree by the coordinator. Two defects in the salvaged state were found and fixed by verifying rather
+than trusting it:
+
+* the new 305-line test file **was never declared as a module**, so it compiled clean by not being compiled
+  at all -- the four launcher tests were dark;
+* two temporary probe scaffolds were still present, whose own doc comments read *"TEMPORARY measurement
+  scaffold ... deleted before the commit"*, and which failed because the `tmp/` fixture they read died with
+  the agent.
+
+Everything below was re-measured on a `cargo xtask fresh-build --release` binary after both were fixed.
+
+### Evidence
+
+`neovm-core` plus `neomacs-layout-engine` green; oracle 38783/38783; the launcher probe byte-identical to
+GNU 31.0.90; the neighbouring coding, EOL and undo probes unchanged. New tests include a file-name-handler
+dispatch check for `start-file-process` and an opcode-level comparison of byte-compiled callers, following
+148's method.
+
+Status: FIXED.

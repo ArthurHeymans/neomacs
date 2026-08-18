@@ -1519,19 +1519,6 @@ fn visible_default_directory_lisp(eval: &super::eval::Context) -> Option<LispStr
     super::fileio::default_directory_lisp_in_state(&eval.obarray, &[], &eval.buffers)
 }
 
-fn visible_lisp_string_variable(
-    eval: &super::eval::Context,
-    name: &str,
-    fallback: &str,
-) -> Result<LispString, Flow> {
-    let value = eval.visible_variable_value_or_nil(name);
-    if value.is_nil() {
-        Ok(LispString::from_utf8(fallback))
-    } else {
-        Ok(super::builtins::expect_lisp_string(&value)?.clone())
-    }
-}
-
 fn os_str_to_lisp_string(value: &OsStr) -> LispString {
     #[cfg(unix)]
     {
@@ -13391,162 +13378,12 @@ pub(crate) fn builtin_set_network_process_option_impl(
     Ok(Value::T)
 }
 
-/// (start-process NAME BUFFER PROGRAM &rest ARGS) -> process-id
-pub(crate) fn builtin_start_process(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("start-process", &args, 3)?;
-    eval.sync_process_read_config_from_visible_variables();
-    let name = expect_process_name_lisp_string(&args[0])?;
-    let buffer = parse_make_process_buffer(eval, &args[1])?;
-    let program = if args[2].is_nil() {
-        LispString::from_utf8("nil")
-    } else {
-        super::builtins::expect_lisp_string(&args[2])?.clone()
-    };
-    let proc_args = parse_lisp_string_args_strict(&args[3..])?;
-    let default_directory = visible_default_directory_lisp(eval);
-    let lookup = ProcessExecLookup {
-        exec_path: eval.visible_variable_value_or_nil("exec-path"),
-        exec_suffixes: eval.visible_variable_value_or_nil("exec-suffixes"),
-        default_directory: default_directory.as_ref(),
-    };
-    let executable = if args[2].is_nil() {
-        None
-    } else {
-        Some(resolve_async_process_program(lookup, &program)?)
-    };
-
-    // GNU's `start-process` is Lisp and does nothing but hand its arguments to
-    // `make-process` (lisp/subr.el:3466-3472), so it runs the very same coding
-    // resolver -- including `find-operation-coding-system`, whose operation
-    // symbol here really is `start-process` (src/process.c:1965).  Rebuilding
-    // the keyword form is what keeps this Rust shadow of a Lisp function from
-    // acquiring a coding chain of its own.
-    let mut coding_plist = vec![
-        ProcessKeyword::Name.value(),
-        args[0],
-        ProcessKeyword::Buffer.value(),
-        args[1],
-    ];
-    if !args[2].is_nil() {
-        coding_plist.push(ProcessKeyword::Command.value());
-        coding_plist.push(Value::list(args[2..].to_vec()));
-    }
-    let coding_environment = make_process_coding_environment(eval, &coding_plist)?;
-    let resolved_coding = resolve_make_process_coding_systems(Value::NIL, coding_environment);
-    validate_process_coding_component(Some(&eval.coding_systems), resolved_coding.decode)?;
-    validate_process_coding_component(Some(&eval.coding_systems), resolved_coding.encode)?;
-    // See `builtin_make_process`: the resolved pair can be freshly consed, and
-    // everything below here allocates.
-    let roots = eval.save_specpdl_roots();
-    eval.push_specpdl_root(resolved_coding.decode);
-    eval.push_specpdl_root(resolved_coding.encode);
-
-    let use_pty = process_connection_type_is_pty(&eval.obarray);
-    let subprocess_cwd = super::callproc::subprocess_default_directory(eval);
-    let child_environment = Some(super::environment::ChildEnvironment::materialize(
-        eval,
-        subprocess_cwd.as_deref(),
-    ));
-    let id = eval.processes.create_process_lisp_resolved(
-        name,
-        buffer,
-        program,
-        proc_args,
-        executable,
-        resolved_coding,
-    );
-    eval.restore_specpdl_roots(roots);
-    if let Some(cwd) = &subprocess_cwd
-        && let Some(proc) = eval.processes.get_mut(id)
-    {
-        proc.default_directory = Some(cwd.clone());
-    }
-    eval.processes.sync_process_mark(&mut eval.buffers, id)?;
-
-    if let Err(e) = eval
-        .processes
-        .spawn_child_with_environment(id, use_pty, child_environment)
-    {
-        // GNU `start-process` creates the process object before the child-side
-        // exec.  An exec failure is then reported as an asynchronous process
-        // exit, so callers can install a sentinel after `start-process`
-        // returns.  Preserve synchronous `exec-path` lookup errors above; this
-        // branch is for failures after the process record exists.
-        let exit_code = async_process_spawn_failure_exit_code(&e);
-        eval.processes
-            .set_child_status_pending(id, process_status_exit_value(exit_code));
-    }
-
-    Ok(Value::make_process(id))
-}
-
-/// (start-process-shell-command NAME BUFFER COMMAND) -> process-id
-pub(crate) fn builtin_start_process_shell_command(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("start-process-shell-command", &args, 3)?;
-    let command = super::builtins::expect_lisp_string(&args[2])?.clone();
-    let shell_program = visible_lisp_string_variable(eval, "shell-file-name", "sh")?;
-    let shell_switch = visible_lisp_string_variable(eval, "shell-command-switch", "-c")?;
-    builtin_start_process(
-        eval,
-        vec![
-            args[0],
-            args[1],
-            Value::heap_string(shell_program),
-            Value::heap_string(shell_switch),
-            Value::heap_string(command),
-        ],
-    )
-}
-
-/// (start-file-process NAME BUFFER PROGRAM &rest PROGRAM-ARGS) -> process-id
-pub(crate) fn builtin_start_file_process(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("start-file-process", &args, 3)?;
-    if let Some(default_directory) = visible_default_directory_lisp(eval) {
-        let operation = Value::symbol("start-file-process");
-        let handler = super::fileio::find_file_name_handler_lisp_for_eval(
-            eval,
-            &default_directory,
-            operation,
-        );
-        if !handler.is_nil() {
-            let mut call_args = Vec::with_capacity(args.len() + 1);
-            call_args.push(operation);
-            call_args.extend_from_slice(&args);
-            return eval.funcall_general(handler, call_args);
-        }
-    }
-    builtin_start_process(eval, args)
-}
-
-/// (start-file-process-shell-command NAME BUFFER COMMAND) -> process-id
-pub(crate) fn builtin_start_file_process_shell_command(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("start-file-process-shell-command", &args, 3)?;
-    let command = super::builtins::expect_lisp_string(&args[2])?.clone();
-    let shell_program = visible_lisp_string_variable(eval, "shell-file-name", "sh")?;
-    let shell_switch = visible_lisp_string_variable(eval, "shell-command-switch", "-c")?;
-    builtin_start_file_process(
-        eval,
-        vec![
-            args[0],
-            args[1],
-            Value::heap_string(shell_program),
-            Value::heap_string(shell_switch),
-            Value::heap_string(command),
-        ],
-    )
-}
+// `start-process', `start-process-shell-command', `start-file-process' and
+// `start-file-process-shell-command' are NOT here: GNU has no C version of
+// any of them.  They are Lisp over `make-process' (which IS in C,
+// src/process.c:1767) -- lisp/subr.el:3466, lisp/subr.el:5063,
+// lisp/simple.el:5249 and lisp/subr.el:5076 -- and we load those files.
+// DIVERGENCES.md 149 deleted the Rust subrs that used to shadow them.
 
 /// (call-process PROGRAM &optional INFILE DESTINATION DISPLAY &rest ARGS)
 ///

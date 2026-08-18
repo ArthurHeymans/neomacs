@@ -5816,8 +5816,13 @@ fn process_live_p_loop_runs_pending_default_sentinel() {
                          (and (processp process)
                               (memq (process-status process)
                                     '(run open listen connect stop)))))
-                 (let ((proc (start-process "apio-live-loop" buf
-                                            "{printf}" "X%sY" "MID")))
+                 ;; `start-process' is Lisp in GNU (lisp/subr.el:3466) and has no
+                 ;; Rust subr since DIVERGENCES.md 149; a bare `Context' is GNU
+                 ;; before `loadup.el', so the launcher here is the C primitive
+                 ;; the Lisp one calls (src/process.c:1767).
+                 (let ((proc (make-process
+                              :name "apio-live-loop" :buffer buf
+                              :command (list "{printf}" "X%sY" "MID"))))
                    (set-process-query-on-exit-flag proc nil)
                    (while (apio-live-p proc)
                      (accept-process-output proc 1))
@@ -8766,9 +8771,12 @@ fn process_reaching_terminal_status_dirties_chrome() {
     let result = ctx.eval_str(
         // Only core builtins here: this Context has no subr.el, so
         // `process-live-p` / `ignore-errors` / `generate-new-buffer` are all
-        // void. The bounded loop also keeps a wedged child from hanging CI.
+        // void -- and so is `start-process', which is `subr.el:3466' Lisp over
+        // `make-process' (DIVERGENCES.md 149). The bounded loop also keeps a
+        // wedged child from hanging CI.
         r#"(let* ((buf (get-buffer-create "p52-proc-chrome"))
-                  (p (start-process "p52-proc" buf "true"))
+                  (p (make-process :name "p52-proc" :buffer buf
+                                   :command (list "true")))
                   (n 0))
              (while (and (< n 100) (eq (process-status p) 'run))
                (accept-process-output p 0.1)

@@ -667,6 +667,9 @@ mod replace_region_contents_test;
 mod lisp_only_predicates_and_aliases_test;
 
 #[cfg(test)]
+mod process_launchers_are_lisp_only_test;
+
+#[cfg(test)]
 mod rust_subrs_shadowed_by_lisp_test;
 
 // -----------------------------------------------------------------------
@@ -2161,30 +2164,13 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
     );
-    ctx.defsubr(
-        "start-process",
-        super::process::builtin_start_process,
-        3,
-        None,
-    );
-    ctx.defsubr(
-        "start-file-process",
-        super::process::builtin_start_file_process,
-        3,
-        None,
-    );
-    ctx.defsubr(
-        "start-process-shell-command",
-        super::process::builtin_start_process_shell_command,
-        3,
-        Some(3),
-    );
-    ctx.defsubr(
-        "start-file-process-shell-command",
-        super::process::builtin_start_file_process_shell_command,
-        3,
-        Some(3),
-    );
+    // No `start-process' / `start-file-process' /
+    // `start-process-shell-command' / `start-file-process-shell-command':
+    // GNU has no C DEFUN for any of them.  All four are Lisp over
+    // `make-process' -- lisp/subr.el:3466, lisp/simple.el:5249,
+    // lisp/subr.el:5063 and lisp/subr.el:5076 -- and `loadup.el' preloads
+    // both files, so a Rust subr here could only ever answer in unit tests.
+    // DIVERGENCES.md 149.
 
     ctx.defsubr("processp", super::process::builtin_processp, 1, Some(1));
     ctx.defsubr("process-id", super::process::builtin_process_id, 1, Some(1));

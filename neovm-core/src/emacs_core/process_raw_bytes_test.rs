@@ -43,21 +43,28 @@ fn builtin_getenv_internal_preserves_raw_unibyte_process_environment_value() {
     assert_eq!(value.as_bytes(), &[0xFF]);
 }
 
+/// `start-process' is Lisp in GNU (lisp/subr.el:3466) and has no Rust subr
+/// since DIVERGENCES.md 149, so the raw-byte question this test asks belongs
+/// to the primitive underneath it: `make-process', which GNU does DEFUN
+/// (src/process.c:1767).
 #[test]
-fn builtin_start_process_preserves_raw_unibyte_command_argument_storage() {
+fn builtin_make_process_preserves_raw_unibyte_command_argument_storage() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
     let echo = find_bin("echo");
-    let pid = builtin_start_process(
+    let pid = builtin_make_process(
         &mut eval,
         vec![
-            Value::string("raw-start-process"),
-            Value::NIL,
-            Value::string(echo),
-            Value::heap_string(LispString::from_unibyte(vec![0xFF])),
+            Value::keyword(":name"),
+            Value::string("raw-make-process"),
+            Value::keyword(":command"),
+            Value::list(vec![
+                Value::string(echo),
+                Value::heap_string(LispString::from_unibyte(vec![0xFF])),
+            ]),
         ],
     )
-    .expect("start-process should succeed")
+    .expect("make-process should succeed")
     .as_process_id()
     .expect("process object id");
 

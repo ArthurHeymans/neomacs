@@ -7625,7 +7625,8 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                  (equal (gnutls-error-string 0) "Success.")
                  (null (gnutls-error-fatalp 1))
                  (null (gnutls-peer-status-warning-describe nil))
-                 (let ((p (start-process "vm-gnutls-stub" nil "cat")))
+                 (let ((p (make-process :name "vm-gnutls-stub"
+                                        :command (list "cat"))))
                    (unwind-protect
                        (list
                         (null (gnutls-asynchronous-parameters p nil))

@@ -61,13 +61,11 @@ const SHADOWED_BY_PRELOADED_LISP: &[&str] = &[
     // sit here are GONE: their Rust subrs were deleted (DIVERGENCES.md 148),
     // so the count fell from 49 to 38.  See
     // `lisp_only_predicates_and_aliases_test.rs' for the per-name statement.
-    // -- Process launchers.  All four are thin Lisp wrappers over
-    // `make-process', which IS in C (src/process.c:1767).  DIVERGENCES.md 131
-    // and 146: the Rust ones answer only in unit tests.
-    "start-file-process",               // lisp/simple.el:5249
-    "start-file-process-shell-command", // lisp/subr.el:5076
-    "start-process",                    // lisp/subr.el:3466
-    "start-process-shell-command",      // lisp/subr.el:5063
+    // -- The four process launchers that used to sit here are GONE: their
+    // Rust subrs were deleted (DIVERGENCES.md 149), so the count fell from 38
+    // to 34.  All four are Lisp over `make-process', which IS in C
+    // (src/process.c:1767); see `process_launchers_are_lisp_only_test.rs' for
+    // the per-name statement.
     // -- Undo.  `syms_of_undo' (src/undo.c:423-490) has exactly one `defsubr',
     // `&Sundo_boundary' (:435).  `primitive-undo' was deleted for this reason
     // (DIVERGENCES.md 146); these two are the same class, not yet done.
@@ -144,13 +142,14 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
          lisp/simple.el:3645 and nowhere in src/",
     );
 
-    // The list must shrink, not just stay reviewed.  146 left 49 entries and
-    // 148 deleted eleven of them; this pins the arithmetic so a re-added
-    // subr cannot be absorbed by editing the list alone.
+    // The list must shrink, not just stay reviewed.  146 left 49 entries, 148
+    // deleted eleven of them and 149 the four process launchers; this pins the
+    // arithmetic so a re-added subr cannot be absorbed by editing the list
+    // alone.
     assert_eq!(
         SHADOWED_BY_PRELOADED_LISP.len(),
-        38,
-        "the reviewed shadow list is 38 names after DIVERGENCES.md 148 \
-         (50 before 146, 49 after it, 38 after 148)",
+        34,
+        "the reviewed shadow list is 34 names after DIVERGENCES.md 149 \
+         (50 before 146, 49 after it, 38 after 148, 34 after 149)",
     );
 }
