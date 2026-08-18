@@ -9629,6 +9629,15 @@ than on a reporting slot.  **It is not pinned**, because Neomacs cannot run it:
 no bytes ever arrive and the buffer stays empty on every row.  Pinning it would
 have recorded the fixture, not the behaviour.  The device gap is recorded below.
 
+> **Corrected, 2026-08-18, by entry 147.**  The reason for the omission is gone:
+> `make-serial-process` opens its port now, and every row above has been pinned
+> in `a_serial_process_decodes_the_bytes_its_port_delivers`, against a pty pair
+> built inside the test.  Three of the rows pin their BYTES only -- entry 147's
+> residual on the `undecided` write-back is why -- and every byte is identical
+> to the GNU measurements above.  Nothing this entry concluded about the serial
+> chain moved: with real bytes flowing, `default-process-coding-system` and
+> `process-coding-system-alist` are still invisible to a serial process.
+
 ### Measured after
 
 Against a `cargo xtask fresh-build --release` binary, `tmp/pw137/pin.el` --
@@ -9670,6 +9679,15 @@ succeeds where GNU signals `(file-error "Failed tcgetattr")`, and no serial
 process ever delivers output.  The coding chain fixed here is correct in advance
 of the I/O it will decode; the I/O is its own change, with a PAL question in it
 (termios lives in `process/sys/`), and no MELPA pin depends on it.
+
+> **Closed, 2026-08-18, by entry 147.**  Both signals are reproduced, and so are
+> four more orderings this paragraph did not know about: the port checks beat the
+> `:speed` check, the open beats the coding chain, the coding chain beats the
+> configuration, and `tcgetattr` beats every keyword domain check.  The PAL
+> question was answered the way GNU answers it -- `serial_open` and
+> `serial_configure` are one header in `src/systty.h` with two implementations --
+> and the ordering above is what decided the SHAPE of the boundary: a settings
+> struct would have validated too early.
 
 **GNU Emacs 31.0.90 segfaults on an invalid coding system for a unibyte process
 buffer.**  Reproduced on the shipped 31.0.90 binary, four ways, always
@@ -12548,5 +12566,457 @@ worth recording: a Rust function wrong in seven measured ways against GNU,
 that no shipped code path had ever executed.  What changes is the bare
 evaluator, where `primitive-undo` is now void exactly as it is in GNU before
 `simple.el`, and the tests, which now measure the Lisp that actually runs.
+
+Status: FIXED.
+
+## 147. `make-serial-process` built a process record for a port it never opened, so a device that does not exist, cannot be read, or is not a tty all produced a live serial process that carried no bytes -- FIXED
+
+Entry 137's residual, and the last of the three it scoped out.  137 gave the
+primitive the coding chain GNU's `Fmake_serial_process` runs and said so:
+"the coding chain fixed here is correct in advance of the I/O it will decode;
+the I/O is its own change, with a PAL question in it".  This is that change.
+
+```elisp
+(make-serial-process :port "/dev/no-such-tty" :speed 9600 :name "s" :noquery t)
+;; GNU                => (file-missing "Opening serial port" "No such file or directory" "/dev/no-such-tty")
+;; Neomacs before fix => #<process s>
+```
+
+Reproduced first, `-Q --batch` against GNU Emacs 31.0.90 and against this
+branch's own pre-fix `cargo xtask fresh-build --release` binary, kept as
+`tmp/pw147/before/neomacs`.  The probe is `tmp/pw147/pin.el` and its two
+outputs are `tmp/pw147/pin-gnu.txt` and `tmp/pw147/pin-before.txt`.
+
+| `make-serial-process`, measured | GNU | Neomacs before fix |
+|---|---|---|
+| `:port "/nonexistent/pw147-tty" :speed 9600` | `(file-missing "Opening serial port" "No such file or directory" "/nonexistent/pw147-tty")` | a live process |
+| `:port "/dev" :speed 9600` (a directory) | `(file-error "Opening serial port" "Is a directory" "/dev")` | a live process |
+| `:port "/proc/1/mem" :speed 9600` | `(permission-denied "Opening serial port" "Permission denied" "/proc/1/mem")` | a live process |
+| `:port "/dev/null" :speed 9600` | `(file-error "Failed tcgetattr" "Inappropriate ioctl for device")` | a live process |
+| `:port "/dev/null" :speed nil` | a live process, `open` | a live process, `open` |
+| a pty slave carrying `c a f <c3> <a9> CR LF x CR LF` | `(99 97 102 233 10 120 10)` | `()` -- nothing ever arrives |
+
+The last row is the one that matters, and it is the reason 137 refused to pin
+the serial payload at all: with no port open there is nothing to read, so every
+payload row measured the fixture rather than the behaviour.
+
+The record was otherwise complete.  `(process-status P)` was `open`, the
+contact plist carried `:speed :bytesize :parity :stopbits :flowcontrol
+:summary`, `serial-process-configure` recomputed all six, and `process-type`
+said `serial`.  Nothing was open.
+
+### Where GNU puts the open, and what that decides
+
+`Fmake_serial_process` is one of the shortest connection primitives, and every
+error it can produce is ordered by where the open sits (src/process.c:3193-3286):
+
+```c
+  port = plist_get (contact, QCport);
+  if (NILP (port)) error ("No port specified");           /* :3193-3194 */
+  CHECK_STRING (port);                                    /* :3195      */
+  if (NILP (plist_member (contact, QCspeed)))
+    error (":speed not specified");                       /* :3198-3199 */
+  if (!NILP (plist_get (contact, QCspeed)))
+    CHECK_FIXNUM (plist_get (contact, QCspeed));          /* :3200-3201 */
+  proc = make_process (name);                             /* :3207      */
+  record_unwind_protect (remove_process, proc);           /* :3209      */
+  fd = serial_open (port);                                /* :3212      */
+  ...
+  buffer = Fget_buffer_create (buffer, Qnil);             /* :3226      */
+  ...
+  setup_process_coding_systems (proc);                    /* :3277      */
+  Fserial_process_configure (nargs, args);                /* :3284      */
+  specpdl_ptr = specpdl_ref_to_ptr (specpdl_count);       /* :3286      */
+```
+
+Five statements, five measurable consequences.
+
+**One: the PORT checks beat the `:speed` check.**  Both are argument checks, but
+`:port` is examined first, so a call with no port at all cannot report a bad
+speed:
+
+```elisp
+(make-serial-process :speed "x")          ;; GNU => (error "No port specified")
+(make-serial-process :port 1 :speed "x")  ;; GNU => (wrong-type-argument stringp 1)
+```
+
+Neomacs answered `(wrong-type-argument fixnump "x")` to the first, because it
+validated `:speed` inside the keyword-parsing loop, at whatever position the
+keyword happened to occupy.
+
+**Two: the open beats everything downstream of it.**  `serial_open` is at :3212
+and `setup_process_coding_systems` at :3277, so an unopenable port reports the
+open even when the coding system is also undefined and the keywords are also
+invalid.  This is the serial analogue of the ordering 137 measured for the
+network primitive ("a refused port beats an undefined coding system to the
+signal"), reached by an earlier mechanism: for `make-network-process` the coding
+resolution happens after the socket exists (:3761), for serial it happens after
+the open unconditionally.
+
+```elisp
+(let ((coding-system-for-read 'no-such-xyz))
+  (make-serial-process :port "/nonexistent/pw147-tty" :speed 9600))
+;; GNU => (file-missing "Opening serial port" ...)
+(make-serial-process :port "/nonexistent/pw147-tty" :speed 9600 :bytesize 5)
+;; GNU => (file-missing "Opening serial port" ...)
+```
+
+**Three: the coding chain beats the configuration.**  :3277 is before :3284, and
+`/dev/null` is the device that separates them -- it opens and then fails
+`tcgetattr`:
+
+```elisp
+(let ((coding-system-for-read 'no-such-xyz))
+  (make-serial-process :port "/dev/null" :speed 9600 :buffer (generate-new-buffer " *b*")))
+;; GNU => (coding-system-error no-such-xyz)      ; not "Failed tcgetattr"
+```
+
+**Four: inside the configuration, `tcgetattr` beats every keyword domain
+check.**  `serial_configure` reads the attributes before it validates anything
+(src/sysdep.c:3164-3166 vs :3195), so:
+
+```elisp
+(make-serial-process :port "/dev/null" :speed 9600 :bytesize 5)
+;; GNU => (file-error "Failed tcgetattr" "Inappropriate ioctl for device")
+(make-serial-process :port "/dev/null" :speed 9600 :parity 'mark)
+;; GNU => (file-error "Failed tcgetattr" "Inappropriate ioctl for device")
+```
+
+Neomacs reported `":bytesize must be nil (8), 7, or 8"` and `":parity must be
+nil (no parity), `even', or `odd'"` for those, which is what a keyword checker
+with no device under it can say.
+
+**Five: what a FAILED creation leaves behind says where it failed.**  The
+`record_unwind_protect (remove_process, proc)` at :3209 removes the record for
+every failure, so no failure ever leaks a process -- but `Fget_buffer_create`
+runs at :3226, between the open and the coding chain, so the BUFFER survives
+every failure except the open's:
+
+| after a failed `make-serial-process` | buffer created? | processes leaked | GNU | Neomacs before fix |
+|---|---|---|---|---|
+| nonexistent port | no | 0 | `file-missing` | a live process, 1 leaked, buffer created |
+| `/dev/ptmx` + `:bytesize 5` | yes | 0 | `error` | `error`, 1 leaked, buffer created |
+| `/dev/ptmx` + undefined coding | yes | 0 | `coding-system-error` | `coding-system-error`, buffer NOT created |
+| `/dev/null` + `:speed 9600` | yes | 0 | `file-error` | a live process, 1 leaked, buffer created |
+
+Two different bugs in one column.  Failures that neomacs did detect left the
+half-built process in `process-list` under its own name, and the one failure it
+detected at the right moment -- the coding system -- created no buffer, because
+neomacs resolved the coding before creating the buffer where GNU does the
+reverse.
+
+### What `serial_configure` actually sets, and what `:speed` nil means
+
+`serial_configure` (src/sysdep.c:3151-3309) is a read-modify-write of one
+`struct termios`:
+
+* `tcgetattr`, then `cfmakeraw`, then `|= CLOCAL` and `|= CREAD` (:3164-3172);
+* `:speed` through `convert_speed` (:3135-3148, bug#49524 -- a plain 9600
+  becomes the `B9600` constant, a value that is already a `Bnnn` is passed
+  through, an unknown value is passed through for the platform to accept or
+  refuse) and then `cfsetspeed` (:3181);
+* `:bytesize` nil -> 8, else 7 or 8, into `CSIZE`/`CS7`/`CS8` (:3186-3205);
+* `:parity` nil/`even`/`odd`, into `PARENB`/`PARODD` plus `IGNPAR`/`INPCK`
+  (:3207-3238);
+* `:stopbits` nil -> 1, else 1 or 2, into `CSTOPB` (:3240-3260);
+* `:flowcontrol` nil/`hw`/`sw`, into `CRTSCTS` or `IXON`/`IXOFF` (:3262-3300);
+* `tcsetattr (TCSANOW)` (:3303), and only then is the contact plist replaced
+  (:3307-3308).
+
+Two things follow from that shape.  The device is written ONCE, at the end, so a
+rejected keyword leaves it untouched -- `cfsetspeed` has already run on the
+local copy when `:bytesize 5` is refused, and the port never sees it; that one
+is guaranteed by the boundary's shape rather than pinned, because a pty cannot
+hold most of what would distinguish it.  And `summary` is built one character at
+a time as each arm validates
+(`summary[0]`, `[1]`, `[2]`), which is why it is `"7O2"` for
+`:bytesize 7 :parity 'odd :stopbits 2` and why `:flowcontrol` never appears in
+it.
+
+`:speed` nil is not "configure with a default speed"; it is documented as "the
+serial port is not configured any further, i.e., all other arguments are
+ignored" (src/process.c:3040-3042), and the implementation is a return before
+`serial_configure` is ever called:
+
+```c
+  if (NILP (plist_get (p->childp, QCspeed)))
+    return Qnil;                                   /* src/process.c:3098-3099 */
+```
+
+So the port is still OPENED and it is simply left alone, which is directly
+measurable on a device that is not a tty:
+
+```elisp
+(make-serial-process :port "/dev/null" :speed 9600)
+;; GNU => (file-error "Failed tcgetattr" "Inappropriate ioctl for device")
+(make-serial-process :port "/dev/null" :speed nil)
+;; GNU => a live process, (process-status P) = open,
+;;        (process-contact P t) = (:port "/dev/null" :speed nil ...)
+;;        -- no :bytesize, no :parity, no :stopbits, no :flowcontrol, no :summary
+```
+
+The same asymmetry runs through `serial-process-configure`: on a `:speed` nil
+process it returns nil without touching anything, and an explicit `:speed nil`
+handed to a process that HAS a speed reaches `CHECK_FIXNUM` and signals
+`(wrong-type-argument fixnump nil)`.
+
+### The state a live serial port is in
+
+`process-status` is `open` and `process-live-p` is true; with `:stop t` the
+status is `stop` and `process-command` is `t`, which is also the case in which
+GNU skips `add_process_read_fd (fd)` (:3241-3243, guarded on
+`!EQ (p->command, Qt) && !EQ (p->filter, Qt)`); `delete-process` makes it
+`closed`.  `process-id` and `process-tty-name` are both nil -- there is no
+child and the port is not the process's controlling terminal.  All measured;
+all of these neomacs already answered, because they are properties of the
+record rather than of the device.
+
+### The PAL decision
+
+A serial port is the facility this project's platform abstraction layer exists
+for, and the argument is not a judgement call: **GNU already made this split, in
+the same shape.**  `serial_open` and `serial_configure` are declared once, in
+`src/systty.h:90-91`, and implemented twice -- termios in `src/sysdep.c:2980`
+and `:3151`, Win32 `CreateFile` + `DCB` in `src/w32.c:11098` and `:11138`.  The
+two functions behind that header are exactly the two the new
+`neovm-core/src/emacs_core/process/sys/serial.rs` exports.  No `termios` name,
+no `tcgetattr`, no `Bnnn` constant appears anywhere else in the tree; the whole
+Unix implementation is `process/sys/serial/termios_backend.rs`.
+
+What crosses the boundary is the harder half, and the obvious answer is the
+wrong one.  Handing the PAL a validated `SerialSettings` struct -- speed,
+bytesize, parity, stopbits, flowcontrol -- reads well and breaks the ordering
+measured above: validating first means `/dev/null` with `:bytesize 5` reports the
+`:bytesize` message where GNU reports `Failed tcgetattr`.  GNU gets that
+ordering from statement order inside one function.  The boundary here gets it
+from the type:
+
+```rust
+pub fn configure<E>(
+    &self,
+    settings: impl FnOnce(&mut SerialAttributes) -> Result<(), E>,
+) -> Result<(), SerialConfigureFailure<E>>;
+```
+
+The read (`tcgetattr` + `cfmakeraw` + `CLOCAL` + `CREAD`) always happens before
+`settings` runs, the write (`tcsetattr (TCSANOW)`) always happens after it and
+only on success, and there is no way to reach the attributes except through the
+read or to reach the write except by returning `Ok`.  A caller cannot validate
+too early, cannot apply half the settings to the device, and cannot forget to
+apply them at all.  `SerialConfigureFailure<E>` keeps the two error worlds
+apart: `Device { step, errno }` is a `file-error` naming the call that failed,
+`Settings(E)` is whatever the Lisp half raised.
+
+What deliberately did NOT move into the PAL is GNU's keyword validation.  GNU
+puts it inside each platform implementation, so `src/w32.c` carries its own
+transcription of the same four `error` messages and the same 8/N/1 defaults --
+one facility, two copies of the Lisp-visible behaviour.  Here the four narrowed
+enums (`SerialByteSize`, `SerialParity`, `SerialStopBits`, `SerialFlowControl`)
+are what arrives at the device, so the domain errors are written once and the
+backend has none left to raise.
+
+The platform choice is made once, at the module boundary, as
+`process/sys/mod.rs` requires.  The non-Unix backend does not stub the calls
+out; its `Device` and `Attributes` are UNINHABITED enums and its `open` never
+returns `Ok`, so every method body is a `match *self {}` that rustc proves
+unreachable and `make-serial-process` on such a platform reports a failed open
+like any other.  Adding the w32 backend means giving that type fields, at which
+point the compiler asks for real bodies.
+
+### The type-level fix
+
+The bug was a process kind that owed an OS resource with nothing in any
+signature saying so.  `ProcessKind::Serial` was an ordinary argument to
+`create_process_with_kind_lisp`, exactly like `Pipe` and `Network`, whose
+records really are created around handles the same function already has -- so
+"build a serial process record" and "open a serial port" were two independent
+statements and only one of them was ever written.
+
+`ProcessKind::Serial` is now unreachable from that constructor.  The generic one
+takes a `ProcessKindWithoutDevice`, which has three variants and not four; the
+only constructor that produces a serial record is
+
+```rust
+pub(crate) fn create_serial_process(
+    &mut self,
+    name: LispString,
+    buffer: Value,
+    port: sys::SerialPort,          // by value: proof `serial_open` succeeded
+    coding: ProcessCodingSystems,
+) -> ProcessId
+```
+
+and `sys::SerialPort` has no `Default`, no `Clone` and no constructor but
+`SerialPort::open`.  A serial process record and an open device are now the same
+event, which is what GNU's `make_process` + `serial_open` + `record_unwind_protect`
+trio says they are.  The one test fixture that used to fabricate a serial record
+(`vm_network_and_serial_process_config_builtins_use_shared_runtime_state`) opens
+`/dev/ptmx` now, because there is no longer any other way to write it.
+
+The rest follows from having the device.  `LiveProcessIo` grew one
+`serial_port` slot, and because GNU keeps ONE descriptor for both directions
+(`p->infd = fd; p->outfd = fd`, :3216-3217) that single slot is both the read source
+(`ProcessOutputSource::Serial`) and the write target in
+`write_process_input_once`.  Registration with the wait poller reuses the
+existing level-triggered readable policy and is guarded exactly as GNU guards
+`add_process_read_fd`.
+
+The creation order was also brought to GNU's, which is the only way the table
+above can be reproduced: open, then buffer, then coding, then configure, then
+the record.  Everything that can fail now fails before any record exists, so
+`remove_process` has nothing to undo -- GNU's unwind-protect is a consequence of
+building the record first, not a requirement, and the two are observationally
+identical because no Lisp runs in between.
+
+### The pin entry 137 could not take
+
+137 measured the serial payload under GNU with a pty pair and wrote:
+
+> **It is not pinned**, because Neomacs cannot run it: `make-serial-process`
+> here creates a process record without opening the port, so no bytes ever
+> arrive and the buffer stays empty on every row.  Pinning it would have
+> recorded the fixture, not the behaviour.
+
+It is pinned now, in `a_serial_process_decodes_the_bytes_its_port_delivers`.
+The fixture is a pty pair opened from the Rust side of the test
+(`posix_openpt` / `grantpt` / `unlockpt`), one pair per row, with the master put
+into raw mode BEFORE anything is written -- otherwise the line discipline
+rewrites the CRs the rows exist to carry -- and the payload queued before the
+serial process opens the slave, so no row depends on timing.  A serial port is
+inherently a tty and these rows say so; what they are NOT is a pty whose master
+has CLOSED, so none of them can be measuring the EOF carryover quirk entry 139
+found.  Child writes `c a f <c3> <a9> CR LF x CR LF`:
+
+| binding | GNU | Neomacs before fix | Neomacs after |
+|---|---|---|---|
+| nothing bound | `(99 97 102 233 10 120 10)` | `()` | `(99 97 102 233 10 120 10)` |
+| `coding-system-for-read` `binary` | `(99 97 102 4194243 4194217 13 10 120 13 10)` | `()` | same as GNU |
+| `coding-system-for-read` `raw-text` | `(99 97 102 4194243 4194217 10 120 10)` | `()` | same as GNU |
+| `coding-system-for-read` `latin-1` | `(99 97 102 195 169 10 120 10)` | `()` | same as GNU |
+| `:coding 'latin-1` | `(99 97 102 195 169 10 120 10)` | `()` | same as GNU |
+| `default-process-coding-system` `(binary . binary)` | `(99 97 102 233 10 120 10)` | `()` | same as GNU |
+| `process-coding-system-alist` `(("pw147p" binary . binary))` | `(99 97 102 233 10 120 10)` | `()` | same as GNU |
+
+The last two rows are 137's conclusion on real bytes rather than on a reporting
+slot: a serial process reaches neither `default-process-coding-system` nor
+`process-coding-system-alist`, and here both are bound to something that would
+be plainly visible and are invisible.  The first row is nil meaning DETECT,
+carried all the way through: `undecided` detects UTF-8 and detects `dos`, so the
+CRs go and `<c3> <a9>` becomes one character.
+
+The pins read `(process-coding-system P)` AFTER the output, where entry 139's
+write-back has replaced the slot with the coding actually used.  Entry 137's own
+pins read the slot BEFORE any output, for the opposite reason; between them the
+chain and the write-back are measured without overlapping.  Four of the seven
+rows pin that slot and agree with GNU; the three whose chain answers nil pin
+only their bytes, for the reason in the residual below.
+
+### Measured after
+
+`tmp/pw147/pin.el` -- fourteen open-and-ordering rows, four aftermath rows, ten
+live-port rows and seven payload rows -- is byte-identical between GNU Emacs
+31.0.90 and a `cargo xtask fresh-build --release` binary of this branch, `diff`
+clean, except for the three coding-slot cells named in the residual below.
+
+`cargo nextest run -p neovm-core` is 9076/9076 green.  `cargo nextest run -p
+neovm-oracle-tests` is 38783/38783 green.  `cargo check --workspace --all-targets`
+and `cargo fmt --all --check` are clean.
+
+No MELPA pin depends on the port -- the only two suites that mention serial at
+all, `arduino_mode` and `arduino_cli_mode`, stub `serial-term` out with
+`cl-letf` -- and they were run anyway: 6/6 green.
+
+A later confirmation run of the core suite was 9075/9076 with
+`read_key_sequence_clears_stale_this_command_keys_at_entry_for_idle_probe` TIMED
+OUT at nextest's 600s limit; it passes in 3.5s on its own, it passed in the run
+above, and it is a keyboard idle-timer probe that touches no process, coding
+system or descriptor.  It is a load flake under a full-parallel run, not a
+result of this change.
+
+Four existing pins moved, and all four moved because their fixture was a port
+that does not exist.  `serial_configuration_keywords_update_contact_state`,
+`serial_configuration_validates_option_domains`,
+`serial_process_configure_resolves_buffer_and_port_designators` and the
+duplicate-keyword rows in
+`process_constructors_duplicate_keywords_use_first_value_like_gnu` all
+created their serial process on an invented `/tmp/neo-serial-*` path, which GNU
+answers with `file-missing`; they now use `/dev/ptmx`, and every expectation was
+re-measured under GNU on that port (`tmp/pw147/unit.el`, `tmp/pw147/unit-gnu.txt`).
+Only two expected values changed at all, and both are the port string inside
+`(process-contact P)`.
+
+New pins: `make_serial_process_open_failures_beat_everything_downstream` (the
+fourteen ordering rows), `a_failed_make_serial_process_leaks_nothing_but_its_buffer`,
+`a_serial_process_decodes_the_bytes_its_port_delivers`,
+`process_send_string_reaches_a_serial_port`,
+`serial_configuration_reaches_the_device` and
+`a_speed_nil_serial_port_is_opened_and_not_configured`.  The last two read the
+pty's real `termios` back from the master side, so they fail if the settings
+reach only `(process-contact P t)` -- which is precisely what they used to do.
+
+### What is NOT testable here, said rather than skipped
+
+**`:bytesize` and `:parity` cannot be observed on a pty.**  Linux's pty driver
+ends every termios change with `c_cflag &= ~(CSIZE | PARENB); c_cflag |= CS8 |
+CREAD` (`drivers/tty/pty.c`, `pty_set_termios`), so the `CS7` this code writes
+reads back as `CS8` no matter who wrote it -- measured, and it is why
+`serial_configuration_reaches_the_device` asserts the speed, `CSTOPB`,
+`CRTSCTS` and the `cfmakeraw` flags but not those two.  Asserting them would
+have pinned the pty driver.  Their arms are covered by `:summary` and by the
+domain pins.
+
+**Real hardware is not in reach.**  Every device row uses `/dev/ptmx`, a pty
+slave, `/dev/null` or a path that does not exist.  Flow control, parity errors
+and anything that depends on a modem line have no fixture here and none is
+invented.
+
+### Found and NOT fixed here
+
+**An `undecided` decode coding system is reported by its own name after a read,
+where GNU reports the one detection chose.**  Entry 139's write-back
+(`read_process_output_set_last_coding_system`, src/process.c:6417-6425) replaces
+the process's decode slot with `CODING_ID_NAME (coding->id)`, and when the
+decode started from `undecided` that id is the DETECTED coding system.  Neomacs
+reports the requested name with the resolved eol type appended:
+
+```elisp
+(let ((b (generate-new-buffer " *u*")))
+  (let ((p (let ((default-process-coding-system nil))
+             (make-process :name "u" :connection-type 'pipe :noquery t :buffer b
+                           :command (list "sh" "-c" "printf 'caf\303\251\r\nx\r\n'")))))
+    (while (< (buffer-size b) 7) (accept-process-output p 0.05))
+    (list (process-coding-system p) last-coding-system-used)))
+;; GNU     => ((utf-8-dos . utf-8-dos) utf-8-dos)
+;; Neomacs => ((undecided-dos . undecided-dos) undecided-dos)
+```
+
+That witness is a `make-process` on a pipe -- no serial port anywhere -- and it
+reproduces on the PRE-FIX binary, so it is entry 139's residual rather than
+anything this entry introduced.  It is invisible for `make-process` and
+`make-network-process` under a normal configuration, because their chains end at
+`default-process-coding-system` and answer something concrete; a serial process
+answers nil always, which is how it surfaced here.  Fixing it means carrying the
+raw bytes (or the `CodingSystemManager`) into `decode_process_run` so the
+detected name can be reported, which is a change to the shared decoder and not
+to the port.  The three affected rows of the payload pin therefore pin their
+BYTES, which are byte-identical to GNU, and not their coding slot.
+
+**`serial-process-configure` on a deleted serial process reports `Failed
+tcgetattr` with `EBADF`.**  GNU would `tcgetattr` the closed descriptor and
+report the same message with whatever errno the kernel gives; here the device
+handle is gone rather than closed, so the errno is chosen rather than observed.
+Not pinned, because GNU's answer depends on descriptor reuse in the running
+process and is not stable.
+
+### Corrections to earlier entries
+
+Entry 137, dated 2026-08-18: its "`make-serial-process` does not open its port"
+residual is closed here, and its refusal to pin the serial payload is retracted
+with a note in place -- the reason for the omission is gone, and the payload is
+pinned in `a_serial_process_decodes_the_bytes_its_port_delivers`.  Everything
+137 concluded about the serial CHAIN survived contact unchanged, including the
+two cells it checked hardest: with real bytes flowing,
+`default-process-coding-system` and `process-coding-system-alist` are still
+invisible to a serial process.
 
 Status: FIXED.

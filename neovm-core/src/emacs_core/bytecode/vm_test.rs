@@ -6171,7 +6171,7 @@ fn vm_process_coding_and_tty_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 String::new(),
                 vec![],
-                crate::emacs_core::process::ProcessKind::Pipe,
+                crate::emacs_core::process::ProcessKindWithoutDevice::Pipe,
                 crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pipe_id, 2);
@@ -6180,7 +6180,7 @@ fn vm_process_coding_and_tty_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 String::new(),
                 vec![],
-                crate::emacs_core::process::ProcessKind::Network,
+                crate::emacs_core::process::ProcessKindWithoutDevice::Network,
                 crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(network_id, 3);
@@ -6243,7 +6243,7 @@ fn vm_process_status_builtins_use_shared_runtime_state() {
              (null (process-status "vm-status-missing"))
              (process-kill-buffer-query-function))"#,
         |eval| {
-            use crate::emacs_core::process::ProcessKind;
+            use crate::emacs_core::process::ProcessKindWithoutDevice;
 
             let real = eval.processes.create_process(
                 "vm-status-real".into(),
@@ -6258,7 +6258,7 @@ fn vm_process_status_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 String::new(),
                 vec![],
-                ProcessKind::Pipe,
+                ProcessKindWithoutDevice::Pipe,
                 crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(pipe, 2);
@@ -6267,7 +6267,7 @@ fn vm_process_status_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 String::new(),
                 vec![],
-                ProcessKind::Network,
+                ProcessKindWithoutDevice::Network,
                 crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(network, 3);
@@ -6633,7 +6633,7 @@ fn vm_non_child_process_creation_builtins_use_shared_runtime_state() {
                  (condition-case err (make-serial-process :name "sp" :port 1 :speed 9600) (error err))
                  (condition-case err (make-serial-process :name "sp") (error err))
                  (condition-case err (make-serial-process :name "sp" :port "/tmp/no-port") (error err))
-                 (let ((p (make-serial-process :name "sp" :port "/tmp/ttyS0" :speed 9600)))
+                 (let ((p (make-serial-process :name "sp" :port "/dev/ptmx" :speed 9600)))
                    (list (processp p)
                          (eq (process-type p) 'serial))))"#
         ),
@@ -6661,16 +6661,21 @@ fn vm_network_and_serial_process_config_builtins_use_shared_runtime_state() {
               (eq (car (condition-case err (set-network-process-option network :foo 1) (error err)))
                   'error)))"#,
         |eval| {
-            use crate::emacs_core::process::ProcessKind;
+            use crate::emacs_core::process::ProcessKindWithoutDevice;
 
             let buffer_id = eval.buffers.create_buffer("*vm-serial-proc*");
             eval.buffers.set_current(buffer_id);
-            let serial_id = eval.processes.create_process_with_kind(
-                "vm-serial".into(),
+            // A serial process record cannot be fabricated any more: the
+            // constructor takes an OPEN device.  `/dev/ptmx` is the real
+            // character device the serial pins use -- see DIVERGENCES.md 147.
+            let device = crate::emacs_core::process::sys::SerialPort::open(std::ffi::OsStr::new(
+                "/dev/ptmx",
+            ))
+            .expect("/dev/ptmx opens on any Linux");
+            let serial_id = eval.processes.create_serial_process(
+                crate::heap_types::LispString::from_utf8("vm-serial"),
                 Value::make_buffer(buffer_id),
-                String::new(),
-                vec![],
-                ProcessKind::Serial,
+                device,
                 crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(serial_id, 1);
@@ -6687,7 +6692,7 @@ fn vm_network_and_serial_process_config_builtins_use_shared_runtime_state() {
                 Value::NIL,
                 String::new(),
                 vec![],
-                ProcessKind::Network,
+                ProcessKindWithoutDevice::Network,
                 crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
             );
             assert_eq!(network_id, 3);
