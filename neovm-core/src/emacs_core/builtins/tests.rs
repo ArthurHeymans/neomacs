@@ -14450,13 +14450,21 @@ fn set_buffer_multibyte_records_gnu_style_undo_entry() {
         ]
     );
 
-    crate::emacs_core::undo::builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), undo_list])
-        .expect("primitive-undo should replay set-buffer-multibyte");
-    assert!(
-        eval.buffers
-            .current_buffer()
-            .expect("current buffer")
-            .get_multibyte()
+    // Replaying it is lisp/simple.el's `primitive-undo' -- GNU has no C
+    // version and neither do we -- so the round trip is asked of the loaded
+    // runtime rather than of this bare evaluator.
+    // Transcribed from GNU Emacs 31.0.90 -Q --batch (tmp/pw52-gnu3.el).
+    assert_eq!(
+        crate::test_utils::runtime_startup_eval_one(
+            r#"(with-temp-buffer
+                 (buffer-enable-undo)
+                 (setq buffer-undo-list nil)
+                 (set-buffer-multibyte nil)
+                 (let ((ul buffer-undo-list))
+                   (list ul
+                         (progn (primitive-undo 1 ul) enable-multibyte-characters))))"#,
+        ),
+        "OK (((apply set-buffer-multibyte t)) t)"
     );
 }
 

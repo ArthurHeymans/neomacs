@@ -7981,6 +7981,27 @@ shadow of a nine-line Lisp function in subr.el, and this is the second time it
 has drifted -- but deleting a registered subr is its own change with its own
 blast radius, and it is recorded here rather than folded in.
 
+> **Correction, 2026-08-18 (ledger 146).**  Both halves of that judgement
+> stand, and 146 adds the measurement 131 was missing: the Rust `start-process`
+> is ALREADY shadowed in every loaded session.  `lisp/subr.el:3466`'s `defun`
+> overwrites the subr's function cell during `loadup`, and the one dispatch
+> path that can reach a registered subr without its cell is taken only when
+> that cell is unbound or nil
+> (`neovm-core/src/emacs_core/bytecode/vm.rs:1368,7150`).  So a real
+> `start-process` call has always reached the Lisp, and the resolver added to
+> `builtin_start_process` here is reachable only from unit tests; the half of
+> this entry that changed shipped behaviour is the `make-process` half, which
+> the Lisp `start-process` calls.  The blast radius is also wider than one
+> subr: `builtin_start_process_shell_command`, `builtin_start_file_process` and
+> `builtin_start_file_process_shell_command` all call `builtin_start_process`
+> directly, so the four go together, and twenty-five `process_test.rs` tests
+> name `start-process` or `start-file-process` and would have to move to a
+> runtime that really spawns children.  146 deletes `primitive-undo`, the
+> same class with a twelve-test cost, and adds a standing check --
+> `neovm-core/src/emacs_core/builtins/rust_subrs_shadowed_by_lisp_test.rs` --
+> that enumerates all 49 remaining Rust subrs preloaded Lisp shadows, these
+> four included.
+
 `coding_explicitly_set` deliberately still means "the caller passed `:coding`",
 not "a coding system was resolved": a PTY status-reporting heuristic keys off
 it, and the resolver answering for an absent `:coding` must not look like an
@@ -12202,5 +12223,330 @@ not affect a real session -- but with `(t . -1)` and `(t . TIMESTAMP)` now
 reachable, that arm is wrong wherever the subr still answers (a bare
 `Context`).  Per the standing "load the .el, do not reimplement it in Rust"
 rule the subr should go, which is a separate change.
+
+Correction, 2026-08-18 (ledger 146): the residue was closed, and "understands
+only the fixnum 0 and skips everything else" is right about `(t . -1)` and
+`(t . TIMESTAMP)` and wrong about the shape.  The arm also FIRED for a `0` it
+should have refused: it tested the RECORDED value and never read the buffer's
+`visited-file-modtime` at all, where GNU compares the two with `time-equal-p`
+(`lisp/simple.el:3668-3688`).  So an obsolete save cleared the modified flag --
+GNU `t`, Neomacs `nil` -- as well as a current one failing to.  The scoping
+here is right, and 146 measures why: the static-table dispatch path that could
+otherwise reach a shadowed subr is taken only when the symbol's function cell
+is unbound or nil (`bytecode/vm.rs:1368,7150`), so the subr had no reader
+outside unit tests and the window before `(load "simple")`.  The subr, and four
+further disagreements with GNU that 145 never looked at, are deleted in 146.
+
+Status: FIXED.
+
+## 146. `primitive-undo` was a Rust subr of a function GNU has no C version of, and its `(t . MODTIME)` arm was wrong in both directions -- FIXED
+
+Ledger 145's residue.  `neovm-core/src/emacs_core/undo.rs` carried a Rust
+`primitive-undo`, registered with `defsubr`.  GNU has no such subr:
+`syms_of_undo` (`src/undo.c:423-490`) contains exactly one `defsubr`,
+`&Sundo_boundary` (`:435`, its DEFUN at `src/undo.c:251`), and searching the
+whole of `src/` for a DEFUN named `primitive-undo` finds nothing.  The function
+is `(defun primitive-undo (n list) ...)` at `lisp/simple.el:3645`, and we ship
+that file.  So this was not a port of anything -- it was invention that
+duplicated Lisp already on disk, which is what the standing "load the .el,
+don't reimplement elisp in Rust" rule forbids.
+
+### Who was reaching it: nobody, measured
+
+The subr is unreachable in any loaded session, and this was checked rather than
+assumed:
+
+* **The function cell.**  `loadup.el:251` loads `simple`, whose `defun` writes
+  a byte-code function into the cell.  `defsubr` runs again after a pdump
+  restore, but its `should_install_public_subr` guard
+  (`neovm-core/src/emacs_core/eval.rs`) refuses to clobber a cell that already
+  holds a non-subr, so the Lisp definition survives.  Measured in the loaded
+  runtime: `(subrp (symbol-function 'primitive-undo))` is `nil` and
+  `(func-arity (symbol-function 'primitive-undo))` is `(2 . 2)` -- the same
+  pair GNU reports.
+* **The static subr table.**  A registered subr can also be reached without its
+  cell: `ResolvedBuiltinCallee::from_static_symbol`
+  (`neovm-core/src/emacs_core/bytecode/vm.rs:1368`) looks the name up in the
+  global table.  Both of its callers reach it only from a `None` function cell
+  -- `symbol_function_id` answers `None` for an unbound or nil cell
+  (`vm.rs:7150`, and the JIT shim at `:6679`, whose other arm requires the cell
+  itself to be subr-valued) -- so a `defun`ed name, whose cell holds a
+  byte-code function, never reaches it.
+* **Rust callers.**  There were none.  Outside its own registration the string
+  `"primitive-undo"` appeared exactly once in `neovm-core/src`, in the deleted
+  function's own `expect_args`.
+* **The bootstrap window.**  Between `init_builtins` and `(load "simple")` --
+  which is load 68 of `loadup.el`'s 137, at `loadup.el:251` -- the subr really
+  did answer.  It was never asked: across all 67 files loaded first the string
+  `primitive-undo` appears in exactly one, `subr.el`, and only inside
+  `undo--wrap-and-run-primitive-undo` (`subr.el:5761-5778`), a `defun` whose
+  body does not run at load time.
+
+That leaves one caller: a bare `Context` in unit tests.  Which is where the
+damage was, because those tests were pinning Rust behaviour GNU does not have.
+
+### What the arm actually did
+
+Asked of the subr directly -- nothing else could reach it -- inside a fully
+loaded runtime, so the buffers and files below are real:
+
+```elisp
+;; entry (t . 0) in a buffer whose visited file HAS a modtime
+(let ((f "tmp/pw52-a.txt"))
+  (with-temp-file f (insert "hello\n"))
+  (with-current-buffer (find-file-noselect f)
+    (setq buffer-undo-list t)
+    (insert "X")
+    (set-buffer-modified-p t)
+    (primitive-undo 1 (list (cons t 0)))
+    (buffer-modified-p)))
+;; GNU                => t
+;; Neomacs before fix => nil
+```
+
+```elisp
+;; entry (t . -1) in a buffer visiting a file that does not exist
+(let ((f "tmp/pw52-b.txt"))
+  (when (file-exists-p f) (delete-file f))
+  (with-current-buffer (find-file-noselect f)
+    (setq buffer-undo-list t)
+    (insert "X")
+    (set-buffer-modified-p t)
+    (list (visited-file-modtime)
+          (progn (primitive-undo 1 (list (cons t -1))) (buffer-modified-p)))))
+;; GNU                => (-1 nil)
+;; Neomacs before fix => (-1 t)
+```
+
+```elisp
+;; entry (t . TIMESTAMP) equal to the buffer's own modtime
+(let ((f "tmp/pw52-c.txt"))
+  (with-temp-file f (insert "hello\n"))
+  (with-current-buffer (find-file-noselect f)
+    (setq buffer-undo-list t)
+    (let ((mt (visited-file-modtime)))
+      (insert "X")
+      (set-buffer-modified-p t)
+      (primitive-undo 1 (list (cons t mt)))
+      (buffer-modified-p))))
+;; GNU                => nil
+;; Neomacs before fix => t
+```
+
+Wrong three ways out of three, and 145 understated it.  "Understands only the
+fixnum `0`" describes the second and third rows; the FIRST row is the opposite
+failure.  GNU's arm is a COMPARISON --
+
+```elisp
+(let ((visited-file-time (visited-file-modtime)))
+  ...
+  (when (time-equal-p time visited-file-time)
+    (unlock-buffer)
+    (set-buffer-modified-p nil)))
+```
+
+(`lisp/simple.el:3668-3688`) -- and the Rust arm was a test on the recorded
+value alone, with the buffer's own modtime never read.  A `0` recorded against
+a buffer that has since acquired a modtime is exactly GNU's "obsolete save"
+case, the one the arm exists to refuse, and Neomacs cleared the modified flag
+for it.  (`unlock-buffer` was not called on any path either.)
+
+Four more arms disagreed.  GNU column measured on GNU Emacs 31.0.90
+`-Q --batch`; Neomacs column measured by calling the subr directly, before the
+deletion:
+
+| probe | GNU | Neomacs before fix |
+| --- | --- | --- |
+| `(primitive-undo 1 (list nil nil nil))` | `(nil nil)` | `nil` |
+| `(primitive-undo 2 (list nil nil nil))` | `(nil)` | `nil` |
+| `(primitive-undo 1.5 (list nil nil nil))` | `(nil)` | `(wrong-type-argument integerp 1.5)` |
+| `(primitive-undo 1 (list (vector 1 2)))` | `(error "Unrecognized entry in undo list [1 2]")` | `nil`, the entry silently skipped |
+| `(funcall 'primitive-undo 1)` | `(wrong-number-of-arguments (2 . 2) 1)` | `(wrong-number-of-arguments primitive-undo 1)` |
+
+A group ends at ONE boundary: GNU's inner loop is
+`(while (setq next (pop list)))` (`lisp/simple.el:3665`), so a single `nil`
+terminates it and the next `nil` begins the next group.  The Rust loop skipped
+every leading `nil` before counting a group, so it swallowed a run of
+boundaries as one and returned a tail two conses short.  COUNT is compared with
+`>` and never coerced, so a float is legal.  The last pcase arm is
+`(_ (error "Unrecognized entry in undo list %S" next))` (`lisp/simple.el:3771`)
+where the Rust `match` ended in `_ => {}`.  And GNU's arity error carries the
+arity CONS as its datum, ours carried the function symbol -- the shape a `defun`
+produces, not the shape a Rust `expect_args` produced.
+
+### The fix
+
+The subr, its inner loop and the seven helpers that existed only for it
+(`expect_list_like`, `char_pos1_to_char0`, `char_pos1_to_byte_clamped`,
+`UndoLispPosition`, `accessible_lisp_char_bounds`,
+`lisp_char_position_is_visible`, `ensure_undo_lisp_range_is_visible`) are
+deleted, together with `UndoEntryHead`, an enum whose only reader was the
+deleted `apply` arm.  `undo.rs` loses 463 lines and gains 5.  Nothing replaced
+them: the runtime loads `lisp/simple.el`, which is the whole point.
+
+Twelve bare-`Context` tests called the deleted function directly, and a
+thirteenth call site sat inside another test.  None was shimmed:
+
+* The twelve `test_primitive_undo_*` tests in
+  `neovm-core/src/emacs_core/undo_test.rs` were pinning the Rust arms.  They
+  are replaced by two runtime tests -- `primitive_undo_entry_arms_match_gnu`,
+  20 forms, and
+  `primitive_undo_modtime_arm_compares_against_the_visited_file_like_gnu`, 3 --
+  whose every expected value was measured under GNU first.  All 23 matched the
+  runtime on the first run, which is the evidence that `lisp/simple.el` was
+  already answering everywhere it mattered.
+* `undo_entry_head_domain_matches_gnu_apply_marker` tested `UndoEntryHead` in
+  isolation; the enum is gone, so the test is gone.
+* `set_buffer_multibyte_records_gnu_style_undo_entry`
+  (`neovm-core/src/emacs_core/builtins/tests.rs`) keeps its bare-`Context`
+  assertions about the RECORDED entry -- recording is ours -- and asks the
+  replay of the runtime instead.
+* Five tests that evaluated `(primitive-undo ...)` as Lisp on a bare `Context`
+  (`test_delete_records_marker_adjustments_for_primitive_undo`,
+  `replace_match_undo_keeps_overlay_endpoint_like_gnu`,
+  `transpose_regions_undo_records_equal_regions_like_gnu`,
+  `undo_of_descending_adjacent_inserts_restores_the_untouched_text`, and
+  `replace_region_contents_undo_restores_the_original_text` in
+  `builtins/replace_region_contents_test.rs`) moved to
+  `runtime_startup_eval_*`.  Their expectations were re-measured under GNU with
+  the `with-temp-buffer` + `buffer-enable-undo` prelude the move requires, and
+  came back unchanged.
+
+One new test states the parity fact itself,
+`primitive_undo_is_lisp_only_like_gnu`: on a bare evaluator
+`(fboundp 'undo-boundary)` is `t` and `(fboundp 'primitive-undo)` is `nil`,
+which is what GNU has before `simple.el` is loaded; in the loaded runtime the
+cell is not a subr and its arity is `(2 . 2)`.  With the subr restored that
+test fails on the second assertion, `t` where GNU has nothing.
+
+### The rest of the class, enumerated
+
+`primitive-undo` is one of a set, and the set is now measured rather than
+guessed.  A new test,
+`neovm-core/src/emacs_core/builtins/rust_subrs_shadowed_by_lisp_test.rs`, walks
+the obarray of a fully booted runtime and collects every name that has a
+registered Rust subr entry AND a function cell that is no longer a subr -- i.e.
+every Rust subr preloaded Lisp shadows.  It was 50 before this change and is 49
+after.
+
+GNU has exactly ONE name in that shape, and it labels itself:
+
+```c
+/* Placeholder used by temacs -nw before window.el is loaded.  */
+DEFUN ("frame-windows-min-size", Fframe_windows_min_size,
+       Sframe_windows_min_size, 4, 4, 0,
+       doc: /* SKIP: real doc in window.el.  */
+       attributes: const)
+```
+
+(`src/frame.c:494-502`; it returns a constant `0`, and `lisp/window.el:1899`
+overrides it.)  That is what a justified shadow looks like: a stub that exists
+for a named bootstrap window, documented as such, doing nothing.
+
+For the other 48, GNU's `src/` has no DEFUN of that name at all.  Every one is
+a Rust reimplementation of Lisp we ship:
+
+* **Window and frame geometry (18)** -- `balance-windows`, `color-defined-p`,
+  `color-values`, `delete-other-windows`, `delete-window`, `display-buffer`,
+  `display-color-cells`, `enlarge-window`, `fit-window-to-buffer`,
+  `make-frame`, `pop-to-buffer`, `select-frame-set-input-focus`,
+  `shrink-window`, `switch-to-buffer`, `window-absolute-pixel-edges`,
+  `window-edges`, `window-pixel-edges`, `window-tree`.  All `window.el` /
+  `frame.el` / `faces.el`, all built in GNU on primitives that ARE in C.  The
+  largest group and the riskiest: the display stack sits downstream of it.
+* **Type predicates (6)** -- `booleanp`, `char-uppercase-p`,
+  `integer-or-null-p`, `list-of-strings-p`, `macrop`, `string-or-null-p`.
+  One-line `defun`s in `subr.el` over predicates that are in C.  The cheapest
+  place to start.
+* **`defalias` names (5)** -- `move-marker`, `not`, `string<`, `string=`,
+  `string>`.  These are the ones an observer can tell apart without running
+  anything: in GNU `symbol-function` answers a SYMBOL (`subr.el:71`,
+  `:2277-2280`), and ours answered a subr object until the alias overwrote it.
+* **Process launchers (4)** -- `start-process`, `start-process-shell-command`,
+  `start-file-process`, `start-file-process-shell-command`.  Ledger 131's find;
+  see the correction below.
+* **Undo (2)** -- `undo` (`lisp/simple.el:3466`) and `buffer-disable-undo`
+  (`lisp/simple.el:3591`).  Same file, same class, same argument as this entry.
+  `undo` is the more interesting of the two: `builtin_undo` does NOT share the
+  code just deleted, it calls `BufferManager::undo_buffer`
+  (`neovm-core/src/buffer/buffer.rs:6264`), a third replay loop with its own
+  copies of the position helpers -- and one that cannot run `apply` entries at
+  all, because the buffer layer has no evaluator.  Deleting `primitive-undo`
+  did not remove it.
+* **Everything else (13)** -- `emacs-repository-get-branch`,
+  `emacs-repository-get-version`, `global-set-key`, `ignore`, `local-set-key`,
+  `make-auto-save-file-name`, `memory-limit`, `read-number`,
+  `set-buffer-file-coding-system`, `string-greaterp`, `string-match-p`
+  (a `defsubst`, `subr.el:5941`), `symbol-file`, `transient-mark-mode`
+  (a `define-minor-mode`, `simple.el:7614`).
+
+The test asserts the list EXACTLY, in both directions: a new shadow fails it
+with an instruction to delete the subr instead, and a removed one fails it so
+the list cannot rot.  The judgement for each entry lives next to the entry, the
+way GNU's lives next to `Sframe_windows_min_size`.  That is the part of this
+change worth more than the deletion: the same defect was recorded four times
+across two functions before anyone counted how many more there were (105, 120
+and 145 for `primitive-undo`; 131 for `start-process`), and it is now a test.
+There was already one hand-written instance of the idea,
+`bootstrap_kill_ring_commands_are_not_rust_subrs`
+(`neovm-core/src/emacs_core/kill_ring_test.rs:46`), which names twelve
+`simple.el` kill-ring commands and asserts `subrp` is nil for each; the new
+test is that check with the name list replaced by a scan.
+
+Nothing else on the list is deleted here.  Deleting a registered subr is cheap
+only when its callers are Lisp; each group above has unit tests that call the
+Rust function directly, and moving those to the runtime is the actual cost.
+`primitive-undo` was the one where the cost was 12 tests and the wrongness was
+already measured.
+
+### Correction to entry 131, 2026-08-18
+
+131 says the Rust `start-process` "should not exist at all -- it is a Rust
+shadow of a nine-line Lisp function in subr.el, and this is the second time it
+has drifted", and defers the deletion for its blast radius.  Both halves stand.
+One thing 131 could not have known and this entry measures: the Rust
+`start-process` is ALREADY shadowed in every loaded session -- it is on the
+list above -- so `lisp/subr.el:3466`'s `defun` is what a real `start-process`
+call has always reached, and the coding-system resolution 131 added inside
+`builtin_start_process` is reachable only from unit tests.  The half of 131
+that changed real behaviour is the `make-process` half, which the Lisp
+`start-process` calls.
+
+The blast radius 131 flagged is confirmed and is wider than one subr:
+`builtin_start_process` is called directly by
+`builtin_start_process_shell_command`, `builtin_start_file_process` and
+`builtin_start_file_process_shell_command`
+(`neovm-core/src/emacs_core/process.rs:13194,13226` and the shell-command
+wrappers below them), so all four go together, and twenty-five tests in
+`process_test.rs` name `start-process` or `start-file-process` and would have
+to move to a runtime that really spawns children.  Not attempted here.
+(`("start-process", 2)` in `neovm-core/src/emacs_core/coding.rs:5091` is NOT
+part of this: it is `find-operation-coding-system`'s target-index table, which
+GNU also keys on the symbol `start-process`, `src/coding.c:11784`.)
+
+### Correction to entry 145, 2026-08-18
+
+145's residue paragraph says the arm "understands only the fixnum `0` and skips
+everything else".  That is right about `(t . -1)` and `(t . TIMESTAMP)` and
+wrong about the shape of the defect: the arm also FIRED for a `0` it should
+have refused, because it never read the buffer's modtime at all, so the
+divergence ran in both directions.  145's scoping -- "wrong wherever the subr
+still answers (a bare `Context`)" -- is correct, and this entry adds the
+measurement that closes it: the static-table dispatch path is gated on a VOID
+function cell, so a `defun`ed name is unreachable through it as well; the subr
+had no reader outside unit tests and the pre-`simple.el` bootstrap window.
+
+### What an observer could tell, and what nothing observable changed
+
+Per the standing warning that a subr and a `defun` are not interchangeable:
+before this change, in a loaded session, `symbol-function`, `subrp`,
+`func-arity`, `commandp` and byte-compiled call sites all already saw
+`lisp/simple.el`'s definition, because the `defun` had overwritten the cell and
+the static-table fast path only fires for an unbound cell.  So for a real
+session this deletion changes nothing observable -- and that is the finding
+worth recording: a Rust function wrong in seven measured ways against GNU,
+that no shipped code path had ever executed.  What changes is the bare
+evaluator, where `primitive-undo` is now void exactly as it is in GNU before
+`simple.el`, and the tests, which now measure the Lisp that actually runs.
 
 Status: FIXED.

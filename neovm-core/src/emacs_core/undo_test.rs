@@ -1,20 +1,202 @@
 use super::*;
-use crate::buffer::{CharRange, LispCharPos1};
+use crate::buffer::EmacsByteRange;
 
+/// `primitive-undo` is Lisp, and only Lisp.
+///
+/// GNU's `syms_of_undo` (src/undo.c:423-490) has exactly one `defsubr`,
+/// `&Sundo_boundary` (:435, its DEFUN at src/undo.c:251); there is no
+/// `Fprimitive_undo` anywhere in src/.  The function is
+/// `(defun primitive-undo (n list) ...)` at lisp/simple.el:3645, so before
+/// that file is loaded nothing answers the name at all, and after it is
+/// loaded the function cell holds a byte-code function.
+///
+/// Neomacs used to register a Rust subr under this name.  `defun` shadowed it
+/// in every real session, which is why the wrongness below never showed --
+/// but a bare `Context` is not a real session, and the Rust arms it exposed
+/// there disagreed with GNU in both directions (DIVERGENCES.md 146).
 #[test]
-fn undo_entry_head_domain_matches_gnu_apply_marker() {
+fn primitive_undo_is_lisp_only_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+
+    // Before any Lisp is loaded: `undo-boundary' answers (GNU has it in C),
+    // `primitive-undo' does not (GNU has no C version).
+    let mut bare = Context::new();
+    assert_eq!(
+        super::super::print::print_value(&bare.eval_str("(fboundp 'undo-boundary)").unwrap()),
+        "t"
+    );
+    assert_eq!(
+        super::super::print::print_value(&bare.eval_str("(fboundp 'primitive-undo)").unwrap()),
+        "nil"
+    );
+
+    // After loadup: simple.el's definition, and it is not a subr.
+    assert_eq!(
+        crate::test_utils::runtime_startup_eval_all(
+            "(fboundp 'primitive-undo)
+             (subrp (symbol-function 'primitive-undo))
+             (func-arity (symbol-function 'primitive-undo))",
+        ),
+        vec!["OK t", "OK nil", "OK (2 . 2)"],
+    );
+}
+
+/// Everything the deleted Rust subr used to answer, measured under GNU Emacs
+/// 31.0.90 `-Q --batch` and re-asked of the runtime, where lisp/simple.el's
+/// `primitive-undo' is what replies.
+///
+/// The rows marked DIVERGED are the ones the deleted Rust subr got wrong.
+#[test]
+fn primitive_undo_entry_arms_match_gnu() {
     crate::test_utils::init_test_tracing();
 
-    assert_eq!(UndoEntryHead::Apply.name(), "apply");
-    assert_eq!(
-        UndoEntryHead::from_lisp_value(&Value::symbol("apply")),
-        Some(UndoEntryHead::Apply)
+    let results = crate::test_utils::runtime_startup_eval_all(
+        r#"
+;; A group is terminated by ONE boundary, not by a run of them.  DIVERGED:
+;; the Rust subr skipped every leading nil before counting a group.
+(primitive-undo 1 (list nil nil nil))
+(primitive-undo 2 (list nil nil nil))
+;; COUNT <= 0 consumes nothing.
+(primitive-undo 0 (list nil nil))
+(primitive-undo -5 (list nil))
+;; COUNT is compared with `>', so a float is accepted.  DIVERGED: the Rust
+;; subr signalled `(wrong-type-argument integerp 1.5)'.
+(primitive-undo 1.5 (list nil nil nil))
+;; A non-list LIST fails in `pop', i.e. as `listp', not before it.
+(condition-case e (primitive-undo 1 7) (error e))
+;; Arity.
+(condition-case e (funcall 'primitive-undo 1) (error e))
+(condition-case e (funcall 'primitive-undo) (error e))
+(condition-case e (funcall 'primitive-undo 1 nil nil) (error e))
+;; (BEG . END): undo an insertion.
+(with-temp-buffer (insert "hello") (primitive-undo 1 (list (cons 1 6))) (buffer-string))
+;; (TEXT . POS): undo a deletion; POS's sign chooses where point lands.
+(with-temp-buffer (primitive-undo 1 (list (cons "hello" 1))) (list (buffer-string) (point)))
+(with-temp-buffer (primitive-undo 1 (list (cons "hello" -1))) (list (buffer-string) (point)))
+;; An integer entry is `goto-char'.
+(with-temp-buffer (insert "hello") (primitive-undo 1 (list 3)) (point))
+;; (TEXT . POS) followed by (MARKER . OFFSET).
+(with-temp-buffer
+  (insert "ae")
+  (let ((m (copy-marker 2 nil)))
+    (primitive-undo 1 (list (cons "bcd" 2) (cons m -2)))
+    (list (buffer-string) (marker-position m))))
+;; A raw byte goes back into a unibyte buffer as that byte.
+(with-temp-buffer
+  (set-buffer-multibyte nil)
+  (primitive-undo 1 (list (cons (unibyte-string 255) 1)))
+  (list (multibyte-string-p (buffer-string)) (append (buffer-string) nil)))
+;; (nil PROP VAL BEG . END) restores a property, including a nil VAL.
+(with-temp-buffer
+  (insert "abcd")
+  (put-text-property 2 4 'face 'bold)
+  (primitive-undo 1 (list '(nil face nil 2 . 4)))
+  (list (get-text-property 1 'face) (get-text-property 2 'face) (get-text-property 3 'face)))
+;; Re-inserted TEXT keeps the properties the string carries.
+(with-temp-buffer
+  (primitive-undo 1 (list (cons (propertize "abc" 'face 'bold) 1)))
+  (list (buffer-string) (get-text-property 1 'face) (get-text-property 3 'face)))
+;; A range outside the accessible portion is an error, not a clamp.
+(with-temp-buffer
+  (insert "hello")
+  (narrow-to-region 2 4)
+  (condition-case e (primitive-undo 1 (list (cons 1 6))) (error e)))
+;; (apply FUN . ARGS) is called.
+(with-temp-buffer
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
+  (set-buffer-multibyte nil)
+  (let ((ul buffer-undo-list))
+    (list ul (progn (primitive-undo 1 ul) enable-multibyte-characters))))
+;; An entry of no known shape is an error.  DIVERGED: the Rust subr skipped it.
+(with-temp-buffer (condition-case e (primitive-undo 1 (list (vector 1 2))) (error e)))
+"#,
     );
+
+    // Transcribed from GNU Emacs 31.0.90 -Q --batch (tmp/pw52-gnu*.el).
     assert_eq!(
-        UndoEntryHead::from_lisp_value(&Value::symbol("quote")),
-        None
+        results,
+        vec![
+            "OK (nil nil)",
+            "OK (nil)",
+            "OK (nil nil)",
+            "OK (nil)",
+            "OK (nil)",
+            "OK (wrong-type-argument listp 7)",
+            "OK (wrong-number-of-arguments (2 . 2) 1)",
+            "OK (wrong-number-of-arguments (2 . 2) 0)",
+            "OK (wrong-number-of-arguments (2 . 2) 3)",
+            "OK \"\"",
+            "OK (\"hello\" 1)",
+            "OK (\"hello\" 6)",
+            "OK 3",
+            "OK (\"abcde\" 4)",
+            "OK (nil (255))",
+            "OK (nil nil nil)",
+            "OK (#(\"abc\" 0 3 (face bold)) bold bold)",
+            "OK (error \"Changes to be undone are outside visible portion of buffer\")",
+            "OK (((apply set-buffer-multibyte t)) t)",
+            "OK (error \"Unrecognized entry in undo list [1 2]\")",
+        ],
     );
-    assert_eq!(UndoEntryHead::from_lisp_value(&Value::fixnum(0)), None);
+}
+
+/// The `(t . MODTIME)` arm, which is the one ledger 145 handed forward.
+///
+/// GNU compares the recorded time against `(visited-file-modtime)` with
+/// `time-equal-p' and only then clears the modified flag
+/// (lisp/simple.el:3668-3688).  The Rust subr instead cleared the flag
+/// whenever the recorded value was the fixnum 0 and skipped every other
+/// value, so it was wrong in BOTH directions -- see DIVERGENCES.md 146 for
+/// the measured before/after rows.
+#[test]
+fn primitive_undo_modtime_arm_compares_against_the_visited_file_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let dir = std::env::temp_dir().join(format!("neo-pu-modtime-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let dir = dir.to_string_lossy().to_string();
+
+    let results = crate::test_utils::runtime_startup_eval_all(&format!(
+        r#"
+;; A recorded 0 against a buffer that HAS a modtime is an obsolete save:
+;; the flag must stay set.
+(let ((f "{dir}/a.txt"))
+  (with-temp-file f (insert "hello\n"))
+  (with-current-buffer (find-file-noselect f)
+    (setq buffer-undo-list t)
+    (insert "X")
+    (set-buffer-modified-p t)
+    (primitive-undo 1 (list (cons t 0)))
+    (prog1 (buffer-modified-p) (set-buffer-modified-p nil) (kill-buffer))))
+;; A visited file that does not exist records -1, and -1 matches it.
+(let ((f "{dir}/b.txt"))
+  (when (file-exists-p f) (delete-file f))
+  (with-current-buffer (find-file-noselect f)
+    (setq buffer-undo-list t)
+    (insert "X")
+    (set-buffer-modified-p t)
+    (prog1 (list (visited-file-modtime)
+                 (progn (primitive-undo 1 (list (cons t -1))) (buffer-modified-p)))
+      (set-buffer-modified-p nil) (kill-buffer))))
+;; A recorded timestamp equal to the buffer's own clears the flag.
+(let ((f "{dir}/c.txt"))
+  (with-temp-file f (insert "hello\n"))
+  (with-current-buffer (find-file-noselect f)
+    (setq buffer-undo-list t)
+    (let ((mt (visited-file-modtime)))
+      (insert "X")
+      (set-buffer-modified-p t)
+      (primitive-undo 1 (list (cons t mt)))
+      (prog1 (buffer-modified-p) (set-buffer-modified-p nil) (kill-buffer)))))
+"#
+    ));
+
+    // Transcribed from GNU Emacs 31.0.90 -Q --batch (tmp/pw52-gnu-probe.el).
+    assert_eq!(results, vec!["OK t", "OK (-1 nil)", "OK nil"]);
+
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -52,160 +234,14 @@ fn test_undo_boundary_wrong_args() {
 }
 
 #[test]
-fn test_primitive_undo_with_count_and_list() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-    let mut eval = Context::new();
-    let list = Value::list(vec![Value::NIL, Value::NIL, Value::NIL]);
-    let result = builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), list]);
-    assert!(result.is_ok());
-    // All-nil list: one group of nothing returns unconsumed tail.
-}
-
-#[test]
-fn test_primitive_undo_zero_count() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-    let mut eval = Context::new();
-    let list = Value::list(vec![Value::NIL, Value::NIL]);
-    let result = builtin_primitive_undo(&mut eval, vec![Value::fixnum(0), list]);
-    assert!(result.is_ok());
-    // Zero count returns list unchanged.
-    assert_eq!(format!("{:?}", result.unwrap()), format!("{:?}", list));
-}
-
-#[test]
-fn test_primitive_undo_negative_count() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-    let mut eval = Context::new();
-    let list = Value::list(vec![Value::NIL]);
-    let result = builtin_primitive_undo(&mut eval, vec![Value::fixnum(-5), list]);
-    assert!(result.is_ok());
-    // Negative count returns list unchanged.
-    assert_eq!(format!("{:?}", result.unwrap()), format!("{:?}", list));
-}
-
-#[test]
-fn test_primitive_undo_invalid_count() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-    let mut eval = Context::new();
-    let list = Value::list(vec![]);
-    let result = builtin_primitive_undo(&mut eval, vec![Value::make_float(1.5), list]);
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_primitive_undo_non_list_signals_wrong_type() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-    let mut eval = Context::new();
-    let result = builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), Value::fixnum(7)]);
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_primitive_undo_wrong_arg_count() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-    let mut eval = Context::new();
-    let result = builtin_primitive_undo(&mut eval, vec![Value::fixnum(1)]);
-    assert!(result.is_err());
-
-    let result = builtin_primitive_undo(&mut eval, vec![]);
-    assert!(result.is_err());
-
-    let result = builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), Value::NIL, Value::NIL]);
-    assert!(result.is_err());
-}
-
-#[test]
-fn test_primitive_undo_reverts_insertion() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-    let mut eval = Context::new();
-    // Insert text into the current buffer.
-    {
-        let buffer = eval.buffers.current_buffer_mut().expect("scratch buffer");
-        buffer.insert("hello");
-    }
-    // Build an undo list that describes the insertion: (1 . 6)
-    // meaning bytes [1,6) were inserted (1-indexed).
-    let entry = Value::cons(Value::fixnum(1), Value::fixnum(6));
-    let list = Value::cons(entry, Value::NIL);
-    let result = builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), list]);
-    assert!(result.is_ok());
-    let contents = eval
-        .buffers
-        .current_buffer()
-        .expect("scratch buffer")
-        .buffer_string();
-    assert_eq!(contents, "");
-}
-
-#[test]
-fn test_primitive_undo_reverts_deletion() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-    let mut eval = Context::new();
-    // Buffer starts empty; the undo entry says "hello" was deleted at pos 1.
-    let entry = Value::cons(Value::string("hello"), Value::fixnum(1));
-    let list = Value::cons(entry, Value::NIL);
-    let result = builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), list]);
-    assert!(result.is_ok());
-    let contents = eval
-        .buffers
-        .current_buffer()
-        .expect("scratch buffer")
-        .buffer_string();
-    assert_eq!(contents, "hello");
-}
-
-#[test]
-fn test_primitive_undo_restores_marker_adjustments_after_deletion() {
-    crate::test_utils::init_test_tracing();
-    use super::super::{eval::Context, marker};
-
-    let mut eval = Context::new();
-    let buf_id = eval.buffers.current_buffer_id().expect("scratch buffer");
-    eval.buffers
-        .current_buffer_mut()
-        .expect("scratch buffer")
-        .insert("ae");
-
-    let marker = marker::make_registered_buffer_marker(
-        &mut eval.buffers,
-        buf_id,
-        LispCharPos1::new(2),
-        false,
-    );
-    let delete_record = Value::cons(Value::string("bcd"), Value::fixnum(2));
-    let marker_record = Value::cons(marker, Value::fixnum(-2));
-    let list = Value::list(vec![delete_record, marker_record]);
-
-    builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), list]).unwrap();
-
-    let contents = eval
-        .buffers
-        .current_buffer()
-        .expect("scratch buffer")
-        .buffer_string();
-    assert_eq!(contents, "abcde");
-    let marker_position =
-        marker::builtin_marker_position_in_buffers(&eval.buffers, vec![marker]).unwrap();
-    assert_eq!(marker_position, Value::fixnum(4));
-}
-
-#[test]
 fn test_delete_records_marker_adjustments_for_primitive_undo() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
 
-    let mut eval = Context::new();
-    let result = eval
-        .eval_str(
-            r#"(progn
+    // `primitive-undo' is lisp/simple.el's, so this needs the loaded runtime.
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(with-temp-buffer
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
   (insert "ABCDE")
   (let ((m (make-marker)))
     (set-marker m 3)
@@ -217,17 +253,10 @@ fn test_delete_records_marker_adjustments_for_primitive_undo() {
     (let ((after-delete (marker-position m)))
       (primitive-undo 1 buffer-undo-list)
       (list after-delete (marker-position m) (buffer-string)))))"#,
-        )
-        .expect("undo marker eval");
-
-    assert_eq!(
-        result,
-        Value::list(vec![
-            Value::fixnum(1),
-            Value::fixnum(3),
-            Value::string("AB123CDE")
-        ])
     );
+
+    // Transcribed from GNU Emacs 31.0.90 -Q --batch (tmp/pw52-gnu4.el).
+    assert_eq!(result, r#"OK (1 3 "AB123CDE")"#);
 }
 
 #[test]
@@ -235,10 +264,10 @@ fn replace_match_undo_keeps_overlay_endpoint_like_gnu() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;
 
-    let mut eval = Context::new();
-    let result = eval
-        .eval_str(
-            r#"(progn
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(with-temp-buffer
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
   (insert "hello WORLD hello WORLD hello")
   (let ((ov1 (make-overlay 1 12))
         (ov2 (make-overlay 13 25)))
@@ -253,24 +282,12 @@ fn replace_match_undo_keeps_overlay_endpoint_like_gnu() {
             (buffer-string)
             (overlay-start ov1) (overlay-end ov1)
             (overlay-start ov2) (overlay-end ov2)))))"#,
-        )
-        .expect("replace-match undo eval");
+    );
 
+    // Transcribed from GNU Emacs 31.0.90 -Q --batch (tmp/pw52-gnu4.el).
     assert_eq!(
         result,
-        Value::list(vec![
-            Value::list(vec![
-                Value::fixnum(1),
-                Value::fixnum(15),
-                Value::fixnum(16),
-                Value::fixnum(31),
-            ]),
-            Value::string("hello WORLD hello WORLD hello"),
-            Value::fixnum(1),
-            Value::fixnum(12),
-            Value::fixnum(13),
-            Value::fixnum(25),
-        ])
+        r#"OK ((1 15 16 31) "hello WORLD hello WORLD hello" 1 12 13 25)"#
     );
 }
 
@@ -279,10 +296,10 @@ fn transpose_regions_undo_records_equal_regions_like_gnu() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;
 
-    let mut eval = Context::new();
-    let result = eval
-        .eval_str(
-            r#"(progn
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(with-temp-buffer
+  (buffer-enable-undo)
+  (setq buffer-undo-list nil)
   (insert "AAA-BBB-CCC")
   (let ((m (copy-marker 5 t)))
     (undo-boundary)
@@ -290,107 +307,10 @@ fn transpose_regions_undo_records_equal_regions_like_gnu() {
     (let ((after (list (buffer-string) (marker-position m))))
       (primitive-undo 1 buffer-undo-list)
       (list after (buffer-string) (marker-position m)))))"#,
-        )
-        .expect("transpose undo eval");
-
-    assert_eq!(
-        result,
-        Value::list(vec![
-            Value::list(vec![Value::string("BBA-AAB-CCC"), Value::fixnum(1)]),
-            Value::string("AAA-BBB-CCC"),
-            Value::fixnum(3),
-        ])
     );
-}
 
-#[test]
-fn test_primitive_undo_reverts_raw_unibyte_deletion() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-    let mut eval = Context::new();
-    eval.buffers
-        .current_buffer_mut()
-        .expect("scratch buffer")
-        .set_multibyte_value(false);
-    let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
-    let entry = Value::cons(raw, Value::fixnum(1));
-    let list = Value::cons(entry, Value::NIL);
-    let result = builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), list]);
-    assert!(result.is_ok());
-    let contents = eval
-        .buffers
-        .current_buffer()
-        .expect("scratch buffer")
-        .buffer_substring_lisp_string_range(crate::buffer::EmacsByteRange::from_usize(0, 1));
-    assert!(!contents.is_multibyte());
-    assert_eq!(contents.as_bytes(), &[0xFF]);
-}
-
-#[test]
-fn test_primitive_undo_restores_nil_text_property_value() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-    let mut eval = Context::new();
-    let id = eval.buffers.current_buffer_id().expect("scratch buffer");
-    let face = Value::symbol("face");
-    let bold = Value::symbol("bold");
-
-    eval.buffers
-        .current_buffer_mut()
-        .expect("scratch buffer")
-        .insert("abcd");
-    eval.buffers
-        .put_buffer_text_property_in_emacs_byte_range(
-            id,
-            EmacsByteRange::from_usize(1, 3),
-            face,
-            bold,
-        )
-        .expect("scratch buffer");
-
-    let range = Value::cons(Value::fixnum(2), Value::fixnum(4));
-    let record = Value::cons(
-        Value::NIL,
-        Value::cons(face, Value::cons(Value::NIL, range)),
-    );
-    let list = Value::cons(record, Value::NIL);
-    builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), list]).unwrap();
-
-    let props = eval
-        .buffers
-        .current_buffer()
-        .expect("scratch buffer")
-        .text_props_get_properties_ordered_at_emacs_byte_pos(crate::buffer::EmacsBytePos::new(1));
-    assert_eq!(props, vec![(face, Value::NIL)]);
-}
-
-#[test]
-fn test_primitive_undo_reinserts_string_text_properties() {
-    crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
-    let mut eval = Context::new();
-    let face = Value::symbol("face");
-    let bold = Value::symbol("bold");
-    let text = Value::string("abc");
-
-    let mut table = crate::buffer::text_props::TextPropertyTable::new();
-    table.put_property_in_char_range(CharRange::from_usize(0, 3), face, bold);
-    crate::emacs_core::value::set_string_text_properties_table_for_value(text, table);
-
-    let record = Value::cons(text, Value::fixnum(1));
-    let list = Value::cons(record, Value::NIL);
-    builtin_primitive_undo(&mut eval, vec![Value::fixnum(1), list]).unwrap();
-
-    let buf = eval.buffers.current_buffer().expect("scratch buffer");
-    assert_eq!(buf.buffer_string(), "abc");
-    assert_eq!(
-        buf.text_props_get_property_at_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0), face),
-        Some(bold)
-    );
-    assert_eq!(
-        buf.text_props_get_property_at_emacs_byte_pos(crate::buffer::EmacsBytePos::new(2), face),
-        Some(bold)
-    );
+    // Transcribed from GNU Emacs 31.0.90 -Q --batch (tmp/pw52-gnu4.el).
+    assert_eq!(result, r#"OK (("BBA-AAB-CCC" 1) "AAA-BBB-CCC" 3)"#);
 }
 
 #[test]
@@ -740,10 +660,10 @@ fn undo_of_descending_adjacent_inserts_restores_the_untouched_text() {
     crate::test_utils::init_test_tracing();
     use super::super::eval::Context;
 
-    let mut eval = Context::new();
-    let result = eval
-        .eval_str(
-            r#"(progn
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(with-temp-buffer
+                 (buffer-enable-undo)
+                 (setq buffer-undo-list nil)
                  (insert "export const total=add(1,2)")
                  (undo-boundary)
                  (goto-char 20)
@@ -753,13 +673,13 @@ fn undo_of_descending_adjacent_inserts_restores_the_untouched_text() {
                  (let ((records buffer-undo-list))
                    (primitive-undo 1 buffer-undo-list)
                    (list (buffer-string) (car records) (car (cdr records)))))"#,
-        )
-        .expect("descending insert undo eval");
+    );
 
-    // Transcribed from GNU Emacs -Q --batch (tmp/p97-probe8.el).
+    // Transcribed from GNU Emacs -Q --batch (tmp/p97-probe8.el, re-measured
+    // in tmp/pw52-gnu4.el).
     assert_eq!(
-        super::super::print::print_value(&result),
-        "(\"export const total=add(1,2)\" (19 . 20) (20 . 21))"
+        result,
+        "OK (\"export const total=add(1,2)\" (19 . 20) (20 . 21))"
     );
 }
 

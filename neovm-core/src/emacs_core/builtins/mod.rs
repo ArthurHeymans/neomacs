@@ -663,6 +663,9 @@ mod tests;
 #[cfg(test)]
 mod replace_region_contents_test;
 
+#[cfg(test)]
+mod rust_subrs_shadowed_by_lisp_test;
+
 // -----------------------------------------------------------------------
 // Wrapper functions for builtins that need tracing or non-standard access
 // -----------------------------------------------------------------------
@@ -4079,12 +4082,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             0,
             Some(0),
         ),
-    );
-    ctx.defsubr(
-        "primitive-undo",
-        super::undo::builtin_primitive_undo,
-        2,
-        Some(2),
     );
     ctx.defsubr("undo", super::undo::builtin_undo, 0, Some(1));
     ctx.defsubr(
