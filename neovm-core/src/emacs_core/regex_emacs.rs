@@ -199,12 +199,19 @@ pub(crate) enum RegexOp {
     /// character has exactly one syntax class, the fused branches are
     /// mutually exclusive, so this is a semantics-preserving rewrite.
     SyntaxSpecSet = 33,
+
+    /// Terminal op of a POSIX pattern: runs the longest-match bookkeeping
+    /// that non-POSIX patterns skip via their trailing `Succeed`
+    /// (regex-emacs.c:4272-4344 — the "fell off the end" path, reified as
+    /// an opcode so a sealed matcher never needs the per-op end-of-buffer
+    /// check).  neomacs-only, like `SyntaxSpecSet`.
+    PosixEnd = 34,
 }
 
 impl RegexOp {
     /// Convert a byte to an opcode.  Returns None for invalid bytes.
     fn from_byte(b: u8) -> Option<Self> {
-        if b <= 33 {
+        if b <= 34 {
             // SAFETY: all values 0-33 are valid enum variants
             Some(unsafe { std::mem::transmute::<u8, RegexOp>(b) })
         } else {
@@ -1666,6 +1673,12 @@ pub(crate) fn regex_compile_lisp_with_translation(
     // longest-match code entirely.
     if !posix {
         emit_op!(RegexOp::Succeed);
+    } else {
+        // Exit jumps fixed up above target the old buffer end, which is
+        // exactly where this terminal op now sits — no target can point
+        // past it (the sealed matcher's no-end-check proof relies on
+        // every pattern ending in Succeed or PosixEnd).
+        emit_op!(RegexOp::PosixEnd);
     }
 
     // Resolve on_failure_jump_smart loops (GNU does this lazily at first
@@ -1753,6 +1766,23 @@ fn validate_sealed_buffer(pattern: &CompiledPattern) -> bool {
     if pc != len {
         return false;
     }
+    // The sealed loop replaces the per-op end-of-bytecode check with the
+    // guarantee that execution only ends at a terminal op.
+    if len == 0 {
+        return false;
+    }
+    let mut last_op_start = 0usize;
+    let mut walk = 0usize;
+    while walk < len {
+        last_op_start = walk;
+        walk += opcode_len(bytecode, walk).expect("pass 1 validated operand spans");
+    }
+    if !matches!(
+        RegexOp::from_byte(bytecode[last_op_start]),
+        Some(RegexOp::Succeed | RegexOp::PosixEnd)
+    ) {
+        return false;
+    }
 
     // Pass 2: every jump target on a boundary; counter positions in-bounds.
     let mut pc = 0usize;
@@ -1768,9 +1798,13 @@ fn validate_sealed_buffer(pattern: &CompiledPattern) -> bool {
             | RegexOp::SucceedN
             | RegexOp::JumpN => {
                 // Matcher convention: target = op_pc + 3 + offset.
+                // Strictly inside the buffer: the sealed loop drops the
+                // end-of-bytecode check, so no jump may land at len — the
+                // compiler ends every pattern with Succeed/PosixEnd at the
+                // old buffer end, which is where end-targeting jumps land.
                 let offset = extract_number(bytecode, pc + 1);
                 let target = pc as i64 + 3 + offset as i64;
-                if target < 0 || target > len as i64 || !is_boundary[target as usize] {
+                if target < 0 || target >= len as i64 || !is_boundary[target as usize] {
                     return false;
                 }
             }
@@ -4845,7 +4879,11 @@ fn re_match_loop<const SEALED: bool>(
         // force another backtrack. When no more backtracks remain,
         // restore whichever saved best is better than the final
         // candidate (regex-emacs.c:4323-4344).
-        if pc >= bytecode.len() {
+        // SEALED buffers cannot reach pc == len: validation proves the last
+        // op is Succeed/PosixEnd and every jump target lands strictly
+        // inside the buffer, so the sealed loop drops this per-op check
+        // (the terminal ops' arms carry the end-of-pattern logic).
+        if !SEALED && pc >= bytecode.len() {
             if d > stop {
                 try_fail!('main_loop);
                 continue 'main_loop;
@@ -4875,6 +4913,9 @@ fn re_match_loop<const SEALED: bool>(
                 }
             }
             break 'main_loop;
+        }
+        if SEALED {
+            debug_assert!(pc < bytecode.len());
         }
 
         let op_pc = pc;
@@ -4913,6 +4954,40 @@ fn re_match_loop<const SEALED: bool>(
                 if d > stop {
                     try_fail!('main_loop);
                     continue 'main_loop;
+                }
+                break 'main_loop;
+            }
+
+            RegexOp::PosixEnd => {
+                // The reified "fell off the end" path (see the opcode doc):
+                // identical to the !SEALED end-of-bytecode block above.
+                if d > stop {
+                    try_fail!('main_loop);
+                    continue 'main_loop;
+                }
+                if posix_longest && d < stop {
+                    let better_than_best = !best_regs_set || d > best_match_end;
+                    if !frames.is_empty() {
+                        if better_than_best {
+                                best_regs_set = true;
+                                best_match_end = d;
+                                best_regstart.clone_from_slice(regstart);
+                                best_regend.clone_from_slice(regend);
+                        }
+                        // Force a backtrack to explore alternative paths.
+                        // The stack is non-empty so goto_fail cannot fail.
+                        try_fail!('main_loop);
+                        continue 'main_loop;
+                    } else if best_regs_set && !better_than_best {
+                        // No more backtracks; the previously saved best
+                        // beats the current finishing position.  Restore
+                        // it before finalizing.
+                        d = best_match_end;
+                        for i in 1..num_regs {
+                                regstart[i] = best_regstart[i];
+                                regend[i] = best_regend[i];
+                        }
+                    }
                 }
                 break 'main_loop;
             }
@@ -5450,7 +5525,7 @@ fn pike_add_thread(
         match op {
             RegexOp::NoOp => stack.push((pc + 1, caps)),
 
-            RegexOp::Succeed => list.push(PikeThread {
+            RegexOp::Succeed | RegexOp::PosixEnd => list.push(PikeThread {
                 pc: PIKE_MATCH_PC,
                 lit_off: 0,
                 caps,
@@ -5969,6 +6044,7 @@ fn opcode_len(bytecode: &[u8], pc: usize) -> Option<usize> {
     Some(match op {
         RegexOp::NoOp
         | RegexOp::Succeed
+        | RegexOp::PosixEnd
         | RegexOp::AnyChar
         | RegexOp::BegLine
         | RegexOp::EndLine
@@ -6182,7 +6258,7 @@ fn continuation_first_superset(buf: &CompiledPattern, from: usize) -> Option<Cha
             }
             let op = RegexOp::from_byte(bytecode[pc])?;
             match op {
-                RegexOp::Succeed => return None,
+                RegexOp::Succeed | RegexOp::PosixEnd => return None,
 
                 // Char-matching terminals: contribute their superset.
                 RegexOp::Exactn | RegexOp::AnyChar | RegexOp::Charset | RegexOp::CharsetNot => {
@@ -6669,7 +6745,7 @@ fn compile_fastmap(pattern: &mut CompiledPattern, syntax: &dyn SyntaxLookup) {
             pc += 1;
 
             match op {
-                RegexOp::Succeed => {
+                RegexOp::Succeed | RegexOp::PosixEnd => {
                     // Pattern can succeed here (may match empty string).
                     pattern.can_be_null = true;
                     break;
