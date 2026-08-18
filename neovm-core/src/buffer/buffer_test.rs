@@ -336,6 +336,65 @@ fn create_indirect_buffer_shares_root_text_and_updates_siblings() {
     }
 }
 
+/// GNU `Fmake_indirect_buffer` runs `reset_buffer` on the new buffer
+/// (`src/buffer.c:896`), which sets `b->modtime` to the unknown sentinel
+/// (`src/buffer.c:1092`), and sets `b->base_buffer` -- the pointer
+/// `record_first_change` dereferences to read a modtime (`src/undo.c:213-214`).
+///
+/// So an indirect buffer has NO modtime of its own even when CLONE copies the
+/// base's other state (GNU 31.0.90 reports `(visited-file-modtime)` = 0 in a
+/// `(make-indirect-buffer base "i" t)` buffer whose base visits a file), while
+/// its first change records the base's -- read live, so a `save-buffer` in the
+/// base after the indirect buffer was made is visible.
+#[test]
+fn an_indirect_buffer_has_no_modtime_of_its_own_and_follows_its_bases() {
+    crate::test_utils::init_test_tracing();
+    use crate::buffer::VisitedFileModtime;
+
+    for clone in [false, true] {
+        let mut mgr = BufferManager::new();
+        let base_id = mgr.current_buffer_id().expect("scratch buffer");
+        mgr.get_mut(base_id)
+            .expect("base buffer")
+            .set_visited_file_modtime(VisitedFileModtime::Known { sec: 11, nsec: 22 });
+
+        let indirect_id = mgr
+            .create_indirect_buffer(base_id, "*indirect-modtime*", clone)
+            .expect("indirect buffer");
+
+        let base_cell = mgr.get(base_id).expect("base buffer").share_modtime_cell();
+        let indirect = mgr.get(indirect_id).expect("indirect buffer");
+        assert_eq!(
+            indirect.visited_file_modtime(),
+            VisitedFileModtime::Unknown,
+            "an indirect buffer visits no file, whatever CLONE ({clone}) copies"
+        );
+        assert!(
+            indirect.follows_modtime_cell_of(&base_cell),
+            "the first-change recorder must reach the base's live cell (clone: {clone})"
+        );
+
+        // A later change to the base is what the indirect buffer records.
+        mgr.get_mut(base_id)
+            .expect("base buffer")
+            .set_visited_file_modtime(VisitedFileModtime::Known { sec: 33, nsec: 44 });
+        let recorded = mgr
+            .get(indirect_id)
+            .expect("indirect buffer")
+            .first_change_modtime()
+            .to_lisp_value();
+        let base_reported = mgr
+            .get(base_id)
+            .expect("base buffer")
+            .visited_file_modtime_value();
+        assert_eq!(
+            crate::emacs_core::print::print_value(&recorded),
+            crate::emacs_core::print::print_value(&base_reported),
+            "the (t . TIME) datum is the base's current modtime (clone: {clone})"
+        );
+    }
+}
+
 #[test]
 fn create_indirect_buffer_flattens_double_indirection() {
     crate::test_utils::init_test_tracing();

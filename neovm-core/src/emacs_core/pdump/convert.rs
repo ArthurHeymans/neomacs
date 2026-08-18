@@ -2847,6 +2847,10 @@ fn load_lisp_char_pos(pos: Option<usize>) -> LispCharPos1 {
 
 fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
     let is_shared_text_owner = buf.base_buffer.is_none();
+    // The image format stores GNU's `struct timespec` as two optional halves;
+    // an indirect buffer dumps its OWN (unknown) modtime and gets its base's
+    // cell back on load, exactly like `text` and `undo_state`.
+    let (modtime_sec, modtime_nsec) = buf.visited_file_modtime().to_dump_halves();
     DumpBuffer {
         id: DumpBufferId(buf.id.0),
         name_lisp: buf.name_value().as_lisp_string().map(dump_lisp_string),
@@ -2871,8 +2875,8 @@ fn dump_buffer(encoder: &mut DumpEncoder, buf: &Buffer) -> DumpBuffer {
         chars_modified_tick: buf.chars_modified_tick(),
         save_modified_tick: Some(buf.save_modified_tick()),
         autosave_modified_tick: Some(buf.autosave_modified_tick),
-        modtime_sec: buf.modtime_sec,
-        modtime_nsec: buf.modtime_nsec,
+        modtime_sec,
+        modtime_nsec,
         modtime_size: buf.modtime_size,
         last_window_start: Some(dump_lisp_char_pos(buf.last_window_start)),
         read_only: buf.get_read_only(),
@@ -4720,8 +4724,10 @@ fn load_buffer(
         accessible_start: dump_text_position_anchor(begv_char, db.begv),
         accessible_end: dump_text_position_anchor(zv_char, db.zv),
         autosave_modified_tick,
-        modtime_sec: db.modtime_sec,
-        modtime_nsec: db.modtime_nsec,
+        modtime: crate::buffer::VisitedFileModtime::from_dump_halves(
+            db.modtime_sec,
+            db.modtime_nsec,
+        ),
         modtime_size: db.modtime_size,
         last_window_start,
         last_selected_window: None,

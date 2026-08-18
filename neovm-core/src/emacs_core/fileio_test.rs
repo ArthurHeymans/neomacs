@@ -6099,3 +6099,73 @@ fn verify_visited_file_modtime_uses_its_buffer_argument_like_gnu() {
         "BUF, not the current buffer, decides the answer"
     );
 }
+
+/// The other half of GNU's Bug#56397 change ("Fix undo of changes in cloned
+/// indirect buffers", commit 74f43f82e6b): with `record_first_change` reading
+/// the BASE buffer's modtime, `Fset_visited_file_modtime` refuses the
+/// no-argument form in an indirect buffer instead of expanding its nil file
+/// name (`src/fileio.c:6202-6203`).  GNU 31.0.90 signals
+/// `(error "An indirect buffer does not have a visited file")`, while a plain
+/// buffer with no visited file still gets `(wrong-type-argument stringp nil)`
+/// from `Fexpand_file_name` -- the two cases must stay distinguishable.
+#[test]
+fn set_visited_file_modtime_refuses_an_indirect_buffer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let base = eval.buffers.current_buffer_id().expect("current buffer");
+    let indirect = eval
+        .buffers
+        .create_indirect_buffer(base, "indirect-modtime-145", false)
+        .expect("indirect buffer");
+    eval.buffers.set_current(indirect);
+
+    match builtin_set_visited_file_modtime(&mut eval, vec![]) {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string(
+                    "An indirect buffer does not have a visited file"
+                )]
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+}
+
+/// GNU `Fset_visited_file_modtime`'s integer arm is
+/// `check_integer_range (time_flag, -1, 0)` followed by
+/// `make_timespec (0, UNKNOWN_MODTIME_NSECS - flag)` (`src/fileio.c:6188-6196`),
+/// so the only integers it accepts are the two non-timestamps
+/// `visited-file-modtime` can return, and each round-trips to itself.  GNU
+/// 31.0.90: `0` -> `0`, `-1` -> `-1`, `5` -> `(args-out-of-range 5 -1 0)`.
+/// Neomacs took any fixnum and answered `0` for all three, so the "the visited
+/// file does not exist" state could not be expressed at all.
+#[test]
+fn set_visited_file_modtime_flags_are_the_two_values_visited_file_modtime_returns() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    for flag in [0, -1] {
+        builtin_set_visited_file_modtime(&mut eval, vec![Value::fixnum(flag)])
+            .expect("an in-range modtime flag");
+        let reported =
+            builtin_visited_file_modtime(&mut eval, vec![]).expect("visited-file-modtime");
+        assert_eq!(
+            reported.as_fixnum(),
+            Some(flag),
+            "flag {flag} must round-trip through visited-file-modtime"
+        );
+    }
+
+    match builtin_set_visited_file_modtime(&mut eval, vec![Value::fixnum(5)]) {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "args-out-of-range");
+            assert_eq!(
+                sig.data,
+                vec![Value::fixnum(5), Value::fixnum(-1), Value::fixnum(0)]
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+}

@@ -14,6 +14,7 @@ pub mod shared;
 pub mod text;
 pub mod text_props;
 pub mod undo;
+pub mod visited_file_modtime;
 
 pub use buffer::{
     Buffer, BufferId, BufferManager, BufferTextSnapshot, InsertionType, LabeledRestriction,
@@ -38,3 +39,4 @@ pub use undo::{
     undo_list_pop_group, undo_list_record_delete, undo_list_record_first_change,
     undo_list_record_insert, undo_list_record_point, undo_list_record_property_change,
 };
+pub use visited_file_modtime::{FirstChangeModtime, VisitedFileModtime, VisitedFileModtimeSlot};

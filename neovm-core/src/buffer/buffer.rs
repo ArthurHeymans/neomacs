@@ -31,6 +31,9 @@ use super::overlay::OverlayList;
 use super::shared::{SavedPointBeforeCommand, SharedUndoState};
 use super::text_props::{ObjectIntervalRun, TextPropertyTable};
 use super::undo;
+#[cfg(test)]
+use super::visited_file_modtime::BaseVisitedFileModtime;
+use super::visited_file_modtime::{FirstChangeModtime, VisitedFileModtime, VisitedFileModtimeSlot};
 use crate::emacs_core::intern::{SymId, intern};
 use crate::emacs_core::value::{RuntimeBindingValue, Value, ValueKind, eq_value};
 use crate::gc_trace::GcTrace;
@@ -2093,8 +2096,7 @@ pub(crate) struct BufferDumpParts {
     pub state_markers: Option<BufferStateMarkers>,
     pub local_var_alist: Value,
     pub keymap: Value,
-    pub modtime_sec: Option<i64>,
-    pub modtime_nsec: Option<i32>,
+    pub modtime: VisitedFileModtime,
     pub modtime_size: Option<i64>,
     pub slots: [Value; BUFFER_SLOT_COUNT],
     pub local_flags: u64,
@@ -2170,11 +2172,12 @@ pub struct Buffer {
     /// `BVAR(buffer, keymap)` — the buffer's local keymap
     /// (`buffer.h:385`). `Value::NIL` when no local keymap is set.
     pub(crate) keymap: crate::emacs_core::value::Value,
-    /// File modification time as seconds since epoch (GNU `struct timespec`).
-    /// `None` means unknown or never visited.
-    pub(crate) modtime_sec: Option<i64>,
-    /// File modification time nanoseconds component.
-    pub(crate) modtime_nsec: Option<i32>,
+    /// GNU `b->modtime` (`src/buffer.h:645-655`) plus the `b->base_buffer`
+    /// link `record_first_change` follows to read it (`src/undo.c:213-214`).
+    /// Reached only through [`Self::visited_file_modtime`],
+    /// [`Self::set_visited_file_modtime`] and
+    /// [`Self::first_change_modtime`], which are GNU's three readers.
+    modtime: VisitedFileModtimeSlot,
     /// File size in bytes when `modtime` was captured.
     pub(crate) modtime_size: Option<i64>,
     /// `BUFFER_OBJFWD` slot table — per-buffer storage for variables
@@ -2364,8 +2367,10 @@ impl Buffer {
             state_markers: None,
             local_var_alist: LocalVariableBindings::from_alist(Value::NIL),
             keymap: crate::emacs_core::value::Value::NIL,
-            modtime_sec: None,
-            modtime_nsec: None,
+            // GNU `reset_buffer`: `b->modtime = make_timespec (0,
+            // UNKNOWN_MODTIME_NSECS); b->modtime_size = -1;`
+            // (`src/buffer.c:1092-1093`).
+            modtime: VisitedFileModtimeSlot::default(),
             modtime_size: None,
             slots: {
                 // Phase 10C: seed every slot from BUFFER_SLOT_INFO.
@@ -2410,8 +2415,7 @@ impl Buffer {
             state_markers: parts.state_markers,
             local_var_alist: LocalVariableBindings::from_alist(parts.local_var_alist),
             keymap: parts.keymap,
-            modtime_sec: parts.modtime_sec,
-            modtime_nsec: parts.modtime_nsec,
+            modtime: VisitedFileModtimeSlot::new(parts.modtime),
             modtime_size: parts.modtime_size,
             slots: parts.slots,
             local_flags: parts.local_flags,
@@ -3671,26 +3675,53 @@ impl Buffer {
         self.mark_marker_ptr = std::ptr::null_mut();
     }
 
-    /// GNU `buffer_visited_file_modtime` (`src/fileio.c:6156-6163`): a Lisp
-    /// timestamp when this buffer has a recorded visited-file modification
-    /// time, and the fixnum 0 when it has none.
+    /// GNU `buffer_visited_file_modtime (current_buffer)`
+    /// (`src/fileio.c:6156-6175`): THIS buffer's recorded visited-file
+    /// modification time, which is what `visited-file-modtime` returns.
     ///
-    /// This is what `visited-file-modtime` returns and what
-    /// `record_first_change` stores in the `(t . TIME)` undo entry, so the two
-    /// must be computed the same way or `primitive-undo` can never match them.
+    /// An indirect buffer's own modtime is the unknown sentinel
+    /// `reset_buffer` left there -- it visits no file -- so this is NOT the
+    /// value the first-change undo entry records; see
+    /// [`Self::first_change_modtime`].
+    pub fn visited_file_modtime(&self) -> VisitedFileModtime {
+        self.modtime.own()
+    }
+
+    /// The Lisp value `visited-file-modtime` returns for this buffer.
     pub fn visited_file_modtime_value(&self) -> Value {
-        match (self.modtime_sec, self.modtime_nsec) {
-            (Some(sec), Some(nsec)) => {
-                // GNU `make_lisp_time`: (HIGH LOW USEC PSEC).
-                Value::list(vec![
-                    Value::fixnum(sec >> 16),
-                    Value::fixnum(sec & 0xFFFF),
-                    Value::fixnum((nsec / 1000) as i64),
-                    Value::fixnum(((nsec % 1000) as i64) * 1000),
-                ])
-            }
-            _ => Value::fixnum(0),
-        }
+        self.visited_file_modtime().to_lisp_value()
+    }
+
+    /// Record a visited-file modtime for THIS buffer. GNU's
+    /// `Fset_visited_file_modtime`, `insert-file-contents` and `write-region`
+    /// all write `current_buffer->modtime`, never a base buffer's.
+    pub fn set_visited_file_modtime(&mut self, modtime: VisitedFileModtime) {
+        self.modtime.set_own(modtime);
+    }
+
+    /// GNU `record_first_change` (`src/undo.c:209-223`): the modtime the
+    /// `(t . TIME)` undo entry records -- the BASE buffer's when this is an
+    /// indirect buffer, because the entry names the save that the shared TEXT
+    /// would be returned to and only the base visits the file.
+    ///
+    /// The returned [`FirstChangeModtime`] is the only thing the undo recorder
+    /// accepts, and this is its only source, so no call site can record the
+    /// current buffer's own modtime instead.
+    pub(in crate::buffer) fn first_change_modtime(&self) -> FirstChangeModtime {
+        self.modtime.for_first_change()
+    }
+
+    /// Test-facing: this buffer's own modtime cell, to assert an indirect
+    /// buffer follows the base the manager owns rather than a copy.
+    #[cfg(test)]
+    pub(in crate::buffer) fn share_modtime_cell(&self) -> BaseVisitedFileModtime {
+        self.modtime.share_own()
+    }
+
+    /// Test-facing counterpart of [`Self::share_modtime_cell`].
+    #[cfg(test)]
+    pub(in crate::buffer) fn follows_modtime_cell_of(&self, base: &BaseVisitedFileModtime) -> bool {
+        self.modtime.follows(base)
     }
 
     // -- Modified flag -------------------------------------------------------
@@ -4559,7 +4590,7 @@ fn record_text_property_first_change(buf: &mut Buffer, undo_list: &mut Value) {
     if buf.modified_tick() > buf.save_modified_tick() {
         return;
     }
-    undo::undo_list_record_first_change(undo_list, buf.visited_file_modtime_value());
+    undo::undo_list_record_first_change(undo_list, buf.first_change_modtime());
     buf.undo_state.set_recorded_first_change(true);
 }
 
@@ -4817,6 +4848,31 @@ impl BufferManager {
         Ok(())
     }
 
+    /// Point an indirect buffer's visited-file modtime slot at its base's, the
+    /// `b->base_buffer` dereference in GNU `record_first_change`
+    /// (`src/undo.c:213-214`), and clear the indirect buffer's own modtime the
+    /// way `reset_buffer` does (`src/buffer.c:1092-1093`).
+    ///
+    /// Both buffers are looked up in `self.buffers` here on purpose: a `Buffer`
+    /// clone carries a *copy* of the modtime cell (see
+    /// `VisitedFileModtimeSlot`'s `Clone`), so linking through a clone would
+    /// freeze the indirect buffer's view of its base.  The same trap already
+    /// applies to `text` and `undo_state` in [`Self::from_dump`].
+    fn link_indirect_visited_file_modtime(&mut self, indirect_id: BufferId, base_id: BufferId) {
+        let Some(base_cell) = self
+            .buffers
+            .get(&base_id)
+            .map(|base| base.modtime.share_own())
+        else {
+            return;
+        };
+        if let Some(indirect) = self.buffers.get_mut(&indirect_id) {
+            indirect.modtime.reset_as_indirect_of(base_cell);
+            // GNU `reset_buffer`: `b->modtime_size = -1` (`src/buffer.c:1093`).
+            indirect.modtime_size = None;
+        }
+    }
+
     /// Allocate a new indirect buffer that shares its root base buffer's text.
     ///
     /// This mirrors GNU Emacs's `make-indirect-buffer` C boundary:
@@ -4905,6 +4961,13 @@ impl BufferManager {
 
         self.buffers.insert(id, indirect);
         self.buffer_order.push(id);
+        // GNU `Fmake_indirect_buffer` runs `reset_buffer` on the new buffer,
+        // which clears its own modtime (`src/buffer.c:1092-1093`) whatever
+        // CLONE says -- an indirect buffer visits no file -- and sets
+        // `b->base_buffer`, which is the link `record_first_change` follows.
+        // Both halves are one call, and it reads the base slot out of the map
+        // rather than from the `root` clone above, whose cell is a copy.
+        self.link_indirect_visited_file_modtime(id, root_id);
         let _ = self.ensure_buffer_state_markers(root_id);
         let _ = self.ensure_buffer_state_markers(id);
         if let Some(mark) = root_mark {
@@ -6642,8 +6705,17 @@ impl BufferManager {
             // would link the indirect buffer to the *temporary* base,
             // not the one in `buffers`. Use `shared_clone` directly on
             // the base buffer's `BufferText` to preserve Rc identity.
-            let (shared_text, shared_undo) = match buffers.get(&base_id) {
-                Some(root) => (root.text.shared_clone(), root.undo_state.clone()),
+            // The visited-file modtime cell is the third thing an indirect
+            // buffer borrows from its base (GNU `record_first_change` follows
+            // `b->base_buffer`, src/undo.c:213-214) and it has exactly the
+            // same aliasing hazard as the two above: `share_own` hands out the
+            // base's live cell, `clone()` would hand out a copy.
+            let (shared_text, shared_undo, base_modtime) = match buffers.get(&base_id) {
+                Some(root) => (
+                    root.text.shared_clone(),
+                    root.undo_state.clone(),
+                    root.modtime.share_own(),
+                ),
                 None => continue,
             };
             let Some(buffer) = buffers.get_mut(&buffer_id) else {
@@ -6651,6 +6723,7 @@ impl BufferManager {
             };
             buffer.text = shared_text;
             buffer.undo_state = shared_undo;
+            buffer.modtime.reset_as_indirect_of(base_modtime);
         }
 
         // Seed `buffer_defaults` from BUFFER_SLOT_INFO's install-time

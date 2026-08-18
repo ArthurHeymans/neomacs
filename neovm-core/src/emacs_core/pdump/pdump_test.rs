@@ -1849,3 +1849,49 @@ fn test_measure_current_process_bootstrap_pdump_raw_load() {
     });
     summarize_timings("raw bootstrap load_from_dump", &bootstrap_raw_load);
 }
+
+/// An indirect buffer borrows three things from its base: its text, its undo
+/// state, and -- since GNU `record_first_change` follows `b->base_buffer`
+/// (`src/undo.c:213-214`) -- the visited-file modtime it records in a
+/// `(t . TIME)` entry.  The image format stores each buffer's OWN modtime, so
+/// the third link has to be rebuilt on load exactly like the first two.
+///
+/// The base's modtime is changed AFTER the load on purpose: a restored link
+/// that had been rebuilt as a copy would still answer with the dumped value.
+#[test]
+fn pdump_round_trip_relinks_an_indirect_buffers_visited_file_modtime() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((base (get-buffer-create "base-145")))
+                 (set-buffer base)
+                 (setq buffer-file-name "/nonesuch/base-145.txt")
+                 (set-visited-file-modtime '(25000 1000 0 0))
+                 (make-indirect-buffer base "indirect-145")
+                 (visited-file-modtime))"#
+        )),
+        "OK (25000 1000 0 0)"
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let dump_path = dir.path().join("indirect-modtime.pdump");
+    dump_to_file(&eval, &dump_path).expect("dump should succeed");
+    let mut loaded = load_from_dump(&dump_path).expect("load should succeed");
+
+    assert_eq!(
+        format_eval_result(&loaded.eval_str(
+            r#"(progn
+                 (set-buffer "base-145")
+                 (set-visited-file-modtime '(30000 2000 0 0))
+                 (set-buffer-modified-p nil)
+                 (setq buffer-undo-list nil)
+                 (set-buffer "indirect-145")
+                 (insert "X")
+                 (list :recorded (cdr (assq t buffer-undo-list))
+                       :own-modtime (visited-file-modtime)))"#
+        )),
+        "OK (:recorded (30000 2000 0 0) :own-modtime 0)",
+        "the restored indirect buffer must record its base's CURRENT modtime"
+    );
+}

@@ -864,6 +864,86 @@ fn first_change_marker_records_the_visited_file_modtime_like_gnu() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// Ledger 105's residual.  GNU's `record_first_change` resolves the BASE
+/// buffer before reading a modtime (`src/undo.c:209-223`):
+///
+/// ```c
+///   struct buffer *base_buffer = current_buffer;
+///   ...
+///   if (base_buffer->base_buffer)
+///     base_buffer = base_buffer->base_buffer;
+///   bset_undo_list (current_buffer,
+///                   Fcons (Fcons (Qt, buffer_visited_file_modtime (base_buffer)),
+///                          BVAR (current_buffer, undo_list)));
+/// ```
+///
+/// The redirect is unconditional, not a fallback for a missing value: under
+/// GNU 31.0.90 an indirect buffer that was given a modtime of its own with
+/// `(set-visited-file-modtime '(1 2 3 4))` STILL records its base's.  This
+/// fixture pins that, because "record the buffer's own modtime, whatever it
+/// is" passes the weaker `(t . 0)` version of the test.
+///
+/// The base's modtime is also read live, at the moment of the change -- so it
+/// is set here AFTER the indirect buffer exists, the order `find-file` +
+/// `clone-indirect-buffer` + `save-buffer` produces.
+#[test]
+fn first_change_in_an_indirect_buffer_records_its_base_buffers_modtime() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+    let mut eval = Context::new();
+
+    let form = r#"(let ((base (get-buffer-create "base-145")))
+             (set-buffer base)
+             (setq buffer-file-name "/nonesuch/base-145.txt")
+             (set-buffer (make-indirect-buffer base "indirect-145"))
+             (set-visited-file-modtime '(1 2 3 4))
+             (set-buffer base)
+             (set-visited-file-modtime '(25000 1000 0 0))
+             (set-buffer-modified-p nil)
+             (setq buffer-undo-list nil)
+             (set-buffer "indirect-145")
+             (insert "X")
+             (list :recorded (cdr (assq t buffer-undo-list))
+                   :own-modtime (visited-file-modtime)))"#;
+    let rendered = super::super::print::print_value(&eval.eval_str(form).expect("eval"));
+    assert_eq!(
+        rendered, "(:recorded (25000 1000 0 0) :own-modtime (1 2 3 0))",
+        "the first-change entry must hold the BASE buffer's modtime, not the \
+         indirect buffer's own: {rendered}"
+    );
+}
+
+/// GNU records `-1`, not `0`, for a buffer visiting a file that does not
+/// exist: `insert-file-contents` stores `time_error_value (save_errno)`
+/// (`src/fileio.c:3971-3978,4200`) before it signals, and
+/// `buffer_visited_file_modtime` maps that `NONEXISTENT_MODTIME_NSECS` to the
+/// fixnum -1 (`src/fileio.c:6156-6163`).  Every `find-file` of a new file
+/// lands here, so the first change to one records `(t . -1)` under GNU
+/// 31.0.90 where Neomacs recorded `(t . 0)`.
+#[test]
+fn a_visited_file_that_does_not_exist_records_minus_one() {
+    crate::test_utils::init_test_tracing();
+    use super::super::eval::Context;
+    let mut eval = Context::new();
+
+    let form = r#"(progn
+             (condition-case nil
+                 (insert-file-contents "/nonesuch/no-such-file-145.txt" t)
+               (error nil))
+             (setq buffer-undo-list nil)
+             (set-buffer-modified-p nil)
+             (insert "X")
+             (list :own-modtime (visited-file-modtime)
+                   :recorded (cdr (assq t buffer-undo-list))
+                   :verify (verify-visited-file-modtime (current-buffer))))"#;
+    let rendered = super::super::print::print_value(&eval.eval_str(form).expect("eval"));
+    assert_eq!(
+        rendered, "(:own-modtime -1 :recorded -1 :verify t)",
+        "a nonexistent visited file is GNU's -1 modtime, and it still verifies \
+         while the file is still missing: {rendered}"
+    );
+}
+
 /// GNU `record_point` (`src/undo.c:47-78`) reads `at_boundary` from the undo
 /// list BEFORE `record_first_change` may cons `(t . TIME)` onto it, and only
 /// then pushes `point_before_last_command_or_undo`.  GNU's own comment on that

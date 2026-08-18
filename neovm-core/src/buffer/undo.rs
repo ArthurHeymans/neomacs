@@ -267,15 +267,26 @@ pub fn undo_list_record_property_change(
 /// file-visiting buffer, and `undo` back to the saved text left
 /// `buffer-modified-p` t where GNU reports nil.
 ///
-/// `visited_file_modtime` must be the value GNU's
-/// `buffer_visited_file_modtime` would return for the buffer owning the undo
-/// list -- see [`crate::buffer::Buffer::visited_file_modtime_value`].
-pub fn undo_list_record_first_change(undo_list: &mut Value, visited_file_modtime: Value) {
+/// GNU resolves the buffer to read the modtime FROM before reading it -- the
+/// base buffer when the change happens in an indirect buffer
+/// (`src/undo.c:213-214`) -- so this takes a
+/// [`FirstChangeModtime`](crate::buffer::FirstChangeModtime), which only
+/// [`Buffer::first_change_modtime`](crate::buffer::Buffer::first_change_modtime)
+/// can mint.  Passing the current buffer's own
+/// `visited-file-modtime` is therefore not expressible here; it was the whole
+/// of ledger 105's residual.
+pub fn undo_list_record_first_change(
+    undo_list: &mut Value,
+    first_change_modtime: super::visited_file_modtime::FirstChangeModtime,
+) {
     if undo_list_is_disabled(undo_list) {
         return;
     }
     let saved = save_scratch_gc_roots();
     push_scratch_gc_root(*undo_list);
+    // Rooted first: a `Known` modtime conses a four-element timestamp, and the
+    // list this entry is about to head must survive that allocation.
+    let visited_file_modtime = first_change_modtime.to_lisp_value();
     push_scratch_gc_root(visited_file_modtime);
     let entry = Value::cons(Value::T, visited_file_modtime);
     push_scratch_gc_root(entry);
