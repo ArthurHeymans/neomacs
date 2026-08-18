@@ -261,7 +261,6 @@ fn test_delete_records_marker_adjustments_for_primitive_undo() {
 #[test]
 fn replace_match_undo_keeps_overlay_endpoint_like_gnu() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
 
     let result = crate::test_utils::runtime_startup_eval_one(
         r#"(with-temp-buffer
@@ -293,7 +292,6 @@ fn replace_match_undo_keeps_overlay_endpoint_like_gnu() {
 #[test]
 fn transpose_regions_undo_records_equal_regions_like_gnu() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
 
     let result = crate::test_utils::runtime_startup_eval_one(
         r#"(with-temp-buffer
@@ -480,7 +478,6 @@ fn first_change_marker_rearmed_on_each_clean_transition() {
 #[test]
 fn undo_of_descending_adjacent_inserts_restores_the_untouched_text() {
     crate::test_utils::init_test_tracing();
-    use super::super::eval::Context;
 
     let result = crate::test_utils::runtime_startup_eval_one(
         r#"(with-temp-buffer
