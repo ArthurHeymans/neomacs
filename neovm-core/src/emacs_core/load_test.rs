@@ -10107,6 +10107,7 @@ fn reader_accepts_utf8_emacs_extended_char_literals_from_ethiopic_source() {
     crate::test_utils::init_test_tracing();
     let source = decode_emacs_utf8_source_lisp(
         b"(aset composition-function-table ?\xF6\xA0\x87\x8A #'ethio-composition-function)\n",
+        crate::emacs_core::coding::EolConversion::Enabled,
     );
 
     let forms = crate::emacs_core::value_reader::read_all_lisp_source(
@@ -10135,7 +10136,8 @@ fn reader_accepts_utf8_emacs_extended_char_literals_in_full_ethiopic_source() {
             .join("lisp/language/ethiopic.el"),
     )
     .expect("read ethiopic source fixture");
-    let source = decode_emacs_utf8_source_lisp(&bytes);
+    let source =
+        decode_emacs_utf8_source_lisp(&bytes, crate::emacs_core::coding::EolConversion::Enabled);
 
     let forms = crate::emacs_core::value_reader::read_all_lisp_source(
         &source,
@@ -10156,7 +10158,8 @@ fn lisp_source_reader_accepts_utf8_emacs_extended_char_literals_in_full_ethiopic
             .join("lisp/language/ethiopic.el"),
     )
     .expect("read ethiopic source fixture");
-    let text = decode_emacs_utf8_source_lisp(&bytes);
+    let text =
+        decode_emacs_utf8_source_lisp(&bytes, crate::emacs_core::coding::EolConversion::Enabled);
     let source = crate::emacs_core::value_reader::LispReadSource::new(&text);
 
     let mut pos = 0;
@@ -14773,7 +14776,10 @@ fn load_source_eol_detection_matches_the_shared_decoder() {
         (b"", b""),
     ];
     for (source, expected) in rows {
-        let decoded = decode_emacs_utf8_source_lisp(source);
+        let decoded = decode_emacs_utf8_source_lisp(
+            source,
+            crate::emacs_core::coding::EolConversion::Enabled,
+        );
         assert_eq!(
             decoded.as_bytes(),
             *expected,

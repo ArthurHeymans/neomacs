@@ -9897,3 +9897,98 @@ fn call_process_reports_the_coding_its_output_was_decoded_with() {
         )
     );
 }
+
+/// DIVERGENCES.md entry 143: `inhibit-eol-conversion` is read at CONVERSION
+/// time, not at the time the coding system is resolved.
+///
+/// This is the measurement that decides the shape of the fix, and a subprocess
+/// is the only place it is observable, because it is the only conversion whose
+/// two halves can be put in different dynamic extents: the coding system is
+/// resolved once at `make-process`, and the bytes arrive later.
+///
+/// GNU re-reads its C global at every decision -- `decode_eol`
+/// (src/coding.c:6767), `decode_coding` (:7481), the eight decoders' `eol_dos`
+/// (:1250-1251 and seven copies) -- and `setup_coding_system`'s read (:5681)
+/// only tunes `common_flags`.  So a process created inside the binding and read
+/// outside it CONVERTS, and one created outside and read inside does NOT.  A
+/// fix that stored the flag on the process at creation would have the first two
+/// rows exactly backwards.
+///
+/// The write-back moves with it: with the flag set, `adjust_coding_eol_type`
+/// never fires, so `(process-coding-system P)` keeps `utf-8` where it would
+/// otherwise become `utf-8-dos` (entry 139).
+///
+/// Every row uses `:connection-type 'pipe` for entry 139's reason: on a pty,
+/// GNU's EOF read returns -1 and drops the decoder's carryover
+/// (src/process.c:6316).  Measured under GNU Emacs 31.0.90
+/// (`tmp/pw49/gnu.txt`).
+#[test]
+fn inhibit_eol_conversion_is_read_when_process_output_arrives_not_when_it_is_resolved() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw143p (coding bind-create bind-read)
+               (let ((buf (generate-new-buffer " *pw143*")))
+                 (unwind-protect
+                     (let ((p (let ((coding-system-for-read coding)
+                                    (inhibit-eol-conversion bind-create))
+                                (make-process :name "pw143" :buffer buf
+                                              :sentinel #'ignore
+                                              :connection-type 'pipe
+                                              :command (list "{sh}" "-c"
+                                                             "printf 'a\\r\\nb\\r\\n'")))))
+                       (let ((inhibit-eol-conversion bind-read))
+                         (while (accept-process-output p 1))
+                         (while (process-live-p p) (accept-process-output p 0.05)))
+                       (list (append (with-current-buffer buf (buffer-string)) nil)
+                             (process-coding-system p)
+                             last-coding-system-used))
+                   (kill-buffer buf))))
+             (defun pw143s (bind-send)
+               (let ((buf (generate-new-buffer " *pw143s*")))
+                 (unwind-protect
+                     (let ((p (let ((coding-system-for-read 'binary)
+                                    (coding-system-for-write 'utf-8-dos))
+                                (make-process :name "pw143s" :buffer buf
+                                              :sentinel #'ignore
+                                              :connection-type 'pipe
+                                              :command (list "{sh}" "-c" "cat")))))
+                       (let ((inhibit-eol-conversion bind-send))
+                         (process-send-string p "a\nb\n"))
+                       (process-send-eof p)
+                       (while (accept-process-output p 1))
+                       (while (process-live-p p) (accept-process-output p 0.05))
+                       (append (with-current-buffer buf (buffer-string)) nil))
+                   (kill-buffer buf))))
+             (list
+              ;; A CONCRETE `-dos' coding: bound at creation only -> converts;
+              ;; bound at read only -> does not.
+              (pw143p 'utf-8-dos t nil)
+              (pw143p 'utf-8-dos nil t)
+              (pw143p 'utf-8-dos t t)
+              (pw143p 'utf-8-dos nil nil)
+              ;; An UNDECIDED eol: the flag also suppresses entry 139's
+              ;; write-back, because there is no adjustment to write back.
+              (pw143p 'utf-8 t t)
+              (pw143p 'utf-8 nil nil)
+              ;; The ENCODE half, at send time (`send_process').
+              (pw143s t)
+              (pw143s nil)))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((97 10 98 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((97 13 10 98 13 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((97 13 10 98 13 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((97 10 98 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((97 13 10 98 13 10) (utf-8 . utf-8-unix) utf-8) ",
+            "((97 10 98 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "(97 10 98 10) ",
+            "(97 13 10 98 13 10))",
+        )
+    );
+}

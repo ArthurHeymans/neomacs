@@ -654,9 +654,13 @@ pub(crate) fn coding_name_eol(coding_system: &str) -> crate::emacs_core::coding:
 /// `encode_string` entry point.  Same rule, same GNU reference
 /// (`consume_chars`, src/coding.c:7607) -- convert the SOURCE once, above the
 /// codec match, so no codec branch is ever offered the decision.
-fn expand_source_eol_text(s: &str, coding_system: &str) -> String {
+fn expand_source_eol_text(
+    s: &str,
+    coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> String {
     use crate::emacs_core::coding::ResolvedEol;
-    match coding_name_eol(coding_system).for_encode() {
+    match coding_name_eol(coding_system).for_encode(eol_conversion) {
         ResolvedEol::Dos => {
             let mut out = String::with_capacity(s.len() + s.matches('\n').count());
             for ch in s.chars() {
@@ -724,9 +728,10 @@ fn coding_name_with_eol_spent(coding_system: &str) -> std::borrow::Cow<'_, str> 
 fn expand_source_eol(
     s: &crate::heap_types::LispString,
     coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> Option<crate::heap_types::LispString> {
     use crate::emacs_core::coding::ResolvedEol;
-    let eol = coding_name_eol(coding_system).for_encode();
+    let eol = coding_name_eol(coding_system).for_encode(eol_conversion);
     if matches!(eol, ResolvedEol::Unix) {
         return None;
     }
@@ -762,8 +767,15 @@ fn expand_source_eol(
 /// GNU's whole `decode_eol` (src/coding.c:6760) for a coding-system NAME:
 /// resolve the eol type against the text -- detecting when the name leaves it
 /// undecided -- and then convert.
-pub(crate) fn decode_eol_text(bytes: &[u8], coding_system: &str) -> Vec<u8> {
-    decode_eol_bytes(bytes, coding_name_eol(coding_system).for_decode(bytes))
+pub(crate) fn decode_eol_text(
+    bytes: &[u8],
+    coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> Vec<u8> {
+    decode_eol_bytes(
+        bytes,
+        coding_name_eol(coding_system).for_decode(bytes, eol_conversion),
+    )
 }
 
 /// One run of a subprocess's output, decoded and with its end of line resolved
@@ -798,12 +810,16 @@ pub(crate) struct DecodedProcessRun {
 /// runs outside every `decode_coding_*` (src/coding.c:7481) -- and it is the
 /// order the resolution has to be computed in for the answer to be reportable:
 /// the scan has to see the same bytes the conversion will touch.
-pub(crate) fn decode_process_run(bytes: &[u8], coding_system: &str) -> DecodedProcessRun {
+pub(crate) fn decode_process_run(
+    bytes: &[u8],
+    coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> DecodedProcessRun {
     use crate::emacs_core::coding::ResolvedEol;
     let eol = coding_name_eol(coding_system);
     let body = coding_name_with_eol_spent(coding_system);
-    let decoded = decode_bytes_to_lisp_string(bytes, &body);
-    let resolution = eol.resolve_for_decode(decoded.as_bytes());
+    let decoded = decode_bytes_to_lisp_string(bytes, &body, eol_conversion);
+    let resolution = eol.resolve_for_decode(decoded.as_bytes(), eol_conversion);
     let text = match resolution.eol() {
         ResolvedEol::Unix => decoded,
         // Rebuilt the way `decode_bytes_to_lisp_string` built it above, so the
@@ -822,16 +838,26 @@ pub(crate) fn decode_process_run(bytes: &[u8], coding_system: &str) -> DecodedPr
     }
 }
 
-/// GNU `CODING_ID_NAME (coding->id)` after one run of process output
-/// (src/process.c:6421): the coding system a decode reports having used.
+/// GNU `CODING_ID_NAME (coding->id)` after a decode: the coding system the
+/// decode reports having used, read out of the resolution that ran it.
 ///
-/// When `adjust_coding_eol_type` fired, that is the SUBSIDIARY it rewrote the
-/// id to -- and the subsidiary comes out of the coding system's own eol vector,
-/// which holds canonical names, so an alias reports its base's subsidiary
-/// (measured under GNU 31.0.90: `coding-system-for-read` `latin-1` over a
-/// CR-only child answers `iso-latin-1-mac`).  When it did not fire, the name is
-/// the one the coding system was set up with, verbatim.
-pub(crate) fn process_run_coding_name(
+/// This is the name behind `last-coding-system-used` (src/coding.c:9497 for a
+/// region, :9644 for a string) and
+/// behind `(process-coding-system P)` (src/process.c:6421) alike, because in
+/// GNU they are one field of one object.  When `adjust_coding_eol_type` fired,
+/// it is the SUBSIDIARY that call rewrote the id to -- and the subsidiary comes
+/// out of the coding system's own eol vector, which holds canonical names, so
+/// an alias reports its base's subsidiary (measured under GNU 31.0.90:
+/// `coding-system-for-read` `latin-1` over a CR-only child answers
+/// `iso-latin-1-mac`).  When it did not fire -- a concrete eol type, no
+/// terminator in the text, or `inhibit-eol-conversion` -- the name is the one
+/// the coding system was set up with, verbatim.
+///
+/// Taking the [`DecodeEolResolution`](crate::emacs_core::coding::DecodeEolResolution)
+/// rather than re-scanning the text is what keeps the reported name and the
+/// conversion the same decision: GNU makes them one call, and every caller here
+/// has to make them one value.
+pub(crate) fn adjusted_coding_name(
     coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     coding_system: &str,
     eol: crate::emacs_core::coding::DecodeEolResolution,
@@ -1289,8 +1315,12 @@ fn decode_utf8_to_emacs_bytes(bytes: &[u8]) -> Vec<u8> {
 /// Prepare raw bytes for utf-8(-emacs) decoding (EOL conversion + optional BOM
 /// strip) and decode straight to Emacs storage bytes — the sentinel-free
 /// counterpart of the utf-8 arm of [`decode_bytes`].
-fn decode_utf8_coding_to_emacs_bytes(bytes: &[u8], coding_system: &str) -> Vec<u8> {
-    let mut prepared = decode_eol_text(bytes, coding_system);
+fn decode_utf8_coding_to_emacs_bytes(
+    bytes: &[u8],
+    coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> Vec<u8> {
+    let mut prepared = decode_eol_text(bytes, coding_system, eol_conversion);
     if coding_system_consumes_utf8_signature(coding_system)
         && prepared.starts_with(&[0xEF, 0xBB, 0xBF])
     {
@@ -1352,22 +1382,31 @@ fn encode_utf8_emacs_text(s: &str) -> Vec<u8> {
     out
 }
 
-pub fn encode_lisp_string(s: &crate::heap_types::LispString, coding_system: &str) -> Vec<u8> {
+pub fn encode_lisp_string(
+    s: &crate::heap_types::LispString,
+    coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> Vec<u8> {
     // The single EOL pass, mirroring GNU `consume_chars` (src/coding.c:7607):
     // convert the SOURCE once, here, above every codec branch, and hand the
     // branches a coding name whose EOL leg is spent.  No branch below can skip
     // EOL conversion because no branch is given the chance to perform it.
-    let expanded = expand_source_eol(s, coding_system);
+    let expanded = expand_source_eol(s, coding_system, eol_conversion);
     encode_lisp_string_eol_spent(
         expanded.as_ref().unwrap_or(s),
         &coding_name_with_eol_spent(coding_system),
+        eol_conversion,
     )
 }
 
 /// The codec dispatch proper.  Its `coding_system` has already had its EOL leg
 /// spent by `encode_lisp_string`, and its source already carries the CR, so
 /// nothing here may perform EOL conversion.
-fn encode_lisp_string_eol_spent(s: &crate::heap_types::LispString, coding_system: &str) -> Vec<u8> {
+fn encode_lisp_string_eol_spent(
+    s: &crate::heap_types::LispString,
+    coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> Vec<u8> {
     if let Some((endian, bom)) = utf16_coding_variant(coding_system) {
         // GNU `encode_coding_utf_16` writes a signature whenever the coding
         // system's `:bom` is not nil (src/coding.c), so the auto `utf-16` -- whose
@@ -1403,7 +1442,7 @@ fn encode_lisp_string_eol_spent(s: &crate::heap_types::LispString, coding_system
         // all real scalar values, so decode the LispString's Emacs bytes to a
         // display string rather than the legacy in-Unicode storage form.
         let text = crate::emacs_core::emacs_char::to_utf8_lossy(s.as_bytes());
-        return encode_string(&text, coding_system);
+        return encode_string(&text, coding_system, eol_conversion);
     }
 
     let single_byte_charset = SingleByteCharset::for_coding_system(coding_system);
@@ -1466,8 +1505,12 @@ fn encode_lisp_string_eol_spent(s: &crate::heap_types::LispString, coding_system
 
 /// Encode a string to bytes using the specified coding system.
 /// Currently only UTF-8 is supported.
-pub fn encode_string(s: &str, coding_system: &str) -> Vec<u8> {
-    let eol_text = expand_source_eol_text(s, coding_system);
+pub fn encode_string(
+    s: &str,
+    coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> Vec<u8> {
+    let eol_text = expand_source_eol_text(s, coding_system, eol_conversion);
     if let Some((endian, bom)) = utf16_coding_variant(coding_system) {
         return encode_utf16_text(&eol_text, endian, bom != Utf16Bom::Without);
     }
@@ -1505,12 +1548,16 @@ pub fn encode_string(s: &str, coding_system: &str) -> Vec<u8> {
 
 /// Decode bytes to a string using the specified coding system.
 /// Currently only UTF-8 is supported.
-pub fn decode_bytes(bytes: &[u8], coding_system: &str) -> String {
+pub fn decode_bytes(
+    bytes: &[u8],
+    coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> String {
     if let Some((endian, bom)) = utf16_coding_variant(coding_system) {
         return decode_utf16_bytes(bytes, endian, bom);
     }
 
-    let mut bytes = decode_eol_text(bytes, coding_system);
+    let mut bytes = decode_eol_text(bytes, coding_system, eol_conversion);
     if coding_system_consumes_utf8_signature(coding_system)
         && bytes.starts_with(&[0xEF, 0xBB, 0xBF])
     {
@@ -1554,9 +1601,13 @@ pub fn decode_bytes(bytes: &[u8], coding_system: &str) -> String {
 /// uses the sentinel-free decoder (eight-bit -> 0x3FFF00+ extended, real PUA
 /// glyphs keep their code points); the other families decode to real Unicode
 /// text whose UTF-8 already IS the Emacs internal encoding.
-pub(crate) fn decode_bytes_emacs(bytes: &[u8], coding_system: &str) -> Vec<u8> {
+pub(crate) fn decode_bytes_emacs(
+    bytes: &[u8],
+    coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> Vec<u8> {
     if matches!(coding_system_family(coding_system), "utf-8" | "utf-8-emacs") {
-        return decode_utf8_coding_to_emacs_bytes(bytes, coding_system);
+        return decode_utf8_coding_to_emacs_bytes(bytes, coding_system, eol_conversion);
     }
     if is_byte_preserving_coding_system(coding_system) {
         // `binary`/`no-conversion`/`raw-text*` perform NO character-code
@@ -1572,16 +1623,22 @@ pub(crate) fn decode_bytes_emacs(bytes: &[u8], coding_system: &str) -> Vec<u8> {
         return crate::emacs_core::emacs_char::str_to_multibyte(&decode_eol_text(
             bytes,
             coding_system,
+            eol_conversion,
         ));
     }
-    decode_bytes(bytes, coding_system).into_bytes()
+    decode_bytes(bytes, coding_system, eol_conversion).into_bytes()
 }
 
 pub(crate) fn decode_bytes_to_lisp_string(
     bytes: &[u8],
     coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> crate::heap_types::LispString {
-    crate::heap_types::LispString::from_emacs_bytes(decode_bytes_emacs(bytes, coding_system))
+    crate::heap_types::LispString::from_emacs_bytes(decode_bytes_emacs(
+        bytes,
+        coding_system,
+        eol_conversion,
+    ))
 }
 
 fn is_byte_preserving_coding_system(coding_system: &str) -> bool {
@@ -2700,6 +2757,7 @@ fn coding_ascii_identity_fast_path(
     coding: &str,
     args: &[Value],
     encode: bool,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> bool {
     if !ctx.coding_systems.is_ascii_compatible(coding) {
         return false;
@@ -2723,6 +2781,16 @@ fn coding_ascii_identity_fast_path(
     // `raw-text` carries.  `coding_name_eol` is that resolution, and it is the
     // same function the conversion itself uses, so the fast path and the
     // conversion cannot disagree about whether EOL work is owed.
+    //
+    // `inhibit_eol_conversion` is the middle term of GNU's three-way escape
+    // (src/coding.c:9613-9615), and it is observable through this path rather
+    // than only through the text: taking the fast path returns a MULTIBYTE
+    // string on decode where the slow `raw-text` decoder builds a unibyte one.
+    // Measured under GNU 31.0.90, `(decode-coding-string "a\r\n" 'raw-text)` is
+    // unibyte normally and multibyte under `inhibit-eol-conversion'.
+    if eol_conversion == crate::emacs_core::coding::EolConversion::Inhibited {
+        return true;
+    }
     match coding_name_eol(coding) {
         crate::emacs_core::coding::EolType::Unix => true,
         _ => {
@@ -2908,7 +2976,7 @@ fn run_coding_with_conversion_hook(
                 vec![Value::symbol("stringp"), transformed],
             )
         })?;
-        let bytes = encode_lisp_string(transformed_str, base_coding);
+        let bytes = encode_lisp_string(transformed_str, base_coding, ctx.eol_conversion());
         Ok(Value::heap_string(
             crate::heap_types::LispString::from_unibyte(bytes),
         ))
@@ -2916,6 +2984,7 @@ fn run_coding_with_conversion_hook(
         let decoded = builtin_decode_coding_string_with_known(
             vec![args[0], Value::symbol(base_coding)],
             |_| true,
+            ctx.eol_conversion(),
         )?;
         run_post_read_conversion(ctx, hook, decoded)
     }
@@ -3652,24 +3721,6 @@ fn apply_explicit_eol_suffix(base: &str, eol: crate::emacs_core::coding::EolType
 /// line terminator at all: `decode_eol` guards the call with
 /// `if (eol_seen != EOL_SEEN_NONE)` (src/coding.c:6805), which is why
 /// `(decode-coding-string "abc" 'undecided)` still reports plain `undecided'.
-fn report_detected_eol(
-    ctx: &crate::emacs_core::eval::Context,
-    reported: &str,
-    eol: crate::emacs_core::coding::EolType,
-    decoded: &crate::heap_types::LispString,
-) -> String {
-    use crate::emacs_core::coding::EolType;
-    if !matches!(eol, EolType::Undecided) {
-        return reported.to_string();
-    }
-    let Some(detected) = crate::emacs_core::coding::detected_decoded_eol(decoded.as_bytes()) else {
-        return reported.to_string();
-    };
-    ctx.coding_systems
-        .canonical_name_for_detected_eol(reported, detected.suffix())
-        .unwrap_or_else(|| reported.to_string())
-}
-
 fn builtin_coding_string_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     mut args: Vec<Value>,
@@ -3731,7 +3782,7 @@ fn builtin_coding_string_in_context(
     // `make_unibyte_string` on encode (src/coding.c:9625-9627).
     if entry == CodingEntry::CodeConvertString
         && destination.is_none()
-        && coding_ascii_identity_fast_path(ctx, &coding, &args, encode)
+        && coding_ascii_identity_fast_path(ctx, &coding, &args, encode, ctx.eol_conversion())
     {
         ctx.set_variable(
             "last-coding-system-used",
@@ -3855,28 +3906,29 @@ fn builtin_coding_string_in_context(
         // encode/decode_coding_object — and therefore WITHOUT the pre/post
         // conversion hook.  So a pure-ASCII `(encode-coding-string "cafe'"
         // 'vietnamese-viqr)` is `"cafe'"`, not the VIQR-translated `café`.
-        let result = if coding_ascii_identity_fast_path(ctx, &coding, &args, encode) {
-            // Identity: encode yields a unibyte string, decode a multibyte one
-            // (GNU `make_unibyte_string` / `make_multibyte_string`).  The bytes
-            // are pure ASCII, so the two storage forms coincide.
-            let bytes = lisp_string_coding_source_bytes(
-                args[0].as_lisp_string().expect("string validated above"),
-            );
-            if encode {
-                Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+        let result =
+            if coding_ascii_identity_fast_path(ctx, &coding, &args, encode, ctx.eol_conversion()) {
+                // Identity: encode yields a unibyte string, decode a multibyte one
+                // (GNU `make_unibyte_string` / `make_multibyte_string`).  The bytes
+                // are pure ASCII, so the two storage forms coincide.
+                let bytes = lisp_string_coding_source_bytes(
+                    args[0].as_lisp_string().expect("string validated above"),
+                );
+                if encode {
+                    Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
+                } else {
+                    Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+                }
             } else {
-                Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
-            }
-        } else {
-            run_coding_with_conversion_hook(
-                ctx,
-                &args,
-                &base_type,
-                hook,
-                encode,
-                coding_name_eol(&coding),
-            )?
-        };
+                run_coding_with_conversion_hook(
+                    ctx,
+                    &args,
+                    &base_type,
+                    hook,
+                    encode,
+                    coding_name_eol(&coding),
+                )?
+            };
         let result_text = result
             .as_lisp_string()
             .ok_or_else(|| {
@@ -3913,7 +3965,7 @@ fn builtin_coding_string_in_context(
         let source = args[0]
             .as_lisp_string()
             .expect("string argument validated above");
-        if let Some(expanded) = expand_source_eol(source, &coding) {
+        if let Some(expanded) = expand_source_eol(source, &coding, ctx.eol_conversion()) {
             args[0] = Value::heap_string(expanded);
             coding = coding_name_with_eol_spent(&coding).into_owned();
             // The fall-through arm re-reads `args[1]`, so the name has to be
@@ -3987,7 +4039,7 @@ fn builtin_coding_string_in_context(
             let bytes = encode_via_charset_list(&source_string(), charset_list);
             Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
         } else {
-            builtin_encode_coding_string_with_known(args, |_| true)?
+            builtin_encode_coding_string_with_known(args, |_| true, ctx.eol_conversion())?
         }
     } else if let Some(imap) = utf7_coding {
         let bytes = decode_via_utf7(&lisp_string_coding_source_bytes(&source_string()), imap);
@@ -4029,7 +4081,7 @@ fn builtin_coding_string_in_context(
         let (bytes, runs) = decode_via_charset_list(&source_bytes, charset_list);
         decoded_string_with_charset_runs(bytes, runs)
     } else {
-        builtin_decode_coding_string_with_known(args, |_| true)?
+        builtin_decode_coding_string_with_known(args, |_| true, ctx.eol_conversion())?
     };
     // The single decode-side pass (GNU `decode_coding`, src/coding.c:7481).
     // `for_decode` is where GNU's `decode_eol` resolves a VECTOR eol_type by
@@ -4038,21 +4090,31 @@ fn builtin_coding_string_in_context(
     // bytes: in UTF-16 a CR is the byte pair 0D 00.
     let result = match result.as_lisp_string() {
         Some(decoded) => {
-            let resolved = decoded_eol.for_decode(decoded.as_bytes());
+            let resolution =
+                decoded_eol.resolve_for_decode(decoded.as_bytes(), ctx.eol_conversion());
+            // GNU's `adjust_coding_eol_type` (src/coding.c:6471) picks the eol
+            // type the conversion runs with AND rewrites `coding->id` in ONE
+            // call, and `code_convert_string` reports that id
+            // (src/coding.c:9497 for a region, :9644 for a string) -- so an
+            // undecided eol that resolved moves
+            // `last-coding-system-used' even when it resolved to unix.  Both
+            // halves come out of the single `resolution` here; deriving the
+            // name from a second scan of the text is how the two can disagree,
+            // which is exactly what `inhibit-eol-conversion' would have made
+            // them do.
+            reported_coding =
+                adjusted_coding_name(&ctx.coding_systems, &reported_coding, resolution);
             // Only a dos/mac result rebuilds the string; a unix one is a no-op
             // and must keep the decoded object as it is, text properties (the
             // source-charset runs) included.
-            if matches!(resolved, crate::emacs_core::coding::ResolvedEol::Unix) {
-                // GNU's `adjust_coding_eol_type` (src/coding.c:6471) rewrites
-                // `coding->id` for a unix result too, and `code_convert_string`
-                // reports that name (src/coding.c:9622), so an undecided eol
-                // that resolved still moves `last-coding-system-used'.
-                reported_coding = report_detected_eol(ctx, &reported_coding, decoded_eol, decoded);
+            if matches!(
+                resolution.eol(),
+                crate::emacs_core::coding::ResolvedEol::Unix
+            ) {
                 result
             } else {
-                let bytes = decode_eol_bytes(decoded.as_bytes(), resolved);
+                let bytes = decode_eol_bytes(decoded.as_bytes(), resolution.eol());
                 let multibyte = decoded.is_multibyte();
-                reported_coding = report_detected_eol(ctx, &reported_coding, decoded_eol, decoded);
                 if multibyte {
                     Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
                 } else {
@@ -4522,15 +4584,27 @@ pub(crate) fn builtin_unibyte_string_p(args: Vec<Value>) -> EvalResult {
     }
 }
 
-/// `(encode-coding-string STRING CODING-SYSTEM)` -> string
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+/// `(encode-coding-string STRING CODING-SYSTEM)` -> string, with end-of-line
+/// conversion ENABLED.
+///
+/// Test-only, and `#[cfg(test)]` for the reason entry 143 records: an
+/// un-parameterised spelling of a coding conversion is a spelling that has
+/// decided what `inhibit-eol-conversion' holds without asking.  Production code
+/// reaches the codec through `builtin_encode_coding_string_with_known`, which
+/// cannot be called without saying.
+#[cfg(test)]
 pub(crate) fn builtin_encode_coding_string(args: Vec<Value>) -> EvalResult {
-    builtin_encode_coding_string_with_known(args, known_coding_system)
+    builtin_encode_coding_string_with_known(
+        args,
+        known_coding_system,
+        crate::emacs_core::coding::EolConversion::Enabled,
+    )
 }
 
 pub(crate) fn builtin_encode_coding_string_with_known(
     args: Vec<Value>,
     known: impl FnOnce(&str) -> bool,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> EvalResult {
     expect_min_args("encode-coding-string", &args, 2)?;
     if args.len() > 4 {
@@ -4570,21 +4644,28 @@ pub(crate) fn builtin_encode_coding_string_with_known(
     {
         return Ok(args[0]);
     }
-    let bytes = encode_lisp_string(string, &coding);
+    let bytes = encode_lisp_string(string, &coding, eol_conversion);
     Ok(Value::heap_string(
         crate::heap_types::LispString::from_unibyte(bytes),
     ))
 }
 
-/// `(decode-coding-string STRING CODING-SYSTEM)` -> string
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
+/// `(decode-coding-string STRING CODING-SYSTEM)` -> string, with end-of-line
+/// conversion ENABLED.  Test-only; see
+/// [`builtin_encode_coding_string`] for why it is `#[cfg(test)]`.
+#[cfg(test)]
 pub(crate) fn builtin_decode_coding_string(args: Vec<Value>) -> EvalResult {
-    builtin_decode_coding_string_with_known(args, known_coding_system)
+    builtin_decode_coding_string_with_known(
+        args,
+        known_coding_system,
+        crate::emacs_core::coding::EolConversion::Enabled,
+    )
 }
 
 pub(crate) fn builtin_decode_coding_string_with_known(
     args: Vec<Value>,
     known: impl FnOnce(&str) -> bool,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> EvalResult {
     expect_min_args("decode-coding-string", &args, 2)?;
     if args.len() > 4 {
@@ -4630,7 +4711,7 @@ pub(crate) fn builtin_decode_coding_string_with_known(
     }
     if is_byte_preserving_coding_system(&coding) {
         let bytes = if coding.starts_with("raw-text") {
-            decode_eol_text(&bytes, &coding)
+            decode_eol_text(&bytes, &coding, eol_conversion)
         } else {
             bytes
         };
@@ -4644,11 +4725,13 @@ pub(crate) fn builtin_decode_coding_string_with_known(
         // code points — never the colliding in-Unicode sentinels (issue #131).
         return Ok(Value::heap_string(
             crate::heap_types::LispString::from_emacs_bytes(decode_utf8_coding_to_emacs_bytes(
-                &bytes, &coding,
+                &bytes,
+                &coding,
+                eol_conversion,
             )),
         ));
     }
-    let decoded = decode_bytes(&bytes, &coding);
+    let decoded = decode_bytes(&bytes, &coding, eol_conversion);
     let charset = match SingleByteCharset::for_coding_system(&coding) {
         Some(single_byte) => Some((single_byte.source_charset_name(), true)),
         None => match coding_system_family(&coding) {

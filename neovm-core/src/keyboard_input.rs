@@ -34,14 +34,30 @@ impl Default for KeyboardInputDecoder {
 }
 
 impl KeyboardInputDecoder {
-    pub(crate) fn push(&mut self, bytes: &[u8], coding_system: &str) -> Vec<EmacsChar> {
+    /// EOL_CONVERSION is required for the reason entry 143 records: this
+    /// decoder's `SingleByte` arm goes through the shared string decoder, whose
+    /// end-of-line pass GNU guards with `inhibit_eol_conversion` like every
+    /// other.  The decoder looks context-free, but it is driven from
+    /// `Context::handle_read_char_input_event`, so the answer is always in
+    /// reach at the point the bytes arrive.
+    pub(crate) fn push(
+        &mut self,
+        bytes: &[u8],
+        coding_system: &str,
+        eol_conversion: crate::emacs_core::coding::EolConversion,
+    ) -> Vec<EmacsChar> {
         let mut decoded = Vec::new();
         if self.coding_system != coding_system {
             decoded.extend(self.finish_current());
             self.coding_system = coding_system.to_owned();
             self.decoder = decoder_for(coding_system);
         }
-        decoded.extend(decode_with(&mut self.decoder, bytes, coding_system));
+        decoded.extend(decode_with(
+            &mut self.decoder,
+            bytes,
+            coding_system,
+            eol_conversion,
+        ));
         decoded
     }
 
@@ -88,14 +104,21 @@ fn decoder_for(coding_system: &str) -> DecoderKind {
     }
 }
 
-fn decode_with(decoder: &mut DecoderKind, bytes: &[u8], coding_system: &str) -> Vec<EmacsChar> {
+fn decode_with(
+    decoder: &mut DecoderKind,
+    bytes: &[u8],
+    coding_system: &str,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
+) -> Vec<EmacsChar> {
     match decoder {
         DecoderKind::Utf8 { pending } => decode_utf8_incremental(pending, bytes),
         DecoderKind::EmacsInternal { pending } => decode_emacs_internal(pending, bytes),
-        DecoderKind::SingleByte => crate::encoding::decode_bytes(bytes, coding_system)
-            .chars()
-            .map(EmacsChar::from_char)
-            .collect(),
+        DecoderKind::SingleByte => {
+            crate::encoding::decode_bytes(bytes, coding_system, eol_conversion)
+                .chars()
+                .map(EmacsChar::from_char)
+                .collect()
+        }
         DecoderKind::BytePreserving => bytes
             .iter()
             .copied()

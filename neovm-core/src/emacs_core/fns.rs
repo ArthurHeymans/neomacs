@@ -766,6 +766,7 @@ pub(crate) fn builtin_md5(eval: &mut super::eval::Context, args: Vec<Value>) -> 
             args.get(1),
             args.get(2),
             md5_coding_system_name(&args).as_deref(),
+            eval.eol_conversion(),
         )?)),
         ValueKind::Veclike(VecLikeType::Buffer) => {
             let input = encoded_hash_slice_for_buffer_in_context(
@@ -893,13 +894,18 @@ fn md5_hex_for_string(
     start_raw: Option<&Value>,
     end_raw: Option<&Value>,
     coding_system: Option<&str>,
+    eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> Result<String, Flow> {
     let string = object
         .as_lisp_string()
         .expect("md5_hex_for_string only accepts string object");
     let encoded;
     let (bytes, len, multibyte) = if string.is_multibyte() {
-        encoded = crate::encoding::encode_lisp_string(string, coding_system.unwrap_or("utf-8"));
+        encoded = crate::encoding::encode_lisp_string(
+            string,
+            coding_system.unwrap_or("utf-8"),
+            eol_conversion,
+        );
         (&encoded[..], encoded.len() as i64, false)
     } else {
         (

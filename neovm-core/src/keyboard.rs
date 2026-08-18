@@ -4598,12 +4598,12 @@ impl crate::emacs_core::eval::Context {
                     self.coding_systems.keyboard_coding_sym(),
                 )
                 .to_owned();
-                let characters = self
-                    .command_loop
-                    .keyboard
-                    .kboard
-                    .tty_input_decoder
-                    .push(&bytes, &coding_system);
+                let eol_conversion = self.eol_conversion();
+                let characters = self.command_loop.keyboard.kboard.tty_input_decoder.push(
+                    &bytes,
+                    &coding_system,
+                    eol_conversion,
+                );
                 for character in characters.into_iter().rev() {
                     self.command_loop.keyboard.pending_input_events.push_front(
                         InputEvent::TtyCharacter {

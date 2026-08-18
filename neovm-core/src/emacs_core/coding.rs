@@ -198,12 +198,17 @@ impl EolType {
     ///     eol_type = Qunix;
     /// ```
     ///
-    /// so encoding never detects.  Only decoding does.
-    pub(crate) fn for_encode(self) -> ResolvedEol {
-        match self {
-            EolType::Dos => ResolvedEol::Dos,
-            EolType::Mac => ResolvedEol::Mac,
-            EolType::Unix | EolType::Undecided => ResolvedEol::Unix,
+    /// so encoding never detects.  Only decoding does.  The first term of that
+    /// expression is [`EolConversion`], which is why it is a parameter and not
+    /// a lookup: see that type for why it cannot be a global here.
+    pub(crate) fn for_encode(self, eol_conversion: EolConversion) -> ResolvedEol {
+        match eol_conversion {
+            EolConversion::Inhibited => ResolvedEol::Unix,
+            EolConversion::Enabled => match self {
+                EolType::Dos => ResolvedEol::Dos,
+                EolType::Mac => ResolvedEol::Mac,
+                EolType::Unix | EolType::Undecided => ResolvedEol::Unix,
+            },
         }
     }
 
@@ -214,8 +219,8 @@ impl EolType {
     /// (src/coding.c:6783-6806) and calling `adjust_coding_eol_type`.  An
     /// undecided eol type therefore means DETECT, not "leave alone" -- the
     /// distinction this whole type exists to keep visible.
-    pub(crate) fn for_decode(self, decoded: &[u8]) -> ResolvedEol {
-        self.resolve_for_decode(decoded).eol()
+    pub(crate) fn for_decode(self, decoded: &[u8], eol_conversion: EolConversion) -> ResolvedEol {
+        self.resolve_for_decode(decoded, eol_conversion).eol()
     }
 
     /// The same resolution, keeping GNU's OTHER half of it.
@@ -234,7 +239,24 @@ impl EolType {
     /// safe only where nothing reports.  Anything that reports must take this
     /// one, because a `ResolvedEol` on its own cannot say whether the name
     /// moved with it.
-    pub(crate) fn resolve_for_decode(self, decoded: &[u8]) -> DecodeEolResolution {
+    pub(crate) fn resolve_for_decode(
+        self,
+        decoded: &[u8],
+        eol_conversion: EolConversion,
+    ) -> DecodeEolResolution {
+        // `decode_eol`'s first line, before the VECTOR branch and before the
+        // conversion (src/coding.c:6767):
+        //
+        //   if (EQ (eol_type, Qunix) || inhibit_eol_conversion)
+        //     return;
+        //
+        // so the flag suppresses `adjust_coding_eol_type` -- the NAME -- as
+        // well as the byte transformation.  Measured under GNU 31.0.90:
+        // `(let ((inhibit-eol-conversion t)) (decode-coding-string "a\r\n" 'utf-8))`
+        // leaves `last-coding-system-used' at `utf-8', not `utf-8-dos'.
+        if eol_conversion == EolConversion::Inhibited {
+            return DecodeEolResolution::Inhibited;
+        }
         match self {
             EolType::Unix => DecodeEolResolution::Specified(ResolvedEol::Unix),
             EolType::Dos => DecodeEolResolution::Specified(ResolvedEol::Dos),
@@ -243,6 +265,53 @@ impl EolType {
                 Some(resolved) => DecodeEolResolution::Adjusted(resolved),
                 None => DecodeEolResolution::NotSeen,
             },
+        }
+    }
+}
+
+/// GNU's `inhibit-eol-conversion` (`DEFVAR_BOOL`, src/coding.c:12022), carried
+/// as a VALUE.
+///
+/// GNU reads a process-wide C global at every end-of-line decision -- eight
+/// decoders' `eol_dos` (src/coding.c:1250-1251 and seven copies),
+/// `consume_chars` (:7625), `decode_eol` (:6767), `decode_coding` (:7481),
+/// `setup_coding_system` (:5681), `check_ascii` (:6181), `detect_coding`
+/// (:6569) and `code_convert_string`'s identity fast path (:9619).  A global is
+/// not available here and must not be faked: the obarray belongs to a
+/// `Context`, `LispBoolFwd` cells are copied per thread
+/// (`neovm-core/src/emacs_core/forward.rs`), and the unit suite runs many
+/// `Context`s on parallel threads, so a static would be read by the wrong
+/// session.
+///
+/// It is therefore a REQUIRED parameter of the two functions that resolve an
+/// [`EolType`] -- [`EolType::for_encode`] and [`EolType::resolve_for_decode`]
+/// -- which entry 139 made the only two ways to get a [`ResolvedEol`].  No
+/// conversion in the editor can resolve an end-of-line type without having
+/// been told what this variable holds, because there is no spelling that
+/// omits it.
+///
+/// It is read at CONVERSION time, never at resolution time, because that is
+/// where GNU reads it.  Measured under GNU 31.0.90: a subprocess created inside
+/// `(let ((inhibit-eol-conversion t)) ...)` and read outside it CONVERTS, and
+/// one created outside and read inside does NOT -- the binding that counts is
+/// the one live when the bytes arrive, not the one live when the coding system
+/// was chosen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EolConversion {
+    /// `inhibit-eol-conversion` is nil.
+    Enabled,
+    /// `inhibit-eol-conversion` is non-nil.
+    Inhibited,
+}
+
+impl EolConversion {
+    /// The variable's Lisp value, read the way GNU's C code sees a
+    /// `DEFVAR_BOOL`: any non-nil value inhibits.
+    pub(crate) fn from_lisp(value: Value) -> Self {
+        if value.is_nil() {
+            EolConversion::Enabled
+        } else {
+            EolConversion::Inhibited
         }
     }
 }
@@ -269,15 +338,27 @@ pub(crate) enum DecodeEolResolution {
     /// (GNU `EOL_SEEN_NONE`).  Nothing converts, and -- because
     /// `adjust_coding_eol_type` is skipped -- the name stays undecided.
     NotSeen,
+    /// `inhibit-eol-conversion` was non-nil, so `decode_eol` returned on its
+    /// first line (src/coding.c:6767) -- before the VECTOR branch and before
+    /// the conversion.  Nothing converts and the name does not move, whatever
+    /// the coding system's own eol type was.
+    ///
+    /// This is a state of its own rather than [`Self::NotSeen`] because the two
+    /// have different causes and only one of them is a property of the text:
+    /// `NotSeen` says the decoded bytes held no terminator, `Inhibited` says
+    /// nobody was allowed to look.
+    Inhibited,
 }
 
 impl DecodeEolResolution {
-    /// The eol type the conversion runs with.  `NotSeen` converts nothing,
-    /// which is `Qunix` (`decode_eol` returns immediately, src/coding.c:6765).
+    /// The eol type the conversion runs with.  `NotSeen` and `Inhibited`
+    /// convert nothing, which is `Qunix` -- both are ways for `decode_eol` to
+    /// finish without touching a byte (src/coding.c:6765 for the second,
+    /// :6805's `eol_seen != EOL_SEEN_NONE` guard for the first).
     pub(crate) fn eol(self) -> ResolvedEol {
         match self {
             DecodeEolResolution::Specified(eol) | DecodeEolResolution::Adjusted(eol) => eol,
-            DecodeEolResolution::NotSeen => ResolvedEol::Unix,
+            DecodeEolResolution::NotSeen | DecodeEolResolution::Inhibited => ResolvedEol::Unix,
         }
     }
 
@@ -285,7 +366,9 @@ impl DecodeEolResolution {
     pub(crate) fn adjusted(self) -> Option<ResolvedEol> {
         match self {
             DecodeEolResolution::Adjusted(eol) => Some(eol),
-            DecodeEolResolution::Specified(_) | DecodeEolResolution::NotSeen => None,
+            DecodeEolResolution::Specified(_)
+            | DecodeEolResolution::NotSeen
+            | DecodeEolResolution::Inhibited => None,
         }
     }
 }

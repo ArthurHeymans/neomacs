@@ -337,3 +337,43 @@ fn call_process_output_eol_is_detected_for_an_undecided_eol_coding_system() {
         );
     }
 }
+
+/// DIVERGENCES.md entry 143: `call-process` honours `inhibit-eol-conversion`
+/// through the same `struct coding_system` its output is decoded with.
+///
+/// `Fcall_process` reads the child into `process_coding` and then reports
+/// `CODING_ID_NAME (process_coding.id)` (src/callproc.c:913).  With the flag
+/// set, `decode_eol` returned before `adjust_coding_eol_type`
+/// (src/coding.c:6767), so the id never moved and the reported name is the one
+/// the chain resolved -- `utf-8`, not `utf-8-dos`.
+///
+/// Measured under GNU Emacs 31.0.90 (`tmp/pw49/gnu.txt`).
+#[cfg(unix)]
+#[test]
+fn call_process_output_honours_inhibit_eol_conversion() {
+    crate::test_utils::init_test_tracing();
+    let printf = find_bin("printf");
+    for (coding, inhibit, expected) in [
+        ("utf-8-dos", "t", "OK ((97 13 10 98 13 10) utf-8-dos)"),
+        ("utf-8-dos", "nil", "OK ((97 10 98 10) utf-8-dos)"),
+        ("utf-8", "t", "OK ((97 13 10 98 13 10) utf-8)"),
+        ("utf-8", "nil", "OK ((97 10 98 10) utf-8-dos)"),
+        ("undecided", "t", "OK ((97 13 10 98 13 10) undecided)"),
+        ("undecided", "nil", "OK ((97 10 98 10) undecided-dos)"),
+    ] {
+        let mut eval = Context::new();
+        let observed = eval.eval_str(&format!(
+            r#"(progn
+                 (setq last-coding-system-used 'unset)
+                 (let ((inhibit-eol-conversion {inhibit})
+                       (coding-system-for-read '{coding}))
+                   (call-process "{printf}" nil t nil "a\\r\\nb\\r\\n"))
+                 (list (append (buffer-string) nil) last-coding-system-used))"#
+        ));
+        assert_eq!(
+            format_eval_result(&observed),
+            expected,
+            "coding {coding}, inhibit-eol-conversion {inhibit}"
+        );
+    }
+}
