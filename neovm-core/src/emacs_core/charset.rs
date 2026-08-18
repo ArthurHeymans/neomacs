@@ -1486,8 +1486,10 @@ pub(crate) fn builtin_charset_priority_list(args: Vec<Value>) -> EvalResult {
         let reg = slot.borrow();
         let priority = reg.priority_list();
         if highestp {
+            // GNU Fcharset_priority_list (charset.c:2163): HIGHESTP returns
+            // the highest-priority charset's NAME SYMBOL itself, not a list.
             if let Some(first) = priority.first() {
-                Ok(Value::list(vec![Value::from_sym_id(*first)]))
+                Ok(Value::from_sym_id(*first))
             } else {
                 Ok(Value::NIL)
             }

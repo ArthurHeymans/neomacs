@@ -158,10 +158,10 @@ fn charset_priority_list_full() {
 #[test]
 fn charset_priority_list_highestp() {
     crate::test_utils::init_test_tracing();
+    // GNU Fcharset_priority_list (charset.c:2163): HIGHESTP returns the
+    // highest-priority charset's name SYMBOL itself, not a one-element list.
     let r = builtin_charset_priority_list(vec![Value::T]).unwrap();
-    let items = list_to_vec(&r).unwrap();
-    assert_eq!(items.len(), 1);
-    assert!(items[0].is_symbol_named("ascii"));
+    assert!(r.is_symbol_named("ascii"));
 }
 
 #[test]

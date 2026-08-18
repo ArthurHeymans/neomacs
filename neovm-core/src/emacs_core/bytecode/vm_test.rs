@@ -7841,7 +7841,7 @@ fn vm_category_charset_and_case_table_builtins_use_shared_runtime_state() {
                    (consp (charset-priority-list))
                    (progn
                      (set-charset-priority 'ascii)
-                     (equal (charset-priority-list t) '(ascii)))
+                     (eq (charset-priority-list t) 'ascii))
                    (null (define-charset-alias 'latin-1 'ascii))
                    (charsetp 'latin-1)
                    (null (declare-equiv-charset 1 94 ?A 'ascii))
