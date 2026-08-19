@@ -1306,12 +1306,16 @@ fn display_queries_default_to_selected_frame_window_system_surface() {
         builtin_display_graphic_p(&mut eval, vec![]).unwrap(),
         Value::T
     );
+    // `display-color-cells' is lisp/frame.el:2966, not a subr (DIVERGENCES.md
+    // 157).  Its body dispatches on `framep-on-display' and, for a `neo'
+    // frame, calls the C `x-display-color-cells' (src/xfns.c:5714) -- which is
+    // what this bare evaluator can ask.
     assert_eq!(
-        builtin_display_color_cells(&mut eval, vec![]).unwrap(),
+        builtin_x_display_color_cells(&mut eval, vec![]).unwrap(),
         Value::fixnum(16_777_216)
     );
     assert_eq!(
-        builtin_display_color_cells(&mut eval, vec![frame]).unwrap(),
+        builtin_x_display_color_cells(&mut eval, vec![frame]).unwrap(),
         Value::fixnum(16_777_216)
     );
     assert_eq!(
@@ -3367,8 +3371,16 @@ fn eval_display_queries_accept_live_frame_designator() {
         builtin_display_screens(&mut eval, vec![Value::make_frame(frame_id)]).unwrap(),
         Value::fixnum(1)
     );
+    // No window system, so `display-color-cells' (lisp/frame.el:2966) falls to
+    // the `t' arm of its `cond' and calls the C `tty-display-color-cells'
+    // (src/term.c:2226).  DIVERGENCES.md 157 deleted the Rust subr for the
+    // Lisp name; the primitive beneath it is what a bare evaluator asks.
     assert_eq!(
-        builtin_display_color_cells(&mut eval, vec![Value::make_frame(frame_id)]).unwrap(),
+        crate::emacs_core::terminal::pure::builtin_tty_display_color_cells(
+            &mut eval,
+            vec![Value::make_frame(frame_id)]
+        )
+        .unwrap(),
         Value::fixnum(0)
     );
     assert_eq!(
@@ -3528,7 +3540,9 @@ fn eval_display_queries_string_designator_reports_missing_display() {
         vec![Value::string("x")],
     ));
     assert_missing_display(builtin_display_screens(&mut eval, vec![Value::string("x")]));
-    assert_missing_display(builtin_display_color_cells(
+    // `display-color-cells' is Lisp (lisp/frame.el:2966); the missing-display
+    // error belongs to the C primitive its `memq' arm calls.
+    assert_missing_display(builtin_x_display_color_cells(
         &mut eval,
         vec![Value::string("x")],
     ));

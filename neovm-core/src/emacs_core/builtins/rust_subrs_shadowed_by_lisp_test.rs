@@ -14,15 +14,22 @@
 //! constant 0.  Every other name below has no C implementation in GNU at all
 //! -- `grep 'DEFUN ("NAME"' src/*.c` finds nothing -- so ours is invention.
 //!
-//! After DIVERGENCES.md 154 the list is two names long: GNU's own placeholder,
-//! and `display-color-cells', which is a DEBT -- our `faces.el' load reaches it
-//! before `frame.el' defines it, which GNU's cannot.  Adding to the list is not
-//! forbidden, but it must be deliberate, so `ShadowJustification' makes an
-//! entry say WHICH of those two things it is and cite the evidence: a
-//! placeholder cites the GNU `src/' line and the `.el' that overrides it, a debt
-//! cites the `.el' that owns the name and the caller that has to move first.  A
-//! name cannot be parked here with no justification, which is how the list
-//! reached fifty.
+//! After DIVERGENCES.md 157 the list is ONE name long, and it is GNU's own.
+//! 154 left two -- the placeholder, and `display-color-cells' filed as a DEBT
+//! because our `faces.el' load reached it before `frame.el' defined it.  157
+//! removed the cause: a `background-mode' frame parameter Rust seeded before
+//! loadup, which GNU's `make_initial_frame' (src/frame.c:1423) does not set and
+//! `frame-set-background-mode' (lisp/frame.el:1526) computes AFTER loadup.
+//! With the seeding gone the caller is gone and the subr went with it.
+//!
+//! That is why the justification is now a STRUCT and not an enum.  While a debt
+//! existed the type had to keep the two kinds apart, so `ShadowJustification'
+//! had a `GnuShipsTheSamePlaceholder' variant and an `UnjustifiedBootstrapCaller'
+//! one.  There is no debt now, so the debt variant is GONE: the only shape this
+//! list can hold is a placeholder GNU itself ships, with the `src/' line that
+//! ships it and the `.el' line that overrides it.  A future debt cannot be
+//! parked here as a data row -- it has to reintroduce the variant, which is a
+//! type change a reviewer sees.
 //!
 //! `bootstrap_kill_ring_commands_are_not_rust_subrs`
 //! (`neovm-core/src/emacs_core/kill_ring_test.rs:46`) is the same check
@@ -35,31 +42,22 @@ use crate::emacs_core::value::{ValueKind, VecLikeType};
 
 /// Why a name is allowed to sit on the shadow list.
 ///
-/// The two reasons are different in KIND, and keeping them apart is the point
-/// of the type.  GNU has exactly one shadow and it is a deliberate placeholder
-/// with a comment saying so; anything else on this list is a Rust function
-/// nothing will ever call, kept only because something reaches the name before
-/// its `.el` loads -- which is a bug with a location, not a design.  A bare
-/// `&[&str]` could not tell those apart, and that is how the list reached fifty.
-enum ShadowJustification {
-    /// GNU ships the same C placeholder ON PURPOSE, and says why in `src/`.
-    GnuShipsTheSamePlaceholder {
-        /// The GNU `src/` line that registers the placeholder, and its reason.
-        gnu_c_placeholder: &'static str,
-        /// The `.el` line that overrides it, in GNU and here.
-        gnu_lisp_override: &'static str,
-    },
-    /// NOT justified.  GNU has no C version at all, so GNU's bootstrap cannot
-    /// reach this name before its `.el` loads -- and ours does.  The entry is a
-    /// debt: it records the Rust-side caller that has to move before the subr
-    /// can be deleted like the rest of its group.
-    UnjustifiedBootstrapCaller {
-        /// The `.el` line that owns the name in GNU.
-        gnu_lisp_definition: &'static str,
-        /// The bootstrap-window caller that keeps the subr alive, and the
-        /// measurement that found it.
-        why_it_cannot_go_yet: &'static str,
-    },
+/// There is exactly ONE admissible reason, and this struct is it: GNU ships the
+/// same C placeholder on purpose and says so in `src/`.  Any other Rust subr a
+/// preloaded `.el` overwrites is a Rust reimplementation of Lisp we already
+/// ship -- delete the subr instead of describing it here.
+///
+/// Until DIVERGENCES.md 157 this was an `enum` with a second variant,
+/// `UnjustifiedBootstrapCaller`, for a name that could not go yet
+/// (`display-color-cells`, held by a frame parameter Rust seeded before
+/// loadup).  157 removed the seeding, the subr went, and the variant went with
+/// it -- so a debt is no longer REPRESENTABLE on this list.  Re-adding one
+/// means re-adding the variant, deliberately, in a diff a reviewer reads.
+struct GnuShipsTheSamePlaceholder {
+    /// The GNU `src/` line that registers the placeholder, and its reason.
+    gnu_c_placeholder: &'static str,
+    /// The `.el` line that overrides it, in GNU and here.
+    gnu_lisp_override: &'static str,
 }
 
 /// A registered Rust subr whose function cell, after `loadup.el`, holds
@@ -67,8 +65,8 @@ enum ShadowJustification {
 struct ReviewedShadow {
     /// The name whose function cell the preloads overwrite.
     name: &'static str,
-    /// Why it is still here.
-    justification: ShadowJustification,
+    /// Why it is still here.  One shape only -- see the struct's doc comment.
+    justification: GnuShipsTheSamePlaceholder,
 }
 
 /// Registered Rust subrs whose function cell, after `loadup.el`, holds
@@ -77,37 +75,14 @@ struct ReviewedShadow {
 /// GNU source for each name was checked with `grep 'DEFUN ("NAME"' src/*.c`
 /// against emacs-mirror 31.0.90 (0ee48ac4df2).
 const SHADOWED_BY_PRELOADED_LISP: &[ReviewedShadow] = &[
-    // The one justified entry: GNU ships this C placeholder ON PURPOSE and
-    // window.el overrides it.
+    // The only entry, and the only kind of entry: GNU ships this C placeholder
+    // ON PURPOSE and window.el overrides it.
     ReviewedShadow {
         name: "frame-windows-min-size",
-        justification: ShadowJustification::GnuShipsTheSamePlaceholder {
+        justification: GnuShipsTheSamePlaceholder {
             gnu_c_placeholder: "src/frame.c:494-502, prefixed \"Placeholder used \
                  by temacs -nw before window.el is loaded\", returns a constant 0",
             gnu_lisp_override: "lisp/window.el:1899 (`frame-windows-min-size')",
-        },
-    },
-    // The one DEBT: eighteenth of DIVERGENCES.md 154's group, and the only one
-    // of the eighteen that could not go.
-    ReviewedShadow {
-        name: "display-color-cells",
-        justification: ShadowJustification::UnjustifiedBootstrapCaller {
-            gnu_lisp_definition: "lisp/frame.el:2966 -- and `loadup.el' loads \
-                 `frame' at :255, ninety-five files after `faces' at :160, so \
-                 the name is VOID in GNU while faces.el loads.  GNU bootstraps, \
-                 which proves GNU's faces.el load never asks for it.",
-            why_it_cannot_go_yet: "our faces.el load DOES ask: \
-                 `custom-declare-face show-paren-match' (lisp/faces.el:3161) -> \
-                 face-spec-set -> face-spec-recalc -> face-spec-choose -> \
-                 face-spec-set-match-display on the clause \
-                 `((background dark) (min-colors 4))' -> `display-color-cells' \
-                 (lisp/faces.el:1588).  The `background' conjunct matches only \
-                 because `ensure_selected_frame_id_in_state_with_policy' \
-                 (window_cmds/mod.rs) seeds `background-mode' = `dark', which \
-                 GNU computes later in `frame-set-background-mode'.  Deleting \
-                 the subr costs 1124 tests -- every test that boots a runtime. \
-                 See `display_color_cells_is_the_one_that_could_not_go_yet' in \
-                 lisp_only_window_frame_names_test.rs.",
         },
     },
     // -- The six type predicates and the five `defalias' names that used to
@@ -140,7 +115,9 @@ const SHADOWED_BY_PRELOADED_LISP: &[ReviewedShadow] = &[
     // eighteen already answered from window.el, frame.el and faces.el, and each
     // one's C neighbour -- from `delete-window-internal' to `xw-color-values'
     // to `x-create-frame' -- stays registered.  The eighteenth,
-    // `display-color-cells', is the entry above.  See
+    // `display-color-cells', was held back -- and it is GONE too
+    // (DIVERGENCES.md 157), which took the count from 2 to 1 and closed the
+    // campaign: what is left is GNU's own placeholder and nothing else.  See
     // `lisp_only_window_frame_names_test.rs' for the per-name statement.
 ];
 
@@ -231,6 +208,8 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
         ("window-edges", "lisp/window.el:3839"),
         ("window-pixel-edges", "lisp/window.el:3922"),
         ("window-tree", "lisp/window.el:3999"),
+        // ...and the eighteenth, which DIVERGENCES.md 157 finally took.
+        ("display-color-cells", "lisp/frame.el:2966"),
     ] {
         assert!(
             lookup_global_subr_entry(intern(name)).is_none(),
@@ -294,72 +273,37 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
     // so a re-added subr cannot be absorbed by editing the list alone.
     assert_eq!(
         SHADOWED_BY_PRELOADED_LISP.len(),
-        2,
-        "the reviewed shadow list is TWO names after DIVERGENCES.md 154 \
+        1,
+        "the reviewed shadow list is ONE name after DIVERGENCES.md 157 \
          (50 before 146, 49 after it, 38 after 148, 34 after 149, 32 after \
-         150, 19 after 152, 2 after 154).  One is the C placeholder GNU itself \
-         ships (`frame-windows-min-size', src/frame.c:494-502); the other is \
-         `display-color-cells', a DEBT with a named cause.  A third entry \
-         means a Rust reimplementation of a `.el' we ship -- delete the subr \
+         150, 19 after 152, 2 after 154, 1 after 157).  That one is the C \
+         placeholder GNU itself ships (`frame-windows-min-size', \
+         src/frame.c:494-502) -- the campaign is closed.  A second entry \
+         means a Rust reimplementation of a `.el' we ship: delete the subr \
          instead.",
     );
 
-    // Exactly one entry may be the justified kind, and it is GNU's.
-    let justified = SHADOWED_BY_PRELOADED_LISP
-        .iter()
-        .filter(|entry| {
-            matches!(
-                entry.justification,
-                ShadowJustification::GnuShipsTheSamePlaceholder { .. }
-            )
-        })
-        .count();
-    assert_eq!(
-        justified, 1,
-        "GNU has exactly one deliberate shadow, so at most one entry here may \
-         claim `GnuShipsTheSamePlaceholder'",
-    );
-
-    // ...and every entry must carry its citations.  This is what the enum
+    // ...and the one entry must carry its citations.  This is what the type
     // exists for: a name cannot be parked here with no justification, which is
-    // how the list reached fifty, and a debt cannot be filed as a design.
+    // how the list reached fifty.  There is no second SHAPE any more -- a debt
+    // has to reintroduce the enum variant DIVERGENCES.md 157 deleted, in a
+    // diff a reviewer reads, rather than being filed as one more data row.
     for entry in SHADOWED_BY_PRELOADED_LISP {
-        match &entry.justification {
-            ShadowJustification::GnuShipsTheSamePlaceholder {
-                gnu_c_placeholder,
-                gnu_lisp_override,
-            } => {
-                assert!(
-                    gnu_c_placeholder.contains("src/"),
-                    "{}: a justified entry must name the GNU src/ line that \
-                     ships the same C placeholder, the way src/frame.c:494-502 \
-                     does",
-                    entry.name,
-                );
-                assert!(
-                    gnu_lisp_override.contains("lisp/"),
-                    "{}: a justified entry must name the .el line that \
-                     overrides the placeholder",
-                    entry.name,
-                );
-            }
-            ShadowJustification::UnjustifiedBootstrapCaller {
-                gnu_lisp_definition,
-                why_it_cannot_go_yet,
-            } => {
-                assert!(
-                    gnu_lisp_definition.contains("lisp/"),
-                    "{}: a debt entry must name the .el line GNU implements it \
-                     in",
-                    entry.name,
-                );
-                assert!(
-                    why_it_cannot_go_yet.contains(".rs") || why_it_cannot_go_yet.contains(".el"),
-                    "{}: a debt entry must name the caller that keeps the subr \
-                     alive, by file",
-                    entry.name,
-                );
-            }
-        }
+        let GnuShipsTheSamePlaceholder {
+            gnu_c_placeholder,
+            gnu_lisp_override,
+        } = &entry.justification;
+        assert!(
+            gnu_c_placeholder.contains("src/"),
+            "{}: an entry must name the GNU src/ line that ships the same C \
+             placeholder, the way src/frame.c:494-502 does",
+            entry.name,
+        );
+        assert!(
+            gnu_lisp_override.contains("lisp/"),
+            "{}: an entry must name the .el line that overrides the \
+             placeholder",
+            entry.name,
+        );
     }
 }

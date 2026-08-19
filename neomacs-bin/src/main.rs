@@ -4356,10 +4356,6 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
         FrontendKind::Tty => {
             eval.set_variable("window-system", Value::NIL);
             eval.set_variable("initial-window-system", Value::NIL);
-            if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
-                frame.remove_parameter(Value::symbol("display-type"));
-                frame.remove_parameter(Value::symbol("background-mode"));
-            }
             if tty_init::should_enable_live_tty_io(startup) {
                 seed_live_tty_frame_parameters(eval, frame_id, startup);
             }
@@ -4386,12 +4382,23 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
     eval.set_variable("terminal-frame", terminal_frame);
     eval.set_variable("frame-initial-frame", frame_initial_frame);
     eval.set_variable("default-minibuffer-frame", default_minibuffer_frame);
-    // Realize the initial frame's faces from their `defface` specs, the way GNU
-    // does at startup (term.c -> `tty-set-up-initial-frame-faces` ->
-    // `face-set-after-frame-default`, and frame.el for window-system frames).
-    // This must run here — after `bootstrap_buffers` has finalized the frame and
-    // its display-type/background-mode parameters — because a realization done
-    // earlier (during `apply_runtime_startup_state`) does not survive the frame
+    // COMPUTE the initial frame's display-derived parameters, and realize its
+    // faces from their `defface` specs -- GNU's two calls, in GNU's order.
+    //
+    // `tty-set-up-initial-frame-faces` (lisp/faces.el:2409-2416) is
+    //     (frame-set-background-mode frame t) (face-set-after-frame-default frame)
+    // and C reaches it from `init_faces_initial` (src/dispnew.c:7178), called
+    // by `init_display` (src/dispnew.c:7413-7422) after the pdump is loaded.
+    // `x-create-frame-with-faces` (lisp/faces.el:2242-2243) makes the SAME two
+    // calls for a window-system frame, so one pair serves both frontends here.
+    //
+    // `frame-set-background-mode` (lisp/frame.el:1526) is what DERIVES
+    // `background-mode' and `display-type'; nothing in Rust may seed them,
+    // because GNU's `make_initial_frame' (src/frame.c:1423) does not and our
+    // `faces.el' load must not be able to see them (DIVERGENCES.md 157).
+    //
+    // This must run here — after `bootstrap_buffers` has finalized the frame —
+    // because a realization done earlier does not survive the frame
     // re-bootstrap. Without it the frame-local face vectors are never populated
     // from the specs, so stock faces fall through to their bootstrap `Color`
     // defaults: `(face-attribute 'elisp-condition :foreground (selected-frame))`
@@ -4401,9 +4408,16 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
     // each spec value verbatim (color parsing happens only at display time),
     // matching GNU's lface storage.
     if let Err(error) = eval.eval_str(
-        "(when (fboundp 'face-set-after-frame-default) (face-set-after-frame-default (selected-frame)))",
+        "(progn
+           (when (fboundp 'frame-set-background-mode)
+             (frame-set-background-mode (selected-frame) t))
+           (when (fboundp 'face-set-after-frame-default)
+             (face-set-after-frame-default (selected-frame))))",
     ) {
-        tracing::warn!(?error, "failed to realize initial-frame faces from defface specs");
+        tracing::warn!(
+            ?error,
+            "failed to realize initial-frame faces from defface specs"
+        );
     }
     // Skip the splash screen — its fill-region is extremely slow through
     // with_mirrored_evaluator.  Users who want it can set this to nil in
@@ -4422,10 +4436,24 @@ fn seed_live_tty_frame_parameters(eval: &mut Context, frame_id: FrameId, startup
         } else {
             frame.remove_parameter(Value::symbol("tty-type"));
         }
-        // Required by face-spec-set-match-display (faces.el) for
-        // defface conditions (class color) and (background dark).
-        frame.set_parameter(Value::symbol("display-type"), Value::symbol("color"));
-        frame.set_parameter(Value::symbol("background-mode"), Value::symbol(bg_mode));
+    }
+    // NOT the `background-mode' FRAME parameter: that one is DERIVED, by
+    // `frame-set-background-mode' (lisp/frame.el:1526), and seeding it directly
+    // is DIVERGENCES.md 157's bug.  GNU's own input channel for a terminal that
+    // can report its background is the TERMINAL parameter --
+    // `frame-terminal-default-bg-mode' (lisp/frame.el:1584-1596) ends
+    // `(terminal-parameter frame 'background-mode)', and that is exactly what
+    // `xterm.el's OSC-11 reply handler writes (lisp/term/xterm.el:
+    // `xterm--report-background-handler').  Write the detected value there and
+    // let the Lisp derive the frame parameter, as GNU does.
+    //
+    // `display-type' needs no input at all: `frame-set-background-mode'
+    // computes it as `color' iff `(tty-display-color-p frame)', which is t for
+    // a live colour terminal.
+    if let Err(error) = eval.eval_str(&format!(
+        "(set-terminal-parameter nil 'background-mode '{bg_mode})"
+    )) {
+        tracing::warn!(?error, "failed to record detected tty background mode");
     }
 }
 

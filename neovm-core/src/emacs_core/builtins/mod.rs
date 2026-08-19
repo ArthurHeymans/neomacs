@@ -3631,22 +3631,15 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    // `display-color-cells' is lisp/frame.el:2966 and NOT a DEFUN, so this
-    // registration is a shadow like the seventeen DIVERGENCES.md 154 deleted --
-    // but it is the one that could not go yet.  `loadup.el' loads `faces' at
-    // :160 and `frame' at :255, and our `faces.el' load reaches this name
-    // through `show-paren-match's `((background dark) (min-colors 4))' clause;
-    // GNU's cannot, or GNU could not bootstrap.  The cause is the
-    // `background-mode' parameter we seed early; see the doc comment on
-    // `builtin_display_color_cells' (display.rs) for the measured backtrace.
-    // Its C neighbours `x-display-color-cells' (src/xfns.c:5714) and
-    // `tty-display-color-cells' (src/term.c:2226) stay registered either way.
-    ctx.defsubr(
-        "display-color-cells",
-        super::display::builtin_display_color_cells,
-        0,
-        None,
-    );
+    // NO `display-color-cells' here.  It is lisp/frame.el:2966 and NOT a
+    // DEFUN, so registering it was a shadow like the seventeen
+    // DIVERGENCES.md 154 deleted; it was the eighteenth, held back because our
+    // `(load "faces")' reached it before `frame.el' defined it.  The cause was
+    // a `background-mode' frame parameter Rust seeded before loadup, which GNU
+    // computes after it (DIVERGENCES.md 157).  With the seeding gone the
+    // caller is gone, and the two C names its Lisp body dispatches to --
+    // `x-display-color-cells' (src/xfns.c:5714) and `tty-display-color-cells'
+    // (src/term.c:2226) -- are registered right where they always were.
     ctx.defsubr(
         "x-display-mm-height",
         super::display::builtin_x_display_mm_height,

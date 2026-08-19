@@ -4966,6 +4966,30 @@ pub fn apply_runtime_startup_state(eval: &mut super::eval::Context) -> Result<()
     eval.set_current_buffer_unrecorded(scratch_id)
         .map_err(map_flow)?;
     super::window_cmds::seed_batch_startup_frame_in_state(&mut eval.frames, &mut eval.buffers);
+    // GNU's `init_display' (src/dispnew.c:7413-7422) is the first thing after
+    // the pdump is loaded that touches the initial frame's faces:
+    //
+    //     void init_display (void)
+    //     { if (noninteractive) { if (dumped_with_pdumper_p ()) init_faces_initial (); }
+    //       else init_display_interactive (); }
+    //
+    // and `init_faces_initial' (src/dispnew.c:7178) sets the tty default
+    // fg/bg pixels and then `call0 (Qtty_set_up_initial_frame_faces)'.  That
+    // Lisp (lisp/faces.el:2409) is `(frame-set-background-mode frame t)' plus
+    // `(face-set-after-frame-default frame)', and `frame-set-background-mode'
+    // (lisp/frame.el:1526) is what COMPUTES `background-mode' and
+    // `display-type' -- which is why they are absent for the whole of loadup
+    // and why GNU's `faces.el' load never reaches `display-color-cells'.
+    //
+    // This is that call, at that point.  It must not move earlier: seeding the
+    // two parameters in Rust before loadup is DIVERGENCES.md 157's bug.
+    eval_startup_forms(
+        eval,
+        r#"
+          (if (fboundp 'tty-set-up-initial-frame-faces)
+              (tty-set-up-initial-frame-faces))
+        "#,
+    )?;
     eval_startup_forms(
         eval,
         // GNU `startup.el` abbreviates `default-directory` after loadup, and
