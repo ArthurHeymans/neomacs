@@ -2283,7 +2283,12 @@ pub struct Context {
     pub(crate) tagged_heap: Box<crate::tagged::gc::TaggedHeap>,
     /// Mmap-backed pdump image that owns any mapped heap payloads borrowed by
     /// this evaluator's Lisp objects.
-    pub(crate) pdump_image: Option<super::pdump::mmap_image::LoadedMmapImage>,
+    /// The loaded pdump mapping, LEAKED to 'static at install: process-global
+    /// structures (the symbol interner's dump-name aliases — see
+    /// `intern_dump_lisp_string` — and the mapped tagged-heap objects) hold
+    /// pointers into it, so the mapping must outlive every Context. One
+    /// bounded leak per load; production loads once per process.
+    pub(crate) pdump_image: Option<&'static super::pdump::mmap_image::LoadedMmapImage>,
     /// One-shot runtime flag set by file pdump loads.  GNU keeps this as
     /// pdumper runtime state, not as a public obarray symbol.
     pub(crate) after_pdump_load_hook_pending: bool,
@@ -6154,7 +6159,9 @@ impl Context {
     }
 
     pub(crate) fn install_pdump_image(&mut self, image: super::pdump::mmap_image::LoadedMmapImage) {
-        self.pdump_image = Some(image);
+        // Leak: see the field doc — global interner aliases and mapped heap
+        // objects reference the image for the remainder of the process.
+        self.pdump_image = Some(&*Box::leak(Box::new(image)));
     }
 
     #[cfg(test)]

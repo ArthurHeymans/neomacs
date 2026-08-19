@@ -246,6 +246,38 @@ impl StringInterner {
         idx
     }
 
+    /// Dump-table bulk intern: `name` was written by a valid interner, so it
+    /// is already normalized (debug-checked), and a mapped name's bytes stay
+    /// mapped for the process lifetime — so the general path's deep
+    /// `LispString::clone` (an allocation + byte copy per name, ~17k names at
+    /// startup) is replaced by a header-word [`LispString::borrowed_alias`].
+    /// Owned or interval-carrying names fall back to the general path.
+    pub fn intern_dump_lisp_string(&mut self, name: &LispString) -> NameId {
+        debug_assert!(
+            matches!(
+                Self::normalize_symbol_name_lisp_string(name),
+                Cow::Borrowed(_)
+            ),
+            "dump symbol name arrived unnormalized"
+        );
+        let Some(alias) = name.borrowed_alias() else {
+            return self.intern_lisp_string(name);
+        };
+        if let Some(idx) = self.lookup_name_parts(name.as_bytes(), name.is_multibyte()) {
+            return idx;
+        }
+        let idx = NameId(self.strings.len() as u32);
+        debug_assert_ne!(
+            idx,
+            crate::emacs_core::symbol::SYMBOL_NAME_SENTINEL,
+            "NameId space exhausted: a real symbol name collided with the \
+             obarray empty-slot presence sentinel (u32::MAX)",
+        );
+        let interned = self.strings.push(alias);
+        self.map.insert(interned, idx);
+        idx
+    }
+
     /// Look up a symbol-name atom without interning it.
     pub fn lookup(&self, s: &str) -> Option<NameId> {
         self.lookup_name_parts(s.as_bytes(), !s.is_ascii())
@@ -699,7 +731,7 @@ impl SymbolRegistry {
         self.symbols.reserve(symbol_names.len());
         let mut name_remap = Vec::with_capacity(names.len());
         for name in names {
-            name_remap.push(self.names.intern_lisp_string(name));
+            name_remap.push(self.names.intern_dump_lisp_string(name));
         }
 
         let derived_flags;

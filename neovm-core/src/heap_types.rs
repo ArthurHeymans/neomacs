@@ -876,6 +876,31 @@ impl LispString {
     }
 }
 
+impl LispString {
+    /// Cheap alias of a string whose bytes are BORROWED (mapped pdump image /
+    /// static rodata, `storage_capacity == 0`) and interval-free: copies the
+    /// header words and shares the byte pointer — no allocation, no byte
+    /// copy, and dropping the alias frees nothing. `None` for allocator-owned
+    /// or interval-carrying strings (use `clone`).
+    ///
+    /// SAFETY-BY-CONTRACT: the caller may hold the alias only while the
+    /// borrowed bytes stay mapped; for pdump image strings that is the
+    /// process lifetime (the same contract the aliased string itself relies
+    /// on).
+    pub(crate) fn borrowed_alias(&self) -> Option<LispString> {
+        if self.storage_capacity != 0 || self.has_intervals() {
+            return None;
+        }
+        Some(LispString {
+            size: self.size,
+            size_byte: self.size_byte,
+            intervals: AtomicPtr::new(std::ptr::null_mut()),
+            data: self.data,
+            storage_capacity: 0,
+        })
+    }
+}
+
 impl Clone for LispString {
     /// Mutator-side only (dereferences the interval table via `intervals`).
     fn clone(&self) -> Self {
