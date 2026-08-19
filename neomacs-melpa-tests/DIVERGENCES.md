@@ -14179,7 +14179,7 @@ to match `debug-ignored-errors`, which GNU also does from C
 
 Nothing was shimmed.
 
-### Tests: thirty-one touched, none propped up
+### Tests: forty-two touched, none propped up
 
 * **Seven `builtin_read_number` tests** (`reader_test.rs`) became one runtime
   test, `read_number_arms_match_gnu`, whose eight rows were measured under GNU
@@ -14209,12 +14209,23 @@ Nothing was shimmed.
 * **`memory-limit`**: the `dispatch_builtin_pure` test and one
   `assert_subr_arity` row are gone; there is no subr to have an arity.  The
   oracle's `(> (memory-limit) 0)` row is now asserted in the runtime, where
-  `subr.el`'s `defun` answers it.
-* **Two VM tests** used `(global-set-key K D)` as incidental vocabulary; they
-  now use its verbatim body, `(define-key (current-global-map) K D)`.  A third
-  passed `'ignore` to `backtrace-frame--internal` as a callback and now passes
-  `#'list`.  A fourth used `string-match-p` in an assertion and now uses
-  `(string-match ... nil t)`.
+  `subr.el`'s `defun` answers it, and the oracle suite itself is green.
+* **`transient-mark-mode`**: the two bare-`Context` tests of the command are
+  one test of what a bare evaluator really has -- the C VARIABLE bound and the
+  Lisp COMMAND void.  `BuiltinInteractiveSpec::NoArgs`'s own test now
+  registers `String("")`, and expects `(interactive "")`.
+* **Incidental vocabulary, 148's rule.**  Two VM tests used
+  `(global-set-key K D)` and now use its verbatim body,
+  `(define-key (current-global-map) K D)`.  One passed `'ignore` to
+  `backtrace-frame--internal` as a callback -- the row records what the
+  callback RETURNS -- and now passes a quoted lambda.  Four assertions in
+  `vm_test.rs`, `eval_test.rs`, `print_test.rs` and `search_test.rs` used
+  `string-match-p` and now use `(string-match ... nil t)`, the C call it
+  inlines to.  Two `string-greaterp` assertions became `string-lessp` with the
+  arguments swapped -- and one of those had to spell `not` out as
+  `(if X nil t)`, because `not` is `subr.el:71` and 148 deleted its subr too.
+  One `vm_autoload_and_symbol_file_share_autoload_runtime_state` reads the
+  function cell instead of `symbol-file`.
 * **The `n` code letter's own tests.**  A bare evaluator can no longer answer
   `(interactive "n")` at all -- exactly as GNU before `subr.el` -- so the `n`
   row left the bare-`Context` batch-spec sweep and the `N` rows moved to
@@ -14257,6 +14268,14 @@ function-cell-dispatch one above: `(interactive "n")` with `read-number`
 rebound answered 42 in GNU and `end-of-file` here.
 
 **After the deletion** all of it `diff`s empty, that probe included.
+
+The suites, after: `cargo nextest run -p neovm-core` **9065 passed, 0 failed,
+51 skipped**; `cargo nextest run -p neovm-oracle-tests` with `NEOVM_BINARY_PATH`
+pointed at the rebuilt binary **38783 passed, 0 failed**;
+`cargo check --workspace --all-targets` clean and `cargo fmt --all --check`
+clean.  The workspace check is the one that matters here: `-p neovm-core` alone
+passed while `neomacs-bin/src/termcap_input.rs` still imported a helper this
+entry deleted, and only the release build found it.
 
 ### What nothing observable changed, and the performance question
 
