@@ -241,6 +241,17 @@ fn gnu_simple_command_execute_eval() -> Context {
     eval_first_form_after_marker(&mut ev, &simple_source, "(defun activate-mark");
     eval_first_form_after_marker(&mut ev, &simple_source, "(defun set-mark (pos)");
     crate::test_utils::load_gnu_undo_auto_runtime(&mut ev);
+    // `global-set-key' is Lisp -- lisp/subr.el:1545, DIVERGENCES.md 152 -- so
+    // this prelude supplies it the way it supplies `command-execute': by
+    // evaluating GNU's own `defun'.
+    eval_first_form_after_marker(&mut ev, &subr_source, "(defun global-set-key (key command)");
+    // Likewise `read-number' (lisp/subr.el:3725): the "n" and "N" code letters
+    // reach it through the function cell, as GNU does at src/callint.c:645.
+    eval_first_form_after_marker(
+        &mut ev,
+        &subr_source,
+        "(defun read-number (prompt &optional default hist)",
+    );
     ev.eval_str(
         r#"
         (use-global-map (make-sparse-keymap))
@@ -888,10 +899,13 @@ fn commandp_only_checks_interactive_form_property_for_gnu_fallback_classes() {
 }
 
 #[test]
-fn commandp_true_for_builtin_ignore() {
+fn commandp_true_for_an_interactive_c_subr() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let result = builtin_commandp_interactive(&mut ev, &[Value::symbol("ignore")]);
+    // GNU 31.0.90: (commandp 'make-local-variable) => t, its intspec being
+    // "vMake Local Variable: " (src/data.c).  This used to ask about `ignore',
+    // which is lisp/subr.el:501 and not a subr at all (DIVERGENCES.md 152).
+    let result = builtin_commandp_interactive(&mut ev, &[Value::symbol("make-local-variable")]);
     assert!(result.unwrap().is_truthy());
 }
 
@@ -2820,15 +2834,18 @@ fn thingatpt_functions_load_from_gnu_elisp() {
 // -------------------------------------------------------------------
 
 #[test]
-fn command_execute_builtin_ignore() {
+fn command_execute_lisp_ignore() {
     crate::test_utils::init_test_tracing();
-    let mut ev = gnu_simple_command_execute_eval();
-    let result = ev.apply(
-        Value::symbol("command-execute"),
-        vec![Value::symbol("ignore")],
+    // `ignore' is lisp/subr.el:501 and has no Rust subr (DIVERGENCES.md 152),
+    // so this asks the runtime that loaded `subr.el'.  GNU 31.0.90 answers
+    // nil for both.
+    assert_eq!(
+        crate::test_utils::runtime_startup_eval_all(
+            "(command-execute 'ignore)
+             (commandp 'ignore)",
+        ),
+        vec!["OK nil", "OK t"],
     );
-    let result = result.unwrap();
-    assert!(result.is_nil());
 }
 
 #[test]
@@ -3037,13 +3054,12 @@ fn call_interactively_rejects_non_vector_keys_argument() {
 fn call_interactively_accepts_vector_keys_argument() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
+    let command = ev
+        .eval_str("'(lambda () (interactive) nil)")
+        .expect("quoted lambda command");
     let result = builtin_call_interactively(
         &mut ev,
-        vec![
-            Value::symbol("ignore"),
-            Value::NIL,
-            Value::vector(vec![Value::fixnum(98)]),
-        ],
+        vec![command, Value::NIL, Value::vector(vec![Value::fixnum(98)])],
     )
     .expect("call-interactively should accept vector keys argument");
     assert!(result.is_nil());
@@ -3053,13 +3069,12 @@ fn call_interactively_accepts_vector_keys_argument() {
 fn call_interactively_does_not_record_keys_argument_in_recent_history() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
+    let command = ev
+        .eval_str("'(lambda () (interactive) nil)")
+        .expect("quoted lambda command");
     let result = builtin_call_interactively(
         &mut ev,
-        vec![
-            Value::symbol("ignore"),
-            Value::NIL,
-            Value::vector(vec![Value::fixnum(98)]),
-        ],
+        vec![command, Value::NIL, Value::vector(vec![Value::fixnum(98)])],
     )
     .expect("call-interactively should accept vector keys argument");
     assert!(result.is_nil());
@@ -3368,7 +3383,7 @@ fn registered_builtin_interactive_spec_is_the_command_identity_source() {
         |_ctx, _args| Ok(Value::NIL),
         0,
         Some(0),
-        BuiltinInteractiveSpec::NoArgs,
+        BuiltinInteractiveSpec::String(""),
     );
     let command = crate::emacs_core::intern::intern("neovm--typed-interactive-registration-test");
     assert!(
@@ -3382,7 +3397,9 @@ fn registered_builtin_interactive_spec_is_the_command_identity_source() {
              (commandp 'neovm--typed-interactive-registration-test)
              (interactive-form 'neovm--typed-interactive-registration-test))"#,
     );
-    assert_eq!(results[0], "OK (t (interactive nil))");
+    // An empty control string is what a GNU DEFUN with intspec "" answers:
+    // measured, (interactive-form 'recursive-edit) => (interactive "").
+    assert_eq!(results[0], "OK (t (interactive \"\"))");
 }
 
 #[test]
@@ -3889,11 +3906,17 @@ fn command_execute_non_command_signals_commandp_error() {
 }
 
 #[test]
-fn call_interactively_builtin_ignore() {
+fn call_interactively_lisp_ignore() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let result = builtin_call_interactively(&mut ev, vec![Value::symbol("ignore")]).unwrap();
-    assert!(result.is_nil());
+    // Same move as `command_execute_lisp_ignore': `ignore' is Lisp
+    // (lisp/subr.el:501), so the runtime is where it can be called at all.
+    assert_eq!(
+        crate::test_utils::runtime_startup_eval_all(
+            "(call-interactively 'ignore)
+             (interactive-form 'ignore)",
+        ),
+        vec!["OK nil", "OK (interactive nil)"],
+    );
 }
 
 #[test]

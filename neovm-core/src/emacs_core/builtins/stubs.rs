@@ -1845,12 +1845,7 @@ pub(crate) fn builtin_remember_mouse_glyph(
 // emacs.c / version.c gap-fill stubs for loadup.el
 // =========================================================================
 
-pub(crate) fn builtin_emacs_repository_get_version(args: Vec<Value>) -> EvalResult {
-    expect_args("emacs-repository-get-version", &args, 0)?;
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_emacs_repository_get_branch(args: Vec<Value>) -> EvalResult {
-    expect_args("emacs-repository-get-branch", &args, 0)?;
-    Ok(Value::NIL)
-}
+// `emacs-repository-get-version' (lisp/version.el:183) and
+// `emacs-repository-get-branch' (:231) used to be stubbed here "for
+// loadup.el".  They are not needed: loadup.el loads version.el at :128 and
+// first calls them at :429 (DIVERGENCES.md 152).

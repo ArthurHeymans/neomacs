@@ -730,61 +730,28 @@ fn eval_and_compile_multiple_forms() {
     assert_eq!(result, "OK 3");
 }
 
+/// `symbol-file' is Lisp -- lisp/subr.el:3351, DIVERGENCES.md 152 -- so a
+/// bare evaluator has nothing to ask.  What THIS module owns is the function
+/// cell `autoload' writes, which is also what GNU's `symbol-file' reads:
+/// `(nth 1 (symbol-function symbol))'.
+///
+/// Measured on GNU 31.0.90 `-Q --batch' first.
 #[test]
-fn symbol_file_returns_nil() {
-    crate::test_utils::init_test_tracing();
-    let result = eval_one("(symbol-file 'cons)");
-    assert_eq!(result, "OK nil");
-}
-
-#[test]
-fn symbol_file_returns_autoload_file_for_function() {
-    crate::test_utils::init_test_tracing();
-    let result = eval_one(
-        r#"(progn (autoload 'sym-file-probe "sym-file-probe-file") (symbol-file 'sym-file-probe))"#,
-    );
-    assert_eq!(result, r#"OK "sym-file-probe-file""#);
-}
-
-#[test]
-fn symbol_file_type_gate_matches_defun_only() {
+fn autoload_writes_the_file_into_the_function_cell_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
-        r#"(autoload 'sym-file-type-probe "sym-file-type-probe-file")
-           (symbol-file 'sym-file-type-probe 'defun)
-           (symbol-file 'sym-file-type-probe 'var)
-           (symbol-file 'sym-file-type-probe 'function)"#,
+        r#"(autoload 'sym-file-probe "sym-file-probe-file")
+           (symbol-function 'sym-file-probe)
+           (nth 1 (symbol-function 'sym-file-probe))
+           (fboundp 'symbol-file)"#,
     );
-    assert_eq!(results[1], r#"OK "sym-file-type-probe-file""#);
-    assert_eq!(results[2], "OK nil");
+    assert_eq!(
+        results[1],
+        r#"OK (autoload "sym-file-probe-file" nil nil nil)"#
+    );
+    assert_eq!(results[2], r#"OK "sym-file-probe-file""#);
+    // GNU's src/ has no DEFUN of this name, so a bare evaluator has none.
     assert_eq!(results[3], "OK nil");
-}
-
-#[test]
-fn symbol_file_non_symbol_returns_nil() {
-    crate::test_utils::init_test_tracing();
-    let results = eval_all(
-        r#"(symbol-file 1)
-           (symbol-file "x")
-           (symbol-file 'car 1)"#,
-    );
-    assert_eq!(results[0], "OK nil");
-    assert_eq!(results[1], "OK nil");
-    assert_eq!(results[2], "OK nil");
-}
-
-#[test]
-fn symbol_file_accepts_third_arg_but_not_fourth() {
-    crate::test_utils::init_test_tracing();
-    let results = eval_all(
-        r#"(autoload 'sym-file-arity-probe "sym-file-arity-probe-file")
-           (symbol-file 'sym-file-arity-probe 'defun t)
-           (condition-case err
-               (symbol-file 'sym-file-arity-probe 'defun t :extra)
-             (error err))"#,
-    );
-    assert_eq!(results[1], r#"OK "sym-file-arity-probe-file""#);
-    assert_eq!(results[2], "OK (wrong-number-of-arguments symbol-file 4)");
 }
 
 #[test]
@@ -956,10 +923,8 @@ fn autoload_sets_uninterned_symbol_function_cell_by_identity() {
         .symbol_function_of_value(&sym)
         .expect("uninterned symbol function cell");
     assert!(is_autoload_value(&function));
-    assert_eq!(
-        builtin_symbol_file(&mut ev, vec![sym]).expect("symbol-file"),
-        Value::string("nofile")
-    );
+    let cell = list_to_vec(&function).expect("autoload cell should be a list");
+    assert_eq!(cell[1], Value::string("nofile"));
 }
 
 #[test]
@@ -990,7 +955,7 @@ fn autoload_accepts_symbol_with_pos_only_when_enabled() {
 }
 
 #[test]
-fn symbol_file_preserves_raw_unibyte_autoload_file() {
+fn autoload_preserves_a_raw_unibyte_file_in_the_function_cell() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let raw_file = Value::heap_string(LispString::from_unibyte(vec![0xFF]));
@@ -1007,9 +972,12 @@ fn symbol_file_preserves_raw_unibyte_autoload_file() {
     )
     .expect("register raw autoload");
 
-    let result =
-        builtin_symbol_file(&mut ev, vec![Value::symbol("raw-autoload")]).expect("symbol-file");
-    let text = result.as_lisp_string().expect("raw symbol-file string");
+    let function = ev
+        .obarray
+        .symbol_function("raw-autoload")
+        .expect("raw-autoload function cell");
+    let cell = list_to_vec(&function).expect("autoload cell should be a list");
+    let text = cell[1].as_lisp_string().expect("raw autoload file string");
     assert!(!text.is_multibyte());
     assert_eq!(text.as_bytes(), &[0xFF]);
 }

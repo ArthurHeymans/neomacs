@@ -974,37 +974,19 @@ fn test_exchange_point_and_mark() {
 }
 
 #[test]
-fn test_transient_mark_mode() {
+fn transient_mark_mode_the_variable_is_c_and_the_command_is_not() {
     crate::test_utils::init_test_tracing();
     let mut ev = eval_with_text("hello");
-    let enabled = eval_str(&mut ev, "(transient-mark-mode)");
-    assert!(enabled.is_truthy());
-
-    let disabled = eval_str(&mut ev, "(transient-mark-mode -1)");
-    assert!(disabled.is_nil());
-
-    let reenabled_nil = eval_str(&mut ev, "(transient-mark-mode nil)");
-    assert!(reenabled_nil.is_truthy());
-
-    let zero = eval_str(&mut ev, "(transient-mark-mode 0)");
-    assert!(zero.is_nil());
-
-    let positive_float = eval_str(&mut ev, "(transient-mark-mode 1.5)");
-    assert!(positive_float.is_truthy());
-
-    let small_float = eval_str(&mut ev, "(transient-mark-mode 0.5)");
-    assert!(small_float.is_nil());
-}
-
-#[test]
-fn test_transient_mark_mode_over_arity() {
-    crate::test_utils::init_test_tracing();
-    let mut ev = eval_with_text("hello");
-    let result = eval_str(
-        &mut ev,
-        "(condition-case err (transient-mark-mode nil nil) (error (car err)))",
+    // DEFVAR_LISP ("transient-mark-mode", ...) is src/buffer.c:5835 and is
+    // here; the `define-minor-mode' command at lisp/simple.el:7614 is not, and
+    // its arms are measured against GNU in
+    // `builtins::lisp_only_misc_names_test::misc_name_arms_match_gnu'
+    // (DIVERGENCES.md 152).
+    assert_eq!(eval_str(&mut ev, "(boundp 'transient-mark-mode)"), Value::T);
+    assert_eq!(
+        eval_str(&mut ev, "(fboundp 'transient-mark-mode)"),
+        Value::NIL
     );
-    assert_eq!(result, Value::symbol("wrong-number-of-arguments"));
 }
 
 #[test]

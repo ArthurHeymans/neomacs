@@ -1306,68 +1306,16 @@ pub(crate) fn builtin_region_end(eval: &mut super::eval::Context, args: Vec<Valu
 }
 
 // ===========================================================================
-// transient-mark-mode  (define-minor-mode in GNU simple.el)
+// transient-mark-mode
 // ===========================================================================
-
-/// `(transient-mark-mode &optional ARG)` — toggle transient-mark-mode.
-///
-/// Matches GNU's define-minor-mode toggle logic:
-/// - no arg or nil  → enable (set to t)
-/// - positive number → enable
-/// - zero or negative → disable (set to nil)
-/// - 'toggle         → flip current value
-pub(crate) fn builtin_transient_mark_mode(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    if args.len() > 1 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![
-                Value::symbol("transient-mark-mode"),
-                Value::fixnum(args.len() as i64),
-            ],
-        ));
-    }
-    let sym_id = intern("transient-mark-mode");
-    let current = eval
-        .obarray
-        .symbol_value("transient-mark-mode")
-        .cloned()
-        .unwrap_or(Value::NIL);
-
-    let new_val = if args.is_empty() || args[0].is_nil() {
-        // No arg or nil → enable
-        Value::T
-    } else if args[0].is_symbol_named("toggle") {
-        // 'toggle → flip
-        if current.is_truthy() {
-            Value::NIL
-        } else {
-            Value::T
-        }
-    } else {
-        // Numeric arg: positive → enable, zero/negative → disable.
-        // Floats are truncated to integer first (GNU define-minor-mode behavior).
-        match args[0].kind() {
-            ValueKind::Fixnum(n) => {
-                if n > 0 {
-                    Value::T
-                } else {
-                    Value::NIL
-                }
-            }
-            ValueKind::Float => {
-                let truncated = args[0].xfloat() as i64;
-                if truncated > 0 { Value::T } else { Value::NIL }
-            }
-            _ => Value::T,
-        }
-    };
-
-    eval.obarray.set_symbol_value_id(sym_id, new_val);
-    Ok(new_val)
-}
+//
+// The FUNCTION is not here.  GNU splits this name: the VARIABLE is C
+// (DEFVAR_LISP "transient-mark-mode", src/buffer.c:5835) and the COMMAND is
+// Lisp -- `(define-minor-mode transient-mark-mode ... :global t :variable
+// (default-value 'transient-mark-mode))' at lisp/simple.el:7614.  The Rust
+// subr was not a command at all (`commandp' nil, no `interactive-form'), took
+// any number of arguments, and never ran `transient-mark-mode-hook'
+// (DIVERGENCES.md 152).
 
 // ===========================================================================
 // Tests

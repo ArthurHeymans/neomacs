@@ -673,6 +673,9 @@ mod lisp_only_undo_commands_test;
 mod process_launchers_are_lisp_only_test;
 
 #[cfg(test)]
+mod lisp_only_misc_names_test;
+
+#[cfg(test)]
 mod rust_subrs_shadowed_by_lisp_test;
 
 // -----------------------------------------------------------------------
@@ -1832,7 +1835,11 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr("looking-at", builtin_looking_at, 1, Some(2));
     ctx.defsubr("posix-looking-at", builtin_posix_looking_at, 1, Some(2));
     ctx.defsubr_slice("string-match", builtin_string_match_slice, 2, Some(4));
-    ctx.defsubr("string-match-p", builtin_string_match_p, 0, None);
+    // `string-match-p' is NOT here: GNU DEFUNs `string-match'
+    // (src/search.c:442) and writes `string-match-p' as a `defsubst' over
+    // it (lisp/subr.el:5941), so a compiled caller INLINES
+    // `(string-match REGEXP STRING START t)' and never reads the cell
+    // (DIVERGENCES.md 152).
     ctx.defsubr("posix-string-match", builtin_posix_string_match, 2, Some(4));
     ctx.defsubr("match-beginning", builtin_match_beginning, 1, Some(1));
     ctx.defsubr("match-end", builtin_match_end, 1, Some(1));
@@ -1955,8 +1962,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr("copy-keymap", builtin_copy_keymap, 1, Some(1));
     ctx.defsubr("define-key", builtin_define_key, 3, Some(4));
     ctx.defsubr("lookup-key", builtin_lookup_key, 2, Some(3));
-    ctx.defsubr("global-set-key", builtin_global_set_key, 0, None);
-    ctx.defsubr("local-set-key", builtin_local_set_key, 0, None);
+    // `global-set-key' (lisp/subr.el:1545) and `local-set-key' (:1569) are
+    // NOT here: GNU has no C version of either.  Both are Lisp over
+    // `define-key' + `current-global-map' / `current-local-map', which ARE
+    // registered just above (DIVERGENCES.md 152).
     ctx.defsubr("use-local-map", builtin_use_local_map, 1, Some(1));
     ctx.defsubr("use-global-map", builtin_use_global_map, 1, Some(1));
     ctx.defsubr("current-local-map", builtin_current_local_map, 0, Some(0));
@@ -2775,12 +2784,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr(
-        "transient-mark-mode",
-        super::navigation::builtin_transient_mark_mode,
-        0,
-        None,
-    );
+    // `transient-mark-mode' the FUNCTION is not here: it is a
+    // `define-minor-mode' at lisp/simple.el:7614.  Only the VARIABLE is C
+    // (DEFVAR_LISP, src/buffer.c:5835), and that stays (DIVERGENCES.md 152).
     ctx.defsubr_interactive(
         "make-local-variable",
         super::custom::builtin_make_local_variable,
@@ -2831,7 +2837,8 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         super::autoload::builtin_autoload_do_load_3,
         1,
     );
-    ctx.defsubr("symbol-file", super::autoload::builtin_symbol_file, 0, None);
+    // `symbol-file' is not here: it is a `defun' at lisp/subr.el:3351 that
+    // walks `load-history' (DIVERGENCES.md 152).
     ctx.defsubr_interactive(
         "downcase-region",
         super::casefiddle::builtin_downcase_region,
@@ -3761,12 +3768,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         2,
         Some(8),
     );
-    ctx.defsubr(
-        "read-number",
-        super::reader::builtin_read_number,
-        1,
-        Some(2),
-    );
+    // `read-number' is not here: it is a `defun' at lisp/subr.el:3725 over
+    // `read-from-minibuffer', and GNU's "n" interactive code letter reaches
+    // it through the function cell (src/callint.c:645) (DIVERGENCES.md 152).
     ctx.defsubr(
         "read-buffer",
         super::minibuffer::builtin_read_buffer,
@@ -5131,12 +5135,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(2),
         super::interactive::BuiltinInteractiveSpec::String(""),
     );
-    ctx.defsubr(
-        "make-auto-save-file-name",
-        super::fileio::builtin_make_auto_save_file_name,
-        0,
-        Some(0),
-    );
+    // `make-auto-save-file-name' is not here: it is a `defun' at
+    // lisp/files.el:7699 over `auto-save-file-name-transforms'.  GNU's C
+    // side only READS the buffer field (src/fileio.c:6406)
+    // (DIVERGENCES.md 152).
     ctx.defsubr(
         "external-debugging-output",
         builtin_external_debugging_output,
@@ -5676,18 +5678,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         2,
         Some(2),
     );
-    ctx.defsubr(
-        "emacs-repository-get-version",
-        |_ctx, args| builtin_emacs_repository_get_version(args),
-        0,
-        Some(0),
-    );
-    ctx.defsubr(
-        "emacs-repository-get-branch",
-        |_ctx, args| builtin_emacs_repository_get_branch(args),
-        0,
-        Some(0),
-    );
+    // `emacs-repository-get-version' (lisp/version.el:183) and
+    // `emacs-repository-get-branch' (:231) are not here.  They were
+    // registered as "gap-fill stubs for loadup.el", but loadup loads
+    // version.el at :128 and only calls them at :429 (DIVERGENCES.md 152).
     ctx.defsubr_interactive(
         "encode-coding-region",
         crate::encoding::builtin_encode_coding_region,
@@ -5798,12 +5792,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr(
-        "memory-limit",
-        |_ctx, args| builtin_memory_limit(args),
-        0,
-        Some(0),
-    );
+    // `memory-limit' is not here: it is a `defun' at lisp/subr.el:3574 over
+    // `process-attributes', which IS registered (src/process.c)
+    // (DIVERGENCES.md 152).
     register_builtin(
         ctx,
         BuiltinRegistration::requires_eval_state(
@@ -7922,13 +7913,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
     );
     ctx.defsubr("arrayp", |_ctx, args| builtin_arrayp(args), 1, Some(1));
-    ctx.defsubr_interactive(
-        "ignore",
-        |_ctx, args| builtin_ignore(args),
-        0,
-        None,
-        super::interactive::BuiltinInteractiveSpec::NoArgs,
-    );
+    // `ignore' is not here: it is a `defun' at lisp/subr.el:501, and the
+    // byte compiler names it itself -- `(byte-defop-compiler-1 ignore)',
+    // lisp/emacs-lisp/bytecomp.el:4429 -- so a compiled `(ignore X)' emits
+    // Bconstant nil and never reads the cell (DIVERGENCES.md 152).
     ctx.defsubr(
         "cl-type-of",
         |_ctx, args| builtin_cl_type_of(args),
@@ -7994,10 +7982,11 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // lisp/subr.el:2277-2279, so their cells hold the TARGET SYMBOL, and a
     // compiled caller emits Bstringeqlsign / Bstringlss instead
     // (DIVERGENCES.md 148).  `string-greaterp' is itself Lisp
-    // (lisp/subr.el:6283); its Rust subr is still on the shadow list.
+    // (lisp/subr.el:6283) with a `compiler-macro' (:6287-6290) that swaps
+    // its arguments into `string-lessp', so it is not registered either
+    // (DIVERGENCES.md 152).
     ctx.defsubr_2("string-equal", builtin_string_equal_2, 2);
     ctx.defsubr_2("string-lessp", builtin_string_lessp_2, 2);
-    ctx.defsubr_2("string-greaterp", builtin_string_greaterp_2, 2);
     ctx.defsubr_slice(
         "substring",
         |_ctx, args| builtin_substring_slice(args),
@@ -8881,12 +8870,10 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr(
-        "set-buffer-file-coding-system",
-        super::coding::builtin_set_buffer_file_coding_system,
-        1,
-        Some(3),
-    );
+    // `set-buffer-file-coding-system' is not here: it is a `defun' at
+    // lisp/international/mule.el:1302 that merges coding systems, sets
+    // `buffer-file-coding-system-explicit' and marks the buffer modified
+    // (DIVERGENCES.md 152).
 
     // -- CCL (eval-dependent) --
     ctx.defsubr("ccl-program-p", builtin_ccl_program_p, 1, Some(1));

@@ -3,7 +3,6 @@ use crate::buffer::LispCharPos1;
 use crate::emacs_core::builtins::search::{
     builtin_looking_at, builtin_match_data, builtin_match_data_translate, builtin_match_string,
     builtin_re_search_forward, builtin_replace_match, builtin_set_match_data, builtin_string_match,
-    builtin_string_match_p,
 };
 use crate::emacs_core::marker;
 use crate::emacs_core::search::builtin_replace_regexp_in_string;
@@ -26,15 +25,6 @@ fn call_string_match(args: Vec<Value>) -> EvalResult {
     SEARCH_TEST_CTX.with(|slot| {
         let mut new_ctx = Box::new(crate::emacs_core::eval::Context::new());
         let result = builtin_string_match(&mut new_ctx, args);
-        *slot.borrow_mut() = Some(new_ctx);
-        result
-    })
-}
-
-fn call_string_match_p(args: Vec<Value>) -> EvalResult {
-    SEARCH_TEST_CTX.with(|slot| {
-        let mut new_ctx = Box::new(crate::emacs_core::eval::Context::new());
-        let result = builtin_string_match_p(&mut new_ctx, args);
         *slot.borrow_mut() = Some(new_ctx);
         result
     })
@@ -391,28 +381,31 @@ fn string_match_defaults_to_case_fold() {
     assert_int(result.unwrap(), 0);
 }
 
+/// `string-match-p' has no subr, here or in GNU: it is a `defsubst' at
+/// lisp/subr.el:5941 whose whole body is `(string-match REGEXP STRING START t)',
+/// so a caller inlines the C primitive with its INHIBIT-MODIFY argument set and
+/// never looks the name up (DIVERGENCES.md 152).  What a bare evaluator can
+/// measure is that argument, on `string-match' (src/search.c:442) -- which is
+/// what the three `string_match_p_*' tests that used to sit here were about:
+/// the answer, the miss, the case fold, and the match data left alone.
+///
+/// Measured on GNU 31.0.90 `-Q --batch' first.
 #[test]
-fn string_match_p_basic() {
+fn string_match_with_inhibit_modify_answers_without_touching_match_data() {
     crate::test_utils::init_test_tracing();
-    let result = call_string_match_p(vec![Value::string("[0-9]+"), Value::string("abc 123 def")]);
-    assert_int(result.unwrap(), 4);
-}
-
-#[test]
-fn string_match_p_no_match() {
-    crate::test_utils::init_test_tracing();
-    let result = call_string_match_p(vec![
-        Value::string("[0-9]+"),
-        Value::string("no digits here"),
-    ]);
-    assert_nil(result.unwrap());
-}
-
-#[test]
-fn string_match_p_defaults_to_case_fold() {
-    crate::test_utils::init_test_tracing();
-    let result = call_string_match_p(vec![Value::string("a"), Value::string("A")]);
-    assert_int(result.unwrap(), 0);
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let result = ev.eval_str(
+        r#"(list (string-match "x\\([0-9]+\\)" "x42")
+                     (match-data)
+                     (string-match "[0-9]+" "abc 123 def" nil t)
+                     (string-match "[0-9]+" "no digits here" nil t)
+                     (string-match "a" "A" nil t)
+                     (match-data))"#,
+    );
+    assert_eq!(
+        crate::emacs_core::error::format_eval_result(&result),
+        "OK (0 (0 3 1 3) 4 nil 0 (0 3 1 3))",
+    );
 }
 
 #[test]

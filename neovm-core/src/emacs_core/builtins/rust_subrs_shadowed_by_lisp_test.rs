@@ -57,36 +57,30 @@ const SHADOWED_BY_PRELOADED_LISP: &[&str] = &[
     "window-edges",                 // lisp/window.el:3839
     "window-pixel-edges",           // lisp/window.el:3922
     "window-tree",                  // lisp/window.el:3999
-    // -- The six type predicates and the five `defalias' names that used to
-    // sit here are GONE: their Rust subrs were deleted (DIVERGENCES.md 148),
-    // so the count fell from 49 to 38.  See
-    // `lisp_only_predicates_and_aliases_test.rs' for the per-name statement.
-    // -- The four process launchers that used to sit here are GONE: their
-    // Rust subrs were deleted (DIVERGENCES.md 149).  All four are Lisp over
-    // `make-process', which IS in C (src/process.c:1767); see
-    // `process_launchers_are_lisp_only_test.rs' for the per-name statement.
-    // -- Undo: NOTHING is left here.  `syms_of_undo' (src/undo.c:423-490) has
-    // exactly one `defsubr', `&Sundo_boundary' (:435), and we register that
-    // one and no more.  `primitive-undo' went in DIVERGENCES.md 146; `undo'
-    // and `buffer-disable-undo' went in 150, which also deleted the third
-    // replay loop the `undo' subr reached (`BufferManager::undo_buffer').
-    // `buffer-enable-undo' is NOT in that group and never was: GNU DEFUNs it
-    // at src/buffer.c:1829, so it is a subr here too and does not appear on
-    // this list.  See `lisp_only_undo_commands_test.rs'.
-    // -- Everything else.
-    "emacs-repository-get-branch",   // lisp/version.el:231
-    "emacs-repository-get-version",  // lisp/version.el:183
-    "global-set-key",                // lisp/subr.el:1545
-    "ignore",                        // lisp/subr.el:501
-    "local-set-key",                 // lisp/subr.el:1569
-    "make-auto-save-file-name",      // lisp/files.el:7699
-    "memory-limit",                  // lisp/subr.el:3574
-    "read-number",                   // lisp/subr.el:3725
-    "set-buffer-file-coding-system", // lisp/international/mule.el:1302
-    "string-greaterp",               // lisp/subr.el:6283
-    "string-match-p",                // lisp/subr.el:5941 (a `defsubst')
-    "symbol-file",                   // lisp/subr.el:3351
-    "transient-mark-mode",           // lisp/simple.el:7614 (`define-minor-mode')
+                                    // -- The six type predicates and the five `defalias' names that used to
+                                    // sit here are GONE: their Rust subrs were deleted (DIVERGENCES.md 148),
+                                    // so the count fell from 49 to 38.  See
+                                    // `lisp_only_predicates_and_aliases_test.rs' for the per-name statement.
+                                    // -- The four process launchers that used to sit here are GONE: their
+                                    // Rust subrs were deleted (DIVERGENCES.md 149).  All four are Lisp over
+                                    // `make-process', which IS in C (src/process.c:1767); see
+                                    // `process_launchers_are_lisp_only_test.rs' for the per-name statement.
+                                    // -- Undo: NOTHING is left here.  `syms_of_undo' (src/undo.c:423-490) has
+                                    // exactly one `defsubr', `&Sundo_boundary' (:435), and we register that
+                                    // one and no more.  `primitive-undo' went in DIVERGENCES.md 146; `undo'
+                                    // and `buffer-disable-undo' went in 150, which also deleted the third
+                                    // replay loop the `undo' subr reached (`BufferManager::undo_buffer').
+                                    // `buffer-enable-undo' is NOT in that group and never was: GNU DEFUNs it
+                                    // at src/buffer.c:1829, so it is a subr here too and does not appear on
+                                    // this list.  See `lisp_only_undo_commands_test.rs'.
+                                    // -- "Everything else": the thirteen names from six files that were left
+                                    // when the groups with a theme had been taken.  They are GONE
+                                    // (DIVERGENCES.md 152), so the count fell from 32 to 19.  Two of them had
+                                    // a C NEIGHBOUR that had to survive the deletion and does:
+                                    // `string-match-p' is a `defsubst' over `string-match' (src/search.c:442),
+                                    // and `transient-mark-mode' the COMMAND is `define-minor-mode' while
+                                    // `transient-mark-mode' the VARIABLE is DEFVAR_LISP (src/buffer.c:5835).
+                                    // See `lisp_only_misc_names_test.rs' for the per-name statement.
 ];
 
 #[test]
@@ -136,12 +130,28 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
          the list either way.\n",
     );
 
-    // The three names GNU implements in lisp/simple.el and nowhere in src/,
-    // deleted by DIVERGENCES.md 146 and 150.  None may come back.
+    // The names GNU implements in Lisp and nowhere in src/, deleted by
+    // DIVERGENCES.md 146, 150 and 152.  None may come back.
     for (name, gnu_source) in [
         ("primitive-undo", "lisp/simple.el:3645"),
         ("undo", "lisp/simple.el:3466"),
         ("buffer-disable-undo", "lisp/simple.el:3591"),
+        ("emacs-repository-get-branch", "lisp/version.el:231"),
+        ("emacs-repository-get-version", "lisp/version.el:183"),
+        ("global-set-key", "lisp/subr.el:1545"),
+        ("ignore", "lisp/subr.el:501"),
+        ("local-set-key", "lisp/subr.el:1569"),
+        ("make-auto-save-file-name", "lisp/files.el:7699"),
+        ("memory-limit", "lisp/subr.el:3574"),
+        ("read-number", "lisp/subr.el:3725"),
+        (
+            "set-buffer-file-coding-system",
+            "lisp/international/mule.el:1302",
+        ),
+        ("string-greaterp", "lisp/subr.el:6283"),
+        ("string-match-p", "lisp/subr.el:5941"),
+        ("symbol-file", "lisp/subr.el:3351"),
+        ("transient-mark-mode", "lisp/simple.el:7614"),
     ] {
         assert!(
             lookup_global_subr_entry(intern(name)).is_none(),
@@ -155,6 +165,16 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
     for (name, gnu_source) in [
         ("undo-boundary", "src/undo.c:251"),
         ("buffer-enable-undo", "src/buffer.c:1829"),
+        // 152's near misses: the C primitive each deleted Lisp name is
+        // written over, or the C half of a split name.
+        ("string-match", "src/search.c:442"),
+        ("string-lessp", "src/fns.c:557"),
+        ("define-key", "src/keymap.c"),
+        ("current-global-map", "src/keymap.c"),
+        ("current-local-map", "src/keymap.c"),
+        ("do-auto-save", "src/fileio.c"),
+        ("process-attributes", "src/process.c"),
+        ("read-from-minibuffer", "src/minibuf.c"),
     ] {
         assert!(
             lookup_global_subr_entry(intern(name)).is_some(),
@@ -162,14 +182,23 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
         );
     }
 
-    // The list must shrink, not just stay reviewed.  146 left 49 entries, 148
-    // deleted eleven of them and 149 the four process launchers; this pins the
-    // arithmetic so a re-added subr cannot be absorbed by editing the list
-    // alone.
+    // `transient-mark-mode' is the split name 152 had to be careful with: the
+    // COMMAND is lisp/simple.el:7614 and is gone, but the VARIABLE is
+    // DEFVAR_LISP at src/buffer.c:5835 and must still be bound.
+    assert!(
+        eval.obarray.symbol_value("transient-mark-mode").is_some(),
+        "transient-mark-mode the VARIABLE is DEFVAR_LISP in GNU \
+         (src/buffer.c:5835); deleting the Lisp COMMAND must not remove it",
+    );
+
+    // The list must shrink, not just stay reviewed.  This pins the arithmetic
+    // so a re-added subr cannot be absorbed by editing the list alone.
     assert_eq!(
         SHADOWED_BY_PRELOADED_LISP.len(),
-        32,
-        "the reviewed shadow list is 32 names after DIVERGENCES.md 149 and 150 \
-         (50 before 146, 49 after it, 38 after 148, 34 after 149, 32 after 150)",
+        19,
+        "the reviewed shadow list is 19 names after DIVERGENCES.md 152 \
+         (50 before 146, 49 after it, 38 after 148, 34 after 149, 32 after \
+         150, 19 after 152).  What is left is one justified C placeholder \
+         (`frame-windows-min-size') and the eighteen window/frame/face names.",
     );
 }

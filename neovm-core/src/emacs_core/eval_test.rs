@@ -9323,7 +9323,7 @@ fn emacs_copyright_is_bound_at_startup() {
     let results = eval_all(
         "emacs-copyright
          (boundp 'emacs-copyright)
-         (string-match-p \"Copyright (C) [0-9]+ Free Software Foundation\" emacs-copyright)",
+         (string-match \"Copyright (C) [0-9]+ Free Software Foundation\" emacs-copyright nil t)",
     );
     assert_eq!(
         results[0],

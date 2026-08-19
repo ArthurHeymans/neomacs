@@ -125,12 +125,6 @@ typed_subr! {
     }
 }
 
-typed_subr! {
-    pub(crate) fn builtin_string_greaterp_2(_eval, a: StringDesignator, b: StringDesignator) -> EvalResult {
-        Ok(Value::bool_val(string_ordering(a.text(), b.text()).is_gt()))
-    }
-}
-
 fn substring_impl(name: &str, args: &[Value], preserve_props: bool) -> EvalResult {
     expect_min_args(name, args, 1)?;
     expect_max_args(name, args, 3)?;

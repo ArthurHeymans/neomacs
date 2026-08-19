@@ -1462,36 +1462,14 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
     }
 }
 
-pub(crate) fn builtin_string_match_p(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
-        .map(|v| !v.is_nil())
-        .unwrap_or(true);
-    let case_translation = if case_fold {
-        let canon = crate::emacs_core::casetab::current_case_canon_table(eval)?;
-        Some(crate::emacs_core::regex_emacs::CaseTranslation::from_char_table(canon))
-    } else {
-        None
-    };
-    let current_buffer = eval.buffers.current_buffer();
-    let syntax_table = current_buffer.map(crate::emacs_core::syntax::SyntaxTable::for_buffer);
-    let category_table =
-        Some(crate::emacs_core::category::active_category_table_for_buffer(current_buffer)?);
-    let word_boundary = current_word_boundary_lookup(eval);
-    let syntax_properties =
-        current_string_match_syntax_properties(eval, &eval.obarray, &eval.buffers, args.get(1));
-    builtin_string_match_p_with_case_fold(
-        case_fold,
-        case_translation,
-        syntax_table.as_ref(),
-        category_table,
-        word_boundary,
-        syntax_properties,
-        &args,
-    )
-}
+// There is no `builtin_string_match_p' subr entry point.  GNU DEFUNs
+// `string-match' (src/search.c:442) and writes `string-match-p' as a
+// `defsubst' over it (lisp/subr.el:5941), so every compiled caller inlines
+// `(string-match REGEXP STRING START t)' and the name has no function of its
+// own to reach (DIVERGENCES.md 152).  `builtin_string_match_p_with_case_fold'
+// above stays: `Context::skip_debugger' calls it to match
+// `debug-ignored-errors', which GNU also does from C -- `fast_string_match'
+// at src/eval.c:2163, over src/search.c:485 -- and never through a Lisp name.
 
 pub(crate) fn builtin_posix_string_match(
     eval: &mut super::eval::Context,

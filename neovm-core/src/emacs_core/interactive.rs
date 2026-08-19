@@ -129,12 +129,16 @@ impl InteractiveSpec {
 /// Static interactive metadata attached to a registered Rust subr.
 ///
 /// GNU stores this beside arity and the function pointer in `Lisp_Subr`.
-/// Representing no arguments, control strings, and Lisp forms as distinct
-/// states prevents command validation from drifting away from argument
-/// preparation.
+/// Representing control strings and Lisp forms as distinct states prevents
+/// command validation from drifting away from argument preparation.
+///
+/// There is deliberately no "no arguments" variant: a GNU `DEFUN`'s intspec is
+/// a string or a Lisp form and never nil, so `(interactive-form 'recursive-edit)`
+/// is `(interactive "")`, not `(interactive nil)`.  The variant that used to be
+/// here existed for `ignore` alone, which is `lisp/subr.el:501` and not a subr
+/// at all (DIVERGENCES.md 152).
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum BuiltinInteractiveSpec {
-    NoArgs,
     String(&'static str),
     Form(fn() -> Value),
 }
@@ -142,7 +146,6 @@ pub(crate) enum BuiltinInteractiveSpec {
 impl BuiltinInteractiveSpec {
     fn into_spec_value(self) -> Value {
         match self {
-            Self::NoArgs => Value::NIL,
             Self::String(code) => Value::string(code),
             Self::Form(build) => build(),
         }
@@ -1815,10 +1818,9 @@ fn interactive_args_from_string_code_in_vm_runtime(
                 InteractiveControlLetter::NumberOrPrefix => {
                     let raw = interactive_prefix_raw_arg_in_state(&shared.obarray, &[], kind);
                     if raw.is_nil() {
-                        let letter_args = [Value::heap_string(prompt.clone())];
-                        args.push(super::reader::finish_read_number_in_vm_runtime(
+                        args.push(read_number_through_the_function_cell(
                             shared,
-                            &letter_args,
+                            Value::heap_string(prompt.clone()),
                         )?);
                     } else {
                         args.push(Value::fixnum(prefix_numeric_value(&raw)));
@@ -1845,10 +1847,9 @@ fn interactive_args_from_string_code_in_vm_runtime(
                     }
                 }
                 InteractiveControlLetter::Number => {
-                    let letter_args = [Value::heap_string(prompt.clone())];
-                    args.push(super::reader::finish_read_number_in_vm_runtime(
+                    args.push(read_number_through_the_function_cell(
                         shared,
-                        &letter_args,
+                        Value::heap_string(prompt.clone()),
                     )?);
                 }
                 InteractiveControlLetter::String => {
@@ -1963,6 +1964,23 @@ fn interactive_read_coding_system_optional_arg(
         Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file" => Ok(Value::NIL),
         Err(flow) => Err(flow),
     }
+}
+
+/// The `n` and `N` code letters, GNU's way: `calln (Qread_number,
+/// callint_message)` (src/callint.c:645).
+///
+/// This is the ONE control letter GNU dispatches through a Lisp function cell
+/// -- `s` is `Fread_string`, `S` is `Fintern` over `Fcompleting_read`, and so
+/// on -- and going through the cell is observable: rebinding `read-number`
+/// changes what `(interactive "n")` produces.  Measured on GNU 31.0.90,
+/// `(cl-letf (((symbol-function 'read-number) (lambda (&rest _) 42))) ...)`
+/// answers 42.  Calling a Rust `read-number` here instead answered the Rust
+/// one, and `read-number` is `lisp/subr.el:3725` -- DIVERGENCES.md 152.
+fn read_number_through_the_function_cell(
+    eval: &mut super::eval::Context,
+    prompt: Value,
+) -> EvalResult {
+    eval.apply(Value::symbol("read-number"), vec![prompt])
 }
 
 fn interactive_use_region_p_in_vm_runtime(shared: &mut super::eval::Context) -> Result<bool, Flow> {
@@ -2560,9 +2578,9 @@ fn interactive_args_from_string_code(
                 InteractiveControlLetter::NumberOrPrefix => {
                     let raw = interactive_prefix_raw_arg(eval, kind);
                     if raw.is_nil() {
-                        args.push(super::reader::builtin_read_number(
+                        args.push(read_number_through_the_function_cell(
                             eval,
-                            vec![Value::heap_string(prompt)],
+                            Value::heap_string(prompt),
                         )?);
                     } else {
                         args.push(Value::fixnum(prefix_numeric_value(&raw)));
@@ -2601,10 +2619,9 @@ fn interactive_args_from_string_code(
                     eval,
                     vec![Value::heap_string(prompt)],
                 )?),
-                InteractiveControlLetter::Number => args.push(super::reader::builtin_read_number(
-                    eval,
-                    vec![Value::heap_string(prompt)],
-                )?),
+                InteractiveControlLetter::Number => args.push(
+                    read_number_through_the_function_cell(eval, Value::heap_string(prompt))?,
+                ),
                 InteractiveControlLetter::Expression => {
                     args.push(interactive_read_expression_arg(eval, prompt)?)
                 }

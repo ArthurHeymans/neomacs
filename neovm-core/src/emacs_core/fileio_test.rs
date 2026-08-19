@@ -120,7 +120,7 @@ fn find_file_name_handler_matches_raw_unibyte_filename_bytes() {
 }
 
 #[test]
-fn make_auto_save_file_name_accepts_raw_unibyte_prefix_directory() {
+fn do_auto_save_names_a_fileless_buffer_under_a_raw_unibyte_prefix_directory() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(
@@ -134,32 +134,36 @@ fn make_auto_save_file_name_accepts_raw_unibyte_prefix_directory() {
         .current_buffer()
         .expect("current buffer")
         .name_runtime_string_owned();
+    eval.buffers
+        .current_buffer_mut()
+        .expect("current buffer")
+        .insert_lisp_string(&crate::heap_types::LispString::from_utf8("payload"));
     let safe_name = buffer_name.replace('/', "!");
     let mut expected = b"/tmp/neomacs-\xFF/#*".to_vec();
     expected.extend_from_slice(safe_name.as_bytes());
     expected.extend_from_slice(b"*#");
 
-    let value = builtin_make_auto_save_file_name(&mut eval, vec![])
-        .expect("make-auto-save-file-name should succeed");
-    assert_unibyte_string_bytes(value, &expected);
+    builtin_do_auto_save(&mut eval, vec![]).expect("do-auto-save should name the buffer");
+    let buf = eval.buffers.current_buffer().expect("current buffer");
+    assert_unibyte_string_bytes(buf.auto_save_file_name_value(), &expected);
 }
 
 #[cfg(unix)]
 #[test]
-fn make_auto_save_file_name_preserves_raw_unibyte_visited_filename() {
+fn do_auto_save_preserves_a_raw_unibyte_visited_filename_in_the_auto_save_name() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(
         b"/tmp/neomacs-\xFF/demo-\xFE".to_vec(),
     ));
-    eval.buffers
-        .current_buffer_mut()
-        .expect("current buffer")
-        .set_file_name_value(raw);
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.set_file_name_value(raw);
+        buf.insert_lisp_string(&crate::heap_types::LispString::from_utf8("payload"));
+    }
 
-    let value = builtin_make_auto_save_file_name(&mut eval, vec![])
-        .expect("make-auto-save-file-name should preserve raw visited file names");
-    assert_unibyte_string_bytes(value, b"/tmp/neomacs-\xFF/#demo-\xFE#");
+    builtin_do_auto_save(&mut eval, vec![])
+        .expect("do-auto-save should preserve raw visited file names");
 
     let buf = eval.buffers.current_buffer().expect("current buffer");
     assert_unibyte_string_bytes(
@@ -5815,8 +5819,9 @@ fn builtin_do_auto_save_preserves_raw_unibyte_filename_and_bytes() {
             0xFF, b'A',
         ]));
     }
-    builtin_make_auto_save_file_name(&mut eval, vec![]).expect("make-auto-save-file-name");
-
+    // `do-auto-save' names the buffer itself when it has no auto-save name;
+    // `make-auto-save-file-name' is Lisp (lisp/files.el:7699) and cannot be
+    // called here (DIVERGENCES.md 152).
     builtin_do_auto_save(&mut eval, vec![]).expect("do-auto-save should preserve raw filenames");
 
     assert_eq!(fs::read(&auto_path).unwrap(), vec![0xFF, b'A']);

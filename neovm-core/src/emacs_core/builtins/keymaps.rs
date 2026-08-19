@@ -10,10 +10,9 @@ use super::keymap::{
     collect_minor_mode_maps_in_state, current_active_maps_for_position,
     expand_meta_prefix_char_events_in_obarray, get_keymap_in_obarray, get_keymap_in_runtime,
     is_list_keymap, key_event_to_emacs_event, list_keymap_accessible, list_keymap_copy,
-    list_keymap_define_seq_in_obarray, list_keymap_define_seq_in_obarray_ex,
-    list_keymap_inherits_from, list_keymap_parent, list_keymap_set_parent,
-    lookup_key_in_keymaps_in_obarray_runtime, make_list_keymap, make_sparse_list_keymap,
-    maybe_keymap_in_obarray, maybe_keymap_in_runtime,
+    list_keymap_define_seq_in_obarray_ex, list_keymap_inherits_from, list_keymap_parent,
+    list_keymap_set_parent, lookup_key_in_keymaps_in_obarray_runtime, make_list_keymap,
+    make_sparse_list_keymap, maybe_keymap_in_obarray, maybe_keymap_in_runtime,
 };
 use super::symbols::cache_event_symbol_value_properties_in_obarray;
 
@@ -456,44 +455,14 @@ fn resolve_lookup_keymaps_in_runtime(
     Ok(vec![get_keymap_in_runtime(eval, value, true, true)?])
 }
 
-/// (global-set-key KEY COMMAND)
-pub(super) fn builtin_global_set_key(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("global-set-key", &args, 2)?;
-    let selected_global_map = eval.current_global_map();
-    let global = get_keymap_in_runtime(eval, &selected_global_map, true, true)?;
-    let events = expect_key_events(&args[0])?;
-    cache_key_event_symbol_properties(eval, &events)?;
-    let def = args[1];
-    if let Err(msg) = list_keymap_define_seq_in_obarray(eval.obarray(), global, &events, def) {
-        return Err(signal("error", vec![Value::string(msg)]));
-    }
-    Ok(def)
-}
-
-/// (local-set-key KEY COMMAND)
-pub(super) fn builtin_local_set_key(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("local-set-key", &args, 2)?;
-    let local = if eval.buffers.current_local_map().is_nil() {
-        let km = make_sparse_list_keymap();
-        let _ = eval.buffers.set_current_local_map(km);
-        km
-    } else {
-        eval.buffers.current_local_map()
-    };
-    let events = expect_key_events(&args[0])?;
-    cache_key_event_symbol_properties(eval, &events)?;
-    let def = args[1];
-    if let Err(msg) = list_keymap_define_seq_in_obarray(eval.obarray(), local, &events, def) {
-        return Err(signal("error", vec![Value::string(msg)]));
-    }
-    Ok(def)
-}
+// `global-set-key' and `local-set-key' are NOT here.  GNU has no C version
+// of either: `(defun global-set-key (key command) ...)' is lisp/subr.el:1545
+// and `(defun local-set-key (key command) ...)' is :1569, both three lines
+// over `define-key' and `current-global-map' / `current-local-map', which are
+// the C primitives (src/keymap.c) and stay registered.  The Rust versions
+// checked the keymap BEFORE the key, so a non-array KEY reported
+// `(wrong-type-argument keymapp nil)' where GNU signals
+// `(wrong-type-argument arrayp KEY)' (DIVERGENCES.md 152).
 
 /// (use-local-map KEYMAP)
 pub(super) fn builtin_use_local_map(
