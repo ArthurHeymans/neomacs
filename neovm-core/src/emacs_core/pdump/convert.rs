@@ -602,6 +602,10 @@ impl<'a> LoadDecoder<'a> {
 
         for (_index, record) in self.state.spans.iter() {
             match record {
+                // Bare slot spans (bytecode constant pools) need no cell-range
+                // registration: the span is reached only through the owning
+                // function's LispValueVec and traced through its GC arm.
+                LoadedObjectSpan::SlotsOnly(_) => {}
                 LoadedObjectSpan::Cons(span) => {
                     cons_run.push(span.offset, |run_start, run_len| {
                         let mapped_heap = mapped_heap.ok_or_else(|| {
@@ -1709,7 +1713,12 @@ impl<'a> LoadDecoder<'a> {
                 }
             }
             DumpHeapObject::ByteCode(bc) => {
-                let data = load_bytecode_owned(self, bc)?;
+                // Alias the constants pool directly in the mapped image when
+                // the dump reserved a slot span (same phase contract as
+                // vector/record slots: fixups patch the image in place).
+                let len = self.mapped_slot_count_or(id, bc.constants.len())?;
+                let mapped = self.mapped_slots_for_object_without_copy(id, len)?;
+                let data = load_bytecode_owned(self, bc, mapped)?;
                 Self::install_restored_bytecode_data(value, data)?;
             }
             DumpHeapObject::Record(items) => {
@@ -4025,6 +4034,7 @@ fn load_lambda_params_owned(p: DumpLambdaParams) -> LambdaParams {
 fn load_bytecode_owned(
     decoder: &mut LoadDecoder,
     bc: DumpByteCodeFunction,
+    mapped_constants: Option<LispValueVec>,
 ) -> Result<ByteCodeFunction, DumpError> {
     let (ops, gnu_bytecode_bytes) = match bc.instructions {
         DumpByteCodeInstructions::Decoded(ops) => (
@@ -4044,12 +4054,15 @@ fn load_bytecode_owned(
         source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
         ops,
         stack_verified: false,
-        constants: bc
-            .constants
-            .into_iter()
-            .map(|value| decoder.load_value_owned(value))
-            .collect::<Vec<_>>()
-            .into(),
+        constants: match mapped_constants {
+            Some(mapped) => mapped,
+            None => bc
+                .constants
+                .into_iter()
+                .map(|value| decoder.load_value_owned(value))
+                .collect::<Vec<_>>()
+                .into(),
+        },
         max_stack: bc.max_stack,
         params,
         arglist,

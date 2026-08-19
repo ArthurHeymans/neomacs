@@ -651,6 +651,11 @@ fn extract_tagged_heap_payloads(heap: &mut DumpTaggedHeap) -> MappedHeapPayload 
             // contents are the external storage.
             DumpHeapObject::CharTable { extras, .. } => Some(extras.len()),
             DumpHeapObject::SubCharTable { contents, .. } => Some(contents.len()),
+            // Bytecode constant pools are mapped as bare slot spans (no
+            // veclike header — the object stays descriptor-driven); the
+            // loader aliases them as LispValueVec::mapped instead of
+            // decoding an owned Vec per function.
+            DumpHeapObject::ByteCode(function) => Some(function.constants.len()),
             _ => None,
         };
         if let Some(slot_count) = slot_count {
@@ -857,6 +862,15 @@ impl MappedHeapBuilder {
                     if let Some(span) = heap.mapped_slots.get(index).copied().flatten() {
                         let mut offset = span.offset as usize;
                         for slot in slots {
+                            self.write_dump_value_word(offset, slot, heap);
+                            offset += std::mem::size_of::<TaggedValue>();
+                        }
+                    }
+                }
+                DumpHeapObject::ByteCode(function) => {
+                    if let Some(span) = heap.mapped_slots.get(index).copied().flatten() {
+                        let mut offset = span.offset as usize;
+                        for slot in &function.constants {
                             self.write_dump_value_word(offset, slot, heap);
                             offset += std::mem::size_of::<TaggedValue>();
                         }

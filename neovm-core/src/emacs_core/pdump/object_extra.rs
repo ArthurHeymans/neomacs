@@ -219,14 +219,18 @@ impl FileObjectDescriptors {
 // ---------------------------------------------------------------------------
 
 /// Build the ObjectExtra section bytes from dump heap objects.
-pub(crate) fn build_object_extra(objects: &[DumpHeapObject]) -> Result<Vec<u8>, DumpError> {
+pub(crate) fn build_object_extra(
+    objects: &[DumpHeapObject],
+    mapped_slots: &[Option<crate::emacs_core::pdump::types::DumpSlotSpan>],
+) -> Result<Vec<u8>, DumpError> {
     let mut bytes = vec![0u8; HEADER_SIZE];
     for (index, obj) in objects.iter().enumerate() {
         if !object_needs_extra(obj) {
             continue;
         }
         write_dump_usize(&mut bytes, index, "object-extra object index")?;
-        write_object_extra(&mut bytes, obj)?;
+        let has_mapped_slots = mapped_slots.get(index).copied().flatten().is_some();
+        write_object_extra(&mut bytes, obj, has_mapped_slots)?;
     }
     let payload_len = bytes.len() - HEADER_SIZE;
     let header = ObjectExtraHeader {
@@ -241,7 +245,11 @@ pub(crate) fn build_object_extra(objects: &[DumpHeapObject]) -> Result<Vec<u8>, 
     Ok(bytes)
 }
 
-fn write_object_extra(out: &mut Vec<u8>, obj: &DumpHeapObject) -> Result<(), DumpError> {
+fn write_object_extra(
+    out: &mut Vec<u8>,
+    obj: &DumpHeapObject,
+    has_mapped_slots: bool,
+) -> Result<(), DumpError> {
     match obj {
         DumpHeapObject::Cons { .. }
         | DumpHeapObject::Float(_)
@@ -298,10 +306,16 @@ fn write_object_extra(out: &mut Vec<u8>, obj: &DumpHeapObject) -> Result<(), Dum
         }
         DumpHeapObject::ByteCode(function) => {
             object_value_codec::write_u8(out, EXTRA_BYTE_CODE);
-            object_value_codec::write_heap_object(
-                out,
-                &DumpHeapObject::ByteCode(function.clone()),
-            )?;
+            let mut function = function.clone();
+            if has_mapped_slots {
+                // The constants pool lives in the mapped heap image (a
+                // SPAN_SLOTS_ONLY span); writing it into the descriptor too
+                // would make the loader PARSE it a second time — the parse,
+                // not the conversion, was the measured cost. The loader
+                // aliases the span and ignores this (now empty) field.
+                function.constants = Vec::new();
+            }
+            object_value_codec::write_heap_object(out, &DumpHeapObject::ByteCode(function))?;
         }
         DumpHeapObject::CharTable { .. } => {
             object_value_codec::write_u8(out, EXTRA_CHAR_TABLE);
@@ -538,6 +552,9 @@ fn mapped_object_is_self_contained(
 ) -> Result<bool, DumpError> {
     match span {
         LoadedObjectSpan::Cons(_) | LoadedObjectSpan::Float(_) => Ok(true),
+        // A bare slot span holds only the constants array; the object itself
+        // is still descriptor-driven.
+        LoadedObjectSpan::SlotsOnly(_) => Ok(false),
         LoadedObjectSpan::Vectorlike { object, .. } => {
             let mapped_heap = mapped_heap.ok_or_else(|| {
                 DumpError::ImageFormatError(
@@ -849,14 +866,17 @@ mod tests {
 
     #[test]
     fn object_extra_is_sparse_for_category_a_descriptors() {
-        let bytes = build_object_extra(&[
-            DumpHeapObject::Cons {
-                car: DumpValue::Nil,
-                cdr: DumpValue::True,
-            },
-            DumpHeapObject::Vector(vec![DumpValue::Nil, DumpValue::True]),
-            DumpHeapObject::Free,
-        ])
+        let bytes = build_object_extra(
+            &[
+                DumpHeapObject::Cons {
+                    car: DumpValue::Nil,
+                    cdr: DumpValue::True,
+                },
+                DumpHeapObject::Vector(vec![DumpValue::Nil, DumpValue::True]),
+                DumpHeapObject::Free,
+            ],
+            &[],
+        )
         .expect("build object extra");
 
         let extras = load_object_extra(&bytes).expect("load object extra");
@@ -873,7 +893,7 @@ mod tests {
             },
             DumpHeapObject::Free,
         ];
-        let bytes = build_object_extra(&objects).expect("build object extra");
+        let bytes = build_object_extra(&objects, &[]).expect("build object extra");
         let heap = DumpTaggedHeap {
             objects,
             mapped_cons: vec![Some(DumpConsSpan { offset: 0 }), None],
@@ -899,7 +919,7 @@ mod tests {
             size_byte: -2,
             text_props: Vec::new(),
         }];
-        let bytes = build_object_extra(&objects).expect("build object extra");
+        let bytes = build_object_extra(&objects, &[]).expect("build object extra");
         let extras = load_object_extra(&bytes).expect("load object extra");
 
         assert!(matches!(
@@ -921,7 +941,7 @@ mod tests {
             DumpHeapObject::Macro(vec![DumpValue::Nil, DumpValue::True]),
             DumpHeapObject::Record(vec![DumpValue::Nil, DumpValue::True]),
         ];
-        let bytes = build_object_extra(&objects).expect("build object extra");
+        let bytes = build_object_extra(&objects, &[]).expect("build object extra");
         assert_eq!(bytes.len(), HEADER_SIZE);
 
         let mut offset = 0u64;
@@ -961,7 +981,8 @@ mod tests {
 
     #[test]
     fn object_extra_rejects_removed_none_tag() {
-        let mut bytes = build_object_extra(&[DumpHeapObject::Free]).expect("build object extra");
+        let mut bytes =
+            build_object_extra(&[DumpHeapObject::Free], &[]).expect("build object extra");
         bytes[HEADER_SIZE + 4] = 100;
 
         let err = load_object_extra(&bytes).expect_err("removed NONE tag should be rejected");

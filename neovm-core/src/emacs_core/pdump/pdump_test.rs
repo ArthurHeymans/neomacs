@@ -52,7 +52,7 @@ fn file_pdump_object_descriptors_stay_sparse() {
         },
         DumpHeapObject::Free,
     ];
-    let object_extra = object_extra::build_object_extra(&objects).expect("build object extra");
+    let object_extra = object_extra::build_object_extra(&objects, &[]).expect("build object extra");
     let heap = types::DumpTaggedHeap {
         objects,
         mapped_cons: vec![Some(types::DumpConsSpan { offset: 0 }), None],

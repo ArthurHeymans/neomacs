@@ -349,7 +349,10 @@ pub fn dump_to_file(eval: &Context, path: &Path) -> Result<(), DumpError> {
     let symbol_table_payload = symbol_table_image::symbol_table_section_bytes(&state.symbol_table)?;
     let heap_payload = mapped_heap::extract_mapped_heap_payloads(&mut state);
     let object_starts_payload = object_starts::build_object_starts(&state.tagged_heap)?;
-    let object_extra_payload = object_extra::build_object_extra(&state.tagged_heap.objects)?;
+    let object_extra_payload = object_extra::build_object_extra(
+        &state.tagged_heap.objects,
+        &state.tagged_heap.mapped_slots,
+    )?;
     let value_fixups_payload =
         value_fixups::value_fixups_section_bytes(&heap_payload.value_fixups)?;
     let obarray_payload = obarray_image::obarray_section_bytes(&state.obarray)?;

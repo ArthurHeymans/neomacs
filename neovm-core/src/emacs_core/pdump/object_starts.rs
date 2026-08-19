@@ -56,6 +56,10 @@ const SPAN_STRING: u8 = 3;
 const SPAN_VECTORLIKE: u8 = 4;
 // Category C objects (no span).
 const SPAN_UNMAPPED: u8 = 5;
+/// A bare slot span with no veclike header: the object itself is
+/// descriptor-driven (Category B), but one of its Value arrays lives in the
+/// mapped heap (bytecode constant pools).
+const SPAN_SLOTS_ONLY: u8 = 6;
 
 fn write_object_span(
     out: &mut Vec<u8>,
@@ -130,10 +134,19 @@ fn write_object_span(
                 out.push(SPAN_NONE);
             }
         }
+        DumpHeapObject::ByteCode(_) => {
+            // Descriptor-driven object with a mapped constants slot span.
+            if let Some(sl) = heap.mapped_slots.get(index).and_then(|s| *s) {
+                out.push(SPAN_SLOTS_ONLY);
+                write_dump_off(out, sl.offset)?;
+                write_dump_off(out, sl.len)?;
+            } else {
+                out.push(SPAN_UNMAPPED);
+            }
+        }
         // Category C: no HeapImage representation.
         DumpHeapObject::HashTable(_)
         | DumpHeapObject::Obarray { .. }
-        | DumpHeapObject::ByteCode(_)
         | DumpHeapObject::Subr { .. }
         | DumpHeapObject::Buffer(_)
         | DumpHeapObject::Window(_)
@@ -167,6 +180,8 @@ pub(crate) enum LoadedObjectSpan {
         object: DumpVecLikeSpan,
         slots: Option<DumpSlotSpan>,
     },
+    /// Bare slot span, no veclike header (bytecode constant pools).
+    SlotsOnly(DumpSlotSpan),
 }
 
 /// Load-side object span lookup.
@@ -252,6 +267,7 @@ impl<'data> LoadedSpans<'data> {
     pub(crate) fn slots(&self, index: usize) -> Option<DumpSlotSpan> {
         match self.get(index) {
             LoadedObjectSpan::Vectorlike { slots, .. } => slots,
+            LoadedObjectSpan::SlotsOnly(slots) => Some(slots),
             _ => None,
         }
     }
@@ -357,6 +373,10 @@ fn read_span_record(data: &[u8], cursor: &mut usize) -> Result<LoadedObjectSpan,
     match tag {
         SPAN_NONE => Ok(LoadedObjectSpan::None),
         SPAN_UNMAPPED => Ok(LoadedObjectSpan::Unmapped),
+        SPAN_SLOTS_ONLY => Ok(LoadedObjectSpan::SlotsOnly(DumpSlotSpan {
+            offset: read_dump_off(data, cursor)?,
+            len: read_dump_off(data, cursor)?,
+        })),
         SPAN_CONS => Ok(LoadedObjectSpan::Cons(DumpConsSpan {
             offset: read_dump_off(data, cursor)?,
         })),
