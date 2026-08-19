@@ -12452,6 +12452,14 @@ after.
 > undo names -- and, with them, the third replay loop this entry found.  See
 > 148 and 150 for the corrections to this entry.
 
+> Note, 2026-08-18 (later the same day): the arithmetic with every instalment
+> counted is 50 before this entry, 49 after it, 38 after 148, 34 after **149**
+> (the four process launchers below), 32 after 150, and **19** after **152**,
+> which deleted the thirteen "Everything else" names below.  What is left is
+> `frame-windows-min-size` -- GNU's own justified placeholder -- and the
+> eighteen window/frame/face names.  See 149 and 152 for their corrections to
+> this entry.
+
 GNU has exactly ONE name in that shape, and it labels itself:
 
 ```c
@@ -12512,7 +12520,22 @@ a Rust reimplementation of Lisp we ship:
   `make-auto-save-file-name`, `memory-limit`, `read-number`,
   `set-buffer-file-coding-system`, `string-greaterp`, `string-match-p`
   (a `defsubst`, `subr.el:5941`), `symbol-file`, `transient-mark-mode`
-  (a `define-minor-mode`, `simple.el:7614`).
+  (a `define-minor-mode`, `simple.el:7614`).  ALL DELETED by entry 152,
+  2026-08-18, which also corrects this bullet three ways.  The group has a
+  structure this entry does not name: three of the thirteen are names a
+  compiled caller NEVER looks up -- `ignore` by a `byte-compile` property
+  (`bytecomp.el:4429`), `string-match-p` by being a `defsubst`,
+  `string-greaterp` by a `compiler-macro` -- and ten are ordinary `Bcall`
+  sites that do read the cell.  Two are SPLIT names whose C half had to
+  survive, the way `buffer-enable-undo` did in 150: `string-match` is
+  `DEFUN`ed at `src/search.c:442`, and `transient-mark-mode` the VARIABLE is
+  `DEFVAR_LISP` at `src/buffer.c:5835`.  And `read-number` is this entry's one
+  counter-example to "a shadowed subr never answers once the `.el` is loaded":
+  `interactive.rs` called the Rust function DIRECTLY for the `n` and `N` code
+  letters, where GNU dispatches through the function cell
+  (`calln (Qread_number, callint_message)`, `src/callint.c:645`), so the Rust
+  reimplementation answered every `(interactive "n")` in a fully loaded
+  session.
 
 The test asserts the list EXACTLY, in both directions: a new shadow fails it
 with an instruction to delete the subr instead, and a removed one fails it so
@@ -13811,5 +13834,499 @@ it.  Three refinements it could not have made without measuring:
 
 146's count line -- "It was 50 before this change and is 49 after", extended
 by 148 to 38 -- is extended again: **36** after this one.
+
+Status: FIXED.
+
+## 152. The thirteen leftover Rust subrs of the shadowed class: eight wrong arities, four names that were not commands at all, a `symbol-file` that never read `load-history`, and an `(interactive "n")` that did not go through the function cell -- FIXED
+
+Fourth and last instalment of the class ledger **146** enumerated: Rust subrs
+whose function cell is overwritten by preloaded Lisp.  148 took the type
+predicates and the `defalias` names, 149 the process launchers, 150 the undo
+commands.  What was left, 146's list called **"Everything else"**: thirteen
+names from six files, related only by being Lisp that GNU has no C version of.
+
+`grep 'DEFUN ("NAME"' src/*.c` against emacs-mirror 31.0.90 (`0ee48ac4df2`)
+finds nothing for any of the thirteen.  The class test is
+`neovm-core/src/emacs_core/builtins/rust_subrs_shadowed_by_lisp_test.rs`, which
+walks a booted runtime's obarray and asserts the list exactly, in both
+directions.  It was 50 before 146, 49 after it, 38 after 148, 34 after 149, 32
+after 150, and is **19** after this entry -- one justified C placeholder
+(`frame-windows-min-size`, `src/frame.c:494-502`) and the eighteen
+window/frame/face names.
+
+### The grouping, verified before anything was deleted
+
+150's lesson was that the group can contain a name GNU really does `DEFUN`, and
+that the *neighbour* is where the trap lives.  Checked one name at a time:
+
+| name | GNU defines it | where | the C neighbour, which stays |
+| --- | --- | --- | --- |
+| `ignore` | `defun` | lisp/subr.el:501 | -- |
+| `global-set-key` | `defun` | lisp/subr.el:1545 | `define-key`, `current-global-map` (src/keymap.c) |
+| `local-set-key` | `defun` | lisp/subr.el:1569 | `define-key`, `current-local-map` (src/keymap.c) |
+| `symbol-file` | `defun` | lisp/subr.el:3351 | -- |
+| `memory-limit` | `defun` | lisp/subr.el:3574 | `process-attributes` (src/process.c) |
+| `read-number` | `defun` | lisp/subr.el:3725 | `read-from-minibuffer` (src/minibuf.c) |
+| `string-match-p` | **`defsubst`** | lisp/subr.el:5941 | **`string-match`, `DEFUN`ed at src/search.c:442** |
+| `string-greaterp` | `defun` | lisp/subr.el:6283 | `string-lessp` (src/fns.c:557) |
+| `transient-mark-mode` | **`define-minor-mode`** | lisp/simple.el:7614 | **the VARIABLE, `DEFVAR_LISP` at src/buffer.c:5835** |
+| `make-auto-save-file-name` | `defun` | lisp/files.el:7699 | `do-auto-save` (src/fileio.c) |
+| `emacs-repository-get-version` | `defun` | lisp/version.el:183 | -- |
+| `emacs-repository-get-branch` | `defun` | lisp/version.el:231 | -- |
+| `set-buffer-file-coding-system` | `defun` | lisp/international/mule.el:1302 | -- |
+
+Two rows are the ones a careless deletion would have got wrong, and both are
+split names rather than pairs:
+
+* **`string-match-p` is not `string-match`.**  `string-match` IS a C `DEFUN`
+  (`src/search.c:442`, arity `(2 . 4)`).  `string-match-p` is a three-line
+  `defsubst` over it whose whole body is
+  `(string-match regexp string start t)` -- the fourth argument being GNU 31's
+  INHIBIT-MODIFY flag, which is why it no longer needs `save-match-data`.
+* **`transient-mark-mode` the COMMAND is not `transient-mark-mode` the
+  VARIABLE.**  `DEFVAR_LISP ("transient-mark-mode", ...)` is `src/buffer.c:5835`
+  and stays; the `define-minor-mode` at `lisp/simple.el:7614` is what a caller
+  reaches through the FUNCTION cell, and only that went.  The standing check
+  now asserts the variable is still bound after the deletion.
+
+`emacs-repository-get-version` and `-branch` carried a comment calling them
+"emacs.c / version.c gap-fill stubs for loadup.el".  `loadup.el` loads
+`version.el` at `:128` and does not call either name until `:429`, so there was
+no gap.
+
+### What an observer could tell, without running anything
+
+GNU column measured on GNU 31.0.90 `-Q --batch`
+(`tmp/pw59/gnu-observables.txt`); Neomacs column measured by asking the subr on
+a bare `Context` before the deletion (`tmp/pw59/neomacs-bare-before.txt`).
+Every cell in the loaded runtime already matched GNU -- being on the shadow
+list IS that measurement -- so this is the bare evaluator, which is GNU before
+`loadup.el` and where the Rust subrs were the only thing answering.
+
+| name | `func-arity` GNU | `func-arity` Rust | `commandp` GNU | `commandp` Rust |
+| --- | --- | --- | --- | --- |
+| `ignore` | `(0 . many)` | `(0 . many)` | `t` | `t` |
+| `global-set-key` | `(2 . 2)` | **`(0 . many)`** | `t` | **`nil`** |
+| `local-set-key` | `(2 . 2)` | **`(0 . many)`** | `t` | **`nil`** |
+| `symbol-file` | `(1 . 3)` | **`(0 . many)`** | `nil` | `nil` |
+| `memory-limit` | `(0 . 0)` | `(0 . 0)` | `nil` | `nil` |
+| `read-number` | `(1 . 3)` | **`(1 . 2)`** | `nil` | `nil` |
+| `string-match-p` | `(2 . 3)` | **`(0 . many)`** | `nil` | `nil` |
+| `string-greaterp` | `(2 . 2)` | `(2 . 2)` | `nil` | `nil` |
+| `transient-mark-mode` | `(0 . 1)` | **`(0 . many)`** | `t` | **`nil`** |
+| `make-auto-save-file-name` | `(0 . 0)` | `(0 . 0)` | `nil` | `nil` |
+| `emacs-repository-get-version` | `(0 . 2)` | **`(0 . 0)`** | `nil` | `nil` |
+| `emacs-repository-get-branch` | `(0 . 1)` | **`(0 . 0)`** | `nil` | `nil` |
+| `set-buffer-file-coding-system` | `(1 . 3)` | `(1 . 3)` | `t` | **`nil`** |
+
+**Eight wrong arities and four wrong `commandp`s.**  `commandp` is the cell 150
+taught this project to look at: `global-set-key`, `local-set-key`,
+`transient-mark-mode` and `set-buffer-file-coding-system` are all commands in
+GNU -- `M-x transient-mark-mode` and `C-x C-m f` need that -- and not one Rust
+subr was registered interactive.  `ignore` was the exception; it was registered
+with a `BuiltinInteractiveSpec::NoArgs`, which is discussed below.
+
+`documentation` was `"Built-in function."` for all thirteen where GNU has the
+real docstring; in the loaded runtime `(documentation 'ignore)` already answered
+`subr.el`'s own text, read out of the byte-compiled `subr.elc` we ship.
+
+The wrong-number-of-arguments DATUM diverged for all thirteen, the way 148
+described: a `defun` reports its arity cons, a subr reports itself.
+
+```elisp
+(condition-case e (funcall 'global-set-key "a") (error e))
+;; GNU                => (wrong-number-of-arguments (2 . 2) 1)
+;; Neomacs before fix => (wrong-number-of-arguments global-set-key 1)
+```
+
+### Who was reaching the Rust subrs: nobody, measured
+
+The same three doors 146, 148 and 150 checked:
+
+* **The function cell.**  Being on the shadow list is the measurement.  All
+  thirteen were on it, and the shipped binary confirmed the consequence: a
+  `cargo xtask fresh-build --release` binary run `-Q --batch` on the
+  observables probe `diff`s **empty** against GNU 31.0.90 -- every `subrp`,
+  `func-arity`, `commandp`, `interactive-form`, first docstring line, and every
+  byte-compilation row.
+* **The static subr table.**  `ResolvedBuiltinCallee::from_static_symbol`
+  (`neovm-core/src/emacs_core/bytecode/vm.rs`) still has exactly two callers and
+  both still reach it only from a `None` function cell (`vm.rs:6679`, `:7150`).
+  A name `loadup.el` writes a cell for cannot arrive there.
+* **Rust callers.**  Twelve of the thirteen had none outside their own
+  registration: after deleting them the library compiled with no errors and only
+  the test tree broke.  **The thirteenth did**, and it is the one real find of
+  this entry -- see `read-number` below.
+
+The bootstrap window is wide for some of these and narrow for others, and it is
+GNU's window in every case: `subr.el` is the third file `loadup.el` loads
+(`:123-125`), `version.el` the fourth (`:128`), `mule.el` (`:133`) and
+`files.el` (`:144`) next, `simple.el` the 64th (`:251`).  GNU has nothing at all
+for these names until those files run, and the suite confirms it: every
+bootstrap and runtime-startup test passes with all thirteen void until their
+`.el` loads.
+
+### Byte-compiled callers: three of the thirteen are never looked up
+
+This is where the thirteen split, and each of the three gets there by a
+different door.  Measured byte-for-byte, GNU 31.0.90 with `lexical-binding` t
+against this runtime; the two columns are identical for every row.
+
+| form | codes | constants |
+| --- | --- | --- |
+| `(lambda (x) (ignore x))` | `(192 135)` | `[nil]` |
+| `(lambda () (ignore))` | `(192 135)` | `[nil]` |
+| `(lambda (r s) (string-match-p r s))` | `(1 1 192 193 3 3 3 194 36 135)` | `[nil string-match t]` |
+| `(lambda (r s n) (string-match-p r s n))` | `(2 2 2 192 3 3 3 193 36 135)` | `[string-match t]` |
+| `(lambda (a b) (string-greaterp a b))` | `(137 2 153 135)` | `[]` |
+
+* `ignore` has a **`byte-compile` property**: `(byte-defop-compiler-1 ignore)`
+  at `lisp/emacs-lisp/bytecomp.el:4429`, whose handler `byte-compile-ignore`
+  (`:4445`) compiles the arguments for effect and then emits a constant nil.
+  The name never enters the constants vector.  (Its `declare` is deliberate
+  about this: `lisp/subr.el:505-506` says `ignore` is "not declared
+  `side-effect-free` because we don't want calls to it elided".)
+* `string-match-p` is a **`defsubst`**, so it is INLINED: the emitted code is
+  `(string-match REGEXP STRING START t)` with START defaulting to nil, and the
+  constants vector names `string-match`, the C primitive.
+* `string-greaterp` has a **`compiler-macro`** (`lisp/subr.el:6287-6290`) that
+  swaps its arguments into `string-lessp`, which has an opcode: `Bdup`,
+  `Bstack_ref2`, `Bstringlss`.  Empty constants vector.
+
+The other ten compile to an ordinary call through the constants vector -- `(192
+1 33 135)` with `[NAME]`, or `(192 32 135)` for the nullary ones -- so a
+compiled caller **does** read the cell, and the shadow was the only thing
+between those callers and the Rust subr.  That is 150's case, not 148's.
+
+### What the Rust versions did differently
+
+Measured on a bare evaluator before the deletion, GNU-first for every row.
+`ignore`, `string-match-p` (answers), `string-greaterp` and `local-set-key`
+were faithful; the rest were not.
+
+**`global-set-key` checked the keymap before the key.**  GNU's body checks KEY
+first (`lisp/subr.el:1566`, `(or (vectorp key) (stringp key) (signal
+'wrong-type-argument (list 'arrayp key)))`) and only then calls `define-key`.
+The Rust subr resolved `(current-global-map)` first:
+
+```elisp
+(condition-case e (global-set-key 42 'foo) (error e))
+;; GNU                => (wrong-type-argument arrayp 42)
+;; Neomacs before fix => (wrong-type-argument keymapp nil)
+```
+
+On a bare evaluator there is no selected global map, so the Rust subr could not
+bind a key at all -- `(global-set-key [f13] 'cmd)` signalled
+`(wrong-type-argument (keymapp nil))`.  GNU has nothing there to call.
+
+**`symbol-file` never looked at `load-history`.**  GNU's `defun` walks
+`load-history` for every kind of definition and, for an autoload, answers
+`(locate-library (nth 1 (symbol-function symbol)))`.  The Rust subr knew only
+about autoloads, and answered the RAW autoload file string:
+
+```elisp
+(progn (autoload 'probe "probe-file") (symbol-file 'probe))
+;; GNU                => nil        ; locate-library finds no "probe-file"
+;; Neomacs before fix => "probe-file"
+
+(file-name-nondirectory (symbol-file 'ignore))
+;; GNU                => "subr.elc"
+;; Neomacs before fix => nil        ; load-history never consulted
+```
+
+It also ignored GNU's third argument, NATIVE-P, entirely.
+
+**`memory-limit` measured a different thing from a different file.**  Its Rust
+docstring cited "GNU's `Fmemory_limit` (alloc.c)", which GNU dropped after
+Emacs 27 (`etc/NEWS.27:2965`).  Since then it is
+`(or (cdr (assq 'vsize (process-attributes (emacs-pid)))) 0)` --
+**virtual** size, from `process-attributes`, which IS a subr here.  The Rust
+version read `VmHWM`, the peak **resident** size, out of `/proc/self/status`.
+Both are positive integers on Linux, which is all the oracle row
+(`div_cx239_memory_limit_query`) asks, so nothing failed; they are simply not
+the same number.
+
+**`set-buffer-file-coding-system` did one of the five things GNU's body does.**
+Its own doc comment said so: "FORCE and NOMODIFY are accepted for arity
+compatibility but currently ignored".  GNU also `check-coding-system`s, merges
+with the previous `buffer-file-coding-system` when FORCE is nil, maintains
+`buffer-file-coding-system-explicit`, and marks the buffer modified:
+
+```elisp
+(with-temp-buffer
+  (set-buffer-modified-p nil)
+  (list (set-buffer-file-coding-system 'utf-8-unix)
+        buffer-file-coding-system (buffer-modified-p)
+        buffer-file-coding-system-explicit))
+;; GNU => (nil utf-8-unix t (nil . utf-8-unix))
+
+(with-temp-buffer
+  (setq buffer-file-coding-system 'utf-8-dos)
+  (set-buffer-file-coding-system 'latin-1 nil t)
+  buffer-file-coding-system)
+;; GNU => iso-latin-1-dos          ; merged: latin-1's text, dos's eol
+```
+
+**`make-auto-save-file-name` wrote a buffer field GNU's Lisp never touches.**
+GNU's `defun` only RETURNS a name; storing it in `buffer-auto-save-file-name`
+is `auto-save-mode`'s job, and the C side only reads the field (`BVAR (b,
+auto_save_file_name)`, `src/fileio.c:6406`).
+
+```elisp
+(with-temp-buffer
+  (setq buffer-file-name "/d/foo.txt")
+  (make-auto-save-file-name)
+  buffer-auto-save-file-name)
+;; GNU                => nil
+;; Neomacs before fix => "/d/#foo.txt#"
+```
+
+**`transient-mark-mode` was not a command and ran no hook.**  GNU's
+`define-minor-mode` gives it `(interactive (list (or current-prefix-arg
+'toggle)))` and a `transient-mark-mode-hook`; the Rust subr set the value and
+returned it.  Its answer arms all matched -- `0`, `1`, `'toggle`, `nil`, `-1`,
+a raw prefix `'(4)`, a float -- but
+
+```elisp
+(let ((seen nil))
+  (let ((transient-mark-mode-hook (list (lambda () (setq seen 'ran)))))
+    (transient-mark-mode 1))
+  seen)
+;; GNU                => ran
+;; Neomacs before fix => nil
+```
+
+**`emacs-repository-get-version` and `-branch` answered a constant nil** with
+arity `(0 . 0)`, where GNU takes `(&optional dir _external)` and `(&optional
+dir)` and shells out to git.
+
+**`read-number` dropped GNU's HIST argument** -- registered `(1 . 2)` where GNU
+is `(1 . 3)` -- and never looped.  GNU's body re-prompts with "Please enter a
+number." until a number arrives; the Rust one signalled `(error "Not a
+number")`.
+
+### The one live Rust caller, and the C dispatch it was not doing
+
+`read-number` is the thirteenth name, and unlike the other twelve it had a
+non-test Rust caller: `interactive.rs` called `builtin_read_number` directly for
+the `n` and `N` code letters, in both the evaluator path and the VM path.
+
+That is not what GNU does.  `n` is the **one** interactive code letter GNU
+dispatches through a Lisp function cell:
+
+```c
+	case 'N':     /* Prefix arg as number, else number from minibuffer.  */
+	  if (!NILP (prefix_arg))
+	    goto have_prefix_arg;
+	  FALLTHROUGH;
+	case 'n':		/* Read number from minibuffer.  */
+	  args[i] = calln (Qread_number, callint_message);
+```
+
+(`src/callint.c:640-646`.  `s` is `Fread_string`, `S` is `Fintern` over
+`Fcompleting_read`, and so on -- all C.)  Going through the cell is observable,
+and it was measured before the change on the shipped release binary:
+
+```elisp
+(cl-letf (((symbol-function 'read-number) (lambda (&rest _) 42)))
+  (call-interactively (lambda (x) (interactive "nNumber: ") x)))
+;; GNU                => 42
+;; Neomacs before fix => (end-of-file "Error reading from stdin")
+```
+
+So a `read-number` advice, a `cl-letf`, or any package that redefines it
+changed `(interactive "n")` in GNU and did nothing here.  `interactive.rs` now
+calls `read_number_through_the_function_cell`, which is
+`eval.apply(Value::symbol("read-number"), vec![prompt])` -- GNU's `calln` -- at
+all four sites, and the whole Rust `read-number` implementation goes with the
+registration.
+
+### The fix
+
+The thirteen `defsubr` calls are deleted, with a comment at each site naming
+the `.el` line that owns the name and the C primitive that stays.  Deleted with
+them: `builtin_ignore` (`builtins/misc_pure.rs`), `builtin_global_set_key` and
+`builtin_local_set_key` (`builtins/keymaps.rs`), `builtin_symbol_file`
+(`autoload.rs`), `builtin_memory_limit` (`builtins/symbols.rs`),
+`builtin_string_match_p` (`builtins/search.rs`), `builtin_string_greaterp_2`
+(`builtins/strings.rs`), `builtin_transient_mark_mode` (`navigation.rs`),
+`builtin_make_auto_save_file_name` (`fileio.rs`),
+`builtin_emacs_repository_get_version` and `_branch` (`builtins/stubs.rs`),
+`builtin_set_buffer_file_coding_system` (`coding.rs`), and the seven functions
+of the `read-number` implementation (`reader.rs`).
+
+Four helpers had no other reader and went too:
+
+* `process_resident_kib` and `parse_proc_status_kib` -- the `/proc/self/status`
+  reader that existed for `memory-limit` alone.
+* `list_keymap_define_seq_in_obarray` (`keymap.rs`) -- the `remove`-less
+  wrapper over `list_keymap_define_seq_in_obarray_ex`.  Its only two callers
+  were the two set-key subrs; `define-key` uses the `_ex` form.
+* **`BuiltinInteractiveSpec::NoArgs`** (`interactive.rs`).  This is the
+  type-system half of the change.  A GNU `DEFUN`'s intspec is a string or a
+  Lisp form and never nil -- measured, `(interactive-form 'recursive-edit)` is
+  `(interactive "")` -- so the "no arguments" variant modelled a state the C
+  layer it mirrors cannot hold.  It existed for `ignore` alone.  The enum now
+  has two variants, and a subr can no longer be registered with an interactive
+  spec GNU could not have written.
+
+Two helpers stay and their comments now say why:
+`builtin_string_match_p_with_case_fold` is called by `Context::skip_debugger`
+to match `debug-ignored-errors`, which GNU also does from C
+(`fast_string_match`, `src/eval.c:2163`); and
+`make_auto_save_file_name_for_buffer` is still reached from
+`builtin_do_auto_save`.
+
+Nothing was shimmed.
+
+### Tests: thirty-one touched, none propped up
+
+* **Seven `builtin_read_number` tests** (`reader_test.rs`) became one runtime
+  test, `read_number_arms_match_gnu`, whose eight rows were measured under GNU
+  with stdin at `/dev/null` first -- including the HIST argument the registered
+  arity refused, and `(read-number "Number: " "x")` =>
+  `(wrong-type-argument numberp "x")`.
+* **Five `symbol-file` tests** (`autoload_test.rs`) pinned the deleted subr's
+  shape, and one pinned an ANSWER GNU does not give: `"sym-file-probe-file"`
+  where GNU says nil.  They became one test of what this module owns -- the
+  function cell `autoload` writes, which is also what GNU's `symbol-file` reads
+  -- plus measured `symbol-file` rows in the new parity test.  The two
+  `builtin_symbol_file` tests were repointed the same way.
+* **Three `string-match-p` tests** (`search_test.rs`) became one bare-evaluator
+  test of the C primitive with its INHIBIT-MODIFY argument, which is what the
+  `defsubst` inlines: the answer, the miss, the case fold, and the match data
+  left alone.
+* **Three `make-auto-save-file-name` tests** (`fileio_test.rs`) drive
+  `do-auto-save` instead -- the C `DEFUN` that reads the auto-save name -- and
+  read the field it sets.  The raw-unibyte bytes they exist for are unchanged.
+* **Four `ignore` tests** moved or were repointed: `commandp` and
+  `interactive-form` now ask about `make-local-variable`, a C `DEFUN` that IS
+  interactive (`(interactive "vMake Local Variable: ")`, measured);
+  `command-execute` and `call-interactively` moved to the runtime, where
+  `subr.el`'s `ignore` answers.
+* **Two `string-greaterp` tests** were repointed at `string-lessp` with the
+  arguments swapped, which is `string-greaterp`'s body verbatim.
+* **`memory-limit`**: the `dispatch_builtin_pure` test and one
+  `assert_subr_arity` row are gone; there is no subr to have an arity.  The
+  oracle's `(> (memory-limit) 0)` row is now asserted in the runtime, where
+  `subr.el`'s `defun` answers it.
+* **Two VM tests** used `(global-set-key K D)` as incidental vocabulary; they
+  now use its verbatim body, `(define-key (current-global-map) K D)`.  A third
+  passed `'ignore` to `backtrace-frame--internal` as a callback and now passes
+  `#'list`.  A fourth used `string-match-p` in an assertion and now uses
+  `(string-match ... nil t)`.
+* **The `n` code letter's own tests.**  A bare evaluator can no longer answer
+  `(interactive "n")` at all -- exactly as GNU before `subr.el` -- so the `n`
+  row left the bare-`Context` batch-spec sweep and the `N` rows moved to
+  `with_vm_eval_bootstrap_context_state`, the same helper `user-error`'s tests
+  already use for the same reason.
+* **The `command-execute` prelude** (`interactive_test.rs`) used
+  `global-set-key` to build its test global map.  Following 148's rule it now
+  evaluates GNU's own `defun` out of `lisp/subr.el`, the way it already does for
+  `command-execute` and `error`; `read-number`'s `defun` joins it.  That is not
+  a shim for a deleted subr -- it is the `.el` line the prelude exists to
+  supply, and it is Lisp, not Rust.
+
+Eight new tests state the parity facts
+(`neovm-core/src/emacs_core/builtins/lisp_only_misc_names_test.rs`): all
+thirteen void on a bare evaluator, with nine C primitives as controls; no
+registered subr for any of the thirteen while all nine controls keep theirs;
+`transient-mark-mode` the VARIABLE still bound on a bare evaluator; the
+observables table above in the loaded runtime; the byte-compilation tables for
+the three that are never looked up and the ten that are; the `declare`d symbol
+properties that produce them; and eighty-one behaviour rows.
+
+### The shipped binary, before and after, against GNU
+
+Not the test harness: a `cargo xtask fresh-build --release` binary (pdump
+regenerated after the link, `target/release/neomacs.pdump` newer than
+`target/release/neomacs`), run `-Q --batch` side by side with GNU 31.0.90 on
+the same probe files.
+
+**Before the deletion**, with all thirteen subrs still registered, both probe
+files already `diff`ed **empty** against GNU: the 78 observable lines (`subrp`,
+`func-arity`, `commandp`, `interactive-form`, first docstring line,
+`indirect-function`), the 15 byte-compilation rows as raw opcode byte lists AND
+constants vectors, the 9 `declare` properties, and the 90 behaviour rows.  That
+is the evidence that `subr.el`, `simple.el`, `files.el`, `mule.el` and
+`version.el` were already answering everywhere it mattered -- the same check
+146, 148 and 150 made, and for the same reason.
+
+The one probe that did NOT `diff` empty before the change is the
+function-cell-dispatch one above: `(interactive "n")` with `read-number`
+rebound answered 42 in GNU and `end-of-file` here.
+
+**After the deletion** all of it `diff`s empty, that probe included.
+
+### What nothing observable changed, and the performance question
+
+For a loaded session the twelve deletions change nothing, and it is measured
+rather than asserted: the cells already held the `.el` definitions, so `subrp`,
+`func-arity`, `commandp`, `interactive-form`, `documentation` and every
+behavioural arm above already answered from Lisp, and a compiled caller already
+emitted GNU's opcode bytes against GNU's constants vector.  What changes is the
+bare evaluator, where all thirteen are now void exactly as they are in GNU
+before their `.el`, and the tests, which now measure the Lisp that runs.  The
+thirteenth, `read-number`, changes one thing on purpose: `(interactive "n")`
+now goes through the function cell, as `src/callint.c:645` does.
+
+`ignore` and `string-match-p` are hot names, so the performance question was
+asked explicitly, and it answers itself from the reachability measurement
+rather than from a benchmark.  In a loaded session no call to any of the
+thirteen could reach the Rust subr: the interpreter reads the function cell
+(which held Lisp), the VM's static-table fast path is gated on a VOID cell
+(`vm.rs:6679`, `:7150`), and for `ignore`, `string-match-p` and `string-greaterp`
+a compiled caller emits an opcode or an inlined call and never looks anything up
+at all.  Deleting a registration no dispatch path consulted cannot move a
+benchmark; the only thing that got cheaper is `init_builtins`, by thirteen
+entries.
+
+### Found and not fixed
+
+* **`do-auto-save` computes an auto-save name GNU's C never computes.**
+  `Fdo_auto_save` (`src/fileio.c`) only ever reads `BVAR (b,
+  auto_save_file_name)` and skips a buffer whose field is not a string; ours
+  falls back to computing one with `make_auto_save_file_name_for_buffer`.  That
+  fallback is why the helper survives this entry.  It is a different subsystem
+  and wants its own measurement.
+* **GNU echoes the minibuffer prompt in batch and we do not.**  `emacs -Q
+  --batch` prints `Number: ` on stdout before the `end-of-file`; the probe
+  outputs differ in that one respect for every prompting code letter, not just
+  `n`.
+
+### Correction to entry 146, 2026-08-18
+
+146's "Everything else" grouping is right in the only sense that matters --
+none of the thirteen has a C `DEFUN` -- and every one of them was safe to
+delete.  Three refinements it could not have made without measuring:
+
+* 146 treats the group as a residue with no structure.  It has one: **three of
+  the thirteen are names a compiled caller never looks up**, each by a
+  different mechanism (`ignore` by a `byte-compile` property,
+  `string-match-p` by being a `defsubst`, `string-greaterp` by a
+  `compiler-macro`), and ten are ordinary `Bcall` sites that DO read the cell.
+  148 found the first pattern among the aliases and 150 the second among the
+  undo commands; this group contains both.
+* 146 lists `string-match-p` and `transient-mark-mode` in the group without
+  remark.  Both are **split names**, and 150's warning about
+  `buffer-enable-undo` applies to each: `string-match` is C
+  (`src/search.c:442`) and `string-match-p` is a `defsubst` over it, and
+  `transient-mark-mode` is a C VARIABLE (`src/buffer.c:5835`) with a Lisp
+  COMMAND.  "Delete the string-match subr" or "delete transient-mark-mode"
+  would have been wrong; "delete the ones GNU has no C version of" is the rule,
+  and the standing check now asserts both halves.
+* 146 says of the class generally that a shadowed subr "never answers once the
+  `.el` is loaded".  True of twelve of these thirteen.  It is NOT true of
+  `read-number`: `interactive.rs` called the Rust function directly for the `n`
+  and `N` code letters, so the Rust reimplementation answered every
+  `(interactive "n")` in a fully loaded session, shadow or no shadow.  The
+  shadow list is a good detector of Rust reimplementations, but a name can be on
+  it and still be live through a Rust caller; only the "Rust callers" door
+  finds that, and it has to be opened for every name.
+
+146's count line -- "It was 50 before this change and is 49 after", extended by
+148 to 38, by 149 to 34 and by 150 to 32 -- is extended a last time: **19**
+after this one, and what remains is one justified C placeholder and the
+window/frame/face cluster.
 
 Status: FIXED.
