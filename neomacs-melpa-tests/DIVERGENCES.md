@@ -12630,6 +12630,31 @@ that no shipped code path had ever executed.  What changes is the bare
 evaluator, where `primitive-undo` is now void exactly as it is in GNU before
 `simple.el`, and the tests, which now measure the Lisp that actually runs.
 
+### Correction, 2026-08-19 (entry 154)
+
+Two notes on this entry's list, neither of which changes its finding.
+
+**The window/frame group's layering was stated backwards.**  The list described
+that group as "window.el / frame.el / faces.el functions built on the primitives
+that ARE in C (`window-edges' on `window-pixel-edges' and so on)".  GNU is the
+other way round: `window-pixel-edges` (`lisp/window.el:3922`) is a one-line
+wrapper whose whole body is `(window-edges window nil nil t)`, and
+`window-absolute-pixel-edges` (`:3937`) is `(window-edges window nil t t)`.  It
+is `window-edges` that is written over the C primitives -- `window-pixel-left`,
+`window-pixel-top`, `window-pixel-width`, `window-pixel-height`,
+`window-body-width`, `window-body-height` and twelve more.  All three are Lisp
+and none is a `DEFUN`, so the grouping itself was right; only the arrow pointed
+the wrong way.
+
+**"Last and riskiest" was correct, and for a reason this entry did not name.**
+Seventeen of the eighteen came out with nothing observable changing, exactly as
+`primitive-undo` did.  The eighteenth, `display-color-cells`, is reached during
+our own `faces.el` load -- through `show-paren-match`'s
+`((background dark) (min-colors 4))` clause -- which GNU's `faces.el` load
+cannot do, because `loadup.el` loads `frame` ninety-five files later and GNU
+bootstraps regardless.  Deleting it costs 1124 tests.  It stays registered and
+is filed as a debt with a named cause; see entry 154.
+
 Status: FIXED.
 
 ## 147. `make-serial-process` built a process record for a port it never opened, so a device that does not exist, cannot be read, or is not a tty all produced a live serial process that carried no bytes -- FIXED
@@ -15182,3 +15207,405 @@ machinery: the 8/16-color quantizer and the terminfo color count.  Explicitly
 NOT fixed, and now measured at 18.2% on a 16-color rxvt: the writer holds its
 own palette instead of carrying the index GNU's `tty-color-desc` already
 computed.
+
+## 154. The last and riskiest group of the shadowed-subr class: seventeen window/frame/face names deleted, seven wrong arities, ten names that were not commands, and an eighteenth that our `faces.el` load reaches before `frame.el` defines it -- FIXED
+
+Fifth and last instalment of the class ledger **146** enumerated: Rust subrs
+whose function cell is overwritten by preloaded Lisp.  148 took the type
+predicates and the `defalias` names, 149 the process launchers, 150 the undo
+commands, 152 the leftovers.  This is the group 146 ranked **last and
+riskiest**, because the display stack is downstream of it: the eighteen
+window, frame and face geometry names.
+
+`grep 'DEFUN ("NAME"' src/*.c` against emacs-mirror 31.0.90 (`0ee48ac4df2`)
+finds nothing for any of the eighteen.  The class test is
+`neovm-core/src/emacs_core/builtins/rust_subrs_shadowed_by_lisp_test.rs`, which
+walks a booted runtime's obarray and asserts the list exactly, in both
+directions.  It was 50 before 146, 49 after it, 38 after 148, 34 after 149, 32
+after 150, 19 after 152, and is **2** after this entry: GNU's own placeholder,
+and one name that could not go.  **Seventeen deleted, one kept with a
+measurement.**
+
+### The grouping, verified before anything was deleted
+
+150's lesson was that the group can contain a name GNU really does `DEFUN`, and
+152's that the *neighbour* is where the trap lives.  Checked one name at a time
+against emacs-mirror 31.0.90; every one is an ordinary `defun` -- no `defsubst`,
+no `define-minor-mode`, no `defalias`:
+
+| name | GNU defines it in | the C neighbour, which stays |
+| --- | --- | --- |
+| `balance-windows` | lisp/window.el:6222 | `window-resize-apply` (src/window.c:4957) |
+| `color-defined-p` | lisp/faces.el:1923 | **`xw-color-defined-p` (src/xfns.c:5581)** |
+| `color-values` | lisp/faces.el:1940 | **`xw-color-values` (src/xfns.c:5597)** |
+| `delete-other-windows` | lisp/window.el:4453 | **`delete-other-windows-internal` (src/window.c:3463)** |
+| `delete-window` | lisp/window.el:4318 | **`delete-window-internal` (src/window.c:5684)** |
+| `display-buffer` | lisp/window.el:8166 | `set-window-buffer` (src/window.c:4428) |
+| `display-color-cells` | lisp/frame.el:2966 | **`x-display-color-cells` (src/xfns.c:5714), `tty-display-color-cells` (src/term.c:2226)** |
+| `enlarge-window` | lisp/window.el:3714 | `window-resize-apply` (src/window.c:4957) |
+| `fit-window-to-buffer` | lisp/window.el:10307 | `window-resize-apply-total` (src/window.c:4999) |
+| `make-frame` | lisp/frame.el:1019 | **`x-create-frame` (src/xfns.c:4916), `make-terminal-frame` (src/frame.c:1736)** |
+| `pop-to-buffer` | lisp/window.el:9403 | `select-window` (src/window.c:616) |
+| `select-frame-set-input-focus` | lisp/frame.el:1262 | `select-frame` (src/frame.c:2097), `raise-frame` (:3667), `x-focus-frame` (:3756) |
+| `shrink-window` | lisp/window.el:3759 | `window-resize-apply` (src/window.c:4957) |
+| `switch-to-buffer` | lisp/window.el:9558 | `set-window-buffer` (src/window.c:4428), `select-window` (:616), `set-buffer` (src/buffer.c:2416) |
+| `window-absolute-pixel-edges` | lisp/window.el:3937 | -- it is a wrapper over `window-edges` |
+| `window-edges` | lisp/window.el:3839 | `window-pixel-left` (src/window.c:1001), `window-body-width` (:1140) and 16 more |
+| `window-pixel-edges` | lisp/window.el:3922 | -- it is a wrapper over `window-edges` |
+| `window-tree` | lisp/window.el:3999 | `frame-root-window` (src/window.c:350) |
+
+Six of the eighteen have a C neighbour **one word away from the Lisp name**, and
+those are the rows a careless sweep would have got wrong: `delete-window` is
+Lisp but `delete-window-internal` is C; `color-values` is Lisp but
+`xw-color-values` is C; `display-color-cells` is Lisp but *both*
+`x-display-color-cells` and `tty-display-color-cells` are C.  All thirty-six C
+names the eighteen are written over were checked with `grep DEFUN` and are
+asserted still registered by
+`neovm-core/src/emacs_core/builtins/lisp_only_window_frame_names_test.rs`.
+
+### Correction to entry 146, 2026-08-19
+
+146's list carried the parenthetical "`window-edges' on `window-pixel-edges' and
+so on".  **The layering is the other way round.**  `window-pixel-edges`
+(`lisp/window.el:3922`) is a one-line wrapper whose whole body is
+`(window-edges window nil nil t)`, and `window-absolute-pixel-edges` (`:3937`)
+is `(window-edges window nil t t)`.  It is `window-edges` that is written over
+the C primitives -- `window-pixel-left`, `window-pixel-top`,
+`window-pixel-width`, `window-pixel-height`, `window-left-column`,
+`window-top-line`, `window-total-width`, `window-total-height`,
+`window-body-width`, `window-body-height`, `window-fringes`, `window-margins`,
+`window-scroll-bar-width`, `window-header-line-height`,
+`window-tab-line-height`, `frame-char-width`, `frame-char-height`,
+`frame-internal-border-width`.  Neither of the three is a `DEFUN`; 146's
+grouping was right, only its arrow pointed backwards.  Nothing else in 146
+changes.
+
+### What an observer could tell, without running anything
+
+GNU column measured on GNU 31.0.90 `-Q --batch`
+(`tmp/pw61/gnu-observables.txt`); Neomacs column measured by asking the subr on
+a bare `Context` before the deletion (`tmp/pw61/probe.log`).  Every cell in the
+loaded runtime already matched GNU -- being on the shadow list IS that
+measurement, and the runtime probe confirmed it name by name, including the
+byte-code `interactive` forms of `display-buffer`, `pop-to-buffer` and
+`switch-to-buffer`.  So this is the bare evaluator, which is GNU before
+`loadup.el` and where the Rust subrs were the only thing answering.
+
+| name | `func-arity` GNU | `func-arity` Rust | `commandp` GNU | `commandp` Rust |
+| --- | --- | --- | --- | --- |
+| `balance-windows` | `(0 . 1)` | `(0 . 1)` | `t` | **`nil`** |
+| `color-defined-p` | `(1 . 2)` | **`(0 . many)`** | `nil` | `nil` |
+| `color-values` | `(1 . 2)` | **`(0 . many)`** | `nil` | `nil` |
+| `delete-other-windows` | `(0 . 2)` | **`(0 . many)`** | `t` | **`nil`** |
+| `delete-window` | `(0 . 1)` | **`(0 . many)`** | `t` | **`nil`** |
+| `display-buffer` | `(1 . 3)` | `(1 . 3)` | `t` | **`nil`** |
+| `display-color-cells` | `(0 . 1)` | **`(0 . many)`** | `nil` | `nil` |
+| `enlarge-window` | `(1 . 2)` | `(1 . 2)` | `t` | **`nil`** |
+| `fit-window-to-buffer` | `(0 . 6)` | `(0 . 6)` | `t` | **`nil`** |
+| `make-frame` | `(0 . 1)` | **`(0 . many)`** | `t` | **`nil`** |
+| `pop-to-buffer` | `(1 . 3)` | `(1 . 3)` | `t` | **`nil`** |
+| `select-frame-set-input-focus` | `(1 . 2)` | **`(0 . many)`** | `nil` | `nil` |
+| `shrink-window` | `(1 . 2)` | `(1 . 2)` | `t` | **`nil`** |
+| `switch-to-buffer` | `(1 . 3)` | `(1 . 3)` | `t` | **`nil`** |
+| `window-absolute-pixel-edges` | `(0 . 1)` | `(0 . 1)` | `nil` | `nil` |
+| `window-edges` | `(0 . 4)` | `(0 . 4)` | `nil` | `nil` |
+| `window-pixel-edges` | `(0 . 1)` | `(0 . 1)` | `nil` | `nil` |
+| `window-tree` | `(0 . 1)` | `(0 . 1)` | `nil` | `nil` |
+
+**Seven wrong arities and ten wrong `commandp`s.**  Ten of the eighteen are
+commands in GNU -- `C-x 0`, `C-x 1`, `C-x b`, `C-x 4 b`, `C-x 5 2`, `C-x +` all
+need that -- and not one Rust subr was registered interactive: every one was
+`ctx.defsubr`, never `ctx.defsubr_interactive`, so `interactive-form` was `nil`
+for all eighteen where GNU has `(interactive nil)`, `(interactive "p")`,
+`(interactive "i\np")` or a compiled `interactive` body.  `documentation` was
+`"Built-in function."` for all eighteen where GNU has the real docstring; in the
+loaded runtime it already answered `window.elc`'s own text.
+
+Three of the eighteen also carry a `declare` a subr registration has no way to
+express: `window-edges`, `window-pixel-edges` and `window-absolute-pixel-edges`
+are `(declare (side-effect-free t))`.
+
+### Byte-compiled callers: all eighteen read the cell
+
+This is where the group differs from 152's, and it makes the case simpler
+rather than harder.  Measured byte-for-byte, GNU 31.0.90 with
+`lexical-binding` t against this runtime; the two columns are identical for
+every row (`tmp/pw61/gnu-bytecode.txt`).
+
+| form | codes | constants |
+| --- | --- | --- |
+| `(lambda (w) (delete-window w))` | `(192 1 33 135)` | `[delete-window]` |
+| `(lambda (b) (switch-to-buffer b))` | `(192 1 33 135)` | `[switch-to-buffer]` |
+| `(lambda (c f) (color-values c f))` | `(192 2 2 34 135)` | `[color-values]` |
+
+...and the same shape for the other fifteen.  **Not one of the eighteen has a
+`byte-compile` property, a `compiler-macro` or a `byte-optimizer`, and not one
+is a `defsubst`**, so unlike three of 152's thirteen there is no door by which a
+compiled caller could avoid the function cell.  Every compiled caller reads it,
+and the shadow was the only thing between those callers and the Rust subr.
+
+### Who was reaching the Rust subrs: nobody through the cell, and ONE through the bootstrap window
+
+The same three doors 146, 148, 150 and 152 checked:
+
+* **The function cell.**  Being on the shadow list is the measurement.  All
+  eighteen were on it, and the runtime probe confirmed the consequence
+  name by name: `subrp` is `nil`, and `func-arity`, `commandp`,
+  `interactive-form` and the first docstring line all equal GNU's.
+* **The static subr table.**  `ResolvedBuiltinCallee::from_static_symbol`
+  (`neovm-core/src/emacs_core/bytecode/vm.rs`) still has exactly two callers and
+  both still reach it only from a `None` function cell.  A name `loadup.el`
+  writes a cell for cannot arrive there.
+* **Rust callers.**  None outside their own registration and the test tree:
+  after deleting the seventeen implementations the library compiled with no
+  errors, and `cargo check -p neovm-core --lib`'s dead-code warning set was
+  byte-identical to the pre-change baseline once the sixteen helpers that had no
+  other reader went with them.  152's `read-number` find -- a live Rust caller
+  bypassing the function cell -- has no counterpart here: `interactive.rs` names
+  none of the eighteen.
+* **The bootstrap window.**  `loadup.el` loads `window` at :138, `faces` at :160
+  and `frame` at :255, out of 137 files.  For seventeen of the eighteen the
+  window is empty, and the suite proves it.  **For the eighteenth it is not**,
+  and that is this entry's real find.
+
+### The one that could not go: `display-color-cells`
+
+`display-color-cells` is `lisp/frame.el:2966`, and `loadup.el` loads `frame` at
+:255 -- ninety-five files after `faces` at :160.  So in GNU the name is **void**
+for the whole of `faces.el`'s load, and **GNU bootstraps**.  That is a complete
+proof that GNU's `faces.el` load never asks for it.
+
+Ours asks.  Measured Lisp backtrace, taken by re-registering the subr with a
+`render_lisp_backtrace` body and running the `x`-featured bootstrap
+(`tmp/pw61/probe2.log`):
+
+```text
+(load "faces")
+ -> (custom-declare-face show-paren-match ...)          ; lisp/faces.el:3161
+ -> (face-spec-set show-paren-match ... face-defface-spec)
+ -> (face-spec-recalc show-paren-match #<frame F1>)     ; over (frame-list)
+ -> (face-spec-choose ... #<frame F1>)
+ -> (face-spec-set-match-display ((background dark) (min-colors 4)) #<frame F1>)
+ -> (display-color-cells #<frame F1>)                   ; lisp/faces.el:1588
+```
+
+`face-spec-set` ends `(dolist (frame (frame-list)) (face-spec-recalc face
+frame))` (`lisp/faces.el:1677-1723`), so a `defface` really is matched against
+live frames at load time, in GNU too.  `face-spec-set-match-display` walks its
+conjuncts with `(while (and conjuncts match))`, so a clause reaches `min-colors`
+only if every earlier conjunct matched.  `show-paren-match`'s third clause,
+`((background dark) (min-colors 4))`, is the only clause in any preloaded
+`defface` whose FIRST conjunct is `background` rather than `class` or `type` --
+every other `min-colors` clause is guarded by a `(class color)` that a
+`display-type mono` frame fails.  It matches here because our frame already
+carries `background-mode` = `dark`, seeded by
+`ensure_selected_frame_id_in_state_with_policy`
+(`neovm-core/src/emacs_core/window_cmds/mod.rs`).  GNU computes that parameter
+only later, in `frame-set-background-mode`, which runs from
+`tty-create-frame-with-faces` / `x-create-frame-with-faces` /
+`after-make-frame-functions` -- all after `loadup.el`.
+
+Deleting the subr was measured, not guessed: with all eighteen gone,
+`cargo nextest run -p neovm-core -p neomacs-layout-engine` reports **1184
+failures, 1124 of them `void-function display-color-cells`** -- every test that
+boots a runtime.  With `display-color-cells` restored and the other seventeen
+gone the same command reports 38, all of them bare-evaluator tests that the rest
+of this entry moves.
+
+So the fix for the eighteenth is not "delete the subr"; it is "stop seeding a
+frame parameter before GNU computes it", which is a display-stack change with
+its own blast radius and its own entry.  The subr stays registered, its doc
+comment carries the backtrace, and the standing check now files it as a **debt
+with a named cause** rather than a design -- see the type change below.
+
+### The fix
+
+The seventeen `defsubr` calls are deleted, with a comment at each site naming
+the `.el` line that owns the name and the C primitives that stay.  Deleted with
+them, from `neovm-core/src/emacs_core/window_cmds/mod.rs`:
+`builtin_balance_windows`, `builtin_delete_other_windows`,
+`builtin_delete_window`, `builtin_display_buffer`, `builtin_enlarge_window`,
+`builtin_fit_window_to_buffer`, `builtin_make_frame`, `builtin_pop_to_buffer`,
+`builtin_select_frame_set_input_focus`, `builtin_shrink_window`,
+`builtin_switch_to_buffer`, `builtin_window_absolute_pixel_edges`,
+`builtin_window_edges`, `builtin_window_pixel_edges` and
+`builtin_window_tree`.
+
+Sixteen helpers had no other reader and went too: `resize_selected_window`,
+`resize_window_by_delta_px`, `MIN_WINDOW_PIXEL_SIZE`, `make_frame_with_state`,
+`resolve_make_frame_backend_request`, the `MakeFrameBackend` enum,
+`window_edges_cols_lines`, `window_body_edges_cols_lines`,
+`tty_batch_window_body_edges_pixels`, `window_edges_pixels`,
+`resolve_window_id`, `resolve_window_id_or_error`,
+`resolve_window_id_or_window_error_in_state`,
+`format_window_designator_for_error_in_state`,
+`find_or_create_buffer_by_name_arg` and `redisplay_window_outer` -- 1349 lines
+from that file alone.  `cargo check -p neovm-core --lib` is clean and its
+dead-code warning set is byte-identical to the pre-change baseline.
+
+Two registrations were the same Rust function under two names, and only the
+generic name went: `color-defined-p` and `color-values` were registered as
+`builtin_xw_color_defined_p_ctx` and `builtin_xw_color_values_ctx`, the
+*graphical* arms, so the Rust `color-defined-p` skipped GNU's
+`display-graphic-p` dispatch entirely and could never reach
+`tty-color-translate`.  Those two functions stay, under the `xw-` names GNU
+`DEFUN`s them as.
+
+`builtin_make_frame`'s GUI arm was one line -- `x_create_frame_impl` -- so
+deleting it removed no code path: `frame.el`'s `make-frame` funcalls
+`frame-creation-function`, which reaches `x-create-frame`, which is that same
+function and stays registered.
+
+Nothing was shimmed.
+
+### Tests: thirty-eight moved, none propped up
+
+Every test that broke was a **bare-evaluator** test -- GNU before `loadup.el`,
+where GNU has none of these names either.  Each one was either moved to the
+booted runtime or repointed at the C primitive GNU's Lisp body calls.
+
+* **Twenty-three in `window_cmds/tests.rs`** moved to a new helper,
+  `runtime_eval_with_usable_terminal`, which is `runtime_startup_eval_all` plus
+  the terminal marking the bare helper already did.  The terminal matters and it
+  is GNU's rule: `(make-frame)` in GNU `-Q --batch` answers
+  `(error "Unknown terminal type")`, measured, which is the same guard the
+  deleted Rust subr carried.
+* **Three `buffer-list` ordering tests** (`builtins/tests.rs`) used
+  `switch-to-buffer` as setup.  They now call the C primitives GNU's body calls
+  -- `set-window-buffer`, `select-window`, `set-buffer` -- and `select-window` is
+  the one that matters, because `record_buffer` is reachable from Lisp **only**
+  through `Fselect_window` (`src/window.c:582`, and the comment at `:540` says
+  exactly that).
+* **Eleven in `bytecode/vm_test.rs`** run on a deliberately minimal VM runtime,
+  so they were repointed rather than moved: `(delete-window W)` ->
+  `(delete-window-internal W)`, `(delete-other-windows)` ->
+  `(delete-other-windows-internal)`, `(make-frame PARMS)` ->
+  `(make-terminal-frame PARMS)`, `(select-frame-set-input-focus F)` ->
+  `(select-frame F)` + `(raise-frame F)`, and `(switch-to-buffer B)` -> the
+  three C calls above.  One row passed `'display-buffer` as
+  `describe-vector`'s DESCRIBER purely to make it signal; it now passes `'car`,
+  measured on GNU as `(wrong-type-argument listp 1)` where `display-buffer` gave
+  `(wrong-type-argument stringp 1)` -- same condition, and a C DEFUN.
+* **Two in `eval_test.rs`**: `(make-frame)` -> `(make-terminal-frame nil)`, and
+  the `set-window-configuration` geometry test now writes out
+  `window-edges`'s PIXELWISE body over the C primitives it reads
+  (`window-pixel-left` + `frame-internal-border-width`, and so on) as a `defun`
+  in its own Lisp prelude, which is the one place a prelude is the right answer.
+* **One in `xdisp_test.rs`**: `(switch-to-buffer "anchor-test")` ->
+  `(set-buffer (get-buffer-create "anchor-test"))`; the test only needs the
+  buffer current.
+* **Two rows in `window_cmds/tests.rs` that asked `window-edges` directly** now
+  ask the C primitives its body reads: `window-body-height` for a body's bottom
+  edge, and `window-pixel-top + frame-internal-border-width +
+  window-header-line-height + window-tab-line-height` for a body's top.  That
+  is a better test than the one it replaces: the deleted Rust `window-edges`
+  read a presented-geometry rectangle directly, where GNU composes primitives,
+  so the old row was re-reading its own fixture.
+* **The `make-frame` GUI test** is repointed at `x-create-frame`, which is what
+  the deleted subr's GUI arm called and what `frame-creation-function` reaches.
+* **The `select-frame-set-input-focus` row** becomes `raise-frame`, the C DEFUN
+  in its body that a non-graphical frame handle must still be accepted by;
+  `x-focus-frame`, the other one, signals without a window system and is
+  asserted where a GUI frame exists.
+
+### The whole-repository Lisp-literal sweep
+
+152's trap was a deleted name inside a Lisp string literal in another crate,
+which `cargo check` cannot see.  The sweep here was done first, over every
+tracked file, for each of the eighteen names in call or quote position:
+
+| where | files | verdict |
+| --- | --- | --- |
+| `neovm-oracle-tests` | 1044 hits | booted binary -- the `.el` answers |
+| `neomacs-melpa-tests` | 980 hits | booted binary -- the `.el` answers |
+| `neovm-core` | 532 hits | the population this entry moved |
+| `neomacs-tui-tests` | 43 hits | booted binary |
+| `neomacs-bin` | 12 hits | booted runtime (`main_test.rs`) |
+| `neomacs-layout-engine` | 7 hits | all `create_bootstrap_evaluator_cached_*` |
+| `neomacs-display-runtime` | 2 hits | comments only |
+
+The discriminator is not the crate, it is whether the file builds a bare
+`Context::new()`.  Nine `.rs` files did both; six of them were the ones this
+entry moved, two (`neomacs-bin/src/main_test.rs`,
+`neomacs-layout-engine/src/engine_test.rs`) mention the names only inside booted
+evaluators, and one (`window_cmds/mod.rs`) only in a comment.
+
+### Two answer divergences the move corrected, and one found and not fixed
+
+Moving a test from the Rust subr to the `.el` changes what it measures, and two
+expectations turned out to have been the Rust subr's answer rather than GNU's.
+Both re-measured on GNU 31.0.90 `-Q --batch` (`tmp/pw61/gnu-more.txt`):
+
+```elisp
+(condition-case err (delete-window 999999) (error err))
+;; GNU                     => (error "999999 is not a valid window")
+;; Neomacs before the move => (wrong-type-argument ...)
+(condition-case err (delete-other-windows 'foo) (error err))
+;; GNU                     => (error "foo is not a valid window")
+;; Neomacs before the move => (wrong-type-argument ...)
+```
+
+`delete-window` and `delete-other-windows` are not C, and their bodies start
+with `(window-normalize-window window)`, which signals a **plain `error`** with
+that message.  `split-window-internal`, the C DEFUN beside them, really does
+signal `wrong-type-argument` -- and the old assertion asserted the C shape for
+all six rows.
+
+```elisp
+(let ((stb-log nil))
+  (setq buffer-list-update-hook
+        (list (lambda () (setq stb-log (cons (buffer-name) stb-log)))))
+  (let ((norecord (progn (switch-to-buffer "stb-hook" t) stb-log)))
+    (switch-to-buffer "*scratch*" t)
+    (setq stb-log nil)
+    (let ((recorded (progn (switch-to-buffer "stb-hook") stb-log)))
+      (list norecord recorded (buffer-name) (buffer-name (window-buffer))))))
+;; GNU                     => (("*scratch*" "*scratch*") ("stb-hook" "*scratch*") "stb-hook" "stb-hook")
+;; Neomacs before the move => (nil ("stb-hook") "stb-hook" "stb-hook")
+```
+
+NORECORD does not silence `buffer-list-update-hook`, because
+`get-buffer-create` runs it too (`src/buffer.c`), and the name logged is the one
+current at the time -- still `*scratch*`.  The Rust subr ran the hook only on
+the recording path.  The runtime now answers GNU's list exactly.
+
+**Found and not fixed**, recorded at the one call site that sees it: GNU's
+`Fdelete_window_internal` ends with `Fselect_window (new_selected_window, Qt)`
+(`src/window.c:5684`ff), and `select_window` makes the new window's buffer
+current.  Ours selects the surviving window but leaves the old buffer current.
+It is a `delete-window-internal` defect, not a shadowed-subr one; the vm test
+that noticed it names the second C step explicitly and cites this entry.
+`delete-window-internal` also cannot stand alone in GNU the way it can here --
+GNU's `(delete-window-internal W)` on a fresh batch split answers
+`(error "Deletion failed")` because GNU's Lisp `delete-window` does the
+`window-resize-apply` bookkeeping first -- so ours does more than GNU's.  Both
+belong to a later entry.
+
+### New standing statement, and the type that carries it
+
+`neovm-core/src/emacs_core/builtins/lisp_only_window_frame_names_test.rs` is the
+per-name statement file this class has for each instalment: the seventeen are
+void on a bare evaluator, the thirty-six C primitives beneath them are still
+subrs, all eighteen answer GNU's observables in the loaded runtime, all eighteen
+byte-compile to an ordinary call through the constants vector, and the two pixel
+wrappers really do go through `window-edges` -- proved with a `cl-letf` on
+`window-edges` that both wrappers see.
+
+The standing check's list changed shape.  It was `&[&str]`, which is how a name
+could be parked on it with no justification and how it reached fifty.  It is now
+`&[ReviewedShadow]`, and each entry carries a `ShadowJustification` **enum** with
+two variants that are different in kind:
+
+* `GnuShipsTheSamePlaceholder { gnu_c_placeholder, gnu_lisp_override }` -- GNU
+  ships the same C placeholder on purpose and says why.  Exactly one entry may
+  be this, and the test asserts it: `frame-windows-min-size`
+  (`src/frame.c:494-502`, overridden at `lisp/window.el:1899`).
+* `UnjustifiedBootstrapCaller { gnu_lisp_definition, why_it_cannot_go_yet }` --
+  GNU has no C version at all, so GNU's bootstrap cannot reach the name before
+  its `.el` loads and ours does.  `display-color-cells` is filed here, with the
+  backtrace and the seeding site named.
+
+The test asserts the citations are present for both variants and that at most
+one entry claims the justified kind.  A debt can no longer be filed as a design.
+
+Status: FIXED.
