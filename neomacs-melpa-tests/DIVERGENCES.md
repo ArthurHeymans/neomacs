@@ -15182,3 +15182,448 @@ machinery: the 8/16-color quantizer and the terminfo color count.  Explicitly
 NOT fixed, and now measured at 18.2% on a 16-color rxvt: the writer holds its
 own palette instead of carrying the index GNU's `tty-color-desc` already
 computed.
+
+### Correction, 2026-08-19 (from entry 155)
+
+The account of the seam above is right about the line and incomplete about the
+shape.  `build_tty_color_map` does receive `(NAME INDEX R G B)`, does drop the
+INDEX, and threading that index to `CellAttrs` does make the writer's table dead
+code: entry 155 did exactly that, and `rgb_to_256`, the xterm system-colour
+table, the 6x6x6 cube, the grayscale ramp and `TtyColorTier` itself are gone.
+
+What is incomplete is "threading a realized palette index FROM THERE", because
+`build_tty_color_map` is not the only place a colour is realized.  It walks the
+frame's Lisp face vectors, so it covers named faces and nothing else.  An
+ANONYMOUS attribute plist -- `(:foreground "#5f8787")` on a text property, on an
+overlay, or in `face-remapping-alist` -- is realized by `NeoFace::from_plist`
+from the LAYOUT ENGINE, a crate that calls no Lisp function anywhere and so
+cannot ask `tty-color-desc` at all.  Threading only the named-face path and
+stopping there leaves every such face with no colour on the wire.  Measured with
+that half shipped and nothing else:
+
+```elisp
+;; TERM=xterm-256color, face `(:foreground "#5f8787")' on a text property
+;; GNU     => ESC [ 38;5;66 m
+;; Neomacs => no colour emitted at all
+```
+
+Entry 155 closes it by carrying `tty-color-alist` itself into the layout engine
+and running GNU's search over the terminal's real list there.
+
+Two numbers above were re-measured and both hold.  The 18.2% on `rxvt-16color`
+and 40.6% on `linux-16color` reproduce exactly -- and entry 155 also settled
+what this entry left open about them: they are ENTIRELY the palette.  The same
+search, given GNU's own `rxvt-16color` list, reproduces GNU's answer on all
+5,832 samples, on all four terminals.  There was no second cause to find.
+
+## 155. The terminal writer re-derived an index Lisp had already handed it, so a palette `tty-color-define` had moved was invisible and a 16-colour terminal was painted out of xterm's table -- FIXED
+
+Entry 153 closed the reported symptom and then measured what it had NOT closed:
+the writer holds its own palette instead of carrying the index `tty-color-desc`
+already computed, worth 18.2% of a 5,832-colour sweep on `rxvt-16color` and
+40.6% on `linux-16color`.  It left that fix deliberately unmade rather than
+half-made.  This entry makes it.
+
+### What GNU's realized face actually carries
+
+Only the index.  There is no RGB in a realized TTY face at all.
+
+`realize_tty_face` (src/xfaces.c:6702) maps every colour attribute through
+`map_tty_color` (src/xfaces.c:6620) -- foreground and background at :6800-6803,
+underline at :6748 and :6777 -- and `map_tty_color`'s entire job is to produce
+one number:
+
+```c
+      /* Associations in tty-defined-color-alist are of the form
+	 (NAME INDEX R G B).  We need the INDEX part.  */
+      pixel = XFIXNUM (XCAR (XCDR (def)));
+```
+
+(src/xfaces.c:6645-6647.)  When the name is not in the list it falls through to
+`load_color` -> `tty_defined_color` -> `tty_lookup_color` (src/xfaces.c:1083),
+which calls the Lisp `tty-color-desc` and keeps exactly the same element:
+
+```c
+      tty_color->pixel = XFIXNUM (XCAR (XCDR (color_desc)));
+```
+
+(src/xfaces.c:1101.)  It does parse the RGB -- `parse_rgb_list` at :1104 -- into
+a local `Emacs_Color` that `tty_defined_color` hands back to `load_color`, and
+`load_color` keeps only `color_def.pixel`.  The RGB never reaches the face.
+
+The slot it lands in is `unsigned long face->foreground` / `face->background` /
+`face->underline_color` (src/dispextern.h:1804-1811), and `turn_on_face`
+(src/term.c:2046) reads it back unchanged:
+
+```c
+  unsigned long fg = face->foreground;
+  ...
+      if (face_tty_specified_color (fg) && ts)
+	{
+	  if (tty->TF_rgb_separate)
+	    p = tparam (ts, NULL, 0, fg >> 16, (fg >> 8) & 0xFF, fg & 0xFF, 0);
+	  else
+	    p = tparam (ts, NULL, 0, fg, 0, 0, 0);
+```
+
+(src/term.c:2048, :2098-2104.)  So one slot has two readings, chosen by the
+terminal's `TF_rgb_separate` bit, and both come straight from Lisp:
+`tty-color-desc` answers a palette subscript below 24-bit colour and
+`tty-color-24bit`'s packed `0xRRGGBB` pixel at it (tty-colors.el:829-838, :975).
+Measured, both editors, one pty run per setting, `-Q -nw`:
+
+```elisp
+;; TERM=xterm-256color  COLORTERM unset
+;;   (display-color-cells) 256        (length (tty-color-alist)) 256
+;;   (tty-color-desc "red")     => ("red" 1 52685 0 0)
+;;   (tty-color-desc "#123456") => ("color-23" 23 0 24415 24415)
+;; TERM=xterm-256color  COLORTERM=truecolor
+;;   (display-color-cells) 16777216   (length (tty-color-alist)) 665
+;;   (tty-color-desc "red")     => ("red" 13434880 52685 0 0)            ; 0xCD0000
+;;   (tty-color-desc "#123456") => ("#123456" 1193046 4626 13364 22102)  ; 0x123456
+;; GNU and Neomacs identical on every row, and the same on screen-256color
+;; and tmux-256color.
+```
+
+Three sentinels sit outside both readings -- `FACE_TTY_DEFAULT_COLOR` (-1),
+`..._FG_COLOR` (-2), `..._BG_COLOR` (-3), src/dispextern.h:1919-1927 -- and
+`face_tty_specified_color` (:1933-1936) is what stops `turn_on_face` emitting
+anything for them.  "No colour" is a state GNU holds, and holds whenever
+`tty-color-desc` did not answer.
+
+### Where ours lost it
+
+`tty_color_desc_rgb` (neovm-core/src/emacs_core/xfaces/mod.rs) called
+`tty-color-desc`, read `items[2] items[3] items[4]`, and never read `items[1]`.
+Entry 153 named that line and it is exactly right.
+
+What 153 did not name is that there are TWO realization paths and only one of
+them went through that function.  Named faces did.  An ANONYMOUS attribute plist
+-- `(:foreground "#5f8787")` on a text property, on an overlay, or in
+`face-remapping-alist` -- is realized by `NeoFace::from_plist`
+(neovm-core/src/face.rs) called from the LAYOUT ENGINE
+(neomacs-layout-engine/src/neovm_bridge.rs, three call sites), which parsed the
+string with a context-free `Color::parse` and never consulted the palette at
+all.  GNU has no such split: `merge_face_ref` folds a plist into the same lface
+vector and one `realize_tty_face` follows, so every colour string goes through
+one `map_tty_color`.
+
+From the realized colour to the wire the index had five more hops to survive,
+and none of them had a slot for it:
+
+```
+neovm-core face::Face.foreground: Option<Color>      (r,g,b,a)
+  -> layout ResolvedFace.fg: u32                     packed sRGB pixel
+  -> layout DisplayRowFace.foreground: Color         linear f32
+  -> protocol face::Face.foreground: Color           linear f32
+  -> runtime CellAttrs.fg: Option<(u8,u8,u8)>        sRGB bytes
+  -> write_fg -> TtyColorTier::approximate           a 256-candidate search
+```
+
+### The failing test, before anything was changed
+
+`tty-color-define` is observable end to end, and it is the case no writer-side
+search can ever pass: it moves a NAME to a slot, and `map_tty_color` finds names
+by `assoc` without approximating anything.  Six faces in a buffer, one pty per
+editor, `COLORTERM` unset, the emitted SGR read out of the raw byte stream:
+
+```elisp
+;; TERM=xterm-256color, after (tty-color-define "red" 200 '(65535 0 0))
+;; and (clear-face-cache)
+;;                                     GNU            Neomacs before
+;;   face  :foreground "red"           38;5;200       91
+;;   face  :foreground "#0000ff"       38;5;21        38;5;21
+;;   face  :foreground "#4d4d4d"       38;5;239       38;5;239
+```
+
+`91` is index 9 -- what approximating (255,0,0) answers, which is not what was
+asked for and never was.  The two hex rows agree because the 256-colour tier's
+table happens to BE that terminal's palette; entry 108 is why.
+
+The 16-colour arm needs no `tty-color-define` at all, because there the tables
+simply differ:
+
+```elisp
+;; TERM=rxvt-16color
+;;                                     GNU            Neomacs before
+;;   face  :foreground "#0000ff"       94             34
+```
+
+`94` is index 12: `rxvt-16color` registers `brightblue` as (0,0,255), which
+`#0000ff` matches EXACTLY.  The writer's xterm table has `brightblue` at
+(92,92,255), so its nearest entry was `blue` (0,0,238) -- index 4, `ESC [ 34 m`.
+
+### The 18.2% is entirely the palette
+
+Measured before assuming.  GNU's own `tty-color-alist` was dumped out of a pty
+for four terminals, GNU's `tty-color-approximate` answers were dumped for the
+same 5,832-colour sweep entry 153 used, and the writer's search was then run
+twice: once over the table it held, once over GNU's list.
+
+```
+;; 5,832 samples per terminal, index against GNU's index
+;;                        the writer's xterm table      the SAME search over
+;;                                                      GNU's own palette
+;; TERM=xterm                 0 of 5832   ( 0.0%)          0 of 5832  (0.0%)
+;; TERM=rxvt-16color       1062 of 5832   (18.2%)          0 of 5832  (0.0%)
+;; TERM=linux-16color      2365 of 5832   (40.6%)          0 of 5832  (0.0%)
+;; TERM=xterm-256color        0 of 5832   ( 0.0%)          0 of 5832  (0.0%)
+```
+
+18.2% and 40.6% reproduce entry 153's numbers exactly, and the right-hand column
+settles what it left open: there is no second cause.  The search was exact all
+along; only the list it searched was wrong.
+
+Which follows from the Lisp being GNU's, verbatim.  `lisp/term/tty-colors.el`,
+`term/xterm.el`, `term/rxvt.el`, `term/linux.el` and `term/screen.el` are
+byte-identical to GNU 31.0.90's, and the lists they build measure identical too,
+row by row:
+
+```
+;; GNU tty-color-alist vs Neomacs tty-color-alist, dumped through a pty
+;;   TERM=xterm            cells   8 / entries   8    identical
+;;   TERM=rxvt-16color     cells  16 / entries  16    identical
+;;   TERM=linux-16color    cells  16 / entries   8    identical
+;;   TERM=xterm-256color   cells 256 / entries 256    identical
+```
+
+### The fix
+
+The realized colour carries the number, and the writer writes it.
+
+`TerminalColor` (neomacs-display-protocol) is GNU's slot with its two readings
+named: `Indexed(u16)` and `Direct { r, g, b }`.  Its only constructor is
+`from_tty_color_desc(index, color_cells)` -- there is no way to build one from an
+RGB triple -- so nothing below face realization can invent an index.  Which of
+the two a `tty-color-desc` answer is gets decided by `tty-color-24bit`'s own
+test, `(= (display-color-cells) 16777216)`.
+
+It rides INSIDE `RealizedColor` rather than beside it, because every merge,
+`:inherit` walk and face copy moves a colour as one value; two parallel slots
+could be updated in one place and not the other, and the writer would be back to
+guessing.  `Option<TerminalColor>` is GNU's `FACE_TTY_DEFAULT_COLOR`: a colour
+the palette could not resolve emits nothing at all, exactly as
+`face_tty_specified_color` arranges.
+
+`CellAttrs.fg`/`.bg` are `Option<TerminalColor>`.  They have no RGB field any
+more, which is what makes the writer's old job unrepresentable rather than
+merely unwritten.  Deleted with the question: `rgb_to_256`,
+`approximate_over_palette`, `off_gray_diagonal`, the `SYSTEM_COLORS` table, the
+6x6x6 cube, the 24-step ramp, `write_fg`/`write_bg`, `set_color_tier`, and
+`TtyColorTier` itself -- the tier existed only to name the palette to search, and
+the only colour-depth question left is GNU's own `if (tty->TN_max_colors > 0)`
+(src/term.c:2092).
+
+Three smaller shapes went with it.  `ResolvedFace::set_foreground` takes a whole
+realized colour, so the pixel and the index cannot be assigned separately.
+`TerminalFaceColor` carries the index through the inverse-video swap, which MOVES
+a colour between slots (GNU `realize_tty_face`, src/xfaces.c:6800-6810).
+`TerminalMenuBarStyle` carries two `Option<TerminalColor>` instead of two pixels
+plus two "use the default" booleans, which said the same thing twice.
+
+### The second seam, which 153 did not name
+
+Threading only from `build_tty_color_map` would have left every anonymous plist
+face with no colour at all.  Measured with that half shipped and nothing else:
+
+```elisp
+;; TERM=xterm-256color, no tty-color-define
+;;                                     GNU            Neomacs
+;;   plist (:foreground "#5f8787")     38;5;66        no colour emitted
+;;   plist (:foreground "red")         31             no colour emitted
+;;   plist (:background "#3a3a3a")     48;5;237       no colour emitted
+```
+
+The layout engine realizes those, and it calls no Lisp function anywhere -- a
+deliberate boundary, not an oversight: layout is pure over a snapshot of Lisp
+data.  So it cannot ask `tty-color-desc`, and closing the split properly means
+moving anonymous-face realization into neovm-core, which is its own entry.
+
+What it can do is carry the palette.  `TtyPalette` is `tty-color-alist` as data
+plus `tty-color-desc`'s two halves over it: the exact name match `map_tty_color`
+takes first (src/xfaces.c:6645-6647), then `tty-color-approximate`
+(lisp/term/tty-colors.el:875-915) with GNU's gray-diagonal exclusion (:866-873)
+and its "a candidate with unknown RGB is never approximated into" rule
+(:895-896).  It is the terminal's REAL list, snapshotted by the same face sync
+that realizes the named faces, and it rides on `FaceTable` so it cannot be a
+different palette from the one they used.  `tty-color-define` moves it and the
+answers move with it.  The writer still holds neither the palette nor a search.
+
+### And the invalidation half
+
+`clear-face-cache` was a stub that checked its arity and returned nil, so the
+palette a face had been realized against could change and nothing repainted.
+GNU's `Fclear_face_cache` (src/xfaces.c:794-803) is three statements:
+`clear_face_cache`, `face_change = true`, `windows_or_buffers_changed = 53`.
+
+```elisp
+;; TERM=xterm-256color, tty-color-define + clear-face-cache AFTER the first
+;; redisplay, then the face repainted
+;; GNU            => ESC [ 31 m   then  ESC [ 38;5;200 m
+;; Neomacs before => ESC [ 31 m   then  ESC [ 31 m
+```
+
+There is no separate realized-face cache here to free -- the render-facing table
+IS the realization, rebuilt by `sync_runtime_faces_for_frame`, which is memoized
+on `face_change_count` -- so bumping that counter is exactly GNU's `face_change`.
+
+### Measured after
+
+`face_colours_reach_the_wire_as_the_index_lisp_computed`
+(neomacs-tui-tests/tests/tty_color_index.rs) runs the whole probe as a suite:
+six faces, three terminals, with and without a `tty-color-define` that moves
+"red" to slot 5 -- a slot every palette here can hold, so the comparison stays
+about the INDEX rather than about how a terminal spells one it cannot.
+
+```
+;; 36 comparisons against live GNU  =>  0 disagree
+```
+
+Spelled out, with `tty-color-define` moving "red" to 200 instead, so the
+before-table above compares directly:
+
+```elisp
+;; TERM=xterm-256color                        GNU        Neomacs after
+;;   face  :foreground "red"                  31         31
+;;   face  :foreground "#0000ff"              38;5;21    38;5;21
+;;   face  :foreground "#4d4d4d"              38;5;239   38;5;239
+;;   plist (:foreground "#5f8787")            38;5;66    38;5;66
+;;   plist (:foreground "red")                31         31
+;;   plist (:background "#3a3a3a")            48;5;237   48;5;237
+;; TERM=xterm-256color, after tty-color-define "red" 200
+;;   face  :foreground "red"                  38;5;200   38;5;200
+;;   plist (:foreground "red")                38;5;200   38;5;200
+;; TERM=rxvt-16color
+;;   face  :foreground "red"                  31         31
+;;   face  :foreground "#0000ff"              94         94       (was 34)
+;;   face  :foreground "#4d4d4d"              90         90
+;;   plist (:foreground "#5f8787")            36         36
+;;   plist (:foreground "red")                31         31
+;;   plist (:background "#3a3a3a")            100        100
+;; TERM=xterm
+;;   all six identical:  31 / 34 / 30 / 36 / 31 / 40
+```
+
+Every row byte-identical except one, which is the next section.
+
+### Found and NOT fixed: the SGR spelling is a rule here and a capability in GNU
+
+`turn_on_face` does not spell an index; it hands it to terminfo `setaf`
+(src/term.c:2098-2113).  The writer applies one fixed rule instead -- `3N` below
+8, `9(N-8)` through 15, `38;5;N` above.  Within a terminal's own palette that is
+byte-exact on all four terminals measured here, because their `setaf` strings
+agree over that range:
+
+```
+xterm-256color  setaf=\E[%?%p1%{8}%<%t3%p1%d%e%p1%{16}%<%t9%p1%{8}%-%d%e38;5;%p1%d%;m
+rxvt-16color    setaf=\E[%?%p1%{8}%<%t%p1%{30}%+%e%p1%'R'%+%;%dm    ; N+82 == 90+(N-8)
+xterm           setaf=\E[3%p1%dm
+```
+
+Outside it they do not, and `tty-color-define` can put an index outside it:
+
+```
+;; after (tty-color-define "red" 200 '(65535 0 0)), a face :foreground "red"
+;; TERM=rxvt-16color   GNU => ESC [ 282 m     Neomacs => ESC [ 38;5;200 m
+;; TERM=xterm          GNU => ESC [ 3200 m    Neomacs => ESC [ 38;5;200 m
+```
+
+282 is 200 + `'R'`; 3200 is `3` prefixed to 200.  Both are nonsense on the wire,
+and both are what GNU emits, because GNU spells with the terminal's own string
+and does not second-guess the index.  The INDEX agrees in every case; only the
+spelling differs, and only for an index the palette cannot hold.  Closing it
+means reading `setaf`/`setab` out of terminfo into the capability record -- which
+already reads that database -- and evaluating the `%?%p1%{8}%<%t...%;` parameter
+language, i.e. a `tparam`.  That is its own entry.
+
+### Found and NOT fixed: there is a second TTY writer, and nothing calls it
+
+`neomacs-display-runtime/src/backend/tty/mod.rs` holds another complete terminal
+writer -- 952 lines with its own `ansi::CellAttrs`, its own `write_sgr` and a
+`TtyBackend` -- which emits `38;2;R;G;B` unconditionally, on every terminal.
+Nothing outside that file and its 1,618-line `tty_test.rs` mentions any of it:
+no production caller anywhere in the workspace, and the crate is workspace-only.
+Entries 108 and 153 both corrected the live writer (`rif.rs`) and left this one
+untouched, which is only invisible because it never runs.  Deleting it is a
+refactor with its own red/green cycle; recording it here so the next reader of
+`grep write_sgr` is not misled by two answers.
+
+### Hypotheses eliminated here
+
+1. *Some of the 18.2% is a second defect in the search.*  No: the writer's search
+   over GNU's own palette reproduces GNU's answer on all 5,832 samples, on all
+   four terminals.  It is the list, and only the list.
+2. *The palettes differ because our Lisp differs.*  No: `term/tty-colors.el`,
+   `term/xterm.el`, `term/rxvt.el`, `term/linux.el` and `term/screen.el` are
+   byte-identical to GNU's, and the alists they build measure identical row by
+   row on four terminals.
+3. *Carrying the index would regress truecolor.*  No: with `COLORTERM=truecolor`
+   both editors report 16777216 cells and `tty-color-desc` answers the packed
+   `0xRRGGBB` pixel, which `TerminalColor::Direct` spells as the same
+   `38;2;R;G;B` the tier used to emit.
+4. *`build_tty_color_map` is the only place a colour is realized.*  No -- an
+   anonymous attribute plist is realized in another crate entirely, and threading
+   only the named-face path silently drops its colour.
+
+### Gates
+
+All against a `cargo xtask fresh-build --release` binary carrying the change
+(binary 05:38, pdump 05:40 -- pdump newer than the binary).
+
+```
+neomacs-display-protocol                        637 run,  637 passed
+neovm-core + layout-engine + display-runtime
+  + display-protocol (debug)                  11693 run, 11691 passed, 2 timed out
+neomacs-tui-tests::tty_color_index (release)      2 run,    2 passed  ( 83.0s)
+neomacs-tui-tests (release)                     915 run,  912 passed, 3 failed
+neomacs-melpa-tests tui_parity_tests (release)   13 run,   13 passed  (233.8s)
+neovm-oracle-tests (release)                  38783 run, 38782 passed, 1 failed
+cargo check --workspace --all-targets          clean
+cargo fmt --all --check                        clean
+```
+
+The protocol run includes `tty_palette_approximates_exactly_as_gnu_does`, which
+is entry 153's sweep on four palettes instead of one:
+
+```
+;; xterm: 0 of 5832 differ      rxvt-16color: 0 of 5832 differ
+;; linux-16color: 0 of 5832     xterm-256color: 0 of 5832
+```
+
+and `tty_color_approximate_matches_gnu_over_the_whole_rgb_cube` runs the same
+5,832 samples through the two REAL editors on a pty, per terminal, at 0.
+
+The two neovm-core timeouts are the 600s watchdog under a 12,595-test run on a
+machine building several other trees:
+`bootstrap_tool_bar_mode_comes_from_gnu_mode_macro_path` and
+`partial_bootstrap_fill_delete_newlines_matches_gnu_trailing_space_behavior`.
+Run alone they pass in 148.3s and 127.1s.
+
+The one oracle failure is
+`divergence_combo_complex::case_027::div_cx27_process_exit_code_various_signals`,
+which spawns `sleep 30`, signals it, and gives `accept-process-output` one
+second to see the death: it recorded `(run 0)` instead of `(signal 3)` under the
+full 38,783-test run and passes alone in 0.4s.  No colour anywhere near it.
+
+The three `neomacs-tui-tests` failures are the environment, and the panic text
+says so.  `set_visited_file_name_elisp_functions_match_gnu_semantics` and
+`keyboard_quit_after_find_file_ctrl_h_returns_to_scratch` are entry 96's
+long-worktree-path pair, which entry 153 recorded too; the second's whole diff is
+the 108-character worktree path wrapping GNU's echo area onto an extra row.
+`dired_jump_via_cx_cj_opens_parent_listing_on_current_file` compares a live
+directory listing whose parent changed between the two spawns -- `1665` links /
+41240 bytes for GNU against `1664` / 41180 for Neomacs, six seconds apart on a
+machine with other work running.  Nothing that asserts on colour moved:
+`index_org_has_face_colours` passes, and so do the whole melpa colour set --
+`gruvbox_theme_real_terminal_profiles_match_gnu` (233.5s), `leuven_theme`, and
+`beacon`'s truecolor lifecycle.
+
+Status: FIXED.  The writer holds no palette and no search; the index it writes is
+the one `tty-color-desc` returned, for named faces and anonymous attribute plists
+alike.  `tty-color-define` is observable end to end, before and after the first
+redisplay.  Entry 153's 5,832-answer sweep stays at zero and now runs on four
+palettes instead of one, in the protocol crate and again through both live
+editors.  Explicitly NOT fixed, and measured: the SGR spelling is a fixed rule
+where GNU reads terminfo `setaf`, visible only for an index the terminal's
+palette cannot hold; and a second, unreachable TTY writer still lives in
+`backend/tty/mod.rs`.
