@@ -160,7 +160,7 @@ impl Default for StringInterner {
 /// GNU keeps that unfolded, multibyte flag and all.
 pub(crate) fn normalize_symbol_name_lisp_string(s: &LispString) -> Cow<'_, LispString> {
     if s.is_ascii() && s.is_multibyte() {
-        Cow::Owned(LispString::from_unibyte(s.as_bytes().to_vec()))
+        Cow::Owned(LispString::from_unibyte_slice(s.as_bytes()))
     } else {
         Cow::Borrowed(s)
     }
@@ -206,7 +206,7 @@ impl StringInterner {
 
     fn name_atom_from_str(s: &str) -> LispString {
         if s.is_ascii() {
-            LispString::from_unibyte(s.as_bytes().to_vec())
+            LispString::from_unibyte_slice(s.as_bytes())
         } else {
             LispString::from_utf8(s)
         }

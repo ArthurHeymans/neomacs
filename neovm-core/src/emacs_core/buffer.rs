@@ -3100,9 +3100,13 @@ fn buffer_insert_lisp_string_from_lisp_string(
     }
     if target_multibyte {
         let bytes = string.as_bytes();
-        // Unibyte ASCII is already valid canonical multibyte content.
+        // Unibyte ASCII is already valid canonical multibyte content. Copy
+        // with one spare slot so the constructor's trailing-NUL push cannot
+        // force a realloc + full re-copy of an exact-capacity Vec.
         if bytes.iter().all(|&byte| byte < 0x80) {
-            return crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
+            let mut owned = Vec::with_capacity(bytes.len() + 1);
+            owned.extend_from_slice(bytes);
+            return crate::heap_types::LispString::from_emacs_bytes(owned);
         }
         // Real conversion: raw 128-255 bytes become their (byte8) chars.
         // Encode through one reused stack buffer, not a Vec per char.

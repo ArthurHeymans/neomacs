@@ -331,7 +331,10 @@ impl PieceTreeTextBackend {
             self.len()
         );
         out.clear();
-        out.reserve(end - start);
+        // One spare slot: these bytes usually become a LispString payload,
+        // whose constructor appends a trailing NUL — an exact-capacity Vec
+        // would realloc and re-copy there.
+        out.reserve(end - start + 1);
         self.for_each_emacs_byte_range_chunk(range, |chunk| {
             out.extend_from_slice(chunk);
             Ok::<(), ()>(())

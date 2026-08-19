@@ -2245,7 +2245,11 @@ fn dump_lisp_string(string: &LispString) -> DumpLispString {
 }
 
 pub(super) fn load_lisp_string(dump: &DumpLispString) -> LispString {
-    LispString::from_dump(dump.data.clone(), dump.size, dump.size_byte)
+    // One spare slot so the constructor's trailing-NUL push cannot force a
+    // realloc + full re-copy of an exact-capacity clone.
+    let mut data = Vec::with_capacity(dump.data.len() + 1);
+    data.extend_from_slice(&dump.data);
+    LispString::from_dump(data, dump.size, dump.size_byte)
 }
 
 fn load_lisp_string_owned(dump: DumpLispString) -> LispString {

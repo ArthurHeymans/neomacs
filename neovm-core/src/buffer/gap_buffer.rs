@@ -357,7 +357,10 @@ impl GapBuffer {
         if start == end {
             return;
         }
-        out.reserve(end - start);
+        // One spare slot beyond the copied range: these bytes usually become a
+        // LispString payload, whose constructor appends a trailing NUL — an
+        // exact-capacity Vec would realloc and re-copy there.
+        out.reserve(end - start + 1);
 
         // Intersection with segment A (logical 0..gap_start).
         if start < self.gap_start {

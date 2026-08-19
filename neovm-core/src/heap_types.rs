@@ -200,6 +200,15 @@ impl LispString {
         }
     }
 
+    /// Copy `bytes` into a payload Vec with one spare slot so
+    /// `from_owned_payload`'s trailing-NUL push never reallocates (an
+    /// exact-capacity Vec would double and re-copy the whole payload there).
+    fn copy_payload(bytes: &[u8]) -> Vec<u8> {
+        let mut payload = Vec::with_capacity(bytes.len() + 1);
+        payload.extend_from_slice(bytes);
+        payload
+    }
+
     fn from_owned_payload(mut payload: Vec<u8>, size: usize, size_byte: i64) -> Self {
         let size_byte = Self::normalize_size_byte(size_byte, false);
         Self::assert_valid_size_byte(size_byte);
@@ -266,7 +275,7 @@ impl LispString {
         if self.storage_capacity != 0 {
             return;
         }
-        let payload = self.as_bytes().to_vec();
+        let payload = Self::copy_payload(self.as_bytes());
         self.replace_owned_payload(payload);
     }
 
@@ -372,6 +381,12 @@ impl LispString {
         size_byte: i64,
     ) -> Self {
         unsafe { Self::from_borrowed_bytes(ptr, len, size, size_byte, false) }
+    }
+
+    /// `from_unibyte` from a borrowed slice, copying with the spare NUL slot
+    /// up front so the constructor never reallocates the fresh copy.
+    pub(crate) fn from_unibyte_slice(bytes: &[u8]) -> Self {
+        Self::from_unibyte(Self::copy_payload(bytes))
     }
 
     /// Create a unibyte string.  Each byte is one character; `size_byte` = -1.
@@ -485,7 +500,7 @@ impl LispString {
     /// Create a multibyte string from valid UTF-8.
     /// Standard Unicode == Emacs encoding, so just copy the bytes.
     pub fn from_utf8(s: &str) -> Self {
-        let data = s.as_bytes().to_vec();
+        let data = Self::copy_payload(s.as_bytes());
         let size = s.chars().count();
         let size_byte = data.len() as i64;
         Self::from_owned_payload(data, size, size_byte)
@@ -751,12 +766,12 @@ impl LispString {
         Some(if self.size_byte >= 0 {
             // multibyte
             if let Some(char_len) = char_len {
-                Self::from_owned_payload(slice.to_vec(), char_len, slice.len() as i64)
+                Self::from_owned_payload(Self::copy_payload(slice), char_len, slice.len() as i64)
             } else {
-                Self::from_emacs_bytes(slice.to_vec())
+                Self::from_emacs_bytes(Self::copy_payload(slice))
             }
         } else {
-            Self::from_unibyte(slice.to_vec())
+            Self::from_unibyte(Self::copy_payload(slice))
         })
     }
 
@@ -863,7 +878,7 @@ impl LispString {
     /// multibyte/unibyte flag.
     pub fn set_from_str(&mut self, s: &str) {
         let was_rodata = self.is_rodata();
-        self.replace_owned_payload(s.as_bytes().to_vec());
+        self.replace_owned_payload(Self::copy_payload(s.as_bytes()));
         if was_rodata {
             self.size_byte = SIZE_BYTE_UNIBYTE_NORMAL;
         }
@@ -909,8 +924,11 @@ impl Clone for LispString {
         } else {
             std::ptr::null_mut()
         };
-        let mut cloned =
-            Self::from_owned_payload(self.as_bytes().to_vec(), self.size, self.size_byte);
+        let mut cloned = Self::from_owned_payload(
+            Self::copy_payload(self.as_bytes()),
+            self.size,
+            self.size_byte,
+        );
         cloned.intervals = AtomicPtr::new(intervals);
         cloned
     }
