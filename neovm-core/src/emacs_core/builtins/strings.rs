@@ -1475,6 +1475,29 @@ fn format_integer_digits(
     apply_integer_width(sign, prefix, &digits, spec)
 }
 
+/// Render `n` as plain decimal digits appended to `out`, with no heap
+/// traffic: one backward stack-buffer pass, like GNU's sprintf into
+/// `sprintf_buf`.
+fn push_i64_decimal(out: &mut Vec<u8>, n: i64) {
+    // i64::MIN-safe: widen before unsigned_abs; the magnitude fits u64.
+    let mut val = (n as i128).unsigned_abs() as u64;
+    let mut buf = [0u8; 21];
+    let mut pos = buf.len();
+    loop {
+        pos -= 1;
+        buf[pos] = b'0' + (val % 10) as u8;
+        val /= 10;
+        if val == 0 {
+            break;
+        }
+    }
+    if n < 0 {
+        pos -= 1;
+        buf[pos] = b'-';
+    }
+    out.extend_from_slice(&buf[pos..]);
+}
+
 /// Format an integer with the given spec.
 fn format_int_spec(n: i64, spec: &FormatSpec) -> String {
     // Fast path for a plain `%d`/`%i`: one backward stack-buffer digit
@@ -2133,6 +2156,33 @@ fn do_format(
                 // propagate. A symbol interned from propertized text keeps those
                 // properties on its name, which is how an error message built
                 // with `(error "..." SYM)' carries them.
+                // Plain `%s` on a string with no property tracking: the bytes
+                // land verbatim (exactly what the general path produces), so
+                // append them directly instead of building two transient
+                // copies (`to_vec` + the formatted Vec) per conversion.
+                if !track_props
+                    && spec.width.is_none()
+                    && spec.precision.is_none()
+                    && !spec.minus
+                    && !spec.plus
+                    && !spec.space
+                    && !spec.zero
+                    && !spec.sharp
+                {
+                    let arg = super::misc_pure::symbol_name_string_for_format(args[this_arg_idx])
+                        .unwrap_or(args[this_arg_idx]);
+                    if let Some(ls) = arg.as_lisp_string() {
+                        // Multibyte bytes are already canonical; ASCII unibyte
+                        // promotes to itself. Raw 128-255 unibyte bytes need
+                        // the general path's str_to_multibyte promotion
+                        // (issue #131 eight-bit chars).
+                        if ls.is_multibyte() || ls.as_bytes().is_ascii() {
+                            result.extend_from_slice(ls.as_bytes());
+                            arg_idx = this_arg_idx + 1;
+                            continue;
+                        }
+                    }
+                }
                 let arg = super::misc_pure::symbol_name_string_for_format(args[this_arg_idx])
                     .unwrap_or(args[this_arg_idx]);
                 let arg_is_string = arg.is_string();
@@ -2176,6 +2226,26 @@ fn do_format(
                 format_string_spec(&s, true, &spec)
             }
             'd' | 'i' | 'b' | 'B' | 'o' | 'x' | 'X' => {
+                // Plain `%d` on a fixnum with no property tracking: render the
+                // digits straight into the result, GNU-sprintf style — the
+                // general path below builds (and immediately drops) a String
+                // per conversion.
+                if !track_props
+                    && matches!(spec.conversion, 'd' | 'i')
+                    && spec.width.is_none()
+                    && spec.precision.is_none()
+                    && !spec.minus
+                    && !spec.plus
+                    && !spec.space
+                    && !spec.zero
+                    && !spec.sharp
+                {
+                    if let ValueKind::Fixnum(n) = args[this_arg_idx].kind() {
+                        push_i64_decimal(&mut result, n);
+                        arg_idx = this_arg_idx + 1;
+                        continue;
+                    }
+                }
                 let formatted = match args[this_arg_idx].kind() {
                     ValueKind::Fixnum(i) => format_int_spec(i, &spec),
                     ValueKind::Float => {
