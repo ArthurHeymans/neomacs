@@ -4275,7 +4275,11 @@ fn line_number_anchor_counts_from_recent_line_and_survives_edits_below() {
     let mut eval = Context::new();
     let text = "line\n".repeat(2000);
     eval.eval_str(&format!(
-        "(progn (switch-to-buffer \"anchor-test\") (insert {:?}))",
+        // `switch-to-buffer' is lisp/window.el:9558 and has no subr any more
+        // (DIVERGENCES.md 154); this test only needs the buffer current, which
+        // is `set-buffer' (src/buffer.c:2416) -- one of the three C primitives
+        // GNU's `switch-to-buffer' body calls.
+        "(progn (set-buffer (get-buffer-create \"anchor-test\")) (insert {:?}))",
         text
     ))
     .expect("setup");

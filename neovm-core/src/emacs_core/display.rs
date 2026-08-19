@@ -753,6 +753,54 @@ pub(crate) fn builtin_display_screens(
     Ok(Value::fixnum(1))
 }
 
+/// `(display-color-cells &optional DISPLAY)`.
+///
+/// THE ONE SURVIVOR of DIVERGENCES.md 154's eighteen, and it is a DEBT, not a
+/// design.  GNU has no `DEFUN ("display-color-cells"` anywhere in `src/`: the
+/// name is `lisp/frame.el:2966`, and `loadup.el` loads `frame` at :255 --
+/// ninety-five files after `faces` at :160.  So in GNU the name is VOID while
+/// `faces.el` loads, and GNU bootstraps, which proves GNU's `faces.el` load
+/// never reaches it.
+///
+/// Ours does.  Measured Lisp backtrace, `x`-featured bootstrap:
+///
+/// ```text
+/// (load "faces")
+///  -> (custom-declare-face show-paren-match ...)      ; lisp/faces.el:3161
+///  -> (face-spec-set show-paren-match ... face-defface-spec)
+///  -> (face-spec-recalc show-paren-match #<frame F1>) ; over (frame-list)
+///  -> (face-spec-choose ... #<frame F1>)
+///  -> (face-spec-set-match-display ((background dark) (min-colors 4)) #<frame F1>)
+///  -> (display-color-cells #<frame F1>)               ; lisp/faces.el:1588
+/// ```
+///
+/// `show-paren-match`'s third clause is the only preloaded defface clause whose
+/// FIRST conjunct is `background` rather than `class` or `type`, so it is the
+/// only one that can reach `min-colors` on a frame with no display class.  It
+/// gets there because `ensure_selected_frame_id_in_state_with_policy`
+/// (`window_cmds/mod.rs`) seeds `background-mode` = `dark` on the frame, which
+/// GNU computes only later, in `frame-set-background-mode`.  Until the frame
+/// carries GNU's parameter set at GNU's time, deleting this subr costs 1124
+/// tests -- every one that boots a runtime.
+///
+/// So this stays registered and is the second entry on the shadow list, filed
+/// as `UnjustifiedBootstrapCaller`, not as a placeholder GNU also ships.
+pub(crate) fn builtin_display_color_cells(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_optional_display_designator_eval(eval, "display-color-cells", &args)?;
+    if display_window_system_symbol_eval(eval, args.first())?
+        .is_some_and(gui_window_system_active_value)
+    {
+        Ok(Value::fixnum(16777216)) // 2^24 = 24-bit TrueColor
+    } else if terminal_runtime_supports_color() {
+        Ok(Value::fixnum(terminal_runtime_color_cells()))
+    } else {
+        Ok(Value::fixnum(0))
+    }
+}
+
 /// Context-aware variant of `display-planes`.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_planes(

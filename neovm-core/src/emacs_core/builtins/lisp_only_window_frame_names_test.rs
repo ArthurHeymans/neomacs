@@ -1,5 +1,6 @@
 //! The eighteen window/frame/face geometry names are Lisp, and only Lisp --
-//! DIVERGENCES.md 154.
+//! DIVERGENCES.md 154.  SEVENTEEN of them lost their Rust subr; the eighteenth,
+//! `display-color-cells', could not go yet and the reason is measured below.
 //!
 //! Ledger 146 enumerated the class -- Rust subrs whose function cell the
 //! `loadup.el` preloads overwrite -- and ranked this group LAST and RISKIEST,
@@ -22,6 +23,17 @@
 //! over the C primitives.  Both are Lisp; neither is a DEFUN.  See the dated
 //! correction note on entry 146.
 //!
+//! The eighteenth name is the one 146's "last and riskiest" warning was
+//! actually about.  `display-color-cells' is `lisp/frame.el:2966' and
+//! `loadup.el' loads `frame' at :255, ninety-five files after `faces' at :160 --
+//! so in GNU the name is VOID while `faces.el' loads, and GNU bootstraps, which
+//! proves GNU's `faces.el' load never reaches it.  Ours does, through
+//! `show-paren-match's `((background dark) (min-colors 4))' clause, because we
+//! seed a `background-mode' frame parameter GNU only computes later.  Deleting
+//! it costs 1124 tests.  It stays registered, on the shadow list, filed as
+//! `UnjustifiedBootstrapCaller' -- see
+//! `display_color_cells_is_the_one_that_could_not_go_yet' below.
+//!
 //! The C primitives each of the eighteen is written over must survive the
 //! deletion, and that is the half a careless sweep would have got wrong:
 //! `delete-window' is Lisp but `delete-window-internal' is C, `color-values' is
@@ -41,6 +53,10 @@ use crate::test_utils::{runtime_startup_eval_all, runtime_startup_eval_one};
 /// GNU has no C version of these, so a bare evaluator -- which is GNU before
 /// `loadup.el` -- must have nothing to answer with.  `loadup.el` loads
 /// `window` at :138, `faces` at :160 and `frame` at :255.
+///
+/// `display-color-cells` belongs on this list by every measurement except one,
+/// and that one keeps it off: see
+/// `display_color_cells_is_the_one_that_could_not_go_yet`.
 const LISP_ONLY_WINDOW_FRAME_NAMES: &[&str] = &[
     "balance-windows",              // lisp/window.el:6222
     "color-defined-p",              // lisp/faces.el:1923
@@ -48,7 +64,6 @@ const LISP_ONLY_WINDOW_FRAME_NAMES: &[&str] = &[
     "delete-other-windows",         // lisp/window.el:4453
     "delete-window",                // lisp/window.el:4318
     "display-buffer",               // lisp/window.el:8166
-    "display-color-cells",          // lisp/frame.el:2966
     "enlarge-window",               // lisp/window.el:3714
     "fit-window-to-buffer",         // lisp/window.el:10307
     "make-frame",                   // lisp/frame.el:1019
@@ -119,7 +134,7 @@ const C_PRIMITIVES_BENEATH_THEM: &[&str] = &[
 ];
 
 #[test]
-fn the_eighteen_window_frame_names_are_void_on_a_bare_evaluator_like_gnu() {
+fn the_seventeen_window_frame_names_are_void_on_a_bare_evaluator_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
 
@@ -145,7 +160,7 @@ fn the_eighteen_window_frame_names_are_void_on_a_bare_evaluator_like_gnu() {
 }
 
 #[test]
-fn no_rust_subr_is_registered_for_the_eighteen_window_frame_names() {
+fn no_rust_subr_is_registered_for_the_seventeen_window_frame_names() {
     crate::test_utils::init_test_tracing();
     // The global subr registry is populated by `init_builtins`, which runs
     // when an evaluator is built; ask for one before reading the table.
@@ -174,7 +189,7 @@ fn no_rust_subr_is_registered_for_the_eighteen_window_frame_names() {
 /// interactive -- and all eighteen answered "Built-in function." for
 /// `documentation`.
 #[test]
-fn the_eighteen_window_frame_names_are_lisp_in_the_loaded_runtime_like_gnu() {
+fn the_seventeen_window_frame_names_are_lisp_in_the_loaded_runtime_like_gnu() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
         runtime_startup_eval_all(
@@ -271,7 +286,7 @@ fn the_eighteen_window_frame_names_are_lisp_in_the_loaded_runtime_like_gnu() {
             // interactive forms
             "OK (interactive nil)",
             "OK (interactive nil)",
-            "OK (interactive \"i\\np\")",
+            "OK (interactive \"i\np\")",
             "OK (interactive \"p\")",
             "OK (interactive \"p\")",
             "OK (interactive nil)",
@@ -308,7 +323,7 @@ fn the_eighteen_window_frame_names_are_lisp_in_the_loaded_runtime_like_gnu() {
 /// Measured on GNU 31.0.90 with `lexical-binding` t (tmp/pw61/gnu-bytecode.txt).
 /// 192 = Bconstant, 1/2 = Bstack_ref, 33 = Bcall1, 34 = Bcall2, 135 = Breturn.
 #[test]
-fn all_eighteen_are_ordinary_calls_that_read_the_cell_like_gnu() {
+fn all_seventeen_are_ordinary_calls_that_read_the_cell_like_gnu() {
     crate::test_utils::init_test_tracing();
     for (form, codes, constants) in [
         (
@@ -425,6 +440,7 @@ fn the_pixel_edge_wrappers_go_through_window_edges_like_gnu() {
     assert_eq!(
         runtime_startup_eval_all(
             r#"
+(require 'cl-lib)
 (cl-letf (((symbol-function 'window-edges)
            (lambda (&optional _w body absolute pixelwise)
              (list 'edges body absolute pixelwise))))
@@ -432,9 +448,114 @@ fn the_pixel_edge_wrappers_go_through_window_edges_like_gnu() {
 ;; lisp/window.el:3922 and :3937 verbatim: (window-edges window nil nil t) and
 ;; (window-edges window nil t t).
 (equal (window-pixel-edges) (window-edges nil nil nil t))
-(equal (window-absolute-pixel-edges) (window-edges nil nil t t))
+(window-pixel-edges)
+;; ABSOLUTE needs `frame-edges', which answers nil on a batch frame in GNU too,
+;; so both editors signal the same error from the same arithmetic.  Measured on
+;; GNU 31.0.90 -Q --batch: (window-absolute-pixel-edges) => (wrong-type-argument
+;; number-or-marker-p nil).
+(condition-case e (window-absolute-pixel-edges) (error e))
+(condition-case e (window-edges nil nil t t) (error e))
 "#,
         ),
-        vec!["OK ((edges nil nil t) (edges nil t t))", "OK t", "OK t",],
+        vec![
+            "OK cl-lib",
+            "OK ((edges nil nil t) (edges nil t t))",
+            "OK t",
+            "OK (0 0 80 24)",
+            "OK (wrong-type-argument number-or-marker-p nil)",
+            "OK (wrong-type-argument number-or-marker-p nil)",
+        ],
+    );
+}
+
+/// `display-color-cells` is the eighteenth name, and the one this entry could
+/// not delete.  Everything an observer can ask still says "Lisp": in the loaded
+/// runtime the cell holds `lisp/frame.el:2966`'s `defun`, with GNU's arity and
+/// GNU's docstring, asserted with the other seventeen above.  What is different
+/// is the bootstrap window.
+///
+/// GNU's `loadup.el` loads `faces` at :160 and `frame` at :255.  For those
+/// ninety-five files `display-color-cells` is VOID in GNU -- and GNU
+/// bootstraps, which is a complete proof that GNU's `faces.el` load never asks
+/// for it.  Ours asks.  Measured Lisp backtrace (tmp/pw61/probe2.log):
+///
+/// ```text
+/// (load "faces")
+///  -> (custom-declare-face show-paren-match ...)      ; lisp/faces.el:3161
+///  -> (face-spec-set show-paren-match ... face-defface-spec)
+///  -> (face-spec-recalc show-paren-match #<frame F1>) ; over (frame-list)
+///  -> (face-spec-choose ... #<frame F1>)
+///  -> (face-spec-set-match-display ((background dark) (min-colors 4)) #<frame F1>)
+///  -> (display-color-cells #<frame F1>)               ; lisp/faces.el:1588
+/// ```
+///
+/// `face-spec-set-match-display` walks conjuncts with `(while (and conjuncts
+/// match))`, so a clause reaches `min-colors` only if every earlier conjunct
+/// matched.  `show-paren-match`'s third clause is the only clause in any
+/// preloaded `defface` whose first conjunct is `background` rather than `class`
+/// or `type`, and it matches here because the frame already carries
+/// `background-mode` = `dark` -- a parameter
+/// `ensure_selected_frame_id_in_state_with_policy` (`window_cmds/mod.rs`) seeds,
+/// and GNU computes only later, in `frame-set-background-mode`.
+///
+/// Deleting the subr costs 1124 tests -- every test that boots a runtime.  So
+/// the fix is not "delete the subr", it is "stop seeding a frame parameter
+/// before GNU does", and that is a display-stack change with its own blast
+/// radius.  This test states the debt so it cannot be forgotten, and pins the
+/// two facts that make it a debt rather than a design.
+#[test]
+fn display_color_cells_is_the_one_that_could_not_go_yet() {
+    crate::test_utils::init_test_tracing();
+
+    // 1. It is still a registered Rust subr -- deliberately, and alone.
+    let _eval = Context::new();
+    assert!(
+        lookup_global_subr_entry(intern("display-color-cells")).is_some(),
+        "display-color-cells is still registered: our `faces.el' load reaches \
+         it before `frame.el' defines it.  See the doc comment above.",
+    );
+
+    // 2. GNU has no C version, so the registration is a shadow: after
+    //    `loadup.el' the cell holds frame.el's `defun', with GNU's arity, GNU's
+    //    commandp and GNU's docstring -- exactly like the seventeen that went.
+    assert_eq!(
+        runtime_startup_eval_all(
+            r#"
+(list (subrp (symbol-function 'display-color-cells))
+      (func-arity 'display-color-cells)
+      (and (commandp 'display-color-cells) t))
+(car (split-string (documentation 'display-color-cells) "\n"))
+(append (aref (byte-compile '(lambda (d) (display-color-cells d))) 1) nil)
+(aref (byte-compile '(lambda (d) (display-color-cells d))) 2)
+;; Both C names its body dispatches to are registered and are subrs.
+(list (subrp (symbol-function 'x-display-color-cells))
+      (subrp (symbol-function 'tty-display-color-cells)))
+"#,
+        ),
+        vec![
+            "OK (nil (0 . 1) nil)",
+            "OK \"Return the number of color cells supported by DISPLAY.\"",
+            "OK (192 1 33 135)",
+            "OK [display-color-cells]",
+            "OK (t t)",
+        ],
+    );
+
+    // 3. The clause that reaches it, and the frame parameter that lets the
+    //    clause match.  Both are what a fix has to change.
+    assert_eq!(
+        runtime_startup_eval_all(
+            "(nth 0 (nth 2 (get 'show-paren-match 'face-defface-spec)))
+             (frame-parameter nil 'background-mode)",
+        ),
+        vec![
+            // lisp/faces.el:3161's third clause: `background' first, so it is
+            // the only preloaded clause that can reach `min-colors' on a frame
+            // with no display class.
+            "OK ((background dark) (min-colors 4))",
+            // GNU's batch frame answers `dark' too -- but only after
+            // `frame-set-background-mode' has run, which is after `loadup.el'.
+            "OK dark",
+        ],
     );
 }

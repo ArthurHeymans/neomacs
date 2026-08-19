@@ -1307,6 +1307,14 @@ fn display_queries_default_to_selected_frame_window_system_surface() {
         Value::T
     );
     assert_eq!(
+        builtin_display_color_cells(&mut eval, vec![]).unwrap(),
+        Value::fixnum(16_777_216)
+    );
+    assert_eq!(
+        builtin_display_color_cells(&mut eval, vec![frame]).unwrap(),
+        Value::fixnum(16_777_216)
+    );
+    assert_eq!(
         crate::emacs_core::builtins::symbols::builtin_xw_display_color_p_ctx(
             &eval,
             vec![Value::NIL],
@@ -3360,6 +3368,10 @@ fn eval_display_queries_accept_live_frame_designator() {
         Value::fixnum(1)
     );
     assert_eq!(
+        builtin_display_color_cells(&mut eval, vec![Value::make_frame(frame_id)]).unwrap(),
+        Value::fixnum(0)
+    );
+    assert_eq!(
         builtin_display_planes(&mut eval, vec![Value::make_frame(frame_id)]).unwrap(),
         Value::fixnum(3)
     );
@@ -3516,6 +3528,10 @@ fn eval_display_queries_string_designator_reports_missing_display() {
         vec![Value::string("x")],
     ));
     assert_missing_display(builtin_display_screens(&mut eval, vec![Value::string("x")]));
+    assert_missing_display(builtin_display_color_cells(
+        &mut eval,
+        vec![Value::string("x")],
+    ));
     assert_missing_display(builtin_display_planes(&mut eval, vec![Value::string("x")]));
     assert_missing_display(builtin_display_visual_class(
         &mut eval,

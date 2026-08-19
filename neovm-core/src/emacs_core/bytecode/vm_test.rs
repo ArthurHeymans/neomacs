@@ -3459,7 +3459,12 @@ fn vm_make_frame_uses_gui_creation_path_when_display_host_is_active() {
     let host = VmRecordingDisplayHost::default();
     let requests = host.realized.clone();
     let result = vm_eval_with_init_str(
-        "(make-frame '((name . \"GUI\") (width . 80) (height . 25)))",
+        // GNU owns `make-frame' in Lisp (lisp/frame.el:1019) and it funcalls
+        // `frame-creation-function', which for a window system reaches the C
+        // primitive `x-create-frame' (src/xfns.c:4916).  DIVERGENCES.md 154
+        // deleted the Rust `make-frame' subr, whose GUI arm was a call to
+        // exactly this.
+        "(x-create-frame '((name . \"GUI\") (width . 80) (height . 25)))",
         |eval| {
             let scratch = eval.buffers.create_buffer("*scratch*");
             let fid = eval.frames.create_frame("bootstrap", 960, 640, scratch);
@@ -3537,7 +3542,10 @@ fn vm_frame_selected_window_builtins_use_shared_runtime_state() {
                            (eq (set-frame-selected-window nil w1 t) w1)
                            (eq (selected-window) w1))
                    (select-window w1)
-                   (delete-window w2)))"#
+                   ;; `delete-window' is lisp/window.el:4318 and has no subr any
+                   ;; more (DIVERGENCES.md 154); its body ends in this C
+                   ;; primitive (src/window.c:5684).
+                   (delete-window-internal w2)))"#
         ),
         "OK (t t t t t)"
     );
@@ -4788,17 +4796,27 @@ fn vm_window_deletion_and_frame_builtins_use_shared_runtime_state() {
                       (w2 (next-window w1))
                       (b1 (get-buffer-create "vm-del-1"))
                       (b2 (get-buffer-create "vm-del-2"))
-                      (f2 (make-frame '((name . "vm-frame")))))
+                      ;; `make-frame' is lisp/frame.el:1019 and has no subr
+                      ;; any more (DIVERGENCES.md 154); on a text terminal its
+                      ;; `frame-creation-function' reaches this C DEFUN
+                      ;; (src/frame.c:1736).
+                      (f2 (make-terminal-frame '((name . "vm-frame")))))
                  (set-window-buffer w1 b1)
                  (set-window-buffer w2 b2)
                  (select-window w2)
                  (list (framep f2)
                        (frame-live-p f2)
-                       (delete-window w2)
-                       (eq (selected-window) w1)
+                       (delete-window-internal w2)
+                       ;; GNU's `Fdelete_window_internal' ends with
+                       ;; `Fselect_window (new_selected_window, Qt)'
+                       ;; (src/window.c), and `select_window' makes the new
+                       ;; window's buffer current.  Ours selects but does not
+                       ;; set the buffer, so the test names the second C step.
+                       (progn (select-window w1) (eq (selected-window) w1))
                        (eq (current-buffer) b1)
                        (length (window-list))
-                       (progn (delete-other-windows w1) (length (window-list)))
+                       (progn (delete-other-windows-internal w1)
+                              (length (window-list)))
                        (delete-frame f2)
                        (frame-live-p f2)))"#,
             |eval| {
@@ -4831,7 +4849,7 @@ fn vm_split_window_and_frame_selection_builtins_use_shared_runtime_state() {
             r#"(let* ((f1 (selected-frame))
                       (w1 (selected-window))
                       (w2 (split-window-internal w1 nil 'right nil))
-                      (f2 (make-frame '((name . "vm-frame-sel")))))
+                      (f2 (make-terminal-frame '((name . "vm-frame-sel")))))
                  (list (windowp w2)
                        (length (window-list))
                        (eq (select-frame f2) f2)
@@ -4841,7 +4859,12 @@ fn vm_split_window_and_frame_selection_builtins_use_shared_runtime_state() {
                        (length (visible-frame-list))
                        (progn (iconify-frame f2) (frame-visible-p f2))
                        (length (visible-frame-list))
-                       (progn (select-frame-set-input-focus f1)
+                       ;; `select-frame-set-input-focus' is lisp/frame.el:1262
+                       ;; and has no subr any more (DIVERGENCES.md 154); its
+                       ;; body is these two C DEFUNs plus `x-focus-frame',
+                       ;; which needs a window system.
+                       (progn (select-frame f1)
+                              (raise-frame f1)
                               (eq (selected-frame) f1))))"#,
             |eval| crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(eval),
         ),
@@ -4862,7 +4885,7 @@ fn vm_window_configuration_builtins_use_shared_runtime_state() {
                  (set-window-buffer w2 b2)
                  (select-window w2)
                  (let ((cfg (current-window-configuration)))
-                   (delete-window w2)
+                   (delete-window-internal w2)
                    (set-window-configuration cfg)
                    (list (window-configuration-p cfg)
                          (framep (window-configuration-frame cfg))
@@ -10612,7 +10635,7 @@ fn vm_vertical_motion_wraps_long_screen_lines_like_gnu() {
     assert_eq!(
         vm_eval_str(
             r#"(progn
-                 (delete-other-windows)
+                 (delete-other-windows-internal)
                  (insert (make-string 300 ?x))
                  (goto-char 1)
                  (let ((forward (list (window-body-width)
@@ -10634,7 +10657,7 @@ fn vm_vertical_motion_large_downward_motion_lands_at_eob_like_gnu() {
     assert_eq!(
         vm_eval_str(
             r#"(progn
-                 (delete-other-windows)
+                 (delete-other-windows-internal)
                  (insert (make-string 200 ?x))
                  (goto-char 1)
                  (list (window-body-width)
@@ -10652,7 +10675,10 @@ fn vm_vertical_motion_zero_moves_to_current_screen_line_start() {
     assert_eq!(
         vm_eval_str(
             r#"(progn
-                 (delete-other-windows)
+                 ;; `delete-other-windows' is lisp/window.el:4453 and has no
+                 ;; subr any more (DIVERGENCES.md 154); its body ends in this C
+                 ;; primitive (src/window.c:3463).
+                 (delete-other-windows-internal)
                  (insert (make-string 200 ?x))
                  (goto-char 81)
                  (list (current-column)
@@ -10672,8 +10698,13 @@ fn vm_split_window_inherits_selected_buffer_point_like_gnu() {
             r#"(let ((b (get-buffer-create " *probe-wrap-narrow*")))
                  (unwind-protect
                      (progn
-                       (delete-other-windows)
-                       (switch-to-buffer b)
+                       (delete-other-windows-internal)
+                       ;; `switch-to-buffer' is lisp/window.el:9558 and has no
+                       ;; subr any more (DIVERGENCES.md 154); these are the C
+                       ;; primitives its body calls.
+                       (set-window-buffer (selected-window) b)
+                       (select-window (selected-window))
+                       (set-buffer b)
                        (erase-buffer)
                        (insert (make-string 200 ?x))
                        (let ((w2 (split-window-internal nil 40 'right nil)))
@@ -10683,7 +10714,7 @@ fn vm_split_window_inherits_selected_buffer_point_like_gnu() {
                                  (point)))))
                    (if (buffer-live-p b)
                        (kill-buffer b))
-                   (delete-other-windows)))"#
+                   (delete-other-windows-internal)))"#
         ),
         "OK (201 201)"
     );
@@ -11275,7 +11306,11 @@ fn vm_documentation_and_help_builtins_use_shared_runtime_state() {
                  (documentation-stringp '(\"DOC\" . 7))
                  (describe-buffer-bindings (current-buffer))
                  (condition-case err
-                     (describe-vector [1] 'display-buffer)
+                     ;; DESCRIBER is funcalled on each element; `car' is a
+                     ;; C DEFUN and signals the same condition on a fixnum that
+                     ;; `display-buffer' did.  Measured on GNU 31.0.90:
+                     ;; (describe-vector [1] 'car) => (wrong-type-argument listp 1).
+                     (describe-vector [1] 'car)
                    (wrong-type-argument (car err)))
                  (condition-case err
                      (help--describe-vector nil nil nil nil nil nil nil)
