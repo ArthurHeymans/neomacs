@@ -358,8 +358,8 @@ use crate::face::{
     BoxStyle, Face as RuntimeFace, FontSlant, FontWeight, FontWidth, LFACE_ATTRS, UnderlineStyle,
 };
 use crate::tagged::header::store_value_atomic;
-use neomacs_display_protocol::TerminalColor;
 use crate::window::{FrameId, FrameManager, FrameParam};
+use neomacs_display_protocol::TerminalColor;
 
 // ===========================================================================
 // Face builtins (pure)
@@ -1835,10 +1835,12 @@ fn tty_color_desc_rgb(
     // otherwise (`if (! FIXNUMP (XCAR (XCDR (color_desc)))) return false;`,
     // xfaces.c:1098-1099).
     let index = items[1].as_fixnum()?;
-    Some(match TerminalColor::from_tty_color_desc(index, color_cells) {
-        Some(terminal) => rgb.with_terminal(terminal),
-        None => return None,
-    })
+    Some(
+        match TerminalColor::from_tty_color_desc(index, color_cells) {
+            Some(terminal) => rgb.with_terminal(terminal),
+            None => return None,
+        },
+    )
 }
 
 /// Collect every foreground/background/distant-foreground color string in the

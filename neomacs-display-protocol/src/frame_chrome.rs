@@ -249,12 +249,18 @@ pub struct MenuBarContent {
     terminal_style: Option<TerminalMenuBarStyle>,
 }
 
+/// The `menu` face as a TERMINAL writes it.
+///
+/// The colours are the realized terminal colours, not pixels: GNU's
+/// `turn_on_face` (src/term.c:2093-2117) writes the index the realized face
+/// carries and nothing else, and `None` is GNU's `FACE_TTY_DEFAULT_FG_COLOR` --
+/// a slot `face_tty_specified_color` (src/dispextern.h:1933-1936) rejects, so
+/// no colour is emitted at all.  A separate "use the default" flag beside a
+/// pixel would say the same thing twice.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TerminalMenuBarStyle {
-    pub fg: u32,
-    pub bg: u32,
-    pub use_default_foreground: bool,
-    pub use_default_background: bool,
+    pub fg: Option<crate::terminal_color::TerminalColor>,
+    pub bg: Option<crate::terminal_color::TerminalColor>,
     pub bold: bool,
     pub inverse: bool,
 }

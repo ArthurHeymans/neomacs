@@ -3293,12 +3293,7 @@ fn face_resolver_honors_overlay_window_property() {
     let _ctx = neovm_core::emacs_core::Context::new();
     let mut table = FaceTable::new();
     let mut hl = NeoFace::new("hl-line-test");
-    hl.background = Some(neovm_core::face::Color {
-        r: 0xff,
-        g: 0xff,
-        b: 0x00,
-        a: 0xff,
-    });
+    hl.background = Some(neovm_core::face::Color::rgb(0xff, 0xff, 0x00));
     table.define("hl-line-test", hl);
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, Some("x".to_string()));
 

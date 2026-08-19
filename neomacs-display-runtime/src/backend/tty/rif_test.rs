@@ -67,8 +67,14 @@ fn resize_clears_grids() {
 fn resolve_attrs_uses_face_table() {
     let mut rif = TtyRif::new(80, 24);
     let mut face = Face::new(FaceId::new(1));
+    // What the writer emits is the REALIZED TERMINAL colour -- the index
+    // `tty-color-desc` returned (GNU `map_tty_color`, src/xfaces.c:6640-6648) --
+    // not the pixel the GUI paints. A face carrying only a pixel has no colour
+    // to write, which is GNU's FACE_TTY_DEFAULT_COLOR.
     face.foreground = Color::rgb(1.0, 0.0, 0.0);
     face.background = Color::rgb(0.0, 1.0, 0.0);
+    face.terminal_foreground = Some(TerminalColor::Indexed(9));
+    face.terminal_background = Some(TerminalColor::Indexed(10));
     face.font_weight = 700;
     face.attributes |= FaceAttributes::ITALIC;
     face.underline_style = UnderlineStyle::Wave;
@@ -79,8 +85,8 @@ fn resolve_attrs_uses_face_table() {
     rif.set_faces(faces);
 
     let attrs = rif.resolve_attrs(FaceId::new(1));
-    assert_eq!(attrs.fg, Some((255, 0, 0)));
-    assert_eq!(attrs.bg, Some((0, 255, 0)));
+    assert_eq!(attrs.fg, Some(TerminalColor::Indexed(9)));
+    assert_eq!(attrs.bg, Some(TerminalColor::Indexed(10)));
     assert!(attrs.bold);
     assert!(attrs.italic);
     assert_eq!(attrs.underline, 3); // Wave
@@ -200,55 +206,6 @@ fn rasterize_shows_placeholder_for_surface_glyph() {
     // The reserved columns show the labeled placeholder, not blank space.
     let rendered: String = (0..cols).map(|c| desired_char(&rif, 0, c)).collect();
     assert_eq!(rendered, "░░[shader]░░");
-}
-
-// ---------------------------------------------------------------------------
-// color_to_rgb8
-// ---------------------------------------------------------------------------
-
-/// `color_to_rgb8` applies `linear_to_srgb` before quantizing, so
-/// a linear input of 0.5 becomes sRGB ~0.735 → 188 (not 127).
-#[test]
-fn color_to_rgb8_converts_correctly() {
-    let c = Color::rgb(1.0, 0.5, 0.0);
-    let (r, g, b) = color_to_rgb8(&c);
-    assert_eq!(r, 255);
-    // linear 0.5 → sRGB: 1.055 * 0.5^(1/2.4) - 0.055 ≈ 0.735 → 188
-    assert_eq!(g, 188);
-    assert_eq!(b, 0);
-}
-
-#[test]
-fn color_to_rgb8_clamps_out_of_range() {
-    let c = Color::rgb(2.0, -1.0, 0.5);
-    let (r, g, b) = color_to_rgb8(&c);
-    assert_eq!(r, 255);
-    assert_eq!(g, 0);
-    // linear 0.5 → sRGB ≈ 188
-    assert_eq!(b, 188);
-}
-
-/// Round-trip: an sRGB pixel value → Color::from_pixel (srgb→linear)
-/// → color_to_rgb8 (linear→srgb) should recover the original byte
-/// values. This is the contract that makes TTY face colors match
-/// GNU Emacs exactly.
-#[test]
-fn color_to_rgb8_round_trips_srgb_pixel() {
-    // grey75 = sRGB 191 = 0xbfbfbf (GNU mode-line bg)
-    let pixel = 0x00bfbfbf_u32;
-    let linear = Color::from_pixel(pixel);
-    let (r, g, b) = color_to_rgb8(&linear);
-    assert_eq!(r, 191, "grey75 round-trip red channel");
-    assert_eq!(g, 191, "grey75 round-trip green channel");
-    assert_eq!(b, 191, "grey75 round-trip blue channel");
-
-    // grey30 = sRGB 77 = 0x4d4d4d (GNU mode-line-inactive bg, dark)
-    let pixel2 = 0x004d4d4d_u32;
-    let linear2 = Color::from_pixel(pixel2);
-    let (r2, g2, b2) = color_to_rgb8(&linear2);
-    assert_eq!(r2, 77, "grey30 round-trip red channel");
-    assert_eq!(g2, 77, "grey30 round-trip green channel");
-    assert_eq!(b2, 77, "grey30 round-trip blue channel");
 }
 
 // ---------------------------------------------------------------------------
@@ -493,6 +450,9 @@ fn tty_line_end_filler_with_default_sgr_still_preserves_nondefault_face_identity
     let mut state = FrameDisplayState::new(5, 1, 1.0, 1.0);
     let mut comment = Face::new(FaceId::new(1));
     comment.foreground = Color::from_pixel(0x00ff7f24);
+    // What makes this face terminal-distinct from the default is its REALIZED
+    // terminal colour, not its pixel: the pixel is never written to a tty.
+    comment.terminal_foreground = Some(TerminalColor::Indexed(208));
     comment.use_default_background = true;
     let mut default_face = Face::new(FaceId::new(0));
     default_face.use_default_foreground = true;
@@ -623,10 +583,16 @@ fn rasterize_respects_matrix_position() {
 fn rasterize_face_fill_paints_blank_cells_before_glyphs() {
     let mut state = FrameDisplayState::new(8, 2, 1.0, 1.0);
     state.background = Color::from_pixel(0x000000);
+    let mut default_face = Face::new(FaceId::new(0));
+    default_face.background = Color::from_pixel(0x000000);
+    default_face.terminal_background = Some(TerminalColor::Indexed(0));
     let mut fill_face = Face::new(FaceId::new(7));
     fill_face.background = Color::from_pixel(0x112233);
+    fill_face.terminal_background = Some(TerminalColor::Indexed(235));
     let mut glyph_face = Face::new(FaceId::new(8));
     glyph_face.background = Color::from_pixel(0x445566);
+    glyph_face.terminal_background = Some(TerminalColor::Indexed(240));
+    state.faces.insert(FaceId::new(0), default_face);
     state.faces.insert(FaceId::new(7), fill_face);
     state.faces.insert(FaceId::new(8), glyph_face);
     state.face_fills.push(FaceFillItem {
@@ -654,12 +620,27 @@ fn rasterize_face_fill_paints_blank_cells_before_glyphs() {
     rif.rasterize(&state);
 
     assert_eq!(rif.desired.cells[0].ch, ' ');
-    assert_eq!(rif.desired.cells[0].attrs.bg, Some((0x11, 0x22, 0x33)));
-    assert_eq!(rif.desired.cells[1].attrs.bg, Some((0x11, 0x22, 0x33)));
+    assert_eq!(
+        rif.desired.cells[0].attrs.bg,
+        Some(TerminalColor::Indexed(235))
+    );
+    assert_eq!(
+        rif.desired.cells[1].attrs.bg,
+        Some(TerminalColor::Indexed(235))
+    );
     assert_eq!(rif.desired.cells[2].ch, 'X');
-    assert_eq!(rif.desired.cells[2].attrs.bg, Some((0x44, 0x55, 0x66)));
-    assert_eq!(rif.desired.cells[7].attrs.bg, Some((0x11, 0x22, 0x33)));
-    assert_eq!(rif.desired.cells[8].attrs.bg, Some((0, 0, 0)));
+    assert_eq!(
+        rif.desired.cells[2].attrs.bg,
+        Some(TerminalColor::Indexed(240))
+    );
+    assert_eq!(
+        rif.desired.cells[7].attrs.bg,
+        Some(TerminalColor::Indexed(235))
+    );
+    assert_eq!(
+        rif.desired.cells[8].attrs.bg,
+        Some(TerminalColor::Indexed(0))
+    );
 }
 
 #[test]
@@ -1930,7 +1911,7 @@ fn erase_to_eol_preserves_a_colored_foreground_space_at_the_boundary() {
         1,
         ' ',
         CellAttrs {
-            fg: Some((255, 127, 36)),
+            fg: Some(TerminalColor::Indexed(208)),
             ..CellAttrs::default()
         },
         false,
@@ -1981,7 +1962,7 @@ fn diff_with_changes_produces_ansi_sequences() {
         0,
         'A',
         CellAttrs {
-            fg: Some((255, 0, 0)),
+            fg: Some(TerminalColor::Direct { r: 255, g: 0, b: 0 }),
             ..CellAttrs::default()
         },
         false,
@@ -2156,8 +2137,8 @@ fn cursor_not_visible_omits_show_cursor_sequence() {
 #[test]
 fn write_sgr_bold_italic_underline() {
     let attrs = CellAttrs {
-        fg: Some((0, 0, 0)),
-        bg: Some((255, 255, 255)),
+        fg: Some(TerminalColor::Indexed(0)),
+        bg: Some(TerminalColor::Indexed(15)),
         bold: true,
         italic: true,
         underline: 1,
@@ -2199,8 +2180,8 @@ fn write_sgr_underline_styles_match_gnu_smulx_codes() {
 #[test]
 fn write_sgr_strikethrough_inverse() {
     let attrs = CellAttrs {
-        fg: Some((0, 0, 0)),
-        bg: Some((0, 0, 0)),
+        fg: Some(TerminalColor::Indexed(0)),
+        bg: Some(TerminalColor::Indexed(0)),
         bold: false,
         italic: false,
         underline: 0,
@@ -2249,10 +2230,10 @@ fn write_sgr_terminal_default_colors() {
 #[test]
 fn grid_clear_sets_background() {
     let mut grid = TtyGrid::new(5, 3);
-    grid.clear(Some((100, 50, 25)));
+    grid.clear(Some(TerminalColor::Indexed(94)));
     for cell in &grid.cells {
         assert_eq!(cell.ch, ' ');
-        assert_eq!(cell.attrs.bg, Some((100, 50, 25)));
+        assert_eq!(cell.attrs.bg, Some(TerminalColor::Indexed(94)));
     }
 }
 
@@ -2422,111 +2403,139 @@ fn plain_cluster_composite_stays_one_cell_and_skips_joiners() {
     assert_eq!(rif.desired.cells[0].extenders.as_deref(), Some("\u{1F469}"));
 }
 
-// --- Color downsampling for non-truecolor terminals (issue #154) -----------
+// --- The realized terminal colour is what the writer writes ----------------
 
-#[test]
-fn tty_color_rgb_to_256_corners() {
-    // Read out of GNU, `emacs -Q -nw` in a PTY with COLORTERM unset:
-    // (nth 1 (tty-color-approximate (tty-color-standard-values COLOR))).
-    // The 16 system colors lead `tty-color-alist`, so pure red/green/white and
-    // black resolve there rather than to the cube entry with the same RGB --
-    // this test used to pin 196 / 46 / 231 / 16, which GNU never emits.
-    assert_eq!(rgb_to_256(255, 0, 0), 9);
-    assert_eq!(rgb_to_256(0, 255, 0), 10);
-    assert_eq!(rgb_to_256(0, 0, 255), 21);
-    assert_eq!(rgb_to_256(0, 0, 0), 0);
-    assert_eq!(rgb_to_256(255, 255, 255), 15);
-    assert_eq!(rgb_to_256(0xcd, 0, 0), 1);
-    assert_eq!(rgb_to_256(0x5c, 0x5c, 0xff), 12);
-    assert_eq!(rgb_to_256(0xe5, 0xe5, 0xe5), 7);
-    assert_eq!(rgb_to_256(0x7f, 0x7f, 0x7f), 8);
-    assert_eq!(rgb_to_256(128, 128, 128), 244);
-}
-
-/// The 8-color tier, against GNU.
+/// The writer emits the number the realized face carries, spelled the way this
+/// terminal's `setaf` spells it, and derives nothing.
 ///
-/// Every answer was read out of GNU 31.0.90, `emacs -Q -nw` in a PTY with
-/// COLORTERM unset and `TERM=xterm`, where `display-color-cells` is 8 and
-/// `tty-color-alist` has exactly the 8 entries this tier's palette holds:
-/// `(nth 1 (tty-color-approximate (list (* r 257) (* g 257) (* b 257))))`.
+/// GNU passes `face->foreground` straight to `tparam (ts, NULL, 0, fg, 0, 0, 0)`
+/// (src/term.c:2098-2104), where `ts` is terminfo `setaf`.  Every xterm-family
+/// entry spells it with the same three-way conditional, e.g.
 ///
-/// `#ff0000` is the row that shows what the old `rgb_to_ansi_basic` got wrong
-/// in kind rather than in degree: an 8-color terminal has no bright red, so
-/// GNU answers 1 ("red", `#cd0000`) and emits `\E[31m`, where the old
-/// threshold answered base 1 with the brightness bit set and emitted `\E[91m`.
+/// ```text
+/// screen-256color setaf =
+///   \E[%?%p1%{8}%<%t3%p1%d%e%p1%{16}%<%t9%p1%{8}%-%d%e38;5;%p1%d%;m
+/// ```
+///
+/// so index < 8 is `ESC [ 3N m`, 8..15 is `ESC [ 9(N-8) m`, and 16 and above is
+/// `ESC [ 38;5;N m`.  `rxvt-16color` reaches the same bytes by a different
+/// formula -- `setaf=\E[%?%p1%{8}%<%t%p1%{30}%+%e%p1%'R'%+%;%dm`, i.e. N+82 for
+/// N >= 8, which is 90..97 exactly over 8..15.
 #[test]
-fn ansi8_tier_matches_gnu_tty_color_approximate() {
-    let tier = TtyColorTier::Ansi8;
-    for (hex, expected) in [
-        ("#000000", 0),
-        ("#ff0000", 1),
-        ("#00ff00", 2),
-        ("#0000ff", 4),
-        ("#ffffff", 7),
-    ] {
-        let channel = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).expect("hex channel");
-        assert_eq!(
-            tier.approximate(channel(1), channel(3), channel(5)),
-            Some(expected),
-            "{hex} at the 8-color tier"
+fn write_sgr_spells_the_index_the_realized_face_carries() {
+    let expected = [
+        (TerminalColor::Indexed(0), "\x1b[30m", "\x1b[40m"),
+        (TerminalColor::Indexed(1), "\x1b[31m", "\x1b[41m"),
+        (TerminalColor::Indexed(7), "\x1b[37m", "\x1b[47m"),
+        (TerminalColor::Indexed(8), "\x1b[90m", "\x1b[100m"),
+        (TerminalColor::Indexed(12), "\x1b[94m", "\x1b[104m"),
+        (TerminalColor::Indexed(15), "\x1b[97m", "\x1b[107m"),
+        (TerminalColor::Indexed(16), "\x1b[38;5;16m", "\x1b[48;5;16m"),
+        (
+            TerminalColor::Indexed(145),
+            "\x1b[38;5;145m",
+            "\x1b[48;5;145m",
+        ),
+        (
+            TerminalColor::Indexed(255),
+            "\x1b[38;5;255m",
+            "\x1b[48;5;255m",
+        ),
+    ];
+    for (color, fg, bg) in expected {
+        let mut buf = Vec::new();
+        write_sgr(
+            &mut buf,
+            &CellAttrs {
+                fg: Some(color),
+                ..CellAttrs::default()
+            },
         );
+        let s = String::from_utf8_lossy(&buf).into_owned();
+        assert!(s.contains(fg), "{color:?} foreground: {s:?}");
+
+        let mut buf = Vec::new();
+        write_sgr(
+            &mut buf,
+            &CellAttrs {
+                bg: Some(color),
+                ..CellAttrs::default()
+            },
+        );
+        let s = String::from_utf8_lossy(&buf).into_owned();
+        assert!(s.contains(bg), "{color:?} background: {s:?}");
     }
 }
 
-/// The tiers that have no palette answer no index at all, so no caller can
-/// quantize on a terminal that has nothing to quantize into.
+/// A 24-bit colour is the OTHER reading of the same slot, not a fallback.
+///
+/// On a terminal reporting 16777216 cells, `tty-color-desc` answers
+/// `tty-color-24bit`'s packed pixel in the INDEX position
+/// (lisp/term/tty-colors.el:829-838), and GNU's `TF_rgb_separate` `setaf`
+/// splits it into three channels (`fg >> 16`, `(fg >> 8) & 0xFF`, `fg & 0xFF`,
+/// src/term.c:2103).  Measured out of GNU with `COLORTERM=truecolor`:
+/// `(tty-color-desc "red")` => `("red" 13434880 52685 0 0)`, and 13434880 is
+/// 0xCD0000.
 #[test]
-fn tiers_without_a_palette_do_not_approximate() {
-    assert_eq!(TtyColorTier::Monochrome.approximate(255, 0, 0), None);
-    assert_eq!(TtyColorTier::TrueColor.approximate(255, 0, 0), None);
-}
-
-// nextest isolates each test in its own process, so the process-global
-// COLOR_TIER set here does not leak into the default-tier tests above.
-#[test]
-fn tty_write_sgr_downsamples_by_tier() {
-    let attrs = CellAttrs {
-        fg: Some((255, 0, 0)),
-        ..CellAttrs::default()
-    };
-    // 256-color terminal -> indexed escape, never 24-bit truecolor.
-    //
-    // GNU approximates #ff0000 to the system "brightred" cell, index 9, and
-    // spells indices below 16 with the short aixterm forms because that is what
-    // its terminfo `setaf` produces:
-    //   screen-256color setaf =
-    //     \E[%?%p1%{8}%<%t3%p1%d%e%p1%{16}%<%t9%p1%{8}%-%d%e38;5;%p1%d%;m
-    // A PTY capture of GNU on this terminal carries \E[96m and \E[37m for the
-    // link and mode-line faces, never \E[38;5;14m or \E[38;5;7m.
-    set_color_tier(256);
+fn write_sgr_spells_a_direct_colour_as_three_channels() {
     let mut buf = Vec::new();
-    write_sgr(&mut buf, &attrs);
-    let s = String::from_utf8(buf).unwrap();
-    assert!(s.contains("\x1b[91m"), "256 tier red: {s:?}");
-    assert!(!s.contains("38;2;"), "must not emit truecolor at 256 tier");
+    write_sgr(
+        &mut buf,
+        &CellAttrs {
+            fg: Some(TerminalColor::Direct { r: 205, g: 0, b: 0 }),
+            bg: Some(TerminalColor::Direct {
+                r: 0x12,
+                g: 0x34,
+                b: 0x56,
+            }),
+            ..CellAttrs::default()
+        },
+    );
+    let s = String::from_utf8_lossy(&buf).into_owned();
+    assert!(s.contains("\x1b[38;2;205;0;0m"), "{s:?}");
+    assert!(s.contains("\x1b[48;2;18;52;86m"), "{s:?}");
     assert!(
         !s.contains("38;5;"),
-        "index 9 is spelled \\E[91m, not 38;5;9"
+        "a direct colour has no palette index: {s:?}"
     );
+}
 
-    // 16-color terminal -> the same index, the same short form.
-    set_color_tier(16);
+/// No realized terminal colour means no colour, never an invented one.
+///
+/// GNU seeds the slot with `FACE_TTY_DEFAULT_*_COLOR` and only assigns a pixel
+/// when `tty-color-desc` answered (`map_tty_color`, src/xfaces.c:6620-6694);
+/// `face_tty_specified_color` (src/dispextern.h:1933-1936) then keeps
+/// `turn_on_face` from emitting anything for it.  This is the case a writer-side
+/// quantizer used to paper over by approximating the RGB it happened to carry.
+#[test]
+fn a_face_with_no_realized_terminal_colour_emits_no_colour() {
     let mut buf = Vec::new();
-    write_sgr(&mut buf, &attrs);
-    let s = String::from_utf8(buf).unwrap();
-    assert!(s.contains("\x1b[91m"), "16-color tier red: {s:?}");
+    write_sgr(&mut buf, &CellAttrs::default());
+    let s = String::from_utf8_lossy(&buf).into_owned();
+    assert!(s.contains("\x1b[39m"), "{s:?}");
+    assert!(s.contains("\x1b[49m"), "{s:?}");
+    assert!(!s.contains("38;5;") && !s.contains("38;2;"), "{s:?}");
+}
 
-    // 8-color terminal -> GNU's 8-entry palette has no bright red at all, so
-    // #ff0000 resolves to index 1 and is emitted as \E[31m.
-    set_color_tier(8);
+/// A terminal with no colours gets no colour SGR at all -- GNU guards the whole
+/// colour block with `if (tty->TN_max_colors > 0)` (src/term.c:2092).
+#[test]
+fn a_terminal_without_colors_emits_no_color_sgr() {
+    let mut caps = TtyAttributeCapabilities::full();
+    caps.color_cells = 0;
     let mut buf = Vec::new();
-    write_sgr(&mut buf, &attrs);
-    let s = String::from_utf8(buf).unwrap();
-    assert!(s.contains("\x1b[31m"), "8-color tier red: {s:?}");
-    assert!(
-        !s.contains("\x1b[91m"),
-        "8 colors have no bright red: {s:?}"
+    write_sgr_with_capabilities(
+        &mut buf,
+        &CellAttrs {
+            fg: Some(TerminalColor::Indexed(9)),
+            bg: Some(TerminalColor::Indexed(0)),
+            ..CellAttrs::default()
+        },
+        &caps,
     );
+    let s = String::from_utf8_lossy(&buf).into_owned();
+    assert!(s.contains("\x1b[39m") && s.contains("\x1b[49m"), "{s:?}");
+    assert!(!s.contains("\x1b[91m") && !s.contains("\x1b[40m"), "{s:?}");
 }
 
 // ---------------------------------------------------------------------------
@@ -3055,7 +3064,11 @@ fn colored_tail_without_bce_stays_on_the_write_path() {
     set_row(&mut rif, 1, "abcdefghijkl");
     let _ = render_output(&mut rif);
     let colored_blank = CellAttrs {
-        bg: Some((40, 44, 52)),
+        bg: Some(TerminalColor::Direct {
+            r: 40,
+            g: 44,
+            b: 52,
+        }),
         ..CellAttrs::default()
     };
     for col in 0..20 {
@@ -3505,7 +3518,11 @@ fn colored_tail_with_bce_erases_and_establishes_the_fill_color() {
     set_row(&mut rif, 1, "abcdefghijklmnopqrst");
     let _ = render_output(&mut rif);
     let colored_blank = CellAttrs {
-        bg: Some((40, 44, 52)),
+        bg: Some(TerminalColor::Direct {
+            r: 40,
+            g: 44,
+            b: 52,
+        }),
         ..CellAttrs::default()
     };
     for col in 0..20 {
@@ -3644,109 +3661,5 @@ fn reused_damage_rows_carry_verbatim_and_plan_nothing() {
             _ => false,
         }) && !ops.is_empty(),
         "only the edited row may be written: {ops:?}"
-    );
-}
-
-// ---------------------------------------------------------------------------
-// 256-color approximation
-// ---------------------------------------------------------------------------
-
-/// Every answer below was READ OUT OF GNU, not derived: `emacs -Q -nw` in a PTY
-/// with COLORTERM unset (so `display-color-cells` is 256), evaluating
-/// `(nth 1 (tty-color-approximate (tty-color-standard-values COLOR)))`.
-///
-/// The near-gray rows are the point. `#afafaf` is an exact 6x6x6 cube entry, so
-/// GNU answers 145; a writer-side short-circuit that sent every near-gray into
-/// the grayscale ramp answered 248 and turned Gruvbox light's comment,
-/// org-verbatim and org-document-info-keyword the wrong shade.
-#[test]
-fn rgb_to_256_matches_gnu_tty_color_approximate() {
-    let gnu = [
-        ("#afafaf", 145),
-        ("#a8a8a8", 248),
-        ("#ffdfaf", 223),
-        ("#262626", 235),
-        ("#3a3a3a", 237),
-        ("#d75f5f", 167),
-        ("#afaf00", 142),
-        ("#5f8787", 66),
-        ("#949494", 246),
-        ("#5fafaf", 73),
-        ("#d75f00", 166),
-        ("#87af87", 108),
-        ("#ffaf00", 214),
-        ("#ffd7af", 223),
-        ("#ffffd7", 230),
-        ("#ffffaf", 229),
-        ("#5f5f5f", 59),
-        ("#878787", 102),
-        ("#d7d7d7", 188),
-        ("#ffffff", 15),
-        ("#000000", 0),
-        ("#080808", 232),
-        ("#121212", 233),
-        ("#928374", 101),
-        ("#7c6f64", 95),
-        ("#665c54", 95),
-        ("#3c3836", 237),
-        ("#282828", 235),
-        ("#fbf1c7", 230),
-        ("#ebdbb2", 187),
-        ("#a89984", 138),
-        ("#bdae93", 144),
-        ("#504945", 239),
-        ("#d5c4a1", 187),
-        ("#101010", 233),
-        ("#0a0a0a", 232),
-        ("#606060", 59),
-        ("#616161", 241),
-        ("#00005f", 17),
-        ("#005f00", 22),
-        ("#8a8a8a", 245),
-    ];
-    let mismatches = gnu
-        .iter()
-        .filter_map(|(hex, expected)| {
-            let channel =
-                |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).expect("hex channel");
-            let got = rgb_to_256(channel(1), channel(3), channel(5));
-            (got != *expected).then(|| format!("{hex}: GNU {expected}, got {got}"))
-        })
-        .collect::<Vec<_>>();
-    assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
-}
-
-/// The same question asked of the whole RGB cube instead of 41 spot colours.
-///
-/// `gnu_tty_color_approximate_sweep.txt` holds 5,832 GNU answers read out of
-/// `emacs -Q -nw` in a PTY (see the file header for the exact invocation).
-/// The 41-colour table above pins the colours ledger 108 was reported on; this
-/// pins the SEARCH itself, so a quantizer that is right on those 41 and wrong
-/// elsewhere -- which is precisely the shape of the defect ledger 108 fixed,
-/// a near-gray short-circuit that never looked at the 6x6x6 cube -- cannot
-/// pass this suite.
-#[test]
-fn rgb_to_256_matches_gnu_across_the_rgb_cube() {
-    let sweep = include_str!("gnu_tty_color_approximate_sweep.txt");
-    let mut compared = 0_usize;
-    let mismatches = sweep
-        .lines()
-        .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
-        .filter_map(|line| {
-            let (hex, index) = line.split_once(' ').expect("RRGGBB INDEX");
-            let channel =
-                |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).expect("hex channel");
-            let expected: u8 = index.trim().parse().expect("palette index");
-            let got = rgb_to_256(channel(0), channel(2), channel(4));
-            compared += 1;
-            (got != expected).then(|| format!("#{hex}: GNU {expected}, got {got}"))
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(compared, 5832, "sweep fixture lost samples");
-    assert!(
-        mismatches.is_empty(),
-        "{} of {compared} sweep colours disagree with GNU:\n{}",
-        mismatches.len(),
-        mismatches.join("\n")
     );
 }

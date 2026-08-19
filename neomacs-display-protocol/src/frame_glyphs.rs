@@ -1252,6 +1252,10 @@ impl FrameGlyphBuffer {
             id: face_id,
             foreground: fg,
             background: bg.unwrap_or(Color::TRANSPARENT),
+            // Built from raw colours rather than from a realized face, so there
+            // is no `tty-color-desc` answer to carry.
+            terminal_foreground: None,
+            terminal_background: None,
             use_default_foreground: false,
             use_default_background: false,
             underline_color: has_underline.then_some(underline_color).flatten(),

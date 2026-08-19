@@ -8,6 +8,7 @@ use crate::display_text_run_measurement::{
 use crate::font::metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::ResolvedFace;
+use neomacs_display_protocol::TerminalColor;
 use neomacs_display_protocol::face::{
     BoxBorderStyle, BoxLineWidth, BoxType, Face, FaceAttributes, UnderlineStyle,
 };
@@ -24,6 +25,11 @@ pub(crate) struct DisplayRowFace {
     pub(crate) face_id: FaceId,
     pub(crate) foreground: Color,
     pub(crate) background: Color,
+    /// The realized terminal colours, carried beside the pixels the GUI paints:
+    /// GNU's `face->foreground`/`face->background` on a tty frame
+    /// (`map_tty_color`, src/xfaces.c:6620-6694).
+    pub(crate) terminal_foreground: Option<TerminalColor>,
+    pub(crate) terminal_background: Option<TerminalColor>,
     pub(crate) extend: bool,
     pub(crate) use_default_foreground: bool,
     pub(crate) use_default_background: bool,
@@ -152,6 +158,8 @@ impl DisplayRowFace {
             face_id,
             foreground: Color::from_pixel(face.fg),
             background: Color::from_pixel(face.bg),
+            terminal_foreground: face.terminal_fg,
+            terminal_background: face.terminal_bg,
             extend: face.extend,
             use_default_foreground: face.use_default_foreground,
             use_default_background: face.use_default_background,
@@ -243,6 +251,8 @@ impl DisplayRowFace {
             id: self.face_id,
             foreground: self.foreground,
             background: self.background,
+            terminal_foreground: self.terminal_foreground,
+            terminal_background: self.terminal_background,
             use_default_foreground: self.use_default_foreground,
             use_default_background: self.use_default_background,
             underline_color: self.underline_color,

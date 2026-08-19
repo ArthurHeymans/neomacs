@@ -7,6 +7,7 @@
 //!
 //! Runs on the evaluator thread (single-threaded, no channel needed).
 
+use neomacs_display_protocol::TerminalColor;
 use neomacs_display_protocol::face::{Face, FaceAttributes};
 use neomacs_display_protocol::frame_chrome::FrameChromeContent;
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
@@ -14,7 +15,7 @@ use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::tty_capabilities::{
     TtyAttributeCapabilities, TtyCapability, TtyItalicRendition,
 };
-use neomacs_display_protocol::types::{Color, FaceId};
+use neomacs_display_protocol::types::FaceId;
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -22,10 +23,19 @@ use std::collections::HashMap;
 // ---------------------------------------------------------------------------
 
 /// Attributes for a single terminal cell (maps to ANSI SGR sequences).
+///
+/// The colours are [`TerminalColor`]s, not RGB: GNU's `turn_on_face`
+/// (src/term.c:2093-2117) writes the number the realized face already carries
+/// and never looks at a colour, because the palette that number came from is
+/// `tty-color-alist` -- per-terminal Lisp data that `tty-color-define` can
+/// change, which nothing here can re-derive.  `None` is GNU's
+/// `FACE_TTY_DEFAULT_FG_COLOR`/`..._BG_COLOR`: a slot
+/// `face_tty_specified_color` (src/dispextern.h:1933-1936) rejects, so no
+/// colour SGR is emitted for it at all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct CellAttrs {
-    pub fg: Option<(u8, u8, u8)>,
-    pub bg: Option<(u8, u8, u8)>,
+    pub fg: Option<TerminalColor>,
+    pub bg: Option<TerminalColor>,
     pub bold: bool,
     pub italic: bool,
     /// 0=none, 1=single, 2=curly/wave, 3=double, 4=dotted, 5=dashed
@@ -136,7 +146,7 @@ impl TtyGrid {
     }
 
     /// Clear all cells to spaces with the given background color.
-    pub fn clear(&mut self, bg: Option<(u8, u8, u8)>) {
+    pub fn clear(&mut self, bg: Option<TerminalColor>) {
         let blank = TtyCell {
             ch: ' ',
             attrs: CellAttrs {
@@ -338,10 +348,10 @@ pub struct TtyRif {
     cursor_shape: TerminalCursorShape,
     /// Face lookup table (face_id -> Face).
     faces: HashMap<FaceId, Face>,
-    /// Default background color (r, g, b).
-    default_bg: Option<(u8, u8, u8)>,
-    /// Default foreground color (r, g, b).
-    default_fg: Option<(u8, u8, u8)>,
+    /// The default face's realized terminal background.
+    default_bg: Option<TerminalColor>,
+    /// The default face's realized terminal foreground.
+    default_fg: Option<TerminalColor>,
     /// What the connected terminal can do; see [`TermCaps`].
     caps: TermCaps,
     /// Accounting for the most recent encoded frame.
@@ -447,7 +457,7 @@ pub enum BlankTailMethod {
 }
 
 impl BlankTailMethod {
-    fn can_erase(self, background: Option<(u8, u8, u8)>) -> bool {
+    fn can_erase(self, background: Option<TerminalColor>) -> bool {
         match self {
             Self::WriteSpaces => false,
             Self::EraseToEol { back_color_erase } => background.is_none() || back_color_erase,
@@ -511,7 +521,7 @@ enum TermOp {
     EraseToEol {
         row: u16,
         from: u16,
-        bg: Option<(u8, u8, u8)>,
+        bg: Option<TerminalColor>,
     },
     /// Shift the tail of `row` right by `count` from column `at` (ICH,
     /// ESC[n@): the typing-echo case. The planner replays the shift on the
@@ -629,16 +639,17 @@ impl TtyRif {
     fn install_state_faces(&mut self, state: &FrameDisplayState) {
         self.faces = state.faces.clone();
         let default_face = self.faces.get(&FaceId::new(0));
-        self.default_bg = if default_face.is_some_and(|face| face.use_default_background) {
-            None
-        } else {
-            Some(color_to_rgb8(&state.background))
-        };
-        self.default_fg = if default_face.is_some_and(|face| face.use_default_foreground) {
-            None
-        } else {
-            default_face.map(|face| color_to_rgb8(&face.foreground))
-        };
+        // Both come from the DEFAULT FACE's realized terminal colours, not from
+        // the frame's pixels: the number the writer emits has to be the one
+        // `tty-color-desc` answered for that very colour. A face that specifies
+        // none, or whose colour the palette could not resolve, leaves `None` --
+        // GNU's `FACE_TTY_DEFAULT_*_COLOR`, emitted as no colour at all.
+        self.default_bg = default_face
+            .filter(|face| !face.use_default_background)
+            .and_then(|face| face.terminal_background);
+        self.default_fg = default_face
+            .filter(|face| !face.use_default_foreground)
+            .and_then(|face| face.terminal_foreground);
     }
 
     /// Rasterize a `FrameDisplayState` into the desired grid.
@@ -940,22 +951,20 @@ impl TtyRif {
         frame_cols: usize,
         lines: usize,
     ) {
-        let attrs = menu.terminal_style().map_or_else(
-            || CellAttrs {
-                fg: Some(color_to_rgb_tuple(menu.foreground())),
-                bg: Some(color_to_rgb_tuple(menu.background())),
-                ..CellAttrs::default()
-            },
-            |style| CellAttrs {
-                fg: (!style.use_default_foreground).then(|| rgb_pixel_to_tuple(style.fg)),
-                bg: (!style.use_default_background).then(|| rgb_pixel_to_tuple(style.bg)),
+        // Without a published terminal style there is no realized terminal
+        // colour for the band, and the GUI pixels it does carry are not one --
+        // GNU would emit no colour there either.
+        let attrs = menu
+            .terminal_style()
+            .map_or_else(CellAttrs::default, |style| CellAttrs {
+                fg: style.fg,
+                bg: style.bg,
                 bold: style.bold,
                 italic: false,
                 underline: 0,
                 strikethrough: false,
                 inverse: style.inverse,
-            },
-        );
+            });
         let visible_rows = visible_cell_range(origin_row, lines, self.desired.height);
         let visible_cols = visible_cell_range(origin_col, frame_cols, self.desired.width);
         if visible_rows.is_empty() || visible_cols.is_empty() {
@@ -993,8 +1002,12 @@ impl TtyRif {
     fn resolve_attrs(&self, face_id: FaceId) -> CellAttrs {
         if let Some(face) = self.faces.get(&face_id) {
             CellAttrs {
-                fg: (!face.use_default_foreground).then(|| color_to_rgb8(&face.foreground)),
-                bg: (!face.use_default_background).then(|| color_to_rgb8(&face.background)),
+                fg: (!face.use_default_foreground)
+                    .then_some(face.terminal_foreground)
+                    .flatten(),
+                bg: (!face.use_default_background)
+                    .then_some(face.terminal_background)
+                    .flatten(),
                 bold: face.is_bold(),
                 italic: face.is_italic(),
                 underline: face.underline_style.gnu_code(),
@@ -2298,7 +2311,7 @@ fn carries_shiftable_content(run: &[TtyCell]) -> bool {
 fn uniform_erasable_tail(
     row: &[TtyCell],
     search_start: usize,
-) -> Option<(usize, Option<(u8, u8, u8)>)> {
+) -> Option<(usize, Option<TerminalColor>)> {
     let mut cells = row.get(search_start..)?.iter().enumerate().rev();
     let (last_offset, last) = cells.next()?;
     if !erasable_blank(last) {
@@ -2324,58 +2337,6 @@ fn row_has_composite_cells(row: &[TtyCell]) -> bool {
 // ANSI helper functions
 // ---------------------------------------------------------------------------
 
-/// Convert a display-protocol `Color` (linear f32 0.0-1.0) to an 8-bit
-/// sRGB tuple suitable for a 24-bit ANSI color escape sequence.
-///
-/// `Color` values in the display protocol are stored in **linear
-/// space** because the wgpu GPU surface (`Bgra8UnormSrgb`)
-/// expects linear input and applies the linear-to-sRGB
-/// conversion automatically at the framebuffer. The TTY output
-/// path has no such automatic conversion — terminals interpret
-/// the 8-bit values as **sRGB** — so we must apply
-/// `linear_to_srgb` here to undo the `srgb_to_linear` that
-/// `Color::from_pixel` applied when the Emacs pixel value was
-/// loaded.
-///
-/// Without this conversion every face color is darker than
-/// GNU's by an exact gamma-2.4 amount:
-///
-///   mode-line bg:  GNU=grey75 (191) neomacs=grey52 (132)
-///   vertical-border fg: GNU=grey20 (51) neomacs=8
-///
-/// With the conversion the emitted bytes match GNU's sRGB pixel
-/// values exactly, since `linear_to_srgb(srgb_to_linear(x)) ≈ x`
-/// (modulo f32 rounding).
-///
-/// Mirrors GNU `src/term.c::tty_defined_color` which stores and
-/// emits face colors as sRGB pixel values with no conversion.
-fn color_to_rgb8(c: &Color) -> (u8, u8, u8) {
-    (
-        Color::linear_component_to_srgb_u8(c.r),
-        Color::linear_component_to_srgb_u8(c.g),
-        Color::linear_component_to_srgb_u8(c.b),
-    )
-}
-
-/// Decompose a 24-bit sRGB pixel (`0x00RRGGBB`) into its byte channels.
-/// Used for the TTY menu bar where colours arrive as packed pixels from
-/// the layout-engine `FaceResolver` rather than as float `Color`s.
-fn rgb_pixel_to_tuple(pixel: u32) -> (u8, u8, u8) {
-    (
-        ((pixel >> 16) & 0xFF) as u8,
-        ((pixel >> 8) & 0xFF) as u8,
-        (pixel & 0xFF) as u8,
-    )
-}
-
-fn color_to_rgb_tuple(color: Color) -> (u8, u8, u8) {
-    (
-        (color.r.clamp(0.0, 1.0) * 255.0).round() as u8,
-        (color.g.clamp(0.0, 1.0) * 255.0).round() as u8,
-        (color.b.clamp(0.0, 1.0) * 255.0).round() as u8,
-    )
-}
-
 /// Write an ANSI CUP (cursor position) escape sequence.
 /// Row and col are 1-based.
 fn write_cursor_goto(buf: &mut Vec<u8>, row: u16, col: u16) {
@@ -2395,40 +2356,14 @@ fn write_cursor_shape(buf: &mut Vec<u8>, shape: TerminalCursorShape) {
 
 // --- Terminal color depth (issue #154) ------------------------------------
 //
-// GNU downsamples realized face colors to the terminal's palette
-// (`tty_default_color_cells` / `tty-color-approximate`). Emitting 24-bit
-// `38;2;r;g;b` on every terminal means a terminal that doesn't support
-// truecolor (Linux console, tmux without `Tc`, strict 256-color emulators)
-// silently drops the color -> no syntax highlighting at all with `neomacs -nw`.
-// Pick the SGR form from the detected color-cell count instead.
-/// What this terminal's palette IS, not merely how deep it is.
-///
-/// GNU never quantizes in the writer: `turn_on_face` (src/term.c) emits the
-/// index the realized face already carries, and that index came from
-/// `tty-color-desc` -> `tty-color-approximate` searching `tty-color-alist`
-/// (lisp/term/tty-colors.el:875-915), whose CONTENTS are registered per
-/// terminal by `lisp/term/<TERM>.el`.  Neomacs carries RGB to the writer
-/// instead and re-derives the index here, so the writer has to name the
-/// palette it searches -- and a tier that names no palette cannot be searched
-/// at all.  Holding the tier and its palette in one type is what stops the two
-/// from being answered in different places, which is how the near-gray
-/// short-circuit ledger 108 removed came to disagree with the palette that was
-/// right all along.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TtyColorTier {
-    /// Monochrome: no color is emitted at all.
-    Monochrome,
-    /// GNU's 8-color `tty-color-alist`, measured out of `emacs -Q -nw` under
-    /// `TERM=xterm`: the first 8 of `xterm-standard-colors`.
-    Ansi8,
-    /// The 16 aixterm colors, `xterm-standard-colors` in full
-    /// (lisp/term/xterm.el:748-768).
-    Ansi16,
-    /// The xterm 256-color palette.
-    Palette256,
-    /// Direct 24-bit color, where no palette search happens.
-    TrueColor,
-}
+// GNU emits a colour only when the terminal has colours at all -- `turn_on_face`
+// guards the whole colour block with `if (tty->TN_max_colors > 0)`
+// (src/term.c:2092) -- and then emits the number the realized face carries.
+// There is no quantizer here and there cannot be one: the palette that number
+// was searched in is `tty-color-alist`, registered per terminal by
+// `lisp/term/<TERM>.el` and modifiable by `tty-color-define`, so a table held
+// here could only ever be a guess at Lisp data. Ledgers 108 and 153 each
+// removed one such guess; this removes the last one by removing the question.
 
 /// This terminal's capabilities, as GNU keeps them on `struct tty_display_info`.
 ///
@@ -2466,180 +2401,12 @@ pub fn set_color_tier(color_cells: i64) {
     }
 }
 
-/// GNU's color-depth buckets, from the capability record's cell count
-/// (GNU `TN_max_colors`, read from terminfo `Co` in `init_tty`).
-///
-/// 8 and 16 are separate tiers because their palettes are different lists, not
-/// a prefix relation with a brightness bit: a 16-color `tty-color-alist` adds
-/// `brightblack`..`brightwhite`, and a color that approximates to one of those
-/// has no 8-color spelling at all.
-pub fn color_tier(caps: &TtyAttributeCapabilities) -> TtyColorTier {
-    if caps.color_cells >= 16_777_216 {
-        TtyColorTier::TrueColor
-    } else if caps.color_cells >= 256 {
-        TtyColorTier::Palette256
-    } else if caps.color_cells >= 16 {
-        TtyColorTier::Ansi16
-    } else if caps.color_cells >= 8 {
-        TtyColorTier::Ansi8
-    } else {
-        TtyColorTier::Monochrome
-    }
-}
-
-/// The 6 channel intensities of the xterm 6x6x6 color cube.
-const CUBE_LEVELS: [u8; 6] = [0, 95, 135, 175, 215, 255];
-
-/// The 16 aixterm/xterm system colors, GNU `xterm-standard-colors`
-/// (lisp/term/xterm.el:748-768). They lead `tty-color-alist`, so on an exact
-/// tie they win over the cube entry with the same RGB -- which is why GNU
-/// answers 0 for #000000 and 15 for #ffffff rather than 16 and 231.
-const SYSTEM_COLORS: [(u8, u8, u8); 16] = [
-    (0, 0, 0),
-    (205, 0, 0),
-    (0, 205, 0),
-    (205, 205, 0),
-    (0, 0, 238),
-    (205, 0, 205),
-    (0, 205, 205),
-    (229, 229, 229),
-    (127, 127, 127),
-    (255, 0, 0),
-    (0, 255, 0),
-    (255, 255, 0),
-    (92, 92, 255),
-    (255, 0, 255),
-    (0, 255, 255),
-    (255, 255, 255),
-];
-
-/// RGB of xterm-256 palette entry INDEX: the system colors (0..=15), the
-/// 6x6x6 cube (16..=231) or the grayscale ramp (232..=255).
-fn xterm_256_entry(index: u8) -> (u8, u8, u8) {
-    if index < 16 {
-        return SYSTEM_COLORS[index as usize];
-    }
-    if index >= 232 {
-        let gray = 8 + 10 * (index - 232);
-        return (gray, gray, gray);
-    }
-    let offset = index - 16;
-    (
-        CUBE_LEVELS[(offset / 36) as usize],
-        CUBE_LEVELS[((offset / 6) % 6) as usize],
-        CUBE_LEVELS[(offset % 6) as usize],
-    )
-}
-
-/// Angle between a color and the gray diagonal of the RGB cube, GNU
-/// `tty-color-off-gray-diag` (lisp/term/tty-colors.el:866-873).
-fn off_gray_diagonal(r: u8, g: u8, b: u8) -> f64 {
-    let (r, g, b) = (r as f64, g as f64, b as f64);
-    let magnitude = (3.0 * (r * r + g * g + b * b)).sqrt();
-    if magnitude < 1.0 {
-        return 0.0;
-    }
-    ((r + g + b) / magnitude).clamp(-1.0, 1.0).acos()
-}
-
-/// Nearest xterm-256 palette index for an RGB triple, over the whole palette.
-///
-/// GNU does not quantize in the writer at all: `turn_on_face` (src/term.c)
-/// emits the index the realized face already carries, and that index came from
-/// `tty-color-approximate` (lisp/term/tty-colors.el:875-915), which scans the
-/// WHOLE palette for the smallest squared 8-bit RGB distance -- skipping
-/// candidates that sit on the gray diagonal whenever the REQUESTED color is
-/// 0.065 radians or more off it.
-///
-/// This used to short-circuit every near-gray straight into the grayscale
-/// ramp, which is not a nearest search: #afafaf has an EXACT cube entry at 145,
-/// but the ramp branch answered 248 (#a8a8a8, distance 147). That is Gruvbox
-/// light's comment / org-verbatim / org-document-info-keyword foreground, and
-/// it is why probing `tty-color-approximate` itself never reproduced the
-/// divergence -- the Lisp palette was right and only the writer disagreed.
-/// The scan is 256 candidates of integer arithmetic, bounded and allocation
-/// free, in the same ascending order GNU's alist is consulted so that exact
-/// ties resolve to the same index.
-pub fn rgb_to_256(r: u8, g: u8, b: u8) -> u8 {
-    let index = TtyColorTier::Palette256
-        .approximate(r, g, b)
-        .expect("the 256-color tier always has a palette");
-    u8::try_from(index).expect("a 256-entry palette indexes into a u8")
-}
-
-/// GNU `tty-color-approximate`'s loop over a palette of `length` entries whose
-/// RGB is `entry(index)`, consulted in ascending index order -- which is what
-/// makes an exact tie resolve to the entry GNU picks (0 for `#000000`, 15 for
-/// `#ffffff`, never 16 or 231).
-fn approximate_over_palette(
-    length: u16,
-    entry: impl Fn(u16) -> (u8, u8, u8),
-    r: u8,
-    g: u8,
-    b: u8,
-) -> u16 {
-    let favor_non_gray = off_gray_diagonal(r, g, b) >= 0.065;
-    let mut best_index = None;
-    let mut best_distance = u32::MAX;
-    for index in 0..length {
-        let (cr, cg, cb) = entry(index);
-        if favor_non_gray && cr == cg && cg == cb {
-            continue;
-        }
-        let difference = |lhs: u8, rhs: u8| -> u32 {
-            let delta = lhs as i32 - rhs as i32;
-            (delta * delta) as u32
-        };
-        let distance = difference(r, cr) + difference(g, cg) + difference(b, cb);
-        if distance < best_distance {
-            best_distance = distance;
-            best_index = Some(index);
-        }
-    }
-    // GNU returns nil when every candidate was skipped, and its callers treat
-    // that as "not resolved". Only an all-gray palette can do that, which none
-    // of these three are, so fall back to entry 0 rather than inventing a
-    // second policy for a state that cannot occur.
-    best_index.unwrap_or(0)
-}
-
-impl TtyColorTier {
-    /// GNU `tty-color-approximate` (lisp/term/tty-colors.el:875-915) over this
-    /// tier's palette: the smallest squared 8-bit RGB distance across the WHOLE
-    /// palette, skipping candidates on the gray diagonal whenever the REQUESTED
-    /// color is 0.065 radians or more off it (`tty-color-off-gray-diag`,
-    /// lisp/term/tty-colors.el:866-873).
-    ///
-    /// `None` for the tiers that have no palette -- monochrome emits nothing and
-    /// truecolor emits the channels themselves, and neither is a search.
-    ///
-    /// Ledger 108 replaced a near-gray short-circuit here with this search for
-    /// the 256-color tier only: `#afafaf` is an EXACT 6x6x6 cube entry (145) and
-    /// the ramp branch answered 248 (`#a8a8a8`, distance 147), which is Gruvbox
-    /// light's comment / org-verbatim / org-document-info-keyword foreground.
-    /// The 8/16-color tier kept a SECOND hand-rolled quantizer -- a per-channel
-    /// `> 100` threshold plus a `> 170` brightness bit -- until ledger 153
-    /// measured it against GNU: 4,589 of 5,832 sampled colors wrong at 8 colors,
-    /// 4,048 of 5,832 at 16.  One search, chosen by tier, is the whole point.
-    pub fn approximate(self, r: u8, g: u8, b: u8) -> Option<u16> {
-        let system = |index: u16| SYSTEM_COLORS[index as usize];
-        match self {
-            // Not "no answer yet" but "no question": monochrome emits nothing
-            // and truecolor emits the channels themselves. Neither has a
-            // palette, so neither can be searched, and the type says so rather
-            // than a panic in a display path saying it.
-            Self::Monochrome | Self::TrueColor => None,
-            Self::Ansi8 => Some(approximate_over_palette(8, system, r, g, b)),
-            Self::Ansi16 => Some(approximate_over_palette(16, system, r, g, b)),
-            Self::Palette256 => Some(approximate_over_palette(
-                256,
-                |index| xterm_256_entry(index as u8),
-                r,
-                g,
-                b,
-            )),
-        }
-    }
+/// Whether this terminal has colours at all -- GNU's
+/// `if (tty->TN_max_colors > 0)` around the whole colour block of `turn_on_face`
+/// (src/term.c:2092). It is the only thing the writer still asks about colour
+/// depth: WHICH colour to write was decided at face realization.
+fn terminal_has_colors(caps: &TtyAttributeCapabilities) -> bool {
+    caps.color_cells > 0
 }
 
 /// The SGR parameter GNU's terminfo `setaf`/`setab` produces for a palette
@@ -2662,32 +2429,17 @@ fn write_indexed_color(buf: &mut Vec<u8>, index: u16, background: bool) {
     };
 }
 
-fn write_fg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8, caps: &TtyAttributeCapabilities) {
+/// Emit one realized terminal colour, GNU `turn_on_face`'s
+/// `tparam (ts, NULL, 0, fg, 0, 0, 0)` / `tparam (ts, NULL, 0, fg >> 16,
+/// (fg >> 8) & 0xFF, fg & 0xFF, 0)` (src/term.c:2098-2113): which of the two
+/// GNU takes is decided by `tty->TF_rgb_separate`, and here by which variant
+/// the realized colour is.
+fn write_terminal_color(buf: &mut Vec<u8>, color: TerminalColor, background: bool) {
     use std::io::Write;
-    match color_tier(caps) {
-        TtyColorTier::TrueColor => {
-            let _ = write!(buf, "\x1b[38;2;{r};{g};{b}m");
-        }
-        TtyColorTier::Monochrome => {}
-        tier => {
-            if let Some(index) = tier.approximate(r, g, b) {
-                write_indexed_color(buf, index, false);
-            }
-        }
-    }
-}
-
-fn write_bg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8, caps: &TtyAttributeCapabilities) {
-    use std::io::Write;
-    match color_tier(caps) {
-        TtyColorTier::TrueColor => {
-            let _ = write!(buf, "\x1b[48;2;{r};{g};{b}m");
-        }
-        TtyColorTier::Monochrome => {}
-        tier => {
-            if let Some(index) = tier.approximate(r, g, b) {
-                write_indexed_color(buf, index, true);
-            }
+    match color {
+        TerminalColor::Indexed(index) => write_indexed_color(buf, index, background),
+        TerminalColor::Direct { r, g, b } => {
+            let _ = write!(buf, "\x1b[{}8;2;{r};{g};{b}m", 3 + u16::from(background));
         }
     }
 }
@@ -2747,16 +2499,17 @@ pub fn write_sgr_with_capabilities(
     }
 
     // GNU term.c only emits color SGR for specified TTY colors.
-    // `None` mirrors FACE_TTY_DEFAULT_FG_COLOR/BG_COLOR.
-    if let Some((r, g, b)) = attrs.fg {
-        write_fg(buf, r, g, b, caps);
-    } else {
-        buf.extend_from_slice(b"\x1b[39m");
+    // `None` mirrors FACE_TTY_DEFAULT_FG_COLOR/BG_COLOR, and the whole block is
+    // skipped on a terminal with no colours (`TN_max_colors > 0`,
+    // src/term.c:2092).
+    let colored = terminal_has_colors(caps);
+    match attrs.fg.filter(|_| colored) {
+        Some(color) => write_terminal_color(buf, color, false),
+        None => buf.extend_from_slice(b"\x1b[39m"),
     }
-    if let Some((r, g, b)) = attrs.bg {
-        write_bg(buf, r, g, b, caps);
-    } else {
-        buf.extend_from_slice(b"\x1b[49m");
+    match attrs.bg.filter(|_| colored) {
+        Some(color) => write_terminal_color(buf, color, true),
+        None => buf.extend_from_slice(b"\x1b[49m"),
     }
 }
 
