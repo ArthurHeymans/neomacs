@@ -315,7 +315,12 @@ pub fn loop_heat_per_wrap() -> u32 {
         std::env::var("NEOVM_JIT_LOOP_HEAT")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(1)
+            // 8 ⇒ 32 loop iterations ≈ one invocation ⇒ a loop tiers up (and
+            // OSR fires) near 32k total iterations. The old credit of 1
+            // needed 256k iterations — a 60k-iteration hot loop in a
+            // once-called function (the realworld buffer bench's insert and
+            // scan loops) never left the interpreter.
+            .unwrap_or(8)
     })
 }
 
