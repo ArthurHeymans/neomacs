@@ -10,6 +10,7 @@ use neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities;
 use neovm_core::emacs_core::terminal::pure::TerminalRuntimeConfig;
 use std::io::Write;
 
+use super::terminal_capabilities::TerminalCapabilityDatabase;
 use super::{FrontendKind, StartupOptions};
 
 /// Return a TTY terminal runtime configuration for interactive sessions.
@@ -75,6 +76,28 @@ pub fn detect_tty_name(_startup: &StartupOptions) -> String {
     default_controlling_tty_name().to_string()
 }
 
+/// How many colors this terminal has, GNU `TN_max_colors`.
+///
+/// GNU reads it from the terminal database, not from the name:
+/// `init_tty` does `tty->TN_max_colors = tgetnum ("Co");` (src/term.c), and
+/// `Ftty_display_color_cells` returns that number, which is in turn what
+/// `lisp/term/<TERM>.el` keys its palette registration on -- so this number
+/// decides how many entries `tty-color-alist` ends up with and which
+/// `((class color) (min-colors N) ...)` face specs match.
+///
+/// Reading the NAME instead is wrong for every terminal whose color count is
+/// not spelled in it.  Measured against GNU 31.0.90, `emacs -Q -nw` in a PTY
+/// with COLORTERM unset:
+///
+///     TERM=rxvt-16color    GNU => cells 16, tty-color-alist 16 entries
+///                          Neomacs before => cells 8, 8 entries
+///     TERM=linux-16color   GNU => cells 16, tty-color-alist 8 entries
+///                          Neomacs before => cells 8, 8 entries
+///
+/// COLORTERM stays ahead of terminfo: a 24-bit terminal advertises itself in
+/// the environment, and no terminfo entry describes it.  The name heuristic
+/// survives only as the fallback for a terminal whose entry cannot be read at
+/// all, where GNU would have exited with "terminal type not defined".
 pub fn detect_tty_color_cells() -> i64 {
     let colorterm = std::env::var("COLORTERM")
         .unwrap_or_default()
@@ -89,6 +112,17 @@ pub fn detect_tty_color_cells() -> i64 {
     if term.is_empty() || term == "dumb" {
         return 0;
     }
+    if let Some(mut database) =
+        super::terminal_capabilities::open_terminal_capability_database(&term)
+    {
+        // GNU: `TN_max_colors = tgetnum ("Co")', and a terminal that reports no
+        // color capability answers -1, which GNU treats as "no colors".
+        return database
+            .get_number("Co")
+            .filter(|colors| *colors > 0)
+            .map_or(0, i64::from);
+    }
+    tracing::debug!("no terminfo entry for TERM; guessing color cells from the name");
     if term.contains("256color") {
         return 256;
     }
