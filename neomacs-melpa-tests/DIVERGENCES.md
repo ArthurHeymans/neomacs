@@ -11629,6 +11629,15 @@ system's eol type is CONCRETE:
 ;; Neomacs => (97 13 10 98 13 10 99 13 10)     ; not converted
 ```
 
+> **Extended, 2026-08-19, by entry 156.**  This section reads
+> `decode_coding_gap` from its ASCII-optimization arm onward.  The eight lines
+> ABOVE that arm carry a second fact: `decode_coding_gap` calls `detect_coding`
+> at src/coding.c:7927-7928 and raises `CODING_MODE_LAST_BLOCK` only at :8009,
+> so `insert-file-contents` DETECTS as though more bytes were coming.  That is
+> why `SourceBlock::Last` survived at the file door through entries 143, 147 and
+> 151, and why a file whose last character is a truncated multibyte sequence
+> read back as `iso-latin-1` where GNU answers `utf-8`.
+
 The mechanism is `decode_coding_gap`'s ASCII-optimization arm
 (src/coding.c:7929-8000, its end-of-line block at :7963-8000).  When the source
 is all ASCII -- or fully valid UTF-8
@@ -14076,12 +14085,34 @@ and turned an ordinary UTF-8 subprocess split by the kernel into two mojibake
 characters per boundary.  That is a worse bug than the one being fixed, and it
 is the reason detection takes
 
+> **Corrected, 2026-08-19, by entry 156.**  Five was an undercount twice over.
+> Two of those five detectors -- Shift-JIS and Big5 -- read TWO bytes per loop
+> iteration, and in C both reads are a `goto no_more_source` against the SAME
+> `src_base`, which is assigned once per iteration; the conjunct was added at
+> the lead-byte site of each and not at the trail-byte one, so
+> `(detect-coding-string "hello caf\303\251 world caf\303")` offered
+> `chinese-big5` where GNU refuses it.  `detect_coding_emacs_mule`'s
+> composite-character scan had the same gap.  And there is a SIXTH detector that
+> reads `CODING_MODE_LAST_BLOCK`, `detect_coding_utf_16`, which spends the flag
+> at the TOP of its body rather than at `no_more_source:`
+> (src/coding.c:1505-1511) -- which is exactly how a search for the
+> `no_more_source:` shape missed it.  The three `no_more_source:` tails are now
+> one function, `detector_no_more_source`, taking the iteration's `src_base`.
+
 ```rust
 pub(crate) enum SourceBlock {
     More,   // a subprocess read that is not the EOF read
     Last,   // a string, a region, a file, or a process at EOF
 }
 ```
+
+> **Corrected, 2026-08-19, by entry 156.**  "a file" is wrong, and it was wrong
+> before this entry as well.  `insert-file-contents` reaches
+> `decode_coding_gap`, which calls `detect_coding` at src/coding.c:7927-7928 and
+> raises `CODING_MODE_LAST_BLOCK` only afterwards at :8009 -- so a file detects
+> as `More`, like a subprocess read that is not the EOF read.  Measured on the
+> four bytes `c a f <c3>`: `decode-coding-string` answers `iso-latin-1` and
+> `insert-file-contents` of the same bytes answers `utf-8`, in GNU.
 
 as a REQUIRED argument rather than a bool with a default.  It is the same
 `flush` the read-boundary rules already took, which is the tell that it was
@@ -14282,6 +14313,20 @@ the right fix and it is not this entry's: the string door's arms take a
 `:post-read-conversion` hook inside a process read is a decision that has to be
 made on purpose rather than inherited from a refactor.
 
+> **Confirmed and still open, 2026-08-19, by entry 156.**  GNU pays that cost.
+> `read_and_insert_process_output` (src/process.c:6502) and the filter branch
+> (:6562) both decode through `decode_coding_c_string`, which is a macro whose
+> body is `decode_coding_object` (src/coding.h:750-755) -- the same function
+> `decode-coding-string` reaches -- and `decode_coding_object` calls
+> `:post-read-conversion` at :8180-8194.  Measured with a coding system whose
+> hook upcases what it decoded: GNU runs it on `call-process`, on
+> `make-process`'s buffer branch, on its filter branch (twice, once per read)
+> and on `insert-file-contents`; this port ran it on none of them.  The
+> `insert-file-contents` row is fixed in 156.  The obstacle for the two process
+> rows is an OWNERSHIP one that this paragraph does not name: `ProcessManager`
+> is a FIELD of the `Context` whose evaluator the string decoder needs, and is
+> already mutably borrowed out of it when the read happens.
+
 The interaction with this entry is worth stating exactly, because it decided the
 scope.  After the fix an `undecided` process read of ISO-2022 bytes reports
 `iso-2022-7bit-dos` and still produces the escape bytes verbatim -- one of the
@@ -14309,6 +14354,19 @@ finds one; `found = Qno_conversion` (:6688) is only reached when the walk found
 nothing.  Neomacs treats a null byte as deciding the question outright.  It is
 one rule in `detect_coding_systems` and it belongs with a re-measurement of the
 whole category walk, not bolted onto the process path.
+
+> **Corrected and closed, 2026-08-19, by entry 156.**  The divergence is real
+> and the location is not.  The rule in `detect_coding_systems` is CORRECT: that
+> function is a port of GNU's `detect_coding_system` (src/coding.c:8686), the
+> detector `detect-coding-string` REPORTS, and GNU's own
+> `(detect-coding-string "\377\376a\0\r\0\n\0" t)` answers `no-conversion`
+> -- measured, before and after.  GNU has a SECOND undecided detector,
+> `detect_coding` (:6502), which is the one a decode runs, and its tail treats
+> the null byte as a FALLBACK (:6683-6684) rather than an override (:8836-8842).
+> This port had one function serving both doors and the reporting rule won.
+> Changing the rule in place, as this residual proposed, would have broken the
+> one door that had it right; the fix is a second function for the second GNU
+> function.
 
 The process row's part of this is worth stating precisely, because the number
 moved and the divergence did not.  Before this entry a child writing a UTF-16
@@ -16059,3 +16117,467 @@ editors.  Explicitly NOT fixed, and measured: the SGR spelling is a fixed rule
 where GNU reads terminfo `setaf`, visible only for an index the terminal's
 palette cannot hold; and a second, unreachable TTY writer still lives in
 `backend/tty/mod.rs`.
+
+## 156. GNU has TWO undecided detectors and this port had one, so every UTF-16 signature decoded as `no-conversion`; and `CODING_MODE_LAST_BLOCK` is raised at three different times relative to detection, not one -- FIXED
+
+Entry 151's second hand-back, and larger than 151 took it for: 151 stated it as
+"one rule in `detect_coding_systems`", and the rule is right where it is -- what
+is wrong is that the DECODE door was reading it at all.  Reproduced first, with
+`-Q --batch` against GNU Emacs 31.0.90 and against this branch's own pre-fix
+`cargo xtask fresh-build --release` binary (kept as `tmp/pw156/refbin/neomacs`
+with its own pdump).  The probes are `tmp/pw156/probe3.el` (twenty-one byte
+patterns across the string, region, `call-process`, file and `make-process`
+doors plus `detect-coding-string`, 147 rows), `tmp/pw156/probe4.el` and
+`tmp/pw156/probe5.el` (the `:post-read-conversion` door matrix),
+`tmp/pw156/probe6.el` through `probe11.el` (the isolations below) and
+`tmp/pw156/pin.el` / `tmp/pw156/pin2.el`, which are the elisp of the pinned
+tests verbatim so every expectation is GNU running the test's own program.
+Every case's bytes come from files written by `tmp/pw156/mkcases.py`, never by
+the editor under test -- which turned out to matter, and is a residual below.
+
+```elisp
+(let ((d (decode-coding-string "\377\376a\0\r\0\n\0" 'undecided)))
+  (list (append d nil) last-coding-system-used))
+;; GNU                => ((97 10) utf-16le-with-signature-dos)
+;; Neomacs before fix => ((255 254 97 0 13 0 10 0) no-conversion)
+
+(detect-coding-string "\377\376a\0\r\0\n\0" t)
+;; GNU and Neomacs, before and after => no-conversion
+```
+
+Both rows are GNU, in the same session, on the same eight bytes, on purpose.
+
+### GNU's two detectors, and why only one of them may answer a decode
+
+`detect_coding` (src/coding.c:6502) is the detector a DECODE runs.
+`decode_coding_object` reaches it through
+`if (CODING_REQUIRE_DETECTION (coding)) detect_coding (coding);` (:8129-8130),
+and its result is not reported anywhere -- the coding system BECOMES it, through
+`setup_coding_system (found, coding)` at :6751.  `found` may be nil, which means
+"nothing re-bases this".
+
+`detect_coding_system` (src/coding.c:8686) is the detector
+`detect-coding-string` and `detect-coding-region` REPORT.  Its result is a list,
+and it always has one.
+
+Their scan loops (:6529-6594 and :8731-8773) and their category priority walks
+(:6622-6645 and :8801-8832) agree line for line, which is exactly why one Rust
+function looked like enough.  Their TAILS do not agree, and the disagreement is
+this entry:
+
+```c
+/* detect_coding_system, src/coding.c:8836 */
+  if ((detect_info.rejected & CATEGORY_MASK_ANY) == CATEGORY_MASK_ANY
+      || null_byte_found)
+    { ... id = CODING_SYSTEM_ID (Qno_conversion); val = list1i (id); }
+```
+
+```c
+/* detect_coding, src/coding.c:6647 */
+	  if (i < coding_category_raw_text)          /* the walk settled on one */
+	    { ... found = CODING_ID_NAME (this->id); }
+	  else if (null_byte_found)
+	    found = Qno_conversion;
+```
+
+A null byte is an OVERRIDE in the reporting detector and a FALLBACK in the
+decoding one.  Both narrow first -- `detect_info.checked |= ~CATEGORY_MASK_UTF_16;
+detect_info.rejected |= ~CATEGORY_MASK_UTF_16;` (:6614-6618 and :8790-8794),
+leaving the four UTF-16 categories the only ones still checkable -- and then only
+`detect_coding` lets the narrowed walk answer.  With a byte-order mark
+`detect_coding_utf_16` sets `CATEGORY_MASK_UTF_16_LE | CATEGORY_MASK_UTF_16_AUTO`
+(:1513-1518), the walk breaks at the `utf-16-auto` priority position, and the tail
+does NOT report that category's own name: `coding_attr_utf_bom` is a CONS, so
+`found = XCAR (coding_systems)` (:6668-6672) -- the concrete
+`utf-16le-with-signature` that `mule-conf.el:1463` put there.
+
+This port had `detect_categories`, a faithful port of `detect_coding_system`,
+answering both doors through `detect_highest_coding_system_for_unibyte_bytes`.
+The reporting rule therefore won at the decode door, and every UTF-16 signature
+came back as its own source bytes under the name `no-conversion` -- through the
+string door, the region door, `call-process`, `insert-file-contents` and
+`make-process` alike, which is the tell that it was one shared rule and not five.
+
+The narrowing had a second half missing as well.  The port's `null_byte_found`
+arm was an `else if` that REPLACED the priority walk instead of preceding it, so
+even a correct tail would have had nothing to answer with.
+
+### `CODING_MODE_LAST_BLOCK` is a fact about the DOOR, and GNU has three answers
+
+Entry 151 made `SourceBlock` a required argument of detection and got the
+process door's answer right.  It got the file door's answer wrong, and so did
+every earlier entry, because the port had `SourceBlock::Last` written once with
+a citation to `code_convert_string`:
+
+| door | GNU | citation |
+|---|---|---|
+| `decode-coding-string` | `Last` | `coding.mode \|= CODING_MODE_LAST_BLOCK` before converting, :9606 |
+| `decode-coding-region` | `Last` | the same, :9480 |
+| `detect-coding-string` / `-region` | `Last` | the same, :8716 |
+| `call-process` | `Last` for a child that has already exited | `process_coding.mode \|=` at EOF, src/callproc.c:796 |
+| `make-process` read | `More` until EOF | src/process.c:6321 |
+| `insert-file-contents` | **`More`, always** | `decode_coding_gap` detects at :7927-7928 and raises the flag at :8009 |
+
+The file row is the surprise and it is not a subtlety without consequences.  A
+file is a complete source in every sense a reader cares about, and GNU detects
+it as though more bytes were coming, because `decode_coding_gap` simply has not
+raised the flag yet when it calls `detect_coding`.  Measured on the four bytes
+`c a f <c3>`:
+
+```elisp
+(decode-coding-string "caf\303" 'undecided)
+;; GNU and Neomacs, both, before and after => iso-latin-1, all four bytes kept
+
+;; the same four bytes in a file, (insert-file-contents f)
+;; GNU                => (99 97 102 4194243)  utf-8
+;; Neomacs before fix => (99 97 102 195)      iso-latin-1
+```
+
+`4194243` is the orphan `<c3>` as an eight-bit character: GNU detected `utf-8`,
+because a partial trailing character is not evidence against UTF-8 when the flag
+is clear (:1215), and then the decoder had no more bytes to complete it with.
+
+### The `no_more_source:` conjunct guards EVERY `ONE_MORE_BYTE`, not the first
+
+Entry 151 found `if (src_base < src && coding->mode & CODING_MODE_LAST_BLOCK)`
+at five sites and ported it to five.  Two of those detectors read TWO bytes per
+loop iteration, and in C both reads are a `goto no_more_source` -- so the
+conjunct guards the LEAD byte's exhaustion and the TRAIL byte's alike, against
+the SAME `src_base`, which C assigns once per iteration at the top of the loop.
+Ported by hand the sharing was not free, and the trail-byte sites returned
+`found` without it:
+
+```elisp
+(detect-coding-string "hello caf\303\251 world caf\303")
+;; GNU                => (iso-latin-1 emacs-mule in-is13194-devanagari
+;;                        chinese-iso-8bit japanese-shift-jis iso-2022-8bit-ss2)
+;; Neomacs before fix => (... japanese-shift-jis chinese-big5 iso-2022-8bit-ss2)
+```
+
+`<c3>` is a valid Big5 lead byte, and the source ends on it.  GNU refuses Big5;
+this port offered it.  The same shape was in `detect_coding_sjis` (:4618) and in
+the composite-character scan of `detect_coding_emacs_mule` (:1908).
+
+`detect_coding_utf_16` is a SIXTH site of the same flag, and 151 did not find it
+because it does not sit at `no_more_source:` -- it is the first thing the
+detector does:
+
+```c
+  if (coding->mode & CODING_MODE_LAST_BLOCK
+      && (coding->src_chars & 1))
+    { detect_info->rejected |= CATEGORY_MASK_UTF_16; return 0; }
+```
+
+(src/coding.c:1505-1511.)  The port rejected an odd byte count unconditionally.
+Measured on the five bytes `FF FE 61 00 0D`:
+
+```elisp
+;; a string is a complete source: an odd count really does refute UTF-16
+(decode-coding-string "\377\376a\0\r" 'undecided)
+;; GNU and Neomacs after => (255 254 97 0 13)  no-conversion
+
+;; a pipe delivering the same five bytes is not
+;; GNU                => ((97 10) (utf-16le-with-signature-mac . utf-8-unix) utf-16le-with-signature-mac)
+;; Neomacs before fix => ((255 254 97 0 13) (no-conversion . utf-8-unix) no-conversion)
+```
+
+### The identity fast path belongs to `code_convert_string` and to nobody else
+
+Met while establishing what GNU does about residual (1), and fixed here because
+it is the same mistake in the same function: one entry's rule applied at every
+entry.  `code_convert_string` returns the argument unconverted for an
+ASCII-compatible coding over pure-ASCII input that owes no end-of-line work
+(:9609-9628), and therefore never runs the coding system's
+`:post-read-conversion`.  `code_convert_region` has no such path.
+`decode_coding_gap` has an analogous ASCII optimization and REFUSES it outright
+when a `:post-read-conversion` exists -- `NILP (CODING_ATTR_POST_READ (attrs))`
+is a conjunct of its guard at :7933.  So the hook runs at both of those doors and
+not at the string one.  Measured with `vietnamese-viqr`, whose entire conversion
+is an ASCII mnemonic translation, on the pure-ASCII source `Vie^.t Nam a` e^``
+(`tmp/pw156/probe5.el`):
+
+| door | GNU | Neomacs before fix |
+|---|---|---|
+| `decode-coding-string` | the source, unchanged | the source, unchanged |
+| `decode-coding-region` | `Việt Nam à ề` | the source, unchanged |
+| `insert-file-contents` | `Việt Nam à ề` | the source, unchanged |
+| `call-process` | `Việt Nam à ề` | the source, unchanged |
+| `make-process` | `Việt Nam à ề` | the source, unchanged |
+
+The first three rows are fixed here.  The last two are residual (1) and are not,
+for the reason below.
+
+### What GNU does about residual (1): it has ONE decoder, and it runs Lisp
+
+Entry 151 handed back "a subprocess is decoded by a POORER decoder than a string
+is" and named the cost: unifying them means running `:post-read-conversion` Lisp
+inside a process read.  That cost is real, and GNU pays it.  There is no
+restricted process decoder in GNU to point at:
+
+* `read_and_insert_process_output` decodes with
+  `decode_coding_c_string (process_coding, buf, nread, curbuf)` (src/process.c:6502);
+* the filter branch decodes with
+  `decode_coding_c_string (coding, chars, nbytes, Qt)` (:6562);
+* `decode_coding_c_string` is a macro whose body is
+  `decode_coding_object (coding, Qnil, 0, 0, bytes, bytes, dst_object)`
+  (src/coding.h:750-755);
+* `decode_coding_object` calls the hook at :8180-8194, through `safe_calln`.
+
+`call-process` reaches the same function the same way (src/callproc.c:856).  So
+the answer to "is GNU's process path the same decoder as the string path" is
+yes, exactly and literally, and 137's warning about resolvers that only rhyme
+does not apply -- these do not rhyme, they are one call.  Measured, with a
+coding system defined by the probe itself whose `:post-read-conversion` upcases
+what it decoded (`tmp/pw156/probe4.el`):
+
+```text
+door                    GNU              Neomacs
+decode-coding-string    "abc\n" hook=nil "abc\n" hook=nil   ; the identity fast path, both
+call-process            "ABC\n" hook=ran "abc\n" hook=nil
+make-process (buffer)   "ABC\n" hook=ran "abc\n" hook=nil
+make-process (filter)   "ABC\n" hook=ran "abc\n" hook=nil
+insert-file-contents    "ABC\n" hook=ran "abc\n" hook=nil   ; fixed here
+```
+
+GNU's filter row runs the hook TWICE, once per read, which is the shape of the
+problem: the hook is called per DECODED RUN, from inside the read loop.
+
+This is left standing, and the reason is a fact about this runtime rather than a
+judgement about the divergence.  The string door is
+`builtin_coding_string_in_context(ctx: &mut Context, ...)`, and its arms read
+coding-system definitions out of the evaluator (`full_iso2022_spec`,
+`euc_iso2022_spec`, `sjis_charsets`, `general_charset_coding_list`,
+`runtime_ccl_spec`, `chinese_hz_charset`, `is_emacs_mule`) before one of them
+EVALUATES Lisp.  The process door is
+`ProcessManager::read_process_output_result(&mut self, ...)`, and `ProcessManager`
+is a FIELD of `Context`: it is already mutably borrowed out of the very
+`Context` the string decoder would need.  Unifying them is therefore not a
+matter of passing one more argument; it is moving the process read out from
+under that borrow, and then deciding on purpose to re-enter the evaluator from
+inside a read -- with `inhibit-quit` and `inhibit-modification-hooks` bound, as
+GNU does (src/process.c:6501, :6537), and with the hook's errors caught, as
+`safe_calln` does.  Both halves are decisions to take deliberately.  Adding the five
+missing codings to `decode_bytes_emacs`'s family match instead would be a THIRD
+copy of the decision this chain has spent six entries removing copies of.
+
+### The type-level fix
+
+Two Rust functions where GNU has two C functions, sharing the code GNU shares.
+`scan_undecided` is the ASCII/ISO-escape scan and the category priority walk,
+which are the same lines in both C functions; it answers an `UndecidedScan`, and
+an `UndecidedScan` is not an answer -- it is `detect_info`, `null_byte_found`,
+and `found_at`, GNU's `category`/`this` at the point the walk broke.  Neither
+tail can be reached from the other's door, because they no longer have the same
+result type:
+
+```rust
+enum DetectedBase {
+    Rebase(SymId),   // setup_coding_system (found, coding) replaces the object
+    Unchanged,       // GNU's nil `found`: nothing re-bases this
+}
+
+fn detect_coding_found(..., scan: &UndecidedScan) -> DetectedBase;   // :6647-6699
+fn detect_categories(..., highest: bool, ...) -> Value;              // :8836-8886
+```
+
+`DetectedBase::Unchanged` is the state the old code could not say.  GNU's nil
+`found` and the coding system NAMED `undecided` are different statements -- the
+first is "the detector declined", the second is "this is not the coding system
+yet" -- and collapsing them is how a detection result could be a name whose whole
+meaning is that it is not one.  It is the same lie entry 151 removed from
+`ProcessOutputDecoding`, one layer further in.
+
+`WalkStop` is a required argument for the same reason `SourceBlock` is: GNU's
+two detectors really do differ there (`detect_coding` always breaks at the first
+found category, :6642-6643; `detect_coding_system` breaks only under `highest`,
+:8818-8831), so the walk cannot have a default.
+
+`run_detector` now returns the detector's own `bool`, because GNU's break
+condition has two terms -- `(*(this->detector)) (coding, &detect_info) &&
+detect_info.found & (1 << category)` -- and the port was dropping the first.
+
+`detector_no_more_source` is the `no_more_source:` tail of the three byte-pair
+detectors, spelled ONCE, taking the iteration's `src_base`.  The bug it makes
+unrepresentable is "this exhaustion site forgot the conjunct": there is no
+per-site spelling left to forget it in.
+
+`CodingEntry` names three C functions where it named two, and answers the two
+questions the entry decides rather than the coding system: `has_identity_fast_path`
+and `detection_block`.  `SourceBlock::Last` is no longer written at a door; it is
+derived from which of GNU's functions the call IS, which is why the file door
+could not keep `code_convert_string`'s answer by accident.
+
+`coding_bom_auto_pair` reads `mule-conf.el`'s `:bom` cons out of the coding
+system manager, which is GNU's `AREF (CODING_ID_ATTRS (id), coding_attr_utf_bom)`.
+No table of UTF-16 names is written in Rust: a `:bom` that is not a cons falls
+back to the category's own name, exactly as `! CONSP (coding_systems)` does.
+
+### The pins
+
+`a_null_byte_narrows_detection_at_the_decode_door_and_decides_it_at_the_report_door`
+(twelve rows: six through `decode-coding-string`, two through
+`decode-coding-region`, and four through `detect-coding-string` that must NOT
+move, because that door already agreed with GNU).
+`insert_file_contents_detects_as_though_more_bytes_were_coming` (four rows, the
+third of which is the same four bytes through the string door, so the pin
+carries GNU's disagreement with itself rather than only one side of it).
+`a_lone_trailing_lead_byte_refutes_big5_and_sjis_in_a_last_block` (three
+`detect-coding-string` rows).
+`a_utf_16_signature_survives_its_own_null_bytes_in_a_process_read` (six rows on
+real pipes, including the odd byte count that a string rejects and a process
+does not, and the signature split across a read boundary).
+
+The third of those started life against `coding_test.rs`'s `detect_list`, the
+bare-manager harness, and had to be moved: that harness builds a
+`CodingSystemManager` with no charset registry, so `emacs_mule_bytes` answers 1
+for every leading code and the `emacs-mule` detector accepts bytes a booted
+editor rejects.  Pinning it there would have recorded the fixture's limitation
+next to the rule under test.  The rule is pinned through the builtin instead,
+where both editors answer identically.
+
+### Measured after
+
+Against a `cargo xtask fresh-build --release` binary of this branch (pdump
+re-generated and newer than the executable), every probe was re-run and diffed
+against GNU Emacs 31.0.90.
+
+`tmp/pw156/probe3.el`'s 147 rows are `diff` clean except TWO, both of them
+residual (1) and neither introduced here: the ISO-2022 case's `call-process` and
+`make-process` TEXT, whose coding-system names agree.  Before the fix 34 of
+those rows diverged (`tmp/pw156/probe3-diff-before.txt` against
+`tmp/pw156/probe3-diff-verify.txt`).  `tmp/pw156/pin.el` and `tmp/pw156/pin2.el`
+-- the elisp of the four pinned tests, twenty-five rows across the string,
+region, file, detection and process doors -- are `diff` clean.
+
+The coordinator's two independent probes were re-run in both directions.
+`tmp/coord-callproc-probe.el` and `tmp/coord-eol-probe.el` are byte-identical
+between the fixed binary and `tmp/coord-cp-gnu.txt` / `tmp/coord-eol-gnu.txt`,
+and a fresh GNU run of each reproduces those stored files exactly, so the
+baselines are still baselines.
+
+`cargo nextest run -p neovm-core` is 9073/9073 green (51 skipped,
+`tmp/pw156/core-final.log`), which is 9069 before this entry plus its four new
+pins.  `cargo nextest run -p neovm-oracle-tests` is 38783/38783 green with NOT
+ONE pin moved (`tmp/pw156/oracle2.log`) -- the same 38783 entries 147 and 151
+counted, which is the number this entry most wanted, because the change is to
+the shared detector and to the shared decode entry.
+`cargo check --workspace --all-targets` and `cargo fmt --all --check` are clean.
+The MELPA suites that carry real process bytes -- the eight name filters entry
+151 used, 42 tests -- are 42/42 green (`tmp/pw156/melpa2.log`).
+
+Three runs of the machine's own noise had to be told apart from the change, and
+all three were, by re-measuring against the PRE-FIX binary rather than by
+re-running until green.
+
+* `div_cx27_process_exit_code_various_signals` answered `(run 0)` where the pin
+  says `(signal 3)` on one oracle run (`tmp/pw156/oracle1.log`): a `sleep 30`
+  child sent SIGQUIT and `(process-status p)` read back `run` after a
+  one-second `accept-process-output`.  That is the identical failure entry 143
+  recorded, on a form containing no coding system at all -- entry 140's class, a
+  pin gated on the process DYING rather than on the output ending.
+* `div_core_divergence_surface_process_attributes_running_child_combo` answered
+  `"sleep 0.2"` where the pin says `"/bin/sh -c sleep\\ 0.2"` on a later run
+  (`tmp/pw156/oracle-final.log`, 38782/38783).  It reads `process-attributes` of
+  a `/bin/sh -c "sleep 0.2"` child immediately after `make-process`, and a shell
+  given one command `exec`s into it, replacing the argv the pin is reading.  It
+  is entry 140's class too, gated on losing a race rather than on winning one.
+  Measured against the pre-fix binary on the same loaded machine, it fails
+  IDENTICALLY (`tmp/pw156/oracle-racy-before.log`), which is what says it is the
+  machine and not this change.
+* `org_roam` failed one MELPA run with `ld.bfd: cannot find sqlite3-api.o` while
+  a second `cargo nextest` was live in the same checkout: two `make` invocations
+  in one module build directory.  Green on its own against both the pre-fix and
+  the fixed binary.
+
+### Found and NOT fixed here
+
+**A subprocess is decoded by a poorer decoder than a string is.**  Entry 151's
+residual, restated with GNU's answer established above and with the cost
+measured rather than predicted.  Unchanged by this entry in both directions:
+
+```elisp
+;; a child writing  a ESC $ B $ " ESC ( B CR LF  on a pipe, coding `undecided'
+;; GNU                => ((97 12354 10) iso-2022-7bit-dos)
+;; Neomacs before fix => ((97 27 36 66 36 34 27 40 66 10) iso-2022-7bit-dos)
+;; Neomacs after fix  => ((97 27 36 66 36 34 27 40 66 10) iso-2022-7bit-dos)
+```
+
+The NAME is right and has been since 151; the TEXT is the escape bytes.  The
+file door decodes the same bytes correctly -- `(97 12354 10)` -- because it goes
+through the string decoder, which is the measurement that says the difference is
+the DECODER and not the detection.
+
+**`write-region` under `coding-system-for-write` `binary` widens a buffer that
+begins with a byte-order mark.**  Found because this entry's own fixture used
+it, and it is why the two UTF-16 `insert-file-contents` rows are verified against
+python-written files (`tmp/pw156/probe9.el`) instead of pinned.  Pre-existing:
+identical on the pre-fix binary (`tmp/pw156/probe10-before.txt`).
+
+```elisp
+(with-temp-buffer
+  (set-buffer-multibyte nil)
+  (insert "\377\376a\0\r\0\n\0")
+  (let ((coding-system-for-write 'binary))
+    (write-region (point-min) (point-max) f nil 'quiet)))
+;; the file then holds
+;; GNU     => (255 254 97 0 13 0 10 0)                             ; the buffer, verbatim
+;; Neomacs => (255 254 255 0 254 0 97 0 0 0 13 0 0 0 10 0 0 0)     ; utf-16le-with-signature
+```
+
+`raw-text` writes the same widened bytes; `encode-coding-string` with either
+coding system is correct, so the loss is in `write-region` and not in the
+encoder.  `last-coding-system-used` reads back `no-conversion` where GNU says
+`binary`, so the writer believes it converted nothing while eighteen bytes
+reached the disk in place of eight.  It belongs with the encode-side
+unibyte-destination work entry 143 left open, not here.
+
+### Corrections to earlier entries
+
+Entry 151, dated 2026-08-19.  Three statements need amending, and its two
+hand-backs are answered.
+
+* "Every one of the five sites in `neovm-core/src/emacs_core/coding.rs` had been
+  ported without the conjunct" undercounts twice.  There is a SIXTH detector
+  that reads `CODING_MODE_LAST_BLOCK`, `detect_coding_utf_16`, and it spends the
+  flag at the TOP of its body rather than at `no_more_source:`
+  (src/coding.c:1505-1511) -- which is how a search for the `no_more_source:`
+  shape missed it.  And of the five that were fixed, two read TWO bytes per loop
+  iteration and reach `no_more_source` from either read; the conjunct was added
+  at the lead-byte site of each and not at the trail-byte one, so
+  `detect-coding-string` offered `chinese-big5` for a source ending on a lone
+  valid Big5 lead byte where GNU refuses it.  `SourceBlock`'s own doc comment
+  said "the four sites that test it"; it is now one function,
+  `detector_no_more_source`, plus the two that spend the flag differently.
+* "It is one rule in `detect_coding_systems` and it belongs with a
+  re-measurement of the whole category walk" is the right instinct and the wrong
+  location.  The rule in `detect_coding_systems` is CORRECT -- it is
+  `detect_coding_system`'s, and `detect-coding-string` answers `no-conversion`
+  for a UTF-16 signature in GNU too, measured, before and after.  What was wrong
+  is that the decode door was reading that function at all.  Changing the rule
+  in place, as the residual proposed, would have broken the one door that had it
+  right.
+* "the process path stopped having an answer of its own and started sharing the
+  one wrong answer -- which is the state a single rule can be fixed in" is
+  exactly what happened and is worth keeping: the fix here is one function, and
+  it moved the string, region, file, `call-process` and `make-process` doors
+  together.
+* Its first hand-back, the poorer process decoder, is NOT closed.  Its
+  prescription was "unifying them means running `:post-read-conversion` Lisp
+  inside a process read, which is a decision to take deliberately rather than
+  stumble into", and that is confirmed: GNU runs the hook on process output in
+  both its buffer branch and its filter branch, measured.  What 151 could not
+  say is that the obstacle here is an OWNERSHIP one -- `ProcessManager` is a
+  field of the `Context` whose evaluator the string decoder needs -- and that
+  is the shape of the work, not the hook.
+
+Entry 143, dated 2026-08-19.  Its `insert-file-contents` residual is untouched
+and its analysis stands; one sentence gains a neighbour.  "`decode_coding_gap`'s
+ASCII-optimization arm ... reading `CODING_ID_EOL_TYPE (coding->id)` directly and
+converting `Qmac`/`Qdos` with no `inhibit_eol_conversion` term anywhere" is about
+the arm at :7929-8000.  The eight lines ABOVE that arm are this entry's:
+`decode_coding_gap` calls `detect_coding` at :7927-7928, before
+`coding->mode |= CODING_MODE_LAST_BLOCK` at :8009, so the file door detects with
+the flag clear.  143 measured the arm and not the call above it, which is why
+`SourceBlock::Last` survived at the file door for three more entries.
+
+Status: FIXED.

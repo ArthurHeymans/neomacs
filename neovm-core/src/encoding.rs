@@ -858,7 +858,7 @@ pub(crate) fn detected_coding_name(
         }
         // The two arms that are keyed on a byte-order mark rather than on the
         // category priority list (:6702-6742).
-        _ => detect_bom_auto_coding(base, bytes)?,
+        _ => detect_bom_auto_coding(base, bytes, block)?,
     };
     let name = apply_explicit_eol_suffix(found, coding_name_eol(coding_system));
     Some(resolve_sym(intern(&name)))
@@ -1967,13 +1967,58 @@ enum CodingDirection {
 /// at `undecided-unix' through `insert-file-contents' or a BUFFER destination.
 /// Naming the entry makes that a match arm rather than something a shared
 /// helper has to guess from its arguments.
+/// Which of GNU's conversion entry points this call IS.
+///
+/// It answers two questions that are decided by the entry and not by the
+/// coding system: whether the identity fast path exists, and what
+/// `CODING_MODE_LAST_BLOCK` holds when `detect_coding` runs.  The three
+/// variants are three named C functions, because GNU gives all three of them a
+/// different answer to the second question and the answer is observable.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CodingEntry {
-    /// GNU `code_convert_string`: the identity fast path is available.
+    /// GNU `code_convert_string` (src/coding.c:9580): the identity fast path is
+    /// available, and the flag is raised at :9606 before the conversion.
     CodeConvertString,
-    /// GNU `decode_coding_object` / `encode_coding_object` reached directly, as
-    /// file I/O does.
-    CodingObject,
+    /// GNU `code_convert_region` (src/coding.c:9455): no identity fast path,
+    /// flag raised at :9480 before the conversion.
+    CodeConvertRegion,
+    /// GNU `decode_coding_gap` (src/coding.c:7905) and its encode twin, which
+    /// file I/O reaches.  No identity fast path, and -- the part that is easy to
+    /// miss -- detection runs at :7927-7928 BEFORE `coding->mode |=
+    /// CODING_MODE_LAST_BLOCK` at :8009.
+    FileGap,
+}
+
+impl CodingEntry {
+    /// GNU's identity fast path is `code_convert_string`'s alone
+    /// (src/coding.c:9609-9628); nothing else has one.
+    fn has_identity_fast_path(self) -> bool {
+        matches!(self, Self::CodeConvertString)
+    }
+
+    /// `CODING_MODE_LAST_BLOCK` as `detect_coding` sees it at this entry.
+    ///
+    /// A file is a complete source in every sense that matters to a reader, and
+    /// yet GNU detects it as though more bytes were coming, because
+    /// `decode_coding_gap` simply has not raised the flag yet when it calls
+    /// `detect_coding`.  That is not a subtlety without consequences -- it is
+    /// the difference between `utf-8` and `iso-latin-1` for any file whose last
+    /// character is a truncated multibyte sequence.  Measured under GNU Emacs
+    /// 31.0.90 on the four bytes `c a f <c3>`:
+    ///
+    /// ```elisp
+    /// (decode-coding-string "caf\303" 'undecided)   ; => iso-latin-1, four bytes kept
+    /// ;; the same four bytes in a file, insert-file-contents
+    /// ;; => utf-8, and the orphan <c3> lands as the eight-bit character 4194243
+    /// ```
+    fn detection_block(self) -> crate::emacs_core::coding::SourceBlock {
+        match self {
+            Self::CodeConvertString | Self::CodeConvertRegion => {
+                crate::emacs_core::coding::SourceBlock::Last
+            }
+            Self::FileGap => crate::emacs_core::coding::SourceBlock::More,
+        }
+    }
 }
 
 /// Whether an encoding operation owns the end of the input stream.
@@ -2046,7 +2091,7 @@ fn transformed_region_string_in_context(
         ],
         direction,
         EncodingBoundary::CompleteText,
-        CodingEntry::CodingObject,
+        CodingEntry::CodeConvertRegion,
     )
 }
 
@@ -3785,14 +3830,23 @@ fn utf8_or_truncated_utf8(bytes: &[u8], block: crate::emacs_core::coding::Source
 /// arm does not look at them.
 ///
 /// Returns `None` when GNU's `found` would be nil, i.e. when nothing re-bases.
-fn detect_bom_auto_coding(base: &str, bytes: &[u8]) -> Option<&'static str> {
+fn detect_bom_auto_coding(
+    base: &str,
+    bytes: &[u8],
+    block: crate::emacs_core::coding::SourceBlock,
+) -> Option<&'static str> {
     match base {
         // src/coding.c:6724-6742.  `coding->head_ascii = 0` and then
         // `detect_coding_utf_16`, which REFUSES an odd-length last block
         // outright (src/coding.c:1501-1507) before it looks at a signature --
         // measured, `(decode-coding-string "\xfe\xff\0" 'utf-16)` answers
         // `utf-16` and keeps U+FEFF as a character.
-        "utf-16" if bytes.len() % 2 == 1 => None,
+        "utf-16"
+            if bytes.len() % 2 == 1
+                && matches!(block, crate::emacs_core::coding::SourceBlock::Last) =>
+        {
+            None
+        }
         "utf-16" => match bytes {
             [0xFF, 0xFE, ..] => Some("utf-16le-with-signature"),
             [0xFE, 0xFF, ..] => Some("utf-16be-with-signature"),
@@ -3905,7 +3959,7 @@ fn builtin_coding_string_in_context(
     // coding system where a returned string reports the argument's.  It also
     // decides the result's multibyteness: `make_multibyte_string` on decode,
     // `make_unibyte_string` on encode (src/coding.c:9625-9627).
-    if entry == CodingEntry::CodeConvertString
+    if entry.has_identity_fast_path()
         && destination.is_none()
         && coding_ascii_identity_fast_path(ctx, &coding, &args, encode, ctx.eol_conversion())
     {
@@ -3941,9 +3995,11 @@ fn builtin_coding_string_in_context(
                 &ctx.coding_systems,
                 &bytes,
                 base == *"prefer-utf-8",
-                // `code_convert_string` sets `CODING_MODE_LAST_BLOCK`
-                // (src/coding.c:9606): a string is complete.
-                crate::emacs_core::coding::SourceBlock::Last,
+                // `CODING_MODE_LAST_BLOCK` is the entry's to state, not this
+                // function's: `code_convert_string` and `code_convert_region`
+                // raise it before converting, `decode_coding_gap` detects
+                // before raising it.  See `CodingEntry::detection_block`.
+                entry.detection_block(),
             )
             .ok_or_else(|| {
                 signal(
@@ -3978,8 +4034,11 @@ fn builtin_coding_string_in_context(
         // on the ORIGINAL base: a `undecided` decode that detected `utf-16`
         // above does not then get re-based a second time.
         if let Some(src) = args[0].as_lisp_string()
-            && let Some(found) =
-                detect_bom_auto_coding(&base, &lisp_string_coding_source_bytes(src))
+            && let Some(found) = detect_bom_auto_coding(
+                &base,
+                &lisp_string_coding_source_bytes(src),
+                entry.detection_block(),
+            )
         {
             coding = apply_explicit_eol_suffix(found, coding_name_eol(&coding));
             args[1] = Value::symbol(&coding);
@@ -4031,35 +4090,49 @@ fn builtin_coding_string_in_context(
     if !dedicated_codec
         && let Some((hook, base_type)) = coding_conversion_hook(ctx, &coding, encode)
     {
-        // GNU's `code_convert_string` (src/coding.c) takes an identity fast path
-        // for an ASCII-compatible coding when the input is pure ASCII and needs
-        // no EOL conversion, returning the string unchanged WITHOUT running
+        // GNU's `code_convert_string` takes an identity fast path for an
+        // ASCII-compatible coding when the input is pure ASCII and needs no EOL
+        // conversion, returning the string unchanged WITHOUT running
         // encode/decode_coding_object — and therefore WITHOUT the pre/post
         // conversion hook.  So a pure-ASCII `(encode-coding-string "cafe'"
         // 'vietnamese-viqr)` is `"cafe'"`, not the VIQR-translated `café`.
-        let result =
-            if coding_ascii_identity_fast_path(ctx, &coding, &args, encode, ctx.eol_conversion()) {
-                // Identity: encode yields a unibyte string, decode a multibyte one
-                // (GNU `make_unibyte_string` / `make_multibyte_string`).  The bytes
-                // are pure ASCII, so the two storage forms coincide.
-                let bytes = lisp_string_coding_source_bytes(
-                    args[0].as_lisp_string().expect("string validated above"),
-                );
-                if encode {
-                    Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
-                } else {
-                    Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
-                }
+        //
+        // It is `code_convert_string`'s fast path and nobody else's
+        // (src/coding.c:9609-9628), which is why the ENTRY has to be asked
+        // rather than only the bytes.  `decode_coding_gap` refuses the
+        // analogous ASCII optimization outright when a `:post-read-conversion`
+        // exists (`NILP (CODING_ATTR_POST_READ (attrs))` at :7933), and
+        // `code_convert_region` has no such path at all, so both of those run
+        // the hook.  Measured under GNU Emacs 31.0.90 on the pure-ASCII VIQR
+        // source `Vie^.t Nam a` e^``:
+        //
+        //   (decode-coding-string ... 'vietnamese-viqr) => the source, unchanged
+        //   (decode-coding-region ... 'vietnamese-viqr) => Việt Nam à ề
+        //   insert-file-contents with that coding       => Việt Nam à ề
+        let result = if entry.has_identity_fast_path()
+            && coding_ascii_identity_fast_path(ctx, &coding, &args, encode, ctx.eol_conversion())
+        {
+            // Identity: encode yields a unibyte string, decode a multibyte one
+            // (GNU `make_unibyte_string` / `make_multibyte_string`).  The bytes
+            // are pure ASCII, so the two storage forms coincide.
+            let bytes = lisp_string_coding_source_bytes(
+                args[0].as_lisp_string().expect("string validated above"),
+            );
+            if encode {
+                Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
             } else {
-                run_coding_with_conversion_hook(
-                    ctx,
-                    &args,
-                    &base_type,
-                    hook,
-                    encode,
-                    coding_name_eol(&coding),
-                )?
-            };
+                Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+            }
+        } else {
+            run_coding_with_conversion_hook(
+                ctx,
+                &args,
+                &base_type,
+                hook,
+                encode,
+                coding_name_eol(&coding),
+            )?
+        };
         let result_text = result
             .as_lisp_string()
             .ok_or_else(|| {
@@ -4352,7 +4425,7 @@ fn encode_external_text_with_boundary(
         boundary,
         // File I/O is GNU's `encode_coding_object` entry, not
         // `code_convert_string`: no identity fast path.
-        CodingEntry::CodingObject,
+        CodingEntry::FileGap,
     )?;
     let bytes = encoded
         .as_lisp_string()
@@ -4417,11 +4490,12 @@ pub(crate) fn decode_file_bytes_in_context(
         vec![source, Value::symbol(coding)],
         CodingDirection::Decode,
         EncodingBoundary::CompleteText,
-        // `insert-file-contents` reaches `decode_coding_object` directly
-        // (src/fileio.c), so it never takes `code_convert_string`'s identity
-        // fast path and always reports the resolved coding system -- including
-        // the end-of-line subsidiary `decode_eol` detected.
-        CodingEntry::CodingObject,
+        // `insert-file-contents` reaches `decode_coding_gap` (src/coding.c:7905),
+        // so it never takes `code_convert_string`'s identity fast path, always
+        // reports the resolved coding system -- including the end-of-line
+        // subsidiary `decode_eol` detected -- and detects with
+        // `CODING_MODE_LAST_BLOCK` still CLEAR.
+        CodingEntry::FileGap,
     )?;
     let text = decoded
         .as_lisp_string()

@@ -2348,3 +2348,205 @@ fn inhibit_eol_conversion_reaches_the_region_and_buffer_doors_but_not_detection(
         )
     );
 }
+
+/// DIVERGENCES.md entry 156: GNU has TWO undecided detectors, and a null byte
+/// is where their answers part.
+///
+/// `detect_coding` (src/coding.c:6502) is the one a DECODE runs;
+/// `detect_coding_system` (:8686) is the one `detect-coding-string` REPORTS.
+/// Their scan loops and their priority walks agree line for line.  Their tails
+/// do not: `detect_coding_system` forces `no-conversion` whenever a null byte
+/// was seen, unconditionally (:8836-8842), while `detect_coding` treats the
+/// null byte as a NARROWING -- `detect_info.rejected |= ~CATEGORY_MASK_UTF_16`
+/// (:6614-6618), leaving the four UTF-16 categories still checkable -- and
+/// reaches `found = Qno_conversion` only as a fallback when the narrowed walk
+/// settled on nothing (:6683-6684).
+///
+/// So the same eight bytes answer `utf-16le-with-signature-dos` at the decode
+/// door and `no-conversion` at the reporting door, in the same session, on
+/// purpose.  This port had one function serving both, and the reporting rule
+/// won: every UTF-16 signature decoded as `no-conversion` and came back as its
+/// own source bytes.
+///
+/// The fourth row is `detect_coding_utf_16`'s own `CODING_MODE_LAST_BLOCK`
+/// conjunct (:1505-1511), which sits at the TOP of that detector rather than at
+/// the `no_more_source:` label the other five spend it at -- which is why entry
+/// 151 fixed those five and not this one.  A string is a complete source, so an
+/// odd byte count really does refute UTF-16 here.
+///
+/// Rows five and six are the fallback still working: no signature, so the
+/// narrowed walk finds nothing and the null byte answers after all.
+///
+/// The last four rows are the reporting door, which must NOT move.
+///
+/// Every expected value was measured by running this test's own program under
+/// GNU Emacs 31.0.90 (`tmp/pw156/pin.el`, `tmp/pw156/pin-gnu.txt`).
+#[test]
+fn a_null_byte_narrows_detection_at_the_decode_door_and_decides_it_at_the_report_door() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(progn
+             (defun pw156d (bytes coding)
+               (setq last-coding-system-used 'unset)
+               (let* ((s (apply #'unibyte-string bytes))
+                      (d (decode-coding-string s coding)))
+                 (list (append d nil) last-coding-system-used)))
+             (defun pw156r (bytes coding)
+               (setq last-coding-system-used 'unset)
+               (with-temp-buffer
+                 (set-buffer-multibyte nil)
+                 (insert (apply #'unibyte-string bytes))
+                 (decode-coding-region (point-min) (point-max) coding)
+                 (list (append (buffer-string) nil) last-coding-system-used)))
+             (defun pw156t (bytes)
+               (let ((s (apply #'unibyte-string bytes)))
+                 (list (detect-coding-string s t) (detect-coding-string s))))
+             (let ((le '(255 254 97 0 13 0 10 0))
+                   (be '(254 255 0 97 0 13 0 10))
+                   (le-plain '(255 254 97 0 98 0))
+                   (le-odd '(255 254 97 0 13))
+                   (nobom '(97 0 98 0 99 0 100 0))
+                   (nul '(97 0 98 13 10)))
+               (list
+                (pw156d le 'undecided)
+                (pw156d be 'undecided)
+                (pw156d le-plain 'undecided)
+                (pw156d le-odd 'undecided)
+                (pw156d nobom 'undecided)
+                (pw156d nul 'undecided)
+                (pw156r le 'undecided)
+                (pw156r be 'undecided)
+                (pw156t le)
+                (pw156t be)
+                (pw156t nobom)
+                (pw156t nul))))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((97 10) utf-16le-with-signature-dos) ",
+            "((97 10) utf-16be-with-signature-dos) ",
+            "((97 98) utf-16le-with-signature) ",
+            "((255 254 97 0 13) no-conversion) ",
+            "((97 0 98 0 99 0 100 0) undecided) ",
+            "((97 0 98 13 10) no-conversion) ",
+            "((97 10) utf-16le-with-signature-dos) ",
+            "((97 10) utf-16be-with-signature-dos) ",
+            "(no-conversion (no-conversion)) ",
+            "(no-conversion (no-conversion)) ",
+            "(no-conversion (no-conversion)) ",
+            "(no-conversion (no-conversion)))",
+        )
+    );
+}
+
+/// DIVERGENCES.md entry 156: `insert-file-contents` detects with
+/// `CODING_MODE_LAST_BLOCK` CLEAR, so a file's trailing partial character is
+/// carryover to the detector exactly as a subprocess chunk boundary is.
+///
+/// GNU raises that flag at three different times relative to detection.
+/// `code_convert_string` raises it at src/coding.c:9606 and
+/// `code_convert_region` at :9480, both before converting.
+/// `decode_coding_gap` -- the entry `insert-file-contents` reaches -- calls
+/// `detect_coding` at :7927-7928 and raises the flag only at :8009.  A file is
+/// a complete source in every sense a reader cares about, and GNU detects it as
+/// though more bytes were coming anyway.
+///
+/// The consequence is not academic: it is the difference between `utf-8` and
+/// `iso-latin-1` for any file whose last character is a truncated multibyte
+/// sequence.  Row three is the same four bytes through the string door, which
+/// IS a last block and does answer `iso-latin-1` -- the two rows disagree in
+/// GNU, and they now disagree here for GNU's reason.
+///
+/// Every expected value was measured by running this test's own program under
+/// GNU Emacs 31.0.90 (`tmp/pw156/pin.el`, `tmp/pw156/pin-gnu.txt`).
+#[test]
+fn insert_file_contents_detects_as_though_more_bytes_were_coming() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(progn
+             (defun pw156d (bytes coding)
+               (setq last-coding-system-used 'unset)
+               (let* ((s (apply #'unibyte-string bytes))
+                      (d (decode-coding-string s coding)))
+                 (list (append d nil) last-coding-system-used)))
+             (defun pw156f (bytes)
+               (let ((f (make-temp-file "pw156f")))
+                 (unwind-protect
+                     (progn
+                       (let ((coding-system-for-write 'binary))
+                         (with-temp-file f
+                           (set-buffer-multibyte nil)
+                           (insert (apply #'unibyte-string bytes))))
+                       (setq last-coding-system-used 'unset)
+                       (with-temp-buffer
+                         (insert-file-contents f)
+                         (list (append (buffer-string) nil)
+                               last-coding-system-used
+                               buffer-file-coding-system)))
+                   (delete-file f))))
+             (list
+              (pw156f '(99 97 102 195))
+              (pw156f '(104 105 32 99 97 102 195 169 32 195))
+              (pw156d '(99 97 102 195) 'undecided)
+              (pw156f '(99 97 102 195 169 13 10))))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((99 97 102 4194243) utf-8 utf-8-unix) ",
+            "((104 105 32 99 97 102 233 32 4194243) utf-8 utf-8-unix) ",
+            "((99 97 102 195) iso-latin-1) ",
+            "((99 97 102 233 10) utf-8-dos utf-8-dos))",
+        )
+    );
+}
+
+/// DIVERGENCES.md entry 156: the `no_more_source:` LAST_BLOCK conjunct guards
+/// EVERY `ONE_MORE_BYTE` in a detector's loop, not only the first.
+///
+/// In C the sharing is free -- every `ONE_MORE_BYTE` is a `goto
+/// no_more_source`, so `detect_coding_big5` (src/coding.c:4665) and
+/// `detect_coding_sjis` (:4618) spend the conjunct on their LEAD byte and on
+/// their TRAIL byte alike, against the same `src_base`, which C assigns once
+/// per loop ITERATION.  Ported by hand it was not free: entry 151 added the
+/// conjunct at the lead-byte site of each and not at the trail-byte one, so a
+/// complete source ending on a lone valid LEAD byte came back "this could be
+/// Big5" where GNU says it could not.
+///
+/// Row one ends on `<c3>`, a valid Big5 lead byte; row two on `<82>`, a valid
+/// Shift-JIS one; row three on `<a4>`, Big5 again.  Row two answering
+/// `(raw-text)` is what "everything else rejected too" looks like: the
+/// `raw-text` category is never rejected, because the walk skips categories at
+/// or past it (src/coding.c:8813).
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program
+/// (`tmp/pw156/pin.el`, `tmp/pw156/pin-gnu.txt`).
+#[test]
+fn a_lone_trailing_lead_byte_refutes_big5_and_sjis_in_a_last_block() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(list
+             (detect-coding-string (apply #'unibyte-string
+                                          '(104 101 108 108 111 32 99 97 102 195 169
+                                            32 119 111 114 108 100 32 99 97 102 195)))
+             (detect-coding-string (apply #'unibyte-string '(97 130 160 130)))
+             (detect-coding-string (apply #'unibyte-string '(97 164 164 164))))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(iso-latin-1 emacs-mule in-is13194-devanagari chinese-iso-8bit ",
+            "japanese-shift-jis iso-2022-8bit-ss2) ",
+            "(raw-text) ",
+            "(iso-latin-1 emacs-mule in-is13194-devanagari chinese-iso-8bit ",
+            "japanese-shift-jis iso-2022-8bit-ss2))",
+        )
+    );
+}
