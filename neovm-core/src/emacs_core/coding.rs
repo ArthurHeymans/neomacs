@@ -3628,12 +3628,36 @@ fn detect_utf_8_no_more(
     true
 }
 
-/// Port of coding.c `detect_coding_utf_16`.  Operates on raw bytes (the macro
-/// `TWO_MORE_BYTES` skips heading multibyte characters, but UTF-16 detection
-/// inspects the literal byte pairs).
-fn detect_utf_16(bytes: &[u8], src_chars: usize, di: &mut DetectInfo) -> bool {
+/// Port of coding.c `detect_coding_utf_16` (src/coding.c:1494).  Operates on raw
+/// bytes (the macro `TWO_MORE_BYTES` skips heading multibyte characters, but
+/// UTF-16 detection inspects the literal byte pairs).
+///
+/// BLOCK is `CODING_MODE_LAST_BLOCK`, and it is a REQUIRED argument for the same
+/// reason it is required by the five detectors that spend it at
+/// `no_more_source:`.  This one spends it at the TOP instead:
+///
+/// ```c
+///   if (coding->mode & CODING_MODE_LAST_BLOCK
+///       && (coding->src_chars & 1))
+///     { detect_info->rejected |= CATEGORY_MASK_UTF_16; return 0; }
+/// ```
+///
+/// (src/coding.c:1505-1511.)  That different position is why DIVERGENCES.md
+/// entry 151 -- which found the conjunct missing at the `no_more_source:` sites
+/// and fixed all five -- did not find it here.  An odd byte count refutes UTF-16
+/// only when the source is COMPLETE; in a subprocess read it is an ordinary
+/// chunk boundary.  Measured under GNU Emacs 31.0.90 on the five bytes
+/// `FF FE 61 00 0D`: `(decode-coding-string ... 'undecided)` answers
+/// `no-conversion` and keeps all five bytes, while a pipe delivering the same
+/// five bytes answers `utf-16le-with-signature-mac` and produces `(97 10)`.
+fn detect_utf_16(
+    bytes: &[u8],
+    src_chars: usize,
+    block: SourceBlock,
+    di: &mut DetectInfo,
+) -> bool {
     di.checked |= MASK_UTF_16;
-    if src_chars & 1 != 0 {
+    if block.is_last() && src_chars & 1 != 0 {
         di.rejected |= MASK_UTF_16;
         return false;
     }
@@ -3692,6 +3716,44 @@ fn detect_utf_16(bytes: &[u8], src_chars: usize, di: &mut DetectInfo) -> bool {
     true
 }
 
+/// The `no_more_source:` tail that `detect_coding_emacs_mule` (src/coding.c:1908),
+/// `detect_coding_sjis` (:4618) and `detect_coding_big5` (:4665) share, spelled
+/// ONCE.
+///
+/// In C the sharing is free: every `ONE_MORE_BYTE` in those loops is a `goto
+/// no_more_source`, so the LAST_BLOCK conjunct guards the LEAD byte's
+/// exhaustion and the TRAIL byte's alike.  Ported by hand it was not free, and
+/// DIVERGENCES.md entry 151 -- which added the conjunct to these detectors --
+/// added it only at the lead-byte site of each.  A source ending on a lone
+/// valid lead byte therefore came back "this is Big5" where GNU says "this is
+/// not", measured under GNU Emacs 31.0.90 on `hello caf <c3> <a9> world caf <c3>`:
+///
+/// ```elisp
+/// (detect-coding-string "hello caf\303\251 world caf\303")
+/// ;; GNU     => (iso-latin-1 emacs-mule in-is13194-devanagari chinese-iso-8bit
+/// ;;             japanese-shift-jis iso-2022-8bit-ss2)
+/// ;; Neomacs => (... japanese-shift-jis chinese-big5 iso-2022-8bit-ss2)
+/// ```
+///
+/// SRC_BASE is GNU's `src_base`, assigned once per LOOP ITERATION at the top --
+/// not once per byte read -- which is what makes `src_base < src` mean "the
+/// source ran out in the middle of a character" at every site alike.
+fn detector_no_more_source(
+    cat: CodingCat,
+    src_base: usize,
+    src_pos: usize,
+    found: u32,
+    block: SourceBlock,
+    di: &mut DetectInfo,
+) -> bool {
+    if src_base < src_pos && block.is_last() {
+        di.rejected |= cat_mask(cat);
+        return false;
+    }
+    di.found |= found;
+    true
+}
+
 /// Port of coding.c `detect_coding_emacs_mule`.
 fn detect_emacs_mule(
     bytes: &[u8],
@@ -3706,13 +3768,14 @@ fn detect_emacs_mule(
     loop {
         let src_base = src.pos;
         let Some(mut c) = src.next() else {
-            // `if (src_base < src && coding->mode & CODING_MODE_LAST_BLOCK)`, :1910.
-            if src_base < src.pos && block.is_last() {
-                di.rejected |= cat_mask(CodingCat::EmacsMule);
-                return false;
-            }
-            di.found |= found;
-            return true;
+            return detector_no_more_source(
+                CodingCat::EmacsMule,
+                src_base,
+                src.pos,
+                found,
+                block,
+                di,
+            );
         };
         if c < 0 {
             continue;
@@ -3724,8 +3787,14 @@ fn detect_emacs_mule(
                 loop {
                     match src.next() {
                         None => {
-                            di.found |= found;
-                            return true;
+                            return detector_no_more_source(
+                                CodingCat::EmacsMule,
+                                src_base,
+                                src.pos,
+                                found,
+                                block,
+                                di,
+                            );
                         }
                         Some(v) => {
                             c = v;
@@ -3758,17 +3827,14 @@ fn detect_emacs_mule(
                 match src.next() {
                     None => {
                         // GNU's `ONE_MORE_BYTE` jumps to `no_more_source` here.
-                        // We are mid-sequence (the leading byte and zero or more
-                        // continuation bytes of this iteration are already
-                        // consumed), so `src_base < src` holds and the answer is
-                        // the LAST_BLOCK conjunct's (coding.c:1910): malformed
-                        // if nothing more is coming, carryover if it is.
-                        if block.is_last() {
-                            di.rejected |= cat_mask(CodingCat::EmacsMule);
-                            return false;
-                        }
-                        di.found |= found;
-                        return true;
+                        return detector_no_more_source(
+                            CodingCat::EmacsMule,
+                            src_base,
+                            src.pos,
+                            found,
+                            block,
+                            di,
+                        );
                     }
                     Some(v) => {
                         c = v;
@@ -3805,13 +3871,7 @@ fn detect_sjis(
     loop {
         let src_base = src.pos;
         let Some(c) = src.next() else {
-            // `if (src_base < src && coding->mode & CODING_MODE_LAST_BLOCK)`, :4620.
-            if src_base < src.pos && block.is_last() {
-                di.rejected |= cat_mask(CodingCat::Sjis);
-                return false;
-            }
-            di.found |= found;
-            return true;
+            return detector_no_more_source(CodingCat::Sjis, src_base, src.pos, found, block, di);
         };
         if c < 0x80 {
             continue;
@@ -3819,8 +3879,14 @@ fn detect_sjis(
         let c = c as u32;
         if (0x81..=0x9F).contains(&c) || (0xE0..=max_first).contains(&c) {
             let Some(c) = src.next() else {
-                di.found |= found;
-                return true;
+                return detector_no_more_source(
+                    CodingCat::Sjis,
+                    src_base,
+                    src.pos,
+                    found,
+                    block,
+                    di,
+                );
             };
             if c < 0x40 || c == 0x7F || c > 0xFC {
                 di.rejected |= cat_mask(CodingCat::Sjis);
@@ -3850,21 +3916,21 @@ fn detect_big5(
     loop {
         let src_base = src.pos;
         let Some(c) = src.next() else {
-            // `if (src_base < src && coding->mode & CODING_MODE_LAST_BLOCK)`, :4667.
-            if src_base < src.pos && block.is_last() {
-                di.rejected |= cat_mask(CodingCat::Big5);
-                return false;
-            }
-            di.found |= found;
-            return true;
+            return detector_no_more_source(CodingCat::Big5, src_base, src.pos, found, block, di);
         };
         if c < 0x80 {
             continue;
         }
         if c >= 0xA1 {
             let Some(c) = src.next() else {
-                di.found |= found;
-                return true;
+                return detector_no_more_source(
+                    CodingCat::Big5,
+                    src_base,
+                    src.pos,
+                    found,
+                    block,
+                    di,
+                );
             };
             if c < 0x40 || (0x7F..=0xA0).contains(&c) {
                 return false;
@@ -4098,16 +4164,13 @@ fn detect_iso_2022(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut D
 /// returning the value `detect-coding-string`/`detect-coding-region` produce.
 /// Direct port of coding.c `detect_coding_system` with `coding_system = nil`
 /// (`undecided`) and no EOL conversion (inputs without CR/LF keep base names).
-fn detect_coding_systems(
+/// GNU's two detection globals, `coding_priorities` and `coding_categories`
+/// (src/coding.c:586, :590), read out of the manager that owns them here.  Both
+/// doors need exactly this pair, so it is built in one place rather than in
+/// each.
+fn coding_category_bindings(
     mgr: &CodingSystemManager,
-    bytes: &[u8],
-    src_chars: usize,
-    multibytep: bool,
-    highest: bool,
-    block: SourceBlock,
-) -> Value {
-    // Build category -> bound coding-system base name from the priority list,
-    // and the category priority order (coding.c `coding_priorities`).
+) -> (Vec<usize>, [Option<SymId>; CODING_CAT_MAX]) {
     let mut cat_system: [Option<SymId>; CODING_CAT_MAX] = [None; CODING_CAT_MAX];
     let mut priorities: Vec<usize> = Vec::with_capacity(CODING_CAT_MAX);
     for &sym in &mgr.priority {
@@ -4125,6 +4188,18 @@ fn detect_coding_systems(
             priorities.push(cat);
         }
     }
+    (priorities, cat_system)
+}
+
+fn detect_coding_systems(
+    mgr: &CodingSystemManager,
+    bytes: &[u8],
+    src_chars: usize,
+    multibytep: bool,
+    highest: bool,
+    block: SourceBlock,
+) -> Value {
+    let (priorities, cat_system) = coding_category_bindings(mgr);
 
     let detected = detect_categories(
         &priorities,
@@ -4145,19 +4220,45 @@ fn detect_coding_systems(
     apply_detected_eol(mgr, detected, bytes, highest)
 }
 
-/// Select GNU's highest-priority coding system for raw file bytes.
+/// The coding system a DECODE of raw BYTES re-bases itself to: GNU
+/// `detect_coding` (src/coding.c:6502), the detector `decode_coding_object`
+/// runs, NOT the one `detect-coding-string` reports.
 ///
-/// Keep undecided decoding and the public `detect-coding-*` builtins on the
-/// same category engine.  Returning an `Option<SymId>` makes both parts of the
-/// protocol explicit: a selected coding system is an interned symbol, while
-/// `None` represents GNU's `nil` result when the manager has no defined system
-/// for any accepting category.
+/// The two are separate functions in GNU and are separate functions here, for
+/// the reason [`scan_undecided`] records: their tails disagree about a null
+/// byte, and a decode that borrowed the reporting tail answered
+/// `no-conversion` for every UTF-16 signature.  They cannot be confused for one
+/// another by accident any more, because they no longer have the same result
+/// type -- this one answers ONE base coding system or GNU's nil, and the
+/// reporting one answers a Lisp list.
+///
+/// `None` is GNU's `found == nil` after the end-of-line rewrite: nothing
+/// re-bases the coding system.  Callers spell that `undecided`, which is what
+/// `apply_detected_eol` turns into the `-dos` / `-mac` subsidiary GNU's
+/// `adjust_coding_eol_type` produces on the other axis.
 pub(crate) fn detect_highest_coding_system_for_unibyte_bytes(
     mgr: &CodingSystemManager,
     bytes: &[u8],
     block: SourceBlock,
 ) -> Option<SymId> {
-    let detected = detect_coding_systems(mgr, bytes, bytes.len(), false, true, block);
+    let (priorities, cat_system) = coding_category_bindings(mgr);
+    let scan = scan_undecided(
+        &priorities,
+        &cat_system,
+        bytes,
+        bytes.len(),
+        false,
+        block,
+        WalkStop::AtFirstFound,
+    );
+    let base = match detect_coding_found(mgr, &priorities, &cat_system, &scan) {
+        DetectedBase::Rebase(sym) => Value::symbol(resolve_sym(sym)),
+        // GNU leaves `coding` alone; this engine's spelling of that is the name
+        // the caller already holds, which for every caller of this function is
+        // `undecided`.
+        DetectedBase::Unchanged => Value::symbol("undecided"),
+    };
+    let detected = apply_detected_eol(mgr, base, bytes, true);
     (!detected.is_nil()).then(|| {
         detected
             .as_symbol_id()
@@ -4257,19 +4358,98 @@ fn apply_detected_eol(
     Value::list(items.into_iter().map(rewrite).collect())
 }
 
-/// The pure detection core: run the per-category detectors over `bytes` and
-/// build the result, given the category priority order and the coding system
-/// bound to each category.  Split out from `detect_coding_systems` so it can be
-/// unit-tested against GNU's bindings without a fully-booted coding manager.
-fn detect_categories(
+/// Whether the category priority walk stops at the first category it finds.
+///
+/// GNU's two undecided detectors differ here and the difference is not
+/// cosmetic: `detect_coding` always stops, because it wants ONE coding system
+/// to become (src/coding.c:6642-6643, a `break` guarded only by
+/// `detect_info.found & (1 << category)`); `detect_coding_system` stops only
+/// under HIGHEST, because otherwise it has to run every detector to report the
+/// whole list (src/coding.c:8818-8831).  It is a required argument so that a
+/// new caller has to say which of the two it is.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum WalkStop {
+    /// GNU's unconditional `break`, and its `highest` one.
+    AtFirstFound,
+    /// GNU's `highest == 0`: keep going and collect every category's verdict.
+    RunEveryDetector,
+}
+
+/// GNU `detect_coding`'s `found` (src/coding.c:6507, tested at :6743): what a
+/// decode-time detection can answer.
+///
+/// `Unchanged` is GNU's nil, and it is a DIFFERENT statement from "the answer
+/// is `undecided`": it says the detector declined to replace the coding system,
+/// which is the normal outcome for text that is nothing but ASCII.  Keeping the
+/// two apart in the type is what stops `undecided` -- a name whose whole meaning
+/// is "this is not the coding system yet" -- from being returned as though it
+/// were a detection result, the same lie entry 151 removed from
+/// `ProcessOutputDecoding`.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum DetectedBase {
+    /// `setup_coding_system (found, coding)` replaces the whole object
+    /// (src/coding.c:6751).
+    Rebase(SymId),
+    /// `found` stayed nil: the decode keeps the coding system it was given.
+    Unchanged,
+}
+
+/// GNU's detection state at the point where its two undecided detectors' result
+/// rules diverge -- everything the two share, and nothing either decides.
+struct UndecidedScan {
+    di: DetectInfo,
+    /// `null_byte_found` (src/coding.c:6523, :8702).  Both tails read it; they
+    /// do NOT read it the same way, which is this entry's divergence.
+    null_byte_found: bool,
+    /// GNU's `category` / `this` where the priority walk broke -- the
+    /// `i < coding_category_raw_text` test both tails make afterwards.  `None`
+    /// is GNU's `i == coding_category_raw_text`: the walk ran to the end
+    /// without settling on one.
+    found_at: Option<usize>,
+}
+
+/// The half of GNU's undecided detection that is literally the same code in
+/// both of its detectors: the ASCII / ISO-escape scan and the category priority
+/// walk.
+///
+/// GNU has TWO undecided detectors, and they are different functions with
+/// different answers -- not one function called twice:
+///
+/// * `detect_coding` (src/coding.c:6502) is the one a DECODE runs, through
+///   `decode_coding_object`'s `if (CODING_REQUIRE_DETECTION (coding))`
+///   (:8128-8129).  Its result is a coding system the decode then BECOMES
+///   (`setup_coding_system (found, coding)`, :6751), and `found` may be nil,
+///   which means "nothing re-bases this".
+/// * `detect_coding_system` (src/coding.c:8686) is the one
+///   `detect-coding-string` and `detect-coding-region` REPORT.  Its result is a
+///   list, and it always has one.
+///
+/// Their scan loops (:6529-6594 and :8731-8773) and their priority walks
+/// (:6622-6645 and :8801-8832) agree line for line.  Their TAILS do not, and
+/// the difference is observable from Lisp -- both rows measured under GNU Emacs
+/// 31.0.90:
+///
+/// ```elisp
+/// (decode-coding-string "\377\376a\0\r\0\n\0" 'undecided)
+/// ;; => "a\n", last-coding-system-used  utf-16le-with-signature-dos
+/// (detect-coding-string "\377\376a\0\r\0\n\0" t)
+/// ;; => no-conversion
+/// ```
+///
+/// `detect_coding_system` forces `no-conversion` whenever a null byte was seen,
+/// unconditionally (src/coding.c:8836-8842); `detect_coding` reaches that answer
+/// only as a FALLBACK, after a priority walk that the null byte NARROWED to the
+/// UTF-16 categories rather than closed (:6614-6618 narrowing, :6683-6684
+/// fallback).
+fn scan_undecided(
     priorities: &[usize],
     cat_system: &[Option<SymId>; CODING_CAT_MAX],
     bytes: &[u8],
     src_chars: usize,
     multibytep: bool,
-    highest: bool,
     block: SourceBlock,
-) -> Value {
+    stop: WalkStop,
+) -> UndecidedScan {
     let mut di = DetectInfo::default();
     let mut null_byte_found = false;
     let mut eight_bit_found = false;
@@ -4310,17 +4490,34 @@ fn detect_categories(
         i += 1;
     }
 
+    let mut found_at = None;
     if null_byte_found || eight_bit_found || head_ascii < bytes.len() || di.found != 0 {
         if head_ascii == bytes.len() {
-            // All 7-bit: nothing more to detect beyond what ISO found.
-        } else if null_byte_found {
-            di.checked |= !MASK_UTF_16;
-            di.rejected |= !MASK_UTF_16;
+            // "As all bytes are 7-bit, we can ignore non-ISO-2022 codings": no
+            // detector runs, and the walk only looks for what the ISO escape
+            // scan above already found (coding.c:6603-6612, :8781-8788).
+            found_at = priorities
+                .iter()
+                .take(CODING_CAT_RAW_TEXT)
+                .copied()
+                .find(|&cat| di.found & (1 << cat) != 0);
         } else {
+            if null_byte_found {
+                // GNU NARROWS here, it does not decide (coding.c:6614-6618,
+                // :8790-8794).  The four UTF-16 categories stay unchecked and
+                // unrejected, and the walk below still runs -- which is how a
+                // UTF-16 signature survives a source full of null bytes.  The
+                // previous port stopped here and let the tail answer
+                // `no-conversion`, which is `detect_coding_system`'s rule
+                // applied to `detect_coding`'s door.
+                di.checked |= !MASK_UTF_16;
+                di.rejected |= !MASK_UTF_16;
+            }
             // Run each category detector for the first `coding_category_raw_text`
-            // PRIORITY POSITIONS (coding.c:8803 `i < coding_category_raw_text`),
-            // skipping categories whose enum value is >= raw_text (8813) and
-            // categories with no bound coding system (8808).
+            // PRIORITY POSITIONS (coding.c:6622 / :8801
+            // `i < coding_category_raw_text`), skipping categories whose enum
+            // value is >= raw_text (:6631 / :8813) and categories with no bound
+            // coding system (:6626 / :8808).
             let scan = priorities.len().min(CODING_CAT_RAW_TEXT);
             for &cat in &priorities[..scan] {
                 if cat_system[cat].is_none() {
@@ -4330,15 +4527,148 @@ fn detect_categories(
                 if cat >= CODING_CAT_RAW_TEXT {
                     continue;
                 }
-                if di.checked & (1 << cat) != 0 {
-                    continue;
+                let accepted = if di.checked & (1 << cat) != 0 {
+                    // Already answered by an earlier detector; GNU does not run
+                    // it again and treats the recorded verdict as its return
+                    // value (coding.c:6632-6636, :8815-8820).
+                    true
+                } else {
+                    run_detector(cat, bytes, head_ascii, src_chars, multibytep, block, &mut di)
+                };
+                if stop == WalkStop::AtFirstFound && accepted && di.found & (1 << cat) != 0 {
+                    found_at = Some(cat);
+                    break;
                 }
-                run_detector(
-                    cat, bytes, head_ascii, src_chars, multibytep, block, &mut di,
-                );
             }
         }
     }
+
+    UndecidedScan {
+        di,
+        null_byte_found,
+        found_at,
+    }
+}
+
+/// GNU `detect_coding`'s result rule (src/coding.c:6647-6699): the coding system
+/// a DECODE re-bases itself to.
+fn detect_coding_found(
+    mgr: &CodingSystemManager,
+    priorities: &[usize],
+    cat_system: &[Option<SymId>; CODING_CAT_MAX],
+    scan: &UndecidedScan,
+) -> DetectedBase {
+    if let Some(cat) = scan.found_at {
+        let Some(this) = cat_system[cat] else {
+            return DetectedBase::Unchanged;
+        };
+        // The two "auto" categories do not answer with their own name.  Their
+        // `:bom` attribute is a CONS of the two concrete coding systems the
+        // signature chooses between, and `detect_coding` returns one of those
+        // (src/coding.c:6649-6680); only a non-cons `:bom` falls back to the
+        // category's own name.
+        if cat == CodingCat::Utf8Auto as usize {
+            return DetectedBase::Rebase(match coding_bom_auto_pair(mgr, this) {
+                Some((sig, nosig)) => {
+                    if scan.di.found & cat_mask(CodingCat::Utf8Sig) != 0 {
+                        sig
+                    } else {
+                        nosig
+                    }
+                }
+                None => this,
+            });
+        }
+        if cat == CodingCat::Utf16Auto as usize {
+            return match coding_bom_auto_pair(mgr, this) {
+                Some((le, be)) => {
+                    if scan.di.found & cat_mask(CodingCat::Utf16Le) != 0 {
+                        DetectedBase::Rebase(le)
+                    } else if scan.di.found & cat_mask(CodingCat::Utf16Be) != 0 {
+                        DetectedBase::Rebase(be)
+                    } else {
+                        // GNU's `found` stays nil: the cons was there and
+                        // neither endianness was signalled.
+                        DetectedBase::Unchanged
+                    }
+                }
+                None => DetectedBase::Rebase(this),
+            };
+        }
+        return DetectedBase::Rebase(this);
+    }
+    if scan.null_byte_found {
+        // The FALLBACK, not the rule (src/coding.c:6683-6684): reached only
+        // because the UTF-16-narrowed walk above settled on nothing.
+        return DetectedBase::Rebase(intern("no-conversion"));
+    }
+    if (scan.di.rejected & MASK_ANY) == MASK_ANY {
+        // `found = Qraw_text` (src/coding.c:6686).  `detect_coding_system`
+        // answers `no-conversion` for the same state (:8836-8842); with
+        // `coding-category-raw-text` in the priority list neither is reachable,
+        // because that category is never rejected and the clause below claims
+        // it first.
+        return DetectedBase::Rebase(intern("raw-text"));
+    }
+    if scan.di.rejected != 0 {
+        // "the highest-priority category that was not rejected"
+        // (src/coding.c:6687-6699).
+        for &cat in priorities.iter().take(CODING_CAT_RAW_TEXT) {
+            if scan.di.rejected & (1 << cat) == 0
+                && let Some(sym) = cat_system[cat]
+            {
+                return DetectedBase::Rebase(sym);
+            }
+        }
+    }
+    DetectedBase::Unchanged
+}
+
+/// GNU's `AREF (CODING_ID_ATTRS (id), coding_attr_utf_bom)` when it is a CONS:
+/// the pair `define-coding-system`'s `:bom` argument stores, e.g.
+/// `(utf-16le-with-signature . utf-16be-with-signature)` for `utf-16`
+/// (lisp/international/mule-conf.el:1463).  `None` is GNU's `! CONSP`.
+fn coding_bom_auto_pair(mgr: &CodingSystemManager, name: SymId) -> Option<(SymId, SymId)> {
+    let bom = *mgr.get(resolve_sym(name))?.properties.get(&intern(":bom"))?;
+    if !bom.is_cons() {
+        return None;
+    }
+    Some((
+        bom.cons_car().as_symbol_id()?,
+        bom.cons_cdr().as_symbol_id()?,
+    ))
+}
+
+/// The pure detection core for `detect-coding-string` / `detect-coding-region`:
+/// GNU `detect_coding_system`'s result rule (src/coding.c:8836-8886) over the
+/// shared scan.  Split out from `detect_coding_systems` so it can be
+/// unit-tested against GNU's bindings without a fully-booted coding manager.
+fn detect_categories(
+    priorities: &[usize],
+    cat_system: &[Option<SymId>; CODING_CAT_MAX],
+    bytes: &[u8],
+    src_chars: usize,
+    multibytep: bool,
+    highest: bool,
+    block: SourceBlock,
+) -> Value {
+    let UndecidedScan {
+        di,
+        null_byte_found,
+        found_at: _,
+    } = scan_undecided(
+        priorities,
+        cat_system,
+        bytes,
+        src_chars,
+        multibytep,
+        block,
+        if highest {
+            WalkStop::AtFirstFound
+        } else {
+            WalkStop::RunEveryDetector
+        },
+    );
 
     // Result construction (coding.c:8838).
     let mut val: Vec<SymId> = Vec::new();
@@ -4392,6 +4722,10 @@ fn detect_categories(
     )
 }
 
+/// GNU's `(*(this->detector)) (coding, &detect_info)` (src/coding.c:6641,
+/// :8827).  The RETURN VALUE is half of the walk's break condition -- GNU
+/// requires the detector to return non-zero AND the category's `found` bit --
+/// so it is returned here rather than dropped.
 fn run_detector(
     cat: usize,
     bytes: &[u8],
@@ -4400,26 +4734,28 @@ fn run_detector(
     multibytep: bool,
     block: SourceBlock,
     di: &mut DetectInfo,
-) {
+) -> bool {
     if cat == CodingCat::Utf8Nosig as usize
         || cat == CodingCat::Utf8Auto as usize
         || cat == CodingCat::Utf8Sig as usize
     {
-        detect_utf_8(bytes, head_ascii, multibytep, block, di);
+        detect_utf_8(bytes, head_ascii, multibytep, block, di)
     } else if (CodingCat::Utf16Auto as usize..=CodingCat::Utf16LeNosig as usize).contains(&cat) {
-        detect_utf_16(bytes, src_chars, di);
+        detect_utf_16(bytes, src_chars, block, di)
     } else if cat == CodingCat::EmacsMule as usize {
-        detect_emacs_mule(bytes, head_ascii, multibytep, block, di);
+        detect_emacs_mule(bytes, head_ascii, multibytep, block, di)
     } else if cat == CodingCat::Sjis as usize {
-        detect_sjis(bytes, head_ascii, multibytep, block, di);
+        detect_sjis(bytes, head_ascii, multibytep, block, di)
     } else if cat == CodingCat::Big5 as usize {
-        detect_big5(bytes, head_ascii, multibytep, block, di);
+        detect_big5(bytes, head_ascii, multibytep, block, di)
     } else if cat == CodingCat::Charset as usize {
-        detect_charset_latin1(bytes, head_ascii, multibytep, di);
+        detect_charset_latin1(bytes, head_ascii, multibytep, di)
     } else if (CodingCat::Iso7 as usize..=CodingCat::Iso8Else as usize).contains(&cat) {
-        detect_iso_2022(bytes, head_ascii, multibytep, di);
+        detect_iso_2022(bytes, head_ascii, multibytep, di)
+    } else {
+        // ccl has no byte-level detector; it stays unchecked.
+        false
     }
-    // ccl has no byte-level detector; it stays unchecked.
 }
 
 /// `(detect-coding-string STRING &optional HIGHEST)` -- detect the coding
