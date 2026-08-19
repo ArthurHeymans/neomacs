@@ -15625,4 +15625,23 @@ two variants that are different in kind:
 The test asserts the citations are present for both variants and that at most
 one entry claims the justified kind.  A debt can no longer be filed as a design.
 
+### The gate
+
+Measured on a `cargo xtask fresh-build --release` binary whose pdump
+(`emacs-31.0.50.1.pdmp`) is newer than the binary, with `NEOVM_BINARY_PATH`
+pointing at it.
+
+| gate | result |
+| --- | --- |
+| `cargo nextest run -p neovm-core -p neomacs-layout-engine` | 11042 run, **11041 passed**, 54 skipped, 1 load-induced timeout (`bootstrap_tool_bar_mode_comes_from_gnu_mode_macro_path`, 600s cap under an 11k-test parallel run; **119s and green in isolation**) |
+| `cargo nextest run --release -p neovm-oracle-tests` | 38783 run, **38783 passed**, 0 failed |
+| `cargo check --workspace --all-targets` | clean; dead-code warning set byte-identical to the pre-change baseline |
+| `cargo fmt --all --check` | clean |
+| release binary vs GNU 31.0.90, observables | `diff` **empty** |
+| release binary vs GNU 31.0.90, byte-compilation | `diff` **empty** |
+
+The layout engine was gated explicitly because it is in the blast radius, and it
+is where the `display-color-cells` bootstrap caller surfaced: four of its
+`x`-featured bootstrap tests were the first thing to fail.
+
 Status: FIXED.
