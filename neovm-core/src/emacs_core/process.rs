@@ -1664,6 +1664,11 @@ impl ProcessOutputDecoding {
     /// hold it back.  A `utf-8` answer keeps a truncated multibyte tail; an
     /// `iso-latin-1` answer -- GNU's answer for bytes that are not valid UTF-8
     /// -- keeps nothing, because every byte is a character.
+    ///
+    /// BLOCK is why those two do not collapse into a chicken and egg.  It is
+    /// GNU's `CODING_MODE_LAST_BLOCK`, and with it the detector can tell a
+    /// truncated tail from a malformed one without knowing the answer first
+    /// (src/coding.c:1215).
     pub(crate) fn detected(
         self,
         coding_systems: &crate::emacs_core::coding::CodingSystemManager,
@@ -2067,15 +2072,19 @@ fn decode_process_output_bytes(
     // included, and it runs before the read boundary is chosen.  Both halves
     // are GNU's: `coding->src_bytes` is the carryover plus this read
     // (src/process.c:6243-6254, `nbytes += carryover` at :6331), and
-    // `detect_coding` runs before any decoder
-    // hands bytes back as carryover (src/coding.c:8129-8130).  The order
-    // matters twice over, because the boundary rules below are properties of
-    // the decoder detection just chose -- a `utf-8` answer holds a truncated
-    // multibyte tail back and an `iso-latin-1` answer holds nothing back.
-    // GNU sets `CODING_MODE_LAST_BLOCK` on a process read only at EOF
-    // (src/process.c:6321), and this is that flag: the same `flush` the
-    // boundary rules below already take.  It is what separates "these bytes are
-    // not UTF-8" from "this chunk stopped in the middle of a character".
+    // `detect_coding` runs before any decoder hands bytes back as carryover
+    // (src/coding.c:8129-8130).  The order matters twice over, because the
+    // boundary rules below are properties of the decoder detection just chose:
+    // a `utf-8` answer holds a truncated multibyte tail back and an
+    // `iso-latin-1` answer holds nothing back, every byte of it being a
+    // character.
+    //
+    // `flush` is GNU's `CODING_MODE_LAST_BLOCK`, which `read_process_output`
+    // raises only at EOF (src/process.c:6321).  Detection needs it for the same
+    // truncated tail the boundary rules below need it for -- it is what
+    // separates "these bytes are not UTF-8" from "this chunk stopped in the
+    // middle of a character" (src/coding.c:1215) -- so the one flag is spent
+    // twice here exactly as GNU spends its one flag twice.
     let resolved = decoding.detected(
         coding_systems,
         &combined,
