@@ -1420,6 +1420,8 @@ cached_symbol_id!(byte_code_symbol, "byte-code");
 cached_symbol_id!(gc_cons_threshold_symbol, "gc-cons-threshold");
 cached_symbol_id!(input_decode_map_symbol, "input-decode-map");
 cached_symbol_id!(local_function_key_map_symbol, "local-function-key-map");
+cached_symbol_id!(post_gc_hook_symbol, "post-gc-hook");
+cached_symbol_id!(echo_area_clear_hook_symbol, "echo-area-clear-hook");
 cached_symbol_id!(gc_cons_percentage_symbol, "gc-cons-percentage");
 cached_symbol_id!(
     startup_gc_ceiling_active_symbol,
@@ -8781,7 +8783,7 @@ impl Context {
     }
 
     fn run_post_gc_hook(&mut self) {
-        let hook = crate::emacs_core::hook_runtime::hook_symbol_by_name(self, "post-gc-hook");
+        let hook = crate::emacs_core::hook_runtime::hook_symbol_by_id(self, post_gc_hook_symbol());
         let _ = self.with_gc_inhibited(|eval| {
             crate::emacs_core::hook_runtime::safe_run_named_hook(eval, hook, &[])
         });
@@ -10321,8 +10323,10 @@ impl Context {
         }
 
         if had_current_message && run_echo_area_clear_hook {
-            let hook =
-                crate::emacs_core::hook_runtime::hook_symbol_by_name(self, "echo-area-clear-hook");
+            let hook = crate::emacs_core::hook_runtime::hook_symbol_by_id(
+                self,
+                echo_area_clear_hook_symbol(),
+            );
             let _ = crate::emacs_core::hook_runtime::safe_run_named_hook(self, hook, &[]);
         }
 

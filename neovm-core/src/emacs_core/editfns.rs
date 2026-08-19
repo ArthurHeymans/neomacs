@@ -83,6 +83,10 @@ editfns_cached_symbol!(
     "inhibit-modification-hooks"
 );
 editfns_cached_symbol!(deactivate_mark_symbol, "deactivate-mark");
+editfns_cached_symbol!(
+    undo_auto_undoable_change_symbol,
+    "undo-auto--undoable-change"
+);
 editfns_cached_symbol!(first_change_hook_symbol, "first-change-hook");
 editfns_cached_symbol!(before_change_functions_symbol, "before-change-functions");
 editfns_cached_symbol!(after_change_functions_symbol, "after-change-functions");
@@ -320,8 +324,9 @@ fn signal_before_change_with_kind(
             .buffers
             .get(current_id)
             .is_some_and(|buf| !buf.get_undo_list().is_t());
-        if undo_enabled && ctx.obarray.fboundp("undo-auto--undoable-change") {
-            ctx.apply(Value::symbol("undo-auto--undoable-change"), vec![])?;
+        let undoable_change = undo_auto_undoable_change_symbol();
+        if undo_enabled && ctx.obarray.fboundp_id(undoable_change) {
+            ctx.apply(Value::from_sym_id(undoable_change), vec![])?;
         }
     }
 
