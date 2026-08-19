@@ -26,7 +26,7 @@ use crate::core::types::Color;
 ///
 /// All sequences target xterm-compatible terminals (virtually all modern
 /// terminals). No terminfo dependency is required.
-pub mod ansi {
+mod ansi {
     /// CSI (Control Sequence Introducer)
     pub const CSI: &str = "\x1b[";
 
@@ -679,7 +679,7 @@ fn terminal_cursor_state(
 // ---------------------------------------------------------------------------
 
 /// TTY backend state
-pub struct TtyBackend {
+struct TtyBackend {
     initialized: bool,
     width: u32,
     height: u32,
@@ -718,7 +718,7 @@ impl Default for TtyBackend {
 }
 
 impl TtyBackend {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             initialized: false,
             width: 80,
@@ -737,22 +737,22 @@ impl TtyBackend {
     }
 
     /// Set child frames to composite on top of the main frame.
-    pub fn set_child_frames(&mut self, frames: Vec<FrameGlyphBuffer>) {
+    fn set_child_frames(&mut self, frames: Vec<FrameGlyphBuffer>) {
         self.child_frames = frames;
     }
 
     /// Set a FrameGlyphBuffer to be rendered on the next render() call.
-    pub fn set_frame_glyphs(&mut self, frame: FrameGlyphBuffer) {
+    fn set_frame_glyphs(&mut self, frame: FrameGlyphBuffer) {
         self.frame_glyphs = Some(frame);
     }
 
     /// Get the current grid dimensions in characters.
-    pub fn grid_size(&self) -> (u32, u32) {
+    fn grid_size(&self) -> (u32, u32) {
         (self.width, self.height)
     }
 
     /// Force a full repaint on the next render.
-    pub fn force_redraw(&mut self) {
+    fn force_redraw(&mut self) {
         self.force_full_render = true;
     }
 
@@ -786,7 +786,7 @@ impl TtyBackend {
 }
 
 impl TtyBackend {
-    pub fn init(&mut self) -> DisplayResult<()> {
+    fn init(&mut self) -> DisplayResult<()> {
         // Get terminal size
         if let Some((cols, rows)) = get_terminal_size() {
             self.width = cols as u32;
@@ -830,7 +830,7 @@ impl TtyBackend {
         Ok(())
     }
 
-    pub fn shutdown(&mut self) {
+    fn shutdown(&mut self) {
         if !self.initialized {
             return;
         }
@@ -857,7 +857,7 @@ impl TtyBackend {
         self.initialized = false;
     }
 
-    pub fn render(&mut self, scene: &Scene) -> DisplayResult<()> {
+    fn render(&mut self, scene: &Scene) -> DisplayResult<()> {
         if !self.initialized {
             return Err(DisplayError::Backend("TTY backend not initialized".into()));
         }
@@ -894,7 +894,7 @@ impl TtyBackend {
         Ok(())
     }
 
-    pub fn present(&mut self) -> DisplayResult<()> {
+    fn present(&mut self) -> DisplayResult<()> {
         if !self.initialized {
             return Err(DisplayError::Backend("TTY backend not initialized".into()));
         }
@@ -916,15 +916,15 @@ impl TtyBackend {
         Ok(())
     }
 
-    pub fn name(&self) -> &'static str {
+    fn name(&self) -> &'static str {
         "tty"
     }
 
-    pub fn is_initialized(&self) -> bool {
+    fn is_initialized(&self) -> bool {
         self.initialized
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) {
+    fn resize(&mut self, width: u32, height: u32) {
         self.width = width;
         self.height = height;
         self.current.resize(width as usize, height as usize);
@@ -932,7 +932,7 @@ impl TtyBackend {
         self.force_full_render = true;
     }
 
-    pub fn set_vsync(&mut self, _enabled: bool) {
+    fn set_vsync(&mut self, _enabled: bool) {
         // No vsync on TTY
     }
 }
