@@ -15439,8 +15439,8 @@ Sixteen helpers had no other reader and went too: `resize_selected_window`,
 `resolve_window_id`, `resolve_window_id_or_error`,
 `resolve_window_id_or_window_error_in_state`,
 `format_window_designator_for_error_in_state`,
-`find_or_create_buffer_by_name_arg` and `redisplay_window_outer` -- 1349 lines
-from that file alone.  `cargo check -p neovm-core --lib` is clean and its
+`find_or_create_buffer_by_name_arg` and `redisplay_window_outer` -- 1331 lines
+deleted from that file alone, against 18 added.  `cargo check -p neovm-core --lib` is clean and its
 dead-code warning set is byte-identical to the pre-change baseline.
 
 Two registrations were the same Rust function under two names, and only the
