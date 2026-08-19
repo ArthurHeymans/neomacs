@@ -9908,6 +9908,217 @@ fn call_process_reports_the_coding_its_output_was_decoded_with() {
     );
 }
 
+/// DIVERGENCES.md entry 151: `read_process_output_set_last_coding_system`
+/// reports `CODING_ID_NAME (coding->id)` (src/process.c:6417-6425), and by the
+/// time it reads that id BOTH of GNU's rewrites have had their turn at it --
+/// `setup_coding_system (found, coding)` inside `detect_coding`
+/// (src/coding.c:6743) for the character code, and `adjust_coding_eol_type`
+/// (:6805) for the end of line.  Entry 139 moved the second and left the first.
+///
+/// The last three rows are the negative controls, and they are what makes the
+/// other eight mean something.  `detect_coding`'s whole body is guarded by
+/// `null_byte_found || eight_bit_found || coding->head_ascii < coding->src_bytes
+/// || detect_info.found` (:6595-6598), so a pure-ASCII child settles the end of
+/// line and NOT the character code; a child with no terminator at all settles
+/// neither; and a unibyte process buffer is downgraded to `raw-text` first,
+/// which does not detect at all, because the undecided half of `raw-text` is
+/// the end of line rather than the character code.
+///
+/// Every row is `:connection-type 'pipe` for entry 139's reason: on a pty GNU's
+/// EOF read returns -1 and drops the decoder's carryover (src/process.c:6316).
+/// Measured under GNU Emacs 31.0.90 running this test's own program
+/// (`tmp/pw151/pin.el`, `tmp/pw151/pin-gnu.txt`).
+#[test]
+fn process_output_write_back_reports_the_character_code_detection_chose() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw151-run (script setup)
+               (let ((buf (generate-new-buffer " *pw151*")))
+                 (unwind-protect
+                     (let ((p (funcall setup buf script)))
+                       (while (accept-process-output p 1))
+                       (while (process-live-p p) (accept-process-output p 0.05))
+                       (list (append (with-current-buffer buf (buffer-string)) nil)
+                             (process-coding-system p)
+                             last-coding-system-used))
+                   (kill-buffer buf))))
+             (defun pw151-spawn (buf script &rest keys)
+               (apply #'make-process :name "pw151" :buffer buf :sentinel #'ignore
+                      :connection-type 'pipe
+                      :command (list "{sh}" "-c" script) keys))
+             (let ((default-process-coding-system '(undecided . utf-8-unix))
+                   (cafe "printf 'caf\\303\\251\\r\\nx\\r\\n'"))
+               (list
+                ;; `undecided' detects on BOTH axes and one name carries both.
+                (pw151-run cafe (lambda (b s) (let ((coding-system-for-read 'undecided))
+                                                (pw151-spawn b s))))
+                ;; A concrete eol on an undecided BASE still detects the
+                ;; character code; `detect_coding' re-applies the specified eol
+                ;; after the re-base (src/coding.c:6749-6753), so the CRs
+                ;; survive here and the name is `utf-8-unix'.
+                (pw151-run cafe (lambda (b s) (let ((coding-system-for-read 'undecided-unix))
+                                                (pw151-spawn b s))))
+                (pw151-run cafe (lambda (b s) (let ((coding-system-for-read 'undecided-dos))
+                                                (pw151-spawn b s))))
+                ;; `prefer-utf-8' is the same category with UTF-8 raised.
+                (pw151-run cafe (lambda (b s) (let ((coding-system-for-read 'prefer-utf-8))
+                                                (pw151-spawn b s))))
+                ;; A nil chain is `undecided', and the write-back completes the
+                ;; still-nil ENCODE half from the DETECTED name (:6442-6444).
+                (pw151-run cafe (lambda (b s) (let ((default-process-coding-system nil))
+                                                (pw151-spawn b s))))
+                ;; An encode half that is not nil does not move.
+                (pw151-run cafe (lambda (b s)
+                                  (let ((default-process-coding-system '(undecided . latin-1)))
+                                    (pw151-spawn b s))))
+                ;; The other two detection outcomes: a null byte is
+                ;; `no-conversion' (:6686), whose eol type is concrete `unix',
+                ;; so its CR LF survives; bytes that are not valid UTF-8 fall to
+                ;; the category priority list and land on `iso-latin-1'.
+                (pw151-run "printf 'a\\0b\\r\\n'"
+                           (lambda (b s) (let ((coding-system-for-read 'undecided))
+                                           (pw151-spawn b s))))
+                (pw151-run "printf 'caf\\351\\r\\n'"
+                           (lambda (b s) (let ((coding-system-for-read 'undecided))
+                                           (pw151-spawn b s))))
+                ;; The negative controls.
+                (pw151-run "printf 'a\\r\\nb\\r\\n'"
+                           (lambda (b s) (let ((coding-system-for-read 'undecided))
+                                           (pw151-spawn b s))))
+                (pw151-run "printf 'abc'"
+                           (lambda (b s) (let ((coding-system-for-read 'undecided))
+                                           (pw151-spawn b s))))
+                (pw151-run cafe (lambda (b s)
+                                  (with-current-buffer b (set-buffer-multibyte nil))
+                                  (let ((default-process-coding-system nil))
+                                    (pw151-spawn b s)))))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((99 97 102 233 10 120 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((99 97 102 233 13 10 120 13 10) (utf-8-unix . utf-8-unix) utf-8-unix) ",
+            "((99 97 102 233 10 120 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((99 97 102 233 10 120 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((99 97 102 233 10 120 10) (utf-8-dos . utf-8-dos) utf-8-dos) ",
+            "((99 97 102 233 10 120 10) (utf-8-dos . latin-1) utf-8-dos) ",
+            "((97 0 98 13 10) (no-conversion . utf-8-unix) no-conversion) ",
+            "((99 97 102 233 10) (iso-latin-1-dos . utf-8-unix) iso-latin-1-dos) ",
+            "((97 10 98 10) (undecided-dos . utf-8-unix) undecided-dos) ",
+            "((97 98 99) (undecided . utf-8-unix) undecided) ",
+            "((99 97 102 195 169 10 120 10) (raw-text-dos . raw-text-dos) raw-text-dos))",
+        )
+    );
+}
+
+/// DIVERGENCES.md entry 151: the character code goes sticky the same way the
+/// end of line does, and INDEPENDENTLY of it.
+///
+/// `undecided-dos` is still type `Qundecided`, so `setup_coding_system` leaves
+/// `CODING_REQUIRE_DETECTION` raised for it (src/coding.c:5713): a chunk that
+/// has settled the end of line has not settled the character code, and the next
+/// chunk still detects.  The first three rows are that; the last one is a
+/// process whose whole life is ASCII and which therefore never detects at all.
+///
+/// Rows four and five are the ones that prove stickiness rather than merely
+/// reporting it, and they need no observation of an intermediate read: a second
+/// chunk of latin-1 bytes decoded by a process that is `utf-8` by then leaves a
+/// raw eight-bit character (4194281), and a second chunk of UTF-8 bytes decoded
+/// by a process that is `iso-latin-1` by then leaves TWO characters (195 169).
+/// Re-detecting per chunk would answer the opposite of each.
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program.
+#[test]
+fn process_charset_detection_is_sticky_for_the_process_not_the_chunk() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw151s-run (script)
+               (let ((buf (generate-new-buffer " *pw151s*")))
+                 (unwind-protect
+                     (let ((p (make-process :name "pw151s" :buffer buf :sentinel #'ignore
+                                            :connection-type 'pipe
+                                            :command (list "{sh}" "-c" script))))
+                       (while (accept-process-output p 1))
+                       (while (process-live-p p) (accept-process-output p 0.05))
+                       (list (append (with-current-buffer buf (buffer-string)) nil)
+                             (process-coding-system p)
+                             last-coding-system-used))
+                   (kill-buffer buf))))
+             (let ((default-process-coding-system '(undecided . utf-8-unix))
+                   (coding-system-for-read 'undecided))
+               (list
+                (pw151s-run "printf 'a\\r\\nb\\r\\n'; sleep 0.7; printf 'caf\\303\\251\\r\\n'")
+                (pw151s-run "printf 'a\\nb\\n'; sleep 0.7; printf 'caf\\303\\251\\n'")
+                (pw151s-run "printf 'abc'; sleep 0.7; printf 'caf\\303\\251\\r\\n'")
+                (pw151s-run "printf 'caf\\303\\251\\r\\n'; sleep 0.7; printf 'caf\\351\\r\\n'")
+                (pw151s-run "printf 'caf\\351\\r\\n'; sleep 0.7; printf 'caf\\303\\251\\r\\n'")
+                (pw151s-run "printf 'a\\r\\nb\\r\\n'; sleep 0.7; printf 'x\\r\\ny\\r\\n'"))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((97 10 98 10 99 97 102 233 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((97 10 98 10 99 97 102 233 10) (utf-8-unix . utf-8-unix) utf-8-unix) ",
+            "((97 98 99 99 97 102 233 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((99 97 102 233 10 99 97 102 4194281 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((99 97 102 233 10 99 97 102 195 169 10) (iso-latin-1-dos . utf-8-unix) iso-latin-1-dos) ",
+            "((97 10 98 10 120 10 121 10) (undecided-dos . utf-8-unix) undecided-dos))",
+        )
+    );
+}
+
+/// DIVERGENCES.md entry 151: `Fcall_process` decodes through
+/// `decode_coding_c_string` too, so `detect_coding` re-bases its coding system
+/// before the decoder runs and `Vlast_coding_system_used = CODING_ID_NAME
+/// (process_coding.id)` (src/callproc.c:913) reports the re-based name.
+///
+/// Entry 139 pinned this door for the end of line; these are the character-code
+/// rows, negative controls included.  Measured under GNU Emacs 31.0.90 running
+/// this test's own program.
+#[test]
+fn call_process_reports_the_character_code_detection_chose() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw151c-run (coding script)
+               (with-temp-buffer
+                 (let ((coding-system-for-read coding))
+                   (call-process "{sh}" nil t nil "-c" script))
+                 (list (append (buffer-string) nil) last-coding-system-used)))
+             (list
+              (pw151c-run 'undecided "printf 'caf\\303\\251\\r\\nx\\r\\n'")
+              (pw151c-run 'undecided "printf 'a\\r\\nb\\r\\n'")
+              (pw151c-run 'undecided "printf 'abc'")
+              (pw151c-run 'undecided "printf 'caf\\351\\r\\n'")
+              (pw151c-run 'undecided "printf 'a\\0b\\r\\n'")
+              (pw151c-run 'undecided-dos "printf 'caf\\303\\251\\r\\nx\\r\\n'")
+              (pw151c-run 'prefer-utf-8 "printf 'caf\\303\\251\\r\\nx\\r\\n'")))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((99 97 102 233 10 120 10) utf-8-dos) ",
+            "((97 10 98 10) undecided-dos) ",
+            "((97 98 99) undecided) ",
+            "((99 97 102 233 10) iso-latin-1-dos) ",
+            "((97 0 98 13 10) no-conversion) ",
+            "((99 97 102 233 10 120 10) utf-8-dos) ",
+            "((99 97 102 233 10 120 10) utf-8-dos))",
+        )
+    );
+}
+
 /// DIVERGENCES.md entry 143: `inhibit-eol-conversion` is read at CONVERSION
 /// time, not at the time the coding system is resolved.
 ///
@@ -10283,6 +10494,10 @@ fn a_failed_make_serial_process_leaks_nothing_but_its_buffer() {
 /// than on a reporting slot: `default-process-coding-system` and
 /// `process-coding-system-alist` are bound to something that would be plainly
 /// visible, and are invisible.
+///
+/// Re-measured under GNU 31.0.90 on real pty pairs by `tmp/pw151/serial_probe.py`
+/// (`tmp/pw151/serial-gnu.txt`) when entry 151 promoted the three nil-chain rows
+/// from a bytes-only pin to a full one.
 #[cfg(unix)]
 #[test]
 fn a_serial_process_decodes_the_bytes_its_port_delivers() {
@@ -10310,15 +10525,13 @@ fn a_serial_process_decodes_the_bytes_its_port_delivers() {
                               (process-coding-system p))
                    (delete-process p))))
              (list
-              ;; The three rows whose chain answers nil report only their
-              ;; BYTES.  Their coding slot after the read is a residual this
-              ;; entry measured and did NOT fix: GNU replaces an `undecided'
-              ;; decode coding with the system detection actually chose
-              ;; (`utf-8-dos'), and neomacs reports `undecided-dos'.  That is
-              ;; entry 139's write-back, not this entry's port -- it reproduces
-              ;; on `make-process' with `default-process-coding-system' nil,
-              ;; which never opens a serial port at all.
-              (car (pw147-serial-bytes "{p0}" 7))
+              ;; The three rows whose chain answers nil pin their coding slot
+              ;; as well as their bytes.  Entry 147 pinned only the bytes here,
+              ;; because an `undecided' decode reported its own name; entry 151
+              ;; carried the `CodingSystemManager' into the decoder, so
+              ;; `detect_coding''s re-base (src/coding.c:6743) reaches the slot
+              ;; and all three answer `utf-8-dos' as GNU does.
+              (pw147-serial-bytes "{p0}" 7)
               (let ((coding-system-for-read 'binary))
                 (pw147-serial-bytes "{p1}" 10))
               (let ((coding-system-for-read 'raw-text))
@@ -10327,9 +10540,9 @@ fn a_serial_process_decodes_the_bytes_its_port_delivers() {
                 (pw147-serial-bytes "{p3}" 8))
               (pw147-serial-bytes "{p4}" 8 :coding 'latin-1)
               (let ((default-process-coding-system '(binary . binary)))
-                (car (pw147-serial-bytes "{p5}" 7)))
+                (pw147-serial-bytes "{p5}" 7))
               (let ((process-coding-system-alist '(("pw147p" binary . binary))))
-                (car (pw147-serial-bytes "{p6}" 7)))))"#,
+                (pw147-serial-bytes "{p6}" 7))))"#,
         p0 = port(0),
         p1 = port(1),
         p2 = port(2),
@@ -10343,13 +10556,13 @@ fn a_serial_process_decodes_the_bytes_its_port_delivers() {
         result,
         concat!(
             "OK (",
-            "(99 97 102 233 10 120 10) ",
+            "((99 97 102 233 10 120 10) (utf-8-dos . utf-8-dos)) ",
             "((99 97 102 4194243 4194217 13 10 120 13 10) (binary)) ",
             "((99 97 102 4194243 4194217 10 120 10) (raw-text-dos . raw-text-dos)) ",
             "((99 97 102 195 169 10 120 10) (iso-latin-1-dos . iso-latin-1-dos)) ",
             "((99 97 102 195 169 10 120 10) (iso-latin-1-dos . latin-1)) ",
-            "(99 97 102 233 10 120 10) ",
-            "(99 97 102 233 10 120 10))",
+            "((99 97 102 233 10 120 10) (utf-8-dos . utf-8-dos)) ",
+            "((99 97 102 233 10 120 10) (utf-8-dos . utf-8-dos)))",
         )
     );
 }
