@@ -1,4 +1,4 @@
-use super::TerminalCapabilityDatabase;
+use super::{StringCapability, TerminalCapabilityDatabase};
 use super::{
     terminal_size_from_env_values, tty_color_cells, tty_enter_sequence, tty_erase_char_value,
     tty_leave_sequence,
@@ -10,15 +10,15 @@ use neovm_core::emacs_core::value::Value;
 struct ColorsOnlyDatabase(Option<i32>);
 
 impl TerminalCapabilityDatabase for ColorsOnlyDatabase {
-    fn get_string(&mut self, _cap: &str) -> Option<Vec<u8>> {
+    fn get_string(&mut self, _cap: StringCapability<'_>) -> Option<Vec<u8>> {
         None
     }
 
-    fn get_number(&mut self, cap: &str) -> Option<i32> {
+    fn get_termcap_number(&mut self, cap: &str) -> Option<i32> {
         (cap == "Co").then_some(self.0).flatten()
     }
 
-    fn get_flag(&mut self, _cap: &str) -> bool {
+    fn get_termcap_flag(&mut self, _cap: &str) -> bool {
         false
     }
 }

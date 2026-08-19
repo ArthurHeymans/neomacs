@@ -10,6 +10,8 @@ use neomacs_display_protocol::tty_capabilities::TtyAttributeCapabilities;
 use neovm_core::emacs_core::terminal::pure::TerminalRuntimeConfig;
 use std::io::Write;
 
+#[cfg(test)]
+use super::terminal_capabilities::StringCapability;
 use super::terminal_capabilities::TerminalCapabilityDatabase;
 use super::{FrontendKind, StartupOptions};
 
@@ -126,7 +128,7 @@ pub(crate) fn tty_color_cells(
         // GNU: `TN_max_colors = tgetnum ("Co")', and a terminal that reports no
         // color capability answers -1, which GNU treats as "no colors".
         return database
-            .get_number("Co")
+            .get_termcap_number("Co")
             .filter(|colors| *colors > 0)
             .map_or(0, i64::from);
     }
