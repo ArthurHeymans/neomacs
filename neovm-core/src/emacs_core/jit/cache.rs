@@ -667,6 +667,9 @@ pub fn try_run_compiled(
                     func.executable_ops(),
                     &func.constants,
                     native_arity,
+                    func.runtime
+                        .compiled_id()
+                        .and_then(super::aot::prewarm_hash_for),
                     obarray,
                 ) {
                     // AOT leaves never inline → no inline deps to register. Their

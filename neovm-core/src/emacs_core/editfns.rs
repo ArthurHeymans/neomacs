@@ -49,21 +49,6 @@ pub(crate) fn lisp_pos_to_byte(
     buf.lisp_pos_to_accessible_emacs_byte_pos(lisp_pos)
 }
 
-fn dynamic_buffer_or_global_symbol_value(
-    obarray: &Obarray,
-    _dynamic: &[OrderedRuntimeBindingMap],
-    buf: Option<&Buffer>,
-    name: &str,
-) -> Option<Value> {
-    if let Some(buf) = buf
-        && let Some(value) = buf.get_buffer_local(name)
-    {
-        return Some(value);
-    }
-
-    obarray.symbol_value(name).copied()
-}
-
 /// Pre-interned symbols for the buffer-modification hot path: interning these
 /// by NAME on every insert/change signal was a measured cost (~140M Ir on the
 /// buffer benchmark). OnceLock is the established cached-SymId pattern.

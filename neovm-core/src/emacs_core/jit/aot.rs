@@ -765,6 +765,66 @@ pub(crate) fn rebuild_reloc_consts(desc: &AotDescriptor) -> Option<Box<[Value]>>
     Some(out.into_boxed_slice())
 }
 
+/// Build a leaf's `reloc_data` from the DESCRIPTOR's recipe — replacing the
+/// load-time live-reloc re-collection (`live_reloc_for_emit_tier`, which ran
+/// `build_mir` per load: the measured 13.5µs/leaf floor of the AOT prewarm).
+///
+/// Semantics (audit #A preserved):
+/// - symbols re-intern BY NAME → the eq-canonical interned object (identical
+///   to the function's own constant);
+/// - nil/t/fixnums are exact immediates;
+/// - heap values (strings, cons trees) are rebuilt from the recipe, then
+///   eq-UPGRADED to the function's own constant when an `equal` match exists
+///   in `constants` — restoring shared identity with interp/JIT.
+///
+/// VERIFICATION (replaces the old live-recipe byte-compare): every resolved
+/// non-immediate value MUST be eq/`equal`-matched by the live constant pool.
+/// A stale or foreign `.so` whose recipe references anything outside this
+/// function's pool is rejected (`None` → the caller stays on the JIT). The
+/// recipe order IS the emitted reloc-index order, so the produced vector is
+/// definitionally index-aligned with the generated code's loads.
+fn resolve_reloc_from_descriptor(
+    desc: &AotDescriptor,
+    constants: &[Value],
+) -> Option<Box<[Value]>> {
+    if desc.reloc_count > MAX_RELOC_COUNT {
+        return None;
+    }
+    let mut out = Vec::with_capacity(desc.reloc_count as usize);
+    let mut at = 0usize;
+    for _ in 0..desc.reloc_count {
+        let (v, n) = rebuild_value(desc.reloc_recipe.get(at..)?, 0)?;
+        at = at.checked_add(n)?;
+        let resolved = if v == Value::NIL || v == Value::T || v.is_fixnum() {
+            v
+        } else if v.as_symbol_id().is_some() {
+            // Interning by name already made it the canonical object — the
+            // same symbol every tier resolves. No pool-membership demand: a
+            // reloc symbol can be DERIVED from a pool constant rather than
+            // equal to it (e.g. the bare symbol stripped from a
+            // symbol-with-position VarRef operand).
+            v
+        } else {
+            // Heap value: eq-UPGRADE to the pool's own object when a deep-
+            // equal match exists (`Value ==` is deep equal — the documented
+            // footgun is exactly the tool here; the pool object also carries
+            // any text properties the recipe's byte encoding could not).
+            // Absent from the pool (a derived value), keep the fresh rebuild —
+            // the pre-audit-#A behavior, correct if not identity-shared.
+            // Authenticity rests on the content hash that NAMED this entry:
+            // exact by construction on the prewarm path (manifest hash checked
+            // against the immutable marked object) and a 128-bit body hash on
+            // the general path.
+            constants.iter().copied().find(|&c| c == v).unwrap_or(v)
+        };
+        out.push(resolved);
+    }
+    if at != desc.reloc_recipe.len() {
+        return None;
+    }
+    Some(out.into_boxed_slice())
+}
+
 // ---------------------------------------------------------------------------
 // R1c-2 + R1c-5 (emit side): the full pure-leaf → object pipeline.
 // ---------------------------------------------------------------------------
@@ -927,50 +987,6 @@ fn collect_baseline_aot_relocs(
         }
     }
     Some((out, seen))
-}
-
-/// The LIVE reloc-constant set for a leaf, collected by the SAME tier the emitter
-/// used, in the SAME first-seen order it assigned reloc indices (audit #A: these
-/// are the live function's OWN constant objects, so the loaded leaf is
-/// `eq`-identical to interp/JIT). This is the SINGLE SOURCE of the load-path
-/// tier-select — previously duplicated verbatim in [`try_load_leaf`] and
-/// [`prepopulate_aot_from_preload`] (drift risk: the two collectors disagree on
-/// the BASELINE tier's op-symbols, so a mismatched choice mis-sizes `live_reloc`
-/// → `load_leaf_from_unit` reloc-count mismatch → the leaf silently never serves).
-///
-/// The tier pivot MUST mirror the emit path (`compile_leaf_to_object` /
-/// `build_preload_object`): MIR-AOT-runnable → `collect_reloc_consts` (the MIR
-/// `MirOp::Const` set: heap consts + symbols); else → `collect_baseline_aot_relocs`
-/// (ALSO the named-builtin / VarRef-VarSet-VarBind op-symbols the MIR collector
-/// never sees). Returns `None` only when the baseline body has a non-recipe-able
-/// const (gensym / non-canonical) — the caller then stays JIT-only.
-///
-/// (NB: the EMIT-path tier choice in `compile_leaf_to_object` / `build_preload_object`
-/// is a DIFFERENT shape — it picks which `.o` to BUILD, not which reloc collector to
-/// run — so it is intentionally NOT folded here; only the two load-path copies were
-/// verbatim-identical.)
-fn live_reloc_for_emit_tier(
-    ops: &[Op],
-    constants: &[Value],
-    arity: usize,
-    // R2 increment B2: the LIVE obarray. A spec-bearing body was emitted BASELINE
-    // (tier-pivot), so its reloc set MUST be collected with the BASELINE collector
-    // (same order the emitter assigned) — else the MIR order mismatches, the recipe-
-    // compare rejects, and the leaf never serves. `None` (test/testkit) → the
-    // pre-B2 MIR-first choice.
-    obarray: Option<&crate::emacs_core::symbol::Obarray>,
-) -> Option<Vec<Value>> {
-    // Mirror the EMIT tier-pivot: spec-bearing → BASELINE collector, unconditionally.
-    let spec_forced =
-        obarray.is_some_and(|ob| super::compile::has_op_call_spec_sites(ops, constants, arity, ob));
-    if !spec_forced
-        && let Ok(m) = mir::build_mir(ops, constants, arity)
-        && mir_is_aot_runnable(&m)
-    {
-        return Some(collect_reloc_consts(&m));
-    }
-    // MIR-rejected / not-MIR-AOT-runnable / spec-forced → baseline reloc set.
-    Some(collect_baseline_aot_relocs(ops, constants)?.0)
 }
 
 /// Compile one bytecode leaf to a relocatable `.o` for AOT (R1c + sidecar).
@@ -2370,10 +2386,7 @@ pub fn testkit_callbuiltinsym_aot_selftest(dir: &std::path::Path) -> Result<(), 
     // reloc_values(); its presence proves the op-SymId is reloc'd-by-name.
     let content_hash = leaf_content_hash(&ops, &constants, arity).ok_or("content hash None")?;
     let unit = load_unit(content_hash).ok_or("unit not found for reloc-set proof")?;
-    let live_reloc = collect_baseline_aot_relocs(&ops, &constants)
-        .ok_or("baseline relocs None at load")?
-        .0;
-    let leaf = load_leaf_from_unit(&unit, content_hash, arity, &live_reloc, None)
+    let leaf = load_leaf_from_unit(&unit, content_hash, arity, &constants, None)
         .ok_or("load_leaf_from_unit None (reloc count/recipe mismatch?)")?;
     let reloc_names: std::collections::HashSet<&str> = leaf
         .reloc_values()
@@ -2758,14 +2771,12 @@ pub fn testkit_baseline_op_symbol_reloc_selftest(dir: &std::path::Path) -> Resul
         let content_hash = leaf_content_hash(&b.ops, &b.constants, b.arity)
             .ok_or(format!("{}: hash None", b.label))?;
         let unit = load_unit(content_hash).ok_or(format!("{}: unit not found", b.label))?;
-        let live_reloc = collect_baseline_aot_relocs(&b.ops, &b.constants)
-            .ok_or(format!("{}: baseline relocs None at load", b.label))?
-            .0;
-        let leaf =
-            load_leaf_from_unit(&unit, content_hash, b.arity, &live_reloc, None).ok_or(format!(
+        let leaf = load_leaf_from_unit(&unit, content_hash, b.arity, &b.constants, None).ok_or(
+            format!(
                 "{}: load_leaf_from_unit None (reloc/recipe mismatch?)",
                 b.label
-            ))?;
+            ),
+        )?;
         let reloc_names: std::collections::HashSet<String> = leaf
             .reloc_values()
             .iter()
@@ -3713,6 +3724,9 @@ pub(crate) fn try_load_leaf(
     ops: &[Op],
     constants: &[Value],
     arity: usize,
+    // Prewarm-stashed manifest hash (see Runtime::aot_manifest_hash): skips
+    // the SHA-256 body hash for the marked loadup class. `None` → hash here.
+    precomputed_hash: Option<u128>,
     // R2 increment B2: the LIVE obarray, for RE-CLASSIFYING the descriptor's
     // `Op::Call` spec sites at load. `None` (shim-free test bodies with a null
     // ctx) leaves every spec site disarmed (the leaf still serves, just generic).
@@ -3721,35 +3735,30 @@ pub(crate) fn try_load_leaf(
     if !aot_enabled() {
         return None;
     }
-    let content_hash = leaf_content_hash(ops, constants, arity)?;
-    // Gap 4b fast-reject: resolve the unit (memo/index lookup — cheap) BEFORE the
-    // live-reloc collection (which runs `build_mir` — expensive), so a fn with no
-    // indexed `.so` does not pay a MIR build just to discover the miss.
+    let content_hash = match precomputed_hash {
+        Some(h) => h,
+        None => leaf_content_hash(ops, constants, arity)?,
+    };
     let unit = load_unit(content_hash)?;
-    // Audit #A: the leaf's reloc constants are the LIVE function's own constant
-    // objects (re-collected here, NOT fresh copies rebuilt from the recipe), so the
-    // AOT leaf is `eq`-identical to interp/JIT. Tier-selected to match the emit path
-    // (the single source: `live_reloc_for_emit_tier`). `None` → non-recipe-able
-    // baseline const → stay JIT-only.
-    let live_reloc = live_reloc_for_emit_tier(ops, constants, arity, obarray)?;
-    load_leaf_from_unit(&unit, content_hash, arity, &live_reloc, obarray)
+    load_leaf_from_unit(&unit, content_hash, arity, constants, obarray)
 }
 
 /// The dlsym + descriptor-decode + verify + construct core, factored out of
 /// [`try_load_leaf`] so a test can drive it with a directly-loaded unit
-/// (bypassing the env/index resolution). `live_reloc` is the LIVE function's
-/// reloc-constant set (its OWN objects), in the emit-time reloc-index order — it
-/// becomes the leaf's `reloc_data` (audit #A: shared identity with interp/JIT).
-/// The `.so`'s recipe is used only to VERIFY that this `.so` matches the function
-/// (re-encode `live_reloc` and compare to the descriptor's recipe by bytes);
-/// a mismatch → `None` (bail to JIT) — closing the truncated-hash-collision gap.
+/// (bypassing the env/index resolution). The leaf's `reloc_data` is built by
+/// [`resolve_reloc_from_descriptor`] straight from the `.so`'s recipe —
+/// symbols re-interned to their canonical objects and heap values eq-upgraded
+/// to the function's own `constants` (audit #A shared identity) — which is
+/// ALSO the verifier: any recipe value the live pool cannot account for
+/// rejects the leaf (`None` → JIT). This replaced the load-time live-reloc
+/// re-collection whose `build_mir` was the measured 13.5µs/leaf floor.
 /// Returns `None` on any symbol miss / descriptor mismatch / arity mismatch /
-/// recipe mismatch — the caller falls back to JIT.
+/// pool mismatch — the caller falls back to JIT.
 pub(crate) fn load_leaf_from_unit(
     unit: &std::sync::Arc<super::compile::LoadedUnit>,
     content_hash: u128,
     arity: usize,
-    live_reloc: &[Value],
+    constants: &[Value],
     // R2 increment B2: the LIVE obarray for the loader's spec-site re-classify+arm
     // (threaded through to `from_aot`). `None` leaves every spec site disarmed.
     obarray: Option<&crate::emacs_core::symbol::Obarray>,
@@ -3827,30 +3836,11 @@ pub(crate) fn load_leaf_from_unit(
     if desc.meta.has_precise_deopt && desc.meta.max_depth > MAX_DEOPT_DEPTH {
         return None;
     }
-    // VERIFY this `.so` matches THIS function: re-encode the live reloc set into a
-    // recipe and require it to equal the descriptor's recipe + count (by bytes).
-    // The content hash already names the `.so`, but it is a 128-bit truncation;
-    // this is the exact const-vec check the descriptor was built to enable
-    // (audit #11) — a hash collision or a stale/foreign `.so` whose recipe differs
-    // is rejected → JIT. (Symbols/strings are byte-faithful, so equal source →
-    // equal recipe bytes.)
-    if desc.reloc_count as usize != live_reloc.len() {
-        return None;
-    }
-    let mut want_recipe = Vec::new();
-    for &c in live_reloc {
-        // A non-recipe-able const can't have produced this `.so` — bail.
-        write_value_recipe(&mut want_recipe, c).ok()?;
-    }
-    if want_recipe != desc.reloc_recipe {
-        return None;
-    }
-    // Audit #A: the leaf's reloc_data is the LIVE function's own constant objects
-    // (already heap-live + GC-rooted via their source function), NOT fresh
-    // recipe-rebuilt copies — so the AOT leaf shares one object per constant with
-    // interp/JIT (eq-identical). Also dissolves the white-object rooting fragility
-    // (these are already-rooted live objects, not freshly-allocated ones).
-    let reloc_data: Box<[Value]> = live_reloc.to_vec().into_boxed_slice();
+    // Build reloc_data from the recipe, verifying against the live pool as we
+    // go (see resolve_reloc_from_descriptor: symbols canonical by interning,
+    // heap values eq-upgraded to the pool's own objects — audit #A preserved;
+    // any value the pool cannot account for rejects the leaf → JIT).
+    let reloc_data = resolve_reloc_from_descriptor(&desc, constants)?;
     // SAFETY: `entry_ptr` is the real native entry inside `unit`'s loaded `.so`;
     // `unit` is held by the returned leaf for its whole life (kept mapped).
     let leaf = unsafe {
@@ -3943,6 +3933,23 @@ pub struct PrepopulateStats {
 /// between dump and run beyond what the ops_len/arity prekey catches) falls
 /// back to a one-time JIT compile at first call — the same path any hot
 /// function takes.
+std::thread_local! {
+    /// compiled_id → preload-manifest content hash, filled at prewarm-marking
+    /// time. Lets the cache-miss AOT consult dlsym the entry WITHOUT re-hashing
+    /// the body (the SHA was part of the measured per-leaf load floor). A side
+    /// table rather than a Runtime field: the 384-byte ByteCodeObj slot has no
+    /// room (the const assert in tagged/gc.rs enforces it). Exact by
+    /// construction: bytecode is immutable and marking verified the manifest
+    /// prekey against the very object whose id keys this map.
+    static PREWARM_HASHES: std::cell::RefCell<std::collections::HashMap<u64, u128>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// The stashed manifest hash for a prewarm-marked function, by compiled id.
+pub(crate) fn prewarm_hash_for(compiled_id: u64) -> Option<u128> {
+    PREWARM_HASHES.with(|m| m.borrow().get(&compiled_id).copied())
+}
+
 pub fn mark_preload_members_prewarmed(ctx: &crate::emacs_core::eval::Context) -> (usize, usize) {
     if !aot_enabled() {
         return (0, 0);
@@ -3969,6 +3976,10 @@ pub fn mark_preload_members_prewarmed(ctx: &crate::emacs_core::eval::Context) ->
             && key.arity == bc.params.required.len()
         {
             bc.runtime.mark_aot_prewarmed();
+            PREWARM_HASHES.with(|m| {
+                m.borrow_mut()
+                    .insert(bc.runtime.compiled_id_or_assign(), key.hash)
+            });
             marked += 1;
         }
     }
@@ -4004,7 +4015,7 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
         compiled_id: u64,
         content_hash: u128,
         arity: usize,
-        live_reloc: Vec<Value>,
+        constants: Vec<Value>,
     }
     let mut preps: Vec<Prep> = Vec::new();
     // Task #11 manifest pre-filter: the v2 pre-key map (name → member?/ops_len/
@@ -4075,22 +4086,13 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
             stats.missed += 1; // cheap-gate miss (was: load_leaf_from_unit dlsym miss).
             continue;
         }
-        // Tier-select the reloc collection to MATCH the emit tier (the single source
-        // `live_reloc_for_emit_tier`; same choice as try_load_leaf). `None` →
-        // non-recipe-able baseline const — unreachable on a membership hit (a
-        // hashable body is recipe-able, and the producer only emitted recipe-able
-        // leaves); kept as a counted miss for visibility.
-        let Some(live_reloc) =
-            live_reloc_for_emit_tier(ops, &bc.constants, arity, Some(&ctx.obarray))
-        else {
-            stats.missed += 1;
-            continue;
-        };
         preps.push(Prep {
             compiled_id: bc.runtime.compiled_id_or_assign(),
             content_hash,
             arity,
-            live_reloc,
+            // The pool travels to the leaf build below (the descriptor recipe
+            // resolves + verifies against it — no build_mir at load anymore).
+            constants: bc.constants.as_slice().to_vec(),
         });
     }
 
@@ -4105,7 +4107,7 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
             &unit,
             p.content_hash,
             p.arity,
-            &p.live_reloc,
+            &p.constants,
             Some(&ctx.obarray),
         ) {
             Some(leaf) => leaves.push((p.compiled_id, leaf)),
@@ -4122,13 +4124,19 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
     // (a marked function with a filled cache slot runs native immediately; a
     // slot kept by an existing JIT leaf is already hot, so marking is a no-op).
     if !inserted_ids.is_empty() {
+        let hash_by_id: std::collections::HashMap<u64, u128> = preps
+            .iter()
+            .map(|p| (p.compiled_id, p.content_hash))
+            .collect();
         let inserted: std::collections::HashSet<u64> = inserted_ids.into_iter().collect();
         for (_name_id, func_val) in ctx.obarray.interned_function_cells_with_names() {
             if let Some(bc) = func_val.get_bytecode_data()
                 && let Some(id) = bc.runtime.compiled_id()
                 && inserted.contains(&id)
+                && let Some(&hash) = hash_by_id.get(&id)
             {
                 bc.runtime.mark_aot_prewarmed();
+                PREWARM_HASHES.with(|m| m.borrow_mut().insert(id, hash));
             }
         }
     }
