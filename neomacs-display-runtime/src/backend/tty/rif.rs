@@ -38,8 +38,16 @@ pub struct CellAttrs {
     pub bg: Option<TerminalColor>,
     pub bold: bool,
     pub italic: bool,
-    /// 0=none, 1=single, 2=curly/wave, 3=double, 4=dotted, 5=dashed
+    /// GNU's `enum face_underline_type` (src/dispextern.h:1760-1765):
+    /// 0=none, 1=single, 2=double-line, 3=wave, 4=dots, 5=dashes.
     pub underline: u8,
+    /// The realized underline colour, GNU's `face->underline_color`
+    /// (src/dispextern.h:1811), emitted through `TF_set_underline_color`
+    /// (src/term.c:2119-2126).
+    ///
+    /// `None` is GNU's 0, which `turn_on_face` emits nothing for: an underline
+    /// with no `:color` of its own, or `(:color foreground-color)`.
+    pub underline_color: Option<TerminalColor>,
     pub strikethrough: bool,
     pub inverse: bool,
 }
@@ -962,6 +970,7 @@ impl TtyRif {
                 bold: style.bold,
                 italic: false,
                 underline: 0,
+                underline_color: None,
                 strikethrough: false,
                 inverse: style.inverse,
             });
@@ -1011,6 +1020,7 @@ impl TtyRif {
                 bold: face.is_bold(),
                 italic: face.is_italic(),
                 underline: face.underline_style.gnu_code(),
+                underline_color: face.terminal_underline_color,
                 strikethrough: face.attributes.contains(FaceAttributes::STRIKE_THROUGH),
                 inverse: face.attributes.contains(FaceAttributes::INVERSE),
             }
@@ -2501,6 +2511,50 @@ pub fn write_sgr_with_capabilities(
         Some(color) => write_terminal_color(buf, color, true),
         None => buf.extend_from_slice(b"\x1b[49m"),
     }
+    // Last, and inside the same colour block: GNU's `TF_set_underline_color`
+    // (src/term.c:2119-2126).  It is installed only alongside
+    // `TF_set_underline_style` (src/term.c:4705-4708), so `Smulx` gates it too.
+    if colored && caps.supports(TtyCapability::UnderlineStyled) {
+        if let Some(color) = attrs.underline_color {
+            write_underline_color(buf, color);
+        }
+    }
+}
+
+/// GNU's `TF_set_underline_color`, which is one fixed string GNU installs
+/// itself rather than a capability it reads (src/term.c:4708):
+///
+/// ```text
+///   \e[58:2::%p1%{65536}%/%d:%p1%{256}%/%{255}%&%d:%p1%{255}%&%dm
+/// ```
+///
+/// One parameter -- the realized slot, whole -- divided into three channels.
+/// `turn_on_face` guards it with `if (ts && face->underline_color)`, and a
+/// realized 0 is therefore indistinguishable from "no underline colour": GNU
+/// emits nothing for an explicit black.  Measured on a pty against GNU 31.0.90,
+/// TERM=tmux-256color:
+///
+/// ```text
+///   (:underline (:color "red"  :style wave))   \e[4:3m \e[58:2::0:0:1m
+///   (:underline (:color "black" :style wave))  \e[4:3m          (no 58)
+///   with COLORTERM=truecolor, "red"            \e[4:3m \e[58:2::205:0:0m
+/// ```
+///
+/// so the conflation below 24-bit colour is reproduced deliberately, not
+/// inherited by accident.
+fn write_underline_color(buf: &mut Vec<u8>, color: TerminalColor) {
+    use std::io::Write;
+    let pixel = color.realized_pixel();
+    if pixel == 0 {
+        return;
+    }
+    let _ = write!(
+        buf,
+        "\x1b[58:2::{}:{}:{}m",
+        pixel >> 16,
+        (pixel >> 8) & 0xFF,
+        pixel & 0xFF
+    );
 }
 
 fn write_cell_contents(buf: &mut Vec<u8>, cell: &TtyCell) {

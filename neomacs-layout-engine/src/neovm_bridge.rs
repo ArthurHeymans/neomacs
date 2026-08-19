@@ -3245,10 +3245,23 @@ pub struct ResolvedFace {
     pub italic: bool,
     /// Font size in pixels.
     pub font_size: f32,
-    /// Underline style (0=none, 1=line, 2=wave, 3=double, 4=dotted, 5=dashed).
+    /// Underline style, GNU's `enum face_underline_type`
+    /// (src/dispextern.h:1760-1765): 0=none, 1=line, 2=double-line, 3=wave,
+    /// 4=dots, 5=dashes.
     pub underline_style: u8,
     /// Underline color (sRGB pixel, 0 = use foreground).
     pub underline_color: u32,
+    /// What a TERMINAL frame writes for the underline colour: GNU's
+    /// `face->underline_color` (src/dispextern.h:1811), which
+    /// `realize_tty_face` fills through `map_tty_color` (src/xfaces.c:6748,
+    /// :6777) exactly as it fills the foreground and the background.
+    ///
+    /// This is a different quantity from [`Self::underline_color`], not a
+    /// different spelling of it.  That one defaults to `fg` so the GUI draws a
+    /// plain `:underline t` in the text colour; GNU's terminal slot stays 0 in
+    /// that case and `turn_on_face` emits no underline colour at all
+    /// (src/term.c:2120).  `None` here is that 0.
+    pub terminal_underline_color: Option<TerminalColor>,
     /// Strike-through enabled.
     pub strike_through: bool,
     /// Strike-through color (sRGB pixel, 0 = use foreground).
@@ -3303,6 +3316,7 @@ impl Default for ResolvedFace {
             font_size: 14.0,
             underline_style: 0,
             underline_color: 0,
+            terminal_underline_color: None,
             strike_through: false,
             strike_through_color: 0,
             overline: false,
@@ -3712,6 +3726,7 @@ impl FaceResolver {
         if let Some(ul) = neo_default.underline.enabled() {
             df.underline_style = underline_style_to_u8(&ul.style);
             df.underline_color = ul.color.as_ref().map(color_to_pixel).unwrap_or(0);
+            df.terminal_underline_color = ul.color.as_ref().and_then(|color| color.terminal);
         }
         // Overline
         if neo_default.overline == Some(true) {
@@ -3881,6 +3896,7 @@ impl FaceResolver {
             FaceDecoration::Disabled => {
                 rf.underline_style = 0;
                 rf.underline_color = 0;
+                rf.terminal_underline_color = None;
             }
             FaceDecoration::Enabled(underline) => {
                 rf.underline_style = underline_style_to_u8(&underline.style);
@@ -3896,6 +3912,13 @@ impl FaceResolver {
                     .as_ref()
                     .map(color_to_pixel)
                     .unwrap_or(rf.fg);
+                // GNU does NOT default the terminal slot to the foreground:
+                // `realize_tty_face` leaves `face->underline_color` at 0 for an
+                // underline with no `:color` of its own (src/xfaces.c:6741,
+                // :6756) and for `(:color foreground-color)` (:6772-6773), and
+                // `turn_on_face` emits nothing for 0 (src/term.c:2120).
+                rf.terminal_underline_color =
+                    underline.color.as_ref().and_then(|color| color.terminal);
             }
         }
         if let Some(overline) = face.overline {
@@ -4686,6 +4709,7 @@ impl FaceResolver {
             FaceDecoration::Disabled => {
                 rf.underline_style = 0;
                 rf.underline_color = 0;
+                rf.terminal_underline_color = None;
             }
             FaceDecoration::Enabled(underline) => {
                 rf.underline_style = underline_style_to_u8(&underline.style);
@@ -4701,6 +4725,13 @@ impl FaceResolver {
                     .as_ref()
                     .map(color_to_pixel)
                     .unwrap_or(rf.fg);
+                // GNU does NOT default the terminal slot to the foreground:
+                // `realize_tty_face` leaves `face->underline_color` at 0 for an
+                // underline with no `:color` of its own (src/xfaces.c:6741,
+                // :6756) and for `(:color foreground-color)` (:6772-6773), and
+                // `turn_on_face` emits nothing for 0 (src/term.c:2120).
+                rf.terminal_underline_color =
+                    underline.color.as_ref().and_then(|color| color.terminal);
             }
         }
         // Overline
