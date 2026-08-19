@@ -14014,8 +14014,12 @@ entries `tty-color-alist` ends up with and which `((class color) (min-colors N)
 ```
 
 `linux-16color` is the row that shows the count and the palette are two
-different facts: GNU reports 16 cells while `lisp/term/linux.el` registers only
-8 colors.  The crate already read `Co` -- `resolve_tty_attribute_capabilities`
+different facts: GNU reports 16 cells and still ends up with 8 palette entries,
+because nothing registers a 16-color palette for that terminal and it falls back
+to `tty-register-default-colors` over `tty-standard-colors`
+(lisp/term/tty-colors.el:748-757, registered at :808-819) -- eight full-intensity
+X names, `("red" 1 65535 0 0)` and not xterm's `#cd0000`.
+The crate already read `Co` -- `resolve_tty_attribute_capabilities`
 (neomacs-bin/src/terminal_capabilities.rs) reads it for the attribute record --
 and `detect_tty_attribute_capabilities` then overwrote it with the name guess
 one line later.  It is now the answer, with the name heuristic kept only for a
