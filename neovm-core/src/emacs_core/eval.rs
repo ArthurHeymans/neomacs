@@ -17333,7 +17333,8 @@ impl Context {
         // `init_builtins` runs both on a fresh evaluator and again after
         // restoring a pdump image. On the pdump path, GNU-loaded Lisp
         // definitions may already shadow a primitive with the same name
-        // (e.g. `global-set-key`, `local-set-key`, `transient-mark-mode`).
+        // (e.g. `switch-to-buffer`, `display-buffer`, `delete-window` --
+        // see `rust_subrs_shadowed_by_lisp_test.rs` for the reviewed list).
         // Refresh stale subr cells, but do not clobber an existing non-subr
         // function cell that the dumped runtime already established.
         let should_install_public_subr =

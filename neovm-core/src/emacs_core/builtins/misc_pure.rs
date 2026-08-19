@@ -16,10 +16,6 @@ pub(crate) fn builtin_prefix_numeric_value(args: Vec<Value>) -> EvalResult {
     Ok(Value::fixnum(numeric))
 }
 
-pub(crate) fn builtin_ignore(_args: Vec<Value>) -> EvalResult {
-    Ok(Value::NIL)
-}
-
 /// Parse a logged message line into its base text and repeat count: a bare
 /// `"MSG"` -> (MSG, 1); a coalesced `"MSG [K times]"` -> (MSG, K). Mirrors GNU
 /// `message_log_check_duplicate` (xdisp.c).

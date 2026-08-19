@@ -6845,48 +6845,14 @@ fn make_auto_save_file_name_for_buffer(
     }
 }
 
-/// `(make-auto-save-file-name)` -> string
-///
-/// Return the file name to use for auto-saves of the current buffer.
-/// Sets `buffer-auto-save-file-name` as a side effect.
-pub(crate) fn builtin_make_auto_save_file_name(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_min_args("make-auto-save-file-name", &args, 0)?;
-    expect_max_args("make-auto-save-file-name", &args, 0)?;
-    let current_id = current_buffer_id_or_error(&eval.buffers)?;
-    let auto_name = {
-        let buf = eval
-            .buffers
-            .get(current_id)
-            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        if let Some(file_name) = buf.file_name_lisp_string() {
-            let op = Value::symbol("make-auto-save-file-name");
-            let handler = find_file_name_handler_lisp_for_eval(eval, file_name, op);
-            if !handler.is_nil() {
-                let result = eval.funcall_general(handler, vec![op])?;
-                if result.is_string()
-                    && let Some(buf) = eval.buffers.get_mut(current_id)
-                {
-                    buf.set_buffer_local("buffer-auto-save-file-name", result);
-                    buf.set_auto_save_file_name_value(result);
-                }
-                return Ok(result);
-            }
-        }
-        make_auto_save_file_name_for_buffer(&eval.obarray, buf)
-    };
-
-    // Set buffer-auto-save-file-name as side effect
-    let auto_name_value = Value::heap_string(auto_name.clone());
-    if let Some(buf) = eval.buffers.get_mut(current_id) {
-        buf.set_buffer_local("buffer-auto-save-file-name", auto_name_value);
-        buf.set_auto_save_file_name_value(auto_name_value);
-    }
-
-    Ok(auto_name_value)
-}
+// `make-auto-save-file-name' is not here.  GNU has no C version: it is
+// `(defun make-auto-save-file-name () ...)' at lisp/files.el:7699, over
+// `auto-save-file-name-transforms', and it only RETURNS a name -- setting
+// `buffer-auto-save-file-name' is `auto-save-mode's job (lisp/files.el), and
+// C only reads the field (`BVAR (b, auto_save_file_name)', src/fileio.c:6406).
+// The Rust subr wrote the field itself (DIVERGENCES.md 152).
+// `make_auto_save_file_name_for_buffer' below is still reached from
+// `builtin_do_auto_save', which computes a name when the buffer has none.
 
 /// `(do-auto-save &optional NO-MESSAGE CURRENT)` -> nil
 ///

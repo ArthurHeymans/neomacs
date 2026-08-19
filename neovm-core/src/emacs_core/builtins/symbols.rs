@@ -5943,48 +5943,12 @@ pub(crate) fn builtin_memory_info(args: Vec<Value>) -> EvalResult {
     ]))
 }
 
-/// `(memory-limit)` -> integer (kilobytes of resident process memory).
-///
-/// GNU's `Fmemory_limit` (alloc.c) returns `get_maxrss()` converted to
-/// kilobytes, "or 0 if the operating system does not report that
-/// information". On Linux the oracle reports a positive peak resident set
-/// size — the oracle-parity corpus asserts `(integerp (memory-limit))` and
-/// `(> (memory-limit) 0)` both evaluate to `t`
-/// (`divergence_combo_complex239::div_cx239_memory_limit_query`). We mirror
-/// that by reading `VmHWM` (peak RSS, GNU's `get_maxrss` analogue, already in
-/// KiB) from `/proc/self/status`, falling back to the current `VmRSS`, then to
-/// 0 when `/proc` is unavailable (the GNU "OS does not report" case).
-pub(crate) fn builtin_memory_limit(args: Vec<Value>) -> EvalResult {
-    expect_args("memory-limit", &args, 0)?;
-    Ok(Value::fixnum(process_resident_kib()))
-}
-
-/// Peak resident set size of the current process, in kilobytes (the GNU
-/// `get_maxrss` analogue), or 0 when the OS does not report it. Prefers
-/// `VmHWM` (peak) and falls back to `VmRSS` (current); both fields in
-/// `/proc/self/status` are already expressed in KiB.
-fn process_resident_kib() -> i64 {
-    let Ok(status) = std::fs::read_to_string("/proc/self/status") else {
-        return 0;
-    };
-    let mut current_rss = 0i64;
-    for line in status.lines() {
-        // `VmHWM` (peak RSS) is GNU's `get_maxrss` analogue; take it when present.
-        if let Some(kib) = line.strip_prefix("VmHWM:").and_then(parse_proc_status_kib) {
-            return kib;
-        }
-        if let Some(kib) = line.strip_prefix("VmRSS:").and_then(parse_proc_status_kib) {
-            current_rss = kib;
-        }
-    }
-    current_rss
-}
-
-/// Parse the leading integer from a `/proc/self/status` value such as
-/// `"\t   12345 kB"`. Returns `None` if it is not a non-negative integer.
-fn parse_proc_status_kib(rest: &str) -> Option<i64> {
-    rest.split_whitespace().next()?.parse::<i64>().ok()
-}
+// `memory-limit' is not here.  GNU dropped the C `Fmemory_limit' after
+// Emacs 27 (etc/NEWS.27:2965); it is now a `defun' at lisp/subr.el:3574 --
+// `(or (cdr (assq 'vsize (process-attributes (emacs-pid)))) 0)', the VIRTUAL
+// size reported by `process-attributes', which IS a subr here.  The Rust
+// version returned VmHWM, the peak RESIDENT size, from a different file
+// (DIVERGENCES.md 152).
 
 pub(crate) fn builtin_module_load(
     ctx: &mut super::super::eval::Context,

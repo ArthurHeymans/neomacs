@@ -4052,8 +4052,8 @@ fn vm_call_interactively_handles_k_k_capital_and_u_specs_on_shared_runtime() {
                    (use-global-map (make-sparse-keymap))
                    (fset 'mouse-drag-region (lambda (&rest _args) nil))
                    (fset 'mouse-set-point (lambda (&rest _args) nil))
-                   (global-set-key [down-mouse-1] #'mouse-drag-region)
-                   (global-set-key [mouse-1] #'mouse-set-point)
+                   (define-key (current-global-map) [down-mouse-1] #'mouse-drag-region)
+                   (define-key (current-global-map) [mouse-1] #'mouse-set-point)
                    nil)
                  (let ((unread-command-events (list '(down-mouse-1) '(mouse-1))))
                    (call-interactively
@@ -4871,7 +4871,9 @@ fn vm_selected_global_map_is_independent_of_the_lisp_variable() {
                       (key (vector 1)))
                  (use-global-map selected)
                  (let ((global-map rebound))
-                   (global-set-key key 'vm-selected-global-command)
+                   ;; `global-set-key's body, verbatim (lisp/subr.el:1567):
+                   ;; the selected map, not the `global-map' VARIABLE.
+                   (define-key (current-global-map) key 'vm-selected-global-command)
                    (list (eq (current-global-map) selected)
                          (eq (current-global-map) global-map)
                          (lookup-key selected key)

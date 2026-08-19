@@ -129,12 +129,16 @@ impl InteractiveSpec {
 /// Static interactive metadata attached to a registered Rust subr.
 ///
 /// GNU stores this beside arity and the function pointer in `Lisp_Subr`.
-/// Representing no arguments, control strings, and Lisp forms as distinct
-/// states prevents command validation from drifting away from argument
-/// preparation.
+/// Representing control strings and Lisp forms as distinct states prevents
+/// command validation from drifting away from argument preparation.
+///
+/// There is deliberately no "no arguments" variant: a GNU `DEFUN`'s intspec is
+/// a string or a Lisp form and never nil, so `(interactive-form 'recursive-edit)`
+/// is `(interactive "")`, not `(interactive nil)`.  The variant that used to be
+/// here existed for `ignore` alone, which is `lisp/subr.el:501` and not a subr
+/// at all (DIVERGENCES.md 152).
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum BuiltinInteractiveSpec {
-    NoArgs,
     String(&'static str),
     Form(fn() -> Value),
 }
@@ -142,7 +146,6 @@ pub(crate) enum BuiltinInteractiveSpec {
 impl BuiltinInteractiveSpec {
     fn into_spec_value(self) -> Value {
         match self {
-            Self::NoArgs => Value::NIL,
             Self::String(code) => Value::string(code),
             Self::Form(build) => build(),
         }

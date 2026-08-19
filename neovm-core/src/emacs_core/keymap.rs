@@ -3476,25 +3476,6 @@ pub fn list_keymap_define_seq(keymap: Value, events: &[Value], def: Value) -> Re
     Ok(())
 }
 
-/// Define a key in a keymap, resolving symbol prefix bindings through the
-/// obarray before auto-creating nested prefix maps.
-///
-/// Uses noinherit lookup for prefix keys, matching GNU Emacs `Fdefine_key`
-/// which calls `access_keymap(noinherit=1)`.
-///
-/// Returns `Err` with a descriptive message if an intermediate key is already
-/// bound to a non-prefix command (matching GNU Emacs behavior which signals
-/// an error like "Key sequence <f1> a starts with non-prefix key <f1>").
-pub fn list_keymap_define_seq_in_obarray(
-    obarray: &Obarray,
-    keymap: Value,
-    events: &[Value],
-    def: Value,
-) -> Result<(), String> {
-    note_keymap_mutation();
-    list_keymap_define_seq_in_obarray_ex(obarray, keymap, events, def, false)
-}
-
 /// Extended version of define-seq that supports the REMOVE flag.
 pub fn list_keymap_define_seq_in_obarray_ex(
     obarray: &Obarray,

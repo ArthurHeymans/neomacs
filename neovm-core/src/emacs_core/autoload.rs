@@ -710,53 +710,13 @@ pub(crate) fn builtin_autoload(eval: &mut super::eval::Context, args: Vec<Value>
     }
 }
 
-/// Context-aware `(symbol-file SYMBOL &optional TYPE)`.
-///
-/// NeoVM currently tracks symbol origin only for autoloaded function symbols.
-/// This matches GNU Emacs behavior for the currently supported subset:
-/// - non-symbol SYMBOL returns nil
-/// - TYPE nil/missing/`defun` queries function definition origin
-/// - other TYPE values return nil
-pub(crate) fn builtin_symbol_file(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    if args.is_empty() || args.len() > 3 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![
-                Value::symbol("symbol-file"),
-                Value::fixnum(args.len() as i64),
-            ],
-        ));
-    }
-
-    let symbol_name = match args[0].as_symbol_id() {
-        Some(name) => name,
-        None => return Ok(Value::NIL),
-    };
-
-    let function_origin_requested = if args.len() == 1 || args[1].is_nil() {
-        true
-    } else {
-        matches!(args[1].as_symbol_name(), Some("defun"))
-    };
-    if !function_origin_requested {
-        return Ok(Value::NIL);
-    }
-
-    if let Some(entry) = eval.autoloads.get_entry_symbol(symbol_name) {
-        return Ok(Value::heap_string(entry.file.clone()));
-    }
-
-    if let Some(fndef) = eval.obarray.symbol_function(resolve_sym(symbol_name))
-        && is_autoload_value(&fndef)
-        && let Some(items) = list_to_vec(&fndef)
-        && let Some(v) = items.get(1)
-        && v.is_string()
-    {
-        return Ok(*v);
-    }
-
-    Ok(Value::NIL)
-}
+// `symbol-file' is not here.  GNU has no C version: it is
+// `(defun symbol-file (symbol &optional type native-p) ...)' at
+// lisp/subr.el:3351, which walks `load-history' for every kind of
+// definition and, for an autoload, answers `(locate-library (nth 1
+// (symbol-function symbol)))'.  The Rust version knew only about autoloads
+// and returned the RAW autoload file string, never consulting
+// `load-history' at all (DIVERGENCES.md 152).
 
 // ---------------------------------------------------------------------------
 // Special form handlers (called from eval.rs try_special_form dispatch)

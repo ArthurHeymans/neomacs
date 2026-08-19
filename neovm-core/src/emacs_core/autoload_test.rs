@@ -956,10 +956,8 @@ fn autoload_sets_uninterned_symbol_function_cell_by_identity() {
         .symbol_function_of_value(&sym)
         .expect("uninterned symbol function cell");
     assert!(is_autoload_value(&function));
-    assert_eq!(
-        builtin_symbol_file(&mut ev, vec![sym]).expect("symbol-file"),
-        Value::string("nofile")
-    );
+    let cell = list_to_vec(&function).expect("autoload cell should be a list");
+    assert_eq!(cell[1], Value::string("nofile"));
 }
 
 #[test]
@@ -990,7 +988,7 @@ fn autoload_accepts_symbol_with_pos_only_when_enabled() {
 }
 
 #[test]
-fn symbol_file_preserves_raw_unibyte_autoload_file() {
+fn autoload_preserves_a_raw_unibyte_file_in_the_function_cell() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let raw_file = Value::heap_string(LispString::from_unibyte(vec![0xFF]));
@@ -1007,9 +1005,12 @@ fn symbol_file_preserves_raw_unibyte_autoload_file() {
     )
     .expect("register raw autoload");
 
-    let result =
-        builtin_symbol_file(&mut ev, vec![Value::symbol("raw-autoload")]).expect("symbol-file");
-    let text = result.as_lisp_string().expect("raw symbol-file string");
+    let function = ev
+        .obarray
+        .symbol_function("raw-autoload")
+        .expect("raw-autoload function cell");
+    let cell = list_to_vec(&function).expect("autoload cell should be a list");
+    let text = cell[1].as_lisp_string().expect("raw autoload file string");
     assert!(!text.is_multibyte());
     assert_eq!(text.as_bytes(), &[0xFF]);
 }

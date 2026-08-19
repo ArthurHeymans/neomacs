@@ -981,7 +981,6 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("marker-last-position", 1, Some(1));
     assert_subr_arity("match-data--translate", 1, Some(1));
     assert_subr_arity("memory-info", 0, Some(0));
-    assert_subr_arity("memory-limit", 0, Some(0));
     assert_subr_arity("make-frame-invisible", 0, Some(2));
     assert_subr_arity("make-terminal-frame", 1, Some(1));
     assert_subr_arity("menu-bar-menu-at-x-y", 2, Some(3));

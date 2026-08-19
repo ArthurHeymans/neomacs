@@ -6997,13 +6997,22 @@ fn pure_dispatch_minibuffer_lock_placeholder_cluster_matches_compat_contracts() 
         "innermost-minibuffer-p should use eval-aware minibuffer state"
     );
 
-    let interactive_ignore =
-        dispatch_builtin_pure("interactive-form", vec![Value::symbol("ignore")])
-            .expect("builtin interactive-form should resolve")
-            .expect("builtin interactive-form should evaluate");
+    // `make-local-variable' is DEFUN'ed with an intspec in GNU (src/data.c),
+    // so a bare evaluator can be asked for its form; measured on GNU 31.0.90,
+    // (interactive-form 'make-local-variable) is
+    // (interactive "vMake Local Variable: ").
+    let interactive_make_local_variable = dispatch_builtin_pure(
+        "interactive-form",
+        vec![Value::symbol("make-local-variable")],
+    )
+    .expect("builtin interactive-form should resolve")
+    .expect("builtin interactive-form should evaluate");
     assert_eq!(
-        interactive_ignore,
-        Value::list(vec![Value::symbol("interactive"), Value::NIL])
+        interactive_make_local_variable,
+        Value::list(vec![
+            Value::symbol("interactive"),
+            Value::string("vMake Local Variable: ")
+        ])
     );
 
     let local_if_set = dispatch_builtin_pure("local-variable-if-set-p", vec![Value::symbol("x")])
@@ -7580,38 +7589,6 @@ fn pure_dispatch_memory_module_placeholder_cluster_matches_compat_contracts() {
         }
         other => panic!("expected signal, got: {other:?}"),
     }
-}
-
-#[test]
-fn memory_limit_returns_resident_kib_integer() {
-    crate::test_utils::init_test_tracing();
-
-    // Arity is exactly 0: an extra argument is a wrong-number-of-arguments error.
-    assert!(
-        dispatch_builtin_pure("memory-limit", vec![Value::NIL])
-            .expect("memory-limit should resolve")
-            .is_err(),
-        "memory-limit takes no arguments"
-    );
-
-    let out = dispatch_builtin_pure("memory-limit", vec![])
-        .expect("memory-limit should resolve")
-        .expect("memory-limit should evaluate");
-    // GNU `Fmemory_limit` returns an integer (kilobytes of resident memory),
-    // or 0 when the OS does not report it.
-    let kib = out
-        .as_fixnum()
-        .expect("memory-limit should return an integer (KiB)");
-    assert!(kib >= 0, "resident KiB must be non-negative, got {kib}");
-
-    // GNU-parity: on Linux the OS reports RSS, so the value is positive — the
-    // oracle corpus asserts `(> (memory-limit) 0)` => t
-    // (divergence_combo_complex239::div_cx239_memory_limit_query).
-    #[cfg(target_os = "linux")]
-    assert!(
-        kib > 0,
-        "expected positive resident KiB on Linux, got {kib}"
-    );
 }
 
 #[test]
@@ -8417,23 +8394,6 @@ fn pure_dispatch_treesit_node_placeholder_cluster_matches_compat_contracts() {
 }
 
 #[test]
-fn pure_dispatch_typed_ignore_accepts_any_arity() {
-    crate::test_utils::init_test_tracing();
-    let zero = dispatch_builtin_pure("ignore", vec![])
-        .expect("builtin ignore should resolve")
-        .expect("builtin ignore should evaluate");
-    assert!(zero.is_nil());
-
-    let many = dispatch_builtin_pure(
-        "ignore",
-        vec![Value::fixnum(1), Value::string("x"), Value::symbol("foo")],
-    )
-    .expect("builtin ignore should resolve")
-    .expect("builtin ignore should evaluate");
-    assert!(many.is_nil());
-}
-
-#[test]
 fn match_data_round_trip_with_nil_groups() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();
@@ -9116,20 +9076,6 @@ fn search_match_runtime_arity_edges_match_oracle_contracts() {
     );
     assert!(matches!(
         string_match_over_arity,
-        Err(Flow::Signal(sig)) if sig.symbol_name() == "wrong-number-of-arguments"
-    ));
-
-    let string_match_p_over_arity = builtin_string_match_p(
-        &mut eval,
-        vec![
-            Value::string("a"),
-            Value::string("a"),
-            Value::fixnum(0),
-            Value::NIL,
-        ],
-    );
-    assert!(matches!(
-        string_match_p_over_arity,
         Err(Flow::Signal(sig)) if sig.symbol_name() == "wrong-number-of-arguments"
     ));
 }
