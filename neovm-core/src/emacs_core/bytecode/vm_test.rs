@@ -8385,7 +8385,12 @@ fn vm_gui_display_capability_builtins_use_live_window_system_state() {
                  (setq window-system nil)
                  (list
                   (xw-display-color-p f)
-                  (display-color-cells f)))"#
+                  ;; `display-color-cells' is lisp/frame.el:2966 and has no
+                  ;; Rust subr (DIVERGENCES.md 157).  This VM runtime is
+                  ;; deliberately minimal, so ask the C primitive the `memq'
+                  ;; arm of its body calls for a `neo' frame:
+                  ;; `x-display-color-cells' (src/xfns.c:5714).
+                  (x-display-color-cells f)))"#
         ),
         r#"OK (t 16777216)"#
     );

@@ -219,6 +219,17 @@ pub fn detect_baud_rate() -> i64 {
     }
 }
 
+/// Detect the terminal's background brightness for GNU's `background-mode'
+/// TERMINAL parameter (`frame-terminal-default-bg-mode', lisp/frame.el:1588).
+///
+/// FOUND AND NOT FIXED (DIVERGENCES.md 157): `COLORFGBG' appears nowhere in GNU.
+/// GNU's own default is `light' for a `tty-type' matching
+/// "^\\(xterm\\|rxvt\\|dtterm\\|eterm\\)" and `dark' otherwise
+/// (`frame--current-background-mode', lisp/frame.el:1505-1524), refined only by
+/// an actual OSC-11 reply (`xterm--set-background-mode',
+/// lisp/term/xterm.el:1309).  157 moved this value onto GNU's channel -- the
+/// terminal parameter, so the FRAME parameter is derived by GNU's Lisp -- but
+/// the heuristic itself still diverges and belongs to a later entry.
 pub fn detect_tty_background_mode() -> &'static str {
     let Some(colorfgbg) = std::env::var("COLORFGBG").ok() else {
         return "dark";

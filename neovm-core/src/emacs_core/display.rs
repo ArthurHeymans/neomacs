@@ -753,53 +753,23 @@ pub(crate) fn builtin_display_screens(
     Ok(Value::fixnum(1))
 }
 
-/// `(display-color-cells &optional DISPLAY)`.
-///
-/// THE ONE SURVIVOR of DIVERGENCES.md 154's eighteen, and it is a DEBT, not a
-/// design.  GNU has no `DEFUN ("display-color-cells"` anywhere in `src/`: the
-/// name is `lisp/frame.el:2966`, and `loadup.el` loads `frame` at :255 --
-/// ninety-five files after `faces` at :160.  So in GNU the name is VOID while
-/// `faces.el` loads, and GNU bootstraps, which proves GNU's `faces.el` load
-/// never reaches it.
-///
-/// Ours does.  Measured Lisp backtrace, `x`-featured bootstrap:
-///
-/// ```text
-/// (load "faces")
-///  -> (custom-declare-face show-paren-match ...)      ; lisp/faces.el:3161
-///  -> (face-spec-set show-paren-match ... face-defface-spec)
-///  -> (face-spec-recalc show-paren-match #<frame F1>) ; over (frame-list)
-///  -> (face-spec-choose ... #<frame F1>)
-///  -> (face-spec-set-match-display ((background dark) (min-colors 4)) #<frame F1>)
-///  -> (display-color-cells #<frame F1>)               ; lisp/faces.el:1588
-/// ```
-///
-/// `show-paren-match`'s third clause is the only preloaded defface clause whose
-/// FIRST conjunct is `background` rather than `class` or `type`, so it is the
-/// only one that can reach `min-colors` on a frame with no display class.  It
-/// gets there because `ensure_selected_frame_id_in_state_with_policy`
-/// (`window_cmds/mod.rs`) seeds `background-mode` = `dark` on the frame, which
-/// GNU computes only later, in `frame-set-background-mode`.  Until the frame
-/// carries GNU's parameter set at GNU's time, deleting this subr costs 1124
-/// tests -- every one that boots a runtime.
-///
-/// So this stays registered and is the second entry on the shadow list, filed
-/// as `UnjustifiedBootstrapCaller`, not as a placeholder GNU also ships.
-pub(crate) fn builtin_display_color_cells(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_optional_display_designator_eval(eval, "display-color-cells", &args)?;
-    if display_window_system_symbol_eval(eval, args.first())?
-        .is_some_and(gui_window_system_active_value)
-    {
-        Ok(Value::fixnum(16777216)) // 2^24 = 24-bit TrueColor
-    } else if terminal_runtime_supports_color() {
-        Ok(Value::fixnum(terminal_runtime_color_cells()))
-    } else {
-        Ok(Value::fixnum(0))
-    }
-}
+// `display-color-cells' is GONE, with the seventeen of DIVERGENCES.md 154 it
+// was held back from.  GNU has no `DEFUN ("display-color-cells"' anywhere in
+// `src/': the name is `lisp/frame.el:2966', and its body dispatches on
+// `framep-on-display' to `x-display-color-cells' (src/xfns.c:5714) or
+// `tty-display-color-cells' (src/term.c:2226) -- both of which are real
+// DEFUNs and both of which stay registered here.
+//
+// It was the eighteenth name and the one 154 could not delete, because our
+// `(load "faces")' reached it while GNU's cannot: GNU's `loadup.el' loads
+// `faces' at :160 and `frame' at :255, so the name is void for ninety-five
+// files and GNU still bootstraps.  The caller was `show-paren-match's
+// `((background dark) (min-colors 4))' clause (lisp/faces.el:3161), whose
+// FIRST conjunct matched only because Rust seeded a `background-mode' frame
+// parameter that GNU's `make_initial_frame' (src/frame.c:1423) does not set.
+// That seeding is gone (DIVERGENCES.md 157), so the clause now fails on its
+// first conjunct exactly as it does in GNU and the walk never reaches
+// `min-colors'.
 
 /// Context-aware variant of `display-planes`.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up

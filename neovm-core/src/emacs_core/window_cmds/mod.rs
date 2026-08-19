@@ -636,26 +636,6 @@ fn ensure_selected_frame_id_in_state_with_policy(
     warn_on_create: bool,
 ) -> FrameId {
     if let Some(fid) = frames.selected_frame().map(|f| f.id) {
-        // Ensure frame parameters required for defface spec matching.
-        // The frame may have been restored from a pdump created before
-        // these parameters were seeded.
-        if let Some(frame) = frames.get_mut(fid) {
-            if frame.parameter("display-type").is_none() {
-                // GNU's `frame-set-background-mode` (frame.el) derives display-type:
-                // a GUI frame is `color`; a tty frame is `color` only if
-                // `tty-display-color-p`, else `mono`. A restored batch frame is a
-                // no-color initial terminal, so it must be `mono` (matching GNU).
-                let display_type = if frame.effective_window_system().is_some() {
-                    "color"
-                } else {
-                    "mono"
-                };
-                frame.set_parameter(Value::symbol("display-type"), Value::symbol(display_type));
-            }
-            if frame.parameter("background-mode").is_none() {
-                frame.set_parameter(Value::symbol("background-mode"), Value::symbol("dark"));
-            }
-        }
         return fid;
     }
 
@@ -688,15 +668,21 @@ fn ensure_selected_frame_id_in_state_with_policy(
         frame.set_window_system(None);
         frame.set_parameter(Value::symbol("width"), Value::fixnum(80));
         frame.set_parameter(Value::symbol("height"), Value::fixnum(25));
-        // Required for defface spec matching (class ...) and (background ...) in
-        // `face-spec-set-match-display`. GNU's `frame-set-background-mode`
-        // computes a tty frame's display-type as `color` iff `tty-display-color-p`,
-        // else `mono`. This synthesized batch frame is the no-color initial
-        // terminal (window-system None, set just above), so it is `mono` — matching
-        // GNU's batch frame and letting deffaces fall through to their `(t ...)`
-        // clauses instead of selecting `(class color)` clauses.
-        frame.set_parameter(Value::symbol("display-type"), Value::symbol("mono"));
-        frame.set_parameter(Value::symbol("background-mode"), Value::symbol("dark"));
+        // NO `display-type' and NO `background-mode' here.  This is GNU's
+        // `make_initial_frame' (src/frame.c:1423), called from
+        // `init_window_once' (src/window.c:9148) BEFORE loadup
+        // (src/emacs.c:2006), and it sets neither.  Both are DERIVED, by
+        // `frame-set-background-mode' (lisp/frame.el:1526), which C reaches
+        // only through `init_faces_initial' (src/dispnew.c:7178) ->
+        // `tty-set-up-initial-frame-faces' (lisp/faces.el:2409) from
+        // `init_display' (src/dispnew.c:7413-7422) -- after the pdump is
+        // loaded, never during loadup.  Measured on GNU 31.0.90, `src/temacs
+        // --batch -l loadup': `background-mode=nil display-type=nil'.
+        // Seeding them here made `show-paren-match's `((background dark)
+        // (min-colors 4))' clause (lisp/faces.el:3161) match its first
+        // conjunct during `(load "faces")' and call `display-color-cells',
+        // which is `lisp/frame.el:2966' and still void ninety-five files
+        // later in GNU.  DIVERGENCES.md 157.
         // The root window covers the 24-line text area (not the minibuffer).
         frame
             .root_window
@@ -5899,8 +5885,15 @@ pub(crate) fn x_create_frame_impl(
             crate::emacs_core::display::gui_window_system_symbol(),
         )));
         frame.set_display_identity(inherited_display_identity);
-        frame.set_parameter(Value::symbol("display-type"), Value::symbol("color"));
-        frame.set_parameter(Value::symbol("background-mode"), Value::symbol("dark"));
+        // NO `display-type' and NO `background-mode' here either.  GNU's
+        // `x-create-frame' (src/xfns.c:4916) does not set them; its Lisp
+        // caller `x-create-frame-with-faces' (lisp/faces.el:2242-2243) does,
+        // by running `(frame-set-background-mode frame t)' and then
+        // `(face-set-after-frame-default frame parameters)' -- the same pair
+        // `tty-set-up-initial-frame-faces' runs for a terminal frame.
+        // `frame.el's `make-frame' funcalls `frame-creation-function', which
+        // reaches that Lisp, so a frame built through Lisp still gets both.
+        // DIVERGENCES.md 157.
         frame.install_gnu_gui_default_parameters();
         if let Some((public_font, font_parameter)) = inherited_font_state {
             frame.set_known_parameter(FrameParam::Font, public_font);
