@@ -16024,7 +16024,7 @@ means reading `setaf`/`setab` out of terminfo into the capability record -- whic
 already reads that database -- and evaluating the `%?%p1%{8}%<%t...%;` parameter
 language, i.e. a `tparam`.  That is its own entry.
 
-### Found and NOT fixed: there is a second TTY writer, and nothing calls it
+### Found and NOT fixed: there is a second TTY writer, and nothing calls it -- CLOSED by entry 158, 2026-08-19
 
 `neomacs-display-runtime/src/backend/tty/mod.rs` holds another complete terminal
 writer -- 952 lines with its own `ansi::CellAttrs`, its own `write_sgr` and a
@@ -16035,6 +16035,30 @@ Entries 108 and 153 both corrected the live writer (`rif.rs`) and left this one
 untouched, which is only invisible because it never runs.  Deleting it is a
 refactor with its own red/green cycle; recording it here so the next reader of
 `grep write_sgr` is not misled by two answers.
+
+CLOSED, 2026-08-19, by entry 158.  All 2,570 lines are gone, and the deadness
+was proved by rustc rather than by inspection: with the module's items made
+private, `cargo check --workspace --all-targets` calls all 42 of them dead in
+the `(lib)` unit, which is compiled with `cfg(test)` OFF, and keeps all but
+three alive in the `(lib test)` unit, which is compiled with `cfg(test)` ON.
+The workspace warning set is byte-identical across the deletion, 73 lines
+either way.
+
+Two things this section did not know.  The first is that the dead writer was
+wrong about more than colour: it had GNU's underline-style enum inverted,
+mapping `double-line` to the curly sequence and `wave` to SGR 21, where GNU has
+`DOUBLE_LINE=2, WAVE=3` (src/dispextern.h:1760-1765).  The second is the reason
+the file was worth reading before deleting it: `CellAttrs::underline_color` and
+`ansi::underline_color` were the only surviving record in this tree of a GNU
+behaviour the live writer had lost -- `turn_on_face`'s `TF_set_underline_color`
+(src/term.c:2119-2126), whose realized slot comes from the same `map_tty_color`
+this entry threaded for the foreground and the background (src/xfaces.c:6748,
+:6777).  This entry's own sentence, "Only the index.  There is no RGB in a
+realized TTY face at all", covers three slots in GNU and this entry threaded
+two.  158 threads the third, and pulling on it found `Smulx` and `smxx` being
+read out of termcap under names that exist only in terminfo -- so the styled
+underline and the strike-through were unreachable on every terminal, not just
+their colours.
 
 ### Hypotheses eliminated here
 
@@ -16116,7 +16140,8 @@ palettes instead of one, in the protocol crate and again through both live
 editors.  Explicitly NOT fixed, and measured: the SGR spelling is a fixed rule
 where GNU reads terminfo `setaf`, visible only for an index the terminal's
 palette cannot hold; and a second, unreachable TTY writer still lives in
-`backend/tty/mod.rs`.
+`backend/tty/mod.rs` (that one CLOSED by entry 158, 2026-08-19 -- deleted, and
+with it the last record of a third colour slot this entry did not thread).
 
 ## 156. GNU has TWO undecided detectors and this port had one, so every UTF-16 signature decoded as `no-conversion`; and `CODING_MODE_LAST_BLOCK` is raised at three different times relative to detection, not one -- FIXED
 
@@ -16581,3 +16606,512 @@ the flag clear.  143 measured the arm and not the call above it, which is why
 `SourceBlock::Last` survived at the file door for three more entries.
 
 Status: FIXED.
+
+## 158. 2,570 lines of terminal writer that nothing could reach, deleted with the compiler as witness -- and the one behaviour only its tests remembered: GNU emits an underline colour, and this port could not, because it asked termcap for two capabilities that live in terminfo -- FIXED
+
+Entry 155's second hand-back.  It reported `neomacs-display-runtime/src/backend/tty/mod.rs`
+as "a second, unreachable TTY writer, 952 lines, emitting unconditional
+truecolor, driven only by its own 1,618-line test file", and left it standing
+because "deleting it is a refactor with its own red/green cycle".  This entry
+runs that cycle.  The deletion itself is worth about four sentences.  What was
+worth doing was reading the 1,618 lines before they died, because one of the
+things they pinned is a rule GNU obeys and this port did not, and following
+that rule to its source found a second, larger one underneath it.
+
+### The deletion, proven by rustc rather than by grep
+
+The module was invisible to the dead-code lint, and the reason is the same
+escape hatch a 2,037-line dead animation module hid behind: an item that is
+externally reachable is never dead, and every step of the path to this one was
+`pub` -- `lib.rs`'s `pub mod backend`, `backend/mod.rs`'s `pub mod tty`, and
+then `pub struct TtyBackend`, `pub mod ansi`, `pub fn write_sgr` and the rest.
+A pristine `cargo check --workspace --all-targets` reported ZERO warnings for
+the file.  `grep` cannot distinguish that from a module that is used.
+
+So the first commit removes `pub` from every top-level item in the module
+except `pub mod rif;`, which is the one thing outside the module that anything
+names, and from `TtyBackend`'s inherent methods.  The items inside `mod ansi`
+keep their `pub`, because they must stay visible to the enclosing module; it is
+`mod ansi` itself going private that takes them out of the lint's reachable
+set.  Then:
+
+```
+cargo check --workspace --all-targets --message-format short
+
+neomacs-display-runtime (lib)       42 warnings
+neomacs-display-runtime (lib test)   9 warnings (6 duplicates)
+```
+
+Both numbers matter, and they say different things.
+
+The `(lib)` unit is compiled with `cfg(test)` OFF.  All 42 of its warnings are
+`never used` / `never constructed` / `never read` on an item declared in
+`backend/tty/mod.rs`, root to leaf: `TtyBackend`, both of its `impl` blocks and
+its `child_frames` field; `TtyGrid`'s `new`, `resize`, `clear`, `get_mut` and
+`set`; `color_to_rgb8`, `get_terminal_size`, `diff_grids`, `render_full`,
+`rasterize_frame_glyphs`, `glyph_pixel_width`, `apply_tty_window_cursor` and
+`terminal_cursor_state`; and all 21 `ansi` constants plus `cursor_goto`,
+`cursor_shape`, `fg_truecolor`, `bg_truecolor`, `fg_256`, `bg_256`,
+`underline_color`, `write_sgr` and `TerminalCursorShape`.  Nothing in the
+module survives a production compile.
+
+The `(lib test)` unit is compiled with `cfg(test)` ON, and only three of those
+warnings remain: `child_frames`, `set_child_frames` and `init`.  Everything
+else is kept alive by `tty_test.rs` and by nothing else.  That is the whole
+statement: production reachability zero, test reachability total, and the
+compiler naming the exact three items that even the tests never touched.
+
+`--all-targets` covers every binary target in the workspace, `mock-display`
+included.  No feature gate reaches it either: the only `cfg` attribute in the
+file is the `#[cfg(test)]` on its test module, and the `tty-backend` feature
+declared in `neomacs-display-runtime/Cargo.toml` is named by no `cfg` anywhere
+in the tree -- a dead flag guarding a dead module.
+
+Deleting all 2,570 lines changes nothing the compiler can see.  The warning set
+of `cargo check --workspace --all-targets` is byte-identical before and after,
+73 lines either way.
+
+### It was the pre-`rif` design, and it had gone wrong in place
+
+The two writers do not differ in quality; they differ in what they consume.
+`rasterize_frame_glyphs` took a `FrameGlyphBuffer` and divided pixel
+coordinates by `char_width`/`char_height`, which is the GUI pipeline's shape.
+`rif.rs` takes `GlyphRow`/`Glyph` at grid coordinates.  Most of what
+`tty_test.rs` pinned is therefore an artifact of a design that was already
+replaced, not a gap: `color_to_rgb8` and its clamping exist only to turn f32
+GUI colours into truecolor bytes, which is precisely what entry 155 established
+a terminal writer must never do.
+
+Two of its pins were actively wrong, and the live writer already had them right:
+
+* Underline style codes.  `mod.rs:187` documented its mapping as
+  "2=wave, 3=double" and `tty_test.rs:84-120` asserted `2 -> ESC[4:3m` and
+  `3 -> ESC[21m`.  GNU's enum is `SINGLE=1, DOUBLE_LINE=2, WAVE=3, DOTS=4,
+  DASHES=5` (src/dispextern.h:1760-1765).  `rif.rs` maps 2 to `4:2` and 3 to
+  `4:3`, which is GNU's, pinned by
+  `write_sgr_underline_styles_match_gnu_smulx_codes`.
+* The cursor.  `terminal_cursor_state` (mod.rs:668-672) HID the hardware cursor
+  for `FilledBox` and `Hollow` and painted an inverse cell instead.  GNU's TTY
+  redisplay never puts a cursor in the glyph matrix; it hides during the update
+  and calls `tty_show_cursor` at the end (src/term.c:763, :831, :3604, :3766).
+  `rif.rs` keeps the cursor out of the cell attributes and maps both styles to
+  the hardware block, pinned by `rasterize_keeps_phys_filled_box_cursor_out_of_cell_attrs`
+  and `rasterize_ignores_nonselected_hollow_cursor_visual_on_tty`, which are the
+  deliberate inverses of the two dying tests.
+
+Neither is a regression to guard against; both are reasons the file was a
+hazard while it stood.  `grep write_sgr` returned two definitions and only one
+of them ran, and entries 108, 153 and 155 each corrected the live one while
+this one kept an answer entry 153 had already measured as wrong.
+
+Everything else `tty_test.rs` pinned has a live counterpart that is at least as
+strict, and usually stricter: redundant-goto elision (`rif.rs:1666`,
+`:1468-1499`, pinned by exact CUP counts at `rif_test.rs:2021`, `:2910`,
+`:2090`), redundant-SGR elision (`rif.rs:1573-1676`), wide-character
+continuation (the dying test only asserted the characters appeared, while
+`diff_grids` actually emitted a spurious goto for the padding column;
+`rif.rs:1289`, `:1300`, `:1670` skip it and `rif_test.rs:1983-2000` asserts the
+absence of the goto by address), zero-area grids (`rif.rs:1183`,
+`rif_test.rs:3464`), and the whole terminal lifecycle, which lives in
+`neomacs-bin/src/tty_init.rs:271-341` and is pinned byte for byte by
+`tty_init_test.rs:120-131`.  `ansi::ENABLE_MOUSE` and `DISABLE_MOUSE` were dead
+inside the dead module -- `TtyBackend::init` never referenced them.
+
+### The one thing only those tests remembered
+
+`CellAttrs::underline_color` (mod.rs:190) and `ansi::underline_color`
+(mod.rs:128-131), pinned by `tty_test.rs:161-171`, `:196` and `:873-901`.
+
+`rif.rs` had no equivalent at any layer.  Its `CellAttrs` carried
+`fg, bg, bold, italic, underline, strikethrough, inverse` and no underline
+colour; `resolve_attrs` never read one; `write_sgr_with_capabilities` ended
+after the background.  A workspace-wide search for the byte sequence `ESC[58`
+found it only in the module that was about to be deleted.
+
+GNU emits it.  `turn_on_face`'s colour block ends:
+
+```c
+	ts = tty->TF_set_underline_color;
+	if (ts && face->underline_color)
+	  {
+	    p = tparam (ts, NULL, 0, face->underline_color, 0, 0, 0);
+	    OUTPUT (tty, p);
+	    xfree (p);
+	  }
+```
+
+(src/term.c:2119-2126.)  `face->underline_color` is `unsigned long`
+(src/dispextern.h:1811) and `realize_tty_face` fills it through the same
+`map_tty_color` as the foreground and the background (src/xfaces.c:6748 and
+:6777) -- so it is a `tty-color-desc` index, exactly the quantity entry 155
+threaded for the other two slots, in a third slot 155 did not know about.
+
+`TF_set_underline_color` is not a capability GNU reads.  It is one fixed string
+GNU installs itself whenever `TF_set_underline_style` is set
+(src/term.c:4705-4708):
+
+```c
+  if (tty->TF_set_underline_style)
+    /* Standard escape sequence to set the underline color.
+       Requires a single parameter, the color index.  */
+    tty->TF_set_underline_color = "\x1b[58:2::%p1%{65536}%/%d:%p1%{256}%/%{255}%&%d:%p1%{255}%&%dm";
+```
+
+One parameter, divided into three channels.  So the same realized number spells
+as a colour triple regardless of what the terminal's depth made it mean -- and
+that is a real property of GNU, not a reading of the source.  Measured, both
+editors on a pty, `TERM=tmux-256color`, 24x80, GNU Emacs 31.0.90:
+
+```
+face                                        GNU                        neomacs before
+(:underline (:color "red" :style wave))     ESC[4:3m ESC[58:2::0:0:1m  ESC[4m
+(:underline (:color "red"))                 ESC[4m   ESC[58:2::0:0:1m  ESC[4m
+(:underline "red")                          ESC[4m   ESC[58:2::0:0:1m  ESC[4m
+(:underline (:color "black" :style wave))   ESC[4:3m                   ESC[4m
+(:underline (:color foreground-color ...))  ESC[4:3m                   ESC[4m
+(:underline (:style dots))                  ESC[4:4m                   ESC[4m
+(:underline (:color "red" ...) :fg "green") ESC[4:3m ESC[58:2::0:0:1m  ESC[4m
+(:underline t)                              ESC[4m                     ESC[4m
+(:strike-through t)                         ESC[9m                     (nothing)
+
+1 of 9 identical
+```
+
+Both columns are the SGR run immediately preceding the text, projected onto the
+three attributes under measurement.  The projection is necessary and is not
+hiding anything: neomacs writes a self-contained run per cell span (a reset,
+then every attribute, then explicit `39`/`49`) where GNU writes an incremental
+one, so an unprojected comparison compares that architectural difference and
+nothing else -- it reports 0 of 9 identical even for `(:underline t)`, which
+both editors get right.
+
+and with `COLORTERM=truecolor` the same `"red"` answers `ESC[58:2::205:0:0m`,
+because the number is whatever `tty-color-desc` put there.  205,0,0 is the
+`tty-color-alist` red, not X11's -- entry 155's rule holding in a third slot.
+
+Four rules fall out of that table, all four now pinned:
+
+1. **It comes last**, after the foreground and the background, because it is
+   the last statement of `turn_on_face`'s colour block.  With a green
+   foreground GNU writes `ESC[4:3m ESC[32m ESC[58:2::0:0:1m`, in that order.
+2. **It does not depend on the underline STYLE.**  A plain single underline
+   with a colour gets both `ESC[4m` and the `58`.
+3. **A realized 0 emits nothing.**  GNU's slot is one `unsigned long` and
+   `if (ts && face->underline_color)` cannot tell black from unset, so an
+   explicit `:color "black"` loses its colour in GNU too -- measured, on both
+   colour depths, since "black" realizes to subscript 0 on one and to pixel
+   0x000000 on the other.  Reproduced deliberately.
+4. **An underline with no colour of its own emits nothing**, and neither does
+   `(:color foreground-color)`.  GNU zeroes the slot for `:underline t`
+   (src/xfaces.c:6741), for a `(:style STYLE)` with no `:color` (:6756) and for
+   `foreground-color` (:6772-6773).
+
+A fifth rule is a reading rather than a measurement, and is flagged as one at
+the site.  Every arm of `turn_on_face` above the colour block is gated on
+`MAY_USE_WITH_COLORS_P`; the `Setulc` statement is gated on
+`if (ts && face->underline_color)` and nothing else (src/term.c:2119-2120).  So
+GNU on a terminal whose `ncv` forbids underline with colours draws no underline
+and writes a colour for it anyway.  It cannot be measured: no entry ncurses
+ships carries both `Smulx` and an `ncv` -- checked on `tmux-256color`,
+`alacritty`, `kitty`, `vte-256color` and `tmux`, all of which have `Smulx` and
+none of which have `ncv`.  The literal reading is what got implemented, because
+adding the `ncv` term would be inventing a rule GNU does not have, and it is
+pinned so that it stays literal rather than drifting to the `supports` gate its
+neighbours use.
+
+Rule 4 is why the terminal underline colour is a SEPARATE field rather than the
+GUI one quantized.  `ResolvedFace::underline_color` deliberately defaults to
+`rf.fg`, so that the GUI draws a plain `:underline t` in the text colour;
+defaulting the terminal slot the same way would put a colour under every
+underline in the editor.  `Option<TerminalColor>` with `None` meaning GNU's 0
+makes the two unconfusable, and the path is the one entry 155 built:
+
+```
+RealizedColor::terminal on the underline  BOTH realization paths
+ResolvedFace::terminal_underline_color    all three bridge sites,
+                                          from NeoColor::terminal
+DisplayRowFace::terminal_underline_color  threaded, never recomputed
+Face::terminal_underline_color            protocol
+CellAttrs::underline_color                resolve_attrs carries it through
+write_sgr_with_capabilities               last, gated on Smulx and colours
+```
+
+The first line of that table is the one that nearly did not get written, and it
+is entry 155's fourth eliminated hypothesis reappearing in a third slot.  155
+found that "an anonymous attribute plist is realized in another crate entirely,
+and threading only the named-face path silently drops its colour".  The same
+was true here and had to be checked rather than assumed: `Face::from_plist_realized`
+realized `:foreground` and `:background` with `realize_color_spec`, which
+consults the palette, and realized `:underline`'s colour with `Color::parse`,
+which does not.  Everything downstream of it would have been correct and inert
+-- an inline `(:underline (:color "red"))` would have reached the writer as a
+pixel with no index, and a pixel with no index is exactly what the writer is
+right to refuse to emit.  GNU has no separate path here: `merge_face_ref` folds
+the plist into the same lface vector and the one `realize_tty_face` that
+follows maps all three colours through `map_tty_color`.  Both of GNU's
+underline spellings now go through the palette, the string form
+(src/xfaces.c:6744-6750) and the `(:color ...)` member (:6771-6779), and the
+pin asserts the absence as well as the presence: no palette is a GUI frame and
+must realize NO index, which is what keeps a GUI underline colour out of the
+terminal writer's slot.
+
+### And underneath it: two capabilities read from the wrong namespace
+
+The measurement above has a second divergence in it that has nothing to do with
+colour.  On `TERM=tmux-256color` GNU wrote `ESC[4:3m` for the wave and neomacs
+wrote `ESC[4m`.  `tmux-256color` HAS `Smulx`; `rif.rs` already had the styled
+branch and the `UnderlineStyled` capability to gate it.  The capability was
+false.
+
+It was false on every terminal, and always had been.
+`terminal_capabilities.rs` read every capability with `tgetstr`, which resolves
+TERMCAP names -- two letters, and nothing else.  `Smulx` and `smxx` have no
+termcap spelling at all.
+
+GNU does not read them that way.  Under `#ifdef TERMINFO` it uses `tigetstr`,
+`smxx` at src/term.c:4587 and `Smulx` at :4694; the `tgetstr` fallback under
+each is for a build with no terminfo, and GNU's own comment on it doubts the
+result:
+
+```c
+  /* FIXME: Is calling tgetstr here for non-terminfo case correct,
+     even though "smxx" is more than 2 characters?  */
+```
+
+(src/term.c:4591-4592.)  The doubt is right.  Probed directly against ncurses on
+this machine:
+
+```
+tmux-256color:   Smulx  tgetstr=null   tigetstr=FOUND
+                 smxx   tgetstr=null   tigetstr=FOUND
+                 us     tgetstr=FOUND  tigetstr=null
+xterm-256color:  Smulx  tgetstr=null   tigetstr=null
+                 smxx   tgetstr=null   tigetstr=FOUND
+```
+
+So two attributes were unreachable in this port, for every user, on every
+terminal:
+
+```
+face                  GNU on tmux-256color   neomacs before
+(:underline (:style wave))  ESC[4:3m         ESC[4m
+(:strike-through t)         ESC[9m           nothing at all
+```
+
+The third line of that probe is why the fix is not "move everything to
+terminfo": `tigetstr` answers null for `us`, `so` and `ZH`, whose terminfo
+spellings are `smul`, `smso` and `sitm`.  Both directions fail silently and in
+the same way, so the namespace is now part of the type:
+
+```rust
+pub(crate) enum StringCapability<'a> {
+    Termcap(&'a str),
+    Terminfo(&'a str),
+}
+```
+
+```rust
+    underline:        has(database, Termcap("us")),
+    underline_styled: has(database, Terminfo("Smulx")),
+    strike_through:   has(database, Terminfo("smxx")),
+```
+
+`tgetent` is what sets ncurses' `cur_term`, so `tigetstr` reads the entry the
+database already opened; no second `setupterm` is needed.  `tigetstr` reports a
+name that is not a string capability as `(char *) -1` rather than NULL, which is
+handled alongside NULL.  Numbers and flags keep `&str` under
+`get_termcap_number`/`get_termcap_flag`, because every one GNU reads -- `Co`,
+`NC`, `in`, `ut` -- has a two-letter name.
+
+Why no test caught it, twice over.  The TUI parity suite runs both editors on
+`TERM=screen-256color` (`neomacs-tui-tests/src/lib.rs:284`), and that entry has
+neither `Smulx` nor `smxx` -- probed:
+
+```
+screen-256color: Smulx tgetstr=null  tigetstr=null
+                 smxx  tgetstr=null  tigetstr=null
+                 us    tgetstr=FOUND tigetstr=null
+```
+
+so on the one terminal the suite measures, "absent" is the right answer and GNU
+emits nothing either.  Every one of those tests was green for a correct reason
+while production was wrong on every other terminal.  It also means this fix
+moves no TUI snapshot, which the gates confirm.
+
+And at the unit level: every existing test in that file drives a
+`FakeCapabilityDatabase` whose backing store is a `HashMap<&str, &str>`, and a
+`HashMap` will answer any key.  `capability_names_match_the_ones_gnu_reads_in_init_tty`
+inserted `"Smulx"` and `"smxx"` and asserted they came back, which is a test of
+the fake.  The new pin asks the REAL database for `tmux-256color` and
+`xterm-256color`, and asserts the asymmetry between them.  That is entry 206's
+rule restated once more: a capability gate must attest what the encoder really
+receives, not that a name was mentioned somewhere.
+
+### Hypotheses eliminated here
+
+1. *The dying test file pins nothing the live writer lacks; it is pure
+   deletion.*  No -- the coloured underline, above.  This is the one thing the
+   brief asked to look for carefully and it was there.
+2. *The underline colour is `Face::underline_color` quantized at the writer.*
+   No, twice over.  It must not be quantized at all (entry 155), and it is not
+   even the same quantity: the GUI field defaults to the foreground and GNU's
+   terminal slot stays 0 in exactly that case.  Threading one field would have
+   put a colour under every plain underline in the editor.
+3. *Threading the named-face path is threading the feature.*  No -- the
+   anonymous attribute plist realizes in a different function with a different
+   colour call, and the whole chain would have been correct and inert without
+   it.  This is entry 155's fourth eliminated hypothesis holding in a third
+   colour slot, and it was checked rather than assumed precisely because 155
+   recorded it.
+4. *`Smulx` was absent from the terminals under test.*  No: `infocmp -x` shows
+   it on `tmux-256color`, `alacritty`, `kitty` and `vte-256color`.  It was the
+   lookup, not the terminals.
+5. *Reproducing GNU's `58:2::0:0:N` on a 256-colour terminal is reproducing a
+   bug and should be corrected.*  Not a decision this entry gets to make: GNU
+   emits it, measured, and the entry's job is parity.  It is documented at the
+   emission site with the capture, so a future entry that wants to diverge does
+   so knowingly.
+6. *The end-to-end measurement can be taken on any `Smulx` terminal.*  No --
+   see below; on `TERM=alacritty` neomacs does not start cleanly, so the
+   measurement had to move to `tmux-256color`.
+
+### Found and NOT fixed: neomacs raises an error at startup on a TERM with no `term/<TERM>.el`
+
+Reproduced while looking for a terminal to measure on.  `TERM=alacritty`,
+`neomacs -nw -Q` on a pty:
+
+```
+ESC[24;1H ... Wrong type argument: frame-initial-p, #<terminal 0 on /dev/tty>
+```
+
+GNU on the same TERM starts silently.  It is not specific to `-Q`, and it is
+not caused by anything loaded: a `-l` of an empty file reproduces it, and so
+does `neomacs -nw -Q` with no file at all.  It costs more than a message: the
+error aborts `command-line-1`, so `-l` and `--eval` are never processed --
+`neomacs -nw -Q -l file.el` on `TERM=alacritty` does not run `file.el`, while
+the same command on `TERM=xterm-256color` does.
+
+`alacritty` is a TERM with no `lisp/term/alacritty.el`, so
+`tty-run-terminal-initialization`'s fallback path is the suspect; the
+`frame-initial-p` in the message is a function applied to a terminal object
+where GNU applies it to a frame.  `xterm-256color`, `tmux-256color` and
+`vte-256color` are unaffected, which is consistent.  Not this entry's, and
+recorded here because it is the reason the parity capture in this entry is on
+`tmux-256color` rather than the alacritty entry the divergence was first found
+on.
+
+### Found and NOT fixed: `Setulc` is a fixed string here and a fixed string in GNU, but the STYLE sequence is a rule here and a capability in GNU
+
+Entry 155 recorded the same shape for `setaf`: neomacs emits a hardcoded ANSI
+spelling where GNU emits the entry's own `setaf` through `tparam`.  The styled
+underline has it too -- `write_sgr_with_capabilities` emits `ESC[4:Nm` where
+GNU emits `tty->TF_set_underline_style` through `tparam`, and the two differ
+for a terminal whose `Smulx` is not the kitty spelling.  Every `Smulx` in
+ncurses' shipped database is `\E[4:%p1%dm`, so this is invisible today.  The
+underline COLOUR has no such gap: GNU's string is a literal in `term.c`, not
+read from the entry at all, so emitting it literally is exactly what GNU does.
+
+### Gates
+
+All against a `cargo xtask fresh-build --release` binary carrying the change,
+never piped, with the pdump newer than the binary.
+
+```
+neomacs-display-runtime + display-protocol
+  + layout-engine (debug)                      3454 run, 3454 passed, 4 skipped
+neomacs-display-runtime backend::tty            122 run,  122 passed
+neomacs startup::tty_init + terminal_capabilities
+  + termcap_input                                25 run,   25 passed
+neovm-core (debug, --no-fail-fast)             9082 run, 9082 passed, 51 skipped
+neomacs-tui-tests (release)                     915 run,  912 passed, 3 failed
+neomacs-melpa-tests tui_parity_tests (release)   13 run,   12 passed, 1 failed
+cargo check --workspace --all-targets           clean, warning set unchanged
+cargo fmt --all --check                         clean
+```
+
+Binary 08:30, pdump 08:32 -- pdump newer than the binary.
+
+The four failures are all the environment, on a machine whose load average was
+37-61 while these ran, and each passes alone:
+
+* `neomacs-tui-tests::eval_elisp::set_visited_file_name_elisp_functions_match_gnu_semantics`
+  and `files_dired::keyboard_quit_after_find_file_ctrl_h_returns_to_scratch`
+  are entry 96's long-worktree-path pair, recorded by 153 and by 155 as well.
+* `files_dired::dired_mark_flag_and_unmark_current_file` is new to this run and
+  passes alone in 14.4s.
+* `tui_parity_tests::leuven_theme_test::leuven_theme_real_color_lifecycle_matches_gnu`
+  failed with "GNU timed out waiting for ... readiness marker", i.e. on the GNU
+  peer, not on this branch's; it passes alone in 31.3s.
+
+The colour tests specifically all pass, and they are the ones this entry could
+have broken: `tty_palette_approximates_exactly_as_gnu_does` (entry 153's
+5,832-sample sweep on four palettes), `tty_color_approximate_matches_gnu_over_the_whole_rgb_cube`
+(the same samples through both real editors on a pty), `face_colours_reach_the_wire_as_the_index_lisp_computed`,
+and the whole melpa colour set -- `gruvbox_theme_real_terminal_profiles_match_gnu`,
+`leuven_theme` and `beacon`'s truecolor lifecycle.
+
+### Measured after
+
+The nine-face capture, re-run against a binary carrying the change, on both
+colour depths:
+
+```
+TERM=tmux-256color COLORTERM=-           9 of 9 identical
+TERM=tmux-256color COLORTERM=truecolor   9 of 9 identical
+```
+
+against 1 of 9 before -- and the one that already matched was `(:underline t)`,
+the only face in the set with neither a style nor a colour.
+
+### Entry 155, dated 2026-08-19: the hand-back is closed
+
+"A second, unreachable TTY writer -- `backend/tty/mod.rs`, 952 lines, emits
+unconditional truecolor, driven only by its own 1,618-line test file."  Closed.
+All 2,570 lines are gone, with `cargo check --workspace --all-targets` as the
+witness rather than inspection, and the warning set of the workspace unchanged
+across the deletion.
+
+155 was right that "deleting it is a refactor with its own red/green cycle" and
+right that the file was misleading anyone who grepped `write_sgr`.  What 155
+could not know, because it did not read the 1,618 lines, is that the file was
+also the only surviving record of a GNU behaviour this port had lost: the
+underline colour, whose realized slot is filled by the same `map_tty_color`
+155 had just finished threading for the foreground and the background.  155's
+own sentence -- "Only the index.  There is no RGB in a realized TTY face at
+all" -- covers three slots in GNU (`src/dispextern.h:1804-1811`), and 155
+threaded two.
+
+One correction to 155's accounting of what the dead writer got wrong.  155
+described it only as emitting "`38;2;R;G;B` unconditionally, on every
+terminal".  True, and not the whole of it: it also had GNU's underline-style
+enum inverted, mapping `double-line` to the curly sequence and `wave` to
+SGR 21.  A reader taking the dead file as a reference for anything would have
+inherited that too.
+
+### Corrections to earlier entries
+
+Entry 153, dated 2026-08-19.  Its list of what the terminal writer emits and
+what it gates each attribute on is complete for the attributes it enumerates,
+but two of those gates could never open.  `underline_styled` and
+`strike_through` were read out of termcap under names that exist only in
+terminfo, so `a_styled_underline_degrades_to_a_plain_one_without_smulx` was
+measuring the only branch any terminal could reach, and `ESC[9m` was never
+emitted at all.  The tests were green because the fake database answers any
+key.  Nothing 153 asserted about the SGR spellings is wrong; what is added is
+that two of them were unreachable in production for the whole life of the
+capability layer.
+
+Status: FIXED.  The second writer is gone and rustc, not inspection, is the
+proof: 42 items dead with `cfg(test)` off, 3 dead with it on, and a workspace
+warning set that does not move when 2,570 lines leave.  The behaviour its tests
+were the only record of has a home in the writer that runs: the realized
+underline colour rides the face the way the foreground and the background do,
+and `turn_on_face`'s `TF_set_underline_color` is emitted last, gated on `Smulx`
+and on the terminal having colours, with GNU's conflation of an explicit black
+with "no colour" reproduced on purpose and measured.  Underneath it, `Smulx`
+and `smxx` are read from terminfo instead of termcap, which is what GNU does,
+so a styled underline and a strike-through are emitted at all for the first
+time.  Explicitly NOT fixed, and recorded: neomacs raises `frame-initial-p` at
+startup on a TERM with no `term/<TERM>.el` and swallows `-l`/`--eval` with it;
+and the styled-underline SEQUENCE remains a fixed rule where GNU reads
+`Smulx`'s own string, invisible on every entry ncurses ships.
