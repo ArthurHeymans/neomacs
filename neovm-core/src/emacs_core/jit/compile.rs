@@ -173,14 +173,15 @@ pub extern "C" fn neovm_jit_gc_restore(saved: i64) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_cons(car: i64, cdr: i64) -> i64 {
+    // No rooting: `Value::cons` is pure allocation (`alloc_cons` — free-list
+    // pop or block bump, allocate-black under a concurrent cycle) and never
+    // reaches a GC safe point, so nothing can collect while `car`/`cdr` are
+    // in flight. Root snapshots happen only at mutator safe points (the
+    // backedge/call shims, which root their live values) — the same invariant
+    // that lets jitted code hold values in native slots between polls at all.
     let car = Value::from_bits(car as usize);
     let cdr = Value::from_bits(cdr as usize);
-    let saved = save_scratch_gc_roots();
-    push_scratch_gc_root(car);
-    push_scratch_gc_root(cdr);
-    let result = Value::cons(car, cdr).bits() as i64;
-    restore_scratch_gc_roots(saved);
-    result
+    Value::cons(car, cdr).bits() as i64
 }
 
 std::thread_local! {
@@ -5875,28 +5876,13 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                             .ok_or(CompileError::UnsupportedOp("mir-cons-no-rt"))?;
                         let car_v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, *car)?;
                         let cdr_v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, *cdr)?;
-                        // Residual = operand-stack values live across the allocation
-                        // (pre-op stack below car+cdr). Cons pops exactly 2.
-                        let residual_len = inst.pre_stack.len().saturating_sub(2);
-                        // Gather the to-root residuals (force-tag ALL so
-                        // downstream `cval` state never moves; the helper
-                        // applies the compile-time skip and the RUNTIME tag
-                        // test around the save/push/restore trio).
-                        let mut vals: Vec<ClifValue> = Vec::with_capacity(residual_len);
-                        for k in 0..residual_len {
-                            let rv = inst.pre_stack[k];
-                            let v = mir_force_tagged(&mut fb, &mut cval, &mut cval_raw, rv)?;
-                            if m.value_type(rv).never_needs_gc_root() && jit_lever1_on() {
-                                continue;
-                            }
-                            vals.push(v);
-                        }
-                        let saved = emit_cond_residual_roots_pre(&mut fb, rt, &vals);
-                        // The shim self-roots car+cdr; infallible + context-free (no
-                        // status, no vmctx) — no STATUS branch / signal exit.
+                        // No residual rooting: the cons shim is pure
+                        // allocation and never reaches a GC safe point (see
+                        // `neovm_jit_cons`), so nothing live across it can be
+                        // collected. Infallible + context-free (no status, no
+                        // vmctx) — no STATUS branch / signal exit.
                         let call = fb.ins().call(rt.refs.cons, &[car_v, cdr_v]);
                         let result = fb.inst_results(call)[0];
-                        emit_cond_residual_roots_post(&mut fb, rt, saved);
                         cval[r] = Some(result);
                         cval_raw[r] = false;
                     }
@@ -7448,22 +7434,11 @@ fn lower_simple_op(
             let rt = rt.ok_or(CompileError::UnsupportedOp("cons"))?;
             let cdr = stack.pop().ok_or(CompileError::StackUnderflow)?;
             let car = stack.pop().ok_or(CompileError::StackUnderflow)?;
-            // The cons shim roots car+cdr across the allocation; we must root any
-            // *other* live operand-stack values too (none in the common case).
-            let result = if stack.is_empty() {
-                let call = fb.ins().call(rt.refs.cons, &[car, cdr]);
-                fb.inst_results(call)[0]
-            } else {
-                let saved = {
-                    let c = fb.ins().call(rt.refs.gc_save, &[]);
-                    fb.inst_results(c)[0]
-                };
-                emit_residual_roots(fb, rt, stack.as_slice());
-                let call = fb.ins().call(rt.refs.cons, &[car, cdr]);
-                let r = fb.inst_results(call)[0];
-                fb.ins().call(rt.refs.gc_restore, &[saved]);
-                r
-            };
+            // No rooting at all: the cons shim is pure allocation and never
+            // reaches a GC safe point (see `neovm_jit_cons`), so neither
+            // car/cdr nor the residual operand stack can be collected under it.
+            let call = fb.ins().call(rt.refs.cons, &[car, cdr]);
+            let result = fb.inst_results(call)[0];
             stack.push(result);
         }
         Op::VarBind(idx) => {
