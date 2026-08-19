@@ -46,10 +46,11 @@ unsafe extern "C" {
 /// at all.  GNU's own comment on that fallback doubts it:
 ///
 /// ```text
+///   /* FIXME: Is calling tgetstr here for non-terminfo case correct,
 ///      even though "smxx" is more than 2 characters?  */
 /// ```
 ///
-/// (src/term.c:4592.)  The doubt is right.  Measured against ncurses on
+/// (src/term.c:4591-4592.)  The doubt is right.  Measured against ncurses on
 /// tmux-256color, whose `infocmp -x` carries both long names:
 ///
 /// ```text
