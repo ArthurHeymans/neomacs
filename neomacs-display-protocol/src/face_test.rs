@@ -60,25 +60,6 @@ fn basic_face_ids_preserve_gnu_slots_and_names() {
 }
 
 #[test]
-fn basic_face_cache_roles_map_to_gnu_lisp_faces() {
-    assert_eq!(BasicFaceId::ModeLineActive.lisp_face_name(), "mode-line");
-    assert_eq!(
-        BasicFaceId::ModeLineInactive.lisp_face_name(),
-        "mode-line-inactive"
-    );
-    assert_eq!(
-        BasicFaceId::HeaderLineActive.lisp_face_name(),
-        "header-line"
-    );
-    assert_eq!(
-        BasicFaceId::HeaderLineInactive.lisp_face_name(),
-        "header-line-inactive"
-    );
-    assert_eq!(BasicFaceId::TabBar.lisp_face_name(), "tab-bar");
-    assert_eq!(BasicFaceId::TabLine.lisp_face_name(), "tab-line");
-}
-
-#[test]
 fn underline_style_codes_match_gnu_face_underline_type() {
     let styles = [
         (UnderlineStyle::None, 0),

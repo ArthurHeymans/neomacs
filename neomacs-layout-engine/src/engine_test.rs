@@ -38,7 +38,7 @@ use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_chrome::{FrameChromeContent, FrameChromeKind};
 use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, FrameGlyph, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{
-    Glyph, GlyphArea, GlyphProvenance, GlyphRow, GlyphStringBufferRange, GlyphType,
+    Glyph, GlyphArea, GlyphProvenance, GlyphRow, GlyphStringBufferRange, GlyphType, MatrixRow,
     NO_BUFFER_POSITION_CHARPOS,
 };
 use neomacs_display_protocol::types::FaceId;
@@ -26478,6 +26478,262 @@ fn p52_selected_window_change_re_evaluates_both_windows_mode_lines() {
         2,
         "a selected-window change must re-evaluate BOTH windows' mode lines \
          (the active/inactive face flips on both)"
+    );
+}
+
+/// GNU realizes the selected window's mode-line cache slot from
+/// `mode-line-active`, not from its `mode-line` parent
+/// (`realize_basic_faces`, xfaces.c; `display_mode_lines`, xdisp.c).  This is
+/// observable even when both rows carry the right numeric basic-face ids: the
+/// selected row must receive the active face's explicit decoration and font
+/// overrides before its height is measured.
+#[test]
+fn selected_mode_line_realizes_active_face_and_matches_inactive_metrics() {
+    use neomacs_display_protocol::face::FaceAttributes;
+    use neovm_core::face::{Color, Face, FaceHeight};
+
+    let (mut eval, frame_id, buf_id, selected) = incr_editing_frame("body\n", 800, 240);
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.set_buffer_local("mode-line-format", Value::string("ML"));
+    }
+
+    // Deliberately make the parent visibly and metrically incompatible with
+    // both leaf faces.  This is the minimal version of the user's theme:
+    // selecting the parent leaks an overline and shrinks only the active row.
+    {
+        let table = eval.face_table_mut();
+
+        let mut parent = Face::new("mode-line");
+        parent.foreground = Some(Color::rgb(0xff, 0x00, 0x00));
+        parent.height = Some(FaceHeight::Absolute(80));
+        parent.overline = Some(true);
+        table.define("mode-line", parent);
+
+        let mut active = Face::new("mode-line-active");
+        active.inherit = Some(Value::symbol("mode-line"));
+        active.foreground = Some(Color::rgb(0xff, 0xff, 0xff));
+        active.height = Some(FaceHeight::Absolute(140));
+        active.overline = Some(false);
+        table.define("mode-line-active", active);
+
+        let mut inactive = Face::new("mode-line-inactive");
+        inactive.inherit = Some(Value::symbol("mode-line"));
+        inactive.foreground = Some(Color::rgb(0x80, 0x80, 0x80));
+        inactive.height = Some(FaceHeight::Absolute(140));
+        inactive.overline = Some(false);
+        table.define("mode-line-inactive", inactive);
+    }
+
+    let inactive = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected,
+            neovm_core::window::SplitDirection::Horizontal,
+            buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window");
+    {
+        let frames = eval.frame_manager_mut();
+        frames
+            .get_mut(frame_id)
+            .expect("frame")
+            .set_window_system(Some(Value::symbol("neo")));
+        for window_id in [selected, inactive] {
+            frames.set_window_parameter(
+                window_id,
+                Value::symbol("mode-line-format"),
+                Value::string("ML"),
+            );
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+
+    let mode_line = |window_id: neovm_core::window::WindowId| {
+        let entry = state
+            .window_matrices
+            .iter()
+            .find(|entry| entry.window_id.get() == window_id.0 as i64)
+            .unwrap_or_else(|| panic!("window {window_id:?} matrix"));
+        entry
+            .matrix
+            .rows
+            .iter()
+            .find(|row| row.enabled && row.role == GlyphRowRole::ModeLine)
+            .unwrap_or_else(|| {
+                panic!(
+                    "window {window_id:?} mode-line row; selected={} rows={:?}",
+                    entry.selected,
+                    entry
+                        .matrix
+                        .rows
+                        .iter()
+                        .map(|row| (row.enabled, row.role, row.height_px))
+                        .collect::<Vec<_>>()
+                )
+            })
+    };
+    let active_row = mode_line(selected);
+    let inactive_row = mode_line(inactive);
+    let active_glyph = active_row.glyphs[GlyphArea::Text.index()]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: 'M' }))
+        .expect("active mode-line text glyph");
+    let active_face = state
+        .faces
+        .get(&active_glyph.face_id)
+        .expect("published active mode-line face");
+
+    assert_eq!(
+        active_face.lisp_name.as_deref(),
+        Some("mode-line-active"),
+        "the selected row must realize GNU's mode-line-active face"
+    );
+    assert!(
+        !active_face.attributes.contains(FaceAttributes::OVERLINE),
+        "mode-line-active's explicit nil must suppress its parent's overline"
+    );
+    assert_eq!(
+        active_row.height_px, inactive_row.height_px,
+        "equal active/inactive face heights must produce equal mode-line rows"
+    );
+}
+
+/// GNU `lookup_named_face` starts an inherited basic face from the frame's
+/// unremapped default face (xfaces.c), so buffer-local `default` scaling affects
+/// body text but not a mode line that has no direct remapping.  Treemacs relies
+/// on exactly this separation: `treemacs-text-scale` remaps only `default`.
+#[test]
+fn buffer_default_text_scale_does_not_shrink_inactive_mode_line() {
+    use neovm_core::face::{Face, FaceHeight};
+
+    let (mut eval, frame_id, main_buffer, selected) = incr_editing_frame("main body\n", 800, 240);
+    realize_test_gui_frame(&mut eval, frame_id);
+    let side_buffer = eval
+        .buffer_manager_mut()
+        .create_buffer("*treemacs-like-scaled-buffer*");
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(main_buffer)
+            .expect("main buffer");
+        buffer.set_buffer_local("mode-line-format", Value::string("MAIN"));
+    }
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(side_buffer)
+            .expect("scaled side buffer");
+        buffer.insert("scaled body\n");
+        buffer.set_buffer_local("mode-line-format", Value::string("TREEMACS"));
+        buffer.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![Value::keyword("height"), Value::make_float(0.7)]),
+                Value::symbol("default"),
+            ])]),
+        );
+    }
+    {
+        let table = eval.face_table_mut();
+
+        let mut default = Face::new("default");
+        default.height = Some(FaceHeight::Absolute(140));
+        table.define("default", default);
+
+        let mut mode_line = Face::new("mode-line");
+        mode_line.height = Some(FaceHeight::Relative(1.0));
+        table.define("mode-line", mode_line);
+
+        let mut active = Face::new("mode-line-active");
+        active.inherit = Some(Value::symbol("mode-line"));
+        table.define("mode-line-active", active);
+
+        let mut inactive = Face::new("mode-line-inactive");
+        inactive.inherit = Some(Value::symbol("mode-line"));
+        table.define("mode-line-inactive", inactive);
+    }
+
+    let side = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected,
+            neovm_core::window::SplitDirection::Horizontal,
+            side_buffer,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window");
+    {
+        let frames = eval.frame_manager_mut();
+        frames
+            .get_mut(frame_id)
+            .expect("frame")
+            .set_window_system(Some(Value::symbol("neo")));
+        for (window_id, label) in [(selected, "MAIN"), (side, "TREEMACS")] {
+            frames.set_window_parameter(
+                window_id,
+                Value::symbol("mode-line-format"),
+                Value::string(label),
+            );
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state");
+    let window_rows = |window_id: neovm_core::window::WindowId| {
+        state
+            .window_matrices
+            .iter()
+            .find(|entry| entry.window_id.get() == window_id.0 as i64)
+            .unwrap_or_else(|| panic!("window {window_id:?} matrix"))
+            .matrix
+            .rows
+            .iter()
+            .filter(|row| row.enabled)
+            .collect::<Vec<_>>()
+    };
+    let main_rows = window_rows(selected);
+    let side_rows = window_rows(side);
+    fn row_for_role<'a>(rows: &'a [&MatrixRow], role: GlyphRowRole) -> &'a MatrixRow {
+        rows.iter()
+            .copied()
+            .find(|row| row.role == role)
+            .unwrap_or_else(|| panic!("{role:?} row in {rows:?}"))
+    }
+    fn body_text_row<'a>(rows: &'a [&MatrixRow]) -> &'a MatrixRow {
+        rows.iter()
+            .copied()
+            .find(|row| row.role == GlyphRowRole::Text && row.displays_text)
+            .unwrap_or_else(|| panic!("body text row in {rows:?}"))
+    }
+    let main_body = body_text_row(&main_rows);
+    let side_body = body_text_row(&side_rows);
+    let main_mode_line = row_for_role(&main_rows, GlyphRowRole::ModeLine);
+    let side_mode_line = row_for_role(&side_rows, GlyphRowRole::ModeLine);
+
+    assert!(
+        side_body.height_px < main_body.height_px,
+        "precondition: the side buffer's default remap must shrink its body text; main={main_body:?} side={side_body:?}"
+    );
+    assert_eq!(
+        side_mode_line.height_px, main_mode_line.height_px,
+        "a default-only buffer remap must not scale the inactive mode line"
     );
 }
 

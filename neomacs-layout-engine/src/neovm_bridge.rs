@@ -3622,15 +3622,17 @@ pub struct FaceResolver {
     font_sizing: FontSizing,
 }
 
-/// GNU basic-face lookup has two identity outcomes.  A canonical lookup keeps
-/// the fixed `enum face_id` slot; a window-named lookup may incorporate
-/// `face-remapping-alist` and therefore needs a content-addressed dynamic slot.
-/// Keeping that distinction typed prevents a remapped face from accidentally
-/// retaining the canonical basic-face id.
+/// GNU basic-face lookup has two realization outcomes.  A canonical lookup
+/// keeps the fixed `enum face_id` slot.  A window-named lookup starts from the
+/// frame's unremapped default, then may incorporate direct or inherited entries
+/// from `face-remapping-alist`, so it needs a content-addressed dynamic slot.
+/// Keeping the base in the variant name prevents window chrome from
+/// accidentally inheriting a buffer-local `default` remap (such as Treemacs'
+/// text scale).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BufferBasicFaceLookup {
     Canonical(BasicFaceId),
-    WindowNamed(BasicFaceId),
+    WindowNamedOverFrameDefault(BasicFaceId),
 }
 
 impl FaceResolver {
@@ -4155,7 +4157,7 @@ impl FaceResolver {
             return BufferBasicFaceLookup::Canonical(face_id);
         }
 
-        let face_name = face_id.lisp_face_name();
+        let face_name = face_id.name();
         let has_direct_mapping = Self::buffer_face_remapping_specs(buffer, face_name).is_some();
         let inherits = self
             .face_table
@@ -4169,7 +4171,7 @@ impl FaceResolver {
         if !has_direct_mapping && !inherits {
             BufferBasicFaceLookup::Canonical(face_id)
         } else {
-            BufferBasicFaceLookup::WindowNamed(face_id)
+            BufferBasicFaceLookup::WindowNamedOverFrameDefault(face_id)
         }
     }
 
@@ -4500,35 +4502,40 @@ impl FaceResolver {
                 let buffer = buffer.expect("buffer-remapped basic face policy requires a buffer");
                 match self.buffer_basic_face_lookup(buffer, face_id) {
                     BufferBasicFaceLookup::Canonical(face_id) => {
-                        let mut resolved = self.resolve_named_face(face_id.lisp_face_name());
-                        // Active mode/header slots intentionally realize Lisp
-                        // faces whose names differ from their cache-role name
-                        // (`mode-line`, not `mode-line-active`).  The enum is
-                        // the authoritative identity at this boundary.
+                        let mut resolved = self.resolve_named_face(face_id.name());
+                        // GNU realizes every basic cache slot from the named
+                        // face represented by that typed role.  Re-stamp the
+                        // fixed cache id after realization so name and slot
+                        // cannot drift apart at this boundary.
                         resolved.face_id = u32::from(face_id);
                         resolved
                     }
-                    BufferBasicFaceLookup::WindowNamed(face_id) => {
-                        let base = self.resolve_buffer_default_face(buffer);
+                    BufferBasicFaceLookup::WindowNamedOverFrameDefault(face_id) => {
+                        // GNU `lookup_named_face` initializes ATTRS from the
+                        // frame's canonical DEFAULT_FACE_ID before merging the
+                        // named face and its buffer-local remappings.  Starting
+                        // here from `resolve_buffer_default_face` would
+                        // pre-apply a default-only text scale to basic window
+                        // chrome before the named face is merged.
+                        let base = self.default_face.clone();
                         let mut resolved = self
                             .resolve_buffer_face_value_over(
                                 buffer,
                                 &base,
-                                &Value::symbol(face_id.lisp_face_name()),
+                                &Value::symbol(face_id.name()),
                             )
                             .unwrap_or(base);
                         // Zero is the bridge's "allocate from the frame face
                         // arena" marker.  The typed lookup above ensures only
-                        // the WindowNamed branch can erase a canonical id.
+                        // the WindowNamedOverFrameDefault branch can erase a
+                        // canonical id.
                         resolved.face_id = 0;
-                        resolved.lisp_name = Some(face_id.lisp_face_name().to_string());
+                        resolved.lisp_name = Some(face_id.name().to_string());
                         resolved
                     }
                 }
             }
-            BaseFacePolicy::FrameBasicFace(face_id) => {
-                self.resolve_named_face(face_id.lisp_face_name())
-            }
+            BaseFacePolicy::FrameBasicFace(face_id) => self.resolve_named_face(face_id.name()),
         }
     }
 
@@ -4552,9 +4559,7 @@ impl FaceResolver {
     ) -> ResolvedFace {
         match origin.default_base_face_policy() {
             BaseFacePolicy::DefaultFace => self.default_face.clone(),
-            BaseFacePolicy::FrameBasicFace(face_id) => {
-                self.resolve_named_face(face_id.lisp_face_name())
-            }
+            BaseFacePolicy::FrameBasicFace(face_id) => self.resolve_named_face(face_id.name()),
             BaseFacePolicy::BufferRemappedBasicFace(_) => {
                 panic!("display origin {origin:?} requires a buffer for basic-face remapping")
             }
