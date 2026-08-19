@@ -18463,7 +18463,7 @@ rc=0
   `data`/`raw_data` out of the pinned `SignalData` into the public enum variant,
   which drops the pin.  Any boundary that holds an `EvalError` while more Lisp
   runs has this entry's bug again.  Not fixed here because `EvalError::Signal`
-  has 72 use sites across `neovm-core`, `neomacs-bin` and `neovm-worker`, and an
+  has 73 use sites across `neovm-core`, `neomacs-bin` and `neovm-worker`, and an
   enum variant cannot carry a private field, so the fix is a shape change
   (`EvalError::Signal(Box<SignalData>)`) rather than an added field -- a separate,
   mechanical, reviewable diff.  The measured bug is on the `Flow` path, which is
@@ -18498,16 +18498,31 @@ rc=0
 
 ### 10. Gates
 
-Measured on this branch, all numbers from run logs under `tmp/`.
+Measured on this branch, all numbers from run logs under `tmp/`.  Both suites
+ran against a `cargo xtask fresh-build --release` that reports
+`finished successfully` with `no_byte_compile=false`, and whose pdump
+(14:06:23, 15,461,351 bytes) is newer than its binary (14:04:38).
 
-* `cargo nextest run -p neovm-oracle-tests`, baseline before the change, on an
-  authoritative `cargo xtask fresh-build --release` at `02ff14193`:
-  **38783 tests run: 38783 passed, 0 skipped** in 666.7 s.
-* `cargo nextest run -p neovm-core -p neomacs-layout-engine` after the change:
-  see `tmp/gate_core.log`.
-* `cargo nextest run -p neovm-oracle-tests` after the change, on a fresh
-  `cargo xtask fresh-build --release`: see `tmp/oracle2.log`.
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine`:
+  **11056 tests run: 11056 passed, 54 skipped** in 315.757 s, exit 0.
+* `cargo nextest run -p neovm-oracle-tests`:
+  **38783 tests run: 38783 passed, 0 skipped** in 657.944 s, exit 0 --
+  `div_v8_cl_defun_key_aux_rest_optional` among them, `PASS` in 0.262 s.
+* The same oracle suite BEFORE the change, on its own authoritative fresh
+  build at `02ff14193`: **38783 passed, 0 skipped** in 666.7 s.  The suite was
+  green on both sides, which is the point of sections 2 and 3: it never held
+  this defect down.
+* The GC-stress recipe from section 3, on the shipped binary: `rc=0`,
+  `(error "Malformed argument list ends with: (&rest f &aux (g (+ a b)))")`.
+  Before the fix, the same command aborted.
 * `cargo check --workspace --all-targets`: clean.
 * `cargo fmt --all --check`: clean.
+
+One failure was seen and is not a residual: `gc_concurrent_handshake_stats_
+populate_per_group` failed 11055/11056 on an intermediate run because the
+per-field root-group names this entry's instrumentation introduced
+(`misc:lexenv`, ...) were still in the tree.  That test asserts the group is
+named `misc` and is non-empty, which is exactly its job; the names were reverted
+and the suite is 11056/11056.
 
 Status: FIXED.
