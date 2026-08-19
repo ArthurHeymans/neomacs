@@ -3737,6 +3737,19 @@ impl FaceResolver {
         }
     }
 
+    /// The terminal palette an ANONYMOUS attribute plist realizes against, or
+    /// `None` on a GUI frame.
+    ///
+    /// Named faces are realized in neovm-core, which calls `tty-color-desc`
+    /// itself, as GNU does.  A plist -- a `face` text property, an overlay, a
+    /// `face-remapping-alist` entry -- is realized HERE, and this crate calls no
+    /// Lisp function anywhere, so it runs GNU's own search over the terminal's
+    /// own palette instead.  It comes off the face table so it cannot be a
+    /// different palette from the one the named faces used.
+    fn plist_palette(&self) -> Option<&neomacs_display_protocol::TtyPalette> {
+        self.face_table.tty_palette()
+    }
+
     /// Discard diagnostics from a speculative frame-layout attempt.
     pub(crate) fn clear_diagnostics(&self) {
         self.invalid_face_references.borrow_mut().clear();
@@ -4000,7 +4013,7 @@ impl FaceResolver {
             FilteredFaceSpec::NotFiltered => {}
         }
         if Self::face_spec_is_plist(&items) {
-            let face = NeoFace::from_plist("--inline--", &items);
+            let face = NeoFace::from_plist_realized("--inline--", &items, self.plist_palette());
             return Some(self.resolve_face_overlay_spec(face, depth + 1));
         }
 
@@ -4263,7 +4276,8 @@ impl FaceResolver {
                     FilteredFaceSpec::NotFiltered => {}
                 }
                 if Self::face_spec_is_plist(&items) {
-                    let mut inline = NeoFace::from_plist("--inline--", &items);
+                    let mut inline =
+                        NeoFace::from_plist_realized("--inline--", &items, self.plist_palette());
                     let parent = inline.inherit.take().and_then(|inherit_ref| {
                         self.resolve_buffer_face_value_overlay_spec_inner(
                             buffer,
@@ -4602,9 +4616,13 @@ impl FaceResolver {
 
     /// Parse an inline face plist like `(:foreground "red" :weight bold)` into
     /// a `Face` object.  Handles the same keywords as GNU Emacs face specs.
-    pub fn face_from_plist(val: &Value) -> Option<NeoFace> {
+    pub fn face_from_plist(&self, val: &Value) -> Option<NeoFace> {
         let items = list_to_vec(val)?;
-        Some(NeoFace::from_plist("--inline--", &items))
+        Some(NeoFace::from_plist_realized(
+            "--inline--",
+            &items,
+            self.plist_palette(),
+        ))
     }
 
     /// Convert a neovm-core `Face` into a fully-realized `ResolvedFace`.

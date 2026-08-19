@@ -3021,7 +3021,7 @@ fn test_face_from_plist_realizes_relative_height_family_and_weight() {
         Value::symbol("extra-bold"),
     ]);
 
-    let inline_face = FaceResolver::face_from_plist(&plist).expect("inline plist face");
+    let inline_face = resolver.face_from_plist(&plist).expect("inline plist face");
     let realized = resolver.realize_face(&inline_face);
 
     assert_eq!(realized.font_family, "DejaVu Sans Mono");

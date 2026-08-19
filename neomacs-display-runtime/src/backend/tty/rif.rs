@@ -2391,16 +2391,6 @@ pub fn set_capabilities(caps: TtyAttributeCapabilities) {
     }
 }
 
-/// Set the color half of the capabilities from the detected color-cell count
-/// (GNU `tty_default_color_cells`): >=2^24 truecolor, >=256 indexed, >=8 basic
-/// ANSI, else monochrome. Color depth is detected separately from the terminfo
-/// attribute strings, so it has its own setter over the same record.
-pub fn set_color_tier(color_cells: i64) {
-    if let Ok(mut slot) = CAPABILITIES.write() {
-        slot.color_cells = color_cells;
-    }
-}
-
 /// Whether this terminal has colours at all -- GNU's
 /// `if (tty->TN_max_colors > 0)` around the whole colour block of `turn_on_face`
 /// (src/term.c:2092). It is the only thing the writer still asks about colour

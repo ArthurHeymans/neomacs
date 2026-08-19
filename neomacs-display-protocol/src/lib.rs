@@ -27,6 +27,7 @@ pub mod sealed_frame_presentation;
 pub mod snapshot_text;
 pub mod terminal_color;
 pub mod transition_policy;
+pub mod tty_palette;
 pub mod types;
 pub mod ui_types;
 pub mod visual_config;
@@ -50,6 +51,7 @@ pub use scroll_animation::*;
 pub use sealed_frame_presentation::*;
 pub use terminal_color::TerminalColor;
 pub use transition_policy::*;
+pub use tty_palette::{TtyPalette, TtyPaletteEntry};
 pub use types::*;
 pub use ui_types::*;
 pub use visual_config::*;
@@ -81,3 +83,7 @@ mod sealed_frame_presentation_test;
 #[cfg(test)]
 #[path = "terminal_color_test.rs"]
 mod terminal_color_test;
+
+#[cfg(test)]
+#[path = "tty_palette_test.rs"]
+mod tty_palette_test;
