@@ -13813,3 +13813,259 @@ it.  Three refinements it could not have made without measuring:
 by 148 to 38 -- is extended again: **36** after this one.
 
 Status: FIXED.
+
+## 153. The Gruvbox 256-color LIGHT report is entry 108's, and entry 108 closed it: the suite is green and the search now agrees with GNU on 5,832 colors -- NOT A DIVERGENCE (already fixed). What was still wrong is the OTHER arm of the same writer, and the color count it was handed -- FIXED
+
+The report: under Gruvbox's 256-color LIGHT profile, `font-lock-comment-face`,
+`org-verbatim` and `org-document-info-keyword` render as `38;5;248` where GNU
+emits `145`, only inside the suite's full sequence and never in an isolated
+probe, with five explanations already refuted under both editors --
+`tty-color-approximate`, `tty-color-desc`, `tty-color-translate`, the whole
+256-entry `tty-color-alist`, and the resolved face value.
+
+Those five refutations are entry 108's, verbatim.  This is entry 108's
+divergence, it was root-caused there, and the fix shipped on 2026-08-14 in
+`fb623d14e`.  This entry re-measures it rather than restating it, and reports
+what the re-measurement turned up next to it.
+
+### Measured now, not recalled
+
+`gruvbox_theme_real_terminal_profiles_match_gnu` -- the suite the report says is
+blocked, which drives all three profiles (default-Org consumer, truecolor,
+256-color) -- passes:
+
+```
+Summary [ 224.698s] 1 test run: 1 passed, 932 skipped
+```
+
+from this worktree, against a `cargo xtask fresh-build --release` binary
+(pdump 22:46:25, binary 22:44:18).  The long worktree path that entry 95
+recorded as failing `gruvbox` alongside `mwim`, `helm_css_scss` and `beacon`
+does not fail it now either.
+
+The Lisp side of both editors is byte-identical where the report says it is,
+re-probed here through a PTY with `COLORTERM` unset and `TERM=screen-256color`,
+gruvbox loaded from the pinned MELPA cache and `gruvbox-light-medium` enabled:
+
+```elisp
+;; GNU      CELLS 256  COLOR256 t  TRUECOLOR nil
+;;          font-lock-comment-face :foreground "#afafaf"
+;;          (tty-color-desc "#afafaf") => ("color-145" 145 44975 44975 44975)
+;; Neomacs  CELLS 256  COLOR256 t  TRUECOLOR nil
+;;          font-lock-comment-face :foreground "#afafaf"
+;;          (tty-color-desc "#afafaf") => ("color-145" 145 44975 44975 44975)
+```
+
+`#afafaf` is not an approximation of anything here; it is what the theme
+literally says.  `gruvbox-theme` is an autothemer theme, so every palette entry
+carries a truecolor value and a 256-color value side by side, and
+`gruvbox-light-medium-theme.el:67` reads
+
+```elisp
+  (gruvbox-dark4           "#a89984" "#afafaf")
+```
+
+which `gruvbox.el:114` gives to `font-lock-comment-face`.  On a 256-color
+display the theme hands the writer `#afafaf`, and `#afafaf` is an EXACT 6x6x6
+cube entry: index 145.
+
+The report names three faces and only three because all three are that one
+palette entry.  `gruvbox.el:108` also gives `gruvbox-dark4` to `shadow`, and
+GNU defines both `org-document-info-keyword` (lisp/org/org-faces.el:441) and
+`org-verbatim` (lisp/org/org-faces.el:473) as `:inherit shadow`.  One theme
+color, one wrong index, three faces -- which is itself evidence the defect was
+downstream of face resolution rather than in any face's spec.
+
+### Why the five probes were all correct and all blind
+
+Because none of them is what draws the glyph.  GNU does not quantize in the
+writer at all: `turn_on_face` (src/term.c) emits the index the realized face
+already carries, and that index came from `tty-color-desc` ->
+`tty-color-approximate` (lisp/term/tty-colors.el:875-915) searching
+`tty-color-alist`.  Neomacs carries RGB to the writer instead and re-derives
+the index there, so the Lisp palette can be perfect while the bytes are wrong.
+Entry 108's `rgb_to_256` short-circuited every near-gray into the 24-step
+grayscale ramp and answered 248 (`#a8a8a8`, distance 147) for a color with an
+exact cube entry.
+
+### The gate the fix shipped with, and the gate it now has
+
+Entry 108 pinned 41 colors read out of GNU.  Those 41 are the colors the report
+named; they pin the answers, not the search.  A near-gray short-circuit that
+had been corrected for exactly those 41 would have passed.
+
+`neomacs-display-runtime/src/backend/tty/gnu_tty_color_approximate_sweep.txt`
+now holds 5,832 GNU answers -- 18 values per channel over the whole RGB cube,
+measured the same way (`emacs -Q -nw` through a PTY, `COLORTERM` unset,
+`TERM=xterm-256color`, `display-color-cells` 256 and `tty-color-alist` 256
+entries, `(nth 1 (tty-color-approximate (list (* r 257) (* g 257) (* b 257))))`).
+`rgb_to_256_matches_gnu_across_the_rgb_cube` compares all of them:
+
+```
+;; GNU vs Neomacs, 5,832 colors  =>  0 mismatches
+```
+
+The palette itself is therefore attested, not assumed: the 41-color table also
+re-measured identical to the pin, and the same answers come back under
+`TERM=screen-256color` as under `TERM=xterm-256color`.
+
+### Hypotheses eliminated here, so the next attempt does not repeat them
+
+Beyond entry 108's five:
+
+6. *The suite's sequence leaves stale state.*  No: the suite passes end to end,
+   including its dark -> light -> stacked -> `disable-theme` lifecycle and its
+   three-page state report, so there is no sequence-only residue left to find.
+7. *`tty-color-alist` differs because the harness terminal differs.*  No: the
+   harness runs `TERM=screen-256color`, and GNU's 41-color and 5,832-color
+   answers are identical under `screen-256color` and `xterm-256color`.
+8. *`CAP TERM "dumb"` in the pins means the terminal really is dumb.*  No.  Both
+   editors put `TERM=dumb` in `process-environment` for their subprocesses, so
+   `(getenv "TERM")` answers `"dumb"` inside a running Emacs whose terminal is
+   `screen-256color`.  The pin is reading the subprocess environment, not the
+   terminal, which is why `CAP CELLS` is 256 on the same line.
+9. *The writer's short 16-color spellings versus `38;5;N` are a divergence the
+   suite can see.*  No: `RawTerminalSnapshot::ansi_grid` re-encodes captured
+   cells canonically rather than replaying the editor's bytes, so `ESC [ 97 m`
+   and `ESC [ 38;5;15 m` compare equal there.  They are still not the same
+   bytes, which is the next section.
+
+### What IS still wrong: the writer's other quantizer
+
+Entry 108 removed one of the writer's two hand-rolled quantizers.  The other
+survived: `rgb_to_ansi_basic`, a per-channel `> 100` threshold with a `> 170`
+brightness bit, used for every 8/16-color terminal.  Measured against GNU over
+the same 5,832 samples, one PTY run per terminal:
+
+```
+;; TERM=xterm         GNU cells 8,  tty-color-alist 8 entries
+;;   GNU's own search over GNU's palette     0 of 5,832 wrong
+;;   Neomacs rgb_to_ansi_basic index     4,589 of 5,832 wrong  (78.7%)
+;; TERM=rxvt-16color  GNU cells 16, tty-color-alist 16 entries
+;;   GNU's own search over GNU's palette     0 of 5,832 wrong
+;;   Neomacs rgb_to_ansi_basic index     4,048 of 5,832 wrong  (69.4%)
+```
+
+The single reduced case that shows it is wrong in kind and not in degree:
+
+```elisp
+;; TERM=xterm, #ff0000
+;; GNU      => index 1  ("red", #cd0000) -- an 8-color terminal has no bright
+;;             red, so tty-color-alist cannot answer 9
+;; Neomacs  => base 1 with the brightness bit, emitted as ESC [ 91 m
+```
+
+`rgb_to_ansi_basic` is gone.  The tier is now a type that carries its palette,
+`TtyColorTier`, with `Ansi8` and `Ansi16` as separate variants -- their
+`tty-color-alist`s are different lists, not a prefix relation with a brightness
+bit -- and one `approximate` method that is GNU's search over whichever palette
+the variant names.  `Monochrome` and `TrueColor` answer `None`, so a tier with
+no palette cannot be quantized into by accident.
+
+Indexed colors are also spelled the way GNU spells them.  GNU emits through
+terminfo `setaf`, whose xterm-family definition is
+
+```
+screen-256color setaf =
+  \E[%?%p1%{8}%<%t3%p1%d%e%p1%{16}%<%t9%p1%{8}%-%d%e38;5;%p1%d%;m
+```
+
+so index < 8 is `ESC [ 3N m`, 8..15 is `ESC [ 9(N-8) m`, and only 16 and above
+is `ESC [ 38;5;N m`.  A PTY capture of GNU rendering this very fixture on
+`screen-256color` carries `ESC [ 37 m` three times next to its `38;5;145`,
+`38;5;237` and `48;5;230`; Neomacs' own pin recorded `ESC [ 38;5;9 m` for index
+9, a spelling GNU never produces.
+
+### And the number that quantizer was handed
+
+`detect_tty_color_cells` (neomacs-bin/src/tty_init.rs) read the color count out
+of the TERM *name*: `256color` in the string meant 256, anything else meant 8.
+GNU reads it from the terminal database -- `init_tty` does
+`tty->TN_max_colors = tgetnum ("Co")` (src/term.c) -- and that number is what
+`lisp/term/<TERM>.el` keys its palette registration on, so it decides how many
+entries `tty-color-alist` ends up with and which `((class color) (min-colors N)
+...)` face specs match.  Measured, both editors, PTY, `COLORTERM` unset:
+
+```elisp
+;; TERM=rxvt-16color
+;;   GNU     => (display-color-cells) 16   (length (tty-color-alist)) 16
+;;   Neomacs => (display-color-cells)  8   (length (tty-color-alist))  8
+;; TERM=linux-16color
+;;   GNU     => (display-color-cells) 16   (length (tty-color-alist))  8
+;;   Neomacs => (display-color-cells)  8   (length (tty-color-alist))  8
+```
+
+`linux-16color` is the row that shows the count and the palette are two
+different facts: GNU reports 16 cells while `lisp/term/linux.el` registers only
+8 colors.  The crate already read `Co` -- `resolve_tty_attribute_capabilities`
+(neomacs-bin/src/terminal_capabilities.rs) reads it for the attribute record --
+and `detect_tty_attribute_capabilities` then overwrote it with the name guess
+one line later.  It is now the answer, with the name heuristic kept only for a
+terminal whose entry cannot be read at all.
+
+Nothing the suites run changes: `screen-256color` reports `colors#0x100` and
+`xterm` reports `colors#8`, the same numbers the name guess produced.
+
+### Found and NOT fixed: the writer owns a palette it cannot own
+
+The deeper shape is still there, and this entry does not close it.  GNU's
+palette is not a constant -- it is `tty-color-alist`, registered per terminal by
+`lisp/term/<TERM>.el` and modifiable by `tty-color-define`.  The writer's is a
+hardcoded xterm table.  For the 256-color tier the two coincide exactly, which
+is why entry 108's fix works and why the 5,832-color sweep is clean.  For the
+16-color tier they do not:
+
+```
+;; TERM=rxvt-16color, GNU's 16 entries vs the xterm system colors
+;;   blue         GNU (0,0,205)    xterm (0,0,238)
+;;   brightblack  GNU (77,77,77)   xterm (127,127,127)
+;;   brightblue   GNU (0,0,255)    xterm (92,92,255)
+;; TERM=linux-16color, GNU's 8 entries vs the xterm system colors
+;;   red          GNU (255,0,0)    xterm (205,0,0)
+;;   white        GNU (255,255,255) xterm (229,229,229)
+```
+
+`linux-16color` is the sharpest case: GNU reports 16 cells and registers 8
+full-intensity colors, so a writer that keys its palette on the CELL COUNT
+searches sixteen entries where GNU searches eight, and can answer a bright
+index GNU cannot spell at all.
+
+The whole measured effect of this entry's fix, one PTY run per terminal, index
+against GNU's index over the same 5,832 samples:
+
+```
+;; TERM=xterm         8 cells,  8 entries   78.7% wrong  ->   0.0% wrong
+;; TERM=rxvt-16color  16 cells, 16 entries  69.4% wrong  ->  18.2% wrong
+;; TERM=linux-16color 16 cells, 8 entries   83.8% wrong  ->  40.6% wrong
+```
+
+Strictly better on all three, exact only where the terminal's palette happens
+to be the one the writer holds -- and no table the writer holds can close the
+rest, because the table is Lisp data the terminal chooses.
+
+The ideal fix is the one GNU's shape already implies: stop re-deriving the
+index and carry the one `tty-color-desc` already returned.
+`build_tty_color_map` (neovm-core/src/emacs_core/xfaces/mod.rs) calls
+`tty-color-desc` per color at face realization and receives `(NAME INDEX R G
+B)` -- it keeps `R G B` and drops `INDEX`, and the writer then spends a
+256-candidate search recovering what was in hand.  Threading a realized palette
+index from there to `CellAttrs` would make the writer's palette table dead code
+and make `tty-color-define` work.  That is a cross-crate change through the
+realized-face representation and the display protocol, with its own red/green
+cycle, and it is deliberately left unmade here rather than half-made.
+
+### Gates
+
+`neomacs-display-runtime` tty tests: 201 run, 201 passed, including the new
+5,832-color sweep, the 8-color tier pin, the no-palette-no-index pin and the
+per-tier SGR spelling pin.  `gruvbox_theme_real_terminal_profiles_match_gnu`
+passes.  `cargo check --workspace --all-targets` and `cargo fmt --all --check`
+are clean.
+
+Status: NOT A DIVERGENCE for the reported symptom -- entry 108 fixed it in
+`fb623d14e` and this entry re-measured it green and widened its gate from 41
+colors to 5,832.  FIXED for the two defects the re-measurement found in the same
+machinery: the 8/16-color quantizer and the terminfo color count.  Explicitly
+NOT fixed, and now measured at 18.2% on a 16-color rxvt: the writer holds its
+own palette instead of carrying the index GNU's `tty-color-desc` already
+computed.
