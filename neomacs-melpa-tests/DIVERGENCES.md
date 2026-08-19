@@ -16933,3 +16933,68 @@ answers nil for it, because `decode_frame_or_terminal` admits only the two shape
 GNU admits -- but `resolve_frame_id` (used by dozens of other frame subrs) still
 takes a fixnum as a frame id, so `(frame-width 0)` works here and raises in GNU.
 That house convention is untouched and unmeasured; it is a separate sweep.
+
+### After
+
+Same probes, same machine, `target/release/neomacs` from
+`cargo xtask fresh-build --release` (pdump 10:45:26 newer than binary 10:42:16).
+All thirteen `--batch -Q` rows now answer what GNU 31.0.90 answers, including
+the four that raised and the three junk rows.  On a pty:
+
+```
+GNU 31.0.90   TERM=alacritty        -l ran, 8 recorded facts
+Neomacs       TERM=alacritty        -l ran, all 8 facts identical to GNU
+Neomacs       TERM=xterm-256color   -l ran, all 8 facts identical to GNU
+```
+
+The eight facts are `tty-type`, `terminal-initted`, `terminal-live-p`,
+`frame-initial-p` of the frame and of the terminal, `xterm-mouse-mode`, and the
+`xterm-mouse-mode` terminal parameter -- so the answer to the second question in
+this entry is measured and not merely argued: on TERM=alacritty neomacs now
+reaches `xterm-mouse-mode t` and `(terminal-parameter nil 'xterm-mouse-mode) t`,
+exactly as GNU does, which is what would have been lost if the terminal branch
+had been made to answer `t` instead of `nil`.
+
+### Gates
+
+```
+cargo nextest run -p neovm-core -p neomacs-layout-engine
+    11055 tests run: 11055 passed, 54 skipped                        473.799s
+cargo nextest run -p neovm-oracle-tests
+    38786 tests run: 38786 passed, 0 skipped                         735.524s
+cargo nextest run -p neomacs
+    233 tests run: 231 passed, 2 failed, 1 skipped                     12.635s
+    (both failures are the worktree's PATH LENGTH; see below)
+NEOMACS_TUI_NEOMACS_BIN=… cargo nextest run -p neomacs-tui-tests \
+        -E 'test(startup_runs_dash_l)'
+    1 passed                                                          17.336s
+NEOVM_ORACLE_MODE=live … -E 'test(frame_initial_p) or test(terminal_live_p_reports_t)'
+    3 passed  (the three new pins re-run against real GNU, not the snapshot)
+cargo check --workspace --all-targets                                 exit 0
+cargo fmt --all --check                                               exit 0
+```
+
+Red before the fix, for the record: 4 of the 5 new `neovm-core` unit tests
+failed with `wrong-type-argument`, and the tty suite failed with "neomacs
+swallowed -l on TERM=alacritty ... startup aborted before command-line-1
+processed the arguments", printing GNU's eight facts beside it.
+
+One `neovm-core` test, `process::tests::terminal_sentinel_observes_separate_stderr_output_like_gnu`,
+failed once in a filtered run while this machine was running four other agents'
+builds, and passed in the full 11055-test run.  Environmental, not this change.
+
+The two `neomacs` failures are `neomacsclient_cli`'s, and they are a property of
+where this branch was developed, not of the branch.  Both bind a Unix socket
+under `<repo>/tmp/` (neomacs-bin/tests/neomacsclient_cli.rs:26-36), and this
+worktree's repo root is 92 characters, so the socket path is 126-128 and
+`SUN_LEN` is 108.  Proven without any neomacs code:
+
+```
+$ python3 -c "...socket.bind(tempfile.mkdtemp(dir='<this worktree>/tmp')+'/server')"
+BIND FAILED 128 AF_UNIX path too long
+```
+
+The same path in the main checkout is 84 characters.  The failure is at
+`UnixListener::bind`, before the test reaches any editor code.
+
+Status: FIXED.
