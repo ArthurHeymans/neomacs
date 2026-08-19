@@ -624,23 +624,29 @@ fn write_output_target_in_state(
             // Only the BUFFER destination decodes.  GNU hands a `(:file NAME)`
             // destination straight to the child as its stdout fd
             // (src/callproc.c:570), so those bytes are never converted.
-            let eol_conversion = eval.eol_conversion();
             // `decode_coding_c_string` detects before it decodes
             // (src/coding.c:8129-8130), so `Fcall_process` sees the same
             // re-basing an asynchronous process does: measured under GNU
             // 31.0.90, `(let ((coding-system-for-read 'undecided))
             // (call-process "sh" nil t nil "-c" "printf 'caf\\303\\251\\r\\n'"))`
             // leaves `last-coding-system-used' at `utf-8-dos'.
-            let run = decoding
-                .detected(
-                    &eval.coding_systems,
-                    output,
-                    // The whole of this route's output is in hand, which is
-                    // GNU's state when it sets `CODING_MODE_LAST_BLOCK` at the
-                    // end of `Fcall_process`'s read loop (src/callproc.c).
-                    crate::emacs_core::coding::SourceBlock::Last,
-                )
-                .decode(&eval.coding_systems, output, eol_conversion);
+            let resolved = decoding.detected(
+                &eval.coding_systems,
+                output,
+                // The whole of this route's output is in hand, which is
+                // GNU's state when it sets `CODING_MODE_LAST_BLOCK` at the
+                // end of `Fcall_process`'s read loop (src/callproc.c:796).
+                crate::emacs_core::coding::SourceBlock::Last,
+            );
+            // And then decodes through `decode_coding_c_string`
+            // (src/callproc.c:856) -- the same macro, and so the same
+            // `decode_coding_object`, that `make-process` and
+            // `decode-coding-string` reach.  `Fcall_process` binds
+            // `inhibit-modification-hooks` around it (:850) because its decode
+            // writes straight into the destination buffer; this one produces a
+            // string and the insertion below runs the change hooks GNU's
+            // `signal_after_change` (:884) runs.
+            let run = resolved.decode_in_context(eval, output)?;
             // `Vlast_coding_system_used = CODING_ID_NAME (process_coding.id)`
             // (src/callproc.c:913).  It sits inside the branch that READ the
             // child's output into a buffer, so a `(:file ...)` or discarded

@@ -2179,21 +2179,26 @@ fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
     processes.spawn_child(pid, true).expect("spawn PTY process");
 
     let deadline = std::time::Instant::now() + Duration::from_secs(1);
-    let mut output = String::new();
-    while std::time::Instant::now() < deadline && !output.contains('\n') {
-        if let Some(chunk) = processes.read_process_output_without_recording_coding(
+    // The bytes, not the text: what this test is about is whether the PTY put a
+    // CR on the wire, and decoding them would only add a second question.  A
+    // `ProcessManager` driven on its own cannot decode anyway -- the decoder is
+    // `decode_coding_object`, which evaluates Lisp -- so the read hands back an
+    // undecoded run and the fixture says so.
+    let mut output: Vec<u8> = Vec::new();
+    while std::time::Instant::now() < deadline && !output.contains(&b'\n') {
+        if let Some(run) = processes.read_process_output_without_decoding(
             pid,
             ProcessOutputSink::DecodedText,
             &crate::emacs_core::coding::CodingSystemManager::new(),
         ) {
-            output.push_str(&process_output_runtime_string(&chunk));
+            output.extend_from_slice(run.undecoded_bytes());
         }
         processes.check_child_status_change(pid);
         std::thread::sleep(Duration::from_millis(10));
     }
     processes.kill_process(pid);
 
-    assert_eq!(output.as_bytes(), b"x\n");
+    assert_eq!(output.as_slice(), b"x\n");
 }
 
 #[cfg(target_os = "linux")]

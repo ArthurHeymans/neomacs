@@ -889,54 +889,6 @@ pub(crate) struct DecodedProcessRun {
     pub(crate) used: &'static str,
 }
 
-/// Decode one run of subprocess output under CODING_SYSTEM.
-///
-/// CODING_SYSTEM has already been through [`detected_coding_name`] -- the
-/// caller must run detection first, because the answer decides which decoder
-/// runs and therefore how many trailing bytes have to be held back as
-/// carryover.  This function is GNU's `decode_coding` from the point where
-/// `detect_coding` has returned.
-///
-/// The coding-system name handed to the decoder has its EOL leg spent
-/// (`coding_name_with_eol_spent`), so the single end-of-line pass is the one
-/// below, on the text the decoder PRODUCED.  That is GNU's order -- `decode_eol`
-/// runs outside every `decode_coding_*` (src/coding.c:7481) -- and it is the
-/// order the resolution has to be computed in for the answer to be reportable:
-/// the scan has to see the same bytes the conversion will touch.
-pub(crate) fn decode_process_run(
-    coding_systems: &crate::emacs_core::coding::CodingSystemManager,
-    bytes: &[u8],
-    coding_system: &'static str,
-    eol_conversion: crate::emacs_core::coding::EolConversion,
-) -> DecodedProcessRun {
-    use crate::emacs_core::coding::ResolvedEol;
-    let eol = coding_name_eol(coding_system);
-    let body = coding_name_with_eol_spent(coding_system);
-    let decoded = decode_bytes_to_lisp_string(bytes, &body, eol_conversion);
-    let resolution = eol.resolve_for_decode(decoded.as_bytes(), eol_conversion);
-    let text = match resolution.eol() {
-        ResolvedEol::Unix => decoded,
-        // Rebuilt the way `decode_bytes_to_lisp_string` built it above, so the
-        // conversion cannot change the string's storage form.  CR and LF are
-        // ASCII and no Emacs multibyte sequence contains an ASCII byte, so
-        // substituting at the byte level is exactly a substitution at the
-        // character level.
-        converting => crate::heap_types::LispString::from_emacs_bytes(decode_eol_bytes(
-            decoded.as_bytes(),
-            converting,
-        )),
-    };
-    let adjusted = adjusted_coding_name(coding_systems, coding_system, resolution);
-    DecodedProcessRun {
-        text,
-        used: if adjusted == coding_system {
-            coding_system
-        } else {
-            resolve_sym(intern(&adjusted))
-        },
-    }
-}
-
 /// GNU `CODING_ID_NAME (coding->id)` after a decode: the coding system the
 /// decode reports having used, read out of the resolution that ran it.
 ///
@@ -1970,10 +1922,11 @@ enum CodingDirection {
 /// Which of GNU's conversion entry points this call IS.
 ///
 /// It answers two questions that are decided by the entry and not by the
-/// coding system: whether the identity fast path exists, and what
-/// `CODING_MODE_LAST_BLOCK` holds when `detect_coding` runs.  The three
-/// variants are three named C functions, because GNU gives all three of them a
-/// different answer to the second question and the answer is observable.
+/// coding system: whether the identity fast path exists, and WHERE
+/// `detect_coding` runs -- at this entry, and if so with what
+/// `CODING_MODE_LAST_BLOCK`, or before the call arrived at all.  The four
+/// variants are four named C functions, because GNU gives them different
+/// answers and every difference is observable.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum CodingEntry {
     /// GNU `code_convert_string` (src/coding.c:9580): the identity fast path is
@@ -1987,6 +1940,48 @@ enum CodingEntry {
     /// miss -- detection runs at :7927-7928 BEFORE `coding->mode |=
     /// CODING_MODE_LAST_BLOCK` at :8009.
     FileGap,
+    /// GNU `decode_coding_object` reached through the `decode_coding_c_string`
+    /// macro (src/coding.h:750-755) from the three subprocess doors:
+    /// `read_and_insert_process_output` (src/process.c:6502),
+    /// `read_and_dispose_of_process_output`'s filter branch (:6562) and
+    /// `Fcall_process` (src/callproc.c:856).  All three are literally the same
+    /// call, which is why there is one arm here and not three.
+    ///
+    /// No identity fast path: that belongs to `code_convert_string` and to
+    /// nobody else (:9609-9628), so a `vietnamese-viqr` process read runs its
+    /// `:post-read-conversion` where the same bytes through
+    /// `decode-coding-string` do not.
+    ///
+    /// Detection has ALREADY run when a call arrives here, and that is the one
+    /// place this port's shape differs from GNU's rather than mirrors it.  GNU
+    /// decodes with the decoder deciding for itself how many trailing bytes it
+    /// could not consume (`coding->carryover_bytes`); here the read boundary is
+    /// computed from the coding system's NAME before the bytes are handed over,
+    /// so the name has to be settled first.  Detection therefore happens at the
+    /// read, through the same `detected_coding_name` this function would have
+    /// called, and running it a SECOND time here -- on the prefix rather than on
+    /// the whole read, which are different bytes -- is exactly the class of
+    /// second-copy bug this chain keeps finding.
+    ProcessRun,
+}
+
+/// Where `detect_coding` runs for a call, and with which
+/// `CODING_MODE_LAST_BLOCK` if it runs here.
+///
+/// GNU asks `if (CODING_REQUIRE_DETECTION (coding)) detect_coding (coding);`
+/// exactly once per conversion (src/coding.c:8129-8130).  Making the answer an
+/// enum rather than a bare `SourceBlock` is what stops a door from detecting
+/// twice: `AlreadyRun` has no `SourceBlock` to offer, so there is no flag to
+/// pass to a second detector call.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EntryDetection {
+    /// `CODING_REQUIRE_DETECTION` still holds when this entry reaches
+    /// `decode_coding_object`, so the detector runs here, with the flag in the
+    /// state this entry left it.
+    Here(crate::emacs_core::coding::SourceBlock),
+    /// The caller has already run `detect_coding` for this conversion and the
+    /// answer is in the coding system's name.
+    AlreadyRun,
 }
 
 impl CodingEntry {
@@ -2011,12 +2006,18 @@ impl CodingEntry {
     /// ;; the same four bytes in a file, insert-file-contents
     /// ;; => utf-8, and the orphan <c3> lands as the eight-bit character 4194243
     /// ```
-    fn detection_block(self) -> crate::emacs_core::coding::SourceBlock {
+    ///
+    /// A subprocess read answers `AlreadyRun`: its flag was spent at the read,
+    /// where GNU raises it only at EOF (src/process.c:6321), and it was spent
+    /// on the carryover PLUS this read rather than on the prefix that survives
+    /// the read boundary.
+    fn detection(self) -> EntryDetection {
         match self {
             Self::CodeConvertString | Self::CodeConvertRegion => {
-                crate::emacs_core::coding::SourceBlock::Last
+                EntryDetection::Here(crate::emacs_core::coding::SourceBlock::Last)
             }
-            Self::FileGap => crate::emacs_core::coding::SourceBlock::More,
+            Self::FileGap => EntryDetection::Here(crate::emacs_core::coding::SourceBlock::More),
+            Self::ProcessRun => EntryDetection::AlreadyRun,
         }
     }
 }
@@ -3094,7 +3095,10 @@ fn run_coding_with_conversion_hook(
     hook: SymId,
     encode: bool,
     eol: crate::emacs_core::coding::EolType,
-) -> EvalResult {
+) -> Result<
+    (Value, Option<crate::emacs_core::coding::DecodeEolResolution>),
+    crate::emacs_core::error::Flow,
+> {
     // The base `:coding-type` symbol names the codec to apply to the text the
     // hook produces / consumes.  GNU's mnemonic codings are utf-8 based; map
     // any other base type by name and fall back to utf-8 (the universal
@@ -3121,16 +3125,47 @@ fn run_coding_with_conversion_hook(
             )
         })?;
         let bytes = encode_lisp_string(transformed_str, base_coding, ctx.eol_conversion());
-        Ok(Value::heap_string(
-            crate::heap_types::LispString::from_unibyte(bytes),
+        Ok((
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes)),
+            None,
         ))
     } else {
+        // GNU's order is decoder, then `decode_eol` (src/coding.c:7481), then
+        // the `:post-read-conversion` hook (:8180-8194) -- three steps, and the
+        // middle one is what names the coding system the conversion reports.
+        // Spending the EOL leg here rather than inside the base decode is what
+        // makes the resolution available: an UNDECIDED eol type is resolved by
+        // scanning the text the decoder produced, and a decode that had already
+        // converted its own newlines has nothing left to scan.  Measured under
+        // GNU Emacs 31.0.90, the pure-ASCII VIQR source through
+        // `insert-file-contents` reports `vietnamese-viqr-unix', not
+        // `vietnamese-viqr'.
+        let body = coding_name_with_eol_spent(base_coding).into_owned();
         let decoded = builtin_decode_coding_string_with_known(
-            vec![args[0], Value::symbol(base_coding)],
+            vec![args[0], Value::symbol(&body)],
             |_| true,
             ctx.eol_conversion(),
         )?;
-        run_post_read_conversion(ctx, hook, decoded)
+        let decoded_str = decoded.as_lisp_string().ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("stringp"), decoded],
+            )
+        })?;
+        let resolution = eol.resolve_for_decode(decoded_str.as_bytes(), ctx.eol_conversion());
+        let converted = match resolution.eol() {
+            crate::emacs_core::coding::ResolvedEol::Unix => decoded,
+            converting => {
+                let bytes = decode_eol_bytes(decoded_str.as_bytes(), converting);
+                let multibyte = decoded_str.is_multibyte();
+                Value::heap_string(if multibyte {
+                    crate::heap_types::LispString::from_emacs_bytes(bytes)
+                } else {
+                    crate::heap_types::LispString::from_unibyte(bytes)
+                })
+            }
+        };
+        Ok((run_post_read_conversion(ctx, hook, converted)?, Some(resolution)))
     }
 }
 
@@ -3985,7 +4020,11 @@ fn builtin_coding_string_in_context(
     // aliases = undecided base + a fixed eol), GNU still detects the character
     // code but forces that eol in `decode_eol` rather than auto-detecting it, so
     // re-attach the explicit EOL suffix to the detected coding system.
-    if !encode {
+    // `if (CODING_REQUIRE_DETECTION (coding)) detect_coding (coding);`
+    // (src/coding.c:8129-8130).  A `ProcessRun` entry answers `AlreadyRun`, so
+    // the whole block is skipped: its detector has run, at the read, on the
+    // carryover plus the read and with the read's own `CODING_MODE_LAST_BLOCK`.
+    if let (false, EntryDetection::Here(block)) = (encode, entry.detection()) {
         let base = coding_system_base(&coding).to_owned();
         if (base == "undecided" || base == "prefer-utf-8")
             && let Some(src) = args[0].as_lisp_string()
@@ -3998,8 +4037,8 @@ fn builtin_coding_string_in_context(
                 // `CODING_MODE_LAST_BLOCK` is the entry's to state, not this
                 // function's: `code_convert_string` and `code_convert_region`
                 // raise it before converting, `decode_coding_gap` detects
-                // before raising it.  See `CodingEntry::detection_block`.
-                entry.detection_block(),
+                // before raising it.  See `CodingEntry::detection`.
+                block,
             )
             .ok_or_else(|| {
                 signal(
@@ -4034,11 +4073,8 @@ fn builtin_coding_string_in_context(
         // on the ORIGINAL base: a `undecided` decode that detected `utf-16`
         // above does not then get re-based a second time.
         if let Some(src) = args[0].as_lisp_string()
-            && let Some(found) = detect_bom_auto_coding(
-                &base,
-                &lisp_string_coding_source_bytes(src),
-                entry.detection_block(),
-            )
+            && let Some(found) =
+                detect_bom_auto_coding(&base, &lisp_string_coding_source_bytes(src), block)
         {
             coding = apply_explicit_eol_suffix(found, coding_name_eol(&coding));
             args[1] = Value::symbol(&coding);
@@ -4114,7 +4150,11 @@ fn builtin_coding_string_in_context(
         {
             // Identity: encode yields a unibyte string, decode a multibyte one
             // (GNU `make_unibyte_string` / `make_multibyte_string`).  The bytes
-            // are pure ASCII, so the two storage forms coincide.
+            // are pure ASCII, so the two storage forms coincide.  Nothing was
+            // decoded, so `decode_eol` never ran and there is no resolution to
+            // report -- which is why GNU's `decode-coding-string` answers plain
+            // `vietnamese-viqr' where every other door answers
+            // `vietnamese-viqr-unix'.
             let bytes = lisp_string_coding_source_bytes(
                 args[0].as_lisp_string().expect("string validated above"),
             );
@@ -4124,14 +4164,22 @@ fn builtin_coding_string_in_context(
                 Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
             }
         } else {
-            run_coding_with_conversion_hook(
+            let (converted, resolution) = run_coding_with_conversion_hook(
                 ctx,
                 &args,
                 &base_type,
                 hook,
                 encode,
                 coding_name_eol(&coding),
-            )?
+            )?;
+            if let Some(resolution) = resolution {
+                // GNU `adjust_coding_eol_type` (src/coding.c:6471) rewrites
+                // `coding->id`, and the id is what every door but the string
+                // one reports.
+                reported_coding =
+                    adjusted_coding_name(&ctx.coding_systems, &reported_coding, resolution);
+            }
+            converted
         };
         let result_text = result
             .as_lisp_string()
@@ -4509,6 +4557,61 @@ pub(crate) fn decode_file_bytes_in_context(
     Ok(DecodedFileBytes {
         text,
         coding_system,
+    })
+}
+
+/// Decode one run of a subprocess's output through the SAME engine
+/// `decode-coding-string`, `decode-coding-region` and `insert-file-contents`
+/// go through.
+///
+/// GNU has no restricted process decoder to mirror.  Its three subprocess doors
+/// -- `read_and_insert_process_output` (src/process.c:6502), the filter branch
+/// of `read_and_dispose_of_process_output` (:6562) and `Fcall_process`
+/// (src/callproc.c:856) -- all decode by expanding the `decode_coding_c_string`
+/// macro, whose body is `decode_coding_object (coding, Qnil, 0, 0, bytes,
+/// bytes, dst_object)` (src/coding.h:750-755): the same C function
+/// `code_convert_string` calls.  So a subprocess gets ISO-2022, `emacs-mule`,
+/// Shift-JIS, GBK, CCL and the charset codings, and it runs the coding system's
+/// `:post-read-conversion` (src/coding.c:8180-8194), because there is nowhere
+/// else for those to live.
+///
+/// CODING has already been through [`detected_coding_name`]; see
+/// [`CodingEntry::ProcessRun`] for why detection cannot be deferred to here.
+///
+/// This function takes a `&mut Context` and that is the whole point of the
+/// [`crate::emacs_core::process::PendingProcessRun`] hand-off: the evaluator
+/// owns the `ProcessManager`, so the read has to have let go of the process
+/// before this can be called.
+pub(crate) fn decode_process_run_in_context(
+    ctx: &mut crate::emacs_core::eval::Context,
+    bytes: &[u8],
+    coding: &'static str,
+) -> Result<DecodedProcessRun, crate::emacs_core::error::Flow> {
+    let source = Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes.to_vec()));
+    let decoded = builtin_coding_string_in_context(
+        ctx,
+        vec![source, Value::symbol(coding)],
+        CodingDirection::Decode,
+        EncodingBoundary::CompleteText,
+        CodingEntry::ProcessRun,
+    )?;
+    let text = decoded
+        .as_lisp_string()
+        .expect("decode-coding-string must return a Lisp string")
+        .clone();
+    // GNU never has to ask: the decode ran through the process's own
+    // `struct coding_system`, so `CODING_ID_NAME (coding->id)` IS the answer
+    // (src/process.c:6421).  Here each run is a separate call, so the name has
+    // to be read back out of the variable the shared engine records it in --
+    // the same variable `read_process_output_set_last_coding_system` writes.
+    let used = ctx
+        .visible_variable_value_or_nil("last-coding-system-used")
+        .as_symbol_id()
+        .filter(|&symbol| symbol != intern("nil"))
+        .expect("a successful context-aware decode records its concrete coding system");
+    Ok(DecodedProcessRun {
+        text,
+        used: resolve_sym(used),
     })
 }
 
