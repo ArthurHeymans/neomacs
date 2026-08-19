@@ -126,7 +126,16 @@ impl ConsCell {
     /// null or point to another valid free-list node.
     #[inline]
     pub unsafe fn set_free_next(&mut self, next: *mut ConsCell) {
-        self.car = TaggedValue::NIL;
+        // GNU `sweep_conses` (src/alloc.c:6856-6858) writes the free-list link
+        // into the cdr union and then poisons the car with `dead_object ()`.
+        // The poison is load-bearing, not decoration: the link is a raw
+        // `*mut ConsCell` whose low three bits are `TAG_SYMBOL`, so a
+        // use-after-free read of the cdr decodes as a symbol with a garbage id
+        // and travels arbitrarily far before it faults. `nil` here would be a
+        // perfectly ordinary Lisp value; `dead_object` is one no live object
+        // can hold, so the car answers "this cell is on the free list" in O(1)
+        // (GNU's `deadp`, src/alloc.c:425-429).
+        self.car = TaggedValue::DEAD;
         self.cdr_or_next.next_free = next;
     }
 }

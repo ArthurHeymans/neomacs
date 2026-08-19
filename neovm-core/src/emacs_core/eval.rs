@@ -1668,6 +1668,15 @@ fn collect_thread_local_gc_roots(
         stats,
         super::jit::cache::collect_jit_reloc_gc_roots,
     );
+    // A signal that is unwinding lives only in a Rust `Flow::Signal`, which the
+    // precise collector cannot see; its payload is pinned by `SignalData`'s
+    // private root handle and seeded here (DIVERGENCES.md 161).
+    collect_group(
+        roots,
+        "in-flight-signal-thread-local",
+        stats,
+        super::error::collect_in_flight_signal_gc_roots,
+    );
     collect_group(
         roots,
         "syntax-thread-local",
@@ -3818,17 +3827,15 @@ impl Context {
             return sig;
         }
 
-        SignalData {
-            symbol: intern("error"),
-            data: vec![
+        SignalData::new(
+            intern("error"),
+            vec![
                 Value::string("Invalid error symbol"),
                 Value::from_sym_id(sig.symbol),
             ],
-            raw_data: None,
-            suppress_signal_hook: sig.suppress_signal_hook,
-            selected_resume: None,
-            search_complete: false,
-        }
+            None,
+            sig.suppress_signal_hook,
+        )
     }
 
     fn maybe_call_debugger_for_signal(
@@ -6284,44 +6291,55 @@ impl Context {
         }
         group("profiler");
         self.trace_profiler_roots(visit);
-        group("misc");
+        group("misc:lexenv");
         visit(self.lexenv);
+        group("misc:quit_flag");
         visit(self.quit_flag);
+        group("misc:inhibit_quit");
         visit(self.inhibit_quit);
+        group("misc:cached_system_name");
         if self.cached_system_name.is_heap_object() {
             visit(self.cached_system_name);
         }
+        group("misc:closure_filter_fn");
         if let Some(filter_fn) = self.interpreted_closure_filter_fn {
             visit(filter_fn);
         }
+        group("misc:named_call_cache");
         for entry in self.named_call_cache.values() {
             if let NamedCallTarget::Obarray(val) = &entry.target {
                 visit(*val);
             }
         }
+        group("misc:pending_safe_funcalls");
         for funcall in &self.pending_safe_funcalls {
             visit(funcall.function);
             for arg in funcall.args.iter().copied() {
                 visit(arg);
             }
         }
+        group("misc:overlay_mod_hooks");
         for hook in &self.last_overlay_modification_hooks {
             visit(hook.hook_list);
             visit(hook.overlay);
         }
+        group("misc:interval_hooks");
         if !self.interval_insert_behind_hooks.is_nil() {
             visit(self.interval_insert_behind_hooks);
         }
         if !self.interval_insert_in_front_hooks.is_nil() {
             visit(self.interval_insert_in_front_hooks);
         }
+        group("misc:current_local_map");
         if !self.current_local_map.is_nil() {
             visit(self.current_local_map);
         }
+        group("misc:selected_global_map");
         let selected_global_map = self.selected_global_map.value();
         if !selected_global_map.is_nil() {
             visit(selected_global_map);
         }
+        group("misc:syntax_tables");
         if self.standard_syntax_table.is_heap_object() {
             visit(self.standard_syntax_table);
         }
