@@ -3663,3 +3663,38 @@ fn rgb_to_256_matches_gnu_tty_color_approximate() {
         .collect::<Vec<_>>();
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
 }
+
+/// The same question asked of the whole RGB cube instead of 41 spot colours.
+///
+/// `gnu_tty_color_approximate_sweep.txt` holds 5,832 GNU answers read out of
+/// `emacs -Q -nw` in a PTY (see the file header for the exact invocation).
+/// The 41-colour table above pins the colours ledger 108 was reported on; this
+/// pins the SEARCH itself, so a quantizer that is right on those 41 and wrong
+/// elsewhere -- which is precisely the shape of the defect ledger 108 fixed,
+/// a near-gray short-circuit that never looked at the 6x6x6 cube -- cannot
+/// pass this suite.
+#[test]
+fn rgb_to_256_matches_gnu_across_the_rgb_cube() {
+    let sweep = include_str!("gnu_tty_color_approximate_sweep.txt");
+    let mut compared = 0_usize;
+    let mismatches = sweep
+        .lines()
+        .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+        .filter_map(|line| {
+            let (hex, index) = line.split_once(' ').expect("RRGGBB INDEX");
+            let channel =
+                |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).expect("hex channel");
+            let expected: u8 = index.trim().parse().expect("palette index");
+            let got = rgb_to_256(channel(0), channel(2), channel(4));
+            compared += 1;
+            (got != expected).then(|| format!("#{hex}: GNU {expected}, got {got}"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(compared, 5832, "sweep fixture lost samples");
+    assert!(
+        mismatches.is_empty(),
+        "{} of {compared} sweep colours disagree with GNU:\n{}",
+        mismatches.len(),
+        mismatches.join("\n")
+    );
+}
