@@ -134,6 +134,10 @@ fn do_auto_save_names_a_fileless_buffer_under_a_raw_unibyte_prefix_directory() {
         .current_buffer()
         .expect("current buffer")
         .name_runtime_string_owned();
+    eval.buffers
+        .current_buffer_mut()
+        .expect("current buffer")
+        .insert_lisp_string(&crate::heap_types::LispString::from_utf8("payload"));
     let safe_name = buffer_name.replace('/', "!");
     let mut expected = b"/tmp/neomacs-\xFF/#*".to_vec();
     expected.extend_from_slice(safe_name.as_bytes());
@@ -152,10 +156,11 @@ fn do_auto_save_preserves_a_raw_unibyte_visited_filename_in_the_auto_save_name()
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(
         b"/tmp/neomacs-\xFF/demo-\xFE".to_vec(),
     ));
-    eval.buffers
-        .current_buffer_mut()
-        .expect("current buffer")
-        .set_file_name_value(raw);
+    {
+        let buf = eval.buffers.current_buffer_mut().expect("current buffer");
+        buf.set_file_name_value(raw);
+        buf.insert_lisp_string(&crate::heap_types::LispString::from_utf8("payload"));
+    }
 
     builtin_do_auto_save(&mut eval, vec![])
         .expect("do-auto-save should preserve raw visited file names");

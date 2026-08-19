@@ -407,6 +407,18 @@ fn misc_name_arms_match_gnu() {
 (symbol-file 'car)
 (symbol-file 42)
 (symbol-file 'pw59-no-such-symbol)
+;; An autoload: GNU answers (locate-library (nth 1 (symbol-function SYM))),
+;; which is nil when that library is not on `load-path'.  DIVERGED -- the Rust
+;; subr answered the RAW autoload file string and never called
+;; `locate-library' at all.
+(progn (autoload 'pw59-sym-file-probe "pw59-sym-file-probe-file")
+       (list (symbol-file 'pw59-sym-file-probe)
+             (symbol-file 'pw59-sym-file-probe 'defun)
+             (symbol-file 'pw59-sym-file-probe 'var)
+             (symbol-file 'pw59-sym-file-probe 'defun t)
+             (symbol-function 'pw59-sym-file-probe)))
+(symbol-file "x")
+(symbol-file 'car 1)
 (condition-case e (funcall 'symbol-file) (error e))
 (condition-case e (funcall 'symbol-file 'ignore nil nil nil) (error e))
 ;; --------------------------------------------------------- string-match-p
@@ -542,6 +554,9 @@ fn misc_name_arms_match_gnu() {
             "OK \"subr.elc\"",
             "OK nil",
             "OK nil",
+            "OK nil",
+            "OK nil",
+            "OK (nil nil nil nil (autoload \"pw59-sym-file-probe-file\" nil nil nil))",
             "OK nil",
             "OK nil",
             "OK (wrong-number-of-arguments (1 . 3) 0)",

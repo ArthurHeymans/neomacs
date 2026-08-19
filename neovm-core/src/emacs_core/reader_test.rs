@@ -2160,91 +2160,40 @@ fn completion_confirm_from_require_match_matches_gnu_minibuffer_setup() {
     );
 }
 
+/// `read-number' is lisp/subr.el:3725 and has no subr (DIVERGENCES.md 152),
+/// so its arms are asked of the runtime that loaded `subr.el'.  Every row was
+/// measured on GNU 31.0.90 `-Q --batch' with stdin at /dev/null first
+/// (tmp/pw59/gnu-readnumber2.txt), including the third HIST argument the Rust
+/// subr was registered too narrow to accept.
 #[test]
-fn read_number_signals_end_of_file_even_with_default() {
+fn read_number_arms_match_gnu() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let result = builtin_read_number(&mut ev, vec![Value::string("Number: "), Value::fixnum(42)]);
-    assert!(result.is_err());
-}
-
-#[test]
-fn read_number_non_character_event_stays_queued_and_signals_end_of_file() {
-    crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    ev.obarray.set_symbol_value(
-        "unread-command-events",
-        Value::list(vec![Value::symbol("foo")]),
-    );
-    let result = builtin_read_number(&mut ev, vec![Value::string("Number: ")]);
-    assert!(matches!(result, Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"));
     assert_eq!(
-        ev.obarray.symbol_value("unread-command-events"),
-        Some(&Value::list(vec![Value::symbol("foo")]))
-    );
-}
-
-#[test]
-fn read_number_signals_end_of_file_without_default() {
-    crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let result = builtin_read_number(&mut ev, vec![Value::string("Number: ")]);
-    assert!(result.is_err());
-}
-
-#[test]
-fn read_number_rejects_non_numeric_default() {
-    crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let result = builtin_read_number(&mut ev, vec![Value::string("Number: "), Value::string("x")]);
-    assert!(matches!(
-        result,
-        Err(Flow::Signal(sig)) if sig.symbol_name() == "wrong-type-argument"
-    ));
-}
-
-#[test]
-fn read_number_accepts_numeric_default_and_signals_end_of_file() {
-    crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let result = builtin_read_number(
-        &mut ev,
-        vec![Value::string("Number: "), Value::make_float(1.5)],
-    );
-    assert!(matches!(
-        result,
-        Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"
-    ));
-}
-
-#[test]
-fn read_number_rejects_more_than_three_args() {
-    crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let result = builtin_read_number(
-        &mut ev,
+        crate::test_utils::runtime_startup_eval_all(
+            r#"(condition-case e (read-number "Number: " 42) (error (car e)))
+               (condition-case e (read-number "Number: ") (error (car e)))
+               (let ((unread-command-events (list 'foo)))
+                 (list (condition-case e (read-number "Number: ") (error (car e)))
+                       unread-command-events))
+               (condition-case e (read-number "Number: " "x") (error e))
+               (condition-case e (read-number "Number: " 1.5) (error (car e)))
+               (condition-case e (read-number "Number: " 42 nil nil) (error e))
+               (condition-case e (read-number 123) (error e))
+               (condition-case e (read-number "Number: " nil 'my-hist) (error (car e)))"#,
+        ),
         vec![
-            Value::string("Number: "),
-            Value::fixnum(42),
-            Value::NIL,
-            Value::NIL,
+            "OK end-of-file",
+            "OK end-of-file",
+            // The queued event is left alone; batch reads stdin.
+            "OK (end-of-file (foo))",
+            "OK (wrong-type-argument numberp \"x\")",
+            "OK end-of-file",
+            "OK (wrong-number-of-arguments (1 . 3) 4)",
+            "OK (wrong-type-argument stringp 123)",
+            // HIST: accepted, which the registered (1 . 2) arity refused.
+            "OK end-of-file",
         ],
     );
-    assert!(matches!(
-        result,
-        Err(Flow::Signal(sig)) if sig.symbol_name() == "wrong-number-of-arguments"
-    ));
-}
-
-#[test]
-fn read_number_rejects_non_string_prompt() {
-    crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let result = builtin_read_number(&mut ev, vec![Value::fixnum(123)]);
-    assert!(matches!(
-        result,
-        Err(Flow::Signal(sig)) if sig.symbol_name() == "wrong-type-argument"
-    ));
 }
 
 #[test]

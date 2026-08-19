@@ -245,6 +245,13 @@ fn gnu_simple_command_execute_eval() -> Context {
     // this prelude supplies it the way it supplies `command-execute': by
     // evaluating GNU's own `defun'.
     eval_first_form_after_marker(&mut ev, &subr_source, "(defun global-set-key (key command)");
+    // Likewise `read-number' (lisp/subr.el:3725): the "n" and "N" code letters
+    // reach it through the function cell, as GNU does at src/callint.c:645.
+    eval_first_form_after_marker(
+        &mut ev,
+        &subr_source,
+        "(defun read-number (prompt &optional default hist)",
+    );
     ev.eval_str(
         r#"
         (use-global-map (make-sparse-keymap))
@@ -3047,13 +3054,12 @@ fn call_interactively_rejects_non_vector_keys_argument() {
 fn call_interactively_accepts_vector_keys_argument() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
+    let command = ev
+        .eval_str("'(lambda () (interactive) nil)")
+        .expect("quoted lambda command");
     let result = builtin_call_interactively(
         &mut ev,
-        vec![
-            Value::symbol("ignore"),
-            Value::NIL,
-            Value::vector(vec![Value::fixnum(98)]),
-        ],
+        vec![command, Value::NIL, Value::vector(vec![Value::fixnum(98)])],
     )
     .expect("call-interactively should accept vector keys argument");
     assert!(result.is_nil());
@@ -3063,13 +3069,12 @@ fn call_interactively_accepts_vector_keys_argument() {
 fn call_interactively_does_not_record_keys_argument_in_recent_history() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
+    let command = ev
+        .eval_str("'(lambda () (interactive) nil)")
+        .expect("quoted lambda command");
     let result = builtin_call_interactively(
         &mut ev,
-        vec![
-            Value::symbol("ignore"),
-            Value::NIL,
-            Value::vector(vec![Value::fixnum(98)]),
-        ],
+        vec![command, Value::NIL, Value::vector(vec![Value::fixnum(98)])],
     )
     .expect("call-interactively should accept vector keys argument");
     assert!(result.is_nil());

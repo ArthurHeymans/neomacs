@@ -882,7 +882,7 @@ fn print_circle_candidate_set_matches_gnu_for_bool_vectors_and_char_tables() {
         print_eval_one(
             "(let ((v (make-char-table 'test))) \
                (let ((print-circle t)) \
-                 (string-match-p \"#[0-9]+=\" (prin1-to-string v))))"
+                 (string-match \"#[0-9]+=\" (prin1-to-string v) nil t)))"
         ),
         "OK nil",
     );

@@ -730,61 +730,28 @@ fn eval_and_compile_multiple_forms() {
     assert_eq!(result, "OK 3");
 }
 
+/// `symbol-file' is Lisp -- lisp/subr.el:3351, DIVERGENCES.md 152 -- so a
+/// bare evaluator has nothing to ask.  What THIS module owns is the function
+/// cell `autoload' writes, which is also what GNU's `symbol-file' reads:
+/// `(nth 1 (symbol-function symbol))'.
+///
+/// Measured on GNU 31.0.90 `-Q --batch' first.
 #[test]
-fn symbol_file_returns_nil() {
-    crate::test_utils::init_test_tracing();
-    let result = eval_one("(symbol-file 'cons)");
-    assert_eq!(result, "OK nil");
-}
-
-#[test]
-fn symbol_file_returns_autoload_file_for_function() {
-    crate::test_utils::init_test_tracing();
-    let result = eval_one(
-        r#"(progn (autoload 'sym-file-probe "sym-file-probe-file") (symbol-file 'sym-file-probe))"#,
-    );
-    assert_eq!(result, r#"OK "sym-file-probe-file""#);
-}
-
-#[test]
-fn symbol_file_type_gate_matches_defun_only() {
+fn autoload_writes_the_file_into_the_function_cell_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
-        r#"(autoload 'sym-file-type-probe "sym-file-type-probe-file")
-           (symbol-file 'sym-file-type-probe 'defun)
-           (symbol-file 'sym-file-type-probe 'var)
-           (symbol-file 'sym-file-type-probe 'function)"#,
+        r#"(autoload 'sym-file-probe "sym-file-probe-file")
+           (symbol-function 'sym-file-probe)
+           (nth 1 (symbol-function 'sym-file-probe))
+           (fboundp 'symbol-file)"#,
     );
-    assert_eq!(results[1], r#"OK "sym-file-type-probe-file""#);
-    assert_eq!(results[2], "OK nil");
+    assert_eq!(
+        results[1],
+        r#"OK (autoload "sym-file-probe-file" nil nil nil)"#
+    );
+    assert_eq!(results[2], r#"OK "sym-file-probe-file""#);
+    // GNU's src/ has no DEFUN of this name, so a bare evaluator has none.
     assert_eq!(results[3], "OK nil");
-}
-
-#[test]
-fn symbol_file_non_symbol_returns_nil() {
-    crate::test_utils::init_test_tracing();
-    let results = eval_all(
-        r#"(symbol-file 1)
-           (symbol-file "x")
-           (symbol-file 'car 1)"#,
-    );
-    assert_eq!(results[0], "OK nil");
-    assert_eq!(results[1], "OK nil");
-    assert_eq!(results[2], "OK nil");
-}
-
-#[test]
-fn symbol_file_accepts_third_arg_but_not_fourth() {
-    crate::test_utils::init_test_tracing();
-    let results = eval_all(
-        r#"(autoload 'sym-file-arity-probe "sym-file-arity-probe-file")
-           (symbol-file 'sym-file-arity-probe 'defun t)
-           (condition-case err
-               (symbol-file 'sym-file-arity-probe 'defun t :extra)
-             (error err))"#,
-    );
-    assert_eq!(results[1], r#"OK "sym-file-arity-probe-file""#);
-    assert_eq!(results[2], "OK (wrong-number-of-arguments symbol-file 4)");
 }
 
 #[test]

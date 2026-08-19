@@ -1044,17 +1044,23 @@ fn handle_switch_frame_accepts_switch_frame_event_and_rejects_nil() {
 }
 
 #[test]
-fn interactive_form_for_ignore_returns_interactive_list() {
+fn interactive_form_for_a_c_subr_returns_interactive_list() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
+    // `make-local-variable' is DEFUN'ed with an intspec (src/data.c); this
+    // used to ask about `ignore', which is lisp/subr.el:501 and has no subr
+    // (DIVERGENCES.md 152).
     let out = crate::emacs_core::builtins::symbols::builtin_interactive_form(
         &mut eval,
-        vec![Value::symbol("ignore")],
+        vec![Value::symbol("make-local-variable")],
     )
     .unwrap();
     assert_eq!(
         out,
-        Value::list(vec![Value::symbol("interactive"), Value::NIL])
+        Value::list(vec![
+            Value::symbol("interactive"),
+            Value::string("vMake Local Variable: ")
+        ])
     );
 }
 

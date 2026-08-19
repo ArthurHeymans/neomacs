@@ -915,17 +915,16 @@ fn pure_dispatch_typed_string_comparisons_accept_symbol_designators() {
         .expect("builtin string-equal should evaluate");
     assert!(equal.is_truthy());
 
-    let greater = dispatch_builtin_pure("string-greaterp", vec![Value::NIL, Value::string("a")])
-        .expect("builtin string-greaterp should resolve")
-        .expect("builtin string-greaterp should evaluate");
+    // `(string-greaterp A B)' is `(string-lessp B A)' -- lisp/subr.el:6285 --
+    // so the designator arms it used to be asked about are `string-lessp's.
+    let greater = dispatch_builtin_pure("string-lessp", vec![Value::string("a"), Value::NIL])
+        .expect("builtin string-lessp should resolve")
+        .expect("builtin string-lessp should evaluate");
     assert!(greater.is_truthy());
 
-    let err = dispatch_builtin_pure(
-        "string-greaterp",
-        vec![Value::fixnum(7), Value::string("a")],
-    )
-    .expect("builtin string-greaterp should resolve")
-    .expect_err("string-greaterp should reject non string/symbol designators");
+    let err = dispatch_builtin_pure("string-lessp", vec![Value::string("a"), Value::fixnum(7)])
+        .expect("builtin string-lessp should resolve")
+        .expect_err("string-lessp should reject non string/symbol designators");
     match err {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");

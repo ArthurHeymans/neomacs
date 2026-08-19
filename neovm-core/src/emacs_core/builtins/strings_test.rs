@@ -97,7 +97,10 @@ fn string_ordering_accepts_raw_unibyte_symbol_names_like_gnu() {
                  (list (eq name (symbol-name sym))
                        (string-lessp sym (unibyte-string 255))
                        (string-lessp (unibyte-string 254) sym)
-                       (string-greaterp sym (unibyte-string 254))))"#,
+                       ;; `string-greaterp' is lisp/subr.el:6283 and reads
+                       ;; `(string-lessp string2 string1)'; DIVERGENCES.md 152.
+                       ;; (`not' is subr.el's too -- 148 -- so spell it out.)
+                       (if (string-lessp sym (unibyte-string 254)) nil t)))"#,
         )
         .expect("raw unibyte symbol names remain valid string designators");
 

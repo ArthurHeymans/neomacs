@@ -4106,9 +4106,12 @@ fn vm_call_interactively_handles_prompt_driven_batch_specs_on_shared_runtime() {
                  (condition-case err
                      (call-interactively '(lambda (x) (interactive "MInherited: ") x))
                    (error (car err)))
-                 (condition-case err
-                     (call-interactively '(lambda (x) (interactive "nNumber: ") x))
-                   (error (car err)))
+                 ;; `n' is not here: it dispatches through the `read-number'
+                 ;; FUNCTION CELL (src/callint.c:645), and `read-number' is
+                 ;; lisp/subr.el:3725, so a bare evaluator has nothing to call
+                 ;; -- exactly as GNU before subr.el.  Its rows are in
+                 ;; `vm_call_interactively_number_specs_need_subr_el'
+                 ;; (DIVERGENCES.md 152).
                  (condition-case err
                      (call-interactively '(lambda (x) (interactive "SSymbol: ") x))
                    (error (car err)))
@@ -4119,24 +4122,16 @@ fn vm_call_interactively_handles_prompt_driven_batch_specs_on_shared_runtime() {
                      (call-interactively '(lambda (x) (interactive "vVariable: ") x))
                    (error (car err))))"#
         ),
-        "OK (97 end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file)"
+        "OK (97 end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file end-of-file)"
     );
 }
 
 #[test]
-fn vm_call_interactively_handles_number_and_optional_coding_prompt_cases_on_shared_runtime() {
+fn vm_call_interactively_handles_optional_coding_prompt_cases_on_shared_runtime() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
         vm_eval_str(
             r#"(list
-                 (let ((current-prefix-arg '(4))
-                       (prefix-arg nil))
-                   (call-interactively '(lambda (n) (interactive "NNumber: ") n)))
-                 (let ((current-prefix-arg nil)
-                       (prefix-arg nil))
-                   (condition-case err
-                       (call-interactively '(lambda (n) (interactive "NNumber: ") n))
-                     (error (car err))))
                  (let ((unread-command-events (list 97)))
                    (list
                     (call-interactively '(lambda (c) (interactive "ZCoding: ") c))
@@ -4146,7 +4141,37 @@ fn vm_call_interactively_handles_number_and_optional_coding_prompt_cases_on_shar
                        (call-interactively '(lambda (c) (interactive "ZCoding: ") c))
                      (error (car err)))))"#
         ),
-        "OK (4 end-of-file (nil (97)) nil)"
+        "OK ((nil (97)) nil)"
+    );
+}
+
+/// The `N' code letter without a prefix argument calls `read-number', which is
+/// defined in subr.el (lisp/subr.el:3725) -- GNU reaches it through the
+/// function cell at src/callint.c:645 -- so this needs the bootstrap context
+/// the same way `user-error' does above (DIVERGENCES.md 152).
+#[test]
+fn vm_call_interactively_number_specs_need_subr_el() {
+    crate::test_utils::init_test_tracing();
+    with_vm_eval_bootstrap_context_state(
+        r#"(list
+              (let ((current-prefix-arg '(4))
+                    (prefix-arg nil))
+                (call-interactively '(lambda (n) (interactive "NNumber: ") n)))
+              (let ((current-prefix-arg nil)
+                    (prefix-arg nil))
+                (condition-case err
+                    (call-interactively '(lambda (n) (interactive "NNumber: ") n))
+                  (error (car err))))
+              (condition-case err
+                  (call-interactively '(lambda (x) (interactive "nNumber: ") x))
+                (error (car err))))"#,
+        false,
+        |result, _eval| {
+            assert_eq!(
+                crate::emacs_core::error::format_eval_result(&result),
+                "OK (4 end-of-file end-of-file)"
+            );
+        },
     );
 }
 
@@ -5790,7 +5815,7 @@ fn vm_prin1_to_string_prints_killed_buffers_in_nested_values_like_gnu() {
                  (list
                   (equal (prin1-to-string rec)
                          "#s(vm-print-owner #<killed buffer>)")
-                  (if (string-match-p "#<killed buffer>" (prin1-to-string text)) t)))"##
+                  (if (string-match "#<killed buffer>" (prin1-to-string text) nil t) t)))"##
         ),
         "OK (t t)"
     );
@@ -8706,15 +8731,19 @@ fn vm_read_only_noop_buffer_mutations_match_gnu() {
 }
 
 #[test]
-fn vm_autoload_and_symbol_file_share_autoload_runtime_state() {
+fn vm_autoload_shares_autoload_runtime_state() {
     crate::test_utils::init_test_tracing();
+    // `symbol-file' is lisp/subr.el:3351 and has no subr (DIVERGENCES.md 152);
+    // the shared state this test is about is the function cell `autoload'
+    // writes, which is also what GNU's `symbol-file' reads.  Measured on GNU
+    // 31.0.90: (symbol-function SYM) is (autoload FILE nil nil nil).
     assert_eq!(
         vm_eval_str(
             r#"(progn
                  (autoload 'vm-symbol-file-probe "vm-symbol-file-probe-file")
-                 (symbol-file 'vm-symbol-file-probe))"#
+                 (symbol-function 'vm-symbol-file-probe))"#
         ),
-        r#"OK "vm-symbol-file-probe-file""#
+        r#"OK (autoload "vm-symbol-file-probe-file" nil nil nil)"#
     );
 }
 
@@ -11304,7 +11333,7 @@ fn vm_backtrace_and_recursion_builtins_use_shared_runtime_state() {
                  (backtrace--locals 1)
                  (backtrace-debug 1 2)
                  (backtrace-eval 1 2)
-                 (backtrace-frame--internal 'ignore 0 nil)
+                 (backtrace-frame--internal '(lambda (&rest _) nil) 0 nil)
                  (integerp (recursion-depth))))"
         ),
         "OK (t nil 2 1 nil t)"

@@ -310,16 +310,6 @@ fn expect_lisp_string(value: &Value) -> Result<crate::heap_types::LispString, Fl
     }
 }
 
-fn expect_number(value: &Value) -> Result<(), Flow> {
-    if value.is_number() {
-        return Ok(());
-    }
-    Err(signal(
-        LispCondition::WrongTypeArgument,
-        vec![Value::symbol("numberp"), *value],
-    ))
-}
-
 pub(crate) fn parse_optional_read_seconds_arg(
     value: Option<&Value>,
 ) -> Result<Option<Duration>, Flow> {
@@ -1697,84 +1687,16 @@ pub(crate) fn finish_read_string_with_minibuffer(
 }
 
 // ---------------------------------------------------------------------------
-// 7. read-number
+// 7. read-number -- NOT here
 // ---------------------------------------------------------------------------
-
-/// `(read-number PROMPT &optional DEFAULT)`
-///
-/// Read a numeric value from the minibuffer.
-/// Delegates to read-from-minibuffer with READ=t, then validates the result
-/// is a number.
-pub(crate) fn builtin_read_number(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_read_number_in_runtime(eval, &args)?;
-    finish_read_number_in_eval(eval, &args)
-}
-
-pub(crate) fn builtin_read_number_in_runtime(
-    runtime: &impl KeyboardInputRuntime,
-    args: &[Value],
-) -> Result<(), Flow> {
-    expect_min_args("read-number", args, 1)?;
-    expect_max_args("read-number", args, 3)?;
-    let prompt = args[0];
-    expect_lisp_string(&prompt)?;
-    if let Some(default) = args.get(1)
-        && !default.is_nil()
-    {
-        expect_number(default)?;
-    }
-    match runtime.minibuffer_input_source() {
-        MinibufferInputSource::CommandLoop => Ok(()),
-        MinibufferInputSource::StandardInput => Err(stdin_end_of_file_error()),
-    }
-}
-
-fn read_number_minibuffer_args(args: &[Value]) -> [Value; 6] {
-    let prompt = args[0];
-    let default_val = args.get(1).copied().unwrap_or(Value::NIL);
-    [
-        prompt,
-        Value::NIL,
-        Value::NIL,
-        Value::T,
-        Value::NIL,
-        default_val,
-    ]
-}
-
-fn validate_read_number_result(result: Value) -> EvalResult {
-    if result.is_number() {
-        return Ok(result);
-    }
-    Err(signal("error", vec![Value::string("Not a number")]))
-}
-
-pub(crate) fn finish_read_number_with_minibuffer(
-    args: &[Value],
-    mut read_from_minibuffer: impl FnMut(&[Value]) -> EvalResult,
-) -> EvalResult {
-    let minibuffer_args = read_number_minibuffer_args(args);
-    validate_read_number_result(read_from_minibuffer(&minibuffer_args)?)
-}
-
-pub(crate) fn finish_read_number_in_eval(
-    eval: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    finish_read_number_with_minibuffer(args, |minibuffer_args| {
-        finish_read_from_minibuffer_in_eval(eval, minibuffer_args)
-    })
-}
-
-pub(crate) fn finish_read_number_in_vm_runtime(
-    shared: &mut super::eval::Context,
-    args: &[Value],
-) -> EvalResult {
-    builtin_read_number_in_runtime(shared, args)?;
-    finish_read_number_with_minibuffer(args, |minibuffer_args| {
-        finish_read_from_minibuffer_in_vm_runtime(shared, minibuffer_args)
-    })
-}
+//
+// `read-number' is `(defun read-number (prompt &optional default hist) ...)'
+// at lisp/subr.el:3725, over `read-from-minibuffer'.  GNU has no C version,
+// and the one place C reaches it -- the `n' and `N' interactive code letters
+// -- goes through the FUNCTION CELL: `calln (Qread_number, callint_message)',
+// src/callint.c:645.  `interactive.rs' does the same
+// (`read_number_through_the_function_cell'), so nothing in Rust needs a
+// `read-number' of its own (DIVERGENCES.md 152).
 
 // ---------------------------------------------------------------------------
 // 8. completing-read
