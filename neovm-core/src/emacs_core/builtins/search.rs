@@ -1240,7 +1240,7 @@ fn commit_string_search_success(
 #[allow(clippy::too_many_arguments)] // match-time Lisp state stays explicit at this seam
 pub(crate) fn builtin_string_match_with_state(
     case_fold: bool,
-    case_translation: Option<crate::emacs_core::regex_emacs::CaseTranslation>,
+    case_translation_table: Option<Value>,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
     word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
@@ -1277,7 +1277,7 @@ pub(crate) fn builtin_string_match_with_state(
                         start,
                         case_fold,
                         false,
-                        case_translation.clone(),
+                        case_translation_table,
                         syntax,
                     );
                     let target = if inhibit_modify { None } else { match_data };
@@ -1313,9 +1313,10 @@ pub(crate) fn builtin_string_match_slice(
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let case_translation = if case_fold {
-        let canon = crate::emacs_core::casetab::current_case_canon_table(eval)?;
-        Some(crate::emacs_core::regex_emacs::CaseTranslation::from_char_table(canon))
+    // The canon TABLE only: regexp compile builds (and caches) the actual
+    // CaseTranslation; constructing its 1KB memo per call was pure waste.
+    let case_translation_table = if case_fold {
+        Some(crate::emacs_core::casetab::current_case_canon_table(eval)?)
     } else {
         None
     };
@@ -1330,7 +1331,7 @@ pub(crate) fn builtin_string_match_slice(
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     let result = builtin_string_match_with_state(
         case_fold,
-        case_translation,
+        case_translation_table,
         syntax_table.as_ref(),
         category_table,
         word_boundary,
@@ -1346,7 +1347,7 @@ pub(crate) fn builtin_string_match_slice(
 #[allow(clippy::too_many_arguments)] // match-time Lisp state stays explicit at this seam
 pub(crate) fn builtin_posix_string_match_with_state(
     case_fold: bool,
-    case_translation: Option<crate::emacs_core::regex_emacs::CaseTranslation>,
+    case_translation_table: Option<Value>,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
     word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
@@ -1389,7 +1390,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
                         start,
                         case_fold,
                         true,
-                        case_translation.clone(),
+                        case_translation_table,
                         syntax,
                     );
                     let target = if inhibit_modify { None } else { match_data };
@@ -1412,7 +1413,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
 
 pub(crate) fn builtin_string_match_p_with_case_fold(
     case_fold: bool,
-    case_translation: Option<crate::emacs_core::regex_emacs::CaseTranslation>,
+    case_translation_table: Option<Value>,
     syntax_table: Option<&crate::emacs_core::syntax::SyntaxTable>,
     category_table: Option<Value>,
     word_boundary: crate::emacs_core::regex_emacs::WordBoundaryLookup,
@@ -1442,7 +1443,7 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
                     start,
                     case_fold,
                     false,
-                    case_translation,
+                    case_translation_table,
                     syntax,
                 ),
                 None,
@@ -1478,9 +1479,10 @@ pub(crate) fn builtin_posix_string_match(
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let case_translation = if case_fold {
-        let canon = crate::emacs_core::casetab::current_case_canon_table(eval)?;
-        Some(crate::emacs_core::regex_emacs::CaseTranslation::from_char_table(canon))
+    // The canon TABLE only: regexp compile builds (and caches) the actual
+    // CaseTranslation; constructing its 1KB memo per call was pure waste.
+    let case_translation_table = if case_fold {
+        Some(crate::emacs_core::casetab::current_case_canon_table(eval)?)
     } else {
         None
     };
@@ -1495,7 +1497,7 @@ pub(crate) fn builtin_posix_string_match(
     let match_data = (!inhibit_changing).then_some(&mut eval.match_data);
     builtin_posix_string_match_with_state(
         case_fold,
-        case_translation,
+        case_translation_table,
         syntax_table.as_ref(),
         category_table,
         word_boundary,

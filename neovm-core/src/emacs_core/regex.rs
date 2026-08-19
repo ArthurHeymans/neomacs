@@ -288,20 +288,26 @@ fn buffer_regexp_syntax_lookup<'a>(
 /// This type cannot be stored in evaluator state.  Buffer and string search
 /// paths must publish it into source-specific character coordinates first.
 fn engine_match_data_from_registers(regs: &MatchRegisters, offset: usize) -> EngineMatchData {
+    // Build the byte-range groups directly: routing through
+    // `EngineMatchData::new` would re-map the whole Vec a second time, per
+    // match, on the hottest search path.
     let num_groups = regs.num_regs();
     let mut groups = Vec::with_capacity(gnu_search_regs_capacity(num_groups));
     for i in 0..num_groups {
         if regs.start[i] >= 0 && regs.end[i] >= 0 {
-            groups.push(Some(MatchGroup::new(
-                regs.start[i] as usize + offset,
-                regs.end[i] as usize + offset,
-            )));
+            groups.push(Some(
+                MatchGroup::new(
+                    regs.start[i] as usize + offset,
+                    regs.end[i] as usize + offset,
+                )
+                .emacs_byte_range(),
+            ));
         } else {
             groups.push(None);
         }
     }
-    extend_to_gnu_search_regs_capacity(&mut groups);
-    EngineMatchData::new(groups)
+    groups.resize(gnu_search_regs_capacity(groups.len()), None);
+    EngineMatchData { groups }
 }
 
 fn buffer_engine_match_data_from_registers(
@@ -838,18 +844,33 @@ impl EngineMatchData {
         crate::emacs_core::perf_trace::time_op(
             crate::emacs_core::perf_trace::HotpathOp::RegexMatchDataChars,
             || {
-                let char_groups = self
-                    .groups
-                    .into_iter()
-                    .map(|range| {
-                        range.map(|range| {
-                            MatchGroup::new(
-                                searched_string.byte_to_char_pos(range.start().get()),
-                                searched_string.byte_to_char_pos(range.end().get()),
-                            )
+                // Resolve the searched string ONCE: `SearchedString::
+                // byte_to_char_pos` re-decodes the Value per endpoint, and for
+                // unibyte/all-ASCII strings byte == char so the whole
+                // conversion is the identity.
+                let string = searched_string.as_lisp_string();
+                let identity = string
+                    .map(|s| !s.is_multibyte() || s.schars() == s.sbytes())
+                    .unwrap_or(true);
+                let char_groups = if identity {
+                    self.groups
+                        .into_iter()
+                        .map(|range| range.map(MatchGroup::from_emacs_byte_range))
+                        .collect()
+                } else {
+                    let string = string.expect("non-identity conversion has a string");
+                    self.groups
+                        .into_iter()
+                        .map(|range| {
+                            range.map(|range| {
+                                MatchGroup::new(
+                                    string.byte_to_char_pos(range.start().get()),
+                                    string.byte_to_char_pos(range.end().get()),
+                                )
+                            })
                         })
-                    })
-                    .collect();
+                        .collect()
+                };
                 MatchData::string(char_groups, Some(searched_string))
             },
         )
@@ -1586,7 +1607,12 @@ fn compile_lisp_pattern_with_posix_translation(
     case_fold: bool,
     posix: bool,
     target_multibyte: bool,
-    translation: Option<CaseTranslation>,
+    // The case-canon CHAR-TABLE, not a built CaseTranslation: a
+    // CaseTranslation is a 1KB memo the cache-hit path never reads, and
+    // building + cloning one per search call was ~170 Ir of pure waste.
+    // The compiled pattern (cached) owns the built translation instead,
+    // so its memo warms across calls.
+    translation_table: Option<super::value::Value>,
     syntax: &dyn SyntaxLookup,
 ) -> Result<Rc<CompiledPattern>, String> {
     // The standard translation's cache key is a constant (its table is
@@ -1594,7 +1620,7 @@ fn compile_lisp_pattern_with_posix_translation(
     // it copied a 1KB byte map per call, cache hits included. Build it on
     // the miss path only.
     let translation_key = if case_fold {
-        Some(translation.as_ref().map_or(0, CaseTranslation::cache_key))
+        Some(translation_table.map_or(0, |table| table.bits()))
     } else {
         None
     };
@@ -1638,7 +1664,9 @@ fn compile_lisp_pattern_with_posix_translation(
     }
 
     let effective_translation = if case_fold {
-        translation.or_else(|| Some(CaseTranslation::standard()))
+        translation_table
+            .map(CaseTranslation::from_char_table)
+            .or_else(|| Some(CaseTranslation::standard()))
     } else {
         None
     };
@@ -1701,7 +1729,7 @@ pub(crate) fn buffer_regexp_syntax_dependency(
         case_fold,
         posix,
         buf.get_multibyte(),
-        buffer_search_translation(buf, case_fold),
+        buffer_search_translation_table(buf, case_fold),
         &syntax,
     )?;
     Ok(if compiled.uses_syntax {
@@ -2643,10 +2671,17 @@ pub(crate) fn re_search_backward_with_posix(
 /// table is installed, else `None` so the engine's fast hardwired folding is
 /// used. Mirrors GNU search.c installing `BVAR (current_buffer, case_canon_table)`.
 fn buffer_search_translation(buf: &Buffer, case_fold: bool) -> Option<CaseTranslation> {
+    buffer_search_translation_table(buf, case_fold).map(CaseTranslation::from_char_table)
+}
+
+/// The case-canon table alone, for the regexp-compile path: the compiled
+/// pattern builds (and caches) its own `CaseTranslation`, so handing compile
+/// a prebuilt 1KB memo per call would be waste the cache-hit path discards.
+fn buffer_search_translation_table(buf: &Buffer, case_fold: bool) -> Option<super::value::Value> {
     if !case_fold {
         return None;
     }
-    crate::emacs_core::casetab::buffer_case_canon_table(buf).map(CaseTranslation::from_char_table)
+    crate::emacs_core::casetab::buffer_case_canon_table(buf)
 }
 
 pub(crate) fn re_search_forward_lisp_with_posix(
@@ -2678,14 +2713,13 @@ pub(crate) fn re_search_forward_lisp_with_posix(
     let region_start = accessible.start();
     let start_rel = start.get() - region_start.get();
     let limit_rel = limit.get() - region_start.get();
-    let translation = buffer_search_translation(buf, case_fold);
     let syn = buffer_regexp_syntax_lookup(buf, region_start, match_context);
     let compiled = compile_lisp_pattern_with_posix_translation(
         pattern,
         case_fold,
         posix,
         buf.get_multibyte(),
-        translation,
+        buffer_search_translation_table(buf, case_fold),
         &syn,
     )?;
 
@@ -2747,7 +2781,7 @@ pub(crate) fn re_search_backward_lisp_with_posix(
         case_fold,
         posix,
         buf.get_multibyte(),
-        buffer_search_translation(buf, case_fold),
+        buffer_search_translation_table(buf, case_fold),
         &syn,
     )?;
 
@@ -2861,7 +2895,7 @@ pub(crate) fn looking_at_lisp_with_posix(
         case_fold,
         posix,
         buf.get_multibyte(),
-        buffer_search_translation(buf, case_fold),
+        buffer_search_translation_table(buf, case_fold),
         &syn,
     )?;
 
@@ -3048,7 +3082,7 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
     start: usize,
     case_fold: bool,
     posix: bool,
-    translation: Option<CaseTranslation>,
+    translation_table: Option<super::value::Value>,
     syntax: &dyn SyntaxLookup,
     match_data: &mut Option<MatchData>,
 ) -> Result<Option<usize>, String> {
@@ -3059,7 +3093,7 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
         start,
         case_fold,
         posix,
-        translation,
+        translation_table,
         syntax,
     )?;
     Ok(success.map(|success| {
@@ -3077,7 +3111,7 @@ pub(crate) fn string_search_full_with_case_fold_source_lisp_pattern_posix_syntax
     start: usize,
     case_fold: bool,
     posix: bool,
-    translation: Option<CaseTranslation>,
+    translation_table: Option<super::value::Value>,
     syntax: &dyn SyntaxLookup,
 ) -> Result<Option<StringSearchSuccess>, String> {
     if start > string.byte_len() {
@@ -3089,7 +3123,7 @@ pub(crate) fn string_search_full_with_case_fold_source_lisp_pattern_posix_syntax
         case_fold,
         posix,
         string.is_multibyte(),
-        translation,
+        translation_table,
         syntax,
     )?;
     let text_bytes = string.as_bytes();
