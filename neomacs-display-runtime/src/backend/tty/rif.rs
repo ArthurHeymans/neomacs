@@ -2567,30 +2567,43 @@ pub fn rgb_to_256(r: u8, g: u8, b: u8) -> u8 {
     u8::try_from(index).expect("a 256-entry palette indexes into a u8")
 }
 
+/// GNU `tty-color-approximate`'s loop over a palette of `length` entries whose
+/// RGB is `entry(index)`, consulted in ascending index order -- which is what
+/// makes an exact tie resolve to the entry GNU picks (0 for `#000000`, 15 for
+/// `#ffffff`, never 16 or 231).
+fn approximate_over_palette(
+    length: u16,
+    entry: impl Fn(u16) -> (u8, u8, u8),
+    r: u8,
+    g: u8,
+    b: u8,
+) -> u16 {
+    let favor_non_gray = off_gray_diagonal(r, g, b) >= 0.065;
+    let mut best_index = None;
+    let mut best_distance = u32::MAX;
+    for index in 0..length {
+        let (cr, cg, cb) = entry(index);
+        if favor_non_gray && cr == cg && cg == cb {
+            continue;
+        }
+        let difference = |lhs: u8, rhs: u8| -> u32 {
+            let delta = lhs as i32 - rhs as i32;
+            (delta * delta) as u32
+        };
+        let distance = difference(r, cr) + difference(g, cg) + difference(b, cb);
+        if distance < best_distance {
+            best_distance = distance;
+            best_index = Some(index);
+        }
+    }
+    // GNU returns nil when every candidate was skipped, and its callers treat
+    // that as "not resolved". Only an all-gray palette can do that, which none
+    // of these three are, so fall back to entry 0 rather than inventing a
+    // second policy for a state that cannot occur.
+    best_index.unwrap_or(0)
+}
+
 impl TtyColorTier {
-    /// How many entries this tier's `tty-color-alist` has, or `None` for the
-    /// two tiers that never search one.
-    fn palette_len(self) -> Option<u16> {
-        match self {
-            Self::Monochrome | Self::TrueColor => None,
-            Self::Ansi8 => Some(8),
-            Self::Ansi16 => Some(16),
-            Self::Palette256 => Some(256),
-        }
-    }
-
-    /// The RGB of palette entry INDEX in this tier, in the same ascending order
-    /// `tty-color-alist` is consulted -- which is what makes an exact tie
-    /// resolve to the same entry GNU picks (0 for `#000000`, 15 for `#ffffff`,
-    /// never 16 or 231).
-    fn entry(self, index: u16) -> (u8, u8, u8) {
-        match self {
-            Self::Monochrome | Self::TrueColor => unreachable!("tier has no palette"),
-            Self::Ansi8 | Self::Ansi16 => SYSTEM_COLORS[index as usize],
-            Self::Palette256 => xterm_256_entry(index as u8),
-        }
-    }
-
     /// GNU `tty-color-approximate` (lisp/term/tty-colors.el:875-915) over this
     /// tier's palette: the smallest squared 8-bit RGB distance across the WHOLE
     /// palette, skipping candidates on the gray diagonal whenever the REQUESTED
@@ -2609,30 +2622,23 @@ impl TtyColorTier {
     /// measured it against GNU: 4,589 of 5,832 sampled colors wrong at 8 colors,
     /// 4,048 of 5,832 at 16.  One search, chosen by tier, is the whole point.
     pub fn approximate(self, r: u8, g: u8, b: u8) -> Option<u16> {
-        let length = self.palette_len()?;
-        let favor_non_gray = off_gray_diagonal(r, g, b) >= 0.065;
-        let mut best_index = None;
-        let mut best_distance = u32::MAX;
-        for index in 0..length {
-            let (cr, cg, cb) = self.entry(index);
-            if favor_non_gray && cr == cg && cg == cb {
-                continue;
-            }
-            let difference = |lhs: u8, rhs: u8| -> u32 {
-                let delta = lhs as i32 - rhs as i32;
-                (delta * delta) as u32
-            };
-            let distance = difference(r, cr) + difference(g, cg) + difference(b, cb);
-            if distance < best_distance {
-                best_distance = distance;
-                best_index = Some(index);
-            }
+        let system = |index: u16| SYSTEM_COLORS[index as usize];
+        match self {
+            // Not "no answer yet" but "no question": monochrome emits nothing
+            // and truecolor emits the channels themselves. Neither has a
+            // palette, so neither can be searched, and the type says so rather
+            // than a panic in a display path saying it.
+            Self::Monochrome | Self::TrueColor => None,
+            Self::Ansi8 => Some(approximate_over_palette(8, system, r, g, b)),
+            Self::Ansi16 => Some(approximate_over_palette(16, system, r, g, b)),
+            Self::Palette256 => Some(approximate_over_palette(
+                256,
+                |index| xterm_256_entry(index as u8),
+                r,
+                g,
+                b,
+            )),
         }
-        // GNU returns nil when every candidate was skipped, and its callers
-        // treat that as "not resolved". Only an all-gray palette can do that,
-        // which none of these three are, so fall back to entry 0 rather than
-        // inventing a second policy for a state that cannot occur.
-        Some(best_index.unwrap_or(0))
     }
 }
 

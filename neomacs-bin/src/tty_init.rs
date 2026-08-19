@@ -99,22 +99,30 @@ pub fn detect_tty_name(_startup: &StartupOptions) -> String {
 /// survives only as the fallback for a terminal whose entry cannot be read at
 /// all, where GNU would have exited with "terminal type not defined".
 pub fn detect_tty_color_cells() -> i64 {
-    let colorterm = std::env::var("COLORTERM")
-        .unwrap_or_default()
-        .to_ascii_lowercase();
+    tty_color_cells(
+        &std::env::var("COLORTERM").unwrap_or_default(),
+        &std::env::var("TERM").unwrap_or_default(),
+        super::terminal_capabilities::open_terminal_capability_database,
+    )
+}
+
+/// The rule itself, over an injected terminal database, so it can be measured
+/// against a terminfo entry this machine may not have installed.
+pub(crate) fn tty_color_cells(
+    colorterm: &str,
+    term: &str,
+    open: impl FnOnce(&str) -> Option<Box<dyn TerminalCapabilityDatabase>>,
+) -> i64 {
+    let colorterm = colorterm.to_ascii_lowercase();
     if colorterm.contains("truecolor") || colorterm.contains("24bit") {
         return 16777216;
     }
 
-    let term = std::env::var("TERM")
-        .unwrap_or_default()
-        .to_ascii_lowercase();
+    let term = term.to_ascii_lowercase();
     if term.is_empty() || term == "dumb" {
         return 0;
     }
-    if let Some(mut database) =
-        super::terminal_capabilities::open_terminal_capability_database(&term)
-    {
+    if let Some(mut database) = open(&term) {
         // GNU: `TN_max_colors = tgetnum ("Co")', and a terminal that reports no
         // color capability answers -1, which GNU treats as "no colors".
         return database
