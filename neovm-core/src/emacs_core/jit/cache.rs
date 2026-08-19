@@ -175,7 +175,15 @@ fn compile_osr_leaf(
     func: &ByteCodeFunction,
     osr_pc: usize,
 ) -> Option<(Rc<CompiledLeaf>, usize)> {
+    let dbg = std::env::var_os("NEOMACS_OSR_DEBUG").is_some();
     if !func.lexical || osr_body_has_dynamic_state(func) {
+        if dbg {
+            eprintln!(
+                "OSR_DEBUG reject pre: lexical={} dynstate={}",
+                func.lexical,
+                osr_body_has_dynamic_state(func)
+            );
+        }
         return None;
     }
     let ops = func.executable_ops();
@@ -183,22 +191,48 @@ fn compile_osr_leaf(
         + func.params.optional.len()
         + usize::from(func.params.rest.is_some());
     let offset_map = func.executable_gnu_byte_offset_map();
-    let cfg = super::compile::analyze_cfg(ops, &func.constants, offset_map, native_arity).ok()?;
+    let cfg = match super::compile::analyze_cfg(ops, &func.constants, offset_map, native_arity) {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            if dbg {
+                eprintln!("OSR_DEBUG reject analyze_cfg: {e:?} ops={}", ops.len());
+            }
+            return None;
+        }
+    };
     // The loop header must be a real block boundary with a known entry depth and
     // no active handler frames (belt-and-suspenders with the op scan).
-    let entry_depth = *cfg.entry_depth.get(&osr_pc)?;
+    let Some(&entry_depth) = cfg.entry_depth.get(&osr_pc) else {
+        if dbg {
+            eprintln!("OSR_DEBUG reject: no entry depth at pc {osr_pc}");
+        }
+        return None;
+    };
     if !cfg.entry_handlers.get(&osr_pc).is_none_or(|h| h.is_empty()) {
+        if dbg {
+            eprintln!("OSR_DEBUG reject: handlers live at pc {osr_pc}");
+        }
         return None;
     }
-    let leaf = super::compile::lower_leaf_full_osr(
+    let leaf = match super::compile::lower_leaf_full_osr(
         ops,
         &func.constants,
         native_arity,
         offset_map,
         Some(obarray),
         Some(osr_pc),
-    )
-    .ok()?;
+    ) {
+        Ok(leaf) => leaf,
+        Err(e) => {
+            if dbg {
+                eprintln!("OSR_DEBUG reject lower: {e:?}");
+            }
+            return None;
+        }
+    };
+    if dbg {
+        eprintln!("OSR_DEBUG compiled: pc={osr_pc} depth={entry_depth}");
+    }
     Some((Rc::new(leaf), entry_depth))
 }
 
@@ -237,11 +271,27 @@ pub(crate) fn try_run_osr(
     let (leaf, entry_depth) = cached?;
     // Only transfer when the live snapshot is exactly the header's entry stack.
     if stack.len() != entry_depth {
+        if std::env::var_os("NEOMACS_OSR_DEBUG").is_some() {
+            eprintln!(
+                "OSR_DEBUG no-transfer: pc={osr_pc} snapshot depth {} != entry {entry_depth}",
+                stack.len()
+            );
+        }
         return None;
     }
     let arg_bits: Vec<i64> = stack.iter().map(|v| v.bits() as i64).collect();
     OSR_TRANSFER_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    Some(leaf.call_premarshaled(ctx as *mut u8, arg_bits.as_ptr()))
+    let run = leaf.call_premarshaled(ctx as *mut u8, arg_bits.as_ptr());
+    if std::env::var_os("NEOMACS_OSR_DEBUG").is_some() {
+        let tag = match &run {
+            NativeRun::Ok(_) => "ok",
+            NativeRun::Deopt => "deopt",
+            NativeRun::DeoptAt(_) => "deopt_at",
+            NativeRun::Signal => "signal",
+        };
+        eprintln!("OSR_DEBUG transfer outcome: pc={osr_pc} {tag}");
+    }
+    Some(run)
 }
 
 /// Count of OSR transfers actually taken (a native OSR entry was invoked). Lets
