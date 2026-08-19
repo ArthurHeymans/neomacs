@@ -235,8 +235,8 @@ impl TaggedValue {
     /// It exists because the free list is threaded through the dead cells
     /// themselves (`ConsCell::set_free_next`, matching GNU `sweep_conses`), so
     /// a reclaimed cell's slots still decode as ordinary Lisp values. `nil` in
-    /// the car is indistinguishable from a real `nil`; `dead_object` is not
-    /// distinguishable from anything, which is the whole point.
+    /// the car is indistinguishable from a real `nil`; `dead_object` is
+    /// distinguishable from every live value, which is the whole point.
     pub const DEAD: Self = Self(TAG_STRING);
 
     /// GNU `deadp` (`src/alloc.c:425-429`) — is this the free-list poison?
