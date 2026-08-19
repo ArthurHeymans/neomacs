@@ -10789,3 +10789,72 @@ fn a_speed_nil_serial_port_is_opened_and_not_configured() {
     assert_ne!(attributes.c_lflag & libc::ICANON, 0, "left alone");
     assert_ne!(attributes.c_iflag & libc::ICRNL, 0, "left alone");
 }
+
+/// DIVERGENCES.md entry 156: a subprocess reads through GNU's `detect_coding`
+/// too, so a UTF-16 signature survives the null bytes that surround it.
+///
+/// `read_and_insert_process_output` and the filter branch both reach
+/// `decode_coding_object` through `decode_coding_c_string` (src/process.c:6502,
+/// :6562), and that is where `CODING_REQUIRE_DETECTION` runs `detect_coding`
+/// (src/coding.c:8128-8129).  The null byte NARROWS the category walk to UTF-16
+/// (:6614-6618) instead of closing it, so rows one and two report a concrete
+/// UTF-16 coding system where entry 151 left the process door reporting
+/// `no-conversion` -- the answer the reporting detector gives, which the process
+/// door had started sharing.
+///
+/// Rows three and four are the narrowed walk finding nothing and the null byte's
+/// FALLBACK standing (:6683-6684).
+///
+/// Row five is `detect_coding_utf_16`'s own LAST_BLOCK conjunct
+/// (:1505-1511), which `read_process_output` leaves clear until EOF
+/// (src/process.c:6321): five bytes are an odd count, and an odd count refutes
+/// UTF-16 only for a complete source.  `decode-coding-string` on the very same
+/// five bytes answers `no-conversion`; a pipe answers
+/// `utf-16le-with-signature-mac`.
+///
+/// Row six is the signature split across the read boundary.
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program
+/// (`tmp/pw156/pin2.el`, `tmp/pw156/pin2-gnu.txt`).
+#[test]
+fn a_utf_16_signature_survives_its_own_null_bytes_in_a_process_read() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw156p-run (script)
+               (let ((buf (generate-new-buffer " *pw156p*")))
+                 (unwind-protect
+                     (let ((p (make-process :name "pw156p" :buffer buf :sentinel #'ignore
+                                            :connection-type 'pipe
+                                            :command (list "{sh}" "-c" script))))
+                       (while (accept-process-output p 1))
+                       (while (process-live-p p) (accept-process-output p 0.05))
+                       (list (append (with-current-buffer buf (buffer-string)) nil)
+                             (process-coding-system p)
+                             last-coding-system-used))
+                   (kill-buffer buf))))
+             (let ((default-process-coding-system '(undecided . utf-8-unix))
+                   (coding-system-for-read 'undecided))
+               (list
+                (pw156p-run "printf '\\377\\376a\\0\\r\\0\\n\\0'")
+                (pw156p-run "printf '\\376\\377\\0a\\0\\r\\0\\n'")
+                (pw156p-run "printf 'a\\0b\\0c\\0d\\0'")
+                (pw156p-run "printf 'a\\0b\\r\\n'")
+                (pw156p-run "printf '\\377\\376a\\0\\r'")
+                (pw156p-run "printf '\\377\\376a\\0'; sleep 0.7; printf '\\r\\0\\n\\0'"))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((97 10) (utf-16le-with-signature-dos . utf-8-unix) utf-16le-with-signature-dos) ",
+            "((97 10) (utf-16be-with-signature-dos . utf-8-unix) utf-16be-with-signature-dos) ",
+            "((97 0 98 0 99 0 100 0) (no-conversion . utf-8-unix) no-conversion) ",
+            "((97 0 98 13 10) (no-conversion . utf-8-unix) no-conversion) ",
+            "((97 10) (utf-16le-with-signature-mac . utf-8-unix) utf-16le-with-signature-mac) ",
+            "((97 10) (utf-16le-with-signature-dos . utf-8-unix) utf-16le-with-signature-dos))",
+        )
+    );
+}

@@ -4090,14 +4090,28 @@ fn builtin_coding_string_in_context(
     if !dedicated_codec
         && let Some((hook, base_type)) = coding_conversion_hook(ctx, &coding, encode)
     {
-        // GNU's `code_convert_string` (src/coding.c) takes an identity fast path
-        // for an ASCII-compatible coding when the input is pure ASCII and needs
-        // no EOL conversion, returning the string unchanged WITHOUT running
+        // GNU's `code_convert_string` takes an identity fast path for an
+        // ASCII-compatible coding when the input is pure ASCII and needs no EOL
+        // conversion, returning the string unchanged WITHOUT running
         // encode/decode_coding_object — and therefore WITHOUT the pre/post
         // conversion hook.  So a pure-ASCII `(encode-coding-string "cafe'"
         // 'vietnamese-viqr)` is `"cafe'"`, not the VIQR-translated `café`.
-        let result =
-            if coding_ascii_identity_fast_path(ctx, &coding, &args, encode, ctx.eol_conversion()) {
+        //
+        // It is `code_convert_string`'s fast path and nobody else's
+        // (src/coding.c:9609-9628), which is why the ENTRY has to be asked
+        // rather than only the bytes.  `decode_coding_gap` refuses the
+        // analogous ASCII optimization outright when a `:post-read-conversion`
+        // exists (`NILP (CODING_ATTR_POST_READ (attrs))` at :7933), and
+        // `code_convert_region` has no such path at all, so both of those run
+        // the hook.  Measured under GNU Emacs 31.0.90 on the pure-ASCII VIQR
+        // source `Vie^.t Nam a` e^``:
+        //
+        //   (decode-coding-string ... 'vietnamese-viqr) => the source, unchanged
+        //   (decode-coding-region ... 'vietnamese-viqr) => Việt Nam à ề
+        //   insert-file-contents with that coding       => Việt Nam à ề
+        let result = if entry.has_identity_fast_path()
+            && coding_ascii_identity_fast_path(ctx, &coding, &args, encode, ctx.eol_conversion())
+        {
                 // Identity: encode yields a unibyte string, decode a multibyte one
                 // (GNU `make_unibyte_string` / `make_multibyte_string`).  The bytes
                 // are pure ASCII, so the two storage forms coincide.
