@@ -1551,8 +1551,12 @@ fn process_coding_symbol_name(value: Value) -> &'static str {
 /// saying so, which is exactly what makes them -- and only them -- the
 /// convert-nothing case.  DIVERGENCES.md entry 131 recorded this conflation in
 /// advance; entry 134 removed it.
-fn process_coding_converts_nothing(coding: Value) -> bool {
-    matches!(coding.as_symbol_name(), Some("binary" | "no-conversion"))
+/// It is keyed on the NAME rather than on the slot `Value` because the coding
+/// system reaching it is as often one `detect_coding` produced -- GNU answers
+/// `Qno_conversion` for a source with a null byte in it (src/coding.c:6686) --
+/// as one the creation-time chain resolved.
+fn process_coding_name_converts_nothing(name: &str) -> bool {
+    matches!(name, "binary" | "no-conversion")
 }
 
 /// The ENCODE-side twin, where `raw-text` DOES belong.
@@ -1595,8 +1599,27 @@ pub(crate) enum ProcessOutputDecoding {
     /// `Vlast_coding_system_used` from `CODING_ID_NAME (coding->id)` after every
     /// run of process output (src/process.c:6421), `binary` included.
     Bytes(&'static str),
-    /// Decode under this coding system.
+    /// Decode under this coding system, which is fully specified: GNU's
+    /// `setup_coding_system` left `CODING_REQUIRE_DETECTION` clear, so the
+    /// decoder is chosen and `coding->id` will not move under it.
     Coding(&'static str),
+    /// `CODING_REQUIRE_DETECTION` (src/coding.h:553): the name here is a
+    /// REQUEST, not an answer.
+    ///
+    /// `decode_coding_object` calls `detect_coding` before any decoder runs
+    /// (src/coding.c:8129-8130), and `detect_coding` REPLACES the whole coding
+    /// system with the one it found -- `setup_coding_system (found, coding)`,
+    /// :6743.  So the bytes are not decoded under this name and must not be
+    /// reported under it either: measured under GNU 31.0.90, a subprocess whose
+    /// chain answers nil and whose child writes `caf <c3> <a9> CR LF x CR LF`
+    /// ends with `(process-coding-system P)` = `(utf-8-dos . utf-8-dos)`, never
+    /// `(undecided-dos . undecided-dos)`.
+    ///
+    /// The variant exists so that name cannot reach a decoder: the only way out
+    /// of it is [`ProcessOutputDecoding::detected`], which needs the bytes and
+    /// the `CodingSystemManager` and answers a [`ResolvedProcessDecoding`],
+    /// which is the only thing that has a `decode`.
+    Detect(&'static str),
 }
 
 impl ProcessOutputDecoding {
@@ -1609,12 +1632,58 @@ impl ProcessOutputDecoding {
     /// nil "caf\\303\\251"))` leaves GNU with four characters, not five.
     pub(crate) fn for_coding(coding: Value) -> Self {
         if coding.is_nil() {
-            return Self::Coding("undecided");
+            return Self::for_name("undecided");
         }
-        if process_coding_converts_nothing(coding) {
-            Self::Bytes(process_coding_symbol_name(coding))
+        Self::for_name(process_coding_symbol_name(coding))
+    }
+
+    /// The three states `setup_coding_system` can leave a `struct coding_system`
+    /// in, as a function of the coding system's NAME.
+    ///
+    /// This is the one place the "does it still detect?" question is answered,
+    /// which is what keeps the answer from drifting between the slot a process
+    /// was created with and the slot the write-back later replaced it with:
+    /// both go through here.
+    pub(crate) fn for_name(name: &'static str) -> Self {
+        if process_coding_name_converts_nothing(name) {
+            Self::Bytes(name)
+        } else if crate::encoding::coding_name_requires_detection(name) {
+            Self::Detect(name)
         } else {
-            Self::Coding(process_coding_symbol_name(coding))
+            Self::Coding(name)
+        }
+    }
+
+    /// GNU's `detect_coding` (src/coding.c:6503-6759) as the step that turns a
+    /// decoding into one that can actually decode.
+    ///
+    /// It runs BEFORE the decoder in GNU and it has to run before it here too,
+    /// for a reason beyond the reported name: the coding system it picks is the
+    /// one whose decoder decides how many trailing bytes are incomplete, so a
+    /// chunk ending mid-sequence is held back only if the DETECTED coding would
+    /// hold it back.  A `utf-8` answer keeps a truncated multibyte tail; an
+    /// `iso-latin-1` answer -- GNU's answer for bytes that are not valid UTF-8
+    /// -- keeps nothing, because every byte is a character.
+    pub(crate) fn detected(
+        self,
+        coding_systems: &crate::emacs_core::coding::CodingSystemManager,
+        bytes: &[u8],
+    ) -> ResolvedProcessDecoding {
+        match self {
+            Self::Bytes(name) => ResolvedProcessDecoding::Bytes(name),
+            Self::Coding(name) => ResolvedProcessDecoding::Coding(name),
+            Self::Detect(requested) => {
+                // A nil `found` leaves the coding system exactly as it was,
+                // decoder included -- and it will be offered the NEXT chunk
+                // again, because the name it keeps still requires detection.
+                let found = crate::encoding::detected_coding_name(coding_systems, requested, bytes)
+                    .unwrap_or(requested);
+                if process_coding_name_converts_nothing(found) {
+                    ResolvedProcessDecoding::Bytes(found)
+                } else {
+                    ResolvedProcessDecoding::Coding(found)
+                }
+            }
         }
     }
 
@@ -1631,8 +1700,14 @@ impl ProcessOutputDecoding {
         let coding = match self {
             // Already byte-faithful.
             Self::Bytes(_) => return self,
-            Self::Coding(name) => name,
+            Self::Coding(name) | Self::Detect(name) => name,
         };
+        // Every answer below is a `raw-text` subsidiary, and `raw-text` does
+        // NOT detect (GNU raises `CODING_REQUIRE_DETECTION` for the `undecided`
+        // TYPE, not for an undecided end of line), so the downgrade closes the
+        // detection question rather than carrying it: measured under GNU
+        // 31.0.90, a subprocess with a unibyte buffer and a nil chain reports
+        // `raw-text-dos` for `caf <c3> <a9> CR LF`, not `utf-8-dos`.
         Self::Coding(if coding == "dos" || coding.ends_with("-dos") {
             "raw-text-dos"
         } else if coding == "mac" || coding.ends_with("-mac") {
@@ -1643,82 +1718,6 @@ impl ProcessOutputDecoding {
             // No EOL type of its own: GNU's `raw-text`, whose EOL is undecided.
             "raw-text"
         })
-    }
-
-    /// The coding-system name this decoding reports having used, BEFORE
-    /// `decode_eol` gets a chance to adjust it.
-    pub(crate) fn coding_name(self) -> &'static str {
-        match self {
-            Self::Bytes(name) | Self::Coding(name) => name,
-        }
-    }
-
-    /// GNU `adjust_coding_eol_type` rewriting `coding->id` in place
-    /// (src/coding.c:6471-6497).
-    ///
-    /// The rewrite is not a report -- it changes what the SAME
-    /// `struct coding_system` decodes with from then on, which is why a
-    /// subprocess's second chunk is decoded by whatever its first chunk
-    /// resolved.  `NAME` is the name the rewrite produced (already canonical,
-    /// see `adjusted_coding_name`); an unadjusted resolution leaves the
-    /// decoding exactly as it was.
-    pub(crate) fn adjusted_to(
-        self,
-        name: &str,
-        eol: crate::emacs_core::coding::DecodeEolResolution,
-    ) -> Self {
-        if eol.adjusted().is_none() {
-            return self;
-        }
-        // Symbol names are interned for the life of the session, so the
-        // adjusted name is available as the `&'static str` this type holds.
-        let interned =
-            crate::emacs_core::intern::resolve_sym(crate::emacs_core::intern::intern(name));
-        match self {
-            Self::Bytes(_) => Self::Bytes(interned),
-            Self::Coding(_) => Self::Coding(interned),
-        }
-    }
-
-    /// Turn a run of child output bytes into the text that is inserted, and
-    /// keep what `decode_eol` decided while doing it.
-    ///
-    /// GNU cannot lose that answer: the decode runs through the process's own
-    /// `struct coding_system`, so `adjust_coding_eol_type`'s rewrite of
-    /// `coding->id` IS the record.  Here each run is a separate call, so the
-    /// answer has to be returned, and
-    /// [`ProcessRunCoding`] is what the caller must then do something with.
-    pub(crate) fn decode(
-        self,
-        bytes: &[u8],
-        eol_conversion: crate::emacs_core::coding::EolConversion,
-    ) -> ProcessDecodedRun {
-        use crate::emacs_core::coding::{DecodeEolResolution, ResolvedEol};
-        match self {
-            // `binary` and `no-conversion` have a CONCRETE `Qunix` eol type
-            // (GNU gives them `:eol-type unix` outright), so `decode_eol`
-            // returns immediately and never adjusts the name.
-            Self::Bytes(name) => ProcessDecodedRun {
-                text: LispString::from_unibyte(bytes.to_vec()),
-                coding: ProcessRunCoding {
-                    coding: name,
-                    eol: DecodeEolResolution::Specified(ResolvedEol::Unix),
-                },
-            },
-            // Issue #131: decode straight to Emacs bytes so process output
-            // keeps real PUA glyphs and eight-bit raw bytes instead of
-            // round-tripping through the lossy storage-string form.
-            Self::Coding(name) => {
-                let run = crate::encoding::decode_process_run(bytes, name, eol_conversion);
-                ProcessDecodedRun {
-                    text: run.text,
-                    coding: ProcessRunCoding {
-                        coding: name,
-                        eol: run.eol,
-                    },
-                }
-            }
-        }
     }
 
     /// GNU's `setup_process_coding_systems` (src/process.c:8380-8409): turn the
@@ -1741,26 +1740,107 @@ impl ProcessOutputDecoding {
     }
 }
 
+/// A process decoding with nothing left to detect: GNU's `struct coding_system`
+/// at the moment `detect_coding` returns and the decoder is about to run.
+///
+/// The type exists to make one thing unrepresentable: decoding, or reporting,
+/// under a name that `detect_coding` would have replaced.  A
+/// [`ProcessOutputDecoding`] has no `decode`; the only bridge is
+/// [`ProcessOutputDecoding::detected`], which takes the bytes and the
+/// `CodingSystemManager` -- GNU's `coding_categories` / `coding_priorities`
+/// globals, which cannot be globals here (entry 143's reason: the obarray is
+/// owned by a `Context` and the unit suite runs many `Context`s on parallel
+/// threads), so the tables have to travel as a value.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ResolvedProcessDecoding {
+    /// `binary` / `no-conversion`: the child's bytes reach the buffer
+    /// unchanged.  Reachable from `Detect` too -- GNU answers `Qno_conversion`
+    /// for a source with a null byte in it (src/coding.c:6686).
+    Bytes(&'static str),
+    /// Decode under this coding system, which is now concrete.
+    Coding(&'static str),
+}
+
+impl ResolvedProcessDecoding {
+    /// The coding-system name the decoder will run with, BEFORE `decode_eol`
+    /// gets a chance to adjust it.
+    ///
+    /// The read-boundary carryover rules are keyed on this and not on the name
+    /// the process was configured with, because in GNU they are properties of
+    /// the DECODER `detect_coding` selected.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Bytes(name) | Self::Coding(name) => name,
+        }
+    }
+
+    /// Turn a run of child output bytes into the text that is inserted, and
+    /// keep the coding system the decode ENDED on while doing it.
+    ///
+    /// GNU cannot lose that answer: the decode runs through the process's own
+    /// `struct coding_system`, so `detect_coding`'s and
+    /// `adjust_coding_eol_type`'s rewrites of `coding->id` ARE the record.
+    /// Here each run is a separate call, so the answer has to be returned, and
+    /// [`ProcessRunCoding`] is what the caller must then do something with.
+    pub(crate) fn decode(
+        self,
+        coding_systems: &crate::emacs_core::coding::CodingSystemManager,
+        bytes: &[u8],
+        eol_conversion: crate::emacs_core::coding::EolConversion,
+    ) -> ProcessDecodedRun {
+        match self {
+            // `binary` and `no-conversion` have a CONCRETE `Qunix` eol type
+            // (GNU gives them `:eol-type unix` outright), so `decode_eol`
+            // returns immediately and never adjusts the name.
+            Self::Bytes(name) => ProcessDecodedRun {
+                text: LispString::from_unibyte(bytes.to_vec()),
+                coding: ProcessRunCoding { used: name },
+            },
+            // Issue #131: decode straight to Emacs bytes so process output
+            // keeps real PUA glyphs and eight-bit raw bytes instead of
+            // round-tripping through the lossy storage-string form.
+            Self::Coding(name) => {
+                let run = crate::encoding::decode_process_run(
+                    coding_systems,
+                    bytes,
+                    name,
+                    eol_conversion,
+                );
+                ProcessDecodedRun {
+                    text: run.text,
+                    coding: ProcessRunCoding { used: run.used },
+                }
+            }
+        }
+    }
+}
+
 /// What one decoded run of process output has to be reported as.
 ///
 /// GNU keeps this in the process's own `struct coding_system` and reads it back
 /// out in `read_process_output_set_last_coding_system` (src/process.c:6417-6425),
 /// which does TWO writes with it: `Vlast_coding_system_used`, and -- when the
 /// decode ended up on a different coding system than it started from --
-/// `p->decode_coding_system` itself.  The second write is what makes an
-/// undecided end-of-line type sticky for the rest of the process's life.
+/// `p->decode_coding_system` itself.  The second write is what makes both a
+/// detected character code and a detected end-of-line type sticky for the rest
+/// of the process's life.
+///
+/// It is ONE name and not a name plus an adjustment, because in GNU it is one
+/// field: `coding->id`, which `setup_coding_system (found, coding)`
+/// (src/coding.c:6743) and `adjust_coding_eol_type` (:6805) both overwrite, and
+/// which `CODING_ID_NAME` then reads back.  Keeping the two rewrites apart here
+/// is what let the first one go unreported while the second one moved.
 ///
 /// It is a separate value from the decoded text because the only way to be
 /// sticky in a per-read decoder is to hand the answer back; see
 /// [`Context::read_process_output_recording_coding`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ProcessRunCoding {
-    /// The coding system the run decoded with, already carrying the
+    /// GNU `CODING_ID_NAME (coding->id)` after the decode, already carrying the
     /// unibyte-buffer `raw_text_coding_system` downgrade
-    /// (`ProcessOutputDecoding::for_process`).
-    coding: &'static str,
-    /// What `decode_eol` resolved, and whether it rewrote the name.
-    eol: crate::emacs_core::coding::DecodeEolResolution,
+    /// (`ProcessOutputDecoding::for_process`), the detected character code and
+    /// the resolved end-of-line type.
+    used: &'static str,
 }
 
 /// The text one run of process output decoded to, together with
@@ -1772,14 +1852,9 @@ pub(crate) struct ProcessDecodedRun {
 }
 
 impl ProcessDecodedRun {
-    /// The coding-system name the run decoded with, before `decode_eol`.
-    pub(crate) fn coding_name(&self) -> &'static str {
-        self.coding.coding
-    }
-
-    /// What `decode_eol` decided while decoding this run.
-    pub(crate) fn coding_eol(&self) -> crate::emacs_core::coding::DecodeEolResolution {
-        self.coding.eol
+    /// The coding system the run is reported as having used.
+    pub(crate) fn coding_used(&self) -> &'static str {
+        self.coding.used
     }
 }
 
@@ -1971,31 +2046,38 @@ fn encode_process_send_input(
 /// src/coding.c:5675-5676) and how the unibyte rule went missing entirely.
 fn decode_process_output_bytes(
     proc: &mut Process,
+    coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     sink: ProcessOutputSink,
     bytes: &[u8],
     flush: bool,
     eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> ProcessDecodedRun {
     let decoding = ProcessOutputDecoding::for_process(proc.coding_decode, sink);
-    match decoding {
-        ProcessOutputDecoding::Bytes(_) => {
-            proc.decoding_carryover.clear();
-            decoding.decode(bytes, eol_conversion)
-        }
-        ProcessOutputDecoding::Coding(name) => {
-            let mut combined = Vec::with_capacity(proc.decoding_carryover.len() + bytes.len());
-            combined.append(&mut proc.decoding_carryover);
-            combined.extend_from_slice(bytes);
-            let decode_len =
-                process_output_decode_prefix_len(name, &combined, flush, eol_conversion);
-            if decode_len < combined.len() {
-                proc.decoding_carryover
-                    .extend_from_slice(&combined[decode_len..]);
-            }
-
-            decoding.decode(&combined[..decode_len], eol_conversion)
-        }
+    if let ProcessOutputDecoding::Bytes(name) = decoding {
+        proc.decoding_carryover.clear();
+        return ResolvedProcessDecoding::Bytes(name).decode(coding_systems, bytes, eol_conversion);
     }
+
+    let mut combined = Vec::with_capacity(proc.decoding_carryover.len() + bytes.len());
+    combined.append(&mut proc.decoding_carryover);
+    combined.extend_from_slice(bytes);
+    // Detection sees the WHOLE buffer that is about to be decoded, carryover
+    // included, and it runs before the read boundary is chosen.  Both halves
+    // are GNU's: `coding->src_bytes` is the carryover plus this read
+    // (src/process.c:6243-6260), and `detect_coding` runs before any decoder
+    // hands bytes back as carryover (src/coding.c:8129-8130).  The order
+    // matters twice over, because the boundary rules below are properties of
+    // the decoder detection just chose -- a `utf-8` answer holds a truncated
+    // multibyte tail back and an `iso-latin-1` answer holds nothing back.
+    let resolved = decoding.detected(coding_systems, &combined);
+    let decode_len =
+        process_output_decode_prefix_len(resolved.name(), &combined, flush, eol_conversion);
+    if decode_len < combined.len() {
+        proc.decoding_carryover
+            .extend_from_slice(&combined[decode_len..]);
+    }
+
+    resolved.decode(coding_systems, &combined[..decode_len], eol_conversion)
 }
 
 fn process_output_runtime_string(output: &LispString) -> String {
@@ -2037,6 +2119,7 @@ fn reset_adaptive_read_delay_after_process_write(proc: &mut Process) {
 
 fn process_output_read_from_io_result(
     proc: &mut Process,
+    coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     sink: ProcessOutputSink,
     result: std::io::Result<usize>,
     bytes: &[u8],
@@ -2048,14 +2131,28 @@ fn process_output_read_from_io_result(
         Ok(0) => {
             let bytes_read = proc.decoding_carryover.len();
             DecodedProcessOutputRead::Data {
-                run: decode_process_output_bytes(proc, sink, &[], true, eol_conversion),
+                run: decode_process_output_bytes(
+                    proc,
+                    coding_systems,
+                    sink,
+                    &[],
+                    true,
+                    eol_conversion,
+                ),
                 bytes_read,
             }
         }
         Ok(n) => {
             update_process_adaptive_read_buffering(proc, n, n == full_read_len);
             DecodedProcessOutputRead::Data {
-                run: decode_process_output_bytes(proc, sink, &bytes[..n], false, eol_conversion),
+                run: decode_process_output_bytes(
+                    proc,
+                    coding_systems,
+                    sink,
+                    &bytes[..n],
+                    false,
+                    eol_conversion,
+                ),
                 bytes_read: n,
             }
         }
@@ -5692,6 +5789,7 @@ impl ProcessManager {
         id: ProcessId,
         sink: ProcessOutputSink,
         eol_conversion: crate::emacs_core::coding::EolConversion,
+        coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> DecodedProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return DecodedProcessOutputRead::NoSource;
@@ -5715,6 +5813,7 @@ impl ProcessManager {
         let result = stdout.read(&mut buf);
         let read = process_output_read_from_io_result(
             proc,
+            coding_systems,
             sink,
             result,
             &buf,
@@ -5738,6 +5837,7 @@ impl ProcessManager {
         id: ProcessId,
         sink: ProcessOutputSink,
         eol_conversion: crate::emacs_core::coding::EolConversion,
+        coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> DecodedProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return DecodedProcessOutputRead::NoSource;
@@ -5752,6 +5852,7 @@ impl ProcessManager {
         let result = port.read(&mut buf);
         let read = process_output_read_from_io_result(
             proc,
+            coding_systems,
             sink,
             result,
             &buf,
@@ -5774,6 +5875,7 @@ impl ProcessManager {
         id: ProcessId,
         sink: ProcessOutputSink,
         eol_conversion: crate::emacs_core::coding::EolConversion,
+        coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> DecodedProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return DecodedProcessOutputRead::NoSource;
@@ -5795,6 +5897,7 @@ impl ProcessManager {
         let result = stderr.read(&mut buf);
         let read = process_output_read_from_io_result(
             proc,
+            coding_systems,
             sink,
             result,
             &buf,
@@ -5815,6 +5918,7 @@ impl ProcessManager {
         id: ProcessId,
         sink: ProcessOutputSink,
         eol_conversion: crate::emacs_core::coding::EolConversion,
+        coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> DecodedProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return DecodedProcessOutputRead::NoSource;
@@ -5829,6 +5933,7 @@ impl ProcessManager {
         let result = reader.read(&mut buf);
         let read = process_output_read_from_io_result(
             proc,
+            coding_systems,
             sink,
             result,
             &buf,
@@ -5846,6 +5951,7 @@ impl ProcessManager {
         id: ProcessId,
         sink: ProcessOutputSink,
         eol_conversion: crate::emacs_core::coding::EolConversion,
+        coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> DecodedProcessOutputRead {
         let Some(proc) = self.processes.get_mut(&id) else {
             return DecodedProcessOutputRead::NoSource;
@@ -5858,6 +5964,7 @@ impl ProcessManager {
             let result = tls.read_process_output(&mut buf);
             let read = process_output_read_from_io_result(
                 proc,
+                coding_systems,
                 sink,
                 result,
                 &buf,
@@ -5900,6 +6007,7 @@ impl ProcessManager {
             let read = match raw_read {
                 RawNetworkRead::Stream(result) => process_output_read_from_io_result(
                     proc,
+                    coding_systems,
                     sink,
                     result,
                     &buf,
@@ -5914,6 +6022,7 @@ impl ProcessManager {
                         DecodedProcessOutputRead::Data {
                             run: decode_process_output_bytes(
                                 proc,
+                                coding_systems,
                                 sink,
                                 &buf[..n],
                                 false,
@@ -5941,6 +6050,7 @@ impl ProcessManager {
                         DecodedProcessOutputRead::Data {
                             run: decode_process_output_bytes(
                                 proc,
+                                coding_systems,
                                 sink,
                                 &buf[..n],
                                 false,
@@ -7114,6 +7224,7 @@ impl ProcessManager {
         id: ProcessId,
         sink: ProcessOutputSink,
         eol_conversion: crate::emacs_core::coding::EolConversion,
+        coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> DecodedProcessOutputRead {
         if self
             .processes
@@ -7125,18 +7236,20 @@ impl ProcessManager {
         let source = self.processes.get(&id).and_then(process_output_source);
 
         match source {
-            Some(ProcessOutputSource::Pty) => self.read_pty_output_result(id, sink, eol_conversion),
+            Some(ProcessOutputSource::Pty) => {
+                self.read_pty_output_result(id, sink, eol_conversion, coding_systems)
+            }
             Some(ProcessOutputSource::ChildStdout) => {
-                self.read_child_stdout_result(id, sink, eol_conversion)
+                self.read_child_stdout_result(id, sink, eol_conversion, coding_systems)
             }
             Some(ProcessOutputSource::ChildStderr) => {
-                self.read_child_stderr_result(id, sink, eol_conversion)
+                self.read_child_stderr_result(id, sink, eol_conversion, coding_systems)
             }
             Some(ProcessOutputSource::Network) => {
-                self.read_network_output_result(id, sink, eol_conversion)
+                self.read_network_output_result(id, sink, eol_conversion, coding_systems)
             }
             Some(ProcessOutputSource::Serial) => {
-                self.read_serial_output_result(id, sink, eol_conversion)
+                self.read_serial_output_result(id, sink, eol_conversion, coding_systems)
             }
             None => DecodedProcessOutputRead::NoSource,
         }
@@ -7153,18 +7266,31 @@ impl ProcessManager {
     /// serves real Lisp goes through
     /// [`Context::read_process_output_recording_coding`] instead; this one
     /// exists for unit fixtures that drive a `ProcessManager` on its own.
+    ///
+    /// The `CodingSystemManager` is still a REQUIRED argument, because
+    /// `detect_coding` reads it and a fixture that skipped it would decode by a
+    /// different rule than the editor does.  A fixture with no `Context` in
+    /// reach can pass `&CodingSystemManager::new()`, which is the honest
+    /// statement that no coding system is defined and therefore nothing detects
+    /// -- not a silent inheritance of one.
     pub fn read_process_output_without_recording_coding(
         &mut self,
         id: ProcessId,
         sink: ProcessOutputSink,
+        coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> Option<LispString> {
         // It names the other thing it does not have, too: with no `Context`
         // there is no `inhibit-eol-conversion' to read, so it decodes the way
         // an unbound variable would (`EolConversion::Enabled`, GNU's initial
         // value at src/coding.c:12027).  Fixtures that need the other answer
         // must drive a `Context`.
-        self.read_process_output_result(id, sink, crate::emacs_core::coding::EolConversion::Enabled)
-            .into_legacy_option()
+        self.read_process_output_result(
+            id,
+            sink,
+            crate::emacs_core::coding::EolConversion::Enabled,
+            coding_systems,
+        )
+        .into_legacy_option()
     }
 
     /// Get stdout output from a process.
@@ -7496,16 +7622,23 @@ impl super::eval::Context {
     ///
     /// It does three things with one answer, and all three are observable:
     ///
-    /// * `Vlast_coding_system_used` becomes `CODING_ID_NAME (coding->id)`.
+    /// * `Vlast_coding_system_used` becomes `CODING_ID_NAME (coding->id)` --
+    ///   the id BOTH of GNU's rewrites have had their turn at, so it carries
+    ///   the character code `detect_coding` chose (src/coding.c:6743) as well
+    ///   as the end-of-line type `adjust_coding_eol_type` chose (:6805).
     /// * When that differs from the process's own decode coding system, the
     ///   process's slot is REPLACED by it (`pset_decode_coding_system`, :6425).
-    ///   That is how a detected end-of-line type becomes sticky: GNU decodes a
-    ///   subprocess through ONE `struct coding_system`, so the second chunk of
-    ///   output is decoded by whatever the first chunk resolved to.  Measured
-    ///   under GNU 31.0.90, a child writing `a CRLF b CRLF` and then, after a
-    ///   pause, `x CR y CR` reads as `(97 10 98 10 120 13 121 13)` -- the second
+    ///   That is how both detections become sticky: GNU decodes a subprocess
+    ///   through ONE `struct coding_system`, so the second chunk of output is
+    ///   decoded by whatever the first chunk resolved to.  Measured under GNU
+    ///   31.0.90, a child writing `a CRLF b CRLF` and then, after a pause,
+    ///   `x CR y CR` reads as `(97 10 98 10 120 13 121 13)` -- the second
     ///   chunk's bare CRs survive because the process is dos by then, where
-    ///   re-detecting per chunk would call them `mac` and eat them.
+    ///   re-detecting per chunk would call them `mac` and eat them.  The two
+    ///   axes go sticky INDEPENDENTLY, because `undecided-dos` is still type
+    ///   `Qundecided`: a first chunk of `a CRLF b CRLF` under `undecided`
+    ///   reports `undecided-dos`, and a later chunk of `caf <c3> <a9> CR LF`
+    ///   moves it on to `utf-8-dos`.
     /// * When the process's ENCODE coding system is still nil, it is completed
     ///   from the decode answer with `coding_inherit_eol_type` (:6442-6444).
     ///
@@ -7518,10 +7651,12 @@ impl super::eval::Context {
         sink: ProcessOutputSink,
     ) -> ProcessOutputRead {
         let eol_conversion = self.eol_conversion();
-        match self
-            .processes
-            .read_process_output_result(id, sink, eol_conversion)
-        {
+        match self.processes.read_process_output_result(
+            id,
+            sink,
+            eol_conversion,
+            &self.coding_systems,
+        ) {
             DecodedProcessOutputRead::Data { run, bytes_read } => {
                 self.record_process_run_coding(id, run.coding);
                 ProcessOutputRead::Data {
@@ -7537,9 +7672,8 @@ impl super::eval::Context {
 
     /// The write-back itself.
     fn record_process_run_coding(&mut self, id: ProcessId, coding: ProcessRunCoding) {
-        let used =
-            crate::encoding::adjusted_coding_name(&self.coding_systems, coding.coding, coding.eol);
-        let used_symbol = Value::symbol(&used);
+        let used = coding.used;
+        let used_symbol = Value::symbol(used);
         self.set_variable("last-coding-system-used", used_symbol);
 
         // `if (!EQ (p->decode_coding_system, Vlast_coding_system_used))`, :6423.
@@ -7555,7 +7689,7 @@ impl super::eval::Context {
         }
         // "If a coding system for encoding is not yet decided, we set it as the
         // same as coding-system for decoding" (:6431-6433).
-        let inherited = crate::encoding::coding_inherit_unix_eol_type(&self.coding_systems, &used);
+        let inherited = crate::encoding::coding_inherit_unix_eol_type(&self.coding_systems, used);
         if let Some(proc) = self.processes.get_mut(id) {
             proc.coding_encode = Value::symbol(&inherited);
         }

@@ -2181,9 +2181,11 @@ fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
     let deadline = std::time::Instant::now() + Duration::from_secs(1);
     let mut output = String::new();
     while std::time::Instant::now() < deadline && !output.contains('\n') {
-        if let Some(chunk) = processes
-            .read_process_output_without_recording_coding(pid, ProcessOutputSink::DecodedText)
-        {
+        if let Some(chunk) = processes.read_process_output_without_recording_coding(
+            pid,
+            ProcessOutputSink::DecodedText,
+            &crate::emacs_core::coding::CodingSystemManager::new(),
+        ) {
             output.push_str(&process_output_runtime_string(&chunk));
         }
         processes.check_child_status_change(pid);

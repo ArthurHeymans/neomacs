@@ -624,30 +624,43 @@ fn write_output_target_in_state(
             // Only the BUFFER destination decodes.  GNU hands a `(:file NAME)`
             // destination straight to the child as its stdout fd
             // (src/callproc.c:570), so those bytes are never converted.
-            let run = decoding.decode(output, eval.eol_conversion());
+            let eol_conversion = eval.eol_conversion();
+            // `decode_coding_c_string` detects before it decodes
+            // (src/coding.c:8129-8130), so `Fcall_process` sees the same
+            // re-basing an asynchronous process does: measured under GNU
+            // 31.0.90, `(let ((coding-system-for-read 'undecided))
+            // (call-process "sh" nil t nil "-c" "printf 'caf\\303\\251\\r\\n'"))`
+            // leaves `last-coding-system-used' at `utf-8-dos'.
+            let run = decoding.detected(&eval.coding_systems, output).decode(
+                &eval.coding_systems,
+                output,
+                eol_conversion,
+            );
             // `Vlast_coding_system_used = CODING_ID_NAME (process_coding.id)`
             // (src/callproc.c:913).  It sits inside the branch that READ the
             // child's output into a buffer, so a `(:file ...)` or discarded
             // destination -- where GNU never opens fd0 -- leaves the variable
             // alone; measured under GNU 31.0.90, `(call-process "sh" nil nil
             // nil "-c" "printf 'a\\r\\n'")` does not move it.  The name is the
-            // one `decode_eol` left in `coding->id`, so an undecided end of
-            // line reports the subsidiary it detected.
-            let used = crate::encoding::adjusted_coding_name(
-                &eval.coding_systems,
-                run.coding_name(),
-                run.coding_eol(),
-            );
-            eval.set_variable("last-coding-system-used", Value::symbol(&used));
-            // `adjust_coding_eol_type` rewrites `coding->id` IN PLACE, and
-            // `Fcall_process` reads the child's stdout and stderr through that
-            // one `struct coding_system` -- when DESTINATION is `t` they are
+            // one `detect_coding` and `decode_eol` left in `coding->id`, so an
+            // undecided coding system reports the character code detection
+            // chose and the subsidiary the end-of-line scan chose.
+            let used = run.coding_used();
+            eval.set_variable("last-coding-system-used", Value::symbol(used));
+            // Both rewrites are IN PLACE on `coding->id`, and `Fcall_process`
+            // reads the child's stdout and stderr through that one
+            // `struct coding_system` -- when DESTINATION is `t` they are
             // literally the same file descriptor (`fd_error = fd_output`,
-            // src/callproc.c).  So an end-of-line type resolved by the first
-            // run decodes the rest of the child's output too, and the reported
-            // name does not fall back to the unadjusted one for a second,
-            // possibly EMPTY, run.
-            *decoding = decoding.adjusted_to(&used, run.coding_eol());
+            // src/callproc.c).  So a character code and an end-of-line type
+            // resolved by the first run decode the rest of the child's output
+            // too, and the reported name does not fall back to the unresolved
+            // one for a second, possibly EMPTY, run.
+            //
+            // Re-classifying rather than assuming `Coding` is what keeps the
+            // faithful case: a first run of pure ASCII leaves `undecided`,
+            // which STILL requires detection, so the second run detects on its
+            // own bytes exactly as GNU's does.
+            *decoding = ProcessOutputDecoding::for_name(used);
             insert_process_output_in_state(eval, destination, &run.text)
         }
         OutputTarget::File(path) => {
