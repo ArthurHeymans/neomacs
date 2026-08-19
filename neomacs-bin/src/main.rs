@@ -4441,11 +4441,12 @@ fn seed_live_tty_frame_parameters(eval: &mut Context, frame_id: FrameId, startup
     // `frame-set-background-mode' (lisp/frame.el:1526), and seeding it directly
     // is DIVERGENCES.md 157's bug.  GNU's own input channel for a terminal that
     // can report its background is the TERMINAL parameter --
-    // `frame-terminal-default-bg-mode' (lisp/frame.el:1584-1596) ends
-    // `(terminal-parameter frame 'background-mode)', and that is exactly what
-    // `xterm.el's OSC-11 reply handler writes (lisp/term/xterm.el:
-    // `xterm--report-background-handler').  Write the detected value there and
-    // let the Lisp derive the frame parameter, as GNU does.
+    // `frame-terminal-default-bg-mode' (lisp/frame.el:1588-1598) ends
+    // `(terminal-parameter frame 'background-mode)', and that is exactly the
+    // slot xterm.el writes from the terminal's OSC-11 reply
+    // (`xterm--set-background-mode', lisp/term/xterm.el:1309-1316, reached from
+    // :1019).  Write the detected value there and let the Lisp derive the frame
+    // parameter, as GNU does.
     //
     // `display-type' needs no input at all: `frame-set-background-mode'
     // computes it as `color' iff `(tty-display-color-p frame)', which is t for

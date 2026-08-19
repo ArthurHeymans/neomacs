@@ -3540,12 +3540,18 @@ fn eval_display_queries_string_designator_reports_missing_display() {
         vec![Value::string("x")],
     ));
     assert_missing_display(builtin_display_screens(&mut eval, vec![Value::string("x")]));
-    // `display-color-cells' is Lisp (lisp/frame.el:2966); the missing-display
-    // error belongs to the C primitive its `memq' arm calls.
-    assert_missing_display(builtin_x_display_color_cells(
-        &mut eval,
-        vec![Value::string("x")],
-    ));
+    // No `display-color-cells' row: it is lisp/frame.el:2966 and has no Rust
+    // subr any more (DIVERGENCES.md 157).  Nor does its C neighbour stand in
+    // for it here -- the two answer DIFFERENT errors, measured on GNU 31.0.90
+    // `-Q --batch':
+    //
+    //     (display-color-cells "x")   => (error "Display x does not exist")
+    //     (x-display-color-cells "x") => (error "Display x can't be opened")
+    //
+    // GNU's message in the first line is raised by `framep-on-display', the
+    // Lisp its body opens with, not by the primitive its `memq' arm reaches --
+    // so repointing this row at `x-display-color-cells' would assert the wrong
+    // string.  Ours already answers GNU's second line.
     assert_missing_display(builtin_display_planes(&mut eval, vec![Value::string("x")]));
     assert_missing_display(builtin_display_visual_class(
         &mut eval,

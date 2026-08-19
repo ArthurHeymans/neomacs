@@ -612,6 +612,7 @@ fn the_loadup_frame_has_gnus_loadup_parameters_not_invented_ones() {
         "(length (frame-list))",
         "(face-spec-set-match-display '((background dark) (min-colors 4)) (selected-frame))",
         "(face-spec-choose (get 'show-paren-match 'face-defface-spec) (selected-frame))",
+        "(sort (mapcar #'car (frame-parameters (selected-frame))) #'string<)",
     ]
     .iter()
     .map(|form| crate::emacs_core::error::format_eval_result(&eval.eval_str(form)))
@@ -633,6 +634,33 @@ fn the_loadup_frame_has_gnus_loadup_parameters_not_invented_ones() {
             // GNU's answer for `show-paren-match' in the loadup state: the
             // `(t ...)' clause.
             "OK (:inherit underline)",
+            // The whole parameter NAME set of the loadup frame.  GNU's,
+            // measured on `src/temacs --batch -l loadup', is
+            //
+            //   background-color buffer-list buried-buffer-list font
+            //   foreground-color height menu-bar-lines minibuffer modeline
+            //   name no-accept-focus tab-bar-lines unsplittable visibility
+            //   width
+            //
+            // and this row is the same set with FIVE differences, all of them
+            // separate from the two this entry owns and all recorded as
+            // DIVERGENCES.md 157's "found and not fixed":
+            //
+            //   ours has, GNU has not: `cursor-color' (GNU gains it only at
+            //     startup, from `face-set-after-frame-default'), `icon-name'
+            //     and `title' (GNU's initial frame has neither);
+            //   GNU has, ours has not: `menu-bar-lines' (GNU's
+            //     `make_initial_frame' calls `set_menu_bar_lines (f,
+            //     make_fixnum (1), Qnil)', src/frame.c:1458) and
+            //     `unsplittable'.
+            //
+            // What matters here is what is ABSENT from both: no
+            // `background-mode', no `display-type'.  If either name reappears
+            // in this row, a Rust seeding has come back and `faces.el' can see
+            // it again.
+            "OK (background-color buffer-list buried-buffer-list cursor-color \
+             font foreground-color height icon-name minibuffer modeline name \
+             no-accept-focus tab-bar-lines title visibility width)",
         ],
     );
 }
