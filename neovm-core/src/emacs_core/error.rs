@@ -207,6 +207,14 @@ struct InFlightSignalRoots {
     /// `quit` and for arity/type errors whose data is symbols and fixnums —
     /// so the overwhelmingly frequent signal costs no table traffic at all.
     slot: Option<usize>,
+    /// The slot index names a row in THIS thread's table, so the handle must
+    /// not travel: dropped on another thread it would release a slot that
+    /// thread pinned, unrooting a live payload. `PhantomData<*const ()>` is
+    /// how that is enforced — it makes the handle (and with it `SignalData`
+    /// and `Flow`) `!Send`, so a cross-thread move is a compile error rather
+    /// than a rare unrooting. That costs nothing real: a `Value` belongs to one
+    /// thread's heap already.
+    _not_send: std::marker::PhantomData<*const ()>,
 }
 
 impl InFlightSignalRoots {
@@ -221,6 +229,7 @@ impl InFlightSignalRoots {
         }
         Self {
             slot: Self::claim(values),
+            _not_send: std::marker::PhantomData,
         }
     }
 
@@ -247,13 +256,17 @@ impl InFlightSignalRoots {
 impl Clone for InFlightSignalRoots {
     fn clone(&self) -> Self {
         let Some(slot) = self.slot else {
-            return Self { slot: None };
+            return Self {
+                slot: None,
+                _not_send: std::marker::PhantomData,
+            };
         };
         let values = IN_FLIGHT_SIGNAL_ROOTS
             .with(|table| table.borrow().slots[slot].clone())
             .unwrap_or_default();
         Self {
             slot: Self::claim(values),
+            _not_send: std::marker::PhantomData,
         }
     }
 }
