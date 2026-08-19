@@ -139,7 +139,7 @@ impl SignalData {
         raw_data: Option<Value>,
         suppress_signal_hook: bool,
     ) -> Self {
-        let pin = InFlightSignalRoots::pin(&data, raw_data);
+        let pin = InFlightSignalRoots::pin(symbol, &data, raw_data);
         Self {
             symbol,
             data,
@@ -218,18 +218,39 @@ struct InFlightSignalRoots {
 }
 
 impl InFlightSignalRoots {
-    fn pin(data: &[Value], raw_data: Option<Value>) -> Self {
-        let mut values: Vec<Value> = data
-            .iter()
-            .copied()
-            .filter(|value| value.is_heap_object())
-            .collect();
-        if let Some(raw) = raw_data.filter(|raw| raw.is_heap_object()) {
-            values.push(raw);
+    fn pin(symbol: SymId, data: &[Value], raw_data: Option<Value>) -> Self {
+        // The error SYMBOL is pinned too, not just the payload: `signal` keeps
+        // the symbol's IDENTITY (an *uninterned* symbol given conditions by
+        // `define-error` is honoured — see `signal_internal_id`), and an
+        // uninterned symbol's value/function/plist cells survive only while
+        // something marks it. In flight, nothing else does.
+        let mut values: Vec<Value> = Vec::new();
+        Self::push_if_traceable(&mut values, Value::from_sym_id(symbol));
+        for value in data.iter().copied() {
+            Self::push_if_traceable(&mut values, value);
+        }
+        if let Some(raw) = raw_data {
+            Self::push_if_traceable(&mut values, raw);
         }
         Self {
             slot: Self::claim(values),
             _not_send: std::marker::PhantomData,
+        }
+    }
+
+    /// Keep what the mark phase can act on. Heap objects obviously; symbols
+    /// because `seed_root` routes them to `mark_symbol`, which is what keeps a
+    /// non-canonical symbol's cells. Fixnums, `nil` and `t` are immediates the
+    /// collector never touches, and dropping them is what leaves the common
+    /// signal — `quit`, and arity errors whose data is a symbol and a count —
+    /// with a short vector or none at all.
+    #[inline]
+    fn push_if_traceable(values: &mut Vec<Value>, value: Value) {
+        if value.is_nil() || value.is_t() {
+            return;
+        }
+        if value.is_heap_object() || value.is_symbol() {
+            values.push(value);
         }
     }
 
