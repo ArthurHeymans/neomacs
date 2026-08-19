@@ -7800,12 +7800,8 @@ impl super::eval::Context {
         // Stage three: GNU's `read_process_output_set_last_coding_system`
         // (src/process.c:6417-6459), which runs after EVERY decoded run.
         self.record_process_run_coding(id, decoded.run.coding);
-        self.processes.finish_process_run(
-            id,
-            decoded.carryover,
-            decoded.mirror,
-            &decoded.run.text,
-        );
+        self.processes
+            .finish_process_run(id, decoded.carryover, decoded.mirror, &decoded.run.text);
         Ok(ProcessOutputRead::Data {
             data: decoded.run.text,
             bytes_read,

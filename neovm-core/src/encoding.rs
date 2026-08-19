@@ -3096,7 +3096,10 @@ fn run_coding_with_conversion_hook(
     encode: bool,
     eol: crate::emacs_core::coding::EolType,
 ) -> Result<
-    (Value, Option<crate::emacs_core::coding::DecodeEolResolution>),
+    (
+        Value,
+        Option<crate::emacs_core::coding::DecodeEolResolution>,
+    ),
     crate::emacs_core::error::Flow,
 > {
     // The base `:coding-type` symbol names the codec to apply to the text the
@@ -3165,7 +3168,10 @@ fn run_coding_with_conversion_hook(
                 })
             }
         };
-        Ok((run_post_read_conversion(ctx, hook, converted)?, Some(resolution)))
+        Ok((
+            run_post_read_conversion(ctx, hook, converted)?,
+            Some(resolution),
+        ))
     }
 }
 
