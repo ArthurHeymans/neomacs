@@ -205,7 +205,7 @@ pub(crate) fn bytecode_to_closure_vector(value: &Value) -> Vec<Value> {
     let env = if let Some(env_val) = bc.env {
         env_val
     } else {
-        Value::vector(bc.constants.clone())
+        Value::vector(bc.constants.as_slice().to_vec())
     };
     crate::emacs_core::eval::push_scratch_gc_root(env);
 

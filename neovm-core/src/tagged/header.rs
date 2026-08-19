@@ -486,6 +486,12 @@ enum LispValueVecStorage {
 unsafe impl Send for LispValueVecStorage {}
 unsafe impl Sync for LispValueVecStorage {}
 
+impl std::fmt::Debug for LispValueVec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_slice().fmt(f)
+    }
+}
+
 impl LispValueVec {
     pub fn owned(items: Vec<TaggedValue>) -> Self {
         Self {

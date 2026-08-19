@@ -14176,7 +14176,7 @@ fn jit_tierup_executes_through_funcall_seam() {
             rest: None,
         });
         f.ops = ops;
-        f.constants = consts;
+        f.constants = consts.into();
         f.max_stack = 16;
         f.runtime.set_hot_for_test();
         Value::make_bytecode(f)
@@ -14295,7 +14295,7 @@ fn jit_call_through_funcall_seam() {
     });
     dbl.lexical = true;
     dbl.ops = vec![Op::StackRef(0), Op::Constant(0), Op::Mul, Op::Return];
-    dbl.constants = vec![Value::make_int(2)];
+    dbl.constants = vec![Value::make_int(2)].into();
     dbl.max_stack = 16;
     let dbl_sym = Value::symbol("jit-e2e-double");
     let ValueKind::Symbol(dbl_id) = dbl_sym.kind() else {
@@ -14320,7 +14320,7 @@ fn jit_call_through_funcall_seam() {
             Op::Call(1),
             Op::Return,
         ];
-        f.constants = vec![Value::symbol("jit-e2e-double")];
+        f.constants = vec![Value::symbol("jit-e2e-double")].into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -14369,7 +14369,7 @@ fn jit_call_through_funcall_seam() {
     });
     callee.lexical = true;
     callee.ops = vec![Op::StackRef(0), Op::Constant(0), Op::Mul, Op::Return];
-    callee.constants = vec![Value::make_int(3)];
+    callee.constants = vec![Value::make_int(3)].into();
     callee.max_stack = 16;
     callee.runtime.set_hot_for_test();
     let callee_sym = Value::symbol("jit-e2e-triple-hot");
@@ -14391,7 +14391,7 @@ fn jit_call_through_funcall_seam() {
         Op::Call(1),
         Op::Return,
     ];
-    nested.constants = vec![callee_sym];
+    nested.constants = vec![callee_sym].into();
     nested.max_stack = 16;
     nested.runtime.set_hot_for_test();
     let nested_v = Value::make_bytecode(nested);
@@ -14410,7 +14410,7 @@ fn jit_call_through_funcall_seam() {
     });
     sig.lexical = true;
     sig.ops = vec![Op::Constant(0), Op::Call(0), Op::Return];
-    sig.constants = vec![Value::symbol("jit-e2e-no-such-function")];
+    sig.constants = vec![Value::symbol("jit-e2e-no-such-function")].into();
     sig.max_stack = 16;
     sig.runtime.set_hot_for_test();
     let sig_v = Value::make_bytecode(sig);
@@ -14447,7 +14447,7 @@ fn jit_handlers_through_funcall_seam() {
         });
         f.lexical = true;
         f.ops = ops;
-        f.constants = consts;
+        f.constants = consts.into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -14703,7 +14703,8 @@ fn jit_switch_through_funcall_seam() {
             Value::make_int(1),
             Value::make_int(2),
             Value::make_int(0),
-        ];
+        ]
+        .into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -14750,7 +14751,7 @@ fn jit_named_builtins_through_funcall_seam() {
         });
         f.lexical = true;
         f.ops = ops;
-        f.constants = consts;
+        f.constants = consts.into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -14847,7 +14848,7 @@ fn jit_save_window_excursion_through_funcall_seam() {
         });
         f.lexical = true;
         f.ops = vec![Op::Constant(0), Op::SaveWindowExcursion, Op::Return];
-        f.constants = vec![body];
+        f.constants = vec![body].into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -14873,7 +14874,7 @@ fn jit_save_window_excursion_through_funcall_seam() {
         });
         f.lexical = true;
         f.ops = vec![Op::Constant(0), Op::SaveWindowExcursion, Op::Return];
-        f.constants = vec![bad_body];
+        f.constants = vec![bad_body].into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -14923,7 +14924,7 @@ fn jit_direct_call_speculation_tracks_redefinition() {
             Op::Mul,
             Op::Return,
         ];
-        f.constants = vec![Value::make_int(k)];
+        f.constants = vec![Value::make_int(k)].into();
         f.max_stack = 16;
         Value::make_bytecode(f)
     };
@@ -14943,7 +14944,7 @@ fn jit_direct_call_speculation_tracks_redefinition() {
         });
         f.lexical = true;
         f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
-        f.constants = vec![g_sym];
+        f.constants = vec![g_sym].into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -15032,7 +15033,7 @@ fn jit_direct_call_speculation_mid_execution_redefinition() {
     });
     h2.lexical = true;
     h2.ops = vec![Op::Constant(0), Op::Return];
-    h2.constants = vec![Value::make_int(2)];
+    h2.constants = vec![Value::make_int(2)].into();
     h2.max_stack = 16;
     let h2_val = Value::make_bytecode(h2);
     // h1: (lambda () (fset 'jit-spec-h h2) 1) — redefines itself, returns 1.
@@ -15051,7 +15052,7 @@ fn jit_direct_call_speculation_mid_execution_redefinition() {
         Op::Constant(3), // 1
         Op::Return,
     ];
-    h1.constants = vec![Value::symbol("fset"), h_sym, h2_val, Value::make_int(1)];
+    h1.constants = vec![Value::symbol("fset"), h_sym, h2_val, Value::make_int(1)].into();
     h1.max_stack = 16;
     ev.obarray
         .set_symbol_function_id(h_id, Value::make_bytecode(h1));
@@ -15073,7 +15074,7 @@ fn jit_direct_call_speculation_mid_execution_redefinition() {
             Op::List(2),
             Op::Return,
         ];
-        f.constants = vec![h_sym];
+        f.constants = vec![h_sym].into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -15110,7 +15111,7 @@ fn jit_direct_call_speculation_mid_execution_redefinition() {
         Op::Constant(3),
         Op::Return,
     ];
-    h1b.constants = vec![Value::symbol("fset"), h_sym, h2_val, Value::make_int(1)];
+    h1b.constants = vec![Value::symbol("fset"), h_sym, h2_val, Value::make_int(1)].into();
     h1b.max_stack = 16;
     ev.obarray
         .set_symbol_function_id(h_id, Value::make_bytecode(h1b));
@@ -15144,7 +15145,7 @@ fn jit_subr_spec_caller(name: &str, nargs: usize, hot: bool) -> Value {
     ops.push(Op::Call(nargs as u16));
     ops.push(Op::Return);
     f.ops = ops;
-    f.constants = vec![Value::symbol(name)];
+    f.constants = vec![Value::symbol(name)].into();
     f.max_stack = 16;
     if hot {
         f.runtime.set_hot_for_test();
@@ -16051,7 +16052,7 @@ fn jit_cbsym_spec_caller(name: &str, nargs: usize, hot: bool) -> Value {
     ops.push(Op::CallBuiltinSym(intern(name), nargs as u8));
     ops.push(Op::Return);
     f.ops = ops;
-    f.constants = Vec::new();
+    f.constants = Vec::new().into();
     f.max_stack = 16;
     if hot {
         f.runtime.set_hot_for_test();
@@ -16215,7 +16216,7 @@ fn jit_cbsym_buffer_loop_tiers_with_profit_gate_on() {
             Op::StackRef(0),   // 15 [n n]   exit
             Op::Return,        // 16
         ];
-        f.constants = vec![Value::make_int(0), Value::make_int(1)];
+        f.constants = vec![Value::make_int(0), Value::make_int(1)].into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -16394,7 +16395,7 @@ fn jit_cbsym_spec_adds_no_eval_depth_level() {
             Op::Call(0),   // 6  recurse (adds ONE eval-depth level)
             Op::Return,    // 7
         ];
-        f.constants = vec![Value::symbol("cbsym-depth"), f_sym];
+        f.constants = vec![Value::symbol("cbsym-depth"), f_sym].into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -16749,7 +16750,7 @@ fn jit_fib_and_loops_compile_under_precise_deopt() {
             Op::Add,          // 16 [n r]          guard AFTER both calls
             Op::Return,       // 17
         ];
-        f.constants = vec![Value::make_int(2), fib_sym, Value::make_int(1)];
+        f.constants = vec![Value::make_int(2), fib_sym, Value::make_int(1)].into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -16812,7 +16813,7 @@ fn jit_fib_and_loops_compile_under_precise_deopt() {
             Op::StackRef(0),   // 10 [n n]
             Op::Return,        // 11
         ];
-        f.constants = vec![Value::make_int(0), id_sym];
+        f.constants = vec![Value::make_int(0), id_sym].into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -16885,7 +16886,7 @@ fn jit_native_to_native_optional_callee_pure_and_marshaled() {
             Op::Call(2),
             Op::Return,
         ];
-        f.constants = vec![c_sym];
+        f.constants = vec![c_sym].into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -16901,7 +16902,7 @@ fn jit_native_to_native_optional_callee_pure_and_marshaled() {
         });
         f.lexical = true;
         f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
-        f.constants = vec![c_sym];
+        f.constants = vec![c_sym].into();
         f.max_stack = 16;
         if hot {
             f.runtime.set_hot_for_test();
@@ -16976,7 +16977,7 @@ fn jit_v3_fast_path_engages_and_tracks_redefinition() {
             Op::Mul,
             Op::Return,
         ];
-        f.constants = vec![Value::make_int(k)];
+        f.constants = vec![Value::make_int(k)].into();
         f.max_stack = 16;
         Value::make_bytecode(f)
     };
@@ -16994,7 +16995,7 @@ fn jit_v3_fast_path_engages_and_tracks_redefinition() {
         });
         f.lexical = true;
         f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
-        f.constants = vec![g_sym];
+        f.constants = vec![g_sym].into();
         f.max_stack = 16;
         f.runtime.set_hot_for_test();
         Value::make_bytecode(f)
@@ -17070,7 +17071,7 @@ fn jit_bench_fib_value(sym_name: &str, tier: BenchTier) -> Value {
         Op::Add,
         Op::Return,
     ];
-    f.constants = vec![Value::make_int(2), fib_sym, Value::make_int(1)];
+    f.constants = vec![Value::make_int(2), fib_sym, Value::make_int(1)].into();
     f.max_stack = 16;
     tier.apply(&f.runtime);
     Value::make_bytecode(f)
@@ -17107,7 +17108,7 @@ fn jit_bench_loop_value(tier: BenchTier) -> Value {
         Op::StackRef(0),
         Op::Return,
     ];
-    f.constants = vec![Value::make_int(0)];
+    f.constants = vec![Value::make_int(0)].into();
     f.max_stack = 16;
     tier.apply(&f.runtime);
     Value::make_bytecode(f)
@@ -17254,7 +17255,7 @@ fn jit_bench_call_bound_caller(tier: BenchTier) -> Value {
         Op::StackRef(0),   // 24 exit: n (=0)
         Op::Return,        // 25
     ];
-    f.constants = vec![Value::make_int(0), Value::symbol("jit-bench-cbleaf")];
+    f.constants = vec![Value::make_int(0), Value::symbol("jit-bench-cbleaf")].into();
     f.max_stack = 16;
     tier.apply(&f.runtime);
     Value::make_bytecode(f)
@@ -17356,7 +17357,7 @@ fn jit_bench_builtin_bound_caller(tier: BenchTier) -> Value {
         Op::StackRef(0),            // 20 exit: n (=0)
         Op::Return,                 // 21
     ];
-    f.constants = vec![Value::make_int(0)];
+    f.constants = vec![Value::make_int(0)].into();
     f.max_stack = 16;
     tier.apply(&f.runtime);
     Value::make_bytecode(f)
@@ -17454,7 +17455,7 @@ fn aot_bench_compute_loop() {
     });
     aot_fn.lexical = true;
     aot_fn.ops = ops.clone();
-    aot_fn.constants = constants.clone();
+    aot_fn.constants = constants.clone().into();
     aot_fn.max_stack = 16;
     let aot_val = Value::make_bytecode(aot_fn.clone());
 
@@ -17866,7 +17867,7 @@ fn aot_bench_real_algorithm() {
     });
     aot_fn.lexical = true;
     aot_fn.ops = ops.clone();
-    aot_fn.constants = constants.clone();
+    aot_fn.constants = constants.clone().into();
     aot_fn.max_stack = 16;
     let aot_val = Value::make_bytecode(aot_fn.clone());
 
@@ -17879,7 +17880,7 @@ fn aot_bench_real_algorithm() {
     });
     cold_f.lexical = true;
     cold_f.ops = ops.clone();
-    cold_f.constants = constants.clone();
+    cold_f.constants = constants.clone().into();
     cold_f.max_stack = 16;
     BenchTier::Cold.apply(&cold_f.runtime);
     let cold_val = Value::make_bytecode(cold_f);
@@ -18359,7 +18360,7 @@ fn vm_bench_call_loop_caller(callee_designator: Value) -> Value {
         Op::StackRef(0), // exit:                    -> [n, acc, acc]
         Op::Return,
     ];
-    f.constants = vec![Value::make_int(0), callee_designator];
+    f.constants = vec![Value::make_int(0), callee_designator].into();
     f.max_stack = 16;
     Value::make_bytecode(f)
 }
@@ -18484,7 +18485,7 @@ fn vm_bench_varref_loop_caller(var_sym: Value) -> Value {
         Op::StackRef(0), // exit:                    -> [n, acc, acc]
         Op::Return,
     ];
-    f.constants = vec![Value::make_int(0), var_sym];
+    f.constants = vec![Value::make_int(0), var_sym].into();
     f.max_stack = 16;
     Value::make_bytecode(f)
 }
@@ -18552,7 +18553,7 @@ fn varref_reader_fn(sym: Value) -> Value {
     });
     f.lexical = true;
     f.ops = vec![Op::VarRef(1), Op::Return];
-    f.constants = vec![Value::NIL, sym];
+    f.constants = vec![Value::NIL, sym].into();
     f.max_stack = 4;
     Value::make_bytecode(f)
 }
@@ -18747,7 +18748,8 @@ fn jit_bench_cbsym_value(tier: BenchTier) -> Value {
     f.constants = vec![
         Value::make_int(0),
         Value::list_from_slice(&[Value::symbol("a"), Value::symbol("b"), Value::symbol("c")]),
-    ];
+    ]
+    .into();
     f.max_stack = 16;
     tier.apply(&f.runtime);
     Value::make_bytecode(f)
@@ -18806,7 +18808,7 @@ fn jit_bench_cbsym_goto_value(tier: BenchTier) -> Value {
         Op::StackRef(0),   // 11 [n n]
         Op::Return,        // 12
     ];
-    f.constants = vec![Value::make_int(0), Value::make_int(1)];
+    f.constants = vec![Value::make_int(0), Value::make_int(1)].into();
     f.max_stack = 16;
     tier.apply(&f.runtime);
     Value::make_bytecode(f)
@@ -18868,7 +18870,8 @@ fn jit_bench_subr_value(tier: BenchTier) -> Value {
         Value::make_int(0),
         Value::symbol("length"),
         Value::list_from_slice(&[Value::symbol("a"), Value::symbol("b"), Value::symbol("c")]),
-    ];
+    ]
+    .into();
     f.max_stack = 16;
     tier.apply(&f.runtime);
     Value::make_bytecode(f)
@@ -18941,7 +18944,8 @@ fn jit_bench_many_value(tier: BenchTier) -> Value {
         Value::make_int(0),
         Value::symbol("looking-at"),
         Value::string("(defun\\|[a-z]+"),
-    ];
+    ]
+    .into();
     f.max_stack = 16;
     tier.apply(&f.runtime);
     Value::make_bytecode(f)
@@ -19016,7 +19020,8 @@ fn jit_bench_pred_value(tier: BenchTier) -> Value {
         Value::make_int(0),
         Value::symbol("recordp"),
         Value::list_from_slice(&[Value::symbol("a"), Value::symbol("b"), Value::symbol("c")]),
-    ];
+    ]
+    .into();
     f.max_stack = 16;
     tier.apply(&f.runtime);
     Value::make_bytecode(f)
@@ -19075,7 +19080,7 @@ fn jit_bench_cons_value(tier: BenchTier) -> Value {
         Op::StackRef(0),   // 12 [n n]
         Op::Return,        // 13
     ];
-    f.constants = vec![Value::make_int(0)];
+    f.constants = vec![Value::make_int(0)].into();
     f.max_stack = 16;
     tier.apply(&f.runtime);
     Value::make_bytecode(f)
@@ -21306,7 +21311,7 @@ fn bench_jit_vs_vm_loop() {
             rest: None,
         });
         f.ops = ops.clone();
-        f.constants = constants.clone();
+        f.constants = constants.clone().into();
         f.max_stack = 64;
         if hot {
             f.runtime.set_hot_for_test();
@@ -21337,7 +21342,7 @@ fn bench_jit_vs_vm_loop() {
             rest: None,
         });
         probe.ops = ops.clone();
-        probe.constants = constants.clone();
+        probe.constants = constants.clone().into();
         probe.max_stack = 64;
         crate::emacs_core::jit::compile::compile_bytecode_function(&probe)
             .expect("loop body must compile to native (no unsupported op / CFG bail)");
@@ -21462,7 +21467,7 @@ fn jit_bench_threshold_economics() {
             rest: None,
         });
         f.ops = ops.clone();
-        f.constants = constants.clone();
+        f.constants = constants.clone().into();
         f.max_stack = 64;
         Value::make_bytecode(f)
     };

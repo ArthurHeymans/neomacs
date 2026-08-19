@@ -557,7 +557,7 @@ fn print_default_handles_self_referential_bytecode_constants() {
     crate::test_utils::init_test_tracing();
     let mut function =
         crate::emacs_core::bytecode::ByteCodeFunction::new(LambdaParams::simple(vec![]));
-    function.constants.push(Value::NIL);
+    function.constants.ensure_owned().push(Value::NIL);
     let bytecode = Value::make_bytecode(function);
     bytecode.with_bytecode_data_mut_for_test(|data| data.constants[0] = bytecode);
 
@@ -577,7 +577,7 @@ fn print_default_uses_gnu_depth_for_nested_bytecode_backrefs() {
     let record = Value::make_record(vec![Value::symbol("foo"), Value::NIL]);
     let mut function =
         crate::emacs_core::bytecode::ByteCodeFunction::new(LambdaParams::simple(vec![]));
-    function.constants.push(record);
+    function.constants.ensure_owned().push(record);
     let bytecode = Value::make_bytecode(function);
     record.with_record_data_mut(|slots| slots[1] = bytecode);
 

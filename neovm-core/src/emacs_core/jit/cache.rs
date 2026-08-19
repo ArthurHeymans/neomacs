@@ -955,7 +955,7 @@ mod tests {
             rest: None,
         });
         f.ops = ops;
-        f.constants = constants;
+        f.constants = constants.into();
         f.max_stack = 16;
         f
     }

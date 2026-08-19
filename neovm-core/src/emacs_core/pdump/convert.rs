@@ -1422,7 +1422,7 @@ impl<'a> LoadDecoder<'a> {
                 ops: Vec::new(),
                 ops_sealed: false,
                 stack_verified: false,
-                constants: Vec::new(),
+                constants: Vec::new().into(),
                 max_stack: 0,
                 params: LambdaParams::simple(Vec::new()),
                 arglist: Value::NIL,
@@ -4048,7 +4048,8 @@ fn load_bytecode_owned(
             .constants
             .into_iter()
             .map(|value| decoder.load_value_owned(value))
-            .collect(),
+            .collect::<Vec<_>>()
+            .into(),
         max_stack: bc.max_stack,
         params,
         arglist,

@@ -4029,7 +4029,11 @@ impl TaggedHeap {
         let data = &obj.data;
         size_of::<ByteCodeObj>()
             .saturating_add(data.resident_ops_capacity().saturating_mul(size_of::<Op>()))
-            .saturating_add(Self::vector_storage_bytes(&data.constants))
+            .saturating_add(
+                data.constants
+                    .owned_capacity()
+                    .saturating_mul(size_of::<TaggedValue>()),
+            )
             .saturating_add(
                 data.params
                     .required
@@ -4176,8 +4180,11 @@ impl TaggedHeap {
                 .constants
                 .len()
                 .saturating_mul(size_of::<TaggedValue>()),
-            capacity_bytes: Self::vector_storage_bytes(&data.constants),
-            owned: data.constants.capacity() > 0,
+            capacity_bytes: data
+                .constants
+                .owned_capacity()
+                .saturating_mul(size_of::<TaggedValue>()),
+            owned: data.constants.owned_capacity() > 0,
             mapped: false,
         });
         stats = stats.add(Self::lambda_params_payload_layout(&data.params));
@@ -13804,7 +13811,7 @@ mod bytecode_arena_tests {
     /// the object's only heap children are its constants (GC-exact tests).
     fn bytecode_fn(constants: Vec<TaggedValue>, n_ops: usize, payload: usize) -> ByteCodeFunction {
         let mut f = ByteCodeFunction::new(LambdaParams::simple(vec![]));
-        f.constants = constants;
+        f.constants = constants.into();
         f.ops = vec![Op::Nil; n_ops];
         if payload > 0 {
             f.gnu_bytecode_bytes = Some(vec![0xAA; payload]);

@@ -131,7 +131,9 @@ pub struct ByteCodeFunction {
     /// lazy path stores its proof inside the decoded cell instead.
     pub(crate) stack_verified: bool,
     /// Constant pool: values referenced by Constant/VarRef/VarSet/etc.
-    pub constants: Vec<Value>,
+    /// `LispValueVec` so a pdump load can alias the pool directly in the
+    /// mapped image instead of materializing an owned Vec per function.
+    pub constants: crate::tagged::header::LispValueVec,
     /// Maximum stack depth needed (for pre-allocation).
     pub max_stack: u16,
     /// Parameter specification.
@@ -243,7 +245,7 @@ impl ByteCodeFunction {
             ops: Vec::new(),
             ops_sealed: false,
             stack_verified: false,
-            constants: Vec::new(),
+            constants: Vec::new().into(),
             max_stack: 0,
             params,
             arglist,
@@ -377,8 +379,10 @@ impl ByteCodeFunction {
             .expect("restored GNU bytecode requires original bytes");
         self.lazy_gnu_code = None;
         if eager_gnu_bytecode() {
-            let (ops, byte_offset_map) =
-                super::decode::decode_gnu_bytecode_with_offset_map(raw_bytes, &mut self.constants)?;
+            let (ops, byte_offset_map) = super::decode::decode_gnu_bytecode_with_offset_map(
+                raw_bytes,
+                self.constants.ensure_owned(),
+            )?;
             self.ops = ops;
             self.ops_sealed = true;
             self.stack_verified = super::decode::verify_stack_effects(
@@ -532,7 +536,7 @@ impl ByteCodeFunction {
             }
         }
         let idx = self.constants.len() as u16;
-        self.constants.push(value);
+        self.constants.ensure_owned().push(value);
         idx
     }
 

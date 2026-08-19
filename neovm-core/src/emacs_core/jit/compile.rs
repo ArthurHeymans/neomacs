@@ -10958,7 +10958,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops.to_vec();
-            f.constants = constants.to_vec();
+            f.constants = constants.to_vec().into();
             f.max_stack = 16;
             let want = {
                 let mut vm = Vm::from_context(&mut eval);
@@ -11077,7 +11077,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops.to_vec();
-            f.constants = constants.to_vec();
+            f.constants = constants.to_vec().into();
             f.max_stack = 16;
             let want = {
                 let mut vm = Vm::from_context(&mut eval);
@@ -11131,7 +11131,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops.to_vec();
-            f.constants = constants.to_vec();
+            f.constants = constants.to_vec().into();
             f.max_stack = 16;
             let want = {
                 let mut vm = Vm::from_context(&mut eval);
@@ -11181,7 +11181,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops.to_vec();
-            f.constants = constants.to_vec();
+            f.constants = constants.to_vec().into();
             f.max_stack = 16;
             let want = {
                 let mut vm = Vm::from_context(&mut eval);
@@ -11274,7 +11274,7 @@ mod tests {
         });
         f.lexical = true;
         f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
-        f.constants = vec![c_sym];
+        f.constants = vec![c_sym].into();
         f.max_stack = 16;
         let f_val = Value::make_bytecode(f.clone());
         let r1 = crate::emacs_core::jit::try_run_compiled(ctx, &f, f_val, &[Value::make_int(5)]);
@@ -11386,7 +11386,7 @@ mod tests {
             Op::Constant(0),
             Op::Return,
         ];
-        g.constants = vec![Value::make_int(0)];
+        g.constants = vec![Value::make_int(0)].into();
         g.max_stack = 16;
         ev.obarray
             .set_symbol_function_id(g_id, Value::make_bytecode(g));
@@ -11404,7 +11404,7 @@ mod tests {
             Op::Call(1),     // (g (sq a))
             Op::Return,
         ];
-        f.constants = vec![g_sym, sq_sym];
+        f.constants = vec![g_sym, sq_sym].into();
         f.max_stack = 16;
         let leaf = compile_bytecode_function_with(&f, Some(&ev.obarray)).expect("F compiles");
         assert!(
@@ -11450,7 +11450,7 @@ mod tests {
             });
             bf.lexical = true;
             bf.ops = ops;
-            bf.constants = consts;
+            bf.constants = consts.into();
             bf.max_stack = 16;
             bf
         };
@@ -11606,7 +11606,7 @@ mod tests {
         });
         f.lexical = true;
         f.ops = ops.to_vec();
-        f.constants = constants.to_vec();
+        f.constants = constants.to_vec().into();
         f.max_stack = 16;
         let interp = {
             let mut vm = Vm::from_context(&mut ev);
@@ -11991,7 +11991,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops;
-            f.constants = vec![Value::symbol(op_name)];
+            f.constants = vec![Value::symbol(op_name)].into();
             f.max_stack = 16;
             compile_bytecode_function_with(&f, Some(ob)).expect("bit-op body compiles")
         };
@@ -12107,7 +12107,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops;
-            f.constants = vec![Value::symbol(op_name)];
+            f.constants = vec![Value::symbol(op_name)].into();
             f.max_stack = 16;
             compile_bytecode_function_with(&f, Some(ob)).expect("inline bit-op body compiles")
         };
@@ -12252,7 +12252,7 @@ mod tests {
                 Op::StackRef(1), // 14: L_end — acc
                 Op::Return,
             ];
-            f.constants = vec![Value::make_int(0)];
+            f.constants = vec![Value::make_int(0)].into();
             f.max_stack = 16;
             f.seal_hand_assembled_ops();
             f
@@ -12426,7 +12426,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops.clone();
-            f.constants = constants.clone();
+            f.constants = constants.clone().into();
             f.max_stack = 32;
             let want = {
                 let mut vm = Vm::from_context(&mut ev);
@@ -13084,7 +13084,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops.to_vec();
-            f.constants = consts.to_vec();
+            f.constants = consts.to_vec().into();
             f.max_stack = 16;
             let mut vm = Vm::from_context(&mut ev);
             vm.execute(&f, vec![]).expect("interp runs let")
@@ -13447,7 +13447,7 @@ mod tests {
             Op::StackRef(0),
             Op::Return,
         ];
-        callee.constants = vec![cell];
+        callee.constants = vec![cell].into();
         callee.max_stack = 16;
         ev.obarray
             .set_symbol_function_id(sym_id, Value::make_bytecode(callee));
@@ -13469,7 +13469,7 @@ mod tests {
         });
         f.lexical = true;
         f.ops = ops.clone();
-        f.constants = constants.clone();
+        f.constants = constants.clone().into();
         f.max_stack = 16;
         f.seal_hand_assembled_ops();
         let leaf = lower_nullary_leaf(&ops, &constants).expect("guard after call compiles now");
@@ -13744,7 +13744,7 @@ mod tests {
     fn compile_bytecode_function_handles_nullary_leaf() {
         let mut f = nullary();
         let c = Value::make_int(123);
-        f.constants = vec![c];
+        f.constants = vec![c].into();
         f.ops = vec![Op::Constant(0), Op::Return];
         let leaf = compile_bytecode_function(&f).unwrap();
         assert_eq!(leaf.call_for_test(&[]), Some(c.bits()));
@@ -13891,7 +13891,7 @@ mod tests {
         let mut eval = Context::new_minimal_vm_harness();
         let mut f = nullary();
         f.ops = ops.to_vec();
-        f.constants = constants.to_vec();
+        f.constants = constants.to_vec().into();
         f.max_stack = 16;
         let mut vm = Vm::from_context(&mut eval);
         vm.execute(&f, vec![]).expect("interpreter runs the body")
@@ -14076,7 +14076,7 @@ mod tests {
         });
         f.lexical = true;
         f.ops = ops.to_vec();
-        f.constants = constants.to_vec();
+        f.constants = constants.to_vec().into();
         f.max_stack = 16;
         let t0 = Instant::now();
         for _ in 0..calls {
@@ -14219,7 +14219,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops.clone();
-            f.constants = constants.clone();
+            f.constants = constants.clone().into();
             f.max_stack = 64;
             let interp = {
                 let mut vm = Vm::from_context(&mut ev);
@@ -14453,7 +14453,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops.clone();
-            f.constants = constants.clone();
+            f.constants = constants.clone().into();
             f.max_stack = 64;
 
             // Tier 0 (oracle): result + final variable state.
@@ -14916,7 +14916,8 @@ mod tests {
             Value::make_int(5),
             Value::symbol("neovm--internal-panic"),
             Value::string("mid-boom"),
-        ];
+        ]
+        .into();
         mid.max_stack = 16;
         ev.obarray
             .set_symbol_function_id(mid_id, Value::make_bytecode(mid));
@@ -15041,7 +15042,8 @@ mod tests {
         mid.constants = vec![
             Value::symbol("neovm--internal-panic"),
             Value::string("resid-boom"),
-        ];
+        ]
+        .into();
         mid.max_stack = 16;
         ev.obarray
             .set_symbol_function_id(mid_id, Value::make_bytecode(mid));
@@ -15243,7 +15245,8 @@ mod tests {
             Value::symbol("arith-error"),
             Value::NIL,
             Value::symbol("jit-fx-witness"),
-        ];
+        ]
+        .into();
         cleanup.max_stack = 16;
         // Force the cleanup hot so its application inside the parity unwind
         // dispatches through the JIT (engagement asserted below — an
@@ -15344,7 +15347,8 @@ mod tests {
         mid.constants = vec![
             Value::symbol("neovm--internal-panic"),
             Value::string("wide-boom"),
-        ];
+        ]
+        .into();
         mid.max_stack = 16;
         ev.obarray
             .set_symbol_function_id(mid_id, Value::make_bytecode(mid));

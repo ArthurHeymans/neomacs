@@ -2216,7 +2216,7 @@ fn vm_backward_branch_quit_counter_spans_bytecode_calls_like_gnu() {
     let child_symbol = intern("vm-backedge-counter-child");
 
     let mut child = ByteCodeFunction::new(LambdaParams::simple(vec![]));
-    child.constants = vec![Value::fixnum(55), Value::fixnum(0), Value::fixnum(42)];
+    child.constants = vec![Value::fixnum(55), Value::fixnum(0), Value::fixnum(42)].into();
     child.ops = vec![
         Op::Constant(0),
         Op::StackRef(0),
@@ -2238,7 +2238,8 @@ fn vm_backward_branch_quit_counter_spans_bytecode_calls_like_gnu() {
         Value::fixnum(200),
         Value::fixnum(0),
         Value::from_sym_id(child_symbol),
-    ];
+    ]
+    .into();
     outer.ops = vec![
         Op::Constant(0),
         Op::StackRef(0),
@@ -2808,7 +2809,8 @@ fn vm_switch_branches_using_hash_table_jump_table() {
             Value::symbol("foo"),
             Value::fixnum(10),
             Value::fixnum(20),
-        ],
+        ]
+        .into(),
         max_stack: 2,
         params: crate::emacs_core::value::LambdaParams::simple(vec![]),
         arglist: Value::NIL,
@@ -2973,7 +2975,7 @@ fn vm_throw_restores_saved_stack_before_resuming_catch() {
             Op::List(2),
             Op::Return,
         ],
-        constants: vec![Value::fixnum(42), Value::symbol("done"), Value::fixnum(99)],
+        constants: vec![Value::fixnum(42), Value::symbol("done"), Value::fixnum(99)].into(),
         max_stack: 3,
         params: crate::emacs_core::value::LambdaParams::simple(vec![]),
         arglist: Value::NIL,
@@ -9562,7 +9564,7 @@ fn vm_bytecode_wrong_arity_matches_gnu_entry_check() {
     let mut func = ByteCodeFunction::new(
         crate::emacs_core::bytecode::decode::parse_arglist_descriptor(2 | (3 << 8)),
     );
-    func.constants = vec![Value::NIL];
+    func.constants = vec![Value::NIL].into();
     func.ops = vec![Op::Constant(0), Op::Return];
     func.max_stack = 1;
 
@@ -9593,7 +9595,7 @@ fn vm_bytecode_rest_wrong_arity_reports_nonrest_descriptor_like_gnu() {
     let mut func = ByteCodeFunction::new(
         crate::emacs_core::bytecode::decode::parse_arglist_descriptor(2 | (2 << 8) | 128),
     );
-    func.constants = vec![Value::NIL];
+    func.constants = vec![Value::NIL].into();
     func.ops = vec![Op::Constant(0), Op::Return];
     func.max_stack = 1;
 
@@ -10779,7 +10781,7 @@ fn vm_gnu_arg_descriptor_preserves_optional_and_rest_slots() {
             Op::List(5),
             Op::Return,
         ],
-        constants: vec![],
+        constants: vec![].into(),
         max_stack: 10,
         params: crate::emacs_core::bytecode::decode::parse_arglist_descriptor(arg_descriptor),
         arglist: Value::fixnum(arg_descriptor),

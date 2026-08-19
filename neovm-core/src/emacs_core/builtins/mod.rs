@@ -5624,7 +5624,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
                 // (params/lexical/arglist/env/max_stack) is in place.
                 ops_sealed: true,
                 stack_verified: false,
-                constants,
+                constants: constants.into(),
                 max_stack,
                 params: LambdaParams::simple(vec![]),
                 arglist: Value::NIL,

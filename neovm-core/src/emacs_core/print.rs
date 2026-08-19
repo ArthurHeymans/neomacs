@@ -1211,7 +1211,7 @@ fn with_bytecode_literal_slots<R>(value: &Value, f: impl FnOnce(&[Value]) -> R) 
     let constants = if let Some(env) = bc.env {
         env
     } else {
-        Value::vector(bc.constants.clone())
+        Value::vector(bc.constants.as_slice().to_vec())
     };
     crate::emacs_core::eval::push_scratch_gc_root(constants);
 

@@ -6676,7 +6676,7 @@ fn make_byte_code_from_parts_with_slots(
         // (params/lexical/arglist/env/max_stack) is in place.
         ops_sealed: true,
         stack_verified: false,
-        constants,
+        constants: constants.into(),
         max_stack,
         params,
         arglist: *arglist,

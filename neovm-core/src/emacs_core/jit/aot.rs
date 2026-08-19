@@ -1864,7 +1864,7 @@ pub fn testkit_call_bearing_selftest(dir: &std::path::Path) -> Result<(), String
         });
         f.lexical = true;
         f.ops = ops;
-        f.constants = constants;
+        f.constants = constants.into();
         f.max_stack = 32;
         f.seal_hand_assembled_ops();
         f
@@ -2031,7 +2031,7 @@ pub fn testkit_baseline_aot_selftest(dir: &std::path::Path) -> Result<(), String
         });
         f.lexical = true;
         f.ops = ops.clone();
-        f.constants = constants.clone();
+        f.constants = constants.clone().into();
         f.max_stack = 16;
         f.seal_hand_assembled_ops();
         f
@@ -2175,7 +2175,7 @@ pub fn testkit_baseline_deep_rawslot_deopt_selftest(dir: &std::path::Path) -> Re
         });
         f.lexical = true;
         f.ops = ops.clone();
-        f.constants = constants.clone();
+        f.constants = constants.clone().into();
         f.max_stack = 16;
         f.seal_hand_assembled_ops();
         f
@@ -2319,7 +2319,7 @@ pub fn testkit_callbuiltinsym_aot_selftest(dir: &std::path::Path) -> Result<(), 
         });
         f.lexical = true;
         f.ops = ops.clone();
-        f.constants = constants.clone();
+        f.constants = constants.clone().into();
         f.max_stack = 16;
         f.seal_hand_assembled_ops();
         f
@@ -2437,7 +2437,7 @@ fn cbsym_aot_serve_and_check(
         });
         f.lexical = true;
         f.ops = ops.to_vec();
-        f.constants = constants.to_vec();
+        f.constants = constants.to_vec().into();
         f.max_stack = 16;
         f.seal_hand_assembled_ops();
         f
@@ -2713,7 +2713,7 @@ pub fn testkit_baseline_op_symbol_reloc_selftest(dir: &std::path::Path) -> Resul
             });
             f.lexical = true;
             f.ops = b.ops.clone();
-            f.constants = b.constants.clone();
+            f.constants = b.constants.clone().into();
             f.max_stack = 16;
             f.seal_hand_assembled_ops();
             f
@@ -2844,7 +2844,7 @@ pub fn testkit_spec_aot_selftest(dir: &std::path::Path) -> Result<(), String> {
         });
         f.lexical = true;
         f.ops = ops;
-        f.constants = vec![Value::symbol(intern(alias_name))];
+        f.constants = vec![Value::symbol(intern(alias_name))].into();
         f.max_stack = 16;
         f.seal_hand_assembled_ops();
         f
@@ -3139,7 +3139,7 @@ pub fn testkit_pgo_roundtrip_selftest(dir: &std::path::Path) -> Result<(), Strin
         });
         f.lexical = true;
         f.ops = ops;
-        f.constants = vec![Value::symbol(intern(alias_name))];
+        f.constants = vec![Value::symbol(intern(alias_name))].into();
         f.max_stack = 16;
         f.seal_hand_assembled_ops();
         f
@@ -3256,7 +3256,7 @@ pub fn testkit_pgo_drain_selftest(dir: &std::path::Path) -> Result<(), String> {
         });
         f.lexical = true;
         f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
-        f.constants = vec![Value::symbol(intern(callee))];
+        f.constants = vec![Value::symbol(intern(callee))].into();
         f.max_stack = 16;
         f.seal_hand_assembled_ops();
         f
@@ -3403,7 +3403,7 @@ fn ev_alias_and_build(
     });
     f.lexical = true;
     f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
-    f.constants = vec![Value::symbol(intern("pgo-off-callee"))];
+    f.constants = vec![Value::symbol(intern("pgo-off-callee"))].into();
     f.max_stack = 16;
     c.obarray
         .set_symbol_function("pgo-off-fn", Value::make_bytecode(f));
@@ -4984,7 +4984,7 @@ mod tests {
         });
         f.lexical = true;
         f.ops = ops.to_vec();
-        f.constants = constants.to_vec();
+        f.constants = constants.to_vec().into();
         f.max_stack = 16;
 
         let ctx_ptr = &mut eval as *mut Context as *mut u8;
@@ -5402,7 +5402,7 @@ mod tests {
         });
         f.lexical = true;
         f.ops = ops.clone();
-        f.constants = constants.clone();
+        f.constants = constants.clone().into();
         f.max_stack = 16;
 
         // Drive try_run_compiled so the AOT leaf is cached.
@@ -5509,7 +5509,7 @@ mod tests {
         });
         f.lexical = true;
         f.ops = ops.clone();
-        f.constants = constants.clone();
+        f.constants = constants.clone().into();
         f.max_stack = 16;
 
         let id = f.runtime.compiled_id_or_assign();
@@ -5553,7 +5553,7 @@ mod tests {
         });
         a.lexical = true;
         a.ops = vec![Op::Constant(0), Op::Add, Op::Return];
-        a.constants = vec![Value::make_int(5)];
+        a.constants = vec![Value::make_int(5)].into();
         a.max_stack = 16;
         let a_id = crate::emacs_core::intern::intern("r2-cand-add5");
         ev.obarray
@@ -5679,7 +5679,7 @@ mod tests {
         });
         a.lexical = true;
         a.ops = ops.clone();
-        a.constants = constants.clone();
+        a.constants = constants.clone().into();
         a.max_stack = 16;
         let sym = crate::emacs_core::intern::intern("r2-prepop-add5");
         ev.obarray
@@ -5772,7 +5772,7 @@ mod tests {
         });
         a.lexical = true;
         a.ops = vec![Op::Constant(0), Op::Add, Op::Return];
-        a.constants = vec![Value::make_int(5)];
+        a.constants = vec![Value::make_int(5)].into();
         a.max_stack = 16;
         let sym = crate::emacs_core::intern::intern("r2-prepop-miss-add5");
         ev.obarray
@@ -5835,7 +5835,7 @@ mod tests {
         });
         a.lexical = true;
         a.ops = vec![Op::Constant(0), Op::Add, Op::Return];
-        a.constants = vec![Value::make_int(5)];
+        a.constants = vec![Value::make_int(5)].into();
         a.max_stack = 16;
         let sym = crate::emacs_core::intern::intern("r2-prepop-nooverwrite-add5");
         ev.obarray
@@ -5912,7 +5912,7 @@ mod tests {
                 });
                 b.lexical = true;
                 b.ops = vec![Op::Constant(0), Op::Sub, Op::Return];
-                b.constants = vec![Value::make_int(1)];
+                b.constants = vec![Value::make_int(1)].into();
                 b.max_stack = 16;
                 b
             }),
@@ -6040,7 +6040,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops;
-            f.constants = consts;
+            f.constants = consts.into();
             f.max_stack = 16;
             f.seal_hand_assembled_ops();
             f
@@ -6150,7 +6150,7 @@ mod tests {
             });
             f.lexical = true;
             f.ops = ops;
-            f.constants = consts;
+            f.constants = consts.into();
             f.max_stack = 16;
             f.seal_hand_assembled_ops();
             f
@@ -6292,7 +6292,7 @@ mod tests {
         });
         f.lexical = true;
         f.ops = ops.clone();
-        f.constants = consts.clone();
+        f.constants = consts.clone().into();
         f.max_stack = 16;
         let sym = crate::emacs_core::intern::intern("pf-fc-add5");
         ev.obarray
@@ -6366,7 +6366,7 @@ mod tests {
         });
         f.lexical = true;
         f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
-        f.constants = vec![Value::symbol(intern(callee))];
+        f.constants = vec![Value::symbol(intern(callee))].into();
         f.max_stack = 16;
         f
     }
