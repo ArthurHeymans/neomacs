@@ -125,6 +125,18 @@ pub struct RealizedColor {
     pub g: u8,
     pub b: u8,
     pub a: u8,
+    /// What a TERMINAL frame's realized face carries for this colour: the
+    /// INDEX `tty-color-desc` returned, which is the whole of GNU's
+    /// `face->foreground` on a tty (`map_tty_color`, src/xfaces.c:6620-6694).
+    ///
+    /// It rides inside the colour rather than beside it because every merge,
+    /// `:inherit` walk and face copy moves the colour as one value; a separate
+    /// slot could be updated in one place and not the other, and the writer
+    /// would then be back to guessing. `None` means "not realized for a
+    /// terminal frame" -- GNU's `FACE_TTY_DEFAULT_COLOR`, which
+    /// `face_tty_specified_color` (src/dispextern.h:1933-1936) rejects, so the
+    /// writer emits no colour rather than one it invented.
+    pub terminal: Option<neomacs_display_protocol::TerminalColor>,
 }
 
 /// Compatibility alias for [`RealizedColor`]: the pre-split name used
@@ -135,11 +147,33 @@ pub type Color = RealizedColor;
 
 impl RealizedColor {
     pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
-        Self { r, g, b, a: 255 }
+        Self {
+            r,
+            g,
+            b,
+            a: 255,
+            terminal: None,
+        }
     }
 
     pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Self { r, g, b, a }
+        Self {
+            r,
+            g,
+            b,
+            a,
+            terminal: None,
+        }
+    }
+
+    /// The same colour, realized for a terminal frame: GNU `map_tty_color`
+    /// storing `tty-color-desc`'s INDEX in the realized face's colour slot.
+    #[must_use]
+    pub const fn with_terminal(self, terminal: neomacs_display_protocol::TerminalColor) -> Self {
+        Self {
+            terminal: Some(terminal),
+            ..self
+        }
     }
 
     /// Pack as an sRGB pixel (`0x00RRGGBB`) — the form face colors take
@@ -197,6 +231,32 @@ impl RealizedColor {
         } else {
             Self::from_name(spec)
         }
+    }
+}
+
+/// Realize one colour SPEC string the way GNU's `tty-color-desc` does
+/// (lisp/term/tty-colors.el:975-987), or context-free when there is no palette.
+///
+/// The name match comes first, exactly as `map_tty_color` takes it
+/// (src/xfaces.c:6640-6648): it is the half no RGB search can reproduce,
+/// because `tty-color-define` can put a name at an index its own RGB would
+/// never approximate to.
+fn realize_color_spec(
+    spec: &str,
+    palette: Option<&neomacs_display_protocol::TtyPalette>,
+) -> Option<RealizedColor> {
+    let Some(palette) = palette.filter(|palette| !palette.is_empty()) else {
+        return RealizedColor::parse(spec);
+    };
+    if let Some((terminal, (r, g, b))) = palette.named(spec) {
+        return Some(RealizedColor::rgb(r, g, b).with_terminal(terminal));
+    }
+    let parsed = RealizedColor::parse(spec)?;
+    match palette.approximate(parsed.r, parsed.g, parsed.b) {
+        Some((terminal, (r, g, b))) => Some(RealizedColor::rgb(r, g, b).with_terminal(terminal)),
+        // Only an all-gray palette can answer nothing; GNU's callers treat that
+        // as "not resolved" and keep no colour rather than substituting one.
+        None => Some(parsed),
     }
 }
 
@@ -1074,6 +1134,23 @@ impl Face {
 
     /// Parse face attributes from a Lisp plist.
     pub fn from_plist(name: &str, plist: &[Value]) -> Self {
+        Self::from_plist_realized(name, plist, None)
+    }
+
+    /// Parse an anonymous attribute plist, realizing its colours against a
+    /// terminal palette.
+    ///
+    /// GNU has no separate path for an anonymous plist: `merge_face_ref` folds
+    /// it into the same lface vector, and the one realization that follows puts
+    /// every colour string through `map_tty_color` -> `tty-color-desc`
+    /// (src/xfaces.c:6620-6694).  Passing `Some(palette)` reproduces that for
+    /// the callers that realize a plist outside the evaluator; `None` is a GUI
+    /// frame, where the realized colour IS the pixel.
+    pub fn from_plist_realized(
+        name: &str,
+        plist: &[Value],
+        palette: Option<&neomacs_display_protocol::TtyPalette>,
+    ) -> Self {
         let mut face = Face::new(name);
         let mut i = 0;
 
@@ -1091,12 +1168,12 @@ impl Face {
             match key {
                 "foreground" | "foreground-color" => {
                     if let Some(s) = val.as_utf8_str() {
-                        face.foreground = Color::parse(s);
+                        face.foreground = realize_color_spec(s, palette);
                     }
                 }
                 "background" | "background-color" => {
                     if let Some(s) = val.as_utf8_str() {
-                        face.background = Color::parse(s);
+                        face.background = realize_color_spec(s, palette);
                     }
                 }
                 "weight" => {
@@ -1158,7 +1235,7 @@ impl Face {
                 }
                 "distant-foreground" => {
                     if let Some(s) = val.as_utf8_str() {
-                        face.distant_foreground = Color::parse(s);
+                        face.distant_foreground = realize_color_spec(s, palette);
                     }
                 }
                 "foundry" => {
@@ -1505,15 +1582,38 @@ pub struct FaceTable {
     /// handle aliases the same allocation for the duration of one redisplay
     /// -- exactly the lifetime the old bitwise deep copy had.
     faces: std::rc::Rc<HashMap<Value, Face>>,
+    /// The terminal's `tty-color-alist` at the moment this table was realized,
+    /// empty on a GUI frame.
+    ///
+    /// It travels WITH the table because it is the thing the table was realized
+    /// against: every consumer that clones the table to realize one more face
+    /// -- an anonymous attribute plist from a text property, an overlay, or
+    /// `face-remapping-alist` -- must realize it against the same palette the
+    /// named faces used, and GNU guarantees that by realizing all of them
+    /// through one `map_tty_color` (src/xfaces.c:6620-6694).
+    tty_palette: std::rc::Rc<neomacs_display_protocol::TtyPalette>,
 }
 
 impl FaceTable {
     pub fn new() -> Self {
         let mut table = Self {
             faces: std::rc::Rc::new(HashMap::new()),
+            tty_palette: std::rc::Rc::new(neomacs_display_protocol::TtyPalette::default()),
         };
         table.register_standard_faces();
         table
+    }
+
+    /// The palette this table's faces were realized against, or `None` on a
+    /// GUI frame -- where a realized colour IS the pixel and no palette exists.
+    #[must_use]
+    pub fn tty_palette(&self) -> Option<&neomacs_display_protocol::TtyPalette> {
+        (!self.tty_palette.is_empty()).then(|| &*self.tty_palette)
+    }
+
+    /// Record the terminal palette this table was realized against.
+    pub fn set_tty_palette(&mut self, palette: neomacs_display_protocol::TtyPalette) {
+        self.tty_palette = std::rc::Rc::new(palette);
     }
 
     /// Register the standard Emacs faces.
@@ -2124,6 +2224,9 @@ impl FaceTable {
 
     pub(crate) fn from_dump(faces: HashMap<String, Face>) -> Self {
         Self {
+            // A dump is written in batch, with no terminal and so no palette;
+            // the first TTY frame's face sync installs one.
+            tty_palette: std::rc::Rc::new(neomacs_display_protocol::TtyPalette::default()),
             faces: std::rc::Rc::new(
                 faces
                     .into_iter()
@@ -2135,6 +2238,7 @@ impl FaceTable {
 
     pub(crate) fn from_dump_sym_ids(faces: Vec<(SymId, Face)>) -> Self {
         Self {
+            tty_palette: std::rc::Rc::new(neomacs_display_protocol::TtyPalette::default()),
             faces: std::rc::Rc::new(
                 faces
                     .into_iter()

@@ -4308,13 +4308,26 @@ fn byte_position_and_clear_bitmap_semantics() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    assert_eq!(builtin_clear_face_cache(vec![]).unwrap(), Value::NIL);
+    let mut face_cache_ctx = crate::emacs_core::eval::Context::new();
+    let face_change_before = face_cache_ctx.face_change_count;
     assert_eq!(
-        builtin_clear_face_cache(vec![Value::symbol("all")]).unwrap(),
+        builtin_clear_face_cache(&mut face_cache_ctx, vec![]).unwrap(),
         Value::NIL
     );
-    let clear_face_arity = builtin_clear_face_cache(vec![Value::NIL, Value::NIL])
-        .expect_err("clear-face-cache should reject >1 args");
+    assert_eq!(
+        builtin_clear_face_cache(&mut face_cache_ctx, vec![Value::symbol("all")]).unwrap(),
+        Value::NIL
+    );
+    // GNU `Fclear_face_cache` sets `face_change = true` (src/xfaces.c:800), and
+    // discarding every realized face is the whole point: without it a
+    // `tty-color-define` that moves a colour never reaches the screen.
+    assert!(
+        face_cache_ctx.face_change_count > face_change_before,
+        "clear-face-cache must invalidate the realized faces"
+    );
+    let clear_face_arity =
+        builtin_clear_face_cache(&mut face_cache_ctx, vec![Value::NIL, Value::NIL])
+            .expect_err("clear-face-cache should reject >1 args");
     match clear_face_arity {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-number-of-arguments");

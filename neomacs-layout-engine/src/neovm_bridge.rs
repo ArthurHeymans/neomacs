@@ -40,6 +40,7 @@ use crate::display_face_policy::BaseFacePolicy;
 use crate::display_origin::DisplayOrigin;
 use crate::font::fontconfig::FontSizing;
 use neomacs_display_protocol::EffectsConfig;
+use neomacs_display_protocol::TerminalColor;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::face::{BasicFaceId, BoxLineWidth};
 use neomacs_display_protocol::types::{FaceId, Rect};
@@ -3224,6 +3225,14 @@ pub struct ResolvedFace {
     pub fg: u32,
     /// Background color (sRGB pixel: 0x00RRGGBB).
     pub bg: u32,
+    /// What a TERMINAL frame writes for `fg`: the index `tty-color-desc`
+    /// returned, which is the whole of GNU's `face->foreground` on a tty
+    /// (`map_tty_color`, src/xfaces.c:6640-6648).  `None` on a GUI frame, and
+    /// on a tty for a colour the palette could not resolve -- GNU's
+    /// `FACE_TTY_DEFAULT_COLOR`, which `turn_on_face` emits nothing for.
+    pub terminal_fg: Option<TerminalColor>,
+    /// What a TERMINAL frame writes for `bg`; see [`Self::terminal_fg`].
+    pub terminal_bg: Option<TerminalColor>,
     /// Use the terminal's default foreground instead of `fg`.
     pub use_default_foreground: bool,
     /// Use the terminal's default background instead of `bg`.
@@ -3284,6 +3293,8 @@ impl Default for ResolvedFace {
         Self {
             fg: 0x00000000,
             bg: 0x00FFFFFF,
+            terminal_fg: None,
+            terminal_bg: None,
             use_default_foreground: false,
             use_default_background: false,
             font_family: String::new(),
@@ -3332,6 +3343,43 @@ impl ResolvedFace {
     pub(crate) fn set_measured_char_width_px(&mut self, width: f32) {
         self.font_char_width = width;
     }
+
+    /// Assign GNU's whole realized foreground from one realized colour.
+    ///
+    /// The pixel and the terminal index are two readings of the same
+    /// `map_tty_color` result (src/xfaces.c:6620-6694), so they are assigned
+    /// together and never separately -- a site that set one and forgot the
+    /// other would put the writer back to guessing an index from RGB.
+    pub(crate) fn set_foreground(&mut self, color: &NeoColor) {
+        self.fg = color_to_pixel(color);
+        self.terminal_fg = color.terminal;
+        self.use_default_foreground = false;
+    }
+
+    /// Assign GNU's whole realized background from one realized colour.
+    pub(crate) fn set_background(&mut self, color: &NeoColor) {
+        self.bg = color_to_pixel(color);
+        self.terminal_bg = color.terminal;
+        self.use_default_background = false;
+    }
+
+    /// The frame's fallback foreground, used when the default face specifies
+    /// none.  It never came from `tty-color-desc`, so it carries no terminal
+    /// colour: GNU's `FACE_TTY_DEFAULT_FG_COLOR`, which `turn_on_face` emits
+    /// no colour for at all.
+    pub(crate) fn set_frame_default_foreground(&mut self, pixel: u32) {
+        self.fg = pixel;
+        self.terminal_fg = None;
+        self.use_default_foreground = true;
+    }
+
+    /// The frame's fallback background; see
+    /// [`Self::set_frame_default_foreground`].
+    pub(crate) fn set_frame_default_background(&mut self, pixel: u32) {
+        self.bg = pixel;
+        self.terminal_bg = None;
+        self.use_default_background = true;
+    }
 }
 
 /// The terminal channel a default-color sentinel belongs to.
@@ -3346,9 +3394,18 @@ enum FaceColorSlot {
 }
 
 /// A face color before it is assigned to its post-inverse destination slot.
+///
+/// It carries the realized terminal index next to the pixel because inverse
+/// video MOVES a colour between slots: GNU `realize_tty_face` maps both source
+/// colours through `map_tty_color` and then swaps the results
+/// (src/xfaces.c:6800-6810), so whatever the writer emits for the foreground
+/// must be exactly what was realized for the background.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TerminalFaceColor {
-    Concrete(u32),
+    Concrete {
+        pixel: u32,
+        terminal: Option<TerminalColor>,
+    },
     TerminalDefault {
         slot: FaceColorSlot,
         fallback_pixel: u32,
@@ -3356,28 +3413,37 @@ enum TerminalFaceColor {
 }
 
 impl TerminalFaceColor {
-    fn from_resolved_slot(pixel: u32, defaulted: bool, slot: FaceColorSlot) -> Self {
+    fn from_resolved_slot(
+        pixel: u32,
+        terminal: Option<TerminalColor>,
+        defaulted: bool,
+        slot: FaceColorSlot,
+    ) -> Self {
         if defaulted {
             Self::TerminalDefault {
                 slot,
                 fallback_pixel: pixel,
             }
         } else {
-            Self::Concrete(pixel)
+            Self::Concrete { pixel, terminal }
         }
     }
 
-    fn materialize_in(self, destination: FaceColorSlot) -> (u32, bool) {
+    fn materialize_in(self, destination: FaceColorSlot) -> (u32, Option<TerminalColor>, bool) {
         match self {
-            Self::Concrete(pixel) => (pixel, false),
+            Self::Concrete { pixel, terminal } => (pixel, terminal, false),
             Self::TerminalDefault {
                 slot,
                 fallback_pixel,
-            } if slot == destination => (fallback_pixel, true),
+            } if slot == destination => (fallback_pixel, None, true),
             // ANSI cannot select the terminal's default background as a
             // foreground (or vice versa). GNU realizes the frame color first
             // and swaps that concrete color, so use the carried fallback.
-            Self::TerminalDefault { fallback_pixel, .. } => (fallback_pixel, false),
+            //
+            // That fallback is a frame pixel, not a `tty-color-desc` answer, so
+            // it carries no terminal colour: GNU's `FACE_TTY_DEFAULT_COLOR`,
+            // which `turn_on_face` emits nothing for.
+            Self::TerminalDefault { fallback_pixel, .. } => (fallback_pixel, None, false),
         }
     }
 
@@ -3395,11 +3461,13 @@ impl TerminalFaceColor {
 fn apply_resolved_face_inverse_video(face: &mut ResolvedFace) {
     let foreground = TerminalFaceColor::from_resolved_slot(
         face.fg,
+        face.terminal_fg,
         face.use_default_foreground,
         FaceColorSlot::Foreground,
     );
     let background = TerminalFaceColor::from_resolved_slot(
         face.bg,
+        face.terminal_bg,
         face.use_default_background,
         FaceColorSlot::Background,
     );
@@ -3409,8 +3477,10 @@ fn apply_resolved_face_inverse_video(face: &mut ResolvedFace) {
         return;
     }
 
-    (face.fg, face.use_default_foreground) = background.materialize_in(FaceColorSlot::Foreground);
-    (face.bg, face.use_default_background) = foreground.materialize_in(FaceColorSlot::Background);
+    (face.fg, face.terminal_fg, face.use_default_foreground) =
+        background.materialize_in(FaceColorSlot::Foreground);
+    (face.bg, face.terminal_bg, face.use_default_background) =
+        foreground.materialize_in(FaceColorSlot::Background);
     face.terminal_inverse_video = false;
 }
 
@@ -3612,16 +3682,14 @@ impl FaceResolver {
         let neo_default = face_table.resolve("default");
         let mut df = ResolvedFace::default();
         if let Some(color) = neo_default.foreground.as_ref() {
-            df.fg = color_to_pixel(color);
+            df.set_foreground(color);
         } else {
-            df.fg = default_fg;
-            df.use_default_foreground = true;
+            df.set_frame_default_foreground(default_fg);
         }
         if let Some(color) = neo_default.background.as_ref() {
-            df.bg = color_to_pixel(color);
+            df.set_background(color);
         } else {
-            df.bg = default_bg;
-            df.use_default_background = true;
+            df.set_frame_default_background(default_bg);
         }
         df.font_family = neo_default
             .family_runtime_string_owned()
@@ -3667,6 +3735,19 @@ impl FaceResolver {
             invalid_face_references: std::cell::RefCell::new(Vec::new()),
             font_sizing,
         }
+    }
+
+    /// The terminal palette an ANONYMOUS attribute plist realizes against, or
+    /// `None` on a GUI frame.
+    ///
+    /// Named faces are realized in neovm-core, which calls `tty-color-desc`
+    /// itself, as GNU does.  A plist -- a `face` text property, an overlay, a
+    /// `face-remapping-alist` entry -- is realized HERE, and this crate calls no
+    /// Lisp function anywhere, so it runs GNU's own search over the terminal's
+    /// own palette instead.  It comes off the face table so it cannot be a
+    /// different palette from the one the named faces used.
+    fn plist_palette(&self) -> Option<&neomacs_display_protocol::TtyPalette> {
+        self.face_table.tty_palette()
     }
 
     /// Discard diagnostics from a speculative frame-layout attempt.
@@ -3762,12 +3843,10 @@ impl FaceResolver {
     fn apply_specified_face_over(&self, base: &ResolvedFace, face: &NeoFace) -> ResolvedFace {
         let mut rf = base.clone();
         if let Some(c) = &face.foreground {
-            rf.fg = color_to_pixel(c);
-            rf.use_default_foreground = false;
+            rf.set_foreground(c);
         }
         if let Some(c) = &face.background {
-            rf.bg = color_to_pixel(c);
-            rf.use_default_background = false;
+            rf.set_background(c);
         }
         match face.inverse_video {
             Some(true) => apply_resolved_face_inverse_video(&mut rf),
@@ -3859,8 +3938,7 @@ impl FaceResolver {
         if let Some(dfg) = &face.distant_foreground
             && colors_close(rf.fg, rf.bg)
         {
-            rf.fg = color_to_pixel(dfg);
-            rf.use_default_foreground = false;
+            rf.set_foreground(dfg);
         }
 
         // Stipple: a face that specifies `:stipple` overrides the inherited
@@ -3935,7 +4013,7 @@ impl FaceResolver {
             FilteredFaceSpec::NotFiltered => {}
         }
         if Self::face_spec_is_plist(&items) {
-            let face = NeoFace::from_plist("--inline--", &items);
+            let face = NeoFace::from_plist_realized("--inline--", &items, self.plist_palette());
             return Some(self.resolve_face_overlay_spec(face, depth + 1));
         }
 
@@ -4198,7 +4276,8 @@ impl FaceResolver {
                     FilteredFaceSpec::NotFiltered => {}
                 }
                 if Self::face_spec_is_plist(&items) {
-                    let mut inline = NeoFace::from_plist("--inline--", &items);
+                    let mut inline =
+                        NeoFace::from_plist_realized("--inline--", &items, self.plist_palette());
                     let parent = inline.inherit.take().and_then(|inherit_ref| {
                         self.resolve_buffer_face_value_overlay_spec_inner(
                             buffer,
@@ -4537,9 +4616,13 @@ impl FaceResolver {
 
     /// Parse an inline face plist like `(:foreground "red" :weight bold)` into
     /// a `Face` object.  Handles the same keywords as GNU Emacs face specs.
-    pub fn face_from_plist(val: &Value) -> Option<NeoFace> {
+    pub fn face_from_plist(&self, val: &Value) -> Option<NeoFace> {
         let items = list_to_vec(val)?;
-        Some(NeoFace::from_plist("--inline--", &items))
+        Some(NeoFace::from_plist_realized(
+            "--inline--",
+            &items,
+            self.plist_palette(),
+        ))
     }
 
     /// Convert a neovm-core `Face` into a fully-realized `ResolvedFace`.
@@ -4555,13 +4638,11 @@ impl FaceResolver {
 
         // Foreground
         if let Some(c) = &face.foreground {
-            rf.fg = color_to_pixel(c);
-            rf.use_default_foreground = false;
+            rf.set_foreground(c);
         }
         // Background
         if let Some(c) = &face.background {
-            rf.bg = color_to_pixel(c);
-            rf.use_default_background = false;
+            rf.set_background(c);
         }
         // Inverse video: swap fg and bg
         match face.inverse_video {
@@ -4659,12 +4740,10 @@ impl FaceResolver {
         // Distant-foreground: GNU Emacs (xfaces.c) uses this when the
         // foreground is too close to the background, improving readability.
         // Check if fg ≈ bg and substitute distant-foreground if available.
-        if let Some(dfg) = &face.distant_foreground {
-            let dfg_pixel = color_to_pixel(dfg);
-            if colors_close(rf.fg, rf.bg) {
-                rf.fg = dfg_pixel;
-                rf.use_default_foreground = false;
-            }
+        if let Some(dfg) = &face.distant_foreground
+            && colors_close(rf.fg, rf.bg)
+        {
+            rf.set_foreground(dfg);
         }
 
         // Stipple: realize the `:stipple` spec to the XBM pattern the renderer

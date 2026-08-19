@@ -325,6 +325,24 @@ pub struct Face {
     /// Background color
     pub background: Color,
 
+    /// What a TERMINAL frame writes for [`Self::foreground`]: the index
+    /// `tty-color-desc` returned, which is the whole of GNU's
+    /// `face->foreground` on a tty frame (`map_tty_color`,
+    /// src/xfaces.c:6620-6694) and the only thing `turn_on_face` emits
+    /// (src/term.c:2093-2117).
+    ///
+    /// `None` on a GUI frame, and on a tty for a colour `tty-color-desc` could
+    /// not resolve -- GNU's `FACE_TTY_DEFAULT_COLOR`, which
+    /// `face_tty_specified_color` (src/dispextern.h:1933-1936) rejects, so the
+    /// writer emits no colour rather than one it invented.
+    #[serde(default)]
+    pub terminal_foreground: Option<crate::terminal_color::TerminalColor>,
+
+    /// What a TERMINAL frame writes for [`Self::background`]; see
+    /// [`Self::terminal_foreground`].
+    #[serde(default)]
+    pub terminal_background: Option<crate::terminal_color::TerminalColor>,
+
     /// Use the terminal's default foreground instead of `foreground`.
     pub use_default_foreground: bool,
 
@@ -425,6 +443,8 @@ impl Default for Face {
             id: FaceId::new(0),
             foreground: Color::WHITE,
             background: Color::BLACK,
+            terminal_foreground: None,
+            terminal_background: None,
             use_default_foreground: false,
             use_default_background: false,
             underline_color: None,
@@ -643,6 +663,10 @@ impl FaceDataFFI {
             id: FaceId::new(self.face_id),
             foreground: Color::from_pixel(self.fg),
             background: Color::from_pixel(self.bg),
+            // A raw FFI pixel never went through `tty-color-desc`, so it has no
+            // terminal colour to carry.
+            terminal_foreground: None,
+            terminal_background: None,
             use_default_foreground: false,
             use_default_background: false,
             underline_color: has_underline.then(|| Color::from_pixel(self.underline_color)),

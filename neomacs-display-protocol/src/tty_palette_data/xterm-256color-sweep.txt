@@ -1,16 +1,10 @@
-# GNU Emacs 31.0.90 `tty-color-approximate' answers over a coarse sweep of the
-# whole RGB cube.  MEASURED, not derived: `emacs -Q -nw' driven through a PTY
-# (script -qec) with COLORTERM unset and TERM=xterm-256color, so
-# `display-color-cells' is 256 and `tty-color-alist' has exactly 256 entries,
-# evaluating for every sampled colour
+# GNU Emacs 31.0.90 `tty-color-approximate' answers on TERM=xterm-256color, over a
+# coarse sweep of the whole RGB cube.  MEASURED, not derived: `emacs -Q -nw'
+# driven through a real pty with COLORTERM unset, evaluating for every sample
 #
 #     (nth 1 (tty-color-approximate (list (* r 257) (* g 257) (* b 257))))
 #
 # Channels step by 15 over 0..255 (18 values each, 18^3 = 5832 samples).
-#
-# The 41-colour table in `rgb_to_256_matches_gnu_tty_color_approximate' pins
-# the colours ledger 108 was about; this file pins the SEARCH, so a future
-# short-circuit that is right on those 41 and wrong elsewhere cannot pass.
 #
 # Format: RRGGBB INDEX, one sample per line, hex lowercase.
 000000 0

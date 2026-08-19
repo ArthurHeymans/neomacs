@@ -913,6 +913,8 @@ fn terminal_cell_face(
         id: face_id,
         foreground: fg,
         background: Color::TRANSPARENT,
+        terminal_foreground: None,
+        terminal_background: None,
         use_default_foreground: false,
         use_default_background: false,
         underline_color: None,

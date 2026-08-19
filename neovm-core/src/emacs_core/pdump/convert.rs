@@ -5753,11 +5753,18 @@ pub(crate) fn load_fontset_registry(dfr: &DumpFontsetRegistry) {
 }
 
 fn load_color(c: &DumpColor) -> Color {
+    // No `terminal` in the dump, and none is wanted: a realized terminal colour
+    // is the index `tty-color-desc` returned for a palette that a *terminal*
+    // registered, and a dump is written in batch with no terminal at all. The
+    // face table is re-realized per frame by
+    // `sync_runtime_face_table_from_frame_lisp_faces`, which is where the index
+    // is filled in.
     Color {
         r: c.r,
         g: c.g,
         b: c.b,
         a: c.a,
+        terminal: None,
     }
 }
 

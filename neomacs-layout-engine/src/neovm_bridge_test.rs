@@ -3021,7 +3021,7 @@ fn test_face_from_plist_realizes_relative_height_family_and_weight() {
         Value::symbol("extra-bold"),
     ]);
 
-    let inline_face = FaceResolver::face_from_plist(&plist).expect("inline plist face");
+    let inline_face = resolver.face_from_plist(&plist).expect("inline plist face");
     let realized = resolver.realize_face(&inline_face);
 
     assert_eq!(realized.font_family, "DejaVu Sans Mono");
@@ -3293,12 +3293,7 @@ fn face_resolver_honors_overlay_window_property() {
     let _ctx = neovm_core::emacs_core::Context::new();
     let mut table = FaceTable::new();
     let mut hl = NeoFace::new("hl-line-test");
-    hl.background = Some(neovm_core::face::Color {
-        r: 0xff,
-        g: 0xff,
-        b: 0x00,
-        a: 0xff,
-    });
+    hl.background = Some(neovm_core::face::Color::rgb(0xff, 0xff, 0x00));
     table.define("hl-line-test", hl);
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, Some("x".to_string()));
 

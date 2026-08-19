@@ -1512,10 +1512,12 @@ impl LayoutEngine {
                         pixel_to_color(face.bg),
                     )
                     .with_terminal_style(TerminalMenuBarStyle {
-                        fg: terminal_face.fg,
-                        bg: terminal_face.bg,
-                        use_default_foreground: terminal_face.use_default_foreground,
-                        use_default_background: terminal_face.use_default_background,
+                        fg: (!terminal_face.use_default_foreground)
+                            .then_some(terminal_face.terminal_fg)
+                            .flatten(),
+                        bg: (!terminal_face.use_default_background)
+                            .then_some(terminal_face.terminal_bg)
+                            .flatten(),
                         bold: terminal_face.font_weight >= 600,
                         inverse: terminal_face.terminal_inverse_video,
                     });

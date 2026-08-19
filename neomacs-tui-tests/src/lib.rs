@@ -607,6 +607,15 @@ fn neomacs_binary_path(workspace: &Path) -> PathBuf {
     neomacs_binary_path_from_override(workspace, std::env::var_os(NEOMACS_TUI_NEOMACS_BIN))
 }
 
+/// The neomacs binary this test run drives, for suites that spawn the editor
+/// themselves instead of through [`TuiSession`] -- e.g. one that runs it to
+/// completion on a pty of a chosen TERM and reads a file it wrote.
+pub fn neomacs_binary() -> PathBuf {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace = manifest.parent().expect("workspace root");
+    neomacs_binary_path(workspace)
+}
+
 fn neomacs_binary_path_from_override(
     workspace: &Path,
     override_path: Option<std::ffi::OsString>,
