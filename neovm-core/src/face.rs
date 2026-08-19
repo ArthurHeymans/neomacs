@@ -125,6 +125,18 @@ pub struct RealizedColor {
     pub g: u8,
     pub b: u8,
     pub a: u8,
+    /// What a TERMINAL frame's realized face carries for this colour: the
+    /// INDEX `tty-color-desc` returned, which is the whole of GNU's
+    /// `face->foreground` on a tty (`map_tty_color`, src/xfaces.c:6620-6694).
+    ///
+    /// It rides inside the colour rather than beside it because every merge,
+    /// `:inherit` walk and face copy moves the colour as one value; a separate
+    /// slot could be updated in one place and not the other, and the writer
+    /// would then be back to guessing. `None` means "not realized for a
+    /// terminal frame" -- GNU's `FACE_TTY_DEFAULT_COLOR`, which
+    /// `face_tty_specified_color` (src/dispextern.h:1933-1936) rejects, so the
+    /// writer emits no colour rather than one it invented.
+    pub terminal: Option<neomacs_display_protocol::TerminalColor>,
 }
 
 /// Compatibility alias for [`RealizedColor`]: the pre-split name used
@@ -135,11 +147,33 @@ pub type Color = RealizedColor;
 
 impl RealizedColor {
     pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
-        Self { r, g, b, a: 255 }
+        Self {
+            r,
+            g,
+            b,
+            a: 255,
+            terminal: None,
+        }
     }
 
     pub const fn rgba(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Self { r, g, b, a }
+        Self {
+            r,
+            g,
+            b,
+            a,
+            terminal: None,
+        }
+    }
+
+    /// The same colour, realized for a terminal frame: GNU `map_tty_color`
+    /// storing `tty-color-desc`'s INDEX in the realized face's colour slot.
+    #[must_use]
+    pub const fn with_terminal(self, terminal: neomacs_display_protocol::TerminalColor) -> Self {
+        Self {
+            terminal: Some(terminal),
+            ..self
+        }
     }
 
     /// Pack as an sRGB pixel (`0x00RRGGBB`) — the form face colors take

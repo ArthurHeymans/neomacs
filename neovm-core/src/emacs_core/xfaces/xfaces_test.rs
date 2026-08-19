@@ -137,6 +137,79 @@ fn lisp_value_to_face_attr_realizes_at_the_boundary() {
     );
 }
 
+/// The palette entry a TTY frame realizes to carries the INDEX
+/// `tty-color-desc` returned, and it survives realization -- that number is
+/// GNU's whole realized colour on a terminal (`map_tty_color` stores it in
+/// `face->foreground`, src/xfaces.c:6640-6648) and the only thing
+/// `turn_on_face` writes (src/term.c:2093-2117).
+///
+/// The two rows are read out of GNU 31.0.90 on a real pty with COLORTERM unset
+/// and TERM=xterm-256color:
+///
+/// ```text
+/// (tty-color-desc "white")   => ("white" 7 58853 58853 58853)
+/// (tty-color-desc "#afafaf") => ("color-145" 145 44975 44975 44975)
+/// ```
+#[test]
+fn realized_tty_colour_keeps_the_index_tty_color_desc_returned() {
+    crate::test_utils::init_test_tracing();
+    use crate::face::{Color, SpecifiedColor};
+    use neomacs_display_protocol::TerminalColor;
+    let mut palette = TtyColorMap::default();
+    palette.insert(
+        "white".to_owned(),
+        Color::rgb(229, 229, 229).with_terminal(TerminalColor::Indexed(7)),
+    );
+    palette.insert(
+        "#afafaf".to_owned(),
+        Color::rgb(175, 175, 175).with_terminal(TerminalColor::Indexed(145)),
+    );
+    let r = FaceColorResolver::TtyPalette(&palette);
+    assert_eq!(
+        r.realize(&SpecifiedColor::parse("white"))
+            .and_then(|c| c.terminal),
+        Some(TerminalColor::Indexed(7))
+    );
+    assert_eq!(
+        r.realize(&SpecifiedColor::parse("#afafaf"))
+            .and_then(|c| c.terminal),
+        Some(TerminalColor::Indexed(145))
+    );
+    // A name the palette could not resolve keeps the context-free parse and
+    // therefore has NO terminal colour: GNU leaves the pixel at
+    // FACE_TTY_DEFAULT_COLOR there, and `face_tty_specified_color`
+    // (src/dispextern.h:1933-1936) makes `turn_on_face` emit nothing rather
+    // than a colour nobody computed.
+    assert_eq!(
+        r.realize(&SpecifiedColor::parse("gold"))
+            .and_then(|c| c.terminal),
+        None
+    );
+    // A GUI frame realizes the same spec with no terminal colour at all.
+    assert_eq!(
+        FaceColorResolver::Standard
+            .realize(&SpecifiedColor::parse("white"))
+            .and_then(|c| c.terminal),
+        None
+    );
+}
+
+/// Two colours that LOOK the same but write different bytes are different
+/// realized colours, so a face cache keyed by colour cannot serve one for the
+/// other.
+#[test]
+fn a_realized_colour_is_not_equal_to_the_same_rgb_without_its_index() {
+    crate::test_utils::init_test_tracing();
+    use crate::face::Color;
+    use neomacs_display_protocol::TerminalColor;
+    let plain = Color::rgb(255, 0, 0);
+    assert_ne!(plain, plain.with_terminal(TerminalColor::Indexed(9)));
+    assert_ne!(
+        plain.with_terminal(TerminalColor::Indexed(1)),
+        plain.with_terminal(TerminalColor::Indexed(9))
+    );
+}
+
 #[test]
 fn register_bootstrap_vars_matches_gnu_defaults() {
     crate::test_utils::init_test_tracing();

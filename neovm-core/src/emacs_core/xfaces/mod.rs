@@ -358,6 +358,7 @@ use crate::face::{
     BoxStyle, Face as RuntimeFace, FontSlant, FontWeight, FontWidth, LFACE_ATTRS, UnderlineStyle,
 };
 use crate::tagged::header::store_value_atomic;
+use neomacs_display_protocol::TerminalColor;
 use crate::window::{FrameId, FrameManager, FrameParam};
 
 // ===========================================================================
@@ -1797,7 +1798,21 @@ impl FaceColorResolver<'_> {
 /// approximates. Returns None when the machinery is not loaded or cannot
 /// resolve the name -- callers then keep the context-free parse, mirroring
 /// GNU's "not resolved" fallback rather than signalling.
-fn tty_color_desc_rgb(eval: &mut super::eval::Context, name: &str) -> Option<crate::face::Color> {
+///
+/// `tty-color-desc` answers `(NAME INDEX R G B)` and GNU keeps the INDEX:
+/// `tty_lookup_color` stores it as `tty_color->pixel` (xfaces.c:1102) and
+/// `map_tty_color` puts it straight into the realized face's colour slot
+/// (xfaces.c:6640-6648).  Keep it here for the same reason -- it is the number
+/// the terminal writer must emit, and nothing downstream of Lisp can re-derive
+/// it, because the palette it was searched in is `tty-color-alist`, per-terminal
+/// Lisp data that `tty-color-define` can change.  The RGB is kept alongside for
+/// the consumers that must show a colour rather than write one (snapshots,
+/// `:distant-foreground` distance, the layout bridge's pixel).
+fn tty_color_desc_rgb(
+    eval: &mut super::eval::Context,
+    name: &str,
+    color_cells: i64,
+) -> Option<crate::face::Color> {
     if !eval.obarray.fboundp("tty-color-desc") {
         return None;
     }
@@ -1815,7 +1830,15 @@ fn tty_color_desc_rgb(eval: &mut super::eval::Context, name: &str) -> Option<cra
     );
     // tty-color-alist stores 16-bit components (xterm-rgb-convert-to-16bit).
     let to8 = |v: i64| (v.clamp(0, 65535) / 257) as u8;
-    Some(crate::face::Color::rgb(to8(r), to8(g), to8(b)))
+    let rgb = crate::face::Color::rgb(to8(r), to8(g), to8(b));
+    // GNU checks the INDEX is a number and gives up on the whole descriptor
+    // otherwise (`if (! FIXNUMP (XCAR (XCDR (color_desc)))) return false;`,
+    // xfaces.c:1098-1099).
+    let index = items[1].as_fixnum()?;
+    Some(match TerminalColor::from_tty_color_desc(index, color_cells) {
+        Some(terminal) => rgb.with_terminal(terminal),
+        None => return None,
+    })
 }
 
 /// Collect every foreground/background/distant-foreground color string in the
@@ -1871,9 +1894,14 @@ fn build_tty_color_map(eval: &mut super::eval::Context, frame_id: FrameId) -> Tt
             }
         }
     }
+    // `tty-color-24bit` keys on `(display-color-cells)` (tty-colors.el:834), so
+    // the same number decides whether the INDEX `tty-color-desc` returns is a
+    // palette subscript or a packed 24-bit pixel. Read it once per sync, not
+    // once per colour.
+    let color_cells = crate::emacs_core::terminal::pure::terminal_runtime_color_cells();
     let mut map = TtyColorMap::default();
     for name in names {
-        if let Some(color) = tty_color_desc_rgb(eval, &name) {
+        if let Some(color) = tty_color_desc_rgb(eval, &name, color_cells) {
             map.insert(name, color);
         }
     }
