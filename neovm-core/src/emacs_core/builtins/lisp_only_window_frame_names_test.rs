@@ -42,8 +42,9 @@
 //! is Lisp but `x-create-frame' and `make-terminal-frame' are C.
 //!
 //! `rust_subrs_shadowed_by_lisp_test.rs` is the scan that finds new shadows;
-//! this is the per-name statement for the eighteen entry 154 deleted, and the
-//! statement that the C names beneath them are still here.
+//! this is the per-name statement for the seventeen entry 154 deleted, for the
+//! eighteenth it could not, and for the C names beneath them that are still
+//! here.
 
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::eval::lookup_global_subr_entry;
@@ -313,7 +314,8 @@ fn the_seventeen_window_frame_names_are_lisp_in_the_loaded_runtime_like_gnu() {
     );
 }
 
-/// Every one of the eighteen compiles to an ordinary call through the
+/// Every one of the eighteen -- including the one that stayed -- compiles to
+/// an ordinary call through the
 /// constants vector, in GNU and here.  None has a `byte-compile` property, a
 /// `compiler-macro` or a `byte-optimizer`, and none is a `defsubst`, so unlike
 /// three of 152's thirteen there is no door by which a compiled caller could
