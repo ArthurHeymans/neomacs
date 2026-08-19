@@ -903,3 +903,76 @@ fn face_remapping_from_lisp_interns_string_names_to_symbols() {
         other => panic!("expected face remap, got {other:?}"),
     }
 }
+
+/// The realized underline colour of an ANONYMOUS attribute plist.
+///
+/// GNU has one realization path: `merge_face_ref` folds an inline plist into
+/// the same lface vector, and `realize_tty_face` then maps `:underline`'s
+/// colour through `map_tty_color` (src/xfaces.c:6748) exactly as it maps
+/// `:foreground` and `:background` (:6800-6803).  The writer emits the result
+/// through `TF_set_underline_color` (src/term.c:2119-2126).
+///
+/// This path used to call `Color::parse` for the underline while calling
+/// `realize_color_spec` for the foreground, so an inline
+/// `(:underline (:color "red"))` reached the terminal with a pixel and no
+/// index -- a colour the writer is right to refuse to emit, and therefore an
+/// underline that silently lost its colour on every terminal frame.
+#[test]
+fn an_anonymous_plist_realizes_its_underline_color_through_the_palette() {
+    use neomacs_display_protocol::terminal_color::TerminalColor;
+    use neomacs_display_protocol::{TtyPalette, TtyPaletteEntry};
+
+    let palette = TtyPalette::new(
+        vec![
+            TtyPaletteEntry {
+                name: "black".to_string(),
+                index: 0,
+                rgb: Some((0, 0, 0)),
+            },
+            TtyPaletteEntry {
+                name: "red".to_string(),
+                index: 1,
+                rgb: Some((205, 0, 0)),
+            },
+        ],
+        256,
+    );
+
+    // The string form, GNU's `(:underline "red")`.
+    let plist = vec![Value::keyword("underline"), Value::string("red")];
+    let face = Face::from_plist_realized("t", &plist, Some(&palette));
+    let underline = face.underline.enabled().expect("underline enabled");
+    assert_eq!(
+        underline.color.and_then(|color| color.terminal),
+        Some(TerminalColor::Indexed(1)),
+        "a string :underline realizes through the palette"
+    );
+
+    // The plist form, GNU's `(:underline (:color "red" :style wave))`.
+    let inner = Value::list(vec![
+        Value::keyword("color"),
+        Value::string("red"),
+        Value::keyword("style"),
+        Value::symbol("wave"),
+    ]);
+    let plist = vec![Value::keyword("underline"), inner];
+    let face = Face::from_plist_realized("t", &plist, Some(&palette));
+    let underline = face.underline.enabled().expect("underline enabled");
+    assert_eq!(underline.style, UnderlineStyle::Wave);
+    assert_eq!(
+        underline.color.and_then(|color| color.terminal),
+        Some(TerminalColor::Indexed(1)),
+        "a plist :color realizes through the palette"
+    );
+
+    // No palette is a GUI frame: the realized colour IS the pixel and carries
+    // no terminal index, which is what keeps a GUI underline out of the
+    // terminal writer's slot.
+    let face = Face::from_plist_realized(
+        "t",
+        &[Value::keyword("underline"), Value::string("red")],
+        None,
+    );
+    let underline = face.underline.enabled().expect("underline enabled");
+    assert_eq!(underline.color.and_then(|color| color.terminal), None);
+}
