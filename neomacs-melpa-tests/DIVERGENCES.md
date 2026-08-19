@@ -16965,7 +16965,7 @@ pointing at it.
 | `cargo nextest run --release -p neovm-oracle-tests` | 38783 run, **38783 passed**, 0 failed |
 | `cargo nextest run -p neomacs` | 233 run, 230 passed, 1 skipped, 2 failed -- both `neomacsclient_cli` socket tests, which fail IDENTICALLY on the pre-change source (`bind local socket: path must be shorter than SUN_LEN`, a worktree-path-length artifact, verified by rebuilding the worktree at `e90b234e7`) |
 | `cargo nextest run --release -p neomacs-tui-tests` | 915 run, 912 passed, 3 failed.  `dired_jump_via_cx_cj_opens_parent_listing_on_current_file` PASSES in isolation (load-flaky).  The other two -- `set_visited_file_name_elisp_functions_match_gnu_semantics` and `keyboard_quit_after_find_file_ctrl_h_returns_to_scratch` -- fail IDENTICALLY when the same worktree tests are pointed at the PRE-CHANGE release binary from the main checkout, so they are not this work: both diffs are the worktree's long absolute path in a minibuffer prompt, wrapping the echo area by a row |
-| `cargo check --workspace --all-targets` | clean; the one warning (`unused import: maybe_keymap_in_obarray`, keymaps.rs) is on the pre-change baseline too |
+| `cargo check --workspace --all-targets` | clean.  `cargo check -p neovm-core --lib`'s warning set is BYTE-IDENTICAL to the pre-change baseline, sixteen lines either side (`tmp/pw64/w-base.txt` vs `tmp/pw64/w-after.txt`), so the deleted subr and its sixteen-line neighbourhood left no orphaned helper behind |
 | `cargo fmt --all --check` | clean |
 | release binary vs GNU 31.0.90, observables | two known lines, section 8 |
 
