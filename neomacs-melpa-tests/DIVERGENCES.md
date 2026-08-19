@@ -16581,3 +16581,395 @@ the flag clear.  143 measured the arm and not the call above it, which is why
 `SourceBlock::Last` survived at the file door for three more entries.
 
 Status: FIXED.
+
+## 157. Two display-derived frame parameters were seeded ninety-five files before GNU computes them, which is the whole reason `display-color-cells` could not be deleted -- FIXED
+
+Entry 154 deleted seventeen of eighteen window/frame/face names and kept one,
+`display-color-cells`, with a measured reason and a typed debt:
+`UnjustifiedBootstrapCaller`.  Its finding was that our `(load "faces")` reaches
+a name GNU's cannot, and that the cause is a frame parameter Rust seeds early.
+That finding was right.  This entry is the cause, and with it gone the
+shadowed-subr campaign 146 opened is **closed**: the standing check is down to
+one name, and that one is GNU's own placeholder.
+
+### 1. When GNU sets `background-mode`, and to what
+
+`make_initial_frame` (`src/frame.c:1423`) is called from `init_window_once`
+(`src/window.c:9148`), which `main` runs at `src/emacs.c:2006` -- before
+`loadup.el`.  It sets `name`, the tty fg/bg pixels, `menu-bar-lines`
+(`src/frame.c:1458`), `tab-bar-lines` and the glyph matrices.  It sets
+**neither `background-mode` nor `display-type`**.
+
+Both are DERIVED, by `frame-set-background-mode` (`lisp/frame.el:1526`), whose
+whole job is the pair:
+
+```elisp
+(let* ((bg-mode (frame--current-background-mode frame))       ; lisp/frame.el:1505
+       (display-type (cond ((null (window-system frame))
+                            (if (tty-display-color-p frame) 'color 'mono))
+                           ((display-color-p frame) 'color)
+                           ((x-display-grayscale-p frame) 'grayscale)
+                           (t 'mono))))
+  ...
+  (modify-frame-parameters frame (list (cons 'background-mode bg-mode)
+                                       (cons 'display-type display-type))))
+```
+
+C reaches it for the initial frame exactly once, and only after the pdump is
+loaded -- `init_display` (`src/dispnew.c:7413-7422`):
+
+```c
+void
+init_display (void)
+{
+  if (noninteractive)
+    {
+      if (dumped_with_pdumper_p ())
+        init_faces_initial ();
+    }
+  else
+    init_display_interactive ();
+}
+```
+
+`init_faces_initial` (`src/dispnew.c:7178`) sets the tty default fg/bg pixels and
+then `call0 (Qtty_set_up_initial_frame_faces)`, which is `lisp/faces.el:2409` --
+`(frame-set-background-mode frame t)` then `(face-set-after-frame-default
+frame)`.  The interactive arm reaches the same function from
+`init_display_interactive` under `initialized && !noninteractive && NILP
+(Vinitial_window_system)` (`src/dispnew.c:7408`), and `initialized` is false in
+temacs, so **loadup runs it in neither arm**.
+
+Measured at the three points asked for.
+
+**During and at the end of loadup**, `src/temacs --batch -l loadup` on GNU
+31.0.90 (`0ee48ac4df2`) -- temacs has no pdump, so `init_faces_initial` is not
+called and this is the state `faces.el` loaded into
+(`tmp/pw64/gnu-temacs-loadup.txt`):
+
+```text
+POST-LOADUP(temacs): background-mode=nil display-type=nil frames=1
+params=((no-accept-focus) (visibility . t) (tab-bar-lines . 0)
+        (menu-bar-lines . 1) (buried-buffer-list)
+        (buffer-list #<buffer *scratch*>) (unsplittable) (modeline . t)
+        (width . 80) (height . 25) (name . "F1") (font . "tty")
+        (background-color . "unspecified-bg")
+        (foreground-color . "unspecified-fg") (minibuffer . t))
+```
+
+**After startup**, `emacs -Q --batch` (`tmp/pw64/gnu-batch-frame.txt`):
+
+```text
+background-mode=dark  display-type=mono  background-color="unspecified-bg"
+window-system=nil  tty-type=nil  frame-background-mode=nil
+terminal-parameter background-mode=nil  tty-display-color-p=nil
+display-color-cells=0
+```
+
+-- the loadup alist plus `(cursor-color . "white") (background-mode . dark)
+(display-type . mono)`.  `dark` because `frame--current-background-mode`
+(`lisp/frame.el:1505-1524`) finds no `frame-background-mode`, no X resource and
+no terminal parameter, and `(color-values "unspecified-bg")` is nil, so its
+`default-bg-mode` branch wins and a frame with no window system and no
+`tty-type` is `dark`.  `mono` because `(tty-display-color-p frame)` is nil.
+
+**And it is already set before any Lisp startup file runs.**  A probe loaded as
+`site-start.el` -- `command-line`'s first load, long before `--eval` -- already
+sees `dark`/`mono` (`tmp/pw64/gnu-sitestart.txt`).  That is the C call above;
+`startup.el:842`'s later `(frame-set-background-mode (selected-frame))` is the
+idempotent second one its own comment says it is.
+
+So: **nil for the whole of loadup; `dark`/`mono` from C at startup, before any
+user Lisp; and once a real frame exists, whatever that frame's background colour
+says.**  The VALUES this port hardcoded were right for the batch frame.  Only
+the TIME was wrong -- by ninety-five preloaded files.
+
+### 2. What the wrong time cost, in GNU's own terms
+
+`face-spec-set` ends `(dolist (frame (frame-list)) (face-spec-recalc face
+frame))` (`lisp/faces.el:1677-1723`), and GNU has a frame during loadup too --
+`frames=1` above -- so a `defface` really is matched against a live frame at
+load time in GNU as well.  The frame is not the divergence.  Its parameters are.
+
+`face-spec-set-match-display` (`lisp/faces.el:1549`) walks conjuncts with
+`(while (and conjuncts match))`, so a clause reaches `min-colors` -- the only
+conjunct that calls `display-color-cells` (`lisp/faces.el:1588`) -- only if
+every earlier conjunct matched.  `show-paren-match`'s third clause
+(`lisp/faces.el:3161`) is the only clause in any preloaded `defface` whose FIRST
+conjunct is `background`.
+
+Measured on the real GNU loadup-state frame
+(`tmp/pw64/gnu-temacs-conjunct.txt`), with `display-color-cells` replaced by a
+counting stub:
+
+```text
+match-display ((background dark) (min-colors 4)) => nil
+match-display ((class color) (background dark)) => nil
+face-spec-choose show-paren-match => (:inherit underline)
+display-color-cells call count during the walk = nil
+```
+
+**Zero calls.**  The first conjunct fails, because there is no
+`background-mode`, and the walk stops.  That is why GNU can leave
+`display-color-cells` void from `loadup.el:160` to `:255` and still bootstrap.
+
+### 3. Why we seeded it, and what actually broke without it
+
+Three Rust sites seeded the pair, all at frame CREATION:
+
+| site | what it wrote | its comment's claim |
+| --- | --- | --- |
+| `ensure_selected_frame_id_in_state_with_policy`, restore branch (`neovm-core/src/emacs_core/window_cmds/mod.rs`) | `display-type` = `color`/`mono` by window system, `background-mode` = `dark` | "The frame may have been restored from a pdump created before these parameters were seeded" |
+| the same function, create branch | `display-type` = `mono`, `background-mode` = `dark` | "Required for defface spec matching (class ...) and (background ...)" |
+| `x_create_frame_impl` (same file) | `display-type` = `color`, `background-mode` = `dark` | -- |
+
+...and `neomacs-bin/src/main.rs` had two more downstream: the TTY arm of
+`configure_gnu_startup_state` REMOVED both again, and
+`seed_live_tty_frame_parameters` wrote `display-type` = `color` plus a
+`background-mode` detected from `COLORFGBG`.
+
+The stated reason -- "required for defface spec matching" -- was the right
+observation with the wrong remedy.  The specs do need the parameters; they need
+them at the time GNU has them, and GNU's own Lisp arranges that.  Nothing needed
+them EARLIER, and that was measured rather than assumed.  Two runs, in order:
+
+| step | `cargo nextest run -p neovm-core -p neomacs-layout-engine` |
+| --- | --- |
+| all three seedings deleted, `tty-set-up-initial-frame-faces` called where `init_display` calls it, subr still registered | 11050 run, **11050 passed**, 54 skipped |
+| ...and then the `display-color-cells` subr deleted | 11050 run, 11049 passed, **1 failed** |
+
+**One failure**, not 154's measured 1124.  And that one row was asserting the
+wrong string anyway -- see the tests section.
+
+### 4. GNU's loadup frame parameters, and ours
+
+The whole parameter NAME set of the initial frame at the end of loadup, sorted,
+measured on both sides.  This is the INVENTED DEFAULTS surface for the initial
+frame, and it is now pinned by a test.
+
+```elisp
+(sort (mapcar #'car (frame-parameters (selected-frame))) #'string<)
+;; GNU (src/temacs --batch -l loadup) =>
+;;   (background-color buffer-list buried-buffer-list font foreground-color
+;;    height menu-bar-lines minibuffer modeline name no-accept-focus
+;;    tab-bar-lines unsplittable visibility width)
+;; Neomacs before fix => the "after" row plus `background-mode' and
+;;   `display-type'.  Those two were measured directly, on the loadup
+;;   evaluator, by the RED run of the new test:
+;;     left: ["OK dark", "OK mono", ...]   right: ["OK nil", "OK nil", ...]
+;; Neomacs after fix =>
+;;   (background-color buffer-list buried-buffer-list cursor-color font
+;;    foreground-color height icon-name minibuffer modeline name
+;;    no-accept-focus tab-bar-lines title visibility width)
+```
+
+Five differences survive and none of them is this entry's: ours carries
+`cursor-color`, `icon-name` and `title` where GNU's loadup frame has none of the
+three (GNU gains `cursor-color` only at startup, from
+`face-set-after-frame-default`), and ours lacks `menu-bar-lines` -- which GNU's
+`make_initial_frame` sets explicitly, `set_menu_bar_lines (f, make_fixnum (1),
+Qnil)` at `src/frame.c:1458`, with the comment "The default value of
+menu-bar-mode is t" -- and `unsplittable`.  All five are recorded in the test
+and under "found and not fixed" below.
+
+### 5. The fix
+
+The three Rust seedings are deleted, each replaced by a comment naming
+`make_initial_frame`/`x-create-frame` and the Lisp that owns the parameter.  The
+Lisp that owns it now runs where GNU runs it:
+
+* `apply_runtime_startup_state` (`neovm-core/src/emacs_core/load.rs`) calls
+  `(tty-set-up-initial-frame-faces)` immediately after the startup frame is in
+  place.  That is `init_display` -> `init_faces_initial` ->
+  `call0 (Qtty_set_up_initial_frame_faces)`, in that order.
+* `configure_gnu_startup_state` (`neomacs-bin/src/main.rs`) runs
+  `(frame-set-background-mode (selected-frame) t)` before its existing
+  `(face-set-after-frame-default (selected-frame))`.  Those two calls in that
+  order ARE `tty-set-up-initial-frame-faces` (`lisp/faces.el:2409-2416`), and
+  are also the pair `x-create-frame-with-faces` runs
+  (`lisp/faces.el:2242-2243`), so one pair serves both frontends.  That is also
+  why the GUI arm needs no replacement seeding: `frame.el`'s `make-frame`
+  funcalls `frame-creation-function`, and ours
+  (`lisp/term/neo-win.el:136-137`) is `x-create-frame-with-faces`.
+* `seed_live_tty_frame_parameters` writes the detected background to the
+  **terminal** parameter instead of the frame parameter.  That is GNU's own
+  input channel: `frame-terminal-default-bg-mode` (`lisp/frame.el:1588-1598`)
+  ends `(terminal-parameter frame 'background-mode)`, and it is the slot
+  `xterm.el` fills from the terminal's OSC-11 reply
+  (`xterm--set-background-mode`, `lisp/term/xterm.el:1309-1316`, reached from
+  `:1019`).  `display-type` needs no input at all -- `frame-set-background-mode`
+  computes it as `color` iff `(tty-display-color-p frame)`.
+
+Nothing was shimmed, and no Rust code writes either parameter any more.
+
+### 6. The prize: `display-color-cells` deleted, and the campaign closed
+
+With the seeding gone the bootstrap caller is gone, so the eighteenth name went
+the way of the seventeen.  `builtin_display_color_cells` and its `ctx.defsubr`
+are deleted from `neovm-core/src/emacs_core/display.rs` and
+`neovm-core/src/emacs_core/builtins/mod.rs`.  Both C names its Lisp body
+dispatches to stay registered and are asserted to: `x-display-color-cells`
+(`src/xfns.c:5714`) and `tty-display-color-cells` (`src/term.c:2226`).
+
+The standing check
+(`neovm-core/src/emacs_core/builtins/rust_subrs_shadowed_by_lisp_test.rs`) is
+now **1**: 50 before 146, 49 after it, 38 after 148, 34 after 149, 32 after 150,
+19 after 152, 2 after 154, **1 after 157**.  The one is GNU's own placeholder,
+`frame-windows-min-size` (`src/frame.c:494-502`, prefixed "Placeholder used by
+temacs -nw before window.el is loaded", overridden at `lisp/window.el:1899`).
+
+**What the type change makes unrepresentable.**  154 replaced the check's
+`&[&str]` with `&[ReviewedShadow]` carrying a `ShadowJustification` enum, so a
+name could not be parked with no reason and a debt could not be filed as a
+design.  It had two variants because there WAS a debt.  There is none now, so
+`UnjustifiedBootstrapCaller` is **deleted** and the justification is a plain
+struct, `GnuShipsTheSamePlaceholder`, whose two fields are the GNU `src/` line
+that ships the placeholder and the `.el` line that overrides it.  A future debt
+can no longer be added as one more data row: it has to reintroduce the variant,
+which is a type change in a diff a reviewer reads.  The list has exactly one
+admissible SHAPE, and it is the one only GNU's own placeholder can take.
+
+### 7. Tests
+
+* **Two new statements** in
+  `neovm-core/src/emacs_core/builtins/lisp_only_window_frame_names_test.rs`.
+  `the_loadup_frame_has_gnus_loadup_parameters_not_invented_ones` pins GNU's
+  measured loadup state -- `background-mode` nil, `display-type` nil, one frame,
+  the `((background dark) (min-colors 4))` walk failing on its first conjunct,
+  `show-paren-match` choosing `(:inherit underline)`, and the whole sorted
+  parameter NAME set from section 4.  It was RED before the fix.
+  `startup_computes_the_two_parameters_the_way_gnu_computes_them` pins GNU's
+  `-Q --batch` state -- `dark`, `mono`, `0`, `(:inherit underline)` -- and is
+  the guard that the removal did not simply drop the parameters on the floor.
+* `display_color_cells_is_the_one_that_could_not_go_yet` becomes
+  `display_color_cells_went_with_the_seeding_that_kept_it`, and
+  `display-color-cells` joins `LISP_ONLY_WINDOW_FRAME_NAMES`, so the file's
+  statements now cover EIGHTEEN names rather than seventeen.
+* **Four rows repointed at the C primitive the Lisp body calls**, the way 154
+  did it: `display_test.rs`'s two GUI rows and its tty row now ask
+  `x-display-color-cells` and `tty-display-color-cells`, and `vm_test.rs`'s
+  `vm_gui_display_capability_builtins_use_live_window_system_state` asks
+  `x-display-color-cells` on its deliberately minimal VM runtime.
+* **One row deleted rather than repointed**, because repointing would have
+  asserted the wrong string.  Measured on GNU 31.0.90 `-Q --batch`:
+
+  ```elisp
+  (condition-case e (display-color-cells "x") (error e))
+  ;; GNU => (error "Display x does not exist")
+  (condition-case e (x-display-color-cells "x") (error e))
+  ;; GNU => (error "Display x can't be opened")
+  ```
+
+  The first message is raised by `framep-on-display`, the Lisp
+  `display-color-cells` opens with, not by the primitive its `memq` arm reaches.
+  Ours already answers the second line exactly, so the `display-color-cells` row
+  in `eval_display_queries_string_designator_reports_missing_display` is gone,
+  with a comment carrying both measurements.
+* **One startup row re-aimed.**
+  `configure_gnu_startup_state_clears_window_system_for_tty_boots`
+  (`neomacs-bin/src/main_test.rs`) asserted the two seeded frame parameters.  It
+  runs on a bare `Context::new()` -- GNU before loadup -- where nothing can
+  derive them, so it now asserts that neither is invented AND that the detected
+  background is on the terminal parameter instead.
+
+### 8. The release binary against GNU, measured
+
+`cargo xtask fresh-build --release`, pdump newer than the binary, both sides
+`-Q --batch` on the same probe (`tmp/pw64/observables.el`,
+`tmp/pw64/observables.diff`).  Identical for: `display-color-cells`'s `subrp`
+(`nil` on both), `func-arity` `(0 . 1)`, `commandp` `nil` and first docstring
+line, and its byte-compiled call; `framep-on-display`,
+`frame-set-background-mode`, `frame-terminal-default-bg-mode`,
+`tty-set-up-initial-frame-faces`, `face-set-after-frame-default` and
+`frame--current-background-mode` on all four observables; the twelve-way frame
+probe
+
+```text
+(dark mono "unspecified-bg" "unspecified-fg" nil nil nil nil nil 0 nil nil)
+```
+
+(`background-mode`, `display-type`, `background-color`, `foreground-color`,
+`window-system`, `tty-type`, `frame-background-mode`, the terminal parameter,
+`tty-display-color-p`, `display-color-cells`, `display-color-p`,
+`display-graphic-p`); and `face-spec-choose` for eleven preloaded deffaces,
+`show-paren-match` through `warning`.
+
+Two lines differ and neither belongs to this entry: `x-display-color-cells`
+carries a placeholder docstring here where GNU has the real `xfns.c` one, and
+the startup frame carries `icon-name` and `title` that GNU's does not and lacks
+`unsplittable`.
+
+### 9. Correction to entry 154, 2026-08-19
+
+154's account of the cause was right, and its measurement of the cost was right
+for the state it measured.  Three details of its GNU citation were not, and they
+are the three that matter for finding the fix.
+
+* 154 wrote that `frame-set-background-mode` "runs from
+  `tty-create-frame-with-faces` / `x-create-frame-with-faces` /
+  `after-make-frame-functions` -- all after `loadup.el`".  Two of those three are
+  real callers (`lisp/faces.el:2336` and `:2242`) but **neither can ever reach
+  the initial frame**, which is not created by `make-frame`.
+  `after-make-frame-functions` is **not a caller at all**: it is a hook declared
+  at `lisp/frame.el:984` and run at `:1177`, and nothing in GNU adds
+  `frame-set-background-mode` to it.  The caller that DOES reach the initial
+  frame -- the only one this entry's fix could use -- is
+  `tty-set-up-initial-frame-faces` (`lisp/faces.el:2409`), called from C by
+  `init_faces_initial` (`src/dispnew.c:7178`) out of `init_display`
+  (`src/dispnew.c:7413-7422`).  154 named none of that path.
+* 154 gave `frame-set-background-mode` no file, and the surrounding sentence
+  reads as though it were in `faces.el` with the rest of the face machinery.  It
+  is `lisp/frame.el:1526`.
+* 154 named ONE seeding site, `ensure_selected_frame_id_in_state_with_policy`.
+  There were three in `neovm-core` -- that function's restore branch and its
+  create branch are separate writes, and `x_create_frame_impl` is a third -- and
+  two more in `neomacs-bin`.
+
+Nothing else in 154 changes.  Its `UnjustifiedBootstrapCaller` justification for
+`display-color-cells` is retired rather than corrected: the debt it recorded is
+paid, and the variant that recorded it is deleted.
+
+### 10. Found and not fixed
+
+* **`COLORFGBG`.**  `tty_init::detect_tty_background_mode`
+  (`neomacs-bin/src/tty_init.rs`) reads `COLORFGBG` and defaults to `dark`.
+  `COLORFGBG` appears **nowhere in GNU**.  GNU's tty default is `light` for a
+  `tty-type` matching `"^\\(xterm\\|rxvt\\|dtterm\\|eterm\\)"` and `dark`
+  otherwise (`frame--current-background-mode`, `lisp/frame.el:1505-1524`),
+  refined only by an actual OSC-11 reply (`xterm--set-background-mode`,
+  `lisp/term/xterm.el:1309-1316`).  This entry moved the value onto GNU's
+  channel -- the terminal parameter, so the frame parameter is DERIVED from it
+  by GNU's Lisp -- which is the structural half; the heuristic's own divergence
+  is separable.  Recorded at the function.
+* **Five more initial-frame parameter divergences**, from section 4: three we
+  invent (`cursor-color`, `icon-name`, `title`) and two GNU sets that we do not
+  (`menu-bar-lines` at `src/frame.c:1458`, and `unsplittable`).  Same CLASS as
+  this entry's two, but none of them reaches a preloaded `defface` clause, so
+  none holds a subr hostage.  They are pinned in
+  `the_loadup_frame_has_gnus_loadup_parameters_not_invented_ones`, so the entry
+  that takes them will see the row change.
+* **`x-display-color-cells`'s docstring** is the placeholder "SKIP: real doc in
+  xfns.c." where GNU has "Return the number of color cells of the X display
+  TERMINAL."  Found by this entry's observables diff; a docstring-table gap, not
+  a behaviour one.
+
+### The gate
+
+Measured on a `cargo xtask fresh-build --release` binary whose pdump
+(`emacs-31.0.50.1.pdmp`) is newer than the binary, with `NEOVM_BINARY_PATH`
+pointing at it.
+
+| gate | result |
+| --- | --- |
+| `cargo nextest run -p neovm-core -p neomacs-layout-engine` | 11050 run, **11050 passed**, 54 skipped |
+| `cargo nextest run --release -p neovm-oracle-tests` | 38783 run, **38783 passed**, 0 failed |
+| `cargo nextest run -p neomacs` | 233 run, 230 passed, 1 skipped, 2 failed -- both `neomacsclient_cli` socket tests, which fail IDENTICALLY on the pre-change source (`bind local socket: path must be shorter than SUN_LEN`, a worktree-path-length artifact, verified by rebuilding the worktree at `e90b234e7`) |
+| `cargo nextest run --release -p neomacs-tui-tests` | 915 run, 912 passed, 3 failed.  `dired_jump_via_cx_cj_opens_parent_listing_on_current_file` PASSES in isolation (load-flaky).  The other two -- `set_visited_file_name_elisp_functions_match_gnu_semantics` and `keyboard_quit_after_find_file_ctrl_h_returns_to_scratch` -- fail IDENTICALLY when the same worktree tests are pointed at the PRE-CHANGE release binary from the main checkout, so they are not this work: both diffs are the worktree's long absolute path in a minibuffer prompt, wrapping the echo area by a row |
+| `cargo check --workspace --all-targets` | clean; the one warning (`unused import: maybe_keymap_in_obarray`, keymaps.rs) is on the pre-change baseline too |
+| `cargo fmt --all --check` | clean |
+| release binary vs GNU 31.0.90, observables | two known lines, section 8 |
+
+The layout engine was gated explicitly because it is in the blast radius, and
+because 154's `display-color-cells` deletion surfaced there first.
+
+Status: FIXED.
