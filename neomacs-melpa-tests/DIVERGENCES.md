@@ -15572,6 +15572,8 @@ All against a `cargo xtask fresh-build --release` binary carrying the change
 
 ```
 neomacs-display-protocol                        637 run,  637 passed
+neomacs-display-runtime backend::tty            192 run,  192 passed
+neomacs startup::tty_init                         8 run,    8 passed
 neovm-core + layout-engine + display-runtime
   + display-protocol (debug)                  11693 run, 11691 passed, 2 timed out
 neomacs-tui-tests::tty_color_index (release)      2 run,    2 passed  ( 83.0s)
