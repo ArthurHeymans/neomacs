@@ -14,7 +14,7 @@ use hashbrown::HashMap;
 use parking_lot::RwLock;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::mem::MaybeUninit;
 use std::ptr::NonNull;
@@ -1293,7 +1293,9 @@ const SYMBOL_NAME_CACHE_MISSING: u32 = u32::MAX;
 const NAME_CANONICAL_CACHE_MISSING: u32 = NIL_SYM_ID.0;
 
 thread_local! {
-    static THREAD_CACHE_EPOCH: RefCell<u64> = const { RefCell::new(0) };
+    // Cell, not RefCell: read on EVERY cached symbol query (epoch check),
+    // and a u64 needs no borrow flag.
+    static THREAD_CACHE_EPOCH: Cell<u64> = const { Cell::new(0) };
     static INTERN_STR_CACHE: RefCell<FxHashMap<&'static str, SymId>> = RefCell::new(FxHashMap::default());
     static SYMBOL_CACHE: RefCell<Vec<SymbolCacheEntry>> = const { RefCell::new(Vec::new()) };
     static NAME_CANONICAL_SYMBOL_CACHE: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
@@ -1372,11 +1374,10 @@ pub(crate) fn intern_call_names() -> Vec<String> {
 fn ensure_thread_local_cache_epoch_current() {
     let current = symbol_registry_epoch().load(Ordering::Acquire);
     THREAD_CACHE_EPOCH.with(|epoch| {
-        let mut epoch = epoch.borrow_mut();
-        if *epoch == current {
+        if epoch.get() == current {
             return;
         }
-        *epoch = current;
+        epoch.set(current);
         INTERN_STR_CACHE.with(|cache| cache.borrow_mut().clear());
         SYMBOL_CACHE.with(|cache| cache.borrow_mut().clear());
         NAME_CANONICAL_SYMBOL_CACHE.with(|cache| cache.borrow_mut().clear());

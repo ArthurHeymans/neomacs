@@ -11144,11 +11144,41 @@ impl Context {
         // checks) is per-call TLS traffic this leaf never needs.
         if sym_id != buffer_undo_list_symbol()
             && let Some(sym) = self.obarray.get_by_id(sym_id)
-            && sym.redirect() == crate::emacs_core::symbol::SymbolRedirect::Plainval
         {
-            let value = unsafe { sym.val.plain };
-            if !value.is_unbound() {
-                return Ok(SymbolValueLookup::Bound(value));
+            match sym.redirect() {
+                crate::emacs_core::symbol::SymbolRedirect::Plainval => {
+                    let value = unsafe { sym.val.plain };
+                    if !value.is_unbound() {
+                        return Ok(SymbolValueLookup::Bound(value));
+                    }
+                }
+                // Localized/Forwarded leaves: a non-Varalias symbol IS its own
+                // alias resolution, so the per-read alias walk + canonical
+                // checks below are pure overhead for these (GNU
+                // `find_symbol_value` dispatches on the redirect tag
+                // directly). `read_localized`'s same-buffer epoch check makes
+                // the common read one compare + one cdr.
+                crate::emacs_core::symbol::SymbolRedirect::Localized => {
+                    if let Some(buf) = self.buffers.current_buffer() {
+                        let target_buf = Value::make_buffer(buf.id);
+                        if let Some(value) = self.obarray.read_localized(
+                            sym_id,
+                            target_buf,
+                            buf.local_var_alist_value(),
+                        ) {
+                            if value.is_unbound() {
+                                return Ok(SymbolValueLookup::Unbound);
+                            }
+                            return Ok(SymbolValueLookup::Bound(value));
+                        }
+                    }
+                }
+                crate::emacs_core::symbol::SymbolRedirect::Forwarded => {
+                    if let Some(value) = self.forwarded_buffer_obj_value(sym) {
+                        return Ok(SymbolValueLookup::Bound(value));
+                    }
+                }
+                crate::emacs_core::symbol::SymbolRedirect::Varalias => {}
             }
         }
 
