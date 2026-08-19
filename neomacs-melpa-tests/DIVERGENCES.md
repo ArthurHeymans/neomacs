@@ -13847,10 +13847,17 @@ blocked, which drives all three profiles (default-Org consumer, truecolor,
 Summary [ 224.698s] 1 test run: 1 passed, 932 skipped
 ```
 
-from this worktree, against a `cargo xtask fresh-build --release` binary
-(pdump 22:46:25, binary 22:44:18).  The long worktree path that entry 95
+from this worktree, against a `cargo xtask fresh-build --release` binary built
+BEFORE anything in this entry was changed (pdump 22:46:25, binary 22:44:18).
+That ordering is the point: the suite was already green on the tree as found,
+so nothing below is what made it pass.  The long worktree path that entry 95
 recorded as failing `gruvbox` alongside `mwim`, `helm_css_scss` and `beacon`
-does not fail it now either.
+does not fail it now either -- the whole 13-test set passes, measured at the end
+of this entry.
+
+There was therefore nothing to bisect.  The plan this entry started from -- run
+the suite's steps one at a time and find the first that diverges -- has no first
+step to find, because no step diverges.
 
 The Lisp side of both editors is byte-identical where the report says it is,
 re-probed here through a PTY with `COLORTERM` unset and `TERM=screen-256color`,
@@ -14078,11 +14085,46 @@ cycle, and it is deliberately left unmade here rather than half-made.
 
 ### Gates
 
-`neomacs-display-runtime` tty tests: 201 run, 201 passed, including the new
-5,832-color sweep, the 8-color tier pin, the no-palette-no-index pin and the
-per-tier SGR spelling pin.  `gruvbox_theme_real_terminal_profiles_match_gnu`
-passes.  `cargo check --workspace --all-targets` and `cargo fmt --all --check`
-are clean.
+All against a `cargo xtask fresh-build --release` binary carrying the change
+(binary 23:32:34, pdump 23:34:44).
+
+The direct one first, because it is what the terminfo change is FOR -- the same
+five terminals in a PTY with `COLORTERM` unset, `(display-color-cells)` and
+`(length (tty-color-alist))` from both editors, diffed:
+
+```
+;; TERM=xterm            GNU 8/8      Neomacs 8/8
+;; TERM=rxvt-16color     GNU 16/16    Neomacs 16/16   (was 8/8)
+;; TERM=screen-256color  GNU 256/256  Neomacs 256/256
+;; TERM=xterm-256color   GNU 256/256  Neomacs 256/256
+;; TERM=linux-16color    GNU 16/8     Neomacs 16/8    (was 8/8)
+;; diff => identical
+```
+
+`linux-16color` answering 16 cells over an 8-entry palette in BOTH editors is
+the row worth keeping: it is reproduced, not approximated.
+
+```
+gruvbox_theme_real_terminal_profiles_match_gnu   1 run, 1 passed  (219.580s)
+neomacs-melpa-tests tui_parity_tests            13 run, 13 passed (223.414s)
+neomacs-display-runtime backend::tty           201 run, 201 passed
+neomacs startup::tty_init                        8 run, 8 passed
+neomacs-tui-tests                              913 run, 911 passed, 2 failed
+```
+
+The two `neomacs-tui-tests` failures are
+`set_visited_file_name_elisp_functions_match_gnu_semantics` and
+`keyboard_quit_after_find_file_ctrl_h_returns_to_scratch`, two of the three
+entry 96 recorded as failing in a long-path worktree with and without an
+unrelated change; the third, `dired_copy_current_file_via_c...`, now passes.
+Neither touches colour: both assert on GNU's own screen reaching a buffer
+state, and the panic text shows GNU's frame, not a divergence.  Nothing that
+asserts on colour moved, and the whole 13-test TUI parity set -- which entry 95
+recorded as five long-path failures including `gruvbox` -- is green.
+
+The 201 tty tests include the new 5,832-color sweep, the 8-color tier pin, the
+no-palette-no-index pin and the per-tier SGR spelling pin.  `cargo check
+--workspace --all-targets` and `cargo fmt --all --check` are clean.
 
 Status: NOT A DIVERGENCE for the reported symptom -- entry 108 fixed it in
 `fb623d14e` and this entry re-measured it green and widened its gate from 41
