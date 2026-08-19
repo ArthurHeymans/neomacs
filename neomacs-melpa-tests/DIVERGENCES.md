@@ -13905,9 +13905,18 @@ entries, `(nth 1 (tty-color-approximate (list (* r 257) (* g 257) (* b 257))))`)
 ;; GNU vs Neomacs, 5,832 colors  =>  0 mismatches
 ```
 
-The palette itself is therefore attested, not assumed: the 41-color table also
-re-measured identical to the pin, and the same answers come back under
-`TERM=screen-256color` as under `TERM=xterm-256color`.
+The palette itself is attested entry by entry, not inferred from the answers.
+Dumping `tty-color-alist` out of GNU on `screen-256color` and comparing all 256
+rows against the table the writer holds:
+
+```
+;; GNU tty-color-alist vs the writer's table, 256 entries  =>  0 mismatches
+;;   ("black" 0 0 0 0) ("red" 1 52685 0 0) ... ("brightblue" 12 23644 23644 65535)
+;;   ... ("color-16" 16 0 0 0) ... ("color-255" 255 61166 61166 61166)
+```
+
+and the 41-color table re-measured identical to its pin, with the same answers
+under `TERM=screen-256color` as under `TERM=xterm-256color`.
 
 ### Hypotheses eliminated here, so the next attempt does not repeat them
 
