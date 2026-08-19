@@ -2661,8 +2661,33 @@ pub(crate) fn builtin_bitmap_spec_p(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_clear_face_cache(args: Vec<Value>) -> EvalResult {
+/// `(clear-face-cache &optional THOROUGHLY)` -- GNU `Fclear_face_cache`
+/// (src/xfaces.c:794-803).
+///
+/// GNU's whole body is `clear_face_cache (...)`, `face_change = true`,
+/// `windows_or_buffers_changed = 53`: every realized face is discarded and the
+/// next redisplay realizes them again.  Doing nothing is observable, because
+/// realization is what reads the palette -- after `tty-color-define` moves a
+/// colour, GNU repaints it at its new index and a no-op leaves the old one:
+///
+///     ;; TERM=xterm-256color, `(tty-color-define "red" 200 '(65535 0 0))'
+///     ;; and `(clear-face-cache)' AFTER the first redisplay, then a face with
+///     ;; `:foreground "red"' repainted
+///     ;; GNU     => ESC [ 31 m   then  ESC [ 38;5;200 m
+///     ;; Neomacs => ESC [ 31 m   then  ESC [ 31 m
+///
+/// Neomacs has no separate realized-face cache to free: the render-facing table
+/// IS the realization, rebuilt by `sync_runtime_faces_for_frame`, which is
+/// memoized on `face_change_count`.  Bumping that counter is therefore exactly
+/// GNU's `face_change = true`.  THOROUGHLY selects font freeing, which has no
+/// counterpart here, so it is accepted and ignored as GNU accepts it on a
+/// terminal frame.
+pub(crate) fn builtin_clear_face_cache(
+    ctx: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_max_args("clear-face-cache", &args, 1)?;
+    ctx.face_change_count += 1;
     Ok(Value::NIL)
 }
 

@@ -8213,12 +8213,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         None,
     );
-    ctx.defsubr(
-        "clear-face-cache",
-        |_ctx, args| builtin_clear_face_cache(args),
-        0,
-        Some(1),
-    );
+    ctx.defsubr("clear-face-cache", builtin_clear_face_cache, 0, Some(1));
     ctx.defsubr(
         "combine-after-change-execute",
         builtin_combine_after_change_execute,
