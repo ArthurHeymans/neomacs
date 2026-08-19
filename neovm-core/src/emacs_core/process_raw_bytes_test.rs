@@ -106,23 +106,27 @@ fn spawn_child_with_environment_uses_process_environment_list() {
         .spawn_child_with_environment(pid, false, Some(env))
         .expect("spawn child");
 
+    // The diagnostic mirror (`get_output`) holds DECODED text and so is only
+    // filled by the `Context`-side read; a bare `ProcessManager` has no
+    // evaluator to decode with.  What this test is about is the child's
+    // environment, which is in the bytes, so it collects those.
+    let mut output: Vec<u8> = Vec::new();
     for _ in 0..20 {
         let events = processes.wait_for_process_events(Duration::from_millis(20));
-        if events.has_ready_process(pid) {
-            let _ = processes.read_process_output_without_recording_coding(
+        if events.has_ready_process(pid)
+            && let Some(run) = processes.read_process_output_without_decoding(
                 pid,
                 ProcessOutputSink::DecodedText,
                 &crate::emacs_core::coding::CodingSystemManager::new(),
-            );
-        }
-        if processes
-            .get_output(pid)
-            .is_some_and(|output| output == "from-lisp")
+            )
         {
+            output.extend_from_slice(run.undecoded_bytes());
+        }
+        if output == b"from-lisp" {
             break;
         }
         std::thread::sleep(Duration::from_millis(10));
     }
 
-    assert_eq!(processes.get_output(pid), Some("from-lisp"));
+    assert_eq!(output.as_slice(), b"from-lisp");
 }

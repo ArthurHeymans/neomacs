@@ -2179,21 +2179,26 @@ fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
     processes.spawn_child(pid, true).expect("spawn PTY process");
 
     let deadline = std::time::Instant::now() + Duration::from_secs(1);
-    let mut output = String::new();
-    while std::time::Instant::now() < deadline && !output.contains('\n') {
-        if let Some(chunk) = processes.read_process_output_without_recording_coding(
+    // The bytes, not the text: what this test is about is whether the PTY put a
+    // CR on the wire, and decoding them would only add a second question.  A
+    // `ProcessManager` driven on its own cannot decode anyway -- the decoder is
+    // `decode_coding_object`, which evaluates Lisp -- so the read hands back an
+    // undecoded run and the fixture says so.
+    let mut output: Vec<u8> = Vec::new();
+    while std::time::Instant::now() < deadline && !output.contains(&b'\n') {
+        if let Some(run) = processes.read_process_output_without_decoding(
             pid,
             ProcessOutputSink::DecodedText,
             &crate::emacs_core::coding::CodingSystemManager::new(),
         ) {
-            output.push_str(&process_output_runtime_string(&chunk));
+            output.extend_from_slice(run.undecoded_bytes());
         }
         processes.check_child_status_change(pid);
         std::thread::sleep(Duration::from_millis(10));
     }
     processes.kill_process(pid);
 
-    assert_eq!(output.as_bytes(), b"x\n");
+    assert_eq!(output.as_slice(), b"x\n");
 }
 
 #[cfg(target_os = "linux")]
@@ -10855,6 +10860,186 @@ fn a_utf_16_signature_survives_its_own_null_bytes_in_a_process_read() {
             "((97 0 98 13 10) (no-conversion . utf-8-unix) no-conversion) ",
             "((97 10) (utf-16le-with-signature-mac . utf-8-unix) utf-16le-with-signature-mac) ",
             "((97 10) (utf-16le-with-signature-dos . utf-8-unix) utf-16le-with-signature-dos))",
+        )
+    );
+}
+
+/// GNU has ONE decoder, and a subprocess reaches it.
+///
+/// `read_and_insert_process_output` decodes with `decode_coding_c_string
+/// (process_coding, buf, nread, curbuf)` (src/process.c:6502); the filter
+/// branch with `decode_coding_c_string (coding, chars, nbytes, Qt)` (:6562);
+/// `Fcall_process` with `decode_coding_c_string (&process_coding, buf, nread,
+/// curbuf)` (src/callproc.c:856).  `decode_coding_c_string` is a macro whose
+/// body is `decode_coding_object (coding, Qnil, 0, 0, bytes, bytes,
+/// dst_object)` (src/coding.h:750-755) -- the same C function
+/// `decode-coding-string` reaches through `code_convert_string`.  They do not
+/// rhyme; they are one call.
+///
+/// So the five coding systems whose decoders live in the evaluator -- ISO-2022,
+/// `emacs-mule`, Shift-JIS, GBK and the charset codings -- decode from a
+/// subprocess exactly as they decode from a string.  Every row here names its
+/// coding system EXPLICITLY, so nothing in it depends on detection: this is the
+/// decoder, and only the decoder.
+///
+/// Each row is `(STRING PROCESS-BUFFER PROCESS-FILTER CALL-PROCESS)`, and the
+/// point of the row is that the four are the same list.  Measured under GNU
+/// Emacs 31.0.90 running this test's own program.
+#[test]
+fn a_subprocess_is_decoded_by_the_decoder_a_string_is() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw159-buf (script coding)
+               (let ((buf (generate-new-buffer " *pw159*")))
+                 (unwind-protect
+                     (let ((p (make-process :name "pw159" :buffer buf :sentinel #'ignore
+                                            :connection-type 'pipe
+                                            :coding (cons coding 'utf-8-unix)
+                                            :command (list "{sh}" "-c" script))))
+                       (while (accept-process-output p 1))
+                       (while (process-live-p p) (accept-process-output p 0.05))
+                       (list (append (with-current-buffer buf (buffer-string)) nil)
+                             last-coding-system-used))
+                   (kill-buffer buf))))
+             (defun pw159-filter (script coding)
+               (let ((acc nil))
+                 (let ((p (make-process :name "pw159f" :buffer nil :sentinel #'ignore
+                                        :connection-type 'pipe
+                                        :coding (cons coding 'utf-8-unix)
+                                        :filter (lambda (_p s) (push s acc))
+                                        :command (list "{sh}" "-c" script))))
+                   (while (accept-process-output p 1))
+                   (while (process-live-p p) (accept-process-output p 0.05))
+                   (list (append (apply #'concat (nreverse acc)) nil)
+                         last-coding-system-used))))
+             (defun pw159-callproc (script coding)
+               (with-temp-buffer
+                 (let ((coding-system-for-read coding))
+                   (call-process "{sh}" nil t nil "-c" script))
+                 (list (append (buffer-string) nil) last-coding-system-used)))
+             (defun pw159-string (bytes coding)
+               (let ((d (decode-coding-string bytes coding)))
+                 (list (append d nil) last-coding-system-used)))
+             (defun pw159-row (script bytes coding)
+               (list (pw159-string bytes coding)
+                     (pw159-buf script coding)
+                     (pw159-filter script coding)
+                     (pw159-callproc script coding)))
+             (list
+              ;; a ESC $ B $ " ESC ( B LF  -- an ISO-2022 designation and one
+              ;; JIS X 0208 character.  Every byte of it is below 0x80.
+              (pw159-row "printf 'a\\033$B$\\042\\033(B\\n'"
+                         "a\033$B$\042\033(B\n" 'iso-2022-7bit)
+              ;; emacs-mule: 0x92 is japanese-jisx0208's leading code.
+              (pw159-row "printf 'a\\222\\260\\241\\n'" "a\222\260\241\n" 'emacs-mule)
+              ;; shift_jis 82 A0
+              (pw159-row "printf 'a\\202\\240\\n'" "a\202\240\n" 'japanese-shift-jis)
+              ;; gbk B0 A1
+              (pw159-row "printf 'a\\260\\241\\n'" "a\260\241\n" 'chinese-gbk)
+              ;; cp437 81 -> U+00FC, a charset coding system
+              (pw159-row "printf 'a\\201\\n'" "a\201\n" 'cp437)))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            // iso-2022-7bit: U+3042, not the escape bytes.
+            "(((97 12354 10) iso-2022-7bit-unix) ((97 12354 10) iso-2022-7bit-unix) ",
+            "((97 12354 10) iso-2022-7bit-unix) ((97 12354 10) iso-2022-7bit-unix)) ",
+            // emacs-mule: U+4E9C.
+            "(((97 20124 10) emacs-mule-unix) ((97 20124 10) emacs-mule-unix) ",
+            "((97 20124 10) emacs-mule-unix) ((97 20124 10) emacs-mule-unix)) ",
+            // japanese-shift-jis: U+3042.
+            "(((97 12354 10) japanese-shift-jis-unix) ((97 12354 10) japanese-shift-jis-unix) ",
+            "((97 12354 10) japanese-shift-jis-unix) ((97 12354 10) japanese-shift-jis-unix)) ",
+            // chinese-gbk: U+554A.
+            "(((97 21834 10) chinese-gbk-unix) ((97 21834 10) chinese-gbk-unix) ",
+            "((97 21834 10) chinese-gbk-unix) ((97 21834 10) chinese-gbk-unix)) ",
+            // cp437: U+00FC.
+            "(((97 252 10) cp437-unix) ((97 252 10) cp437-unix) ",
+            "((97 252 10) cp437-unix) ((97 252 10) cp437-unix)))",
+        )
+    );
+}
+
+/// `decode_coding_object` runs the coding system's `:post-read-conversion`
+/// (src/coding.c:8180-8194), and a subprocess read IS a `decode_coding_object`
+/// call -- so process output runs the hook, on the buffer branch and on the
+/// filter branch alike.
+///
+/// `vietnamese-viqr` is the measurement rather than a probe-defined coding
+/// system because its ENTIRE conversion is that hook: its `:coding-type` is
+/// `utf-8` and the ASCII mnemonic translation happens in elisp.  So the text
+/// answers the question by itself, with no counter to trust.
+///
+/// The row that must NOT move is the first.  `code_convert_string`'s identity
+/// fast path (src/coding.c:9609-9628) returns a pure-ASCII source unconverted
+/// and therefore never reaches `decode_coding_object` at all, so
+/// `decode-coding-string` does not run the hook where every other door does --
+/// and reports the coding system's plain name where every other door reports
+/// the end-of-line subsidiary `decode_eol` chose.  The pin carries GNU's
+/// disagreement with itself rather than one side of it.
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program.
+#[test]
+fn a_process_read_runs_the_coding_systems_post_read_conversion() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defvar pw159h-src "Vie^.t Nam a` e^`\n")
+             (defvar pw159h-script "printf 'Vie^.t Nam a` e^`\\n'")
+             (defun pw159h-buf ()
+               (let ((buf (generate-new-buffer " *pw159h*")))
+                 (unwind-protect
+                     (let ((p (make-process :name "pw159h" :buffer buf :sentinel #'ignore
+                                            :connection-type 'pipe
+                                            :coding (cons 'vietnamese-viqr 'utf-8-unix)
+                                            :command (list "{sh}" "-c" pw159h-script))))
+                       (while (accept-process-output p 1))
+                       (while (process-live-p p) (accept-process-output p 0.05))
+                       (list (append (with-current-buffer buf (buffer-string)) nil)
+                             last-coding-system-used))
+                   (kill-buffer buf))))
+             (defun pw159h-filter ()
+               (let ((acc nil))
+                 (let ((p (make-process :name "pw159hf" :buffer nil :sentinel #'ignore
+                                        :connection-type 'pipe
+                                        :coding (cons 'vietnamese-viqr 'utf-8-unix)
+                                        :filter (lambda (_p s) (push s acc))
+                                        :command (list "{sh}" "-c" pw159h-script))))
+                   (while (accept-process-output p 1))
+                   (while (process-live-p p) (accept-process-output p 0.05))
+                   (list (append (apply #'concat (nreverse acc)) nil)
+                         last-coding-system-used))))
+             (list
+              ;; The identity fast path: no conversion, no hook, no subsidiary.
+              (let ((d (decode-coding-string pw159h-src 'vietnamese-viqr)))
+                (list (append d nil) last-coding-system-used))
+              ;; call-process, src/callproc.c:856.
+              (with-temp-buffer
+                (let ((coding-system-for-read 'vietnamese-viqr))
+                  (call-process "{sh}" nil t nil "-c" pw159h-script))
+                (list (append (buffer-string) nil) last-coding-system-used))
+              ;; make-process, buffer branch, src/process.c:6502.
+              (pw159h-buf)
+              ;; make-process, filter branch, src/process.c:6562.
+              (pw159h-filter)))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            // The source verbatim: V i e ^ . t SPC N a m SPC a ` SPC e ^ ` LF
+            "((86 105 101 94 46 116 32 78 97 109 32 97 96 32 101 94 96 10) vietnamese-viqr) ",
+            // Việt Nam à ề -- the hook ran.
+            "((86 105 7879 116 32 78 97 109 32 224 32 7873 10) vietnamese-viqr-unix) ",
+            "((86 105 7879 116 32 78 97 109 32 224 32 7873 10) vietnamese-viqr-unix) ",
+            "((86 105 7879 116 32 78 97 109 32 224 32 7873 10) vietnamese-viqr-unix))",
         )
     );
 }

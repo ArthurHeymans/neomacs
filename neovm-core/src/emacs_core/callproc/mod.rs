@@ -624,23 +624,39 @@ fn write_output_target_in_state(
             // Only the BUFFER destination decodes.  GNU hands a `(:file NAME)`
             // destination straight to the child as its stdout fd
             // (src/callproc.c:570), so those bytes are never converted.
-            let eol_conversion = eval.eol_conversion();
             // `decode_coding_c_string` detects before it decodes
             // (src/coding.c:8129-8130), so `Fcall_process` sees the same
             // re-basing an asynchronous process does: measured under GNU
             // 31.0.90, `(let ((coding-system-for-read 'undecided))
             // (call-process "sh" nil t nil "-c" "printf 'caf\\303\\251\\r\\n'"))`
             // leaves `last-coding-system-used' at `utf-8-dos'.
-            let run = decoding
-                .detected(
-                    &eval.coding_systems,
-                    output,
-                    // The whole of this route's output is in hand, which is
-                    // GNU's state when it sets `CODING_MODE_LAST_BLOCK` at the
-                    // end of `Fcall_process`'s read loop (src/callproc.c).
-                    crate::emacs_core::coding::SourceBlock::Last,
-                )
-                .decode(&eval.coding_systems, output, eol_conversion);
+            let resolved = decoding.detected(
+                &eval.coding_systems,
+                output,
+                // The whole of this route's output is in hand, which is
+                // GNU's state when it sets `CODING_MODE_LAST_BLOCK` at the
+                // end of `Fcall_process`'s read loop (src/callproc.c:796).
+                crate::emacs_core::coding::SourceBlock::Last,
+            );
+            // And then decodes through `decode_coding_c_string`
+            // (src/callproc.c:856) -- the same macro, and so the same
+            // `decode_coding_object`, that `make-process` and
+            // `decode-coding-string` reach.  `Fcall_process` binds
+            // `inhibit-modification-hooks` around it (:850) because its decode
+            // writes straight into the destination buffer; this one produces a
+            // string and the insertion below runs the change hooks GNU's
+            // `signal_after_change` (:884) runs.
+            //
+            // An EMPTY run is not decoded at all: `if (!nread) ;`
+            // (src/callproc.c:835) is the first arm of the three-way branch, so
+            // no decoder and no `:post-read-conversion` runs for it.  That
+            // matters here in a way it does not in GNU, because GNU reads the
+            // child's stdout and stderr through ONE descriptor when DESTINATION
+            // is `t` (`fd_error = fd_output`) while this route captures them
+            // separately and would otherwise offer the second, usually empty,
+            // one to the decoder as well -- measured, a `call-process` under a
+            // coding system with a `:post-read-conversion` runs the hook once
+            // in GNU and would have run it twice here.
             // `Vlast_coding_system_used = CODING_ID_NAME (process_coding.id)`
             // (src/callproc.c:913).  It sits inside the branch that READ the
             // child's output into a buffer, so a `(:file ...)` or discarded
@@ -650,7 +666,18 @@ fn write_output_target_in_state(
             // one `detect_coding` and `decode_eol` left in `coding->id`, so an
             // undecided coding system reports the character code detection
             // chose and the subsidiary the end-of-line scan chose.
-            let used = run.coding_used();
+            // It is assigned once, AFTER the read loop, from whatever the
+            // last decode left in `coding->id` -- so an EMPTY run, which never
+            // reached a decoder, reports the name the previous one resolved to
+            // rather than reverting to the unresolved one.
+            let decoded = if output.is_empty() {
+                None
+            } else {
+                Some(resolved.decode_in_context(eval, output)?)
+            };
+            let used = decoded
+                .as_ref()
+                .map_or_else(|| resolved.name(), |run| run.coding_used());
             eval.set_variable("last-coding-system-used", Value::symbol(used));
             // Both rewrites are IN PLACE on `coding->id`, and `Fcall_process`
             // reads the child's stdout and stderr through that one
@@ -666,7 +693,10 @@ fn write_output_target_in_state(
             // which STILL requires detection, so the second run detects on its
             // own bytes exactly as GNU's does.
             *decoding = ProcessOutputDecoding::for_name(used);
-            insert_process_output_in_state(eval, destination, &run.text)
+            match decoded {
+                Some(run) => insert_process_output_in_state(eval, destination, &run.text),
+                None => Ok(()),
+            }
         }
         OutputTarget::File(path) => {
             // GNU opens the `(:file DEST)` output file at spawn time with
