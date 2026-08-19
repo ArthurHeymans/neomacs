@@ -73,14 +73,7 @@ pub(crate) fn flow_from_eval_error(err: EvalError) -> Flow {
             symbol,
             data,
             raw_data,
-        } => Flow::Signal(Box::new(SignalData {
-            symbol,
-            data,
-            raw_data,
-            suppress_signal_hook: false,
-            selected_resume: None,
-            search_complete: false,
-        })),
+        } => Flow::Signal(Box::new(SignalData::new(symbol, data, raw_data, false))),
         EvalError::UncaughtThrow { tag, value } => Flow::Throw { tag, value },
         EvalError::Shutdown(request) => Flow::Shutdown(request),
     }
@@ -128,13 +121,206 @@ pub struct SignalData {
     pub(crate) suppress_signal_hook: bool,
     pub(crate) selected_resume: Option<ResumeTarget>,
     pub(crate) search_complete: bool,
+    /// Keeps `data` and `raw_data` reachable for the collector while this
+    /// signal is in flight. PRIVATE on purpose: it is what makes an unrooted
+    /// signal payload unrepresentable outside this module — a struct with a
+    /// private field cannot be built from a literal elsewhere, so every
+    /// construction site has to go through [`SignalData::new`], which pins.
+    /// See [`InFlightSignalRoots`] for why the pin is needed at all.
+    pin: InFlightSignalRoots,
 }
 
 impl SignalData {
+    /// The only way to build a signal payload: pins `data` and `raw_data` as
+    /// GC roots for as long as the returned value (or any clone of it) lives.
+    pub(crate) fn new(
+        symbol: SymId,
+        data: Vec<Value>,
+        raw_data: Option<Value>,
+        suppress_signal_hook: bool,
+    ) -> Self {
+        let pin = InFlightSignalRoots::pin(symbol, &data, raw_data);
+        Self {
+            symbol,
+            data,
+            raw_data,
+            suppress_signal_hook,
+            selected_resume: None,
+            search_complete: false,
+            pin,
+        }
+    }
+
     /// Resolve the signal symbol name via the interner.
     pub fn symbol_name(&self) -> &str {
         resolve_sym(self.symbol)
     }
+}
+
+// ---------------------------------------------------------------------------
+// In-flight signal payload rooting
+// ---------------------------------------------------------------------------
+//
+// GNU never needs this: `signal_or_quit` builds the `(SYMBOL . DATA)` pair and
+// longjmps with it on the C stack, and `mark_stack` scans that stack
+// conservatively, so the payload is a root for free the whole way out
+// (src/eval.c `signal_or_quit`, src/alloc.c `mark_stack`).
+//
+// This collector is PRECISE — there is no conservative stack scan
+// (`neovm-core/src/tagged/CONCURRENT_GC.md`, "precise-rooting precondition";
+// `set_stack_bottom` is a no-op) — and a signal does not longjmp here, it
+// travels up the Rust stack as `Flow::Signal(Box<SignalData>)`. That journey
+// is not quiet: every frame it passes runs `unbind_to`, which executes
+// `unwind-protect` cleanups, buffer and binding restores, and (through
+// `signal-hook-function` / `debug-on-error`) arbitrary Lisp. All of that
+// allocates, and any allocation-bearing safe point may collect.
+//
+// Without a root the payload is unreachable at exactly that moment, so the
+// collector reclaims it, and `condition-case` then binds a DANGLING cons to
+// its variable. The damage surfaces arbitrarily far away and unrecognizably:
+// a reclaimed cons's cdr holds `ConsCell::set_free_next`'s raw `*mut ConsCell`
+// free-list link, whose low three bits are `TAG_SYMBOL`, so it decodes as a
+// symbol with a garbage id (DIVERGENCES.md 161).
+//
+// The table is a thread-local slot arena rather than the `SCRATCH_GC_ROOTS`
+// stack because a signal's lifetime is NOT stack-shaped: it is cloned, boxed,
+// stored in a resume target, and converted to and from `EvalError`, so roots
+// are released in an order a truncating stack cannot express.
+
+thread_local! {
+    static IN_FLIGHT_SIGNAL_ROOTS: RefCell<InFlightSignalRootTable> =
+        RefCell::new(InFlightSignalRootTable::default());
+}
+
+#[derive(Default)]
+struct InFlightSignalRootTable {
+    /// One entry per live pin; `None` marks a reusable slot.
+    slots: Vec<Option<Vec<Value>>>,
+    free: Vec<usize>,
+}
+
+/// A pin on one signal's heap payload. Owns a slot in the thread-local table
+/// for its whole life; `Clone` takes a fresh slot (a cloned `Flow` is a second
+/// independent owner), `Drop` releases it.
+struct InFlightSignalRoots {
+    /// `None` when the payload contained no heap object — the common case for
+    /// `quit` and for arity/type errors whose data is symbols and fixnums —
+    /// so the overwhelmingly frequent signal costs no table traffic at all.
+    slot: Option<usize>,
+    /// The slot index names a row in THIS thread's table, so the handle must
+    /// not travel: dropped on another thread it would release a slot that
+    /// thread pinned, unrooting a live payload. `PhantomData<*const ()>` is
+    /// how that is enforced — it makes the handle (and with it `SignalData`
+    /// and `Flow`) `!Send`, so a cross-thread move is a compile error rather
+    /// than a rare unrooting. That costs nothing real: a `Value` belongs to one
+    /// thread's heap already.
+    _not_send: std::marker::PhantomData<*const ()>,
+}
+
+impl InFlightSignalRoots {
+    fn pin(symbol: SymId, data: &[Value], raw_data: Option<Value>) -> Self {
+        // The error SYMBOL is pinned too, not just the payload: `signal` keeps
+        // the symbol's IDENTITY (an *uninterned* symbol given conditions by
+        // `define-error` is honoured — see `signal_internal_id`), and an
+        // uninterned symbol's value/function/plist cells survive only while
+        // something marks it. In flight, nothing else does.
+        let mut values: Vec<Value> = Vec::new();
+        Self::push_if_traceable(&mut values, Value::from_sym_id(symbol));
+        for value in data.iter().copied() {
+            Self::push_if_traceable(&mut values, value);
+        }
+        if let Some(raw) = raw_data {
+            Self::push_if_traceable(&mut values, raw);
+        }
+        Self {
+            slot: Self::claim(values),
+            _not_send: std::marker::PhantomData,
+        }
+    }
+
+    /// Keep what the mark phase can act on. Heap objects obviously; symbols
+    /// because `seed_root` routes them to `mark_symbol`, which is what keeps a
+    /// non-canonical symbol's cells. Fixnums, `nil` and `t` are immediates the
+    /// collector never touches, and dropping them is what leaves the common
+    /// signal — `quit`, and arity errors whose data is a symbol and a count —
+    /// with a short vector or none at all.
+    #[inline]
+    fn push_if_traceable(values: &mut Vec<Value>, value: Value) {
+        if value.is_nil() || value.is_t() {
+            return;
+        }
+        if value.is_heap_object() || value.is_symbol() {
+            values.push(value);
+        }
+    }
+
+    fn claim(values: Vec<Value>) -> Option<usize> {
+        if values.is_empty() {
+            return None;
+        }
+        IN_FLIGHT_SIGNAL_ROOTS.with(|table| {
+            let mut table = table.borrow_mut();
+            match table.free.pop() {
+                Some(slot) => {
+                    table.slots[slot] = Some(values);
+                    Some(slot)
+                }
+                None => {
+                    table.slots.push(Some(values));
+                    Some(table.slots.len() - 1)
+                }
+            }
+        })
+    }
+}
+
+impl Clone for InFlightSignalRoots {
+    fn clone(&self) -> Self {
+        let Some(slot) = self.slot else {
+            return Self {
+                slot: None,
+                _not_send: std::marker::PhantomData,
+            };
+        };
+        let values = IN_FLIGHT_SIGNAL_ROOTS
+            .with(|table| table.borrow().slots[slot].clone())
+            .unwrap_or_default();
+        Self {
+            slot: Self::claim(values),
+            _not_send: std::marker::PhantomData,
+        }
+    }
+}
+
+impl Drop for InFlightSignalRoots {
+    fn drop(&mut self) {
+        let Some(slot) = self.slot else { return };
+        // A thread-local can already be destroyed during thread teardown; a
+        // failed access there means the table itself is gone, so there is
+        // nothing left to release.
+        let _ = IN_FLIGHT_SIGNAL_ROOTS.try_with(|table| {
+            let mut table = table.borrow_mut();
+            table.slots[slot] = None;
+            table.free.push(slot);
+        });
+    }
+}
+
+impl std::fmt::Debug for InFlightSignalRoots {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        f.write_str("InFlightSignalRoots")
+    }
+}
+
+/// Seed every in-flight signal payload into the collector's root set. Wired
+/// into `collect_thread_local_gc_roots` (`eval.rs`) beside the other
+/// thread-local root groups.
+pub(crate) fn collect_in_flight_signal_gc_roots(out: &mut Vec<Value>) {
+    IN_FLIGHT_SIGNAL_ROOTS.with(|table| {
+        for slot in table.borrow().slots.iter().flatten() {
+            out.extend(slot.iter().copied());
+        }
+    });
 }
 
 pub(crate) type EvalResult = Result<Value, Flow>;
@@ -280,14 +466,12 @@ pub(crate) fn signal_internal_id(
     raw_data: Option<Value>,
     suppress_signal_hook: bool,
 ) -> Flow {
-    Flow::Signal(Box::new(SignalData {
+    Flow::Signal(Box::new(SignalData::new(
         symbol,
         data,
         raw_data,
         suppress_signal_hook,
-        selected_resume: None,
-        search_complete: false,
-    }))
+    )))
 }
 
 /// Create a signal where DATA is used as the raw cdr payload.

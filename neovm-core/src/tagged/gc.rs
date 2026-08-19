@@ -11794,6 +11794,47 @@ mod ownership_tests {
         drop(heap);
     }
 
+    /// GNU `sweep_conses` (src/alloc.c:6856-6858) threads the free list through
+    /// the dead cells and then writes `dead_object ()` into the car, so a cell
+    /// on the free list is "recognizable in O(1)" (`deadp`, src/alloc.c:425-429).
+    ///
+    /// That poison is what makes a use-after-free diagnosable HERE, because the
+    /// free-list link lives in the cdr union and a raw `*mut ConsCell` has
+    /// `TAG_SYMBOL` (0b000) in its low three bits — so an unpoisoned reclaimed
+    /// cons reads back as the perfectly ordinary `(nil . SOME-SYMBOL)` and the
+    /// garbage only faults much later, in the symbol resolver
+    /// (DIVERGENCES.md 161).
+    #[test]
+    fn a_reclaimed_cons_is_recognizable_as_dead() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let rooted = heap.alloc_cons(TaggedValue::fixnum(1), TaggedValue::fixnum(2));
+        let doomed = heap.alloc_cons(TaggedValue::fixnum(3), TaggedValue::fixnum(4));
+        assert!(!unsafe { (*doomed.xcons_ptr()).load_car() }.is_dead());
+
+        heap.collect_exact(std::iter::once(rooted));
+
+        assert!(
+            !unsafe { (*rooted.xcons_ptr()).load_car() }.is_dead(),
+            "a rooted cons must not be poisoned",
+        );
+        assert!(
+            unsafe { (*doomed.xcons_ptr()).load_car() }.is_dead(),
+            "a reclaimed cons must carry GNU's dead_object in its car, not nil: \
+             without it a use-after-free is indistinguishable from live data",
+        );
+        // And the free-list link the cdr now holds is exactly the shape that
+        // decodes as a bogus symbol: an aligned raw pointer under TAG_SYMBOL.
+        let link = unsafe { (*doomed.xcons_ptr()).load_cdr() };
+        assert!(
+            link.is_symbol(),
+            "the free-list link decodes through TAG_SYMBOL (bits 0x{:x})",
+            link.bits(),
+        );
+    }
+
     /// Workstream A path-collapse safety net (characterization): a forced
     /// `collect_exact` retains a rooted live cons graph and reclaims an unrooted
     /// one, INDEPENDENT of which internal path (concurrent / incremental /

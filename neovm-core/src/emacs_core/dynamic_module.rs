@@ -560,14 +560,12 @@ fn module_signal_or_throw(priv_: &emacs_env_private) -> Result<(), Flow> {
                 .unwrap_or_else(|| intern("error"));
             let sym_name = resolve_sym(sym_id);
             let raw_data = priv_.non_local_exit_data;
-            Err(Flow::Signal(Box::new(super::error::SignalData {
-                symbol: intern(sym_name),
-                data: super::value::list_to_vec(&raw_data).unwrap_or_else(|| vec![raw_data]),
-                raw_data: Some(raw_data),
-                suppress_signal_hook: false,
-                selected_resume: None,
-                search_complete: false,
-            })))
+            Err(Flow::Signal(Box::new(super::error::SignalData::new(
+                intern(sym_name),
+                super::value::list_to_vec(&raw_data).unwrap_or_else(|| vec![raw_data]),
+                Some(raw_data),
+                false,
+            ))))
         }
         emacs_funcall_exit::Throw => Err(Flow::Throw {
             tag: priv_.non_local_exit_symbol,

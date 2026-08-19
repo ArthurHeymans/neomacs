@@ -16662,6 +16662,20 @@ Status: FIXED.
 
 ## 157. Two display-derived frame parameters were seeded ninety-five files before GNU computes them, which is the whole reason `display-color-cells` could not be deleted -- FIXED
 
+> **Correction, 2026-08-19 (entry 161).** A bisect attributed an oracle crash to
+> this entry -- `div_v8_cl_defun_key_aux_rest_optional` dying with
+> `panicked at neovm-core/src/emacs_core/intern.rs:603: invalid symbol id
+> SymId(4241809408)` -- on the reading that 157's new
+> `tty-set-up-initial-frame-faces` call runs face realization at startup where
+> nothing ran before.  **157 did not introduce that crash.**  The defect is a
+> missing GC root on an in-flight signal payload and it reproduces on the
+> PRE-155 reference binary (`tmp/refbin/neomacs`, built 2026-08-17), with the
+> identical stack, under `NEOVM_GC_STRESS=1`.  What 157 changed is how much
+> Lisp runs before the probe, hence when the collector lands -- it is a trigger,
+> not a cause.  Nothing in this entry is withdrawn; see 161 for the measurement
+> and the fix.
+
+
 Entry 154 deleted seventeen of eighteen window/frame/face names and kept one,
 `display-color-cells`, with a measured reason and a typed debt:
 `UnjustifiedBootstrapCaller`.  Its finding was that our `(load "faces")` reaches
@@ -18080,5 +18094,435 @@ diagnosis but of one inference and one claim.
   loss.  Five names is what the copy would have covered; what sharing the
   decoder actually buys is every coding system in the manager and every one a
   user defines, hooks included -- which no list of names can be.
+
+Status: FIXED.
+
+## 161. A signal that is unwinding was not a GC root, so `condition-case` bound a cons the collector had already reclaimed -- and a reclaimed cons was indistinguishable from live data, which is why the fault surfaced as a garbage symbol id thirty frames away -- FIXED
+
+Handed over as "a live memory-corruption-shaped regression, already bisected":
+the oracle probe `div_v8_cl_defun_key_aux_rest_optional`
+(`neovm-oracle-tests/src/divergence/combos/strict/cl_defun_key_aux_rest_optional_combo.rs:9`)
+was reported dying with
+
+```text
+thread ... panicked at neovm-core/src/emacs_core/intern.rs:603:32:
+invalid symbol id SymId(4241809408)
+  neovm_core::emacs_core::intern::resolve_sym_lisp_string
+  neovm_core::emacs_core::print::symbol_bytes
+  ...
+  neovm_core::emacs_core::builtins::misc_eval::builtin_prin1
+```
+
+bisected to entry 157, and reproducing only under nextest.  Two of those three
+are wrong, and the third is a symptom of something older and much worse.
+
+### 1. The panic value is not an id, it is a pointer -- and its alignment names the allocator that made it
+
+`TAG_SYMBOL` is `0b000` (`neovm-core/src/tagged/value.rs:56`) and `as_symbol_id`
+is an unchecked shift, `SymId((bits >> 3) as u32)` (`value.rs:576-582`,
+post-fix line numbers throughout).  So
+**every 8-byte-aligned machine word decodes as a symbol**, and a garbage "symbol
+id" is a raw pointer with its low three bits already spent.
+
+Decode the reported one.  `4241809408 = 0xFCD4E000`; its low **13** bits are
+zero, so the word it came from, `id << 3 = 0x7E6A70000`, has its low **16** bits
+zero -- it is 64 KiB aligned.  A random 32-bit id has its low 13 bits zero with
+probability `1/8192`, so this is a signature, not a coincidence, and the
+signature is exact: `CONS_BLOCK_BYTES = CONS_BLOCK_ALIGN = 64 * 1024`
+(`neovm-core/src/tagged/gc.rs:1149-1150`), the block is `alloc_zeroed` at that
+alignment (`ConsBlock::layout`, `:1207`), and cell 0 sits at the block base
+(`cells_ptr`, `:1229`).  The word is a `*mut ConsCell`.
+
+Which pointer, specifically: `ConsBlock::sweep` (`gc.rs:1336-1353`) walks a
+block's cells in reverse and threads every unmarked one onto the global free
+list through the cell itself, `set_free_next`
+(`neovm-core/src/tagged/header.rs:128-140`) writing the link into the
+`cdr_or_next` union.  Because the walk is `(0..next_index).rev()`, cell 0 of each
+block ends up as the list head, so the first cell freed in the *next* block
+links straight to a block base.  That is the 64 KiB-aligned link the panic
+printed.
+
+**A cons cell that had been reclaimed was still being read.**  The printer was
+not at fault, and neither was `intern.rs:603` -- both were downstream of a
+use-after-free that had already happened.
+
+One thing in the handover does not survive this reading, and it was offered as
+the strongest lever: "It is deterministic: byte-identical id at two different
+commits."  A pointer under ASLR is not.  The three ids this entry actually
+observed, from three runs of one reduction on one binary, are `0xfc420a06`,
+`0xfc424a06` and `0xfc42ca06` -- the same block, different cells, and they move
+with the mapping.  What IS stable is the shape: 16-byte aligned, in the
+`0x7fffe2...` band, always a cell adjacent to its owner.  Chasing the constant
+would have been chasing a mirage; chasing the alignment named the allocator in
+one step.
+
+### 2. The reported reproduction does not reproduce, and the bisect does not hold
+
+Measured, on this branch's own `cargo xtask fresh-build --release` at main HEAD
+`02ff14193` (ledger 159), the commit the handover says fails:
+
+| what | result |
+|---|---|
+| `cargo nextest run -p neovm-oracle-tests -E 'test(div_v8_cl_defun_key_aux_rest_optional)'` | `1 test run: 1 passed` |
+| the same, with `NEOVM_BINARY_PATH` pointed at the main checkout's 11:28 release binary | `1 passed` |
+| the test binary run directly, worktree root | `1 passed` |
+| the test binary run directly, `NEXTEST_WORKSPACE_ROOT` = the main checkout | `1 passed` |
+| the same binary run from the main checkout itself, with and without `RUST_LOG` | `1 passed` each |
+| the child process replayed outside the harness, 100 consecutive runs | `100/100` correct |
+| **the full oracle suite** | **`38783 tests run: 38783 passed, 0 skipped`** (666.7 s) |
+
+The main checkout's source tree is byte-identical to this worktree's
+(`diff -rq` over `neovm-core/src` and `neomacs-bin/src`: empty), and its release
+binary was linked at 11:28 against commit `02ff14193` (committed 11:07), so this
+is the same build the bisect's last step measured.
+
+So "reproduces under nextest, passes when run directly" is not a property of the
+code.  What it is a property of is **when the collector lands**, and that moves
+with anything that changes how much has been allocated by the time the probe
+runs -- the size of the inherited environment, the ambient `RUST_LOG`, what else
+the process did first.  Every row above is the same defect, present and latent.
+The handover's own instinct was right and its evidence was thin: `refbin` PASS,
+`e90b234e7` PASS, `ce3be8dde` FAIL is four samples of a coin whose bias is
+allocation timing.
+
+### 3. Making it deterministic: `NEOVM_GC_STRESS=1`
+
+`gc_stress` (`neovm-core/src/emacs_core/eval.rs:51-56`) collects synchronously to
+completion at every allocation-bearing safe point; its stated purpose is "a
+deterministic missing-root shakeout", and three earlier fixes in this tree
+(`f891c3d76`, `842f03122`, `4d7100a3a`) were found with it.  It had never been
+pointed at the shipped binary -- there is no xtask, script or CI job that runs a
+real `neomacs` process under it.
+
+Pointed at this probe it fails every time, in eighteen seconds:
+
+```sh
+NEOVM_GC_STRESS=1 ./target/release/neomacs --batch -Q --eval '(progn
+  (require (quote cl-lib))
+  (condition-case err
+      (let ((buf (generate-new-buffer " *probe*")))
+        (unwind-protect
+            (eval (read "(cl-defun probe-keyfn (a b &optional c &key d (e 10) &rest f &aux (g (+ a b))) (list a b c d e f g))") t)
+          (when (buffer-live-p buf) (kill-buffer buf))))
+    (error (prin1 (cons (car err) (cdr err))) (terpri))))'
+```
+
+with a *different* far-end symptom, which is itself informative: the process
+reserves 64 GiB in one step (`VmSize` `437,308 kB` -> `67,554,364 kB`), touches
+it page by page to a resident 62 GB, and is killed.  Under `ulimit -v 8000000`
+the allocation fails fast and prints the reason:
+
+```text
+memory allocation of 67714982000 bytes failed
+   9: alloc::raw_vec::handle_error
+  10: alloc::raw_vec::RawVecInner<A>::reserve::do_reserve_and_handle
+  11: neovm_core::emacs_core::intern::thread_local_record_canonical
+  12: neovm_core::emacs_core::intern::is_canonical_id
+  13: neovm_core::tagged::gc::TaggedHeap::mark_all
+```
+
+`67,714,982,000 / 16 = 4,232,186,375`: the thread-local symbol cache is a `Vec`
+indexed by symbol id (`thread_local_record_canonical`, `intern.rs:1433`, and its
+siblings), so a garbage id near `2^32` asks for a 64 GiB resize.  The reported
+`intern.rs:603` panic and this are the same garbage id arriving at two different
+unguarded consumers.
+
+Note where the frame above it is: **inside the collector's own mark**.  The GC
+was tracing a value that decodes as a symbol with an impossible id.
+
+### 4. What the collector was looking at
+
+A temporary instrumentation of `mark_or_push_child` -- abort when a symbol child
+is outside the registry, printing the owner, the origin string the mark path
+already carries, and the root group -- answered it in one run:
+
+```text
+NEOVM-DIAG out-of-range symbol child: id=4232202758 (0xfc424a06) word=0x7fffe2125030
+  align16=true align64k=false origin=cons-cdr owner=0x7fffe2125023 owner_kind=Cons
+NEOVM-DIAG root group=misc:lexenv depth=4 owner_car=0x0
+```
+
+The owner is a cons at `0x7fffe2125020`; its cdr is `0x7fffe2125030`, which is
+`owner + 0x10` -- the *adjacent cell*, exactly what `ConsBlock::sweep`'s reverse
+walk writes.  Its car is `0`.  The cell is on the free list, and it is reachable
+from `Context::lexenv` (`eval.rs` `trace_roots`, the `misc` group) at chain
+depth 4.
+
+Depth 4 is the whole story in one number.  `self.lexenv` is cons 1; its car is
+the binding pair, cons 2; the pair's cdr is the bound value `(error "...")`,
+cons 3; and cons 4 is that datum's tail -- the `("Malformed argument list ends
+with: ...")` cell.  **What `condition-case` bound to `err` was a datum whose tail
+the collector had already reclaimed.**  Printing it is what the reported panic
+was doing: `(error nil . <free-list link>)`, and the link decodes as a symbol.
+
+A second instrumentation, this time on the mutator side -- abort in `alloc_cons`
+when either operand is a cons whose car is the poison -- named the site:
+
+```text
+NEOVM-DIAG alloc_cons publishing a FREED cons as cdr: 0x7fffe2105023
+   1: neovm_core::emacs_core::eval::Context::sf_condition_case_value_named
+   ...
+   9: neovm_core::emacs_core::eval::Context::eval_value_with_lexical_arg
+```
+
+`run_condition_case_body` (`eval.rs`) computes
+`let binding_value = make_signal_binding_value(&sig);`, and
+`make_signal_binding_value` (`neovm-core/src/emacs_core/error.rs:534-542`) is
+`Value::cons(Value::symbol(sig.symbol), *raw)` over `sig.raw_data`.  The cdr it
+published was the freed cell.
+
+### 5. Root cause
+
+`Flow::Signal(Box<SignalData>)` carries the signal's Lisp payload -- `data:
+Vec<Value>` and `raw_data: Option<Value>` -- up the **Rust** stack, and nothing
+rooted it.
+
+GNU never has to think about this.  `signal_or_quit` builds the
+`(SYMBOL . DATA)` pair, stores it in `handlerlist->val` and `longjmp`s; the
+payload sits on the C stack, and `mark_stack` (`src/alloc.c`) scans that stack
+conservatively, so it is a root for free the whole way out.
+
+This collector is **precise**.  `neovm-core/src/tagged/CONCURRENT_GC.md:252-313`
+states the precondition in as many words -- "there is NO conservative stack scan
+(`set_stack_bottom` is a literal no-op).  Every heap value the mutator will use
+after a safepoint MUST be reachable from a seeded root" -- and `trace_roots` had
+no group for a signal in flight.  The `handlers` group visits a condition frame's
+`conditions`, `tag` and `handler` and nothing else; the specpdl group does visit
+`SpecBinding::LexicalEnv { old_lexenv }`, so the *saved lexenv* was never the
+problem.
+
+And the unwind is not quiet.  Every frame the signal passes runs `unbind_to`,
+which executes `unwind-protect` cleanups, buffer and binding restores, and --
+through `signal-hook-function` / `debug-on-error` -- arbitrary Lisp.  In the
+reduction above that is literally `(kill-buffer buf)`.  All of it allocates, and
+any allocation-bearing safe point may collect.  At that moment the payload has no
+root, so it is reclaimed; `condition-case` then binds the corpse.
+
+That is why the failure looked like it belonged to display code: it needs a
+signal, an allocating unwind, and a collection landing between them.  Entry 157's
+new startup Lisp changes how full the nursery is when the probe runs.  So does
+nextest's larger inherited environment.  Neither is the defect.
+
+**The defect predates entry 155.**  The same abort, the same stack, the same
+64 GiB, reproduces on the pre-155 reference binary built 2026-08-17:
+
+```sh
+NEOVM_GC_STRESS=1 tmp/refbin/neomacs --dump-file tmp/refbin/neomacs.pdump \
+  --batch -Q --eval '<the form above>'
+#=> memory allocation of 67725598608 bytes failed
+#=>   5: neovm_core::emacs_core::intern::thread_local_record_canonical
+#=>   6: neovm_core::emacs_core::intern::is_canonical_id
+#=>   7: neovm_core::tagged::gc::TaggedHeap::mark_all
+```
+
+It is also, almost certainly, **entry 15**.  That entry recorded an intermittent
+SIGSEGV in `format_string_bytes_in_state` ->
+`format_value_bytes_in_state_with_options` -> `format_cons_bytes_in_state` at
+30-40%, hypothesised "a stale `LispString` -- a `Value` collected or moved during
+the walk", noted that "GC landing inside the format walk would explain the
+intermittency exactly", and closed as "not reproduced in 44 runs ... may be
+latent".  Same recursion, same class, same intermittency, and 44 clean runs is
+exactly what a defect gated on GC timing produces.
+
+### 6. The fix, in two halves
+
+**Half one: the payload is a root by construction.**  `SignalData` gains a
+private `InFlightSignalRoots` handle (`error.rs`) that pins the signal's payload
+in a thread-local slot table for as long as the signal -- or any clone of it --
+lives, and releases the slot on `Drop`.  The table is seeded beside the other
+thread-local root groups (`collect_in_flight_signal_gc_roots`, wired into
+`collect_thread_local_gc_roots` as `in-flight-signal-thread-local`).
+
+Four choices there are load-bearing:
+
+* **The field is private.**  A struct with a private field cannot be built from a
+  literal outside its module, so all four `SignalData` construction sites
+  (`flow_from_eval_error` and `signal_internal_id` in `error.rs`,
+  `canonicalize_signal_symbol` in `eval.rs`, and the module-ABI exit in
+  `dynamic_module.rs`) now go through `SignalData::new`, which pins.  An
+  unrooted signal payload stopped being *representable*; a fifth construction
+  site cannot be written without the compiler asking for the pin.
+* **A slot table, not the `SCRATCH_GC_ROOTS` stack.**  A signal's lifetime is not
+  stack-shaped: it is cloned, boxed, stored in a `ResumeTarget`, and converted to
+  and from `EvalError`.  Roots are therefore released in an order a truncating
+  stack cannot express.
+* **The error SYMBOL is pinned too**, not just `data` and `raw_data`.  `signal`
+  keeps the symbol's IDENTITY -- an uninterned symbol given conditions by
+  `define-error` is honoured, which is why `signal_internal_id` takes a `SymId`
+  rather than a name -- and an uninterned symbol's value/function/plist cells
+  survive only while something marks it.  `seed_root` routes a symbol to
+  `mark_symbol`, which is that path.  `nil`, `t` and fixnums are dropped: they
+  are immediates the collector never touches, which is what leaves `quit` with
+  no slot at all and a plain arity error with a one-element vector.
+* **The handle is `!Send`** (a `PhantomData<*const ()>`).  A slot index names a
+  row in one thread's table; dropped on another thread it would release a row
+  that thread pinned, unrooting a live payload.  With the marker, that is a
+  compile error instead of a rare unrooting -- and the workspace builds
+  unchanged, which is the measurement that says nothing sends a signal across
+  threads today.
+
+**Half two: a reclaimed cons is recognizable.**  `set_free_next` wrote
+`TaggedValue::NIL` into the freed car.  GNU writes `dead_object ()`
+(`src/alloc.c:6858`), defined at `src/lisp.h:1353-1357` as
+`make_lisp_ptr (NULL, Lisp_String)` with the comment "Return a Lisp_Object value
+that does not correspond to any object.  This can make some Lisp objects on free
+lists recognizable in O(1)", and reads it back through `deadp`
+(`src/alloc.c:425-429`) at `live_cons_holding` (`:4656`), `live_symbol_holding`
+(`:4711`) and `:7270`, with `eassert (!EQ (object, dead_object ()))` in the
+dumper (`src/pdumper.c:3110`).  `TaggedValue::DEAD` is now the same bit pattern
+(a null pointer under `TAG_STRING`) and `set_free_next` writes it.
+
+That half fixes no bug on its own and is not decoration.  `nil` is a perfectly
+ordinary Lisp value, so an unpoisoned reclaimed cons reads back as the
+unremarkable `(nil . SOME-SYMBOL)` and the garbage travels until it meets a
+consumer rude enough to fault -- which is why the reported panic pointed at the
+printer and the stress run pointed at a `Vec::resize`, and neither pointed
+anywhere near `condition-case`.  With the poison, the crime is legible at the
+scene: the second instrumentation in section 4 only worked because of it, and so
+does the regression test below.
+
+A defensive range check at `intern.rs:603` would have done the opposite.  It
+would have turned a loud crash into a quiet wrong answer over memory that is
+still corrupt.
+
+### 7. The tests
+
+Three, all red before the change, at a level that costs milliseconds instead of a
+38k-pin suite:
+
+* `emacs_core::error::tests::in_flight_signal_payload_survives_a_collection` --
+  build a signal whose payload is heap-allocated, drop every other reference,
+  collect, require the payload to still be live.  Red:
+  `the in-flight signal payload was collected while the signal was still
+  unwinding (its cons is on the free list)`.
+* `emacs_core::error::tests::condition_case_binding_value_survives_a_collection`
+  -- the same one level up, through `make_signal_binding_value`.  Red as
+  `SIGABRT` at `value.rs:1936`, the string-header use-after-free tripwire.
+* `tagged::gc::ownership_tests::a_reclaimed_cons_is_recognizable_as_dead` -- a
+  rooted cons is not poisoned, a reclaimed one is, and the free-list link it now
+  carries in its cdr does decode through `TAG_SYMBOL`.  This is the GNU parity
+  pin for `dead_object`.
+
+Red measured by disabling only the pin (`InFlightSignalRoots::pin` returning an
+empty handle) and re-running: `2 tests run: 0 passed, 2 failed`.  Green with it
+restored: `2 tests run: 2 passed`, and the reclaimed-cons test
+`1 test run: 1 passed`.
+
+The end-to-end check is the stress recipe from section 3, which went from an
+abort to
+
+```text
+rc=0
+(error "Malformed argument list ends with: (&rest f &aux (g (+ a b)))")
+```
+
+### 8. Hypotheses eliminated
+
+* **"157's new `tty-set-up-initial-frame-faces` call is the prime suspect"**
+  (the handover's).  Eliminated by measurement, not argument: the same failure
+  reproduces on the pre-155 reference binary, which does not contain 157.  157 is
+  a trigger.  Its other halves -- the five deleted seeding sites and the deleted
+  `display-color-cells` subr -- fall with it and needed no separate elimination
+  once the pre-155 binary failed.
+* **"It reproduces ONLY under nextest"** (the handover's).  It reproduces under
+  nextest, outside nextest, and in neither, depending on allocation timing; and
+  it does not reproduce in *any* of them on a clean fresh build at the commit the
+  bisect blames.  The nextest environment is bigger, which moves the collection,
+  and nothing more.
+* **The nextest `prlimit --as=8589934592` wrapper** (the handover's, already
+  eliminated there).  Confirmed independently: the direct run under the same
+  limit passes, and the 8 GiB cap is in fact *useful* -- it is what turns the
+  64 GiB resize into a fast abort with a backtrace instead of an OOM kill.
+* **`RUST_LOG=debug` in the ambient environment.**  Present in this session and
+  inherited by every spawned child, so it was checked in both directions: with
+  and without, the probe passes, and the stress recipe fails.
+* **A missing tenured -> young write barrier** (a mid-run lead: "`write_barrier`
+  occurs 5 times in the file and all 5 are test-function names -- no production
+  barrier").  The production barrier exists under a different name.
+  `set_cons_car`/`set_cons_cdr` (`neovm-core/src/tagged/mutate.rs:22-43`) call
+  `note_heap_slot_write`, and `note_heap_write_record` (`gc.rs:1054-1080`) keeps
+  it armed whenever the dump partition is active -- "the dump partition needs the
+  barrier even when owner-tracking is off, to record mutations of dumped objects
+  into the remembered set" -- which is exactly the tenured case.  Two further
+  measurements point away from it: the reclaimed cell is a young cons-block cell
+  reached from a plain `Context` field, and the mark that found it ran
+  stop-the-world (`mark_all_on_gc_thread` blocks the mutator on a channel), so it
+  is not a concurrent-marking race either.
+* **The printer.**  `neovm-oracle-tests` does not depend on `neovm-core`
+  (`neovm-oracle-tests/Cargo.toml`), so the reported panic was the spawned release
+  binary's stderr relayed through the harness's `.expect`, and the corruption was
+  three steps upstream of `prin1`.
+* **A stale or mismatched pdump.**  Ruled out by the source-tree `diff -rq` above
+  plus the pdump's own fingerprint check, which is what rejected an unstamped
+  diagnostic binary (`pdump fingerprint mismatch (expected 4E454F...` = the
+  unpatched `NEOMACS_PDUMP_FINGERPRINT_SLOT!!` placeholder).
+
+### 9. Found and NOT fixed
+
+* **`EvalError::Signal` carries the same payload with no pin.**  `map_flow` moves
+  `data`/`raw_data` out of the pinned `SignalData` into the public enum variant,
+  which drops the pin.  Any boundary that holds an `EvalError` while more Lisp
+  runs has this entry's bug again.  Not fixed here because `EvalError::Signal`
+  has 73 use sites across `neovm-core`, `neomacs-bin` and `neovm-worker`, and an
+  enum variant cannot carry a private field, so the fix is a shape change
+  (`EvalError::Signal(Box<SignalData>)`) rather than an added field -- a separate,
+  mechanical, reviewable diff.  The measured bug is on the `Flow` path, which is
+  every interpreter `condition-case`.
+* **`Flow::Throw { tag, value }` and `Flow::ThreadBlocked { blocker,
+  remaining_forms }` are unrooted in flight** for exactly the same reason, and
+  `throw` unwinds through the same `unwind-protect` cleanups.  No reproduction
+  yet; the shape is identical and it should get the same treatment.
+* **The specpdl root walk ends in `_ => {}`** (`eval.rs`, the `specpdl` group).
+  A new `SpecBinding` variant carrying a `Value` is silently unrooted, with no
+  compiler complaint -- the same class of hole this entry closed with a private
+  field.  It wants an exhaustive match.
+* **`try_resolve_sym` / `try_resolve_sym_lisp_string`** (`intern.rs:1488-1507`)
+  exist, return `None` for an out-of-range id, and have **zero callers**.
+* **`verify_marked_objects_owned`** (`gc.rs`, `#[cfg(debug_assertions)]` and
+  `#[allow(dead_code)]`) is written for precisely this failure -- its own comment
+  says "If a marked object is NOT in a list, it means a root pointed to freed
+  memory that happened to look like a valid tagged pointer" -- and is not wired
+  up to anything.
+* **There is still no subprocess GC-stress harness.**  `NEOVM_GC_STRESS` appears
+  in three files, all in-process; no xtask, script or CI job runs a real
+  `neomacs` under it.  This entry found its bug in eighteen seconds with one.
+  The cheapest useful shape is a handful of forms run against the shipped binary
+  with `ulimit -v` set, asserting exit 0.
+* **`Value::as_lisp_string` still hands `&'static LispString` to ~675 call
+  sites** (`from_value.rs:179-187` records it).  Untouched here.  It is a
+  different seam -- a borrow outliving its object rather than an object outliving
+  its root -- but it fails the same way, and `value.rs:1936` is where this entry's
+  second test lands when the pin is removed.
+* **`detect_tty_background_mode` still reads `COLORFGBG`**, entry 157's own
+  recorded residual, untouched.
+
+### 10. Gates
+
+Measured on this branch, all numbers from run logs under `tmp/`.  Both suites
+ran against a `cargo xtask fresh-build --release` that reports
+`finished successfully` with `no_byte_compile=false`, and whose pdump
+(14:06:23, 15,461,351 bytes) is newer than its binary (14:04:38).
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine`:
+  **11056 tests run: 11056 passed, 54 skipped** in 315.757 s, exit 0.
+* `cargo nextest run -p neovm-oracle-tests`:
+  **38783 tests run: 38783 passed, 0 skipped** in 657.944 s, exit 0 --
+  `div_v8_cl_defun_key_aux_rest_optional` among them, `PASS` in 0.262 s.
+* The same oracle suite BEFORE the change, on its own authoritative fresh
+  build at `02ff14193`: **38783 passed, 0 skipped** in 666.7 s.  The suite was
+  green on both sides, which is the point of sections 2 and 3: it never held
+  this defect down.
+* The GC-stress recipe from section 3, on the shipped binary: `rc=0`,
+  `(error "Malformed argument list ends with: (&rest f &aux (g (+ a b)))")`.
+  Before the fix, the same command aborted.
+* `cargo check --workspace --all-targets`: clean.
+* `cargo fmt --all --check`: clean.
+
+One failure was seen and is not a residual: `gc_concurrent_handshake_stats_
+populate_per_group` failed 11055/11056 on an intermediate run because the
+per-field root-group names this entry's instrumentation introduced
+(`misc:lexenv`, ...) were still in the tree.  That test asserts the group is
+named `misc` and is non-empty, which is exactly its job; the names were reverted
+and the suite is 11056/11056.
 
 Status: FIXED.

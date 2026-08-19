@@ -1668,6 +1668,15 @@ fn collect_thread_local_gc_roots(
         stats,
         super::jit::cache::collect_jit_reloc_gc_roots,
     );
+    // A signal that is unwinding lives only in a Rust `Flow::Signal`, which the
+    // precise collector cannot see; its payload is pinned by `SignalData`'s
+    // private root handle and seeded here (DIVERGENCES.md 161).
+    collect_group(
+        roots,
+        "in-flight-signal-thread-local",
+        stats,
+        super::error::collect_in_flight_signal_gc_roots,
+    );
     collect_group(
         roots,
         "syntax-thread-local",
@@ -3818,17 +3827,15 @@ impl Context {
             return sig;
         }
 
-        SignalData {
-            symbol: intern("error"),
-            data: vec![
+        SignalData::new(
+            intern("error"),
+            vec![
                 Value::string("Invalid error symbol"),
                 Value::from_sym_id(sig.symbol),
             ],
-            raw_data: None,
-            suppress_signal_hook: sig.suppress_signal_hook,
-            selected_resume: None,
-            search_complete: false,
-        }
+            None,
+            sig.suppress_signal_hook,
+        )
     }
 
     fn maybe_call_debugger_for_signal(

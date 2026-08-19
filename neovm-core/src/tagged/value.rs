@@ -226,6 +226,25 @@ impl TaggedValue {
     /// as "absent" depending on context.
     pub const UNBOUND: Self = Self((UNBOUND_SYM_ID.0 as usize) << TAG_BITS | TAG_SYMBOL);
 
+    /// GNU's `dead_object ()` (`src/lisp.h:1353-1357`): "Return a Lisp_Object
+    /// value that does not correspond to any object. This can make some Lisp
+    /// objects on free lists recognizable in O(1)." GNU spells it
+    /// `make_lisp_ptr (NULL, Lisp_String)`; this is the same bit pattern here,
+    /// a STRING tag over a null pointer, which no live object can ever hold.
+    ///
+    /// It exists because the free list is threaded through the dead cells
+    /// themselves (`ConsCell::set_free_next`, matching GNU `sweep_conses`), so
+    /// a reclaimed cell's slots still decode as ordinary Lisp values. `nil` in
+    /// the car is indistinguishable from a real `nil`; `dead_object` is
+    /// distinguishable from every live value, which is the whole point.
+    pub const DEAD: Self = Self(TAG_STRING);
+
+    /// GNU `deadp` (`src/alloc.c:425-429`) — is this the free-list poison?
+    #[inline]
+    pub fn is_dead(self) -> bool {
+        self.0 == Self::DEAD.0
+    }
+
     // -- Fixnum --
 
     /// Create a fixnum (62-bit signed integer, no heap allocation).

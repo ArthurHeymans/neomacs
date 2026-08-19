@@ -251,3 +251,74 @@ fn minibuffer_quit_does_not_take_down_a_noninteractive_session() {
         "a plain quit keeps GNU's stderr-then-exit behavior: {reported:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// In-flight signal payload rooting (DIVERGENCES.md 161)
+// ---------------------------------------------------------------------------
+
+/// A signal that is unwinding lives only in a Rust `Flow::Signal`. GNU gets
+/// this for free — `signal_or_quit` carries the payload on the C stack and
+/// `mark_stack` scans it conservatively — but this collector is precise, so
+/// the payload has to be an explicit root or a collection reached from an
+/// `unwind-protect` cleanup reclaims it and `condition-case` binds a dangling
+/// cons.
+///
+/// This is the cheap, direct pin for that class: build a signal whose payload
+/// is heap-allocated, drop every OTHER reference to it, collect, and require
+/// the payload to still be a live list. Before the fix the cons was on the
+/// free list, so its car read back as [`Value::DEAD`] — GNU's `dead_object`.
+#[test]
+fn in_flight_signal_payload_survives_a_collection() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let flow = crate::emacs_core::error::signal_with_data(
+        LispCondition::Error,
+        Value::list(vec![Value::string("Malformed argument list")]),
+    );
+
+    // Nothing else references the payload: it is reachable ONLY through the
+    // in-flight signal, which is what the root set has to cover.
+    eval.gc_collect();
+
+    let Flow::Signal(sig) = &flow else {
+        panic!("signal_with_data builds a signal flow");
+    };
+    let raw = sig.raw_data.expect("signal_with_data records raw data");
+    assert!(raw.is_cons(), "payload stays a cons: {raw:?}");
+    assert!(
+        !raw.cons_car().is_dead(),
+        "the in-flight signal payload was collected while the signal was still \
+         unwinding (its cons is on the free list)"
+    );
+    assert_eq!(
+        print_value_with_eval(&eval, &super::make_signal_binding_value(sig)),
+        "(error \"Malformed argument list\")"
+    );
+}
+
+/// The same guarantee one level up: what `condition-case` binds must be a live
+/// datum after a collection, not a resurrected free-list cell. This is the
+/// shape the oracle probe `div_v8_cl_defun_key_aux_rest_optional` hit — the
+/// error datum printed as `(error . <garbage symbol>)` and the printer panicked
+/// in `resolve_sym_lisp_string`.
+#[test]
+fn condition_case_binding_value_survives_a_collection() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let flow = crate::emacs_core::error::signal_with_data(
+        LispCondition::Error,
+        Value::list(vec![Value::string("Malformed argument list ends with")]),
+    );
+    eval.gc_collect();
+
+    let Flow::Signal(sig) = &flow else {
+        panic!("signal flow");
+    };
+    let bound = super::make_signal_binding_value(sig);
+    assert_eq!(
+        print_value_with_eval(&eval, &bound),
+        "(error \"Malformed argument list ends with\")"
+    );
+}
