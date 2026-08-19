@@ -329,18 +329,26 @@ pub fn jit_runtime_enabled() -> bool {
 
 /// OSR (on-stack replacement): transfer a hot loop in a rarely-/once-called
 /// function into native code MID-execution (the case loop-heat's next-entry
-/// tier-up cannot reach). Opt-in via `NEOVM_JIT_OSR=on` (default OFF): a new
-/// correctness-critical path — the interpreter marshals its live operand stack
-/// into a native OSR entry, restricted to functions with no dynamic
-/// bind/handler/save ops (nothing to transfer). Off ⇒ the back-edge stays a
-/// pure interpreter loop, zero added cost.
+/// tier-up cannot reach). Default ON since the `mod` arith-intrinsic made the
+/// transferred loop a measured win on builtin-call-bearing bodies (list
+/// workload −25% wall; the shimmed-builtin overhead previously ate the
+/// transfer's gain — the reason this started life opt-in). Kill switch:
+/// `NEOVM_JIT_OSR=off` (same spelling family as `NEOVM_JIT`); the interpreter
+/// marshals its live operand stack into a native OSR entry, restricted to
+/// functions with no dynamic bind/handler/save ops (nothing to transfer).
+/// Off ⇒ the back-edge stays a pure interpreter loop, zero added cost.
 pub fn jit_osr_on() -> bool {
     #[cfg(test)]
     if let Some(o) = OSR_TEST_OVERRIDE.with(|c| c.get()) {
         return o;
     }
     static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| std::env::var("NEOVM_JIT_OSR").as_deref() == Ok("on"))
+    *ON.get_or_init(|| {
+        !matches!(
+            std::env::var("NEOVM_JIT_OSR").ok().as_deref(),
+            Some("0" | "off" | "false" | "no")
+        )
+    })
 }
 
 #[cfg(test)]
