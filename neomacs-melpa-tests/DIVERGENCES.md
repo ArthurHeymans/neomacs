@@ -15564,9 +15564,9 @@ Against a `cargo xtask fresh-build --release` binary of this branch (pdump
 re-generated and newer than the executable), every probe was re-run and diffed
 against GNU Emacs 31.0.90.
 
-`tmp/pw156/probe3.el`'s 147 rows are `diff` clean except THREE cells, all of them
-residual (1) and none introduced here: the ISO-2022 row's `call-process` and
-`make-process` text.  Before the fix 34 of those rows diverged
+`tmp/pw156/probe3.el`'s 147 rows are `diff` clean except TWO, both of them
+residual (1) and neither introduced here: the ISO-2022 case's `call-process` and
+`make-process` TEXT, whose coding-system names agree.  Before the fix 34 of those rows diverged
 (`tmp/pw156/probe3-diff-before.txt` against `tmp/pw156/probe3-diff-after.txt`).
 `tmp/pw156/pin.el` and `tmp/pw156/pin2.el` -- the elisp of the four pinned
 tests, twenty-five rows across the string, region, file, detection and process
