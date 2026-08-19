@@ -16946,13 +16946,14 @@ and a fresh GNU run of each reproduces those stored files exactly, so the
 baselines are still baselines.
 
 `cargo nextest run -p neovm-core` is 9083/9083 green (51 skipped,
-`tmp/pw159/core2.log`), which is 9081 before this entry plus its two new pins.
+`tmp/pw159/core3.log`), which is 9081 before this entry plus its two new pins.
 The 9081 is a measurement and not an inference: `tmp/pw159/core1.log` is the
 same suite run against the fix with the pins NOT yet written, 9081/9081, so the
 change moved nothing on its own.
 
 `cargo nextest run -p neovm-oracle-tests` is 38783/38783 green with NOT ONE pin
-moved (`tmp/pw159/oracle2.log`) -- the same 38783 entries 147, 151 and 156
+moved (`tmp/pw159/oracle3.log`, run with `--no-fail-fast` so the count is the
+whole suite and not a prefix of it) -- the same 38783 entries 147, 151 and 156
 counted, which is the number this entry most wanted, because a shared decoder is
 the widest possible change.
 
@@ -16976,13 +16977,21 @@ fixed one all pass (`tmp/pw159/racy-before.log`, `tmp/pw159/racy-after.log`), an
 the full re-run with `--no-fail-fast` is clean at 38783.
 
 The MELPA suites that carry real process bytes -- the eight name filters
-entries 151 and 156 used, 42 tests -- are 42/42 green (`tmp/pw159/melpa2.log`).
-The first run had `org_roam` failing on `ld.bfd: cannot find sqlite3-api.o`,
-which is entry 156's other recorded flake verbatim: two `make` invocations in
-one module build directory.  It passes on its own against both the pre-fix and
-the fixed binary (`tmp/pw159/orgroam-before.log`, `tmp/pw159/orgroam-after.log`).
-`org_roam` is in this set because the substring filter `test(rg)` matches `org`,
-which is also how entry 151 acquired it.
+entries 151 and 156 used, 42 tests -- are 42/42 green (`tmp/pw159/melpa4.log`).
+Two of the 42 flaked once each on a loaded machine and both were told apart from
+the change by re-measuring against the PRE-FIX binary rather than by re-running
+until green.  `org_roam` failed on `ld.bfd: cannot find sqlite3-api.o`, entry
+156's other recorded flake verbatim: two `make` invocations in one module build
+directory; it passes on its own against both binaries
+(`tmp/pw159/orgroam-before.log`, `tmp/pw159/orgroam-after.log`).
+`magit_log_buffer_file_margin_columns_match_gnu_full_screen` rendered
+`*scratch*` where the pin has a magit log buffer -- the TUI harness timing out
+before magit finished loading, on a screen whose every character is ASCII and
+therefore decodes identically under any of this entry's changes; it takes 5s
+alone and took 20.6s in that run, and passes against both binaries
+(`tmp/pw159/magit-before.log`, `tmp/pw159/magit-after.log`).  Both are in this
+set only because the substring filter `test(rg)` matches `org` and `margin`,
+which is also how entry 151 acquired its extras.
 
 `cargo check --workspace --all-targets` and `cargo fmt --all --check` are clean.
 
