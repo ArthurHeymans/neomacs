@@ -1845,7 +1845,11 @@ pub extern "C" fn neovm_jit_arith_spec(
                         return None;
                     }
                     let m = l % r;
-                    Some(if m != 0 && ((m < 0) != (r < 0)) { m + r } else { m })
+                    Some(if m != 0 && ((m < 0) != (r < 0)) {
+                        m + r
+                    } else {
+                        m
+                    })
                 }),
                 _ => {
                     debug_assert_eq!(kind, ARITH_KIND_LOGNOT);
@@ -3908,11 +3912,14 @@ pub(crate) fn force_inline_arith_for_test(on: bool) {
 /// `band`/`bor`/`bxor`/`ineg` on the TAGGED fixnum bits (the tag `2` survives
 /// `&`/`|`, is restored after `^`, and `ineg` maps a tagged fixnum to its
 /// `lognot`), guarded by a fixnum check that deopts, instead of the armed
-/// `neovm_jit_arith_spec` shim (which marshals 8 args). Redefinition is caught by
-/// the leaf's `inline_epoch` eviction. `ash` never inlines (overflow/bignum).
-/// Env `NEOVM_JIT_INLINE_ARITH=on` opts in (default OFF pending the shim-vs-inline
-/// A/B); AOT always keeps the shim (its loader owns arm/disarm — an inline op has
-/// no per-site epoch).
+/// `neovm_jit_arith_spec` shim (which marshals 8 args). `mod` inlines its
+/// floor-modulo on the untagged values (srem + branchless sign-fixup,
+/// zero-divisor deopt). Redefinition is caught by the leaf's `inline_epoch`
+/// eviction. `ash` never inlines (overflow/bignum).
+/// Default ON since the shim-vs-inline A/B (list workload −11.5% wall, no
+/// change elsewhere); `NEOVM_JIT_INLINE_ARITH=off` is the kill switch. AOT
+/// always keeps the shim (its loader owns arm/disarm — an inline op has no
+/// per-site epoch).
 fn jit_inline_arith_on() -> bool {
     #[cfg(test)]
     if let Some(o) = INLINE_ARITH_TEST_OVERRIDE.with(|c| c.get()) {
@@ -3920,7 +3927,12 @@ fn jit_inline_arith_on() -> bool {
     }
     use std::sync::OnceLock;
     static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| std::env::var("NEOVM_JIT_INLINE_ARITH").as_deref() == Ok("on"))
+    *ON.get_or_init(|| {
+        !matches!(
+            std::env::var("NEOVM_JIT_INLINE_ARITH").ok().as_deref(),
+            Some("0" | "off" | "false" | "no")
+        )
+    })
 }
 
 /// Which `ArithIntrinsic` ops Level-B lowers inline (everything but `ash`, whose
