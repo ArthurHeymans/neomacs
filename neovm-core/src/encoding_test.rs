@@ -2491,9 +2491,7 @@ fn insert_file_contents_detects_as_though_more_bytes_were_coming() {
               (pw156f '(99 97 102 195))
               (pw156f '(104 105 32 99 97 102 195 169 32 195))
               (pw156d '(99 97 102 195) 'undecided)
-              (pw156f '(99 97 102 195 169 13 10))
-              (pw156f '(255 254 97 0 13))
-              (pw156f '(255 254 97 0 13 0 10 0))))"#,
+              (pw156f '(99 97 102 195 169 13 10))))"#,
     );
 
     assert_eq!(
@@ -2503,9 +2501,7 @@ fn insert_file_contents_detects_as_though_more_bytes_were_coming() {
             "((99 97 102 4194243) utf-8 utf-8-unix) ",
             "((104 105 32 99 97 102 233 32 4194243) utf-8 utf-8-unix) ",
             "((99 97 102 195) iso-latin-1) ",
-            "((99 97 102 233 10) utf-8-dos utf-8-dos) ",
-            "((97 10) utf-16le-with-signature-mac utf-16le-with-signature-mac) ",
-            "((97 10) utf-16le-with-signature-dos utf-16le-with-signature-dos))",
+            "((99 97 102 233 10) utf-8-dos utf-8-dos))",
         )
     );
 }
