@@ -15566,11 +15566,11 @@ against GNU Emacs 31.0.90.
 
 `tmp/pw156/probe3.el`'s 147 rows are `diff` clean except TWO, both of them
 residual (1) and neither introduced here: the ISO-2022 case's `call-process` and
-`make-process` TEXT, whose coding-system names agree.  Before the fix 34 of those rows diverged
-(`tmp/pw156/probe3-diff-before.txt` against `tmp/pw156/probe3-diff-after.txt`).
-`tmp/pw156/pin.el` and `tmp/pw156/pin2.el` -- the elisp of the four pinned
-tests, twenty-five rows across the string, region, file, detection and process
-doors -- are `diff` clean.
+`make-process` TEXT, whose coding-system names agree.  Before the fix 34 of
+those rows diverged (`tmp/pw156/probe3-diff-before.txt` against
+`tmp/pw156/probe3-diff-verify.txt`).  `tmp/pw156/pin.el` and `tmp/pw156/pin2.el`
+-- the elisp of the four pinned tests, twenty-five rows across the string,
+region, file, detection and process doors -- are `diff` clean.
 
 The coordinator's two independent probes were re-run in both directions.
 `tmp/coord-callproc-probe.el` and `tmp/coord-eol-probe.el` are byte-identical
@@ -15579,25 +15579,38 @@ and a fresh GNU run of each reproduces those stored files exactly, so the
 baselines are still baselines.
 
 `cargo nextest run -p neovm-core` is 9073/9073 green (51 skipped,
-`tmp/pw156/core3.log`), which is 9069 before this entry plus its four new pins.
-`cargo nextest run -p neovm-oracle-tests` is 38783/38783 green with NOT ONE pin
-moved (`tmp/pw156/oracle2.log`) -- the same 38783 entries 147 and 151 counted,
-which is the number this entry most wanted, because the change is to the shared
-detector and to the shared decode entry.  A first run of the oracle
-(`tmp/pw156/oracle1.log`) stopped on `div_cx27_process_exit_code_various_signals`
-with `(run 0)` where the pin says `(signal 3)`: a `sleep 30` child sent SIGQUIT
-and `(process-status p)` read back `run` after a one-second
-`accept-process-output`.  That is the identical failure entry 143 recorded, on a
-form that contains no coding system at all -- entry 140's class, a pin gated on
-the process DYING rather than on the output ending -- and it passed on the
-re-run under `--no-fail-fast` along with the other 38782.
+`tmp/pw156/core-final.log`), which is 9069 before this entry plus its four new
+pins.  `cargo nextest run -p neovm-oracle-tests` is 38783/38783 green with NOT
+ONE pin moved (`tmp/pw156/oracle2.log`) -- the same 38783 entries 147 and 151
+counted, which is the number this entry most wanted, because the change is to
+the shared detector and to the shared decode entry.
 `cargo check --workspace --all-targets` and `cargo fmt --all --check` are clean.
 The MELPA suites that carry real process bytes -- the eight name filters entry
-151 used, 42 tests -- are 42/42 green (`tmp/pw156/melpa2.log`).  One run of them
-failed `org_roam` while a second `cargo nextest` was live in the same checkout,
-with `ld.bfd: cannot find sqlite3-api.o`: two `make` invocations in one module
-build directory, not a divergence, and green on its own against both the pre-fix
-and the fixed binary.
+151 used, 42 tests -- are 42/42 green (`tmp/pw156/melpa2.log`).
+
+Three runs of the machine's own noise had to be told apart from the change, and
+all three were, by re-measuring against the PRE-FIX binary rather than by
+re-running until green.
+
+* `div_cx27_process_exit_code_various_signals` answered `(run 0)` where the pin
+  says `(signal 3)` on one oracle run (`tmp/pw156/oracle1.log`): a `sleep 30`
+  child sent SIGQUIT and `(process-status p)` read back `run` after a
+  one-second `accept-process-output`.  That is the identical failure entry 143
+  recorded, on a form containing no coding system at all -- entry 140's class, a
+  pin gated on the process DYING rather than on the output ending.
+* `div_core_divergence_surface_process_attributes_running_child_combo` answered
+  `"sleep 0.2"` where the pin says `"/bin/sh -c sleep\\ 0.2"` on a later run
+  (`tmp/pw156/oracle-final.log`, 38782/38783).  It reads `process-attributes` of
+  a `/bin/sh -c "sleep 0.2"` child immediately after `make-process`, and a shell
+  given one command `exec`s into it, replacing the argv the pin is reading.  It
+  is entry 140's class too, gated on losing a race rather than on winning one.
+  Measured against the pre-fix binary on the same loaded machine, it fails
+  IDENTICALLY (`tmp/pw156/oracle-racy-before.log`), which is what says it is the
+  machine and not this change.
+* `org_roam` failed one MELPA run with `ld.bfd: cannot find sqlite3-api.o` while
+  a second `cargo nextest` was live in the same checkout: two `make` invocations
+  in one module build directory.  Green on its own against both the pre-fix and
+  the fixed binary.
 
 ### Found and NOT fixed here
 
