@@ -102,8 +102,8 @@ type MatchResult = Option<NormalizedMatch>;
 fn normalize(result: Option<(usize, MatchRegisters)>) -> MatchResult {
     result.map(|(match_start, registers)| NormalizedMatch {
         match_start,
-        group_starts: registers.start,
-        group_ends: registers.end,
+        group_starts: registers.start.to_vec(),
+        group_ends: registers.end.to_vec(),
     })
 }
 

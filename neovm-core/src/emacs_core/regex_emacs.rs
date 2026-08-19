@@ -631,17 +631,19 @@ fn relocate_charset_keys<V>(map: &mut HashMap<usize, V>, from: usize, from_end: 
 pub(crate) struct MatchRegisters {
     /// Start positions for each group (group 0 = full match).
     /// -1 means group did not participate in match.
-    pub start: Vec<i64>,
+    /// Inline up to 8 groups: GNU reuses one global `search_regs`, so a heap
+    /// Vec pair per match would be allocator churn GNU never pays.
+    pub start: SmallVec<[i64; 8]>,
 
     /// End positions for each group.
-    pub end: Vec<i64>,
+    pub end: SmallVec<[i64; 8]>,
 }
 
 impl MatchRegisters {
     pub fn new(num_groups: usize) -> Self {
         Self {
-            start: vec![-1; num_groups],
-            end: vec![-1; num_groups],
+            start: SmallVec::from_elem(-1, num_groups),
+            end: SmallVec::from_elem(-1, num_groups),
         }
     }
 
