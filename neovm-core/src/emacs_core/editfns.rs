@@ -86,6 +86,10 @@ editfns_cached_symbol!(deactivate_mark_symbol, "deactivate-mark");
 editfns_cached_symbol!(first_change_hook_symbol, "first-change-hook");
 editfns_cached_symbol!(before_change_functions_symbol, "before-change-functions");
 editfns_cached_symbol!(after_change_functions_symbol, "after-change-functions");
+editfns_cached_symbol!(
+    combine_after_change_calls_symbol,
+    "combine-after-change-calls"
+);
 
 pub(crate) fn buffer_read_only_active_in_state(
     obarray: &Obarray,
@@ -210,8 +214,10 @@ pub(crate) fn text_change_for_unchanged_extent_in_manager(
 
 /// Check whether `inhibit-modification-hooks` is non-nil.
 pub(crate) fn inhibit_modification_hooks(ctx: &crate::emacs_core::eval::Context) -> bool {
-    let sym =
-        crate::emacs_core::hook_runtime::hook_symbol_by_name(ctx, "inhibit-modification-hooks");
+    let sym = crate::emacs_core::hook_runtime::hook_symbol_by_id(
+        ctx,
+        inhibit_modification_hooks_symbol(),
+    );
     crate::emacs_core::hook_runtime::hook_value_by_id(ctx, sym).is_some_and(|v| v.is_truthy())
 }
 
@@ -720,8 +726,10 @@ impl BeforeChangeSpecialFunction {
 /// `before-change-functions` is either nil or the well-known
 /// `(t syntax-ppss-flush-cache)` special case.
 fn combine_after_change_calls_active(ctx: &crate::emacs_core::eval::Context) -> bool {
-    let combine_sym =
-        crate::emacs_core::hook_runtime::hook_symbol_by_name(ctx, "combine-after-change-calls");
+    let combine_sym = crate::emacs_core::hook_runtime::hook_symbol_by_id(
+        ctx,
+        combine_after_change_calls_symbol(),
+    );
     let combine_val =
         crate::emacs_core::hook_runtime::hook_value_by_id(ctx, combine_sym).unwrap_or(Value::NIL);
     if combine_val.is_nil() {
@@ -729,7 +737,7 @@ fn combine_after_change_calls_active(ctx: &crate::emacs_core::eval::Context) -> 
     }
 
     let before_sym =
-        crate::emacs_core::hook_runtime::hook_symbol_by_name(ctx, "before-change-functions");
+        crate::emacs_core::hook_runtime::hook_symbol_by_id(ctx, before_change_functions_symbol());
     let before_val =
         crate::emacs_core::hook_runtime::hook_value_by_id(ctx, before_sym).unwrap_or(Value::NIL);
     if before_val.is_nil() {

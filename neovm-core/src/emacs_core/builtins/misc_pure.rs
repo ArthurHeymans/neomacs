@@ -562,8 +562,12 @@ pub(crate) fn builtin_symbol_name_1(eval: &mut super::eval::Context, symbol: Val
 pub(crate) fn symbol_name_string_for_format(value: Value) -> Option<Value> {
     // Plain symbols only: a symbol-with-position keeps `format`'s existing
     // printed representation, as it does in GNU when symbols-with-pos are not
-    // enabled.
-    builtin_symbol_name_value(value, false).ok()
+    // enabled. NOT via builtin_symbol_name_value: do_format probes EVERY
+    // argument through here, and constructing (then discarding) that
+    // function's wrong-type-argument signal — which interns `symbolp` — for
+    // every fixnum argument was a measured per-format cost.
+    let id = super::symbols::symbol_id_checked(&value, false)?;
+    Some(crate::emacs_core::intern::materialize_symbol_name_value(id))
 }
 
 fn builtin_symbol_name_value(symbol: Value, symbols_with_pos_enabled: bool) -> EvalResult {
