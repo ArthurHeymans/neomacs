@@ -201,6 +201,15 @@ pub(crate) fn text_change_for_unchanged_extent_in_manager(
 // Buffer modification hooks — GNU Emacs signal_before_change / signal_after_change
 // ---------------------------------------------------------------------------
 
+/// Visible (buffer-local aware) value of a hook variable is non-nil.
+fn hook_symbol_value_truthy(
+    ctx: &crate::emacs_core::eval::Context,
+    sym: crate::emacs_core::intern::SymId,
+) -> bool {
+    let sym = crate::emacs_core::hook_runtime::hook_symbol_by_id(ctx, sym);
+    crate::emacs_core::hook_runtime::hook_value_by_id(ctx, sym).is_some_and(|v| v.is_truthy())
+}
+
 /// Check whether `inhibit-modification-hooks` is non-nil.
 pub(crate) fn inhibit_modification_hooks(ctx: &crate::emacs_core::eval::Context) -> bool {
     let sym = crate::emacs_core::hook_runtime::hook_symbol_by_id(
@@ -342,6 +351,26 @@ fn signal_before_change_with_kind(
     crate::emacs_core::textprop::prepare_interval_modification_for_change(
         ctx, current_id, beg, end,
     )?;
+
+    // Quiet fast path: when nothing can run under the bind — no
+    // first-change hook due, `before-change-functions` nil, no overlays —
+    // the `inhibit-modification-hooks` binding is unobservable. GNU binds
+    // unconditionally (insdel.c signal_before_change), but its bind is a C
+    // specpdl push; ours was ~590 Ir of bind+unbind per modification.
+    {
+        let first_change_due = ctx
+            .buffers
+            .get(current_id)
+            .is_some_and(|buf| buf.modified_state_value().is_nil())
+            && hook_symbol_value_truthy(ctx, first_change_hook_symbol());
+        if !first_change_due
+            && !hook_symbol_value_truthy(ctx, before_change_functions_symbol())
+            && !buffer_has_overlays(ctx, current_id)
+        {
+            ctx.last_overlay_modification_hooks = Vec::new();
+            return Ok(());
+        }
+    }
 
     // Convert byte positions to 1-based character positions.
     let (lisp_beg, lisp_end) = {
@@ -508,6 +537,23 @@ fn signal_after_change_with_kind(
     // hooks observe the buffer state from before this new edit's after-pass.
     if !ctx.combine_after_change_list.is_empty() {
         execute_combined_after_change(ctx)?;
+    }
+
+    // Quiet fast path (twin of the one in `signal_before_change_with_kind`):
+    // with `after-change-functions` nil, no recorded or live overlay hooks,
+    // no interval insert hooks, and no text-property intervals to report,
+    // nothing can run under the bind.
+    if !hook_symbol_value_truthy(ctx, after_change_functions_symbol())
+        && ctx.last_overlay_modification_hooks.is_empty()
+        && ctx.interval_insert_behind_hooks.is_nil()
+        && ctx.interval_insert_in_front_hooks.is_nil()
+        && !buffer_has_overlays(ctx, current_id)
+        && ctx
+            .buffers
+            .get(current_id)
+            .is_some_and(|buf| buf.text_props_is_empty())
+    {
+        return Ok(());
     }
 
     // Convert byte positions to 1-based character positions.
