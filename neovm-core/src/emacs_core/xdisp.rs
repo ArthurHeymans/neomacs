@@ -5812,6 +5812,9 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
         "char-script-table",
         make_char_table_with_extra_slots(Value::symbol("char-script-table"), Value::NIL, 1),
     );
+    // GNU DEFVAR_LISP (src/character.c:1138): a special, so a lexical-binding
+    // `let` of it binds dynamically and internal matcher reads see it.
+    obarray.make_special("char-script-table");
     // GNU's C default for `pre-redisplay-function` is `ignore` (xdisp.c:39133),
     // NOT nil. simple.el upgrades it to `redisplay--pre-redisplay-functions`
     // (the driver of the `pre-redisplay-functions` hook) ONLY when it still
