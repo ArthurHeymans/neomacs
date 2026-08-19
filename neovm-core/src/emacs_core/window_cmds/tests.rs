@@ -111,6 +111,36 @@ fn bootstrap_eval_with_frame(src: &str) -> Vec<String> {
     runtime_startup_eval_all(src)
 }
 
+/// Evaluate all forms in a FULLY BOOTED runtime whose terminal is marked
+/// usable.
+///
+/// This is where a test goes when it needs one of the seventeen names
+/// DIVERGENCES.md 154 deleted -- `delete-window', `delete-other-windows',
+/// `make-frame', `switch-to-buffer', `select-frame-set-input-focus' and the
+/// rest.  GNU has no C version of any of them: they are `window.el' and
+/// `frame.el' `defun's, so they exist only after `loadup.el', and the bare
+/// evaluator above is GNU BEFORE `loadup.el', where they are void in GNU too.
+///
+/// The terminal is marked usable because GNU's `make-frame' needs one --
+/// production `--batch' deliberately has none and GNU answers
+/// `(error "Unknown terminal type")' -- and the bare helper these tests came
+/// from marked it for exactly that reason.
+fn runtime_eval_with_usable_terminal(src: &str) -> Vec<String> {
+    let mut ev = runtime_startup_context();
+    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
+    ev.eval_str_each(src)
+        .iter()
+        .map(format_eval_result)
+        .collect()
+}
+
+fn runtime_eval_one_with_usable_terminal(src: &str) -> String {
+    runtime_eval_with_usable_terminal(src)
+        .into_iter()
+        .next()
+        .expect("result")
+}
+
 fn bootstrap_eval_one_with_frame(src: &str) -> String {
     bootstrap_eval_with_frame(src)
         .into_iter()
@@ -575,7 +605,7 @@ fn windowp_true() {
 #[test]
 fn windowp_true_for_stale_deleted_window() {
     crate::test_utils::init_test_tracing();
-    let r = eval_one_with_frame(
+    let r = runtime_eval_one_with_usable_terminal(
         "(let ((w (split-window-internal (selected-window) nil nil nil)))
            (delete-window w)
            (windowp w))",
@@ -614,7 +644,7 @@ fn window_buffer_returns_buffer() {
 #[test]
 fn window_buffer_returns_nil_for_stale_deleted_window() {
     crate::test_utils::init_test_tracing();
-    let r = eval_one_with_frame(
+    let r = runtime_eval_one_with_usable_terminal(
         "(let ((w (split-window-internal (selected-window) nil nil nil)))
            (delete-window w)
            (window-buffer w))",
@@ -1083,15 +1113,15 @@ fn gui_window_body_geometry_excludes_fringes_and_margins() {
             .expect("window-text-width"),
         Value::fixnum(748)
     );
+    // `window-edges' is lisp/window.el:3839 and has no Rust subr any more
+    // (DIVERGENCES.md 154).  Its BODY/PIXELWISE right edge is
+    // `left-body + (window-body-width W t)' and its bottom is
+    // `top-body + (window-body-height W t)', so the two numbers it would have
+    // added come from these C primitives; the width is asserted above.
     assert_eq!(
-        super::builtin_window_edges(&mut ev, vec![Value::NIL, Value::T, Value::NIL, Value::T])
-            .expect("window-edges"),
-        Value::list(vec![
-            Value::fixnum(16),
-            Value::fixnum(0),
-            Value::fixnum(764),
-            Value::fixnum(568),
-        ])
+        super::builtin_window_body_height(&mut ev, vec![Value::NIL, Value::T])
+            .expect("window-body-height"),
+        Value::fixnum(568)
     );
     assert_eq!(
         super::builtin_window_fringes(&mut ev, vec![Value::NIL]).expect("window-fringes"),
@@ -1567,7 +1597,7 @@ fn window_list_1_callable_paths_return_live_windows() {
 #[test]
 fn window_list_1_stale_window_signals_wrong_type_argument() {
     crate::test_utils::init_test_tracing();
-    let r = eval_one_with_frame(
+    let r = runtime_eval_one_with_usable_terminal(
         "(let ((w (split-window-internal (selected-window) nil nil nil)))
            (delete-window w)
            (list (condition-case err (window-list-1 w nil) (error (car err)))
@@ -1583,7 +1613,7 @@ fn window_list_1_stale_window_signals_wrong_type_argument() {
 #[test]
 fn window_list_1_all_frames_includes_other_frame_windows() {
     crate::test_utils::init_test_tracing();
-    let r = eval_one_with_frame(
+    let r = runtime_eval_one_with_usable_terminal(
         "(let ((f1 (selected-frame))
               (f2 (make-frame)))
            (let ((w1 (progn (select-frame f1) (selected-window)))
@@ -1604,7 +1634,7 @@ fn window_list_1_all_frames_includes_other_frame_windows() {
 #[test]
 fn get_buffer_window_all_frames_selects_gnu_frame_scope() {
     crate::test_utils::init_test_tracing();
-    let r = eval_one_with_frame(
+    let r = runtime_eval_one_with_usable_terminal(
         "(let ((f1 (selected-frame))
               (f2 (make-frame)))
            (let ((w1 (progn (select-frame f1) (selected-window)))
@@ -1987,7 +2017,7 @@ fn split_window_internal_enforces_arity() {
 #[test]
 fn split_delete_window_invalid_designators_signal_error() {
     crate::test_utils::init_test_tracing();
-    let results = eval_with_frame(
+    let results = runtime_eval_with_usable_terminal(
         "(condition-case err
              (split-window-internal 999999 nil nil nil)
            (error (car err)))
@@ -1999,14 +2029,23 @@ fn split_delete_window_invalid_designators_signal_error() {
          (condition-case err (delete-other-windows 999999) (error (car err)))
          (condition-case err (delete-other-windows 'foo) (error (car err)))",
     );
-    // GNU Emacs signals wrong-type-argument for invalid window
-    // designators (not generic error).
+    // `split-window-internal' is the C DEFUN (src/window.c) and signals
+    // `wrong-type-argument' for an invalid window designator.
     assert_eq!(results[0], "OK wrong-type-argument");
     assert_eq!(results[1], "OK wrong-type-argument");
-    assert_eq!(results[2], "OK wrong-type-argument");
-    assert_eq!(results[3], "OK wrong-type-argument");
-    assert_eq!(results[4], "OK wrong-type-argument");
-    assert_eq!(results[5], "OK wrong-type-argument");
+    // `delete-window' and `delete-other-windows' are NOT C: they are
+    // lisp/window.el:4318 and :4453 and start with
+    // `(window-normalize-window window)', which signals a PLAIN `error' whose
+    // message is "%s is not a valid window".  The Rust subrs answered
+    // `wrong-type-argument', and this assertion used to encode that.  Measured
+    // on GNU 31.0.90 -Q --batch (tmp/pw61/gnu-more.txt):
+    //   (delete-window 999999)        => (error "999999 is not a valid window")
+    //   (delete-other-windows 'foo)   => (error "foo is not a valid window")
+    // DIVERGENCES.md 154.
+    assert_eq!(results[2], "OK error");
+    assert_eq!(results[3], "OK error");
+    assert_eq!(results[4], "OK error");
+    assert_eq!(results[5], "OK error");
 }
 
 #[test]
@@ -2137,7 +2176,7 @@ fn select_window_works() {
 #[test]
 fn select_window_selects_a_live_child_windows_owning_frame() {
     crate::test_utils::init_test_tracing();
-    let result = eval_one_with_frame(
+    let result = runtime_eval_one_with_usable_terminal(
         "(let* ((parent (selected-frame))
                 (child (make-frame
                         (list (cons 'parent-frame parent)
@@ -2231,7 +2270,7 @@ fn select_window_runs_buffer_list_update_hook_unless_norecord() {
 #[test]
 fn select_window_swaps_buffer_point_between_windows() {
     crate::test_utils::init_test_tracing();
-    let result = eval_one_with_frame(
+    let result = runtime_eval_one_with_usable_terminal(
         "(let ((w1 (selected-window)))
            (set-buffer (window-buffer w1))
            (insert \"0123456789abcdefghijklmnopqrstuvwxyz\")
@@ -2482,10 +2521,8 @@ fn window_use_time_and_old_state_queries_match_batch_defaults_and_error_predicat
 #[test]
 fn window_bump_use_time_tracks_second_most_recent_window() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let out = ev
-        .eval_str_each(
-            "(let* ((w1 (selected-window))
+    let out = runtime_eval_with_usable_terminal(
+        "(let* ((w1 (selected-window))
                 (w2 (split-window-internal (selected-window) nil nil nil)))
            (list (window-use-time w1)
                  (window-use-time w2)
@@ -2498,10 +2535,7 @@ fn window_bump_use_time_tracks_second_most_recent_window() {
                (let ((w (split-window-internal (selected-window) nil nil nil)))
                  (delete-window w)
                  (condition-case err (window-bump-use-time w) (error (car err)))))",
-        )
-        .iter()
-        .map(format_eval_result)
-        .collect::<Vec<_>>();
+    );
     assert_eq!(out[0], "OK (1 0 1 2 1 nil)");
     assert_eq!(
         out[1],
@@ -2539,10 +2573,8 @@ fn window_bump_use_time_shared_state_smoke() {
 #[test]
 fn window_vscroll_helpers_match_batch_defaults_and_error_predicates() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let out = ev
-        .eval_str_each(
-            "(let* ((w (selected-window))
+    let out = runtime_eval_with_usable_terminal(
+        "(let* ((w (selected-window))
                 (m (minibuffer-window)))
            (list (window-vscroll w)
                  (window-vscroll m)
@@ -2565,10 +2597,7 @@ fn window_vscroll_helpers_match_batch_defaults_and_error_predicates() {
            (delete-window w)
            (list (condition-case err (window-vscroll w) (error (car err)))
                  (condition-case err (set-window-vscroll w 1) (error (car err)))))",
-        )
-        .iter()
-        .map(format_eval_result)
-        .collect::<Vec<_>>();
+    );
     assert_eq!(out[0], "OK (0 0 0 0 0 0 0 0 0 0)");
     assert_eq!(
         out[1],
@@ -2635,10 +2664,8 @@ fn window_scroll_state_shared_state_smoke() {
 #[test]
 fn window_hscroll_and_margin_setters_match_batch_defaults_and_error_predicates() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let out = ev
-        .eval_str_each(
-            "(let* ((w (selected-window))
+    let out = runtime_eval_with_usable_terminal(
+        "(let* ((w (selected-window))
                 (m (minibuffer-window)))
            (list (window-hscroll w)
                  (set-window-hscroll w 3)
@@ -2681,10 +2708,7 @@ fn window_hscroll_and_margin_setters_match_batch_defaults_and_error_predicates()
            (delete-window w)
            (list (condition-case err (set-window-hscroll w 1) (error (car err)))
                  (condition-case err (set-window-margins w 1 2) (error (car err)))))",
-        )
-        .iter()
-        .map(format_eval_result)
-        .collect::<Vec<_>>();
+    );
     assert_eq!(
         out[0],
         "OK (0 3 3 0 0 97 97 (nil) t (1 . 2) nil t (nil) t (3) nil 0 4 4 (nil) t (4 . 5))"
@@ -2699,10 +2723,8 @@ fn window_hscroll_and_margin_setters_match_batch_defaults_and_error_predicates()
 #[test]
 fn window_fringes_and_scroll_bar_setters_match_batch_defaults_and_error_predicates() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let out = ev
-        .eval_str_each(
-            "(let* ((w (selected-window))
+    let out = runtime_eval_with_usable_terminal(
+        "(let* ((w (selected-window))
                 (m (minibuffer-window)))
            (list (window-fringes w)
                  (window-fringes m)
@@ -2733,10 +2755,7 @@ fn window_fringes_and_scroll_bar_setters_match_batch_defaults_and_error_predicat
            (delete-window w)
            (list (condition-case err (set-window-fringes w 0 0) (error (car err)))
                  (condition-case err (set-window-scroll-bars w nil) (error (car err)))))",
-        )
-        .iter()
-        .map(format_eval_result)
-        .collect::<Vec<_>>();
+    );
     assert_eq!(
         out[0],
         "OK ((0 0 nil nil) (0 0 nil nil) nil nil nil (0 0 nil nil) (0 0 nil nil) (nil 0 t nil 0 t nil) (nil 0 t nil 0 t nil) nil nil (nil 0 t nil 0 t nil) (nil 0 t nil 0 t nil) nil nil (0 0 nil nil) (nil 0 t nil 0 t nil))"
@@ -2799,10 +2818,8 @@ fn window_parameter_helpers_match_batch_defaults_and_key_semantics() {
 #[test]
 fn window_display_table_helpers_match_batch_defaults_and_set_get_semantics() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let out = ev
-        .eval_str_each(
-            "(let* ((w (selected-window))
+    let out = runtime_eval_with_usable_terminal(
+        "(let* ((w (selected-window))
                 (m (minibuffer-window))
                 (dt '(1 2 3)))
            (list (null (window-display-table w))
@@ -2827,10 +2844,7 @@ fn window_display_table_helpers_match_batch_defaults_and_set_get_semantics() {
            (delete-window w)
            (list (condition-case err (window-display-table w) (error (car err)))
                  (condition-case err (set-window-display-table w nil) (error (car err)))))",
-        )
-        .iter()
-        .map(format_eval_result)
-        .collect::<Vec<_>>();
+    );
     assert_eq!(out[0], "OK (t t t t t t t t t t t t)");
     assert_eq!(
         out[1],
@@ -2842,10 +2856,8 @@ fn window_display_table_helpers_match_batch_defaults_and_set_get_semantics() {
 #[test]
 fn window_cursor_type_helpers_match_batch_defaults_and_set_get_semantics() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let out = ev
-        .eval_str_each(
-            "(let* ((w (selected-window))
+    let out = runtime_eval_with_usable_terminal(
+        "(let* ((w (selected-window))
                 (m (minibuffer-window)))
            (list (window-cursor-type w)
                  (window-cursor-type m)
@@ -2870,10 +2882,7 @@ fn window_cursor_type_helpers_match_batch_defaults_and_set_get_semantics() {
            (delete-window w)
            (list (condition-case err (window-cursor-type w) (error (car err)))
                  (condition-case err (set-window-cursor-type w nil) (error (car err)))))",
-        )
-        .iter()
-        .map(format_eval_result)
-        .collect::<Vec<_>>();
+    );
     assert_eq!(out[0], "OK (t t nil nil bar bar t t hbar hbar nil nil)");
     assert_eq!(
         out[1],
@@ -3464,20 +3473,14 @@ fn previous_window_wraps() {
 #[test]
 fn frame_ops_enforce_max_arity() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
-    let out = ev
-        .eval_str_each(
-            "(condition-case err (make-frame nil nil) (error (car err)))
+    let out = runtime_eval_with_usable_terminal(
+        "(condition-case err (make-frame nil nil) (error (car err)))
          (condition-case err (delete-frame nil nil nil) (error (car err)))
          (condition-case err (frame-parameter nil 'name nil) (error (car err)))
          (condition-case err (frame-parameters nil nil) (error (car err)))
          (condition-case err (modify-frame-parameters nil nil nil) (error (car err)))
          (condition-case err (frame-visible-p nil nil) (error (car err)))",
-        )
-        .iter()
-        .map(format_eval_result)
-        .collect::<Vec<_>>();
+    );
     assert_eq!(out[0], "OK wrong-number-of-arguments");
     assert_eq!(out[1], "OK wrong-number-of-arguments");
     assert_eq!(out[2], "OK wrong-number-of-arguments");
@@ -3686,11 +3689,8 @@ fn frame_query_builtins_use_internal_window_system_state() {
 #[test]
 fn select_frame_arity_designators_and_selection() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
-    let out = ev
-        .eval_str_each(
-            "(condition-case err (select-frame) (error (car err)))
+    let out = runtime_eval_with_usable_terminal(
+        "(condition-case err (select-frame) (error (car err)))
          (condition-case err (select-frame nil) (error err))
          (condition-case err (select-frame \"x\") (error err))
          (condition-case err (select-frame 999999) (error err))
@@ -3701,10 +3701,7 @@ fn select_frame_arity_designators_and_selection() {
                      (eq (selected-frame) f2))
              (select-frame f1)
              (delete-frame f2)))",
-        )
-        .iter()
-        .map(format_eval_result)
-        .collect::<Vec<_>>();
+    );
     assert_eq!(out[0], "OK wrong-number-of-arguments");
     assert_eq!(out[1], "OK (wrong-type-argument frame-live-p nil)");
     assert_eq!(out[2], "OK (wrong-type-argument frame-live-p \"x\")");
@@ -3715,20 +3712,15 @@ fn select_frame_arity_designators_and_selection() {
 #[test]
 fn select_frame_set_input_focus_arity_designators_and_result() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    let out = ev
-        .eval_str_each(
-            "(condition-case err (select-frame-set-input-focus) (error (car err)))
+    let out = runtime_eval_with_usable_terminal(
+        "(condition-case err (select-frame-set-input-focus) (error (car err)))
          (condition-case err (select-frame-set-input-focus nil) (error err))
          (condition-case err (select-frame-set-input-focus \"x\") (error err))
          (condition-case err (select-frame-set-input-focus 999999) (error err))
          (let ((f (selected-frame)))
            (list (select-frame-set-input-focus f)
                  (eq (selected-frame) f)))",
-        )
-        .iter()
-        .map(format_eval_result)
-        .collect::<Vec<_>>();
+    );
     assert_eq!(out[0], "OK wrong-number-of-arguments");
     assert_eq!(out[1], "OK (wrong-type-argument frame-live-p nil)");
     assert_eq!(out[2], "OK (wrong-type-argument frame-live-p \"x\")");
@@ -3739,10 +3731,7 @@ fn select_frame_set_input_focus_arity_designators_and_result() {
 #[test]
 fn set_frame_selected_window_matches_selection_and_error_semantics() {
     crate::test_utils::init_test_tracing();
-    let mut ev = Context::new();
-    crate::emacs_core::terminal::pure::mark_selected_terminal_usable_for_test(&ev);
-    let out = ev
-        .eval_str_each(
+    let out = runtime_eval_with_usable_terminal(
         "(condition-case err (set-frame-selected-window) (error (car err)))
          (condition-case err (set-frame-selected-window nil nil) (error err))
          (condition-case err (set-frame-selected-window nil 999999) (error err))
@@ -3792,10 +3781,7 @@ fn set_frame_selected_window_matches_selection_and_error_semantics() {
              (delete-window w2)))
          (list (condition-case err (funcall #'set-frame-selected-window nil (selected-window) nil nil) (error err))
                (condition-case err (apply #'set-frame-selected-window '(nil)) (error err)))",
-    )
-        .iter()
-        .map(format_eval_result)
-        .collect::<Vec<_>>();
+    );
     assert_eq!(out[0], "OK wrong-number-of-arguments");
     assert_eq!(out[1], "OK (wrong-type-argument window-live-p nil)");
     assert_eq!(out[2], "OK (wrong-type-argument window-live-p 999999)");
@@ -3968,7 +3954,7 @@ fn frame_list_has_one() {
 #[test]
 fn make_frame_creates_new() {
     crate::test_utils::init_test_tracing();
-    let results = eval_with_frame(
+    let results = runtime_eval_with_usable_terminal(
         "(make-frame)
          (length (frame-list))",
     );
@@ -5239,7 +5225,7 @@ fn x_create_frame_reserves_tab_bar_space_above_root_window() {
 }
 
 #[test]
-fn make_frame_uses_gui_creation_path_when_display_host_is_active() {
+fn x_create_frame_realizes_the_gui_frame_make_frame_delegates_to() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let scratch = ev.buffers.create_buffer("*scratch*");
@@ -5264,7 +5250,12 @@ fn make_frame_uses_gui_creation_path_when_display_host_is_active() {
         Value::cons(Value::symbol("width"), Value::fixnum(80)),
         Value::cons(Value::symbol("height"), Value::fixnum(25)),
     ]);
-    let created = super::builtin_make_frame(&mut ev, vec![params]).expect("make-frame");
+    // GNU owns `make-frame' in Lisp (lisp/frame.el:1019) and it funcalls
+    // `frame-creation-function', which for a window system reaches the C
+    // primitive `x-create-frame' (src/xfns.c).  DIVERGENCES.md 154 deleted the
+    // Rust `make-frame' subr, whose GUI arm was one line -- a call to exactly
+    // this -- so the test asks the primitive frame.el delegates to.
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
 
     let created_id = crate::window::FrameId(
         created
@@ -5394,7 +5385,7 @@ fn x_create_frame_prefers_display_host_primary_window_size_without_explicit_geom
 #[test]
 fn delete_frame_works() {
     crate::test_utils::init_test_tracing();
-    let results = eval_with_frame(
+    let results = runtime_eval_with_usable_terminal(
         "(let ((f2 (make-frame)))
            (delete-frame f2)
            (length (frame-list)))",
@@ -5405,7 +5396,7 @@ fn delete_frame_works() {
 #[test]
 fn delete_frame_on_dead_frame_object_returns_nil() {
     crate::test_utils::init_test_tracing();
-    let results = eval_with_frame(
+    let results = runtime_eval_with_usable_terminal(
         "(let ((f2 (make-frame)))
            (delete-frame f2)
            (delete-frame f2))",
@@ -5543,8 +5534,14 @@ fn frame_builtins_accept_frame_handle_values() {
         crate::emacs_core::frame::builtin_select_frame(&mut ev, vec![frame]).unwrap(),
         Value::make_frame(fid.0)
     );
+    // `select-frame-set-input-focus' is lisp/frame.el:1262 and has no Rust
+    // subr any more (DIVERGENCES.md 154).  Its body is `select-frame' --
+    // asserted just above -- plus `raise-frame' and `x-focus-frame'.
+    // `raise-frame' is the one of those two a NON-graphical frame handle must
+    // still be accepted by; `x-focus-frame' signals unless the frame has a
+    // window system, and is asserted in display_test.rs where one does.
     assert_eq!(
-        super::builtin_select_frame_set_input_focus(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::builtins::symbols::builtin_raise_frame(vec![frame]).unwrap(),
         Value::NIL
     );
 }
@@ -6799,7 +6796,7 @@ fn switch_to_buffer_changes_window() {
 #[test]
 fn switch_to_buffer_runs_buffer_list_update_hook_unless_norecord() {
     crate::test_utils::init_test_tracing();
-    let result = eval_one_with_frame(
+    let result = runtime_eval_one_with_usable_terminal(
         "(let ((stb-log nil))
            (setq buffer-list-update-hook
                  (list (lambda ()
@@ -6813,7 +6810,16 @@ fn switch_to_buffer_runs_buffer_list_update_hook_unless_norecord() {
                      (buffer-name)
                      (buffer-name (window-buffer))))))",
     );
-    assert_eq!(result, "OK (nil (\"stb-hook\") \"stb-hook\" \"stb-hook\")");
+    // Measured on GNU 31.0.90 -Q --batch (tmp/pw61/gnu-more.txt).  The Rust
+    // subr ran `buffer-list-update-hook' only for the recording call; GNU runs
+    // it from `get-buffer-create' as well (src/buffer.c), so the NORECORD call
+    // still logs twice -- under the name that is current at the time, which is
+    // still "*scratch*".  DIVERGENCES.md 154: the old expectation was the Rust
+    // subr's answer, not GNU's.
+    assert_eq!(
+        result,
+        "OK ((\"*scratch*\" \"*scratch*\") (\"stb-hook\" \"*scratch*\") \"stb-hook\" \"stb-hook\")"
+    );
 }
 
 #[test]
@@ -7010,7 +7016,7 @@ fn set_window_configuration_preserves_reused_window_history_across_gc() {
 #[test]
 fn set_window_configuration_keeps_live_point_for_the_saved_current_buffer() {
     crate::test_utils::init_test_tracing();
-    let results = eval_with_frame(
+    let results = runtime_eval_with_usable_terminal(
         r#"(save-current-buffer
              (let ((b (get-buffer-create "wcfg-pt-a"))
                    (other (selected-window))
@@ -7394,14 +7400,20 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
             .expect("presented geometry");
     }
 
-    let edges = super::builtin_window_edges(
-        &mut ev,
-        vec![Value::make_window(wid.0), Value::T, Value::NIL, Value::T],
-    )
-    .expect("window body pixel edges");
-    let edges = crate::emacs_core::value::list_to_vec(&edges).expect("edges list");
-
-    assert_eq!(edges[1], Value::fixnum(22));
+    // GNU's `window-edges' (lisp/window.el:3839) computes a body's TOP as
+    //   (window-pixel-top W) + (frame-internal-border-width FRAME)
+    //   + (window-header-line-height W) + (window-tab-line-height W)
+    // and it is Lisp there and here -- DIVERGENCES.md 154 deleted the Rust
+    // subr.  Ask the four C primitives the Lisp reads: the RENDERED tab line
+    // (17) and header line (5) must beat the stale 999s in the snapshot's
+    // scalar fields, which is what this test is about.
+    let top_body = ev
+        .eval_str(
+            "(+ (window-pixel-top) (frame-internal-border-width)
+                (window-header-line-height) (window-tab-line-height))",
+        )
+        .expect("body top from the C primitives `window-edges' reads");
+    assert_eq!(top_body, Value::fixnum(22));
 
     let posn = crate::emacs_core::xdisp::builtin_posn_at_point(
         &mut ev,
@@ -7415,7 +7427,7 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
     let glyph_height = posn[9].cons_cdr().as_fixnum().expect("glyph height");
 
     assert_eq!(
-        edges[1].as_fixnum().expect("body top") + glyph_y + glyph_height,
+        top_body.as_fixnum().expect("body top") + glyph_y + glyph_height,
         330
     );
 }

@@ -676,6 +676,9 @@ mod process_launchers_are_lisp_only_test;
 mod lisp_only_misc_names_test;
 
 #[cfg(test)]
+mod lisp_only_window_frame_names_test;
+
+#[cfg(test)]
 mod rust_subrs_shadowed_by_lisp_test;
 
 // -----------------------------------------------------------------------
@@ -3116,24 +3119,15 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
-    ctx.defsubr(
-        "window-edges",
-        super::window_cmds::builtin_window_edges,
-        0,
-        Some(4),
-    );
-    ctx.defsubr(
-        "window-pixel-edges",
-        super::window_cmds::builtin_window_pixel_edges,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "window-absolute-pixel-edges",
-        super::window_cmds::builtin_window_absolute_pixel_edges,
-        0,
-        Some(1),
-    );
+    // `window-edges' (lisp/window.el:3839), `window-pixel-edges' (:3922) and
+    // `window-absolute-pixel-edges' (:3937) are Lisp and only Lisp: GNU has no
+    // DEFUN for any of the three (DIVERGENCES.md 154).  `window-edges' is
+    // written over the C primitives registered around here --
+    // `window-pixel-left', `window-pixel-top', `window-pixel-width',
+    // `window-pixel-height', `window-left-column', `window-top-line',
+    // `window-total-width', `window-total-height', `window-body-width',
+    // `window-body-height' -- and the other two are one-line wrappers over
+    // `window-edges' itself, not over any primitive.
     ctx.defsubr(
         "window-body-height",
         super::window_cmds::builtin_window_body_height,
@@ -3263,24 +3257,11 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             Some(5),
         ),
     );
-    ctx.defsubr(
-        "delete-window",
-        super::window_cmds::builtin_delete_window,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "delete-other-windows",
-        super::window_cmds::builtin_delete_other_windows,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "fit-window-to-buffer",
-        super::window_cmds::builtin_fit_window_to_buffer,
-        0,
-        Some(6),
-    );
+    // `delete-window' (lisp/window.el:4318), `delete-other-windows' (:4453)
+    // and `fit-window-to-buffer' (:10307) are Lisp and only Lisp
+    // (DIVERGENCES.md 154).  The C primitives they are written over --
+    // `delete-window-internal' and `delete-other-windows-internal'
+    // (src/window.c) -- are registered below and stay.
     ctx.defsubr(
         "select-window",
         super::window_cmds::builtin_select_window,
@@ -3443,12 +3424,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
         super::interactive::BuiltinInteractiveSpec::String(""),
     );
-    ctx.defsubr(
-        "make-frame",
-        super::window_cmds::builtin_make_frame,
-        0,
-        None,
-    );
+    // `make-frame' is lisp/frame.el:1019, not a DEFUN (DIVERGENCES.md 154).
+    // It funcalls `frame-creation-function', which on a text terminal reaches
+    // `make-terminal-frame' -- that one IS a C DEFUN (src/frame.c) and stays.
     ctx.defsubr_interactive(
         "iconify-frame",
         super::frame::builtin_iconify_frame,
@@ -3653,6 +3631,16 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(1),
     );
+    // `display-color-cells' is lisp/frame.el:2966 and NOT a DEFUN, so this
+    // registration is a shadow like the seventeen DIVERGENCES.md 154 deleted --
+    // but it is the one that could not go yet.  `loadup.el' loads `faces' at
+    // :160 and `frame' at :255, and our `faces.el' load reaches this name
+    // through `show-paren-match's `((background dark) (min-colors 4))' clause;
+    // GNU's cannot, or GNU could not bootstrap.  The cause is the
+    // `background-mode' parameter we seed early; see the doc comment on
+    // `builtin_display_color_cells' (display.rs) for the measured backtrace.
+    // Its C neighbours `x-display-color-cells' (src/xfns.c:5714) and
+    // `tty-display-color-cells' (src/term.c:2226) stay registered either way.
     ctx.defsubr(
         "display-color-cells",
         super::display::builtin_display_color_cells,
@@ -6303,12 +6291,11 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             BuiltinNoEvalPlaceholder::Nil,
         ),
     );
-    ctx.defsubr(
-        "color-defined-p",
-        |ctx, args| super::xfaces::builtin_xw_color_defined_p_ctx(ctx, args),
-        0,
-        None,
-    );
+    // `color-defined-p' is lisp/faces.el:1923, not a DEFUN (DIVERGENCES.md
+    // 154).  Its body dispatches on `display-graphic-p' to `xw-color-defined-p'
+    // -- registered immediately above, and a C DEFUN in GNU -- or to
+    // `tty-color-translate'.  Registering the graphical arm under the generic
+    // name skipped that dispatch.
     register_builtin(
         ctx,
         BuiltinRegistration::placeholder(
@@ -6319,12 +6306,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             BuiltinNoEvalPlaceholder::Nil,
         ),
     );
-    ctx.defsubr(
-        "color-values",
-        |ctx, args| super::xfaces::builtin_xw_color_values_ctx(ctx, args),
-        0,
-        None,
-    );
+    // `color-values' is lisp/faces.el:1940, not a DEFUN (DIVERGENCES.md 154),
+    // and dispatches the same way: `xw-color-values' (above, a C DEFUN) or
+    // `tty-color-values'.
     register_builtin(
         ctx,
         BuiltinRegistration::placeholder(
@@ -7537,12 +7521,9 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr(
-        "select-frame-set-input-focus",
-        super::window_cmds::builtin_select_frame_set_input_focus,
-        0,
-        None,
-    );
+    // `select-frame-set-input-focus' is lisp/frame.el:1262, not a DEFUN
+    // (DIVERGENCES.md 154).  Its body is `select-frame' + `x-focus-frame' +
+    // `raise-frame', all three C DEFUNs that stay registered.
     ctx.defsubr(
         "modify-frame-parameters",
         super::frame::builtin_modify_frame_parameters,
@@ -9549,51 +9530,16 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(2),
     );
 
-    // -- Window builtins: display-buffer, switch-to-buffer, pop-to-buffer --
-    ctx.defsubr(
-        "switch-to-buffer",
-        super::window_cmds::builtin_switch_to_buffer,
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "display-buffer",
-        super::window_cmds::builtin_display_buffer,
-        1,
-        Some(3),
-    );
-    ctx.defsubr(
-        "pop-to-buffer",
-        super::window_cmds::builtin_pop_to_buffer,
-        1,
-        Some(3),
-    );
+    // -- Window builtins: `switch-to-buffer' (lisp/window.el:9558),
+    // `display-buffer' (:8166) and `pop-to-buffer' (:9403) are Lisp and only
+    // Lisp (DIVERGENCES.md 154).  The C primitives underneath them --
+    // `set-window-buffer', `select-window', `set-buffer' -- stay registered.
 
-    // -- Window tree / resize builtins --
-    ctx.defsubr(
-        "balance-windows",
-        super::window_cmds::builtin_balance_windows,
-        0,
-        Some(1),
-    );
-    ctx.defsubr(
-        "enlarge-window",
-        super::window_cmds::builtin_enlarge_window,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "shrink-window",
-        super::window_cmds::builtin_shrink_window,
-        1,
-        Some(2),
-    );
-    ctx.defsubr(
-        "window-tree",
-        super::window_cmds::builtin_window_tree,
-        0,
-        Some(1),
-    );
+    // -- Window tree / resize: `balance-windows' (lisp/window.el:6222),
+    // `enlarge-window' (:3714), `shrink-window' (:3759) and `window-tree'
+    // (:3999) are Lisp and only Lisp (DIVERGENCES.md 154).  They are written
+    // over `window-resize-apply', `window-resize-apply-total' and
+    // `frame-root-window', which are C DEFUNs and stay registered.
 
     // GNU exposes public evaluator-owned entries like `if` and `throw` as
     // real subrs in the function cell even though they are dispatched by the

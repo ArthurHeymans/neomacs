@@ -4507,11 +4507,19 @@ fn buffer_list_moves_selected_buffer_to_front_like_gnu() {
     let target = builtin_get_buffer_create(&mut eval, vec![Value::string("buffer-list-target")])
         .expect("target");
 
-    crate::emacs_core::window_cmds::builtin_switch_to_buffer(
-        &mut eval,
-        vec![Value::string("buffer-list-target")],
+    // GNU's `switch-to-buffer' (lisp/window.el:9558) reduces to three C
+    // primitives, and only one of them touches the list this test measures:
+    // `record_buffer' is reachable from Lisp ONLY through `Fselect_window'
+    // (src/window.c:582; the comment at :540 says so in as many words).
+    // DIVERGENCES.md 154 deleted the Rust `switch-to-buffer' subr, so the
+    // setup now names the C primitives GNU's Lisp would have called.
+    eval.eval_str(
+        r#"(let ((b (get-buffer "buffer-list-target")))
+             (set-window-buffer (selected-window) b)
+             (select-window (selected-window))
+             (set-buffer b))"#,
     )
-    .expect("switch-to-buffer");
+    .expect("switch to the target buffer through GNU's C primitives");
 
     assert_eq!(
         builtin_buffer_list(&mut eval, vec![]).expect("buffer-list"),
@@ -4533,11 +4541,19 @@ fn bury_buffer_internal_moves_buffer_to_end_like_gnu() {
     let target = builtin_get_buffer_create(&mut eval, vec![Value::string("bury-order-target")])
         .expect("target");
 
-    crate::emacs_core::window_cmds::builtin_switch_to_buffer(
-        &mut eval,
-        vec![Value::string("bury-order-target")],
+    // GNU's `switch-to-buffer' (lisp/window.el:9558) reduces to three C
+    // primitives, and only one of them touches the list this test measures:
+    // `record_buffer' is reachable from Lisp ONLY through `Fselect_window'
+    // (src/window.c:582; the comment at :540 says so in as many words).
+    // DIVERGENCES.md 154 deleted the Rust `switch-to-buffer' subr, so the
+    // setup now names the C primitives GNU's Lisp would have called.
+    eval.eval_str(
+        r#"(let ((b (get-buffer "bury-order-target")))
+             (set-window-buffer (selected-window) b)
+             (select-window (selected-window))
+             (set-buffer b))"#,
     )
-    .expect("switch-to-buffer");
+    .expect("switch to the target buffer through GNU's C primitives");
     builtin_bury_buffer_internal(&mut eval, vec![target]).expect("bury-buffer-internal");
 
     assert_eq!(
@@ -4561,11 +4577,19 @@ fn buffer_list_frame_arg_moves_displayed_buffer_to_front_like_gnu() {
     let target = builtin_get_buffer_create(&mut eval, vec![Value::string("buffer-list-target")])
         .expect("target");
 
-    crate::emacs_core::window_cmds::builtin_switch_to_buffer(
-        &mut eval,
-        vec![Value::string("buffer-list-target")],
+    // GNU's `switch-to-buffer' (lisp/window.el:9558) reduces to three C
+    // primitives, and only one of them touches the list this test measures:
+    // `record_buffer' is reachable from Lisp ONLY through `Fselect_window'
+    // (src/window.c:582; the comment at :540 says so in as many words).
+    // DIVERGENCES.md 154 deleted the Rust `switch-to-buffer' subr, so the
+    // setup now names the C primitives GNU's Lisp would have called.
+    eval.eval_str(
+        r#"(let ((b (get-buffer "buffer-list-target")))
+             (set-window-buffer (selected-window) b)
+             (select-window (selected-window))
+             (set-buffer b))"#,
     )
-    .expect("switch-to-buffer");
+    .expect("switch to the target buffer through GNU's C primitives");
 
     assert_eq!(
         builtin_buffer_list(&mut eval, vec![frame]).expect("buffer-list"),

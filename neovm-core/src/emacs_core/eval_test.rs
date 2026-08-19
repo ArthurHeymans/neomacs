@@ -10741,7 +10741,10 @@ fn delete_frame_runs_before_and_after_delete_hooks() {
     let result = eval_one_with_frame(
         "(progn
            (setq hook-log nil)
-           (let ((f2 (make-frame)))
+           ;; `make-frame' is lisp/frame.el:1019 and has no subr any more
+           ;; (DIVERGENCES.md 154); on a text terminal its
+           ;; `frame-creation-function' reaches this C DEFUN (src/frame.c:1736).
+           (let ((f2 (make-terminal-frame nil)))
              (setq delete-frame-functions
                    (list (lambda (frame)
                            (setq hook-log
@@ -12097,17 +12100,37 @@ fn set_window_configuration_reconciles_restored_batch_frame_geometry() {
 
     let result = ev
         .eval_str(
-            r#"(let ((before
-                       (list (window-total-height (frame-root-window))
-                             (window-pixel-edges (frame-root-window)))))
-                 (let ((configuration (current-window-configuration)))
-                   (unwind-protect
-                       (split-window-internal (selected-window) nil nil nil)
-                     (set-window-configuration configuration)))
-                 (list before
-                       (window-total-height (frame-root-window))
-                       (window-pixel-edges (frame-root-window))
-                       (window-edges (frame-root-window))))"#,
+            // `window-edges' and `window-pixel-edges' are lisp/window.el:3839
+            // and :3922 and have no subr any more (DIVERGENCES.md 154).  The
+            // pixel edges are `(LEFT TOP LEFT+WIDTH TOP+HEIGHT)' over the C
+            // primitives the Lisp reads, with a zero internal border.
+            r#"(progn
+                 ;; lisp/window.el:3839 `window-edges' with PIXELWISE non-nil,
+                 ;; written out over the C primitives its body reads.  A batch
+                 ;; frame's `frame-internal-border-width' is 0 and its character
+                 ;; cell is one pixel, so this is also the non-pixelwise answer.
+                 ;; `defun' is a `subr.el' macro, so a bare evaluator -- GNU
+                 ;; before loadup.el -- has only `fset'.
+                 (fset 'pw61-pixel-edges
+                       (lambda (w)
+                         (let ((left (+ (window-pixel-left w)
+                                        (frame-internal-border-width)))
+                               (top (+ (window-pixel-top w)
+                                       (frame-internal-border-width))))
+                           (list left top
+                                 (+ left (window-pixel-width w))
+                                 (+ top (window-pixel-height w))))))
+                 (let ((before
+                        (list (window-total-height (frame-root-window))
+                              (pw61-pixel-edges (frame-root-window)))))
+                   (let ((configuration (current-window-configuration)))
+                     (unwind-protect
+                         (split-window-internal (selected-window) nil nil nil)
+                       (set-window-configuration configuration)))
+                   (list before
+                         (window-total-height (frame-root-window))
+                         (pw61-pixel-edges (frame-root-window))
+                         (pw61-pixel-edges (frame-root-window)))))"#,
         )
         .expect("set-window-configuration should restore the frame");
 
