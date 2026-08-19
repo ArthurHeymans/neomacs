@@ -6291,55 +6291,44 @@ impl Context {
         }
         group("profiler");
         self.trace_profiler_roots(visit);
-        group("misc:lexenv");
+        group("misc");
         visit(self.lexenv);
-        group("misc:quit_flag");
         visit(self.quit_flag);
-        group("misc:inhibit_quit");
         visit(self.inhibit_quit);
-        group("misc:cached_system_name");
         if self.cached_system_name.is_heap_object() {
             visit(self.cached_system_name);
         }
-        group("misc:closure_filter_fn");
         if let Some(filter_fn) = self.interpreted_closure_filter_fn {
             visit(filter_fn);
         }
-        group("misc:named_call_cache");
         for entry in self.named_call_cache.values() {
             if let NamedCallTarget::Obarray(val) = &entry.target {
                 visit(*val);
             }
         }
-        group("misc:pending_safe_funcalls");
         for funcall in &self.pending_safe_funcalls {
             visit(funcall.function);
             for arg in funcall.args.iter().copied() {
                 visit(arg);
             }
         }
-        group("misc:overlay_mod_hooks");
         for hook in &self.last_overlay_modification_hooks {
             visit(hook.hook_list);
             visit(hook.overlay);
         }
-        group("misc:interval_hooks");
         if !self.interval_insert_behind_hooks.is_nil() {
             visit(self.interval_insert_behind_hooks);
         }
         if !self.interval_insert_in_front_hooks.is_nil() {
             visit(self.interval_insert_in_front_hooks);
         }
-        group("misc:current_local_map");
         if !self.current_local_map.is_nil() {
             visit(self.current_local_map);
         }
-        group("misc:selected_global_map");
         let selected_global_map = self.selected_global_map.value();
         if !selected_global_map.is_nil() {
             visit(selected_global_map);
         }
-        group("misc:syntax_tables");
         if self.standard_syntax_table.is_heap_object() {
             visit(self.standard_syntax_table);
         }
