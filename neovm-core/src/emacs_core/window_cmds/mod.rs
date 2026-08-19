@@ -6183,23 +6183,9 @@ pub(crate) fn builtin_window_right_divider_width(
     Ok(Value::fixnum(width))
 }
 
-/// `(frame-initial-p &optional FRAME)` -> t if FRAME is the bootstrap initial
-/// frame. Mirrors GNU `Fframe_initial_p` (src/terminal.c): FRAME defaults to the
-/// selected frame, and the result is t when the frame is live and
-/// `FRAME_INITIAL_P` -- the placeholder frame used during daemon mode, batch
-/// mode, and the early stages of startup before a real terminal or
-/// window-system frame is installed. `resolve_frame_id_in_state` only yields the
-/// id of a live frame, so the remaining `frame.initial` check completes GNU's
-/// `FRAME_LIVE_P (f) && FRAME_INITIAL_P (f)` test.
-pub(crate) fn builtin_frame_initial_p(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    let fid = resolve_frame_id(eval, args.first(), "frame-initial-p")?;
-    Ok(Value::bool_val(
-        eval.frames.get(fid).is_some_and(|f| f.initial),
-    ))
-}
+// `frame-initial-p` lives in `emacs_core::terminal::pure`, where GNU keeps it
+// (src/terminal.c): its argument is a frame OR a terminal, and only the
+// terminal module can answer the terminal half.
 
 // ===========================================================================
 // Bootstrap variables

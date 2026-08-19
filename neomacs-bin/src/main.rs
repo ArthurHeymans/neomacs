@@ -160,8 +160,7 @@ use neovm_core::emacs_core::load::{
 use neovm_core::emacs_core::print_value_with_eval;
 use neovm_core::emacs_core::terminal::pure::{
     TerminalRuntimeConfig, configure_terminal_runtime, ensure_terminal_runtime_owner,
-    reset_terminal_host, reset_terminal_runtime, set_graphical_terminal_display_name,
-    set_terminal_host,
+    reset_terminal_host, reset_terminal_runtime, set_terminal_host,
 };
 use neovm_core::emacs_core::{Context, DisplayHost, GuiFrameHostRequest, PopupMenuRequest};
 use neovm_core::face::{FaceHeight, FontWeight, LFaceAttr};
@@ -3046,14 +3045,18 @@ fn run_gui_evaluator_worker(
     evaluator.set_max_depth(1600);
     reset_terminal_host();
     reset_terminal_runtime();
-    // GNU names a window-system terminal after its display connection (":0",
-    // "wayland-0", …), not "initial_terminal". Elisp that keys off
+    // GNU's `x_term_init'/`pgtk_term_init' create an output_x_window/output_pgtk
+    // terminal and name it after the display connection (":0", "wayland-0", …),
+    // not "initial_terminal". Both halves matter: Elisp that keys off
     // `(terminal-name)` to detect a real display — e.g. indent-bars' theme-reset
-    // guard — otherwise misbehaves on the GUI. Read the display the same way the
-    // frame's `display` parameter does.
+    // guard — needs the name, and `frame-initial-p` needs the terminal to say it
+    // is not the initial one even on a display with no name to adopt. Read the
+    // display the same way the frame's `display` parameter does.
+    let mut display_terminal = TerminalRuntimeConfig::window_system();
     if let Some(display_name) = host_gui_display_identity().native_display() {
-        set_graphical_terminal_display_name(display_name);
+        display_terminal = display_terminal.with_name(display_name);
     }
+    configure_terminal_runtime(display_terminal);
     evaluator.set_variable("dump-mode", Value::NIL);
     // GNU's window-system terminal inits do not measure a line speed, they
     // assert one: `baud_rate = 19200' in `x_term_init' (src/xterm.c:32279) and

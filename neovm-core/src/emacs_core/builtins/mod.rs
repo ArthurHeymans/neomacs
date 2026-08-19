@@ -3553,7 +3553,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "frame-initial-p",
-        super::window_cmds::builtin_frame_initial_p,
+        super::terminal::pure::builtin_frame_initial_p,
         0,
         Some(1),
     );

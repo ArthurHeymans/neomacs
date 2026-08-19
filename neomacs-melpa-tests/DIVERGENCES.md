@@ -17452,7 +17452,16 @@ the same command on `TERM=xterm-256color` does.
 `alacritty` is a TERM with no `lisp/term/alacritty.el`, so
 `tty-run-terminal-initialization`'s fallback path is the suspect; the
 `frame-initial-p` in the message is a function applied to a terminal object
-where GNU applies it to a frame.  `xterm-256color`, `tmux-256color` and
+where GNU applies it to a frame.
+
+> **Closed, 2026-08-19, by entry 160.**  The cause was not the term-file
+> fallback and not a misuse of `frame-initial-p`; GNU's subr takes a terminal by
+> design (src/terminal.c:482-500) and ours had ported only the frame branch.
+> The trigger is `xterm--auto-xt-mouse-allowed-types`
+> (lisp/term/xterm.el:134-140), not a missing `lisp/term/<TERM>.el` -- alacritty
+> DOES get `terminal-init-xterm`, because `term-file-aliases` (lisp/faces.el:48)
+> maps it to xterm.  The paragraph above is therefore wrong on both halves and
+> is left standing as written, per the no-withdrawal rule.  `xterm-256color`, `tmux-256color` and
 `vte-256color` are unaffected, which is consistent.  Not this entry's, and
 recorded here because it is the reason the parity capture in this entry is on
 `tmux-256color` rather than the alacritty entry the divergence was first found
@@ -18097,6 +18106,420 @@ diagnosis but of one inference and one claim.
 
 Status: FIXED.
 
+## 160. `frame-initial-p` was ported with the `if` and without the `else`, so a TERMINAL argument raised -- and because the raise happens inside terminal initialization it cost the whole command line, `-l` and `--eval` included, on every TERM in xterm.el's auto-mouse allowlist -- FIXED
+
+Reported by the agent working entry 158, which found it while doing something
+else and recorded it without fixing it:
+
+```
+$ TERM=alacritty neomacs -nw -Q
+Wrong type argument: frame-initial-p, #<terminal 0 on /dev/tty>
+```
+
+158 filed it as a message.  It is not a message.  The raise happens inside
+`tty-run-terminal-initialization`, which runs before `command-line-1` looks at
+the command line, so the arguments after it are never processed at all.
+Measured, both editors, one pty per run (`script -qec`), `-nw -Q -l FILE` where
+FILE writes a marker and calls `kill-emacs`:
+
+```
+GNU 31.0.90   TERM=alacritty        FILE ran, editor exited
+Neomacs       TERM=alacritty        FILE never ran, editor sat in the command
+                                    loop until the harness killed it (SIGKILL
+                                    after 90s)
+Neomacs       TERM=xterm-256color   FILE ran, editor exited
+```
+
+`-Q` was not incidental: with no init file to load, `-l` was the only thing left
+on the command line, and a user's `--eval` would have gone the same way.
+
+### The hypothesis 158 left, and why it is wrong
+
+158's note said the suspect was `tty-run-terminal-initialization`'s fallback path
+-- the branch taken when there is no `lisp/term/<TERM>.el` -- and that
+`frame-initial-p` was "a function applied to a terminal object where GNU applies
+it to a frame."  Both halves are wrong, and the second one is wrong in the
+direction that matters: it says GNU would not do this, when GNU documents doing
+exactly this.
+
+`Fframe_initial_p`, src/terminal.c:482-500, in full:
+
+```c
+DEFUN ("frame-initial-p", Fframe_initial_p, Sframe_initial_p, 0, 1, 0,
+       doc: /* Return non-nil if FRAME is the initial frame.
+That is, the initial text frame used internally during daemon mode,
+batch mode, and the early stages of startup.
+If FRAME is a terminal object, return non-nil if it holds
+the initial frame.  FRAME defaults to the selected frame.  */)
+  (Lisp_Object frame)
+{
+  if (NILP (frame))
+    frame = selected_frame;
+  if (FRAMEP (frame))
+    {
+      struct frame *f = XFRAME (frame);
+      return FRAME_LIVE_P (f) && FRAME_INITIAL_P (f) ? Qt : Qnil;
+    }
+  struct terminal *t = decode_terminal (frame);
+  return t && t->type == output_initial ? Qt : Qnil;
+}
+```
+
+The doc string says "If FRAME is a terminal object" outright.  There are two
+branches, and they ask different questions of different objects:
+`FRAME_INITIAL_P (f)` of a frame, `t->type == output_initial` of a terminal.
+
+The caller that depends on the second branch is GNU's own
+`turn-on-xterm-mouse-tracking-on-terminal`, lisp/xt-mouse.el:508-512, which
+passes a TERMINAL on purpose and says why:
+
+```elisp
+(defun turn-on-xterm-mouse-tracking-on-terminal (&optional terminal)
+  "Enable xterm mouse tracking on TERMINAL."
+  (when (and xterm-mouse-mode (eq t (terminal-live-p terminal))
+	     ;; Avoid the initial terminal which is not a termcap device.
+             (not (frame-initial-p terminal)))
+```
+
+It is reached from `xterm-mouse-mode`'s own body, which maps it over
+`(terminal-list)` (lisp/xt-mouse.el:413) -- a list of TERMINALS, never frames.
+
+### Why only some TERM values
+
+Not the missing term file.  `TERM=alacritty` DOES load `lisp/term/xterm.el`:
+`tty-run-terminal-initialization` (lisp/faces.el:2365-2404) consults
+`term-file-aliases` before it looks for a file, and that alist
+(lisp/faces.el:38-51) contains
+
+```elisp
+    ("alacritty" . "xterm")
+    ("foot" . "xterm")
+    ("contour" . "xterm"))
+```
+
+so `terminal-init-xterm` runs, and `(terminal-parameter nil 'terminal-initted)`
+answers `terminal-init-xterm` in both editors on that TERM -- measured.
+
+What alacritty has and `xterm-256color` does not is a match in
+`xterm--auto-xt-mouse-allowed-types` (lisp/term/xterm.el:134-140):
+
+```elisp
+(defconst xterm--auto-xt-mouse-allowed-types
+  (rx string-start
+      (or "alacritty"
+          "contour")
+      string-end)
+  "Like `xterm--auto-xt-mouse-allowed-names', but for the terminal's type.
+This will get matched against the environment variable \"TERM\".")
+```
+
+and `xterm--init` ends with (lisp/term/xterm.el:1035-1044)
+
+```elisp
+  (when (and (not xterm-mouse-mode-called)
+             (or (string-match-p xterm--auto-xt-mouse-allowed-types
+                                 (tty-type (selected-frame)))
+                 (and-let* ((name-and-version (xterm--query-name-and-version)))
+                   (string-match-p xterm--auto-xt-mouse-allowed-names
+                                   name-and-version))))
+    (xterm-mouse-mode 1))
+```
+
+So the trigger is not "TERM has no term file", it is "this terminal auto-enables
+xterm mouse tracking at startup" -- which is TERM `alacritty` or `contour` by
+name, OR any terminal whose XTVERSION reply matches
+`xterm--auto-xt-mouse-allowed-names` (:106-114: Konsole, WezTerm, iTerm2, kitty,
+foot).  The last clause means the blast radius includes sessions whose TERM is
+plain `xterm-256color`, if the emulator answers XTVERSION as one of those five.
+The alias table also puts `foot` on the xterm path, so a `foot` user reaches
+`xterm--init` by one route and matches the allowlist by the other.
+
+`xterm-256color` is the control, and it worked throughout: it matches neither
+allowlist without an XTVERSION reply, so `(xterm-mouse-mode 1)` never runs and
+`frame-initial-p` is never handed a terminal.
+
+### What ours did
+
+`builtin_frame_initial_p` (was neovm-core/src/emacs_core/window_cmds/mod.rs:6201)
+was one line:
+
+```rust
+    let fid = resolve_frame_id(eval, args.first(), "frame-initial-p")?;
+```
+
+and `resolve_frame_id_in_state`'s catch-all arm
+(neovm-core/src/emacs_core/window_cmds/mod.rs:527) signals
+`wrong-type-argument` with the predicate name for anything that is not a fixnum
+or a `VecLikeType::Frame`.  Its doc comment transcribed
+`FRAME_LIVE_P (f) && FRAME_INITIAL_P (f)` and stopped there.  That is the whole
+defect: the `if (FRAMEP …)` body was copied, and the `else` that the `if`
+implies was not, because in C the `else` has no keyword to notice.
+
+Measured in `--batch -Q`, one line per call, before the fix:
+
+```
+                                           GNU 31.0.90        Neomacs
+(frame-initial-p)                          t                  t
+(frame-initial-p (selected-frame))         t                  t
+(frame-initial-p (car (terminal-list)))    t                  SIGNAL wrong-type-argument
+(frame-initial-p (frame-terminal))         t                  SIGNAL wrong-type-argument
+(frame-initial-p "junk")                   nil                SIGNAL wrong-type-argument
+(frame-initial-p 'sym)                     nil                SIGNAL wrong-type-argument
+(frame-initial-p 42)                       nil                SIGNAL wrong-type-argument
+```
+
+The junk rows are the same defect seen from the other side.  GNU's
+`decode_terminal` (src/terminal.c:223-233) does not raise:
+
+```c
+decode_terminal (Lisp_Object terminal)
+{
+  struct terminal *t;
+
+  if (NILP (terminal))
+    terminal = selected_frame;
+  t = (TERMINALP (terminal)
+       ? XTERMINAL (terminal)
+       : FRAMEP (terminal) ? FRAME_TERMINAL (XFRAME (terminal)) : NULL);
+  return t && t->name ? t : NULL;
+}
+```
+
+NULL for a non-designator, and NULL for a terminal whose `name` has been freed --
+which is what `delete_terminal` does -- so a deleted terminal answers nil rather
+than t.  Nothing handed to `frame-initial-p` can make it raise.  Ours could only
+raise.
+
+### The second question: whose terminal is terminal 0?
+
+GNU's comment says the guard exists to "avoid the initial terminal which is not
+a termcap device", and our error named `#<terminal 0 on /dev/tty>`.  If our
+terminal 0 were genuinely the initial terminal, then merely accepting terminals
+would answer `t` where GNU answers `nil`, xterm mouse tracking would be skipped,
+and the fix would have traded a loud bug for a quiet one.  Measured on a pty,
+`-nw -Q`, TERM=alacritty:
+
+```
+                                      GNU 31.0.90              Neomacs
+(terminal-list)                       (#<terminal 1 on         (#<terminal 0 on
+                                        /dev/tty>)               /dev/tty>)
+(terminal-name (frame-terminal))      "/dev/tty"               "/dev/tty"
+(terminal-live-p (frame-terminal))    t                        t
+(frame-initial-p (selected-frame))    nil                      nil
+(terminal-parameter nil
+  'terminal-initted)                  terminal-init-xterm      terminal-init-xterm
+```
+
+So both editors are talking about a real tty terminal, and GNU answers `nil` for
+it.  The ids differ because the LIFECYCLES differ.  GNU's
+`init_initial_terminal` (src/terminal.c:663) makes the FIRST terminal, the
+`output_initial` one; `init_tty` (src/term.c:4420) then calls
+`create_terminal (output_termcap, NULL)` for a SECOND, which takes the next id;
+and the initial terminal is deleted on the way out (`delete_initial_terminal`,
+src/terminal.c:683), leaving one terminal, numbered 1.  We keep ONE record and
+re-describe it in place, so ours is the terminal the bootstrap started with --
+still numbered 0, now named `/dev/tty`.
+
+That is the fact that decides the shape of the fix.  The question
+`frame-initial-p` asks of a terminal cannot be answered from anything our record
+happened to have:
+
+* not the id -- GNU's tty terminal is 1 and ours is 0;
+* not the name -- our GUI path leaves the name `"initial_terminal"` when the
+  display connection has no name to adopt;
+* not liveness or activity -- `terminal-live-p` deliberately reports
+  `output_initial` and `output_termcap` alike as `t` (src/terminal.c:452-459),
+  which is exactly why xt-mouse needs a second question at all.  Measured: `t`
+  in both editors, for both the batch initial terminal and the live tty one, so
+  the `(eq t (terminal-live-p terminal))` half of the guard passes in both and
+  the `frame-initial-p` half is what decides.
+
+### The fix
+
+Two pieces, both in neovm-core/src/emacs_core/terminal/pure.rs.
+
+`TerminalOutputMethod` names GNU's `enum output_method` (src/termhooks.h:57-70)
+for the three kinds we model -- `Initial`, `Termcap`, `WindowSystem` -- and
+`TerminalRecord` carries one.  Every `TerminalRuntimeConfig` constructor now
+states which it is, so the question is answered at each construction site
+instead of inferred later: `inactive()` is `init_initial_terminal`,
+`interactive()` is `init_tty` (src/term.c:4420), and the new `window_system()` is
+`x_term_init`/`pgtk_term_init` (src/xterm.c:32208, src/pgtkterm.c:4816).  The GUI
+startup in neomacs-bin now builds a `window_system()` config and gives it the
+display name when there is one, instead of renaming the terminal and leaving its
+kind unsaid; a nameless display connection is still not the initial terminal.
+
+`FrameOrTerminal` names the three outcomes of GNU's argument resolution --
+`Frame`, `Terminal`, `Neither` -- and `decode_frame_or_terminal` performs it
+once.  `frame-initial-p` matches on that enum, which is what stops the frame-only
+reading coming back: dropping the terminal case is now a non-exhaustive match,
+and there is nowhere left to put a raise.  `Neither` is GNU's NULL and GNU's dead
+frame, and it answers nil.
+
+The subr moved from `window_cmds` to `terminal::pure`, where GNU keeps it
+(src/terminal.c), and where the terminal half of its argument can actually be
+resolved.
+
+### The audit: which other subrs take a frame OR a terminal
+
+Every `decode_terminal` / `decode_live_terminal` / `decode_tty_terminal` call
+site in GNU's `src/`, resolved to its subr, then asked BOTH ways in both editors
+in `--batch -Q` -- once with `(selected-frame)`, once with
+`(car (terminal-list))`.  23 subrs, 46 calls:
+
+`terminal-live-p`, `frame-initial-p`, `terminal-name`, `terminal-parameters`,
+`terminal-parameter`, `set-terminal-parameter`, `tty-type`,
+`tty-display-color-p`, `tty-display-color-cells`, `controlling-tty-p`,
+`tty-no-underline`, `tty-top-frame`, `terminal-coding-system`,
+`keyboard-coding-system`, `tty--output-buffer-size`, `send-string-to-terminal`,
+`tty--set-output-buffer-size`, `set-output-flow-control`, `set-input-meta-mode`,
+`set-terminal-coding-system-internal`, `set-keyboard-coding-system-internal`,
+`suspend-tty`, `resume-tty`.
+
+**One** had the frame-vs-terminal defect: `frame-initial-p`.  The other 22 accept
+both shapes and answer identically for both, because they already share one
+resolver, `decode_terminal_id_eval`, which mirrors `decode_terminal`.  The defect
+was in the one subr that was NOT routed through it.  So this is a single-site
+bug, not a class, and the shared abstraction it needed already existed one module
+over -- which is the finding: the port had the door, and this subr walked past it.
+
+The same sweep did surface three residuals that are NOT about the argument shape
+(each answers the same, wrongly, for both shapes).  They are recorded below.
+
+### Found and NOT fixed
+
+**1. `tty--output-buffer-size` does not know it is not a tty.**  GNU
+`decode_tty_terminal` (src/terminal.c:247-253) answers NULL for a terminal that
+is not `output_termcap`/`output_msdos_raw`, and the subr (src/term.c:2634) then
+signals.  Measured in `--batch -Q`:
+
+```
+(tty--output-buffer-size nil)         GNU: SIGNAL (error "Not a tty terminal")
+                                      Neomacs: 0
+```
+
+**2. `tty--set-output-buffer-size` likewise** (src/term.c:2619), and GNU's
+message for it is worth quoting because it is not the one you would guess:
+
+```
+(tty--set-output-buffer-size 0 nil)   GNU: SIGNAL (error "Attempt to suspend a
+                                                          non-text terminal device")
+                                      Neomacs: nil
+```
+
+Both are the same missing distinction -- we have no equivalent of
+`decode_tty_terminal`'s "is this terminal actually a tty" narrowing, which is a
+third question on top of live/initial.  `TerminalOutputMethod` now makes it
+answerable in one comparison (`Termcap`); it was left unmade here because these
+two subrs are the only callers measured and neither is on a startup path.
+
+**3. `set-keyboard-coding-system-internal` rejects `undecided`.**
+
+```
+(set-keyboard-coding-system-internal 'undecided nil)
+    GNU: nil
+    Neomacs: SIGNAL (error "Unsupported coding system for keyboard: undecided")
+```
+
+GNU's subr (src/coding.c:10739-10755) polices the argument with exactly two
+tests -- `CHECK_SYMBOL`, then `Fcheck_coding_system` unless it is nil (which
+becomes `no-conversion`) -- and `undecided` passes both, so GNU sets it up and
+answers nil.  Ours adds a keyboard-specific allowlist GNU does not have.
+Unrelated to terminal designators; recorded because the sweep found it.
+
+**4. `terminal-parameters` returns its alist in the opposite order.**  GNU's
+`store_terminal_param` pushes, so the newest parameter is first; ours appends.
+Measured:
+
+```elisp
+;; after (set-terminal-parameter nil 'l160-a 1) then 'l160-b 2
+GNU:     ((l160-b . 2) (l160-a . 1) (normal-erase-is-backspace . 0)
+          (keyboard-coding-saved-meta-mode t))
+Neomacs: ((keyboard-coding-saved-meta-mode t) (normal-erase-is-backspace . 0)
+          (l160-a . 1) (l160-b . 2))
+```
+
+`assq` lookups are unaffected; anything that prints the alist, takes its `car`,
+or relies on a later `set-terminal-parameter` shadowing an earlier one is not.
+
+**5. Entry 158's closure note could not be added.**  Entry 158 is not present in
+DIVERGENCES.md at this branch's merge base (`e90b234e7`, entries run to 156), so
+there was nothing to annotate.  When 158 lands, its "Found and NOT fixed" item
+for this bug should gain, dated 2026-08-19: *Closed by entry 160.  The cause was
+not the term-file fallback and not a misuse of `frame-initial-p`; GNU's subr
+takes a terminal by design (src/terminal.c:482-500) and ours had ported only the
+frame branch.  The trigger is `xterm--auto-xt-mouse-allowed-types`
+(lisp/term/xterm.el:134-140), not a missing `lisp/term/<TERM>.el`.*
+
+**6. A fixnum is still a frame designator here, and everywhere else.**  GNU's
+`FRAMEP` is nil for `0`, so `(frame-initial-p 0)` answers nil.  Ours now also
+answers nil for it, because `decode_frame_or_terminal` admits only the two shapes
+GNU admits -- but `resolve_frame_id` (used by dozens of other frame subrs) still
+takes a fixnum as a frame id, so `(frame-width 0)` works here and raises in GNU.
+That house convention is untouched and unmeasured; it is a separate sweep.
+
+### After
+
+Same probes, same machine, `target/release/neomacs` from
+`cargo xtask fresh-build --release` (pdump 10:45:26 newer than binary 10:42:16).
+All thirteen `--batch -Q` rows now answer what GNU 31.0.90 answers, including
+the four that raised and the three junk rows.  On a pty:
+
+```
+GNU 31.0.90   TERM=alacritty        -l ran, 8 recorded facts
+Neomacs       TERM=alacritty        -l ran, all 8 facts identical to GNU
+Neomacs       TERM=xterm-256color   -l ran, all 8 facts identical to GNU
+```
+
+The eight facts are `tty-type`, `terminal-initted`, `terminal-live-p`,
+`frame-initial-p` of the frame and of the terminal, `xterm-mouse-mode`, and the
+`xterm-mouse-mode` terminal parameter -- so the answer to the second question in
+this entry is measured and not merely argued: on TERM=alacritty neomacs now
+reaches `xterm-mouse-mode t` and `(terminal-parameter nil 'xterm-mouse-mode) t`,
+exactly as GNU does, which is what would have been lost if the terminal branch
+had been made to answer `t` instead of `nil`.
+
+### Gates
+
+```
+cargo nextest run -p neovm-core -p neomacs-layout-engine
+    11055 tests run: 11055 passed, 54 skipped                        473.799s
+cargo nextest run -p neovm-oracle-tests
+    38786 tests run: 38786 passed, 0 skipped                         735.524s
+cargo nextest run -p neomacs
+    233 tests run: 231 passed, 2 failed, 1 skipped                     12.635s
+    (both failures are the worktree's PATH LENGTH; see below)
+NEOMACS_TUI_NEOMACS_BIN=… cargo nextest run -p neomacs-tui-tests \
+        -E 'test(startup_runs_dash_l)'
+    1 passed                                                          17.336s
+NEOVM_ORACLE_MODE=live … -E 'test(frame_initial_p) or test(terminal_live_p_reports_t)'
+    3 passed  (the three new pins re-run against real GNU, not the snapshot)
+cargo check --workspace --all-targets                                 exit 0
+cargo fmt --all --check                                               exit 0
+```
+
+Red before the fix, for the record: 4 of the 5 new `neovm-core` unit tests
+failed with `wrong-type-argument`, and the tty suite failed with "neomacs
+swallowed -l on TERM=alacritty ... startup aborted before command-line-1
+processed the arguments", printing GNU's eight facts beside it.
+
+One `neovm-core` test, `process::tests::terminal_sentinel_observes_separate_stderr_output_like_gnu`,
+failed once in a filtered run while this machine was running four other agents'
+builds, and passed in the full 11055-test run.  Environmental, not this change.
+
+The two `neomacs` failures are `neomacsclient_cli`'s, and they are a property of
+where this branch was developed, not of the branch.  Both bind a Unix socket
+under `<repo>/tmp/` (neomacs-bin/tests/neomacsclient_cli.rs:26-36), and this
+worktree's repo root is 92 characters, so the socket path is 126-128 and
+`SUN_LEN` is 108.  Proven without any neomacs code:
+
+```
+$ python3 -c "...socket.bind(tempfile.mkdtemp(dir='<this worktree>/tmp')+'/server')"
+BIND FAILED 128 AF_UNIX path too long
+```
+
+The same path in the main checkout is 84 characters.  The failure is at
+`UnixListener::bind`, before the test reaches any editor code.
 ## 161. A signal that is unwinding was not a GC root, so `condition-case` bound a cons the collector had already reclaimed -- and a reclaimed cons was indistinguishable from live data, which is why the fault surfaced as a garbage symbol id thirty frames away -- FIXED
 
 Handed over as "a live memory-corruption-shaped regression, already bisected":
