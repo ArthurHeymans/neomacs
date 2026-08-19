@@ -5124,6 +5124,7 @@ impl Context {
         super::fileio::register_bootstrap_vars(obarray);
         super::process::register_bootstrap_vars(obarray);
         super::undo::register_bootstrap_vars(obarray);
+        super::category::register_bootstrap_vars(obarray);
         super::window_cmds::register_bootstrap_vars(obarray);
         super::keyboard::pure::register_bootstrap_vars(obarray);
         super::composite::register_bootstrap_vars(obarray);
@@ -11133,7 +11134,14 @@ impl Context {
         {
             return Ok(SymbolValueLookup::Bound(value));
         }
+        self.find_symbol_value_by_id(sym_id)
+    }
 
+    /// GNU `find_symbol_value`: the dynamic value alone, no lexenv consult.
+    /// Internal state reads (search options, change hooks) call this — a
+    /// DEFVAR'd special can never have a lexical cell, so the probe
+    /// `lookup_symbol_value_by_id` runs first is pure per-read cost there.
+    pub(crate) fn find_symbol_value_by_id(&self, sym_id: SymId) -> Result<SymbolValueLookup, Flow> {
         // Fast path — GNU `find_symbol_value`'s SYMBOL_PLAINVAL leaf: an
         // ordinary global with a bound plain cell answers from one slot
         // read. Aliases, localized/forwarded symbols, unbound cells (where
@@ -11189,7 +11197,6 @@ impl Context {
         }
 
         let resolved = super::builtins::resolve_variable_alias_id(self, sym_id)?;
-        let resolved_is_canonical = is_canonical_id(resolved);
 
         if resolved != sym_id && is_keyword_id(resolved) {
             return Ok(SymbolValueLookup::Bound(Value::from_kw_id(resolved)));
@@ -11229,8 +11236,8 @@ impl Context {
         // rather than a BUFFER_OBJFWD slot. Keep that special storage
         // out of the generic symbol-read path so ordinary PLAINVAL
         // symbols do not scan `local_var_alist`.
-        if resolved_is_canonical
-            && resolved == buffer_undo_list_symbol()
+        if resolved == buffer_undo_list_symbol()
+            && is_canonical_id(resolved)
             && let Some(buf) = self.buffers.current_buffer()
             && let Some(binding) = buf.get_buffer_local_binding_by_sym_id(resolved)
         {
@@ -11252,16 +11259,16 @@ impl Context {
         // aren't explicitly stored in the obarray and aren't
         // specbound, they resolve to their canonical values.
         // Mirrors the vm.rs `lookup_var` fallback path.
-        if is_canonical_id(sym_id) && sym_id == nil_symbol() {
+        if sym_id == nil_symbol() && is_canonical_id(sym_id) {
             return Ok(SymbolValueLookup::Bound(Value::NIL));
         }
-        if is_canonical_id(sym_id) && sym_id == t_symbol() {
+        if sym_id == t_symbol() && is_canonical_id(sym_id) {
             return Ok(SymbolValueLookup::Bound(Value::T));
         }
-        if resolved_is_canonical && resolved == nil_symbol() {
+        if resolved == nil_symbol() && is_canonical_id(resolved) {
             return Ok(SymbolValueLookup::Bound(Value::NIL));
         }
-        if resolved_is_canonical && resolved == t_symbol() {
+        if resolved == t_symbol() && is_canonical_id(resolved) {
             return Ok(SymbolValueLookup::Bound(Value::T));
         }
 
@@ -17993,8 +18000,9 @@ impl Context {
         &self,
         resolved: SymId,
     ) -> Option<Value> {
-        let resolved_is_canonical = is_canonical_id(resolved);
-
+        // Canonicality is only consulted by the rare fallback arms below;
+        // check the (2-instruction) id compares first so the common read
+        // skips the epoch-checked TLS canonical lookup entirely.
         use crate::emacs_core::symbol::SymbolRedirect;
         if let Some(sym) = self.obarray.get_by_id(resolved) {
             match sym.redirect() {
@@ -18022,8 +18030,8 @@ impl Context {
             }
         }
 
-        if resolved_is_canonical
-            && resolved == buffer_undo_list_symbol()
+        if resolved == buffer_undo_list_symbol()
+            && is_canonical_id(resolved)
             && let Some(buf) = self.buffers.current_buffer()
             && let Some(binding) = buf.get_buffer_local_binding_by_sym_id(resolved)
         {
@@ -18034,10 +18042,10 @@ impl Context {
             return Some(value);
         }
 
-        if resolved_is_canonical && resolved == nil_symbol() {
+        if resolved == nil_symbol() && is_canonical_id(resolved) {
             return Some(Value::NIL);
         }
-        if resolved_is_canonical && resolved == t_symbol() {
+        if resolved == t_symbol() && is_canonical_id(resolved) {
             return Some(Value::T);
         }
         if is_keyword_id(resolved) {

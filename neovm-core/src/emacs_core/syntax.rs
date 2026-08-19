@@ -216,7 +216,7 @@ impl SyntaxStateVariable {
     #[inline(always)]
     fn enabled(self, ctx: &super::eval::Context) -> bool {
         matches!(
-            ctx.lookup_symbol_value_by_id(self.symbol_id()),
+            ctx.find_symbol_value_by_id(self.symbol_id()),
             Ok(super::eval::SymbolValueLookup::Bound(value)) if value.is_truthy()
         )
     }
