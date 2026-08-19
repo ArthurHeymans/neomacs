@@ -2695,16 +2695,37 @@ fn configure_gnu_startup_state_clears_window_system_for_tty_boots() {
         .frame_manager()
         .get(frame_id)
         .expect("selected TTY frame should exist");
+    // NEITHER display-derived parameter may be invented in Rust.  GNU's
+    // `make_initial_frame' (src/frame.c:1423) sets neither, and both are
+    // computed by `frame-set-background-mode' (lisp/frame.el:1526), which this
+    // bare `Context::new()' -- GNU before loadup -- has not loaded.  Seeding
+    // them here is DIVERGENCES.md 157's bug, and this row is the guard.
     assert_eq!(
         frame.parameter("display-type"),
-        Some(Value::symbol("color")),
-        "live TTY startup should seed face classification for defface matching"
+        None,
+        "display-type is DERIVED by frame-set-background-mode (lisp/frame.el:1526); \
+         Rust must not seed it"
     );
     assert_eq!(
         frame.parameter("background-mode"),
-        Some(Value::symbol(detect_tty_background_mode())),
-        "live TTY startup should seed background classification for defface matching"
+        None,
+        "background-mode is DERIVED by frame-set-background-mode (lisp/frame.el:1526); \
+         Rust must not seed it"
     );
+    // What the detection DOES write is GNU's own input channel for it: the
+    // TERMINAL parameter `frame-terminal-default-bg-mode' reads
+    // (lisp/frame.el:1588-1598), the slot xterm.el fills from an OSC-11 reply.
+    assert_eq!(
+        eval.eval_str("(terminal-parameter nil 'background-mode)")
+            .expect("terminal-parameter probe"),
+        Value::symbol(detect_tty_background_mode()),
+        "live TTY startup records the detected background on the TERMINAL, for \
+         frame-set-background-mode to derive the frame parameter from"
+    );
+    let frame = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("selected TTY frame should exist");
     assert_eq!(
         frame.parameter("tty"),
         Some(Value::string(default_controlling_tty_name()))
