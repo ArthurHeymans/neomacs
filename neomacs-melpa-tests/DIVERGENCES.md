@@ -15351,7 +15351,13 @@ The same three doors 146, 148, 150 and 152 checked:
 * **The function cell.**  Being on the shadow list is the measurement.  All
   eighteen were on it, and the runtime probe confirmed the consequence
   name by name: `subrp` is `nil`, and `func-arity`, `commandp`,
-  `interactive-form` and the first docstring line all equal GNU's.
+  `interactive-form` and the first docstring line all equal GNU's.  The shipped
+  binary confirms it end to end: a `cargo xtask fresh-build --release` binary
+  run `-Q --batch` on the observables probe `diff`s **empty** against GNU
+  31.0.90 -- all eighteen names AND the thirty-seven C neighbours, every
+  `subrp`, `func-arity`, `commandp`, `interactive-form` and first docstring line
+  (`tmp/pw61/observables.diff`) -- and so does the byte-compilation probe, every
+  opcode sequence and constants vector (`tmp/pw61/bytecode.diff`).
 * **The static subr table.**  `ResolvedBuiltinCallee::from_static_symbol`
   (`neovm-core/src/emacs_core/bytecode/vm.rs`) still has exactly two callers and
   both still reach it only from a `None` function cell.  A name `loadup.el`
