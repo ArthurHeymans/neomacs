@@ -27,8 +27,9 @@ use crate::terminal_color::TerminalColor;
 /// `rgb` is `None` for a row registered without RGB values, which
 /// `tty-color-approximate` skips: "If the RGB values of the candidate color are
 /// unknown, we never consider it for approximating another color"
-/// (lisp/term/tty-colors.el:895-896).
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+/// (lisp/term/tty-colors.el:895-896).  Such a row is still reachable BY NAME,
+/// which is the branch `map_tty_color` takes first.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TtyPaletteEntry {
     pub name: String,
     pub index: i64,
@@ -39,9 +40,15 @@ pub struct TtyPaletteEntry {
 /// them -- which decides exact ties, because the search keeps the FIRST
 /// strictly-smaller distance (`(if (and (< dist best-distance) ...)`,
 /// lisp/term/tty-colors.el:903).
-#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TtyPalette {
     entries: Vec<TtyPaletteEntry>,
+    /// Canonicalized name -> row, so the name branch is a lookup rather than a
+    /// scan.  A 24-bit terminal registers every X colour name it knows -- 665
+    /// rows measured on `xterm-256color` with `COLORTERM=truecolor` -- and this
+    /// branch runs once per colour string of every anonymous attribute plist
+    /// the layout engine realizes.
+    by_name: std::collections::HashMap<String, usize>,
     /// `display-color-cells`, the number `tty-color-24bit` keys on
     /// (lisp/term/tty-colors.el:834).
     color_cells: i64,
@@ -50,8 +57,16 @@ pub struct TtyPalette {
 impl TtyPalette {
     #[must_use]
     pub fn new(entries: Vec<TtyPaletteEntry>, color_cells: i64) -> Self {
+        // `tty-modify-color-alist` replaces an existing row in place rather than
+        // appending, so a name appears once; keep the FIRST if a malformed list
+        // ever repeats one, which is what `assoc` would find.
+        let mut by_name = std::collections::HashMap::with_capacity(entries.len());
+        for (at, entry) in entries.iter().enumerate() {
+            by_name.entry(entry.name.clone()).or_insert(at);
+        }
         Self {
             entries,
+            by_name,
             color_cells,
         }
     }
@@ -90,7 +105,7 @@ impl TtyPalette {
     #[must_use]
     pub fn named(&self, name: &str) -> Option<(TerminalColor, (u8, u8, u8))> {
         let canonical = Self::canonicalize(name);
-        let entry = self.entries.iter().find(|entry| entry.name == canonical)?;
+        let entry = &self.entries[*self.by_name.get(&canonical)?];
         let color = TerminalColor::from_tty_color_desc(entry.index, self.color_cells)?;
         Some((color, entry.rgb.unwrap_or((0, 0, 0))))
     }
