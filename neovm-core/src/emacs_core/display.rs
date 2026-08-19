@@ -753,23 +753,6 @@ pub(crate) fn builtin_display_screens(
     Ok(Value::fixnum(1))
 }
 
-/// Context-aware variant of `display-color-cells`.
-pub(crate) fn builtin_display_color_cells(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_optional_display_designator_eval(eval, "display-color-cells", &args)?;
-    if display_window_system_symbol_eval(eval, args.first())?
-        .is_some_and(gui_window_system_active_value)
-    {
-        Ok(Value::fixnum(16777216)) // 2^24 = 24-bit TrueColor
-    } else if terminal_runtime_supports_color() {
-        Ok(Value::fixnum(terminal_runtime_color_cells()))
-    } else {
-        Ok(Value::fixnum(0))
-    }
-}
-
 /// Context-aware variant of `display-planes`.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_display_planes(
