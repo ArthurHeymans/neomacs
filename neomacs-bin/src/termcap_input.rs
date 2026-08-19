@@ -12,7 +12,7 @@
 
 use super::terminal_capabilities::{TerminalCapabilityDatabase, open_terminal_capability_database};
 use neovm_core::emacs_core::intern::intern;
-use neovm_core::emacs_core::keymap::list_keymap_define_seq_in_obarray;
+use neovm_core::emacs_core::keymap::list_keymap_define_seq_in_obarray_ex;
 use neovm_core::emacs_core::{Context, Value};
 
 const FKEY_TABLE: &[(&str, &str)] = &[
@@ -177,7 +177,9 @@ fn define_terminal_key(eval: &mut Context, keymap: Value, sequence: &[u8], name:
         .map(|byte| Value::fixnum(i64::from(*byte)))
         .collect::<Vec<_>>();
     let definition = Value::vector(vec![Value::symbol(intern(name))]);
-    match list_keymap_define_seq_in_obarray(eval.obarray(), keymap, &events, definition) {
+    // `define-key' with REMOVE nil, which is what the deleted wrapper was
+    // (DIVERGENCES.md 152).
+    match list_keymap_define_seq_in_obarray_ex(eval.obarray(), keymap, &events, definition, false) {
         Ok(()) => true,
         Err(err) => {
             tracing::debug!(

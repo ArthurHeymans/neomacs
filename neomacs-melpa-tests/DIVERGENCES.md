@@ -14289,10 +14289,11 @@ entries.
   falls back to computing one with `make_auto_save_file_name_for_buffer`.  That
   fallback is why the helper survives this entry.  It is a different subsystem
   and wants its own measurement.
-* **GNU echoes the minibuffer prompt in batch and we do not.**  `emacs -Q
-  --batch` prints `Number: ` on stdout before the `end-of-file`; the probe
-  outputs differ in that one respect for every prompting code letter, not just
-  `n`.
+The prompt echo is worth recording as a symptom rather than a residual: before
+the `read-number` change, `emacs -Q --batch` printed `Number: ` on stdout
+before the `end-of-file` and we printed nothing, because the Rust subr never
+reached `read-from-minibuffer`.  It matches now, and `read-string` -- which
+always went through the C primitive -- always matched.
 
 ### Correction to entry 146, 2026-08-18
 
