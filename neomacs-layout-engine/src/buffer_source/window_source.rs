@@ -5,7 +5,7 @@ use crate::scroll_policy::{
     ForwardScroll, ScrollPolicy, count_lines_bounded, last_usable_row, line_start_above,
     line_start_below, top_margin,
 };
-use crate::types::{WindowKind, WindowParams};
+use crate::types::{PartialBodyWalkStart, WindowKind, WindowParams};
 use neovm_core::buffer::{CharPos0, EmacsBytePos, TextPositionAnchor};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -101,6 +101,20 @@ impl BufferWindowSourceRequest {
             ScrollPolicy::from_window_params(params),
             params.scroll_margin,
         )
+    }
+
+    /// Build a source request for an incremental partial walk without changing
+    /// semantic window state.  [`Self::read_exact_into`] consumes the typed
+    /// walk start directly, while point and every other display dependency
+    /// remain sourced from the authoritative [`WindowParams`] snapshot.
+    pub(crate) fn for_partial_walk(
+        params: &WindowParams,
+        walk_start: PartialBodyWalkStart,
+        max_rows: usize,
+    ) -> Self {
+        let mut request = Self::from_window_params(params, max_rows);
+        request.requested_window_start = walk_start.get();
+        request
     }
 
     #[allow(clippy::too_many_arguments)]

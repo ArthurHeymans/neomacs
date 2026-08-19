@@ -153,10 +153,9 @@ where
         // `visibility_bottom_y` caps it at the window bottom — exactly the
         // newly-exposed row count. Chrome geometry is left intact (the mode-line
         // re-walks at the full-window bottom). The source reads from
-        // `exposed_start_charpos` so its text slice + byte indices align with the
+        // `walk_start` so its text slice + byte indices align with the
         // walk, while the published positions later use the real window_start.
-        let scroll_source_params;
-        let source_params: &WindowParams = if let Some(scroll) = &scroll {
+        let source_request = if let Some(scroll) = &scroll {
             geometry.text_y = params.bounds.y + scroll.exposed_text_y;
             geometry.display_text_row_base = scroll.exposed_row_base;
             // Phase 3 below-reuse: BOUND the walk to the edited line only — the
@@ -166,21 +165,18 @@ where
             if scroll.bound_walk {
                 geometry.max_rows = scroll.exposed_row_count;
             }
-            let mut p = params.clone();
-            p.window_start = scroll.exposed_start_charpos;
-            // Pin the source's point to the exposed region so its scroll-to-point
-            // heuristic does NOT pull window_start back toward the real point
-            // (which lives in the already-laid reused rows). The real cursor is
-            // re-decorated after the walk; the walk's spurious cursor is cleared.
-            p.point = scroll.exposed_start_charpos;
-            scroll_source_params = p;
-            &scroll_source_params
+            // Exact partial reads do not run the viewport scrolling heuristic,
+            // so there is no need to counterfeit point.  The request keeps the
+            // real semantic point for line numbers and other row decoration.
+            BufferWindowSourceRequest::for_partial_walk(
+                params,
+                scroll.walk_start,
+                geometry.max_rows,
+            )
         } else {
-            params
+            BufferWindowSourceRequest::from_window_params(params, geometry.max_rows)
         };
 
-        let source_request =
-            BufferWindowSourceRequest::from_window_params(source_params, geometry.max_rows);
         let text_source = if scroll.is_some() || position_publication.uses_exact_window_start() {
             source_request.read_exact_into(&buf_access, text_buf)
         } else {

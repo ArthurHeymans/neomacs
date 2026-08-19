@@ -23241,6 +23241,131 @@ fn phase3_plain_edit_matches_full_rebuild_golden() {
     );
 }
 
+/// A localized edit walk starts at the first damaged row, but point remains a
+/// window-wide semantic input.  In particular, inserting a newline at BOL
+/// moves point to the following display row, so `line-number-current-line`
+/// must move with the cursor instead of following the partial walk's start.
+#[test]
+fn phase3_newline_edit_keeps_current_line_number_face_on_cursor_row() {
+    let line = "line\n";
+    let text = line.repeat(40);
+    let edit_at = 9 * line.len();
+    let (mut eval, frame_id, buf_id, selected_window) = incr_editing_frame(&text, 800, 600);
+    eval.eval_str(
+        "(progn
+           (internal-set-lisp-face-attribute
+             'line-number :background \"#000000\" (selected-frame))
+           (internal-set-lisp-face-attribute
+             'line-number-current-line :background \"#ff0000\" (selected-frame)))",
+    )
+    .expect("make current and ordinary line-number faces observably distinct");
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.set_buffer_local("display-line-numbers", Value::T);
+        buffer.goto_emacs_byte_pos(EmacsBytePos::new(edit_at));
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let line_number_prefix_len = {
+        let state = engine
+            .last_frame_display_state
+            .as_ref()
+            .expect("warm display state");
+        let window = state
+            .window_matrices
+            .iter()
+            .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+            .expect("warm selected window matrix");
+        window
+            .matrix
+            .rows
+            .iter()
+            .filter(|row| row.enabled && row.role == GlyphRowRole::Text)
+            .find_map(|row| {
+                let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
+                let prefix_len = text_glyphs
+                    .iter()
+                    .take_while(|glyph| glyph.legacy_charpos() == NO_BUFFER_POSITION_CHARPOS)
+                    .count();
+                (prefix_len > 0 && prefix_len < text_glyphs.len()).then_some(prefix_len)
+            })
+            .expect("warm frame line-number prefix before buffer text")
+    };
+    eval.buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("\n");
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().edit_windows,
+        1,
+        "the regression must exercise localized edit replay"
+    );
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let window = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id.get() == selected_window.0 as i64)
+        .expect("selected window matrix");
+    let cursor_row = window
+        .matrix
+        .rows
+        .iter()
+        .position(|row| row.enabled && row.role == GlyphRowRole::Text && row.cursor_col.is_some())
+        .expect("cursor row");
+    // Identify every expected prefix from glyph provenance, independently of
+    // the face being tested.  Otherwise a whole prefix that fell back to the
+    // default face would disappear from a face-filtered assertion.
+    let line_number_prefixes_by_row = window
+        .matrix
+        .rows
+        .iter()
+        .enumerate()
+        .filter(|(_, row)| row.enabled && row.role == GlyphRowRole::Text)
+        .map(|(row_index, row)| {
+            let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
+            assert!(
+                text_glyphs.len() >= line_number_prefix_len,
+                "visible text row {row_index} lost its complete line-number prefix"
+            );
+            (row_index, &text_glyphs[..line_number_prefix_len])
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        line_number_prefixes_by_row.len() > 1,
+        "the regression fixture must include non-current numbered rows"
+    );
+    for (row_index, prefix) in line_number_prefixes_by_row {
+        assert!(
+            !prefix.is_empty(),
+            "every visible text row must retain its line-number prefix; row {row_index} has none"
+        );
+        let expected_face = if row_index == cursor_row {
+            "line-number-current-line"
+        } else {
+            "line-number"
+        };
+        let actual_faces = prefix
+            .iter()
+            .map(|glyph| {
+                state
+                    .faces
+                    .get(&glyph.face_id)
+                    .and_then(|face| face.lisp_name.as_deref())
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            actual_faces.iter().all(|face| *face == Some(expected_face)),
+            "numbered row {row_index} must use only {expected_face}, got {actual_faces:?}"
+        );
+    }
+}
+
 #[test]
 fn phase3_delete_at_eob_does_not_relay_reused_prefix_from_buffer_start() {
     let text = ";; first scratch line\n;; second scratch line\n\n";

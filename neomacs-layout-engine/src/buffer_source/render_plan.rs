@@ -798,7 +798,7 @@ impl BufferSourceOutputSetup {
         //
         // render_into overrode the geometry so THIS walk lays ONLY the
         // newly-exposed rows (at matrix indices [exposed_row_base..]); the source
-        // reads from exposed_start_charpos. We then install the reused rows
+        // reads from the replay's typed partial-body walk start. We then install the reused rows
         // (shifted) above them, splice the snapshots, re-decorate the cursor, and
         // re-walk chrome. Byte-identical to a full rebuild of the scrolled window.
         if let Some(mut scroll) = scroll {
