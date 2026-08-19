@@ -18119,7 +18119,8 @@ are wrong, and the third is a symptom of something older and much worse.
 ### 1. The panic value is not an id, it is a pointer -- and its alignment names the allocator that made it
 
 `TAG_SYMBOL` is `0b000` (`neovm-core/src/tagged/value.rs:56`) and `as_symbol_id`
-is an unchecked shift, `SymId((bits >> 3) as u32)` (`value.rs:557-563`).  So
+is an unchecked shift, `SymId((bits >> 3) as u32)` (`value.rs:576-582`,
+post-fix line numbers throughout).  So
 **every 8-byte-aligned machine word decodes as a symbol**, and a garbage "symbol
 id" is a raw pointer with its low three bits already spent.
 
@@ -18129,13 +18130,13 @@ zero -- it is 64 KiB aligned.  A random 32-bit id has its low 13 bits zero with
 probability `1/8192`, so this is a signature, not a coincidence, and the
 signature is exact: `CONS_BLOCK_BYTES = CONS_BLOCK_ALIGN = 64 * 1024`
 (`neovm-core/src/tagged/gc.rs:1149-1150`), the block is `alloc_zeroed` at that
-alignment (`ConsBlock::layout`, `:1208`), and cell 0 sits at the block base
+alignment (`ConsBlock::layout`, `:1207`), and cell 0 sits at the block base
 (`cells_ptr`, `:1229`).  The word is a `*mut ConsCell`.
 
-Which pointer, specifically: `ConsBlock::sweep` (`gc.rs:1335-1352`) walks a
+Which pointer, specifically: `ConsBlock::sweep` (`gc.rs:1336-1353`) walks a
 block's cells in reverse and threads every unmarked one onto the global free
 list through the cell itself, `set_free_next`
-(`neovm-core/src/tagged/header.rs:117-131`) writing the link into the
+(`neovm-core/src/tagged/header.rs:128-140`) writing the link into the
 `cdr_or_next` union.  Because the walk is `(0..next_index).rev()`, cell 0 of each
 block ends up as the list head, so the first cell freed in the *next* block
 links straight to a block base.  That is the 64 KiB-aligned link the panic
@@ -18144,6 +18145,16 @@ printed.
 **A cons cell that had been reclaimed was still being read.**  The printer was
 not at fault, and neither was `intern.rs:603` -- both were downstream of a
 use-after-free that had already happened.
+
+One thing in the handover does not survive this reading, and it was offered as
+the strongest lever: "It is deterministic: byte-identical id at two different
+commits."  A pointer under ASLR is not.  The three ids this entry actually
+observed, from three runs of one reduction on one binary, are `0xfc420a06`,
+`0xfc424a06` and `0xfc42ca06` -- the same block, different cells, and they move
+with the mapping.  What IS stable is the shape: 16-byte aligned, in the
+`0x7fffe2...` band, always a cell adjacent to its owner.  Chasing the constant
+would have been chasing a mirage; chasing the alignment named the allocator in
+one step.
 
 ### 2. The reported reproduction does not reproduce, and the bisect does not hold
 
@@ -18256,7 +18267,7 @@ NEOVM-DIAG alloc_cons publishing a FREED cons as cdr: 0x7fffe2105023
 
 `run_condition_case_body` (`eval.rs`) computes
 `let binding_value = make_signal_binding_value(&sig);`, and
-`make_signal_binding_value` (`neovm-core/src/emacs_core/error.rs:350-358`) is
+`make_signal_binding_value` (`neovm-core/src/emacs_core/error.rs:534-542`) is
 `Value::cons(Value::symbol(sig.symbol), *raw)` over `sig.raw_data`.  The cdr it
 published was the freed cell.
 
@@ -18316,27 +18327,39 @@ exactly what a defect gated on GC timing produces.
 ### 6. The fix, in two halves
 
 **Half one: the payload is a root by construction.**  `SignalData` gains a
-private `InFlightSignalRoots` handle (`error.rs`) that pins every heap `Value` in
-`data` and `raw_data` in a thread-local slot table for as long as the signal --
-or any clone of it -- lives, and releases the slot on `Drop`.  The table is
-seeded beside the other thread-local root groups
-(`collect_in_flight_signal_gc_roots`, wired into `collect_thread_local_gc_roots`
-as `in-flight-signal-thread-local`).
+private `InFlightSignalRoots` handle (`error.rs`) that pins the signal's payload
+in a thread-local slot table for as long as the signal -- or any clone of it --
+lives, and releases the slot on `Drop`.  The table is seeded beside the other
+thread-local root groups (`collect_in_flight_signal_gc_roots`, wired into
+`collect_thread_local_gc_roots` as `in-flight-signal-thread-local`).
 
-Two choices in that sentence are load-bearing:
+Four choices there are load-bearing:
 
 * **The field is private.**  A struct with a private field cannot be built from a
   literal outside its module, so all four `SignalData` construction sites
-  (`error.rs:76`, `error.rs:283`, `eval.rs` `canonicalize_signal_symbol`,
-  `dynamic_module.rs:563`) now go through `SignalData::new`, which pins.  An
+  (`flow_from_eval_error` and `signal_internal_id` in `error.rs`,
+  `canonicalize_signal_symbol` in `eval.rs`, and the module-ABI exit in
+  `dynamic_module.rs`) now go through `SignalData::new`, which pins.  An
   unrooted signal payload stopped being *representable*; a fifth construction
   site cannot be written without the compiler asking for the pin.
 * **A slot table, not the `SCRATCH_GC_ROOTS` stack.**  A signal's lifetime is not
   stack-shaped: it is cloned, boxed, stored in a `ResumeTarget`, and converted to
   and from `EvalError`.  Roots are therefore released in an order a truncating
-  stack cannot express.  The empty-payload case (`quit`, arity and type errors
-  whose data is symbols and fixnums) claims no slot at all, so the overwhelmingly
-  common signal costs nothing.
+  stack cannot express.
+* **The error SYMBOL is pinned too**, not just `data` and `raw_data`.  `signal`
+  keeps the symbol's IDENTITY -- an uninterned symbol given conditions by
+  `define-error` is honoured, which is why `signal_internal_id` takes a `SymId`
+  rather than a name -- and an uninterned symbol's value/function/plist cells
+  survive only while something marks it.  `seed_root` routes a symbol to
+  `mark_symbol`, which is that path.  `nil`, `t` and fixnums are dropped: they
+  are immediates the collector never touches, which is what leaves `quit` with
+  no slot at all and a plain arity error with a one-element vector.
+* **The handle is `!Send`** (a `PhantomData<*const ()>`).  A slot index names a
+  row in one thread's table; dropped on another thread it would release a row
+  that thread pinned, unrooting a live payload.  With the marker, that is a
+  compile error instead of a rare unrooting -- and the workspace builds
+  unchanged, which is the measurement that says nothing sends a signal across
+  threads today.
 
 **Half two: a reclaimed cons is recognizable.**  `set_free_next` wrote
 `TaggedValue::NIL` into the freed car.  GNU writes `dead_object ()`
