@@ -3495,25 +3495,34 @@ impl<'a> DetectSrc<'a> {
 /// Big5 at :4667 -- and the conjunct is the whole difference between "these
 /// bytes are not this coding system" and "this chunk stopped in the middle of a
 /// character and the rest is coming".  Dropping it, which is what this port did
-/// until DIVERGENCES.md entry 151, is invisible for a string, a region or a
-/// file (all complete by construction) and wrong for a subprocess, whose reads
-/// split wherever the kernel split them: measured under GNU 31.0.90, a child
-/// writing `caf <c3>` and then `<a9> CR LF` detects `utf-8` and holds the
-/// `<c3>` back, where `(decode-coding-string "caf\303" 'undecided)` on the very
-/// same bytes answers `iso-latin-1`.
+/// until DIVERGENCES.md entry 151, is invisible for a string or a region and
+/// wrong for a subprocess, whose reads split wherever the kernel split them:
+/// measured under GNU 31.0.90, a child writing `caf <c3>` and then `<a9> CR LF`
+/// detects `utf-8` and holds the `<c3>` back, where
+/// `(decode-coding-string "caf\303" 'undecided)` on the very same bytes answers
+/// `iso-latin-1`.
+///
+/// A FIFTH detector reads the flag and does not end on that line:
+/// `detect_coding_utf_16` spends it at the TOP of its body, on an odd byte count
+/// (:1505-1511).  And a file is NOT a `Last` block, which entry 151's version of
+/// this comment got wrong: `insert-file-contents` reaches `decode_coding_gap`,
+/// which calls `detect_coding` at :7927-7928 and raises the flag only at :8009.
+/// See DIVERGENCES.md entry 156 and `CodingEntry::detection_block`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SourceBlock {
     /// More bytes may follow: a subprocess read that is not the EOF read.  A
     /// trailing partial character is CARRYOVER, not evidence.
     More,
-    /// The source is complete -- a string, a region, a file, or a process at
-    /// EOF -- so a trailing partial character really is malformed.
+    /// The source is complete -- a string, a region, `call-process` output
+    /// after the child exited, or a process at EOF -- so a trailing partial
+    /// character really is malformed.  A FILE is not one of these; see
+    /// `CodingEntry::detection_block`.
     Last,
 }
 
 impl SourceBlock {
     /// GNU's `coding->mode & CODING_MODE_LAST_BLOCK` as a bool, spelled out at
-    /// the four sites that test it so the C reads the same as the Rust.
+    /// the sites that test it so the C reads the same as the Rust.
     fn is_last(self) -> bool {
         matches!(self, Self::Last)
     }
