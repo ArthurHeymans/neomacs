@@ -1083,15 +1083,15 @@ fn gui_window_body_geometry_excludes_fringes_and_margins() {
             .expect("window-text-width"),
         Value::fixnum(748)
     );
+    // `window-edges' is lisp/window.el:3839 and has no Rust subr any more
+    // (DIVERGENCES.md 154).  Its BODY/PIXELWISE right edge is
+    // `left-body + (window-body-width W t)' and its bottom is
+    // `top-body + (window-body-height W t)', so the two numbers it would have
+    // added come from these C primitives; the width is asserted above.
     assert_eq!(
-        super::builtin_window_edges(&mut ev, vec![Value::NIL, Value::T, Value::NIL, Value::T])
-            .expect("window-edges"),
-        Value::list(vec![
-            Value::fixnum(16),
-            Value::fixnum(0),
-            Value::fixnum(764),
-            Value::fixnum(568),
-        ])
+        super::builtin_window_body_height(&mut ev, vec![Value::NIL, Value::T])
+            .expect("window-body-height"),
+        Value::fixnum(568)
     );
     assert_eq!(
         super::builtin_window_fringes(&mut ev, vec![Value::NIL]).expect("window-fringes"),
@@ -5239,7 +5239,7 @@ fn x_create_frame_reserves_tab_bar_space_above_root_window() {
 }
 
 #[test]
-fn make_frame_uses_gui_creation_path_when_display_host_is_active() {
+fn x_create_frame_realizes_the_gui_frame_make_frame_delegates_to() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let scratch = ev.buffers.create_buffer("*scratch*");
@@ -5264,7 +5264,12 @@ fn make_frame_uses_gui_creation_path_when_display_host_is_active() {
         Value::cons(Value::symbol("width"), Value::fixnum(80)),
         Value::cons(Value::symbol("height"), Value::fixnum(25)),
     ]);
-    let created = super::builtin_make_frame(&mut ev, vec![params]).expect("make-frame");
+    // GNU owns `make-frame' in Lisp (lisp/frame.el:1019) and it funcalls
+    // `frame-creation-function', which for a window system reaches the C
+    // primitive `x-create-frame' (src/xfns.c).  DIVERGENCES.md 154 deleted the
+    // Rust `make-frame' subr, whose GUI arm was one line -- a call to exactly
+    // this -- so the test asks the primitive frame.el delegates to.
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
 
     let created_id = crate::window::FrameId(
         created
@@ -5543,8 +5548,14 @@ fn frame_builtins_accept_frame_handle_values() {
         crate::emacs_core::frame::builtin_select_frame(&mut ev, vec![frame]).unwrap(),
         Value::make_frame(fid.0)
     );
+    // `select-frame-set-input-focus' is lisp/frame.el:1262 and has no Rust
+    // subr any more (DIVERGENCES.md 154).  Its body is `select-frame' --
+    // asserted just above -- plus `raise-frame' and `x-focus-frame'.
+    // `raise-frame' is the one of those two a NON-graphical frame handle must
+    // still be accepted by; `x-focus-frame' signals unless the frame has a
+    // window system, and is asserted in display_test.rs where one does.
     assert_eq!(
-        super::builtin_select_frame_set_input_focus(&mut ev, vec![frame]).unwrap(),
+        crate::emacs_core::builtins::symbols::builtin_raise_frame(vec![frame]).unwrap(),
         Value::NIL
     );
 }
@@ -7394,14 +7405,20 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
             .expect("presented geometry");
     }
 
-    let edges = super::builtin_window_edges(
-        &mut ev,
-        vec![Value::make_window(wid.0), Value::T, Value::NIL, Value::T],
-    )
-    .expect("window body pixel edges");
-    let edges = crate::emacs_core::value::list_to_vec(&edges).expect("edges list");
-
-    assert_eq!(edges[1], Value::fixnum(22));
+    // GNU's `window-edges' (lisp/window.el:3839) computes a body's TOP as
+    //   (window-pixel-top W) + (frame-internal-border-width FRAME)
+    //   + (window-header-line-height W) + (window-tab-line-height W)
+    // and it is Lisp there and here -- DIVERGENCES.md 154 deleted the Rust
+    // subr.  Ask the four C primitives the Lisp reads: the RENDERED tab line
+    // (17) and header line (5) must beat the stale 999s in the snapshot's
+    // scalar fields, which is what this test is about.
+    let top_body = ev
+        .eval_str(
+            "(+ (window-pixel-top) (frame-internal-border-width)
+                (window-header-line-height) (window-tab-line-height))",
+        )
+        .expect("body top from the C primitives `window-edges' reads");
+    assert_eq!(top_body, Value::fixnum(22));
 
     let posn = crate::emacs_core::xdisp::builtin_posn_at_point(
         &mut ev,
@@ -7415,7 +7432,7 @@ fn window_body_pixel_edges_begin_below_rendered_header_and_tab_lines() {
     let glyph_height = posn[9].cons_cdr().as_fixnum().expect("glyph height");
 
     assert_eq!(
-        edges[1].as_fixnum().expect("body top") + glyph_y + glyph_height,
+        top_body.as_fixnum().expect("body top") + glyph_y + glyph_height,
         330
     );
 }

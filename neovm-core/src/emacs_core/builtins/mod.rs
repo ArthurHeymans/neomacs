@@ -676,6 +676,9 @@ mod process_launchers_are_lisp_only_test;
 mod lisp_only_misc_names_test;
 
 #[cfg(test)]
+mod lisp_only_window_frame_names_test;
+
+#[cfg(test)]
 mod rust_subrs_shadowed_by_lisp_test;
 
 // -----------------------------------------------------------------------

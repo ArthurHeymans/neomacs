@@ -14,9 +14,13 @@
 //! constant 0.  Every other name below has no C implementation in GNU at all
 //! -- `grep 'DEFUN ("NAME"' src/*.c` finds nothing -- so ours is invention.
 //!
-//! Adding to this list is not forbidden, but it must be deliberate: a new
-//! entry means a Rust function nothing will ever call, and it must be
-//! justified in the entry's comment the way GNU justifies its one.
+//! After DIVERGENCES.md 154 the class is CLOSED: the list is one name long and
+//! that name is GNU's own placeholder.  Adding to it is not forbidden, but it
+//! must be deliberate -- a new entry means a Rust function nothing will ever
+//! call, so `JustifiedShadow' makes an entry carry the two citations GNU's own
+//! carries: the `src/' line with the C placeholder and the `.el' line that
+//! overrides it.  A name cannot be parked here with no justification, which is
+//! how the list reached fifty.
 //!
 //! `bootstrap_kill_ring_commands_are_not_rust_subrs`
 //! (`neovm-core/src/emacs_core/kill_ring_test.rs:46`) is the same check
@@ -27,60 +31,67 @@ use crate::emacs_core::eval::lookup_global_subr_entry;
 use crate::emacs_core::intern::intern;
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
+/// A Rust subr that preloaded Lisp overwrites is a Rust function nothing will
+/// ever call.  GNU has exactly ONE and says why in the source, so an entry here
+/// must carry the same two citations GNU's does: the `src/` line that registers
+/// the placeholder, and the `.el` line that overrides it.  The type is the
+/// point -- a bare `&[&str]` let a name be added with no justification at all,
+/// which is how the list reached fifty.
+struct JustifiedShadow {
+    /// The name whose function cell the preloads overwrite.
+    name: &'static str,
+    /// GNU's own C placeholder for this name, and the reason it has one.
+    gnu_c_placeholder: &'static str,
+    /// The `.el` line that overrides the placeholder in GNU and here.
+    gnu_lisp_override: &'static str,
+}
+
 /// Registered Rust subrs whose function cell, after `loadup.el`, holds
 /// something other than a subr.
 ///
 /// GNU source for each name was checked with `grep 'DEFUN ("NAME"' src/*.c`
 /// against emacs-mirror 31.0.90 (0ee48ac4df2).
-const SHADOWED_BY_PRELOADED_LISP: &[&str] = &[
-    // -- GNU ships a C placeholder here ON PURPOSE, and window.el overrides
-    // it (src/frame.c:494-502).  This is the only justified entry.
-    "frame-windows-min-size",
-    // -- Window and frame geometry.  GNU has none of these in C; they are
-    // window.el / frame.el / faces.el functions built on the primitives that
-    // ARE in C (`window-edges' on `window-pixel-edges' and so on).
-    "balance-windows",              // lisp/window.el:6222
-    "color-defined-p",              // lisp/faces.el:1923
-    "color-values",                 // lisp/faces.el:1940
-    "delete-other-windows",         // lisp/window.el:4453
-    "delete-window",                // lisp/window.el:4318
-    "display-buffer",               // lisp/window.el:8166
-    "display-color-cells",          // lisp/frame.el:2966
-    "enlarge-window",               // lisp/window.el:3714
-    "fit-window-to-buffer",         // lisp/window.el:10307
-    "make-frame",                   // lisp/frame.el:1019
-    "pop-to-buffer",                // lisp/window.el:9403
-    "select-frame-set-input-focus", // lisp/frame.el:1262
-    "shrink-window",                // lisp/window.el:3759
-    "switch-to-buffer",             // lisp/window.el:9558
-    "window-absolute-pixel-edges",  // lisp/window.el:3937
-    "window-edges",                 // lisp/window.el:3839
-    "window-pixel-edges",           // lisp/window.el:3922
-    "window-tree",                  // lisp/window.el:3999
-                                    // -- The six type predicates and the five `defalias' names that used to
-                                    // sit here are GONE: their Rust subrs were deleted (DIVERGENCES.md 148),
-                                    // so the count fell from 49 to 38.  See
-                                    // `lisp_only_predicates_and_aliases_test.rs' for the per-name statement.
-                                    // -- The four process launchers that used to sit here are GONE: their
-                                    // Rust subrs were deleted (DIVERGENCES.md 149).  All four are Lisp over
-                                    // `make-process', which IS in C (src/process.c:1767); see
-                                    // `process_launchers_are_lisp_only_test.rs' for the per-name statement.
-                                    // -- Undo: NOTHING is left here.  `syms_of_undo' (src/undo.c:423-490) has
-                                    // exactly one `defsubr', `&Sundo_boundary' (:435), and we register that
-                                    // one and no more.  `primitive-undo' went in DIVERGENCES.md 146; `undo'
-                                    // and `buffer-disable-undo' went in 150, which also deleted the third
-                                    // replay loop the `undo' subr reached (`BufferManager::undo_buffer').
-                                    // `buffer-enable-undo' is NOT in that group and never was: GNU DEFUNs it
-                                    // at src/buffer.c:1829, so it is a subr here too and does not appear on
-                                    // this list.  See `lisp_only_undo_commands_test.rs'.
-                                    // -- "Everything else": the thirteen names from six files that were left
-                                    // when the groups with a theme had been taken.  They are GONE
-                                    // (DIVERGENCES.md 152), so the count fell from 32 to 19.  Two of them had
-                                    // a C NEIGHBOUR that had to survive the deletion and does:
-                                    // `string-match-p' is a `defsubst' over `string-match' (src/search.c:442),
-                                    // and `transient-mark-mode' the COMMAND is `define-minor-mode' while
-                                    // `transient-mark-mode' the VARIABLE is DEFVAR_LISP (src/buffer.c:5835).
-                                    // See `lisp_only_misc_names_test.rs' for the per-name statement.
+const SHADOWED_BY_PRELOADED_LISP: &[JustifiedShadow] = &[
+    // GNU ships this C placeholder ON PURPOSE and window.el overrides it.
+    // This is the only justified entry, and after DIVERGENCES.md 154 it is the
+    // only entry.
+    JustifiedShadow {
+        name: "frame-windows-min-size",
+        gnu_c_placeholder: "src/frame.c:494-502, prefixed \"Placeholder used by \
+             temacs -nw before window.el is loaded\", returns a constant 0",
+        gnu_lisp_override: "lisp/window.el:1899 (`frame-windows-min-size')",
+    },
+    // -- The six type predicates and the five `defalias' names that used to
+    // sit here are GONE: their Rust subrs were deleted (DIVERGENCES.md 148),
+    // so the count fell from 49 to 38.  See
+    // `lisp_only_predicates_and_aliases_test.rs' for the per-name statement.
+    // -- The four process launchers that used to sit here are GONE: their
+    // Rust subrs were deleted (DIVERGENCES.md 149).  All four are Lisp over
+    // `make-process', which IS in C (src/process.c:1767); see
+    // `process_launchers_are_lisp_only_test.rs' for the per-name statement.
+    // -- Undo: NOTHING is left here.  `syms_of_undo' (src/undo.c:423-490) has
+    // exactly one `defsubr', `&Sundo_boundary' (:435), and we register that
+    // one and no more.  `primitive-undo' went in DIVERGENCES.md 146; `undo'
+    // and `buffer-disable-undo' went in 150, which also deleted the third
+    // replay loop the `undo' subr reached (`BufferManager::undo_buffer').
+    // `buffer-enable-undo' is NOT in that group and never was: GNU DEFUNs it
+    // at src/buffer.c:1829, so it is a subr here too and does not appear on
+    // this list.  See `lisp_only_undo_commands_test.rs'.
+    // -- "Everything else": the thirteen names from six files that were left
+    // when the groups with a theme had been taken.  They are GONE
+    // (DIVERGENCES.md 152), so the count fell from 32 to 19.  Two of them had
+    // a C NEIGHBOUR that had to survive the deletion and does:
+    // `string-match-p' is a `defsubst' over `string-match' (src/search.c:442),
+    // and `transient-mark-mode' the COMMAND is `define-minor-mode' while
+    // `transient-mark-mode' the VARIABLE is DEFVAR_LISP (src/buffer.c:5835).
+    // See `lisp_only_misc_names_test.rs' for the per-name statement.
+    // -- The eighteen window/frame/face geometry names are GONE
+    // (DIVERGENCES.md 154), so the count fell from 19 to 1 and the class is
+    // closed.  146 ranked them last and riskiest because the display stack is
+    // downstream; measured, all eighteen already answered from window.el,
+    // frame.el and faces.el, and each one's C neighbour -- ranging from
+    // `delete-window-internal' to `xw-color-values' to `x-create-frame' --
+    // stays registered.  See `lisp_only_window_frame_names_test.rs'.
 ];
 
 #[test]
@@ -117,7 +128,7 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
 
     let mut expected: Vec<String> = SHADOWED_BY_PRELOADED_LISP
         .iter()
-        .map(|s| (*s).to_string())
+        .map(|entry| entry.name.to_string())
         .collect();
     expected.sort();
 
@@ -152,6 +163,25 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
         ("string-match-p", "lisp/subr.el:5941"),
         ("symbol-file", "lisp/subr.el:3351"),
         ("transient-mark-mode", "lisp/simple.el:7614"),
+        // DIVERGENCES.md 154's eighteen.
+        ("balance-windows", "lisp/window.el:6222"),
+        ("color-defined-p", "lisp/faces.el:1923"),
+        ("color-values", "lisp/faces.el:1940"),
+        ("delete-other-windows", "lisp/window.el:4453"),
+        ("delete-window", "lisp/window.el:4318"),
+        ("display-buffer", "lisp/window.el:8166"),
+        ("display-color-cells", "lisp/frame.el:2966"),
+        ("enlarge-window", "lisp/window.el:3714"),
+        ("fit-window-to-buffer", "lisp/window.el:10307"),
+        ("make-frame", "lisp/frame.el:1019"),
+        ("pop-to-buffer", "lisp/window.el:9403"),
+        ("select-frame-set-input-focus", "lisp/frame.el:1262"),
+        ("shrink-window", "lisp/window.el:3759"),
+        ("switch-to-buffer", "lisp/window.el:9558"),
+        ("window-absolute-pixel-edges", "lisp/window.el:3937"),
+        ("window-edges", "lisp/window.el:3839"),
+        ("window-pixel-edges", "lisp/window.el:3922"),
+        ("window-tree", "lisp/window.el:3999"),
     ] {
         assert!(
             lookup_global_subr_entry(intern(name)).is_none(),
@@ -175,6 +205,26 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
         ("do-auto-save", "src/fileio.c"),
         ("process-attributes", "src/process.c"),
         ("read-from-minibuffer", "src/minibuf.c"),
+        // 154's near misses: the C primitive each deleted window/frame/face
+        // name is written over.  Six of them are one character away from the
+        // Lisp name that went.
+        ("delete-window-internal", "src/window.c:5684"),
+        ("delete-other-windows-internal", "src/window.c:3463"),
+        ("window-pixel-left", "src/window.c:1001"),
+        ("window-body-width", "src/window.c:1140"),
+        ("window-resize-apply", "src/window.c:4957"),
+        ("frame-root-window", "src/window.c:350"),
+        ("set-window-buffer", "src/window.c:4428"),
+        ("select-window", "src/window.c:616"),
+        ("xw-color-defined-p", "src/xfns.c:5581"),
+        ("xw-color-values", "src/xfns.c:5597"),
+        ("x-display-color-cells", "src/xfns.c:5714"),
+        ("tty-display-color-cells", "src/term.c:2226"),
+        ("x-create-frame", "src/xfns.c:4916"),
+        ("make-terminal-frame", "src/frame.c:1736"),
+        ("select-frame", "src/frame.c:2097"),
+        ("raise-frame", "src/frame.c:3667"),
+        ("x-focus-frame", "src/frame.c:3756"),
     ] {
         assert!(
             lookup_global_subr_entry(intern(name)).is_some(),
@@ -195,10 +245,31 @@ fn rust_subrs_shadowed_by_preloaded_lisp_match_the_reviewed_list() {
     // so a re-added subr cannot be absorbed by editing the list alone.
     assert_eq!(
         SHADOWED_BY_PRELOADED_LISP.len(),
-        19,
-        "the reviewed shadow list is 19 names after DIVERGENCES.md 152 \
+        1,
+        "the reviewed shadow list is ONE name after DIVERGENCES.md 154 \
          (50 before 146, 49 after it, 38 after 148, 34 after 149, 32 after \
-         150, 19 after 152).  What is left is one justified C placeholder \
-         (`frame-windows-min-size') and the eighteen window/frame/face names.",
+         150, 19 after 152, 1 after 154).  The class is closed: what is left \
+         is the single justified C placeholder GNU itself ships, \
+         `frame-windows-min-size' (src/frame.c:494-502).  A second entry \
+         means a Rust reimplementation of a `.el' we ship -- delete the subr \
+         instead.",
     );
+
+    // ...and every entry must carry the two citations GNU's own placeholder
+    // carries.  This is what the struct exists for: a name cannot be parked
+    // here with no justification, which is how the list reached fifty.
+    for entry in SHADOWED_BY_PRELOADED_LISP {
+        assert!(
+            entry.gnu_c_placeholder.contains("src/"),
+            "{}: an entry must name the GNU src/ line that ships the same C \
+             placeholder, the way src/frame.c:494-502 does",
+            entry.name,
+        );
+        assert!(
+            entry.gnu_lisp_override.contains("lisp/"),
+            "{}: an entry must name the .el line that overrides the \
+             placeholder",
+            entry.name,
+        );
+    }
 }
