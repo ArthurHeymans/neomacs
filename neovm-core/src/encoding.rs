@@ -4112,27 +4112,27 @@ fn builtin_coding_string_in_context(
         let result = if entry.has_identity_fast_path()
             && coding_ascii_identity_fast_path(ctx, &coding, &args, encode, ctx.eol_conversion())
         {
-                // Identity: encode yields a unibyte string, decode a multibyte one
-                // (GNU `make_unibyte_string` / `make_multibyte_string`).  The bytes
-                // are pure ASCII, so the two storage forms coincide.
-                let bytes = lisp_string_coding_source_bytes(
-                    args[0].as_lisp_string().expect("string validated above"),
-                );
-                if encode {
-                    Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
-                } else {
-                    Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
-                }
+            // Identity: encode yields a unibyte string, decode a multibyte one
+            // (GNU `make_unibyte_string` / `make_multibyte_string`).  The bytes
+            // are pure ASCII, so the two storage forms coincide.
+            let bytes = lisp_string_coding_source_bytes(
+                args[0].as_lisp_string().expect("string validated above"),
+            );
+            if encode {
+                Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
             } else {
-                run_coding_with_conversion_hook(
-                    ctx,
-                    &args,
-                    &base_type,
-                    hook,
-                    encode,
-                    coding_name_eol(&coding),
-                )?
-            };
+                Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
+            }
+        } else {
+            run_coding_with_conversion_hook(
+                ctx,
+                &args,
+                &base_type,
+                hook,
+                encode,
+                coding_name_eol(&coding),
+            )?
+        };
         let result_text = result
             .as_lisp_string()
             .ok_or_else(|| {

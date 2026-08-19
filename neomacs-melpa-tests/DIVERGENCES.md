@@ -11629,6 +11629,15 @@ system's eol type is CONCRETE:
 ;; Neomacs => (97 13 10 98 13 10 99 13 10)     ; not converted
 ```
 
+> **Extended, 2026-08-19, by entry 156.**  This section reads
+> `decode_coding_gap` from its ASCII-optimization arm onward.  The eight lines
+> ABOVE that arm carry a second fact: `decode_coding_gap` calls `detect_coding`
+> at src/coding.c:7927-7928 and raises `CODING_MODE_LAST_BLOCK` only at :8009,
+> so `insert-file-contents` DETECTS as though more bytes were coming.  That is
+> why `SourceBlock::Last` survived at the file door through entries 143, 147 and
+> 151, and why a file whose last character is a truncated multibyte sequence
+> read back as `iso-latin-1` where GNU answers `utf-8`.
+
 The mechanism is `decode_coding_gap`'s ASCII-optimization arm
 (src/coding.c:7929-8000, its end-of-line block at :7963-8000).  When the source
 is all ASCII -- or fully valid UTF-8
@@ -14051,12 +14060,34 @@ and turned an ordinary UTF-8 subprocess split by the kernel into two mojibake
 characters per boundary.  That is a worse bug than the one being fixed, and it
 is the reason detection takes
 
+> **Corrected, 2026-08-19, by entry 156.**  Five was an undercount twice over.
+> Two of those five detectors -- Shift-JIS and Big5 -- read TWO bytes per loop
+> iteration, and in C both reads are a `goto no_more_source` against the SAME
+> `src_base`, which is assigned once per iteration; the conjunct was added at
+> the lead-byte site of each and not at the trail-byte one, so
+> `(detect-coding-string "hello caf\303\251 world caf\303")` offered
+> `chinese-big5` where GNU refuses it.  `detect_coding_emacs_mule`'s
+> composite-character scan had the same gap.  And there is a SIXTH detector that
+> reads `CODING_MODE_LAST_BLOCK`, `detect_coding_utf_16`, which spends the flag
+> at the TOP of its body rather than at `no_more_source:`
+> (src/coding.c:1505-1511) -- which is exactly how a search for the
+> `no_more_source:` shape missed it.  The three `no_more_source:` tails are now
+> one function, `detector_no_more_source`, taking the iteration's `src_base`.
+
 ```rust
 pub(crate) enum SourceBlock {
     More,   // a subprocess read that is not the EOF read
     Last,   // a string, a region, a file, or a process at EOF
 }
 ```
+
+> **Corrected, 2026-08-19, by entry 156.**  "a file" is wrong, and it was wrong
+> before this entry as well.  `insert-file-contents` reaches
+> `decode_coding_gap`, which calls `detect_coding` at src/coding.c:7927-7928 and
+> raises `CODING_MODE_LAST_BLOCK` only afterwards at :8009 -- so a file detects
+> as `More`, like a subprocess read that is not the EOF read.  Measured on the
+> four bytes `c a f <c3>`: `decode-coding-string` answers `iso-latin-1` and
+> `insert-file-contents` of the same bytes answers `utf-8`, in GNU.
 
 as a REQUIRED argument rather than a bool with a default.  It is the same
 `flush` the read-boundary rules already took, which is the tell that it was
@@ -14257,6 +14288,20 @@ the right fix and it is not this entry's: the string door's arms take a
 `:post-read-conversion` hook inside a process read is a decision that has to be
 made on purpose rather than inherited from a refactor.
 
+> **Confirmed and still open, 2026-08-19, by entry 156.**  GNU pays that cost.
+> `read_and_insert_process_output` (src/process.c:6502) and the filter branch
+> (:6562) both decode through `decode_coding_c_string`, which is a macro whose
+> body is `decode_coding_object` (src/coding.h:750-755) -- the same function
+> `decode-coding-string` reaches -- and `decode_coding_object` calls
+> `:post-read-conversion` at :8180-8194.  Measured with a coding system whose
+> hook upcases what it decoded: GNU runs it on `call-process`, on
+> `make-process`'s buffer branch, on its filter branch (twice, once per read)
+> and on `insert-file-contents`; this port ran it on none of them.  The
+> `insert-file-contents` row is fixed in 156.  The obstacle for the two process
+> rows is an OWNERSHIP one that this paragraph does not name: `ProcessManager`
+> is a FIELD of the `Context` whose evaluator the string decoder needs, and is
+> already mutably borrowed out of it when the read happens.
+
 The interaction with this entry is worth stating exactly, because it decided the
 scope.  After the fix an `undecided` process read of ISO-2022 bytes reports
 `iso-2022-7bit-dos` and still produces the escape bytes verbatim -- one of the
@@ -14284,6 +14329,19 @@ finds one; `found = Qno_conversion` (:6688) is only reached when the walk found
 nothing.  Neomacs treats a null byte as deciding the question outright.  It is
 one rule in `detect_coding_systems` and it belongs with a re-measurement of the
 whole category walk, not bolted onto the process path.
+
+> **Corrected and closed, 2026-08-19, by entry 156.**  The divergence is real
+> and the location is not.  The rule in `detect_coding_systems` is CORRECT: that
+> function is a port of GNU's `detect_coding_system` (src/coding.c:8686), the
+> detector `detect-coding-string` REPORTS, and GNU's own
+> `(detect-coding-string "\377\376a\0\r\0\n\0" t)` answers `no-conversion`
+> -- measured, before and after.  GNU has a SECOND undecided detector,
+> `detect_coding` (:6502), which is the one a decode runs, and its tail treats
+> the null byte as a FALLBACK (:6683-6684) rather than an override (:8836-8842).
+> This port had one function serving both doors and the reporting rule won.
+> Changing the rule in place, as this residual proposed, would have broken the
+> one door that had it right; the fix is a second function for the second GNU
+> function.
 
 The process row's part of this is worth stating precisely, because the number
 moved and the divergence did not.  Before this entry a child writing a UTF-16

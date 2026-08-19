@@ -3650,12 +3650,7 @@ fn detect_utf_8_no_more(
 /// `FF FE 61 00 0D`: `(decode-coding-string ... 'undecided)` answers
 /// `no-conversion` and keeps all five bytes, while a pipe delivering the same
 /// five bytes answers `utf-16le-with-signature-mac` and produces `(97 10)`.
-fn detect_utf_16(
-    bytes: &[u8],
-    src_chars: usize,
-    block: SourceBlock,
-    di: &mut DetectInfo,
-) -> bool {
+fn detect_utf_16(bytes: &[u8], src_chars: usize, block: SourceBlock, di: &mut DetectInfo) -> bool {
     di.checked |= MASK_UTF_16;
     if block.is_last() && src_chars & 1 != 0 {
         di.rejected |= MASK_UTF_16;
@@ -4533,7 +4528,9 @@ fn scan_undecided(
                     // value (coding.c:6632-6636, :8815-8820).
                     true
                 } else {
-                    run_detector(cat, bytes, head_ascii, src_chars, multibytep, block, &mut di)
+                    run_detector(
+                        cat, bytes, head_ascii, src_chars, multibytep, block, &mut di,
+                    )
                 };
                 if stop == WalkStop::AtFirstFound && accepted && di.found & (1 << cat) != 0 {
                     found_at = Some(cat);
@@ -4629,7 +4626,10 @@ fn detect_coding_found(
 /// `(utf-16le-with-signature . utf-16be-with-signature)` for `utf-16`
 /// (lisp/international/mule-conf.el:1463).  `None` is GNU's `! CONSP`.
 fn coding_bom_auto_pair(mgr: &CodingSystemManager, name: SymId) -> Option<(SymId, SymId)> {
-    let bom = *mgr.get(resolve_sym(name))?.properties.get(&intern(":bom"))?;
+    let bom = *mgr
+        .get(resolve_sym(name))?
+        .properties
+        .get(&intern(":bom"))?;
     if !bom.is_cons() {
         return None;
     }
