@@ -1453,6 +1453,12 @@ pub(crate) const ARITH_KIND_LOGXOR: i64 = 2;
 pub(crate) const ARITH_KIND_ASH: i64 = 3;
 /// Op discriminator for [`neovm_jit_arith_spec`]: `lognot` (1-arg bitwise NOT).
 pub(crate) const ARITH_KIND_LOGNOT: i64 = 4;
+/// Op discriminator for [`neovm_jit_arith_spec`]: `mod` (2-arg floor-modulo).
+/// The fixnum fast path is GC-free: `|a % b| < |b|` and the sign-fixup add
+/// stays within the divisor's magnitude, so the result is always a fixnum; a
+/// zero divisor bounces to generic (arith-error), non-fixnums (floats,
+/// bignums, markers) bounce to generic.
+pub(crate) const ARITH_KIND_MOD: i64 = 5;
 
 /// Classify a callee SYMBOL name + arity as a bitwise-arithmetic intrinsic op,
 /// or `None`. Shared by [`subr_spec_kind`] (which additionally proves the live
@@ -1467,6 +1473,9 @@ pub(crate) const ARITH_KIND_LOGNOT: i64 = 4;
 ///   materializes a bignum), so a fixnum shift is a real win; LEFT-shift overflow
 ///   bounces to generic.
 /// * `lognot` (1 arg) — `!n` of a fixnum is always a fixnum.
+/// * `mod` (2 args) — floor-modulo of two fixnums is always a fixnum
+///   (`|a % b| < |b|`, and the sign-fixup add stays below the divisor's
+///   magnitude); a zero divisor bounces to generic (arith-error).
 ///
 /// Other arities stay on the generic path (0 → identity const, ≥3 → reduction).
 /// `lsh` is deliberately absent: it is an elisp `defun` (subr.el), not a subr,
@@ -1478,6 +1487,7 @@ fn arith_intrinsic_op_by_name(name: &str, nargs: usize) -> Option<u8> {
         ("logxor", 2) => ARITH_KIND_LOGXOR,
         ("ash", 2) => ARITH_KIND_ASH,
         ("lognot", 1) => ARITH_KIND_LOGNOT,
+        ("mod", 2) => ARITH_KIND_MOD,
         _ => return None,
     };
     Some(op as u8)
@@ -1828,6 +1838,15 @@ pub extern "C" fn neovm_jit_arith_spec(
                 ARITH_KIND_LOGIOR => fix2().map(|(l, r)| l | r),
                 ARITH_KIND_LOGXOR => fix2().map(|(l, r)| l ^ r),
                 ARITH_KIND_ASH => fix2().and_then(|(l, r)| ash_fixnum_fast(l, r)),
+                // GNU Fmod integer branch: truncated rem, then pull the
+                // result onto the divisor's side of zero.
+                ARITH_KIND_MOD => fix2().and_then(|(l, r)| {
+                    if r == 0 {
+                        return None;
+                    }
+                    let m = l % r;
+                    Some(if m != 0 && ((m < 0) != (r < 0)) { m + r } else { m })
+                }),
                 _ => {
                     debug_assert_eq!(kind, ARITH_KIND_LOGNOT);
                     Value::from_bits(a as usize).as_fixnum().map(|n| !n)
@@ -7200,6 +7219,26 @@ fn lower_simple_op(
                     match op {
                         x if x == ARITH_KIND_LOGAND as u8 => fb.ins().band(a, b),
                         x if x == ARITH_KIND_LOGIOR as u8 => fb.ins().bor(a, b),
+                        x if x == ARITH_KIND_MOD as u8 => {
+                            // GNU Fmod integer branch on the untagged values:
+                            // truncated srem, then pull a nonzero result onto
+                            // the divisor's side of zero. Zero divisor deopts
+                            // (the interpreter re-runs the real call, which
+                            // signals arith-error). The result magnitude stays
+                            // below |b|, so the retag never overflows.
+                            let av = fb.ins().sshr_imm_u(a, FIXNUM_SHIFT as i64);
+                            let bv = fb.ins().sshr_imm_u(b, FIXNUM_SHIFT as i64);
+                            let nonzero = fb.ins().icmp_imm_u(IntCC::NotEqual, bv, 0);
+                            emit_guard(fb, dsite, nonzero);
+                            let m = fb.ins().srem(av, bv);
+                            let signs = fb.ins().bxor(m, bv);
+                            let differ = fb.ins().icmp_imm_u(IntCC::SignedLessThan, signs, 0);
+                            let m_nonzero = fb.ins().icmp_imm_u(IntCC::NotEqual, m, 0);
+                            let need_fix = fb.ins().band(differ, m_nonzero);
+                            let fixed = fb.ins().iadd(m, bv);
+                            let floored = fb.ins().select(need_fix, fixed, m);
+                            retag_fixnum(fb, floored)
+                        }
                         _ => {
                             debug_assert_eq!(op, ARITH_KIND_LOGXOR as u8);
                             // XOR clears the tag bit (2^2=0); restore it.
@@ -7980,7 +8019,7 @@ impl SpecCalleeKind {
             // site whose callee was re-aliased to `logior`). A shared disc would arm
             // it and run the wrong baked op; distinct discs make the mismatch disarm.
             SpecCalleeKind::ArithIntrinsic { op } => {
-                debug_assert!(op <= 4, "ArithIntrinsic op discriminant out of range");
+                debug_assert!(op <= 5, "ArithIntrinsic op discriminant out of range");
                 Some(5 + op)
             }
             SpecCalleeKind::CbsymTierA { .. } | SpecCalleeKind::CbsymTierB => None,
@@ -7990,7 +8029,7 @@ impl SpecCalleeKind {
     /// Number of distinct `Op::Call` spec discriminants [`to_spec_disc`](Self::to_spec_disc)
     /// assigns (0..DISC_COUNT). Salted into `ABI_TAG` so a renumber/count change
     /// re-tags stale `.so`s.
-    pub(crate) const DISC_COUNT: u8 = 10;
+    pub(crate) const DISC_COUNT: u8 = 11;
 }
 
 /// A speculated direct-call site: an `Op::Call` whose callee slot provably
