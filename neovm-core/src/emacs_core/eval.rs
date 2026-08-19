@@ -2656,6 +2656,27 @@ pub struct Context {
     /// Contiguous bytecode stack buffer, matching GNU Emacs's bc_thread_state.
     /// All bytecode frames share this single buffer. GC scans it directly.
     pub(crate) bc_buf: Vec<Value>,
+    /// JIT residual-root window stack: generated code stores the operand-stack
+    /// values live across a GC-capable shim call into `[top..top+N)` slots of
+    /// this stack and bumps `jit_root_stack_top` for the call's duration (see
+    /// `emit_cond_residual_roots_pre` in jit/compile.rs) — replacing the
+    /// per-call scratch-root save/push/restore shim trio. Grow-only; every
+    /// slot below `len` always holds a valid tagged Value (initialized NIL,
+    /// only ever overwritten with tagged stores), so tracing `0..top` is
+    /// always sound and no per-frame fill is needed.
+    pub(crate) jit_root_stack: Vec<Value>,
+    /// Mirror of `jit_root_stack.as_mut_ptr()`, republished on growth; read by
+    /// generated code via a compile-time field offset.
+    pub(crate) jit_root_stack_ptr: *mut Value,
+    /// Live top: slots `0..top` are GC roots. Written by generated code around
+    /// each rooted shim call; always back at its frame-entry value between
+    /// sites (each site restores it), so a fresh load at any site sees the
+    /// frame base.
+    pub(crate) jit_root_stack_top: usize,
+    /// Mirror of `jit_root_stack.len()` (the usable capacity), republished on
+    /// growth; generated code compares `top + N` against it and calls the
+    /// grow shim on overflow.
+    pub(crate) jit_root_stack_cap: usize,
     /// Frame metadata for each active bytecode invocation.
     /// Each entry records where the frame's stack region starts in bc_buf
     /// and the function object (so GC can trace its constants).
@@ -5863,6 +5884,10 @@ impl Context {
             eval_temp_roots: Vec::new(),
             sequence_temp_root_frames: Vec::new(),
             bc_buf: Vec::with_capacity(4096),
+            jit_root_stack: Vec::new(),
+            jit_root_stack_ptr: std::ptr::null_mut(),
+            jit_root_stack_top: 0,
+            jit_root_stack_cap: 0,
             bc_frames: Vec::new(),
             condition_stack: Vec::new(),
             next_resume_id: 1,
@@ -6057,6 +6082,10 @@ impl Context {
             eval_temp_roots: Vec::new(),
             sequence_temp_root_frames: Vec::new(),
             bc_buf: Vec::with_capacity(4096),
+            jit_root_stack: Vec::new(),
+            jit_root_stack_ptr: std::ptr::null_mut(),
+            jit_root_stack_top: 0,
+            jit_root_stack_cap: 0,
             bc_frames: Vec::new(),
             condition_stack: Vec::new(),
             next_resume_id: 1,
@@ -6153,6 +6182,13 @@ impl Context {
         }
         group("bc");
         for root in self.bc_buf.iter().copied() {
+            visit(root);
+        }
+        group("jit_window");
+        for root in self.jit_root_stack[..self.jit_root_stack_top]
+            .iter()
+            .copied()
+        {
             visit(root);
         }
         for frame in &self.bc_frames {
@@ -14215,6 +14251,17 @@ impl Context {
     }
 
     #[inline]
+    /// Grow the JIT residual-root window stack to hold at least `need` slots
+    /// and republish the pointer/capacity mirrors generated code reads. Called
+    /// from the cold grow shim only; new slots are NIL so every slot below
+    /// `len` is always a valid traced Value.
+    pub(crate) fn jit_root_stack_grow(&mut self, need: usize) {
+        let new_len = need.max(64).next_power_of_two();
+        self.jit_root_stack.resize(new_len, Value::NIL);
+        self.jit_root_stack_ptr = self.jit_root_stack.as_mut_ptr();
+        self.jit_root_stack_cap = new_len;
+    }
+
     /// GNU `specpdl_ptr--` for the JIT native-call exit: pop the call's own
     /// `BacktraceNative` frame without touching the result value at all.
     /// Returns false when the stack is not in the balanced single-frame

@@ -184,6 +184,19 @@ pub extern "C" fn neovm_jit_cons(car: i64, cdr: i64) -> i64 {
     Value::cons(car, cdr).bits() as i64
 }
 
+/// Cold overflow path of the JIT residual-root window (see
+/// `emit_root_window_stores`): grow the ctx root stack to hold `need` slots
+/// and republish the ptr/cap mirrors baked field-offset loads read.
+/// SAFETY: vmctx contract (see `neovm_jit_call`); pure Vec growth — no lisp,
+/// no GC, no safe point.
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_rootwin_grow(ctx: *mut u8, need: i64) {
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    ctx.jit_root_stack_grow(need as usize);
+}
+
 std::thread_local! {
     /// The non-local `Flow` (signal/throw/...) raised inside a runtime call made
     /// by JIT code. The call shim stashes it and returns [`STATUS_SIGNAL`]; the
@@ -714,7 +727,7 @@ struct ShimAddr(*const ());
 unsafe impl Sync for ShimAddr {}
 
 #[used]
-static JIT_SHIM_ANCHOR: [ShimAddr; 42] = [
+static JIT_SHIM_ANCHOR: [ShimAddr; 43] = [
     ShimAddr(neovm_jit_apply as *const ()),
     // logand/logior/logxor intrinsic — AOT-importable, so it must survive
     // `--gc-sections` for `--export-dynamic-symbol` to promote it (see below).
@@ -741,6 +754,7 @@ static JIT_SHIM_ANCHOR: [ShimAddr; 42] = [
     ShimAddr(neovm_jit_gc_push_many as *const ()),
     ShimAddr(neovm_jit_gc_restore as *const ()),
     ShimAddr(neovm_jit_gc_save as *const ()),
+    ShimAddr(neovm_jit_rootwin_grow as *const ()),
     ShimAddr(neovm_jit_integerp_slow as *const ()),
     ShimAddr(neovm_jit_list as *const ()),
     ShimAddr(neovm_jit_match_handler as *const ()),
@@ -4830,58 +4844,78 @@ fn jit_lever1_on() -> bool {
     *ON.get_or_init(|| std::env::var("NEOVM_JIT_LEVER1").as_deref() != Ok("off"))
 }
 
-/// Root a set of already-tagged residual `Value`s across a GC safepoint. Lever 2:
-/// with the optimization ON (default), gather `vals` into `rt.residual_buf_slot`
-/// at static offsets and issue ONE `neovm_jit_gc_push_many` call — the shim
-/// tight-loops re-testing `is_heap_object` and pushing the heap ones, so heap-
-/// dense residual sets pay one call instead of N (byte-compile profile: the
-/// per-residual `neovm_jit_gc_push` was the #1 hot symbol at 7.35%). With the opt
-/// OFF (`NEOVM_JIT_LEVER1=off`), fall back to the pre-batch unconditional per-value
-/// `neovm_jit_gc_push`. The caller applies the compile-time immediate skip (MIR
-/// `never_needs_gc_root` / baseline `is_nonheap_const`) when the opt is on, so
-/// `vals` is exactly the to-root set; the shim's re-test makes an over-included
-/// value harmless.
-///
-/// Every `vals` slot MUST be a tagged `Value` (callers run `mir_force_tagged` /
-/// `retag_all_raw` first) — a raw fixnum reaching the shim would be a UAF. The
-/// buffer holds up to the body's max operand-stack depth (see `residual_buf_slot`
-/// sizing), an upper bound on any single site's residual count, and is reused per
-/// site (the shim reads it synchronously before returning).
-fn emit_gc_push_many(fb: &mut FunctionBuilder, rt: &RtCtx, vals: &[ClifValue]) {
-    if vals.is_empty() {
-        return;
-    }
-    if !jit_lever1_on() {
-        // A/B baseline: unconditional per-value shim call (pre-batch behavior).
-        for &v in vals {
-            fb.ins().call(rt.refs.gc_push, &[v]);
-        }
-        return;
-    }
-    // Lever 2 batch: N static stores into the gather buffer + one shim call.
-    for (i, &v) in vals.iter().enumerate() {
-        fb.ins()
-            .stack_store(rt.ptr_ty, v, rt.residual_buf_slot, (i * 8) as i32);
-    }
-    let addr = fb.ins().stack_addr(rt.ptr_ty, rt.residual_buf_slot, 0);
-    let count = fb.ins().iconst(types::I64, vals.len() as i64);
-    fb.ins().call(rt.refs.gc_push_many, &[addr, count]);
-}
-
-/// Bracketing state for CONDITIONAL residual rooting: `rooted == false`
-/// means the site emitted no rooting code at all (statically empty to-root
-/// set); otherwise inline tag tests decide at RUN TIME whether the
-/// save/push pair executes, recording the saved scratch depth (or the -1
-/// sentinel) in `rt.gc_saved_slot` for the post-call restore branch.
-/// Empirically most Unknown-typed residuals are fixnum accumulators or
-/// symbols, so the common path skips all three rooting shims.
+/// Bracketing state for residual-root windows: `base == None` means the
+/// site emitted no rooting at all (statically empty to-root set); otherwise
+/// the frame-base `jit_root_stack_top` value loaded before the stores, which
+/// the post-call helper writes back.
 #[derive(Clone, Copy)]
 struct CondRoots {
-    rooted: bool,
+    base: Option<ClifValue>,
 }
 
 impl CondRoots {
-    const NONE: Self = Self { rooted: false };
+    const NONE: Self = Self { base: None };
+}
+
+/// Compile-time byte offsets of the [`Context`] JIT root-window mirror fields
+/// generated code reads/writes ((ptr, top, cap)).
+fn ctx_rootwin_offsets() -> (i32, i32, i32) {
+    (
+        core::mem::offset_of!(Context, jit_root_stack_ptr) as i32,
+        core::mem::offset_of!(Context, jit_root_stack_top) as i32,
+        core::mem::offset_of!(Context, jit_root_stack_cap) as i32,
+    )
+}
+
+/// Store `to_root` into the ctx residual-root window at `[top..top+N)` and
+/// bump `top`, returning the saved frame base for the post-call restore.
+///
+/// This replaces the gc_save / gc_push_many / gc_restore shim trio (~3 calls
+/// plus per-value pushes, measured at ~123 Ir/call with heap residuals): on
+/// the non-grow path it is two field loads, one compare, N+1 stores and no
+/// calls. `top` is invariant between sites (every site restores it), so the
+/// fresh load here always sees the frame base; nested calls stack naturally.
+/// Slots below the stack's length always hold valid tagged Values
+/// (NIL-initialized, only ever overwritten by these tagged stores), so the
+/// tracer's `0..top` walk never sees garbage and stale slots merely
+/// over-retain, exactly like interpreter operand-stack residue.
+fn emit_root_window_stores(
+    fb: &mut FunctionBuilder,
+    rt: &RtCtx,
+    to_root: &[ClifValue],
+) -> ClifValue {
+    let (off_ptr, off_top, off_cap) = ctx_rootwin_offsets();
+    let vmctx = fb.use_var(rt.vmctx_var);
+    let base = fb
+        .ins()
+        .load(types::I64, MemFlagsData::trusted(), vmctx, off_top);
+    let need = fb.ins().iadd_imm_u(base, to_root.len() as i64);
+    let cap = fb
+        .ins()
+        .load(types::I64, MemFlagsData::trusted(), vmctx, off_cap);
+    let fits = fb.ins().icmp(IntCC::UnsignedLessThanOrEqual, need, cap);
+    let grow_blk = fb.create_block();
+    let store_blk = fb.create_block();
+    fb.ins().brif(fits, store_blk, &[], grow_blk, &[]);
+    fb.switch_to_block(grow_blk);
+    fb.seal_block(grow_blk);
+    fb.ins().call(rt.refs.rootwin_grow, &[vmctx, need]);
+    fb.ins().jump(store_blk, &[]);
+    fb.switch_to_block(store_blk);
+    fb.seal_block(store_blk);
+    // Re-load the (possibly regrown) buffer pointer AFTER the capacity gate.
+    let ptr = fb
+        .ins()
+        .load(rt.ptr_ty, MemFlagsData::trusted(), vmctx, off_ptr);
+    let byte_off = fb.ins().ishl_imm_u(base, 3);
+    let slot0 = fb.ins().iadd(ptr, byte_off);
+    for (i, &v) in to_root.iter().enumerate() {
+        fb.ins()
+            .store(MemFlagsData::trusted(), v, slot0, (i * 8) as i32);
+    }
+    fb.ins()
+        .store(MemFlagsData::trusted(), need, vmctx, off_top);
+    base
 }
 
 fn emit_cond_residual_roots_pre(
@@ -4900,90 +4934,20 @@ fn emit_cond_residual_roots_pre(
     if to_root.is_empty() {
         return CondRoots::NONE;
     }
-    if !on {
-        // A/B baseline: unconditional save + per-value push (pre-lever
-        // behavior), routed through the slot so the post helper is uniform.
-        let c = fb.ins().call(rt.refs.gc_save, &[]);
-        let sv = fb.inst_results(c)[0];
-        fb.ins().stack_store(types::I64, sv, rt.gc_saved_slot, 0);
-        for &v in &to_root {
-            fb.ins().call(rt.refs.gc_push, &[v]);
-        }
-        return CondRoots { rooted: true };
+    CondRoots {
+        base: Some(emit_root_window_stores(fb, rt, &to_root)),
     }
-    // `!(is_fixnum | is_symbol)` is the exact layout-anchored
-    // `is_heap_object` (see the lever-1 correctness note); the shim's own
-    // re-test keeps any over-approximation harmless.
-    let mut any_heap: Option<ClifValue> = None;
-    for &v in &to_root {
-        let fixbits = fb.ins().band_imm_u(v, FIXNUM_CHECK_MASK as i64);
-        let is_fix = fb
-            .ins()
-            .icmp_imm_u(IntCC::Equal, fixbits, FIXNUM_CHECK_VALUE as i64);
-        let symbits = fb.ins().band_imm_u(v, TAG_MASK as i64);
-        let is_sym = fb
-            .ins()
-            .icmp_imm_u(IntCC::Equal, symbits, TAG_SYMBOL as i64);
-        let nonheap = fb.ins().bor(is_fix, is_sym);
-        let heap = fb.ins().bxor_imm(nonheap, 1);
-        any_heap = Some(match any_heap {
-            Some(acc) => fb.ins().bor(acc, heap),
-            None => heap,
-        });
-    }
-    let any_heap = any_heap.expect("to_root nonempty");
-    let sentinel = fb.ins().iconst(types::I64, -1);
-    fb.ins()
-        .stack_store(types::I64, sentinel, rt.gc_saved_slot, 0);
-    let root_blk = fb.create_block();
-    let cont_blk = fb.create_block();
-    fb.ins().brif(any_heap, root_blk, &[], cont_blk, &[]);
-    fb.switch_to_block(root_blk);
-    fb.seal_block(root_blk);
-    let c = fb.ins().call(rt.refs.gc_save, &[]);
-    let sv = fb.inst_results(c)[0];
-    fb.ins().stack_store(types::I64, sv, rt.gc_saved_slot, 0);
-    emit_gc_push_many(fb, rt, &to_root);
-    fb.ins().jump(cont_blk, &[]);
-    fb.switch_to_block(cont_blk);
-    fb.seal_block(cont_blk);
-    CondRoots { rooted: true }
 }
 
 fn emit_cond_residual_roots_post(fb: &mut FunctionBuilder, rt: &RtCtx, cr: CondRoots) {
-    if !cr.rooted {
+    let Some(base) = cr.base else {
         return;
-    }
-    let sv = fb
-        .ins()
-        .stack_load(rt.ptr_ty, types::I64, rt.gc_saved_slot, 0);
-    let took = fb.ins().icmp_imm_u(IntCC::NotEqual, sv, -1);
-    let rest_blk = fb.create_block();
-    let done_blk = fb.create_block();
-    fb.ins().brif(took, rest_blk, &[], done_blk, &[]);
-    fb.switch_to_block(rest_blk);
-    fb.seal_block(rest_blk);
-    fb.ins().call(rt.refs.gc_restore, &[sv]);
-    fb.ins().jump(done_blk, &[]);
-    fb.switch_to_block(done_blk);
-    fb.seal_block(done_blk);
-}
-
-/// Baseline residual-rooting (all ~16 `lower_op` sites): collect the to-root
-/// operand-stack slice — skipping compile-time non-heap constants
-/// ([`is_nonheap_const`]) when the opt is on — and batch-root it via
-/// [`emit_gc_push_many`]. Every `values` slot MUST already be tagged (the caller
-/// runs `retag_all_raw` before any gc_push-bearing op — see [`op_preserves_raw`]).
-fn emit_residual_roots(fb: &mut FunctionBuilder, rt: &RtCtx, values: &[ClifValue]) {
-    let on = jit_lever1_on();
-    let mut to_root: Vec<ClifValue> = Vec::with_capacity(values.len());
-    for &v in values {
-        if on && is_nonheap_const(fb, v) {
-            continue; // provably non-heap immediate: nothing to root.
-        }
-        to_root.push(v);
-    }
-    emit_gc_push_many(fb, rt, &to_root);
+    };
+    // Pop the site's residual window: top back to the frame base.
+    let (_, off_top, _) = ctx_rootwin_offsets();
+    let vmctx = fb.use_var(rt.vmctx_var);
+    fb.ins()
+        .store(MemFlagsData::trusted(), base, vmctx, off_top);
 }
 
 /// The deopt landing block for a guard-emitting MIR inst. In a CALL-BEARING body
@@ -5214,6 +5178,10 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
             neovm_jit_gc_push_many as *const u8,
         );
         builder.symbol("neovm_jit_gc_restore", neovm_jit_gc_restore as *const u8);
+        builder.symbol(
+            "neovm_jit_rootwin_grow",
+            neovm_jit_rootwin_grow as *const u8,
+        );
         builder.symbol("neovm_jit_call", neovm_jit_call as *const u8);
         builder.symbol("neovm_jit_apply", neovm_jit_apply as *const u8);
         builder.symbol("neovm_jit_cons", neovm_jit_cons as *const u8);
@@ -5776,45 +5744,12 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                         // keeps any over-approximation harmless. The saved
                         // depth crosses the callee via `gc_saved_slot`, with
                         // -1 marking "nothing rooted".
-                        let rooted = if to_root.is_empty() {
-                            false
+                        let saved = if to_root.is_empty() {
+                            CondRoots::NONE
                         } else {
-                            let mut any_heap: Option<ClifValue> = None;
-                            for &v in &to_root {
-                                let fixbits = fb.ins().band_imm_u(v, FIXNUM_CHECK_MASK as i64);
-                                let is_fix = fb.ins().icmp_imm_u(
-                                    IntCC::Equal,
-                                    fixbits,
-                                    FIXNUM_CHECK_VALUE as i64,
-                                );
-                                let symbits = fb.ins().band_imm_u(v, TAG_MASK as i64);
-                                let is_sym =
-                                    fb.ins()
-                                        .icmp_imm_u(IntCC::Equal, symbits, TAG_SYMBOL as i64);
-                                let nonheap = fb.ins().bor(is_fix, is_sym);
-                                let heap = fb.ins().bxor_imm(nonheap, 1);
-                                any_heap = Some(match any_heap {
-                                    Some(acc) => fb.ins().bor(acc, heap),
-                                    None => heap,
-                                });
+                            CondRoots {
+                                base: Some(emit_root_window_stores(&mut fb, rt, &to_root)),
                             }
-                            let any_heap = any_heap.expect("to_root nonempty");
-                            let sentinel = fb.ins().iconst(types::I64, -1);
-                            fb.ins()
-                                .stack_store(types::I64, sentinel, rt.gc_saved_slot, 0);
-                            let root_blk = fb.create_block();
-                            let cont_blk = fb.create_block();
-                            fb.ins().brif(any_heap, root_blk, &[], cont_blk, &[]);
-                            fb.switch_to_block(root_blk);
-                            fb.seal_block(root_blk);
-                            let c = fb.ins().call(rt.refs.gc_save, &[]);
-                            let sv = fb.inst_results(c)[0];
-                            fb.ins().stack_store(types::I64, sv, rt.gc_saved_slot, 0);
-                            emit_gc_push_many(&mut fb, rt, &to_root);
-                            fb.ins().jump(cont_blk, &[]);
-                            fb.switch_to_block(cont_blk);
-                            fb.seal_block(cont_blk);
-                            true
                         };
                         let vmctx = fb.use_var(rt.vmctx_var);
                         let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
@@ -5829,22 +5764,7 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
                             .ins()
                             .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr]);
                         let status = fb.inst_results(call)[0];
-                        if rooted {
-                            // Restore only when the site actually rooted.
-                            let sv =
-                                fb.ins()
-                                    .stack_load(rt.ptr_ty, types::I64, rt.gc_saved_slot, 0);
-                            let took = fb.ins().icmp_imm_u(IntCC::NotEqual, sv, -1);
-                            let rest_blk = fb.create_block();
-                            let done_blk = fb.create_block();
-                            fb.ins().brif(took, rest_blk, &[], done_blk, &[]);
-                            fb.switch_to_block(rest_blk);
-                            fb.seal_block(rest_blk);
-                            fb.ins().call(rt.refs.gc_restore, &[sv]);
-                            fb.ins().jump(done_blk, &[]);
-                            fb.switch_to_block(done_blk);
-                            fb.seal_block(done_blk);
-                        }
+                        emit_cond_residual_roots_post(&mut fb, rt, saved);
                         // STATUS_OK -> continue; anything else is STATUS_SIGNAL.
                         let se = *signal_exit.get_or_insert_with(|| fb.create_block());
                         let cont = fb.create_block();
@@ -6018,6 +5938,7 @@ struct RtCtx {
 
 /// Callable references to every runtime shim, declared into one function.
 struct RtRefs {
+    rootwin_grow: FuncRef,
     gc_save: FuncRef,
     gc_push: FuncRef,
     gc_push_many: FuncRef,
@@ -6148,6 +6069,8 @@ fn declare_rt_refs<M: Module>(
     let push_id = declare(module, "neovm_jit_gc_push", &sig_arg)?;
     let push_many_id = declare(module, "neovm_jit_gc_push_many", &sig_push_many)?;
     let restore_id = declare(module, "neovm_jit_gc_restore", &sig_arg)?;
+    // (vmctx, need) -> (): same param shape as push_many.
+    let rootwin_grow_id = declare(module, "neovm_jit_rootwin_grow", &sig_push_many)?;
     let cons_id = declare(module, "neovm_jit_cons", &sig_cons)?;
     let call_id = declare(module, "neovm_jit_call", &sig_call)?;
     let apply_id = declare(module, "neovm_jit_apply", &sig_call)?;
@@ -6326,6 +6249,7 @@ fn declare_rt_refs<M: Module>(
     };
 
     Ok(RtRefs {
+        rootwin_grow: module.declare_func_in_func(rootwin_grow_id, func),
         gc_save: module.declare_func_in_func(save_id, func),
         gc_push: module.declare_func_in_func(push_id, func),
         gc_push_many: module.declare_func_in_func(push_many_id, func),
@@ -9529,6 +9453,10 @@ pub fn lower_leaf_full_osr(
         neovm_jit_gc_push_many as *const u8,
     );
     builder.symbol("neovm_jit_gc_restore", neovm_jit_gc_restore as *const u8);
+    builder.symbol(
+        "neovm_jit_rootwin_grow",
+        neovm_jit_rootwin_grow as *const u8,
+    );
     builder.symbol("neovm_jit_cons", neovm_jit_cons as *const u8);
     builder.symbol("neovm_jit_call", neovm_jit_call as *const u8);
     builder.symbol("neovm_jit_apply", neovm_jit_apply as *const u8);
