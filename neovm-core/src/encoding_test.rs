@@ -2505,3 +2505,48 @@ fn insert_file_contents_detects_as_though_more_bytes_were_coming() {
         )
     );
 }
+
+/// DIVERGENCES.md entry 156: the `no_more_source:` LAST_BLOCK conjunct guards
+/// EVERY `ONE_MORE_BYTE` in a detector's loop, not only the first.
+///
+/// In C the sharing is free -- every `ONE_MORE_BYTE` is a `goto
+/// no_more_source`, so `detect_coding_big5` (src/coding.c:4665) and
+/// `detect_coding_sjis` (:4618) spend the conjunct on their LEAD byte and on
+/// their TRAIL byte alike, against the same `src_base`, which C assigns once
+/// per loop ITERATION.  Ported by hand it was not free: entry 151 added the
+/// conjunct at the lead-byte site of each and not at the trail-byte one, so a
+/// complete source ending on a lone valid LEAD byte came back "this could be
+/// Big5" where GNU says it could not.
+///
+/// Row one ends on `<c3>`, a valid Big5 lead byte; row two on `<82>`, a valid
+/// Shift-JIS one; row three on `<a4>`, Big5 again.  Row two answering
+/// `(raw-text)` is what "everything else rejected too" looks like: the
+/// `raw-text` category is never rejected, because the walk skips categories at
+/// or past it (src/coding.c:8813).
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program
+/// (`tmp/pw156/pin.el`, `tmp/pw156/pin-gnu.txt`).
+#[test]
+fn a_lone_trailing_lead_byte_refutes_big5_and_sjis_in_a_last_block() {
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(list
+             (detect-coding-string (apply #'unibyte-string
+                                          '(104 101 108 108 111 32 99 97 102 195 169
+                                            32 119 111 114 108 100 32 99 97 102 195)))
+             (detect-coding-string (apply #'unibyte-string '(97 130 160 130)))
+             (detect-coding-string (apply #'unibyte-string '(97 164 164 164))))"#,
+    );
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(iso-latin-1 emacs-mule in-is13194-devanagari chinese-iso-8bit ",
+            "japanese-shift-jis iso-2022-8bit-ss2) ",
+            "(raw-text) ",
+            "(iso-latin-1 emacs-mule in-is13194-devanagari chinese-iso-8bit ",
+            "japanese-shift-jis iso-2022-8bit-ss2))",
+        )
+    );
+}
