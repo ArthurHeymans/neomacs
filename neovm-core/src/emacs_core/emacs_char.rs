@@ -932,6 +932,14 @@ pub fn count_size_as_multibyte(src: &[u8]) -> usize {
 ///
 /// Mirrors GNU `str_to_multibyte` (character.c:686).
 pub fn str_to_multibyte(src: &[u8]) -> Vec<u8> {
+    // ASCII promotes to itself: one block copy instead of a per-byte loop.
+    // (One spare slot: the result often becomes a LispString payload, whose
+    // constructor appends a trailing NUL.)
+    if src.is_ascii() {
+        let mut out = Vec::with_capacity(src.len() + 1);
+        out.extend_from_slice(src);
+        return out;
+    }
     let mut out = Vec::with_capacity(count_size_as_multibyte(src));
     for &c in src {
         if c <= 0x7F {

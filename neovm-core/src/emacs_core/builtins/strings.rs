@@ -2005,7 +2005,9 @@ fn do_format(
     // paths still step per character. The previous decode of the whole
     // format string into a `Vec<u32>` per call was a top cost of `format`.
     let fmt_storage: Vec<u8>;
-    let fmt_bytes: &[u8] = if fmt_ls.is_multibyte() {
+    // ASCII unibyte bytes ARE their multibyte promotion — borrow them
+    // directly instead of allocating an identity copy per `format` call.
+    let fmt_bytes: &[u8] = if fmt_ls.is_multibyte() || fmt_ls.as_bytes().is_ascii() {
         fmt_ls.as_bytes()
     } else {
         fmt_storage = crate::emacs_core::emacs_char::str_to_multibyte(fmt_ls.as_bytes());
