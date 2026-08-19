@@ -230,11 +230,48 @@ fn graphical_terminal_adopts_its_display_name() {
         builtin_terminal_name(&mut eval, vec![]).unwrap(),
         Value::string("initial_terminal")
     );
-    set_graphical_terminal_display_name(":0");
+    configure_terminal_runtime(TerminalRuntimeConfig::window_system().with_name(":0"));
     assert_eq!(
         builtin_terminal_name(&mut eval, vec![]).unwrap(),
         Value::string(":0")
     );
+}
+
+/// A display connection with no name to adopt keeps `"initial_terminal"` as its
+/// name -- and still must not be mistaken for the initial terminal, because the
+/// name was never the thing GNU asks about.
+#[test]
+fn nameless_graphical_terminal_is_still_not_the_initial_terminal() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    reset_terminal_runtime();
+    configure_terminal_runtime(TerminalRuntimeConfig::window_system());
+    let mut eval = Context::new();
+    assert_eq!(
+        builtin_terminal_name(&mut eval, vec![]).unwrap(),
+        Value::string("initial_terminal")
+    );
+    let terminal = builtin_frame_terminal(&mut eval, vec![Value::NIL]).unwrap();
+    assert_eq!(frame_initial_p(&mut eval, terminal), Ok(Value::NIL));
+}
+
+/// The GUI startup keeps a SECOND, display-less terminal for the hidden
+/// bootstrap frame (`ensure_terminal_runtime_owner(GUI_STARTUP_TERMINAL_ID,
+/// "startup_terminal", …)` in neomacs-bin).  That one is GNU's initial terminal,
+/// and GNU's doc string is about exactly it: "If FRAME is a terminal object,
+/// return non-nil if it holds the initial frame."
+#[test]
+fn frame_initial_p_separates_the_display_terminal_from_the_startup_terminal() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    configure_terminal_runtime(TerminalRuntimeConfig::window_system().with_name(":0"));
+    let mut eval = Context::new();
+    // After the Context, which re-mints terminal handles.
+    let startup_terminal =
+        ensure_terminal_runtime_owner(1, "startup_terminal", TerminalRuntimeConfig::inactive());
+    let display_terminal = builtin_frame_terminal(&mut eval, vec![Value::NIL]).unwrap();
+    assert_eq!(frame_initial_p(&mut eval, display_terminal), Ok(Value::NIL));
+    assert_eq!(frame_initial_p(&mut eval, startup_terminal), Ok(Value::T));
 }
 
 #[test]
@@ -670,7 +707,8 @@ fn frame_initial_p_answers_nil_for_a_live_tty_terminal() {
     crate::test_utils::init_test_tracing();
     reset_terminal_thread_locals();
     configure_terminal_runtime(
-        TerminalRuntimeConfig::interactive(Some("alacritty".to_string()), 256).with_name("/dev/tty"),
+        TerminalRuntimeConfig::interactive(Some("alacritty".to_string()), 256)
+            .with_name("/dev/tty"),
     );
     let mut eval = Context::new();
     let terminal = builtin_frame_terminal(&mut eval, vec![Value::NIL]).unwrap();
@@ -684,7 +722,11 @@ fn frame_initial_p_answers_nil_for_a_non_designator() {
     crate::test_utils::init_test_tracing();
     reset_terminal_thread_locals();
     let mut eval = Context::new();
-    for junk in [Value::string("junk"), Value::symbol("sym"), Value::fixnum(42)] {
+    for junk in [
+        Value::string("junk"),
+        Value::symbol("sym"),
+        Value::fixnum(42),
+    ] {
         assert_eq!(
             frame_initial_p(&mut eval, junk),
             Ok(Value::NIL),
@@ -699,9 +741,10 @@ fn frame_initial_p_answers_nil_for_a_non_designator() {
 fn frame_initial_p_answers_nil_for_a_deleted_terminal() {
     crate::test_utils::init_test_tracing();
     reset_terminal_thread_locals();
+    let mut eval = Context::new();
+    // After the Context, which re-mints terminal handles.
     let secondary =
         ensure_terminal_runtime_owner(1, "secondary", TerminalRuntimeConfig::inactive());
-    let mut eval = Context::new();
     assert_eq!(frame_initial_p(&mut eval, secondary), Ok(Value::T));
     builtin_delete_terminal(&mut eval, vec![secondary, Value::T]).expect("delete-terminal");
     assert_eq!(frame_initial_p(&mut eval, secondary), Ok(Value::NIL));
@@ -732,6 +775,5 @@ fn frame_initial_p_still_answers_for_frames() {
 /// `(frame-initial-p DESIGNATOR)`, with a signal rendered as text so a test can
 /// state the ANSWER it expects and report the raise it got instead.
 fn frame_initial_p(eval: &mut Context, designator: Value) -> Result<Value, String> {
-    crate::emacs_core::window_cmds::builtin_frame_initial_p(eval, vec![designator])
-        .map_err(|flow| format!("{flow:?}"))
+    builtin_frame_initial_p(eval, vec![designator]).map_err(|flow| format!("{flow:?}"))
 }

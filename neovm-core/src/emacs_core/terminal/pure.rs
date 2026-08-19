@@ -61,6 +61,12 @@ impl TerminalRuntime {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TerminalRuntimeConfig {
     pub name: Option<String>,
+    /// What kind of display this terminal drives -- GNU's argument to
+    /// `create_terminal`.  There is no default: every construction site picks a
+    /// constructor ([`TerminalRuntimeConfig::inactive`],
+    /// [`TerminalRuntimeConfig::interactive`],
+    /// [`TerminalRuntimeConfig::window_system`]) and thereby answers it.
+    pub output_method: TerminalOutputMethod,
     pub tty_type: Option<String>,
     pub color_cells: i64,
     pub controlling_tty: bool,
@@ -105,12 +111,57 @@ impl DeleteTerminalMode {
     }
 }
 
+/// GNU's `enum output_method` (src/termhooks.h), as far as neomacs models it:
+/// what KIND of display a terminal drives.
+///
+/// GNU tells these apart by allocating one `struct terminal` per display --
+/// `init_initial_terminal` makes the `output_initial` one, `init_tty`
+/// (src/term.c) an `output_termcap` one, `x_term_init` an `output_x_window`
+/// one -- and deletes the initial terminal once a real one exists.  We keep ONE
+/// record and re-describe it in place, so the kind has to be STATED rather than
+/// inferred from what happens to be true of the record:
+///
+/// * not from the id -- GNU's tty terminal is `#<terminal 1 on /dev/tty>` and
+///   ours is `#<terminal 0 on /dev/tty>`, because ours is the same record the
+///   bootstrap started with;
+/// * not from the name -- a window-system terminal keeps `"initial_terminal"`
+///   when its display connection has no name to adopt;
+/// * not from liveness or activity -- `terminal-live-p` deliberately reports
+///   `output_initial` and `output_termcap` alike as `t` (src/terminal.c:456-459),
+///   which is exactly why `turn-on-xterm-mouse-tracking-on-terminal`
+///   (lisp/xt-mouse.el:510-512) needs a SECOND question to separate them.
+///
+/// That second question is `frame-initial-p`, and its terminal branch is one
+/// comparison against this type: `t->type == output_initial`
+/// (src/terminal.c:499).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TerminalOutputMethod {
+    /// GNU `output_initial`: the bootstrap terminal used during daemon mode,
+    /// batch mode and the early stages of startup, and which holds the initial
+    /// frame.
+    Initial,
+    /// GNU `output_termcap`: a text terminal on a tty device.
+    Termcap,
+    /// GNU `output_x_window` / `output_pgtk` / `output_ns` / …: a window-system
+    /// display connection.
+    WindowSystem,
+}
+
+impl TerminalOutputMethod {
+    /// GNU `Fframe_initial_p`'s terminal branch: `t->type == output_initial`.
+    fn is_initial(self) -> bool {
+        matches!(self, Self::Initial)
+    }
+}
+
 struct TerminalRecord {
     id: u64,
     name: String,
     handle: Value,
     params: Vec<(Value, Value)>,
     runtime: TerminalRuntime,
+    /// GNU `struct terminal.type`.  See [`TerminalOutputMethod`].
+    output_method: TerminalOutputMethod,
     deleted: bool,
     host: Option<Box<dyn TerminalHost>>,
 }
@@ -123,6 +174,9 @@ impl TerminalRecord {
             handle: terminal_handle_for_id(id),
             params: Vec::new(),
             runtime: TerminalRuntime::inactive(),
+            // GNU's first terminal is `init_initial_terminal`'s, and every
+            // record starts as that one until a display init re-describes it.
+            output_method: TerminalOutputMethod::Initial,
             deleted: false,
             host: None,
         }
@@ -166,6 +220,9 @@ impl TerminalManager {
             if self.terminals[idx].deleted {
                 self.terminals[idx].deleted = false;
                 self.terminals[idx].runtime = TerminalRuntime::inactive();
+                // Re-created from nothing is re-created as GNU's
+                // `init_initial_terminal` terminal, whatever it drove before.
+                self.terminals[idx].output_method = TerminalOutputMethod::Initial;
                 self.terminals[idx].host = None;
             }
             return &mut self.terminals[idx];
@@ -219,12 +276,14 @@ impl TerminalManager {
         id: u64,
         name: String,
         runtime: TerminalRuntime,
+        output_method: TerminalOutputMethod,
     ) -> &mut TerminalRecord {
         if let Some(idx) = self.terminals.iter().position(|terminal| terminal.id == id) {
             let terminal = &mut self.terminals[idx];
             terminal.name = name;
             terminal.deleted = false;
             terminal.runtime = runtime;
+            terminal.output_method = output_method;
             return terminal;
         }
         self.terminals.push(TerminalRecord {
@@ -233,6 +292,7 @@ impl TerminalManager {
             handle: terminal_handle_for_id(id),
             params: Vec::new(),
             runtime,
+            output_method,
             deleted: false,
             host: None,
         });
@@ -241,9 +301,13 @@ impl TerminalManager {
 }
 
 impl TerminalRuntimeConfig {
+    /// GNU `init_initial_terminal`: the display-less bootstrap terminal.  Also
+    /// the terminal the GUI startup keeps for the hidden initial frame, which
+    /// is the same thing GNU keeps it for.
     pub fn inactive() -> Self {
         Self {
             name: None,
+            output_method: TerminalOutputMethod::Initial,
             tty_type: None,
             color_cells: 0,
             controlling_tty: false,
@@ -251,12 +315,30 @@ impl TerminalRuntimeConfig {
         }
     }
 
+    /// GNU `init_tty` (src/term.c): a text terminal on a tty device.
     pub fn interactive(tty_type: Option<String>, color_cells: i64) -> Self {
         Self {
             name: None,
+            output_method: TerminalOutputMethod::Termcap,
             tty_type,
             color_cells: color_cells.max(0),
             controlling_tty: true,
+            attribute_capabilities: TtyAttributeCapabilities::none(),
+        }
+    }
+
+    /// GNU `x_term_init` / `pgtk_term_init`: a window-system display
+    /// connection.  It carries no tty capabilities and no colour-cell count --
+    /// those are terminfo facts about a text terminal -- but it is emphatically
+    /// not the initial terminal, whether or not the display had a name to
+    /// adopt.
+    pub fn window_system() -> Self {
+        Self {
+            name: None,
+            output_method: TerminalOutputMethod::WindowSystem,
+            tty_type: None,
+            color_cells: 0,
+            controlling_tty: false,
             attribute_capabilities: TtyAttributeCapabilities::none(),
         }
     }
@@ -273,6 +355,16 @@ impl TerminalRuntimeConfig {
     }
 }
 
+/// Re-describe the primary terminal as the display CONFIG names -- GNU's
+/// `create_terminal (type, …)` plus the name that display init gives it.
+///
+/// A window-system terminal takes its name from its display connection (`":0"`,
+/// `"wayland-0"`), not from the bootstrap `"initial_terminal"`: Elisp uses
+/// `(terminal-name)` to tell a real display from the display-less initial one --
+/// e.g. indent-bars' `indent-bars-reset-styles` skips recomputing bar colors on
+/// a theme change while the terminal is still `"initial_terminal"`.  A config
+/// with no name leaves the existing one alone, so a display that has no name to
+/// give still gets its output method re-described.
 pub fn configure_terminal_runtime(config: TerminalRuntimeConfig) {
     TERMINAL_MANAGER.with(|slot| {
         let mut manager = slot.borrow_mut();
@@ -280,6 +372,7 @@ pub fn configure_terminal_runtime(config: TerminalRuntimeConfig) {
         if let Some(name) = config.name {
             terminal.name = name;
         }
+        terminal.output_method = config.output_method;
         terminal.runtime = TerminalRuntime {
             active: config.controlling_tty || config.tty_type.is_some() || config.color_cells > 0,
             tty_type: config.tty_type,
@@ -298,6 +391,7 @@ pub fn ensure_terminal_runtime_owner(
 ) -> Value {
     TERMINAL_MANAGER.with(|slot| {
         let mut manager = slot.borrow_mut();
+        let output_method = config.output_method;
         let runtime = TerminalRuntime {
             active: config.controlling_tty || config.tty_type.is_some() || config.color_cells > 0,
             tty_type: config.tty_type,
@@ -306,7 +400,9 @@ pub fn ensure_terminal_runtime_owner(
             suspended: false,
             attribute_capabilities: config.attribute_capabilities,
         };
-        manager.ensure_terminal(id, name.into(), runtime).handle
+        manager
+            .ensure_terminal(id, name.into(), runtime, output_method)
+            .handle
     })
 }
 
@@ -315,21 +411,8 @@ pub fn reset_terminal_runtime() {
         let mut manager = slot.borrow_mut();
         let terminal = manager.ensure_initial_terminal();
         terminal.name = TERMINAL_NAME.to_string();
+        terminal.output_method = TerminalOutputMethod::Initial;
         terminal.runtime = TerminalRuntime::inactive();
-    });
-}
-
-/// Name the primary terminal after its graphical display connection (e.g.
-/// `":0"` or `"wayland-0"`), matching GNU where a window-system terminal's name
-/// is its display string, not the bootstrap `"initial_terminal"`. Elisp uses
-/// `(terminal-name)` to tell a real display from the display-less initial
-/// terminal — e.g. indent-bars' `indent-bars-reset-styles` skips recomputing
-/// bar colors on a theme change while the terminal is still `"initial_terminal"`
-/// — so a GUI terminal must adopt its display name.
-pub fn set_graphical_terminal_display_name(name: impl Into<String>) {
-    TERMINAL_MANAGER.with(|slot| {
-        let mut manager = slot.borrow_mut();
-        manager.ensure_initial_terminal().name = name.into();
     });
 }
 
@@ -491,6 +574,63 @@ pub(crate) fn terminal_designator_eval_p(
     decode_terminal_id_eval(eval, value).is_some()
 }
 
+/// What a `frame-initial-p` argument turned out to be.
+///
+/// GNU's `Fframe_initial_p` (src/terminal.c:482-500) resolves its argument
+/// twice: `FRAMEP` first, `decode_terminal` otherwise.  The two branches ask
+/// different questions of different objects -- `FRAME_INITIAL_P (f)` of a frame,
+/// `t->type == output_initial` of a terminal -- and `decode_terminal`
+/// (src/terminal.c:223-233) answers NULL, never a signal, for everything else.
+///
+/// Naming the three outcomes is what keeps the frame-only reading from creeping
+/// back: a port that transcribes only the `if (FRAMEP …)` body loses the branch
+/// silently, because the `if` is the only trace of the `else`.  Here the subr
+/// matches on this enum, so the terminal case cannot be dropped without the
+/// compiler saying so, and there is nowhere left to put a raise.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FrameOrTerminal {
+    /// GNU `FRAMEP` + `FRAME_LIVE_P`: a live frame.
+    Frame(crate::window::FrameId),
+    /// GNU `decode_terminal`: a live terminal.  A deleted one does not qualify
+    /// -- `delete_terminal` frees `t->name` and `decode_terminal`'s last line is
+    /// `return t && t->name ? t : NULL`.
+    Terminal(u64),
+    /// GNU's NULL, and GNU's dead frame: the caller answers nil.
+    Neither,
+}
+
+/// GNU `Fframe_initial_p`'s argument resolution, performed once.
+///
+/// nil resolves to the selected frame BEFORE the `FRAMEP` test, so nil always
+/// takes the frame branch -- in batch we materialize that frame the same way
+/// every other frame subr does.
+pub(crate) fn decode_frame_or_terminal(
+    eval: &mut crate::emacs_core::eval::Context,
+    arg: Option<&Value>,
+) -> FrameOrTerminal {
+    let Some(value) = arg.filter(|value| !value.is_nil()) else {
+        return FrameOrTerminal::Frame(
+            crate::emacs_core::window_cmds::ensure_selected_frame_id_in_state(
+                &mut eval.frames,
+                &mut eval.buffers,
+            ),
+        );
+    };
+    if let ValueKind::Veclike(VecLikeType::Frame) = value.kind() {
+        let frame_id = crate::window::FrameId(value.as_frame_id().expect("frame value"));
+        return if eval.frames.get(frame_id).is_some() {
+            FrameOrTerminal::Frame(frame_id)
+        } else {
+            // GNU reaches `FRAME_LIVE_P (f)` here and answers nil.
+            FrameOrTerminal::Neither
+        };
+    }
+    match live_terminal_id_by_handle(value) {
+        Some(id) => FrameOrTerminal::Terminal(id),
+        None => FrameOrTerminal::Neither,
+    }
+}
+
 pub(crate) fn expect_terminal_designator_eval(
     eval: &mut crate::emacs_core::eval::Context,
     value: &Value,
@@ -586,6 +726,11 @@ fn terminal_runtime_for_id(id: u64) -> TerminalRuntime {
             .map(|terminal| terminal.runtime.clone())
             .unwrap_or_else(TerminalRuntime::inactive)
     })
+}
+
+/// GNU `t->type` for a terminal that still exists.
+fn terminal_output_method_for_id(id: u64) -> Option<TerminalOutputMethod> {
+    TERMINAL_MANAGER.with(|slot| slot.borrow().get(id).map(|terminal| terminal.output_method))
 }
 
 /// Mark the selected terminal as having a controlling tty, so it can host a
@@ -716,6 +861,43 @@ pub(crate) fn builtin_terminal_name(
     Ok(Value::string(
         terminal_name_for_id(terminal_id).unwrap_or_else(|| TERMINAL_NAME.to_string()),
     ))
+}
+
+/// `(frame-initial-p &optional FRAME)` -- GNU `Fframe_initial_p`,
+/// src/terminal.c:482-500.
+///
+/// FRAME is a frame OR a terminal, and GNU's doc string says both: "If FRAME is
+/// a terminal object, return non-nil if it holds the initial frame."  The
+/// terminal branch has a caller that depends on it --
+/// `turn-on-xterm-mouse-tracking-on-terminal` (lisp/xt-mouse.el:508-512) hands
+/// it a TERMINAL to skip "the initial terminal which is not a termcap device" --
+/// and that caller runs during startup on every TERM matching
+/// `xterm--auto-xt-mouse-allowed-types` (lisp/term/xterm.el:134-140).  It runs
+/// inside `tty-run-terminal-initialization`, i.e. before `command-line-1`, so a
+/// raise here does not merely print: it costs the whole command line, `-l` and
+/// `--eval` included.
+///
+/// Nothing handed to this subr can raise.  GNU's `decode_terminal` answers NULL
+/// for a non-designator and for a deleted terminal, and `FRAME_LIVE_P` covers a
+/// dead frame, so every unusable argument answers nil.
+pub(crate) fn builtin_frame_initial_p(
+    eval: &mut crate::emacs_core::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_max_args("frame-initial-p", &args, 1)?;
+    let initial = match decode_frame_or_terminal(eval, args.first()) {
+        // GNU: `FRAME_LIVE_P (f) && FRAME_INITIAL_P (f)`; the resolution above
+        // has already established the frame is live.
+        FrameOrTerminal::Frame(frame_id) => {
+            eval.frames.get(frame_id).is_some_and(|frame| frame.initial)
+        }
+        // GNU: `t->type == output_initial`.
+        FrameOrTerminal::Terminal(terminal_id) => {
+            terminal_output_method_for_id(terminal_id).is_some_and(TerminalOutputMethod::is_initial)
+        }
+        FrameOrTerminal::Neither => false,
+    };
+    Ok(Value::bool_val(initial))
 }
 
 /// (terminal-list) -> list of live terminal handles.

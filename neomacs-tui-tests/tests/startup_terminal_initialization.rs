@@ -191,7 +191,10 @@ fn startup_runs_dash_l_on_every_terminal_gnu_does() {
             divergences.len(),
             divergences.join("\n")
         );
-        report.push(format!("TERM={term}: -l ran, {} facts match GNU", facts.lines().count()));
+        report.push(format!(
+            "TERM={term}: -l ran, {} facts match GNU",
+            facts.lines().count()
+        ));
     }
     eprintln!("{}", report.join("\n"));
 }
