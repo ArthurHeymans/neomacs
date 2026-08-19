@@ -793,10 +793,22 @@ pub(crate) fn decode_eol_text(
 /// * `utf-16` whose `:bom` is a CONS, i.e. the bare `utf-16` (:5804).
 ///
 /// `raw-text` is deliberately absent, for the same reason it is absent from
-/// `process_coding_converts_nothing`: the half of it that is undecided is the
-/// end of line, not the character code.  Measured under GNU 31.0.90, a
-/// subprocess whose buffer is unibyte -- the `raw_text_coding_system` downgrade
-/// -- reports `raw-text-dos` for `caf <c3> <a9> CR LF`, never `utf-8-dos`.
+/// `process_coding_name_converts_nothing`: the half of it that is undecided is
+/// the end of line, not the character code.  Measured under GNU 31.0.90 rather
+/// than recalled --
+///
+/// ```text
+/// (coding-system-type 'raw-text)      => raw-text
+/// (coding-system-type 'undecided)     => undecided
+/// (coding-system-type 'undecided-dos) => undecided
+/// (coding-system-type 'prefer-utf-8)  => undecided
+/// (coding-system-get 'utf-8-auto :bom) => (utf-8-with-signature . utf-8)
+/// (coding-system-get 'utf-16 :bom)     => (utf-16le-with-signature . utf-16be-with-signature)
+/// ```
+///
+/// -- and visible in behaviour too: a subprocess whose buffer is unibyte, i.e.
+/// the `raw_text_coding_system` downgrade, reports `raw-text-dos` for
+/// `caf <c3> <a9> CR LF`, never `utf-8-dos`.
 pub(crate) fn coding_name_requires_detection(coding_system: &str) -> bool {
     matches!(
         coding_system_base(coding_system),
