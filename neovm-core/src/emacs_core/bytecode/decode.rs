@@ -7,7 +7,10 @@
 //! 1. Decode all instructions sequentially, building a byte-offset → instruction-index map.
 //! 2. Patch all jump targets from absolute byte offsets to instruction indices.
 
-use std::collections::HashMap;
+// FxHashMap, not std's SipHash map: `offset_map`/`byte_targets` are built on
+// EVERY bytecode decode (small-int keys), and SipHash dominated decode_pass1
+// on decode-heavy phases (byte-compile: ~30M Ir of map inserts per bench).
+use rustc_hash::FxHashMap as HashMap;
 use std::fmt;
 
 use super::chunk::GnuByteOffsetMapEntry;
@@ -476,7 +479,7 @@ fn decode_pass1(
     _constants: &mut Vec<Value>,
 ) -> Result<(Vec<RawOp>, HashMap<usize, usize>, Vec<JumpPatch>), DecodeError> {
     let mut ops: Vec<RawOp> = Vec::new();
-    let mut offset_map: HashMap<usize, usize> = HashMap::new();
+    let mut offset_map: HashMap<usize, usize> = HashMap::default();
     let mut jump_patches: Vec<JumpPatch> = Vec::new();
     let mut pos: usize = 0;
     let len = bytecodes.len();
@@ -842,7 +845,7 @@ fn patch_jumps(
 ) -> Result<Vec<Op>, DecodeError> {
     // Build the ops vector, extracting byte targets for jump instructions.
     let mut ops: Vec<Op> = Vec::with_capacity(raw_ops.len());
-    let mut byte_targets: HashMap<usize, usize> = HashMap::new();
+    let mut byte_targets: HashMap<usize, usize> = HashMap::default();
 
     for (i, raw) in raw_ops.into_iter().enumerate() {
         match raw {

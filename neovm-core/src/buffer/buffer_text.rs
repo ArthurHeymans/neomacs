@@ -2140,10 +2140,28 @@ impl BufferText {
     /// Convert a character position to a logical Emacs byte offset using an
     /// anchor-bracketed cached search. Mirrors GNU `buf_charpos_to_bytepos`
     /// (`src/marker.c:167`).
+    /// Chars==bytes identity head inline; anchor machinery out-of-line (see
+    /// `emacs_byte_pos_to_char_pos`).
+    #[inline]
     pub fn char_pos_to_emacs_byte_pos(&self, target: CharPos0) -> EmacsBytePos {
         #[cfg(test)]
         CHAR_POS_TO_EMACS_BYTE_POS_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
+        {
+            let storage = self.storage.borrow();
+            let metrics = storage.metrics;
+            if metrics.char_len().get() == metrics.emacs_byte_len().get() {
+                return if target >= metrics.char_end() {
+                    metrics.emacs_byte_end()
+                } else {
+                    EmacsBytePos::new(target.get())
+                };
+            }
+        }
+        self.char_pos_to_emacs_byte_pos_multibyte(target)
+    }
+
+    fn char_pos_to_emacs_byte_pos_multibyte(&self, target: CharPos0) -> EmacsBytePos {
         let storage = self.storage.borrow();
         let metrics = storage.metrics;
         let content_epoch = storage.content_epoch;
@@ -2233,7 +2251,28 @@ impl BufferText {
 
     /// Convert a logical Emacs byte position to a character position. Symmetric
     /// to `buf_charpos_to_bytepos` — shares the same anchor + cache machinery.
+    ///
+    /// The chars==bytes identity head is split out inline: match-data
+    /// publication converts two positions per match, and for ASCII-content
+    /// buffers the whole conversion is a borrow + two compares — the
+    /// out-of-line anchor machinery below kept it at ~110 Ir per call.
+    #[inline]
     pub fn emacs_byte_pos_to_char_pos(&self, target: EmacsBytePos) -> CharPos0 {
+        {
+            let storage = self.storage.borrow();
+            let metrics = storage.metrics;
+            if metrics.char_len().get() == metrics.emacs_byte_len().get() {
+                return if target >= metrics.emacs_byte_end() {
+                    metrics.char_end()
+                } else {
+                    CharPos0::new(target.get())
+                };
+            }
+        }
+        self.emacs_byte_pos_to_char_pos_multibyte(target)
+    }
+
+    fn emacs_byte_pos_to_char_pos_multibyte(&self, target: EmacsBytePos) -> CharPos0 {
         let storage = self.storage.borrow();
         let metrics = storage.metrics;
         let content_epoch = storage.content_epoch;

@@ -1626,6 +1626,34 @@ fn compile_lisp_pattern_with_posix_translation(
     };
     let syntax_key = syntax.cache_key();
 
+    // Front-hit fast path: the MRU rotation below keeps the hot pattern at
+    // index 0, and a front hit needs no rotation — so it also needs no
+    // mutable borrow and none of the deep-probe bookkeeping. A search loop
+    // re-probing one pattern lands here every time.
+    if let Some(cached) = LISP_REGEX_PATTERN_CACHE.with(|cache| {
+        let cache = cache.borrow();
+        let (
+            cached_posix,
+            cached_case_fold,
+            cached_translation_key,
+            cached_pattern_multibyte,
+            cached_target_multibyte,
+            cached_pattern,
+            cached_syntax_key,
+            compiled,
+        ) = cache.first()?;
+        (*cached_posix == posix
+            && *cached_case_fold == case_fold
+            && *cached_translation_key == translation_key
+            && *cached_pattern_multibyte == pattern.is_multibyte()
+            && *cached_target_multibyte == target_multibyte
+            && cached_pattern.as_slice() == pattern.as_bytes()
+            && syntax_key_matches(*cached_syntax_key, syntax_key))
+        .then(|| compiled.clone())
+    }) {
+        return Ok(cached);
+    }
+
     if let Some(cached) = crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexCompileHit,
         || {
