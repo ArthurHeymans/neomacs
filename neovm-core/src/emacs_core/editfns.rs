@@ -10,7 +10,6 @@
 
 use super::error::{EvalResult, Flow, signal};
 use super::eval::OverlayModificationHook;
-use super::intern::intern;
 use super::symbol::Obarray;
 use super::value::*;
 use crate::buffer::{
@@ -65,22 +64,42 @@ fn dynamic_buffer_or_global_symbol_value(
     obarray.symbol_value(name).copied()
 }
 
+/// Pre-interned symbols for the buffer-modification hot path: interning these
+/// by NAME on every insert/change signal was a measured cost (~140M Ir on the
+/// buffer benchmark). OnceLock is the established cached-SymId pattern.
+macro_rules! editfns_cached_symbol {
+    ($fn_name:ident, $name:literal) => {
+        fn $fn_name() -> crate::emacs_core::intern::SymId {
+            static S: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+                std::sync::OnceLock::new();
+            *S.get_or_init(|| crate::emacs_core::intern::intern($name))
+        }
+    };
+}
+editfns_cached_symbol!(inhibit_read_only_symbol, "inhibit-read-only");
+editfns_cached_symbol!(buffer_read_only_symbol, "buffer-read-only");
+editfns_cached_symbol!(
+    inhibit_modification_hooks_symbol,
+    "inhibit-modification-hooks"
+);
+editfns_cached_symbol!(deactivate_mark_symbol, "deactivate-mark");
+editfns_cached_symbol!(first_change_hook_symbol, "first-change-hook");
+editfns_cached_symbol!(before_change_functions_symbol, "before-change-functions");
+editfns_cached_symbol!(after_change_functions_symbol, "after-change-functions");
+
 pub(crate) fn buffer_read_only_active_in_state(
     obarray: &Obarray,
     dynamic: &[OrderedRuntimeBindingMap],
     buf: &Buffer,
 ) -> bool {
-    let iro = crate::emacs_core::intern::intern("inhibit-read-only");
+    let iro = inhibit_read_only_symbol();
     if let Some(value) = buf.get_buffer_local_by_sym_id_gated(iro, obarray.is_localized(iro))
         && value.is_truthy()
     {
         return false;
     }
 
-    if obarray
-        .symbol_value("inhibit-read-only")
-        .is_some_and(|value| value.is_truthy())
-    {
+    if obarray.symbol_value_id_or_nil(iro).is_truthy() {
         return false;
     }
 
@@ -88,8 +107,12 @@ pub(crate) fn buffer_read_only_active_in_state(
         return true;
     }
 
-    dynamic_buffer_or_global_symbol_value(obarray, dynamic, Some(buf), "buffer-read-only")
-        .is_some_and(|value| value.is_truthy())
+    let _ = dynamic;
+    let bro = buffer_read_only_symbol();
+    if let Some(value) = buf.get_buffer_local_by_sym_id_gated(bro, obarray.is_localized(bro)) {
+        return value.is_truthy();
+    }
+    obarray.symbol_value_id_or_nil(bro).is_truthy()
 }
 
 pub(crate) fn ensure_current_buffer_writable_in_state(
@@ -194,10 +217,10 @@ pub(crate) fn inhibit_modification_hooks(ctx: &crate::emacs_core::eval::Context)
 
 fn run_named_hook_reset_on_error(
     ctx: &mut crate::emacs_core::eval::Context,
-    hook_name: &str,
+    hook_name: crate::emacs_core::intern::SymId,
     hook_args: &[Value],
 ) -> Result<(), Flow> {
-    let hook_sym = crate::emacs_core::hook_runtime::hook_symbol_by_name(ctx, hook_name);
+    let hook_sym = crate::emacs_core::hook_runtime::hook_symbol_by_id(ctx, hook_name);
     let hook_value =
         crate::emacs_core::hook_runtime::hook_value_by_id(ctx, hook_sym).unwrap_or(Value::NIL);
     if hook_value.is_nil() {
@@ -216,10 +239,10 @@ fn run_named_hook_reset_on_error(
 
 fn run_named_hook_without_reset(
     ctx: &mut crate::emacs_core::eval::Context,
-    hook_name: &str,
+    hook_name: crate::emacs_core::intern::SymId,
     hook_args: &[Value],
 ) -> Result<(), Flow> {
-    let hook_sym = crate::emacs_core::hook_runtime::hook_symbol_by_name(ctx, hook_name);
+    let hook_sym = crate::emacs_core::hook_runtime::hook_symbol_by_id(ctx, hook_name);
     let hook_value =
         crate::emacs_core::hook_runtime::hook_value_by_id(ctx, hook_sym).unwrap_or(Value::NIL);
     if hook_value.is_nil() {
@@ -344,12 +367,12 @@ fn signal_before_change_with_kind(
         .get(current_id)
         .is_some_and(|buf| buf.modified_state_value().is_nil());
     let specpdl_count = ctx.specpdl.len();
-    ctx.specbind(intern("inhibit-modification-hooks"), Value::T);
+    ctx.specbind(inhibit_modification_hooks_symbol(), Value::T);
     let result = (|| -> Result<(), Flow> {
         if run_first_change {
-            run_named_hook_without_reset(ctx, "first-change-hook", &[])?;
+            run_named_hook_without_reset(ctx, first_change_hook_symbol(), &[])?;
         }
-        run_named_hook_reset_on_error(ctx, "before-change-functions", &hook_args)?;
+        run_named_hook_reset_on_error(ctx, before_change_functions_symbol(), &hook_args)?;
 
         ctx.last_overlay_modification_hooks = collect_overlay_change_hooks(
             ctx,
@@ -399,10 +422,7 @@ fn deactivate_mark_after_preparing_change(ctx: &mut crate::emacs_core::eval::Con
     // `Fset (Qdeactivate_mark, Qt)` after signaling before-change. Because
     // `deactivate-mark` is buffer-local-when-set, this creates a buffer-local
     // binding on the modified buffer (so it appears in buffer-local-variables).
-    let _ = ctx.try_set_runtime_binding_by_id(
-        crate::emacs_core::intern::intern("deactivate-mark"),
-        Value::T,
-    );
+    let _ = ctx.try_set_runtime_binding_by_id(deactivate_mark_symbol(), Value::T);
 }
 
 /// GNU `signal_after_change(beg, end, old_len)` — run `after-change-functions`
@@ -524,9 +544,9 @@ fn signal_after_change_with_kind(
     // so unbind_to(specpdl_count) pops them with the specbind.
     ctx.push_specpdl_root(saved_interval_insert_behind_hooks);
     ctx.push_specpdl_root(saved_interval_insert_in_front_hooks);
-    ctx.specbind(intern("inhibit-modification-hooks"), Value::T);
+    ctx.specbind(inhibit_modification_hooks_symbol(), Value::T);
     let result = (|| -> Result<(), Flow> {
-        run_named_hook_reset_on_error(ctx, "after-change-functions", &hook_args)?;
+        run_named_hook_reset_on_error(ctx, after_change_functions_symbol(), &hook_args)?;
 
         ctx.interval_insert_behind_hooks = saved_interval_insert_behind_hooks;
         ctx.interval_insert_in_front_hooks = saved_interval_insert_in_front_hooks;

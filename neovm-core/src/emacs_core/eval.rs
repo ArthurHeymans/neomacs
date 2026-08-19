@@ -1418,6 +1418,8 @@ cached_symbol_id!(max_lisp_eval_depth_symbol, "max-lisp-eval-depth");
 cached_symbol_id!(byte_code_literal_symbol, "byte-code-literal");
 cached_symbol_id!(byte_code_symbol, "byte-code");
 cached_symbol_id!(gc_cons_threshold_symbol, "gc-cons-threshold");
+cached_symbol_id!(input_decode_map_symbol, "input-decode-map");
+cached_symbol_id!(local_function_key_map_symbol, "local-function-key-map");
 cached_symbol_id!(gc_cons_percentage_symbol, "gc-cons-percentage");
 cached_symbol_id!(
     startup_gc_ceiling_active_symbol,
@@ -9249,9 +9251,9 @@ impl Context {
     }
 
     fn sync_keyboard_runtime_binding_by_id(&mut self, sym_id: SymId, value: Value) {
-        if sym_id == intern("input-decode-map") {
+        if sym_id == input_decode_map_symbol() {
             self.command_loop.keyboard.set_input_decode_map(value);
-        } else if sym_id == intern("local-function-key-map") {
+        } else if sym_id == local_function_key_map_symbol() {
             self.command_loop.keyboard.set_local_function_key_map(value);
         }
     }

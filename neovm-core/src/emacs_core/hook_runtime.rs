@@ -77,6 +77,13 @@ pub(crate) fn hook_symbol_by_name(ctx: &Context, hook_name: &str) -> SymId {
         .unwrap_or_else(|_| intern(hook_name))
 }
 
+/// Alias-resolving variant of [`hook_symbol_by_name`] for a PRE-INTERNED hook
+/// symbol: same per-call alias resolution, no per-call intern (the intern was
+/// a measured per-change-signal cost on insert-heavy code).
+pub(crate) fn hook_symbol_by_id(ctx: &Context, hook_sym: SymId) -> SymId {
+    builtins::resolve_variable_alias_id_in_obarray(&ctx.obarray, hook_sym).unwrap_or(hook_sym)
+}
+
 pub(crate) fn hook_value_by_id(ctx: &Context, hook_sym: SymId) -> Option<Value> {
     ctx.visible_runtime_variable_value_by_id_resolved(hook_sym)
 }
