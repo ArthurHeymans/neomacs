@@ -137,6 +137,67 @@ fn divergence_frame_child_frames() {
     );
 }
 
+/// `frame-initial-p` answers about a TERMINAL as readily as about a FRAME.
+///
+/// GNU's `Fframe_initial_p` (src/terminal.c:482-500) tests `FRAMEP` first and
+/// falls through to `decode_terminal` otherwise; its doc string says so outright
+/// ("If FRAME is a terminal object, return non-nil if it holds the initial
+/// frame").  `turn-on-xterm-mouse-tracking-on-terminal` (lisp/xt-mouse.el:512)
+/// is the caller that relies on it, and on a TERM in
+/// `xterm--auto-xt-mouse-allowed-types` (lisp/term/xterm.el:134-140 -- alacritty,
+/// contour) it runs during startup, so a raise here costs `-l` and `--eval`.
+#[test]
+fn divergence_frame_initial_p_terminal_designator() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r#"(list
+  (frame-initial-p)
+  (frame-initial-p (selected-frame))
+  (frame-initial-p (frame-terminal))
+  (frame-initial-p (car (terminal-list))))"#,
+        expect,
+    );
+}
+
+/// `decode_terminal` (src/terminal.c:223-233) returns NULL rather than raising,
+/// so every shape that is neither a frame nor a live terminal answers nil.  A
+/// fixnum is one of them: GNU's `FRAMEP` is false for 0, and 0 is not a terminal.
+#[test]
+fn divergence_frame_initial_p_rejects_without_signalling() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r#"(list
+  (frame-initial-p "junk")
+  (frame-initial-p 'sym)
+  (frame-initial-p 42)
+  (frame-initial-p 0)
+  (frame-initial-p (list 1 2)))"#,
+        expect,
+    );
+}
+
+/// The guard `turn-on-xterm-mouse-tracking-on-terminal` pairs with the
+/// `frame-initial-p` test: `(eq t (terminal-live-p terminal))`.  GNU reports
+/// both `output_initial` and `output_termcap` as `t` (src/terminal.c:452-478),
+/// so the guard passes and the `frame-initial-p` answer is what decides.
+#[test]
+fn divergence_terminal_live_p_reports_t_for_the_initial_terminal() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (t t \"initial_terminal\")""#]];
+    crate::common::assert_oracle_parity_expect(
+        r#"(list
+  (eq t (terminal-live-p (car (terminal-list))))
+  (eq t (terminal-live-p (frame-terminal)))
+  (terminal-name (car (terminal-list))))"#,
+        expect,
+    );
+}
+
 #[test]
 fn divergence_x_display_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();

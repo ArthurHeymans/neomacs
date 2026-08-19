@@ -625,3 +625,113 @@ fn frame_terminal_returns_live_handle() {
     let live = builtin_terminal_live_p(&mut eval, vec![handle]).unwrap();
     assert_eq!(live, Value::T);
 }
+
+// ---------------------------------------------------------------------------
+// `frame-initial-p` takes a TERMINAL as well as a FRAME (ledger 160)
+// ---------------------------------------------------------------------------
+//
+// GNU's `Fframe_initial_p` (src/terminal.c:482-500) admits either shape:
+//
+//     if (NILP (frame))    frame = selected_frame;
+//     if (FRAMEP (frame))  return FRAME_LIVE_P (f) && FRAME_INITIAL_P (f);
+//     struct terminal *t = decode_terminal (frame);
+//     return t && t->type == output_initial ? Qt : Qnil;
+//
+// and `decode_terminal` (src/terminal.c:223-233) never signals: it answers NULL
+// for anything that is neither a terminal nor a frame, and for a terminal whose
+// `name` has been freed by `delete_terminal`, so the subr answers nil for junk.
+//
+// The terminal branch is not decoration.  `turn-on-xterm-mouse-tracking-on-terminal`
+// (lisp/xt-mouse.el:508-512) passes a TERMINAL deliberately, to skip "the
+// initial terminal which is not a termcap device", and `xterm--init`
+// (lisp/term/xterm.el:1035-1044) calls `(xterm-mouse-mode 1)` on every terminal
+// whose TERM matches `xterm--auto-xt-mouse-allowed-types` -- alacritty, contour.
+// A signal there aborts `command-line-1`, so `-l` and `--eval` never run.
+
+/// Measured in GNU 31.0.90 `--batch -Q`:
+/// `(frame-initial-p (car (terminal-list))) => t`.
+#[test]
+fn frame_initial_p_answers_t_for_the_bootstrap_terminal() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    let mut eval = Context::new();
+    let terminal = builtin_frame_terminal(&mut eval, vec![Value::NIL]).unwrap();
+    assert_eq!(frame_initial_p(&mut eval, terminal), Ok(Value::T));
+}
+
+/// Measured in GNU 31.0.90, `emacs -nw -Q` on a pty with TERM=alacritty:
+/// `(frame-initial-p (frame-terminal)) => nil`.  GNU is answering about an
+/// `output_termcap` terminal `init_tty` created; its initial terminal is gone by
+/// then.  We reuse terminal record 0 for the tty rather than allocating a second
+/// one, so the answer has to come from the terminal's OUTPUT METHOD -- not from
+/// its id (ours is 0, GNU's is 1) and not from its name.
+#[test]
+fn frame_initial_p_answers_nil_for_a_live_tty_terminal() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    configure_terminal_runtime(
+        TerminalRuntimeConfig::interactive(Some("alacritty".to_string()), 256).with_name("/dev/tty"),
+    );
+    let mut eval = Context::new();
+    let terminal = builtin_frame_terminal(&mut eval, vec![Value::NIL]).unwrap();
+    assert_eq!(frame_initial_p(&mut eval, terminal), Ok(Value::NIL));
+}
+
+/// `decode_terminal` answers NULL, so GNU answers nil.  Measured in GNU 31.0.90
+/// `--batch -Q`: `"junk"`, `'sym` and `42` each answer nil, none signal.
+#[test]
+fn frame_initial_p_answers_nil_for_a_non_designator() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    let mut eval = Context::new();
+    for junk in [Value::string("junk"), Value::symbol("sym"), Value::fixnum(42)] {
+        assert_eq!(
+            frame_initial_p(&mut eval, junk),
+            Ok(Value::NIL),
+            "frame-initial-p should answer nil for {junk:?}, as GNU's decode_terminal does"
+        );
+    }
+}
+
+/// A deleted terminal has no `name` in GNU, so `decode_terminal` answers NULL
+/// and `frame-initial-p` answers nil instead of t.
+#[test]
+fn frame_initial_p_answers_nil_for_a_deleted_terminal() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    let secondary =
+        ensure_terminal_runtime_owner(1, "secondary", TerminalRuntimeConfig::inactive());
+    let mut eval = Context::new();
+    assert_eq!(frame_initial_p(&mut eval, secondary), Ok(Value::T));
+    builtin_delete_terminal(&mut eval, vec![secondary, Value::T]).expect("delete-terminal");
+    assert_eq!(frame_initial_p(&mut eval, secondary), Ok(Value::NIL));
+}
+
+/// The FRAME branch keeps GNU's `FRAME_LIVE_P (f) && FRAME_INITIAL_P (f)`.
+#[test]
+fn frame_initial_p_still_answers_for_frames() {
+    crate::test_utils::init_test_tracing();
+    reset_terminal_thread_locals();
+    let mut eval = Context::new();
+    let buffer = eval.buffer_manager_mut().create_buffer("*scratch*");
+    let real = eval.frame_manager_mut().create_frame("F1", 80, 25, buffer);
+    assert_eq!(
+        frame_initial_p(&mut eval, Value::make_frame(real.0)),
+        Ok(Value::NIL)
+    );
+    eval.frame_manager_mut()
+        .get_mut(real)
+        .expect("frame")
+        .initial = true;
+    assert_eq!(
+        frame_initial_p(&mut eval, Value::make_frame(real.0)),
+        Ok(Value::T)
+    );
+}
+
+/// `(frame-initial-p DESIGNATOR)`, with a signal rendered as text so a test can
+/// state the ANSWER it expects and report the raise it got instead.
+fn frame_initial_p(eval: &mut Context, designator: Value) -> Result<Value, String> {
+    crate::emacs_core::window_cmds::builtin_frame_initial_p(eval, vec![designator])
+        .map_err(|flow| format!("{flow:?}"))
+}
