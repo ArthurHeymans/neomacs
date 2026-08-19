@@ -3485,8 +3485,48 @@ impl<'a> DetectSrc<'a> {
     }
 }
 
+/// GNU's `CODING_MODE_LAST_BLOCK` (src/coding.h:264-267) as a required
+/// argument of detection: "the decoding/encoding routines treat the current
+/// data as the last block of the whole text to be converted".
+///
+/// It is the one thing the bytes cannot tell a detector.  Four of GNU's
+/// detectors end on `if (src_base < src && coding->mode & CODING_MODE_LAST_BLOCK)`
+/// -- UTF-8 at src/coding.c:1215, `emacs-mule` at :1910, Shift-JIS at :4620 and
+/// Big5 at :4667 -- and the conjunct is the whole difference between "these
+/// bytes are not this coding system" and "this chunk stopped in the middle of a
+/// character and the rest is coming".  Dropping it, which is what this port did
+/// until DIVERGENCES.md entry 151, is invisible for a string, a region or a
+/// file (all complete by construction) and wrong for a subprocess, whose reads
+/// split wherever the kernel split them: measured under GNU 31.0.90, a child
+/// writing `caf <c3>` and then `<a9> CR LF` detects `utf-8` and holds the
+/// `<c3>` back, where `(decode-coding-string "caf\303" 'undecided)` on the very
+/// same bytes answers `iso-latin-1`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SourceBlock {
+    /// More bytes may follow: a subprocess read that is not the EOF read.  A
+    /// trailing partial character is CARRYOVER, not evidence.
+    More,
+    /// The source is complete -- a string, a region, a file, or a process at
+    /// EOF -- so a trailing partial character really is malformed.
+    Last,
+}
+
+impl SourceBlock {
+    /// GNU's `coding->mode & CODING_MODE_LAST_BLOCK` as a bool, spelled out at
+    /// the four sites that test it so the C reads the same as the Rust.
+    fn is_last(self) -> bool {
+        matches!(self, Self::Last)
+    }
+}
+
 /// Port of coding.c `detect_coding_utf_8`.
-fn detect_utf_8(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut DetectInfo) -> bool {
+fn detect_utf_8(
+    bytes: &[u8],
+    head_ascii: usize,
+    multibytep: bool,
+    block: SourceBlock,
+    di: &mut DetectInfo,
+) -> bool {
     di.checked |= MASK_UTF_8;
     let nbytes = bytes.len();
     let mut nchars = head_ascii;
@@ -3503,7 +3543,7 @@ fn detect_utf_8(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut Dete
     loop {
         let src_base = src.pos;
         let Some(c) = src.next() else {
-            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, di);
+            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, block, di);
         };
         if c < 0 || c < 0x80 {
             nchars += 1;
@@ -3516,7 +3556,7 @@ fn detect_utf_8(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut Dete
         // c is a positive 8-bit lead; read continuation octets as raw bytes.
         let c = c as u8;
         let Some(c1) = src.next() else {
-            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, di);
+            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, block, di);
         };
         if c1 < 0 || (c1 as u8 & 0xC0) != 0x80 {
             di.rejected |= MASK_UTF_8;
@@ -3527,7 +3567,7 @@ fn detect_utf_8(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut Dete
             continue;
         }
         let Some(c2) = src.next() else {
-            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, di);
+            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, block, di);
         };
         if c2 < 0 || (c2 as u8 & 0xC0) != 0x80 {
             di.rejected |= MASK_UTF_8;
@@ -3538,7 +3578,7 @@ fn detect_utf_8(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut Dete
             continue;
         }
         let Some(c3) = src.next() else {
-            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, di);
+            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, block, di);
         };
         if c3 < 0 || (c3 as u8 & 0xC0) != 0x80 {
             di.rejected |= MASK_UTF_8;
@@ -3549,7 +3589,7 @@ fn detect_utf_8(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut Dete
             continue;
         }
         let Some(c4) = src.next() else {
-            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, di);
+            return detect_utf_8_no_more(nbytes, src_base, src.pos, bom_found, nchars, block, di);
         };
         if c4 < 0 || (c4 as u8 & 0xC0) != 0x80 {
             di.rejected |= MASK_UTF_8;
@@ -3569,9 +3609,11 @@ fn detect_utf_8_no_more(
     src: usize,
     bom_found: bool,
     nchars: usize,
+    block: SourceBlock,
     di: &mut DetectInfo,
 ) -> bool {
-    if src_base < src {
+    // `if (src_base < src && coding->mode & CODING_MODE_LAST_BLOCK)`, :1215.
+    if src_base < src && block.is_last() {
         di.rejected |= MASK_UTF_8;
         return false;
     }
@@ -3655,6 +3697,7 @@ fn detect_emacs_mule(
     bytes: &[u8],
     head_ascii: usize,
     multibytep: bool,
+    block: SourceBlock,
     di: &mut DetectInfo,
 ) -> bool {
     di.checked |= cat_mask(CodingCat::EmacsMule);
@@ -3663,7 +3706,8 @@ fn detect_emacs_mule(
     loop {
         let src_base = src.pos;
         let Some(mut c) = src.next() else {
-            if src_base < src.pos {
+            // `if (src_base < src && coding->mode & CODING_MODE_LAST_BLOCK)`, :1910.
+            if src_base < src.pos && block.is_last() {
                 di.rejected |= cat_mask(CodingCat::EmacsMule);
                 return false;
             }
@@ -3716,11 +3760,15 @@ fn detect_emacs_mule(
                         // GNU's `ONE_MORE_BYTE` jumps to `no_more_source` here.
                         // We are mid-sequence (the leading byte and zero or more
                         // continuation bytes of this iteration are already
-                        // consumed), so `src_base < src` holds and, with
-                        // LAST_BLOCK set, GNU rejects this category rather than
-                        // reporting it found (coding.c:1907).
-                        di.rejected |= cat_mask(CodingCat::EmacsMule);
-                        return false;
+                        // consumed), so `src_base < src` holds and the answer is
+                        // the LAST_BLOCK conjunct's (coding.c:1910): malformed
+                        // if nothing more is coming, carryover if it is.
+                        if block.is_last() {
+                            di.rejected |= cat_mask(CodingCat::EmacsMule);
+                            return false;
+                        }
+                        di.found |= found;
+                        return true;
                     }
                     Some(v) => {
                         c = v;
@@ -3743,7 +3791,13 @@ fn detect_emacs_mule(
 
 /// Port of coding.c `detect_coding_sjis` (japanese-shift-jis has 2 charsets, so
 /// the max first byte of a 2-byte code is 0xEF).
-fn detect_sjis(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut DetectInfo) -> bool {
+fn detect_sjis(
+    bytes: &[u8],
+    head_ascii: usize,
+    multibytep: bool,
+    block: SourceBlock,
+    di: &mut DetectInfo,
+) -> bool {
     di.checked |= cat_mask(CodingCat::Sjis);
     let max_first = 0xEF;
     let mut src = DetectSrc::new(bytes, head_ascii, multibytep);
@@ -3751,7 +3805,8 @@ fn detect_sjis(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut Detec
     loop {
         let src_base = src.pos;
         let Some(c) = src.next() else {
-            if src_base < src.pos {
+            // `if (src_base < src && coding->mode & CODING_MODE_LAST_BLOCK)`, :4620.
+            if src_base < src.pos && block.is_last() {
                 di.rejected |= cat_mask(CodingCat::Sjis);
                 return false;
             }
@@ -3782,14 +3837,21 @@ fn detect_sjis(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut Detec
 }
 
 /// Port of coding.c `detect_coding_big5`.
-fn detect_big5(bytes: &[u8], head_ascii: usize, multibytep: bool, di: &mut DetectInfo) -> bool {
+fn detect_big5(
+    bytes: &[u8],
+    head_ascii: usize,
+    multibytep: bool,
+    block: SourceBlock,
+    di: &mut DetectInfo,
+) -> bool {
     di.checked |= cat_mask(CodingCat::Big5);
     let mut src = DetectSrc::new(bytes, head_ascii, multibytep);
     let mut found = 0u32;
     loop {
         let src_base = src.pos;
         let Some(c) = src.next() else {
-            if src_base < src.pos {
+            // `if (src_base < src && coding->mode & CODING_MODE_LAST_BLOCK)`, :4667.
+            if src_base < src.pos && block.is_last() {
                 di.rejected |= cat_mask(CodingCat::Big5);
                 return false;
             }
@@ -4042,6 +4104,7 @@ fn detect_coding_systems(
     src_chars: usize,
     multibytep: bool,
     highest: bool,
+    block: SourceBlock,
 ) -> Value {
     // Build category -> bound coding-system base name from the priority list,
     // and the category priority order (coding.c `coding_priorities`).
@@ -4070,6 +4133,7 @@ fn detect_coding_systems(
         src_chars,
         multibytep,
         highest,
+        block,
     );
 
     // GNU `detect_coding_system` finishes by detecting the end-of-line format
@@ -4091,8 +4155,9 @@ fn detect_coding_systems(
 pub(crate) fn detect_highest_coding_system_for_unibyte_bytes(
     mgr: &CodingSystemManager,
     bytes: &[u8],
+    block: SourceBlock,
 ) -> Option<SymId> {
-    let detected = detect_coding_systems(mgr, bytes, bytes.len(), false, true);
+    let detected = detect_coding_systems(mgr, bytes, bytes.len(), false, true, block);
     (!detected.is_nil()).then(|| {
         detected
             .as_symbol_id()
@@ -4203,6 +4268,7 @@ fn detect_categories(
     src_chars: usize,
     multibytep: bool,
     highest: bool,
+    block: SourceBlock,
 ) -> Value {
     let mut di = DetectInfo::default();
     let mut null_byte_found = false;
@@ -4267,7 +4333,9 @@ fn detect_categories(
                 if di.checked & (1 << cat) != 0 {
                     continue;
                 }
-                run_detector(cat, bytes, head_ascii, src_chars, multibytep, &mut di);
+                run_detector(
+                    cat, bytes, head_ascii, src_chars, multibytep, block, &mut di,
+                );
             }
         }
     }
@@ -4330,21 +4398,22 @@ fn run_detector(
     head_ascii: usize,
     src_chars: usize,
     multibytep: bool,
+    block: SourceBlock,
     di: &mut DetectInfo,
 ) {
     if cat == CodingCat::Utf8Nosig as usize
         || cat == CodingCat::Utf8Auto as usize
         || cat == CodingCat::Utf8Sig as usize
     {
-        detect_utf_8(bytes, head_ascii, multibytep, di);
+        detect_utf_8(bytes, head_ascii, multibytep, block, di);
     } else if (CodingCat::Utf16Auto as usize..=CodingCat::Utf16LeNosig as usize).contains(&cat) {
         detect_utf_16(bytes, src_chars, di);
     } else if cat == CodingCat::EmacsMule as usize {
-        detect_emacs_mule(bytes, head_ascii, multibytep, di);
+        detect_emacs_mule(bytes, head_ascii, multibytep, block, di);
     } else if cat == CodingCat::Sjis as usize {
-        detect_sjis(bytes, head_ascii, multibytep, di);
+        detect_sjis(bytes, head_ascii, multibytep, block, di);
     } else if cat == CodingCat::Big5 as usize {
-        detect_big5(bytes, head_ascii, multibytep, di);
+        detect_big5(bytes, head_ascii, multibytep, block, di);
     } else if cat == CodingCat::Charset as usize {
         detect_charset_latin1(bytes, head_ascii, multibytep, di);
     } else if (CodingCat::Iso7 as usize..=CodingCat::Iso8Else as usize).contains(&cat) {
@@ -4371,8 +4440,15 @@ pub(crate) fn builtin_detect_coding_string(
     let src_chars = s.schars();
     let multibytep = s.is_multibyte();
     let highest = args.get(1).is_some_and(|v| v.is_truthy());
+    // A string is complete by construction, which is GNU setting
+    // `CODING_MODE_LAST_BLOCK` in `Fdetect_coding_string` (src/coding.c:8716).
     Ok(detect_coding_systems(
-        mgr, &bytes, src_chars, multibytep, highest,
+        mgr,
+        &bytes,
+        src_chars,
+        multibytep,
+        highest,
+        SourceBlock::Last,
     ))
 }
 
@@ -4428,8 +4504,14 @@ pub(crate) fn builtin_detect_coding_region(
     let bytes = crate::encoding::lisp_string_coding_source_bytes(&string);
     let src_chars = string.schars();
     let multibytep = string.is_multibyte();
+    // Likewise `Fdetect_coding_region` (src/coding.c:8009).
     Ok(detect_coding_systems(
-        mgr, &bytes, src_chars, multibytep, highest,
+        mgr,
+        &bytes,
+        src_chars,
+        multibytep,
+        highest,
+        SourceBlock::Last,
     ))
 }
 

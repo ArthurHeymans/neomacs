@@ -789,8 +789,8 @@ pub(crate) fn decode_eol_text(
 ///   subsidiaries of `undecided` share too -- `undecided-dos` is still type
 ///   `Qundecided`, so a chunk that has settled the END OF LINE has not settled
 ///   the character code;
-/// * `utf-8` whose `:bom` is a CONS, i.e. `utf-8-auto` (:5785);
-/// * `utf-16` whose `:bom` is a CONS, i.e. the bare `utf-16` (:5803).
+/// * `utf-8` whose `:bom` is a CONS, i.e. `utf-8-auto` (:5786);
+/// * `utf-16` whose `:bom` is a CONS, i.e. the bare `utf-16` (:5804).
 ///
 /// `raw-text` is deliberately absent, for the same reason it is absent from
 /// `process_coding_converts_nothing`: the half of it that is undecided is the
@@ -808,8 +808,8 @@ pub(crate) fn coding_name_requires_detection(coding_system: &str) -> bool {
 /// effect: the coding system a decode of BYTES will actually run with.
 ///
 /// `detect_coding` does not merely answer a question -- it REPLACES the coding
-/// system, `setup_coding_system (found, coding)` (:6743), and then re-applies
-/// the end-of-line type the caller had specified (:6749-6753).  So a decode
+/// system, `setup_coding_system (found, coding)` (:6751), and then re-applies
+/// the end-of-line type the caller had specified (:6752-6753).  So a decode
 /// that started at `undecided` ends at `utf-8` with its eol still to be
 /// resolved by `decode_eol`, and one that started at `undecided-dos` ends at
 /// `utf-8-dos` outright.
@@ -818,7 +818,7 @@ pub(crate) fn coding_name_requires_detection(coding_system: &str) -> bool {
 /// error case: it is the normal outcome for pure-ASCII bytes, because
 /// `detect_coding`'s whole body is guarded by `null_byte_found ||
 /// eight_bit_found || coding->head_ascii < coding->src_bytes ||
-/// detect_info.found` (:6595-6598).  Measured under GNU 31.0.90, a subprocess
+/// detect_info.found` (:6596-6599).  Measured under GNU 31.0.90, a subprocess
 /// whose first chunk is `a CRLF b CRLF` reports `undecided-dos` -- the eol half
 /// moved and the character half did not -- and a later non-ASCII chunk still
 /// moves it on to `utf-8-dos`.
@@ -826,6 +826,7 @@ pub(crate) fn detected_coding_name(
     coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     coding_system: &str,
     bytes: &[u8],
+    block: crate::emacs_core::coding::SourceBlock,
 ) -> Option<&'static str> {
     let base = coding_system_base(coding_system);
     let found = match base {
@@ -834,6 +835,7 @@ pub(crate) fn detected_coding_name(
                 coding_systems,
                 bytes,
                 base == "prefer-utf-8",
+                block,
             )?);
             // A detection result of `undecided` is this engine's spelling of
             // GNU's nil `found`.
@@ -3708,15 +3710,41 @@ fn detect_undecided_coding(
     coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     bytes: &[u8],
     prefer_utf_8: bool,
+    block: crate::emacs_core::coding::SourceBlock,
 ) -> Option<crate::emacs_core::intern::SymId> {
-    let valid_utf8_multibyte =
-        std::str::from_utf8(bytes).is_ok() && bytes.iter().any(|&b| b >= 0x80);
-    // `prefer-utf-8` raises UTF-8 ahead of the configured category priority.
-    if prefer_utf_8 && valid_utf8_multibyte {
+    // `prefer-utf-8` raises UTF-8 ahead of the configured category priority --
+    // GNU's `prefer_utf_8 && detect_coding_utf_8 (coding, &detect_info)`
+    // (src/coding.c:6619-6620), which is the same detector as everywhere else
+    // and therefore tolerates a trailing partial character when this is not the
+    // last block.
+    if prefer_utf_8 && utf8_or_truncated_utf8(bytes, block) && bytes.iter().any(|&b| b >= 0x80) {
         return Some(intern("utf-8"));
     }
 
-    crate::emacs_core::coding::detect_highest_coding_system_for_unibyte_bytes(coding_systems, bytes)
+    crate::emacs_core::coding::detect_highest_coding_system_for_unibyte_bytes(
+        coding_systems,
+        bytes,
+        block,
+    )
+}
+
+/// Valid UTF-8, or valid UTF-8 that stops in the middle of its last character
+/// when more bytes may still follow.
+///
+/// GNU has no separate predicate for this: `detect_coding_utf_8` walks the
+/// source and its `no_more_source:` tail rejects a partial trailing character
+/// only under `CODING_MODE_LAST_BLOCK` (src/coding.c:1215).  This is that one
+/// rule spelled for the `prefer-utf-8` shortcut, which does not go through the
+/// category walk.
+fn utf8_or_truncated_utf8(bytes: &[u8], block: crate::emacs_core::coding::SourceBlock) -> bool {
+    match std::str::from_utf8(bytes) {
+        Ok(_) => true,
+        Err(error) => {
+            !matches!(block, crate::emacs_core::coding::SourceBlock::Last)
+                && error.error_len().is_none()
+                && std::str::from_utf8(&bytes[..error.valid_up_to()]).is_ok()
+        }
+    }
 }
 
 /// The BOM-detecting arms of GNU's `detect_coding` (src/coding.c:6702-6742).
@@ -3897,14 +3925,20 @@ fn builtin_coding_string_in_context(
             && let Some(src) = args[0].as_lisp_string()
         {
             let bytes = lisp_string_coding_source_bytes(src);
-            let detected =
-                detect_undecided_coding(&ctx.coding_systems, &bytes, base == *"prefer-utf-8")
-                    .ok_or_else(|| {
-                        signal(
-                            LispCondition::CodingSystemError,
-                            vec![Value::symbol(&coding)],
-                        )
-                    })?;
+            let detected = detect_undecided_coding(
+                &ctx.coding_systems,
+                &bytes,
+                base == *"prefer-utf-8",
+                // `code_convert_string` sets `CODING_MODE_LAST_BLOCK`
+                // (src/coding.c:9606): a string is complete.
+                crate::emacs_core::coding::SourceBlock::Last,
+            )
+            .ok_or_else(|| {
+                signal(
+                    LispCondition::CodingSystemError,
+                    vec![Value::symbol(&coding)],
+                )
+            })?;
             coding = apply_explicit_eol_suffix(resolve_sym(detected), coding_name_eol(&coding));
             // Rewrite the coding argument too, so the fallback decode path
             // (which re-reads args[1]) uses the detected system rather than the

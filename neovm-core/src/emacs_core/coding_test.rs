@@ -2067,6 +2067,7 @@ fn detect_list_mb(bytes: &[u8], src_chars: usize, multibytep: bool) -> Vec<Strin
         src_chars,
         multibytep,
         false,
+        SourceBlock::Last,
     );
     list_to_vec(&v)
         .unwrap()
@@ -2473,7 +2474,15 @@ fn detect_highest_with_front(front: Option<CodingCat>) -> String {
         priorities.retain(|&x| x != c);
         priorities.insert(0, c);
     }
-    let v = detect_categories(&priorities, &cat_system, ISO7_DESIGNATION, 6, false, true);
+    let v = detect_categories(
+        &priorities,
+        &cat_system,
+        ISO7_DESIGNATION,
+        6,
+        false,
+        true,
+        SourceBlock::Last,
+    );
     resolve_sym(v.as_symbol_id().unwrap()).to_string()
 }
 

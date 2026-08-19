@@ -9912,13 +9912,13 @@ fn call_process_reports_the_coding_its_output_was_decoded_with() {
 /// reports `CODING_ID_NAME (coding->id)` (src/process.c:6417-6425), and by the
 /// time it reads that id BOTH of GNU's rewrites have had their turn at it --
 /// `setup_coding_system (found, coding)` inside `detect_coding`
-/// (src/coding.c:6743) for the character code, and `adjust_coding_eol_type`
+/// (src/coding.c:6751) for the character code, and `adjust_coding_eol_type`
 /// (:6805) for the end of line.  Entry 139 moved the second and left the first.
 ///
 /// The last three rows are the negative controls, and they are what makes the
 /// other eight mean something.  `detect_coding`'s whole body is guarded by
 /// `null_byte_found || eight_bit_found || coding->head_ascii < coding->src_bytes
-/// || detect_info.found` (:6595-6598), so a pure-ASCII child settles the end of
+/// || detect_info.found` (:6596-6599), so a pure-ASCII child settles the end of
 /// line and NOT the character code; a child with no terminator at all settles
 /// neither; and a unibyte process buffer is downgraded to `raw-text` first,
 /// which does not detect at all, because the undecided half of `raw-text` is
@@ -9956,7 +9956,7 @@ fn process_output_write_back_reports_the_character_code_detection_chose() {
                                                 (pw151-spawn b s))))
                 ;; A concrete eol on an undecided BASE still detects the
                 ;; character code; `detect_coding' re-applies the specified eol
-                ;; after the re-base (src/coding.c:6749-6753), so the CRs
+                ;; after the re-base (src/coding.c:6752-6753), so the CRs
                 ;; survive here and the name is `utf-8-unix'.
                 (pw151-run cafe (lambda (b s) (let ((coding-system-for-read 'undecided-unix))
                                                 (pw151-spawn b s))))
@@ -9974,7 +9974,7 @@ fn process_output_write_back_reports_the_character_code_detection_chose() {
                                   (let ((default-process-coding-system '(undecided . latin-1)))
                                     (pw151-spawn b s))))
                 ;; The other two detection outcomes: a null byte is
-                ;; `no-conversion' (:6686), whose eol type is concrete `unix',
+                ;; `no-conversion' (:6688), whose eol type is concrete `unix',
                 ;; so its CR LF survives; bytes that are not valid UTF-8 fall to
                 ;; the category priority list and land on `iso-latin-1'.
                 (pw151-run "printf 'a\\0b\\r\\n'"
@@ -10071,6 +10071,72 @@ fn process_charset_detection_is_sticky_for_the_process_not_the_chunk() {
             "((99 97 102 233 10 99 97 102 4194281 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
             "((99 97 102 233 10 99 97 102 195 169 10) (iso-latin-1-dos . utf-8-unix) iso-latin-1-dos) ",
             "((97 10 98 10 120 10 121 10) (undecided-dos . utf-8-unix) undecided-dos))",
+        )
+    );
+}
+
+/// DIVERGENCES.md entry 151: detection is told whether more bytes may follow,
+/// and it changes the answer.
+///
+/// Four of GNU's detectors end on
+/// `if (src_base < src && coding->mode & CODING_MODE_LAST_BLOCK)` -- UTF-8 at
+/// src/coding.c:1215, `emacs-mule` at :1910, Shift-JIS at :4620, Big5 at :4667
+/// -- and `read_process_output` raises that flag only at EOF
+/// (src/process.c:6321).  So a chunk that stops in the middle of a character is
+/// still UTF-8 and the partial character is carryover, where the very same
+/// bytes handed to `decode-coding-string` -- a complete source, GNU sets the
+/// flag in `code_convert_string` (src/coding.c:9606) -- are NOT UTF-8 and fall
+/// to `iso-latin-1`.  The last row is that disagreement, and it is the point:
+/// the two doors differ because the flag differs, not because the detectors do.
+///
+/// Without the flag this fix would have regressed the most ordinary case there
+/// is -- a process emitting UTF-8 in chunks the kernel split mid-character --
+/// from carryover to two mojibake characters.
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program.
+#[test]
+fn process_detection_treats_a_partial_trailing_character_as_carryover() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw151b-run (script)
+               (let ((buf (generate-new-buffer " *pw151b*")))
+                 (unwind-protect
+                     (let ((p (make-process :name "pw151b" :buffer buf :sentinel #'ignore
+                                            :connection-type 'pipe
+                                            :command (list "{sh}" "-c" script))))
+                       (while (accept-process-output p 1))
+                       (while (process-live-p p) (accept-process-output p 0.05))
+                       (list (append (with-current-buffer buf (buffer-string)) nil)
+                             (process-coding-system p)
+                             last-coding-system-used))
+                   (kill-buffer buf))))
+             (let ((default-process-coding-system '(undecided . utf-8-unix))
+                   (coding-system-for-read 'undecided))
+               (list
+                ;; A two-byte character split across the read boundary.
+                (pw151b-run "printf 'caf\\303'; sleep 0.7; printf '\\251\\r\\n'")
+                ;; A three-byte one.
+                (pw151b-run "printf 'a\\344\\270'; sleep 0.7; printf '\\255\\r\\n'")
+                ;; Truncated with nothing following: the EOF read IS the last
+                ;; block, but detection answered `utf-8' on the first read and
+                ;; is sticky, so the orphan byte lands as an eight-bit
+                ;; character rather than re-deciding the coding system.
+                (pw151b-run "printf 'caf\\303'")
+                ;; The string door on the same bytes IS a complete source.
+                (list (append (decode-coding-string "caf\303" 'undecided) nil)
+                      last-coding-system-used))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "((99 97 102 233 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((97 20013 10) (utf-8-dos . utf-8-unix) utf-8-dos) ",
+            "((99 97 102 4194243) (utf-8 . utf-8-unix) utf-8) ",
+            "((99 97 102 195) iso-latin-1))",
         )
     );
 }
@@ -10529,7 +10595,7 @@ fn a_serial_process_decodes_the_bytes_its_port_delivers() {
               ;; as well as their bytes.  Entry 147 pinned only the bytes here,
               ;; because an `undecided' decode reported its own name; entry 151
               ;; carried the `CodingSystemManager' into the decoder, so
-              ;; `detect_coding''s re-base (src/coding.c:6743) reaches the slot
+              ;; `detect_coding''s re-base (src/coding.c:6751) reaches the slot
               ;; and all three answer `utf-8-dos' as GNU does.
               (pw147-serial-bytes "{p0}" 7)
               (let ((coding-system-for-read 'binary))

@@ -1553,7 +1553,7 @@ fn process_coding_symbol_name(value: Value) -> &'static str {
 /// advance; entry 134 removed it.
 /// It is keyed on the NAME rather than on the slot `Value` because the coding
 /// system reaching it is as often one `detect_coding` produced -- GNU answers
-/// `Qno_conversion` for a source with a null byte in it (src/coding.c:6686) --
+/// `Qno_conversion` for a source with a null byte in it (src/coding.c:6688) --
 /// as one the creation-time chain resolved.
 fn process_coding_name_converts_nothing(name: &str) -> bool {
     matches!(name, "binary" | "no-conversion")
@@ -1609,7 +1609,7 @@ pub(crate) enum ProcessOutputDecoding {
     /// `decode_coding_object` calls `detect_coding` before any decoder runs
     /// (src/coding.c:8129-8130), and `detect_coding` REPLACES the whole coding
     /// system with the one it found -- `setup_coding_system (found, coding)`,
-    /// :6743.  So the bytes are not decoded under this name and must not be
+    /// :6751.  So the bytes are not decoded under this name and must not be
     /// reported under it either: measured under GNU 31.0.90, a subprocess whose
     /// chain answers nil and whose child writes `caf <c3> <a9> CR LF x CR LF`
     /// ends with `(process-coding-system P)` = `(utf-8-dos . utf-8-dos)`, never
@@ -1668,6 +1668,7 @@ impl ProcessOutputDecoding {
         self,
         coding_systems: &crate::emacs_core::coding::CodingSystemManager,
         bytes: &[u8],
+        block: crate::emacs_core::coding::SourceBlock,
     ) -> ResolvedProcessDecoding {
         match self {
             Self::Bytes(name) => ResolvedProcessDecoding::Bytes(name),
@@ -1676,8 +1677,9 @@ impl ProcessOutputDecoding {
                 // A nil `found` leaves the coding system exactly as it was,
                 // decoder included -- and it will be offered the NEXT chunk
                 // again, because the name it keeps still requires detection.
-                let found = crate::encoding::detected_coding_name(coding_systems, requested, bytes)
-                    .unwrap_or(requested);
+                let found =
+                    crate::encoding::detected_coding_name(coding_systems, requested, bytes, block)
+                        .unwrap_or(requested);
                 if process_coding_name_converts_nothing(found) {
                     ResolvedProcessDecoding::Bytes(found)
                 } else {
@@ -1755,7 +1757,7 @@ impl ProcessOutputDecoding {
 pub(crate) enum ResolvedProcessDecoding {
     /// `binary` / `no-conversion`: the child's bytes reach the buffer
     /// unchanged.  Reachable from `Detect` too -- GNU answers `Qno_conversion`
-    /// for a source with a null byte in it (src/coding.c:6686).
+    /// for a source with a null byte in it (src/coding.c:6688).
     Bytes(&'static str),
     /// Decode under this coding system, which is now concrete.
     Coding(&'static str),
@@ -1827,7 +1829,7 @@ impl ResolvedProcessDecoding {
 ///
 /// It is ONE name and not a name plus an adjustment, because in GNU it is one
 /// field: `coding->id`, which `setup_coding_system (found, coding)`
-/// (src/coding.c:6743) and `adjust_coding_eol_type` (:6805) both overwrite, and
+/// (src/coding.c:6751) and `adjust_coding_eol_type` (:6805) both overwrite, and
 /// which `CODING_ID_NAME` then reads back.  Keeping the two rewrites apart here
 /// is what let the first one go unreported while the second one moved.
 ///
@@ -2064,12 +2066,25 @@ fn decode_process_output_bytes(
     // Detection sees the WHOLE buffer that is about to be decoded, carryover
     // included, and it runs before the read boundary is chosen.  Both halves
     // are GNU's: `coding->src_bytes` is the carryover plus this read
-    // (src/process.c:6243-6260), and `detect_coding` runs before any decoder
+    // (src/process.c:6243-6254, `nbytes += carryover` at :6331), and
+    // `detect_coding` runs before any decoder
     // hands bytes back as carryover (src/coding.c:8129-8130).  The order
     // matters twice over, because the boundary rules below are properties of
     // the decoder detection just chose -- a `utf-8` answer holds a truncated
     // multibyte tail back and an `iso-latin-1` answer holds nothing back.
-    let resolved = decoding.detected(coding_systems, &combined);
+    // GNU sets `CODING_MODE_LAST_BLOCK` on a process read only at EOF
+    // (src/process.c:6321), and this is that flag: the same `flush` the
+    // boundary rules below already take.  It is what separates "these bytes are
+    // not UTF-8" from "this chunk stopped in the middle of a character".
+    let resolved = decoding.detected(
+        coding_systems,
+        &combined,
+        if flush {
+            crate::emacs_core::coding::SourceBlock::Last
+        } else {
+            crate::emacs_core::coding::SourceBlock::More
+        },
+    );
     let decode_len =
         process_output_decode_prefix_len(resolved.name(), &combined, flush, eol_conversion);
     if decode_len < combined.len() {
@@ -7624,7 +7639,7 @@ impl super::eval::Context {
     ///
     /// * `Vlast_coding_system_used` becomes `CODING_ID_NAME (coding->id)` --
     ///   the id BOTH of GNU's rewrites have had their turn at, so it carries
-    ///   the character code `detect_coding` chose (src/coding.c:6743) as well
+    ///   the character code `detect_coding` chose (src/coding.c:6751) as well
     ///   as the end-of-line type `adjust_coding_eol_type` chose (:6805).
     /// * When that differs from the process's own decode coding system, the
     ///   process's slot is REPLACED by it (`pset_decode_coding_system`, :6425).

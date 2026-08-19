@@ -631,11 +631,16 @@ fn write_output_target_in_state(
             // 31.0.90, `(let ((coding-system-for-read 'undecided))
             // (call-process "sh" nil t nil "-c" "printf 'caf\\303\\251\\r\\n'"))`
             // leaves `last-coding-system-used' at `utf-8-dos'.
-            let run = decoding.detected(&eval.coding_systems, output).decode(
-                &eval.coding_systems,
-                output,
-                eol_conversion,
-            );
+            let run = decoding
+                .detected(
+                    &eval.coding_systems,
+                    output,
+                    // The whole of this route's output is in hand, which is
+                    // GNU's state when it sets `CODING_MODE_LAST_BLOCK` at the
+                    // end of `Fcall_process`'s read loop (src/callproc.c).
+                    crate::emacs_core::coding::SourceBlock::Last,
+                )
+                .decode(&eval.coding_systems, output, eol_conversion);
             // `Vlast_coding_system_used = CODING_ID_NAME (process_coding.id)`
             // (src/callproc.c:913).  It sits inside the branch that READ the
             // child's output into a buffer, so a `(:file ...)` or discarded
