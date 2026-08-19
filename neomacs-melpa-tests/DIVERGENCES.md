@@ -13828,6 +13828,15 @@ divergence, it was root-caused there, and the fix shipped on 2026-08-14 in
 `fb623d14e`.  This entry re-measures it rather than restating it, and reports
 what the re-measurement turned up next to it.
 
+One thing to fix for whoever searches next: that commit is titled "tty:
+approximate 256-colors the way GNU approximates them (ledger 99)", and ledger 99
+is `accept-process-output` returning early on pending input.  The commit's
+number is wrong; the entry it implements is 108.  `git log -- <the writer>` is
+the reliable way to reach it, not the ledger number in the subject line.  The
+gruvbox suite was written on 2026-08-11 (`4a49b32cf`) and the fix landed three
+days later, which is the whole reason a report written against the suite's first
+days reads as open long after it closed.
+
 ### Measured now, not recalled
 
 `gruvbox_theme_real_terminal_profiles_match_gnu` -- the suite the report says is
