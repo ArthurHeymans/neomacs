@@ -178,6 +178,16 @@ thread_local! {
     /// bool whenever a heap is (re)installed on a thread — that resync, not a
     /// guard, is the panic-recovery point.
     static TAGGED_HEAP_CONCURRENT_ACTIVE: Cell<bool> = const { Cell::new(false) };
+    /// Mirrors `TaggedHeap::{dump_addr_lo, dump_addr_hi}` so the write
+    /// barrier's partition-only path can span-test a cons owner without
+    /// dereferencing the heap. `(usize::MAX, 0)` = empty span.
+    static TAGGED_HEAP_DUMP_SPAN: Cell<(usize, usize)> = const { Cell::new((usize::MAX, 0)) };
+    /// The owner most recently inserted into `mapped_remembered`. That set is
+    /// append-only for the life of the heap ("permanent root"), so a repeat
+    /// write by the same owner has nothing to add on the partition-only path
+    /// (owner tracking Disabled, no concurrent mark — both re-checked before
+    /// this cache is consulted). Reset whenever a heap is (re)installed.
+    static TAGGED_HEAP_LAST_REMEMBERED: Cell<usize> = const { Cell::new(0) };
     /// Auto-allocated heap for tests that construct Values without a Context.
     #[cfg(test)]
     static TEST_FALLBACK_TAGGED_HEAP: std::cell::RefCell<Option<Box<TaggedHeap>>> =
@@ -966,6 +976,9 @@ pub fn set_tagged_heap(heap: &mut TaggedHeap) {
     TAGGED_HEAP_WRITE_TRACKING_MODE.with(|mode| mode.set(heap.write_tracking_mode()));
     TAGGED_HEAP_PARTITION_ACTIVE.with(|p| p.set(heap.partition_dump));
     TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.set(heap.concurrent_mark_running));
+    TAGGED_HEAP_DUMP_SPAN.with(|s| s.set((heap.dump_addr_lo, heap.dump_addr_hi)));
+    // Owner bits are heap-specific: a different heap invalidates the cache.
+    TAGGED_HEAP_LAST_REMEMBERED.with(|l| l.set(0));
 }
 
 /// Uninstall `heap` from this thread's allocation slot, if it is the heap
@@ -990,6 +1003,8 @@ pub fn clear_tagged_heap_if_installed(heap: &TaggedHeap) {
             TAGGED_HEAP_WRITE_TRACKING_MODE.with(|mode| mode.set(WriteTrackingMode::Disabled));
             TAGGED_HEAP_PARTITION_ACTIVE.with(|p| p.set(false));
             TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.set(false));
+            TAGGED_HEAP_DUMP_SPAN.with(|s| s.set((usize::MAX, 0)));
+            TAGGED_HEAP_LAST_REMEMBERED.with(|l| l.set(0));
         }
     });
 }
@@ -1075,6 +1090,27 @@ fn note_heap_write_record(record: HeapWriteRecord) {
     let concurrent = TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.get());
     if disabled && !partition && !concurrent {
         return;
+    }
+    if disabled && !concurrent {
+        // Partition-only path: the barrier's sole job is the append-only dump
+        // remembered set (see `record_heap_write`), so two cheap thread-local
+        // rejects apply. (1) A repeat of the last-inserted owner has nothing
+        // to add — its entry is permanent. (2) A cons owner's decision is the
+        // dump-span test alone (`value_is_tenured` is always false for cons,
+        // and neither an address nor the span ever changes), so a cons outside
+        // the span never needs the heap at all.
+        let bits = record.owner.bits();
+        if TAGGED_HEAP_LAST_REMEMBERED.with(|l| l.get()) == bits {
+            return;
+        }
+        if record.owner.is_cons()
+            && let Some(addr) = TaggedHeap::value_heap_addr(record.owner)
+        {
+            let (lo, hi) = TAGGED_HEAP_DUMP_SPAN.with(|s| s.get());
+            if addr < lo || addr >= hi {
+                return;
+            }
+        }
     }
     with_tagged_heap(|heap| heap.record_heap_write(record));
 }
@@ -3942,6 +3978,9 @@ impl TaggedHeap {
             && (self.owner_is_mapped(record.owner) || self.value_is_tenured(record.owner))
         {
             self.mapped_remembered.insert(record.owner.bits());
+            // Arm the barrier's repeat-owner reject: this entry is permanent,
+            // so the partition-only path can skip the same owner's next write.
+            TAGGED_HEAP_LAST_REMEMBERED.with(|l| l.set(record.owner.bits()));
         }
         // SATB (snapshot-at-the-beginning) barrier. Runs BEFORE the store, so the
         // owner's current children are its PRE-overwrite values; logging them
@@ -4003,6 +4042,7 @@ impl TaggedHeap {
         }
         self.dump_addr_lo = self.dump_addr_lo.min(start);
         self.dump_addr_hi = self.dump_addr_hi.max(start.saturating_add(len_bytes));
+        TAGGED_HEAP_DUMP_SPAN.with(|s| s.set((self.dump_addr_lo, self.dump_addr_hi)));
         if !self.partition_dump {
             self.partition_dump = true;
             // Keep the write-barrier hot-path mirror in sync so the dump
