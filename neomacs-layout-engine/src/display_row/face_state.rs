@@ -40,6 +40,10 @@ pub(crate) struct DisplayRowFace {
     pub(crate) font_size: f32,
     pub(crate) underline_style: u8,
     pub(crate) underline_color: Option<Color>,
+    /// The realized terminal underline colour, carried beside the pixel the
+    /// GUI paints: GNU's `face->underline_color` on a tty frame
+    /// (`map_tty_color`, src/xfaces.c:6748, :6777).
+    pub(crate) terminal_underline_color: Option<TerminalColor>,
     pub(crate) strike_through: bool,
     pub(crate) strike_through_color: Option<Color>,
     pub(crate) overline: bool,
@@ -160,6 +164,7 @@ impl DisplayRowFace {
             background: Color::from_pixel(face.bg),
             terminal_foreground: face.terminal_fg,
             terminal_background: face.terminal_bg,
+            terminal_underline_color: face.terminal_underline_color,
             extend: face.extend,
             use_default_foreground: face.use_default_foreground,
             use_default_background: face.use_default_background,
@@ -256,6 +261,7 @@ impl DisplayRowFace {
             use_default_foreground: self.use_default_foreground,
             use_default_background: self.use_default_background,
             underline_color: self.underline_color,
+            terminal_underline_color: self.terminal_underline_color,
             overline_color: self.overline_color,
             strike_through_color: self.strike_through_color,
             box_color: self.box_color,

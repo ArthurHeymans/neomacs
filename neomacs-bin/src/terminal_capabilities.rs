@@ -28,20 +28,64 @@ unsafe extern "C" {
     fn tgetstr(capability: *const c_char, area: *mut *mut c_char) -> *mut c_char;
     fn tgetnum(capability: *const c_char) -> c_int;
     fn tgetflag(capability: *const c_char) -> c_int;
+    fn tigetstr(capability: *const c_char) -> *mut c_char;
+}
+
+/// Which of the two capability namespaces a string capability name lives in.
+///
+/// They do not overlap, and a name from one is invisible to the other.
+/// `tgetstr` resolves TERMCAP names, which are two letters and nothing else;
+/// `tigetstr` resolves TERMINFO names, which are the long ones.  `us` exists
+/// only for `tgetstr` (its terminfo spelling is `smul`) and `Smulx` exists only
+/// for `tigetstr` (it has no termcap spelling at all).
+///
+/// GNU splits its lookups the same way: `init_tty` reads `so`, `us`, `md`, `mh`
+/// and `ZH` with `tgetstr`, and reads the two long names with `tigetstr` --
+/// `smxx` at src/term.c:4587 and `Smulx` at :4694, each guarded by
+/// `#ifdef TERMINFO` with a `tgetstr` fallback for a build that has no terminfo
+/// at all.  GNU's own comment on that fallback doubts it:
+///
+/// ```text
+///   /* FIXME: Is calling tgetstr here for non-terminfo case correct,
+///      even though "smxx" is more than 2 characters?  */
+/// ```
+///
+/// (src/term.c:4591-4592.)  The doubt is right.  Measured against ncurses on
+/// tmux-256color, whose `infocmp -x` carries both long names:
+///
+/// ```text
+///   Smulx    tgetstr=null   tigetstr=FOUND
+///   smxx     tgetstr=null   tigetstr=FOUND
+///   us       tgetstr=FOUND  tigetstr=null
+/// ```
+///
+/// A `&str` capability name cannot carry that distinction, so a terminfo name
+/// asked of `tgetstr` answers "this terminal has no such capability" rather
+/// than failing, and the attribute is then silently never emitted for the rest
+/// of the program's life.  Naming the namespace in the type is what stops the
+/// next capability from being added to the wrong one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StringCapability<'a> {
+    /// A two-letter termcap name, read with `tgetstr`.
+    Termcap(&'a str),
+    /// A terminfo capability name, read with `tigetstr`.
+    Terminfo(&'a str),
 }
 
 /// A source of terminal capabilities — terminfo in production, a table in tests.
 pub(crate) trait TerminalCapabilityDatabase {
-    /// A string capability (GNU `tgetstr`). `None` when the entry lacks it.
-    fn get_string(&mut self, cap: &str) -> Option<Vec<u8>>;
+    /// A string capability, read from the namespace its name belongs to (GNU
+    /// `tgetstr` or `tigetstr`).  `None` when the entry lacks it.
+    fn get_string(&mut self, cap: StringCapability<'_>) -> Option<Vec<u8>>;
 
     /// A numeric capability (GNU `tgetnum`). `None`, like GNU's `-1`, when the
-    /// entry lacks it.
-    fn get_number(&mut self, cap: &str) -> Option<i32>;
+    /// entry lacks it.  Every number GNU reads -- `Co`, `NC` -- has a
+    /// two-letter termcap name, so there is no terminfo variant here.
+    fn get_termcap_number(&mut self, cap: &str) -> Option<i32>;
 
     /// A boolean capability (GNU `tgetflag`). Termcap two-letter names, e.g.
     /// `ut` for back-color-erase (terminfo `bce`).
-    fn get_flag(&mut self, cap: &str) -> bool;
+    fn get_termcap_flag(&mut self, cap: &str) -> bool;
 }
 
 pub(crate) fn open_terminal_capability_database(
@@ -53,46 +97,52 @@ pub(crate) fn open_terminal_capability_database(
 /// Resolve what this terminal can render, reading the same capability names GNU
 /// reads in `init_tty`:
 ///
-/// | capability | GNU field | meaning |
-/// |---|---|---|
-/// | `so` | `TS_standout_mode` | inverse video |
-/// | `us` | `TS_enter_underline_mode` | underline |
-/// | `Smulx` | `TF_set_underline_style` | styled underline |
-/// | `md` | `TS_enter_bold_mode` | bold |
-/// | `mh` | `TS_enter_dim_mode` | dim (and GNU's italic fallback) |
-/// | `ZH` | `TS_enter_italic_mode` | italic (`sitm`) |
-/// | `smxx` | `TS_enter_strike_through_mode` | strike-through |
-/// | `Co` | `TN_max_colors` | color cells |
-/// | `NC` | `TN_no_color_video` | attributes unusable with colors |
+/// | capability | namespace | GNU field | meaning |
+/// |---|---|---|---|
+/// | `so` | termcap | `TS_standout_mode` | inverse video |
+/// | `us` | termcap | `TS_enter_underline_mode` | underline |
+/// | `Smulx` | terminfo | `TF_set_underline_style` | styled underline |
+/// | `md` | termcap | `TS_enter_bold_mode` | bold |
+/// | `mh` | termcap | `TS_enter_dim_mode` | dim (and GNU's italic fallback) |
+/// | `ZH` | termcap | `TS_enter_italic_mode` | italic (`sitm`) |
+/// | `smxx` | terminfo | `TS_enter_strike_through_mode` | strike-through |
+/// | `Co` | termcap | `TN_max_colors` | color cells |
+/// | `NC` | termcap | `TN_no_color_video` | attributes unusable with colors |
+///
+/// The namespace column is not decoration; see [`StringCapability`].  Reading
+/// `Smulx` and `smxx` out of termcap answers "absent" on every terminal that
+/// has ever existed.
 pub(crate) fn resolve_tty_attribute_capabilities(
     database: &mut dyn TerminalCapabilityDatabase,
 ) -> TtyAttributeCapabilities {
-    let has = |database: &mut dyn TerminalCapabilityDatabase, cap: &str| {
+    use StringCapability::{Termcap, Terminfo};
+
+    let has = |database: &mut dyn TerminalCapabilityDatabase, cap: StringCapability<'_>| {
         database
             .get_string(cap)
             .is_some_and(|value| !value.is_empty())
     };
     let color_cells = database
-        .get_number("Co")
+        .get_termcap_number("Co")
         .filter(|colors| *colors > 0)
         .unwrap_or(0);
     // GNU: `TN_no_color_video = tgetnum ("NC"); if (== -1) TN_no_color_video = 0'.
     let no_color_video = database
-        .get_number("NC")
+        .get_termcap_number("NC")
         .filter(|ncv| *ncv > 0)
         .map_or(TtyNoColorVideo::NONE, |ncv| TtyNoColorVideo(ncv as u16));
     let standout = database
-        .get_string("so")
+        .get_string(Termcap("so"))
         .filter(|sequence| !sequence.is_empty());
 
     TtyAttributeCapabilities {
         standout_sequence: standout.map(|sequence| canonical_cap(&sequence)),
-        underline: has(database, "us"),
-        underline_styled: has(database, "Smulx"),
-        bold: has(database, "md"),
-        dim: has(database, "mh"),
-        italic: has(database, "ZH"),
-        strike_through: has(database, "smxx"),
+        underline: has(database, Termcap("us")),
+        underline_styled: has(database, Terminfo("Smulx")),
+        bold: has(database, Termcap("md")),
+        dim: has(database, Termcap("mh")),
+        italic: has(database, Termcap("ZH")),
+        strike_through: has(database, Terminfo("smxx")),
         color_cells: i64::from(color_cells),
         no_color_video,
     }
@@ -137,10 +187,19 @@ fn canonical_cap(entry: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Does the entry's `cap` string canonicalize to exactly `expected`?
-fn cap_is(database: &mut dyn TerminalCapabilityDatabase, cap: &str, expected: &[u8]) -> bool {
+/// Does the entry's termcap `cap` string canonicalize to exactly `expected`?
+///
+/// Every capability the update planner consults is a cursor-movement or
+/// erase-and-scroll capability, and all of those have two-letter termcap names.
+/// A capability with only a terminfo name goes through
+/// [`StringCapability::Terminfo`] instead.
+fn termcap_cap_is(
+    database: &mut dyn TerminalCapabilityDatabase,
+    cap: &'static str,
+    expected: &[u8],
+) -> bool {
     database
-        .get_string(cap)
+        .get_string(StringCapability::Termcap(cap))
         .is_some_and(|value| canonical_cap(&value) == expected)
 }
 
@@ -161,18 +220,19 @@ pub(crate) fn resolve_term_caps(
 ) -> neomacs_display_runtime::backend::tty::rif::TermCaps {
     use neomacs_display_runtime::backend::tty::rif::{BlankTailMethod, RegionScrollMethod};
 
-    let decstbm = cap_is(database, "cs", b"\x1b[%i%d;%dr");
-    let cursor_address = cap_is(database, "cm", b"\x1b[%i%d;%dH");
-    let su_sd = cap_is(database, "SF", b"\x1b[%dS") && cap_is(database, "SR", b"\x1b[%dT");
+    let decstbm = termcap_cap_is(database, "cs", b"\x1b[%i%d;%dr");
+    let cursor_address = termcap_cap_is(database, "cm", b"\x1b[%i%d;%dH");
+    let su_sd =
+        termcap_cap_is(database, "SF", b"\x1b[%dS") && termcap_cap_is(database, "SR", b"\x1b[%dT");
     // GNU defaults TS_fwd_scroll to plain cursor-down (LF) when `sf` is
     // absent (term.c:4820), and requires `sr` for the reverse direction
     // (term.c:4912). IND and RI are what the encoder emits; LF at the
     // bottom margin indexes identically on every DECSTBM terminal.
-    let fwd_index = match database.get_string("sf") {
+    let fwd_index = match database.get_string(StringCapability::Termcap("sf")) {
         None => true,
         Some(sf) => matches!(canonical_cap(&sf).as_slice(), b"\n" | b"\x1bD"),
     };
-    let rev_index = cap_is(database, "sr", b"\x1bM");
+    let rev_index = termcap_cap_is(database, "sr", b"\x1bM");
     let scroll_region = if decstbm && cursor_address {
         if su_sd {
             Some(RegionScrollMethod::SuSd)
@@ -187,11 +247,12 @@ pub(crate) fn resolve_term_caps(
 
     neomacs_display_runtime::backend::tty::rif::TermCaps {
         scroll_region,
-        insert_delete_char: cap_is(database, "IC", b"\x1b[%d@")
-            && cap_is(database, "DC", b"\x1b[%dP"),
-        blank_tail: if !database.get_flag("in") && cap_is(database, "ce", b"\x1b[K") {
+        insert_delete_char: termcap_cap_is(database, "IC", b"\x1b[%d@")
+            && termcap_cap_is(database, "DC", b"\x1b[%dP"),
+        blank_tail: if !database.get_termcap_flag("in") && termcap_cap_is(database, "ce", b"\x1b[K")
+        {
             BlankTailMethod::EraseToEol {
-                back_color_erase: database.get_flag("ut"),
+                back_color_erase: database.get_termcap_flag("ut"),
             }
         } else {
             BlankTailMethod::WriteSpaces
@@ -223,7 +284,7 @@ pub(crate) fn check_terminal_powerful_enough(term: &str) -> Result<(), String> {
     let Some(mut database) = open_terminal_capability_database(term) else {
         return Ok(());
     };
-    if cap_is(database.as_mut(), "cm", b"\x1b[%i%d;%dH") {
+    if termcap_cap_is(database.as_mut(), "cm", b"\x1b[%i%d;%dH") {
         return Ok(());
     }
     Err(format!(
@@ -263,9 +324,26 @@ impl UnixTermcapDatabase {
 
 #[cfg(not(windows))]
 impl TerminalCapabilityDatabase for UnixTermcapDatabase {
-    fn get_string(&mut self, cap: &str) -> Option<Vec<u8>> {
-        let cap = CString::new(cap).ok()?;
-        let raw = unsafe { tgetstr(cap.as_ptr(), &mut self.string_area_ptr) };
+    fn get_string(&mut self, cap: StringCapability<'_>) -> Option<Vec<u8>> {
+        let raw = match cap {
+            StringCapability::Termcap(name) => {
+                let name = CString::new(name).ok()?;
+                unsafe { tgetstr(name.as_ptr(), &mut self.string_area_ptr) }
+            }
+            // `tgetent` is what sets ncurses' `cur_term`, so `tigetstr` reads
+            // the entry this database already opened; no second `setupterm` is
+            // needed.  `tigetstr` reports a name that is not a string
+            // capability as (char *) -1 rather than NULL, and that is not a
+            // capability this terminal has either.
+            StringCapability::Terminfo(name) => {
+                let name = CString::new(name).ok()?;
+                let raw = unsafe { tigetstr(name.as_ptr()) };
+                if raw as isize == -1 {
+                    return None;
+                }
+                raw
+            }
+        };
         if raw.is_null() {
             return None;
         }
@@ -273,13 +351,13 @@ impl TerminalCapabilityDatabase for UnixTermcapDatabase {
         (!bytes.is_empty()).then_some(bytes)
     }
 
-    fn get_number(&mut self, cap: &str) -> Option<i32> {
+    fn get_termcap_number(&mut self, cap: &str) -> Option<i32> {
         let cap = CString::new(cap).ok()?;
         let value = unsafe { tgetnum(cap.as_ptr()) };
         (value != -1).then_some(value)
     }
 
-    fn get_flag(&mut self, cap: &str) -> bool {
+    fn get_termcap_flag(&mut self, cap: &str) -> bool {
         let Ok(cap) = CString::new(cap) else {
             return false;
         };

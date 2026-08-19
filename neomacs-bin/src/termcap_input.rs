@@ -10,7 +10,9 @@
 //! The terminfo database handle itself lives in
 //! [`super::terminal_capabilities`], shared with the output-attribute half.
 
-use super::terminal_capabilities::{TerminalCapabilityDatabase, open_terminal_capability_database};
+use super::terminal_capabilities::{
+    StringCapability, TerminalCapabilityDatabase, open_terminal_capability_database,
+};
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::keymap::list_keymap_define_seq_in_obarray_ex;
 use neovm_core::emacs_core::{Context, Value};
@@ -111,15 +113,15 @@ pub(crate) fn seed_input_decode_map_from_terminal(eval: &mut Context) {
     };
 
     for (cap, name) in FKEY_TABLE {
-        if let Some(sequence) = db.get_string(cap)
+        if let Some(sequence) = db.get_string(StringCapability::Termcap(cap))
             && !define_terminal_key(eval, input_decode_map, &sequence, name)
         {
             return;
         }
     }
 
-    let k_semi = db.get_string("k;");
-    let k0 = db.get_string("k0");
+    let k_semi = db.get_string(StringCapability::Termcap("k;"));
+    let k0 = db.get_string(StringCapability::Termcap("k0"));
     if let Some(sequence) = k_semi {
         if let Some(k0_sequence) = k0
             && !define_terminal_key(eval, input_decode_map, &k0_sequence, "f0")
@@ -139,7 +141,7 @@ pub(crate) fn seed_input_decode_map_from_terminal(eval: &mut Context) {
         let Some(cap) = numbered_function_key_capability(i) else {
             continue;
         };
-        if let Some(sequence) = db.get_string(&cap) {
+        if let Some(sequence) = db.get_string(StringCapability::Termcap(&cap)) {
             let name = format!("f{i}");
             if !define_terminal_key(eval, input_decode_map, &sequence, &name) {
                 return;
@@ -198,10 +200,13 @@ fn conditional_reassign(
     fallback_cap: &str,
     name: &str,
 ) {
-    if db.get_string(missing_cap).is_some() {
+    if db
+        .get_string(StringCapability::Termcap(missing_cap))
+        .is_some()
+    {
         return;
     }
-    if let Some(sequence) = db.get_string(fallback_cap) {
+    if let Some(sequence) = db.get_string(StringCapability::Termcap(fallback_cap)) {
         define_terminal_key(eval, keymap, &sequence, name);
     }
 }

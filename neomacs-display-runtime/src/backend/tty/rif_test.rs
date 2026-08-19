@@ -2142,6 +2142,7 @@ fn write_sgr_bold_italic_underline() {
         bold: true,
         italic: true,
         underline: 1,
+        underline_color: None,
         strikethrough: false,
         inverse: false,
     };
@@ -2185,6 +2186,7 @@ fn write_sgr_strikethrough_inverse() {
         bold: false,
         italic: false,
         underline: 0,
+        underline_color: None,
         strikethrough: true,
         inverse: true,
     };
@@ -2204,6 +2206,7 @@ fn write_sgr_terminal_default_colors() {
         bold: false,
         italic: false,
         underline: 0,
+        underline_color: None,
         strikethrough: false,
         inverse: false,
     };
@@ -3661,5 +3664,221 @@ fn reused_damage_rows_carry_verbatim_and_plan_nothing() {
             _ => false,
         }) && !ops.is_empty(),
         "only the edited row may be written: {ops:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Underline colour -- GNU `Setulc` / `TF_set_underline_color`
+// ---------------------------------------------------------------------------
+
+/// GNU emits the underline colour LAST, after the foreground and the
+/// background, and it emits it as three channels.
+///
+/// `turn_on_face`'s colour block ends with
+///
+/// ```c
+///  ts = tty->TF_set_underline_color;
+///  if (ts && face->underline_color)
+///    { p = tparam (ts, NULL, 0, face->underline_color, 0, 0, 0); OUTPUT (tty, p); }
+/// ```
+///
+/// (src/term.c:2119-2126), and `TF_set_underline_color` is one fixed string
+/// GNU installs itself (src/term.c:4708):
+///
+/// ```text
+///   \e[58:2::%p1%{65536}%/%d:%p1%{256}%/%{255}%&%d:%p1%{255}%&%dm
+/// ```
+///
+/// One parameter, split into three channels. Measured from GNU 31.0.90 on a
+/// pty, TERM=tmux-256color, face `(:underline (:color "red" :style wave))`:
+///
+/// ```text
+///   COLORTERM unset    \e[4:3m \e[58:2::0:0:1m WAVY
+///   COLORTERM=truecolor \e[4:3m \e[58:2::205:0:0m WAVY
+/// ```
+///
+/// so the same slot spells a palette subscript as `0:0:N` and a 24-bit pixel
+/// as `R:G:B`, exactly as `Setulc`'s single parameter implies.
+#[test]
+fn underline_color_is_gnus_setulc_emitted_after_the_other_colors() {
+    let attrs = CellAttrs {
+        fg: Some(TerminalColor::Indexed(2)),
+        underline: UnderlineStyle::Wave.gnu_code(),
+        underline_color: Some(TerminalColor::Indexed(1)),
+        ..CellAttrs::default()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &TtyAttributeCapabilities::full());
+    let s = String::from_utf8(buf).unwrap();
+
+    assert!(
+        s.contains("\x1b[58:2::0:0:1m"),
+        "palette subscript 1 must spell as GNU's Setulc parameter: {s:?}"
+    );
+    let underline_color = s.find("\x1b[58").expect("Setulc emitted");
+    let foreground = s.find("\x1b[32m").expect("foreground emitted");
+    assert!(
+        foreground < underline_color,
+        "GNU emits the underline colour after fg and bg: {s:?}"
+    );
+
+    let direct = CellAttrs {
+        underline: UnderlineStyle::Wave.gnu_code(),
+        underline_color: Some(TerminalColor::Direct { r: 205, g: 0, b: 0 }),
+        ..CellAttrs::default()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &direct, &TtyAttributeCapabilities::full());
+    let s = String::from_utf8(buf).unwrap();
+    assert!(
+        s.contains("\x1b[58:2::205:0:0m"),
+        "a 24-bit underline colour spells as three channels: {s:?}"
+    );
+}
+
+/// `TF_set_underline_color` is installed only when `TF_set_underline_style`
+/// is (src/term.c:4705-4708), so a terminal with no `Smulx` gets no underline
+/// colour even though it still gets the plain underline. The whole block also
+/// sits inside `if (tty->TN_max_colors > 0)` (src/term.c:2092).
+#[test]
+fn underline_color_needs_smulx_and_colors() {
+    let attrs = CellAttrs {
+        underline: UnderlineStyle::Line.gnu_code(),
+        underline_color: Some(TerminalColor::Indexed(1)),
+        ..CellAttrs::default()
+    };
+
+    let no_smulx = TtyAttributeCapabilities {
+        underline_styled: false,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &no_smulx);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(s.contains("\x1b[4m"), "the plain underline still stands");
+    assert!(!s.contains("\x1b[58"), "no Smulx, no Setulc: {s:?}");
+
+    let no_colors = TtyAttributeCapabilities {
+        color_cells: 0,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &no_colors);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(!s.contains("\x1b[58"), "no colours, no Setulc: {s:?}");
+}
+
+/// GNU cannot tell "no underline colour" from "underline colour zero": the
+/// realized slot is one `unsigned long` and `if (ts && face->underline_color)`
+/// reads 0 as absent (src/term.c:2120). Measured from GNU on a pty,
+/// TERM=tmux-256color, face `(:underline (:color "black" :style wave))`:
+///
+/// ```text
+///   \e[4:3mCASEc          -- the wave, and no \e[58 at all
+/// ```
+///
+/// both with and without COLORTERM=truecolor, because "black" realizes to
+/// palette subscript 0 on one and to pixel 0x000000 on the other.
+#[test]
+fn an_underline_color_of_zero_is_gnus_absent_underline_color() {
+    for zero in [
+        TerminalColor::Indexed(0),
+        TerminalColor::Direct { r: 0, g: 0, b: 0 },
+    ] {
+        let attrs = CellAttrs {
+            underline: UnderlineStyle::Wave.gnu_code(),
+            underline_color: Some(zero),
+            ..CellAttrs::default()
+        };
+        let mut buf = Vec::new();
+        write_sgr_with_capabilities(&mut buf, &attrs, &TtyAttributeCapabilities::full());
+        let s = String::from_utf8(buf).unwrap();
+        assert!(s.contains("\x1b[4:3m"), "the wave still stands: {s:?}");
+        assert!(
+            !s.contains("\x1b[58"),
+            "{zero:?} is GNU's absent underline colour: {s:?}"
+        );
+    }
+}
+
+/// An underline with no colour of its own emits no `Setulc`. GNU sets
+/// `face->underline_color = 0` for `:underline t` (src/xfaces.c:6741), for
+/// `(:style STYLE)` with no `:color` (:6756), and for
+/// `(:color foreground-color)` (:6772-6773). Measured on a pty,
+/// TERM=tmux-256color:
+///
+/// ```text
+///   (:underline t)                              \e[4mPLAIN
+///   (:underline (:style dots))                  \e[4:4mCASEf
+///   (:underline (:color foreground-color ...))  \e[4:3mCASEe
+/// ```
+#[test]
+fn an_underline_without_a_color_emits_no_setulc() {
+    let attrs = CellAttrs {
+        underline: UnderlineStyle::Dotted.gnu_code(),
+        underline_color: None,
+        ..CellAttrs::default()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &TtyAttributeCapabilities::full());
+    let s = String::from_utf8(buf).unwrap();
+    assert!(
+        s.contains("\x1b[4:4m"),
+        "the dotted underline stands: {s:?}"
+    );
+    assert!(!s.contains("\x1b[58"), "no colour, no Setulc: {s:?}");
+}
+
+/// The colour rides a face, not a guess: `resolve_attrs` must carry the
+/// realized `terminal_underline_color` through unchanged, the way it already
+/// carries the realized foreground and background.
+#[test]
+fn resolve_attrs_carries_the_realized_underline_color() {
+    let mut rif = TtyRif::new(4, 1);
+    let mut face = Face::new(FaceId::new(7));
+    face.underline_style = UnderlineStyle::Wave;
+    face.terminal_underline_color = Some(TerminalColor::Indexed(1));
+    let mut faces = HashMap::new();
+    faces.insert(FaceId::new(7), face);
+    rif.set_faces(faces);
+
+    let attrs = rif.resolve_attrs(FaceId::new(7));
+    assert_eq!(attrs.underline_color, Some(TerminalColor::Indexed(1)));
+    assert_eq!(attrs.underline, UnderlineStyle::Wave.gnu_code());
+}
+
+/// GNU's `Setulc` guard has no `MAY_USE_WITH_COLORS_P` term, unlike every
+/// other arm of `turn_on_face`: it is `if (ts && face->underline_color)`
+/// (src/term.c:2120).  So an `ncv` that forbids underline on a colour frame
+/// suppresses the underline and NOT its colour.
+///
+/// Unmeasurable against a real terminal: no entry ncurses ships carries both
+/// `Smulx` and an `ncv`, checked across tmux-256color, alacritty, kitty,
+/// vte-256color and tmux.  Pinned so that the literal reading is the one that
+/// stays, rather than drifting to the `supports` gate the arms above use.
+#[test]
+fn ncv_suppresses_the_underline_but_not_gnus_underline_color() {
+    let attrs = CellAttrs {
+        underline: UnderlineStyle::Wave.gnu_code(),
+        underline_color: Some(TerminalColor::Indexed(1)),
+        ..CellAttrs::default()
+    };
+    let ncv_underline = TtyAttributeCapabilities {
+        no_color_video: TtyNoColorVideo::UNDERLINE,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &ncv_underline);
+    let s = String::from_utf8(buf).unwrap();
+
+    for underline in ["\x1b[4m", "\x1b[4:3m"] {
+        assert!(
+            !s.contains(underline),
+            "ncv forbids the underline itself: {s:?}"
+        );
+    }
+    assert!(
+        s.contains("\x1b[58:2::0:0:1m"),
+        "GNU's Setulc guard does not consult ncv: {s:?}"
     );
 }

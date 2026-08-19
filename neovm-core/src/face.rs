@@ -1196,7 +1196,7 @@ impl Face {
                         face.family = Some(*val);
                     }
                 }
-                "underline" => face.underline = parse_underline_value(val),
+                "underline" => face.underline = parse_underline_value(val, palette),
                 "overline" => {
                     if let Some(s) = val.as_utf8_str() {
                         face.overline = Some(true);
@@ -1269,7 +1269,19 @@ impl Face {
     }
 }
 
-fn parse_underline_value(value: &Value) -> FaceDecoration<Underline> {
+/// Parse one `:underline` value from an anonymous attribute plist.
+///
+/// The colour is realized through the terminal palette, exactly as this
+/// function's caller realizes `:foreground` and `:background`.  GNU realizes
+/// all three through the same `map_tty_color` (src/xfaces.c:6748, :6777 for
+/// the underline), and the writer emits the underline colour through
+/// `TF_set_underline_color` (src/term.c:2119-2126); a `Color::parse` here
+/// would produce a pixel with no terminal index, and the underline would
+/// silently lose its colour on a terminal frame while keeping it in the GUI.
+fn parse_underline_value(
+    value: &Value,
+    palette: Option<&neomacs_display_protocol::TtyPalette>,
+) -> FaceDecoration<Underline> {
     match value.kind() {
         ValueKind::T => FaceDecoration::Enabled(Underline {
             style: UnderlineStyle::Line,
@@ -1283,7 +1295,7 @@ fn parse_underline_value(value: &Value) -> FaceDecoration<Underline> {
             };
             FaceDecoration::Enabled(Underline {
                 style: UnderlineStyle::Line,
-                color: Color::parse(&text),
+                color: realize_color_spec(&text, palette),
                 position: None,
             })
         }
@@ -1303,7 +1315,9 @@ fn parse_underline_value(value: &Value) -> FaceDecoration<Underline> {
                 let item = &items[i + 1];
                 match key {
                     "color" => {
-                        color = parse_color_value(item);
+                        color = face_runtime_string(item)
+                            .as_deref()
+                            .and_then(|spec| realize_color_spec(spec, palette));
                     }
                     "style" => {
                         if let Some(name) = item.as_symbol_name() {

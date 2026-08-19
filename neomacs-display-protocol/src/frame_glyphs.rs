@@ -1259,6 +1259,9 @@ impl FrameGlyphBuffer {
             use_default_foreground: false,
             use_default_background: false,
             underline_color: has_underline.then_some(underline_color).flatten(),
+            // Built from raw colours, so there is no realized terminal
+            // underline colour either.
+            terminal_underline_color: None,
             overline_color,
             strike_through_color,
             box_color: None,

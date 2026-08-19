@@ -319,6 +319,24 @@ pub struct Face {
     /// Underline color (if different from foreground)
     pub underline_color: Option<Color>,
 
+    /// What a TERMINAL frame writes for the underline colour: GNU's
+    /// `face->underline_color` (src/dispextern.h:1811), realized through the
+    /// same `map_tty_color` as the foreground and the background
+    /// (src/xfaces.c:6748 and :6777) and emitted by `turn_on_face` through
+    /// `TF_set_underline_color` (src/term.c:2119-2126).
+    ///
+    /// It is NOT [`Self::underline_color`] quantized.  That field is the GUI's,
+    /// and it defaults to the face's foreground so a `:underline t` draws in
+    /// the text colour; GNU's terminal slot is 0 in exactly that case and
+    /// `turn_on_face` then emits nothing.  Keeping them apart is what stops a
+    /// plain underline from acquiring a colour on a terminal.
+    ///
+    /// `None` on a GUI frame, for an underline with no `:color` of its own, and
+    /// for `(:color foreground-color)` -- GNU zeroes the slot for all three
+    /// (src/xfaces.c:6741, :6756, :6772-6773).
+    #[serde(default)]
+    pub terminal_underline_color: Option<crate::terminal_color::TerminalColor>,
+
     /// Overline color
     pub overline_color: Option<Color>,
 
@@ -415,6 +433,7 @@ impl Default for Face {
             use_default_foreground: false,
             use_default_background: false,
             underline_color: None,
+            terminal_underline_color: None,
             overline_color: None,
             strike_through_color: None,
             box_color: None,
@@ -637,6 +656,7 @@ impl FaceDataFFI {
             use_default_foreground: false,
             use_default_background: false,
             underline_color: has_underline.then(|| Color::from_pixel(self.underline_color)),
+            terminal_underline_color: None,
             overline_color: overline.then(|| Color::from_pixel(self.overline_color)),
             strike_through_color: strike_through
                 .then(|| Color::from_pixel(self.strike_through_color)),

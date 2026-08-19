@@ -95,15 +95,24 @@ impl FakeCapabilityDatabase {
 }
 
 impl TerminalCapabilityDatabase for FakeCapabilityDatabase {
-    fn get_string(&mut self, cap: &str) -> Option<Vec<u8>> {
-        self.strings.get(cap).map(|value| value.as_bytes().to_vec())
+    /// Both namespaces are one map here, keyed by the capability's own name.
+    /// A fake will answer any key, which is exactly why it cannot attest that
+    /// the REAL database can find `Smulx` and `smxx`; see
+    /// `styled_underline_and_strike_through_come_from_the_terminfo_database`.
+    fn get_string(&mut self, cap: StringCapability) -> Option<Vec<u8>> {
+        let name = match cap {
+            StringCapability::Termcap(name) | StringCapability::Terminfo(name) => name,
+        };
+        self.strings
+            .get(name)
+            .map(|value| value.as_bytes().to_vec())
     }
 
-    fn get_number(&mut self, cap: &str) -> Option<i32> {
+    fn get_termcap_number(&mut self, cap: &str) -> Option<i32> {
         self.numbers.get(cap).copied()
     }
 
-    fn get_flag(&mut self, cap: &str) -> bool {
+    fn get_termcap_flag(&mut self, cap: &str) -> bool {
         self.flags.contains(cap)
     }
 }
@@ -297,4 +306,67 @@ fn padding_and_parameter_markers_do_not_defeat_recognition() {
         .with_string("cm", "\x1b[%i%p1%d;%p2%dH");
     let caps = resolve_term_caps(&mut database);
     assert_eq!(caps.scroll_region, Some(RegionScrollMethod::SuSd));
+}
+
+/// The two long capability names GNU reads, read from the REAL database.
+///
+/// Every other test in this file feeds a `FakeCapabilityDatabase` keyed by
+/// plain strings, which answers `Smulx` and `smxx` because a `HashMap` will
+/// answer any key.  The real database will not: `tgetstr` resolves two-letter
+/// TERMCAP names and nothing else, so it answers NULL for both of these on
+/// every entry in existence.  GNU reads them with `tigetstr`
+/// (src/term.c:4587 and :4694) for exactly that reason.
+///
+/// These two entries are ncurses' own and their contents are stable:
+/// `infocmp -x tmux-256color` carries `Smulx` and `smxx`, and
+/// `infocmp -x xterm-256color` carries `smxx` but not `Smulx`.  An entry that
+/// cannot be opened at all (no terminfo database on the machine) makes the
+/// assertion vacuous rather than red, since that is the one condition under
+/// which neomacs is right to answer "absent".
+#[test]
+fn styled_underline_and_strike_through_come_from_the_terminfo_database() {
+    let Some(tmux) = tty_attribute_capabilities_for_term("tmux-256color") else {
+        return;
+    };
+    assert!(
+        tmux.underline_styled,
+        "tmux-256color has Smulx; tgetstr cannot see it and tigetstr can"
+    );
+    assert!(
+        tmux.strike_through,
+        "tmux-256color has smxx; tgetstr cannot see it and tigetstr can"
+    );
+
+    let Some(xterm) = tty_attribute_capabilities_for_term("xterm-256color") else {
+        return;
+    };
+    assert!(
+        xterm.strike_through,
+        "xterm-256color has smxx even though it has no Smulx"
+    );
+    assert!(
+        !xterm.underline_styled,
+        "xterm-256color has no Smulx, so a styled underline must fall back"
+    );
+}
+
+/// The two-letter names must keep going to termcap.
+///
+/// `tigetstr` is the mirror image of `tgetstr`: it resolves TERMINFO names and
+/// answers NULL for `us`, `so` and `ZH`, whose terminfo spellings are `smul`,
+/// `smso` and `sitm`.  Moving every lookup to terminfo would break the other
+/// direction just as silently.
+#[test]
+fn two_letter_capability_names_still_come_from_termcap() {
+    let Some(xterm) = tty_attribute_capabilities_for_term("xterm-256color") else {
+        return;
+    };
+    assert!(xterm.underline, "xterm-256color has us");
+    assert!(xterm.bold, "xterm-256color has md");
+    assert!(xterm.italic, "xterm-256color has ZH");
+    assert!(
+        xterm.standout_sequence.is_some(),
+        "xterm-256color has so, and the writer needs its bytes"
+    );
+    assert_eq!(xterm.color_cells, 256, "xterm-256color has Co#256");
 }

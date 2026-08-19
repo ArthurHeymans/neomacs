@@ -918,6 +918,7 @@ fn terminal_cell_face(
         use_default_foreground: false,
         use_default_background: false,
         underline_color: None,
+        terminal_underline_color: None,
         overline_color: None,
         strike_through_color: None,
         box_color: None,
