@@ -1282,7 +1282,12 @@ fn undecided_decode_uses_the_shared_iso_2022_detector() {
     .unwrap();
 
     assert_eq!(
-        detect_undecided_coding(&eval.coding_systems, b"\x1b$B$3$s\x1b(B", false,),
+        detect_undecided_coding(
+            &eval.coding_systems,
+            b"\x1b$B$3$s\x1b(B",
+            false,
+            crate::emacs_core::coding::SourceBlock::Last,
+        ),
         Some(crate::emacs_core::intern::intern("iso-2022-7bit"))
     );
 }

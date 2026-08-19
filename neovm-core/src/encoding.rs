@@ -778,8 +778,94 @@ pub(crate) fn decode_eol_text(
     )
 }
 
-/// One run of a subprocess's output, decoded and with its end of line resolved
-/// -- and the resolution kept.
+/// GNU `CODING_REQUIRE_DETECTION` (src/coding.h:553-554) for a coding-system
+/// NAME.
+///
+/// `setup_coding_system` raises the mask for exactly three kinds of coding
+/// system, and for nothing else:
+///
+/// * the `undecided` TYPE (src/coding.c:5713), which `prefer-utf-8` and the
+///   bare `unix`/`dos`/`mac` aliases share, and which the `-unix`/`-dos`/`-mac`
+///   subsidiaries of `undecided` share too -- `undecided-dos` is still type
+///   `Qundecided`, so a chunk that has settled the END OF LINE has not settled
+///   the character code;
+/// * `utf-8` whose `:bom` is a CONS, i.e. `utf-8-auto` (:5786);
+/// * `utf-16` whose `:bom` is a CONS, i.e. the bare `utf-16` (:5804).
+///
+/// `raw-text` is deliberately absent, for the same reason it is absent from
+/// `process_coding_name_converts_nothing`: the half of it that is undecided is
+/// the end of line, not the character code.  Measured under GNU 31.0.90 rather
+/// than recalled --
+///
+/// ```text
+/// (coding-system-type 'raw-text)      => raw-text
+/// (coding-system-type 'undecided)     => undecided
+/// (coding-system-type 'undecided-dos) => undecided
+/// (coding-system-type 'prefer-utf-8)  => undecided
+/// (coding-system-get 'utf-8-auto :bom) => (utf-8-with-signature . utf-8)
+/// (coding-system-get 'utf-16 :bom)     => (utf-16le-with-signature . utf-16be-with-signature)
+/// ```
+///
+/// -- and visible in behaviour too: a subprocess whose buffer is unibyte, i.e.
+/// the `raw_text_coding_system` downgrade, reports `raw-text-dos` for
+/// `caf <c3> <a9> CR LF`, never `utf-8-dos`.
+pub(crate) fn coding_name_requires_detection(coding_system: &str) -> bool {
+    matches!(
+        coding_system_base(coding_system),
+        "undecided" | "prefer-utf-8" | "utf-8-auto" | "utf-16"
+    )
+}
+
+/// GNU's `detect_coding` (src/coding.c:6503-6759) reduced to its one lasting
+/// effect: the coding system a decode of BYTES will actually run with.
+///
+/// `detect_coding` does not merely answer a question -- it REPLACES the coding
+/// system, `setup_coding_system (found, coding)` (:6751), and then re-applies
+/// the end-of-line type the caller had specified (:6752-6753).  So a decode
+/// that started at `undecided` ends at `utf-8` with its eol still to be
+/// resolved by `decode_eol`, and one that started at `undecided-dos` ends at
+/// `utf-8-dos` outright.
+///
+/// `None` is GNU's nil `found`, which leaves the name alone.  That is not an
+/// error case: it is the normal outcome for pure-ASCII bytes, because
+/// `detect_coding`'s whole body is guarded by `null_byte_found ||
+/// eight_bit_found || coding->head_ascii < coding->src_bytes ||
+/// detect_info.found` (:6596-6599).  Measured under GNU 31.0.90, a subprocess
+/// whose first chunk is `a CRLF b CRLF` reports `undecided-dos` -- the eol half
+/// moved and the character half did not -- and a later non-ASCII chunk still
+/// moves it on to `utf-8-dos`.
+pub(crate) fn detected_coding_name(
+    coding_systems: &crate::emacs_core::coding::CodingSystemManager,
+    coding_system: &str,
+    bytes: &[u8],
+    block: crate::emacs_core::coding::SourceBlock,
+) -> Option<&'static str> {
+    let base = coding_system_base(coding_system);
+    let found = match base {
+        "undecided" | "prefer-utf-8" => {
+            let detected = resolve_sym(detect_undecided_coding(
+                coding_systems,
+                bytes,
+                base == "prefer-utf-8",
+                block,
+            )?);
+            // A detection result of `undecided` is this engine's spelling of
+            // GNU's nil `found`.
+            if coding_system_base(detected) == "undecided" {
+                return None;
+            }
+            detected
+        }
+        // The two arms that are keyed on a byte-order mark rather than on the
+        // category priority list (:6702-6742).
+        _ => detect_bom_auto_coding(base, bytes)?,
+    };
+    let name = apply_explicit_eol_suffix(found, coding_name_eol(coding_system));
+    Some(resolve_sym(intern(&name)))
+}
+
+/// One run of a subprocess's output, decoded, together with the coding system
+/// the decode ENDED on.
 ///
 /// This is GNU's `decode_coding` (src/coding.c:7398-7484) for the one caller
 /// that has to REPORT what it decoded with: the decoder runs first, then
@@ -788,21 +874,28 @@ pub(crate) fn decode_eol_text(
 /// the resulting `coding->id` back out into `Vlast_coding_system_used` and into
 /// the process's own decode slot.
 ///
-/// Returning the resolution rather than only the text is the whole point.  A
+/// Returning that name rather than only the text is the whole point.  A
 /// subprocess is decoded through ONE `struct coding_system` in GNU, so once
-/// `adjust_coding_eol_type` has fired the choice is sticky for that process; the
-/// only way to be sticky here -- where each read is a separate call -- is for
-/// the call to hand its answer back to the process record.
+/// `detect_coding` or `adjust_coding_eol_type` has rewritten `coding->id` the
+/// choice is sticky for that process; the only way to be sticky here -- where
+/// each read is a separate call -- is for the call to hand its answer back to
+/// the process record.
 #[derive(Debug)]
 pub(crate) struct DecodedProcessRun {
     /// The text to insert, after both conversions.
     pub(crate) text: crate::heap_types::LispString,
-    /// What `decode_eol` decided, including whether the coding system's NAME
-    /// moved with it.
-    pub(crate) eol: crate::emacs_core::coding::DecodeEolResolution,
+    /// GNU `CODING_ID_NAME (coding->id)` once both rewrites have had their
+    /// turn: the detected base carrying the resolved end-of-line type.
+    pub(crate) used: &'static str,
 }
 
 /// Decode one run of subprocess output under CODING_SYSTEM.
+///
+/// CODING_SYSTEM has already been through [`detected_coding_name`] -- the
+/// caller must run detection first, because the answer decides which decoder
+/// runs and therefore how many trailing bytes have to be held back as
+/// carryover.  This function is GNU's `decode_coding` from the point where
+/// `detect_coding` has returned.
 ///
 /// The coding-system name handed to the decoder has its EOL leg spent
 /// (`coding_name_with_eol_spent`), so the single end-of-line pass is the one
@@ -811,8 +904,9 @@ pub(crate) struct DecodedProcessRun {
 /// order the resolution has to be computed in for the answer to be reportable:
 /// the scan has to see the same bytes the conversion will touch.
 pub(crate) fn decode_process_run(
+    coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     bytes: &[u8],
-    coding_system: &str,
+    coding_system: &'static str,
     eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> DecodedProcessRun {
     use crate::emacs_core::coding::ResolvedEol;
@@ -832,9 +926,14 @@ pub(crate) fn decode_process_run(
             converting,
         )),
     };
+    let adjusted = adjusted_coding_name(coding_systems, coding_system, resolution);
     DecodedProcessRun {
         text,
-        eol: resolution,
+        used: if adjusted == coding_system {
+            coding_system
+        } else {
+            resolve_sym(intern(&adjusted))
+        },
     }
 }
 
@@ -3623,15 +3722,41 @@ fn detect_undecided_coding(
     coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     bytes: &[u8],
     prefer_utf_8: bool,
+    block: crate::emacs_core::coding::SourceBlock,
 ) -> Option<crate::emacs_core::intern::SymId> {
-    let valid_utf8_multibyte =
-        std::str::from_utf8(bytes).is_ok() && bytes.iter().any(|&b| b >= 0x80);
-    // `prefer-utf-8` raises UTF-8 ahead of the configured category priority.
-    if prefer_utf_8 && valid_utf8_multibyte {
+    // `prefer-utf-8` raises UTF-8 ahead of the configured category priority --
+    // GNU's `prefer_utf_8 && detect_coding_utf_8 (coding, &detect_info)`
+    // (src/coding.c:6619-6620), which is the same detector as everywhere else
+    // and therefore tolerates a trailing partial character when this is not the
+    // last block.
+    if prefer_utf_8 && utf8_or_truncated_utf8(bytes, block) && bytes.iter().any(|&b| b >= 0x80) {
         return Some(intern("utf-8"));
     }
 
-    crate::emacs_core::coding::detect_highest_coding_system_for_unibyte_bytes(coding_systems, bytes)
+    crate::emacs_core::coding::detect_highest_coding_system_for_unibyte_bytes(
+        coding_systems,
+        bytes,
+        block,
+    )
+}
+
+/// Valid UTF-8, or valid UTF-8 that stops in the middle of its last character
+/// when more bytes may still follow.
+///
+/// GNU has no separate predicate for this: `detect_coding_utf_8` walks the
+/// source and its `no_more_source:` tail rejects a partial trailing character
+/// only under `CODING_MODE_LAST_BLOCK` (src/coding.c:1215).  This is that one
+/// rule spelled for the `prefer-utf-8` shortcut, which does not go through the
+/// category walk.
+fn utf8_or_truncated_utf8(bytes: &[u8], block: crate::emacs_core::coding::SourceBlock) -> bool {
+    match std::str::from_utf8(bytes) {
+        Ok(_) => true,
+        Err(error) => {
+            !matches!(block, crate::emacs_core::coding::SourceBlock::Last)
+                && error.error_len().is_none()
+                && std::str::from_utf8(&bytes[..error.valid_up_to()]).is_ok()
+        }
+    }
 }
 
 /// The BOM-detecting arms of GNU's `detect_coding` (src/coding.c:6702-6742).
@@ -3812,14 +3937,20 @@ fn builtin_coding_string_in_context(
             && let Some(src) = args[0].as_lisp_string()
         {
             let bytes = lisp_string_coding_source_bytes(src);
-            let detected =
-                detect_undecided_coding(&ctx.coding_systems, &bytes, base == *"prefer-utf-8")
-                    .ok_or_else(|| {
-                        signal(
-                            LispCondition::CodingSystemError,
-                            vec![Value::symbol(&coding)],
-                        )
-                    })?;
+            let detected = detect_undecided_coding(
+                &ctx.coding_systems,
+                &bytes,
+                base == *"prefer-utf-8",
+                // `code_convert_string` sets `CODING_MODE_LAST_BLOCK`
+                // (src/coding.c:9606): a string is complete.
+                crate::emacs_core::coding::SourceBlock::Last,
+            )
+            .ok_or_else(|| {
+                signal(
+                    LispCondition::CodingSystemError,
+                    vec![Value::symbol(&coding)],
+                )
+            })?;
             coding = apply_explicit_eol_suffix(resolve_sym(detected), coding_name_eol(&coding));
             // Rewrite the coding argument too, so the fallback decode path
             // (which re-reads args[1]) uses the detected system rather than the
