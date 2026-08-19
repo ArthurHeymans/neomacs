@@ -3931,6 +3931,50 @@ pub struct PrepopulateStats {
 ///
 /// Runs ONLY when [`aot_enabled`]; a missing/invalid preload is a clean no-op
 /// (every function just JITs — strictly additive). Returns the stats.
+/// LAZY prewarm (the production path): mark every loadup function the preload
+/// manifest lists as a MEMBER (name + ops_len + arity prekey match) so
+/// `dispatch` serves it via `Plan::Compiled` from call 1 — the leaf itself is
+/// built on the first call by the cache-miss path's `try_load_leaf` AOT
+/// consult (~13µs, paid only for functions actually called). The EAGER
+/// `prepopulate_aot_from_preload` builds all ~1.2k leaves up front
+/// (~16.5ms measured) and is kept for tests/benchmarks.
+///
+/// A marked function whose body hash no longer matches the preload (redefined
+/// between dump and run beyond what the ops_len/arity prekey catches) falls
+/// back to a one-time JIT compile at first call — the same path any hot
+/// function takes.
+pub fn mark_preload_members_prewarmed(ctx: &crate::emacs_core::eval::Context) -> (usize, usize) {
+    if !aot_enabled() {
+        return (0, 0);
+    }
+    let Some(prekeys) = load_preload_prekeys() else {
+        return (0, 0);
+    };
+    let mut candidates = 0usize;
+    let mut marked = 0usize;
+    for (name_id, func_val) in ctx.obarray.interned_function_cells_with_names() {
+        if !func_val.is_bytecode() {
+            continue;
+        }
+        let Some(bc) = func_val.get_bytecode_data() else {
+            continue;
+        };
+        if !bc.params.optional.is_empty() || bc.params.rest.is_some() {
+            continue;
+        }
+        candidates += 1;
+        if let Some(key) = prekeys.get(crate::emacs_core::intern::resolve_name(name_id))
+            && key.member
+            && key.ops_len == bc.executable_ops().len()
+            && key.arity == bc.params.required.len()
+        {
+            bc.runtime.mark_aot_prewarmed();
+            marked += 1;
+        }
+    }
+    (candidates, marked)
+}
+
 pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> PrepopulateStats {
     let mut stats = PrepopulateStats::default();
     if !aot_enabled() {
@@ -4069,7 +4113,25 @@ pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> P
         }
     }
     stats.loaded = leaves.len();
-    stats.inserted = super::cache::prepopulate_aot_leaves(leaves);
+    let inserted_ids = super::cache::prepopulate_aot_leaves(leaves);
+    stats.inserted = inserted_ids.len();
+    // Serve the prewarmed leaves FROM CALL 1: without this, `dispatch`'s heat
+    // gate keeps ONE-SHOT startup elisp interpreted forever — the preload only
+    // ever helped functions that independently became hot. Re-walk the bound
+    // function cells and mark the runtimes whose leaves were just inserted
+    // (a marked function with a filled cache slot runs native immediately; a
+    // slot kept by an existing JIT leaf is already hot, so marking is a no-op).
+    if !inserted_ids.is_empty() {
+        let inserted: std::collections::HashSet<u64> = inserted_ids.into_iter().collect();
+        for (_name_id, func_val) in ctx.obarray.interned_function_cells_with_names() {
+            if let Some(bc) = func_val.get_bytecode_data()
+                && let Some(id) = bc.runtime.compiled_id()
+                && inserted.contains(&id)
+            {
+                bc.runtime.mark_aot_prewarmed();
+            }
+        }
+    }
     tracing::debug!(
         "aot-preload: prepopulated {} inserted / {} loaded / {} candidates ({} missed, {} slots already warm)",
         stats.inserted,

@@ -527,7 +527,7 @@ pub(crate) fn compiled_cache_probe() -> (usize, usize) {
 /// never in any `INLINE_DEPS` set, so `evict_inline_dependents` never targets it —
 /// the spec-slot-safety assert above only ever fires on genuinely-inlined leaves,
 /// which AOT leaves are not.
-pub(crate) fn prepopulate_aot_leaves(leaves: Vec<(u64, CompiledLeaf)>) -> usize {
+pub(crate) fn prepopulate_aot_leaves(leaves: Vec<(u64, CompiledLeaf)>) -> Vec<u64> {
     // Establish COMPILED_HEAP == current WITHOUT clearing (audit w0guiyma9): a
     // plain `sync_cache_to_current_heap` would, on the very first None→current
     // transition, CLEAR the cache — destroying any VALID same-heap JIT leaf the
@@ -537,7 +537,7 @@ pub(crate) fn prepopulate_aot_leaves(leaves: Vec<(u64, CompiledLeaf)>) -> usize 
     // be kept. Only a genuine heap CHANGE (a later pdump reload) should clear, and
     // that path still goes through `sync_cache_to_current_heap` from the GC roots.
     COMPILED_HEAP.with(|h| h.set(crate::tagged::gc::current_tagged_heap_identity()));
-    let mut inserted = 0usize;
+    let mut inserted = Vec::new();
     COMPILED.with(|c| {
         let mut cache = c.borrow_mut();
         for (id, leaf) in leaves {
@@ -547,7 +547,7 @@ pub(crate) fn prepopulate_aot_leaves(leaves: Vec<(u64, CompiledLeaf)>) -> usize 
             // consts are rooted via the COMPILED walk in collect_jit_reloc_gc_roots.
             if cache.get(id).is_none() {
                 cache.insert(id, CacheEntry::Compiled(Rc::new(leaf)));
-                inserted += 1;
+                inserted.push(id);
             }
         }
     });

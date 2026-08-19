@@ -267,6 +267,13 @@ pub struct Runtime {
     /// stale cache entry can never be mis-looked-up after the (non-moving) GC
     /// reuses its address — a new function gets a new id. Reset to 0 on clone.
     compiled_id: AtomicU64,
+    /// Set by the AOT preload prepopulate (R2-C3) when this function's leaf was
+    /// inserted into the compiled cache at startup: `dispatch` then serves the
+    /// prewarmed native leaf FROM CALL 1 instead of interpreting until the heat
+    /// threshold — the piece that lets the AOT preload cover ONE-SHOT startup
+    /// elisp, which never gets hot. One relaxed load on the dispatch path,
+    /// never set in the default (AOT-off) configuration.
+    aot_prewarmed: std::sync::atomic::AtomicBool,
     /// Test-only: pin this function to the Tier-0 interpreter regardless of
     /// hotness (the benchmark harness measures native vs interpreter in ONE
     /// process — a hot copy and a forced-cold copy — to cancel the
@@ -383,6 +390,7 @@ impl Runtime {
             heat: AtomicU32::new(0),
             feedback: FeedbackVec::new(),
             compiled_id: AtomicU64::new(0),
+            aot_prewarmed: std::sync::atomic::AtomicBool::new(false),
             #[cfg(test)]
             force_interpret: std::sync::atomic::AtomicBool::new(false),
         }
@@ -413,7 +421,7 @@ impl Runtime {
         let prev = self.heat.load(Ordering::Relaxed);
         let now = prev.saturating_add(1);
         self.heat.store(now, Ordering::Relaxed);
-        if now >= hot_threshold() {
+        if now >= hot_threshold() || self.aot_prewarmed.load(Ordering::Relaxed) {
             Plan::Compiled
         } else {
             Plan::Interpret
@@ -495,6 +503,13 @@ impl Runtime {
 
     /// Test-only: force this function "hot" so the next [`dispatch`](Self::dispatch)
     /// tiers it up, without driving `HOT_THRESHOLD` real invocations.
+    /// Mark this function as served by a prepopulated AOT leaf (see the
+    /// field doc): `dispatch` returns `Plan::Compiled` from call 1.
+    pub(crate) fn mark_aot_prewarmed(&self) {
+        self.aot_prewarmed
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
     #[cfg(test)]
     pub(crate) fn set_hot_for_test(&self) {
         self.heat.store(Self::HOT_THRESHOLD, Ordering::Relaxed);

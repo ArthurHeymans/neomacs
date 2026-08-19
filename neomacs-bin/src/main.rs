@@ -2976,23 +2976,27 @@ fn maybe_prepopulate_aot(mode: RuntimeMode, evaluator: &Context) {
     if mode != RuntimeMode::FinalRun {
         return;
     }
-    let stats = neovm_core::emacs_core::jit::aot::prepopulate_aot_from_preload(evaluator);
-    if stats.candidates > 0 || stats.inserted > 0 {
+    // LAZY prewarm: mark preload members so dispatch serves them from call 1;
+    // each leaf is built by the cache-miss AOT consult on first use. The
+    // eager prepopulate (~16.5ms up front for ~1.2k leaves) remains available
+    // to tests/benchmarks via prepopulate_aot_from_preload.
+    let t0 = std::time::Instant::now();
+    let (candidates, marked) =
+        neovm_core::emacs_core::jit::aot::mark_preload_members_prewarmed(evaluator);
+    if std::env::var_os("NEOVM_AOT_TIMING").is_some() {
+        eprintln!(
+            "AOT_TIMING lazy-prewarm: {:?} (candidates={candidates} marked={marked})",
+            t0.elapsed(),
+        );
+    }
+    if marked > 0 {
         let force = matches!(std::env::var("NEOVM_AOT").as_deref(), Ok("force"));
         if force {
             tracing::info!(
-                "AOT preload: prepopulated {} / {} loadup leaves ({} missed) — native from call 1",
-                stats.inserted,
-                stats.candidates,
-                stats.missed
+                "AOT preload: marked {marked} / {candidates} loadup fns prewarmed —                  native from call 1, leaves load lazily"
             );
         } else {
-            tracing::debug!(
-                "AOT preload: prepopulated {} / {} loadup leaves ({} missed)",
-                stats.inserted,
-                stats.candidates,
-                stats.missed
-            );
+            tracing::debug!("AOT preload: marked {marked} / {candidates} loadup fns prewarmed");
         }
     }
 }
