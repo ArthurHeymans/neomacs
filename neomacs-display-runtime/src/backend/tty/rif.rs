@@ -2401,10 +2401,34 @@ fn write_cursor_shape(buf: &mut Vec<u8>, shape: TerminalCursorShape) {
 // truecolor (Linux console, tmux without `Tc`, strict 256-color emulators)
 // silently drops the color -> no syntax highlighting at all with `neomacs -nw`.
 // Pick the SGR form from the detected color-cell count instead.
-const TIER_NONE: u8 = 0;
-const TIER_BASIC: u8 = 1; // 8/16 ANSI colors
-const TIER_256: u8 = 2;
-const TIER_TRUECOLOR: u8 = 3;
+/// What this terminal's palette IS, not merely how deep it is.
+///
+/// GNU never quantizes in the writer: `turn_on_face` (src/term.c) emits the
+/// index the realized face already carries, and that index came from
+/// `tty-color-desc` -> `tty-color-approximate` searching `tty-color-alist`
+/// (lisp/term/tty-colors.el:875-915), whose CONTENTS are registered per
+/// terminal by `lisp/term/<TERM>.el`.  Neomacs carries RGB to the writer
+/// instead and re-derives the index here, so the writer has to name the
+/// palette it searches -- and a tier that names no palette cannot be searched
+/// at all.  Holding the tier and its palette in one type is what stops the two
+/// from being answered in different places, which is how the near-gray
+/// short-circuit ledger 108 removed came to disagree with the palette that was
+/// right all along.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TtyColorTier {
+    /// Monochrome: no color is emitted at all.
+    Monochrome,
+    /// GNU's 8-color `tty-color-alist`, measured out of `emacs -Q -nw` under
+    /// `TERM=xterm`: the first 8 of `xterm-standard-colors`.
+    Ansi8,
+    /// The 16 aixterm colors, `xterm-standard-colors` in full
+    /// (lisp/term/xterm.el:748-768).
+    Ansi16,
+    /// The xterm 256-color palette.
+    Palette256,
+    /// Direct 24-bit color, where no palette search happens.
+    TrueColor,
+}
 
 /// This terminal's capabilities, as GNU keeps them on `struct tty_display_info`.
 ///
@@ -2442,16 +2466,24 @@ pub fn set_color_tier(color_cells: i64) {
     }
 }
 
-/// GNU's color-depth buckets, from the capability record's cell count.
-fn color_tier(caps: &TtyAttributeCapabilities) -> u8 {
+/// GNU's color-depth buckets, from the capability record's cell count
+/// (GNU `TN_max_colors`, read from terminfo `Co` in `init_tty`).
+///
+/// 8 and 16 are separate tiers because their palettes are different lists, not
+/// a prefix relation with a brightness bit: a 16-color `tty-color-alist` adds
+/// `brightblack`..`brightwhite`, and a color that approximates to one of those
+/// has no 8-color spelling at all.
+pub fn color_tier(caps: &TtyAttributeCapabilities) -> TtyColorTier {
     if caps.color_cells >= 16_777_216 {
-        TIER_TRUECOLOR
+        TtyColorTier::TrueColor
     } else if caps.color_cells >= 256 {
-        TIER_256
+        TtyColorTier::Palette256
+    } else if caps.color_cells >= 16 {
+        TtyColorTier::Ansi16
     } else if caps.color_cells >= 8 {
-        TIER_BASIC
+        TtyColorTier::Ansi8
     } else {
-        TIER_NONE
+        TtyColorTier::Monochrome
     }
 }
 
@@ -2529,11 +2561,28 @@ fn off_gray_diagonal(r: u8, g: u8, b: u8) -> f64 {
 /// free, in the same ascending order GNU's alist is consulted so that exact
 /// ties resolve to the same index.
 pub fn rgb_to_256(r: u8, g: u8, b: u8) -> u8 {
+    let index = TtyColorTier::Palette256
+        .approximate(r, g, b)
+        .expect("the 256-color tier always has a palette");
+    u8::try_from(index).expect("a 256-entry palette indexes into a u8")
+}
+
+/// GNU `tty-color-approximate`'s loop over a palette of `length` entries whose
+/// RGB is `entry(index)`, consulted in ascending index order -- which is what
+/// makes an exact tie resolve to the entry GNU picks (0 for `#000000`, 15 for
+/// `#ffffff`, never 16 or 231).
+fn approximate_over_palette(
+    length: u16,
+    entry: impl Fn(u16) -> (u8, u8, u8),
+    r: u8,
+    g: u8,
+    b: u8,
+) -> u16 {
     let favor_non_gray = off_gray_diagonal(r, g, b) >= 0.065;
-    let mut best_index = 0_u8;
+    let mut best_index = None;
     let mut best_distance = u32::MAX;
-    for index in 0..=255_u8 {
-        let (cr, cg, cb) = xterm_256_entry(index);
+    for index in 0..length {
+        let (cr, cg, cb) = entry(index);
         if favor_non_gray && cr == cg && cg == cb {
             continue;
         }
@@ -2544,50 +2593,102 @@ pub fn rgb_to_256(r: u8, g: u8, b: u8) -> u8 {
         let distance = difference(r, cr) + difference(g, cg) + difference(b, cb);
         if distance < best_distance {
             best_distance = distance;
-            best_index = index;
+            best_index = Some(index);
         }
     }
-    best_index
+    // GNU returns nil when every candidate was skipped, and its callers treat
+    // that as "not resolved". Only an all-gray palette can do that, which none
+    // of these three are, so fall back to entry 0 rather than inventing a
+    // second policy for a state that cannot occur.
+    best_index.unwrap_or(0)
 }
 
-/// Nearest basic-ANSI color as `(base 0..7, bright)` for an RGB triple.
-pub fn rgb_to_ansi_basic(r: u8, g: u8, b: u8) -> (u8, bool) {
-    let on = |v: u8| -> u8 { u8::from(v > 100) };
-    let base = on(r) | (on(g) << 1) | (on(b) << 2);
-    (base, r.max(g).max(b) > 170)
+impl TtyColorTier {
+    /// GNU `tty-color-approximate` (lisp/term/tty-colors.el:875-915) over this
+    /// tier's palette: the smallest squared 8-bit RGB distance across the WHOLE
+    /// palette, skipping candidates on the gray diagonal whenever the REQUESTED
+    /// color is 0.065 radians or more off it (`tty-color-off-gray-diag`,
+    /// lisp/term/tty-colors.el:866-873).
+    ///
+    /// `None` for the tiers that have no palette -- monochrome emits nothing and
+    /// truecolor emits the channels themselves, and neither is a search.
+    ///
+    /// Ledger 108 replaced a near-gray short-circuit here with this search for
+    /// the 256-color tier only: `#afafaf` is an EXACT 6x6x6 cube entry (145) and
+    /// the ramp branch answered 248 (`#a8a8a8`, distance 147), which is Gruvbox
+    /// light's comment / org-verbatim / org-document-info-keyword foreground.
+    /// The 8/16-color tier kept a SECOND hand-rolled quantizer -- a per-channel
+    /// `> 100` threshold plus a `> 170` brightness bit -- until ledger 153
+    /// measured it against GNU: 4,589 of 5,832 sampled colors wrong at 8 colors,
+    /// 4,048 of 5,832 at 16.  One search, chosen by tier, is the whole point.
+    pub fn approximate(self, r: u8, g: u8, b: u8) -> Option<u16> {
+        let system = |index: u16| SYSTEM_COLORS[index as usize];
+        match self {
+            // Not "no answer yet" but "no question": monochrome emits nothing
+            // and truecolor emits the channels themselves. Neither has a
+            // palette, so neither can be searched, and the type says so rather
+            // than a panic in a display path saying it.
+            Self::Monochrome | Self::TrueColor => None,
+            Self::Ansi8 => Some(approximate_over_palette(8, system, r, g, b)),
+            Self::Ansi16 => Some(approximate_over_palette(16, system, r, g, b)),
+            Self::Palette256 => Some(approximate_over_palette(
+                256,
+                |index| xterm_256_entry(index as u8),
+                r,
+                g,
+                b,
+            )),
+        }
+    }
+}
+
+/// The SGR parameter GNU's terminfo `setaf`/`setab` produces for a palette
+/// index -- `\E[3Nm` below 8, `\E[9(N-8)m` through 15, `\E[38;5;Nm` above.
+///
+/// This is the `setaf` string of every xterm-family entry, e.g.
+/// `screen-256color`:
+/// `\E[%?%p1%{8}%<%t3%p1%d%e%p1%{16}%<%t9%p1%{8}%-%d%e38;5;%p1%d%;m`.
+/// Writing it once, from the index, is what keeps the palette choice and the
+/// bytes that spell it from being decided in two places.
+fn write_indexed_color(buf: &mut Vec<u8>, index: u16, background: bool) {
+    use std::io::Write;
+    let base = if background { 10 } else { 0 };
+    let _ = if index < 8 {
+        write!(buf, "\x1b[{}m", 30 + base + index)
+    } else if index < 16 {
+        write!(buf, "\x1b[{}m", 90 + base + index - 8)
+    } else {
+        write!(buf, "\x1b[{}8;5;{index}m", 3 + u16::from(background))
+    };
 }
 
 fn write_fg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8, caps: &TtyAttributeCapabilities) {
     use std::io::Write;
     match color_tier(caps) {
-        TIER_TRUECOLOR => {
+        TtyColorTier::TrueColor => {
             let _ = write!(buf, "\x1b[38;2;{r};{g};{b}m");
         }
-        TIER_256 => {
-            let _ = write!(buf, "\x1b[38;5;{}m", rgb_to_256(r, g, b));
+        TtyColorTier::Monochrome => {}
+        tier => {
+            if let Some(index) = tier.approximate(r, g, b) {
+                write_indexed_color(buf, index, false);
+            }
         }
-        TIER_BASIC => {
-            let (base, bright) = rgb_to_ansi_basic(r, g, b);
-            let _ = write!(buf, "\x1b[{}m", if bright { 90 + base } else { 30 + base });
-        }
-        _ => {}
     }
 }
 
 fn write_bg(buf: &mut Vec<u8>, r: u8, g: u8, b: u8, caps: &TtyAttributeCapabilities) {
     use std::io::Write;
     match color_tier(caps) {
-        TIER_TRUECOLOR => {
+        TtyColorTier::TrueColor => {
             let _ = write!(buf, "\x1b[48;2;{r};{g};{b}m");
         }
-        TIER_256 => {
-            let _ = write!(buf, "\x1b[48;5;{}m", rgb_to_256(r, g, b));
+        TtyColorTier::Monochrome => {}
+        tier => {
+            if let Some(index) = tier.approximate(r, g, b) {
+                write_indexed_color(buf, index, true);
+            }
         }
-        TIER_BASIC => {
-            let (base, bright) = rgb_to_ansi_basic(r, g, b);
-            let _ = write!(buf, "\x1b[{}m", if bright { 100 + base } else { 40 + base });
-        }
-        _ => {}
     }
 }
 

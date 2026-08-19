@@ -2443,13 +2443,42 @@ fn tty_color_rgb_to_256_corners() {
     assert_eq!(rgb_to_256(128, 128, 128), 244);
 }
 
+/// The 8-color tier, against GNU.
+///
+/// Every answer was read out of GNU 31.0.90, `emacs -Q -nw` in a PTY with
+/// COLORTERM unset and `TERM=xterm`, where `display-color-cells` is 8 and
+/// `tty-color-alist` has exactly the 8 entries this tier's palette holds:
+/// `(nth 1 (tty-color-approximate (list (* r 257) (* g 257) (* b 257))))`.
+///
+/// `#ff0000` is the row that shows what the old `rgb_to_ansi_basic` got wrong
+/// in kind rather than in degree: an 8-color terminal has no bright red, so
+/// GNU answers 1 ("red", `#cd0000`) and emits `\E[31m`, where the old
+/// threshold answered base 1 with the brightness bit set and emitted `\E[91m`.
 #[test]
-fn tty_color_rgb_to_ansi_basic() {
-    assert_eq!(rgb_to_ansi_basic(0, 0, 0), (0, false));
-    assert_eq!(rgb_to_ansi_basic(200, 0, 0), (1, true));
-    assert_eq!(rgb_to_ansi_basic(0, 200, 0), (2, true));
-    assert_eq!(rgb_to_ansi_basic(0, 0, 200), (4, true));
-    assert_eq!(rgb_to_ansi_basic(255, 255, 255), (7, true));
+fn ansi8_tier_matches_gnu_tty_color_approximate() {
+    let tier = TtyColorTier::Ansi8;
+    for (hex, expected) in [
+        ("#000000", 0),
+        ("#ff0000", 1),
+        ("#00ff00", 2),
+        ("#0000ff", 4),
+        ("#ffffff", 7),
+    ] {
+        let channel = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).expect("hex channel");
+        assert_eq!(
+            tier.approximate(channel(1), channel(3), channel(5)),
+            Some(expected),
+            "{hex} at the 8-color tier"
+        );
+    }
+}
+
+/// The tiers that have no palette answer no index at all, so no caller can
+/// quantize on a terminal that has nothing to quantize into.
+#[test]
+fn tiers_without_a_palette_do_not_approximate() {
+    assert_eq!(TtyColorTier::Monochrome.approximate(255, 0, 0), None);
+    assert_eq!(TtyColorTier::TrueColor.approximate(255, 0, 0), None);
 }
 
 // nextest isolates each test in its own process, so the process-global
@@ -2461,20 +2490,43 @@ fn tty_write_sgr_downsamples_by_tier() {
         ..CellAttrs::default()
     };
     // 256-color terminal -> indexed escape, never 24-bit truecolor.
+    //
+    // GNU approximates #ff0000 to the system "brightred" cell, index 9, and
+    // spells indices below 16 with the short aixterm forms because that is what
+    // its terminfo `setaf` produces:
+    //   screen-256color setaf =
+    //     \E[%?%p1%{8}%<%t3%p1%d%e%p1%{16}%<%t9%p1%{8}%-%d%e38;5;%p1%d%;m
+    // A PTY capture of GNU on this terminal carries \E[96m and \E[37m for the
+    // link and mode-line faces, never \E[38;5;14m or \E[38;5;7m.
     set_color_tier(256);
     let mut buf = Vec::new();
     write_sgr(&mut buf, &attrs);
     let s = String::from_utf8(buf).unwrap();
-    // GNU approximates #ff0000 to the system "brightred" cell, index 9.
-    assert!(s.contains("\x1b[38;5;9m"), "256 tier red: {s:?}");
+    assert!(s.contains("\x1b[91m"), "256 tier red: {s:?}");
     assert!(!s.contains("38;2;"), "must not emit truecolor at 256 tier");
+    assert!(
+        !s.contains("38;5;"),
+        "index 9 is spelled \\E[91m, not 38;5;9"
+    );
 
-    // Basic (8/16) terminal -> bright-red ANSI code.
+    // 16-color terminal -> the same index, the same short form.
+    set_color_tier(16);
+    let mut buf = Vec::new();
+    write_sgr(&mut buf, &attrs);
+    let s = String::from_utf8(buf).unwrap();
+    assert!(s.contains("\x1b[91m"), "16-color tier red: {s:?}");
+
+    // 8-color terminal -> GNU's 8-entry palette has no bright red at all, so
+    // #ff0000 resolves to index 1 and is emitted as \E[31m.
     set_color_tier(8);
     let mut buf = Vec::new();
     write_sgr(&mut buf, &attrs);
     let s = String::from_utf8(buf).unwrap();
-    assert!(s.contains("\x1b[91m"), "basic tier bright red: {s:?}");
+    assert!(s.contains("\x1b[31m"), "8-color tier red: {s:?}");
+    assert!(
+        !s.contains("\x1b[91m"),
+        "8 colors have no bright red: {s:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -3662,4 +3714,39 @@ fn rgb_to_256_matches_gnu_tty_color_approximate() {
         })
         .collect::<Vec<_>>();
     assert!(mismatches.is_empty(), "{}", mismatches.join("\n"));
+}
+
+/// The same question asked of the whole RGB cube instead of 41 spot colours.
+///
+/// `gnu_tty_color_approximate_sweep.txt` holds 5,832 GNU answers read out of
+/// `emacs -Q -nw` in a PTY (see the file header for the exact invocation).
+/// The 41-colour table above pins the colours ledger 108 was reported on; this
+/// pins the SEARCH itself, so a quantizer that is right on those 41 and wrong
+/// elsewhere -- which is precisely the shape of the defect ledger 108 fixed,
+/// a near-gray short-circuit that never looked at the 6x6x6 cube -- cannot
+/// pass this suite.
+#[test]
+fn rgb_to_256_matches_gnu_across_the_rgb_cube() {
+    let sweep = include_str!("gnu_tty_color_approximate_sweep.txt");
+    let mut compared = 0_usize;
+    let mismatches = sweep
+        .lines()
+        .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+        .filter_map(|line| {
+            let (hex, index) = line.split_once(' ').expect("RRGGBB INDEX");
+            let channel =
+                |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).expect("hex channel");
+            let expected: u8 = index.trim().parse().expect("palette index");
+            let got = rgb_to_256(channel(0), channel(2), channel(4));
+            compared += 1;
+            (got != expected).then(|| format!("#{hex}: GNU {expected}, got {got}"))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(compared, 5832, "sweep fixture lost samples");
+    assert!(
+        mismatches.is_empty(),
+        "{} of {compared} sweep colours disagree with GNU:\n{}",
+        mismatches.len(),
+        mismatches.join("\n")
+    );
 }
