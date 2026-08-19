@@ -3503,7 +3503,7 @@ enum ProcessBytesRead {
 /// coding system the decode ended on, and the two things the write-back still
 /// owes the process record.
 #[derive(Debug)]
-struct DecodedProcessRun {
+struct DecodedPendingProcessRun {
     run: ProcessDecodedRun,
     carryover: Vec<u8>,
     mirror: ProcessOutputMirror,
@@ -7796,7 +7796,7 @@ impl super::eval::Context {
         // decoder needs the whole editor -- ISO-2022's designations, CCL
         // programs and charset lists live in the evaluator, and
         // `:post-read-conversion` IS the evaluator.
-        let decoded = self.decode_process_run(run)?;
+        let decoded = self.decode_pending_process_run(run)?;
         // Stage three: GNU's `read_process_output_set_last_coding_system`
         // (src/process.c:6417-6459), which runs after EVERY decoded run.
         self.record_process_run_coding(id, decoded.run.coding);
@@ -7827,7 +7827,10 @@ impl super::eval::Context {
     /// filter branch, `dst_object` `Qt` (src/coding.c:8133-8137) -- and the
     /// process buffer is written afterwards by the insertion path, with the
     /// change hooks GNU's `signal_after_change` (:6510) runs.
-    fn decode_process_run(&mut self, run: PendingProcessRun) -> Result<DecodedProcessRun, Flow> {
+    fn decode_pending_process_run(
+        &mut self,
+        run: PendingProcessRun,
+    ) -> Result<DecodedPendingProcessRun, Flow> {
         let PendingProcessRun {
             coding,
             bytes,
@@ -7839,9 +7842,15 @@ impl super::eval::Context {
         self.specbind(intern("inhibit-quit"), Value::T);
         self.specbind(intern("last-nonmenu-event"), Value::T);
         let decoded = coding.decode_in_context(self, &bytes);
+        // The `?` is deliberately AFTER the unwind, not on the call: a
+        // `:post-read-conversion` that signals must still leave the bindings
+        // popped and the match data restored, which is what GNU's specpdl does
+        // for it.  The bytes of a run whose decode signalled are lost in both
+        // editors -- GNU's error escapes `read_process_output` before
+        // `read_process_output_set_last_coding_system` can store the carryover.
         self.unbind_to(specpdl_count);
         self.match_data = saved_match_data;
-        Ok(DecodedProcessRun {
+        Ok(DecodedPendingProcessRun {
             run: decoded?,
             carryover,
             mirror,
