@@ -2514,7 +2514,15 @@ pub fn write_sgr_with_capabilities(
     // Last, and inside the same colour block: GNU's `TF_set_underline_color`
     // (src/term.c:2119-2126).  It is installed only alongside
     // `TF_set_underline_style` (src/term.c:4705-4708), so `Smulx` gates it too.
-    if colored && caps.supports(TtyCapability::UnderlineStyled) {
+    //
+    // The gate is the PRESENCE of `Smulx`, not `supports`: GNU's guard here is
+    // `if (ts && face->underline_color)` with no `MAY_USE_WITH_COLORS_P` term,
+    // unlike every arm above it.  So a terminal whose `ncv` forbids underline
+    // on a colour frame gets no underline from GNU and a colour for it anyway.
+    // No entry ncurses ships has both `Smulx` and an `ncv`, so the difference
+    // is unobservable; the literal reading is kept because inventing the ncv
+    // term here would be inventing a rule GNU does not have.
+    if colored && caps.underline_styled {
         if let Some(color) = attrs.underline_color {
             write_underline_color(buf, color);
         }

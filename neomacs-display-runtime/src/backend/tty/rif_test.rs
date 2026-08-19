@@ -3846,3 +3846,39 @@ fn resolve_attrs_carries_the_realized_underline_color() {
     assert_eq!(attrs.underline_color, Some(TerminalColor::Indexed(1)));
     assert_eq!(attrs.underline, UnderlineStyle::Wave.gnu_code());
 }
+
+/// GNU's `Setulc` guard has no `MAY_USE_WITH_COLORS_P` term, unlike every
+/// other arm of `turn_on_face`: it is `if (ts && face->underline_color)`
+/// (src/term.c:2120).  So an `ncv` that forbids underline on a colour frame
+/// suppresses the underline and NOT its colour.
+///
+/// Unmeasurable against a real terminal: no entry ncurses ships carries both
+/// `Smulx` and an `ncv`, checked across tmux-256color, alacritty, kitty,
+/// vte-256color and tmux.  Pinned so that the literal reading is the one that
+/// stays, rather than drifting to the `supports` gate the arms above use.
+#[test]
+fn ncv_suppresses_the_underline_but_not_gnus_underline_color() {
+    let attrs = CellAttrs {
+        underline: UnderlineStyle::Wave.gnu_code(),
+        underline_color: Some(TerminalColor::Indexed(1)),
+        ..CellAttrs::default()
+    };
+    let ncv_underline = TtyAttributeCapabilities {
+        no_color_video: TtyNoColorVideo::UNDERLINE,
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &ncv_underline);
+    let s = String::from_utf8(buf).unwrap();
+
+    for underline in ["\x1b[4m", "\x1b[4:3m"] {
+        assert!(
+            !s.contains(underline),
+            "ncv forbids the underline itself: {s:?}"
+        );
+    }
+    assert!(
+        s.contains("\x1b[58:2::0:0:1m"),
+        "GNU's Setulc guard does not consult ncv: {s:?}"
+    );
+}
