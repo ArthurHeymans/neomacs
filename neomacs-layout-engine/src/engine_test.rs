@@ -26159,7 +26159,12 @@ fn an_empty_display_string_consumes_its_covered_range() {
 /// indented line's leading whitespace to the top of the buffer.
 #[test]
 fn a_tab_stretch_carries_its_own_buffer_position() {
-    let glyphs = display_prop_first_row_glyphs("ab\tcd\n", "(ignore)");
+    // The setup form is a no-op: this test is about the tab's stretch glyph,
+    // not about any display property.  It used `(ignore)', which stopped
+    // working on a bare `Context' when DIVERGENCES.md 152 deleted that Rust
+    // subr -- `ignore' is a `defun' in subr.el, which a bare Context has not
+    // loaded.  `nil' needs no function at all.
+    let glyphs = display_prop_first_row_glyphs("ab\tcd\n", "nil");
     assert!(
         matches!(glyphs[2].glyph_type, GlyphType::Stretch { .. }),
         "expected the tab to render as a stretch, got {:?}",
