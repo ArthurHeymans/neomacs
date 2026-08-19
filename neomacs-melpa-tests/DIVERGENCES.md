@@ -15525,10 +15525,21 @@ tracked file, for each of the eighteen names in call or quote position:
 | `neomacs-display-runtime` | 2 hits | comments only |
 
 The discriminator is not the crate, it is whether the file builds a bare
-`Context::new()`.  Nine `.rs` files did both; six of them were the ones this
-entry moved, two (`neomacs-bin/src/main_test.rs`,
-`neomacs-layout-engine/src/engine_test.rs`) mention the names only inside booted
-evaluators, and one (`window_cmds/mod.rs`) only in a comment.
+`Context::new()`.  Nine `.rs` files did both, and each was read:
+
+* four are the ones this entry moved -- `window_cmds/tests.rs`,
+  `bytecode/vm_test.rs`, `eval_test.rs`, `xdisp_test.rs`;
+* `neomacs-bin/src/main_test.rs` and `neomacs-layout-engine/src/engine_test.rs`
+  name them only inside `create_bootstrap_evaluator_cached_*` evaluators;
+* `load_test.rs` names them only inside `bootstrap_*` evaluators;
+* `font_test.rs` names them only inside a `source.contains(...)` STRING
+  COMPARISON against `obsolete/` aliases, which never evaluates them;
+* `window_cmds/mod.rs` names them only in a comment.
+
+The three tests that were bare AND evaluated a deleted name outside that list --
+`builtins/tests.rs`'s three `buffer-list` orderings and `display_test.rs`'s
+`display-color-cells` rows -- were found by the compiler instead, because they
+called the Rust function directly rather than through a Lisp string.
 
 ### Two answer divergences the move corrected, and one found and not fixed
 
