@@ -1815,6 +1815,62 @@ fn ascii_fold_find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.len() > haystack.len() {
         return None;
     }
+    // SIMD scan for the first byte's two case variants, then verify the
+    // remainder at each candidate. On repetitive inputs where candidates
+    // are dense and verification keeps failing late, the spent-work budget
+    // drops to the guaranteed-linear KMP instead (no match starts before
+    // the first unresolved candidate, so resuming there is exact).
+    let fold = |b: u8| b.to_ascii_lowercase();
+    let lo = needle[0].to_ascii_lowercase();
+    let up = needle[0].to_ascii_uppercase();
+    let tail = &needle[1..];
+    let mut budget = haystack.len().saturating_mul(2).saturating_add(256);
+    let mut at = 0usize;
+    while at + needle.len() <= haystack.len() {
+        let rel = if lo == up {
+            memchr::memchr(lo, &haystack[at..])
+        } else {
+            memchr::memchr2(lo, up, &haystack[at..])
+        };
+        let start = match rel {
+            Some(rel) => at + rel,
+            None => return None,
+        };
+        if start + needle.len() > haystack.len() {
+            return None;
+        }
+        let mut used = 1usize;
+        let mut ok = true;
+        for (i, &nb) in tail.iter().enumerate() {
+            used += 1;
+            if fold(haystack[start + 1 + i]) != fold(nb) {
+                ok = false;
+                break;
+            }
+        }
+        if ok {
+            return Some(start);
+        }
+        budget = budget.saturating_sub(used);
+        if budget == 0 {
+            return ascii_fold_find_bytes_kmp(&haystack[start..], needle)
+                .map(|found| start + found);
+        }
+        at = start + 1;
+    }
+    None
+}
+
+/// Guaranteed O(n+m) ASCII-case-insensitive find: KMP over the folded
+/// sequences. Backstop for [`ascii_fold_find_bytes`] on adversarial
+/// repetitive inputs.
+fn ascii_fold_find_bytes_kmp(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    if needle.len() > haystack.len() {
+        return None;
+    }
     let fold = |b: u8| b.to_ascii_lowercase();
     // KMP failure table over the folded needle.
     let mut table = vec![0usize; needle.len()];
