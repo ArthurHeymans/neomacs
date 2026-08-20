@@ -20892,3 +20892,512 @@ checkout for part of the run -- which is exactly why the gate is
 across three separately linked binaries.
 
 Status: FIXED.
+
+## 168. Four handed-over items, three of them premise-refuted or declined -- and the bug was next door: thirty-five variables were documented with GNU's own "this is not the doc" marker -- FIXED
+
+Four residuals from entries 132, 135 and 138, each reproduced `-Q --batch`
+against GNU 31.0.90 (`0ee48ac4df20`) and a `cargo xtask fresh-build --release`
+binary of `bee864abc` -- ledger 164's merge, which reports its own commit
+through `emacs-repository-version`, answers 138's probes, and is oracle-valid
+by the check that catches the stale-`.elc` mode
+(`(with-current-buffer "*scratch*" (buffer-string))` is `""`).
+
+Three of the four are not bugs to fix, and saying so with evidence is most of
+this entry.  The fix is the fifth thing, found while checking item 3's
+neighbours: `C-h v x-pointer-shape` answered `SKIP: real text in xfns.c.`
+
+| item | verdict |
+| --- | --- |
+| 1. five platform names non-special | **PREMISE REFUTED** -- entry 141 closed it three days earlier; the probe is byte-identical |
+| 2. `command-line-max-length` 1572864 vs 626432 | **REPRODUCED, DIAGNOSIS CONFIRMED, DECLINED** -- one declaration, two stack policies; pin strengthened from shape to derivation |
+| 3. `Lisp_Fwd_Obj` / `Lisp_Fwd_Kboard_Obj` unwired | **REPRODUCED and RE-SIZED at 447 names**; the storage wiring **DECLINED** with a GC-tracer citation; the invariant handed over |
+| 4. `debug-on-next-call` | **REPRODUCED, unchanged** -- a debugger gap, worth its own entry |
+| 5. (found here) 35 variables documented with GNU's `SKIP` placeholder | **FIXED** |
+
+### Item 1: the five platform names were fixed by entry 141, and the probe is byte-identical
+
+The brief asked which `syms_of_*` each lives in and what value GNU gives it in
+a tty session versus a GUI one.  The answers, and then the measurement that
+makes them moot:
+
+| name | GNU's declaration | initializer |
+| --- | --- | --- |
+| `x-bitmap-file-path` | `syms_of_image`, `src/image.c:13265-13267` | `decode_env_path (0, PATH_BITMAPS, 0)` |
+| `x-scroll-event-delta-factor` | `syms_of_xterm`, `src/xterm.c:32833-32837` | `make_float (1.0)` |
+| `x-auto-preserve-selections` | `syms_of_xterm`, `src/xterm.c:32976-32984` | `list2 (QCLIPBOARD, QPRIMARY)` |
+| `vertical-centering-font-regexp` | `syms_of_fontset`, `src/fontset.c:2237-2242` | `Qnil`; the regexp comes from `lisp/international/fontset.el:1266` |
+| `x-gtk-use-system-tooltips` (the fifth name, from 138) | none in any build | `defvaralias` at `lisp/term/x-win.el:1572` onto the `DEFVAR_BOOL` at `src/frame.c:7725` |
+
+**Tty versus GUI does not enter into it, and that is checkable rather than
+assumed.**  `main` calls `syms_of_image` at `src/emacs.c:2366` under
+`#ifdef HAVE_WINDOW_SYSTEM`, and `syms_of_xterm` and `syms_of_fontset` at
+`2374` and `2377` under `#ifdef HAVE_X_WINDOWS` -- compile-time gates, not
+runtime ones -- and every `syms_of_*` runs before any terminal or window-system
+init.  So one binary reports the same value in `--batch`, on a tty and under a
+window system; none of these is "legitimately absent in a tty build", and the
+`--batch` measurement below is the whole answer.
+
+```elisp
+(list (mapcar (lambda (s) (list s (special-variable-p s) (symbol-value s)))
+              '(x-bitmap-file-path x-gtk-use-system-tooltips
+                x-scroll-event-delta-factor x-auto-preserve-selections
+                vertical-centering-font-regexp))
+      (let ((x-bitmap-file-path 'probe)) (symbol-value 'x-bitmap-file-path))
+      (indirect-variable 'x-gtk-use-system-tooltips)
+      (mapcar (lambda (s) (list s (boundp s)))
+              '(window-combination-limit void-text-area-pointer
+                temporary-file-directory)))
+;; GNU 31.0.90 and Neomacs bee864abc, character-identical:
+;; (((x-bitmap-file-path t ("/usr/include/X11/bitmaps"))
+;;   (x-gtk-use-system-tooltips t t)
+;;   (x-scroll-event-delta-factor t 1.0)
+;;   (x-auto-preserve-selections t (CLIPBOARD PRIMARY))
+;;   (vertical-centering-font-regexp t "gb2312\\|gbk\\|gb18030\\|jisx0208\\|jisx0212\\|ksc5601\\|cns11643\\|big5"))
+;;  probe use-system-tooltips
+;;  ((window-combination-limit t) (void-text-area-pointer t) (temporary-file-directory t)))
+```
+
+Entry 141 (2026-08-17) did exactly what the brief asks for -- one shared
+mechanism rather than five patches.  `cus_start_platform_vars` stopped seeding
+anything, `GnuBinding::{DeclaredInC, DeclaredInPreloadedLisp, UnboundHere}`
+each carry the declaration site, the four C names went to the Neomacs
+counterpart of their `syms_of_*` (`image::register_bootstrap_vars`,
+`fontset::register_bootstrap_vars`, the existing `syms_of_xterm` block), and
+the fifth went to `lisp/term/neo-preload.el` as a `defvaralias`, because a
+`syms_of_*` counterpart is not what an alias wants.  Nothing to do here.  138's
+residual is measured closed below.
+
+### Item 2: one declaration, two stack policies -- and the pin can say so exactly
+
+138's diagnosis holds, and the probe that confirms it also makes it
+self-validating rather than a story:
+
+```elisp
+(let* ((reported (with-temp-buffer
+                   (call-process "sh" nil t nil "-c" "ulimit -s")
+                   (car (split-string (buffer-string)))))
+       (stack (if (equal reported "unlimited") most-positive-fixnum
+                (* 1024 (string-to-number reported))))
+       ;; glibc: _SC_ARG_MAX = MAX (131072, MIN (stack / 4, 6 MiB))
+       (predicted (/ (max 131072 (min (/ stack 4) (* 6 1024 1024))) 4)))
+  (list command-line-max-length reported predicted
+        (= command-line-max-length predicted)))
+;; GNU     => (626432  "9788"   626432  t)
+;; Neomacs => (1572864 "131072" 1572864 t)
+```
+
+The child reports the stack limit it inherited, which is the editor's own after
+it has set it, and the glibc formula applied to that number reproduces
+`command-line-max-length` exactly in both editors.  The formula was checked
+directly rather than taken from documentation:
+`sh -c 'ulimit -s 4096; getconf ARG_MAX'` is 1048576,
+`ulimit -s unlimited` is 6291456, and `ulimit -s 131072` is also 6291456 -- the
+6 MiB cap.
+
+GNU's 9788 KiB is not the shell's 8192 and not a constant: `main` raises
+RLIMIT_STACK to `emacs_re_max_failures * ratio + extra`, rounded up to a page
+(`src/emacs.c:1563-1623`), which is `40000 * 213 + 1500000` = 10,020,000 ->
+10,022,912 bytes = 9788 KiB, sized for `regex-emacs.c`'s backtrack stack.  That
+runs at `src/emacs.c:1563`; `syms_of_callproc`, which does
+`command_line_max_length = sysconf (_SC_ARG_MAX) / 4`
+(`src/callproc.c:2246-2252`), runs at `src/emacs.c:2172` -- after.  So GNU's own
+number is a report of GNU's stack policy.  Neomacs raises the same limit to a
+flat 128 MiB (`neomacs-bin/src/main.rs`, `increase_stack_limit`), which lands on
+glibc's 6 MiB cap, and 6291456 / 4 is 1572864.
+
+**So there is nothing to fix at the variable, and writing 626432 into Rust
+would be the bug this ledger keeps finding** -- an invented default that
+disagrees with the machine it describes.  Mirroring GNU's number would mean
+mirroring GNU's stack policy, i.e. dropping this evaluator from 128 MiB to
+9.56 MiB, and the call site says why that stack is there: Elisp evaluation
+recurses on the native stack here in a way GNU's C `eval_sub` does not.
+
+Two things did change.  The call-site comment said "Increase the stack size to
+64 MB" beside `const TARGET_STACK_MB: u64 = 128`, and the function's doc said
+the policy matched GNU's; both are corrected, and the derivation above is now
+written at the call site so the next reader of `command-line-max-length` finds
+the reason instead of re-deriving it.  And the pin moved from shape to
+derivation: `oracle_command_line_max_length_is_derived_from_this_editors_stack_rlimit`
+asks each editor for its own inherited rlimit and re-derives the number, so it
+is editor-independent, exact, and it is the assertion that fails if anyone
+"fixes" the difference with a constant.  The old shape assertion
+(`integerp` and `> 0`) stays where it is; no pin moved.
+
+### Item 3: `Lisp_Fwd_Obj` enforces nothing, and 447 names disagree anyway
+
+Entry 132 wrote "Both enforce nothing on assignment, so no divergence follows
+from that", entry 135 and entry 138 carried the sentence forward, and entry 141
+found the counterexample without sizing it.  Sized here, over every name
+`grep DEFVAR_LISP src/*.c` finds (563) plus the 14 `DEFVAR_KBOARD` names, each
+asked `boundp` and then whether `makunbound` is refused:
+
+```
+                                     GNU     Neomacs
+DEFVAR_LISP names bound              490     446
+  ... `makunbound' refused           487     5
+  ... `makunbound' allowed           3       441
+DEFVAR_KBOARD names bound            14      13
+  ... `makunbound' refused           14      0
+```
+
+**GNU's rule has no exceptions.**  The three `DEFVAR_LISP` names GNU lets you
+unbind are exactly the three it does not declare in this build:
+`selection-coding-system` and `next-selection-coding-system` are C only in
+`src/w16select.c:681` and `src/w32select.c:1324`, so here they come from
+`lisp/select.el:42` and `:82`; and `echo-area-clear-hook`'s only `DEFVAR_LISP`
+is inside `#if 0` (`src/keyboard.c:14058-14061`), with
+`Fset (Qecho_area_clear_hook, Qnil)` binding the symbol instead at
+`src/keyboard.c:14076`.  All three are `SYMBOL_PLAINVAL`, which is why
+`Fmakunbound` reaches `Fset (symbol, Qunbound)` (`src/data.c:788`) and lands in
+the plainval arm rather than the `error ("Built-in variable may not be
+unbound : %s")` at `src/data.c:1805-1808`.
+
+The five Neomacs refuses are `most-positive-fixnum`, `most-negative-fixnum`,
+`font-weight-table`, `font-slant-table` and `font-width-table` -- constants,
+caught by a different check (`SYMBOL_CONSTANT_P`, `src/data.c:770-771`).  So
+**447 names answer `makunbound` one way in GNU and the other way here.**
+
+#### Why the answer is still "do not wire it"
+
+The residual is real, and `Lisp_Fwd_Obj` *storage* is nevertheless the wrong
+instrument for it.  Two reasons, both checkable:
+
+- **It would move ~490 variables into the failure class entries 161, 162 and
+  163 were spent on.**  A `Lisp_Objfwd` owns a `Lisp_Object`
+  (`src/lisp.h:3495-3500`), so the Rust counterpart owns a `Value` inside a
+  leaked `'static` descriptor -- for variables holding lists, strings, keymaps
+  and char-tables.  Neomacs's symbol tracer is written against the opposite
+  invariant, in as many words: "Only `Plainval` holds a heap value cell: alias
+  = a non-heap `SymId`, localized = a `*mut BLV`, forwarded = a raw fwd ptr --
+  none is a heap `Value` to trace here"
+  (`neovm-core/src/emacs_core/symbol.rs`, `read_symbol_children_consistent`).
+  `Int` and `Bool` were free of that because an `intmax_t` and a `bool` are not
+  heap values.  `Obj` is not.
+- **It buys nothing else.**  `Lisp_Fwd_Obj`'s store arm is a plain assignment
+  plus a `buffer_defaults` fan-out (`src/data.c:1489-1516`) that Neomacs
+  already models through `Lisp_Fwd_Buffer_Obj` and per-buffer defaults, and
+  `Lisp_Fwd_Kboard_Obj` checks nothing at all (`src/data.c:1529-1536`).  The
+  unbind refusal is the whole of the difference, and it is a property of the
+  DECLARATION -- "GNU's C declares this one" -- not of where the bytes live.
+
+So the shape the 447 names want is entry 135's `GNU_BOOL_VARIABLES` and entry
+141's `cus_start_platform_vars` at 3.5x scale: a table of GNU's own measured
+answers, consulted by `check_forwarded_unbind`, which is already the single
+site every unbind path goes through.  That is a real entry, not churn -- but it
+is not four small patches and it is not this one.  `forward.rs`'s module header
+now carries the measurement and withdraws the "observationally identical"
+claim, so the next reader inherits the number rather than the sentence.
+
+### Item 4: `debug-on-next-call` is a debugger gap, and it is worth its own entry
+
+Re-measured, unchanged from 135:
+
+```elisp
+(list (default-value 'debug-on-next-call)
+      (progn (set-default 'debug-on-next-call 5) (default-value 'debug-on-next-call))
+      (progn (setq debug-on-next-call t) debug-on-next-call))
+;; GNU     => (nil nil t)   ... and four debugger backtraces on stderr
+;; Neomacs => (nil t   t)
+```
+
+The four backtraces are the mechanism showing itself.  `set-default` coerces 5
+to `t` through `Lisp_Fwd_Bool` (`src/data.c:1485-1487`), the very next
+`funcall` reaches `if (debug_on_next_call) do_debug_on_call (Qlambda, count)`
+(`src/eval.c:3189`; also `eval_sub` at `2601` and `exec_byte_code` at
+`src/bytecode.c:798`), and `do_debug_on_call` clears the flag on its first line
+before calling the debugger (`src/eval.c:336-340`), as does `call_debugger`
+itself (`src/eval.c:298`) and `init_eval` (`src/eval.c:248`).  The third
+element is `t` in both editors because `progn` and `setq` are special forms, so
+no funcall intervenes before the read.
+
+The variable is right here: it is declared, Boolean-coerced and listed in
+`byte-boolean-vars` by entry 135's machinery.  What is missing is the three
+dispatch checks and `do_debug_on_call`.  **That is worth its own entry and it
+is small**, which is the part 135 could not see: Neomacs already has
+`call_debugger_for_signal` and `maybe_call_debugger_for_signal`
+(`neovm-core/src/emacs_core/eval.rs`), already has `backtrace-debug` and a
+`debug_on_exit` flag on backtrace frames (`misc.rs`, `eval.rs`), and
+`pop_bytecode_backtrace_frame_with_result` already documents the landing site a
+real implementation needs.  The same entry should take `debug-on-exit`, which
+is the other half of `Fbacktrace_debug` and is missing for the same reason.
+Sized and recorded, not fixed; the exclusion comment in
+`defvar_bool_byte_boolean_vars.rs` now carries the mechanism.
+
+### Item 5: the bug, which was next door -- GNU's `SKIP` marker is not documentation
+
+Checking whether the two names Neomacs binds and GNU does not
+(`x-mode-pointer-shape`, `x-nontext-pointer-shape`, entry 141's residual) were
+also documented turned this up:
+
+```elisp
+(mapcar (lambda (s) (documentation-property s 'variable-documentation))
+        '(x-pointer-shape x-mode-pointer-shape))
+;; GNU                => ("The shape of the pointer when over text.\nChanging the value does not
+;;                         affect existing frames\nunless you set the mouse color." nil)
+;; Neomacs before fix => ("SKIP: real text in xfns.c." "SKIP: real doc in xfns.c.")
+```
+
+A variable several window systems declare keeps its doc text in exactly one
+file and a placeholder in the rest, so the string is maintained once:
+`x-pointer-shape` is `DEFVAR_LISP` in `src/xfns.c:10327`,
+`src/w32fns.c:11809`, `src/haikufns.c:3284` and `src/androidfns.c:3587`, and
+three of the four read `doc: /* SKIP: real doc in xfns.c.  */`.  170 `DEFVAR`
+blocks across GNU's `src/*.c` carry the marker.
+
+**GNU does not merely tolerate the marker, it refuses it, in the engine, with a
+comment saying what it is** (`src/doc.c:600-608`):
+
+```c
+          /* Ignore docs that start with SKIP.  These mark
+             placeholders where the real doc is elsewhere.  */
+	  if (SYMBOLP (sym))
+	    {
+	      if (p[1] == 'V')
+		{
+                  if ((!NILP (Fboundp (sym))
+                      || !NILP (Fmemq (sym, delayed_init)))
+                      && strncmp (end, "\nSKIP", 5))
+                    Fput (sym, Qvariable_documentation,
+                          make_fixnum (pos + end + 1 - buf));
+		}
+```
+
+So no GNU build shows a `SKIP` string to a user, for any variable, on any
+window system -- which makes it exactly the kind of value that has to be
+unrepresentable rather than merely absent.
+
+`scripts/extract_gnu_defvar_docs.py` walked `sorted(gnu_src.glob("*.c"))` and
+kept the FIRST copy of a duplicated name.  Alphabetically that is
+`androidfns.c` or `w32fns.c` for almost every `x-` name -- precisely the copies
+that carry the marker.  35 of the generated table's rows held one.
+
+```
+Neomacs, before fix, over the 35 names:
+  answered a `SKIP` placeholder                        35
+  ... of which GNU answers the canonical text          30
+  ... of which GNU answers nil (never declared here)    2
+  ... of which both editors' real doc is in Lisp        3
+```
+
+### Why GNU's code is shaped this way
+
+`make-docfile` is a text scanner: it does not evaluate the preprocessor and it
+does not know which files this build compiles, so `etc/DOC` is bigger than the
+build.  GNU therefore filters at the other end, in `Fsnarf_documentation`, and
+the filter has two clauses because the DOC file can be wrong in two ways.
+`strncmp (end, "\nSKIP", 5)` rejects the copy that is a pointer to the real
+text; `Fboundp (sym)` rejects a name whose declaration this build did not
+compile -- the comment above it (`src/doc.c:585-594`) says they used to filter
+by `build_files` and now rely on this instead.  Both clauses are about the same
+thing: in GNU a doc string and the declaration that owns it come from one
+statement, and anything that separates them has to be undone at load time.
+
+The two clauses are also why the `#if 0` cases split the way they do rather
+than uniformly.  `echo-area-clear-hook`'s doc survives because `Fset` binds the
+symbol on the line after the `#endif` (`src/keyboard.c:14076`), so the `Fboundp`
+clause passes; `x-mode-pointer-shape` has no such `Fset` for its Lisp symbol --
+only `Vx_mode_pointer_shape = Qnil;` for the C global -- so it stays unbound and
+gets no doc.  A generator cannot derive that from the text; only boundness
+decides it, which is the whole design.
+
+Neomacs has no `make-docfile` and no DOC file, so both clauses had to be
+written down somewhere, and neither was: the table was generated from the text
+and read back verbatim.
+
+### The type-level fix
+
+**The marker never becomes a row.**  `extract_gnu_defvar_docs.py` drops a
+`DEFVAR` block whose doc starts with `SKIP` -- GNU's own prefix test -- so the
+name falls through to the next file, which is the one holding the real text.
+The generator also now reports any name whose two REAL copies differ, and the
+answer over the whole of `src/*.c` is **zero**: once the marker is honoured,
+"which platform file wins" stops being a question, which is the measurement
+that says GNU's convention is complete rather than merely conventional.
+
+**A row holding one does not compile.**  `var_docs::mod` grows a `const fn`
+prefix test and a `const _: () = { ... }` walk over the generated table, so a
+regenerated `gnu_table.rs` carrying a placeholder is a compile error rather
+than a wrong `C-h v`.  Verified by injecting one:
+`error[E0080]: evaluation panicked: GNU_VAR_DOCS holds a SKIP placeholder; GNU
+never installs one (src/doc.c:600-608).`  This is the guard that matters,
+because the table is regenerated by a script that nobody reads afterwards.
+
+**Two names stop existing.**  Every `DEFVAR_LISP` GNU has for
+`x-nontext-pointer-shape` or `x-mode-pointer-shape` is inside
+`#if false /* This doesn't really do anything.  */` -- `src/xfns.c:10333-10338`
+and `10347-10352`, and the same pair in `src/androidfns.c`; `w32fns.c` and
+`haikufns.c` do not declare them at all.  A declaration in a dead preprocessor
+branch is not a declaration, so GNU binds neither, and the bootstrap seed list
+in `eval.rs` was entry 138's invented existence reached through a case that is
+not about a platform at all.  The C global `Vx_mode_pointer_shape` still exists
+and is still assigned `Qnil` on the line after the `#endif`, which is what
+makes the seed look justified from the C side and is worth recording as the
+trap.  Nothing in GNU's `lisp/`, this tree's `lisp/`, or either editor's own
+sources reads either name.
+
+Regenerating against the current mirror also picked up six names the committed
+table predated -- `after-delete-frame-select-mru-frame`,
+`command-line-max-length` (item 2's variable, declared by entry 138 after this
+table was last generated), `kill-emacs-on-sigint`,
+`multiple-terminals-merge-keyboards`, `special-mirror-table`,
+`w32--terminal-is-conhost` -- and three texts GNU has since rewritten
+(`use-short-answers`, `window-combination-resize`, `x-gtk-resize-child-frames`).
+885 rows, from 881.
+
+### Measured after
+
+The same probes, `-Q --batch`, against a `cargo xtask fresh-build --release`
+binary of `091c91f00` (`finished successfully (release)`,
+`no_byte_compile=false`, pdump 07:48:28 newer than the binary at 07:46:31,
+`*scratch*` empty).
+
+```
+                                                    GNU   before  after
+`variable-documentation' answering a SKIP marker    0     35      0
+the 35 names' (name, boundp, first doc line):
+  lines identical to GNU                            --    2       30
+  ... differing on the doc only                     --    28      2
+  ... differing on boundness only                   --    3       3
+  ... differing on both                             --    2       0
+`boundp' x-mode-pointer-shape,
+   x-nontext-pointer-shape                          nil   t       nil
+rows in GNU_VAR_DOCS                                --    881     885
+```
+
+The wider sweep, the same three fields over every one of the 881 names the
+committed table carried, is what says the fix did not buy its 33 lines by
+breaking others:
+
+```
+                                                          before  after
+lines differing from GNU                                  237     208
+  ... same boundness, different doc                        182     155
+      ... a SKIP marker here                                28       0
+      ... both editors leave the name unbound, GNU nil     116     118
+      ... both have real text and the texts differ          38      37
+  ... GNU binds the name, Neomacs does not                  49      49
+  ... Neomacs binds the name, GNU does not                   6       4
+```
+
+Every line that moved, moved toward GNU.  The 116 -> 118 is the two pointer
+shapes changing residual: they left "Neomacs binds and GNU does not" and joined
+"both unbound, GNU answers nil", which is the `Fboundp`-clause residual sized
+under "found and NOT fixed".
+
+Two traps worth recording, because both produced a green-looking answer.
+
+`cargo nextest run -E 'test(a) + test(b)'` over the two new pin groups printed
+`Summary [0.167s] 0 tests run: 0 passed, 38790 skipped` and
+`error: no tests to run` -- the union spelling did not match, and had the run
+not ended in an error the line above it would have read like a pass.  The same
+shape reached the direct test binary: `<binary> oracle_command_line_max_length...
+--exact` needs the MODULE-qualified name, and without it prints
+`running 0 tests` followed by `test result: ok`.  Assert on `N passed` with
+N > 0; the word `ok` is not evidence.
+
+And the expectation for the doc-text pin was taken with
+`NEOVM_ORACLE_MODE=refresh` through the harness, not by running GNU directly,
+for the reason entry 138 recorded.  Two of the three pins' hand-written
+expectations already matched GNU exactly in refresh mode, which is the useful
+direction; all four new pins were then re-run under `NEOVM_ORACLE_MODE=live`,
+where the harness runs both editors and compares them rather than comparing
+one to a string: 3 passed and 1 passed, 0 failed.
+
+Blast radius, measured rather than assumed: 885 doc strings were regenerated,
+two variables stopped existing, and a `const` assertion was added to a
+generated table, so the suites were the gate.  All release-binary gates ran against the `091c91f00` fresh build described
+above, with both bootstrap fingerprint memos deleted first.
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine`:
+  **11078 tests run: 11078 passed, 54 skipped** in 964.115 s, exit 0, zero
+  `FAIL` lines.  Baseline 11078 + 54 skipped -- unchanged: two variables
+  stopping existing and 885 regenerated doc strings moved no unit test.
+* `cargo nextest run -p neovm-oracle-tests`:
+  **38790 tests run: 38790 passed, 0 skipped** in 726.965 s, exit 0, zero
+  `FAIL` lines.  Baseline 38786 plus the four pins added here.  **No pin
+  moved.**
+* `cargo xtask gc-stress --editor <this branch's release binary>`:
+  **9/9 probes passed**, exit 0, and the
+  `gc-stress: 9 probe(s) against .../target/release/neomacs` line names the
+  binary -- `--editor` is the option that works; `NEOVM_BINARY_PATH` is
+  silently ignored.
+* `cargo check --workspace --all-targets`: clean, 0 errors.
+* `cargo fmt --all --check`: clean.
+* **The negative control for the compile-time guard**, which is what makes it
+  worth having: injecting
+  `(r#"l168-negative-control"#, r#"SKIP: real doc in xfns.c."#)` into the
+  generated table gives
+  `error[E0080]: evaluation panicked: GNU_VAR_DOCS holds a SKIP placeholder;
+  GNU never installs one (src/doc.c:600-608). Re-run
+  scripts/extract_gnu_defvar_docs.py.` -- a compile error, not a test failure.
+
+The machine was shared throughout: load average 91.89 with three sibling agents
+building, which is why the two suites took 964 s and 727 s against ledger 164's
+455 s and 648 s for the same crates.  Neither number is used for anything but
+"it ran".
+
+### Corrections to earlier entries
+
+- Entry 132's "`Lisp_Fwd_Obj` and `Lisp_Fwd_Kboard_Obj` remain unwired.  Both
+  enforce nothing on assignment, so no divergence follows from that;
+  `DEFVAR_LISP` variables stay ordinary obarray cells, which is
+  observationally identical" is **wrong on the last clause**, corrected
+  2026-08-20.  Being `SYMBOL_FORWARDED` also decides whether `makunbound` is
+  refused (`src/data.c:1805-1808`), which is observable, and it differs for
+  447 of the 563 + 14 names.  Entry 135's and entry 138's repetitions of the
+  sentence inherit the correction; entry 141 found the counterexample and did
+  not size it.
+- Entry 138's "Five of the seven platform names GNU DOES bind here are
+  `special-variable-p` => nil ... each wants its own `syms_of_*` counterpart"
+  is **measured closed 2026-08-20**: entry 141 did it, four in `syms_of_*`
+  counterparts and the fifth as a `defvaralias` because GNU has no such
+  variable, and the ten-name probe is character-identical between the editors.
+- Entry 138's "`command-line-max-length` is 1572864 here against GNU's 626432
+  on this machine, and the declaration is not what differs ... Two editors with
+  different stack policies" is **confirmed exactly, 2026-08-20**, and the pin
+  no longer has to settle for shape: the child's inherited `ulimit -s` is 9788
+  KiB under GNU and 131072 KiB here, and glibc's
+  `MAX (131072, MIN (stack / 4, 6 MiB)) / 4` reproduces both numbers.
+- Entry 141's "`var_docs::gnu_table` still documents names outside the
+  `cus-start.el` table that this build does not declare ... widening it needs
+  the same name-by-name GNU probe run over the rest of the generated table" is
+  **partly superseded 2026-08-20**: no probe is needed, because GNU's rule is
+  `Fboundp` at snarf time (`src/doc.c:606-611`), not a table.  Applying it is
+  still a separate entry, for the reason under "found and NOT fixed".
+
+### Found and NOT fixed here
+
+- **The `Fboundp` clause of `Fsnarf_documentation` is not applied, and it
+  cannot be applied alone.**  Over all 881 names in the generated table, GNU
+  and Neomacs differ on 237 lines of `(name, boundp, first line of doc)`:
+  182 same-boundness-different-doc (116 of them names neither editor binds,
+  where GNU answers nil and Neomacs answers the text; 38 different real text;
+  28 the `SKIP` rows this entry fixes), 46 GNU-bound/Neomacs-unbound with the
+  same doc, 6 Neomacs-bound/GNU-unbound, 3 GNU-bound/Neomacs-unbound with
+  different doc.  Gating `var_docs::lookup` on boundness would fix the 116 and
+  BREAK the 46 -- names GNU binds and Neomacs does not, whose docs agree today
+  by accident.  So the clause has to land with the 49 names, which is entry
+  141's X-only-surface residual measured one layer wider (25 of the 49 are
+  `x-`/`xft-`; the other 24 include `long-line-threshold`,
+  `frame-size-history`, `internal-doc-file-name`, `code-conversion-map-vector`
+  and `menu-prompt-more-char`).  One entry, two halves, in that order.
+- The 38 names where both editors have a real doc and the texts differ are not
+  all one cause -- `use-short-answers` was table staleness and is fixed here,
+  `transient-mark-mode` differs by a leading space, and `indent-tabs-mode`
+  answers a `define-minor-mode`-shaped string here against `buffer.c`'s text.
+  Sized, not diagnosed.
+- `x-mode-pointer-shape` and `x-nontext-pointer-shape` are now unbound in both
+  editors, and their `variable-documentation` still differs: GNU answers nil
+  and Neomacs answers `src/xfns.c`'s `#if false` text, because the generator
+  reads the text and only the `Fboundp` clause above can reject it.  Two lines,
+  moved from wrong-text to wrong-presence, and closable by the entry above.
+- `xwidget-list` and `xwidget-view-list` remain bound here and unbound under
+  GNU, with `xwidget-webkit-disable-javascript`: a build-feature difference
+  entry 138 already justified, re-confirmed by this entry's sweep, which found
+  no other name Neomacs binds and GNU does not.
+- `strings-consed` and the six allocation counters entry 132 left reading 0 are
+  unchanged.
+- `Lisp_Fwd_Obj` and `Lisp_Fwd_Kboard_Obj` remain unwired -- deliberately, for
+  the first time, with the reason in `forward.rs` and the size above.
+
+Status: FIXED.
