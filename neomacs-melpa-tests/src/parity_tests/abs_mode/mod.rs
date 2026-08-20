@@ -238,14 +238,43 @@ received, so the workflow never races the compiler subprocess."
         (accept-process-output nil 0.05))))
   abs-test-compilation-outcome)
 
+(defun abs-test-note-sentinel (process &rest _)
+  "Record on PROCESS that its sentinel has run."
+  (process-put process 'abs-test-sentinel-ran t))
+
 (defun abs-test-wait-for-process (buffer)
-  "Wait until BUFFER has no live process, then return its text."
-  (let ((deadline (+ (float-time) 60)))
-    (while (and (get-buffer-process buffer)
-                (process-live-p (get-buffer-process buffer))
-                (< (float-time) deadline))
-      (accept-process-output nil 0.05)))
-  (while (accept-process-output nil 0.05))
+  "Wait until BUFFER's process has run its sentinel, then return its text.
+The text this returns is pinned, and it ends with the line
+`Process inferior-erlang finished' -- which `internal-default-process-sentinel'
+itself writes.  So the pin cannot be taken before the sentinel has run, and
+`process-live-p' going nil is not that moment.  It is strictly earlier, and
+by construction: GNU reaps the child in `handle_child_signal', which sets
+`raw_status_new' (src/process.c:7748) -- all `process-status' needs to answer
+`exit' (src/process.c:1188-1189) -- and in the same pass calls
+`delete_read_fd' (src/process.c:7760), so the pipe has stopped being read at
+exactly the instant `process-live-p' goes nil.  The bytes still queued are
+recovered only by the drain loop in `status_notify' (src/process.c:7896-7911),
+which runs just before `exec_sentinel' (src/process.c:7937).  Waiting for the
+sentinel therefore waits on the output; waiting for death waits on the clock.
+
+Either witness is accepted -- the sentinel observer firing, or the process
+leaving the process list, which `status_notify' does at src/process.c:7926
+with no Lisp between it and `exec_sentinel' -- because the second covers the
+case where the sentinel had already run before this function was reached."
+  (let ((process (get-buffer-process buffer)))
+    (unless (buffer-live-p (get-buffer buffer))
+      (error "abs-test-wait-for-process: %s does not exist" buffer))
+    (when process
+      (add-function :after (process-sentinel process) #'abs-test-note-sentinel)
+      (let ((deadline (+ (float-time) 60)))
+        (while (and (get-buffer-process buffer)
+                    (not (process-get process 'abs-test-sentinel-ran))
+                    (< (float-time) deadline))
+          (accept-process-output nil 0.05)))
+      (unless (or (process-get process 'abs-test-sentinel-ran)
+                  (null (get-buffer-process buffer)))
+        (error "abs-test-wait-for-process: %s never ran its sentinel; its \
+text records only as much of the child's output as had been read" buffer))))
   (with-current-buffer buffer
     (buffer-substring-no-properties (point-min) (point-max))))
 

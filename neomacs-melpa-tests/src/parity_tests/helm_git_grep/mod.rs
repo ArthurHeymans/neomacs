@@ -234,6 +234,20 @@ const PRELUDE: &str = r####"
     (apply hgg394-test-real-call-process
            hgg394-test-git-executable infile destination display args)))
 
+(defun hgg394-test-note-sentinel (process &rest _)
+  "Record on PROCESS that its sentinel has run.
+That is the causal end of the child's output, and `process-live-p' going
+nil is not.  GNU reaps the child in `handle_child_signal', which sets
+`raw_status_new' (src/process.c:7748) -- enough for `process-status' to
+answer `exit' (src/process.c:1188-1189) -- and in the same pass calls
+`delete_read_fd' (src/process.c:7760), so ordinary reading of the pipe has
+STOPPED at exactly the moment `process-live-p' goes nil.  Whatever the
+child had already written is recovered only by the drain loop inside
+`status_notify' (src/process.c:7896-7911), which runs immediately before
+`exec_sentinel' (src/process.c:7937).  So the sentinel having run is a fact
+about the output; the process being dead is a fact about the clock."
+  (process-put process 'hgg394-test-sentinel-ran t))
+
 (defun hgg394-test-start-process (name buffer program &rest args)
   (unless (and (equal name "git-grep-process") (null buffer)
                (equal program "git")
@@ -256,6 +270,13 @@ const PRELUDE: &str = r####"
         (error "Unexpected created Git process: %S" process))
       (push process hgg394-test-owned-processes)
       (set-process-sentinel process #'ignore)
+      ;; Attach the completion witness here, at creation, because this is the
+      ;; only moment that is guaranteed to precede the sentinel: Emacs runs
+      ;; process sentinels only from `status_notify', which runs from the event
+      ;; loop, so nothing can have fired before the first
+      ;; `accept-process-output'.
+      (add-function :after (process-sentinel process)
+                    #'hgg394-test-note-sentinel)
       process)))
 
 (defun hgg394-test-make-process (&rest args)
@@ -264,24 +285,27 @@ const PRELUDE: &str = r####"
   (apply hgg394-test-real-make-process args))
 
 (defun hgg394-test-wait-process (process)
+  "Wait until PROCESS has run its sentinel, then report how it exited.
+The caller reads `hgg394-test-process-output-buffer' the moment this
+returns, so what it needs is the fact that the child's output has all been
+read -- not the fact that the child is dead.  Those are different moments
+and they are not in the order one would guess: see
+`hgg394-test-note-sentinel'.  Waiting for the sentinel removes the choice;
+signalling rather than returning means a future edit that goes back to
+waiting on the clock fails on its first run instead of moving a snapshot
+months later."
   (let ((deadline (+ (float-time) 10.0)))
-    (while (and (process-live-p process) (< (float-time) deadline))
-      (accept-process-output process 0.05))
-    (when (process-live-p process)
-      (error "Git grep process timed out"))
-    (accept-process-output process 0.01)
+    (while (and (not (process-get process 'hgg394-test-sentinel-ran))
+                (< (float-time) deadline))
+      (accept-process-output nil 0.05))
+    (unless (process-get process 'hgg394-test-sentinel-ran)
+      (error "hgg394-test-wait-process: %S never ran its sentinel; \
+`%s' holds only as much of the child's output as had been read"
+             process (buffer-name hgg394-test-process-output-buffer)))
     (unless (and (eq (process-status process) 'exit)
                  (zerop (process-exit-status process)))
       (error "Git grep process failed: %S/%S"
              (process-status process) (process-exit-status process)))
-    (let ((settled (with-current-buffer hgg394-test-process-output-buffer
-                     (buffer-string))))
-      (dotimes (_ 2)
-        (accept-process-output process 0.01)
-        (unless (equal settled
-                       (with-current-buffer hgg394-test-process-output-buffer
-                         (buffer-string)))
-          (error "Git grep output changed after process exit"))))
     (list :status (process-status process)
           :exit (process-exit-status process)
           :stable t)))
