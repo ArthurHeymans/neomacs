@@ -21194,6 +21194,50 @@ shape, and the test fails if that number grows.  It is 6 today.
    suite never loads `haskell-compile'.  A future case that does will need the
    pipe guard 144 gave `cargo', `overseer' and `ggtags'.
 
+### Gates, and what the full melpa run cost to read honestly
+
+```
+cargo fmt --all --check                                   clean
+cargo check --workspace --all-targets                     clean
+cargo nextest run -p neovm-core -p neomacs-layout-engine  11078/11078 passed, 54 skipped
+cargo xtask gc-stress --editor ./target/release/neomacs   9/9 probes passed
+cargo nextest run -p neomacs-melpa-tests --no-fail-fast   933 run: 921 passed, 12 failed, 2 skipped
+cargo nextest run -p neovm-oracle-tests                   29677/38786, 0 failed (stopped, see below)
+```
+
+The first melpa run is worth recording as a mistake rather than a result: it
+reported `270/933 tests run: 269 passed, 1 failed` and stopped, because nextest
+fail-fasts by default.  A truncated run is not a gate, and it looked like one.
+The number above is the `--no-fail-fast` re-run.
+
+That re-run is also what caught this branch's own bug.  `pipenv`'s new docstring
+quoted the pinned text literally, an unescaped `"` closed the docstring, and the
+reader took the following `\n` as an escaped `n` -- so the batch failed with
+`(void-variable nProcess)`.  The earlier targeted run had passed because it
+predated that helper.  Fixed, and the five touched suites plus the two audit
+tests now run `7 tests run: 7 passed`.
+
+Every one of the other eleven failures was attributed rather than assumed.  Four
+pass in isolation and are load -- the machine carried a load average of 70-90 on
+32 cores throughout, from sibling agents -- and seven are deterministic and fail
+identically with the melpa tree reverted to this branch's merge base
+(`bee864abc`):
+
+```
+;; load, pass in isolation      ahg  apheleia  closql  org_roam
+;; deterministic, also at BASE  apple_container_tramp  auto_save_buffers_enhanced
+;;                              importmagic  jedi  quelpa  leuven_theme  gruvbox_theme
+```
+
+The oracle was stopped deliberately at 29677/38786 with 0 failed, because the
+`divergence_combo_strict` group had slowed to roughly one test per six minutes
+under that load and it was blocking the melpa gate, which is the one this branch
+can actually move.  It is stopped, not green, and the distinction matters -- but
+it also cannot be moved by this branch: the diff touches only
+`neomacs-melpa-tests/`, and the oracle drives `target/release/neomacs`
+(neovm-oracle-tests/src/common.rs:161), built here from engine sources identical
+to the merge base.
+
 Status: FIXED (harness defect, in five fixtures and nine gate sites -- the two
 entry 144 handed on, plus the seven the re-screen found), plus one
 engine divergence found, measured and deliberately left for its own entry.  No
