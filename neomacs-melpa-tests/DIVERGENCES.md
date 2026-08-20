@@ -23241,3 +23241,94 @@ pinned by `signal_process_reads_an_integer_as_an_os_pid_like_gnu`.
    falls through to the designator resolver, which errors.  Untouched here
    because the fix above only removed a table lookup and did not widen the
    accepted domain; sized, not diagnosed.
+
+### 10. Gates
+
+```
+cargo fmt --all --check                                   clean
+cargo check --workspace --all-targets                     clean
+cargo nextest run -p neovm-core -p neomacs-layout-engine  11092 run: 11092 passed, 54 skipped
+cargo nextest run -p neovm-oracle-tests                   38790 run: 38790 passed, 0 failed
+cargo xtask gc-stress --editor ./target/release/neomacs   9/9 probes passed
+cargo nextest run -p neomacs-melpa-tests --no-fail-fast   933 run: 923 passed, 10 failed, 2 skipped
+```
+
+The engine count is the merge base's 11080 plus this branch's twelve new tests.
+The oracle ran the whole suite rather than being stopped: 165's run was abandoned
+at 29677/38790 under a load average of 70-90, and this one finished 38790 in
+855s.  Both the oracle and gc-stress ran against the same
+`./target/release/neomacs` the melpa run drives, rebuilt by
+`cargo xtask fresh-build --release` after the last source change
+(`no_byte_compile=false`, pdump newer than the binary).
+
+**One mistake worth recording.**  A melpa run was started while the oracle was
+still going and reported `912 passed, 21 failed`.  Overlapping suites on a shared
+32-core box is not a gate, and the number above is the re-run with nothing else
+in flight (load average 11 rather than 200+).  The discarded run's failure set
+does not even intersect the real one cleanly -- it contains `anaconda_mode`,
+`racer`, `ytdl`, `embark_consult` and three helm TUI suites that pass otherwise,
+and it does NOT contain `pipenv`, which is the one real flake.  A concurrent run
+does not just add noise; it changes which tests fail.
+
+**The melpa ten, attributed rather than assumed.**  Seven are the set already
+known deterministic at the merge base: `apple_container_tramp`,
+`auto_save_buffers_enhanced`, `importmagic`, `jedi`, `quelpa`, `leuven_theme`,
+`gruvbox_theme`.  Of the other three:
+
+* `apheleia` and `git_gutter_fringe_real_gui_rows_match_gnu` pass in isolation
+  (`2 tests run: 2 passed`).  Entry 165 already recorded `apheleia` as
+  load-sensitive; the second is a GUI-display test.
+* `pipenv` is the one that needed real work, and the answer is that it is
+  **pre-existing and flaky at the same rate**.  Its
+  `public_shell_sends_init_command_and_closes_owned_comint_process` case pins the
+  shell buffer's whole text as `"\nProcess shell finished\n"`, and Neomacs
+  sometimes answers `"ack:exec pipenv shell\n\nProcess shell finished\n"`.
+  Twelve solo runs on each binary, both built by `fresh-build --release`:
+
+  ```
+  merge base 5384b1416   F P F P P P P P P F P F   8 passed / 4 failed
+  this branch            P P P P F P F P P F F P   8 passed / 4 failed
+  ```
+
+  The failing text is byte-identical between them.  The 39-test process subset,
+  four runs on each:
+
+  ```
+  merge base    39/39  39/39  38/39  38/39
+  this branch   38/39  38/39  39/39  38/39
+  ```
+
+  `pipenv` is the only failure in either column.  So it is an **eighth**
+  pre-existing melpa failure, not among the seven, and it is not adopted here.
+  Building the merge-base binary to settle this cost a full `fresh-build` in each
+  direction, and it was the only way to tell a pre-existing flake from a
+  regression in exactly the code this branch changes.
+
+  The race is in the fixture, and it is entry 165's own residual.
+  `pip384-test-wait-file` waits for `stdin<exec pipenv shell>` to appear in the
+  boundary LOG, and the shell stand-in writes that log line *before* it prints
+  `ack:...` to stdout -- so the gate does not establish that the ack has been
+  read.  165 rewrote this suite's other clock-gated pin and left this one gating
+  on a file.  Its own docstring for `pip384-test-wait-process` argues that
+  waiting for death is not waiting for the output; the same argument applies one
+  level down to waiting for a log line that precedes the output being pinned.
+  Recorded with the rate rather than a verdict, because 165's closing
+  "7 tests run: 7 passed" was one sample of a two-in-three test.
+
+**And the gate that is not a number.**  The three-kind neighbour sweep
+(`tmp/pw169/audit.el`: 41 probes x child / pty / `:stderr` pipe = 123 rows,
+diffed against GNU Emacs 31.0.90) went from **24 divergent rows at the merge base
+to 0**, and `tmp/pw169/sentinel-visibility.el` is byte-identical between the two
+editors.  The single-kind version of the sweep is `exit_sentinel_neighbour_audit`
+and the pipe-kind rows are `stderr_pipe_sentinel_neighbour_audit`, so the next
+reader gets tests rather than shell scripts.
+
+Status: FIXED -- five engine defects, of which the reported one is the first.
+The other four came out of the audit: `delete-process` retiring around the
+`delete-exited-processes` decision instead of through it; the type check that
+must precede the liveness check in five subrs; `signal-process` reading a bare
+integer as a table index rather than an OS pid; and `process-status` letting a
+stop outrank an exit.  **Two of those four were regressions this branch itself
+introduced, caught by re-running the audit against the rebuilt binary** -- which
+is the argument for diffing the fix against the merge base as well as against
+GNU, rather than against GNU alone.
