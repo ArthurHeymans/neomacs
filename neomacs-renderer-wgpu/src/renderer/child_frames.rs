@@ -31,8 +31,9 @@ fn child_scissor(
 impl WgpuRenderer {
     /// Render a child frame as a floating overlay on top of the parent frame.
     ///
-    /// Draws shadow, background fill, rounded border, then delegates all glyph
-    /// rendering (text, cursors, images, etc.) to `render_frame_content()`.
+    /// Draws shadow, background fill, and rounded border, delegates all glyph
+    /// rendering (text, cursors, images, etc.) to `render_frame_content()`,
+    /// then draws the square outer border.
     /// Uses LoadOp::Load to composite on top of whatever was rendered before.
     #[allow(clippy::too_many_arguments)]
     pub fn render_child_frame(
@@ -349,6 +350,82 @@ impl WgpuRenderer {
             pointer_selection,
             Some(scissor),
         );
+
+        let outer_bw = child
+            .outer_border_width
+            .max(0.0)
+            .min(frame_w.max(0.0) / 2.0)
+            .min(frame_h.max(0.0) / 2.0);
+        if outer_bw > 0.0 {
+            let mut outer_border_verts: Vec<RectVertex> = Vec::new();
+            self.add_rect(
+                &mut outer_border_verts,
+                offset_x,
+                offset_y,
+                frame_w,
+                outer_bw,
+                &child.outer_border_color,
+            );
+            self.add_rect(
+                &mut outer_border_verts,
+                offset_x,
+                offset_y + frame_h - outer_bw,
+                frame_w,
+                outer_bw,
+                &child.outer_border_color,
+            );
+            self.add_rect(
+                &mut outer_border_verts,
+                offset_x,
+                offset_y,
+                outer_bw,
+                frame_h,
+                &child.outer_border_color,
+            );
+            self.add_rect(
+                &mut outer_border_verts,
+                offset_x + frame_w - outer_bw,
+                offset_y,
+                outer_bw,
+                frame_h,
+                &child.outer_border_color,
+            );
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Child Frame Outer Border Encoder"),
+                });
+            {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Child Frame Outer Border Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                        depth_slice: None,
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_scissor_rect(scissor.0, scissor.1, scissor.2, scissor.3);
+                if let Some(upload) =
+                    self.arenas
+                        .rect
+                        .upload(&self.device, &self.queue, &outer_border_verts)
+                {
+                    pass.set_pipeline(&self.pipelines.rect);
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                    pass.set_vertex_buffer(0, upload.buffer_slice());
+                    pass.draw(0..outer_border_verts.len() as u32, 0..1);
+                }
+            }
+            self.queue.submit(std::iter::once(encoder.finish()));
+        }
     }
 }
 

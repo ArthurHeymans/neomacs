@@ -2026,16 +2026,17 @@ pub fn collect_layout_params_with_font_sizing(
             WindowDisplayRole {
                 is_selected,
                 mode_line_active,
-                is_minibuffer: false,
+                is_minibuffer: frame.minibuffer_window == Some(*win_id),
             },
             window_cursor_type,
             window_cursor_effect,
             font_sizing,
         ) {
             tracing::debug!(
-                "layout window cursor: win={} selected={} minibuffer=false kind={:?} width={} color=#{:06x} window-cursor-type={:?}",
+                "layout window cursor: win={} selected={} minibuffer={} kind={:?} width={} color=#{:06x} window-cursor-type={:?}",
                 wp.window_id,
                 wp.selected,
+                wp.is_minibuffer(),
                 wp.cursor_kind,
                 wp.cursor_bar_width,
                 wp.cursor_color,

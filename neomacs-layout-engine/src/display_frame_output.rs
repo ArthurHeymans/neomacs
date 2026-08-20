@@ -57,6 +57,8 @@ pub(crate) struct FrameOutputIdentity {
     pub(crate) undecorated: bool,
     pub(crate) border_width: f32,
     pub(crate) border_color: Color,
+    pub(crate) outer_border_width: f32,
+    pub(crate) outer_border_color: Color,
     pub(crate) background_alpha: f32,
     pub(crate) no_accept_focus: bool,
 }
@@ -284,6 +286,8 @@ impl<'a> FrameOutputTarget<'a> {
             identity.undecorated,
             identity.border_width,
             identity.border_color,
+            identity.outer_border_width,
+            identity.outer_border_color,
             identity.background_alpha,
             identity.no_accept_focus,
         );

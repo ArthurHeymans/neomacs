@@ -1221,8 +1221,12 @@ pub(crate) fn builtin_modify_frame_parameters(
                 let key_name = resolve_sym(key);
                 match key_name {
                     "width" => {
+                        if parse_frame_size_param(pair_cdr).is_some()
+                            || pair_cdr.as_float().is_some()
+                        {
+                            requested_width = Some(pair_cdr);
+                        }
                         if let Some(size) = parse_frame_size_param(pair_cdr) {
-                            requested_width = Some(size);
                             let cols = eval
                                 .frames
                                 .get(fid)
@@ -1235,8 +1239,12 @@ pub(crate) fn builtin_modify_frame_parameters(
                         }
                     }
                     "height" => {
+                        if parse_frame_size_param(pair_cdr).is_some()
+                            || pair_cdr.as_float().is_some()
+                        {
+                            requested_height = Some(pair_cdr);
+                        }
                         if let Some(size) = parse_frame_size_param(pair_cdr) {
-                            requested_height = Some(size);
                             let lines = eval
                                 .frames
                                 .get(fid)
@@ -1249,21 +1257,13 @@ pub(crate) fn builtin_modify_frame_parameters(
                         }
                     }
                     "left" => {
-                        if let Some(n) = pair_cdr.as_int() {
-                            if let Some(frame) = eval.frames.get_mut(fid) {
-                                frame.left_pos = n;
-                                frame.set_parameter(Value::symbol("left"), Value::fixnum(n));
-                            }
-                            requested_left = Some(n);
+                        if pair_cdr.as_int().is_some() || pair_cdr.as_float().is_some() {
+                            requested_left = Some(pair_cdr);
                         }
                     }
                     "top" => {
-                        if let Some(n) = pair_cdr.as_int() {
-                            if let Some(frame) = eval.frames.get_mut(fid) {
-                                frame.top_pos = n;
-                                frame.set_parameter(Value::symbol("top"), Value::fixnum(n));
-                            }
-                            requested_top = Some(n);
+                        if pair_cdr.as_int().is_some() || pair_cdr.as_float().is_some() {
+                            requested_top = Some(pair_cdr);
                         }
                     }
                     "buffer-list" => {
@@ -1434,6 +1434,9 @@ pub(crate) fn builtin_modify_frame_parameters(
         frame.sync_tool_bar_height_from_parameters();
     }
 
+    let requested_width = resolve_frame_size_parameter(&eval.frames, fid, requested_width, true);
+    let requested_height = resolve_frame_size_parameter(&eval.frames, fid, requested_height, false);
+
     if requested_width.is_some()
         || requested_height.is_some()
         || requested_left.is_some()
@@ -1532,7 +1535,89 @@ pub(crate) fn builtin_modify_frame_parameters(
         }
     }
 
+    let (left, top) =
+        resolve_frame_position_parameters(&eval.frames, fid, requested_left, requested_top);
+    if let Some(frame) = eval.frames.get_mut(fid) {
+        if let Some(left) = left {
+            frame.left_pos = left;
+            frame.set_parameter(Value::symbol("left"), Value::fixnum(left));
+        }
+        if let Some(top) = top {
+            frame.top_pos = top;
+            frame.set_parameter(Value::symbol("top"), Value::fixnum(top));
+        }
+    }
+
     Ok(Value::NIL)
+}
+
+fn resolve_frame_size_parameter(
+    frames: &FrameManager,
+    fid: FrameId,
+    value: Option<Value>,
+    horizontal: bool,
+) -> Option<FrameSizeParam> {
+    let value = value?;
+    if let Some(size) = parse_frame_size_param(value) {
+        return Some(size);
+    }
+    let fraction = value
+        .as_float()
+        .filter(|value| (0.0..=1.0).contains(value))?;
+    let frame = frames.get(fid)?;
+    let parent = frames.get(frame.parent_frame.as_frame_id().map(FrameId)?)?;
+    let parent_pixels = if horizontal {
+        parent.width
+    } else {
+        parent.height
+    };
+    let non_text_pixels = if horizontal {
+        frame_non_text_total_width_pixels_in_state(frames, fid)
+    } else {
+        frame_non_text_total_height_pixels(frame)
+    };
+    let outer_pixels = (f64::from(parent_pixels) * fraction) as u32;
+    Some(FrameSizeParam::TextPixels(
+        outer_pixels.saturating_sub(non_text_pixels).max(1),
+    ))
+}
+
+fn resolve_frame_position_parameters(
+    frames: &FrameManager,
+    fid: FrameId,
+    left: Option<Value>,
+    top: Option<Value>,
+) -> (Option<i64>, Option<i64>) {
+    let Some(frame) = frames.get(fid) else {
+        return (None, None);
+    };
+    let parent = frame
+        .parent_frame
+        .as_frame_id()
+        .map(FrameId)
+        .and_then(|parent_id| frames.get(parent_id));
+    let resolve = |value: Option<Value>, parent_size: u32, frame_size: u32| {
+        value.and_then(|value| {
+            value.as_int().or_else(|| {
+                let fraction = value
+                    .as_float()
+                    .filter(|value| (0.0..=1.0).contains(value))?;
+                Some((fraction * f64::from(parent_size.saturating_sub(frame_size))) as i64)
+            })
+        })
+    };
+    (
+        resolve(
+            left,
+            parent.map_or(frame.width, |parent| parent.width),
+            frame.width,
+        ),
+        resolve(
+            top,
+            parent.map_or(frame.height, |parent| parent.height),
+            frame.height,
+        ),
+    )
 }
 
 /// `(frame-visible-p FRAME)` -> t or nil.

@@ -8124,6 +8124,7 @@ impl Context {
         // recomputed at the end of this function and absorbs any overlay change,
         // keeping the next unchanged redisplay skippable (no thrash).
         self.run_pre_redisplay_function();
+        self.resize_minibuffer_only_frames();
         // GNU `redisplay_internal` calls `hscroll_window_tree` (src/xdisp.c)
         // before laying out windows so each window's `hscroll` follows point;
         // for a truncated line whose point has moved off the right edge (the
@@ -8183,6 +8184,30 @@ impl Context {
         self.unbind_to(specpdl_count);
         if let Err(flow) = result {
             tracing::debug!("pre-redisplay-function signalled (ignored): {flow:?}");
+        }
+    }
+
+    fn resize_minibuffer_only_frames(&mut self) {
+        if !self
+            .obarray
+            .symbol_value("resize-mini-frames")
+            .is_some_and(|value| value.is_truthy())
+        {
+            return;
+        }
+        let frames: Vec<Value> = self
+            .frames
+            .frame_list()
+            .into_iter()
+            .filter_map(|frame_id| {
+                self.frames.get(frame_id).and_then(|frame| {
+                    (frame.visible && frame.minibuffer_window == Some(frame.root_window.id()))
+                        .then_some(Value::make_frame(frame_id.0))
+                })
+            })
+            .collect();
+        for frame in frames {
+            let _ = self.safe_funcall(Value::symbol("window--resize-mini-frame"), vec![frame]);
         }
     }
 

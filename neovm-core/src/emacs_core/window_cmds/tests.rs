@@ -1557,6 +1557,107 @@ fn window_resize_apply_preserves_lisp_computed_vertical_sizes() {
 }
 
 #[test]
+fn resize_mini_window_internal_applies_staged_pixel_heights() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let* ((frame (selected-frame))
+                  (root (frame-root-window frame))
+                  (mini (minibuffer-window frame))
+                  (root-height (window-pixel-height root))
+                  (mini-height (window-pixel-height mini))
+                  (delta (frame-char-height frame)))
+             (set-window-new-pixel root (- root-height delta))
+             (set-window-new-pixel mini (+ mini-height delta))
+             (list (resize-mini-window-internal mini)
+                   (= (window-pixel-height root) (- root-height delta))
+                   (= (window-pixel-height mini) (+ mini-height delta))
+                   (= (cadr (window-pixel-edges mini))
+                      (nth 3 (window-pixel-edges root)))
+                   (= (window-new-pixel mini) 0)))"#,
+    );
+    assert_eq!(result, "OK (t t t t t)");
+}
+
+#[test]
+fn resize_mini_window_internal_rejects_nonconserving_geometry() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let* ((frame (selected-frame))
+                  (root (frame-root-window frame))
+                  (mini (minibuffer-window frame))
+                  (root-height (window-pixel-height root))
+                  (mini-height (window-pixel-height mini))
+                  (delta (frame-char-height frame)))
+             (set-window-new-pixel root (- root-height delta))
+             (set-window-new-pixel mini (+ mini-height delta 2))
+             (list (condition-case err
+                       (resize-mini-window-internal mini)
+                     (error (car err)))
+                   (= (window-pixel-height root) root-height)
+                   (= (window-pixel-height mini) mini-height)))"#,
+    );
+    assert_eq!(result, "OK (error t t)");
+}
+
+#[test]
+fn resize_mini_window_internal_rejects_missing_root_staging() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let* ((frame (selected-frame))
+                  (root (frame-root-window frame))
+                  (mini (minibuffer-window frame))
+                  (root-height (window-pixel-height root))
+                  (mini-height (window-pixel-height mini)))
+             (set-window-new-pixel mini mini-height)
+             (list (condition-case err
+                       (resize-mini-window-internal mini)
+                     (error (car err)))
+                   (= (window-pixel-height root) root-height)
+                   (= (window-pixel-height mini) mini-height)))"#,
+    );
+    assert_eq!(result, "OK (error t t)");
+}
+
+#[test]
+fn resize_mini_window_internal_rejects_non_positive_minibuffer_staging() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let* ((frame (selected-frame))
+                  (root (frame-root-window frame))
+                  (mini (minibuffer-window frame))
+                  (root-height (window-pixel-height root))
+                  (mini-height (window-pixel-height mini)))
+             (set-window-new-pixel root (+ root-height mini-height))
+             (set-window-new-pixel mini 0)
+             (list (condition-case err
+                       (resize-mini-window-internal mini)
+                     (error (car err)))
+                   (= (window-pixel-height root) root-height)
+                   (= (window-pixel-height mini) mini-height)))"#,
+    );
+    assert_eq!(result, "OK (error t t)");
+}
+
+#[test]
+fn window_resize_minibuffer_grows_and_conserves_pixel_height() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let* ((frame (selected-frame))
+                  (root (frame-root-window frame))
+                  (mini (minibuffer-window frame))
+                  (old-root-height (window-pixel-height root))
+                  (old-mini-height (window-pixel-height mini))
+                  (old-total (+ old-root-height old-mini-height)))
+             (window-resize mini 1)
+             (let ((new-root-height (window-pixel-height root))
+                   (new-mini-height (window-pixel-height mini)))
+               (list (> new-mini-height old-mini-height)
+                     (= (+ new-root-height new-mini-height) old-total))))"#,
+    );
+    assert_eq!(result, "OK (t t)");
+}
+
+#[test]
 fn display_buffer_fit_window_to_buffer_shrinks_new_window() {
     crate::test_utils::init_test_tracing();
     let result = bootstrap_eval_one_with_frame(
@@ -4950,6 +5051,70 @@ fn modify_frame_parameters_resizes_gui_child_frame_text_pixels() {
 }
 
 #[test]
+fn modify_frame_parameters_resolves_child_fractional_size_before_position() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(scratch);
+    let parent_id = ev.frames.create_frame("parent", 624, 648, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("neo")));
+        parent.char_width = 8.0;
+        parent.char_height = 16.0;
+        parent.font_pixel_size = 16.0;
+    }
+    ev.frames.select_frame(parent_id);
+    ev.set_display_host(Box::new(RecordingDisplayHost::new()));
+
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("width"), Value::fixnum(10)),
+        Value::cons(Value::symbol("height"), Value::fixnum(1)),
+        Value::cons(Value::symbol("child-frame-border-width"), Value::fixnum(3)),
+        Value::cons(Value::symbol("left-fringe"), Value::fixnum(0)),
+        Value::cons(Value::symbol("right-fringe"), Value::fixnum(0)),
+        Value::cons(Value::symbol("vertical-scroll-bars"), Value::NIL),
+        Value::cons(Value::symbol("horizontal-scroll-bars"), Value::NIL),
+        Value::cons(Value::symbol("minibuffer"), Value::symbol("only")),
+        Value::cons(Value::symbol("visibility"), Value::NIL),
+    ]);
+    let child = super::x_create_frame_impl(
+        &mut ev.frames,
+        &mut ev.buffers,
+        &mut ev.display_host,
+        vec![params],
+    )
+    .expect("x-create-frame");
+    let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
+
+    let alist = Value::list(vec![
+        Value::cons(Value::symbol("width"), Value::make_float(0.5)),
+        Value::cons(Value::symbol("height"), Value::fixnum(1)),
+        Value::cons(Value::symbol("left"), Value::make_float(0.5)),
+        Value::cons(Value::symbol("top"), Value::make_float(0.0)),
+    ]);
+    crate::emacs_core::frame::builtin_modify_frame_parameters(&mut ev, vec![child, alist])
+        .expect("modify-frame-parameters");
+
+    let child_native_width =
+        crate::emacs_core::frame::builtin_frame_native_width(&mut ev, vec![child])
+            .expect("frame-native-width");
+    let child_frame = ev.frames.get(child_id).expect("child frame");
+    assert_eq!(
+        (
+            child_native_width,
+            child_frame.left_pos,
+            child_frame.top_pos
+        ),
+        (Value::fixnum(312), 156, 0)
+    );
+}
+
+#[test]
 fn delete_frame_removes_gui_child_overlay_from_display_host() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
@@ -6443,6 +6608,58 @@ fn set_frame_size_builtins_resize_live_gui_frames_and_notify_host() {
     assert_eq!(
         frame.parameter("neovm--frame-text-lines"),
         Some(Value::fixnum(34))
+    );
+}
+
+#[test]
+fn x_create_frame_minibuffer_only_uses_root_as_minibuffer() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buf = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buf);
+    let root_id = ev.frames.create_frame("F1", 624, 648, buf);
+    {
+        let root = ev.frames.get_mut(root_id).expect("root frame");
+        root.set_window_system(Some(Value::symbol("neo")));
+        root.char_width = 7.2;
+        root.char_height = 17.0;
+        root.font_pixel_size = 12.0;
+    }
+    ev.set_display_host(Box::new(RecordingDisplayHost::new()));
+
+    let params = Value::list(vec![
+        Value::cons(Value::symbol("parent-frame"), Value::make_frame(root_id.0)),
+        Value::cons(Value::symbol("minibuffer"), Value::symbol("only")),
+        Value::cons(Value::symbol("height"), Value::fixnum(1)),
+        Value::cons(Value::symbol("child-frame-border-width"), Value::fixnum(3)),
+        Value::cons(Value::symbol("visibility"), Value::NIL),
+    ]);
+    let child = super::x_create_frame_impl(
+        &mut ev.frames,
+        &mut ev.buffers,
+        &mut ev.display_host,
+        vec![params],
+    )
+    .expect("x-create-frame");
+    let child_id = crate::window::FrameId(child.as_frame_id().expect("child frame"));
+    let child_frame = ev.frames.get(child_id).expect("child frame");
+    let root_window_id = child_frame.root_window.id();
+
+    assert!(child_frame.minibuffer_leaf.is_none());
+    assert_eq!(child_frame.minibuffer_window, Some(root_window_id));
+    let crate::window::Window::Leaf { buffer_id, .. } = &child_frame.root_window else {
+        panic!("child frame root must be a leaf window");
+    };
+    assert!(
+        ev.buffers
+            .get(*buffer_id)
+            .expect("root buffer")
+            .has_name(" *Minibuf-0*")
+    );
+    assert!(child_frame.no_split);
+    assert_eq!(
+        child_frame.parameter("minibuffer"),
+        Some(Value::symbol("only"))
     );
 }
 

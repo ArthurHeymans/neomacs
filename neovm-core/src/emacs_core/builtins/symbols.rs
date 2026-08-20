@@ -3657,18 +3657,63 @@ pub(crate) fn builtin_resize_mini_window_internal(
         .ok_or_else(|| signal("error", vec![Value::string("Window not found")]))?;
     let frame = eval
         .frames
-        .get(fid)
+        .get_mut(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
     if frame.minibuffer_window != Some(window_id) {
         return Err(signal(
             "error",
-            vec![Value::string("Not a minibuffer window")],
+            vec![Value::string("Not a valid minibuffer window")],
         ));
     }
-    // The layout engine drives the actual resize via
-    // grow_mini_window/shrink_mini_window during redisplay.
-    // This Lisp-callable entry point acknowledges the request.
-    Ok(Value::NIL)
+
+    let root_height = frame.root_window.bounds().height.max(0.0) as i64;
+    let root_new = frame
+        .root_window
+        .new_pixel()
+        .ok_or_else(|| signal("error", vec![Value::string("Cannot resize mini window")]))?;
+    let (mini_height, mini_new) = {
+        let mini = frame.minibuffer_leaf.as_ref().ok_or_else(|| {
+            signal(
+                "error",
+                vec![Value::string("Cannot resize a minibuffer-only frame")],
+            )
+        })?;
+        (
+            mini.bounds().height.max(0.0) as i64,
+            mini.new_pixel()
+                .ok_or_else(|| signal("error", vec![Value::string("Cannot resize mini window")]))?,
+        )
+    };
+
+    let old_total = root_height.saturating_add(mini_height);
+    let new_total = root_new.saturating_add(mini_new);
+    if !crate::window::window_resize_check(&frame.root_window, false)
+        || mini_new <= 0
+        || old_total != new_total
+    {
+        return Err(signal(
+            "error",
+            vec![Value::string("Cannot resize mini window")],
+        ));
+    }
+
+    let char_width = frame.char_width;
+    let char_height = frame.char_height;
+    crate::window::window_resize_apply(&mut frame.root_window, false, char_width, char_height);
+    let mini = frame
+        .minibuffer_leaf
+        .as_mut()
+        .expect("minibuffer leaf validated before resize mutation");
+    let bounds = *mini.bounds();
+    mini.set_bounds(crate::window::Rect::new(
+        bounds.x,
+        bounds.y,
+        bounds.width,
+        mini_new as f32,
+    ));
+    mini.set_new_pixel(None);
+    frame.recalculate_minibuffer_bounds();
+    Ok(Value::T)
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up

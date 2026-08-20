@@ -343,6 +343,8 @@ impl DisplayOutputBuilder {
         undecorated: bool,
         border_width: f32,
         border_color: Color,
+        outer_border_width: f32,
+        outer_border_color: Color,
         background_alpha: f32,
         no_accept_focus: bool,
     ) {
@@ -356,6 +358,8 @@ impl DisplayOutputBuilder {
                 undecorated,
                 border_width,
                 border_color,
+                outer_border_width,
+                outer_border_color,
                 background_alpha,
                 no_accept_focus,
             },
@@ -572,16 +576,14 @@ impl DisplayOutputBuilder {
         char_width: f32,
         char_height: f32,
     ) -> FrameDisplayState {
-        let Self {
-            window_state,
-            frame_state,
-            face_attempt,
-        } = self;
-        let mut state = FrameDisplayState::new(frame_cols, frame_rows, char_width, char_height);
-        state.window_matrices = window_state.into_window_matrix_entries();
-        frame_state.install_into(&mut state);
-        state.faces = face_attempt.faces();
-        state
+        self.finish_with_pixel_size(
+            frame_cols,
+            frame_rows,
+            char_width,
+            char_height,
+            frame_cols as f32 * char_width,
+            frame_rows as f32 * char_height,
+        )
     }
 
     pub(crate) fn finish_with_pixel_size(
@@ -593,9 +595,17 @@ impl DisplayOutputBuilder {
         frame_pixel_width: f32,
         frame_pixel_height: f32,
     ) -> FrameDisplayState {
-        let mut state = self.finish(frame_cols, frame_rows, char_width, char_height);
+        let Self {
+            window_state,
+            frame_state,
+            face_attempt,
+        } = self;
+        let mut state = FrameDisplayState::new(frame_cols, frame_rows, char_width, char_height);
         state.frame_pixel_width = frame_pixel_width;
         state.frame_pixel_height = frame_pixel_height;
+        state.window_matrices = window_state.into_window_matrix_entries();
+        frame_state.install_into(&mut state);
+        state.faces = face_attempt.faces();
         state
     }
 }

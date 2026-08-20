@@ -5292,24 +5292,35 @@ pub(crate) fn selected_frame_impl(
     let fid = ensure_selected_frame_id_in_state(frames, buffers);
     Ok(Value::make_frame(fid.0))
 }
+#[derive(Clone, Copy)]
+enum ChildMinibuffer {
+    Own,
+    Shared(WindowId),
+    Only,
+}
+
 fn resolve_child_shared_minibuffer(
     frames: &FrameManager,
     parent_id: FrameId,
     minibuffer_param: Option<Value>,
-) -> Result<Option<WindowId>, Flow> {
+) -> Result<ChildMinibuffer, Flow> {
     let Some(minibuffer_param) = minibuffer_param else {
-        return Ok(None);
+        return Ok(ChildMinibuffer::Own);
     };
 
     if minibuffer_param.is_nil() || matches!(minibuffer_param.as_symbol_name(), Some("none")) {
         return Ok(frames
             .root_frame_id(parent_id)
             .and_then(|root_id| frames.get(root_id))
-            .and_then(|root| root.minibuffer_window));
+            .and_then(|root| root.minibuffer_window)
+            .map_or(ChildMinibuffer::Own, ChildMinibuffer::Shared));
+    }
+    if matches!(minibuffer_param.as_symbol_name(), Some("only")) {
+        return Ok(ChildMinibuffer::Only);
     }
 
     let Some(raw_window_id) = minibuffer_param.as_window_id() else {
-        return Ok(None);
+        return Ok(ChildMinibuffer::Own);
     };
     let window_id = WindowId(raw_window_id);
     let valid_minibuffer = frames
@@ -5322,7 +5333,7 @@ fn resolve_child_shared_minibuffer(
         })
         .is_some();
     if valid_minibuffer {
-        Ok(Some(window_id))
+        Ok(ChildMinibuffer::Shared(window_id))
     } else {
         Err(signal(
             "error",
@@ -5445,8 +5456,17 @@ pub(crate) fn make_frame_plain(
                 .unwrap_or(BufferId(0));
             let fid =
                 frames.create_frame_value_on_terminal(name, terminal_id, width, height, buf_id);
-            let shared_minibuffer =
+            let child_minibuffer =
                 resolve_child_shared_minibuffer(frames, parent_id, minibuffer_param)?;
+            let minibuffer_buffer_id = if matches!(child_minibuffer, ChildMinibuffer::Only) {
+                Some(
+                    buffers
+                        .find_buffer_by_name(" *Minibuf-0*")
+                        .unwrap_or_else(|| buffers.create_buffer(" *Minibuf-0*")),
+                )
+            } else {
+                None
+            };
             let z_order = 1 + frames.max_child_z_order(parent_id);
             let frame = frames
                 .get_mut(fid)
@@ -5469,9 +5489,22 @@ pub(crate) fn make_frame_plain(
             frame.undecorated = undecorated;
             frame.no_accept_focus = no_accept_focus;
             frame.no_split = no_split;
-            if let Some(shared_minibuffer) = shared_minibuffer {
-                frame.minibuffer_leaf = None;
-                frame.minibuffer_window = Some(shared_minibuffer);
+            match child_minibuffer {
+                ChildMinibuffer::Shared(shared_minibuffer) => {
+                    frame.minibuffer_leaf = None;
+                    frame.minibuffer_window = Some(shared_minibuffer);
+                }
+                ChildMinibuffer::Only => {
+                    frame.minibuffer_leaf = None;
+                    frame.minibuffer_window = Some(frame.root_window.id());
+                    frame.no_split = true;
+                    if let Some(minibuffer_buffer_id) = minibuffer_buffer_id
+                        && let Window::Leaf { buffer_id, .. } = &mut frame.root_window
+                    {
+                        *buffer_id = minibuffer_buffer_id;
+                    }
+                }
+                ChildMinibuffer::Own => {}
             }
             for (key, value) in all_params {
                 if let Some(param_key) = FrameParamKey::from_symbol_value(key) {
@@ -5482,7 +5515,7 @@ pub(crate) fn make_frame_plain(
             }
             frame.set_parameter(Value::symbol("width"), Value::fixnum(i64::from(width)));
             frame.set_parameter(Value::symbol("height"), Value::fixnum(i64::from(height)));
-            if let Some(shared_minibuffer) = shared_minibuffer {
+            if let ChildMinibuffer::Shared(shared_minibuffer) = child_minibuffer {
                 frame.set_parameter(
                     Value::symbol("minibuffer"),
                     Value::make_window(shared_minibuffer.0),
@@ -5848,12 +5881,20 @@ pub(crate) fn x_create_frame_impl(
         .current_buffer()
         .map(|buffer| buffer.id)
         .unwrap_or_else(|| buffers.create_buffer("*scratch*"));
-    let shared_minibuffer = parent_id
+    let child_minibuffer = parent_id
         .map(|parent_id| resolve_child_shared_minibuffer(frames, parent_id, parsed.minibuffer))
         .transpose()?
-        .flatten();
+        .unwrap_or(ChildMinibuffer::Own);
     let z_order = parent_id.map(|parent_id| 1 + frames.max_child_z_order(parent_id));
-    let minibuffer_buffer_id = buffers.find_buffer_by_name(" *Minibuf-0*");
+    let minibuffer_buffer_id = if matches!(child_minibuffer, ChildMinibuffer::Only) {
+        Some(
+            buffers
+                .find_buffer_by_name(" *Minibuf-0*")
+                .unwrap_or_else(|| buffers.create_buffer(" *Minibuf-0*")),
+        )
+    } else {
+        buffers.find_buffer_by_name(" *Minibuf-0*")
+    };
     let fid = frames.create_frame_value(name, width_px, height_px, current_buffer_id);
     {
         let frame = frames
@@ -5905,16 +5946,29 @@ pub(crate) fn x_create_frame_impl(
         frame.set_known_parameter(FrameParam::ParentFrame, parent_frame_value);
         frame.set_parameter(Value::symbol("left"), Value::fixnum(frame.left_pos));
         frame.set_parameter(Value::symbol("top"), Value::fixnum(frame.top_pos));
-        if let Some(shared_minibuffer) = shared_minibuffer {
-            frame.minibuffer_leaf = None;
-            frame.minibuffer_window = Some(shared_minibuffer);
-            frame.set_parameter(
-                Value::symbol("minibuffer"),
-                Value::make_window(shared_minibuffer.0),
-            );
+        match child_minibuffer {
+            ChildMinibuffer::Shared(shared_minibuffer) => {
+                frame.minibuffer_leaf = None;
+                frame.minibuffer_window = Some(shared_minibuffer);
+                frame.set_parameter(
+                    Value::symbol("minibuffer"),
+                    Value::make_window(shared_minibuffer.0),
+                );
+            }
+            ChildMinibuffer::Only => {
+                frame.minibuffer_leaf = None;
+                frame.minibuffer_window = Some(frame.root_window.id());
+                frame.no_split = true;
+            }
+            ChildMinibuffer::Own => {}
         }
+        let root_buffer_id = if matches!(child_minibuffer, ChildMinibuffer::Only) {
+            minibuffer_buffer_id.unwrap_or(current_buffer_id)
+        } else {
+            current_buffer_id
+        };
         if let Window::Leaf { buffer_id, .. } = &mut frame.root_window {
-            *buffer_id = current_buffer_id;
+            *buffer_id = root_buffer_id;
         }
         if let Some(minibuffer_leaf) = frame.minibuffer_leaf.as_mut() {
             if let Some(minibuffer_buffer_id) = minibuffer_buffer_id {

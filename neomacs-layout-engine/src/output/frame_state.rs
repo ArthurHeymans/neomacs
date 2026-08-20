@@ -36,6 +36,8 @@ pub(crate) struct OutputFrameBuildState {
     undecorated: bool,
     border_width: f32,
     border_color: Color,
+    outer_border_width: f32,
+    outer_border_color: Color,
     background_alpha: f32,
     no_accept_focus: bool,
 }
@@ -74,6 +76,13 @@ impl OutputFrameBuildState {
                 b: 0.0,
                 a: 1.0,
             },
+            outer_border_width: 0.0,
+            outer_border_color: Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
             background_alpha: 1.0,
             no_accept_focus: false,
         }
@@ -106,6 +115,13 @@ impl OutputFrameBuildState {
         self.undecorated = false;
         self.border_width = 0.0;
         self.border_color = Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 1.0,
+        };
+        self.outer_border_width = 0.0;
+        self.outer_border_color = Color {
             r: 0.0,
             g: 0.0,
             b: 0.0,
@@ -222,6 +238,8 @@ impl OutputFrameBuildState {
                 self.undecorated = identity.undecorated;
                 self.border_width = identity.border_width;
                 self.border_color = identity.border_color;
+                self.outer_border_width = identity.outer_border_width;
+                self.outer_border_color = identity.outer_border_color;
                 self.background_alpha = identity.background_alpha;
                 self.no_accept_focus = identity.no_accept_focus;
             }
@@ -300,6 +318,8 @@ impl OutputFrameBuildState {
         state.undecorated = self.undecorated;
         state.border_width = self.border_width;
         state.border_color = self.border_color;
+        state.outer_border_width = self.outer_border_width;
+        state.outer_border_color = self.outer_border_color;
         state.background_alpha = self.background_alpha;
         state.no_accept_focus = self.no_accept_focus;
     }

@@ -2645,6 +2645,14 @@ impl Frame {
             .unwrap_or_else(|| self.internal_border_width())
     }
 
+    pub fn outer_border_width(&self) -> i64 {
+        if self.effective_window_system().is_none() {
+            return 0;
+        }
+        self.nonnegative_frame_parameter_int(FrameParam::BorderWidth)
+            .unwrap_or(0)
+    }
+
     pub fn install_gnu_gui_default_parameters(&mut self) {
         // GNU GUI ports seed these through gui_default_parameter before the
         // frame's Lisp face defaults are realized.
@@ -3411,7 +3419,7 @@ impl Frame {
         } else {
             let root_height = self.root_window.bounds().height;
             let text_lines = (root_height / char_height).floor().max(1.0) as i64;
-            let total_lines = text_lines.saturating_add(1);
+            let total_lines = text_lines.saturating_add(i64::from(self.minibuffer_leaf.is_some()));
             self.set_parameter(Value::symbol("height"), Value::fixnum(total_lines));
             self.set_parameter(
                 Value::symbol("neovm--frame-text-lines"),

@@ -1526,6 +1526,10 @@ pub struct FrameDisplayState {
     pub undecorated: bool,
     pub border_width: f32,
     pub border_color: Color,
+    #[serde(default)]
+    pub outer_border_width: f32,
+    #[serde(default)]
+    pub outer_border_color: Color,
     pub background_alpha: f32,
     pub no_accept_focus: bool,
     pub window_infos: Vec<WindowInfo>,
@@ -1946,6 +1950,13 @@ impl FrameDisplayState {
                 b: 0.0,
                 a: 1.0,
             },
+            outer_border_width: 0.0,
+            outer_border_color: Color {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
             background_alpha: 1.0,
             no_accept_focus: false,
             window_infos: Vec::new(),
@@ -1981,6 +1992,8 @@ impl FrameDisplayState {
         state.undecorated = buf.undecorated;
         state.border_width = buf.border_width;
         state.border_color = buf.border_color;
+        state.outer_border_width = buf.outer_border_width;
+        state.outer_border_color = buf.outer_border_color;
         state.background_alpha = buf.background_alpha;
         state.no_accept_focus = buf.no_accept_focus;
         state.faces = buf.faces.clone();
@@ -2122,6 +2135,8 @@ impl FrameDisplayState {
         buf.undecorated = self.undecorated;
         buf.border_width = self.border_width;
         buf.border_color = self.border_color;
+        buf.outer_border_width = self.outer_border_width;
+        buf.outer_border_color = self.outer_border_color;
         buf.background_alpha = self.background_alpha;
         buf.no_accept_focus = self.no_accept_focus;
 

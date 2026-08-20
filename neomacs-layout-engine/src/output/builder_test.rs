@@ -233,12 +233,27 @@ fn builder_can_preserve_exact_frame_pixel_size() {
     assert_eq!(state.frame_rows, 36);
     assert_eq!(state.frame_pixel_width, 1300.0);
     assert_eq!(state.frame_pixel_height, 1188.0);
+    assert_eq!(state.frame_placement.outer_in_parent().width(), 1300.0);
+    assert_eq!(state.frame_placement.outer_in_parent().height(), 1188.0);
 }
 
 #[test]
 fn builder_preserves_negative_child_frame_origin_for_parent_clipping() {
     let mut builder = DisplayOutputBuilder::new();
-    builder.set_output_frame_identity(2, 1, -1.0, -2.0, 1, true, 0.0, Color::BLACK, 1.0, true);
+    builder.set_output_frame_identity(
+        2,
+        1,
+        -1.0,
+        -2.0,
+        1,
+        true,
+        0.0,
+        Color::BLACK,
+        0.0,
+        Color::BLACK,
+        1.0,
+        true,
+    );
 
     let state = builder.finish(80, 24, 1.0, 1.0);
     let placement = state.frame_placement;
