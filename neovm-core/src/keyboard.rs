@@ -2863,7 +2863,7 @@ impl crate::emacs_core::eval::Context {
         match self.apply(filter, vec![definition]) {
             Ok(value) => Ok(value),
             Err(crate::emacs_core::error::Flow::Signal(signal))
-                if signal.symbol_name() != "quit" =>
+                if signal.symbol != intern("quit") =>
             {
                 Ok(Value::NIL)
             }

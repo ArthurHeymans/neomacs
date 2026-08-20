@@ -21,7 +21,7 @@ use std::{collections::HashMap, time::Duration};
 
 use super::error::{
     EvalResult, Flow, make_signal_binding_value, signal, signal_from_binding_value,
-    signal_with_data, signal_with_data_id,
+    signal_with_data_id,
 };
 use super::value::{Value, ValueKind, eq_value, list_to_vec};
 use crate::gc_trace::GcTrace;
@@ -725,7 +725,7 @@ fn split_signal_binding_value(value: Value) -> Option<(Value, Value)> {
     };
     let pair_car = value.cons_car();
     let pair_cdr = value.cons_cdr();
-    pair_car.as_symbol_name()?;
+    pair_car.as_symbol_id()?;
     Some((pair_car, pair_cdr))
 }
 
@@ -1045,7 +1045,7 @@ pub(crate) fn builtin_thread_signal(
         ));
     }
     let error_symbol = args[1];
-    let Some(error_name) = error_symbol.as_symbol_name() else {
+    let Some(error_symbol_id) = error_symbol.as_symbol_id() else {
         return Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("symbolp"), error_symbol],
@@ -1053,7 +1053,7 @@ pub(crate) fn builtin_thread_signal(
     };
     let data = args[2];
     if id == ctx.threads.current_thread_id() {
-        return Err(signal_with_data(error_name, data));
+        return Err(signal_with_data_id(error_symbol_id, data));
     }
     ctx.threads
         .signal_thread(id, Value::cons(error_symbol, data));

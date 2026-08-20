@@ -291,6 +291,30 @@ fn obarray_quit_conditions_match_gnu_non_error_hierarchy() {
 }
 
 #[test]
+fn condition_handlers_use_canonical_t_identity_without_reading_symbol_names() {
+    crate::test_utils::init_test_tracing();
+    let mut ob = Obarray::new();
+    init_standard_errors(&mut ob);
+    let signal = intern("error");
+    let raw_condition = crate::emacs_core::intern::intern_lisp_string(
+        &crate::heap_types::LispString::from_unibyte(vec![0xff]),
+    );
+    let uninterned_t = crate::emacs_core::intern::intern_uninterned("t");
+
+    assert!(!signal_matches_condition_value_sym(
+        &ob,
+        signal,
+        &Value::from_sym_id(raw_condition)
+    ));
+    assert!(!signal_matches_condition_value_sym(
+        &ob,
+        signal,
+        &Value::from_sym_id(uninterned_t)
+    ));
+    assert!(signal_matches_condition_value_sym(&ob, signal, &Value::T));
+}
+
+#[test]
 fn obarray_overflow_error_conditions() {
     crate::test_utils::init_test_tracing();
     let mut ob = Obarray::new();

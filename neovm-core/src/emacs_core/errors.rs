@@ -19,7 +19,7 @@
 use super::error::{
     EvalResult, Flow, signal, signal_suppressed, signal_with_data, signal_with_data_id,
 };
-use super::intern::{SymId, intern, resolve_sym};
+use super::intern::{SymId, T_SYM_ID, intern, resolve_sym};
 use super::symbol::Obarray;
 use super::value::*;
 use crate::emacs_core::error::LispCondition;
@@ -164,6 +164,20 @@ pub fn signal_matches_condition_value_sym(
     signal_matches_pattern_against_conditions(signal_sym, conditions.as_ref(), pattern)
 }
 
+/// Identity-aware hierarchical match for one signal and one condition.
+///
+/// This is the object-level counterpart of [`signal_matches_hierarchical`]
+/// for runtime paths where GNU compares Lisp symbol objects rather than their
+/// potentially raw or mutable names.
+pub fn signal_matches_hierarchical_sym(
+    obarray: &Obarray,
+    signal_sym: SymId,
+    condition_sym: SymId,
+) -> bool {
+    let conditions = obarray.get_property_id(signal_sym, intern("error-conditions"));
+    signal_matches_symbol_against_conditions(signal_sym, conditions.as_ref(), condition_sym)
+}
+
 fn signal_matches_pattern_against_conditions(
     signal_sym: SymId,
     conditions: Option<&Value>,
@@ -181,30 +195,34 @@ fn signal_matches_pattern_against_conditions(
             let Some(cond_id) = super::builtins::symbols::symbol_id(pattern) else {
                 return false;
             };
-            if pattern_is_catch_all(cond_id) {
-                return true;
-            }
-            // Exact identity match.
-            if cond_id == signal_sym {
-                return true;
-            }
-            // Membership in the signal's error-conditions (compared by identity).
-            if let Some(conds) = conditions {
-                let mut tail = *conds;
-                while tail.is_cons() {
-                    if tail.cons_car().as_symbol_id() == Some(cond_id) {
-                        return true;
-                    }
-                    tail = tail.cons_cdr();
-                }
-            }
-            false
+            signal_matches_symbol_against_conditions(signal_sym, conditions, cond_id)
         }
     }
 }
 
+fn signal_matches_symbol_against_conditions(
+    signal_sym: SymId,
+    conditions: Option<&Value>,
+    condition_sym: SymId,
+) -> bool {
+    if pattern_is_catch_all(condition_sym) || condition_sym == signal_sym {
+        return true;
+    }
+    let Some(conditions) = conditions else {
+        return false;
+    };
+    let mut tail = *conditions;
+    while tail.is_cons() {
+        if tail.cons_car().as_symbol_id() == Some(condition_sym) {
+            return true;
+        }
+        tail = tail.cons_cdr();
+    }
+    false
+}
+
 fn pattern_is_catch_all(cond_id: SymId) -> bool {
-    resolve_sym(cond_id) == "t"
+    cond_id == T_SYM_ID
 }
 
 // ---------------------------------------------------------------------------
@@ -607,12 +625,10 @@ fn build_peculiar_signal_flow(eval: &super::eval::Context, error_object: Value) 
             vec![Value::symbol("symbolp"), error_symbol],
         );
     };
-    let sym_name = resolve_sym(symbol_id);
-
     // Read `error-conditions' by identity so an uninterned error symbol is
     // honoured (see `builtin_signal`).
-    if sym_name != "error"
-        && sym_name != "quit"
+    if symbol_id != intern("error")
+        && symbol_id != intern("quit")
         && eval
             .obarray
             .get_property_id(symbol_id, intern("error-conditions"))
@@ -704,12 +720,10 @@ fn build_resignal_flow(eval: &super::eval::Context, error_object: Value) -> Flow
             vec![Value::symbol("symbolp"), error_symbol],
         );
     };
-    let sym_name = resolve_sym(symbol_id);
-
     // Read `error-conditions' by identity so an uninterned error symbol is
     // honoured (see `builtin_signal`).
-    if sym_name != "error"
-        && sym_name != "quit"
+    if symbol_id != intern("error")
+        && symbol_id != intern("quit")
         && eval
             .obarray
             .get_property_id(symbol_id, intern("error-conditions"))
@@ -795,16 +809,16 @@ fn error_message_string_rendered(
     error_data: &Value,
 ) -> EvalResult {
     // Emacs expects ERROR-DATA to be a list (or nil).
-    let (sym_name, data) = match error_data.kind() {
+    let (symbol, data) = match error_data.kind() {
         ValueKind::Cons => {
             let pair_car = error_data.cons_car();
             let pair_cdr = error_data.cons_cdr();
-            let sym = match pair_car.as_symbol_name() {
-                Some(name) => name.to_string(),
+            let symbol = match pair_car.as_symbol_id() {
+                Some(symbol) => symbol,
                 None => return Ok(Value::string("peculiar error")),
             };
             let rest = error_data_tail_to_vec(pair_cdr);
-            (sym, rest)
+            (symbol, rest)
         }
         ValueKind::Nil => return Ok(Value::heap_string(lisp_lit("peculiar error"))),
         _ => {
@@ -819,7 +833,12 @@ fn error_message_string_rendered(
     // `error-message` property is a string.  This deliberately includes
     // non-error conditions such as `quit` and `minibuffer-quit`, whose
     // `error-conditions` do not include `error`.
-    let Some(base_message_value) = eval.obarray.get_property(&sym_name, "error-message") else {
+    let error_symbol = intern("error");
+    let user_error_symbol = intern("user-error");
+    let Some(base_message_value) = eval
+        .obarray
+        .get_property_id(symbol, intern("error-message"))
+    else {
         if data.is_empty() {
             return Ok(Value::heap_string(lisp_lit("peculiar error")));
         }
@@ -842,7 +861,7 @@ fn error_message_string_rendered(
     // itself signals.  A non-nil, non-string callback result is retained and
     // consequently renders as a peculiar error, matching GNU's downstream
     // printer behavior.
-    let base_message_value = if sym_name != "error"
+    let base_message_value = if symbol != error_symbol
         && eval
             .obarray
             .symbol_function_id(intern("substitute-command-keys"))
@@ -878,17 +897,17 @@ fn error_message_string_rendered(
     let base_message = error_arg_lisp(eval, &base_message_value, ErrorDatumPrintMode::Princ);
 
     if data.is_empty() {
-        if sym_name == "error" {
+        if symbol == error_symbol {
             return Ok(Value::heap_string(lisp_lit("peculiar error")));
         }
-        if sym_name == "user-error" {
+        if symbol == user_error_symbol {
             return Ok(Value::heap_string(lisp_lit("")));
         }
         return Ok(Value::heap_string(base_message));
     }
 
     // `user-error` always renders payload data directly.
-    if sym_name == "user-error" {
+    if symbol == user_error_symbol {
         if let Some(first) = data.first().filter(|v| v.as_lisp_string().is_some()) {
             let first_str = error_arg_lisp(eval, first, ErrorDatumPrintMode::Princ);
             let rest = &data[1..];
@@ -914,8 +933,12 @@ fn error_message_string_rendered(
         return Ok(Value::heap_string(detail));
     }
 
-    let is_file_error_family = signal_matches_hierarchical(&eval.obarray, &sym_name, "file-error");
-    let is_file_locked = sym_name == "file-locked";
+    let is_file_error_family = signal_matches_condition_value_sym(
+        &eval.obarray,
+        symbol,
+        &Value::from_sym_id(intern("file-error")),
+    );
+    let is_file_locked = symbol == intern("file-locked");
 
     // `file-locked` is an oddball in Emacs: it always reports "peculiar error"
     // with all payload elements, even if the first datum is a string.
@@ -933,14 +956,14 @@ fn error_message_string_rendered(
 
     // `error` and file-error-family conditions use a leading string for
     // user-facing detail.
-    if sym_name == "error" || is_file_error_family {
+    if symbol == error_symbol || is_file_error_family {
         if let Some(first) = data.first().filter(|v| v.as_lisp_string().is_some()) {
             let first_str = error_arg_lisp(eval, first, ErrorDatumPrintMode::Princ);
             let rest = &data[1..];
             if rest.is_empty() {
                 return Ok(Value::heap_string(first_str));
             }
-            let print_mode = if sym_name == "error" {
+            let print_mode = if symbol == error_symbol {
                 ErrorDatumPrintMode::Prin1
             } else {
                 ErrorDatumPrintMode::Princ
@@ -974,7 +997,7 @@ fn error_message_string_rendered(
         return Ok(Value::heap_string(lisp_lit("peculiar error")));
     }
 
-    let print_mode = if sym_name == "end-of-file" {
+    let print_mode = if symbol == intern("end-of-file") {
         ErrorDatumPrintMode::Princ
     } else {
         ErrorDatumPrintMode::Prin1

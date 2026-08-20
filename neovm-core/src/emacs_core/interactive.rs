@@ -1961,7 +1961,7 @@ fn interactive_read_coding_system_optional_arg(
 ) -> Result<Value, Flow> {
     match super::lread::builtin_read_coding_system(eval, vec![Value::heap_string(prompt)]) {
         Ok(value) => Ok(value),
-        Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file" => Ok(Value::NIL),
+        Err(Flow::Signal(sig)) if sig.symbol == intern("end-of-file") => Ok(Value::NIL),
         Err(flow) => Err(flow),
     }
 }

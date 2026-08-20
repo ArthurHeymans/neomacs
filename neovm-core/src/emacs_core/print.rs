@@ -7,6 +7,7 @@ use std::fmt::Write as _;
 use super::chartable::{bool_vector_length, char_table_external_slots};
 use super::intern::{
     SymId, intern, lookup_interned_lisp_string, resolve_sym, resolve_sym_lisp_string,
+    symbol_name_confusing,
 };
 use super::string_escape::format_lisp_string_bytes_emacs;
 use super::value::{
@@ -2263,76 +2264,6 @@ fn append_symbol_name_bytes_with_escape(
             out.push(byte);
         }
     }
-}
-
-fn symbol_name_confusing(bytes: &[u8]) -> bool {
-    let Some(&first) = bytes.first() else {
-        return false;
-    };
-
-    let signed = matches!(first, b'+' | b'-');
-    let after_sign = usize::from(signed);
-    let number_like_start = bytes
-        .get(after_sign)
-        .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'.');
-
-    (number_like_start && emacs_decimal_number_consumes_all(bytes))
-        || first == b'?'
-        || (first == b'.' && !bytes.get(1).is_some_and(|byte| byte.is_ascii_alphabetic()))
-}
-
-fn emacs_decimal_number_consumes_all(bytes: &[u8]) -> bool {
-    let mut pos = 0usize;
-    if matches!(bytes.get(pos), Some(b'+' | b'-')) {
-        pos += 1;
-    }
-
-    let mut has_leading_digits = false;
-    while bytes.get(pos).is_some_and(u8::is_ascii_digit) {
-        has_leading_digits = true;
-        pos += 1;
-    }
-
-    if bytes.get(pos) == Some(&b'.') {
-        pos += 1;
-    }
-
-    let mut has_trailing_digits = false;
-    while bytes.get(pos).is_some_and(u8::is_ascii_digit) {
-        has_trailing_digits = true;
-        pos += 1;
-    }
-
-    let mut has_exponent = false;
-    if matches!(bytes.get(pos), Some(b'e' | b'E')) {
-        let exponent_start = pos;
-        pos += 1;
-        let exponent_sign_is_plus = bytes.get(pos) == Some(&b'+');
-        if matches!(bytes.get(pos), Some(b'+' | b'-')) {
-            pos += 1;
-        }
-
-        let exponent_digits_start = pos;
-        while bytes.get(pos).is_some_and(u8::is_ascii_digit) {
-            pos += 1;
-        }
-
-        if pos > exponent_digits_start {
-            has_exponent = true;
-        } else if exponent_sign_is_plus
-            && bytes
-                .get(pos..pos + 3)
-                .is_some_and(|suffix| suffix == b"INF" || suffix == b"NaN")
-        {
-            pos += 3;
-            has_exponent = true;
-        } else {
-            pos = exponent_start;
-        }
-    }
-
-    let float_syntax = has_trailing_digits || (has_leading_digits && has_exponent);
-    pos == bytes.len() && (has_leading_digits || float_syntax)
 }
 
 pub(crate) fn format_float(f: f64) -> String {

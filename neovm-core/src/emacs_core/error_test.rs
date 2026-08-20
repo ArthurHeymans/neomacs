@@ -252,6 +252,37 @@ fn minibuffer_quit_does_not_take_down_a_noninteractive_session() {
     );
 }
 
+#[test]
+fn raw_condition_inheriting_minibuffer_quit_does_not_take_down_session() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.set_variable("noninteractive", Value::T);
+    let condition = crate::emacs_core::intern::intern_lisp_string(
+        &crate::heap_types::LispString::from_unibyte(vec![0xff]),
+    );
+    eval.obarray
+        .put_property_id(
+            condition,
+            crate::emacs_core::intern::intern("error-conditions"),
+            Value::list(vec![
+                Value::from_sym_id(condition),
+                Value::symbol("minibuffer-quit"),
+                Value::symbol("quit"),
+            ]),
+        )
+        .expect("raw condition should accept an identity-keyed hierarchy");
+
+    let reported = eval.command_error_default_report(
+        Value::list(vec![Value::from_sym_id(condition)]),
+        Value::string(""),
+    );
+    assert!(
+        reported.is_ok(),
+        "minibuffer-quit ancestry is matched by identity: {reported:?}"
+    );
+    assert!(eval.shutdown_request().is_none());
+}
+
 // ---------------------------------------------------------------------------
 // In-flight signal payload rooting (DIVERGENCES.md 161)
 // ---------------------------------------------------------------------------

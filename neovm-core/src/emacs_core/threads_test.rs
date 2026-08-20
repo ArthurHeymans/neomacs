@@ -568,6 +568,44 @@ fn test_builtin_thread_signal_current_thread_raises() {
 }
 
 #[test]
+fn test_builtin_thread_signal_preserves_raw_symbol_identity_through_join() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let thread = builtin_make_thread(
+        &mut eval,
+        vec![Value::make_lambda(super::super::value::LambdaData {
+            params: super::super::value::LambdaParams::simple(vec![]),
+            body: vec![Value::fixnum(42)],
+            env: None,
+            docstring: None,
+            doc_form: None,
+            interactive: None,
+        })],
+    )
+    .unwrap();
+    let raw_symbol =
+        crate::emacs_core::intern::intern_lisp_string(&LispString::from_unibyte(vec![0xff]));
+    let data = Value::list(vec![Value::string("oops")]);
+
+    assert_eq!(
+        builtin_thread_signal(
+            &mut eval,
+            vec![thread, Value::from_sym_id(raw_symbol), data],
+        )
+        .unwrap(),
+        Value::NIL
+    );
+
+    match builtin_thread_join(&mut eval, vec![thread]) {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol, raw_symbol);
+            assert_eq!(sig.raw_data, Some(data));
+        }
+        other => panic!("expected thread-join to preserve the raw signal: {other:?}"),
+    }
+}
+
+#[test]
 fn test_builtin_thread_last_error_cleanup() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();

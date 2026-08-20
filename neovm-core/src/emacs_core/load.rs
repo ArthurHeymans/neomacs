@@ -2,7 +2,7 @@
 
 use super::builtins::collections::builtin_make_hash_table;
 use super::error::{EvalError, Flow, map_flow, signal};
-use super::intern::{SymId, intern, resolve_sym};
+use super::intern::{format_symbol_name_for_diagnostic, intern, resolve_sym};
 use super::keymap::is_list_keymap;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use super::value_reader::ReadSymbolShorthands;
@@ -233,15 +233,9 @@ pub(crate) fn decode_emacs_utf8(bytes: &[u8]) -> String {
     out
 }
 
-/// Format a Value for human-readable error messages, resolving SymIds and heap-backed values.
-fn format_symbol_name_for_error(symbol: SymId) -> String {
-    let name = super::intern::resolve_sym_lisp_string(symbol);
-    crate::emacs_core::emacs_char::emacs_bytes_to_lossy_string(name.as_bytes(), name.is_multibyte())
-}
-
 fn format_value_for_error(v: &Value) -> String {
     match v.kind() {
-        ValueKind::Symbol(sid) => format_symbol_name_for_error(sid),
+        ValueKind::Symbol(sid) => format_symbol_name_for_diagnostic(sid),
         ValueKind::String => format!("\"{}\"", load_string_text(v).expect("checked string")),
         ValueKind::Fixnum(n) => format!("{}", n),
         ValueKind::Nil => "nil".to_string(),
@@ -276,7 +270,11 @@ fn format_eval_error_in_state(eval: &super::eval::Context, err: &EvalError) -> S
             } else {
                 crate::emacs_core::error::print_value_in_state(eval, &Value::list(data.clone()))
             };
-            format!("({} {})", format_symbol_name_for_error(*symbol), payload)
+            format!(
+                "({} {})",
+                format_symbol_name_for_diagnostic(*symbol),
+                payload
+            )
         }
         EvalError::UncaughtThrow { tag, value, .. } => format!(
             "(throw {} {})",
@@ -312,7 +310,11 @@ fn format_load_form_error(err: &EvalError) -> String {
                 let data_strs: Vec<String> = data.iter().map(format_value_for_error).collect();
                 format!("({})", data_strs.join(" "))
             };
-            format!("({} {})", format_symbol_name_for_error(*symbol), payload)
+            format!(
+                "({} {})",
+                format_symbol_name_for_diagnostic(*symbol),
+                payload
+            )
         }
         other => format!("{other:?}"),
     }
@@ -2545,7 +2547,7 @@ fn run_after_load_evaluation(eval: &mut super::eval::Context, path_lisp: &LispSt
         if let Err(e) = eval.apply1(Value::symbol(dale_id), abs_path) {
             let err_msg = match &e {
                 super::error::Flow::Signal(sig) => {
-                    let sym = super::intern::resolve_sym(sig.symbol);
+                    let sym = format_symbol_name_for_diagnostic(sig.symbol);
                     let data: Vec<String> = sig.data.iter().map(format_value_for_error).collect();
                     format!("({} {})", sym, data.join(" "))
                 }

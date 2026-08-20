@@ -15,6 +15,7 @@ use parking_lot::RwLock;
 use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
+use std::fmt::Write as _;
 use std::hash::{BuildHasher, Hash, Hasher};
 use std::mem::MaybeUninit;
 use std::ptr::NonNull;
@@ -40,22 +41,163 @@ impl std::fmt::Debug for SymId {
             Some(registry) => match registry.slot(*self) {
                 Some(slot) => {
                     let name = registry.names.resolve_lisp_string(slot.name);
-                    match name.as_utf8_str() {
-                        Some(name) => write!(f, "SymId({} {name})", self.0),
-                        None => write!(
-                            f,
-                            "SymId({} <{} raw byte{}>)",
-                            self.0,
-                            name.as_bytes().len(),
-                            if name.as_bytes().len() == 1 { "" } else { "s" }
-                        ),
-                    }
+                    write!(
+                        f,
+                        "SymId({} {})",
+                        self.0,
+                        format_lisp_symbol_name_for_diagnostic(name)
+                    )
                 }
                 None => write!(f, "SymId({})", self.0),
             },
             None => write!(f, "SymId({})", self.0),
         }
     }
+}
+
+/// Render a symbol name into a UTF-8 diagnostic without discarding Lisp
+/// character identity.
+///
+/// GNU's symbol printer walks the name as a Lisp string instead of first
+/// requiring UTF-8. Rust log sinks cannot carry Emacs byte8 or non-Unicode
+/// characters directly, so preserve them with a fixed-width `\xNN` notation
+/// that ordinary symbol escaping cannot produce. In particular, a unibyte
+/// `C3 A9` name must stay `\xC3\xA9`; it is not the multibyte Unicode name `é`.
+fn format_lisp_symbol_name_for_diagnostic(name: &LispString) -> String {
+    fn push_char(out: &mut String, code: u32, confusing_prefix: bool) {
+        if confusing_prefix {
+            out.push('\\');
+        }
+        if crate::emacs_core::emacs_char::char_byte8_p(code) {
+            let byte = crate::emacs_core::emacs_char::char_to_byte8(code);
+            write!(out, "\\x{byte:02X}").expect("write to String");
+            return;
+        }
+
+        let Some(ch) = char::from_u32(code) else {
+            write!(out, "\\x{{{code:X}}}").expect("write to String");
+            return;
+        };
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch.is_control() => {
+                write!(out, "\\x{{{code:X}}}").expect("write to String");
+            }
+            '"' | '\'' | ';' | '#' | '(' | ')' | ',' | '`' | '[' | ']' | ' ' => {
+                out.push('\\');
+                out.push(ch);
+            }
+            _ => out.push(ch),
+        }
+    }
+
+    if name.is_empty() {
+        return "##".to_string();
+    }
+
+    let bytes = name.as_bytes();
+    let mut out = String::with_capacity(bytes.len());
+    let mut confusing_prefix = symbol_name_confusing(bytes);
+    if !name.is_multibyte() {
+        for &byte in bytes {
+            push_char(
+                &mut out,
+                crate::emacs_core::emacs_char::unibyte_to_char(byte),
+                confusing_prefix,
+            );
+            confusing_prefix = false;
+        }
+        return out;
+    }
+
+    let mut pos = 0;
+    while pos < bytes.len() {
+        let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
+        push_char(&mut out, code, confusing_prefix);
+        confusing_prefix = false;
+        pos += len;
+    }
+    out
+}
+
+pub(crate) fn format_symbol_name_for_diagnostic(symbol: SymId) -> String {
+    format_lisp_symbol_name_for_diagnostic(resolve_sym_lisp_name(symbol))
+}
+
+/// Whether an unescaped symbol spelling would be read as something other than
+/// that symbol. Shared by the Lisp printer and UTF-8 diagnostic renderer so
+/// their escaping rules cannot drift.
+pub(crate) fn symbol_name_confusing(bytes: &[u8]) -> bool {
+    let Some(&first) = bytes.first() else {
+        return false;
+    };
+
+    let signed = matches!(first, b'+' | b'-');
+    let after_sign = usize::from(signed);
+    let number_like_start = bytes
+        .get(after_sign)
+        .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'.');
+
+    (number_like_start && emacs_decimal_number_consumes_all(bytes))
+        || first == b'?'
+        || (first == b'.' && !bytes.get(1).is_some_and(|byte| byte.is_ascii_alphabetic()))
+}
+
+fn emacs_decimal_number_consumes_all(bytes: &[u8]) -> bool {
+    let mut pos = 0usize;
+    if matches!(bytes.get(pos), Some(b'+' | b'-')) {
+        pos += 1;
+    }
+
+    let mut has_leading_digits = false;
+    while bytes.get(pos).is_some_and(u8::is_ascii_digit) {
+        has_leading_digits = true;
+        pos += 1;
+    }
+
+    if bytes.get(pos) == Some(&b'.') {
+        pos += 1;
+    }
+
+    let mut has_trailing_digits = false;
+    while bytes.get(pos).is_some_and(u8::is_ascii_digit) {
+        has_trailing_digits = true;
+        pos += 1;
+    }
+
+    let mut has_exponent = false;
+    if matches!(bytes.get(pos), Some(b'e' | b'E')) {
+        let exponent_start = pos;
+        pos += 1;
+        let exponent_sign_is_plus = bytes.get(pos) == Some(&b'+');
+        if matches!(bytes.get(pos), Some(b'+' | b'-')) {
+            pos += 1;
+        }
+
+        let exponent_digits_start = pos;
+        while bytes.get(pos).is_some_and(u8::is_ascii_digit) {
+            pos += 1;
+        }
+
+        if pos > exponent_digits_start {
+            has_exponent = true;
+        } else if exponent_sign_is_plus
+            && bytes
+                .get(pos..pos + 3)
+                .is_some_and(|suffix| suffix == b"INF" || suffix == b"NaN")
+        {
+            pos += 3;
+            has_exponent = true;
+        } else {
+            pos = exponent_start;
+        }
+    }
+
+    let float_syntax = has_trailing_digits || (has_leading_digits && has_exponent);
+    pos == bytes.len() && (has_leading_digits || float_syntax)
 }
 
 /// A compact handle to a deduplicated symbol-name atom. Runtime-local only.

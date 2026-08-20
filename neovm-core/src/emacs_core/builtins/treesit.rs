@@ -11,7 +11,7 @@ use tree_sitter_language::LanguageFn;
 use crate::buffer::{Buffer, BufferId, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use crate::emacs_core::buffer::expect_buffer_id;
 use crate::emacs_core::emacs_char::byte_to_char_pos;
-use crate::emacs_core::intern::{NIL_SYM_ID, SymId, resolve_sym};
+use crate::emacs_core::intern::{NIL_SYM_ID, SymId, intern, resolve_sym};
 use crate::emacs_core::treesit::{
     self as runtime, NODE_SLOT_PARSER, PARSER_SLOT_EMBED_LEVEL, PARSER_SLOT_LANGUAGE,
     PARSER_SLOT_NOTIFIERS, PARSER_SLOT_TAG, ParserFreshness, ParserInputRevision,
@@ -1556,7 +1556,7 @@ pub(crate) fn builtin_treesit_induce_sparse_tree(
     ) {
         Ok(Some(tree)) => Ok(tree),
         Ok(None) => Ok(Value::NIL),
-        Err(Flow::Signal(sig)) if sig.symbol_name() == "treesit-predicate-not-found" => {
+        Err(Flow::Signal(sig)) if sig.symbol == intern("treesit-predicate-not-found") => {
             Ok(Value::NIL)
         }
         Err(err) => Err(err),
@@ -2945,7 +2945,7 @@ pub(crate) fn builtin_treesit_search_forward(
     ) {
         Ok(Some(node)) => Ok(make_node_value_for_parser(eval, handle.parser_id, node)),
         Ok(None) => Ok(Value::NIL),
-        Err(Flow::Signal(sig)) if sig.symbol_name() == "treesit-predicate-not-found" => {
+        Err(Flow::Signal(sig)) if sig.symbol == intern("treesit-predicate-not-found") => {
             Ok(Value::NIL)
         }
         Err(err) => Err(err),
@@ -2982,7 +2982,7 @@ pub(crate) fn builtin_treesit_search_subtree(
     ) {
         Ok(Some(node)) => Ok(make_node_value_for_parser(eval, handle.parser_id, node)),
         Ok(None) => Ok(Value::NIL),
-        Err(Flow::Signal(sig)) if sig.symbol_name() == "treesit-predicate-not-found" => {
+        Err(Flow::Signal(sig)) if sig.symbol == intern("treesit-predicate-not-found") => {
             Ok(Value::NIL)
         }
         Err(err) => Err(err),

@@ -46,10 +46,7 @@ fn load_error_formatting_handles_raw_unibyte_symbol_names() {
     let name = crate::heap_types::LispString::from_unibyte(vec![0xff]);
     let symbol = crate::emacs_core::intern::intern_lisp_string(&name);
 
-    assert_eq!(
-        format_value_for_error(&Value::from_sym_id(symbol)),
-        "\u{fffd}"
-    );
+    assert_eq!(format_value_for_error(&Value::from_sym_id(symbol)), r"\xFF");
 }
 
 #[test]
@@ -60,7 +57,7 @@ fn load_error_formatting_preserves_unibyte_symbol_encoding() {
 
     assert_eq!(
         format_value_for_error(&Value::from_sym_id(symbol)),
-        "\u{fffd}\u{fffd}"
+        r"\xC3\xA9"
     );
 }
 
@@ -70,14 +67,10 @@ fn load_error_formatting_handles_raw_unibyte_signal_names() {
     let eval = Context::new();
     let name = crate::heap_types::LispString::from_unibyte(vec![0xff]);
     let symbol = crate::emacs_core::intern::intern_lisp_string(&name);
-    let error = EvalError::Signal {
-        symbol,
-        data: Vec::new(),
-        raw_data: None,
-    };
+    let error = EvalError::signal(symbol, Vec::new(), None);
 
-    assert_eq!(format_load_form_error(&error), "(\u{fffd} nil)");
-    assert_eq!(format_eval_error_in_state(&eval, &error), "(\u{fffd} nil)");
+    assert_eq!(format_load_form_error(&error), r"(\xFF nil)");
+    assert_eq!(format_eval_error_in_state(&eval, &error), r"(\xFF nil)");
 }
 
 fn isolated_runtime_bootstrap_eval() -> Context {
@@ -9753,9 +9746,16 @@ fn load_replaces_t_user_init_file_with_found_filename() {
     fs::write(&file, "(setq vm-user-init-file-seen user-init-file)\n").expect("write fixture");
 
     let mut eval = super::super::eval::Context::new();
-    eval.set_variable("user-init-file", Value::T);
+    eval.set_variable(
+        "load-path",
+        Value::list(vec![Value::heap_string(
+            crate::emacs_core::fileio::path_to_lisp_file_name(temp.path()),
+        )]),
+    );
 
-    let loaded = load_file(&mut eval, &file).expect("load fixture");
+    let loaded = eval
+        .eval_str(r#"(progn (setq user-init-file t) (load "init"))"#)
+        .expect("load fixture through load-path resolution");
     assert_eq!(loaded, Value::T);
 
     let expected = crate::emacs_core::fileio::host_path_to_lisp_file_name_string(&file);
@@ -9772,6 +9772,34 @@ fn load_replaces_t_user_init_file_with_found_filename() {
             .and_then(|value| value.as_utf8_str()),
         Some(expected.as_str()),
         "the resolved filename must persist after loading",
+    );
+}
+
+#[test]
+fn after_load_error_formatting_handles_raw_unibyte_signal_names() {
+    crate::test_utils::init_test_tracing();
+    let temp = tempdir().expect("tempdir");
+    let file = temp.path().join("after-load-raw-signal.el");
+    fs::write(&file, "(setq vm-after-load-raw-signal-file-loaded t)\n").expect("write fixture");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.eval_str(
+        r##"(fset 'do-after-load-evaluation
+               (lambda (_file)
+                 (let ((condition (intern (unibyte-string 255))))
+                   (put condition 'error-conditions (list condition 'error))
+                   (signal condition nil))))"##,
+    )
+    .expect("install raw-signal after-load hook");
+
+    let loaded = load_file(&mut eval, &file)
+        .expect("a raw condition name in an after-load error must remain reportable");
+    assert_eq!(loaded, Value::T);
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("vm-after-load-raw-signal-file-loaded")
+            .copied(),
+        Some(Value::T),
     );
 }
 

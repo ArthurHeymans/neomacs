@@ -665,8 +665,56 @@ fn sym_id_debug_handles_raw_unibyte_symbol_names() {
     let rendered = format!("{id:?}");
 
     assert!(
-        rendered == format!("SymId({})", id.0)
-            || rendered == format!("SymId({} <1 raw byte>)", id.0),
+        rendered == format!("SymId({})", id.0) || rendered == format!(r"SymId({} \xFF)", id.0),
         "got {rendered}"
+    );
+}
+
+#[test]
+fn symbol_diagnostics_preserve_unibyte_name_identity() {
+    crate::test_utils::init_test_tracing();
+    let raw_utf8_bytes = intern_lisp_string(&unibyte_name(&[0xc3, 0xa9]));
+    let raw_high_byte = intern_lisp_string(&unibyte_name(&[0xff]));
+    let unicode = intern_lisp_string(&crate::heap_types::LispString::from_utf8("é"));
+    let literal_escape = intern(r"\303\251");
+    let numeric = intern("377");
+
+    assert_eq!(
+        format_symbol_name_for_diagnostic(raw_utf8_bytes),
+        r"\xC3\xA9"
+    );
+    assert_eq!(format_symbol_name_for_diagnostic(raw_high_byte), r"\xFF");
+    assert_eq!(format_symbol_name_for_diagnostic(unicode), "é");
+    assert_eq!(
+        format_symbol_name_for_diagnostic(literal_escape),
+        r"\\303\\251"
+    );
+    assert_eq!(format_symbol_name_for_diagnostic(numeric), r"\377");
+    assert_ne!(
+        format_symbol_name_for_diagnostic(raw_high_byte),
+        format_symbol_name_for_diagnostic(numeric)
+    );
+    assert_eq!(format_symbol_name_for_diagnostic(intern("?")), r"\?");
+}
+
+#[test]
+fn symbol_diagnostics_use_the_lisp_visible_name_object() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let symbol_id = intern("diagnostic-live-name-object-probe");
+    let symbol = crate::emacs_core::value::Value::from_sym_id(symbol_id);
+    let name = crate::emacs_core::builtins::misc_pure::builtin_symbol_name_1(&mut eval, symbol)
+        .expect("symbol-name should materialize the Lisp-visible name object");
+
+    crate::emacs_core::builtins::collections::builtin_aset(vec![
+        name,
+        crate::emacs_core::value::Value::fixnum(0),
+        crate::emacs_core::value::Value::fixnum('X' as i64),
+    ])
+    .expect("GNU permits mutation of the stored symbol-name string");
+
+    assert_eq!(
+        format_symbol_name_for_diagnostic(symbol_id),
+        "Xiagnostic-live-name-object-probe"
     );
 }

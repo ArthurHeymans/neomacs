@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 
-use super::intern::{SymId, intern, resolve_sym};
+use super::intern::{SymId, format_symbol_name_for_diagnostic, intern, resolve_sym};
 use super::print::PrintOptions;
 use super::string_escape::{format_lisp_string_bytes_emacs, format_lisp_string_emacs};
 use super::value::{Value, ValueKind, VecLikeType, get_string_text_properties_for_value};
@@ -85,7 +85,7 @@ impl Display for EvalError {
             } => write!(
                 f,
                 "signal {} {}",
-                resolve_sym(*symbol),
+                format_symbol_name_for_diagnostic(*symbol),
                 format_signal_payload(raw_data.as_ref(), data),
             ),
             Self::UncaughtThrow { tag, value, .. } => write!(
@@ -689,10 +689,9 @@ pub(crate) fn signal_from_binding_value(value: Value) -> Option<Flow> {
     };
     let pair_car = value.cons_car();
     let pair_cdr = value.cons_cdr();
-    let symbol = pair_car;
     let tail = pair_cdr;
-    let symbol_name = symbol.as_symbol_name()?;
-    Some(signal_with_data(symbol_name, tail))
+    let symbol_id = pair_car.as_symbol_id()?;
+    Some(signal_with_data_id(symbol_id, tail))
 }
 
 /// Format an eval result for the compat test harness (TSV output).
@@ -706,7 +705,11 @@ pub fn format_eval_result(result: &Result<Value, EvalError>) -> String {
             ..
         }) => {
             let payload = format_signal_payload(raw_data.as_ref(), data);
-            format!("ERR ({} {})", resolve_sym(*symbol), payload)
+            format!(
+                "ERR ({} {})",
+                format_symbol_name_for_diagnostic(*symbol),
+                payload
+            )
         }
         Err(EvalError::UncaughtThrow { tag, value, .. }) => {
             format!(
@@ -1669,7 +1672,11 @@ pub(crate) fn format_signal_data_with_eval(
     sig: &SignalData,
 ) -> String {
     let payload = print_signal_payload_with_eval(eval, sig.raw_data.as_ref(), &sig.data);
-    format!("({} {})", sig.symbol_name(), payload)
+    format!(
+        "({} {})",
+        format_symbol_name_for_diagnostic(sig.symbol),
+        payload
+    )
 }
 
 /// Render non-local control flow in Lisp-readable form for diagnostics.
@@ -1714,7 +1721,11 @@ pub fn format_eval_result_with_eval(
             ..
         }) => {
             let payload = print_signal_payload_with_eval(eval, raw_data.as_ref(), data);
-            format!("ERR ({} {})", resolve_sym(*symbol), payload)
+            format!(
+                "ERR ({} {})",
+                format_symbol_name_for_diagnostic(*symbol),
+                payload
+            )
         }
         Err(EvalError::UncaughtThrow { tag, value, .. }) => {
             format!(
@@ -1771,7 +1782,7 @@ pub fn format_eval_result_bytes_with_eval(
             ..
         }) => {
             out.extend_from_slice(b"ERR (");
-            out.extend_from_slice(resolve_sym(*symbol).as_bytes());
+            append_print_value_bytes_with_eval(eval, &Value::from_sym_id(*symbol), &mut out);
             out.push(b' ');
             append_signal_payload_bytes_with_eval(eval, raw_data.as_ref(), data, &mut out);
             out.push(b')');
@@ -1922,8 +1933,12 @@ impl super::eval::Context {
         // aborting a minibuffer reports like any other quit but must never take
         // the session down, not even before the first frame is displayed.
         let is_minibuffer_quit = data.is_cons()
-            && data.cons_car().as_symbol_name().is_some_and(|symbol| {
-                super::errors::signal_matches_hierarchical(&self.obarray, symbol, "minibuffer-quit")
+            && data.cons_car().as_symbol_id().is_some_and(|symbol| {
+                super::errors::signal_matches_hierarchical_sym(
+                    &self.obarray,
+                    symbol,
+                    intern("minibuffer-quit"),
+                )
             });
         if !is_minibuffer_quit && self.noninteractive() {
             eprintln!("{context_text}{rendered}");

@@ -25,7 +25,8 @@ use super::doc::{STARTUP_VARIABLE_DOC_STRING_PROPERTIES, STARTUP_VARIABLE_DOC_ST
 use super::error::*;
 use super::interactive::InteractiveRegistry;
 use super::intern::{
-    SymId, intern, intern_uninterned, is_canonical_id, is_keyword_id, resolve_sym, symbol_name_id,
+    SymId, format_symbol_name_for_diagnostic, intern, intern_uninterned, is_canonical_id,
+    is_keyword_id, resolve_sym, symbol_name_id,
 };
 use super::keymap::{list_keymap_define, list_keymap_set_parent, make_sparse_list_keymap};
 use super::kmacro::KmacroManager;
@@ -1430,6 +1431,10 @@ cached_symbol_id!(
 cached_symbol_id!(memory_full_symbol, "memory-full");
 cached_symbol_id!(gc_elapsed_symbol, "gc-elapsed");
 cached_symbol_id!(gcs_done_symbol, "gcs-done");
+cached_symbol_id!(error_symbol, "error");
+cached_symbol_id!(quit_symbol, "quit");
+cached_symbol_id!(invalid_function_symbol, "invalid-function");
+cached_symbol_id!(error_conditions_symbol, "error-conditions");
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn is_lambda_like_symbol_id(id: SymId) -> bool {
@@ -3814,8 +3819,7 @@ impl Context {
     }
 
     fn canonicalize_signal_symbol(&self, sig: SignalData) -> SignalData {
-        let sym_name = sig.symbol_name();
-        if sym_name == "error" || sym_name == "quit" {
+        if sig.symbol == error_symbol() || sig.symbol == quit_symbol() {
             return sig;
         }
         // GNU `signal_or_quit` reads `error-conditions` directly from the
@@ -3827,14 +3831,14 @@ impl Context {
         // canonicalize to "Invalid error symbol".  Use identity instead.
         if self
             .obarray
-            .get_property_id(sig.symbol, intern("error-conditions"))
+            .get_property_id(sig.symbol, error_conditions_symbol())
             .is_some()
         {
             return sig;
         }
 
         SignalData::new(
-            intern("error"),
+            error_symbol(),
             vec![
                 Value::string("Invalid error symbol"),
                 Value::from_sym_id(sig.symbol),
@@ -3869,10 +3873,10 @@ impl Context {
         }
 
         let conditions = self.signal_conditions_value(sig);
-        let debug_setting = if crate::emacs_core::errors::signal_matches_hierarchical(
+        let debug_setting = if crate::emacs_core::errors::signal_matches_condition_value_sym(
             &self.obarray,
-            sig.symbol_name(),
-            "quit",
+            sig.symbol,
+            &Value::from_sym_id(quit_symbol()),
         ) {
             self.obarray
                 .symbol_value("debug-on-quit")
@@ -3901,7 +3905,7 @@ impl Context {
         // empty/`(SYMBOL)' fallback a name-based lookup of a different interned
         // symbol would give.
         self.obarray
-            .get_property_id(sig.symbol, intern("error-conditions"))
+            .get_property_id(sig.symbol, error_conditions_symbol())
             .unwrap_or_else(|| Value::list(vec![Value::from_sym_id(sig.symbol)]))
     }
 
@@ -3982,7 +3986,7 @@ impl Context {
         let rendered = super::error::format_signal_data_with_eval(self, sig);
         tracing::error!(
             "entering Lisp debugger for signal: symbol={} data={}",
-            sig.symbol_name(),
+            format_symbol_name_for_diagnostic(sig.symbol),
             rendered
         );
         let specpdl_count = self.specpdl.len();
@@ -7016,7 +7020,7 @@ impl Context {
                 Err(Flow::Signal(sig)) => {
                     // Error in command loop — display and restart.
                     // Mirrors cmd_error() in keyboard.c.
-                    let sym_name = sig.symbol_name().to_string();
+                    let sym_name = format_symbol_name_for_diagnostic(sig.symbol);
                     let error_msg = self.display_command_error(&sig);
                     // Render the *condition symbol* and full signal payload, not
                     // just the human message: a bare "peculiar error" (an error
@@ -7040,7 +7044,7 @@ impl Context {
                     self.assign("prefix-arg", Value::NIL);
 
                     // Ring the bell for quit signals
-                    if sym_name == "quit" {
+                    if sig.symbol == quit_symbol() {
                         let _ = super::builtins::dispatch_builtin(self, "ding", vec![]);
                     }
 
@@ -7061,7 +7065,7 @@ impl Context {
                         .as_lisp_string()
                         .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
                 })
-                .unwrap_or_else(|| sig.symbol_name().to_string());
+                .unwrap_or_else(|| format_symbol_name_for_diagnostic(sig.symbol));
         let _ = super::builtins::dispatch_builtin(self, "message", vec![Value::string(&error_msg)]);
         error_msg
     }
@@ -7380,7 +7384,7 @@ impl Context {
                         return exec_result;
                     }
                     Flow::Signal(sig) => {
-                        let sym_name = sig.symbol_name().to_string();
+                        let sym_name = format_symbol_name_for_diagnostic(sig.symbol);
                         let error_msg = self.display_command_error(sig);
                         // Signal-dispatch-time backtrace (debug tracing only) — see
                         // `dispatch_signal`. This is the primary command-error path
@@ -11426,7 +11430,7 @@ impl Context {
         let result = self.apply_untraced(function, args);
         match &result {
             Err(Flow::Signal(sig))
-                if sig.symbol_name() == "invalid-function" && !function_is_callable =>
+                if !function_is_callable && sig.symbol == invalid_function_symbol() =>
             {
                 Err(signal(
                     LispCondition::InvalidFunction,
@@ -11479,7 +11483,7 @@ impl Context {
         let result = self.funcall_general_untraced(function, args);
         match &result {
             Err(Flow::Signal(sig))
-                if sig.symbol_name() == "invalid-function" && !function_is_callable =>
+                if !function_is_callable && sig.symbol == invalid_function_symbol() =>
             {
                 Err(signal(
                     LispCondition::InvalidFunction,
@@ -11510,7 +11514,7 @@ impl Context {
                 let result = self.funcall_general_untraced(func, args);
                 match &result {
                     Err(Flow::Signal(sig))
-                        if sig.symbol_name() == "invalid-function" && !function_is_callable =>
+                        if !function_is_callable && sig.symbol == invalid_function_symbol() =>
                     {
                         Err(signal(
                             LispCondition::InvalidFunction,
@@ -15495,7 +15499,7 @@ impl Context {
 
                 match self.apply_untraced(func, args) {
                     Err(Flow::Signal(sig))
-                        if sig.symbol_name() == "invalid-function" && !function_is_callable =>
+                        if !function_is_callable && sig.symbol == invalid_function_symbol() =>
                     {
                         Err(signal(
                             LispCondition::InvalidFunction,
@@ -15543,7 +15547,7 @@ impl Context {
 
                 match self.apply(func, args) {
                     Err(Flow::Signal(sig))
-                        if sig.symbol_name() == "invalid-function" && !function_is_callable =>
+                        if !function_is_callable && sig.symbol == invalid_function_symbol() =>
                     {
                         Err(signal(
                             LispCondition::InvalidFunction,
@@ -15635,7 +15639,7 @@ impl Context {
         let function_is_callable = self.function_value_is_callable(&function);
         match self.apply_untraced(function, args) {
             Err(Flow::Signal(sig))
-                if sig.symbol_name() == "invalid-function" && !function_is_callable =>
+                if !function_is_callable && sig.symbol == invalid_function_symbol() =>
             {
                 Err(signal(
                     LispCondition::InvalidFunction,
