@@ -426,6 +426,34 @@ pub(crate) fn signal_before_text_change(
     Ok(())
 }
 
+/// The before-change signal for an insertion, which needs a POSITION and not a
+/// measured change.
+///
+/// GNU's insertion core signals `prepare_to_modify_buffer (PT, PT, NULL)` --
+/// `insert_from_string_1` (src/insdel.c:1043), `insert_from_buffer_1`
+/// (:1287), `insert_1_both` (:906).  Both ends are `PT`, so the range is
+/// empty: the text about to be inserted is deliberately not part of what the
+/// hook is told about, which is exactly why GNU is free to read that text
+/// afterwards (`copy_text` at :1053, `string_intervals` at :1093).
+///
+/// Taking `EmacsBytePos` rather than a `TextChange` is the load-bearing part.
+/// A `TextChange` carries the NEW extent, so a caller had to measure -- and in
+/// practice fully materialize -- the inserted text before it could signal.
+/// This signature removes that obligation from the type, so the pre-hook
+/// snapshot cannot be reintroduced by accident.  See DIVERGENCES.md 164.
+pub(crate) fn signal_before_insertion_at_emacs_byte_pos(
+    ctx: &mut crate::emacs_core::eval::Context,
+    byte_pos: EmacsBytePos,
+) -> Result<(), Flow> {
+    signal_before_change_with_kind(
+        ctx,
+        EmacsByteRange::from_start_len(byte_pos, EmacsByteLen::ZERO),
+        BufferChangeKind::Characters,
+    )?;
+    deactivate_mark_after_preparing_change(ctx);
+    Ok(())
+}
+
 /// Run GNU's modification-hook protocol for a text-property-only change.
 /// Tree-sitter consumes characters, not properties, so this deliberately does
 /// not create an incremental parser edit.
@@ -646,6 +674,16 @@ pub(crate) fn signal_after_property_change(
 /// decoded `LispString`: select the buffer whose hooks and read-only state
 /// govern the edit, signal the paired change notifications, perform the raw
 /// storage mutation, and restore the caller's current buffer on every exit.
+///
+/// `text` is read AFTER `signal_before_text_change`, i.e. after arbitrary Lisp.
+/// That is sound only because every caller passes a borrow of a local it owns
+/// outright -- a freshly decoded `run.text`, a `LispString::from_utf8` -- which
+/// no hook can reach, let alone collect. DIVERGENCES.md 163 §10 named this a
+/// latent trap because the signature does not say so and a caller passing
+/// `value.as_lisp_string()?` would compile; 164 shows what saying so looks
+/// like, at the `insert` door: carry the `Value`, root it, and take the borrow
+/// past the safepoint (`PendingInsert` in `emacs_core/buffer.rs`). Anything
+/// added here that wants to pass a heap borrow must do that instead.
 pub(crate) fn insert_lisp_string_with_change_hooks_in_buffer(
     ctx: &mut crate::emacs_core::eval::Context,
     buffer_id: crate::buffer::BufferId,

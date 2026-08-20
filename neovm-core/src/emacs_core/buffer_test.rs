@@ -237,3 +237,183 @@ fn a_point_saved_in_one_buffer_is_not_recorded_in_another_like_gnu() {
         r#"OK (7 "((6 . 7) nil (1 . 7) (t . 0))")"#,
     );
 }
+
+/// GNU reads an inserted string's BYTES and INTERVALS *after*
+/// `before-change-functions`, not before.  `insert_from_string_1`
+/// (src/insdel.c:1020-1098) takes `nchars`/`nbytes` from the caller --
+/// `general_insert_function` passes `SCHARS (val)` / `SBYTES (val)`
+/// (src/editfns.c:1337-1340) -- but `prepare_to_modify_buffer (PT, PT, NULL)`
+/// (src/insdel.c:1043), which is what runs the hook, sits BETWEEN that
+/// snapshot and both `copy_text (SDATA (string) + pos_byte, ...)`
+/// (src/insdel.c:1053) and `intervals = string_intervals (string)`
+/// (src/insdel.c:1093).
+///
+/// This is sound in GNU for a reason worth naming, because it is what makes
+/// the same shape sound here: `Faset` on a string (src/data.c:2658-2681) is
+/// strictly length-preserving in BOTH chars and bytes -- multibyte strings
+/// take ASCII-for-ASCII in place, unibyte strings take `SSET` -- so no Lisp
+/// operation can invalidate the pre-hook `nchars`/`nbytes`.  Only the bytes
+/// behind the pointer and the interval tree can move, and GNU re-reads both
+/// through `string` (a rooted `Lisp_Object`) at the point of use.
+///
+/// We materialized the whole `InsertPiece` -- converted bytes AND a clone of
+/// the text-property table -- before signalling, so a hook that mutated or
+/// propertized the string it was about to see inserted was invisible.
+///
+/// Verified against GNU Emacs 31.0.90; see DIVERGENCES.md 163 §10 and 164.
+#[test]
+fn insert_reads_the_string_after_before_change_functions_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s (copy-sequence "abcdefgh")))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (aset s 0 ?Z))))
+                 (insert s)
+                 (buffer-string))"#
+        )),
+        r#"OK "Zbcdefgh""#,
+        "GNU's copy_text runs after prepare_to_modify_buffer"
+    );
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s (copy-sequence "abcdefgh")))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (aset s 1 ?Y))))
+                 (insert-before-markers s)
+                 (buffer-string))"#
+        )),
+        r#"OK "aYcdefgh""#,
+        "insert-before-markers shares insert_from_string_1"
+    );
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s (copy-sequence "abcdefgh")))
+                 (setq before-change-functions
+                       (list (lambda (&rest _)
+                                     (put-text-property 0 3 'face 'bold s))))
+                 (insert s)
+                 (get-text-property 1 'face))"#
+        )),
+        "OK bold",
+        "GNU grafts string_intervals (string) read after the hook"
+    );
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s (copy-sequence "abcdefgh")))
+                 (insert s)
+                 (buffer-string))"#
+        )),
+        r#"OK "abcdefgh""#,
+        "control: no hook, unchanged"
+    );
+}
+
+/// The other three doors into GNU's `general_insert_function`
+/// (src/editfns.c:1373-1424) reach the same `insert_from_string_1`, so the
+/// late read is not a property of `insert` alone.  Pinned separately from the
+/// `insert` case so a regression names which door it came through.
+///
+/// The `set-text-properties` row is the inverse of the `put-text-property`
+/// one and is the reason the fix cannot be "merge the hook's properties into
+/// the snapshot": GNU takes `string_intervals (string)` wholesale after the
+/// hook (src/insdel.c:1093), so properties the hook REMOVED are gone too.
+///
+/// Verified against GNU Emacs 31.0.90.
+#[test]
+fn every_insert_door_reads_the_string_after_the_change_hook_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s (copy-sequence "abcdefgh")))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (aset s 0 ?Z))))
+                 (insert-and-inherit s)
+                 (buffer-string))"#
+        )),
+        r#"OK "Zbcdefgh""#,
+        "insert-and-inherit"
+    );
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s (copy-sequence "abcdefgh")))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (aset s 2 ?W))))
+                 (insert-before-markers-and-inherit s)
+                 (buffer-string))"#
+        )),
+        r#"OK "abWdefgh""#,
+        "insert-before-markers-and-inherit"
+    );
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s (propertize (copy-sequence "abcdefgh") 'face 'italic)))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (set-text-properties 0 8 nil s))))
+                 (insert s)
+                 (get-text-property 1 'face))"#
+        )),
+        "OK nil",
+        "a hook that strips properties is observed too: GNU reads the whole \
+         interval tree after the hook, it does not merge"
+    );
+
+    // The loop shape: only the argument the hook mutates changes, and the
+    // hook fires once per argument, so argument 1 is already in the buffer
+    // when the mutation lands.  GNU: "aaaZbb".
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s1 (copy-sequence "aaa")) (s2 (copy-sequence "bbb")))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (aset s2 0 ?Z))))
+                 (insert s1 s2)
+                 (buffer-string))"#
+        )),
+        r#"OK "aaaZbb""#,
+        "one before-change signal per argument, mutation seen by argument 2"
+    );
+
+    // A character argument has nothing a hook can mutate, and GNU converts it
+    // eagerly (`CHAR_STRING`, src/editfns.c:1327).  Control for the split.
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(progn (setq before-change-functions (list (lambda (&rest _) nil)))
+                      (insert ?a ?b ?c)
+                      (buffer-string))"#
+        )),
+        r#"OK "abc""#,
+        "character arm unaffected"
+    );
+
+    // An empty string returns before `prepare_to_modify_buffer`, so it runs
+    // no hook at all (`insert_from_string`, src/insdel.c:986-987).  GNU: (1 "a").
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((n 0))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (setq n (1+ n)))))
+                 (insert "")
+                 (insert "a")
+                 (list n (buffer-string)))"#
+        )),
+        r#"OK (1 "a")"#,
+        "empty argument signals nothing"
+    );
+}

@@ -3345,38 +3345,38 @@ fn remap_old_byte_to_new_boundary(
     lisp_string_advance_byte_to_boundary(new_storage, new_byte)
 }
 
-/// Convert one `insert` argument into the text that GNU's
-/// `general_insert_function` would hand to `insert`/`insert_from_string`
-/// (src/editfns.c:1307-1345).
+/// Convert the CHARACTER arm of one `insert` argument into buffer text, as
+/// GNU's `general_insert_function` does with `CHAR_STRING (c, str)` /
+/// `CHAR_TO_BYTE8 (c)` (src/editfns.c:1320-1333).
 ///
 /// GNU converts and inserts one argument at a time, so this deliberately takes
 /// a single argument: hoisting the conversion of the whole argument vector
 /// above the first insertion is exactly what made a valid prefix disappear when
 /// a later argument was neither a character nor a string.
-fn insert_piece_from_arg(arg: Value, target_multibyte: bool) -> Result<InsertPiece, Flow> {
-    match arg.kind() {
-        ValueKind::String => buffer_insert_piece_from_string(arg, target_multibyte),
-        ValueKind::Fixnum(c) => {
-            let code = u32::try_from(c).ok();
-            let text = code
-                .and_then(|code| encode_char_code_for_buffer_bytes(code, target_multibyte))
-                .map(|bytes| lisp_string_from_buffer_bytes(bytes, target_multibyte))
-                .ok_or_else(|| {
-                    signal(
-                        LispCondition::WrongTypeArgument,
-                        vec![Value::symbol("char-or-string-p"), arg],
-                    )
-                })?;
-            Ok(InsertPiece {
-                text,
-                text_props: None,
-            })
-        }
-        _other => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("char-or-string-p"), arg],
-        )),
-    }
+///
+/// This is the only arm converted before the change hook, and the signature
+/// says why: a `Fixnum` code point is a value, not a heap object, so there is
+/// nothing here for `before-change-functions` to mutate.  The string arm is
+/// `PendingInsert::materialize`, deliberately after the hook.
+fn insert_piece_from_char_arg(
+    code_point: i64,
+    arg: Value,
+    target_multibyte: bool,
+) -> Result<InsertPiece, Flow> {
+    let text = u32::try_from(code_point)
+        .ok()
+        .and_then(|code| encode_char_code_for_buffer_bytes(code, target_multibyte))
+        .map(|bytes| lisp_string_from_buffer_bytes(bytes, target_multibyte))
+        .ok_or_else(|| {
+            signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("char-or-string-p"), arg],
+            )
+        })?;
+    Ok(InsertPiece {
+        text,
+        text_props: None,
+    })
 }
 
 pub(crate) fn apply_inherited_text_properties(
@@ -3411,25 +3411,6 @@ pub(crate) fn apply_inherited_text_properties(
         let _ = buffers
             .put_buffer_text_property_in_emacs_byte_range(current_id, byte_range, *name, *value);
     }
-}
-
-/// Thread every interval plist an insert-piece set holds onto one heap list.
-/// The pieces' TextPropertyTable clones SHARE the source strings' plist cons
-/// spines; a before-change hook that set-text-properties the source strings
-/// unlinks those spines from their rooted homes, and a GC would free the
-/// plists the insert then writes into the buffer.
-fn insert_pieces_root_holder(pieces: &[InsertPiece]) -> Value {
-    let mut holder = Value::NIL;
-    for piece in pieces {
-        if let Some(props) = &piece.text_props {
-            props.for_each_root(|plist| {
-                if plist.is_heap_object() {
-                    holder = Value::cons(plist, holder);
-                }
-            });
-        }
-    }
-    holder
 }
 
 /// Where markers exactly at an insertion site are placed.
@@ -3478,28 +3459,127 @@ fn general_insert_function(
 ) -> EvalResult {
     for arg in args {
         let target_multibyte = current_buffer_multibyte(&eval.buffers)?;
-        let piece = insert_piece_from_arg(*arg, target_multibyte)?;
-        insert_one_piece(eval, piece, marker_placement, property_mode)?;
+        let Some(pending) = PendingInsert::classify(*arg, target_multibyte)? else {
+            continue;
+        };
+        insert_one_pending(
+            eval,
+            pending,
+            target_multibyte,
+            marker_placement,
+            property_mode,
+        )?;
     }
     Ok(Value::NIL)
 }
 
-/// Insert exactly one converted argument, with its own before/after change
-/// signals, mirroring one `insert`/`insert_from_string` call inside GNU's
+/// One `insert` argument, decided but not yet read.
+///
+/// GNU settles exactly two things about an argument before any hook can run:
+/// whether it is a character or a string (`general_insert_function`,
+/// src/editfns.c:1320-1343, which signals `char-or-string-p` here), and, for a
+/// string, whether it is empty (`insert_from_string`, src/insdel.c:986-987,
+/// returns for `SCHARS (string) == 0` before `insert_from_string_1` is
+/// entered).  Everything else about a string -- its bytes and its intervals --
+/// GNU reads AFTER `before-change-functions`: `prepare_to_modify_buffer (PT,
+/// PT, NULL)` (src/insdel.c:1043) sits between the caller's `SCHARS`/`SBYTES`
+/// snapshot and both `copy_text (SDATA (string) + pos_byte, ...)` (:1053) and
+/// `intervals = string_intervals (string)` (:1093).
+///
+/// Reading late is sound in GNU for a reason that is easy to miss and is the
+/// whole argument for reproducing the shape rather than working around it:
+///
+///  * the object is ROOTED.  `string` is a `Lisp_Object` in a C frame, which
+///    `mark_stack` scans conservatively, so the hook cannot collect it.
+///  * the pointer is RE-READ.  `SDATA` is a macro over
+///    `XSTRING (string)->u.s.data`, evaluated at each use, so a GC that
+///    relocated the payload (`compact_small_strings`, src/alloc.c) is
+///    invisible to the caller.
+///  * the LENGTH cannot go stale.  `Faset` on a string (src/data.c:2658-2681)
+///    is strictly length-preserving in chars and in bytes -- multibyte strings
+///    take ASCII-for-ASCII in place, unibyte strings take `SSET`, and every
+///    other case is an `error` -- so no Lisp operation can invalidate the
+///    pre-hook `nchars`/`nbytes`.
+///
+/// The `Str` arm therefore holds a `Value`, which can be rooted, and never a
+/// `&LispString`, which cannot.  That is the type-level statement of
+/// DIVERGENCES.md 163's thesis: the `&'static LispString` seam was survivable
+/// only because this path copied early, and copying early is what made it
+/// disagree with GNU.  Deferring the borrow to `materialize`, past the
+/// safepoint, is what lets both properties hold at once.
+enum PendingInsert {
+    /// A character argument, converted eagerly exactly as GNU does
+    /// (`CHAR_STRING (c, str)`, src/editfns.c:1327).  A fixnum has no bytes a
+    /// hook could reach, so there is nothing to defer.
+    Char(InsertPiece),
+    /// A string argument, held the way GNU holds it: as the Lisp object, to be
+    /// read after the hook.
+    Str(Value),
+}
+
+impl PendingInsert {
+    /// The pre-hook half of GNU's protocol: dispatch on type, reject anything
+    /// that is neither, and report an empty string as "nothing to do".
+    ///
+    /// `Ok(None)` is GNU's `SCHARS (string) == 0` early return, which happens
+    /// before `prepare_to_modify_buffer`, so an empty argument runs no hook at
+    /// all.  A character always yields at least one byte, so it is never
+    /// `None`.
+    fn classify(arg: Value, target_multibyte: bool) -> Result<Option<Self>, Flow> {
+        match arg.kind() {
+            ValueKind::String => {
+                let empty = arg
+                    .as_lisp_string()
+                    .is_none_or(|string| string.schars() == 0);
+                if empty {
+                    return Ok(None);
+                }
+                Ok(Some(Self::Str(arg)))
+            }
+            ValueKind::Fixnum(code_point) => Ok(Some(Self::Char(insert_piece_from_char_arg(
+                code_point,
+                arg,
+                target_multibyte,
+            )?))),
+            _other => Err(signal(
+                LispCondition::WrongTypeArgument,
+                vec![Value::symbol("char-or-string-p"), arg],
+            )),
+        }
+    }
+
+    /// The Lisp object that must stay reachable across the change hook, which
+    /// is what stands in for GNU's conservatively-scanned C frame.
+    fn source_root(&self) -> Value {
+        match self {
+            Self::Char(_) => Value::NIL,
+            Self::Str(value) => *value,
+        }
+    }
+
+    /// The post-hook half: read the bytes and the intervals now, the way GNU's
+    /// `copy_text` and `string_intervals (string)` do.
+    fn materialize(self, target_multibyte: bool) -> Result<InsertPiece, Flow> {
+        match self {
+            Self::Char(piece) => Ok(piece),
+            Self::Str(value) => buffer_insert_piece_from_string(value, target_multibyte),
+        }
+    }
+}
+
+/// Insert exactly one argument, with its own before/after change signals,
+/// mirroring one `insert`/`insert_from_string` call inside GNU's
 /// `general_insert_function` loop.
-fn insert_one_piece(
+///
+/// The ordering here is GNU's and is load-bearing: signal first, read the
+/// source second.  See `PendingInsert` for why reading second is safe.
+fn insert_one_pending(
     eval: &mut super::eval::Context,
-    piece: InsertPiece,
+    pending: PendingInsert,
+    target_multibyte: bool,
     marker_placement: InsertPieceMarkerPlacement,
     property_mode: InsertPiecePropertyMode,
 ) -> EvalResult {
-    let pieces = vec![piece];
-    let insert_extent = insert_pieces_extent(&pieces);
-    if insert_extent.is_empty() {
-        // GNU `insert_from_string` returns immediately for an empty string
-        // (src/insdel.c), so no change hook runs for an empty argument.
-        return Ok(Value::NIL);
-    }
     let current_id = eval
         .buffers
         .current_buffer_id()
@@ -3509,15 +3589,45 @@ fn insert_one_piece(
         .get(current_id)
         .map(Buffer::point_emacs_byte_pos)
         .unwrap_or(EmacsBytePos::ZERO);
+
+    // Root the SOURCE, which is the only thing that has to survive the hook,
+    // and which subsumes everything derived from it.
+    //
+    // GNU's `string` survives `prepare_to_modify_buffer` because it is a
+    // rooted `Lisp_Object`; this states the same guarantee explicitly instead
+    // of inheriting it from a conservative stack scan.  It also replaces the
+    // list of interval plists this function used to cons up before signalling:
+    // the piece's `TextPropertyTable` clone shares the source string's plist
+    // spines, and while the source is rooted those spines are reachable
+    // through it, exactly as GNU reaches them through `string_intervals
+    // (string)` (src/insdel.c:1093).  Rooting them separately was only
+    // necessary while the clone was taken BEFORE the hook, where a
+    // `set-text-properties` on the source could unlink a spine the clone still
+    // pointed at.  Materializing after the hook closes that window, so one
+    // root replaces a per-property cons chain on every propertized insert.
+    let piece_root_scope = eval.save_specpdl_roots();
+    let source_root = pending.source_root();
+    if source_root.is_heap_object() {
+        eval.push_specpdl_root(source_root);
+    }
+    super::editfns::signal_before_insertion_at_emacs_byte_pos(eval, insert_pos)?;
+
+    // Past the safepoint: now read the bytes and the intervals.
+    let pieces = vec![pending.materialize(target_multibyte)?];
+    let insert_extent = insert_pieces_extent(&pieces);
+    if insert_extent.is_empty() {
+        // GNU cannot reach this -- `Faset` cannot empty a string -- but a
+        // conversion that produced no bytes must not be handed to the after
+        // signal as a zero-width insertion that already ran a before signal.
+        eval.restore_specpdl_roots(piece_root_scope);
+        return Ok(Value::NIL);
+    }
     let change = current_empty_text_change_at_emacs_byte_pos(
         &eval.buffers,
         current_id,
         insert_pos,
         insert_extent,
     )?;
-    let piece_root_scope = eval.save_specpdl_roots();
-    eval.push_specpdl_root(insert_pieces_root_holder(&pieces));
-    super::editfns::signal_before_text_change(eval, change)?;
     insert_pieces_in_state(
         &eval.obarray,
         &[],

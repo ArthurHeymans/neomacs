@@ -1347,6 +1347,13 @@ fn apply_print_target_escape_bindings(
     }
 }
 
+/// `text` is read AFTER `signal_before_text_change`, i.e. after arbitrary
+/// Lisp. Sound today because every caller passes a borrow of a local it owns
+/// outright -- the printer's freshly built output -- which no hook can reach.
+/// DIVERGENCES.md 163 §10 named this a latent trap because the signature does
+/// not say so; 164 shows the shape that does, at the `insert` door: carry the
+/// `Value`, root it on the specpdl, and take the borrow past the safepoint
+/// (`PendingInsert` in `emacs_core/buffer.rs`).
 fn insert_print_lisp_string_with_hooks(
     ctx: &mut crate::emacs_core::eval::Context,
     buffer_id: crate::buffer::BufferId,
