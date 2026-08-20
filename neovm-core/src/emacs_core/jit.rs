@@ -27,7 +27,7 @@
 //! |---|---|---|
 //! | `NEOVM_JIT` | on | Kill switch: `0`/`off`/`false`/`no` forces the pure interpreter (the A/B baseline). |
 //! | `NEOVM_JIT_THRESHOLD` | 256 | Tier-up heat threshold; `=1` compiles every compilable function — the differential soak and the strictest oracle configuration. |
-//! | `NEOVM_JIT_LOOP_HEAT` | 1 | Heat credited per 256-iteration back-edge wrap (loop-aware tier-up); `=0` disables loop heat — the pre-loop-heat baseline. |
+//! | `NEOVM_JIT_LOOP_HEAT` | 8 | Heat credited per 256-iteration back-edge wrap (32 iterations ≈ one call; a hot loop tiers up near 32k iterations); `=0` disables loop heat — the pre-loop-heat baseline. |
 //! | `NEOVM_JIT_LEVER1` | on | Residual-rooting non-heap skip; `=off` reverts to an unconditional gc_push per residual (single-build A/B). |
 //! | `NEOVM_JIT_PROFIT` | on | Profitability gate (calls ≤ arith); `=off` also compiles call-heavy bodies. |
 //!
