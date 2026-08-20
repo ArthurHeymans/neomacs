@@ -21,11 +21,16 @@
 ;; Form 1 runs `aset' from inside `before-change-functions', so a string is
 ;; RELOCATED (`LispString::mutate_bytes') in the middle of an insert, while the
 ;; insert path holds a `&LispString'.  It deliberately mutates a DIFFERENT
-;; string from the one being inserted: mutating the inserted one is observable
-;; in GNU and not here, which is a real divergence but a divergence about WHEN
-;; the bytes are read, not about memory safety -- see DIVERGENCES.md 163 §10,
-;; "the insert path snapshots the string before the hook".  Pinning it here
-;; would make this probe fail for a reason it is not testing.
+;; string from the one being inserted, and that stays deliberate: this probe is
+;; about a borrow surviving a relocation elsewhere on the heap, which is a
+;; separate hazard from which snapshot the insert reads.
+;;
+;; 2026-08-20: when this was written, mutating the INSERTED string was a real
+;; divergence -- `insert' snapshotted its argument before the hook and GNU
+;; reads it after (DIVERGENCES.md 163 §10) -- so pinning it here would have
+;; failed for a reason this probe is not testing.  DIVERGENCES.md 164 landed
+;; that fix; the GNU answer is now pinned by probe 09, which mutates the
+;; string being inserted while consing hard.
 
 (defvar gc-stress-sink nil)
 (defvar gc-stress-other nil)

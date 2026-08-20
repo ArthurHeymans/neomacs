@@ -316,3 +316,104 @@ fn insert_reads_the_string_after_before_change_functions_like_gnu() {
         "control: no hook, unchanged"
     );
 }
+
+/// The other three doors into GNU's `general_insert_function`
+/// (src/editfns.c:1373-1424) reach the same `insert_from_string_1`, so the
+/// late read is not a property of `insert` alone.  Pinned separately from the
+/// `insert` case so a regression names which door it came through.
+///
+/// The `set-text-properties` row is the inverse of the `put-text-property`
+/// one and is the reason the fix cannot be "merge the hook's properties into
+/// the snapshot": GNU takes `string_intervals (string)` wholesale after the
+/// hook (src/insdel.c:1093), so properties the hook REMOVED are gone too.
+///
+/// Verified against GNU Emacs 31.0.90.
+#[test]
+fn every_insert_door_reads_the_string_after_the_change_hook_like_gnu() {
+    crate::test_utils::init_test_tracing();
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s (copy-sequence "abcdefgh")))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (aset s 0 ?Z))))
+                 (insert-and-inherit s)
+                 (buffer-string))"#
+        )),
+        r#"OK "Zbcdefgh""#,
+        "insert-and-inherit"
+    );
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s (copy-sequence "abcdefgh")))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (aset s 2 ?W))))
+                 (insert-before-markers-and-inherit s)
+                 (buffer-string))"#
+        )),
+        r#"OK "abWdefgh""#,
+        "insert-before-markers-and-inherit"
+    );
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s (propertize (copy-sequence "abcdefgh") 'face 'italic)))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (set-text-properties 0 8 nil s))))
+                 (insert s)
+                 (get-text-property 1 'face))"#
+        )),
+        "OK nil",
+        "a hook that strips properties is observed too: GNU reads the whole \
+         interval tree after the hook, it does not merge"
+    );
+
+    // The loop shape: only the argument the hook mutates changes, and the
+    // hook fires once per argument, so argument 1 is already in the buffer
+    // when the mutation lands.  GNU: "aaaZbb".
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((s1 (copy-sequence "aaa")) (s2 (copy-sequence "bbb")))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (aset s2 0 ?Z))))
+                 (insert s1 s2)
+                 (buffer-string))"#
+        )),
+        r#"OK "aaaZbb""#,
+        "one before-change signal per argument, mutation seen by argument 2"
+    );
+
+    // A character argument has nothing a hook can mutate, and GNU converts it
+    // eagerly (`CHAR_STRING`, src/editfns.c:1327).  Control for the split.
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(progn (setq before-change-functions (list (lambda (&rest _) nil)))
+                      (insert ?a ?b ?c)
+                      (buffer-string))"#
+        )),
+        r#"OK "abc""#,
+        "character arm unaffected"
+    );
+
+    // An empty string returns before `prepare_to_modify_buffer`, so it runs
+    // no hook at all (`insert_from_string`, src/insdel.c:986-987).  GNU: (1 "a").
+    let mut eval = crate::emacs_core::eval::Context::new();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            r#"(let ((n 0))
+                 (setq before-change-functions
+                       (list (lambda (&rest _) (setq n (1+ n)))))
+                 (insert "")
+                 (insert "a")
+                 (list n (buffer-string)))"#
+        )),
+        r#"OK (1 "a")"#,
+        "empty argument signals nothing"
+    );
+}

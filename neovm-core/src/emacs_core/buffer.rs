@@ -3413,34 +3413,6 @@ pub(crate) fn apply_inherited_text_properties(
     }
 }
 
-/// Thread every interval plist an insert-piece set holds onto one heap list.
-/// The pieces' TextPropertyTable clones SHARE the source strings' plist cons
-/// spines, so anything that unlinks a spine from its rooted home leaves the
-/// insert writing plists a GC may already have freed.
-///
-/// Since DIVERGENCES.md 164 the pieces are materialized AFTER
-/// `before-change-functions`, so the hook this originally guarded against can
-/// no longer run between the clone and the write.  The root is still pushed,
-/// and deliberately: `insert_pieces_in_state` allocates (buffer growth,
-/// property tables, marker adjustment), any allocation is a collection point,
-/// and the spines are reachable from the clone alone only for as long as the
-/// source string still holds them.  This is the same rule GNU applies to
-/// `intervals` between `string_intervals (string)` and
-/// `graft_intervals_into_buffer` (src/insdel.c:1093-1100).
-fn insert_pieces_root_holder(pieces: &[InsertPiece]) -> Value {
-    let mut holder = Value::NIL;
-    for piece in pieces {
-        if let Some(props) = &piece.text_props {
-            props.for_each_root(|plist| {
-                if plist.is_heap_object() {
-                    holder = Value::cons(plist, holder);
-                }
-            });
-        }
-    }
-    holder
-}
-
 /// Where markers exactly at an insertion site are placed.
 ///
 /// GNU threads this decision through its insertion core as a boolean.  A
@@ -3618,11 +3590,26 @@ fn insert_one_pending(
         .map(Buffer::point_emacs_byte_pos)
         .unwrap_or(EmacsBytePos::ZERO);
 
-    let piece_root_scope = eval.save_specpdl_roots();
+    // Root the SOURCE, which is the only thing that has to survive the hook,
+    // and which subsumes everything derived from it.
+    //
     // GNU's `string` survives `prepare_to_modify_buffer` because it is a
-    // rooted `Lisp_Object`; this is the same guarantee, stated explicitly
-    // rather than inherited from a stack scan.
-    eval.push_specpdl_root(pending.source_root());
+    // rooted `Lisp_Object`; this states the same guarantee explicitly instead
+    // of inheriting it from a conservative stack scan.  It also replaces the
+    // list of interval plists this function used to cons up before signalling:
+    // the piece's `TextPropertyTable` clone shares the source string's plist
+    // spines, and while the source is rooted those spines are reachable
+    // through it, exactly as GNU reaches them through `string_intervals
+    // (string)` (src/insdel.c:1093).  Rooting them separately was only
+    // necessary while the clone was taken BEFORE the hook, where a
+    // `set-text-properties` on the source could unlink a spine the clone still
+    // pointed at.  Materializing after the hook closes that window, so one
+    // root replaces a per-property cons chain on every propertized insert.
+    let piece_root_scope = eval.save_specpdl_roots();
+    let source_root = pending.source_root();
+    if source_root.is_heap_object() {
+        eval.push_specpdl_root(source_root);
+    }
     super::editfns::signal_before_insertion_at_emacs_byte_pos(eval, insert_pos)?;
 
     // Past the safepoint: now read the bytes and the intervals.
@@ -3635,7 +3622,6 @@ fn insert_one_pending(
         eval.restore_specpdl_roots(piece_root_scope);
         return Ok(Value::NIL);
     }
-    eval.push_specpdl_root(insert_pieces_root_holder(&pieces));
     let change = current_empty_text_change_at_emacs_byte_pos(
         &eval.buffers,
         current_id,
