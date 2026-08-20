@@ -106,6 +106,8 @@ struct BufferTextStorage {
     /// Content epoch at which the anchor_cache is valid.
     /// Mismatch triggers a wholesale clear on next read.
     anchor_cache_key: Cell<u64>,
+    /// Round-robin replacement cursor for the anchor ring.
+    anchor_cache_cursor: Cell<usize>,
 }
 
 impl BufferTextStorage {
@@ -207,6 +209,7 @@ impl Clone for BufferTextStorage {
             pos_cache: self.pos_cache.clone(),
             anchor_cache: self.anchor_cache.clone(),
             anchor_cache_key: self.anchor_cache_key.clone(),
+            anchor_cache_cursor: self.anchor_cache_cursor.clone(),
         }
     }
 }
@@ -269,6 +272,7 @@ impl BufferText {
                 pos_cache: Cell::new(PositionCache::default()),
                 anchor_cache: RefCell::new(Vec::new()),
                 anchor_cache_key: Cell::new(0),
+                anchor_cache_cursor: Cell::new(0),
             })),
         }
     }
@@ -2050,6 +2054,19 @@ impl BufferText {
         out
     }
 
+    /// Remember a completed scan's endpoint as a reusable anchor, replacing
+    /// round-robin once the ring is full.
+    fn remember_scan_anchor(storage: &BufferTextStorage, anchor: TextPositionAnchor) {
+        let mut cache = storage.anchor_cache.borrow_mut();
+        if cache.len() < POSITION_ANCHOR_RING_CAP {
+            cache.push(anchor);
+        } else {
+            let slot = storage.anchor_cache_cursor.get() % POSITION_ANCHOR_RING_CAP;
+            cache[slot] = anchor;
+            storage.anchor_cache_cursor.set(slot + 1);
+        }
+    }
+
     fn ensure_position_anchor_cache_current(storage: &BufferTextStorage, content_epoch: u64) {
         if storage.anchor_cache_key.get() != content_epoch {
             storage.anchor_cache.borrow_mut().clear();
@@ -2244,10 +2261,7 @@ impl BufferText {
         // walked more than POSITION_ANCHOR_STRIDE positions.
         let walked = bounds.min_char_walk(target);
         if walked.get() > POSITION_ANCHOR_STRIDE {
-            storage
-                .anchor_cache
-                .borrow_mut()
-                .push(TextPositionAnchor::new(target, result));
+            Self::remember_scan_anchor(&storage, TextPositionAnchor::new(target, result));
         }
 
         storage.pos_cache.set(PositionCache {
@@ -2377,10 +2391,7 @@ impl BufferText {
             // actually walked more than POSITION_ANCHOR_STRIDE positions.
             let walked = bounds.min_byte_walk(target);
             if walked.get() > POSITION_ANCHOR_STRIDE {
-                storage
-                    .anchor_cache
-                    .borrow_mut()
-                    .push(TextPositionAnchor::new(result, target));
+                Self::remember_scan_anchor(&storage, TextPositionAnchor::new(result, target));
             }
 
             storage.pos_cache.set(PositionCache {
@@ -2421,8 +2432,16 @@ const POSITION_DISTANCE_BASE: usize = 50;
 /// GNU `marker.c:162` — bracket-bail distance grows by this per marker checked.
 const POSITION_DISTANCE_INCR: usize = 50;
 /// Auto-insert an anchor when a scan walks more than this many positions.
-/// Mirrors GNU `marker.c:238-241` (5000-char threshold).
-const POSITION_ANCHOR_STRIDE: usize = 5000;
+/// GNU `marker.c:238-241` uses 5000, but GNU also gains a fresh anchor from
+/// every marker the session creates; without that ambient supply, repeated
+/// ~3KB scans between two hot regions (kill at line N / yank at EOB) never
+/// earned an anchor and re-walked the same span forever. The ring below is
+/// capped, so a lower threshold costs at most RING_CAP compares per lookup.
+const POSITION_ANCHOR_STRIDE: usize = 512;
+/// Bound on remembered scan anchors per epoch (round-robin replacement):
+/// keeps the per-conversion consider loop O(1) while covering several hot
+/// regions at once.
+const POSITION_ANCHOR_RING_CAP: usize = 16;
 
 struct ForwardMultibytePositionScan {
     byte_pos: EmacsBytePos,
