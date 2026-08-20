@@ -657,3 +657,16 @@ fn sym_id_debug_resolves_the_symbol_name() {
         "got {embedded}"
     );
 }
+
+#[test]
+fn sym_id_debug_handles_raw_unibyte_symbol_names() {
+    crate::test_utils::init_test_tracing();
+    let id = intern_lisp_string(&unibyte_name(&[0xff]));
+    let rendered = format!("{id:?}");
+
+    assert!(
+        rendered == format!("SymId({})", id.0)
+            || rendered == format!("SymId({} <1 raw byte>)", id.0),
+        "got {rendered}"
+    );
+}

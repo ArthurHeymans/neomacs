@@ -2,7 +2,7 @@
 
 use super::builtins::collections::builtin_make_hash_table;
 use super::error::{EvalError, Flow, map_flow, signal};
-use super::intern::{intern, resolve_sym};
+use super::intern::{SymId, intern, resolve_sym};
 use super::keymap::is_list_keymap;
 use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
 use super::value_reader::ReadSymbolShorthands;
@@ -234,9 +234,14 @@ pub(crate) fn decode_emacs_utf8(bytes: &[u8]) -> String {
 }
 
 /// Format a Value for human-readable error messages, resolving SymIds and heap-backed values.
+fn format_symbol_name_for_error(symbol: SymId) -> String {
+    let name = super::intern::resolve_sym_lisp_string(symbol);
+    crate::emacs_core::emacs_char::emacs_bytes_to_lossy_string(name.as_bytes(), name.is_multibyte())
+}
+
 fn format_value_for_error(v: &Value) -> String {
     match v.kind() {
-        ValueKind::Symbol(sid) => super::intern::resolve_sym(sid).to_string(),
+        ValueKind::Symbol(sid) => format_symbol_name_for_error(sid),
         ValueKind::String => format!("\"{}\"", load_string_text(v).expect("checked string")),
         ValueKind::Fixnum(n) => format!("{}", n),
         ValueKind::Nil => "nil".to_string(),
@@ -271,7 +276,7 @@ fn format_eval_error_in_state(eval: &super::eval::Context, err: &EvalError) -> S
             } else {
                 crate::emacs_core::error::print_value_in_state(eval, &Value::list(data.clone()))
             };
-            format!("({} {})", resolve_sym(*symbol), payload)
+            format!("({} {})", format_symbol_name_for_error(*symbol), payload)
         }
         EvalError::UncaughtThrow { tag, value, .. } => format!(
             "(throw {} {})",
@@ -307,7 +312,7 @@ fn format_load_form_error(err: &EvalError) -> String {
                 let data_strs: Vec<String> = data.iter().map(format_value_for_error).collect();
                 format!("({})", data_strs.join(" "))
             };
-            format!("({} {})", resolve_sym(*symbol), payload)
+            format!("({} {})", format_symbol_name_for_error(*symbol), payload)
         }
         other => format!("{other:?}"),
     }
@@ -2162,6 +2167,16 @@ pub(crate) fn load_file_with_requested_and_found_options(
             ))],
             None,
         ));
+    }
+
+    let user_init_file = intern("user-init-file");
+    if eval
+        .visible_runtime_variable_value_by_id(user_init_file)
+        .map_err(map_flow)?
+        == Some(Value::T)
+    {
+        eval.try_set_runtime_binding_by_id(user_init_file, Value::heap_string(found.clone()))
+            .map_err(map_flow)?;
     }
 
     // GNU Emacs only signals `Recursive load` once the same found filename is
