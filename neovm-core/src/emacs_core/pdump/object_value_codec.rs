@@ -281,9 +281,7 @@ fn write_hash_table(out: &mut Vec<u8>, table: &DumpLispHashTable) -> Result<(), 
     write_opt_hash_table_weakness(out, table.weakness.as_ref());
     write_f64(out, table.rehash_size);
     write_f64(out, table.rehash_threshold);
-    write_hash_entries(out, &table.entries)?;
-    write_hash_entries(out, &table.key_snapshots)?;
-    write_hash_keys(out, &table.insertion_order)?;
+    write_ordered_hash_entries(out, &table.ordered_entries)?;
     Ok(())
 }
 
@@ -437,14 +435,21 @@ fn write_hash_keys(out: &mut Vec<u8>, keys: &[DumpHashKey]) -> Result<(), DumpEr
     Ok(())
 }
 
-fn write_hash_entries(
+fn write_ordered_hash_entries(
     out: &mut Vec<u8>,
-    entries: &[(DumpHashKey, DumpValue)],
+    entries: &[(DumpHashKey, DumpValue, Option<DumpValue>)],
 ) -> Result<(), DumpError> {
     write_len(out, entries.len(), "hash entry count")?;
-    for (key, value) in entries {
+    for (key, value, snapshot) in entries {
         write_hash_key(out, key)?;
         write_value(out, value)?;
+        match snapshot {
+            Some(snap) => {
+                write_bool(out, true);
+                write_value(out, snap)?;
+            }
+            None => write_bool(out, false),
+        }
     }
     Ok(())
 }
@@ -1028,9 +1033,7 @@ impl<'a> Cursor<'a> {
             weakness: self.read_opt_hash_table_weakness()?,
             rehash_size: self.read_f64("hash table rehash size")?,
             rehash_threshold: self.read_f64("hash table rehash threshold")?,
-            entries: self.read_hash_entries()?,
-            key_snapshots: self.read_hash_entries()?,
-            insertion_order: self.read_hash_keys()?,
+            ordered_entries: self.read_ordered_hash_entries()?,
         })
     }
 
@@ -1133,11 +1136,20 @@ impl<'a> Cursor<'a> {
         Ok(keys)
     }
 
-    fn read_hash_entries(&mut self) -> Result<Vec<(DumpHashKey, DumpValue)>, DumpError> {
+    fn read_ordered_hash_entries(
+        &mut self,
+    ) -> Result<Vec<(DumpHashKey, DumpValue, Option<DumpValue>)>, DumpError> {
         let len = self.read_len("hash entry count")?;
         let mut entries = Vec::with_capacity(len);
         for _ in 0..len {
-            entries.push((self.read_hash_key()?, self.read_value()?));
+            let key = self.read_hash_key()?;
+            let value = self.read_value()?;
+            let snapshot = if self.read_bool("hash key snapshot present")? {
+                Some(self.read_value()?)
+            } else {
+                None
+            };
+            entries.push((key, value, snapshot));
         }
         Ok(entries)
     }
@@ -1578,21 +1590,23 @@ mod tests {
                 weakness: Some(DumpHashTableWeakness::KeyOrValue),
                 rehash_size: 1.5,
                 rehash_threshold: 0.8,
-                entries: vec![(
-                    DumpHashKey::EqualCons(
-                        Box::new(DumpHashKey::Text("a".into())),
-                        Box::new(DumpHashKey::Cycle(1)),
+                ordered_entries: vec![
+                    (
+                        DumpHashKey::EqualCons(
+                            Box::new(DumpHashKey::Text("a".into())),
+                            Box::new(DumpHashKey::Cycle(1)),
+                        ),
+                        DumpValue::Cons(DumpHeapRef { index: 1 }),
+                        Some(DumpValue::Int(8)),
                     ),
-                    DumpValue::Cons(DumpHeapRef { index: 1 }),
-                )],
-                key_snapshots: vec![
-                    (DumpHashKey::Char('x'), DumpValue::Int(8)),
                     (
                         DumpHashKey::Bignum(vec![0, 0xFFFF_FFFF_FFFF_FFFF, 1]),
                         DumpValue::Int(9),
+                        None,
                     ),
+                    (DumpHashKey::Char('x'), DumpValue::Int(8), None),
+                    (DumpHashKey::HeapRef(1), DumpValue::True, None),
                 ],
-                insertion_order: vec![DumpHashKey::HeapRef(1)],
             }),
             DumpHeapObject::Marker(DumpMarker {
                 buffer: Some(DumpBufferId(5)),

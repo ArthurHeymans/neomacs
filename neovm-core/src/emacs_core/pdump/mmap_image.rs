@@ -18,7 +18,11 @@ use sha2::{Digest, Sha256};
 use super::{DumpError, fingerprint_bytes, hex_string};
 
 const MMAP_MAGIC: [u8; 16] = *b"NEOMMAPDUMP\0\0\0\0\0";
-const MMAP_FORMAT_VERSION: u32 = 6;
+// 7: hash tables encode as insertion-ordered (key, value, snapshot) triples
+// in the object stream. ANY object-codec change must bump this — a stale
+// same-version file passes the header check and then misparses into memory
+// unsafety (the advice-stack test cache found this the hard way).
+const MMAP_FORMAT_VERSION: u32 = 7;
 const SECTION_ALIGN: u64 = 8;
 const RELOCATION_TAG_BITS: u64 = 4;
 const RELOCATION_TAG_MASK: u64 = (1 << RELOCATION_TAG_BITS) - 1;

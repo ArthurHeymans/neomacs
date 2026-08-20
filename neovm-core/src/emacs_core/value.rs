@@ -1305,6 +1305,18 @@ impl LispHashTable {
         self.data.replace_pointer_key(old_ptr, new_ptr, new_key);
     }
 
+    /// Rebuild from insertion-ordered `(hash_key, value, key_snapshot)`
+    /// triples: one insert (one hash) per entry, no temporary maps. The
+    /// pdump loader's path — its dump format stores entries pre-sorted.
+    pub fn rebuild_from_ordered_entries(&mut self, entries: Vec<(HashKey, Value, Option<Value>)>) {
+        self.data.clear();
+        self.data.reserve(entries.len());
+        for (hash_key, value, snapshot) in entries {
+            let key = snapshot.unwrap_or(value);
+            self.insert(hash_key, key, value);
+        }
+    }
+
     pub fn rebuild_from_parts(
         &mut self,
         values: FxHashMap<HashKey, Value>,

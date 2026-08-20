@@ -1640,37 +1640,33 @@ impl<'a> LoadDecoder<'a> {
                 });
             }
             DumpHeapObject::HashTable(ht) => {
+                let DumpLispHashTable {
+                    test,
+                    test_name,
+                    size,
+                    weakness,
+                    rehash_size,
+                    rehash_threshold,
+                    ordered_entries,
+                } = ht;
+                let entries: Vec<_> = ordered_entries
+                    .into_iter()
+                    .map(|(k, v, snap)| {
+                        (
+                            load_hash_key_owned(self, k),
+                            self.load_value_owned(v),
+                            snap.map(|s| self.load_value_owned(s)),
+                        )
+                    })
+                    .collect();
                 let _ = value.with_hash_table_mut(|table| {
-                    let DumpLispHashTable {
-                        test,
-                        test_name,
-                        size,
-                        weakness,
-                        rehash_size,
-                        rehash_threshold,
-                        entries,
-                        key_snapshots,
-                        insertion_order,
-                    } = ht;
                     table.test = load_hash_table_test(&test);
                     table.test_name = test_name.map(|s| load_sym_id(&s));
                     table.size = size;
                     table.weakness = weakness.as_ref().map(load_hash_table_weakness);
                     table.rehash_size = rehash_size;
                     table.rehash_threshold = rehash_threshold;
-                    let values = entries
-                        .into_iter()
-                        .map(|(k, v)| (load_hash_key_owned(self, k), self.load_value_owned(v)))
-                        .collect();
-                    let snapshots = key_snapshots
-                        .into_iter()
-                        .map(|(k, v)| (load_hash_key_owned(self, k), self.load_value_owned(v)))
-                        .collect();
-                    let order = insertion_order
-                        .into_iter()
-                        .map(|key| load_hash_key_owned(self, key))
-                        .collect();
-                    table.rebuild_from_parts(values, snapshots, order);
+                    table.rebuild_from_ordered_entries(entries);
                 });
             }
             DumpHeapObject::Obarray { buckets, count } => {
@@ -1811,11 +1807,11 @@ impl<'a> LoadDecoder<'a> {
                     stack.extend(extras);
                 }
                 DumpHeapObject::HashTable(ht) => {
-                    for (_, value) in ht.entries {
+                    for (_, value, snapshot) in ht.ordered_entries {
                         stack.push(value);
-                    }
-                    for (_, value) in ht.key_snapshots {
-                        stack.push(value);
+                        if let Some(snap) = snapshot {
+                            stack.push(snap);
+                        }
                     }
                 }
                 DumpHeapObject::Obarray { buckets, .. } => {
@@ -2200,12 +2196,10 @@ mod tests {
                 weakness: None,
                 rehash_size: 1.5,
                 rehash_threshold: 0.8125,
-                entries: vec![
-                    (DumpHashKey::Int(1), DumpValue::True),
-                    (DumpHashKey::Int(2), DumpValue::True),
+                ordered_entries: vec![
+                    (DumpHashKey::Int(1), DumpValue::True, None),
+                    (DumpHashKey::Int(2), DumpValue::True, None),
                 ],
-                key_snapshots: Vec::new(),
-                insertion_order: vec![DumpHashKey::Int(1)],
             },
         );
 
@@ -2473,23 +2467,21 @@ pub(crate) fn dump_hash_table(encoder: &mut DumpEncoder, ht: &LispHashTable) -> 
         weakness: ht.weakness.as_ref().map(dump_hash_table_weakness),
         rehash_size: ht.rehash_size,
         rehash_threshold: ht.rehash_threshold,
-        entries: ht
-            .data
-            .iter()
-            .map(|(k, v)| (dump_hash_key(encoder, k), encoder.dump_value(v)))
-            .collect(),
-        key_snapshots: ht
-            .data
-            .iter()
-            .map(|(key, _)| {
-                let snapshot = ht.key_snapshot(key).copied().unwrap_or(Value::NIL);
-                (dump_hash_key(encoder, key), encoder.dump_value(&snapshot))
-            })
-            .collect(),
-        insertion_order: ht
+        ordered_entries: ht
             .live_hash_keys_in_slot_order()
             .into_iter()
-            .map(|key| dump_hash_key(encoder, key))
+            .filter_map(|key| {
+                let value = ht.data.get(key).copied()?;
+                let snapshot = ht
+                    .key_snapshot(key)
+                    .copied()
+                    .map(|snap| encoder.dump_value(&snap));
+                Some((
+                    dump_hash_key(encoder, key),
+                    encoder.dump_value(&value),
+                    snapshot,
+                ))
+            })
             .collect(),
     }
 }
@@ -4226,20 +4218,16 @@ pub(crate) fn load_hash_table_weakness(w: &DumpHashTableWeakness) -> HashTableWe
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn load_hash_table(decoder: &mut LoadDecoder, ht: &DumpLispHashTable) -> LispHashTable {
-    let data: FxHashMap<HashKey, Value> = ht
-        .entries
+    let entries: Vec<_> = ht
+        .ordered_entries
         .iter()
-        .map(|(k, v)| (load_hash_key(decoder, k), decoder.load_value(v)))
-        .collect();
-    let key_snapshots: FxHashMap<HashKey, Value> = ht
-        .key_snapshots
-        .iter()
-        .map(|(k, v)| (load_hash_key(decoder, k), decoder.load_value(v)))
-        .collect();
-    let insertion_order: Vec<HashKey> = ht
-        .insertion_order
-        .iter()
-        .map(|key| load_hash_key(decoder, key))
+        .map(|(k, v, snap)| {
+            (
+                load_hash_key(decoder, k),
+                decoder.load_value(v),
+                snap.as_ref().map(|s| decoder.load_value(s)),
+            )
+        })
         .collect();
 
     let mut table = LispHashTable::new_unpopulated_with_options(
@@ -4250,7 +4238,7 @@ pub(crate) fn load_hash_table(decoder: &mut LoadDecoder, ht: &DumpLispHashTable)
         ht.rehash_threshold,
     );
     table.test_name = ht.test_name.map(|s| load_sym_id(&s));
-    table.rebuild_from_parts(data, key_snapshots, insertion_order);
+    table.rebuild_from_ordered_entries(entries);
     table
 }
 

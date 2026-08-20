@@ -406,9 +406,13 @@ pub struct DumpLispHashTable {
     pub weakness: Option<DumpHashTableWeakness>,
     pub rehash_size: f64,
     pub rehash_threshold: f64,
-    pub entries: Vec<(DumpHashKey, DumpValue)>,
-    pub key_snapshots: Vec<(DumpHashKey, DumpValue)>,
-    pub insertion_order: Vec<DumpHashKey>,
+    /// Entries in INSERTION ORDER, each carrying its key-snapshot Value
+    /// (`None` when the snapshot is just the entry value — the common case).
+    /// One ordered list replaces the old entries/key_snapshots/
+    /// insertion_order triple: the loader used to build two temporary maps
+    /// and re-join them per table (4-5 hash operations per entry); ordered
+    /// entries load with ONE insert per entry.
+    pub ordered_entries: Vec<(DumpHashKey, DumpValue, Option<DumpValue>)>,
 }
 
 // ---------------------------------------------------------------------------
