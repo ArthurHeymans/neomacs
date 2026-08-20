@@ -575,13 +575,33 @@ enum SymbolNameOrigin {
 /// cached heap object when it must return a value.  Callers must not silently
 /// substitute the atom once an object exists: GNU `symbol-name` and every
 /// primitive built on it observe later mutation of the object.
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum LispVisibleSymbolName {
     LispObject(TaggedValue),
     Atom {
         symbol: SymId,
         string: &'static LispString,
     },
+}
+
+impl LispVisibleSymbolName {
+    /// Borrow the name string, for no longer than this view lives.
+    ///
+    /// GNU spells the same coercion `s1 = SYMBOL_NAME (s1)` and only then
+    /// reaches for `SDATA (s1)` (`src/fns.c:344-353`): what travels between
+    /// statements is the Lisp OBJECT, and the byte pointer is taken at the
+    /// point of use.  This is that, in types.  The object arm holds a
+    /// `TaggedValue`, so the borrow is reborrowed from `&self` and cannot
+    /// outlive the view; only the atom arm is genuinely `'static`, and it says
+    /// so in its own field rather than in the return type of both.
+    pub(crate) fn text(&self) -> &LispString {
+        match self {
+            Self::LispObject(value) => value
+                .as_lisp_string()
+                .expect("a registered symbol name object remains a string"),
+            Self::Atom { string, .. } => string,
+        }
+    }
 }
 
 impl NewSymbolName {
@@ -1303,26 +1323,24 @@ pub(crate) fn unintern_canonical_id(id: SymId) -> bool {
     changed
 }
 
-/// The string a symbol's name READS as from Lisp: the name object the symbol
-/// was created from when it has one on the current heap, else its name atom.
+/// The string a symbol's name READS as from Lisp, with the object-vs-atom
+/// distinction kept in the type: the name object the symbol was created from
+/// when it has one on the current heap, else its process-lifetime name atom.
 ///
 /// GNU has only the first case -- a symbol's name is the string object it was
 /// created from -- so everything Lisp can observe follows the object:
 /// `symbol-name`, printing, and obarray lookup, including through a later
 /// `aset` on that string.
 ///
-/// Do NOT cache the result. Unlike the process-lifetime atom from
+/// Do NOT cache the borrow. Unlike the process-lifetime atom from
 /// [`resolve_sym_lisp_string`], a name object is an ordinary GC-managed heap
-/// string owned by one heap.
-#[inline]
-pub fn resolve_sym_lisp_name(id: SymId) -> &'static LispString {
-    resolve_sym_name_value(id)
-        .and_then(|name_value| name_value.as_lisp_string())
-        .unwrap_or_else(|| resolve_sym_lisp_string(id))
-}
-
-/// Resolve one symbol name with the exact object-vs-atom distinction visible
-/// to GNU Lisp primitives.
+/// string owned by one heap.  DIVERGENCES.md 167: this function used to have a
+/// flattened sibling, `resolve_sym_lisp_name`, that answered
+/// `&'static LispString` for BOTH cases -- so the sentence directly above was
+/// advice a caller could ignore silently.  It is a lifetime now: hold the
+/// [`LispVisibleSymbolName`] and take [`LispVisibleSymbolName::text`] at the
+/// point of use, exactly as GNU takes `SDATA` only after `s1 = SYMBOL_NAME
+/// (s1)`.
 #[inline]
 pub(crate) fn resolve_lisp_visible_symbol_name(id: SymId) -> LispVisibleSymbolName {
     global_symbol_registry()

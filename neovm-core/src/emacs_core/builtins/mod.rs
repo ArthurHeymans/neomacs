@@ -499,18 +499,22 @@ pub(super) fn expect_string_lossy(value: &Value) -> Result<String, Flow> {
     expect_lisp_string(value).map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
 }
 
-/// Borrow GNU's exact comparison operand: a string passes through unchanged,
-/// while a symbol contributes its existing `SYMBOL_NAME` string object.
+/// GNU's exact comparison operand: a string passes through unchanged, while a
+/// symbol contributes its existing `SYMBOL_NAME` string object.
+///
+/// Returns the OPERAND, not a borrow of it. GNU's own primitives are written
+/// the same way -- `if (SYMBOLP (s1)) s1 = SYMBOL_NAME (s1);` and only then
+/// `SDATA (s1)` (`src/fns.c:344-353`) -- and it is what lets this function
+/// stop claiming `'static` for a heap string: see [`StringDesignator`].
 pub(super) fn expect_string_comparison_operand(
     value: &Value,
-) -> Result<&'static crate::heap_types::LispString, Flow> {
+) -> Result<from_value::StringDesignator, Flow> {
     match value.kind() {
-        ValueKind::String => Ok(value
-            .as_lisp_string()
-            .expect("ValueKind::String must carry LispString payload")),
+        ValueKind::String => Ok(from_value::StringDesignator::String(*value)),
         _ => value
             .as_symbol_id()
-            .map(crate::emacs_core::intern::resolve_sym_lisp_name)
+            .map(crate::emacs_core::intern::resolve_lisp_visible_symbol_name)
+            .map(from_value::StringDesignator::SymbolName)
             .ok_or_else(|| {
                 signal(
                     LispCondition::WrongTypeArgument,

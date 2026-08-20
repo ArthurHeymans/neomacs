@@ -1520,9 +1520,9 @@ pub(crate) fn global_obarray_symbols_in_bucket_order(
 /// GNU compares against the symbol's NAME OBJECT, which Lisp can mutate in
 /// place -- `(aset name 0 ?X)` after `(intern name ob)` makes the symbol answer
 /// to the new spelling and not the old one.
-fn obarray_lookup_name(sym: Value) -> Option<&'static crate::heap_types::LispString> {
+fn obarray_lookup_name(sym: Value) -> Option<crate::emacs_core::intern::LispVisibleSymbolName> {
     sym.as_symbol_id()
-        .map(crate::emacs_core::intern::resolve_sym_lisp_name)
+        .map(crate::emacs_core::intern::resolve_lisp_visible_symbol_name)
 }
 
 /// Search a bucket chain (cons list) for a symbol with the given name.
@@ -1544,7 +1544,7 @@ pub(crate) fn obarray_bucket_find(
                 let car = current.cons_car();
                 let cdr = current.cons_cdr();
                 if let Some(sym_name) = obarray_lookup_name(car)
-                    && crate::emacs_core::intern::normalize_symbol_name_lisp_string(sym_name)
+                    && crate::emacs_core::intern::normalize_symbol_name_lisp_string(sym_name.text())
                         .as_ref()
                         == normalized.as_ref()
                 {
@@ -1593,7 +1593,7 @@ fn grow_obarray_vector_if_needed(obarray_val: Value) {
             let Some(name) = obarray_lookup_name(sym) else {
                 continue;
             };
-            let idx = obarray_hash_lisp_string(name, new_buckets.len());
+            let idx = obarray_hash_lisp_string(name.text(), new_buckets.len());
             new_buckets[idx] = Value::cons(sym, new_buckets[idx]);
         }
     }
@@ -1717,20 +1717,28 @@ pub(crate) fn intern_soft_impl(eval: &super::eval::Context, args: Vec<Value>) ->
     // Custom obarray path
     if !is_global_obarray_proxy(eval, &effective_obarray) {
         let obarray_val = check_obarray_value(effective_obarray)?;
-        let name = match args[0].kind() {
-            ValueKind::String => std::borrow::Cow::Borrowed(args[0].as_lisp_string().unwrap()),
-            // GNU searches for `SYMBOL_NAME (name)` -- the name OBJECT, the
-            // same string the bucket chain is compared on.
-            ValueKind::Symbol(id) => {
-                std::borrow::Cow::Borrowed(crate::emacs_core::intern::resolve_sym_lisp_name(id))
+        // GNU searches for `SYMBOL_NAME (name)` -- the name OBJECT, the same
+        // string the bucket chain is compared on. The view has to outlive the
+        // `Cow` that borrows out of it, so it is bound before the match rather
+        // than produced inside one of its arms.
+        let symbol_name_view = match args[0].kind() {
+            ValueKind::Symbol(id) => Some(
+                crate::emacs_core::intern::resolve_lisp_visible_symbol_name(id),
+            ),
+            ValueKind::Nil => Some(crate::emacs_core::intern::resolve_lisp_visible_symbol_name(
+                NIL_SYM_ID,
+            )),
+            ValueKind::T => Some(crate::emacs_core::intern::resolve_lisp_visible_symbol_name(
+                T_SYM_ID,
+            )),
+            _ => None,
+        };
+        let name = match (&symbol_name_view, args[0].kind()) {
+            (Some(view), _) => std::borrow::Cow::Borrowed(view.text()),
+            (None, ValueKind::String) => {
+                std::borrow::Cow::Borrowed(args[0].as_lisp_string().unwrap())
             }
-            ValueKind::Nil => std::borrow::Cow::Borrowed(
-                crate::emacs_core::intern::resolve_sym_lisp_name(NIL_SYM_ID),
-            ),
-            ValueKind::T => std::borrow::Cow::Borrowed(
-                crate::emacs_core::intern::resolve_sym_lisp_name(T_SYM_ID),
-            ),
-            _other => {
+            (None, _other) => {
                 // Transparently unwrap symbol-with-pos → bare symbol name.
                 if let Some(id) = symbol_id(&args[0]) {
                     std::borrow::Cow::Borrowed(crate::emacs_core::intern::resolve_sym_lisp_string(

@@ -2216,7 +2216,8 @@ fn symbol_bytes(id: super::intern::SymId, options: PrintOptions) -> Vec<u8> {
     // OBJECT: GNU prints the string the symbol was created from, which Lisp can
     // have mutated in place since.
     let canonical = lookup_interned_lisp_string(resolve_sym_lisp_string(id));
-    let name = super::intern::resolve_sym_lisp_name(id);
+    let visible_name = super::intern::resolve_lisp_visible_symbol_name(id);
+    let name = visible_name.text();
     let mut out = Vec::new();
     if canonical == Some(id) {
         append_symbol_name_bytes_with_escape(name, &mut out, !options.print_noescape);
