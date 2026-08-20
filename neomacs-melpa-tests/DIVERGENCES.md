@@ -21189,7 +21189,8 @@ shape, and the test fails if that number grows.  It is 6 today.
    suite never loads `haskell-compile'.  A future case that does will need the
    pipe guard 144 gave `cargo', `overseer' and `ggtags'.
 
-Status: FIXED (harness defect, in five fixtures and seven gate sites), plus one
+Status: FIXED (harness defect, in five fixtures and nine gate sites -- the two
+entry 144 handed on, plus the seven the re-screen found), plus one
 engine divergence found, measured and deliberately left for its own entry.  No
 package behaviour changed, and every measurement above was reproduced by GNU
 Emacs 31.0.90 and Neomacs -- including the one where they disagree, which is the
