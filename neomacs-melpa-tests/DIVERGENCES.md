@@ -23030,14 +23030,29 @@ probe produced **4716 rows instead of 123** before a depth guard was added.
 None of that was visible from the reported symptom, and none of it needed a
 separate fix -- the five rows came green with the ordering.
 
-The call-site inventory that goes with it: **6 direct callers of
-`run_process_sentinel_callback`** (one is the retirement funnel; the other five
-are the non-terminal network `"open\n"`, `"failed with code N"` and
-server-accept notifications, which retire nothing in GNU either), **3 callers of
-`notify_process_status_sentinel`** (now 1, `continue-process`), **7
-removal-or-deactivation sites**, of which exactly two remove from the live
-table.  **Zero sites now run a terminal sentinel before the retirement**, and
-**zero live-only accessors remain in any removal-to-sentinel window.**
+The call-site inventory that goes with it, re-derived against the finished
+branch rather than quoted from the start of it:
+
+* **`run_process_sentinel_callback`: 6 call sites.**  One (`:8314`) is the
+  funnel every terminal sentinel now goes through; the other five are the
+  non-terminal network notifications -- `"open\n"` on connect (`:8439`,
+  `:8502`), `"failed with code N"` (`:8443`, `:8506`) and the server-accept
+  `"open from ..."` (`:8641`).  None of those retires anything in GNU either.
+* **`run_status_notification_sentinel`: 4 call sites** -- the exit path
+  (`:8983`), the network-EOF path (`:8771`), `delete-process`/`kill-buffer`
+  (`:8374`) and `continue-process` (`:8330`).
+* **`notify_process_status_sentinel`: 3 callers at the merge base, 1 now** --
+  `continue-process`, whose `"continued"` is not one of `status_notify`'s
+  terminal symbols.  It also lost a `reap_terminal: bool` parameter that all
+  three callers passed `false`.
+* **10 removal-or-teardown call sites across five functions**, of which exactly
+  one -- `reap_exited_process` -- moves a process out of the live table.  Its
+  three call sites are `delete_process` itself, the trailing GNU `:1153` reap,
+  and `settle_status_and_retire`.
+
+**Zero sites now run a terminal sentinel before the retirement**, and **zero
+live-only accessors remain in any removal-to-sentinel window** -- the latter
+verified independently, not by the same reading that made the change.
 
 ### 7. The audit's second pass found six rows this branch had just broken
 
