@@ -11121,3 +11121,95 @@ fn an_eof_read_decodes_a_zero_byte_last_block_on_the_filter_branch() {
         )
     );
 }
+
+/// A subprocess's decoder keeps its state across a read boundary, and the
+/// boundary is the DECODER's answer rather than a rule about its name.
+///
+/// GNU decodes a process through ONE `struct coding_system` for the process's
+/// whole life (`proc_decode_coding_system[channel]`, src/process.c:6238), and
+/// each decoder ends by reporting how far it got:
+///
+/// ```c
+///  no_more_source:
+///   coding->consumed_char += consumed_chars_base;
+///   coding->consumed = src_base - coding->source;
+/// ```
+///
+/// (src/coding.c:1421-1423 for UTF-8, and the same two lines at :1696, :2541,
+/// :3982, :4791, :4886 and :5591.)  `decode_coding` then turns the unconsumed
+/// tail into `coding->carryover` when the flag is clear (:7466-7474), and
+/// `read_process_output_set_last_coding_system` copies it onto the process
+/// (:6448-6457).  Two consequences, and both are rows here:
+///
+/// * a character split across a read boundary is completed by the next read,
+///   for EVERY decoder and not just the UTF-8 family;
+/// * an ISO-2022 designation set in one read is still in force in the next,
+///   because the designation lives in `coding->spec.iso_2022` and the struct
+///   outlives the read.
+///
+/// The split is forced by a HANDSHAKE and not by a sleep: the child writes,
+/// blocks on `read`, and only this test can unblock it, so `2` chunks is a
+/// measurement rather than a hope.  Each row is
+/// `(CHUNKS CONCATENATED-CHARACTERS LAST-CODING-SYSTEM-USED)`, and the
+/// characters are the concatenation precisely so that a row which failed to
+/// split would still be WRONG rather than accidentally right.
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program.
+#[test]
+fn a_process_decoder_carries_its_state_and_its_carryover_across_a_read() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw166b-run (coding cmd)
+               (let* ((acc nil)
+                      (p (make-process :name "pw166b" :buffer nil :sentinel #'ignore
+                                       :connection-type 'pipe
+                                       :coding (cons coding 'binary)
+                                       :filter (lambda (_p s) (setq acc (append acc (list s))))
+                                       :command (list "{sh}" "-c" cmd))))
+                 (while (null acc) (accept-process-output p 1))
+                 (process-send-string p "go\n")
+                 (while (accept-process-output p 1))
+                 (while (process-live-p p) (accept-process-output p 0.05))
+                 (list (length acc) (append (apply #'concat acc) nil)
+                       last-coding-system-used)))
+             (list
+              ;; the UTF-8 family, which the deleted name table already covered
+              (pw166b-run 'utf-8 "printf 'a\\303'; read x; printf '\\251\\n'")
+              (pw166b-run 'utf-8 "printf 'a\\343\\201'; read x; printf '\\202\\n'")
+              ;; an ISO-2022 designation that ends read 1: state, not carryover
+              (pw166b-run 'iso-2022-7bit "printf 'a\\033$B'; read x; printf '$\\042\\033(B\\n'")
+              ;; the same designation, split inside the character it introduces
+              (pw166b-run 'iso-2022-7bit "printf 'a\\033$B$'; read x; printf '\\042\\033(B\\n'")
+              (pw166b-run 'japanese-shift-jis "printf 'a\\202'; read x; printf '\\240\\n'")
+              (pw166b-run 'chinese-gbk "printf 'a\\260'; read x; printf '\\241\\n'")
+              (pw166b-run 'chinese-big5 "printf 'a\\244'; read x; printf '\\100\\n'")
+              (pw166b-run 'japanese-iso-8bit "printf 'a\\244'; read x; printf '\\242\\n'")
+              (pw166b-run 'emacs-mule "printf 'a\\222'; read x; printf '\\260\\241\\n'")
+              (pw166b-run 'utf-16le "printf 'a\\000\\102'; read x; printf '\\000\\n\\000'")
+              (pw166b-run 'utf-16le-with-signature "printf '\\377\\376a\\000'; read x; printf '\\n\\000'")
+              ;; the control: every byte of iso-latin-1 is a character, so
+              ;; nothing is ever held back and both chunks decode whole
+              (pw166b-run 'iso-latin-1 "printf 'a\\351'; read x; printf '\\350\\n'")))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(2 (97 233 10) utf-8-unix) ",
+            "(2 (97 12354 10) utf-8-unix) ",
+            "(2 (97 12354 10) iso-2022-7bit-unix) ",
+            "(2 (97 12354 10) iso-2022-7bit-unix) ",
+            "(2 (97 12354 10) japanese-shift-jis-unix) ",
+            "(2 (97 21834 10) chinese-gbk-unix) ",
+            "(2 (97 19968 10) chinese-big5-unix) ",
+            "(2 (97 12354 10) japanese-iso-8bit-unix) ",
+            "(2 (97 20124 10) emacs-mule-unix) ",
+            "(2 (97 66 10) utf-16le-unix) ",
+            "(2 (97 10) utf-16le-with-signature-unix) ",
+            "(2 (97 233 232 10) iso-latin-1-unix))",
+        )
+    );
+}
