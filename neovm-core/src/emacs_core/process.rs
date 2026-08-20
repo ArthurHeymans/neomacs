@@ -77,6 +77,56 @@ pub enum NetworkSocket {
 pub(crate) mod sys;
 use sys::ChildStatusSource;
 
+/// GNU `status_notify`'s "retire, then run the sentinel" ordering, as a type.
+/// See `process/status_notify.rs`.
+mod status_notify;
+use status_notify::ProcessStatusNotification;
+
+/// What GNU's `status_notify` does with a process whose status has just become
+/// terminal, chosen by `delete-exited-processes` (src/process.c:7925-7929, the
+/// variable at :8916-8920 with default 1).
+///
+/// A bool at these call sites reads as "should we delete?", which is the
+/// question, not the answer; the two answers are different GNU functions with
+/// different observable effects, so they are spelled out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExitedProcessDisposition {
+    /// GNU `remove_process` (src/process.c:957-966): drop the process from
+    /// `Vprocess_alist`, so `get-process`, `get-buffer-process` and
+    /// `process-list` stop returning it.  The object itself is untouched.
+    Remove,
+    /// GNU `deactivate_process` (src/process.c:4812): close the descriptors and
+    /// leave the process listed.
+    Deactivate,
+}
+
+impl ExitedProcessDisposition {
+    fn from_delete_exited_processes(delete_exited_processes: bool) -> Self {
+        if delete_exited_processes {
+            Self::Remove
+        } else {
+            Self::Deactivate
+        }
+    }
+}
+
+/// Which of GNU's single `deactivate_process` teardown this port must apply.
+///
+/// GNU needs no such distinction: every kind's descriptors live in
+/// `p->open_fd[]` and `deactivate_process` (src/process.c:4812) closes them all.
+/// This port keeps a real child's pty and pipes, a network connection's socket
+/// and a TLS stream in different fields of `Process::live_io`, so the teardown
+/// is selected by what the process actually had open.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProcessIoTeardown {
+    /// A real child (or a pipe) that has terminated: drop all live I/O.
+    Terminal,
+    /// A network connection whose peer closed: drop the socket and any TLS
+    /// stream, keeping the rest of `live_io` as this port's network accessors
+    /// expect.
+    Network,
+}
+
 /// GNU-compatible GnuTLS process initialization stage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive)]
 #[repr(i64)]
@@ -5211,6 +5261,15 @@ impl ProcessManager {
         }
     }
 
+    /// GNU `deactivate_process` (src/process.c:4812), dispatched on what this
+    /// port's `Process::live_io` actually holds.  See [`ProcessIoTeardown`].
+    fn apply_process_io_teardown(&mut self, id: ProcessId, teardown: ProcessIoTeardown) {
+        match teardown {
+            ProcessIoTeardown::Terminal => self.deactivate_terminal_process_io(id),
+            ProcessIoTeardown::Network => self.deactivate_network_process_io(id),
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             processes: HashMap::new(),
@@ -7698,12 +7757,16 @@ impl super::eval::Context {
         self.processes.set_default_read_config(config);
     }
 
-    /// Whether `delete-exited-processes` is non-nil (GNU
-    /// `delete_exited_processes`, default `t`).  Controls whether a terminated
-    /// process is removed from the process list once its status is reported.
-    fn delete_exited_processes_enabled(&self) -> bool {
-        self.visible_variable_value_or_nil("delete-exited-processes")
-            .is_truthy()
+    /// GNU `status_notify`'s branch on `delete_exited_processes`
+    /// (src/process.c:7925-7929); the variable is `DEFVAR_BOOL`'d at :8916 with
+    /// default 1.  Read once per notification, as GNU reads the C variable, so
+    /// a sentinel that rebinds it cannot change the decision already taken for
+    /// its own process.
+    fn exited_process_disposition(&self) -> ExitedProcessDisposition {
+        ExitedProcessDisposition::from_delete_exited_processes(
+            self.visible_variable_value_or_nil("delete-exited-processes")
+                .is_truthy(),
+        )
     }
 
     pub(crate) fn kill_buffer_processes(&mut self, buffer_id: BufferId) -> Result<(), Flow> {
@@ -7727,7 +7790,7 @@ impl super::eval::Context {
                 .is_some_and(|proc| proc.status_notify_pending);
             self.processes.delete_process(id);
             if was_live && (!was_terminal || was_pending_notification) {
-                self.notify_process_status_sentinel(id, false)?;
+                self.notify_process_status_sentinel(id)?;
             }
         }
         Ok(())
@@ -8220,26 +8283,32 @@ impl super::eval::Context {
         )
     }
 
-    fn notify_process_status_sentinel(
+    /// GNU `exec_sentinel` (src/process.c:7800), driven from a
+    /// [`ProcessStatusNotification`] -- i.e. from arguments captured before the
+    /// process was retired, never from a lookup that the retirement has
+    /// invalidated.
+    fn run_status_notification_sentinel(
         &mut self,
-        pid: ProcessId,
-        reap_terminal: bool,
+        notification: ProcessStatusNotification,
     ) -> Result<(), Flow> {
-        let Some(proc) = self.processes.get_any(pid) else {
+        self.run_process_sentinel_callback(
+            notification.id(),
+            notification.sentinel(),
+            notification.message(),
+        )
+    }
+
+    /// The sentinel for a process this port has already removed from the live
+    /// table -- `delete-process` and `kill-buffer`, which delete first and
+    /// notify second, matching GNU's `Fdelete_process` -> `status_notify`
+    /// ordering (src/process.c:1128/1148 then :1155).
+    fn notify_process_status_sentinel(&mut self, pid: ProcessId) -> Result<(), Flow> {
+        let Some(notification) =
+            ProcessStatusNotification::for_retired_process(&self.processes, pid)
+        else {
             return Ok(());
         };
-        let sentinel = proc.sentinel;
-        let status = proc.status;
-        let terminal = process_status_is_terminal_for_notify(&status);
-        let message = gnu_process_status_message_for_process(proc);
-
-        self.run_process_sentinel_callback(pid, sentinel, &message)?;
-
-        if reap_terminal && terminal && self.delete_exited_processes_enabled() {
-            self.processes.reap_exited_process(pid);
-        }
-
-        Ok(())
+        self.run_status_notification_sentinel(notification)
     }
 
     fn run_process_log_callback(
@@ -8612,23 +8681,19 @@ impl super::eval::Context {
                         {
                             proc.status = process_status_exit_value(256);
                         }
-                        self.processes.deactivate_network_process_io(pid);
-                        let sentinel = self
-                            .processes
-                            .get(pid)
-                            .map(|p| p.sentinel)
-                            .unwrap_or(Value::NIL);
-                        let msg = self
-                            .processes
-                            .get(pid)
-                            .map(gnu_process_status_message_for_process)
-                            .unwrap_or_else(|| "connection broken by remote peer\n".to_string());
-                        self.run_process_sentinel_callback(pid, sentinel, &msg)?;
-                        // GNU `status_notify`: a terminated network process is
-                        // removed from the process list when
-                        // `delete-exited-processes' is non-nil.
-                        if self.delete_exited_processes_enabled() {
-                            self.processes.reap_exited_process(pid);
+                        // Same `status_notify` ordering as the child exit path
+                        // below: the removal decision (src/process.c:7925-7929)
+                        // precedes `exec_sentinel' (:7937), and the type is what
+                        // makes that the only expressible order.
+                        let disposition = self.exited_process_disposition();
+                        let notification = ProcessStatusNotification::settle_status_and_retire(
+                            &mut self.processes,
+                            pid,
+                            ProcessIoTeardown::Network,
+                            disposition,
+                        );
+                        if let Some(notification) = notification {
+                            self.run_status_notification_sentinel(notification)?;
                         }
                         handled_terminal_eof = true;
                         break;
@@ -8822,42 +8887,27 @@ impl super::eval::Context {
             );
         }
 
-        let sentinel = self
-            .processes
-            .get(pid)
-            .map(|p| p.sentinel)
-            .unwrap_or(Value::NIL);
-        if let Some(proc) = self.processes.get_mut(pid)
-            && !proc.pending_status.is_nil()
-        {
-            proc.status = proc.pending_status;
+        // GNU `status_notify` settles the status, builds the message and takes
+        // the `delete-exited-processes' removal decision (src/process.c:
+        // 7915-7929) BEFORE `exec_sentinel' (:7937), so an exit sentinel sees
+        // its own process already gone from `process-list'/`get-process'/
+        // `get-buffer-process'.  This port had the two halves the other way
+        // round (ledger 165, found and not fixed; ledger 169, fixed).  The
+        // ordering is now the type's, not this function's: the notification
+        // cannot be built without the retirement having happened, and it
+        // carries the sentinel arguments that a post-retirement `get` could no
+        // longer supply.
+        let disposition = self.exited_process_disposition();
+        let notification = ProcessStatusNotification::settle_status_and_retire(
+            &mut self.processes,
+            pid,
+            ProcessIoTeardown::Terminal,
+            disposition,
+        );
+        if let Some(notification) = notification {
+            self.run_status_notification_sentinel(notification)?;
         }
-        let exit_msg = self
-            .processes
-            .get(pid)
-            .map(gnu_process_status_message_for_process)
-            .unwrap_or_else(|| "finished\n".to_string());
-        self.processes.clear_status_notify_pending(pid);
-        self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
         outcome.record_serviced();
-
-        // GNU `status_notify`: a terminated process (status exit/signal/closed)
-        // is removed from `Vprocess_alist' when `delete-exited-processes' is
-        // non-nil (its default), so that `get-process'/`process-list' no longer
-        // return it. The process object itself stays alive for any binding that
-        // still holds it (e.g. `process-status' on the value), which neomacs
-        // models by moving it into the deleted-process table that `get_any`
-        // reads.
-        let terminal = self
-            .processes
-            .get(pid)
-            .is_some_and(|proc| process_status_is_terminal_for_notify(&proc.status));
-        if terminal {
-            self.processes.deactivate_terminal_process_io(pid);
-            if self.delete_exited_processes_enabled() {
-                self.processes.reap_exited_process(pid);
-            }
-        }
         Ok(outcome)
     }
 }
@@ -14038,7 +14088,7 @@ pub(crate) fn builtin_delete_process(
         .is_some_and(|proc| proc.status_notify_pending);
     eval.processes.delete_process(id);
     if was_live && (!was_terminal || was_pending_notification) {
-        eval.notify_process_status_sentinel(id, false)?;
+        eval.notify_process_status_sentinel(id)?;
     }
     Ok(Value::NIL)
 }
@@ -14096,7 +14146,7 @@ pub(crate) fn builtin_continue_process(
         .get_any(id)
         .is_some_and(|proc| proc.kind == ProcessKind::Real && process_status_is_run(&proc.status))
     {
-        eval.notify_process_status_sentinel(id, false)?;
+        eval.notify_process_status_sentinel(id)?;
     }
     Ok(ret)
 }
