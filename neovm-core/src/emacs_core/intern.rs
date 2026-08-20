@@ -124,7 +124,18 @@ fn format_lisp_symbol_name_for_diagnostic(name: &LispString) -> String {
 }
 
 pub(crate) fn format_symbol_name_for_diagnostic(symbol: SymId) -> String {
-    format_lisp_symbol_name_for_diagnostic(resolve_sym_lisp_name(symbol))
+    // The LIVE Lisp-visible name object where one exists, not the immutable
+    // atom: GNU permits `aset` on a symbol's name string and a diagnostic must
+    // show the mutation (`symbol_diagnostics_use_the_lisp_visible_name_object`).
+    //
+    // This used to call `resolve_sym_lisp_name`, which DIVERGENCES.md 167
+    // deleted because it flattened both cases into one `&'static LispString` --
+    // sound for the leaked atom, a lie for the GC-managed object. The typed
+    // view is the replacement: hold it, and take the borrow at the point of
+    // use, exactly as GNU reaches for `SDATA` only after `s1 = SYMBOL_NAME (s1)`
+    // (src/fns.c:344-353).
+    let name = resolve_lisp_visible_symbol_name(symbol);
+    format_lisp_symbol_name_for_diagnostic(name.text())
 }
 
 /// Whether an unescaped symbol spelling would be read as something other than
