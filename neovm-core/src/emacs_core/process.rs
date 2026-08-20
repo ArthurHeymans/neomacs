@@ -9312,6 +9312,21 @@ fn signal_process_not_active_in_manager(processes: &ProcessManager, id: ProcessI
     )
 }
 
+/// GNU `process_send_signal`'s first guard, `!EQ (p->type, Qreal)`
+/// (src/process.c:7084-7086).
+///
+/// It is asked of the process OBJECT, which `get_process` (:7081) resolves
+/// without consulting liveness, so it must be asked through `get_any` here.
+/// Asking it through the live table instead let a retired network, serial or
+/// pipe process fall past it and be treated as signalable -- invisible until
+/// ledger 169 started retiring processes before their sentinels run.
+fn check_process_is_real_subprocess(processes: &ProcessManager, id: ProcessId) -> Result<(), Flow> {
+    match processes.get_any(id) {
+        Some(proc) if proc.kind != ProcessKind::Real => Err(signal_process_not_subprocess(proc)),
+        _ => Ok(()),
+    }
+}
+
 fn signal_process_not_subprocess(proc: &Process) -> Flow {
     signal(
         "error",
@@ -9551,6 +9566,33 @@ fn is_stale_process_id_designator_in_manager(processes: &ProcessManager, value: 
         }
         _ => false,
     }
+}
+
+/// The same staleness, restricted to the kind GNU's TYPE check lets through.
+///
+/// GNU's "Process NAME is not active" is `p->infd < 0`, and in every subr that
+/// raises it the type check comes FIRST: `process_send_signal` tests
+/// `!EQ (p->type, Qreal)` at src/process.c:7084-7086 before `p->infd < 0` at
+/// :7087-7089, and `Fprocess_running_child_p` does the same at :7042-7047.  A
+/// network, serial or pipe process is never `Qreal`, so for those the type
+/// check always wins -- "is not a subprocess", never "is not active" -- and
+/// `stop-process`/`continue-process` do not reach either test, because they
+/// handle those three kinds first and return the process (:7267-7278,
+/// :7294-7315).
+///
+/// This port's analogue of `p->infd < 0` is "no longer in the live table", and
+/// ledger 169 made that true at the retirement, which is where GNU puts it.
+/// Answering it ahead of the type check made a retired `:stderr` pipe report
+/// "is not active" inside its own sentinel where GNU reports "is not a
+/// subprocess" -- six rows of the neighbour audit, measured.  So the guard is
+/// asked only about the kind GNU would have let past.
+///
+/// An id in neither table cannot be asked its kind; it keeps the old answer.
+fn is_stale_real_process_designator_in_manager(processes: &ProcessManager, value: &Value) -> bool {
+    is_stale_process_id_designator_in_manager(processes, value)
+        && process_value_to_id(value)
+            .and_then(|id| processes.get_any(id))
+            .is_none_or(|proc| proc.kind == ProcessKind::Real)
 }
 
 fn resolve_optional_process_or_current_buffer_in_state(
@@ -9801,9 +9843,14 @@ fn resolve_optional_process_with_explicit_return_in_state(
     buffers: &BufferManager,
     value: Option<&Value>,
 ) -> Result<(ProcessId, Value), Flow> {
+    // `kill-process`, `stop-process`, `continue-process`, `quit-process` and
+    // `interrupt-process' all reach GNU's `process_send_signal', whose TYPE
+    // check precedes its `p->infd < 0' check -- and the two connection-shaped
+    // subrs never reach it at all.  See
+    // `is_stale_real_process_designator_in_manager'.
     if let Some(v) = value
         && !v.is_nil()
-        && is_stale_process_id_designator_in_manager(processes, v)
+        && is_stale_real_process_designator_in_manager(processes, v)
         && let Some(id) = process_value_to_id(v)
     {
         return Err(signal_process_not_active_in_manager(processes, id));
@@ -9832,14 +9879,19 @@ fn resolve_signal_process_target_in_state(
     if let Some(v) = value
         && !v.is_nil()
     {
-        // A first-class process object designates that process while live;
-        // once it has exited, GNU still signals the recorded OS pid.
-        if let Some(id) = v.as_process_id() {
-            return if processes.get(id).is_some() {
-                Ok(SignalProcessTarget::Process(id))
-            } else {
-                Ok(SignalProcessTarget::Pid(id as i64))
-            };
+        // A first-class process object designates that PROCESS, live or not.
+        // GNU's `internal-default-signal-process` takes `XPROCESS
+        // (process)->pid` (src/process.c:7380) after a plain `CHECK_PROCESS`
+        // (:7379) -- no liveness test -- and raises "Cannot signal process %s"
+        // when that pid is <= 0 (:7381-7382), which is what a pipe or network
+        // process has.  Falling through to the pid branch here handed
+        // `sys::send_signal` this port's `ProcessId` (1, 2, 3 ...) as though it
+        // were an OS pid; before ledger 169 that was unreachable for a process
+        // still in the alist, and retiring earlier made it reachable.
+        if let Some(id) = v.as_process_id()
+            && processes.get_any(id).is_some()
+        {
+            return Ok(SignalProcessTarget::Process(id));
         }
         return match v.kind() {
             ValueKind::String => {
@@ -9849,16 +9901,23 @@ fn resolve_signal_process_target_in_state(
                     None => SignalProcessTarget::MissingNamedProcess,
                 })
             }
-            // GNU `Fsignal_process` treats a bare integer as a literal OS
-            // PID, not a process-object id.
-            ValueKind::Fixnum(pid) if pid >= 0 => {
-                let id = pid as ProcessId;
-                if processes.get(id).is_some() {
-                    Ok(SignalProcessTarget::Process(id))
-                } else {
-                    Ok(SignalProcessTarget::Pid(pid))
-                }
-            }
+            // GNU `Fsignal_process` treats a bare integer as a literal OS PID
+            // and never looks it up: `internal-default-signal-process` calls
+            // `get_process` only for a NON-number (src/process.c:7369-7370),
+            // and a number goes straight to
+            // `CONS_TO_INTEGER (process, pid_t, pid)` (:7375-7376).  The
+            // docstring says the same (:7405-7407).
+            //
+            // Consulting the live process table here made the answer depend on
+            // whether an unrelated process happened to hold that `ProcessId`.
+            // Measured, `-Q --batch`, one live child, before this change:
+            //
+            //   (signal-process 1 0)   GNU -1 (EPERM from `kill (1, 0)`)
+            //                          Neomacs 0 -- this port's process #1
+            //
+            // The comment above this arm already stated GNU's rule; the code
+            // under it did not follow it.
+            ValueKind::Fixnum(pid) if pid >= 0 => Ok(SignalProcessTarget::Pid(pid)),
             _ => Ok(SignalProcessTarget::Process(
                 resolve_get_process_designator_in_state(processes, buffers, v)?,
             )),
@@ -10773,10 +10832,8 @@ pub(crate) fn builtin_internal_default_interrupt_process_impl(
     }
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
+    check_process_is_real_subprocess(processes, id)?;
     if let Some(proc) = processes.get_mut(id) {
-        if proc.kind != ProcessKind::Real {
-            return Err(signal_process_not_subprocess(proc));
-        }
         #[cfg(unix)]
         let _ = signal_process_or_unbacked_success(
             proc,
@@ -10814,7 +10871,10 @@ pub(crate) fn builtin_internal_default_signal_process_impl(
     let signal_num = parse_signal_number(&args[1])?;
     match resolve_signal_process_target_in_state(processes, buffers, args.first())? {
         SignalProcessTarget::Process(id) => {
-            if let Some(proc) = processes.get_mut(id) {
+            // `get_any_mut`, not `get_mut`: GNU's `CHECK_PROCESS` +
+            // `XPROCESS (process)->pid` (src/process.c:7379-7382) does not ask
+            // whether the process is still in `Vprocess_alist`.
+            if let Some(proc) = processes.get_any_mut(id) {
                 if proc.kind != ProcessKind::Real {
                     return Err(signal_cannot_signal_process(proc));
                 }
@@ -14238,7 +14298,14 @@ pub(crate) fn builtin_continue_process_impl(
     }
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
-    if let Some(proc) = processes.get_mut(id) {
+    // GNU's `Fcontinue_process` handles a network, serial or pipe process
+    // before it resolves anything (src/process.c:7294-7315) and sets
+    // `p->command' whether or not the connection is still listed -- hence
+    // `get_any_mut'.  The signalling branch stays live-only: a retired REAL
+    // process was rejected by the resolver above, as GNU's `p->infd < 0'
+    // rejects it at :7087-7089.
+    let is_live = processes.get(id).is_some();
+    if let Some(proc) = processes.get_any_mut(id) {
         if matches!(
             proc.kind,
             ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
@@ -14247,7 +14314,7 @@ pub(crate) fn builtin_continue_process_impl(
             if proc.kind == ProcessKind::Serial {
                 proc.status = ProcessStatusSymbol::Open.value();
             }
-        } else {
+        } else if is_live {
             // GNU `process_send_signal(SIGCONT)` discards `raw_status_new`
             // before publishing `run`, so a queued stop transition cannot
             // overwrite the explicit continuation on the next status pass.
@@ -14310,10 +14377,8 @@ pub(crate) fn builtin_kill_process_impl(
     }
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
+    check_process_is_real_subprocess(processes, id)?;
     if let Some(proc) = processes.get_mut(id) {
-        if proc.kind != ProcessKind::Real {
-            return Err(signal_process_not_subprocess(proc));
-        }
         kill_real_process_child(proc, signal_kill_number());
     }
     Ok(ret)
@@ -14362,9 +14427,12 @@ pub(crate) fn builtin_signal_process_impl(
         ));
     }
 
+    // The type check precedes the liveness check here too: a retired pipe must
+    // reach `signal_cannot_signal_process` below (GNU's `p->pid <= 0` at
+    // src/process.c:7381-7382), not this early -1.
     if let Some(process) = args.first()
         && !process.is_nil()
-        && is_stale_process_id_designator_in_manager(processes, process)
+        && is_stale_real_process_designator_in_manager(processes, process)
     {
         return Ok(Value::fixnum(-1));
     }
@@ -14372,7 +14440,13 @@ pub(crate) fn builtin_signal_process_impl(
     let signal_num = parse_signal_number(&args[1])?;
     match resolve_signal_process_target_in_state(processes, buffers, args.first())? {
         SignalProcessTarget::Process(id) => {
-            if let Some(proc) = processes.get_mut(id) {
+            // `get_any_mut`, matching `internal-default-signal-process` above:
+            // GNU's `CHECK_PROCESS` + `XPROCESS (process)->pid`
+            // (src/process.c:7379-7382) asks the object, not the alist.  This
+            // twin is only reachable from tests, but it carried the shape the
+            // rest of this file no longer has, which is how the class comes
+            // back.
+            if let Some(proc) = processes.get_any_mut(id) {
                 if proc.kind != ProcessKind::Real {
                     return Err(signal_cannot_signal_process(proc));
                 }
@@ -14415,13 +14489,17 @@ pub(crate) fn builtin_stop_process_impl(
     }
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
-    if let Some(proc) = processes.get_mut(id) {
+    // GNU's `Fstop_process` special-cases a network, serial or pipe process
+    // before it resolves anything (src/process.c:7267-7278): it sets
+    // `p->command' to t and returns the process, with no liveness test at all.
+    let is_live = processes.get(id).is_some();
+    if let Some(proc) = processes.get_any_mut(id) {
         if matches!(
             proc.kind,
             ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
         ) {
             proc.command = Value::T;
-        } else {
+        } else if is_live {
             #[cfg(unix)]
             let _ =
                 deliver_process_signal(proc, libc::SIGTSTP, ProcessSignalRecipient::ProcessGroup);
@@ -14454,10 +14532,8 @@ pub(crate) fn builtin_quit_process_impl(
     }
     let (id, ret) =
         resolve_optional_process_with_explicit_return_in_state(processes, buffers, args.first())?;
+    check_process_is_real_subprocess(processes, id)?;
     if let Some(proc) = processes.get_mut(id) {
-        if proc.kind != ProcessKind::Real {
-            return Err(signal_process_not_subprocess(proc));
-        }
         // Send SIGQUIT to the child process.
         #[cfg(unix)]
         let _ = deliver_process_signal(proc, libc::SIGQUIT, ProcessSignalRecipient::ProcessGroup);
@@ -16150,9 +16226,12 @@ pub(crate) fn builtin_process_running_child_p_impl(
             ],
         ));
     }
+    // GNU checks `!EQ (p->type, Qreal)` at src/process.c:7042-7044 BEFORE
+    // `p->infd < 0` at :7045-7047, so a pipe answers "is not a subprocess"
+    // however long it has been dead.
     if let Some(process) = args.first()
         && let Some(id) = process_value_to_id(process)
-        && is_stale_process_id_designator_in_manager(processes, process)
+        && is_stale_real_process_designator_in_manager(processes, process)
     {
         return Err(signal_process_not_active_in_manager(processes, id));
     }

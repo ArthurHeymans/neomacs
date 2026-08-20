@@ -11737,3 +11737,142 @@ const PW169_NEIGHBOUR_AUDIT: &str = concat!(
     "(accept-output) (delete . ok) (status-after-delete . exit) ",
     "(in-list-after-delete))",
 );
+
+/// The same audit on the `:stderr` pipe process, whose sentinel runs after the
+/// pipe has been retired too -- and which answers a DIFFERENT set of errors,
+/// because GNU tests the process TYPE before it tests `p->infd < 0`.
+///
+/// `process_send_signal` raises "is not a subprocess" at src/process.c:7084-7086
+/// and only then "is not active" at :7087-7089; `Fprocess_running_child_p` has
+/// the same pair at :7042-7047; `internal-default-signal-process` raises
+/// "Cannot signal process" from `p->pid <= 0` after a bare `CHECK_PROCESS`
+/// (:7379-7382); and `Fstop_process` / `Fcontinue_process` never reach any of
+/// them, because they handle a network, serial or pipe process first and
+/// return the process (:7267-7278, :7294-7315).
+///
+/// A pipe is never `Qreal` and its pid is 0, so all five answers are
+/// independent of whether it is still listed.  This port answered them from a
+/// live-table lookup placed AHEAD of the type check, which was invisible while
+/// the pipe was still listed inside its own sentinel and became six wrong rows
+/// the moment ledger 169 retired it on time.
+///
+/// Measured, `emacs -Q --batch`, GNU Emacs 31.0.90 (`tmp/pw169/audit.el`).
+#[test]
+fn stderr_pipe_sentinel_neighbour_audit() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((obuf (generate-new-buffer " *pw169pipe-out*"))
+                  (ebuf (generate-new-buffer " *pw169pipe-err*"))
+                  (depth 0)
+                  (owner-done nil)
+                  (result :pending)
+                  (try (lambda (thunk)
+                         (condition-case e (funcall thunk)
+                           (error (list 'error (cadr e))))))
+                  (proc (make-process
+                         :name "pw169pipe"
+                         :buffer obuf
+                         :command '("{sh}" "-c" "printf out; printf err 1>&2")
+                         :stderr ebuf
+                         :noquery t
+                         :sentinel (lambda (_p _e) (setq owner-done t)))))
+             (set-process-sentinel
+              (get-buffer-process ebuf)
+              (lambda (p event)
+                (when (and (= depth 0) (string-prefix-p "finished" event))
+                  (setq depth 1)
+                  (setq result
+                        (list
+                         (cons 'status (funcall try (lambda () (process-status p))))
+                         (cons 'type (funcall try (lambda () (process-type p))))
+                         (cons 'get-buffer-process
+                               (funcall try (lambda () (and (get-buffer-process ebuf) t))))
+                         (cons 'in-process-list
+                               (funcall try (lambda () (and (memq p (process-list)) t))))
+                         (cons 'running-child-p
+                               (funcall try (lambda () (process-running-child-p p))))
+                         (cons 'interrupt
+                               (funcall try (lambda () (progn (interrupt-process p) 'ok))))
+                         (cons 'kill
+                               (funcall try (lambda () (progn (kill-process p) 'ok))))
+                         (cons 'signal-0
+                               (funcall try (lambda () (progn (signal-process p 0) 'ok))))
+                         (cons 'continue
+                               (funcall try (lambda () (progn (continue-process p) 'ok))))
+                         (cons 'stop
+                               (funcall try (lambda () (progn (stop-process p) 'ok))))
+                         (cons 'send-eof
+                               (funcall try (lambda () (progn (process-send-eof p) 'ok)))))))))
+             (while (not owner-done) (accept-process-output nil 0.1))
+             (let ((n 0))
+               (while (and (eq result :pending) (< n 50))
+                 (setq n (1+ n))
+                 (accept-process-output nil 0.05)))
+             result)"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK ((status . closed) (type . pipe) ",
+            "(get-buffer-process) (in-process-list) ",
+            "(running-child-p error \"Process pw169pipe stderr is not a subprocess\") ",
+            "(interrupt error \"Process pw169pipe stderr is not a subprocess\") ",
+            "(kill error \"Process pw169pipe stderr is not a subprocess\") ",
+            "(signal-0 error \"Cannot signal process pw169pipe stderr\") ",
+            "(continue . ok) (stop . ok) ",
+            "(send-eof error \"Process pw169pipe stderr not running: finished\n\"))",
+        )
+    );
+}
+
+/// A bare integer argument to `signal-process` is an OS pid, and GNU never
+/// looks it up: `internal-default-signal-process` calls `get_process` only for
+/// a NON-number (src/process.c:7369-7370), and a number goes straight to
+/// `CONS_TO_INTEGER (process, pid_t, pid)` (:7375-7376).  The docstring says so
+/// too (:7405-7407).
+///
+/// This port consulted the live process table first, so a small integer
+/// answered for whichever process happened to hold that internal `ProcessId`.
+/// Measured, `-Q --batch`, with exactly one live child:
+///
+/// ```text
+///                          GNU 31.0.90   Neomacs, before
+/// (signal-process 1 0)     -1            0      <- this port's process #1
+/// (signal-process 2 0)     -1            -1
+/// (signal-process 3 0)     -1            -1
+/// ```
+///
+/// `-1` is `kill (1, 0)` failing with EPERM against init.  Signal 0 only, so
+/// nothing is actually signalled.  Found by ledger 169's neighbour audit, not
+/// by the bug it set out to fix.
+#[test]
+fn signal_process_reads_an_integer_as_an_os_pid_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((p (make-process
+                      :name "pw169-sigfix"
+                      :buffer (generate-new-buffer " *pw169sig*")
+                      :command '("{sh}" "-c" "sleep 30")
+                      :noquery t
+                      :sentinel #'ignore))
+                  (answers (mapcar (lambda (n)
+                                     (condition-case e (signal-process n 0)
+                                       (error (list 'error (cadr e)))))
+                                   '(1 2 3)))
+                  (own (condition-case e (signal-process (process-id p) 0)
+                         (error (list 'error (cadr e))))))
+             (prog1 (list :small answers
+                          :own own
+                          :own-pid-is-large (and (> (process-id p) 100) t)
+                          :still-live (and (process-live-p p) t))
+               (delete-process p)))"#
+    ));
+
+    assert_eq!(
+        result,
+        "OK (:small (-1 -1 -1) :own 0 :own-pid-is-large t :still-live t)"
+    );
+}
