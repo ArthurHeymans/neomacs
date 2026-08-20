@@ -1767,6 +1767,33 @@ pub(crate) fn buffer_regexp_syntax_dependency(
     })
 }
 
+/// [`buffer_regexp_syntax_dependency`] plus the pattern's finite maximum
+/// per-attempt span in characters (`None` when unbounded), for callers
+/// that can propertize a bounded window instead of the whole tail.
+pub(crate) fn buffer_regexp_syntax_dependency_and_span(
+    buf: &Buffer,
+    pattern: &LispString,
+    case_fold: bool,
+    posix: bool,
+) -> Result<(BufferRegexpSyntaxDependency, Option<usize>), String> {
+    let syntax = buffer_syntax_lookup(buf);
+    let compiled = compile_lisp_pattern_with_posix_translation(
+        pattern,
+        case_fold,
+        posix,
+        buf.get_multibyte(),
+        buffer_search_translation_table(buf, case_fold),
+        &syntax,
+    )?;
+    let dependency = if compiled.uses_syntax {
+        BufferRegexpSyntaxDependency::BufferSyntaxDependent
+    } else {
+        BufferRegexpSyntaxDependency::SyntaxIndependent
+    };
+    let span = regex_emacs::pattern_max_match_chars(&compiled);
+    Ok((dependency, span))
+}
+
 fn string_char_match_data(searched_string: SearchedString, byte_md: EngineMatchData) -> MatchData {
     byte_md.publish_string(searched_string)
 }

@@ -1883,3 +1883,25 @@ fn prefilter_multibyte_needles_char_boundary() {
     // must be rejected (char-boundary skip), and matches stay byte-exact.
     assert_prefilter_equiv("\\(中文\\|éxx\\)", false, "a中文b éxx 中éxx中文".as_bytes());
 }
+
+#[test]
+fn test_pattern_max_match_chars() {
+    crate::test_utils::init_test_tracing();
+    let max = |pat: &str| pattern_max_match_chars(&regex_compile(pat, false, false).unwrap());
+    // Loop-free patterns get a finite conservative bound at least as
+    // large as any real match.
+    assert_eq!(max("hello"), Some(5));
+    assert_eq!(max("\\_<byte-compile\\_>"), Some(12));
+    assert_eq!(max("^foo$"), Some(3));
+    assert!(max("a\\|bb").unwrap() >= 2);
+    assert!(max("\\(ab\\)c").unwrap() >= 3);
+    assert!(max("[abc]x").unwrap() >= 2);
+    assert!(max("\\sw\\s-").unwrap() >= 2);
+    // Unbounded or counter-driven repetition, and backreferences,
+    // report no finite bound.
+    assert_eq!(max("a*"), None);
+    assert_eq!(max("a+b"), None);
+    assert_eq!(max("a\\{2,5\\}"), None);
+    assert_eq!(max("\\(x\\)\\1"), None);
+    assert_eq!(max(".*foo"), None);
+}

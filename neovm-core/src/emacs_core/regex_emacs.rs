@@ -6407,6 +6407,64 @@ fn goto_fail(
 /// speed-up for patterns that begin with a restricted set of characters.
 ///
 /// Byte length of the opcode at `pc`, or `None` for a malformed buffer.
+/// Conservative upper bound, in characters, on the buffer text a single
+/// match attempt of this pattern can consume, or `None` when no finite
+/// bound is known (repetition, backreferences, repeat counters,
+/// range-table charsets, or a bound past the cap). Every jump in a
+/// loop-free program points forward, so the program is a left-to-right
+/// DAG and the sum of every consuming opcode bounds any path through it.
+/// `exactn` counts bytes, which only overestimates its character count.
+pub(crate) fn pattern_max_match_chars(pattern: &CompiledPattern) -> Option<usize> {
+    const CAP: usize = 512;
+    let bytecode = &pattern.buffer;
+    let mut pc = 0usize;
+    let mut total = 0usize;
+    while pc < bytecode.len() {
+        let op = RegexOp::from_byte(*bytecode.get(pc)?)?;
+        match op {
+            RegexOp::Exactn => total += *bytecode.get(pc + 1)? as usize,
+            RegexOp::AnyChar
+            | RegexOp::SyntaxSpec
+            | RegexOp::NotSyntaxSpec
+            | RegexOp::CategorySpec
+            | RegexOp::NotCategorySpec
+            | RegexOp::SyntaxSpecSet => total += 1,
+            RegexOp::Charset | RegexOp::CharsetNot => {
+                // The high bit marks a trailing range table that
+                // `opcode_len` does not skip; walking past one would
+                // misread its bytes as opcodes.
+                if bytecode.get(pc + 1)? & 0x80 != 0 {
+                    return None;
+                }
+                total += 1;
+            }
+            RegexOp::Duplicate
+            | RegexOp::SucceedN
+            | RegexOp::JumpN
+            | RegexOp::SetNumberAt => return None,
+            RegexOp::Jump
+            | RegexOp::OnFailureJump
+            | RegexOp::OnFailureKeepStringJump
+            | RegexOp::OnFailureJumpLoop
+            | RegexOp::OnFailureJumpNastyloop
+            | RegexOp::OnFailureJumpSmart => {
+                if extract_number(bytecode, pc + 1) < 0 {
+                    return None;
+                }
+            }
+            _ => {}
+        }
+        if total > CAP {
+            return None;
+        }
+        match opcode_len(bytecode, pc) {
+            Some(len) if len > 0 => pc += len,
+            _ => return None,
+        }
+    }
+    Some(total)
+}
+
 fn opcode_len(bytecode: &[u8], pc: usize) -> Option<usize> {
     let op = RegexOp::from_byte(*bytecode.get(pc)?)?;
     Some(match op {

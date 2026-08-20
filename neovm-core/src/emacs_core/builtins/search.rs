@@ -648,13 +648,28 @@ fn prepare_current_buffer_regexp_syntax_to(
     Ok(syntax_properties)
 }
 
+/// How a buffer regexp search should obtain its syntax-table properties.
+enum RegexpSearchPrep {
+    /// `syntax-propertize` already ran far enough; search directly.
+    Ready(BufferRegexpSyntaxProperties),
+    /// Unbounded forward search with a finite per-attempt span: the caller
+    /// runs the probe ladder in [`propertize_window_for_forward_regexp`]
+    /// before the committed search.
+    Windowed {
+        syntax_properties: BufferRegexpSyntaxProperties,
+        start_char: usize,
+        region_end_char: usize,
+        margin_chars: usize,
+    },
+}
+
 fn prepare_buffer_regexp_search(
     eval: &mut super::eval::Context,
     args: &[Value],
     kind: SearchKind,
     case_fold: bool,
     posix: bool,
-) -> Result<BufferRegexpSyntaxProperties, Flow> {
+) -> Result<RegexpSearchPrep, Flow> {
     // GNU `search_command` (src/search.c) runs `CHECK_STRING (string)` before
     // it looks at COUNT, so a non-string pattern signals even when the search
     // would do nothing. Keep that order without carrying the borrow past the
@@ -662,13 +677,13 @@ fn prepare_buffer_regexp_search(
     let _ = eval.expect_lisp_string(args[0])?;
     let (_, opts, _, start_char) = current_search_context_in_manager(&eval.buffers, args, kind)?;
     if opts.steps == 0 {
-        return Ok(
+        return Ok(RegexpSearchPrep::Ready(
             if crate::emacs_core::syntax::parse_sexp_lookup_properties_enabled(eval) {
                 BufferRegexpSyntaxProperties::Honor
             } else {
                 BufferRegexpSyntaxProperties::Ignore
             },
-        );
+        ));
     }
 
     // The matcher's reachable range: a backward search only examines
@@ -682,7 +697,184 @@ fn prepare_buffer_regexp_search(
             _ => None,
         },
     };
+
+    // An unbounded forward search whose pattern has a finite per-attempt
+    // span doesn't need the whole tail propertized up front: the probe
+    // ladder covers exactly as much as the search examines.
+    if matches!(opts.direction, SearchDirection::Forward)
+        && target.is_none()
+        && opts.steps == 1
+        && crate::emacs_core::syntax::parse_sexp_lookup_properties_enabled(eval)
+    {
+        // Warm path: `syntax-propertize--done` already covers the whole
+        // accessible region (fontified buffer, no edits since), so neither
+        // the ladder's probe search nor any propertize call is needed.
+        let done = eval
+            .eval_symbol("syntax-propertize--done")
+            .unwrap_or(Value::fixnum(-1));
+        let covered = eval
+            .buffers
+            .current_buffer()
+            .map(|buf| buf.accessible_char_region().end().get())
+            .is_some_and(|end| {
+                // `end` is 0-based; full coverage means `--done` reached the
+                // 1-based point-max = end + 1, the old conservative target.
+                matches!(done.kind(), ValueKind::Fixnum(d) if d >= end as i64 + 1)
+            });
+        if covered {
+            return Ok(RegexpSearchPrep::Ready(BufferRegexpSyntaxProperties::Honor));
+        }
+        let windowed = {
+            let pattern = eval.expect_lisp_string(args[0])?;
+            let buf = eval
+                .buffers
+                .current_buffer()
+                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+            let (dependency, span) = super::regex::buffer_regexp_syntax_dependency_and_span(
+                buf, pattern, case_fold, posix,
+            )
+            .map_err(regex_error_signal)?;
+            (dependency.is_buffer_syntax_dependent())
+                .then_some(span)
+                .flatten()
+                .map(|span| {
+                    (
+                        start_char.max(1) as usize,
+                        buf.accessible_char_region().end().get(),
+                        span.saturating_add(2),
+                    )
+                })
+        };
+        if let Some((start_char, region_end_char, margin_chars)) = windowed {
+            return Ok(RegexpSearchPrep::Windowed {
+                syntax_properties: BufferRegexpSyntaxProperties::Honor,
+                start_char,
+                region_end_char,
+                margin_chars,
+            });
+        }
+    }
+
     prepare_current_buffer_regexp_syntax_to(eval, args[0], case_fold, posix, target)
+        .map(RegexpSearchPrep::Ready)
+}
+
+/// Unpack a [`RegexpSearchPrep`], running the probe ladder for the
+/// windowed case so the committed search reads only propertized text.
+fn resolve_regexp_search_prep(
+    eval: &mut super::eval::Context,
+    args: &[Value],
+    case_fold: bool,
+    posix: bool,
+    prep: RegexpSearchPrep,
+) -> Result<BufferRegexpSyntaxProperties, Flow> {
+    match prep {
+        RegexpSearchPrep::Ready(syntax_properties) => Ok(syntax_properties),
+        RegexpSearchPrep::Windowed {
+            syntax_properties,
+            start_char,
+            region_end_char,
+            margin_chars,
+        } => {
+            propertize_window_for_forward_regexp(
+                eval,
+                args,
+                case_fold,
+                posix,
+                syntax_properties,
+                start_char,
+                region_end_char,
+                margin_chars,
+            )?;
+            Ok(syntax_properties)
+        }
+    }
+}
+
+/// Propertize just enough of the buffer for an unbounded forward regexp
+/// search whose pattern has a finite per-attempt span (`margin_chars` =
+/// that span + 2). GNU's matcher extends `syntax-propertize--done` lazily
+/// as it advances (`update_syntax_table_forward` →
+/// `parse_sexp_propertize`, which stops at charpos + 1); our matcher
+/// cannot run Lisp mid-match, and propertizing to point-max on every
+/// search made each syntax-dependent search after a buffer edit re-run
+/// `syntax-propertize` over the whole tail — quadratic under
+/// search/replace loops.
+///
+/// Ladder: propertize a window, run a pure probe through the same
+/// searcher core the committed search uses (no point/match-data commit),
+/// and accept once the found match end clears the window frontier by
+/// `margin_chars`. Every attempt at or before the found start examines at
+/// most its start + span + 1 positions, all inside the window, so the
+/// committed re-run reads only propertized text and returns the identical
+/// result. Failures widen the window ×4 until it covers the region — at
+/// which point behavior equals the old conservative full propertize.
+fn propertize_window_for_forward_regexp(
+    eval: &mut super::eval::Context,
+    args: &[Value],
+    case_fold: bool,
+    posix: bool,
+    syntax_properties: BufferRegexpSyntaxProperties,
+    start_char: usize,
+    region_end_char: usize,
+    margin_chars: usize,
+) -> Result<(), Flow> {
+    let mut lookahead = 4096usize.max(margin_chars.saturating_mul(4));
+    loop {
+        let window_end = start_char.saturating_add(lookahead).min(region_end_char);
+        crate::emacs_core::syntax::maybe_syntax_propertize_for_scan(
+            eval,
+            window_end.saturating_add(1),
+        )?;
+        if window_end >= region_end_char {
+            return Ok(());
+        }
+        let match_context = current_buffer_regexp_match_context(
+            &eval.obarray,
+            &eval.buffers,
+            current_word_boundary_lookup(eval),
+            syntax_properties,
+        );
+        let probe = {
+            let pattern = expect_lisp_string(&args[0])?;
+            let Some(buf) = eval.buffers.current_buffer_mut() else {
+                return Ok(());
+            };
+            super::regex::re_search_forward_lisp_with_posix(
+                buf,
+                pattern,
+                None,
+                false,
+                case_fold,
+                posix,
+                match_context,
+            )
+        };
+        match probe {
+            Ok(Some(success)) => {
+                let (_, end_byte, _) = success.into_parts();
+                let end_char = eval
+                    .buffers
+                    .current_buffer()
+                    .map(|buf| buf.emacs_byte_pos_to_char_pos_clamped(end_byte).get())
+                    .unwrap_or(usize::MAX);
+                if end_char.saturating_add(margin_chars) <= window_end {
+                    return Ok(());
+                }
+            }
+            // A real regexp error reproduces in the committed search; give
+            // it full coverage so its semantics match the old path exactly.
+            Err(msg) if msg != "Search failed" => {
+                crate::emacs_core::syntax::maybe_syntax_propertize_for_scan(
+                    eval,
+                    region_end_char.saturating_add(1),
+                )?;
+                return Ok(());
+            }
+            Ok(None) | Err(_) => {}
+        }
+        lookahead = lookahead.saturating_mul(4);
+    }
 }
 
 pub(crate) fn builtin_search_backward(
@@ -770,8 +962,9 @@ pub(crate) fn builtin_re_search_forward(
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let syntax_properties =
+    let prep =
         prepare_buffer_regexp_search(eval, &args, SearchKind::ForwardRegexp, case_fold, false)?;
+    let syntax_properties = resolve_regexp_search_prep(eval, &args, case_fold, false, prep)?;
     let match_context = current_buffer_regexp_match_context(
         &eval.obarray,
         &eval.buffers,
@@ -891,8 +1084,9 @@ pub(crate) fn builtin_re_search_backward(
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let syntax_properties =
+    let prep =
         prepare_buffer_regexp_search(eval, &args, SearchKind::BackwardRegexp, case_fold, false)?;
+    let syntax_properties = resolve_regexp_search_prep(eval, &args, case_fold, false, prep)?;
     let match_context = current_buffer_regexp_match_context(
         &eval.obarray,
         &eval.buffers,
@@ -1006,8 +1200,9 @@ pub(crate) fn builtin_posix_search_forward(
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let syntax_properties =
+    let prep =
         prepare_buffer_regexp_search(eval, &args, SearchKind::ForwardRegexp, case_fold, true)?;
+    let syntax_properties = resolve_regexp_search_prep(eval, &args, case_fold, true, prep)?;
     let match_context = current_buffer_regexp_match_context(
         &eval.obarray,
         &eval.buffers,
@@ -1034,8 +1229,9 @@ pub(crate) fn builtin_posix_search_backward(
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let syntax_properties =
+    let prep =
         prepare_buffer_regexp_search(eval, &args, SearchKind::BackwardRegexp, case_fold, true)?;
+    let syntax_properties = resolve_regexp_search_prep(eval, &args, case_fold, true, prep)?;
     let match_context = current_buffer_regexp_match_context(
         &eval.obarray,
         &eval.buffers,
