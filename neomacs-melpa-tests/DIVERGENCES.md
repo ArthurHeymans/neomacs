@@ -21321,6 +21321,34 @@ shape, and the test fails if that number grows.  It is 6 today.
    `neovm-core/src/emacs_core/process.rs:8615-8634`, measured above.  An exit
    sentinel in this port sees its own process in `process-list'; GNU's does not.
    Needs its own entry.
+
+   > **2026-08-20, entry 169: FIXED.**  The prerequisite named here --
+   > `run_process_sentinel_callback` building its argument with
+   > `Value::make_process(pid)` -- turned out not to be one.  That value is
+   > cached and `eq`-stable and is never evicted, `reap_exited_process` moves the
+   > process into the deleted table that `get_any` reads, and `delete-process`
+   > in this port was *already* running its sentinel after removing the process,
+   > which was a working proof the identity survives.  GNU says why in general:
+   > `exec_sentinel` passes the `Lisp_Object proc` the loop already holds
+   > (`list3 (sentinel, proc, reason)`, src/process.c:7846), so the identity is
+   > the object and `Vprocess_alist` is only a directory.  The real hazard was
+   > the six LIVE-only `self.processes.get(pid)` reads *between* the old
+   > sentinel call and the old reap, each behind an `unwrap_or(Value::NIL)` or an
+   > `unwrap_or_else(|| "finished\n")`.
+   >
+   > Two things this entry's three-column table could not show also had to be
+   > handled: the removal is `delete-exited-processes'-gated (:7926-7929), so
+   > with the flag nil GNU's exit sentinel *does* see its own process; and
+   > `delete-process` diverged in the OPPOSITE direction, removing
+   > unconditionally and too early (GNU's `Fdelete_process` reaches the sentinel
+   > through `status_notify` at :1129/:1149 and only then removes at :1153).
+   > Entry 169's neighbour audit also found that seven of the ten Lisp answers
+   > the reorder corrects are not about the process list at all: GNU's
+   > "Process NAME is not active" gate is `p->infd < 0`, and `p->infd` goes to
+   > -1 inside the `deactivate_process` that `remove_process` calls, so retiring
+   > late left `interrupt-process`, `kill-process`, `stop-process`,
+   > `continue-process` and `process-running-child-p` silently succeeding on a
+   > dead process -- and `stop-process` re-entering the sentinel.
 2. **Six sites in four suites** still gate a pin on the clock, recorded as
    `NeedsAudit' with citations: `auctex_cluttex/workflows.rs:408,517` (pins
    `:next "View"`, `:messages ("ClutTeX finished successfully.")` and
@@ -22766,3 +22794,541 @@ building, which is why the two suites took 964 s and 727 s against ledger 164's
   the first time, with the reason in `forward.rs` and the size above.
 
 Status: FIXED.
+
+## 169. Entry 165's handed-over inversion: this port ran a process's exit sentinel BEFORE retiring it, and GNU's order is the other way round -- the fix is one type whose only constructors perform the retirement, and the neighbour audit found that seven of the ten Lisp answers it corrects are not about the process list at all, because GNU's `p->infd < 0` gate closes at exactly the moment `remove_process` runs -- FIXED
+
+Entry 165 measured this and deliberately left it: "It deserves its own entry, its
+own red pin and its own oracle run, not a hurried reorder at the end of this
+one."  It also named the one thing a fix had to settle first --
+`run_process_sentinel_callback` builds its argument with
+`Value::make_process(pid)`, so an earlier reap has to leave that identity
+resolvable.  Both are answered below, and the second one is answered by GNU.
+
+### 1. Reproduced first, in both editors, and the table is larger than 165's
+
+165's probe asked three questions.  This entry's asks thirty-five, on three
+process kinds, and adds the two settings that decide the answer.  All of it is
+`-Q --batch`, GNU Emacs 31.0.90 against `./target/release/neomacs` at this
+branch's merge base (`5384b1416`).  Probes are `tmp/pw169/sentinel-visibility.el`,
+`tmp/pw169/gnu-extra.el`, `tmp/pw169/audit.el` and `tmp/pw169/audit-list.el`.
+
+165's three columns, re-derived rather than inherited:
+
+```
+;; child, connection-type pipe, sentinel inspects itself
+GNU      PW169-CHILD-SENTINEL: (:get-buffer-process nil :get-process nil
+                                :in-process-list nil :process-status exit)
+Neomacs  PW169-CHILD-SENTINEL: (:get-buffer-process t   :get-process t
+                                :in-process-list t   :process-status exit)
+```
+
+and the six the brief did not have:
+
+| case | GNU 31.0.90 | Neomacs, merge base |
+|---|---|---|
+| pty child, exit sentinel | `nil nil nil` | `t t t` |
+| `:stderr` pipe, its own sentinel | `nil nil nil`, status `closed` | `t t t`, status `closed` |
+| signalled child (`kill -TERM $$`) | `nil nil`, status `signal`, exit 15 | `t t`, same status |
+| `delete-process`, default flag | `nil nil nil` | `nil nil nil` |
+| **`delete-exited-processes` nil, exit** | **`t t t`** | `t t t` |
+| **`delete-exited-processes` nil, `delete-process`** | **`t t t`**, then `nil nil` after | **`nil nil nil`** |
+
+The two bold rows are why this is not "reap earlier".  GNU's removal is
+*conditional*, and with the flag nil GNU's exit sentinel **does** see its own
+process -- the opposite answer from the default.  A fix that reaped
+unconditionally before the sentinel would have passed 165's three-column table
+and broken this one.  The last row is the same defect inverted, in a neighbour:
+`delete-process` in this port removed unconditionally and too early.
+
+Two more measurements that decided the design:
+
+```
+;; two children exiting together; each sentinel lists the live pw169- processes
+GNU      (("pw169-b" ("pw169-a")) ("pw169-a" ()))
+Neomacs  (("pw169-a" ("pw169-b" "pw169-a")) ("pw169-b" ("pw169-b")))
+```
+
+-- so the retirement is per-process and immediately before that process's own
+sentinel, not a batch at the end of the pass; and each Neomacs sentinel saw
+*itself*.  (The order in which the two run also differs; §9.)
+
+```
+;; the process VALUE captured inside a GNU sentinel, after removal
+PW169-REAPED-VALUE: (:eq-to-original t :processp t :name "pw169-val"
+ :status exit :exit 0 :buffer t :sentinel t
+ :filter internal-default-process-filter :command ("sh" "-c" "printf hi")
+ :id 566626 :type real :contact t :coding (utf-8-unix . utf-8-unix)
+ :query-on-exit t :plist nil :tty "/dev/pts/31")
+```
+
+### 2. GNU's ordering, with the lines checked one at a time
+
+165 cited `remove_process` at :7926 and `exec_sentinel` at :7937.  Re-read, the
+per-process body of `status_notify` is:
+
+```c
+	  if (p->raw_status_new)                              /* :7914 */
+	    update_status (p);                                /* :7915 */
+	  msg = status_message (p);                           /* :7916 */
+
+	  symbol = p->status;                                 /* :7919 */
+	  if (CONSP (p->status)) symbol = XCAR (p->status);
+
+	  if (EQ (symbol, Qsignal) || EQ (symbol, Qexit)
+	      || EQ (symbol, Qclosed))                        /* :7923-7924 */
+	    {
+	      if (delete_exited_processes)                    /* :7926 */
+		remove_process (proc);                        /* :7927 */
+	      else
+		deactivate_process (proc);                    /* :7929 */
+	    }
+
+	  p->update_tick = p->tick;                           /* :7935 */
+	  exec_sentinel (proc, msg);                          /* :7937 */
+```
+
+`remove_process` is at :957-966 and is only two lines of work -- `Frassq` then
+`Fdelq` on `Vprocess_alist`, then `deactivate_process`.  `deactivate_process`
+(:4812) does **not** touch the alist.  `get-buffer-process` walks the alist
+(`FOR_EACH_PROCESS`, :8425-8427), as do `get-process` and `process-list`, and
+`delete-exited-processes` is `DEFVAR_BOOL`'d at :8916 with default 1 (:8920).
+That is the whole mechanism, and it accounts for both bold rows above.
+
+### 3. The prerequisite 165 named, answered by GNU rather than by us
+
+165 asked whether `Value::make_process(pid)` survives an earlier reap.  GNU's
+answer is that the question does not arise for it, and *why* transfers:
+
+```c
+  sentinel = p->sentinel;                                 /* :7823 */
+  ...
+  internal_condition_case_1 (read_process_output_call,
+			     list3 (sentinel, proc, reason),      /* :7846 */
+```
+
+`exec_sentinel` is handed the `Lisp_Object proc` the notification loop already
+holds, and passes it verbatim.  Nothing between `remove_process` and the
+sentinel re-derives the process from a name or a table.  **In GNU the process
+identity IS the object, and `Vprocess_alist` is a directory, not the storage.**
+That is what `PW169-REAPED-VALUE` above measures: after removal the object still
+answers name, status, exit code, buffer, sentinel, filter, command, pid, type,
+contact, coding, query-on-exit, plist and tty, and is `eq` to the original.
+
+This port already has the same property and 165 did not credit it:
+`reap_exited_process` moves the `Process` from `processes` into
+`deleted_processes`, and `get_any`/`get_any_mut` read both.  `Value::make_process`
+is a cached, `eq`-preserving heap object keyed on `ProcessId`, "never evicted on
+`delete-process`" by its own docstring.  So the identity was never the problem.
+
+**The problem was the other half of the lookup.**  Between the old sentinel call
+and the old reap sat six reads through `self.processes.get(pid)` and
+`get_mut(pid)` -- the LIVE-only accessors -- each behind an `unwrap_or(Value::NIL)`
+or an `unwrap_or_else(|| "finished\n".to_string())`.  Moving the reap without
+moving those would have replaced a visible ordering bug with a silent one: a
+`nil` sentinel and a message that is always `"finished"`.  That, not
+`make_process`, is what the prerequisite should have said.
+
+### 4. The type: the retirement is the constructor
+
+`neovm-core/src/emacs_core/process/status_notify.rs` is a child module of
+`process.rs`, so it can see `ProcessManager`'s private tables while its own
+fields stay private to the parent -- entry 162's "a field whose type has no
+constructor outside the module", applied to an ordering instead of a root.
+
+```rust
+#[must_use = "retiring a process is only half of GNU's status_notify; \
+              its sentinel must still run"]
+pub(super) struct ProcessStatusNotification {
+    id: ProcessId,
+    sentinel: Value,
+    message: String,
+}
+```
+
+There is no struct literal writable in `process.rs`, and the only two
+constructors are `settle_status_and_retire` -- which applies the pending status,
+builds the message, and then takes the removal decision, all before it returns
+-- and `for_retired_process`, for the one notification that retires nothing.
+So "sentinel before retirement" is not a rule this file follows; it is a
+sentence the compiler will not accept.  And the sentinel arguments are carried
+in the value, so no caller can go looking for them through a `get` the
+retirement has just emptied.
+
+Two smaller shape changes come with it, and both replace a bool that asked the
+question with the two answers GNU actually has:
+
+* `ExitedProcessDisposition::{Remove, Deactivate}` -- `remove_process` (:7927)
+  and `deactivate_process` (:7929), not `delete_exited_processes_enabled() ->
+  bool`.
+* `ProcessIoTeardown::{Terminal, Network}` -- GNU needs no such split because
+  every kind's descriptors live in `p->open_fd[]`; this port keeps a child's pty
+  and pipes, a socket and a TLS stream in different fields.
+
+`notify_process_status_sentinel` lost a `reap_terminal: bool` parameter that all
+three of its callers passed `false`, and is now down to one honest caller,
+`continue-process`, whose `"continued"` is not a terminal status.
+
+### 5. `delete-process` reaches the same decision, and had to be split at GNU's seam
+
+`Fdelete_process` (:1083) is not "remove, then notify".  It stamps the status
+and kills the child (:1123-1150), calls `status_notify` (:1129 for a
+network/serial/pipe process, :1149 for a child) -- which takes the removal
+decision above and only then runs the sentinel -- and finishes with an
+unconditional `remove_process` at :1153, *after* the sentinel has returned.
+`kill_buffer_processes` (:8455) inherits this by calling `Fdelete_process`
+for the same three kinds (:8463-8464).
+
+`ProcessManager::delete_process` is now split at that seam:
+`stamp_process_for_delete` is :1123-1150 and leaves the process listed;
+`delete_process` is that plus the reap of :1153.  Both `delete-process` and
+`kill-buffer`'s teardown now go through `settle_status_and_retire`, so exactly
+one place in the file decides whether a retiring process leaves the process
+list.  The trailing reap runs *before* a signalling sentinel's error is
+propagated, because GNU's `exec_sentinel` swallows it in its own
+`internal_condition_case_1` (:7845-7848) and :1153 is therefore never skipped.
+
+### 6. The audit: 35 entry points, 10 divergent, 0 after -- and seven of the ten are not about the process list
+
+The audit is a value, not a prose list: `exit_sentinel_neighbour_audit`
+(`process_test.rs`) calls thirty-five process entry points from inside an exit
+sentinel and pins the whole result in one assert.  GNU was measured first
+(`tmp/pw169/audit-list.el`).
+
+| row | merge base | GNU, and now |
+|---|---|---|
+| `process-running-child-p` | `t` | `error "Process NAME is not active"` |
+| `get-process` | `t` | `nil` |
+| `get-buffer-process` | `t` | `nil` |
+| `memq` in `process-list` | `t` | `nil` |
+| `process-send-eof` | `ok` | `error "... not running: finished"` |
+| `interrupt-process` | `ok` | `error "... is not active"` |
+| `kill-process` | `ok` | `error "... is not active"` |
+| `continue-process` | `ok` | `error "... is not active"` |
+| `stop-process` | `ok` | `error "... is not active"` |
+| `process-status` after `delete-process` | `signal` | `exit` |
+
+The other twenty-five rows -- `processp`, `process-status`, `process-live-p`,
+`process-exit-status`, `process-id`, `process-name`, `process-buffer`,
+`process-mark`, `process-type`, `process-contact`, `process-filter`,
+`process-sentinel`, `process-plist`, `process-query-on-exit-flag`,
+`process-coding-system`, `process-inherit-coding-system-flag`,
+`process-tty-name`, `process-thread`, `set-process-plist`, `set-process-filter`,
+`process-send-string`, `signal-process`, `accept-process-output`,
+`delete-process` and the post-delete list membership -- matched GNU at the merge
+base and still do.
+
+**Seven of the ten are not about the process list, and that is the finding.**
+GNU gates `process_send_signal` on `p->infd < 0` (:7087-7089) and
+`Fprocess_running_child_p` on the same test (:7045-7047), and `p->infd` becomes
+-1 inside `deactivate_process` (:4845-4847) -- which `remove_process` calls at
+:965.  **GNU's "is not active" gate closes at exactly the instant of the
+retirement.**  This port's live-table lookup is that same gate, so retiring
+after the sentinel held it open, and five subrs silently succeeded on a dead
+process.  One of them was worse than silent: `stop-process` on a still-listed
+retiring process re-entered the sentinel, and the first run of the three-kind
+probe produced **4716 rows instead of 123** before a depth guard was added.
+None of that was visible from the reported symptom, and none of it needed a
+separate fix -- the five rows came green with the ordering.
+
+The call-site inventory that goes with it, re-derived against the finished
+branch rather than quoted from the start of it:
+
+* **`run_process_sentinel_callback`: 6 call sites.**  One (`:8314`) is the
+  funnel every terminal sentinel now goes through; the other five are the
+  non-terminal network notifications -- `"open\n"` on connect (`:8439`,
+  `:8502`), `"failed with code N"` (`:8443`, `:8506`) and the server-accept
+  `"open from ..."` (`:8641`).  None of those retires anything in GNU either.
+* **`run_status_notification_sentinel`: 4 call sites** -- the exit path
+  (`:8983`), the network-EOF path (`:8771`), `delete-process`/`kill-buffer`
+  (`:8374`) and `continue-process` (`:8330`).
+* **`notify_process_status_sentinel`: 3 callers at the merge base, 1 now** --
+  `continue-process`, whose `"continued"` is not one of `status_notify`'s
+  terminal symbols.  It also lost a `reap_terminal: bool` parameter that all
+  three callers passed `false`.
+* **10 removal-or-teardown call sites across five functions**, of which exactly
+  one -- `reap_exited_process` -- moves a process out of the live table.  Its
+  three call sites are `delete_process` itself, the trailing GNU `:1153` reap,
+  and `settle_status_and_retire`.
+
+**Zero sites now run a terminal sentinel before the retirement**, and **zero
+live-only accessors remain in any removal-to-sentinel window** -- the latter
+verified independently, not by the same reading that made the change.
+
+### 7. The audit's second pass found six rows this branch had just broken
+
+The three-kind sweep (`tmp/pw169/audit.el`, 41 probes x child / pty / `:stderr`
+pipe = 123 rows) was **24 divergent rows at the merge base**.  Re-run against
+the freshly built release binary it was **6** -- and all six were new, all in the
+pipe case, and all caused by the reorder:
+
+| row, `:stderr` pipe | merge base | after the reorder | GNU |
+|---|---|---|---|
+| `process-running-child-p` | not a subprocess | is not active | not a subprocess |
+| `interrupt-process` | not a subprocess | is not active | not a subprocess |
+| `kill-process` | not a subprocess | is not active | not a subprocess |
+| `signal-process` | Cannot signal | `ok` | Cannot signal |
+| `continue-process` | `ok` | is not active | `ok` |
+| `stop-process` | `ok` | is not active | `ok` |
+
+**GNU tests the process TYPE before it tests whether the process is active, in
+every one of them.**  `process_send_signal` has `!EQ (p->type, Qreal)` at
+:7084-7086 *before* `p->infd < 0` at :7087-7089;
+`Fprocess_running_child_p` has the same pair at :7042-7047;
+`internal-default-signal-process` raises "Cannot signal process" from
+`p->pid <= 0` after a bare `CHECK_PROCESS` (:7379-7382); and `Fstop_process` /
+`Fcontinue_process` never reach any of it, because they handle a network, serial
+or pipe process first and return the process (:7267-7278, :7294-7315).  A pipe
+is never `Qreal` and its pid is 0, so all five answers are independent of
+liveness.  This port asked liveness first and used `get_mut` where GNU asks the
+object.
+
+That inversion was **unreachable before this branch** -- a retiring pipe was
+still listed inside its own sentinel, so the liveness gate never fired -- which
+is why the merge base was accidentally right.  Fixed by
+`is_stale_real_process_designator_in_manager` (the staleness gate, asked only of
+the kind GNU's type check lets through) and `check_process_is_real_subprocess`
+(the type gate, asked through `get_any`), and by moving stop/continue/signal to
+`get_any_mut` so a retired connection still gets its `p->command` set as GNU
+sets it.  Pinned by `stderr_pipe_sentinel_neighbour_audit`.
+
+Re-run once more against the final binary, the 123-row sweep is down to **one**
+divergent row -- and that row is the same shape a third time.  `process-status`
+remaps a connection's status with an `else if` chain whose FIRST arm is
+`exit -> closed` (:1195-1196); `p->command == t -> stop` is the second
+(:1197-1198) and `run -> open` the third (:1199-1200).  So a connection that has
+finished reports `closed` however many times `stop-process` was called on it.
+This port asked `command == t` first.  Measured:
+
+```
+                        before   after-stop   after-continue
+GNU 31.0.90             closed   closed       closed
+Neomacs, before         closed   stop         closed
+```
+
+Invisible until something sets `p->command` on an already-closed connection --
+which is exactly what the `stop-process` fix two paragraphs up started doing,
+because GNU's `Fstop_process` (:7267-7278) has no liveness test at all.  Fixed
+and pinned by `a_stopped_but_finished_connection_reports_closed_like_gnu`.  The
+three-kind sweep is **0 divergent rows of 123**.
+
+**And one defect the sweep found that this branch did not cause.**  A bare
+integer argument to `signal-process` is an OS pid in GNU and is never looked up:
+`internal-default-signal-process` calls `get_process` only for a NON-number
+(:7369-7370) and a number goes straight to
+`CONS_TO_INTEGER (process, pid_t, pid)` (:7375-7376), which is what the
+docstring promises (:7405-7407).  This port consulted the live process table
+first, so a small integer answered for whichever process happened to hold that
+internal `ProcessId`.  Measured, `-Q --batch`, one live child:
+
+```
+                        GNU 31.0.90   Neomacs
+(signal-process 1 0)    -1            0      <- this port's process #1
+(signal-process 2 0)    -1            -1
+(signal-process 3 0)    -1            -1
+(signal-process PID 0)  0             0
+```
+
+`-1` is `kill (1, 0)` failing EPERM against init.  The comment above that arm
+already stated GNU's rule; the code under it did not follow it.  Fixed and
+pinned by `signal_process_reads_an_integer_as_an_os_pid_like_gnu`.
+
+### 8. Hypotheses eliminated
+
+* **"`Value::make_process(pid)` will not survive an earlier reap"** (165's, and
+  the brief's prerequisite).  Wrong in both halves.  The value is cached and
+  `eq`-stable and is never evicted; the deleted-process table plus `get_any`
+  keeps the process reachable; and `delete-process` in this port *already* ran
+  its sentinel after removing the process, which is a working proof that the
+  identity survives.  The real hazard was the six LIVE-only reads in the window,
+  which no amount of reasoning about `make_process` would have found.
+* **"The fix is to reap before the sentinel."**  Refuted by measurement: with
+  `delete-exited-processes` nil, GNU does *not* reap, and its sentinel sees its
+  own process.  The fix is to take GNU's *decision* before the sentinel.
+* **"The five signal subrs need their own `infd`-shaped gate."**  Considered
+  after the audit turned them up, and refuted by rebuilding: all five gate on the
+  live table already, and the retirement is what closes them.  Nothing was
+  written for those rows; they came green with the ordering.  The *second* pass
+  then showed the gate was in the wrong PLACE rather than missing -- see §7 --
+  which is a distinction only a re-measurement could make.
+* **"The three-kind sweep going 24 -> 6 means six rows were left over."**  It
+  did not.  All six were NEW, and every one of them was a regression this branch
+  had introduced ninety minutes earlier.  Diffing against GNU alone would have
+  read them as pre-existing; diffing against the merge base as well is what
+  named them.  Re-measuring the *base* after the fix, not just the fix, is the
+  step that earned this.
+* **"`builtin_signal_process_impl` is dead code and can be deleted."**  Refuted
+  by `rustc` rather than by grep -- `cargo rustc -p neovm-core --profile test
+  --lib -- --force-warn dead_code` does not report it, while the non-test build
+  does, and the 640 -> 195 drop in dead-code warnings between the two runs is
+  the check that `cfg(test)` really applied.  It has a caller at
+  `process_test.rs:807`.  It was aligned with its live
+  twin instead, so that test now exercises the corrected shape.
+* **"`deactivate_terminal_process_io` will do for the network EOF path too."**
+  Not tested and not adopted: it drops the whole of `live_io`, where the network
+  path deliberately drops only the socket and TLS stream.  Hence
+  `ProcessIoTeardown` rather than one call.
+* **"The two-children test can pin GNU's order."**  It cannot, and the test says
+  so: GNU's alist is newest-first (`create_process` conses onto the front, :953)
+  so GNU reports `pw169-b` first, while this port's walk is driven by poller
+  readiness and reported `pw169-a` first.  The test pins only what this entry is
+  about -- no sentinel sees itself, and the first sees exactly one other.
+
+### 9. Found and NOT fixed
+
+1. **The notification walk order.**  GNU visits processes newest-first, because
+   `FOR_EACH_PROCESS` walks `Vprocess_alist` and `create_process` conses onto its
+   front (:953).  This port's `poll_process_output_for_ids` takes the poller's
+   ready list.  Measured above: with two children exiting together GNU runs
+   `pw169-b`'s sentinel first and this port runs `pw169-a`'s.  Note that
+   `process-list` itself is already correct here -- `list_processes` sorts by
+   descending id with that exact citation -- so this is the *notification* order
+   only.  Entry 54 already special-cased the one case where it was Lisp-visible
+   (a `:stderr` pipe must not be notified before its owner), which is a reason to
+   think a general fix belongs with that machinery and not with this ordering.
+2. **Entry 166's decode residual belongs to a different entry, and here is its
+   price.**  GNU's `read_and_insert_process_output` returns before decoding
+   anything when the process has no live buffer (`if (!nread || NILP (p->buffer)
+   || !BUFFER_LIVE_P (...)) return;`, :6459-6465), and it is reached only for the
+   default filter under `fast-read-process-output` (:6557-6559, `DEFVAR_BOOL`
+   default true at :8980-8985); every other path decodes and then calls
+   `read_process_output_set_last_coding_system` (:6562-6565).  Measured, GNU
+   `-Q --batch` (`tmp/pw169/coding-residual.el`):
+
+   ```
+   fast-read-process-output=t
+   default-filter-no-buffer     last-coding-system-used=pw169-untouched
+   default-filter-with-buffer   last-coding-system-used=utf-8-unix
+   explicit-filter-no-buffer    last-coding-system-used=utf-8-unix
+   ```
+
+   So the residual is real and it is one `if` in GNU.  It is **not** the same
+   change as this entry: different function (`read_process_output`, not
+   `status_notify`), different observable (`last-coding-system-used` and the
+   decode carryover, not the process list), and 166 already priced its cost as
+   untangling the `proc.stdout` diagnostic mirrors, which are fed from the
+   decoded text.  Its own entry, and the measurement above means that entry does
+   not have to re-derive the GNU side.
+3. **`stamp_process_for_delete` can retire a process with a NON-terminal
+   status, and GNU cannot.**  Its middle arm adopts a staged `pending_status`,
+   and `process_status_from_child_wait` maps `ChildWait::Continued` to `run`
+   (`process.rs:2696`), so `delete-process` on a process carrying a staged
+   continuation retires it with status `run`.  Because that arm is an `else if`
+   it also skips the kill below, and `wait_for_real_process_child_termination`
+   then calls `child.wait()` on a child nobody signalled -- an unbounded block.
+   GNU cannot reach the state, and the line that prevents it is deliberate:
+   `Fdelete_process` sets `p->raw_status_new = 0` at :1124, DISCARDING the
+   pending raw status before anything else, and then stamps
+   `(signal . SIGKILL)` unless the status is already `signal` or `exit`
+   (:1142-1146).
+
+   Not fixed here, and the reason is the shape of the change rather than its
+   size.  Mirroring :1124 also discards a pending TERMINAL status: for a process
+   whose child has exited with `(exit . 0)` staged but not applied, GNU stamps
+   `(signal . SIGKILL)` and loses the exit code -- which is presumably what this
+   port's adopt-arm was written to avoid.  So "mirror :1124" is a claim about
+   two states and neither has been measured.  This is a code-reading result, not
+   a reproduction, and it is recorded as one; the next entry should start from a
+   reproduction of both states.  The arm is pre-existing -- this branch only
+   moved it out of `delete_process` into `stamp_process_for_delete`.
+4. **`process-tty-name` on a pipe process** answers `nil` in both editors and was
+   not probed for a pty in the pinned audit (the pin uses
+   `:connection-type 'pipe`); the three-kind sweep covers the pty and agrees.
+   Recorded so the next reader knows the pin's scope is one kind and the sweep's
+   is three.
+5. **`(signal-process N SIG)` for a negative integer.**  GNU's
+   `CONS_TO_INTEGER` (:7376) accepts a negative number and `kill (-pgid, sig)`
+   signals a process group; this port's arm is guarded `pid >= 0` and a negative
+   falls through to the designator resolver, which errors.  Untouched here
+   because the fix above only removed a table lookup and did not widen the
+   accepted domain; sized, not diagnosed.
+
+### 10. Gates
+
+```
+cargo fmt --all --check                                   clean
+cargo check --workspace --all-targets                     clean
+cargo nextest run -p neovm-core -p neomacs-layout-engine  11092 run: 11092 passed, 54 skipped
+cargo nextest run -p neovm-oracle-tests                   38790 run: 38790 passed, 0 failed
+cargo xtask gc-stress --editor ./target/release/neomacs   9/9 probes passed
+cargo nextest run -p neomacs-melpa-tests --no-fail-fast   933 run: 923 passed, 10 failed, 2 skipped
+```
+
+The engine count is the merge base's 11080 plus this branch's twelve new tests.
+The oracle ran the whole suite rather than being stopped: 165's run was abandoned
+at 29677/38790 under a load average of 70-90, and this one finished 38790 in
+855s.  Both the oracle and gc-stress ran against the same
+`./target/release/neomacs` the melpa run drives, rebuilt by
+`cargo xtask fresh-build --release` after the last source change
+(`no_byte_compile=false`, pdump newer than the binary).
+
+**One mistake worth recording.**  A melpa run was started while the oracle was
+still going and reported `912 passed, 21 failed`.  Overlapping suites on a shared
+32-core box is not a gate, and the number above is the re-run with nothing else
+in flight (load average 11 rather than 200+).  The discarded run's failure set
+does not even intersect the real one cleanly -- it contains `anaconda_mode`,
+`racer`, `ytdl`, `embark_consult` and three helm TUI suites that pass otherwise,
+and it does NOT contain `pipenv`, which is the one real flake.  A concurrent run
+does not just add noise; it changes which tests fail.
+
+**The melpa ten, attributed rather than assumed.**  Seven are the set already
+known deterministic at the merge base: `apple_container_tramp`,
+`auto_save_buffers_enhanced`, `importmagic`, `jedi`, `quelpa`, `leuven_theme`,
+`gruvbox_theme`.  Of the other three:
+
+* `apheleia` and `git_gutter_fringe_real_gui_rows_match_gnu` pass in isolation
+  (`2 tests run: 2 passed`).  Entry 165 already recorded `apheleia` as
+  load-sensitive; the second is a GUI-display test.
+* `pipenv` is the one that needed real work, and the answer is that it is
+  **pre-existing and flaky at the same rate**.  Its
+  `public_shell_sends_init_command_and_closes_owned_comint_process` case pins the
+  shell buffer's whole text as `"\nProcess shell finished\n"`, and Neomacs
+  sometimes answers `"ack:exec pipenv shell\n\nProcess shell finished\n"`.
+  Twelve solo runs on each binary, both built by `fresh-build --release`:
+
+  ```
+  merge base 5384b1416   F P F P P P P P P F P F   8 passed / 4 failed
+  this branch            P P P P F P F P P F F P   8 passed / 4 failed
+  ```
+
+  The failing text is byte-identical between them.  The 39-test process subset,
+  four runs on each:
+
+  ```
+  merge base    39/39  39/39  38/39  38/39
+  this branch   38/39  38/39  39/39  38/39
+  ```
+
+  `pipenv` is the only failure in either column.  So it is an **eighth**
+  pre-existing melpa failure, not among the seven, and it is not adopted here.
+  Building the merge-base binary to settle this cost a full `fresh-build` in each
+  direction, and it was the only way to tell a pre-existing flake from a
+  regression in exactly the code this branch changes.
+
+  The race is in the fixture, and it is entry 165's own residual.
+  `pip384-test-wait-file` waits for `stdin<exec pipenv shell>` to appear in the
+  boundary LOG, and the shell stand-in writes that log line *before* it prints
+  `ack:...` to stdout -- so the gate does not establish that the ack has been
+  read.  165 rewrote this suite's other clock-gated pin and left this one gating
+  on a file.  Its own docstring for `pip384-test-wait-process` argues that
+  waiting for death is not waiting for the output; the same argument applies one
+  level down to waiting for a log line that precedes the output being pinned.
+  Recorded with the rate rather than a verdict, because 165's closing
+  "7 tests run: 7 passed" was one sample of a two-in-three test.
+
+**And the gate that is not a number.**  The three-kind neighbour sweep
+(`tmp/pw169/audit.el`: 41 probes x child / pty / `:stderr` pipe = 123 rows,
+diffed against GNU Emacs 31.0.90) went from **24 divergent rows at the merge base
+to 0**, and `tmp/pw169/sentinel-visibility.el` is byte-identical between the two
+editors.  The single-kind version of the sweep is `exit_sentinel_neighbour_audit`
+and the pipe-kind rows are `stderr_pipe_sentinel_neighbour_audit`, so the next
+reader gets tests rather than shell scripts.
+
+Status: FIXED -- five engine defects, of which the reported one is the first.
+The other four came out of the audit: `delete-process` retiring around the
+`delete-exited-processes` decision instead of through it; the type check that
+must precede the liveness check in five subrs; `signal-process` reading a bare
+integer as a table index rather than an OS pid; and `process-status` letting a
+stop outrank an exit.  **Two of those four were regressions this branch itself
+introduced, caught by re-running the audit against the rebuilt binary** -- which
+is the argument for diffing the fix against the merge base as well as against
+GNU, rather than against GNU alone.

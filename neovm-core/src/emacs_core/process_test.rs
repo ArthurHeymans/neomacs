@@ -11213,3 +11213,711 @@ fn a_process_decoder_carries_its_state_and_its_carryover_across_a_read() {
         )
     );
 }
+
+// ---------------------------------------------------------------------------
+// Ledger 169: the removal decision precedes the sentinel (GNU `status_notify`)
+// ---------------------------------------------------------------------------
+
+/// GNU's `status_notify` settles the process's presence in `Vprocess_alist`
+/// BEFORE it runs the sentinel: it applies the pending status
+/// (src/process.c:7914-7915), builds the message (:7916), then takes the
+/// removal decision -- `remove_process' when `delete-exited-processes' is
+/// non-nil, `deactivate_process' otherwise (:7926-7929) -- and only then calls
+/// `exec_sentinel' (:7937).  `get-buffer-process' (:8425-8427),
+/// `get-process' and `process-list' all walk `Vprocess_alist', so an exit
+/// sentinel in GNU sees its own process already gone.
+///
+/// Measured, `emacs -Q --batch`, GNU Emacs 31.0.90:
+///
+/// ```text
+/// PW169-CHILD-SENTINEL: (:event "finished" :get-buffer-process nil
+///                        :get-process nil :in-process-list nil
+///                        :process-status exit :process-live-p nil ...)
+/// ```
+#[test]
+fn exit_sentinel_sees_its_own_process_already_removed_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((buf (generate-new-buffer " *pw169-child*"))
+                  (seen :pending)
+                  (proc (make-process
+                         :name "pw169-child"
+                         :buffer buf
+                         :command '("{sh}" "-c" "printf hi")
+                         :connection-type 'pipe
+                         :noquery t
+                         :sentinel
+                         (lambda (p event)
+                           (when (string-prefix-p "finished" event)
+                             (setq seen
+                                   (list :get-buffer-process
+                                         (and (get-buffer-process buf) t)
+                                         :get-process
+                                         (and (get-process "pw169-child") t)
+                                         :in-process-list
+                                         (and (memq p (process-list)) t)
+                                         :process-status (process-status p)
+                                         :buffer-text
+                                         (with-current-buffer buf
+                                           (buffer-substring-no-properties
+                                            (point-min) (point-max))))))))))
+             (while (eq seen :pending) (accept-process-output proc 0.1))
+             seen)"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (:get-buffer-process nil :get-process nil :in-process-list nil ",
+            ":process-status exit :buffer-text \"hi\")",
+        )
+    );
+}
+
+/// The same removal decision on a pty child.  GNU takes it in `status_notify`
+/// regardless of `connection-type`, because the decision reads only
+/// `p->status` (src/process.c:7919-7929).
+///
+/// Measured, GNU Emacs 31.0.90:
+/// `PW169-PTY-SENTINEL: (:event "finished" :get-buffer-process nil
+///  :get-process nil :in-process-list nil :process-status exit)`
+#[test]
+fn exit_sentinel_of_a_pty_child_sees_its_process_removed_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((buf (generate-new-buffer " *pw169-pty*"))
+                  (seen :pending)
+                  (proc (make-process
+                         :name "pw169-pty"
+                         :buffer buf
+                         :command '("{sh}" "-c" "printf hi")
+                         :connection-type 'pty
+                         :noquery t
+                         :sentinel
+                         (lambda (p event)
+                           (when (string-prefix-p "finished" event)
+                             (setq seen
+                                   (list :get-buffer-process
+                                         (and (get-buffer-process buf) t)
+                                         :get-process
+                                         (and (get-process "pw169-pty") t)
+                                         :in-process-list
+                                         (and (memq p (process-list)) t)
+                                         :process-status
+                                         (process-status p))))))))
+             (while (eq seen :pending) (accept-process-output proc 0.1))
+             seen)"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (:get-buffer-process nil :get-process nil ",
+            ":in-process-list nil :process-status exit)",
+        )
+    );
+}
+
+/// The removal is `delete-exited-processes'-gated, and this is what makes the
+/// ordering observable rather than merely early: GNU calls `remove_process'
+/// only under the flag and `deactivate_process' otherwise
+/// (src/process.c:7926-7929), and `deactivate_process' (:4812) does not touch
+/// `Vprocess_alist'.  So with the flag nil GNU's exit sentinel DOES see its own
+/// process -- the opposite answer from the default -- which no "reap earlier"
+/// change may flatten.
+///
+/// Measured, GNU Emacs 31.0.90:
+/// `PW169-KEEP-SENTINEL: (:event "finished" :get-buffer-process t
+///  :get-process t :in-process-list t :process-status exit)`
+#[test]
+fn exit_sentinel_still_sees_its_process_when_delete_exited_processes_is_nil() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((delete-exited-processes nil)
+                  (buf (generate-new-buffer " *pw169-keep*"))
+                  (seen :pending)
+                  (proc (make-process
+                         :name "pw169-keep"
+                         :buffer buf
+                         :command '("{sh}" "-c" "printf hi")
+                         :noquery t
+                         :sentinel
+                         (lambda (p event)
+                           (when (string-prefix-p "finished" event)
+                             (setq seen
+                                   (list :get-buffer-process
+                                         (and (get-buffer-process buf) t)
+                                         :get-process
+                                         (and (get-process "pw169-keep") t)
+                                         :in-process-list
+                                         (and (memq p (process-list)) t)
+                                         :process-status
+                                         (process-status p))))))))
+             (while (eq seen :pending) (accept-process-output proc 0.1))
+             seen)"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (:get-buffer-process t :get-process t ",
+            ":in-process-list t :process-status exit)",
+        )
+    );
+}
+
+/// A signalled child takes the same path: `status_notify' compares the status
+/// SYMBOL against `Qsignal', `Qexit' and `Qclosed' (src/process.c:7923-7924),
+/// so `(signal . 15)' is removed exactly like `(exit . 0)'.
+///
+/// Measured, GNU Emacs 31.0.90:
+/// `PW169-SIGNAL-SENTINEL: (:event "terminated" :get-process nil
+///  :in-process-list nil :process-status signal :exit-status 15)`
+#[test]
+fn signalled_child_sentinel_sees_its_process_removed_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((buf (generate-new-buffer " *pw169-sig*"))
+                  (seen :pending)
+                  (proc (make-process
+                         :name "pw169-sig"
+                         :buffer buf
+                         :command '("{sh}" "-c" "kill -TERM $$; sleep 5")
+                         :noquery t
+                         :sentinel
+                         (lambda (p _event)
+                           (unless (process-live-p p)
+                             (setq seen
+                                   (list :get-process
+                                         (and (get-process "pw169-sig") t)
+                                         :in-process-list
+                                         (and (memq p (process-list)) t)
+                                         :process-status (process-status p)
+                                         :exit-status
+                                         (process-exit-status p))))))))
+             (while (eq seen :pending) (accept-process-output proc 0.1))
+             seen)"#
+    ));
+
+    assert_eq!(
+        result,
+        "OK (:get-process nil :in-process-list nil :process-status signal :exit-status 15)"
+    );
+}
+
+/// The retirement is strictly per-process, not a batch at the end of the
+/// notification pass: GNU's `FOR_EACH_PROCESS' body (src/process.c:7887)
+/// retires and then notifies ONE process before moving to the next.  With two
+/// children exiting together, the sentinel that runs first therefore sees the
+/// other still listed and itself already gone, and the second sees neither.
+///
+/// Deliberately blind to WHICH of the two runs first.  GNU's alist is
+/// newest-first (`create_process' conses onto the front, src/process.c:953) so
+/// GNU reports `pw169-b' first; this port's notification walk is driven by
+/// poller readiness and reported `pw169-a' first.  That ordering difference is
+/// a separate divergence, recorded in ledger 169 as found and not fixed.
+/// Pinning it here would make this test fail for the wrong reason.
+///
+/// Measured, GNU Emacs 31.0.90:
+/// `PW169-TWO-SENTINELS: (("pw169-b" :live ("pw169-a" ...))
+///                        ("pw169-a" :live (...)))`
+/// -- the first sentinel sees one other `pw169-' process and never itself; the
+/// second sees none.
+#[test]
+fn each_sentinel_sees_only_the_processes_not_yet_retired_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((seen nil)
+                  (n 0)
+                  (mk (lambda (name)
+                        (make-process
+                         :name name
+                         :buffer (generate-new-buffer (concat " *" name "*"))
+                         :command '("{sh}" "-c" "printf x")
+                         :noquery t
+                         :sentinel
+                         (lambda (p event)
+                           (when (string-prefix-p "finished" event)
+                             (setq n (1+ n))
+                             (let ((mine 0) (others 0))
+                               (dolist (q (process-list))
+                                 (when (string-prefix-p "pw169-" (process-name q))
+                                   (if (eq q p)
+                                       (setq mine (1+ mine))
+                                     (setq others (1+ others)))))
+                               (push (list :self mine :others others) seen))))))))
+             (funcall mk "pw169-a")
+             (funcall mk "pw169-b")
+             (while (< n 2) (accept-process-output nil 0.1))
+             (nreverse seen))"#
+    ));
+
+    assert_eq!(result, "OK ((:self 0 :others 1) (:self 0 :others 0))");
+}
+
+/// The identity a sentinel receives outlives the removal, because removal is
+/// deregistration from a directory and not destruction of the object: GNU's
+/// `remove_process' (src/process.c:957-966) only rewrites `Vprocess_alist',
+/// and `exec_sentinel' hands the sentinel the very `Lisp_Object proc' the
+/// notification loop already held (:7845-7846), never a re-lookup.
+///
+/// Measured, GNU Emacs 31.0.90, on the value captured inside the sentinel:
+/// `PW169-REAPED-VALUE: (:eq-to-original t :processp t :name "pw169-val"
+///  :status exit :exit 0 :buffer t :sentinel t
+///  :filter internal-default-process-filter :command ("sh" "-c" "printf hi")
+///  :type real :contact t :query-on-exit t :plist nil :tty "/dev/pts/31")`
+///
+/// (The pin below reads `:query-on-exit nil` only because the test passes
+/// `:noquery t`, which the probe did not.)
+#[test]
+fn a_retired_process_value_still_answers_every_accessor_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((buf (generate-new-buffer " *pw169-val*"))
+                  (kept nil)
+                  (done nil)
+                  (proc (make-process
+                         :name "pw169-val"
+                         :buffer buf
+                         :command '("{sh}" "-c" "printf hi")
+                         :noquery t
+                         :sentinel (lambda (p event)
+                                     (when (string-prefix-p "finished" event)
+                                       (setq kept p done t))))))
+             (while (not done) (accept-process-output proc 0.1))
+             (list :eq-to-original (eq kept proc)
+                   :processp (processp kept)
+                   :name (process-name kept)
+                   :status (process-status kept)
+                   :exit (process-exit-status kept)
+                   :buffer (and (bufferp (process-buffer kept)) t)
+                   :sentinel (and (process-sentinel kept) t)
+                   :filter (process-filter kept)
+                   :command (process-command kept)
+                   :type (process-type kept)
+                   :contact (process-contact kept)
+                   :query-on-exit (process-query-on-exit-flag kept)
+                   :plist (process-plist kept)))"#
+    ));
+
+    assert_eq!(
+        result,
+        format!(
+            "OK (:eq-to-original t :processp t :name \"pw169-val\" \
+             :status exit :exit 0 :buffer t :sentinel t \
+             :filter internal-default-process-filter \
+             :command (\"{sh}\" \"-c\" \"printf hi\") \
+             :type real :contact t :query-on-exit nil :plist nil)"
+        )
+    );
+}
+
+/// `delete-process` reaches the same retirement through the same code: GNU's
+/// `Fdelete_process` stamps the terminal status and calls `status_notify`
+/// (src/process.c:1128 for a network/pipe/serial process, :1148 for a child),
+/// so the sentinel it runs sees the `delete-exited-processes' decision rather
+/// than an unconditional removal.  `Fdelete_process`'s own trailing
+/// `remove_process' (:1155) is what makes the deletion unconditional, and it
+/// runs after the sentinel has returned.
+///
+/// So with the flag nil the deleted process is still listed inside its sentinel
+/// and gone immediately after -- the one place where "before" and "after" the
+/// sentinel differ.  Measured, GNU Emacs 31.0.90:
+///
+/// ```text
+/// PW169-DELETE-KEEP-SENTINEL: (:event "killed" :get-buffer-process t
+///                              :get-process t :in-process-list t)
+/// PW169-DELETE-KEEP-AFTER:    (:get-process nil :in-process-list nil)
+/// ```
+#[test]
+fn delete_process_sentinel_honours_delete_exited_processes_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((delete-exited-processes nil)
+                  (buf (generate-new-buffer " *pw169-del2*"))
+                  (seen :pending)
+                  (proc (make-process
+                         :name "pw169-del2"
+                         :buffer buf
+                         :command '("{sh}" "-c" "sleep 30")
+                         :noquery t
+                         :sentinel
+                         (lambda (p _event)
+                           (setq seen
+                                 (list :get-buffer-process
+                                       (and (get-buffer-process buf) t)
+                                       :get-process
+                                       (and (get-process "pw169-del2") t)
+                                       :in-process-list
+                                       (and (memq p (process-list)) t)))))))
+             (delete-process proc)
+             (list :in-sentinel seen
+                   :after (list :get-process
+                                (and (get-process "pw169-del2") t)
+                                :in-process-list
+                                (and (memq proc (process-list)) t))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (:in-sentinel (:get-buffer-process t :get-process t :in-process-list t) ",
+            ":after (:get-process nil :in-process-list nil))",
+        )
+    );
+}
+
+/// The default setting is unchanged by the above: `delete-exited-processes' is
+/// `t', so `status_notify' removes (src/process.c:7926) and the sentinel sees
+/// nothing.  Measured, GNU Emacs 31.0.90:
+/// `PW169-DELETE-SENTINEL: (:event "killed" :get-buffer-process nil
+///  :get-process nil :in-process-list nil :process-status signal)`
+#[test]
+fn delete_process_sentinel_sees_its_process_removed_by_default_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((buf (generate-new-buffer " *pw169-del*"))
+                  (seen :pending)
+                  (proc (make-process
+                         :name "pw169-del"
+                         :buffer buf
+                         :command '("{sh}" "-c" "sleep 30")
+                         :noquery t
+                         :sentinel
+                         (lambda (p event)
+                           (setq seen
+                                 (list :event (string-trim event)
+                                       :get-buffer-process
+                                       (and (get-buffer-process buf) t)
+                                       :get-process
+                                       (and (get-process "pw169-del") t)
+                                       :in-process-list
+                                       (and (memq p (process-list)) t)
+                                       :process-status (process-status p)))))))
+             (delete-process proc)
+             seen)"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (:event \"killed\" :get-buffer-process nil :get-process nil ",
+            ":in-process-list nil :process-status signal)",
+        )
+    );
+}
+
+/// The neighbour audit of ledger 169, as one value: every Lisp entry point an
+/// exit sentinel can reach about its own just-retired process, run inside that
+/// sentinel.  35 entry points, one assert, so a future change to any of them
+/// has to come past this pin.
+///
+/// Measured, `emacs -Q --batch`, GNU Emacs 31.0.90 (probe
+/// `tmp/pw169/audit-list.el`).  All 35 rows match GNU; the one row whose text
+/// differs, `coding`, differs only under this unit-test runtime and is
+/// annotated at the pin.
+///
+/// Six of these rows moved with ledger 169 and none of them is about the
+/// process list: `running-child-p`, `interrupt`, `kill`, `continue` and `stop`
+/// all gate on GNU's `p->infd < 0`, which becomes true inside
+/// `deactivate_process` -- the function `remove_process` calls.  Retiring too
+/// late kept the gate open, so five subrs silently succeeded on a dead process
+/// and `stop-process` re-entered the sentinel.  That is the argument for
+/// auditing the neighbours rather than pinning the reported symptom.
+#[test]
+fn exit_sentinel_neighbour_audit() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((buf (generate-new-buffer " *pw169audit*"))
+                  (depth 0)
+                  (result :pending)
+                  (try (lambda (thunk)
+                         (condition-case e (funcall thunk)
+                           (error (list 'error (cadr e))))))
+                  (proc nil))
+             (setq proc
+                   (make-process
+                    :name "pw169audit"
+                    :buffer buf
+                    :command '("{sh}" "-c" "printf hi")
+                    :connection-type 'pipe
+                    :noquery t
+                    :sentinel
+                    (lambda (p event)
+                      (when (and (= depth 0) (string-prefix-p "finished" event))
+                        (setq depth 1)
+                        (setq result
+                              (list
+                               (cons 'processp    (funcall try (lambda () (and (processp p) t))))
+                               (cons 'status      (funcall try (lambda () (process-status p))))
+                               (cons 'live-p      (funcall try (lambda () (and (process-live-p p) t))))
+                               (cons 'exit-status (funcall try (lambda () (process-exit-status p))))
+                               (cons 'id-nonnil   (funcall try (lambda () (and (process-id p) t))))
+                               (cons 'name        (funcall try (lambda () (process-name p))))
+                               (cons 'buffer-live (funcall try (lambda () (and (buffer-live-p (process-buffer p)) t))))
+                               (cons 'mark-set    (funcall try (lambda () (and (marker-buffer (process-mark p)) t))))
+                               (cons 'type        (funcall try (lambda () (process-type p))))
+                               (cons 'contact     (funcall try (lambda () (process-contact p))))
+                               (cons 'filter      (funcall try (lambda () (process-filter p))))
+                               (cons 'sentinel-set (funcall try (lambda () (and (process-sentinel p) t))))
+                               (cons 'plist       (funcall try (lambda () (process-plist p))))
+                               (cons 'query-on-exit (funcall try (lambda () (process-query-on-exit-flag p))))
+                               (cons 'coding      (funcall try (lambda () (process-coding-system p))))
+                               (cons 'inherit-coding (funcall try (lambda () (process-inherit-coding-system-flag p))))
+                               (cons 'tty-name-string (funcall try (lambda () (and (stringp (process-tty-name p)) t))))
+                               (cons 'thread-nonnil (funcall try (lambda () (and (process-thread p) t))))
+                               (cons 'running-child-p (funcall try (lambda () (process-running-child-p p))))
+                               (cons 'get-process (funcall try (lambda () (and (get-process "pw169audit") t))))
+                               (cons 'get-buffer-process (funcall try (lambda () (and (get-buffer-process buf) t))))
+                               (cons 'in-process-list (funcall try (lambda () (and (memq p (process-list)) t))))
+                               (cons 'set-plist   (funcall try (lambda () (progn (set-process-plist p '(:pw169 t)) (process-plist p)))))
+                               (cons 'set-filter  (funcall try (lambda () (progn (set-process-filter p #'ignore) (process-filter p)))))
+                               (cons 'send-string (funcall try (lambda () (progn (process-send-string p "x") 'ok))))
+                               (cons 'send-eof    (funcall try (lambda () (progn (process-send-eof p) 'ok))))
+                               (cons 'interrupt   (funcall try (lambda () (progn (interrupt-process p) 'ok))))
+                               (cons 'kill        (funcall try (lambda () (progn (kill-process p) 'ok))))
+                               (cons 'signal-0    (funcall try (lambda () (progn (signal-process p 0) 'ok))))
+                               (cons 'continue    (funcall try (lambda () (progn (continue-process p) 'ok))))
+                               (cons 'stop        (funcall try (lambda () (progn (stop-process p) 'ok))))
+                               (cons 'accept-output (funcall try (lambda () (accept-process-output p 0))))
+                               (cons 'delete      (funcall try (lambda () (progn (delete-process p) 'ok))))
+                               (cons 'status-after-delete (funcall try (lambda () (process-status p))))
+                               (cons 'in-list-after-delete (funcall try (lambda () (and (memq p (process-list)) t))))))))))
+             (while (eq result :pending) (accept-process-output proc 0.1))
+             result)"#
+    ));
+
+    assert_eq!(result, PW169_NEIGHBOUR_AUDIT);
+}
+
+/// GNU Emacs 31.0.90's answer, verbatim, with this port's four known
+/// deviations substituted and labelled.  Keeping the two in one string is
+/// deliberate: a reader comparing them sees exactly which rows are still open.
+const PW169_NEIGHBOUR_AUDIT: &str = concat!(
+    "OK ((processp . t) (status . exit) (live-p) (exit-status . 0) ",
+    "(id-nonnil . t) (name . \"pw169audit\") (buffer-live . t) (mark-set . t) ",
+    "(type . real) (contact . t) (filter . internal-default-process-filter) ",
+    "(sentinel-set . t) (plist) (query-on-exit) ",
+    // HARNESS, not a divergence: `emacs -Q` and `./target/release/neomacs -Q`
+    // both answer `(utf-8-unix . utf-8-unix)` here (probe
+    // `tmp/pw169/audit-list.el`, measured on both).  This unit-test runtime
+    // starts without the locale-derived coding priority, so the DECODE half is
+    // still `undecided` when the sentinel reads it.
+    "(coding undecided-unix . utf-8-unix) (inherit-coding) (tty-name-string) ",
+    "(thread-nonnil . t) ",
+    // GNU raises `Process NAME is not active` here, from the `p->infd < 0`
+    // gate at src/process.c:7045-7047 -- and `p->infd` goes to -1 in
+    // `deactivate_process` (:4845-4847), which `remove_process` calls (:965).
+    // So GNU's gate closes at the retirement, and this port's live-table
+    // lookup is the same gate: before ledger 169 it answered 0 here, because
+    // the retirement had not happened yet.
+    "(running-child-p error \"Process pw169audit is not active\") ",
+    "(get-process) (get-buffer-process) (in-process-list) ",
+    "(set-plist :pw169 t) (set-filter . ignore) ",
+    "(send-string error \"Process pw169audit not running: finished\n\") ",
+    "(send-eof error \"Process pw169audit not running: finished\n\") ",
+    // The same gate, through `process_send_signal` (src/process.c:7087-7089).
+    // All four answered `ok` before ledger 169, and `stop-process` on a
+    // still-live retiring process re-entered the sentinel, so the audit probe
+    // looped: 4716 rows instead of 123.
+    "(interrupt error \"Process pw169audit is not active\") ",
+    "(kill error \"Process pw169audit is not active\") ",
+    "(signal-0 . ok) ",
+    "(continue error \"Process pw169audit is not active\") ",
+    "(stop error \"Process pw169audit is not active\") ",
+    "(accept-output) (delete . ok) (status-after-delete . exit) ",
+    "(in-list-after-delete))",
+);
+
+/// The same audit on the `:stderr` pipe process, whose sentinel runs after the
+/// pipe has been retired too -- and which answers a DIFFERENT set of errors,
+/// because GNU tests the process TYPE before it tests `p->infd < 0`.
+///
+/// `process_send_signal` raises "is not a subprocess" at src/process.c:7084-7086
+/// and only then "is not active" at :7087-7089; `Fprocess_running_child_p` has
+/// the same pair at :7042-7047; `internal-default-signal-process` raises
+/// "Cannot signal process" from `p->pid <= 0` after a bare `CHECK_PROCESS`
+/// (:7379-7382); and `Fstop_process` / `Fcontinue_process` never reach any of
+/// them, because they handle a network, serial or pipe process first and
+/// return the process (:7267-7278, :7294-7315).
+///
+/// A pipe is never `Qreal` and its pid is 0, so all five answers are
+/// independent of whether it is still listed.  This port answered them from a
+/// live-table lookup placed AHEAD of the type check, which was invisible while
+/// the pipe was still listed inside its own sentinel and became six wrong rows
+/// the moment ledger 169 retired it on time.
+///
+/// Measured, `emacs -Q --batch`, GNU Emacs 31.0.90 (`tmp/pw169/audit.el`).
+#[test]
+fn stderr_pipe_sentinel_neighbour_audit() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((obuf (generate-new-buffer " *pw169pipe-out*"))
+                  (ebuf (generate-new-buffer " *pw169pipe-err*"))
+                  (depth 0)
+                  (owner-done nil)
+                  (result :pending)
+                  (try (lambda (thunk)
+                         (condition-case e (funcall thunk)
+                           (error (list 'error (cadr e))))))
+                  (proc (make-process
+                         :name "pw169pipe"
+                         :buffer obuf
+                         :command '("{sh}" "-c" "printf out; printf err 1>&2")
+                         :stderr ebuf
+                         :noquery t
+                         :sentinel (lambda (_p _e) (setq owner-done t)))))
+             (set-process-sentinel
+              (get-buffer-process ebuf)
+              (lambda (p event)
+                (when (and (= depth 0) (string-prefix-p "finished" event))
+                  (setq depth 1)
+                  (setq result
+                        (list
+                         (cons 'status (funcall try (lambda () (process-status p))))
+                         (cons 'type (funcall try (lambda () (process-type p))))
+                         (cons 'get-buffer-process
+                               (funcall try (lambda () (and (get-buffer-process ebuf) t))))
+                         (cons 'in-process-list
+                               (funcall try (lambda () (and (memq p (process-list)) t))))
+                         (cons 'running-child-p
+                               (funcall try (lambda () (process-running-child-p p))))
+                         (cons 'interrupt
+                               (funcall try (lambda () (progn (interrupt-process p) 'ok))))
+                         (cons 'kill
+                               (funcall try (lambda () (progn (kill-process p) 'ok))))
+                         (cons 'signal-0
+                               (funcall try (lambda () (progn (signal-process p 0) 'ok))))
+                         (cons 'continue
+                               (funcall try (lambda () (progn (continue-process p) 'ok))))
+                         (cons 'stop
+                               (funcall try (lambda () (progn (stop-process p) 'ok))))
+                         (cons 'send-eof
+                               (funcall try (lambda () (progn (process-send-eof p) 'ok)))))))))
+             (while (not owner-done) (accept-process-output nil 0.1))
+             (let ((n 0))
+               (while (and (eq result :pending) (< n 50))
+                 (setq n (1+ n))
+                 (accept-process-output nil 0.05)))
+             result)"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK ((status . closed) (type . pipe) ",
+            "(get-buffer-process) (in-process-list) ",
+            "(running-child-p error \"Process pw169pipe stderr is not a subprocess\") ",
+            "(interrupt error \"Process pw169pipe stderr is not a subprocess\") ",
+            "(kill error \"Process pw169pipe stderr is not a subprocess\") ",
+            "(signal-0 error \"Cannot signal process pw169pipe stderr\") ",
+            "(continue . ok) (stop . ok) ",
+            "(send-eof error \"Process pw169pipe stderr not running: finished\n\"))",
+        )
+    );
+}
+
+/// A bare integer argument to `signal-process` is an OS pid, and GNU never
+/// looks it up: `internal-default-signal-process` calls `get_process` only for
+/// a NON-number (src/process.c:7369-7370), and a number goes straight to
+/// `CONS_TO_INTEGER (process, pid_t, pid)` (:7375-7376).  The docstring says so
+/// too (:7405-7407).
+///
+/// This port consulted the live process table first, so a small integer
+/// answered for whichever process happened to hold that internal `ProcessId`.
+/// Measured, `-Q --batch`, with exactly one live child:
+///
+/// ```text
+///                          GNU 31.0.90   Neomacs, before
+/// (signal-process 1 0)     -1            0      <- this port's process #1
+/// (signal-process 2 0)     -1            -1
+/// (signal-process 3 0)     -1            -1
+/// ```
+///
+/// `-1` is `kill (1, 0)` failing with EPERM against init.  Signal 0 only, so
+/// nothing is actually signalled.  Found by ledger 169's neighbour audit, not
+/// by the bug it set out to fix.
+#[test]
+fn signal_process_reads_an_integer_as_an_os_pid_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((p (make-process
+                      :name "pw169-sigfix"
+                      :buffer (generate-new-buffer " *pw169sig*")
+                      :command '("{sh}" "-c" "sleep 30")
+                      :noquery t
+                      :sentinel #'ignore))
+                  (answers (mapcar (lambda (n)
+                                     (condition-case e (signal-process n 0)
+                                       (error (list 'error (cadr e)))))
+                                   '(1 2 3)))
+                  (own (condition-case e (signal-process (process-id p) 0)
+                         (error (list 'error (cadr e))))))
+             (prog1 (list :small answers
+                          :own own
+                          :own-pid-is-large (and (> (process-id p) 100) t)
+                          :still-live (and (process-live-p p) t))
+               (delete-process p)))"#
+    ));
+
+    assert_eq!(
+        result,
+        "OK (:small (-1 -1 -1) :own 0 :own-pid-is-large t :still-live t)"
+    );
+}
+
+/// `process-status`'s connection remapping is an `else if` chain, and its
+/// FIRST arm is `exit -> closed` (src/process.c:1195-1196); the
+/// `p->command == t` stop is the second (:1197-1198) and `run -> open` the
+/// third (:1199-1200).  So a connection that has finished reports `closed`
+/// however many times `stop-process` was called on it.
+///
+/// This port asked `command == t` first, which is invisible until something
+/// sets `p->command' on a connection that has already closed -- which is
+/// exactly what `stop-process` does, and what ledger 169 made this port start
+/// doing on a retired connection the way GNU does (`Fstop_process` :7267-7278
+/// has no liveness test at all).  It was the last divergent row of the
+/// three-kind neighbour sweep.
+///
+/// Measured, GNU Emacs 31.0.90: `closed`.
+#[test]
+fn a_stopped_but_finished_connection_reports_closed_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((obuf (generate-new-buffer " *pw169stop-out*"))
+                  (ebuf (generate-new-buffer " *pw169stop-err*"))
+                  (owner-done nil)
+                  (proc (make-process
+                         :name "pw169stop"
+                         :buffer obuf
+                         :command '("{sh}" "-c" "printf out; printf err 1>&2")
+                         :stderr ebuf
+                         :noquery t
+                         :sentinel (lambda (_p _e) (setq owner-done t))))
+                  (epipe (get-buffer-process ebuf)))
+             (set-process-sentinel epipe #'ignore)
+             (while (not owner-done) (accept-process-output nil 0.1))
+             (dotimes (_ 10) (accept-process-output nil 0.05))
+             (list :before (process-status epipe)
+                   :after-stop (progn (stop-process epipe) (process-status epipe))
+                   :after-continue (progn (continue-process epipe)
+                                          (process-status epipe))))"#
+    ));
+
+    assert_eq!(
+        result,
+        "OK (:before closed :after-stop closed :after-continue closed)"
+    );
+}
