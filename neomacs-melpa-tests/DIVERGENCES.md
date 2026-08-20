@@ -17961,6 +17961,45 @@ which is also how entry 151 acquired its extras.
 
 ### Found and NOT fixed here
 
+> **Note added 2026-08-20 by entry 166.**  Both of the residuals in "Found and
+> NOT fixed here" that 166 was handed are CLOSED; the other two are not, and
+> one of 166's own findings narrows the first of them.
+>
+> * **"A stateful decoder does not carry its state across a read boundary, and
+>   the read boundary itself is only computed for UTF-8" -- CLOSED.**  159's
+>   prescription was the fix: "what the decoders owe is GNU's
+>   `coding->consumed` / `coding->carryover_bytes`, and what a process owes is
+>   a decoder object that survives between reads."  166 built exactly that.
+>   The count is not reported by a decoder at all -- it is taken off the cursor
+>   that drives it (`decode_units`, GNU's `src_base` / `ONE_MORE_BYTE` pair) --
+>   and `ProcessCodingState` is the per-process `struct coding_system` the
+>   carryover, the `CODING_MODE_LAST_BLOCK` latch and `coding->spec` now share.
+>   The 105-line name-keyed table 159 warned against was deleted rather than
+>   extended.  Nine of 166's fourteen probe rows were red; one is left, and it
+>   is `chinese-hz`, a Rust reimplementation of a Lisp coding system that was
+>   wrong in the same way before.
+>
+> * **"The EOF read is a zero-byte `decode_coding_object` call" -- CLOSED, and
+>   this entry's sizing of it was wrong in both directions.**  It is NARROWER
+>   than stated: "GNU => 2 filter chunks, 3 hook calls" holds for a PIPE and
+>   not for a pty, and `make-process` defaults to a pty
+>   (`process-connection-type` is `t`).  On a pty Linux answers the master with
+>   `EIO`, `read_process_output` takes its `nbytes < 0` early return
+>   (src/process.c:6315), and GNU runs the hook exactly as often as this port
+>   already did.  It is also SMALLER than stated: no "extra empty `Data` read
+>   ahead of every `Eof`" is needed, because GNU makes no extra read -- the
+>   zero-byte decode and the end of file are the same read, since
+>   `read_process_output` returns `0 + carryover` (:6345).  One variant,
+>   `ProcessBytesRead::EofAfterLastBlock`, carries both facts, it has exactly
+>   one consumer, and not one drain loop was touched.  The 38,786 oracle pins
+>   did not move.
+>
+> * **`decode_file_name` is the same class, one door further out** -- still
+>   open, and untouched here.
+>
+> * **`decode-coding-region` of a hook coding system in a UNIBYTE buffer** --
+>   still open, and untouched here.
+
 **A stateful decoder does not carry its state across a read boundary, and the
 read boundary itself is only computed for UTF-8.**  This is the residual the
 unification exposes rather than creates, and it is the honest limit of a port
@@ -20829,5 +20868,405 @@ throughout -- another agent held a `cargo build --profile profiling` on the main
 checkout for part of the run -- which is exactly why the gate is
 `instructions:u` and not wall time: the startup-only control moved by 0.003%
 across three separately linked binaries.
+
+Status: FIXED.
+
+## 166. Entry 159's two residuals: the read boundary was a table of byte lengths keyed on the coding system's NAME, and the EOF read that GNU decodes zero bytes in belongs to a PIPE and not to a pty -- FIXED, by giving the decoders GNU's cursor and the process GNU's `struct coding_system`
+
+Entry 159's hand-back, both halves, measured before anything was designed.
+Reproduced with `-Q --batch` against GNU Emacs 31.0.90 and against this
+branch's own pre-fix `cargo xtask fresh-build --release` binary (kept as
+`tmp/pw166/refbin/neomacs` with its own pdump).  The probes are
+`tmp/pw166/probe1.el` (fourteen coding systems across a read boundary),
+`tmp/pw166/probe2b.el` and `probe2c.el` (the EOF hook count, by connection type
+and by branch), `tmp/pw166/probe3.el` (what the EOF read does to
+`last-coding-system-used`) and `tmp/pw166/pin1.el` / `pin2.el`, which are the
+elisp of the two pinned tests extracted verbatim so every expectation is GNU
+running the test's own program.
+
+Both residuals are real, and one of them is smaller than 159 stated and one is
+narrower.
+
+### 1. The EOF read: a pipe, a filter, and nothing else
+
+```elisp
+;; a child writing `abc', pausing, writing `def'; a Lisp filter; a coding
+;; system whose :post-read-conversion counts the calls
+;; :connection-type 'pipe  GNU => 2 chunks, 3 hook calls   Neomacs before => 2, 2
+;; :connection-type 'pty   GNU => 2 chunks, 2 hook calls   Neomacs before => 2, 2
+;; a child writing NOTHING, filter, pipe
+;;                         GNU => 0 chunks, 1 hook call    Neomacs before => 0, 0
+;; the same through the BUFFER branch, pipe or pty
+;;                         GNU => 0 hook calls             Neomacs before => 0
+```
+
+Entry 159 sized this as "3 hook calls for 2 chunks" without naming the
+connection type, and the connection type is half the rule.  GNU:
+
+```c
+  p->decoding_carryover = 0;
+
+  if (nbytes <= 0)
+    {
+      if (nbytes < 0 || coding->mode & CODING_MODE_LAST_BLOCK)
+	{
+	  SAFE_FREE_UNBIND_TO (count, Qnil);
+	  return nbytes;
+	}
+      coding->mode |= CODING_MODE_LAST_BLOCK;
+    }
+```
+
+(src/process.c:6312-6321.)  Three decisions, not one.  `nbytes < 0` returns
+without raising the flag, and that is not a corner case: when the child on the
+far end of a pty exits, Linux answers the master with `EIO` rather than with a
+zero-byte read, so a pty process never has a last block at all.  A zero-byte
+read on a PIPE does raise it and falls THROUGH to a decode of `0 + carryover`
+bytes, and `read_process_output` then returns that total (:6345) -- so when the
+carryover is empty the SAME read is both the zero-byte decode and the end of
+file its caller acts on.
+
+The branch is the other half.  `read_and_dispose_of_process_output` splits on
+`fast_read_process_output && EQ (p->filter, Qinternal_default_process_filter)`
+(:6557-6559), and `read_and_insert_process_output`'s first statement is
+
+```c
+  if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (XBUFFER (p->buffer)))
+    return;
+```
+
+(:6464-6465) -- before `decode_coding_c_string`.  So the buffer branch has no
+zero-byte decode, and the filter branch calls the filter only for a non-empty
+result (`SBYTES (text) > 0`, :6569) while running the hook either way.
+
+This port had no flag at all.  "Flush" meant "there is carryover left", which
+is why a process with none decoded nothing at EOF, and why
+`last-coding-system-used` stayed nil where GNU sets it:
+
+```elisp
+;; a child writing nothing, a Lisp filter, :coding 'iso-latin-1
+;; GNU                => last-coding-system-used  iso-latin-1
+;; Neomacs before fix => last-coding-system-used  nil
+```
+
+### 2. The read boundary was a table of byte lengths keyed on a NAME
+
+```elisp
+;; the child writes, blocks on `read', and only the reader can unblock it, so
+;; the split is a measurement rather than a hope.  Filter chunks concatenated.
+;; coding                      GNU              Neomacs before fix
+;; utf-8            a<c3> / <a9>LF     (97 233 10)      (97 233 10)
+;; iso-2022-7bit    aESC$B / $"ESC(BLF (97 12354 10)    (97 36 34 10)
+;; iso-2022-7bit    aESC$B$ / "ESC(BLF (97 12354 10)    (97 36 34 10)
+;; japanese-shift-jis  a<82> / <a0>LF  (97 12354 10)    (97 4194178 4194208 10)
+;; chinese-gbk         a<b0> / <a1>LF  (97 21834 10)    (97 4194224 4194209 10)
+;; chinese-big5        a<a4> / @LF     (97 19968 10)    (97 65533 64 10)
+;; japanese-iso-8bit   a<a4> / <a2>LF  (97 12354 10)    (97 4194212 4194210 10)
+;; emacs-mule       a<92> / <b0><a1>LF (97 20124 10)    (97 4194194 4194224 4194209 10)
+;; utf-16le            a\0B / \0LF\0   (97 66 10)       (97 66 2560 0)
+;; iso-latin-1         a<e9> / <e8>LF  (97 233 232 10)  (97 233 232 10)
+```
+
+Ten of the twelve rows.  Two were already right and they say what the rule
+was: `utf-8` was right because a table of UTF-8 byte lengths existed, and
+`iso-latin-1` was right because every byte of it is a character.
+
+### GNU's answer, which is one line per decoder
+
+Every `decode_coding_*` in src/coding.c is a `while (1)` whose first statement
+is `src_base = src;` and whose byte reads go through `ONE_MORE_BYTE`, a macro
+that jumps to `no_more_source:` when the source runs out (:169-190).  The
+label's whole job is:
+
+```c
+ no_more_source:
+  coding->consumed_char += consumed_chars_base;
+  coding->consumed = src_base - coding->source;
+```
+
+at :1423 (utf-8), :1696 (utf-16), :2541 (emacs-mule), :3982 (iso-2022), :4791
+(sjis), :4886 (big5), :5591 (charset), plus :5185 (ccl) and :5274 (raw-text).
+`decode_coding` then turns the tail nobody consumed into `coding->carryover`
+when the flag is clear (:7466-7474) and flushes it as eight-bit characters when
+it is set (:7434-7462), and
+`read_process_output_set_last_coding_system` copies the carryover onto the
+process AFTER the decode (src/process.c:6448-6457).
+
+The second half is the state.  GNU decodes a subprocess through ONE
+`struct coding_system` for the process's whole life
+(`proc_decode_coding_system[channel]`, :6238), so an ISO-2022 designation set
+by one read is still in force in the next.  A designation is NOT carryover:
+`ESC $ B` at the end of a read is a COMPLETE escape sequence, GNU consumes it
+and records it, and holding it back instead would answer the first row above
+correctly and the second row wrongly.
+### The type-level fix, part one: a decoder that cannot report the wrong count
+
+159 warned about the tempting fix -- "a second copy of each decoder's
+byte-length rules next to it would be precisely the mistake this chain keeps
+undoing" -- so the count is not reported at all.  It is taken off the cursor
+that drove the decode:
+
+```rust
+fn decode_units<F>(bytes: &[u8], eol: DosEolLookahead, mut body: F) -> DecodedSource
+where
+    F: FnMut(&mut UnitReader<'_>, &mut DecodeSink) -> Result<(), NoMoreSource>,
+```
+
+`UnitReader` is `ONE_MORE_BYTE` and `src_base`: it hands out bytes, it can put
+back the character it is on (GNU's `src = src_base`, :1334), and its position
+is PRIVATE -- a decoder cannot say where its character ended, because where it
+ended is the cursor's answer.  A body that runs off the end returns
+`NoMoreSource`, and both the bytes it took and anything it had already pushed
+are unwound, which is `goto no_more_source` and nothing else.  `SourceConsumed`
+is a newtype whose only public constructors are the cursor's and
+`SourceConsumed::all`, and `all` is a statement about a decoder rather than a
+default: `raw-text` and the ISO-8859 charsets really cannot stop short, and
+neither can `utf-7` or `chinese-hz`, which GNU implements in Lisp over
+`raw-text` (lisp/international/utf-7.el, lisp/language/china-util.el) so that
+the C decoder underneath consumes the run before the hook sees it -- measured,
+GNU decodes each chunk of those independently and answers the LITERAL `-b` for
+a `+MEI` / `-b` split.
+
+Seven decoders are now written this way: utf-8, utf-16, Shift-JIS, EUC,
+`emacs-mule`, the charset codings and ISO-2022, plus Big5, whose characters
+still come from `encoding_rs` while its boundary comes from GNU's own two
+`ONE_MORE_BYTE`s -- one function, one rule, so the two cannot drift apart.
+
+The end-of-line half of the boundary comes with it.  GNU's `eol_dos` lives
+INSIDE every decoder (`bool eol_dos = !inhibit_eol_conversion && EQ
+(CODING_ID_EOL_TYPE (coding->id), Qdos);`, :1250-1251, and
+`if (eol_dos && c1 == '\r') ONE_MORE_BYTE (byte_after_cr);`, :1348-1349), which
+is why a CR that ends a read waits for the next one.  It is one place here
+instead of eight, and it is an ARGUMENT rather than something a decoder works
+out, because this port spends the coding system's end-of-line leg before the
+decoder runs -- `decode_coding` calls `decode_eol` AFTER the decoder (:7481).
+
+### The type-level fix, part two: the process gets GNU's `struct coding_system`
+
+```rust
+pub struct ProcessCodingState {
+    carryover: Vec<u8>,
+    last_block: LastBlock,
+    decoder: crate::encoding::CodingDecoderState,
+}
+```
+
+The three fields are the three things GNU's per-process struct carries between
+reads, and having them in one place is what makes them impossible to update
+independently.  Before this entry the carryover was a bare `Vec<u8>` on the
+process, the decoder state did not exist, and `CODING_MODE_LAST_BLOCK` was a
+`flush: bool` each call site worked out for itself -- and "flush" happened to
+mean "there is carryover left", which is residual (2) in one sentence.
+
+`LastBlock` is a latch and not a boolean, because `read_process_output` READS
+and RAISES it in the same three lines and behaves differently on each side of
+the transition.  `CodingDecoderState` holds only the ISO-2022 arm, and that is
+a measurement rather than an omission: it is the only decoder in this port
+whose state is observable across a read boundary at all.
+
+`CodingRun` is the third: the mutable half of a `struct coding_system` for ONE
+conversion -- the block, the decoder state to continue from, and the
+`coding->consumed` the decode must leave behind.  `CodingRun::complete_source()`
+is what a string, a region and a file pass, and it is a statement rather than a
+convenience: those are `CODING_MODE_LAST_BLOCK` sources with no previous run to
+continue from and no next run to continue into.
+
+### What a read no longer knows
+
+`PendingProcessRun` carried a `carryover: Vec<u8>` the READ had computed.  It
+now carries the whole buffer, the decoder state and the block, and nothing
+else -- the carryover comes back with the DECODED run, because until the
+decoder has run nobody knows where the last complete character ended.  Entry
+159 put it exactly right and this entry only had to build it: "what the
+decoders owe is GNU's `coding->consumed` / `coding->carryover_bytes`".
+
+Deleted with it: `process_output_decode_prefix_len`,
+`process_coding_uses_utf8_carryover` (six coding-system name prefixes),
+`utf8_expected_sequence_len`, `utf8_complete_prefix_len` and
+`process_coding_uses_dos_eol_carryover` -- 105 lines of table.  And with the
+table went the `eol_conversion` argument that seven read signatures were
+threading, `read_process_output_result` down to
+`process_output_read_from_io_result`: `inhibit-eol-conversion' mattered to the
+READ only because the trailing-CR lookahead was there, and it is the decoder's
+now, as it is in GNU.
+
+`ProcessReadOutcome` is the fourth type, and it is there because of a library:
+
+```text
+  Err(ref e) if e.raw_os_error() == Some(libc::EIO) => {
+      // EIO indicates that the slave pty has been closed.
+      // Treat this as EOF so that std::io::Read::read_to_string
+      // and similar functions gracefully terminate ...
+      Ok(0)
+  }
+```
+
+(portable-pty-0.9.0/src/unix.rs:93-103.)  `portable_pty` deliberately erases
+the exact bit `nbytes < 0` turns on, so an `io::Result<usize>` may not be what
+the coding layer is handed: each source classifies its own end of stream, and a
+pty says `Failed` where a pipe says `EndOfStream`.
+
+### Measured after
+
+Against a `cargo xtask fresh-build --release` binary of this branch (pdump
+re-generated and newer than the executable, `no_byte_compile=false`), every
+probe was re-run and diffed against GNU Emacs 31.0.90.
+
+`tmp/pw166/probe1.el`'s fourteen rows had NINE diverging before this entry and
+have ONE after, and the one is not this entry's: `chinese-hz` is a Rust
+reimplementation of a coding system GNU implements in Lisp
+(lisp/language/china-util.el), and its escape handling was wrong in the same
+way before and after.
+
+```elisp
+;; read 1 = `a~{', read 2 = `0!~}b LF'
+;; GNU                => chunks ((97) (48 33 126 125 98 10))
+;; Neomacs, before and after => chunks ((97) (48 33 98 10))
+```
+
+`tmp/pw166/probe2b.el` and `tmp/pw166/probe2c.el` -- the hook counts by
+connection type and by branch, ten rows -- are byte-identical to GNU.
+`tmp/pw166/probe3.el` is `diff` clean except the bufferless default-filter row
+below.  `tmp/pw166/pin1.el` and `tmp/pw166/pin2.el`, the elisp of the two
+pinned tests, are `diff` clean.
+
+`cargo nextest run -p neovm-oracle-tests` is 38786/38786 green with NOT ONE
+pin moved (`tmp/pw166/oracle1.log`, run with `--no-fail-fast` so the count is
+the whole suite and not a prefix of it) -- the same 38786 entries 163 and 164
+counted at this branch's merge base, and the number this entry most wanted,
+because the read protocol is what those pins observe and this entry changed
+it.  There was no
+second run: the first was clean, so entry 156's and 159's recorded flakes did
+not have to be told apart from anything.
+
+`cargo xtask gc-stress --editor ./target/release/neomacs` is 9/9
+(`tmp/pw166/gcstress.log`).  The `--editor` is not optional: the environment
+variable this suite does NOT read is `NEOVM_BINARY_PATH`, and a run without
+`--editor` measures whatever binary the xtask defaults to.
+
+`cargo nextest run -p neovm-core -p neomacs-layout-engine` is 11080/11080 green
+(54 skipped, `tmp/pw166/core3.log`), which is the 11078 this branch started
+from plus this entry's two pins.  `cargo check --workspace --all-targets` and
+`cargo fmt --all --check` are clean.
+
+### The pins
+
+`an_eof_read_decodes_a_zero_byte_last_block_on_the_filter_branch` -- five rows
+of `(FILTER-CHUNKS HOOK-CALLS LAST-CODING-SYSTEM-USED)` over a coding system
+whose `:post-read-conversion` counts the decodes it is run for.  Three of the
+five must NOT move: the pty row and the two buffer-branch rows are what stop
+the fix from being "run the hook once more, everywhere".
+
+`a_process_decoder_carries_its_state_and_its_carryover_across_a_read` -- twelve
+coding systems, ten of them red before.  The split is forced by a HANDSHAKE and
+not by a sleep: the child writes, blocks on `read`, and only the test can
+unblock it, so the `2` in each row is a measurement rather than a hope.  The
+characters are the CONCATENATION of the chunks precisely so that a row which
+failed to split would still be wrong rather than accidentally right, and the
+`iso-latin-1` row is the control -- every byte of it is a character, so nothing
+is ever held back and it was green before this entry as well as after.
+
+### Found and NOT fixed here
+
+**GNU decodes NOTHING for a default filter with no buffer, and this port
+decodes.**  Met while establishing residual (2), because it is the same early
+return one clause further along: `read_and_insert_process_output` returns on
+`!nread || NILP (p->buffer) || !BUFFER_LIVE_P (...)` (src/process.c:6464-6465).
+
+```elisp
+;; (make-process :buffer nil ...) with the DEFAULT filter, writing `ab'
+;; GNU     => process-coding-system (undecided . utf-8-unix), lcsu nil
+;; Neomacs => process-coding-system (undecided-unix . utf-8-unix), lcsu undecided-unix
+```
+
+The bytes are discarded in both editors and no Lisp ever sees the text; what
+differs is `last-coding-system-used`, the sticky rewrite of the process's own
+coding system, and any `:post-read-conversion` side effect.  Closing it means
+skipping the decode entirely for that branch, and this port's
+`proc.stdout` / `proc.stderr` diagnostic mirrors (issue #131) are fed FROM the
+decoded text, so a unit fixture that reads `get_output` on a bufferless process
+would stop seeing anything.  It is a fix about the mirrors, not about coding,
+and it is not this entry's.
+
+**`chinese-hz` decodes a `~}` this port's decoder eats.**  Found by the read
+boundary probe and not caused by it: `decode_via_hz` is a Rust reimplementation
+of a coding system GNU implements in Lisp (`decode-hz-region`,
+lisp/language/china-util.el, reached through `:post-read-conversion`), and it
+was wrong in the same way before this entry.  The standing directive is to load
+the .el rather than to reimplement it, so the fix is a deletion and it belongs
+with the utf-7 twin next door.
+
+```elisp
+;; read 1 = `a~{', read 2 = `0!~}b LF'
+;; GNU                       => chunks ((97) (48 33 126 125 98 10))
+;; Neomacs, before and after => chunks ((97) (48 33 98 10))
+```
+
+**A CCL coding system still consumes its whole source.**  GNU's
+`decode_coding_ccl` reports `coding->consumed` like every other decoder
+(src/coding.c:5185); this port drives the CCL program to the end of the run and
+says so.  It is the one decoder still owing the answer -- the eight above it
+are converted and the rest genuinely consume every byte -- and the arm is
+written to be replaced rather than to be believed.
+
+**`chinese-iso-8bit` through the `decode_bytes` fall-through.**  Every coding
+system that reaches the fall-through now is one in which each byte is a
+character -- except this family, which `decode_bytes` decodes with
+`encoding_rs`'s GBK.  In practice `euc_iso2022_spec` claims it first and the
+EUC decoder answers for it; the arm is a residual only if that ever stops being
+true.
+
+**An invalid leading byte at a read boundary waits one read under a charset
+coding.**  GNU's `decode_coding_charset` looks the byte up in
+`AREF (valids, c)` BEFORE reading any more (src/coding.c:5526-5530), so a byte
+no charset can start goes to `invalid_code` immediately.  This port has no
+`valids` table and asks each charset in the list, so a byte that could have
+been a 2-byte lead is held back until the next read tells it otherwise.  The
+text is identical either way -- the byte is emitted as an eight-bit character
+one chunk later, and at EOF the last block flushes it -- but a Lisp filter sees
+the run boundaries.
+
+**A `:post-read-conversion` that calls `accept-process-output` on its own
+process sees the designations as of before its own run.**  GNU's decode and its
+hook share one `struct coding_system`, so the inner read sees `coding->spec` as
+the outer decoder left it.  This port hands the decode a COPY and takes it back
+afterwards.  The carryover has exactly the same shape and GNU makes the same
+choice for it deliberately (clear before, write after, :6312 against :6448), so
+the divergence is one field wide and in the direction GNU chose for its
+neighbour.
+
+**UTF-16's endianness and `emacs-mule`'s composition state are not carried.**
+GNU keeps both in `coding->spec` (`spec.utf_16.detected_bom`,
+`spec.emacs_mule.cmp_status`).  `CodingDecoderState` has room for them and one
+arm; neither is observable through this port's decoders today, because
+`decode_via_utf16` re-reads the signature from the coding system's name rather
+than from a remembered detection, and this port's `emacs-mule` decoder has no
+composition support at all.
+
+### Corrections to earlier entries
+
+Entry 159, dated 2026-08-20.  Both residuals are closed here.  Two statements
+need amending, and neither is a correction of its diagnosis.
+
+* "GNU => 2 filter chunks, 3 hook calls" is true of a PIPE and false of a pty,
+  and `make-process`'s default is a pty (`process-connection-type` is `t`).
+  On a pty Linux answers the master with `EIO`, `read_process_output` takes its
+  `nbytes < 0` early return, and GNU runs the hook exactly as often as this
+  port already did.  159's own probe must have named `:connection-type 'pipe`,
+  as its pinned tests do; the ledger text did not.
+* "closing it needs a `CODING_MODE_LAST_BLOCK`-already-spent bit on the process
+  plus an extra empty `Data` read ahead of every `Eof` -- which every drain loop
+  in this port would then see.  That is a change to the read protocol, gated by
+  38783 oracle pins."  The bit is right and the extra read is not needed.  GNU
+  does not make an extra read: the zero-byte decode and the end of file are the
+  SAME read, because `read_process_output` returns `0 + carryover` (:6345).
+  `ProcessBytesRead::EofAfterLastBlock` is that one read reporting both facts,
+  it has exactly one consumer, and no drain loop was touched.
+
+Entry 156, dated 2026-08-20.  Its `CODING_MODE_LAST_BLOCK` table
+("`make-process` read: `More` until EOF, src/process.c:6321") is right about
+detection and incomplete about the DECODE: the flag is spent twice per read in
+GNU, once by `detect_coding` and once by `decode_coding`'s choice between the
+binary flush and the carryover, and the same one flag is spent twice here.
 
 Status: FIXED.
