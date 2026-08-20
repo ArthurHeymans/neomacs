@@ -70,17 +70,43 @@ const PRELUDE: &str = r####"
           (pip384-test-normalize (cdr value) root)))
    (t value)))
 
+(defun pip384-test-note-sentinel (process &rest _)
+  "Record on PROCESS that its sentinel has run."
+  (process-put process 'pip384-test-sentinel-ran t))
+
 (defun pip384-test-wait-process (process)
-  (let ((attempt 0))
-    (while (and (< attempt 100) (process-live-p process))
-      (accept-process-output process 0.05)
-      (setq attempt (1+ attempt)))
-    (when (process-live-p process)
-      (error "Pipenv process did not finish: %S" (process-command process)))
-    ;; Settle the real sentinel and prove there is no deferred filter output.
-    (dotimes (_ 2) (accept-process-output process 0.02))
-    (list :status (process-status process)
-          :exit (process-exit-status process))))
+  "Wait until PROCESS has run its sentinel, then report how it exited.
+The caller pins the shell buffer's whole text, and that text is the single
+line Process shell finished -- a line the SENTINEL writes.  So the pin
+cannot be taken before the sentinel has run, and waiting for the process to
+die is not that moment.  It is strictly earlier, by construction: GNU reaps
+the child in `handle_child_signal', setting `raw_status_new'
+\(src/process.c:7748), which is all `process-status' needs to answer `exit'
+\(src/process.c:1188-1189), and in the same pass calling `delete_read_fd'
+\(src/process.c:7760), so the pipe stops being read at exactly that instant.
+Anything still queued is recovered only by the drain loop in `status_notify'
+\(src/process.c:7896-7911), immediately before `exec_sentinel'
+\(src/process.c:7937).  The previous shape here spent two fixed
+`accept-process-output' calls hoping to cover that gap, and said so.
+
+Either witness is accepted: the observer firing, or PROCESS leaving
+`process-list', which both editors were measured to do only once the
+sentinel has run."
+  (unless (process-get process 'pip384-test-sentinel-ran)
+    (add-function :after (process-sentinel process)
+                  #'pip384-test-note-sentinel))
+  (let ((deadline (+ (float-time) 30)))
+    (while (and (not (process-get process 'pip384-test-sentinel-ran))
+                (memq process (process-list))
+                (< (float-time) deadline))
+      (accept-process-output nil 0.05)))
+  (unless (or (process-get process 'pip384-test-sentinel-ran)
+              (not (memq process (process-list))))
+    (error "pip384-test-wait-process: %S never ran its sentinel; the shell \
+buffer holds only as much of the child's output as had been read"
+           (process-command process)))
+  (list :status (process-status process)
+        :exit (process-exit-status process)))
 
 (defun pip384-test-wait-file (path needle process)
   (let ((attempt 0) value)

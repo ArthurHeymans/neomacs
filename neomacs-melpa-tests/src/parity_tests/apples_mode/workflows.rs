@@ -141,10 +141,26 @@ fn runs_a_selected_report_delivery_and_displays_the_external_result() -> ParityB
                         (call-interactively menu-command)
                         (let ((process
                                (get-process "apples-do-applescript")))
-                          (while (and process (process-live-p process))
-                            (accept-process-output process 0.05))
-                          (when process
-                            (accept-process-output process 0.05)))
+                          ;; Wait for the sentinel, not for the child to die.  apples-mode
+                          ;; computes the value this case pins INSIDE the sentinel it installs
+                          ;; (apples-mode.el:498-504), and `process-live-p' going nil is strictly
+                          ;; earlier: reaping the child sets `raw_status_new' (src/process.c:7748)
+                          ;; and drops the read fd (src/process.c:7760) in one pass, so the bytes
+                          ;; still queued are recovered only by the drain in `status_notify'
+                          ;; (src/process.c:7896-7911), which runs just before `exec_sentinel'
+                          ;; (src/process.c:7937).
+                          (unless process
+                            (error "apples-mode fixture: the script process never started"))
+                          (add-function :after (process-sentinel process)
+                                        (lambda (proc &rest _)
+                                          (process-put proc 'apples-test-sentinel-ran t)))
+                          (let ((deadline (+ (float-time) 30)))
+                            (while (and (not (process-get process 'apples-test-sentinel-ran))
+                                        (< (float-time) deadline))
+                              (accept-process-output nil 0.05)))
+                          (unless (process-get process 'apples-test-sentinel-ran)
+                            (error "apples-mode fixture: %s never ran its sentinel"
+                                   (process-name process))))
                         (list
                          menu-command
                          (substring-no-properties
@@ -211,10 +227,26 @@ fn failed_region_execution_highlights_the_broken_reference_and_moves_to_it() -> 
                         (apples-run-region beg end))
                       (let ((process
                              (get-process "apples-do-applescript")))
-                        (while (and process (process-live-p process))
-                          (accept-process-output process 0.05))
-                        (when process
-                          (accept-process-output process 0.05)))
+                        ;; Wait for the sentinel, not for the child to die.  apples-mode
+                        ;; computes the value this case pins INSIDE the sentinel it installs
+                        ;; (apples-mode.el:498-504), and `process-live-p' going nil is strictly
+                        ;; earlier: reaping the child sets `raw_status_new' (src/process.c:7748)
+                        ;; and drops the read fd (src/process.c:7760) in one pass, so the bytes
+                        ;; still queued are recovered only by the drain in `status_notify'
+                        ;; (src/process.c:7896-7911), which runs just before `exec_sentinel'
+                        ;; (src/process.c:7937).
+                        (unless process
+                          (error "apples-mode fixture: the script process never started"))
+                        (add-function :after (process-sentinel process)
+                                      (lambda (proc &rest _)
+                                        (process-put proc 'apples-test-sentinel-ran t)))
+                        (let ((deadline (+ (float-time) 30)))
+                          (while (and (not (process-get process 'apples-test-sentinel-ran))
+                                      (< (float-time) deadline))
+                            (accept-process-output nil 0.05)))
+                        (unless (process-get process 'apples-test-sentinel-ran)
+                          (error "apples-mode fixture: %s never ran its sentinel"
+                                 (process-name process))))
                       (let* ((visible-error
                               (substring-no-properties
                                (apples-show-last-result)))
@@ -291,10 +323,26 @@ fn compiles_then_decompiles_a_script_through_the_documented_toolchain() -> Parit
                             (concat bin-dir path-separator (getenv "PATH")))
                     (apples-compile source compiled)
                     (let ((process (get-process "apples-compile")))
-                      (while (and process (process-live-p process))
-                        (accept-process-output process 0.05))
-                      (when process
-                        (accept-process-output process 0.05)))
+                      ;; Wait for the sentinel, not for the child to die.  apples-mode
+                      ;; computes the value this case pins INSIDE the sentinel it installs
+                      ;; (apples-mode.el:498-504), and `process-live-p' going nil is strictly
+                      ;; earlier: reaping the child sets `raw_status_new' (src/process.c:7748)
+                      ;; and drops the read fd (src/process.c:7760) in one pass, so the bytes
+                      ;; still queued are recovered only by the drain in `status_notify'
+                      ;; (src/process.c:7896-7911), which runs just before `exec_sentinel'
+                      ;; (src/process.c:7937).
+                      (unless process
+                        (error "apples-mode fixture: the script process never started"))
+                      (add-function :after (process-sentinel process)
+                                    (lambda (proc &rest _)
+                                      (process-put proc 'apples-test-sentinel-ran t)))
+                      (let ((deadline (+ (float-time) 30)))
+                        (while (and (not (process-get process 'apples-test-sentinel-ran))
+                                    (< (float-time) deadline))
+                          (accept-process-output nil 0.05)))
+                      (unless (process-get process 'apples-test-sentinel-ran)
+                        (error "apples-mode fixture: %s never ran its sentinel"
+                               (process-name process))))
                     (setq compiled-artifact
                           (with-temp-buffer
                             (insert-file-contents compiled)
@@ -304,10 +352,26 @@ fn compiles_then_decompiles_a_script_through_the_documented_toolchain() -> Parit
                           (apples-decompile-query ?o))
                       (apples-decompile compiled)
                       (let ((process (get-process "apples-decompile")))
-                        (while (and process (process-live-p process))
-                          (accept-process-output process 0.05))
-                        (when process
-                          (accept-process-output process 0.05))))
+                        ;; Wait for the sentinel, not for the child to die.  apples-mode
+                        ;; computes the value this case pins INSIDE the sentinel it installs
+                        ;; (apples-mode.el:498-504), and `process-live-p' going nil is strictly
+                        ;; earlier: reaping the child sets `raw_status_new' (src/process.c:7748)
+                        ;; and drops the read fd (src/process.c:7760) in one pass, so the bytes
+                        ;; still queued are recovered only by the drain in `status_notify'
+                        ;; (src/process.c:7896-7911), which runs just before `exec_sentinel'
+                        ;; (src/process.c:7937).
+                        (unless process
+                          (error "apples-mode fixture: the script process never started"))
+                        (add-function :after (process-sentinel process)
+                                      (lambda (proc &rest _)
+                                        (process-put proc 'apples-test-sentinel-ran t)))
+                        (let ((deadline (+ (float-time) 30)))
+                          (while (and (not (process-get process 'apples-test-sentinel-ran))
+                                      (< (float-time) deadline))
+                            (accept-process-output nil 0.05)))
+                        (unless (process-get process 'apples-test-sentinel-ran)
+                          (error "apples-mode fixture: %s never ran its sentinel"
+                                 (process-name process)))))
                     (list
                      (file-exists-p compiled)
                      compiled-artifact
