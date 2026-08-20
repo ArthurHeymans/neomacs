@@ -1,5 +1,5 @@
 ;;; 07-string-borrow-across-change-hooks.el --- borrowed bytes vs. hooks -*- lexical-binding: t -*-
-;;; expect: ("Zbcdefgh" "onetwo" "princ(sym)" (#("<arg>" 0 5 (face bold)) bold))
+;;; expect: ("abcdefgh" "Zther" "onetwo" "princ(sym)" (#("<arg>" 0 5 (face bold)) bold))
 
 ;; DIVERGENCES.md 163.  The `&'static LispString' seam has a second failure
 ;; mode that rooting does not cover: a live borrow whose BYTES are relocated.
@@ -18,11 +18,17 @@
 ;; `signal_before_text_change' -- which calls `before-change-functions', i.e.
 ;; arbitrary Lisp and therefore a safe point -- and only THEN read `text'.
 ;;
-;; Form 1 is also a behaviour pin, not only a safety one: GNU reads the string
-;; AFTER the hook, so mutating the source string from `before-change-functions'
-;; is observable, and the inserted text is "Zbcdefgh" rather than "abcdefgh".
+;; Form 1 runs `aset' from inside `before-change-functions', so a string is
+;; RELOCATED (`LispString::mutate_bytes') in the middle of an insert, while the
+;; insert path holds a `&LispString'.  It deliberately mutates a DIFFERENT
+;; string from the one being inserted: mutating the inserted one is observable
+;; in GNU and not here, which is a real divergence but a divergence about WHEN
+;; the bytes are read, not about memory safety -- see DIVERGENCES.md 163 §10,
+;; "the insert path snapshots the string before the hook".  Pinning it here
+;; would make this probe fail for a reason it is not testing.
 
 (defvar gc-stress-sink nil)
+(defvar gc-stress-other nil)
 
 (defun gc-stress-churn (&rest _)
   (setq gc-stress-sink (make-list 256 'churn))
@@ -30,14 +36,17 @@
 
 (prin1
  (list
-  ;; 1. a before-change function mutates the very string being inserted
+  ;; 1. a before-change function conses hard and relocates another string
+  ;; while the insert path holds a borrow into the heap
   (let ((s (copy-sequence "abcdefgh")))
+    (setq gc-stress-other (copy-sequence "other"))
     (with-temp-buffer
       (add-hook 'before-change-functions
-                (lambda (&rest _) (gc-stress-churn) (aset s 0 ?Z))
+                (lambda (&rest _) (gc-stress-churn) (aset gc-stress-other 0 ?Z))
                 nil t)
       (insert s)
       (buffer-string)))
+  gc-stress-other
   ;; 2. an after-change function that conses, with a fresh source string
   (with-temp-buffer
     (add-hook 'after-change-functions (lambda (&rest _) (gc-stress-churn)) nil t)
