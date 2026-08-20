@@ -20035,6 +20035,29 @@ along with the fact that `NEOVM_BINARY_PATH` is not consulted.
   exactly what makes it disagree with GNU.  The `&'static` did not cause the
   divergence; the defensive habit that makes the `&'static` survivable did.
 
+  **2026-08-20 -- ledger 164: FIXED.**  `insert` now reads its argument after
+  the hook and the reproduction above answers `("Zbcdefgh" "aYcdefgh" bold
+  "abcdefgh")` in both editors.  Three notes back to this bullet, since it set
+  the terms:
+
+  * The measurement this bullet deferred came out at **+31 instructions per
+    string insert, +2 per character insert** -- not a doubled conversion.  The
+    "materialize, hook, re-materialize" shape it feared is not what the fix
+    needs, because GNU's before-change range for an insertion is `(PT, PT)`:
+    nothing has to be measured before the hook at all.  What forced the early
+    measurement here was `signal_before_text_change` taking a `TextChange`,
+    which carries the new extent.
+  * The "cheap MEASURE, GNU's `count_size_as_multibyte`" this bullet proposed
+    would have been a mistake, and 164 §9 shows why: that is the ONE pre-hook
+    snapshot GNU has that can go stale, and reproducing it reproduces a GNU
+    buffer whose character count disagrees with its contents.
+  * The closing thesis holds and is now stated as a type.  The port was safe
+    because it copied early; carrying a rooted `Value` across the hook and
+    taking the borrow after it is safe *and* agrees with GNU, because a `Value`
+    can be a root and a `&'static LispString` cannot -- which is this entry's
+    §1.  gc-stress probe 09 pins both halves in one form; it fails on the
+    pre-164 binary and passes after.
+
 * **`insert_lisp_string_with_change_hooks_in_buffer` (`editfns.rs:618`) and
   `insert_print_lisp_string_with_hooks` (`builtins/misc_eval.rs:1350`) are
   latent traps.**  Both take `text: &LispString`, run
@@ -20144,5 +20167,664 @@ intermediate `cargo nextest` run died with
 on `flate2`, `itertools` and `bytemuck` -- the shared machine's sccache server
 had gone away.  Re-running the identical command succeeded; nothing in this
 branch touches those crates.
+
+Status: FIXED.
+
+## 164. `insert` measured its argument before `before-change-functions`; GNU only fixes its LENGTH there and reads the bytes and the intervals after -- and GNU can do that because `aset` cannot change a string's length -- FIXED, and the neighbour audit found the same shape INVERTED in `replace-region-contents` and a buffer over-read in GNU at `insert-buffer-substring`
+
+Handed over by ledger 163 §10 as its one behavioural defect, already measured
+in both directions, with an explicit reason for not fixing it: "a measurement I
+did not have time to make rather than a design opinion", the worry being that
+"the naive alternative (materialize, hook, re-materialize) doubles the
+conversion on the hottest path there is".
+
+The measurement says **+31 instructions per string insert, +2 per character
+insert** -- +0.21% and +0.02% of those workloads. So the hot-path worry was
+right in kind and wrong by two orders of magnitude in size, and the reason it is
+small is not a micro-optimisation but a fact about GNU that decides the whole
+design: **GNU's before-change signal for an insertion is
+`prepare_to_modify_buffer (PT, PT, NULL)` -- a ZERO-WIDTH range.** The text
+about to be inserted is deliberately not part of what the hook is told about.
+Nothing needs to be measured before the hook at all. What forced the early
+measurement here was a *type*: the before signal took a `TextChange`, which
+carries the new extent, so no caller could signal without first measuring, and
+the only measure this port has is its converter.
+
+The headline: **one door fixed; 14 Lisp entry points and 31 probe forms audited,
+13 divergent before and 6 after; and of the 6 that remain, one is GNU reading
+past the end of a buffer, one is GNU leaving a buffer whose character count and
+byte count disagree, and one is GNU disagreeing with itself depending on which
+of two code paths inside a single subr it took.**
+
+### 1. Reproduced first, in both directions
+
+163's probe, unchanged, against `emacs 31.0.90` and `target/release/neomacs`:
+
+```elisp
+(list
+ (let ((s (copy-sequence "abcdefgh")))
+   (with-temp-buffer
+     (add-hook 'before-change-functions (lambda (&rest _) (aset s 0 ?Z)) nil t)
+     (insert s) (buffer-string)))
+ (let ((s (copy-sequence "abcdefgh")))
+   (with-temp-buffer
+     (add-hook 'before-change-functions (lambda (&rest _) (aset s 1 ?Y)) nil t)
+     (insert-before-markers s) (buffer-string)))
+ (let ((s (copy-sequence "abcdefgh")))
+   (with-temp-buffer
+     (add-hook 'before-change-functions
+               (lambda (&rest _) (put-text-property 0 3 'face 'bold s)) nil t)
+     (insert s) (get-text-property 1 'face)))
+ (let ((s (copy-sequence "abcdefgh")))     ; control: no hook
+   (with-temp-buffer (insert s) (buffer-string))))
+```
+
+```text
+GNU Emacs 31.0.90       ("Zbcdefgh" "aYcdefgh" bold "abcdefgh")
+neomacs, merge base     ("abcdefgh" "abcdefgh" nil  "abcdefgh")
+neomacs, this branch    ("Zbcdefgh" "aYcdefgh" bold "abcdefgh")
+```
+
+Red first: `insert_reads_the_string_after_before_change_functions_like_gnu`
+(`neovm-core/src/emacs_core/buffer_test.rs`), committed in `1c29b66ba` before
+any fix, failing `left: "abcdefgh", right: "Zbcdefgh"`.
+
+### 2. Why GNU can read late, from GNU's source -- three properties, and only two transfer
+
+163 established the ordering and stopped there, which is half the answer. The
+other half is the one the brief asked for: `prepare_to_modify_buffer` runs
+arbitrary Lisp and GNU still holds `string` across it. Three separate GNU facts
+make that sound, and which of them transfer decides whether our fix is "read
+late" or "read late *and* root the string".
+
+**(a) The object is rooted.** `string` is a `Lisp_Object` in a C frame and
+`mark_stack` scans the C stack conservatively, so the hook cannot collect it.
+This one is inherited from the language, which is exactly why it does *not*
+transfer: a Rust `&'static LispString` is not a root and nothing scans for it.
+This is 163 §1's subject, restated from the other side.
+
+**(b) The pointer is re-read.** `SDATA` is a macro over
+`XSTRING (string)->u.s.data`, evaluated at each use. `compact_small_strings`
+(`src/alloc.c:1959`) relocates small string payloads on every GC -- the entire
+reason `pin_string` (`src/alloc.c:2373`) exists -- so a `char *` taken before the
+hook would be invalid after it. GNU never takes one; it takes
+`SDATA (string)` at `src/insdel.c:1053`, after. Transfers: `LispString::as_bytes`
+re-reads `data` too.
+
+**(c) The length cannot go stale.** This is the one that is easy to miss and it
+is what licenses the split. `Faset` on a string (`src/data.c:2658-2681`) is
+strictly length-preserving in *both* chars and bytes:
+
+```c
+  else /* STRINGP */
+    {
+      if (idxval < 0 || idxval >= SCHARS (array)) args_out_of_range (array, idx);
+      CHECK_CHARACTER (newelt);
+      int c = XFIXNAT (newelt);
+      if (STRING_MULTIBYTE (array))
+	{
+	  if (c > 0x7f) error ("Attempt to store non-ASCII char into multibyte string");
+	  ptrdiff_t idxval_byte = string_char_to_byte (array, idxval);
+	  unsigned char *p = SDATA (array) + idxval_byte;
+	  if (*p > 0x7f) error ("Attempt to replace non-ASCII char in multibyte string");
+	  *p = c;
+	}
+      else
+	{
+	  if (c > 0xff) error ("Attempt to store non-byte value into unibyte string");
+	  SSET (array, idxval, c);
+	}
+    }
+```
+
+Multibyte strings take ASCII for ASCII in place; unibyte strings take `SSET`,
+one byte for one byte; everything else is an `error`. **No Lisp operation
+changes a string's `length` or `string-bytes` in place.** So the `nchars` /
+`nbytes` that `general_insert_function` snapshots at `src/editfns.c:1338-1339`,
+and that size the gap after the hook, are unfalsifiable -- which is exactly why
+GNU is content to fix them early and read everything else late.
+
+Measured rather than asserted, in both editors:
+
+```text
+                                         GNU 31.0.90     neomacs
+(aset unibyte-literal 0 ?Z)  len/bytes   3 / 3           3 / 3
+(aset multibyte 0 ?a) over non-ASCII     error           error
+(aset unibyte 0 200)         len/bytes   3 / 3           3 / 3
+(aset unibyte 0 300)                     error           error
+```
+
+So the answer is **read late AND root**: (b) and (c) hold here already, (a) does
+not, and (a) is the one a type can be made to state. §5 states it.
+
+### 3. The ordering, with line numbers
+
+`insert_from_string_1` (`src/insdel.c:1017-1112`):
+
+| # | line | what | side of the hook |
+|---|---|---|---|
+| 1 | `editfns.c:1338-1339` | `SCHARS (val)` / `SBYTES (val)` passed by `general_insert_function` | before |
+| 2 | `insdel.c:986` | `SCHARS (string) == 0` early return | before |
+| 3 | `insdel.c:1032` | `count_size_as_multibyte (SDATA (string) + pos_byte, nbytes)` | before |
+| 4 | **`insdel.c:1044`** | **`prepare_to_modify_buffer (PT, PT, NULL)`** | **the hook** |
+| 5 | `insdel.c:1053` | `copy_text (SDATA (string) + pos_byte, GPT_ADDR, nbytes, ...)` | after |
+| 6 | `insdel.c:1093` | `intervals = string_intervals (string)` | after |
+| 7 | `insdel.c:1099` | `graft_intervals_into_buffer (intervals, PT, nchars, ...)` | after |
+
+GNU's own comment above (4) explains why the hook sits there rather than later:
+"Do this before moving and increasing the gap, because the before-change hooks
+might move the gap or make it smaller." The hook is placed early *for the gap's
+sake*; reading the source after it is the consequence, not the intent.
+
+`insert_one_piece` (`emacs_core/buffer.rs`, as handed over) did 1, 2, 3, 5 and 6
+all at step zero: `insert_piece_from_arg` converted the bytes *and* cloned the
+whole `TextPropertyTable` before `signal_before_text_change`. Both halves were
+pre-hook snapshots. That is rows a01-a06, a16 and a17 of the audit.
+
+Row 3 is the exception that matters and it is dealt with in §9: `outgoing_nbytes`
+is the one GNU snapshot that CAN go stale, and reproducing it means reproducing
+a GNU defect.
+
+### 4. What forced the early read was a type, not a performance choice
+
+`signal_before_text_change` took a `TextChange`, and a `TextChange` carries the
+new extent:
+
+```rust
+pub struct TextChange {
+    old_range: TextEditRange,
+    new_extent: TextExtent,
+    after_start_byte: EmacsBytePos,
+    after_new_extent: TextExtent,
+    after_old_char_len: CharLen,
+}
+```
+
+So the caller had to measure before it could signal. But
+`signal_before_text_change` reads exactly one field of it,
+`change.before_byte_range()`, and for an insertion that range is `[pos, pos)`.
+The new extent was never consulted before the hook -- here or in GNU. Verified
+by probe rather than by reading, and identical in both editors:
+
+```elisp
+(with-temp-buffer
+  (add-hook 'before-change-functions (lambda (b e) (push (list 'B b e) bres)) nil t)
+  (add-hook 'after-change-functions  (lambda (b e l) (push (list 'A b e l) ares)) nil t)
+  (insert "abcdefgh") (insert "xy" "zw"))
+
+;; both editors:
+;;   :before ((B 1 1) (B 9 9) (B 11 11))
+;;   :after  ((A 1 9 0) (A 9 11 0) (A 11 13 0))
+```
+
+So the fix is a signature. `signal_before_insertion_at_emacs_byte_pos` takes an
+`EmacsBytePos`, and there is now no way to reach the before signal for an
+insertion that obliges the caller to have measured anything:
+
+```rust
+pub(crate) fn signal_before_insertion_at_emacs_byte_pos(
+    ctx: &mut crate::emacs_core::eval::Context,
+    byte_pos: EmacsBytePos,
+) -> Result<(), Flow> {
+    signal_before_change_with_kind(
+        ctx,
+        EmacsByteRange::from_start_len(byte_pos, EmacsByteLen::ZERO),
+        BufferChangeKind::Characters,
+    )?;
+    deactivate_mark_after_preparing_change(ctx);
+    Ok(())
+}
+```
+
+The signal's own behaviour is byte-identical: the range it forwards to
+tree-sitter's `begin_buffer_edit`, to `prepare_interval_modification_for_change`,
+to the hook arguments and to `collect_overlay_change_hooks` was already
+zero-width. Only the obligation moved.
+
+### 5. The decision that survives the hook is a type, and it holds a `Value`
+
+```rust
+enum PendingInsert {
+    Char(InsertPiece),
+    Str(Value),
+}
+```
+
+`classify` is the pre-hook half and does only what GNU does before the hook:
+dispatch on `char-or-string-p` and signal `wrong-type-argument` for anything
+else (`src/editfns.c:1320-1343`), and report an empty string as
+nothing-to-do -- GNU's `SCHARS (string) == 0` at `src/insdel.c:986`, which
+returns before `prepare_to_modify_buffer`, so an empty argument runs **no hook
+at all** (pinned; GNU and neomacs both answer `(1 "a")` for
+`(insert "") (insert "a")` with a counting hook).
+
+`materialize` is the post-hook half and is the only place a borrow into the heap
+is taken.
+
+The `Str` arm holds a `Value`, never a `&LispString`, and that is the point.
+163's closing thesis was that "the port is safe at the insert boundary BECAUSE
+it copies the string early, and copying early is exactly what makes it disagree
+with GNU". The two are only in tension while the thing carried across the hook
+is a *borrow*. A `Value` can be a root; a `&'static LispString` cannot, which is
+163 §1's whole subject. Carrying the `Value`, rooting it on the specpdl, and
+taking the borrow afterwards satisfies both constraints at once -- and the
+borrow checker rather than a reviewer keeps them satisfied, because
+`materialize` consumes `self`, so there is no way to read the string arm before
+the hook without adding a line that does not exist.
+
+The character arm stays eager and the signature says why: `Fixnum(code_point)`
+is a value, not a heap object, so there is nothing for a hook to mutate. GNU is
+eager there too (`CHAR_STRING (c, str)`, `src/editfns.c:1327`).
+`insert_piece_from_arg` is narrowed to `insert_piece_from_char_arg` so the
+string arm cannot be reached through the eager path at all.
+
+### 6. The follow-on: one root replaces a cons chain, because the copy was paying for it
+
+`insert_one_piece` used to cons a list of every interval plist its pieces held
+and push that as a GC root, with this reason:
+
+> The pieces' TextPropertyTable clones SHARE the source strings' plist cons
+> spines; a before-change hook that set-text-properties the source strings
+> unlinks those spines from their rooted homes, and a GC would free the plists
+> the insert then writes into the buffer.
+
+That hazard is a *consequence of cloning before the hook*. With the clone taken
+after, no Lisp runs between the clone and the write, and while the source
+`Value` is rooted every spine it shares is reachable through it -- which is how
+GNU reaches them, through `string_intervals (string)` (`src/insdel.c:1093`)
+hanging off the rooted `string`. So the per-property cons chain is replaced by
+the one root the fix already needed, and the character arm pushes no root at all.
+
+This is the entry's second-order result and is worth stating plainly: **the
+defensive copy was paying for a root it did not need, and removing the copy
+removed the need.** 163 called the early copy "the defensive habit that makes
+the `&'static` survivable". It was also the habit that made an extra root
+necessary. §7 shows it is worth 24 of the 55 instructions the first version cost.
+
+### 7. The cost, measured
+
+`perf stat -e instructions:u` under `taskset -c 0-15`, three reps per cell,
+median reported. Both sides run the binary from `target/release/neomacs`, per
+`project_gui_render_latency`'s binary-location trap. Never wall time, per
+`feedback_no_wall_time_benchmarks`. Run-to-run spread was at or below 0.033% in
+every cell, so a 30-instruction-per-op difference is far outside the noise.
+
+```sh
+taskset -c 0-15 perf stat -e instructions:u -x, \
+  target/release/neomacs -Q --batch -l tmp/bench/insert-plain.el
+```
+
+(This box is a hybrid P/E part, so `perf stat` emits two rows;
+`cpu_atom/instructions/u` reads `<not counted>` with 0 runtime under that
+`taskset`, and `cpu_core/instructions/u` is the whole count.)
+
+`Ir/op` subtracts the median `startup-only` control (318.10M, stable to 0.003%
+across all three builds) and divides by the iteration count.
+
+| workload | iters | base | after §5 | after §6 | net Ir/op | net total |
+|---|---|---|---|---|---|---|
+| `(insert s)`, 36-char plain string, no hook | 400,000 | 14098.3 | 14152.8 | 14129.2 | **+30.9** | +0.207% |
+| `(insert (propertize s 'face 'bold))` | 150,000 | 24383.3 | 24437.0 | 24420.5 | **+37.3** | +0.141% |
+| unibyte string into a multibyte buffer | 400,000 | 14099.3 | 14152.8 | 14129.1 | **+29.9** | +0.200% |
+| `(insert ?x)` | 400,000 | 13931.8 | 14008.8 | 13934.2 | **+2.4** | +0.016% |
+
+Totals behind the plain row: 5,957,427,806 -> 5,979,219,242 -> 5,969,787,132.
+
+Three things the numbers say that reading could not:
+
+* **163's stated reason for declining does not survive contact.** There is no
+  doubled conversion, because there is no second conversion: the pre-hook
+  measurement the design was budgeting for is not needed at all (§4). The whole
+  faithful shape costs about 31 instructions on a path that costs 14,100.
+* **§6 is worth measuring separately, and it is where the character arm's cost
+  went.** The first version cost +77 Ir/op on `(insert ?x)` -- a character
+  argument has no properties, so it was paying purely for an extra specpdl push.
+  Rooting the source instead, and not rooting anything for a fixnum, took that
+  to +2.4.
+* **The residual +31 is a specpdl push and a larger value moved once more.** It
+  is not free and this entry does not claim it is.
+
+### 8. The audit: 14 Lisp entry points, 31 probe forms, 13 divergent before and 6 after
+
+Each form runs in its own process against both editors, because one of them
+makes GNU produce a buffer `prin1` refuses to print (§9) and a shared process
+would have hidden the rest. 25 forms in the main sweep:
+
+| probe | GNU 31.0.90 | neomacs before | neomacs after |
+|---|---|---|---|
+| a01 `insert` | `"Zbcdefgh"` | `"abcdefgh"` DIVERGE | `"Zbcdefgh"` same |
+| a02 `insert-and-inherit` | `"Zbcdefgh"` | `"abcdefgh"` DIVERGE | `"Zbcdefgh"` same |
+| a03 `insert-before-markers` | `"aYcdefgh"` | `"abcdefgh"` DIVERGE | `"aYcdefgh"` same |
+| a04 `insert-before-markers-and-inherit` | `"abWdefgh"` | `"abcdefgh"` DIVERGE | `"abWdefgh"` same |
+| a05 hook ADDS a text property | `(bold #("abcdefgh" 0 3 (face bold)))` | `(nil "abcdefgh")` DIVERGE | same |
+| a06 hook REMOVES text properties | `nil` | `italic` DIVERGE | `nil` same |
+| a07 two arguments, hook mutates the second | `"aaaZbb"` | same | same |
+| a08 `insert-char` | `"aaa"` | same | same |
+| a09 `insert-buffer-substring`, hook edits source | `"Zbcdefgh"` | `"abcdefgh"` DIVERGE | **DIVERGE** |
+| a10 `insert-buffer-substring-no-properties` | `"abcdefgh"` | same | same |
+| a11 `insert-buffer-substring`, hook propertizes source | `bold` | `nil` DIVERGE | **DIVERGE** |
+| a12 `replace-region-contents` with a string | `"01abcdefgh56789"` | `"01Zbcdefgh56789"` DIVERGE | **DIVERGE** |
+| a13 `subst-char-in-region` | `"bbbb"` | same | same |
+| a14 `princ` to a buffer | `"abcdefgh"` | same | same |
+| a15 `prin1` to a buffer | `"\"abcdefgh\""` | same | same |
+| a16 `insert` into a UNIBYTE buffer | `"Zbcdefgh"` | `"abcdefgh"` DIVERGE | `"Zbcdefgh"` same |
+| a17 unibyte string into a MULTIBYTE buffer | `("\310bcdefg" 8 9)` | `("abcdefgh" 8 9)` DIVERGE | **DIVERGE**, deliberately (§9) |
+| a18 `replace-buffer-contents` | `"abbdefgh"` | `"abcdefgh"` DIVERGE | **DIVERGE** |
+| a19 `insert-file-contents` | `"abcdefgh"` | same | same |
+| a20 `self-insert-command` | `"xxx"` | same | same |
+| a21 hook moves point, after-change extent | `("XY0123456789" 3 ((5 3 0)))` | `((5 7 0))` DIVERGE | **DIVERGE** |
+| a22 hook inserts into the same buffer | `"<>abcd"` | same | same |
+| a23 hook calls `set-buffer-multibyte` | `("abcdefgh" nil)` | same | same |
+| a24 hook mutates a shared property PLIST | `bold` | same | same |
+| a25 empty argument runs no hook | `(1 "a")` | same | same |
+
+**25 audited, 13 divergent before, 6 after.** Six more forms sharpen the
+remaining ones (§9, §10). The fourteen entry points are `insert`,
+`insert-and-inherit`, `insert-before-markers`,
+`insert-before-markers-and-inherit`, `insert-char`, `insert-buffer-substring`,
+`insert-buffer-substring-no-properties`, `replace-region-contents`,
+`replace-buffer-contents`, `subst-char-in-region`, `princ`, `prin1`,
+`insert-file-contents` and `self-insert-command`.
+
+a24 deserves a note because it is the one that could have gone either way and
+did not: a hook that mutates a property plist the string still points at is
+observed by both editors, because both graft the live plist rather than a
+deep copy. a23 is the same story for `set-buffer-multibyte`, and it is a real
+GNU hazard left dormant -- GNU reads `BVAR (current_buffer,
+enable_multibyte_characters)` both before the hook (for `outgoing_nbytes`,
+`src/insdel.c:1028`) and after it (as `copy_text`'s last argument, `:1055`) --
+but the two
+reads only disagree if the hook flips it, and in that case GNU's answer and ours
+happen to coincide.
+
+### 9. GNU reads past the end of a buffer at `insert_from_buffer_1`, and leaves a corrupt buffer at `insert_from_string_1` -- this port declines both
+
+`insert_from_buffer_1` (`src/insdel.c:1239-1366`) has exactly the shape of
+`insert_from_string_1`: `from_byte` / `to_byte` / `incoming_nbytes` at
+`:1245-1247` before the hook, `prepare_to_modify_buffer (PT, PT, NULL)` at `:1288`,
+`copy_text (BUF_BYTE_ADDRESS (buf, from_byte), ...)` at `:1303` and `:1312`
+after, `intervals = buffer_intervals (buf)` at `:1354` after. So
+`insert-buffer-substring` shares the defect -- a09, a11 -- and the obvious move
+is to give it the same fix.
+
+It is not the right move, because the property that makes reading late safe for
+a *string* (§2c: `aset` cannot change a length) has no analogue for a *buffer*.
+A hook can freely shrink the source buffer, and then `incoming_nbytes` is stale
+in the dangerous direction:
+
+```elisp
+(let ((src (generate-new-buffer "shrink")))
+  (with-current-buffer src (insert "abcdefgh"))
+  (with-temp-buffer
+    (add-hook 'before-change-functions
+              (lambda (&rest _)
+                (with-current-buffer src (erase-buffer) (insert "x")))
+              nil t)
+    (insert-buffer-substring src 1 9)
+    (list (buffer-size)
+          (string-to-list (encode-coding-string (buffer-string) 'binary t)))))
+```
+
+```text
+GNU 31.0.90  =>  (8 (120 0 0 0 0 -17014912 0 0))
+neomacs      =>  (8 (97 98 99 100 101 102 103 104))
+```
+
+GNU copies eight bytes out of a buffer that now holds one character, producing
+`x` followed by NULs and one word of whatever was in the gap. Printing the
+result with the whole probe in one process aborts the probe outright:
+
+```text
+cl-prin1: (error "Invalid character: f03c5f80")
+```
+
+The complementary direction, a hook that GROWS the source, is merely wrong
+rather than unsafe -- GNU reads eight characters from the new contents starting
+at the stale offset:
+
+```text
+n5  hook inserts "QQQQ" at the front of the source, then (insert-buffer-substring src 1 9)
+GNU 31.0.90  =>  "QQQQabcd"
+neomacs      =>  "abcdefgh"
+```
+
+**Matching GNU here means matching a read past `ZV`.** Declined, and recorded in
+§12 as declined rather than missed.
+
+The same reasoning retires row 3 of §3's table. `count_size_as_multibyte`
+(`src/insdel.c:1032`) is the one pre-hook snapshot §2c does *not* protect: a
+byte value change is legal under `aset` and does not change `SBYTES`, but it
+does change how many bytes that string occupies once expanded to multibyte. a17
+is that hole:
+
+```elisp
+(let ((s (string-to-unibyte (copy-sequence "abcdefgh"))))
+  (with-temp-buffer
+    (add-hook 'before-change-functions (lambda (&rest _) (aset s 0 200)) nil t)
+    (insert s)
+    (list (buffer-string) (buffer-size) (position-bytes (point-max)))))
+```
+
+```text
+GNU 31.0.90  =>  ("\310bcdefg" 8 9)
+neomacs      =>  ("\310bcdefgh" 8 10)
+```
+
+GNU's answer is internally inconsistent: `buffer-size` says 8 characters, and
+the text it returns is 7. `outgoing_nbytes` was computed as 8 while `copy_text`
+wrote 9, so `GAP_SIZE -= outgoing_nbytes` and `GPT_BYTE += outgoing_nbytes`
+under-count by one and the `*(GPT_ADDR) = 0` anchor at `:1079` lands on the
+final `h`. Neomacs measures once, after the hook, and reports 8 characters in 9
+bytes, which is what the string actually is. **Deliberate divergence from a GNU
+defect**, and the reason the fix does not use the "cheap byte-count-only
+measure" 163 proposed: that measure is precisely the thing that is wrong.
+
+### 10. `replace-region-contents` diverges in BOTH directions, because GNU disagrees with itself
+
+`replace_range` (`src/insdel.c:1463-1543`) reads `inschars = SCHARS (new)` at
+`:1474` before `prepare_to_modify_buffer (from, to, &from)` at `:1505`, and
+`insbytes = SBYTES (new)` / `insbeg_ptr = SDATA (new)` at `:1541-1542` after --
+the same split, for the same reason.
+
+But `Freplace_region_contents` does not always reach `replace_range` with the
+caller's string. When neither side is empty and the diff is enabled, it copies
+the string into a work buffer first:
+
+```c
+  /* The rest of the code is not prepared to handle a string SOURCE.  */
+  if (!b)
+    {
+      Lisp_Object workbuf = code_conversion_save (true, STRING_MULTIBYTE (source));
+      b = XBUFFER (workbuf);
+      set_buffer_internal (b);
+      CALLN (Finsert, source);          /* editfns.c:2096 */
+      set_buffer_internal (a);
+    }
+```
+
+That copy happens before any hook fires on the target buffer, so on the diff
+path GNU sees the string as it was *before* the hook -- an early snapshot
+produced, with some irony, by `Finsert` into a buffer that has no change hooks.
+On the direct path (`max-secs` 0, `editfns.c:2040-2046`) it reaches
+`replace_range` and reads *after*. Our two paths are each the mirror image:
+
+| | GNU 31.0.90 | neomacs |
+|---|---|---|
+| n2 diff path, string source | `"01abcdefgh56789"` (early) | `"01Zbcdefgh56789"` (late) |
+| n3 direct path, `max-secs` 0 | `"01Zbcdefgh56789"` (late) | `"01abcdefgh56789"` (early) |
+| n6 direct path, BUFFER source | `"01Zabcdefg56789"` (late) | `"01abcdefgh56789"` (early) |
+
+So a12 is not one divergence but two, in opposite directions, and matching GNU
+means deliberately snapshotting early on one path and late on the other. Not
+fixed here: it is a different subr, it needs its own red test and its own
+measurement, and the work-buffer copy is an implementation artifact that could
+reasonably be argued to be a GNU bug rather than a contract. Recorded in §12
+with the citation so the next agent does not have to re-derive it.
+
+### 11. Hypotheses eliminated
+
+1. **"The faithful shape doubles the conversion on the hottest path"** --
+   163's own reason for declining. REFUTED. There is no second conversion,
+   because the pre-hook measurement the design was budgeting for is never
+   consulted: GNU's insertion before-range is `(PT, PT)` (§4, probed in both
+   editors). Measured cost of the whole change: +31 Ir on a 14,100 Ir path.
+
+2. **"The fix needs a cheap byte-count-only measure, GNU's
+   `count_size_as_multibyte`"** -- 163's proposed design. REFUTED, and it is
+   fortunate that it is: that measure is the single pre-hook snapshot GNU has
+   that can go stale, and reproducing it reproduces the corrupt buffer in §9's
+   a17. The fix needs no measure at all.
+
+3. **"Reading the source late reintroduces the use-after-free class 161-163
+   closed"** -- the brief's own stated risk. REFUTED by construction and by
+   probe. What crosses the hook is a `Value` on the specpdl root stack, not a
+   borrow, and `materialize` consumes `self` so the borrow cannot be taken
+   early. gc-stress probe 09 conses under `NEOVM_GC_STRESS=1` *while* mutating
+   the string being inserted: 9/9 on the fixed binary, and 8/9 naming probe 09
+   on the pre-change binary, so the probe is a detector and not a tautology.
+
+4. **"860bf8f76's quiet fast path makes this free -- if no hook can run the
+   ordering is unobservable, so pay nothing"** -- the brief asked which. It does
+   NOT make it free, and it does not conflict either. The fast path lives
+   *inside* `signal_before_change_with_kind`, deliberately after
+   `lock_current_buffer_before_change` and
+   `prepare_interval_modification_for_change`; a caller-side "can any hook run?"
+   predicate would have to be evaluated before both, and both can run Lisp (file
+   locking can prompt; interval preparation runs `modification-hooks`). The
+   ordering is also observable through more than `before-change-functions` --
+   `first-change-hook` and overlay `modification-hooks` reach the same place.
+   Deferring unconditionally is simpler *and* cheaper than a predicate that has
+   to be conservative about all of that. Conflict check: 860bf8f76 touches only
+   the bodies of `signal_before_change_with_kind` and
+   `signal_after_change_with_kind`; this entry adds a new caller of the former
+   and changes neither fast path. Both are in the tree and the suite is green.
+
+5. **"GNU's answer is the target in every row"** -- REFUTED in two of the six
+   remaining rows. In a17 GNU leaves a buffer whose character count disagrees
+   with its contents; in n1 GNU reads past `ZV`. Copying GNU is the default, not
+   the rule.
+
+6. **"`insert-buffer-substring` shares the shape so it should share the fix"** --
+   REJECTED after measuring GNU rather than after reading it. §9.
+
+7. **"The root holder is load-bearing and must be kept"** -- REFUTED. It guarded
+   a window that only exists while the property-table clone is taken before the
+   hook. Removing it recovered 24 of the 55 Ir/op the first version cost, and
+   the whole 77 on the character arm. Verified by the suite and by probe 09,
+   which grafts hook-consed plists into a buffer under GC stress.
+
+### 12. Found and NOT fixed
+
+* **`insert-buffer-substring` reads its source buffer before the hook; GNU reads
+  it after, and GNU is not safe doing so.** a09, a11, n1, n5.
+  `insert_from_buffer_1` splits at `src/insdel.c:1288` exactly as
+  `insert_from_string_1` does, so the same `PendingInsert` treatment applies in
+  shape -- a `BufferRange { source, char_range }` arm materializing after the
+  signal. It is declined because §2c has no buffer analogue: the pre-hook
+  `incoming_nbytes` can be falsified by the hook, and GNU's response to that is
+  to read past the end of the buffer. Anyone taking this on should decide first
+  whether the target is GNU's answer or a correct one, because they are not the
+  same answer, and should re-clamp against `ZV` after the hook rather than
+  trusting the snapshot.
+* **`replace-region-contents` diverges in BOTH directions.** a12, n2, n3, n6,
+  and §10. The diff path needs an early snapshot (GNU's work-buffer copy,
+  `src/editfns.c:2089-2096`) and the direct path needs a late one
+  (`replace_range`, `src/insdel.c:1541-1542`); ours has them the wrong way round
+  on both. Two red tests and its own measurement; not attempted here.
+* **`replace-buffer-contents` (a18).** GNU `"abbdefgh"`, neomacs `"abcdefgh"`
+  when the hook edits the source buffer. Same family as the above and not
+  separately investigated; GNU's answer there is a diff computed against a
+  source that changed underneath it, so it is not obviously a contract either.
+* **The after-change extent when a hook MOVES POINT (a21, n4).** GNU's
+  `insert_from_string` captures `opoint = PT` at `src/insdel.c:984`, before the
+  hook, and reports `signal_after_change (opoint, 0, PT - opoint)` at `:991`.
+  If the hook moves point backwards, `lenins` goes NEGATIVE and the hook is
+  handed a range that runs backwards: GNU `(5 3 0)`, neomacs `(5 7 0)`. Not
+  fixed, and the reason is a type rather than a shrug: `TextExtent` is a pair of
+  unsigned lengths, so GNU's negative `lenins` is not representable without
+  making the extent signed across the whole edit pipeline. That is a real
+  refactor to reproduce a degenerate value no hook can use. Recorded so the
+  next person weighs it rather than rediscovering it.
+* **`insert_one_pending` computes `current_id` and `insert_pos` before the
+  hook and does not re-read the current buffer after it.** GNU re-reads
+  `current_buffer` inside `insert_from_string_1` (every `PT`, `GPT`, `BVAR`
+  after `:1044`), so a hook that leaves a different buffer selected is handled
+  differently. Pre-existing, unchanged by this entry, and untested by the
+  audit -- a22 and a23 only cover hooks that restore the buffer. Named because
+  the fix moved code around this and someone will otherwise assume it was
+  considered and dismissed; it was considered and left.
+* **`insert_lisp_string_with_change_hooks_in_buffer` (`editfns.rs`) and
+  `insert_print_lisp_string_with_hooks` (`builtins/misc_eval.rs`) still take
+  `text: &LispString` across `signal_before_text_change`** -- 163's residual,
+  untouched. Every caller still passes a borrow of an owned local, so nothing is
+  wrong today, and a14/a15 confirm `princ`/`prin1` to a buffer agree with GNU.
+  This entry makes the fix concrete rather than hypothetical: the parameter
+  should become a `PendingInsert`-shaped value, i.e. the thing that must survive
+  the hook is the Lisp object and the borrow is taken after.
+* **`expect_string_comparison_operand` (`builtins/mod.rs:504`) still returns
+  `&'static`** for both arms -- 163's residual, untouched.
+* **`Value::closure_docstring` (`value.rs:2125`) and `obarray_lookup_name`
+  (`builtins/symbols.rs:1523`)** -- 163's residual, untouched.
+* **The 357 production borrow sites with no `Context` in scope** -- 163 §6's
+  residual, untouched.
+* **`aset_string_replacement`'s coexisting borrows** -- 163 §9's residual,
+  untouched.
+* **The dead-string check's cost is still unmeasured** -- 163's residual. This
+  entry's fixture would measure it (`insert-plain` is string-heavy and stable to
+  0.005%) but it was not the change under test.
+* **`try_resolve_sym` / `try_resolve_sym_lisp_string` (`intern.rs:1494/1502`)
+  still have zero callers** -- 161's residual, restated by 162 and 163, carried
+  a fourth time. 163's disposition stands: DELETE them.
+* **The probe corpus is 31 forms and 9 gc-stress probes, not a fuzzer** --
+  162's residual, restated. The insert-argument space in particular (unibyte vs
+  multibyte source crossed with unibyte vs multibyte buffer crossed with what
+  the hook does) is enumerable and was sampled, not covered.
+* **The oracle is still not a detector for this class.** 38786 pins are green on
+  both sides of this change, as they were for 161, 162 and 163. Recorded plainly
+  so entry 165 does not read oracle green as evidence about change-hook
+  ordering.
+* **`detect_tty_background_mode` still reads `COLORFGBG`** -- 157's residual,
+  carried by 161, 162 and 163, untouched again.
+
+### 13. Gates
+
+All release-binary gates ran against a `cargo xtask fresh-build --release`
+reporting `+ xtask fresh-build finished successfully (release)` with
+`no_byte_compile=false`, whose pdump (04:50:09, 15,461,439 bytes) is newer than
+its binary (04:48:13), and which is oracle-valid by the check that catches the
+stale-`.elc` failure mode: `(with-current-buffer "*scratch*" (buffer-string))`
+is `""`, not the startup message. The worktree's copied `.elc` files were
+touched forward before the build, and both bootstrap fingerprint memos were
+deleted first.
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine`:
+  **11078 tests run: 11078 passed, 54 skipped** in 454.878 s, exit 0.
+  Merge-base baseline is 11076 + 54 skipped; the two new tests are the insert
+  pin and the four-door pin.
+* `cargo nextest run -p neovm-oracle-tests`:
+  **38786 tests run: 38786 passed, 0 skipped** in 647.721 s, exit 0, zero
+  `FAIL` lines. Baseline 38786. As §12 records, this is green on both sides of
+  the change and always was.
+* `cargo xtask gc-stress --editor <this branch's release binary>`:
+  **9/9 probes passed**, exit 0. Baseline is 8/8; probe 09 is new.
+* **The negative control, which is what makes the 9/9 mean anything.** The same
+  command with `--editor` pointing at the main checkout's PRE-change release
+  binary (`03:09:38`, verified pre-change by re-running §1's probe against it
+  and getting `("abcdefgh" "abcdefgh" nil "abcdefgh")`): **8/9 probes passed**,
+  exit 1, `FAIL 09-insert-source-read-after-change-hooks`,
+  `expected stdout to contain: ("Zbcdefgh" "aYcdefgh" bold nil "abcdefgh"
+  "abcdefgh")`. The other eight, probe 07 included, pass on both binaries -- so
+  this change neither needed nor consumed any of 163's memory-safety slack.
+  `--editor` is the option that works here; `NEOVM_BINARY_PATH` is silently
+  ignored, and the `gc-stress: N probe(s) against <path>` line is what to read
+  before believing either result.
+* `cargo check -p neovm-core --all-targets`: clean.
+* `cargo fmt --all --check`: clean.
+
+`perf stat` numbers and the exact command are in §7. The machine was shared
+throughout -- another agent held a `cargo build --profile profiling` on the main
+checkout for part of the run -- which is exactly why the gate is
+`instructions:u` and not wall time: the startup-only control moved by 0.003%
+across three separately linked binaries.
 
 Status: FIXED.

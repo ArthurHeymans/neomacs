@@ -674,6 +674,16 @@ pub(crate) fn signal_after_property_change(
 /// decoded `LispString`: select the buffer whose hooks and read-only state
 /// govern the edit, signal the paired change notifications, perform the raw
 /// storage mutation, and restore the caller's current buffer on every exit.
+///
+/// `text` is read AFTER `signal_before_text_change`, i.e. after arbitrary Lisp.
+/// That is sound only because every caller passes a borrow of a local it owns
+/// outright -- a freshly decoded `run.text`, a `LispString::from_utf8` -- which
+/// no hook can reach, let alone collect. DIVERGENCES.md 163 §10 named this a
+/// latent trap because the signature does not say so and a caller passing
+/// `value.as_lisp_string()?` would compile; 164 shows what saying so looks
+/// like, at the `insert` door: carry the `Value`, root it, and take the borrow
+/// past the safepoint (`PendingInsert` in `emacs_core/buffer.rs`). Anything
+/// added here that wants to pass a heap borrow must do that instead.
 pub(crate) fn insert_lisp_string_with_change_hooks_in_buffer(
     ctx: &mut crate::emacs_core::eval::Context,
     buffer_id: crate::buffer::BufferId,
