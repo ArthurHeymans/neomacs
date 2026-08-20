@@ -2099,16 +2099,13 @@ impl<'a> Vm<'a> {
                     out.push(raw);
                 }
             }
-            Flow::Throw { tag, value } => {
-                out.push(*tag);
-                out.push(*value);
+            Flow::Throw(thrown) => {
+                out.push(thrown.tag);
+                out.push(thrown.value);
             }
-            Flow::ThreadBlocked {
-                blocker,
-                remaining_forms,
-            } => {
-                out.push(*blocker);
-                out.push(*remaining_forms);
+            Flow::ThreadBlocked(blocked) => {
+                out.push(blocked.blocker);
+                out.push(blocked.remaining_forms);
             }
             // Carries only an exit code and a restart flag: no Lisp values to
             // keep alive.
@@ -5005,7 +5002,7 @@ impl<'a> Vm<'a> {
                         let val = stk!().pop().unwrap_or(Value::NIL);
                         let tag = stk!().pop().unwrap_or(Value::NIL);
                         cursor.publish(self.ctx);
-                        resume_flow!(Flow::Throw { tag, value: val })
+                        resume_flow!(Flow::throw(tag, val))
                     }
 
                     // -- Closure --
@@ -7322,8 +7319,9 @@ impl<'a> Vm<'a> {
         match flow {
             // Neither is resumable inside the VM: a blocked thread and a
             // shutdown both unwind past every handler this frame owns.
-            Flow::ThreadBlocked { .. } | Flow::Shutdown(_) => Err(flow),
-            Flow::Throw { tag, value } => {
+            Flow::ThreadBlocked(_) | Flow::Shutdown(_) => Err(flow),
+            Flow::Throw(thrown) => {
+                let (tag, value) = (thrown.tag, thrown.value);
                 let selected_resume = self.ctx.matching_catch_resume(&tag);
                 if let Some(ResumeTarget::VmCatch {
                     target,
@@ -7349,7 +7347,7 @@ impl<'a> Vm<'a> {
                 }
 
                 if selected_resume.is_some() {
-                    return Err(Flow::Throw { tag, value });
+                    return Err(Flow::throw(tag, value));
                 }
                 tracing::debug!(
                     target: "neomacs::throw_on_input",

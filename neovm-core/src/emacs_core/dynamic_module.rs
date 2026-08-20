@@ -525,12 +525,12 @@ unsafe fn module_handle_nonlocal_exit(env: *mut emacs_env, flow: Flow) {
                     .raw_data
                     .unwrap_or_else(|| Value::list(sig.data.clone()));
             }
-            Flow::Throw { tag, value } => {
+            Flow::Throw(thrown) => {
                 priv_.pending_non_local_exit = emacs_funcall_exit::Throw;
-                priv_.non_local_exit_symbol = tag;
-                priv_.non_local_exit_data = value;
+                priv_.non_local_exit_symbol = thrown.tag;
+                priv_.non_local_exit_data = thrown.value;
             }
-            Flow::ThreadBlocked { .. } => {
+            Flow::ThreadBlocked(_) => {
                 priv_.pending_non_local_exit = emacs_funcall_exit::Signal;
                 priv_.non_local_exit_symbol = Value::symbol("error");
                 priv_.non_local_exit_data =
@@ -567,10 +567,10 @@ fn module_signal_or_throw(priv_: &emacs_env_private) -> Result<(), Flow> {
                 false,
             ))))
         }
-        emacs_funcall_exit::Throw => Err(Flow::Throw {
-            tag: priv_.non_local_exit_symbol,
-            value: priv_.non_local_exit_data,
-        }),
+        emacs_funcall_exit::Throw => Err(Flow::throw(
+            priv_.non_local_exit_symbol,
+            priv_.non_local_exit_data,
+        )),
     }
 }
 

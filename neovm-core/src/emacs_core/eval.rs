@@ -1668,14 +1668,15 @@ fn collect_thread_local_gc_roots(
         stats,
         super::jit::cache::collect_jit_reloc_gc_roots,
     );
-    // A signal that is unwinding lives only in a Rust `Flow::Signal`, which the
-    // precise collector cannot see; its payload is pinned by `SignalData`'s
-    // private root handle and seeded here (DIVERGENCES.md 161).
+    // A signal, throw or thread-yield that is unwinding lives only in a Rust
+    // `Flow`, which the precise collector cannot see; each variant's payload is
+    // pinned by its own private root handle and seeded here (DIVERGENCES.md
+    // 161 for the signal, 162 for the throw and the thread-yield).
     collect_group(
         roots,
-        "in-flight-signal-thread-local",
+        "in-flight-flow-thread-local",
         stats,
-        super::error::collect_in_flight_signal_gc_roots,
+        super::error::collect_in_flight_flow_gc_roots,
     );
     collect_group(
         roots,
@@ -3715,12 +3716,12 @@ impl Context {
                             self.restore_specpdl_roots(specpdl_root_scope);
                             return dispatched;
                         }
-                        Err(flow @ Flow::Throw { .. }) => {
+                        Err(flow @ Flow::Throw(_)) => {
                             self.pop_condition_frame();
                             self.restore_specpdl_roots(specpdl_root_scope);
                             return Err(flow);
                         }
-                        Err(flow @ (Flow::ThreadBlocked { .. } | Flow::Shutdown(_))) => {
+                        Err(flow @ (Flow::ThreadBlocked(_) | Flow::Shutdown(_))) => {
                             self.pop_condition_frame();
                             self.restore_specpdl_roots(specpdl_root_scope);
                             return Err(flow);
@@ -6285,8 +6286,17 @@ impl Context {
                 }
                 SpecBinding::SaveExcursion { marker, .. } => visit(*marker),
                 SpecBinding::NativeUnwind { action } => action.trace_roots(visit),
-                SpecBinding::SaveCurrentBuffer { .. } | SpecBinding::Nop => {}
-                _ => {}
+                // EXHAUSTIVE ON PURPOSE — no catch-all arm. These four carry
+                // no Lisp value (a buffer id, two lengths, nothing), and a new
+                // `SpecBinding` variant must state which group it belongs to
+                // instead of being absorbed by a `_ => {}`. A root walk is the
+                // one match where "the compiler did not complain" and "the
+                // value is marked" must be the same sentence
+                // (DIVERGENCES.md 161's residual, closed by 162).
+                SpecBinding::SaveCurrentBuffer { .. }
+                | SpecBinding::LoadsInProgress { .. }
+                | SpecBinding::RequireStack { .. }
+                | SpecBinding::Nop => {}
             }
         }
         group("profiler");
@@ -6751,10 +6761,8 @@ impl Context {
         match result {
             Ok(val) => Ok(val),
             // exit-recursive-edit: throw 'exit nil → normal return
-            Err(Flow::Throw { ref tag, ref value })
-                if catches_exit && tag.is_symbol_named("exit") =>
-            {
-                let value = *value;
+            Err(Flow::Throw(ref thrown)) if catches_exit && thrown.tag.is_symbol_named("exit") => {
+                let value = thrown.value;
                 match self.classify_command_loop_exit(value)? {
                     // abort-recursive-edit: throw 'exit t → signal quit
                     CommandLoopExit::Quit => Err(super::error::signal(LispCondition::Quit, vec![])),
@@ -6808,7 +6816,7 @@ impl Context {
             let result = if outermost_command_loop {
                 match self.command_loop_top_level_1() {
                     Ok(_) => self.command_loop_2(CommandLoopEntry::RecursiveEdit),
-                    Err(Flow::Throw { ref tag, .. }) if tag.is_symbol_named("top-level") => {
+                    Err(Flow::Throw(ref thrown)) if thrown.tag.is_symbol_named("top-level") => {
                         // top-level throw inside top_level_1 — fall through
                         // to command_loop_2 just like GNU's two-catch flow.
                         self.command_loop_2(CommandLoopEntry::RecursiveEdit)
@@ -6823,7 +6831,7 @@ impl Context {
 
             match result {
                 // top-level throw → restart the loop
-                Err(Flow::Throw { ref tag, .. }) if tag.is_symbol_named("top-level") => {
+                Err(Flow::Throw(ref thrown)) if thrown.tag.is_symbol_named("top-level") => {
                     tracing::debug!("command_loop_inner: top-level throw, restarting loop");
                     continue;
                 }
@@ -6977,7 +6985,7 @@ impl Context {
         loop {
             match self.command_loop_1(entry) {
                 Ok(val) => return Ok(val),
-                Err(flow @ Flow::Throw { .. }) => {
+                Err(flow @ Flow::Throw(_)) => {
                     // Throws propagate (exit, top-level, etc.) without
                     // re-entering the command loop.  Re-running command_loop_1
                     // here traps minibuffer exit throws and blocks waiting for
@@ -6986,7 +6994,7 @@ impl Context {
                 }
                 // A shutdown unwinds the command loop instead of restarting it:
                 // GNU never returns from Fkill_emacs to command_loop_2.
-                Err(flow @ (Flow::ThreadBlocked { .. } | Flow::Shutdown(_))) => return Err(flow),
+                Err(flow @ (Flow::ThreadBlocked(_) | Flow::Shutdown(_))) => return Err(flow),
                 Err(flow @ Flow::Signal(_))
                     if self
                         .command_loop
@@ -7350,7 +7358,7 @@ impl Context {
 
             if let Err(ref flow) = exec_result {
                 match flow {
-                    Flow::Throw { .. } | Flow::ThreadBlocked { .. } | Flow::Shutdown(_) => {
+                    Flow::Throw(_) | Flow::ThreadBlocked(_) | Flow::Shutdown(_) => {
                         return exec_result;
                     }
                     Flow::Signal(_)
@@ -8926,10 +8934,7 @@ impl Context {
                 has_matching_catch = self.has_active_catch(&throw_on_input),
                 "process_quit_flag: throwing for pending input"
             );
-            return Err(Flow::Throw {
-                tag: throw_on_input,
-                value: Value::T,
-            });
+            return Err(Flow::throw(throw_on_input, Value::T));
         }
 
         Err(signal(LispCondition::Quit, vec![]))
@@ -9533,19 +9538,13 @@ impl Context {
             while cursor.is_cons() {
                 match ctx.eval_sub(cursor.cons_car()) {
                     Ok(value) => last = value,
-                    Err(Flow::ThreadBlocked {
-                        blocker,
-                        remaining_forms,
-                    }) => {
-                        let remaining_forms = if remaining_forms.is_nil() {
+                    Err(Flow::ThreadBlocked(blocked)) => {
+                        let remaining_forms = if blocked.remaining_forms.is_nil() {
                             cursor.cons_cdr()
                         } else {
-                            remaining_forms
+                            blocked.remaining_forms
                         };
-                        return Err(Flow::ThreadBlocked {
-                            blocker,
-                            remaining_forms,
-                        });
+                        return Err(Flow::thread_blocked(blocked.blocker, remaining_forms));
                     }
                     Err(flow) => return Err(flow),
                 }
@@ -12233,19 +12232,13 @@ impl Context {
             while cursor.is_cons() {
                 match self.eval_sub(cursor.cons_car()) {
                     Ok(value) => last = value,
-                    Err(Flow::ThreadBlocked {
-                        blocker,
-                        remaining_forms,
-                    }) => {
-                        let remaining_forms = if remaining_forms.is_nil() {
+                    Err(Flow::ThreadBlocked(blocked)) => {
+                        let remaining_forms = if blocked.remaining_forms.is_nil() {
                             cursor.cons_cdr()
                         } else {
-                            remaining_forms
+                            blocked.remaining_forms
                         };
-                        return Err(Flow::ThreadBlocked {
-                            blocker,
-                            remaining_forms,
-                        });
+                        return Err(Flow::thread_blocked(blocked.blocker, remaining_forms));
                     }
                     Err(flow) => return Err(flow),
                 }
@@ -12455,29 +12448,37 @@ impl Context {
             Ok(value) => Ok(value),
             Err(Flow::Signal(sig)) => match self.dispatch_signal_if_needed(sig) {
                 Ok(dispatched) => Err(Flow::Signal(dispatched)),
-                Err(Flow::Throw {
-                    tag: thrown_tag,
-                    value,
-                }) if eq_value(&tag, &thrown_tag) => Ok(value),
+                Err(Flow::Throw(thrown)) if eq_value(&tag, &thrown.tag) => Ok(thrown.value),
                 Err(flow) => Err(flow),
             },
-            Err(Flow::Throw {
-                tag: thrown_tag,
-                value,
-            }) if eq_value(&tag, &thrown_tag) => Ok(value),
+            Err(Flow::Throw(thrown)) if eq_value(&tag, &thrown.tag) => Ok(thrown.value),
             Err(flow) => Err(flow),
         };
         self.pop_condition_frame();
-        match result {
-            Ok(value) => {
-                self.unbind_to_result(specpdl_count)?;
-                Ok(value)
-            }
-            Err(flow) => {
-                self.unbind_to_result(specpdl_count)?;
-                Err(flow)
-            }
+        // Catching moves the value OUT of the pinned `ThrowData`, so from
+        // here it lives only in a Rust local — invisible to the precise
+        // collector — while `unbind_to_result` runs `unwind-protect` cleanups
+        // and variable watchers, i.e. arbitrary Lisp at allocation-bearing
+        // safe points. `unbind_to_with_result` is the same guarantee for the
+        // ordinary eval path ("GNU eval.c `unbind_to(count, value)` carries
+        // VALUE through cleanup"); this is `catch`'s, which was missing it,
+        // and the VM's own throw resume already does it by hand
+        // (`bytecode/vm.rs`, `push_vm_frame_root(tag/value)` around
+        // `unbind_to(spec_depth)`).
+        //
+        // Guarded on a non-empty suffix because the overwhelmingly common
+        // case is empty: every inner form pops its own bindings on the throw
+        // path, so a throw usually reaches its `catch` with nothing left to
+        // unwind. That is also why this seam has no discriminating test
+        // (DIVERGENCES.md 162, "Found and NOT fixed").
+        if self.specpdl.len() > specpdl_count {
+            let root_scope = self.save_vm_roots();
+            self.push_eval_result_roots(&result);
+            let unwound = self.unbind_to_result(specpdl_count);
+            self.restore_vm_roots(root_scope);
+            unwound?;
         }
+        result
     }
 
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -12695,30 +12696,26 @@ impl Context {
                 }
                 Err(Flow::Signal(sig))
             }
-            Err(flow @ Flow::ThreadBlocked { .. }) => {
+            Err(flow @ Flow::ThreadBlocked(_)) => {
                 self.truncate_condition_stack(condition_stack_base);
-                if let Flow::ThreadBlocked {
-                    blocker,
-                    remaining_forms,
-                } = flow
-                    && !remaining_forms.is_nil()
+                if let Flow::ThreadBlocked(ref blocked) = flow
+                    && !blocked.remaining_forms.is_nil()
                 {
-                    return Err(Flow::ThreadBlocked {
-                        blocker,
-                        remaining_forms:
-                            crate::emacs_core::threads::make_thread_condition_case_continuation(
-                                var,
-                                remaining_forms,
-                                Value::list(handlers_vec.to_vec()),
-                                self.lexenv,
-                            ),
-                    });
+                    return Err(Flow::thread_blocked(
+                        blocked.blocker,
+                        crate::emacs_core::threads::make_thread_condition_case_continuation(
+                            var,
+                            blocked.remaining_forms,
+                            Value::list(handlers_vec.to_vec()),
+                            self.lexenv,
+                        ),
+                    ));
                 }
                 Err(flow)
             }
             // A shutdown is not a condition: condition-case cannot handle it,
             // matching GNU, where Fkill_emacs exits and no handler ever runs.
-            Err(flow @ (Flow::Throw { .. } | Flow::Shutdown(_))) => {
+            Err(flow @ (Flow::Throw(_) | Flow::Shutdown(_))) => {
                 self.truncate_condition_stack(condition_stack_base);
                 Err(flow)
             }
@@ -12803,11 +12800,11 @@ impl Context {
 
     fn validate_throw(&self, flow: Flow) -> Flow {
         match flow {
-            Flow::Throw { ref tag, ref value } => {
-                if self.has_active_catch(tag) {
+            Flow::Throw(ref thrown) => {
+                if self.has_active_catch(&thrown.tag) {
                     flow
                 } else {
-                    signal(LispCondition::NoCatch, vec![*tag, *value])
+                    signal(LispCondition::NoCatch, vec![thrown.tag, thrown.value])
                 }
             }
             other => other,
@@ -13330,9 +13327,9 @@ impl Context {
     fn flow_has_active_handler(&self, flow: &Flow) -> bool {
         match flow {
             Flow::Signal(sig) => self.has_active_condition_handler_for_signal(sig),
-            Flow::Throw { tag, .. } => self.has_active_catch(tag),
+            Flow::Throw(thrown) => self.has_active_catch(&thrown.tag),
             // Nothing handles a shutdown; it unwinds to the process boundary.
-            Flow::ThreadBlocked { .. } | Flow::Shutdown(_) => false,
+            Flow::ThreadBlocked(_) | Flow::Shutdown(_) => false,
         }
     }
 
@@ -14129,16 +14126,13 @@ impl Context {
                     self.push_vm_frame_root(raw_data);
                 }
             }
-            Err(Flow::Throw { tag, value }) => {
-                self.push_vm_frame_root(*tag);
-                self.push_vm_frame_root(*value);
+            Err(Flow::Throw(thrown)) => {
+                self.push_vm_frame_root(thrown.tag);
+                self.push_vm_frame_root(thrown.value);
             }
-            Err(Flow::ThreadBlocked {
-                blocker,
-                remaining_forms,
-            }) => {
-                self.push_vm_frame_root(*blocker);
-                self.push_vm_frame_root(*remaining_forms);
+            Err(Flow::ThreadBlocked(blocked)) => {
+                self.push_vm_frame_root(blocked.blocker);
+                self.push_vm_frame_root(blocked.remaining_forms);
             }
             // No Lisp values to root.
             Err(Flow::Shutdown(_)) => {}
@@ -15564,7 +15558,7 @@ impl Context {
                 let tag = args[0];
                 let value = args[1];
                 if self.has_active_catch(&tag) {
-                    Err(Flow::Throw { tag, value })
+                    Err(Flow::throw(tag, value))
                 } else {
                     Err(signal(LispCondition::NoCatch, vec![tag, value]))
                 }
@@ -15590,7 +15584,7 @@ impl Context {
             let tag = args[0];
             let value = args[1];
             if self.has_active_catch(&tag) {
-                Err(Flow::Throw { tag, value })
+                Err(Flow::throw(tag, value))
             } else {
                 Err(signal(LispCondition::NoCatch, vec![tag, value]))
             }
@@ -15637,26 +15631,21 @@ impl Context {
             }
         };
         let result = match self.eval_lambda_body_value(body) {
-            Err(Flow::ThreadBlocked {
-                blocker,
-                remaining_forms,
-            }) if !remaining_forms.is_nil()
-                && crate::emacs_core::threads::thread_condition_case_continuation_parts(
-                    remaining_forms,
-                )
-                .is_none() =>
+            Err(Flow::ThreadBlocked(blocked))
+                if !blocked.remaining_forms.is_nil()
+                    && crate::emacs_core::threads::thread_condition_case_continuation_parts(
+                        blocked.remaining_forms,
+                    )
+                    .is_none() =>
             {
                 let resume_function = builtins::symbols::make_interpreted_closure_from_parts(
                     &Value::NIL,
-                    &remaining_forms,
+                    &blocked.remaining_forms,
                     &self.lexenv,
                     None,
                     None,
                 )?;
-                Err(Flow::ThreadBlocked {
-                    blocker,
-                    remaining_forms: resume_function,
-                })
+                Err(Flow::thread_blocked(blocked.blocker, resume_function))
             }
             other => other,
         };

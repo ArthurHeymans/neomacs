@@ -2601,8 +2601,9 @@ fn vm_eval_shared_runtime_path_preserves_active_shared_catches() {
 
     assert!(matches!(
         result,
-        Err(Flow::Throw { tag, value })
-            if tag == Value::symbol("vm-bridge-catch") && value == Value::fixnum(7)
+        Err(Flow::Throw(ref thrown))
+            if thrown.tag == Value::symbol("vm-bridge-catch")
+                && thrown.value == Value::fixnum(7)
     ));
     drop(vm);
     eval.pop_condition_frame();

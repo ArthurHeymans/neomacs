@@ -323,58 +323,87 @@ fn condition_case_binding_value_survives_a_collection() {
     );
 }
 
-
 // ---------------------------------------------------------------------------
-// RED probes (pre-fix shape) for DIVERGENCES.md 162 -- temporary
+// In-flight THROW and THREAD-BLOCKED payload rooting (DIVERGENCES.md 162)
 // ---------------------------------------------------------------------------
 
+/// `throw` unwinds through exactly the machinery `signal` does: every frame it
+/// passes runs `unbind_to`, which executes `unwind-protect` cleanup forms and
+/// variable watchers — arbitrary Lisp, and therefore allocation-bearing safe
+/// points. GNU is safe here for free: `Fthrow` -> `unwind_to_catch`
+/// (src/eval.c:1188-1226) stores the value in `catchlist->val` and `longjmp`s,
+/// leaving it on the C stack, which `mark_stack` (src/alloc.c) scans
+/// conservatively. This collector is PRECISE — `set_stack_bottom` is a no-op
+/// (`tagged/CONCURRENT_GC.md`, "precise-rooting precondition") — so a
+/// `Flow::Throw` payload that is not a seeded root is reclaimed mid-unwind and
+/// `catch` returns a free-list cell.
+///
+/// Red before the pin: the payload cons's car reads back as [`Value::DEAD`],
+/// GNU's `dead_object` (src/alloc.c:6858) that `set_free_next` now writes.
 #[test]
-fn red_in_flight_throw_payload_survives_a_collection() {
+fn in_flight_throw_payload_survives_a_collection() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
-    let flow = Flow::Throw {
-        tag: Value::symbol("neovm-throw-probe"),
-        value: Value::list(vec![Value::string("thrown datum")]),
-    };
+
+    let flow = Flow::throw(
+        Value::symbol("neovm-throw-probe"),
+        Value::list(vec![Value::string("thrown datum")]),
+    );
+
+    // Nothing else references the thrown datum: it is reachable ONLY through
+    // the in-flight throw, which is what the root set has to cover.
     eval.gc_collect();
-    let Flow::Throw { value, .. } = &flow else {
-        panic!("throw flow");
+
+    let Flow::Throw(thrown) = &flow else {
+        panic!("Flow::throw builds a throw flow");
     };
-    assert!(value.is_cons(), "payload stays a cons: {value:?}");
     assert!(
-        !value.cons_car().is_dead(),
+        thrown.value.is_cons(),
+        "payload stays a cons: {:?}",
+        thrown.value
+    );
+    assert!(
+        !thrown.value.cons_car().is_dead(),
         "the in-flight throw payload was collected while the throw was still \
          unwinding (its cons is on the free list)"
     );
-    assert_eq!(print_value_with_eval(&eval, value), "(\"thrown datum\")");
+    assert_eq!(
+        print_value_with_eval(&eval, &thrown.value),
+        "(\"thrown datum\")"
+    );
 }
 
+/// The cooperative thread-yield handoff carries two Lisp values up the same
+/// Rust stack, and `sf_condition_case_value_named`'s `ThreadBlocked` arm
+/// rebuilds a continuation from them — allocation, and one frame out the same
+/// `unwind-protect` cleanups. Same class, same fix.
 #[test]
-fn red_in_flight_thread_blocked_payload_survives_a_collection() {
+fn in_flight_thread_blocked_payload_survives_a_collection() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
-    let flow = Flow::ThreadBlocked {
-        blocker: Value::list(vec![Value::string("blocker datum")]),
-        remaining_forms: Value::list(vec![Value::string("remaining form")]),
-    };
+
+    let flow = Flow::thread_blocked(
+        Value::list(vec![Value::string("blocker datum")]),
+        Value::list(vec![Value::string("remaining form")]),
+    );
+
     eval.gc_collect();
-    let Flow::ThreadBlocked {
-        blocker,
-        remaining_forms,
-    } = &flow
-    else {
-        panic!("thread-blocked flow");
+
+    let Flow::ThreadBlocked(blocked) = &flow else {
+        panic!("Flow::thread_blocked builds a thread-blocked flow");
     };
     assert!(
-        !blocker.cons_car().is_dead(),
-        "the in-flight thread-blocked BLOCKER was collected"
+        !blocked.blocker.cons_car().is_dead(),
+        "the in-flight thread-blocked BLOCKER was collected while the yield \
+         was still in flight"
     );
     assert!(
-        !remaining_forms.cons_car().is_dead(),
-        "the in-flight thread-blocked REMAINING-FORMS were collected"
+        !blocked.remaining_forms.cons_car().is_dead(),
+        "the in-flight thread-blocked REMAINING-FORMS were collected while the \
+         yield was still in flight"
     );
     assert_eq!(
-        print_value_with_eval(&eval, remaining_forms),
+        print_value_with_eval(&eval, &blocked.remaining_forms),
         "(\"remaining form\")"
     );
 }
