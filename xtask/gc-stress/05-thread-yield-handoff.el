@@ -1,33 +1,42 @@
 ;;; 05-thread-yield-handoff.el --- in-flight thread-blocked payload -*- lexical-binding: t -*-
-;;; expect: (thread-probe-done (blocked datum))
+;;; expect: (thread-probe-done (blocked datum) (cleanup ran))
 
 ;; DIVERGENCES.md 162. `Flow::ThreadBlocked' carries the object being waited on
-;; and the forms to re-dispatch on resume. `sf_condition_case_value_named''s
-;; ThreadBlocked arm rebuilds a continuation from both while they live only in
-;; Rust locals, and one frame out the same `unwind-protect' cleanups run.
+;; and the forms to re-dispatch on resume, up the Rust stack, through the same
+;; `unbind_to' that runs `unwind-protect' cleanups. Yielding from a thread is
+;; the only way to produce one from Lisp.
+;;
+;; What this asserts is deliberately narrow, because `thread-yield' in a
+;; non-main thread does not currently resume the rest of the body (measured on
+;; the pre-fix binary too, so it is pre-existing and not this entry's: see
+;; DIVERGENCES.md 162 "Found and NOT fixed"). It asserts that the datum built
+;; BEFORE the yield is still intact after the join, that the cleanup ran and
+;; built a live datum of its own, and that the process exited 0 -- all with a
+;; full collection at every safe point in between.
+;;
+;; `thread-join' and nothing else: a `(while (thread-live-p ...) (thread-yield))'
+;; spin loop in the MAIN thread never terminates under this scheduler and burns
+;; a core, which is a hang, not a probe.
 
 (defvar gc-stress-sink nil)
-(defvar gc-stress-result nil)
+(defvar gc-stress-before-yield nil)
+(defvar gc-stress-cleanup nil)
 
-(let ((thread
-       (make-thread
-        (lambda ()
-          (condition-case _err
-              (unwind-protect
-                  (progn
-                    (thread-yield)
-                    (setq gc-stress-sink (make-list 256 'churn))
-                    (thread-yield)
-                    (setq gc-stress-result
-                          (list (intern (concat "blocked" ""))
-                                (intern (concat "datum" "")))))
-                (setq gc-stress-sink (make-list 256 'cleanup)))
-            (error nil)))
-        "gc-stress-probe")))
-  (while (thread-live-p thread)
-    (setq gc-stress-sink (make-list 64 'main))
-    (thread-yield))
-  (thread-join thread))
+(thread-join
+ (make-thread
+  (lambda ()
+    (unwind-protect
+        (progn
+          (setq gc-stress-before-yield
+                (list (intern (concat "blocked" ""))
+                      (intern (concat "datum" ""))))
+          (setq gc-stress-sink (make-list 256 'churn))
+          (thread-yield))
+      (setq gc-stress-cleanup
+            (list (intern (concat "cleanup" ""))
+                  (intern (concat "ran" ""))))))
+  "gc-stress-probe"))
 
-(prin1 (list 'thread-probe-done gc-stress-result))
+(setq gc-stress-sink (make-list 4096 'churn))
+(prin1 (list 'thread-probe-done gc-stress-before-yield gc-stress-cleanup))
 (terpri)

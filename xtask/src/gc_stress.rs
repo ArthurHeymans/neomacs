@@ -31,6 +31,7 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 type DynError = Box<dyn std::error::Error>;
 type Result<T> = std::result::Result<T, DynError>;
@@ -38,18 +39,31 @@ type Result<T> = std::result::Result<T, DynError>;
 /// Default cap on the child's virtual address space, in KiB (8 GiB).
 const DEFAULT_ADDRESS_LIMIT_KB: u64 = 8_000_000;
 
+/// Default wall-clock budget per probe. Generous: every allocation-bearing
+/// safe point runs a full collection, so a probe is orders of magnitude slower
+/// than the same forms unstressed.
+const DEFAULT_TIMEOUT_SECS: u64 = 300;
+
 pub(crate) fn usage_text() -> &'static str {
     "\
        cargo xtask gc-stress [--editor PATH] [--probe-dir DIR] [--filter SUBSTR]
-                             [--address-limit-kb N] [--list]
+                             [--address-limit-kb N] [--timeout-secs N] [--list]
 "
 }
 
 struct Options {
     editor: PathBuf,
     probe_dir: PathBuf,
+    /// Where each probe's stdout/stderr land. Files, not pipes: the runner
+    /// polls for the child's exit so it can KILL a hang, and a pipe that fills
+    /// while nobody is reading it would deadlock the very case this is for.
+    out_dir: PathBuf,
     filter: Option<String>,
     address_limit_kb: u64,
+    /// Wall-clock budget per probe. A missing root can present as a hang as
+    /// easily as a crash, and an unbounded probe in CI is a wedged job, so the
+    /// timeout is a FAILURE mode of the harness rather than an accident.
+    timeout: Duration,
     list: bool,
 }
 
@@ -85,11 +99,16 @@ pub(crate) fn run(repo_root: &Path, args: impl IntoIterator<Item = OsString>) ->
         .into());
     }
 
+    std::fs::create_dir_all(&options.out_dir)
+        .map_err(|err| format!("cannot create {}: {err}", options.out_dir.display()))?;
+
     println!(
-        "gc-stress: {} probe(s) against {} (NEOVM_GC_STRESS=1, ulimit -v {} KiB)",
+        "gc-stress: {} probe(s) against {} (NEOVM_GC_STRESS=1, ulimit -v {} KiB, \
+         {} s/probe)",
         probes.len(),
         options.editor.display(),
         options.address_limit_kb,
+        options.timeout.as_secs(),
     );
 
     let mut failures = Vec::new();
@@ -119,7 +138,9 @@ fn parse(repo_root: &Path, args: impl IntoIterator<Item = OsString>) -> Result<O
     let mut editor = repo_root.join("target/release/neomacs");
     let mut probe_dir = repo_root.join("xtask/gc-stress");
     let mut filter = None;
+    let mut out_dir = repo_root.join("tmp/gc-stress");
     let mut address_limit_kb = DEFAULT_ADDRESS_LIMIT_KB;
+    let mut timeout_secs = DEFAULT_TIMEOUT_SECS;
     let mut list = false;
 
     let mut args = args.into_iter();
@@ -131,12 +152,19 @@ fn parse(repo_root: &Path, args: impl IntoIterator<Item = OsString>) -> Result<O
         match arg.to_string_lossy().as_ref() {
             "--editor" => editor = PathBuf::from(next("--editor")?),
             "--probe-dir" => probe_dir = PathBuf::from(next("--probe-dir")?),
+            "--out-dir" => out_dir = PathBuf::from(next("--out-dir")?),
             "--filter" => filter = Some(next("--filter")?.to_string_lossy().into_owned()),
             "--address-limit-kb" => {
                 address_limit_kb = next("--address-limit-kb")?
                     .to_string_lossy()
                     .parse()
                     .map_err(|_| "--address-limit-kb takes a number of KiB".to_string())?;
+            }
+            "--timeout-secs" => {
+                timeout_secs = next("--timeout-secs")?
+                    .to_string_lossy()
+                    .parse()
+                    .map_err(|_| "--timeout-secs takes a number of seconds".to_string())?;
             }
             "--list" => list = true,
             "--help" | "-h" => {
@@ -150,8 +178,10 @@ fn parse(repo_root: &Path, args: impl IntoIterator<Item = OsString>) -> Result<O
     Ok(Options {
         editor,
         probe_dir,
+        out_dir,
         filter,
         address_limit_kb,
+        timeout: Duration::from_secs(timeout_secs),
         list,
     })
 }
@@ -187,13 +217,18 @@ fn collect_probes(options: &Options) -> Result<Vec<Probe>> {
 }
 
 fn run_probe(options: &Options, probe: &Probe) -> Result<()> {
+    let stdout_path = options.out_dir.join(format!("{}.out", probe.name));
+    let stderr_path = options.out_dir.join(format!("{}.err", probe.name));
+    let stdout_file = std::fs::File::create(&stdout_path)?;
+    let stderr_file = std::fs::File::create(&stderr_path)?;
+
     // `ulimit -v` has no portable Rust equivalent without a libc dependency,
     // and the cap has to apply to the CHILD, so go through the shell.
     let script = format!(
         "ulimit -v {limit}; exec \"$1\" --batch -Q -l \"$2\"",
         limit = options.address_limit_kb
     );
-    let output = Command::new("sh")
+    let mut child = Command::new("sh")
         .arg("-c")
         .arg(&script)
         .arg("gc-stress")
@@ -203,29 +238,52 @@ fn run_probe(options: &Options, probe: &Probe) -> Result<()> {
         // Debug-only inside neovm-core; harmless on a release binary, and the
         // right thing when someone points this at a debug build.
         .env("NEOVM_GC_VERIFY_MARKED", "1")
-        .output()
+        .stdout(stdout_file)
+        .stderr(stderr_file)
+        .spawn()
         .map_err(|err| format!("failed to spawn {}: {err}", options.editor.display()))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    if !output.status.success() {
-        return Err(format!(
-            "    exit: {}\n    stdout: {}\n    stderr: {}",
-            output.status,
-            stdout.trim(),
-            stderr.trim()
-        )
-        .into());
+    let started = Instant::now();
+    let status = loop {
+        match child.try_wait()? {
+            Some(status) => break status,
+            None if started.elapsed() >= options.timeout => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!(
+                    "    TIMEOUT after {} s (killed). A missing root presents as a hang \
+                     as readily as a crash.\n    stdout: {}\n    stderr: {}",
+                    options.timeout.as_secs(),
+                    read_trimmed(&stdout_path),
+                    read_trimmed(&stderr_path),
+                )
+                .into());
+            }
+            None => std::thread::sleep(Duration::from_millis(100)),
+        }
+    };
+
+    let stdout = read_trimmed(&stdout_path);
+    let stderr = read_trimmed(&stderr_path);
+    if !status.success() {
+        return Err(
+            format!("    exit: {status}\n    stdout: {stdout}\n    stderr: {stderr}").into(),
+        );
     }
     if let Some(expect) = &probe.expect
         && !stdout.contains(expect.as_str())
     {
         return Err(format!(
-            "    expected stdout to contain: {expect}\n    stdout: {}\n    stderr: {}",
-            stdout.trim(),
-            stderr.trim()
+            "    expected stdout to contain: {expect}\n    stdout: {stdout}\n    stderr: {stderr}"
         )
         .into());
     }
     Ok(())
+}
+
+fn read_trimmed(path: &Path) -> String {
+    std::fs::read_to_string(path)
+        .unwrap_or_default()
+        .trim()
+        .to_string()
 }
