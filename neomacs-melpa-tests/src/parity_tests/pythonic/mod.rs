@@ -419,9 +419,26 @@ fn asynchronous_process_streams_output_invokes_sentinel_and_exposes_process_cont
                    (string-trim event))
                   events))
                :query-on-exit nil))
-        (while (process-live-p process)
-          (accept-process-output process 0.1))
-        (accept-process-output process 0.1)
+        ;; Wait for the sentinel's own record, not for the process to die.
+        ;; This case pins :output, which the FILTER assembles, and :events,
+        ;; which the SENTINEL pushes -- so both halves of the pin are written
+        ;; after the child is already gone.  `process-live-p' going nil is the
+        ;; wrong fact and it is wrong in a specific direction: GNU reaps the
+        ;; child in `handle_child_signal', setting `raw_status_new'
+        ;; (src/process.c:7748), which is all `process-status' needs to answer
+        ;; `exit' (src/process.c:1188-1189), and in the same pass calling
+        ;; `delete_read_fd' (src/process.c:7760), which STOPS ordinary reading
+        ;; of the pipe.  The bytes the child had already written are recovered
+        ;; only by the drain loop in `status_notify' (src/process.c:7896-7911),
+        ;; which runs immediately before `exec_sentinel' (src/process.c:7937).
+        ;; So `events' becoming non-nil proves the drain has happened; the
+        ;; child being dead proves the opposite is still possible.
+        (let ((deadline (+ (float-time) 30)))
+          (while (and (null events) (< (float-time) deadline))
+            (accept-process-output nil 0.05)))
+        (unless events
+          (error "pythonic worker never ran its sentinel; :output holds only \
+as much of the child's stream as had been read"))
         (setq summary
               (pythonic-test-process-summary
                process))
