@@ -268,6 +268,16 @@ jobs:
       - name: Build fresh release runtime
         run: cargo xtask fresh-build --release
 
+      # The standing detector for the missing-GC-root class (DIVERGENCES.md
+      # 161/162). This collector is precise, so a Lisp value that rides Rust
+      # control flow is invisible to trace_roots unless it was rooted
+      # deliberately -- and such a bug is invisible to an ordinary green suite:
+      # the whole 38k-pin oracle suite was green on BOTH sides of 161's
+      # use-after-free. NEOVM_GC_STRESS=1 collects at every allocation-bearing
+      # safe point, which turns "sometimes" into "always".
+      - name: GC-stress the shipped runtime
+        run: cargo xtask gc-stress
+
       - name: Package shared test runtime
         run: |
           test -x target/release/neomacs

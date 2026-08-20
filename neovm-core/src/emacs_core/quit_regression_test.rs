@@ -158,8 +158,8 @@ fn maybe_quit_promotes_pending_frontend_input_for_while_no_input() {
     assert!(
         matches!(
             result,
-            Err(crate::emacs_core::error::Flow::Throw { tag, value })
-                if tag == sentinel && value == Value::T
+            Err(crate::emacs_core::error::Flow::Throw(ref thrown))
+                if thrown.tag == sentinel && thrown.value == Value::T
         ),
         "maybe_quit must promote queued ordinary input into throw-on-input"
     );

@@ -426,8 +426,8 @@ impl MinibufferCommandOutcome {
     fn from_recursive_edit(result: EvalResult) -> Self {
         match result {
             Ok(_) => Self::Accepted,
-            Err(Flow::Throw { tag, value })
-                if tag.is_symbol_named("exit") && !value.is_truthy() =>
+            Err(Flow::Throw(ref thrown))
+                if thrown.tag.is_symbol_named("exit") && !thrown.value.is_truthy() =>
             {
                 Self::Accepted
             }

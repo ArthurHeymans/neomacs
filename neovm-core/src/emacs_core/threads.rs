@@ -881,16 +881,13 @@ pub(crate) fn finish_make_thread_result(
             // another thread joins it later.
             threads.record_last_error(error_val);
         }
-        Err(Flow::Throw { ref tag, ref value }) => {
-            let error_val = Value::list(vec![Value::symbol("no-catch"), *tag, *value]);
+        Err(Flow::Throw(ref thrown)) => {
+            let error_val = Value::list(vec![Value::symbol("no-catch"), thrown.tag, thrown.value]);
             threads.record_thread_internal_error(thread_id, error_val);
             threads.record_last_error(error_val);
         }
-        Err(Flow::ThreadBlocked {
-            blocker,
-            remaining_forms,
-        }) => {
-            threads.block_thread(thread_id, blocker, remaining_forms);
+        Err(Flow::ThreadBlocked(blocked)) => {
+            threads.block_thread(thread_id, blocked.blocker, blocked.remaining_forms);
         }
         // kill-emacs is process-wide in GNU (Fkill_emacs exits, whichever
         // thread runs it), so it is not recorded as this thread's error — it
@@ -976,10 +973,10 @@ pub(crate) fn builtin_thread_yield(
 ) -> EvalResult {
     expect_args("thread-yield", &args, 0)?;
     if ctx.threads.current_thread_id() != 0 {
-        return Err(Flow::ThreadBlocked {
-            blocker: Value::symbol("thread-yield"),
-            remaining_forms: Value::NIL,
-        });
+        return Err(Flow::thread_blocked(
+            Value::symbol("thread-yield"),
+            Value::NIL,
+        ));
     }
     Ok(Value::NIL)
 }
@@ -1241,10 +1238,7 @@ pub(crate) fn builtin_mutex_lock(
         ));
     }
     if !ctx.threads.mutex_lock(id) {
-        return Err(Flow::ThreadBlocked {
-            blocker: args[0],
-            remaining_forms: Value::NIL,
-        });
+        return Err(Flow::thread_blocked(args[0], Value::NIL));
     }
     Ok(Value::NIL)
 }

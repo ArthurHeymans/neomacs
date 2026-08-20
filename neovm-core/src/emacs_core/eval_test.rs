@@ -2345,7 +2345,8 @@ fn read_char_requeues_keypress_and_throws_on_input() {
         .expect_err("throw-on-input should interrupt read_char");
     assert!(matches!(
         flow,
-        Flow::Throw { tag, value } if tag == Value::symbol("tag") && value == Value::T
+        Flow::Throw(ref thrown)
+            if thrown.tag == Value::symbol("tag") && thrown.value == Value::T
     ));
 
     ev.obarray.set_symbol_value("throw-on-input", Value::NIL);
@@ -2369,7 +2370,8 @@ fn read_char_window_close_honors_throw_on_input_before_quit() {
         .expect_err("throw-on-input should interrupt read_char");
     assert!(matches!(
         flow,
-        Flow::Throw { tag, value } if tag == Value::symbol("tag") && value == Value::T
+        Flow::Throw(ref thrown)
+            if thrown.tag == Value::symbol("tag") && thrown.value == Value::T
     ));
 
     ev.obarray.set_symbol_value("throw-on-input", Value::NIL);
@@ -2504,7 +2506,7 @@ fn eval_list_form_throws_on_pending_host_input() {
     let result = ev.eval_str("(list 1 2)");
     assert!(matches!(
         result,
-        Err(EvalError::UncaughtThrow { tag, value })
+        Err(EvalError::UncaughtThrow { tag, value, .. })
             if tag == Value::symbol("tag") && value == Value::T
     ));
 
@@ -8126,10 +8128,7 @@ fn funcall_throw_uses_shared_condition_stack_without_catch_tag_mirror() {
     let result = ev.funcall_general(Value::symbol("throw"), vec![tag, Value::fixnum(42)]);
     assert!(matches!(
         result,
-        Err(Flow::Throw {
-            tag: thrown_tag,
-            value
-        }) if thrown_tag == tag && value == Value::fixnum(42)
+        Err(Flow::Throw(ref thrown)) if thrown.tag == tag && thrown.value == Value::fixnum(42)
     ));
     assert_eq!(ev.condition_stack_depth_for_test(), 1);
 

@@ -261,10 +261,7 @@ fn active_catch_throw_is_not_logged_as_load_form_failure() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
     let tag = Value::symbol("input");
-    let err = EvalError::UncaughtThrow {
-        tag,
-        value: Value::T,
-    };
+    let err = EvalError::uncaught_throw(tag, Value::T);
 
     assert!(
         should_log_load_form_error(&eval, &err),
@@ -1205,6 +1202,7 @@ fn missing_runtime_image_reports_heapless_startup_error() {
             symbol,
             data,
             raw_data,
+            ..
         } => {
             assert_eq!(resolve_sym(symbol), "error");
             assert_eq!(
@@ -1721,7 +1719,7 @@ fn format_eval_error(eval: &Context, err: &EvalError) -> String {
             items.extend(data.iter().copied());
             crate::emacs_core::print::print_value_with_buffers(&Value::list(items), &eval.buffers)
         }
-        EvalError::UncaughtThrow { tag, value } => format!(
+        EvalError::UncaughtThrow { tag, value, .. } => format!(
             "(throw {} {})",
             crate::emacs_core::print::print_value_with_buffers(tag, &eval.buffers),
             crate::emacs_core::print::print_value_with_buffers(value, &eval.buffers),
@@ -13897,7 +13895,7 @@ fn key_parse_modifier_bits() {
                         let data_strs: Vec<String> = data.iter().map(|v| format!("{v}")).collect();
                         format!("({sym} {})", data_strs.join(" "))
                     }
-                    EvalError::UncaughtThrow { tag, value } => {
+                    EvalError::UncaughtThrow { tag, value, .. } => {
                         format!("(throw {tag} {value})")
                     }
                     EvalError::Shutdown(request) => {

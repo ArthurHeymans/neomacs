@@ -7639,9 +7639,7 @@ impl super::eval::Context {
     ) -> Result<(), Flow> {
         match result {
             Ok(_) => Ok(()),
-            Err(err @ (Flow::Throw { .. } | Flow::ThreadBlocked { .. } | Flow::Shutdown(_))) => {
-                Err(err)
-            }
+            Err(err @ (Flow::Throw(_) | Flow::ThreadBlocked(_) | Flow::Shutdown(_))) => Err(err),
             Err(err @ Flow::Signal(_)) => {
                 let rendered = super::error::format_flow_with_eval(self, &err);
                 tracing::warn!("{} callback error: {}", kind.label(), rendered);

@@ -1,3 +1,5 @@
+mod gc_stress;
+
 use flate2::read::GzDecoder;
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
@@ -276,6 +278,15 @@ fn run_xtask(repo_root: PathBuf, args: impl IntoIterator<Item = OsString>) -> Re
     if matches!(args.peek().and_then(|arg| arg.to_str()), Some("perf")) {
         args.next();
         neomacs_perf::run_cli(&repo_root, args)?;
+        return Ok(());
+    }
+    // The standing detector for the missing-GC-root class (DIVERGENCES.md
+    // 161/162): run the SHIPPED binary under NEOVM_GC_STRESS=1, which collects
+    // at every allocation-bearing safe point. See `gc_stress` for why a green
+    // test suite is not evidence here.
+    if matches!(args.peek().and_then(|arg| arg.to_str()), Some("gc-stress")) {
+        args.next();
+        gc_stress::run(&repo_root, args)?;
         return Ok(());
     }
     let options = FreshBuildOptions::parse(repo_root, args)?;
@@ -4159,6 +4170,16 @@ Usage: cargo xtask [fresh-build] (--release | --profile NAME) [--bin-dir DIR] [-
        cargo xtask perf run SCENARIO [--editor PATH] [--iterations N] [--frontend batch|tui|gui]
        cargo xtask perf compare SCENARIO --baseline-editor PATH --candidate-editor PATH [--samples N>=3]
        cargo xtask perf profile SCENARIO [--profiler perf] [--editor PATH] [--iterations N]
+       cargo xtask gc-stress [--editor PATH] [--probe-dir DIR] [--filter SUBSTR]
+                             [--address-limit-kb N] [--list]
+
+gc-stress runs xtask/gc-stress/*.el against the shipped release binary with
+NEOVM_GC_STRESS=1 (collect at every allocation-bearing safe point) and a
+`ulimit -v` cap, and requires exit 0 plus each probe's `;;; expect:` line. It
+is the standing detector for the missing-GC-root class: this collector is
+precise, so a Lisp value riding Rust control flow is invisible to trace_roots
+unless it was rooted deliberately, and such a bug is invisible to an ordinary
+green suite (DIVERGENCES.md 161 and 162).
 
 --release (or --profile NAME) is required: fresh-build produces the runnable runtime
 binary by byte-compiling the Lisp tree with it, so it needs an optimized profile.

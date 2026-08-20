@@ -1599,10 +1599,7 @@ impl RecursiveEditBuffer {
 /// Throws to the `top-level` tag to unwind all recursive edits.
 pub(crate) fn builtin_top_level(args: Vec<Value>) -> EvalResult {
     expect_args("top-level", &args, 0)?;
-    Err(Flow::Throw {
-        tag: Value::symbol("top-level"),
-        value: Value::NIL,
-    })
+    Err(Flow::throw(Value::symbol("top-level"), Value::NIL))
 }
 
 /// `(exit-recursive-edit)` — exit innermost recursive edit.
@@ -1621,10 +1618,7 @@ pub(crate) fn builtin_exit_recursive_edit(
             vec![Value::string("No recursive edit is in progress")],
         ));
     }
-    Err(Flow::Throw {
-        tag: Value::symbol("exit"),
-        value: Value::NIL,
-    })
+    Err(Flow::throw(Value::symbol("exit"), Value::NIL))
 }
 
 /// `(exit-minibuffer)` — exit the active minibuffer.
@@ -1634,10 +1628,7 @@ pub(crate) fn builtin_exit_recursive_edit(
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_exit_minibuffer(args: Vec<Value>) -> EvalResult {
     expect_args("exit-minibuffer", &args, 0)?;
-    Err(Flow::Throw {
-        tag: Value::symbol("exit"),
-        value: Value::NIL,
-    })
+    Err(Flow::throw(Value::symbol("exit"), Value::NIL))
 }
 
 /// `(abort-minibuffers)` — abort active minibuffer sessions.
@@ -1781,10 +1772,7 @@ pub(crate) fn builtin_abort_recursive_edit(
             vec![Value::string("No recursive edit is in progress")],
         ));
     }
-    Err(Flow::Throw {
-        tag: Value::symbol("exit"),
-        value: Value::T,
-    })
+    Err(Flow::throw(Value::symbol("exit"), Value::T))
 }
 
 // ---------------------------------------------------------------------------

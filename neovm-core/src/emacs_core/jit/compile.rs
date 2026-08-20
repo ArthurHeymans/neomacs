@@ -2173,10 +2173,10 @@ pub extern "C" fn neovm_jit_cbsym_read(
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_throw(tag: i64, value: i64) {
     jit_shim_contain!(no_ctx, (), {
-        stash_pending_flow(Flow::Throw {
-            tag: Value::from_bits(tag as usize),
-            value: Value::from_bits(value as usize),
-        });
+        stash_pending_flow(Flow::throw(
+            Value::from_bits(tag as usize),
+            Value::from_bits(value as usize),
+        ));
     })
 }
 
@@ -2405,11 +2405,12 @@ pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64
         let mut flow = take_pending_flow().expect("match shim runs only after STATUS_SIGNAL");
         loop {
             match flow {
-                Flow::ThreadBlocked { .. } | Flow::Shutdown(_) => {
+                Flow::ThreadBlocked(_) | Flow::Shutdown(_) => {
                     stash_pending_flow(flow);
                     return -1;
                 }
-                Flow::Throw { tag, value } => {
+                Flow::Throw(thrown) => {
+                    let (tag, value) = (thrown.tag, thrown.value);
                     let Some(selected) = ctx.matching_catch_resume(&tag) else {
                         // No matching catch anywhere: unwind all our frames and
                         // propagate `no-catch` (resume_nonlocal parity).
@@ -2448,7 +2449,7 @@ pub extern "C" fn neovm_jit_match_handler(ctx: *mut u8, ours: i64, out: *mut i64
                     }
                     // The selected catch belongs to an outer frame: ours are all
                     // popped; rethrow for the frame unwind + outer handlers.
-                    stash_pending_flow(Flow::Throw { tag, value });
+                    stash_pending_flow(Flow::throw(tag, value));
                     return -1;
                 }
                 Flow::Signal(sig) => {
@@ -11778,12 +11779,9 @@ mod tests {
         .unwrap();
         assert_eq!(thrown.call(ctx_ptr, &[]), NativeRun::Signal);
         match take_pending_flow().expect("throw Flow stashed") {
-            Flow::Throw {
-                tag: got_tag,
-                value,
-            } => {
-                assert_eq!(got_tag, tag);
-                assert_eq!(value, Value::make_int(42));
+            Flow::Throw(thrown) => {
+                assert_eq!(thrown.tag, tag);
+                assert_eq!(thrown.value, Value::make_int(42));
             }
             other => panic!("expected Flow::Throw, got {other:?}"),
         }

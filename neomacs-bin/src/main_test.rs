@@ -2201,11 +2201,7 @@ fn startup_image_error_renderer_surfaces_heapless_payload() {
     let payload = Value::symbol(intern(
         "failed to load final image /tmp/neomacs.pdump: boom",
     ));
-    let err = EvalError::Signal {
-        symbol: intern("error"),
-        data: vec![payload],
-        raw_data: Some(payload),
-    };
+    let err = EvalError::signal(intern("error"), vec![payload], Some(payload));
 
     assert_eq!(
         render_startup_image_error(&err),

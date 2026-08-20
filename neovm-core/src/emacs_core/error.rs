@@ -18,19 +18,60 @@ thread_local! {
 }
 
 /// Public-facing evaluation error.
+///
+/// Both Lisp-carrying variants hold an [`InFlightRoots`] pin, for the same
+/// reason [`Flow`]'s payloads do: a boundary that holds an `EvalError` while
+/// more Lisp runs is holding Lisp values the precise collector cannot see. An
+/// enum variant cannot have a private FIELD (a variant's fields are as visible
+/// as the enum), so the pin is a field of a type that has no constructor
+/// outside this module — which makes the struct literal unwritable elsewhere
+/// and [`EvalError::signal`] / [`EvalError::uncaught_throw`] the only ways in.
+/// Existing `EvalError::Signal { symbol, data, .. }` patterns keep working
+/// unchanged; only construction sites move (DIVERGENCES.md 162).
 #[derive(Clone, Debug)]
 pub enum EvalError {
     Signal {
         symbol: SymId,
         data: Vec<Value>,
         raw_data: Option<Value>,
+        /// Not constructible outside `error.rs`; see the type docs.
+        pin: InFlightRoots,
     },
     UncaughtThrow {
         tag: Value,
         value: Value,
+        /// Not constructible outside `error.rs`; see the type docs.
+        pin: InFlightRoots,
     },
     /// `kill-emacs` reached this boundary: not an error, an exit request.
     Shutdown(super::eval::ShutdownRequest),
+}
+
+impl EvalError {
+    /// The only way to build a signal error: pins the symbol and payload as GC
+    /// roots for as long as the error (or any clone of it) lives.
+    pub fn signal(symbol: SymId, data: Vec<Value>, raw_data: Option<Value>) -> Self {
+        let pin = InFlightRoots::pin(
+            std::iter::once(Value::from_sym_id(symbol))
+                .chain(data.iter().copied())
+                .chain(raw_data),
+        );
+        Self::Signal {
+            symbol,
+            data,
+            raw_data,
+            pin,
+        }
+    }
+
+    /// The only way to build an uncaught-throw error; pins tag and value.
+    pub fn uncaught_throw(tag: Value, value: Value) -> Self {
+        Self::UncaughtThrow {
+            tag,
+            value,
+            pin: InFlightRoots::pin([tag, value]),
+        }
+    }
 }
 
 impl Display for EvalError {
@@ -40,13 +81,14 @@ impl Display for EvalError {
                 symbol,
                 data,
                 raw_data,
+                ..
             } => write!(
                 f,
                 "signal {} {}",
                 resolve_sym(*symbol),
                 format_signal_payload(raw_data.as_ref(), data),
             ),
-            Self::UncaughtThrow { tag, value } => write!(
+            Self::UncaughtThrow { tag, value, .. } => write!(
                 f,
                 "uncaught throw tag={} value={}",
                 super::print::print_value(tag),
@@ -73,8 +115,9 @@ pub(crate) fn flow_from_eval_error(err: EvalError) -> Flow {
             symbol,
             data,
             raw_data,
+            ..
         } => Flow::Signal(Box::new(SignalData::new(symbol, data, raw_data, false))),
-        EvalError::UncaughtThrow { tag, value } => Flow::Throw { tag, value },
+        EvalError::UncaughtThrow { tag, value, .. } => Flow::throw(tag, value),
         EvalError::Shutdown(request) => Flow::Shutdown(request),
     }
 }
@@ -83,14 +126,13 @@ pub(crate) fn flow_from_eval_error(err: EvalError) -> Flow {
 #[derive(Clone, Debug)]
 pub enum Flow {
     Signal(Box<SignalData>),
-    Throw {
-        tag: Value,
-        value: Value,
-    },
-    ThreadBlocked {
-        blocker: Value,
-        remaining_forms: Value,
-    },
+    /// `throw` to a `catch` tag. The payload is an owned struct for the same
+    /// reason `Signal`'s is: it carries a private [`InFlightRoots`] pin, so a
+    /// throw whose tag or value is not a GC root is not representable
+    /// (DIVERGENCES.md 162).
+    Throw(Box<ThrowData>),
+    /// The cooperative thread-yield handoff. Same shape, same reason.
+    ThreadBlocked(Box<ThreadBlockedData>),
     /// `kill-emacs`: unwind everything and exit with this request.
     ///
     /// GNU's `Fkill_emacs` is `noreturn` — it runs the hooks and calls
@@ -112,6 +154,104 @@ pub enum Flow {
     Shutdown(super::eval::ShutdownRequest),
 }
 
+impl Flow {
+    /// The only way to build a `throw`: pins `tag` and `value` as GC roots for
+    /// as long as the flow (or any clone of it) lives.
+    pub(crate) fn throw(tag: Value, value: Value) -> Self {
+        Self::Throw(Box::new(ThrowData::new(tag, value)))
+    }
+
+    /// The only way to build a thread-yield handoff; pins both payloads.
+    pub(crate) fn thread_blocked(blocker: Value, remaining_forms: Value) -> Self {
+        Self::ThreadBlocked(Box::new(ThreadBlockedData::new(blocker, remaining_forms)))
+    }
+
+    /// Exhaustive proof that every variant's Lisp payload is pinned.
+    ///
+    /// This function exists to FAIL TO COMPILE. A new `Flow` variant must add
+    /// an arm here, and the arm has to name a payload type implementing the
+    /// sealed [`InFlightPinned`] trait — which only a struct with a private
+    /// [`InFlightRoots`] field in this module can implement. A variant that
+    /// carries a bare `Value` therefore cannot be added without either pinning
+    /// it or deliberately declaring it root-free, and the `Shutdown` arm is
+    /// exactly that declaration: `ShutdownRequest` is `{ exit_code: i32,
+    /// restart: bool }` and holds no Lisp value at all.
+    ///
+    /// (`#[allow(dead_code)]`: the return value is not consumed anywhere —
+    /// the compile-time exhaustiveness IS the product.)
+    #[allow(dead_code)]
+    pub(crate) fn pinned_payload(&self) -> Option<&dyn InFlightPinned> {
+        match self {
+            Self::Signal(data) => Some(&**data),
+            Self::Throw(data) => Some(&**data),
+            Self::ThreadBlocked(data) => Some(&**data),
+            Self::Shutdown(_) => None,
+        }
+    }
+}
+
+/// A `Flow` payload whose Lisp values are pinned as GC roots by construction.
+///
+/// Sealed in practice: implementing it means producing an [`InFlightRoots`],
+/// and `InFlightRoots::pin` is private to this module — so the only
+/// implementors are the payload structs below, and a new one has to be written
+/// here, next to the pin. (The type itself is `pub` only because
+/// [`EvalError`]'s variants name it in a public enum's interface; it has all-
+/// private fields and no public constructor.)
+pub(crate) trait InFlightPinned {
+    fn in_flight_roots(&self) -> &InFlightRoots;
+}
+
+/// `(throw TAG VALUE)` in flight.
+#[derive(Clone, Debug)]
+pub struct ThrowData {
+    pub tag: Value,
+    pub value: Value,
+    /// See [`SignalData::pin`]. PRIVATE, so `Flow::throw` is the only way in.
+    pin: InFlightRoots,
+}
+
+impl ThrowData {
+    fn new(tag: Value, value: Value) -> Self {
+        let pin = InFlightRoots::pin([tag, value]);
+        Self { tag, value, pin }
+    }
+}
+
+impl InFlightPinned for ThrowData {
+    fn in_flight_roots(&self) -> &InFlightRoots {
+        &self.pin
+    }
+}
+
+/// A cooperative thread yield in flight: the object being waited on, plus the
+/// forms the scheduler must re-dispatch when the thread is resumed.
+#[derive(Clone, Debug)]
+pub struct ThreadBlockedData {
+    pub blocker: Value,
+    pub remaining_forms: Value,
+    /// See [`SignalData::pin`]. PRIVATE, so `Flow::thread_blocked` is the only
+    /// way in.
+    pin: InFlightRoots,
+}
+
+impl ThreadBlockedData {
+    fn new(blocker: Value, remaining_forms: Value) -> Self {
+        let pin = InFlightRoots::pin([blocker, remaining_forms]);
+        Self {
+            blocker,
+            remaining_forms,
+            pin,
+        }
+    }
+}
+
+impl InFlightPinned for ThreadBlockedData {
+    fn in_flight_roots(&self) -> &InFlightRoots {
+        &self.pin
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct SignalData {
     pub symbol: SymId,
@@ -126,8 +266,8 @@ pub struct SignalData {
     /// signal payload unrepresentable outside this module — a struct with a
     /// private field cannot be built from a literal elsewhere, so every
     /// construction site has to go through [`SignalData::new`], which pins.
-    /// See [`InFlightSignalRoots`] for why the pin is needed at all.
-    pin: InFlightSignalRoots,
+    /// See [`InFlightRoots`] for why the pin is needed at all.
+    pin: InFlightRoots,
 }
 
 impl SignalData {
@@ -139,7 +279,11 @@ impl SignalData {
         raw_data: Option<Value>,
         suppress_signal_hook: bool,
     ) -> Self {
-        let pin = InFlightSignalRoots::pin(symbol, &data, raw_data);
+        let pin = InFlightRoots::pin(
+            std::iter::once(Value::from_sym_id(symbol))
+                .chain(data.iter().copied())
+                .chain(raw_data),
+        );
         Self {
             symbol,
             data,
@@ -154,6 +298,12 @@ impl SignalData {
     /// Resolve the signal symbol name via the interner.
     pub fn symbol_name(&self) -> &str {
         resolve_sym(self.symbol)
+    }
+}
+
+impl InFlightPinned for SignalData {
+    fn in_flight_roots(&self) -> &InFlightRoots {
+        &self.pin
     }
 }
 
@@ -188,21 +338,22 @@ impl SignalData {
 // are released in an order a truncating stack cannot express.
 
 thread_local! {
-    static IN_FLIGHT_SIGNAL_ROOTS: RefCell<InFlightSignalRootTable> =
-        RefCell::new(InFlightSignalRootTable::default());
+    static IN_FLIGHT_ROOTS: RefCell<InFlightRootTable> =
+        RefCell::new(InFlightRootTable::default());
 }
 
 #[derive(Default)]
-struct InFlightSignalRootTable {
+struct InFlightRootTable {
     /// One entry per live pin; `None` marks a reusable slot.
     slots: Vec<Option<Vec<Value>>>,
     free: Vec<usize>,
 }
 
-/// A pin on one signal's heap payload. Owns a slot in the thread-local table
+/// A pin on one in-flight payload's heap values. Owns a slot in the
+/// thread-local table
 /// for its whole life; `Clone` takes a fresh slot (a cloned `Flow` is a second
 /// independent owner), `Drop` releases it.
-struct InFlightSignalRoots {
+pub struct InFlightRoots {
     /// `None` when the payload contained no heap object — the common case for
     /// `quit` and for arity/type errors whose data is symbols and fixnums —
     /// so the overwhelmingly frequent signal costs no table traffic at all.
@@ -217,20 +368,18 @@ struct InFlightSignalRoots {
     _not_send: std::marker::PhantomData<*const ()>,
 }
 
-impl InFlightSignalRoots {
-    fn pin(symbol: SymId, data: &[Value], raw_data: Option<Value>) -> Self {
-        // The error SYMBOL is pinned too, not just the payload: `signal` keeps
-        // the symbol's IDENTITY (an *uninterned* symbol given conditions by
-        // `define-error` is honoured — see `signal_internal_id`), and an
-        // uninterned symbol's value/function/plist cells survive only while
-        // something marks it. In flight, nothing else does.
+impl InFlightRoots {
+    /// Pin every traceable value in `payload` for the handle's lifetime.
+    ///
+    /// A signal passes its error SYMBOL through here too, not just its data:
+    /// `signal` keeps the symbol's IDENTITY (an *uninterned* symbol given
+    /// conditions by `define-error` is honoured — see `signal_internal_id`),
+    /// and an uninterned symbol's value/function/plist cells survive only
+    /// while something marks it. In flight, nothing else does.
+    fn pin(payload: impl IntoIterator<Item = Value>) -> Self {
         let mut values: Vec<Value> = Vec::new();
-        Self::push_if_traceable(&mut values, Value::from_sym_id(symbol));
-        for value in data.iter().copied() {
+        for value in payload {
             Self::push_if_traceable(&mut values, value);
-        }
-        if let Some(raw) = raw_data {
-            Self::push_if_traceable(&mut values, raw);
         }
         Self {
             slot: Self::claim(values),
@@ -258,7 +407,7 @@ impl InFlightSignalRoots {
         if values.is_empty() {
             return None;
         }
-        IN_FLIGHT_SIGNAL_ROOTS.with(|table| {
+        IN_FLIGHT_ROOTS.with(|table| {
             let mut table = table.borrow_mut();
             match table.free.pop() {
                 Some(slot) => {
@@ -274,7 +423,7 @@ impl InFlightSignalRoots {
     }
 }
 
-impl Clone for InFlightSignalRoots {
+impl Clone for InFlightRoots {
     fn clone(&self) -> Self {
         let Some(slot) = self.slot else {
             return Self {
@@ -282,7 +431,7 @@ impl Clone for InFlightSignalRoots {
                 _not_send: std::marker::PhantomData,
             };
         };
-        let values = IN_FLIGHT_SIGNAL_ROOTS
+        let values = IN_FLIGHT_ROOTS
             .with(|table| table.borrow().slots[slot].clone())
             .unwrap_or_default();
         Self {
@@ -292,13 +441,13 @@ impl Clone for InFlightSignalRoots {
     }
 }
 
-impl Drop for InFlightSignalRoots {
+impl Drop for InFlightRoots {
     fn drop(&mut self) {
         let Some(slot) = self.slot else { return };
         // A thread-local can already be destroyed during thread teardown; a
         // failed access there means the table itself is gone, so there is
         // nothing left to release.
-        let _ = IN_FLIGHT_SIGNAL_ROOTS.try_with(|table| {
+        let _ = IN_FLIGHT_ROOTS.try_with(|table| {
             let mut table = table.borrow_mut();
             table.slots[slot] = None;
             table.free.push(slot);
@@ -306,17 +455,17 @@ impl Drop for InFlightSignalRoots {
     }
 }
 
-impl std::fmt::Debug for InFlightSignalRoots {
+impl std::fmt::Debug for InFlightRoots {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        f.write_str("InFlightSignalRoots")
+        f.write_str("InFlightRoots")
     }
 }
 
-/// Seed every in-flight signal payload into the collector's root set. Wired
-/// into `collect_thread_local_gc_roots` (`eval.rs`) beside the other
-/// thread-local root groups.
-pub(crate) fn collect_in_flight_signal_gc_roots(out: &mut Vec<Value>) {
-    IN_FLIGHT_SIGNAL_ROOTS.with(|table| {
+/// Seed every in-flight `Flow` payload — signal, throw and thread-yield —
+/// into the collector's root set. Wired into `collect_thread_local_gc_roots`
+/// (`eval.rs`) beside the other thread-local root groups.
+pub(crate) fn collect_in_flight_flow_gc_roots(out: &mut Vec<Value>) {
+    IN_FLIGHT_ROOTS.with(|table| {
         for slot in table.borrow().slots.iter().flatten() {
             out.extend(slot.iter().copied());
         }
@@ -505,28 +654,20 @@ pub(crate) fn signal_with_data_id(symbol: SymId, data: Value) -> Flow {
 pub fn map_flow(flow: Flow) -> EvalError {
     match flow {
         Flow::Signal(sig) => {
-            let SignalData {
-                symbol,
-                data,
-                raw_data,
-                ..
-            } = *sig;
-            EvalError::Signal {
-                symbol,
-                data,
-                raw_data,
-            }
+            // `sig` (and with it the SignalData pin) stays alive until the new
+            // pin is taken, so the payload is never momentarily unrooted.
+            EvalError::signal(sig.symbol, sig.data.clone(), sig.raw_data)
         }
-        Flow::Throw { tag, value } => EvalError::UncaughtThrow { tag, value },
+        Flow::Throw(thrown) => EvalError::uncaught_throw(thrown.tag, thrown.value),
         Flow::Shutdown(request) => EvalError::Shutdown(request),
-        Flow::ThreadBlocked { blocker, .. } => EvalError::Signal {
-            symbol: intern("error"),
-            data: vec![Value::string(format!(
+        Flow::ThreadBlocked(blocked) => EvalError::signal(
+            intern("error"),
+            vec![Value::string(format!(
                 "Thread blocked on {}",
-                super::print::print_value(&blocker)
+                super::print::print_value(&blocked.blocker)
             ))],
-            raw_data: None,
-        },
+            None,
+        ),
     }
 }
 
@@ -562,11 +703,12 @@ pub fn format_eval_result(result: &Result<Value, EvalError>) -> String {
             symbol,
             data,
             raw_data,
+            ..
         }) => {
             let payload = format_signal_payload(raw_data.as_ref(), data);
             format!("ERR ({} {})", resolve_sym(*symbol), payload)
         }
-        Err(EvalError::UncaughtThrow { tag, value }) => {
+        Err(EvalError::UncaughtThrow { tag, value, .. }) => {
             format!(
                 "ERR (no-catch ({} {}))",
                 super::print::print_value(tag),
@@ -1534,13 +1676,16 @@ pub(crate) fn format_signal_data_with_eval(
 pub(crate) fn format_flow_with_eval(eval: &super::eval::Context, flow: &Flow) -> String {
     match flow {
         Flow::Signal(sig) => format_signal_data_with_eval(eval, sig),
-        Flow::Throw { tag, value } => format!(
+        Flow::Throw(thrown) => format!(
             "(no-catch ({} {}))",
-            print_value_with_eval(eval, tag),
-            print_value_with_eval(eval, value)
+            print_value_with_eval(eval, &thrown.tag),
+            print_value_with_eval(eval, &thrown.value)
         ),
-        Flow::ThreadBlocked { blocker, .. } => {
-            format!("(thread-blocked {})", print_value_with_eval(eval, blocker))
+        Flow::ThreadBlocked(blocked) => {
+            format!(
+                "(thread-blocked {})",
+                print_value_with_eval(eval, &blocked.blocker)
+            )
         }
         Flow::Shutdown(request) => format!("(kill-emacs {})", request.exit_code),
     }
@@ -1566,11 +1711,12 @@ pub fn format_eval_result_with_eval(
             symbol,
             data,
             raw_data,
+            ..
         }) => {
             let payload = print_signal_payload_with_eval(eval, raw_data.as_ref(), data);
             format!("ERR ({} {})", resolve_sym(*symbol), payload)
         }
-        Err(EvalError::UncaughtThrow { tag, value }) => {
+        Err(EvalError::UncaughtThrow { tag, value, .. }) => {
             format!(
                 "ERR (no-catch ({} {}))",
                 print_value_with_eval(eval, tag),
@@ -1622,6 +1768,7 @@ pub fn format_eval_result_bytes_with_eval(
             symbol,
             data,
             raw_data,
+            ..
         }) => {
             out.extend_from_slice(b"ERR (");
             out.extend_from_slice(resolve_sym(*symbol).as_bytes());
@@ -1632,7 +1779,7 @@ pub fn format_eval_result_bytes_with_eval(
         Err(EvalError::Shutdown(request)) => {
             out.extend_from_slice(format!("ERR (kill-emacs {})", request.exit_code).as_bytes());
         }
-        Err(EvalError::UncaughtThrow { tag, value }) => {
+        Err(EvalError::UncaughtThrow { tag, value, .. }) => {
             out.extend_from_slice(b"ERR (no-catch (");
             append_print_value_bytes_with_eval(eval, tag, &mut out);
             out.push(b' ');

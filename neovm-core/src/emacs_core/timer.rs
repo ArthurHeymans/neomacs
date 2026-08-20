@@ -349,10 +349,10 @@ pub(crate) fn builtin_sleep_for(eval: &mut super::eval::Context, args: Vec<Value
     let total_secs = secs + millis / 1000.0;
     if total_secs > 0.0 {
         if eval.threads.current_thread_id() != 0 {
-            return Err(Flow::ThreadBlocked {
-                blocker: crate::emacs_core::threads::make_sleep_blocker(total_secs),
-                remaining_forms: Value::NIL,
-            });
+            return Err(Flow::thread_blocked(
+                crate::emacs_core::threads::make_sleep_blocker(total_secs),
+                Value::NIL,
+            ));
         }
         let total = gnu_sleep_duration_from_secs(total_secs);
         let end_time = GnuTimerTimestamp::now().add_duration(total);

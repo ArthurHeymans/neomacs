@@ -322,3 +322,149 @@ fn condition_case_binding_value_survives_a_collection() {
         "(error \"Malformed argument list ends with\")"
     );
 }
+
+// ---------------------------------------------------------------------------
+// In-flight THROW and THREAD-BLOCKED payload rooting (DIVERGENCES.md 162)
+// ---------------------------------------------------------------------------
+
+/// `throw` unwinds through exactly the machinery `signal` does: every frame it
+/// passes runs `unbind_to`, which executes `unwind-protect` cleanup forms and
+/// variable watchers — arbitrary Lisp, and therefore allocation-bearing safe
+/// points. GNU is safe here for free: `Fthrow` -> `unwind_to_catch`
+/// (src/eval.c:1188-1226) stores the value in `catchlist->val` and `longjmp`s,
+/// leaving it on the C stack, which `mark_stack` (src/alloc.c) scans
+/// conservatively. This collector is PRECISE — `set_stack_bottom` is a no-op
+/// (`tagged/CONCURRENT_GC.md`, "precise-rooting precondition") — so a
+/// `Flow::Throw` payload that is not a seeded root is reclaimed mid-unwind and
+/// `catch` returns a free-list cell.
+///
+/// Red before the pin: the payload cons's car reads back as [`Value::DEAD`],
+/// GNU's `dead_object` (src/alloc.c:6858) that `set_free_next` now writes.
+#[test]
+fn in_flight_throw_payload_survives_a_collection() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let flow = Flow::throw(
+        Value::symbol("neovm-throw-probe"),
+        Value::list(vec![Value::string("thrown datum")]),
+    );
+
+    // Nothing else references the thrown datum: it is reachable ONLY through
+    // the in-flight throw, which is what the root set has to cover.
+    eval.gc_collect();
+
+    let Flow::Throw(thrown) = &flow else {
+        panic!("Flow::throw builds a throw flow");
+    };
+    assert!(
+        thrown.value.is_cons(),
+        "payload stays a cons: {:?}",
+        thrown.value
+    );
+    assert!(
+        !thrown.value.cons_car().is_dead(),
+        "the in-flight throw payload was collected while the throw was still \
+         unwinding (its cons is on the free list)"
+    );
+    assert_eq!(
+        print_value_with_eval(&eval, &thrown.value),
+        "(\"thrown datum\")"
+    );
+}
+
+/// The cooperative thread-yield handoff carries two Lisp values up the same
+/// Rust stack, and `sf_condition_case_value_named`'s `ThreadBlocked` arm
+/// rebuilds a continuation from them — allocation, and one frame out the same
+/// `unwind-protect` cleanups. Same class, same fix.
+#[test]
+fn in_flight_thread_blocked_payload_survives_a_collection() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let flow = Flow::thread_blocked(
+        Value::list(vec![Value::string("blocker datum")]),
+        Value::list(vec![Value::string("remaining form")]),
+    );
+
+    eval.gc_collect();
+
+    let Flow::ThreadBlocked(blocked) = &flow else {
+        panic!("Flow::thread_blocked builds a thread-blocked flow");
+    };
+    assert!(
+        !blocked.blocker.cons_car().is_dead(),
+        "the in-flight thread-blocked BLOCKER was collected while the yield \
+         was still in flight"
+    );
+    assert!(
+        !blocked.remaining_forms.cons_car().is_dead(),
+        "the in-flight thread-blocked REMAINING-FORMS were collected while the \
+         yield was still in flight"
+    );
+    assert_eq!(
+        print_value_with_eval(&eval, &blocked.remaining_forms),
+        "(\"remaining form\")"
+    );
+}
+
+/// The boundary type has the same problem the flow did. `map_flow` converts a
+/// `Flow::Signal` into the PUBLIC `EvalError::Signal`, and before this entry
+/// that conversion moved `data`/`raw_data` out of the pinned `SignalData` and
+/// dropped the pin — so any boundary holding an `EvalError` while more Lisp
+/// runs (every `load_file` caller, the worker task boundary, the batch
+/// `--eval` reporter) was holding values the collector could not see.
+///
+/// 161 recorded this as needing a shape change across 73 use sites. It does
+/// not: an enum variant cannot have a private field, but it CAN have a field
+/// whose type has no constructor outside the module, which makes the literal
+/// unwritable and leaves every `{ symbol, data, .. }` pattern untouched.
+#[test]
+fn eval_error_signal_payload_survives_a_collection() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    // `map_flow` consumes the `Flow`, so the flow's own pin is gone by the
+    // time this returns: only the `EvalError`'s pin can keep the payload.
+    let err = crate::emacs_core::error::map_flow(crate::emacs_core::error::signal_with_data(
+        LispCondition::Error,
+        Value::list(vec![Value::string("boundary datum")]),
+    ));
+
+    eval.gc_collect();
+
+    let EvalError::Signal { raw_data, .. } = &err else {
+        panic!("map_flow of a signal is an EvalError::Signal");
+    };
+    let raw = raw_data.expect("signal_with_data records raw data");
+    assert!(
+        !raw.cons_car().is_dead(),
+        "the EvalError payload was collected while the error was still in \
+         flight at a boundary (its cons is on the free list)"
+    );
+    assert_eq!(print_value_with_eval(&eval, &raw), "(\"boundary datum\")");
+}
+
+/// The throw half of the same boundary.
+#[test]
+fn eval_error_uncaught_throw_payload_survives_a_collection() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let err = crate::emacs_core::error::map_flow(Flow::throw(
+        Value::symbol("neovm-boundary-throw"),
+        Value::list(vec![Value::string("boundary thrown")]),
+    ));
+
+    eval.gc_collect();
+
+    let EvalError::UncaughtThrow { value, .. } = &err else {
+        panic!("map_flow of a throw is an EvalError::UncaughtThrow");
+    };
+    assert!(
+        !value.cons_car().is_dead(),
+        "the EvalError uncaught-throw payload was collected while the error \
+         was still in flight at a boundary"
+    );
+    assert_eq!(print_value_with_eval(&eval, value), "(\"boundary thrown\")");
+}

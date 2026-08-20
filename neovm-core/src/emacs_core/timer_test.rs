@@ -371,7 +371,8 @@ fn sleep_for_window_close_honors_throw_on_input_before_handler() {
         .expect_err("throw-on-input should interrupt sleep-for");
     assert!(matches!(
         flow,
-        Flow::Throw { tag, value } if tag == Value::symbol("tag") && value == Value::T
+        Flow::Throw(ref thrown)
+            if thrown.tag == Value::symbol("tag") && thrown.value == Value::T
     ));
 
     ev.obarray.set_symbol_value("throw-on-input", Value::NIL);

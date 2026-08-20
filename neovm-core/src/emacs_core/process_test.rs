@@ -6299,7 +6299,8 @@ fn accept_process_output_window_close_honors_throw_on_input_before_quit() {
         .expect_err("throw-on-input should interrupt accept-process-output");
     assert!(matches!(
         flow,
-        Flow::Throw { tag, value } if tag == Value::symbol("tag") && value == Value::T
+        Flow::Throw(ref thrown)
+            if thrown.tag == Value::symbol("tag") && thrown.value == Value::T
     ));
 
     ev.obarray.set_symbol_value("throw-on-input", Value::NIL);

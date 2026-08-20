@@ -1273,8 +1273,8 @@ fn builtin_top_level_throws_top_level_tag() {
     // (mirrors GNU Emacs keyboard.c:1187 Ftop_level).
     assert!(matches!(
         result,
-        Err(Flow::Throw { tag, value })
-            if tag.is_symbol_named("top-level") && value.is_nil()
+        Err(Flow::Throw(ref thrown))
+            if thrown.tag.is_symbol_named("top-level") && thrown.value.is_nil()
     ));
 }
 
@@ -1387,8 +1387,8 @@ fn builtin_exit_minibuffer_throws_exit_tag() {
     let result = builtin_exit_minibuffer(vec![]);
     assert!(matches!(
         result,
-        Err(Flow::Throw { tag, value })
-            if tag.is_symbol_named("exit") && value.is_nil()
+        Err(Flow::Throw(ref thrown))
+            if thrown.tag.is_symbol_named("exit") && thrown.value.is_nil()
     ));
 }
 
