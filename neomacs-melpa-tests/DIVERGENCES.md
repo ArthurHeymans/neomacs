@@ -21092,13 +21092,18 @@ Re-screening on the idiom alone -- `process-live-p' used as a `while' loop
 condition, no package reading at all -- gives **37 sites in 28 suites**, of
 which 22 suites were outside 144's intersection entirely.  Reading all 37:
 
-| verdict | sites | why |
-|---|---|---|
-| teardown | 13 | `delete-process' already called; the loop only confirms death |
-| causal witness | 6 | waits for a prompt the child wrote or a flag its sentinel set, and signals |
-| pipe EOF | 2 | the awaited process is `PIPECONN_P'; death is EOF (`blacken') |
-| output not pinned | 9 | pins a file the child closed, an exit status, or the liveness itself |
-| **clock-gated pin** | **7** | **fixed below** |
+| verdict | suites | sites | why |
+|---|---|---|---|
+| teardown | 7 | 8 | `delete-process' already called; the loop only confirms death |
+| causal witness | 4 | 6 | waits for a prompt the child wrote or a flag its sentinel set, and signals |
+| pipe EOF | 1 | 2 | the awaited process is `PIPECONN_P'; death is EOF (`blacken') |
+| output not pinned | 8 | 8 | pins a file the child closed, an exit status, or the liveness itself |
+| still unaudited | 4 | 6 | carries the shape; each needs its own reproduction (listed at the end) |
+| **clock-gated pin** | **4** | **7** | **fixed below** |
+
+The verdict is recorded per suite, so a suite whose sites differ in kind takes
+the weakest claim -- `browse_at_remote''s two sites are one teardown and one
+real gate, and both are counted unaudited.
 
 ### The seven, and why each is provable by reading
 
