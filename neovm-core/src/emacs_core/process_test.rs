@@ -2188,7 +2188,7 @@ fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
     while std::time::Instant::now() < deadline && !output.contains(&b'\n') {
         if let Some(run) = processes.read_process_output_without_decoding(
             pid,
-            ProcessOutputSink::DecodedText,
+            ProcessOutputDestination::to_filter(),
             &crate::emacs_core::coding::CodingSystemManager::new(),
         ) {
             output.extend_from_slice(run.undecoded_bytes());
@@ -11041,6 +11041,175 @@ fn a_process_read_runs_the_coding_systems_post_read_conversion() {
             "((86 105 7879 116 32 78 97 109 32 224 32 7873 10) vietnamese-viqr-unix) ",
             "((86 105 7879 116 32 78 97 109 32 224 32 7873 10) vietnamese-viqr-unix) ",
             "((86 105 7879 116 32 78 97 109 32 224 32 7873 10) vietnamese-viqr-unix))",
+        )
+    );
+}
+
+/// GNU's EOF read is a zero-byte `decode_coding_object` call, and it happens on
+/// the FILTER branch of a PIPE and nowhere else.
+///
+/// `read_process_output` raises `CODING_MODE_LAST_BLOCK` the first time
+/// `emacs_read` returns nothing and falls THROUGH to the decode; the second
+/// time -- and on any read ERROR -- the flag is already up (or `nbytes < 0`)
+/// and it returns without decoding anything (src/process.c:6313-6321).  So the
+/// filter branch runs the coding system's `:post-read-conversion` once more
+/// than there were chunks, with `produced_char` zero, and does not call the
+/// filter for it (`SBYTES (text) > 0`, :6567).
+///
+/// Two things narrow it, and both are rows here because both were measured
+/// under GNU Emacs 31.0.90 running this test's own program:
+///
+/// * `read_and_insert_process_output` -- the branch `fast-read-process-output'
+///   and the default filter take -- `return`s on `!nread` BEFORE deciding
+///   anything (:6464), so the buffer branch has no zero-byte decode at all.
+/// * A pty is not a pipe.  When the child on the far end of a pty exits, Linux
+///   answers the master with `EIO` rather than with a zero-byte read, so
+///   `nbytes < 0` takes the early return and the flag is never raised.  Entry
+///   159 sized this residual as "3 hook calls for 2 chunks" without naming the
+///   connection type; on a pty GNU runs the hook twice, exactly as this port
+///   already did.
+///
+/// Each row is `(FILTER-CHUNKS HOOK-CALLS LAST-CODING-SYSTEM-USED)`.
+#[test]
+fn an_eof_read_decodes_a_zero_byte_last_block_on_the_filter_branch() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defvar pw166-hooks 0)
+             (defun pw166-prc (len) (setq pw166-hooks (1+ pw166-hooks)) len)
+             (define-coding-system 'pw166-hook-utf8
+               "utf-8 whose :post-read-conversion counts the decodes it is run for"
+               :mnemonic ?U :coding-type 'utf-8 :charset-list '(unicode)
+               :post-read-conversion #'pw166-prc)
+             (defun pw166-run (conn filterp script)
+               (setq pw166-hooks 0 last-coding-system-used nil)
+               (let* ((buf (unless filterp (generate-new-buffer " *pw166*")))
+                      (acc nil)
+                      (p (make-process :name "pw166" :buffer buf :sentinel #'ignore
+                                       :connection-type conn
+                                       :coding (cons 'pw166-hook-utf8 'utf-8-unix)
+                                       :filter (when filterp (lambda (_p s) (push s acc)))
+                                       :command (list "{sh}" "-c" script))))
+                 (while (accept-process-output p 1))
+                 (while (process-live-p p) (accept-process-output p 0.05))
+                 (prog1 (list (length acc) pw166-hooks last-coding-system-used)
+                   (when buf (kill-buffer buf)))))
+             (list
+              ;; filter branch, pipe, nothing written: the hook still runs once,
+              ;; on zero characters, and no chunk reaches the filter.
+              (pw166-run 'pipe t "true")
+              ;; filter branch, pipe, one chunk: one hook call for the chunk and
+              ;; one for the last block.
+              (pw166-run 'pipe t "printf abc")
+              ;; the same on a pty: EIO, not a zero-byte read, so no last block.
+              (pw166-run 'pty t "true")
+              ;; the buffer branch has no zero-byte decode either way.
+              (pw166-run 'pipe nil "true")
+              (pw166-run 'pipe nil "printf abc")))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(0 1 pw166-hook-utf8) ",
+            "(1 2 pw166-hook-utf8) ",
+            "(0 0 nil) ",
+            "(0 0 nil) ",
+            "(0 1 pw166-hook-utf8))",
+        )
+    );
+}
+
+/// A subprocess's decoder keeps its state across a read boundary, and the
+/// boundary is the DECODER's answer rather than a rule about its name.
+///
+/// GNU decodes a process through ONE `struct coding_system` for the process's
+/// whole life (`proc_decode_coding_system[channel]`, src/process.c:6242), and
+/// each decoder ends by reporting how far it got:
+///
+/// ```c
+///  no_more_source:
+///   coding->consumed_char += consumed_chars_base;
+///   coding->consumed = src_base - coding->source;
+/// ```
+///
+/// (src/coding.c:1421-1423 for UTF-8, and the same two lines at :1696, :2541,
+/// :3982, :4791, :4886 and :5591.)  `decode_coding` then turns the unconsumed
+/// tail into `coding->carryover` when the flag is clear (:7466-7474), and
+/// `read_process_output_set_last_coding_system` copies it onto the process
+/// (:6448-6457).  Two consequences, and both are rows here:
+///
+/// * a character split across a read boundary is completed by the next read,
+///   for EVERY decoder and not just the UTF-8 family;
+/// * an ISO-2022 designation set in one read is still in force in the next,
+///   because the designation lives in `coding->spec.iso_2022` and the struct
+///   outlives the read.
+///
+/// The split is forced by a HANDSHAKE and not by a sleep: the child writes,
+/// blocks on `read`, and only this test can unblock it, so `2` chunks is a
+/// measurement rather than a hope.  Each row is
+/// `(CHUNKS CONCATENATED-CHARACTERS LAST-CODING-SYSTEM-USED)`, and the
+/// characters are the concatenation precisely so that a row which failed to
+/// split would still be WRONG rather than accidentally right.
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program.
+#[test]
+fn a_process_decoder_carries_its_state_and_its_carryover_across_a_read() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw166b-run (coding cmd)
+               (let* ((acc nil)
+                      (p (make-process :name "pw166b" :buffer nil :sentinel #'ignore
+                                       :connection-type 'pipe
+                                       :coding (cons coding 'binary)
+                                       :filter (lambda (_p s) (setq acc (append acc (list s))))
+                                       :command (list "{sh}" "-c" cmd))))
+                 (while (null acc) (accept-process-output p 1))
+                 (process-send-string p "go\n")
+                 (while (accept-process-output p 1))
+                 (while (process-live-p p) (accept-process-output p 0.05))
+                 (list (length acc) (append (apply #'concat acc) nil)
+                       last-coding-system-used)))
+             (list
+              ;; the UTF-8 family, which the deleted name table already covered
+              (pw166b-run 'utf-8 "printf 'a\\303'; read x; printf '\\251\\n'")
+              (pw166b-run 'utf-8 "printf 'a\\343\\201'; read x; printf '\\202\\n'")
+              ;; an ISO-2022 designation that ends read 1: state, not carryover
+              (pw166b-run 'iso-2022-7bit "printf 'a\\033$B'; read x; printf '$\\042\\033(B\\n'")
+              ;; the same designation, split inside the character it introduces
+              (pw166b-run 'iso-2022-7bit "printf 'a\\033$B$'; read x; printf '\\042\\033(B\\n'")
+              (pw166b-run 'japanese-shift-jis "printf 'a\\202'; read x; printf '\\240\\n'")
+              (pw166b-run 'chinese-gbk "printf 'a\\260'; read x; printf '\\241\\n'")
+              (pw166b-run 'chinese-big5 "printf 'a\\244'; read x; printf '\\100\\n'")
+              (pw166b-run 'japanese-iso-8bit "printf 'a\\244'; read x; printf '\\242\\n'")
+              (pw166b-run 'emacs-mule "printf 'a\\222'; read x; printf '\\260\\241\\n'")
+              (pw166b-run 'utf-16le "printf 'a\\000\\102'; read x; printf '\\000\\n\\000'")
+              (pw166b-run 'utf-16le-with-signature "printf '\\377\\376a\\000'; read x; printf '\\n\\000'")
+              ;; the control: every byte of iso-latin-1 is a character, so
+              ;; nothing is ever held back and both chunks decode whole
+              (pw166b-run 'iso-latin-1 "printf 'a\\351'; read x; printf '\\350\\n'")))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(2 (97 233 10) utf-8-unix) ",
+            "(2 (97 12354 10) utf-8-unix) ",
+            "(2 (97 12354 10) iso-2022-7bit-unix) ",
+            "(2 (97 12354 10) iso-2022-7bit-unix) ",
+            "(2 (97 12354 10) japanese-shift-jis-unix) ",
+            "(2 (97 21834 10) chinese-gbk-unix) ",
+            "(2 (97 19968 10) chinese-big5-unix) ",
+            "(2 (97 12354 10) japanese-iso-8bit-unix) ",
+            "(2 (97 20124 10) emacs-mule-unix) ",
+            "(2 (97 66 10) utf-16le-unix) ",
+            "(2 (97 10) utf-16le-with-signature-unix) ",
+            "(2 (97 233 232 10) iso-latin-1-unix))",
         )
     );
 }

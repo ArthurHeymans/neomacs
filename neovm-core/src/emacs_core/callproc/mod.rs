@@ -673,7 +673,18 @@ fn write_output_target_in_state(
             let decoded = if output.is_empty() {
                 None
             } else {
-                Some(resolved.decode_in_context(eval, output)?)
+                // `Fcall_process` reads the child's output to the END before
+                // it decodes (src/callproc.c:786-795, which raises
+                // `CODING_MODE_LAST_BLOCK` on the read that returns zero), and
+                // it decodes through a `struct coding_system` of its own that
+                // no other run continues -- so the block is `Last` and there
+                // is no decoder state to carry in or out.
+                Some(resolved.decode_in_context(
+                    eval,
+                    output,
+                    &mut crate::encoding::CodingDecoderState::default(),
+                    crate::emacs_core::coding::SourceBlock::Last,
+                )?)
             };
             let used = decoded
                 .as_ref()

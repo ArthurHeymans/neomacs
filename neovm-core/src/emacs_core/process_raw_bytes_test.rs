@@ -116,7 +116,7 @@ fn spawn_child_with_environment_uses_process_environment_list() {
         if events.has_ready_process(pid)
             && let Some(run) = processes.read_process_output_without_decoding(
                 pid,
-                ProcessOutputSink::DecodedText,
+                ProcessOutputDestination::to_filter(),
                 &crate::emacs_core::coding::CodingSystemManager::new(),
             )
         {

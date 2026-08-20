@@ -1311,7 +1311,13 @@ fn decode_iso2022_attaches_charset_property_for_designated_charset() {
             | crate::emacs_core::coding::IsoFlag::Designation,
     };
     // "X" + ESC$B designation + two dim-2 chars + ESC(B (ascii) + "Y".
-    let (bytes, runs) = decode_via_iso2022(b"X\x1b$B$3$s\x1b(BY", &spec);
+    let decoded = decode_via_iso2022(
+        b"X\x1b$B$3$s\x1b(BY",
+        &spec,
+        &mut Iso2022DecodeState::default(),
+        DosEolLookahead::NotRequired,
+    );
+    let (bytes, runs) = (decoded.bytes, decoded.runs);
     let text = crate::emacs_core::emacs_char::to_utf8_lossy(&bytes);
     // X + 2 kanji + Y == 4 chars.  The run starts at the first kanji and runs
     // to the end of the text: re-designating G0 back to `ascii` does not close
@@ -1434,7 +1440,8 @@ fn decode_euc_attaches_charset_property() {
         flags: enumflags2::BitFlags::empty(),
     };
     // ASCII 'A' then one GR character (0xA4 0xB3 -> GL 0x24 0x33).
-    let (bytes, runs) = decode_via_euc(b"A\xA4\xB3", &spec);
+    let decoded = decode_via_euc(b"A\xA4\xB3", &spec, DosEolLookahead::NotRequired);
+    let (bytes, runs) = (decoded.bytes, decoded.runs);
     let text = crate::emacs_core::emacs_char::to_utf8_lossy(&bytes);
     assert_eq!(text.chars().count(), 2);
     assert_eq!(runs.len(), 1);
@@ -1461,7 +1468,8 @@ fn decode_sjis_attaches_charset_property() {
     // Pick SJIS bytes that map to a valid kanji code in test-jis.
     let kanji_sjis = jis_to_sjis(0x2433);
     let mut input = vec![b'A', 0xA1, kanji_sjis.0, kanji_sjis.1];
-    let (bytes, runs) = decode_via_sjis(&input, &charsets);
+    let decoded = decode_via_sjis(&input, &charsets, DosEolLookahead::NotRequired);
+    let (bytes, runs) = (decoded.bytes, decoded.runs);
     let text = crate::emacs_core::emacs_char::to_utf8_lossy(&bytes);
     assert_eq!(text.chars().count(), 3); // A + katakana + kanji
     // Two runs: katakana at [1,2), kanji at [2,3).
@@ -1514,7 +1522,8 @@ fn decode_sjis_charset_runs_absorb_ascii_like_gnu() {
         b'G',
         b'H',
     ];
-    let (bytes, runs) = decode_via_sjis(&input, &charsets);
+    let decoded = decode_via_sjis(&input, &charsets, DosEolLookahead::NotRequired);
+    let (bytes, runs) = (decoded.bytes, decoded.runs);
     let text = crate::emacs_core::emacs_char::to_utf8_lossy(&bytes);
     assert_eq!(text.chars().count(), 12);
 
