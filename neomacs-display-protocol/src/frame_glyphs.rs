@@ -936,6 +936,10 @@ pub struct FrameGlyphBuffer {
     pub border_width: f32,
     /// Child frame border color
     pub border_color: Color,
+    /// Child frame outer border width (pixels)
+    pub outer_border_width: f32,
+    /// Child frame outer border color
+    pub outer_border_color: Color,
     /// Background opacity (1.0 = opaque, 0.0 = transparent)
     pub background_alpha: f32,
     /// Whether this frame should not accept keyboard focus
@@ -1301,6 +1305,8 @@ impl FrameGlyphBuffer {
             undecorated: false,
             border_width: 0.0,
             border_color: Color::BLACK,
+            outer_border_width: 0.0,
+            outer_border_color: Color::BLACK,
             background_alpha: 1.0,
             no_accept_focus: false,
             glyphs: Vec::with_capacity(10000),

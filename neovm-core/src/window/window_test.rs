@@ -2069,6 +2069,27 @@ fn frame_resize_pixelwise_updates_window_tree_and_invalidates_display_state() {
 }
 
 #[test]
+fn resize_pixelwise_minibuffer_only_does_not_add_minibuffer_line() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = FrameManager::new();
+    let fid = mgr.create_frame("mini", 100, 60, BufferId(1));
+    let frame = mgr.get_mut(fid).expect("frame");
+    frame.set_window_system(Some(Value::symbol("x")));
+    frame.char_height = 15.0;
+    let root_window_id = frame.root_window.id();
+    frame.minibuffer_leaf = None;
+    frame.minibuffer_window = Some(root_window_id);
+
+    frame.resize_pixelwise(100, 60);
+
+    assert_eq!(frame.parameter("height"), Some(Value::fixnum(4)));
+    assert_eq!(
+        frame.parameter("neovm--frame-text-lines"),
+        Some(Value::fixnum(4))
+    );
+}
+
+#[test]
 fn frame_resize_discards_geometry_dependent_auto_hscroll() {
     crate::test_utils::init_test_tracing();
     let mut mgr = FrameManager::new();

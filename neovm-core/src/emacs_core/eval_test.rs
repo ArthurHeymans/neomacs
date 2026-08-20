@@ -1890,6 +1890,52 @@ fn redisplay_skips_callback_when_visible_state_is_unchanged() {
 }
 
 #[test]
+fn redisplay_runs_resize_mini_frame_for_minibuffer_only_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let frame_id = ev
+        .frames
+        .create_frame("F1", 960, 640, crate::buffer::BufferId(1));
+    let root_window_id = ev
+        .frames
+        .get(frame_id)
+        .expect("created frame")
+        .root_window
+        .id();
+    {
+        let frame = ev.frames.get_mut(frame_id).expect("created frame");
+        frame.minibuffer_leaf = None;
+        frame.minibuffer_window = Some(root_window_id);
+        frame.visible = true;
+    }
+
+    ev.eval_str(
+        r#"(progn
+             (setq resize-mini-frames t
+                   neo-resize-mini-frame-calls 0
+                   neo-resize-mini-frame-arg nil)
+             (fset 'window--resize-mini-frame
+                   (lambda (frame)
+                     (setq neo-resize-mini-frame-calls
+                           (1+ neo-resize-mini-frame-calls))
+                     (setq neo-resize-mini-frame-arg frame))))"#,
+    )
+    .expect("resize-mini-frame test setup should evaluate");
+    ev.redisplay_fn = Some(Box::new(|_ev: &mut Context| {}));
+
+    ev.redisplay_with_force(true);
+
+    assert_eq!(
+        ev.obarray().symbol_value("neo-resize-mini-frame-calls"),
+        Some(&Value::fixnum(1))
+    );
+    assert_eq!(
+        ev.obarray().symbol_value("neo-resize-mini-frame-arg"),
+        Some(&Value::make_frame(frame_id.0))
+    );
+}
+
+#[test]
 fn overlay_property_change_invalidates_redisplay_signature() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

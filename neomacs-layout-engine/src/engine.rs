@@ -91,7 +91,7 @@ use neomacs_display_protocol::types::DisplayWindowId;
 use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::types::{FaceId, Px};
 use neovm_core::emacs_core::Value;
-use neovm_core::window::WindowDisplaySnapshot;
+use neovm_core::window::{FrameParam, WindowDisplaySnapshot};
 
 /// Bound redisplay convergence work when point begins outside the visible span.
 const MAX_WINDOW_VISIBILITY_RETRIES: usize = 128;
@@ -975,6 +975,7 @@ impl LayoutEngine {
             let mut curr_window_infos: rustc_hash::FxHashMap<DisplayWindowId, WindowInfo> =
                 rustc_hash::FxHashMap::default();
             let default_resolved = face_resolver.default_face();
+            let child_frame_border = face_resolver.resolve_named_face("child-frame-border");
 
             // Set up frame dimensions in the builder
             let frame_identity = if let Some(frame) = evaluator.frame_manager().get(frame_id) {
@@ -992,7 +993,14 @@ impl LayoutEngine {
                     z_order: frame.z_order,
                     undecorated: frame.undecorated,
                     border_width: frame.internal_border_width() as f32,
-                    border_color: Color::BLACK,
+                    border_color: Color::from_pixel(child_frame_border.bg),
+                    outer_border_width: frame.outer_border_width() as f32,
+                    outer_border_color: frame
+                        .known_parameter(FrameParam::BorderColor)
+                        .and_then(|value| value.as_utf8_str())
+                        .and_then(neovm_core::face::Color::parse)
+                        .map(|color| Color::from_pixel(color.to_pixel()))
+                        .unwrap_or(Color::BLACK),
                     background_alpha: 1.0,
                     no_accept_focus: frame.no_accept_focus,
                 })

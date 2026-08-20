@@ -107,6 +107,8 @@ pub(crate) struct OutputFrameIdentityInstallRequest {
     pub(crate) undecorated: bool,
     pub(crate) border_width: f32,
     pub(crate) border_color: Color,
+    pub(crate) outer_border_width: f32,
+    pub(crate) outer_border_color: Color,
     pub(crate) background_alpha: f32,
     pub(crate) no_accept_focus: bool,
 }
