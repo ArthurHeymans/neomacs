@@ -9176,6 +9176,19 @@ and_reads_back_canonically` now pins all 148 in one place.
   all, so nothing clears it.  That is a debugger gap, pre-existing and now
   merely visible; the variable is excluded from the oracle sweep for the same
   reason GNU's own value is unstable.
+  - **RE-MEASURED unchanged 2026-08-20, and sized (entry 168 item 4).**  The
+    probe is `(nil nil t)` under GNU against `(nil t t)` here, and GNU prints
+    four debugger backtraces while answering, which is the mechanism showing
+    itself: `if (debug_on_next_call) do_debug_on_call (...)` at
+    `src/eval.c:2601`, `src/eval.c:3189` and `src/bytecode.c:798`, and
+    `do_debug_on_call` clears the flag on its first line (`src/eval.c:336-340`),
+    as do `call_debugger` (`298`) and `init_eval` (`248`).  Do not "fix" the
+    variable -- its declaration and Boolean coercion are correct here.  The
+    arming mechanism IS worth its own entry and it is small: Neomacs already
+    has `call_debugger_for_signal`, `backtrace-debug` and a `debug_on_exit`
+    flag on backtrace frames, and `pop_bytecode_backtrace_frame_with_result`
+    already documents the landing site.  `debug-on-exit`, missing for the same
+    reason, belongs to the same entry.
 - `noninteractive` is seeded `t` in the table where GNU's C default is the
   parsed argv (`noninteractive1 = noninteractive`, `src/emacs.c:1953`).  That
   matches what Neomacs already did, and the binary still overwrites it from
@@ -9185,6 +9198,12 @@ and_reads_back_canonically` now pins all 148 in one place.
   existence of the kind entry 132 recorded for `dos-hyper-key`.
 - `Lisp_Fwd_Obj` and `Lisp_Fwd_Kboard_Obj` remain unwired, unchanged from 132:
   neither enforces anything on assignment.
+  - **Corrected 2026-08-20 (entry 168 item 3).**  "Neither enforces anything on
+    assignment" is true and is not the whole story: `SYMBOL_FORWARDED` also
+    decides whether `makunbound` is refused (`src/data.c:1805-1808`), which is
+    observable and differs for 447 of the 563 `DEFVAR_LISP` plus 14
+    `DEFVAR_KBOARD` names.  Entry 168 sizes it and declines the storage wiring
+    for a GC reason; see 138's residual for the note.
 
 ## 136. `undo-boundary` never recorded that it had happened, so `undo-auto--last-boundary-cause` stayed nil -- FIXED
 
@@ -10079,6 +10098,16 @@ harness will.  The pin uses 999999 now.
   own `syms_of_*` counterpart rather than a seed -- which is what
   `window-combination-limit` and `void-text-area-pointer` already have, and both
   measure identical to GNU.
+  - **CLOSED by entry 141, re-measured 2026-08-20 (entry 168 item 1).**  Four
+    of the five got a `syms_of_*` counterpart and the fifth got a
+    `defvaralias`, because GNU declares no `x-gtk-use-system-tooltips` in any
+    build.  The ten-name probe -- `boundp`, `special-variable-p`,
+    `symbol-value`, `default-value`, `local-variable-if-set-p`,
+    `indirect-variable` and a dynamic `let` -- is character-identical between
+    GNU 31.0.90 and a release binary of `bee864abc`.  Session kind does not
+    enter into it: all four `syms_of_*` are called under compile-time
+    `#ifdef`s (`src/emacs.c:2366`, `2374`, `2377`) and run before any terminal
+    or window-system init, so `--batch`, tty and GUI report the same values.
 - `command-line-max-length` is 1572864 here against GNU's 626432 on this
   machine, and the declaration is not what differs.  glibc derives
   `_SC_ARG_MAX` from `RLIMIT_STACK` -- `MAX (ARG_MAX, MIN (stack / 4, 6 MiB))`
@@ -10087,6 +10116,17 @@ harness will.  The pin uses 999999 now.
   limit, and Neomacs sets a larger one and lands on the 6 MiB cap.  Two editors
   with different stack policies, not two different declarations; the pin asserts
   the shape for exactly that reason.
+  - **CONFIRMED EXACTLY and DECLINED as nothing to fix, 2026-08-20 (entry 168
+    item 2).**  Asking each editor's own child for the stack limit it
+    inherited: GNU 9788 KiB, Neomacs 131072 KiB, and
+    `MAX (131072, MIN (stack / 4, 6 MiB)) / 4` reproduces 626432 and 1572864
+    respectively.  GNU's 9788 KiB is `emacs_re_max_failures * ratio + extra`
+    page-rounded (`src/emacs.c:1563-1623`), set before `syms_of_callproc` runs
+    (`src/emacs.c:2172`); Neomacs's is a flat 128 MiB the evaluator's native
+    recursion needs.  The pin no longer settles for shape --
+    `oracle_command_line_max_length_is_derived_from_this_editors_stack_rlimit`
+    re-derives the number in each editor, and fails if anyone writes GNU's
+    constant into Rust.
 - `xwidget-webkit-disable-javascript` is bound here and unbound under GNU,
   because Neomacs ships an xwidget layer this GNU build was not compiled with.
   Same class as `(featurep 'x)` being `nil` here and `t` under GNU on this
@@ -10101,6 +10141,27 @@ harness will.  The pin uses 999999 now.
   `GLYPH_DEBUG` -- for the same reason the 26 names above were removed.
 - `Lisp_Fwd_Obj` and `Lisp_Fwd_Kboard_Obj` remain unwired, unchanged from 132
   and 135.
+  - **SIZED, and the storage wiring DECLINED, 2026-08-20 (entry 168 item 3).**
+    132's "no divergence follows" is wrong: `SYMBOL_FORWARDED` also decides
+    whether `makunbound` is refused (`src/data.c:1805-1808`).  Over the 563
+    `DEFVAR_LISP` names plus the 14 `DEFVAR_KBOARD` ones, GNU refuses 487 + 14
+    and Neomacs refuses 5 + 0 -- **447 names disagree**, and GNU's rule has no
+    exceptions (the three it allows are the three it does not declare here).
+    Wiring the storage is still the wrong instrument: a `Lisp_Objfwd` owns a
+    `Lisp_Object`, which would put a heap `Value` behind ~490 leaked `'static`
+    descriptors against the invariant Neomacs's GC symbol tracer is written on
+    ("Only `Plainval` holds a heap value cell", `symbol.rs`), and it enforces
+    nothing else.  The refusal is a property of the DECLARATION and wants a
+    measured name table consulted by `check_forwarded_unbind`; its own entry.
+- **Two names this entry's seed loop kept turned out to be invented existence
+  too, found 2026-08-20 (entry 168 item 5) and FIXED there.**  Every
+  `DEFVAR_LISP` GNU has for `x-mode-pointer-shape` or
+  `x-nontext-pointer-shape` is inside `#if false` (`src/xfns.c:10333-10338`,
+  `10347-10352`, and the same pair in `src/androidfns.c`), so no build declares
+  either; the C global is still assigned `Qnil` after the `#endif`, which is
+  what made the seed look justified.  Entry 141 listed both as bound-here /
+  unbound-there without the reason.  Entry 168's sweep of all 577 names found
+  no other name Neomacs binds and GNU does not, beyond the two xwidget ones.
 
 Status: FIXED.
 

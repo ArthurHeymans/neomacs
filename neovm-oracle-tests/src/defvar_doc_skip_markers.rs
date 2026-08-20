@@ -75,8 +75,11 @@ fn oracle_no_builtin_variable_documentation_is_gnus_skip_placeholder() {
 /// `#if false /* This doesn't really do anything.  */` (`src/xfns.c:10333-10338`,
 /// `10347-10352`, and the same pair in `src/androidfns.c`), so no build
 /// declares them, `Fsnarf_documentation`'s `Fboundp` gate never fires, and GNU
-/// answers nil.  They are pinned for *existence* in
-/// `cus_start_platform_declarations`-style form below rather than for text.
+/// answers nil.  Their *existence* is pinned by
+/// `oracle_defvars_inside_a_dead_preprocessor_branch_are_unbound` below; their
+/// text still differs, because only GNU's `Fboundp` clause can reject a doc the
+/// generator can see, and applying that clause needs the 49 names GNU binds and
+/// Neomacs does not (ledger 168, "found and NOT fixed").
 #[test]
 fn oracle_platform_duplicated_variables_carry_the_canonical_doc_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
@@ -99,7 +102,9 @@ fn oracle_platform_duplicated_variables_carry_the_canonical_doc_text() {
           x-window-left-edge-cursor x-window-right-edge-cursor
           x-window-top-edge-cursor x-window-top-left-corner-cursor
           x-window-top-right-corner-cursor x-window-vertical-drag-cursor))"#;
-    let expect = expect_test::expect![[r#""OK PLACEHOLDER""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((font-use-system-font . \"Non-nil means to apply the system defined font dynamically.\") (next-selection-coding-system . \"Coding system for the next communication with other programs.\") (selection-coding-system . \"Coding system for communicating with other programs.\") (selection-converter-alist . \"An alist associating X Windows selection-types with functions.\") (x-alt-keysym . \"Which modifier value Emacs reports when Alt is depressed.\") (x-ctrl-keysym . \"Which modifier value Emacs reports when Ctrl is depressed.\") (x-cursor-fore-pixel . \"A string indicating the foreground color of the cursor box.\") (x-gtk-file-dialog-help-text . \"If non-nil, the GTK file chooser will show additional help text.\") (x-gtk-show-hidden-files . \"If non-nil, the GTK file chooser will by default show hidden files.\") (x-gtk-use-old-file-dialog . \"Non-nil means prompt with the old GTK file selection dialog.\") (x-hourglass-pointer-shape . \"The shape of the pointer when Emacs is busy.\") (x-hyper-keysym . \"Which modifier value Emacs reports when Hyper is depressed.\") (x-max-tooltip-size . \"Maximum size for tooltips.\") (x-meta-keysym . \"Which modifier value Emacs reports when Meta is depressed.\") (x-no-window-manager . \"Non-nil if no X window manager is in use.\") (x-pixel-size-width-font-regexp . \"Regexp matching a font name whose width is the same as ‘PIXEL_SIZE’.\") (x-pointer-shape . \"The shape of the pointer when over text.\") (x-sensitive-text-pointer-shape . \"The shape of the pointer when over mouse-sensitive text.\") (x-super-keysym . \"Which modifier value Emacs reports when Super is depressed.\") (x-toolkit-scroll-bars . \"Which toolkit scroll bars Emacs uses, if any.\") (x-underline-at-descent-line . \"Non-nil means to draw the underline at the same place as the descent line.\") (x-use-underline-position-properties . \"Non-nil means make use of UNDERLINE_POSITION font properties.\") (x-wait-for-event-timeout . \"How long to wait for X events.\") (x-window-bottom-edge-cursor . \"Pointer shape indicating a bottom x-window edge can be dragged.\") (x-window-bottom-left-corner-cursor . \"Pointer shape indicating a bottom left x-window corner can be dragged.\") (x-window-bottom-right-corner-cursor . \"Pointer shape indicating a bottom right x-window corner can be dragged.\") (x-window-horizontal-drag-cursor . \"Pointer shape to use for indicating a window can be dragged horizontally.\") (x-window-left-edge-cursor . \"Pointer shape indicating a left x-window edge can be dragged.\") (x-window-right-edge-cursor . \"Pointer shape indicating a right x-window edge can be dragged.\") (x-window-top-edge-cursor . \"Pointer shape indicating a top x-window edge can be dragged.\") (x-window-top-left-corner-cursor . \"Pointer shape indicating a top left x-window corner can be dragged.\") (x-window-top-right-corner-cursor . \"Pointer shape indicating a top right x-window corner can be dragged.\") (x-window-vertical-drag-cursor . \"Pointer shape to use for indicating a window can be dragged vertically.\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
