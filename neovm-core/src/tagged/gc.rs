@@ -3414,6 +3414,36 @@ impl Default for TaggedHeap {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Post-mark ownership verification gate (DIVERGENCES.md 162)
+// ---------------------------------------------------------------------------
+//
+// `verify_marked_objects_owned` was written for the missing-root class and
+// then never called ("dead code written for exactly this failure", 161's own
+// residual list). It is O(live objects) per collection, so it stays off by
+// default and is turned on either process-wide with `NEOVM_GC_VERIFY_MARKED=1`
+// — the companion to `NEOVM_GC_STRESS=1`, which is what makes a missing root
+// deterministic — or per-thread from a test.
+
+#[cfg(debug_assertions)]
+thread_local! {
+    static VERIFY_MARKED_OBJECTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(debug_assertions)]
+fn verify_marked_objects_enabled() -> bool {
+    static FROM_ENV: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let from_env =
+        *FROM_ENV.get_or_init(|| std::env::var("NEOVM_GC_VERIFY_MARKED").as_deref() == Ok("1"));
+    from_env || VERIFY_MARKED_OBJECTS.with(|flag| flag.get())
+}
+
+/// Turn post-mark ownership verification on for THIS thread.
+#[cfg(all(debug_assertions, test))]
+pub(crate) fn set_verify_marked_objects_for_test(on: bool) {
+    VERIFY_MARKED_OBJECTS.with(|flag| flag.set(on));
+}
+
 impl TaggedHeap {
     pub fn new() -> Self {
         Self {
@@ -6584,6 +6614,18 @@ impl TaggedHeap {
         self.mark_and_sweep_weak_tables();
         let mark_us = mark_t0.elapsed().as_micros() as u64;
 
+        // The mark has drained and the sweep has not started: the one moment
+        // where "marked" and "owned" must agree. A marked object that no arena
+        // or intrusive list owns is a root that pointed at freed memory.
+        #[cfg(debug_assertions)]
+        if verify_marked_objects_enabled() {
+            let problems = self.verify_marked_objects_owned();
+            assert_eq!(
+                problems, 0,
+                "post-mark ownership verification found {problems} problem(s):                  a root pointed at memory no arena owns (see the GC VERIFY                  lines above)"
+            );
+        }
+
         self.finalize_collection(mark_us, bytes_before, t0);
     }
 
@@ -8787,14 +8829,20 @@ impl TaggedHeap {
                 || self.non_cons_object_addrs.contains(&(ptr as usize)))
     }
 
-    /// Debug verification: after marking, check that every marked non-cons
-    /// object is actually in one of our intrusive lists (young `all_objects`
-    /// or tenured `tenured_objects`). If a marked object is NOT in a list, it
-    /// means a root pointed to freed memory that happened to look like a valid
-    /// tagged pointer.
+    /// Post-mark verification: check that every marked non-cons object is
+    /// actually in one of our intrusive lists (young `all_objects` or tenured
+    /// `tenured_objects`). If a marked object is NOT in a list, it means a
+    /// root pointed to freed memory that happened to look like a valid tagged
+    /// pointer — precisely the failure DIVERGENCES.md 161 chased for a day.
+    ///
+    /// Returns the number of problems found. Wired into `complete_collection`
+    /// behind [`verify_marked_objects_enabled`], which is off unless
+    /// `NEOVM_GC_VERIFY_MARKED=1` or a test turns it on: the walk is O(live
+    /// objects) per collection. It was dead code with an `#[allow(dead_code)]`
+    /// "delete or wire up" note until ledger 162 wired it up.
     #[cfg(debug_assertions)]
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn verify_marked_objects_owned(&self) {
+    fn verify_marked_objects_owned(&self) -> usize {
+        let mut problems = 0usize;
         // Build a set of all owned non-cons object addresses
         let mut owned_addrs: std::collections::HashSet<usize> = std::collections::HashSet::new();
         for head in [self.all_objects, self.tenured_objects] {
@@ -8825,6 +8873,7 @@ impl TaggedHeap {
                             // Check string data pointer is reasonable
                             let str_ptr = s.as_bytes().as_ptr() as usize;
                             if str_ptr != 0 && str_ptr < 0x1000 {
+                                problems += 1;
                                 tracing::error!(
                                     "GC VERIFY: marked StringObj at {:p} has \
                                      corrupt data pointer {:#x}",
@@ -8852,11 +8901,13 @@ impl TaggedHeap {
             non_cons_object_addrs: &FxHashSet<usize>,
             parity: bool,
             total_marked: &mut usize,
+            problems: &mut usize,
         ) {
             for slot in arena.collect_allocated_slots() {
                 let header = slot as *const GcHeader;
                 unsafe {
                     if (*header).kind != T::KIND {
+                        *problems += 1;
                         tracing::error!(
                             "GC VERIFY: {} arena slot at {:p} has a wrong-kind header",
                             T::CLASS,
@@ -8868,6 +8919,7 @@ impl TaggedHeap {
                     }
                 }
                 if non_cons_object_addrs.contains(&(slot as usize)) {
+                    *problems += 1;
                     tracing::error!(
                         "GC VERIFY: {} arena slot {:p} must NOT be in \
                          non_cons_object_addrs (page-span oracle owns it)",
@@ -8882,53 +8934,63 @@ impl TaggedHeap {
             &self.non_cons_object_addrs,
             parity,
             &mut total_marked,
+            &mut problems,
         );
         verify_arena_slots(
             &self.string_arena,
             &self.non_cons_object_addrs,
             parity,
             &mut total_marked,
+            &mut problems,
         );
         verify_arena_slots(
             &self.vector_arena,
             &self.non_cons_object_addrs,
             parity,
             &mut total_marked,
+            &mut problems,
         );
         verify_arena_slots(
             &self.bytecode_arena,
             &self.non_cons_object_addrs,
             parity,
             &mut total_marked,
+            &mut problems,
         );
         verify_arena_slots(
             &self.lambda_arena,
             &self.non_cons_object_addrs,
             parity,
             &mut total_marked,
+            &mut problems,
         );
         verify_arena_slots(
             &self.macro_arena,
             &self.non_cons_object_addrs,
             parity,
             &mut total_marked,
+            &mut problems,
         );
         verify_arena_slots(
             &self.record_arena,
             &self.non_cons_object_addrs,
             parity,
             &mut total_marked,
+            &mut problems,
         );
         verify_arena_slots(
             &self.symbol_with_pos_arena,
             &self.non_cons_object_addrs,
             parity,
             &mut total_marked,
+            &mut problems,
         );
         tracing::trace!(
-            "GC verify: {} marked non-cons objects, all owned",
-            total_marked
+            "GC verify: {} marked non-cons objects, {} problem(s)",
+            total_marked,
+            problems
         );
+        problems
     }
 
     /// TEST-ONLY object-arena coherence check over ALL class arenas:
@@ -11833,6 +11895,35 @@ mod ownership_tests {
             "the free-list link decodes through TAG_SYMBOL (bits 0x{:x})",
             link.bits(),
         );
+    }
+
+    /// `verify_marked_objects_owned` was written for the missing-root class
+    /// and had zero callers — 161 listed it as "dead code written for exactly
+    /// this failure". It is wired into `complete_collection` now, behind a
+    /// gate. This is the pin that it RUNS and that a healthy heap reports zero
+    /// problems: without the wiring the gate function does not exist and this
+    /// does not compile (DIVERGENCES.md 162).
+    #[test]
+    fn post_mark_ownership_verification_runs_and_finds_nothing() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        super::set_verify_marked_objects_for_test(true);
+        assert!(super::verify_marked_objects_enabled());
+
+        let kept = heap.alloc_string(crate::heap_types::LispString::new("kept".into(), false));
+        let vector = heap.alloc_vector(vec![TaggedValue::fixnum(7)]);
+        let rooted = heap.alloc_cons(kept, vector);
+        let _doomed =
+            heap.alloc_string(crate::heap_types::LispString::new("dropped".into(), false));
+
+        // Asserts internally (problems == 0) at the one moment where "marked"
+        // and "owned" must agree.
+        heap.collect_exact(std::iter::once(rooted));
+        assert_eq!(heap.verify_marked_objects_owned(), 0);
+
+        super::set_verify_marked_objects_for_test(false);
     }
 
     /// Workstream A path-collapse safety net (characterization): a forced
