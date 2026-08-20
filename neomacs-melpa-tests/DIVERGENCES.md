@@ -19804,6 +19804,13 @@ in place for leaf code with no evaluator, and require `Context::lisp_string` at
 any site that has one.**  That is 174 sites, mechanical, and it is the subset
 where the check can actually fire.
 
+**2026-08-20 -- ledger 167: NOT LANDED, and resized.**  The 174 is 160 after
+this entry's own conversions, and 95 of those 160 are INLINE or OWNED -- the
+borrow dies at the end of its own statement, so anchoring it to `&Context`
+cannot ever fire.  The migration that buys anything is the **63** BOUND sites,
+59 of them with a live range longer than one line.  167 §8 has the per-file
+distribution.
+
 **And the cost of tightening the accessor itself, measured rather than
 estimated.**  The strongest ZERO-CHURN tightening available is
 `as_lisp_string(&self) -> Option<&LispString>`: method-call syntax auto-refs,
@@ -19832,6 +19839,18 @@ Not landed here.  It buys the ESCAPE property, not the safepoint property --
 a `Value` local can outlive a safepoint and still be unrooted -- and this entry
 already spends its risk budget on the hot search path.  It is a good, small,
 separately reviewable follow-up, and the number above is what it costs.
+
+**2026-08-20 -- ledger 167: LANDED, and the price above was exact.**  20 errors,
+16 lib and 4 lib-test, 7 genuine escapes and 13 temporaries -- site for site,
+including the observation that four of the six E0515s share the
+`.and_then(|value| value.as_lisp_string())` shape.  Two corrections rather than
+disagreements.  First, the count is a LOWER BOUND on the workspace: a 21st
+error waits in `neomacs-layout-engine`, which rustc does not compile while
+`neovm-core` is failing.  Second, `value.rs:2012` is not quite "a one-word fix"
+-- `lisp_string_in` has to anchor its borrow to the HEAP rather than to `self`,
+which no safe signature can express, so 167 gives it (and `closure_docstring`)
+a single named `unsafe` re-anchoring helper with its three call sites
+enumerated in its doc comment.
 
 ### 7. Making a reclaimed string legible -- GNU already does this, and we did half of it
 
@@ -20074,13 +20093,36 @@ along with the fact that `NEOVM_BINARY_PATH` is not consulted.
   but not for its string arm.  Contained today because its only consumer is
   `StringDesignator`'s private field.  Splitting the two arms would let the
   string one be honest.
+
+  **2026-08-20 -- ledger 167: FIXED, and the sentence above is half wrong.**
+  `resolve_sym_lisp_name` was NOT static in its first arm: it returned the
+  symbol's name OBJECT, and the doc comment four lines above it already said
+  so -- "Do NOT cache the result. Unlike the process-lifetime atom from
+  `resolve_sym_lisp_string`, a name object is an ordinary GC-managed heap
+  string owned by one heap."  Reading the signature rather than the comment is
+  how an audit inherits a lie.  Neither arm needed splitting: the function
+  returns the OPERAND now, as GNU's own `s1 = SYMBOL_NAME (s1)` does
+  (`src/fns.c:344-353`), `StringDesignator` holds it instead of a borrow of
+  it, and `resolve_sym_lisp_name` is deleted in favour of the
+  `LispVisibleSymbolName` view this tree already had.
 * **`Value::closure_docstring` (`value.rs:2125`) and
   `obarray_lookup_name` (`builtins/symbols.rs:1523`)** are the two remaining
   `&'static LispString` returners that are NOT symbol-name resolvers.  Both are
   single-use and neither crosses a safepoint today; neither was touched.
+
+  **2026-08-20 -- ledger 167: both FIXED.**  `closure_docstring` takes `&self`
+  and anchors its borrow to the closure whose slot the string came from;
+  `obarray_lookup_name` returns `Option<LispVisibleSymbolName>` and its callers
+  take `.text()` at the point of use.  After this, every `&'static LispString`
+  left in the workspace -- sixteen of them -- names storage in the leaked
+  symbol-name atom arena (`intern.rs:99-131`).  None borrows the mark-sweep
+  heap.
 * **The 357 production borrow sites with no `Context` in scope.**  §6 sizes the
   migration and recommends the 174 that do.  The rest need a parameter threaded
   in, one call chain at a time, and none of them is known to be wrong.
+
+  **2026-08-20 -- ledger 167:** 363 on that tree, still open, and still nothing
+  known to be wrong about any of them.
 * **`aset_string_replacement`'s coexisting borrows.**  §9.  NLL saves it; the
   `&'static` means NLL is not being asked the question.
 * **The dead-string check costs a load and a predictable branch on every
@@ -20829,5 +20871,448 @@ throughout -- another agent held a `cargo build --profile profiling` on the main
 checkout for part of the run -- which is exactly why the gate is
 `instructions:u` and not wall time: the startup-only control moved by 0.003%
 across three separately linked binaries.
+
+Status: FIXED.
+
+## 167. `Value::as_lisp_string` now returns a borrow the borrow checker can check: `(&self) -> Option<&LispString>` costs exactly the 20 errors 163 priced it at, 7 escapes and 13 temporaries, and no `&'static LispString` in the workspace borrows the mark-sweep heap any more -- FIXED, and the entry's longest-lived result is that 163's own audit scripts, shipped "so the numbers can be re-measured rather than believed", report ZERO and exit 0
+
+Entry 163 audited this seam and reached the right verdict -- MOSTLY BENIGN, no
+live use-after-free, the discriminator is rootedness and mechanically that is
+`&mut` -- and then priced, but did not land, the one change that removes the
+lie itself.  This is that change.
+
+The headline: **the tightening costs exactly what 163 measured, to the error --
+20 compile errors, 16 in the lib and 4 in the lib-test target, 7 genuine
+escapes and 13 temporaries.  A twenty-first lives in `neomacs-layout-engine`
+and was invisible to 163's count because that crate does not compile until
+`neovm-core` does.  Every one of the eight escapes now has a decision with a
+reason, four of them cost a three-line edit each, and after them NOT ONE
+`&'static LispString` in the workspace borrows the mark-sweep heap: all sixteen
+survivors name storage in the leaked symbol-name atom arena.**  `expect_lisp_string`,
+which the brief asked about as a second 172-site job, needed zero edits and §7
+says why.  And the audit tooling 163 shipped so that any of this could be
+re-measured could not measure anything at all -- §1, which is the part of this
+entry with the longest shelf life.
+
+### 1. The tooling 163 shipped answers zero, and exits 0 doing it
+
+163's `tools/gc-audit/README.md` opens: "They are shipped so the numbers in
+that entry can be re-measured rather than believed."  They cannot be.  All
+eight scripts compute
+
+```python
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+```
+
+which was correct while they lived in `tools/` and resolves to `<repo>/tools`
+now that they live in `tools/gc-audit/`.  Six of the eight then fail SILENTLY.
+`classify2.py` walks three directories that do not exist and writes well-formed
+JSON:
+
+```text
+grep_lines 0 sites 0
+```
+
+and `reach.py` -- whose 90.2% is 163's central refutation of the coordinator's
+safepoint filter, the number that entry turns on -- prints
+
+```text
+distinct fn names defined : 0
+fn definitions total      : 0
+names reaching a safepoint: 0 (0.0% of defined names)
+```
+
+Exit status 0, both.  This is the ledger's own standing trap ("assert on `N
+passed` with N>0, never on the word `ok`") wearing a different hat: an analysis
+that reports an empty measurement and looks exactly like one that ran.
+
+Fixed at the shape rather than the path.  `gcaudit_root.repo_root()` walks UP
+until it finds a directory that actually holds this workspace and raises when
+there is none, so the next directory move cannot break it the same way; and
+`require_nonzero()` gives the three scripts with a headline count one line with
+which to refuse to report a zero.
+
+**Re-measured, with every difference from 163 accounted for by 163's own
+landing rather than waved at:**
+
+| | 163 (merge base `bc0505a98`) | 167 (this tree) | why it moved |
+|---|---|---|---|
+| accessor lines | 793 | **799** | 163's new doc comment adds 10 `COMMENT` lines; `Context::expect_lisp_string` adds a `DEFN` |
+| production uses | 531 | **523** | 163 converted 20 sites, several to `Context::lisp_string`, which the accessor regex does not match |
+| real borrows | 500 | **492** | same |
+| `Context` in scope | 174 | **160** | same |
+| no `Context` in scope | 357 | **363** | 163's `prepare_current_buffer_regexp_syntax*` restructure moved sites into helpers that take a `Value` |
+| names reaching a safepoint | 23877 / 26484 = 90.2% | **23906 / 26518 = 90.2%** | unchanged |
+
+163's central finding survives re-measurement unchanged: 90.2% of function
+names in these three crates can reach a safepoint, so "is this borrow held
+across a safepoint" is still not, on its own, a usable filter inside an
+interpreter.
+
+### 2. The signature change, and the 20 errors 163 predicted
+
+```rust
+as_lisp_string(self)  -> Option<&'static LispString>   // the lie
+as_lisp_string(&self) -> Option<&LispString>           // the truth
+```
+
+Method-call syntax auto-refs, so all ~680 uses still resolve; what stops
+compiling is a borrow that ESCAPES the `Value` place it was read from.  Applied
+to the tree before any other change in this entry, rustc's own tally:
+
+```text
+error: could not compile `neovm-core` (lib) due to 16 previous errors
+error: could not compile `neovm-core` (lib test) due to 20 previous errors
+```
+
+163 predicted "20 compile errors -- rustc's own tally is 16 previous errors for
+the lib and 20 for the lib-test target, so 16 production and 4 in test files",
+split **7 genuine escapes and 13 temporaries**.  Re-measured: 20, 16 and 4, and
+the split is 7 and 13, site for site, including the four that share the
+`.and_then(|value| value.as_lisp_string())` shape.  That is an unusually exact
+prediction for a tree several entries further along, and it is worth stating
+plainly because everything below rests on it.
+
+**One error 163 could not see.**  `neomacs-layout-engine`'s
+`OverlayDisplayString::bytes` (`neovm_bridge.rs:2567`) returns
+`Option<&'static [u8]>` out of `self.string`, and it is a 21st E0515.  163's
+number was rustc's per-target count for `neovm-core`, and a downstream crate is
+not compiled while its dependency is failing, so a whole-workspace figure was
+never available to it.  The lesson generalises past this seam: **a per-crate
+error count taken from a failing build is a LOWER BOUND on the workspace.**
+
+### 3. The 13 temporaries, and the two that were worth more than a `let`
+
+Each takes a borrow of a `Value` that only ever existed as a temporary --
+`buf.file_name_value().as_lisp_string()`, `entry.cons_car().as_lisp_string()`,
+`value?.as_lisp_string()?` -- so under `&'static` they compile because the lie
+outlives everything, and under an honest signature they are E0716 or E0515 on a
+value dropped at the end of its own statement.
+
+They landed FIRST, in their own commit, because every one of those edits is
+correct under BOTH signatures and none of them changes behaviour.  That keeps
+the signature commit down to a diff a reviewer can hold in their head, which is
+the whole reason this entry is four commits and not one.
+
+Two are worth more than a `let`.  `Buffer::file_name_lisp_string` and
+`auto_save_file_name_lisp_string` (`buffer/buffer.rs:2571/2600`) -- the two
+accessors 163 §6(a) had already elided to `&self` -- were reading
+`self.file_name_value()`, a COPY of the slot.  They index the slot itself now,
+so the borrow is anchored in the buffer's own storage and its lifetime says so.
+Two more delete the temporary entirely by calling those accessors instead of
+re-deriving them (`fileio.rs:4040`, `:4146`).
+
+One has a shape rather than a statement to fix.  `hashtab.rs`'s local
+`UninternTarget` held `Cow<'static, LispString>` over a borrow of `args[0]`, so
+it demanded `'static` from a subr argument; it takes the ARGUMENT's lifetime
+now, and the symbol arm's genuine process-lifetime atom coerces into it.
+
+### 4. The eight escapes, each with a decision and a reason
+
+| site | decision | reason |
+|---|---|---|
+| `emacs_core/buffer.rs:449` | restructured | a closure's by-value parameter outlived by its own borrow; bind the slot value first |
+| `fontset.rs:857` | restructured | same shape; move `parse_font_name_string` INSIDE the closure, since it returns owned data anyway |
+| `fontset.rs:866` | restructured | same |
+| `neovm_bridge.rs:2567` | restructured | `OverlayDisplayString::bytes` takes `&self` |
+| `builtins/mod.rs:508` `expect_string_comparison_operand` | returns the OPERAND, not a borrow of it | §5 |
+| `intern.rs:1166` `resolve_sym_lisp_name` | DELETED | §5 |
+| `value.rs:2012` `lisp_string_in` | re-anchored to the heap | §6 |
+| `value.rs:2128` `closure_docstring` | re-anchored to `&self` | §6 |
+
+Four of the eight cost a three-line edit each, exactly as 163 predicted when it
+called them "the identical shape, `.and_then(|value| value.as_lisp_string())`
+-- a closure whose borrow outlives its by-value parameter, which is exactly the
+shape of the `FromValue` impl §6(a) deleted".
+
+### 5. 163 filed one of these as legitimate, and the function's own doc comment disagreed with it four lines above
+
+163 §10 left `expect_string_comparison_operand` returning `&'static`
+"legitimately, for its symbol arm -- `resolve_sym_lisp_name` really is static,
+symbol names are never reclaimed -- but not for its string arm".
+
+Half of that is wrong, and the wrong half was already written down.
+`resolve_sym_lisp_name` had two arms.  The first, `resolve_sym_name_value`, is
+the name OBJECT the symbol was created from -- and the doc comment four lines
+above the function said, in these words:
+
+> Do NOT cache the result. Unlike the process-lifetime atom from
+> `resolve_sym_lisp_string`, a name object is an ordinary GC-managed heap
+> string owned by one heap.
+
+Only the fallback arm is the atom.  The signature answered `&'static` for BOTH,
+so that instruction was advice a caller could ignore silently -- and an audit
+that reads signatures, which is what a `grep`-driven audit is, reads the half
+that is wrong.
+
+**The type that states the distinction already existed, twice.**
+`LispVisibleSymbolName` (`intern.rs:425`) is documented as "keeping GNU's two
+ownership cases distinct at the type boundary" and as carrying "either a
+process-lifetime atom or the exact rooted Lisp value"; `CompletionText`
+(`minibuffer.rs:1838`) is the same enum in the completion machinery, down to
+the reborrowing accessor.  `resolve_sym_lisp_name` was the flattened sibling
+that threw the distinction away.  Deleted; its five production callers hold the
+view and take `LispVisibleSymbolName::text(&self) -> &LispString` at the point
+of use.
+
+That is GNU's own shape, taken from GNU's source rather than from an argument
+about Rust.  `Fstring_equal` (`src/fns.c:344-353`):
+
+```c
+  if (SYMBOLP (s1))
+    s1 = SYMBOL_NAME (s1);
+  ...
+      || memcmp (SDATA (s1), SDATA (s2), SBYTES (s1)))
+```
+
+What travels between statements is the Lisp OBJECT; `SDATA` is taken at the
+point of use, inside the statement that uses it.  So `StringDesignator` --
+163's own example of "the shape that works", whose doc comment explained at
+length that its `&'static` field "is NOT a claim that the string outlives the
+designator" -- now holds the OPERAND rather than a borrow of it, and
+`expect_string_comparison_operand` returns that.  There is no `'static` left to
+explain, and `text()`'s reborrow from `&self` is the only lifetime the data has
+rather than a convention a private field was protecting.
+
+An existing test pins that this is a refactor and not a change: the designator
+test asserts `std::ptr::eq` against the symbol's own name object
+(`from_value_test.rs:167-186`), so rebuilding the string instead of reusing the
+object still fails.
+
+### 6. Two borrows must be anchored somewhere other than the place, so there is now exactly one launderer, and it is `unsafe`
+
+`as_lisp_string(&self)` anchors its result to the `Value` PLACE.  Two callers
+need a different anchor, and one of them needs a STRONGER one:
+
+* `Value::lisp_string_in` anchors to a shared borrow of the heap.  That is
+  163's own accessor and the entire reason it exists: reaching a collection
+  needs `&mut Context`, which owns the heap, so the borrow cannot coexist with
+  a safepoint.
+* `Value::closure_docstring` anchors to the closure whose
+  `CLOSURE_DOC_STRING` slot the string came out of.  The `doc` local is a copy
+  of the slot and anchors nothing, which is precisely why the safe accessor
+  cannot express it.
+
+Rust has no safe way to say "re-tie this borrow to that", so there is now
+exactly one launderer: `Value::as_lisp_string_reanchored`, private, `unsafe`,
+returning an unbounded `'a`.  Its doc comment enumerates its three call sites
+-- `as_lisp_string` itself is the third, anchored to `&self` -- and says that a
+fourth is an argument to be had rather than an edit to be made.  That is what
+this section buys: one named escape hatch with three justified users instead of
+500 anonymous ones.
+
+**What survives, and why it is allowed to.**  The workspace still contains 16
+`&'static LispString` occurrences, and every one names storage in the
+symbol-name ATOM arena -- `NameAtoms::push` / `get` (`intern.rs:99-131`), whose
+own SAFETY comment reads "The allocation is intentionally leaked and the
+initialized value is never mutated, so the returned reference stays valid for
+the remainder of the process."  Not one of them borrows the mark-sweep heap.
+That is the answer to "delete the `&'static` where you can, and say plainly
+where you cannot": the survivors are few, named, and describing memory that
+really is process-lifetime.
+
+### 7. `expect_lisp_string` needed zero edits, and the reason is the interesting part
+
+The brief asked whether `expect_lisp_string`'s 172 sites follow or are
+separate.  They follow, at a cost of nothing, and the evidence is that **not
+one of the 20 compile errors was an `expect_lisp_string` call site.**
+
+`expect_lisp_string` is six functions (163 §2).  Three return a borrow, and all
+three already elide their output lifetime to their input:
+
+```text
+builtins/mod.rs:485   fn expect_lisp_string(value: &Value)       -> Result<&LispString, Flow>
+search.rs:63          fn expect_lisp_string(val: &Value)         -> Result<&LispString, Flow>
+eval.rs:8899          fn expect_lisp_string(&self, value: Value) -> Result<&LispString, Flow>
+```
+
+The first two are 163 §6(a)'s "stop lying where it is free"; the third is 163's
+`Context` accessor.  The other three, plus `expect_lisp_string_strict`, return
+an OWNED `LispString` (31 sites).
+
+So the caller-visible lifetime was already honest before this entry.  What was
+NOT honest was the derivation: `value.as_lisp_string()` produced `&'static` and
+the elision narrowed it, so the honesty was a coincidence of variance that any
+new helper could drop by writing `'static` again -- which is exactly what
+`resolve_sym_lisp_name` and the deleted `impl FromValue for &'static
+LispString` did.  The source of `'static` is gone now, so the elision is
+load-bearing rather than decorative.  This is the general shape of what the
+entry buys and it is invisible in a diff: the 172 sites did not change, and the
+reason they are correct did.
+
+### 8. Sizing the Tier-1 migration properly: it is 63 sites, not 174
+
+163 recommended "leave `as_lisp_string` in place for leaf code with no
+evaluator, and require `Context::lisp_string` at any site that has one -- that
+is 174 sites, mechanical".  Re-measured here at **160** after 163's own
+landing, and then sharpened, because most of those 160 cannot ever fire:
+
+| class | count | can the `&Context` anchor ever fire? |
+|---|---|---|
+| INLINE -- the borrow dies at the end of its own statement | 85 | no |
+| OWNED -- immediately `.clone()`d or reduced to a scalar | 10 | no |
+| **BOUND -- a name is bound to the borrow** | **63** | yes |
+| of those, live range longer than one line | 59 | yes |
+
+The honest size of the migration that buys anything is therefore **63**, and
+the biggest groups are `builtins/search.rs` 6, `dired.rs` 5, `minibuffer.rs` 5,
+`builtins/misc_pure.rs` 4.  Converting the other 95 would be pure churn: an
+anchor cannot fire across a call that is not there.
+
+Not landed, and the reason is a measurement rather than an opinion.  163's
+`pass5` filter already selected the 28 BOUND sites whose live range spans an
+evaluator call, converted 20, and found the 6 that genuinely crossed one.  The
+remaining ~43 do not span such a call today, so converting them is purely
+preventive -- the anchor fires only when a future edit inserts a Lisp call into
+the live range -- and 163's own hit rate says roughly 30% of conversions need a
+restructure (6 of 20).  That is a real diff on paths this entry cannot
+re-verify inside its budget, against a benefit that is entirely in the future.
+It is a good next job and the number above is what it costs.
+
+### 9. Hypotheses eliminated
+
+* **"They are shipped so the numbers in that entry can be re-measured rather
+  than believed"** (163's `tools/gc-audit/README.md`).  Refuted in §1: as
+  committed, all eight scripts scan `<repo>/tools`, and six of them report a
+  count of zero while exiting 0.  Everything 163 measured was correct; nothing
+  it measured could be re-measured.  Fixed, and re-measured -- the numbers
+  hold.
+* **"`resolve_sym_lisp_name` really is static, symbol names are never
+  reclaimed"** (163 §10).  Half refuted, from that function's own doc comment
+  four lines above it: only the ATOM arm is process-lifetime; the object arm
+  is "an ordinary GC-managed heap string owned by one heap".  §5.
+* **"`expect_lisp_string` (172 sites) has the same shape"** (the brief's item
+  5).  Refuted, at zero cost: its three borrowing definitions already elide to
+  their input, so the honest `as_lisp_string` propagated to all 172 sites with
+  no edit.  What changed is not the sites but the reason they are correct --
+  §7.
+* **"20 compile errors"** (163 §6).  Upheld exactly for `neovm-core`, and it
+  is a LOWER BOUND for the workspace: a 21st waits in
+  `neomacs-layout-engine`, which is not compiled while its dependency is
+  failing.  §2.
+* **"That is 174 sites, mechanical"** (163's Tier-1 recommendation).
+  Re-measured at 160 and then sharpened to **63**: 95 of the 160 are INLINE or
+  OWNED, so anchoring their borrow to `&Context` cannot ever fire.  §8.
+* **The `&self` tightening buys the safepoint property.**  It does not, and
+  163 said so first: it buys the ESCAPE property.  A `Value` local can outlive
+  a safepoint and still be unrooted, so keeping the place alive is not keeping
+  the object alive.  What keeps a subr argument alive is the backtrace frame,
+  which 163 pinned.  This entry does not weaken that claim and does not
+  strengthen it.
+
+### 10. Found and NOT fixed
+
+* **The Tier-1 migration proper -- 63 sites where the `&Context` anchor can
+  fire, 59 of them with a live range longer than one line.**  Sized in §8,
+  with the per-file distribution and 163's measured ~30% restructure rate.
+  This is the next job in this seam and the only one left that changes what
+  the compiler checks.
+* **The 363 borrow sites with no `Context` in scope.**  163's residual,
+  restated with a fresh count.  Each needs a parameter threaded through a call
+  chain and none is known to be wrong.
+* **The compile_fail doctest on `Value::as_lisp_string` is NOT gated.**  The
+  escape property is a compile-time property, so a doctest is the only place
+  it can be pinned -- and `cargo nextest` does not run doctests while the
+  repository's `cargo` wrapper refuses `cargo test` outright ("cargo test is
+  forbidden, use cargo nextest").  The runnable red measurement is
+  `tools/gc-audit/exp_self_lifetime.py`, which now loosens the signature
+  rather than tightening it; with the `'static` restored,
+  `cargo check --workspace --all-targets` goes clean again, which is the
+  measurement in the other direction.  Wiring doctests into the gate is worth
+  someone's afternoon and is not this entry's business.
+* **`insert_lisp_string_with_change_hooks_in_buffer` (`editfns.rs:687`) and
+  `insert_print_lisp_string_with_hooks` (`builtins/misc_eval.rs:1357`) are
+  still latent traps, and this entry does NOT close them.**  163 filed both:
+  each takes `text: &LispString` beside `ctx: &mut Context`, runs
+  `signal_before_text_change` -- arbitrary Lisp -- and reads `text`
+  afterwards.  Worth being exact about why the honest signature does not help,
+  because it is the clearest illustration of what the signature does and does
+  not buy: a caller passing `value.as_lisp_string()?` still compiles, since
+  that borrow is anchored to the caller's own `Value` place and conflicts with
+  nothing.  A caller passing `ctx.expect_lisp_string(v)?` would NOT compile.
+  So the Tier-1 accessor closes this and the `&self` accessor does not, which
+  is §8's argument in one call site.  The fix 163 named -- "a parameter type
+  that cannot be a heap borrow" -- is a by-value `LispString` (every caller
+  today passes a borrow of an owned local, so it costs a move rather than a
+  clone), and the ripple is three call chains deep.
+* **`try_resolve_sym` / `try_resolve_sym_lisp_string` (`intern.rs:1545/1553`)
+  still have zero callers.**  161's residual, restated by 162 and 163, carried
+  a fourth time.  163's disposition stands: DELETE them rather than wire them
+  up, because they are the defensive range check 161 §6 argued would turn a
+  loud crash into a quiet wrong answer.
+* **`aset_string_replacement`'s coexisting borrows**
+  (`builtins/collections.rs:109`).  163's residual.  NLL still saves it, and
+  the site still has no `Context`, so the `&self` anchor changes nothing here.
+* **The dead-string check's cost is still unmeasured.**  163's residual,
+  unchanged: a null test on a word in the same cache line as the
+  `size`/`size_byte` the caller is about to read, on every `as_lisp_string`.
+  Nobody has run `perf stat` on it, and the discipline is
+  `feedback_no_wall_time_benchmarks`.
+* **The gc-stress corpus is nine probes, not a fuzzer.**  162's residual,
+  carried by 163 and 164.  This entry adds no probe, deliberately: what it
+  changes is a compile-time property, and a runtime probe cannot see it.
+* **`detect_tty_background_mode` still reads `COLORFGBG`** (157's residual,
+  carried by 161, 162 and 163, untouched again).
+
+### 11. Gates
+
+Both suites ran against a `cargo xtask fresh-build --release` reporting
+`+ xtask fresh-build finished successfully (release)` with
+`skip_build=false no_byte_compile=false`, whose pdump (07:57:26, 15,461,439
+bytes) is newer than its binary (07:55:19), and which is oracle-valid by the
+check that catches the stale-`.elc` failure mode:
+`(with-current-buffer "*scratch*" (buffer-string))` answers `""`, not the
+startup message.
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine`:
+  **11078 tests run: 11078 passed, 54 skipped** in 1140.485 s, exit 0.
+  Baseline 11078 + 54 skipped.  This entry adds no test: what it changes is a
+  compile-time property, and §10 says plainly why the one place it can be
+  pinned is not gated.
+* `cargo nextest run -p neovm-oracle-tests`: **38786 tests run: 38786 passed,
+  0 skipped** in 746.769 s, exit 0.  Baseline 38786.  As in 161, 162 and 163,
+  the oracle is green on both sides of the change and always was; recorded
+  plainly so the next entry does not read it as evidence about borrows.
+* `cargo xtask gc-stress --editor target/release/neomacs`: **9/9 probes
+  passed**, exit 0.  Probes 06, 07, 08 and 09 are the string-borrow probes,
+  i.e. the four this change could break.
+* `cargo check --workspace --all-targets`: clean.
+* `cargo fmt --all --check`: clean.
+
+The red measurement, which for this entry is a compile-error count rather than
+a failing test.  `python3 tools/gc-audit/exp_self_lifetime.py` restores the
+`&'static` signature and nothing else:
+
+```text
+error: could not compile `neovm-core` (lib) due to 16 previous errors
+error: could not compile `neovm-core` (lib test) due to 20 previous errors
+```
+
+on the tree as handed over -- and on the tree as it stands, the same patch now
+makes `cargo check --workspace --all-targets` go from clean to CLEAN, exit 0,
+because with the `'static` back every escape typechecks again.  Measured in
+both directions, which is what makes it evidence: the errors are the property,
+and the property is gone the moment the lifetime is.
+
+**The worktree trap 163 recorded is right about the number and wrong about the
+recipe, and it costs a full suite run to find out.**  163 says to copy `lisp/`
+and `leim/`'s 1,730 gitignored generated files, described as "`charprop.el`,
+`cp51932.el`, every `*-loaddefs.el`, every `.elc`".  That description covers
+1,669 of them.  The missing 61 are ordinary generated `.el` files that match
+none of those patterns -- all twenty `uni-*.el`, `lisp/loaddefs.el`,
+`lisp/cus-load.el`, `lisp/finder-inf.el`, `lisp/subdirs.el`,
+`lisp/international/{emoji-labels,eucjp-ms,idna-mapping}.el`, the CEDET
+`*-by.el`/`*-wy.el` grammars, and `lisp/leim/quail/*.el`.  Without them nine
+unrelated window/process tests fail during bootstrap as
+
+```text
+bootstrap: Signal { symbol: SymId(2934 wrong-type-argument),
+                    data: [Symbol(SymId(4580 char-table-p)), String@0x7fffe8d8bac0] }
+```
+
+which looks like a defect in the code under test and is a missing Unicode
+property table.  The reliable recipe is not a pattern list: diff the file
+trees.  Copy every path under `lisp/`, `leim/` and `etc/` that exists in the
+main checkout and not in the worktree, then `touch` the `.elc` forward.
 
 Status: FIXED.
