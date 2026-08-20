@@ -18919,6 +18919,44 @@ rc=0
 * **`detect_tty_background_mode` still reads `COLORFGBG`**, entry 157's own
   recorded residual, untouched.
 
+> **Note added 2026-08-19 by entry 162.**  Five of the eight residuals above are
+> closed; the entry is otherwise unchanged.
+>
+> * `Flow::Throw` and `Flow::ThreadBlocked` -- **CLOSED, and they WERE
+>   defective.**  162 reproduced both directly (`2 tests run: 0 passed, 2
+>   failed` on the pre-fix shape) and gave each a payload struct with a private
+>   `InFlightRoots`, the same mechanism generalized.
+> * `EvalError::Signal` -- **CLOSED, and the reason it was deferred does not
+>   hold.**  "An enum variant cannot carry a private field, so the fix is a
+>   shape change" is true of a *private field* and false of the requirement it
+>   was standing in for: a variant CAN carry a field whose TYPE has no
+>   constructor outside the module, which makes the literal unwritable
+>   everywhere else while leaving all 73 `{ symbol, data, .. }` patterns
+>   compiling untouched.  Only the 23 construction sites moved.
+> * The specpdl `_ => {}` -- **CLOSED**, and GNU is the authority rather than
+>   taste: `mark_specpdl` (`src/eval.c:4374-4377`) carries the comment "While
+>   other loops that scan the specpdl use `default: break;` for simplicity, here
+>   we explicitly list all cases and abort if we find an unexpected value".
+> * `verify_marked_objects_owned` -- **CLOSED by wiring it up**, not by deleting
+>   it: it returns a problem count now and runs in `complete_collection` behind
+>   `NEOVM_GC_VERIFY_MARKED=1`.
+> * The subprocess GC-stress harness -- **CLOSED**: `cargo xtask gc-stress`,
+>   five probes, `ulimit -v` and all.
+>
+> Still open from this list: `try_resolve_sym`'s zero callers,
+> `Value::as_lisp_string`'s `&'static` seam, and `COLORFGBG`.
+>
+> One correction, not a withdrawal.  §5 says "GNU never has to think about
+> this" and credits `mark_stack`'s conservative scan.  GNU is safe here
+> **twice**, and the second way is a deliberate PRECISE root:
+> `mark_one_thread` (`src/thread.c:665-692`) walks the handler chain and marks
+> `handler->tag_or_ch` and `handler->val` by name -- `val` being exactly the
+> in-flight non-local-exit payload.  Our `handlers` root group visits a
+> condition frame's `conditions`, `tag` and `handler` and has no `val`, because
+> our `val` does not live in the condition frame at all; it lives in a Rust
+> `Flow`.  That makes the missing group an outright GNU-parity gap, not merely
+> a consequence of precise collection.
+
 ### 10. Gates
 
 Measured on this branch, all numbers from run logs under `tmp/`.  Both suites
