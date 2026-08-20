@@ -2188,7 +2188,7 @@ fn pty_process_output_does_not_translate_lf_to_crlf_like_gnu() {
     while std::time::Instant::now() < deadline && !output.contains(&b'\n') {
         if let Some(run) = processes.read_process_output_without_decoding(
             pid,
-            ProcessOutputSink::DecodedText,
+            ProcessOutputDestination::to_filter(),
             &crate::emacs_core::coding::CodingSystemManager::new(),
         ) {
             output.extend_from_slice(run.undecoded_bytes());
@@ -11041,6 +11041,83 @@ fn a_process_read_runs_the_coding_systems_post_read_conversion() {
             "((86 105 7879 116 32 78 97 109 32 224 32 7873 10) vietnamese-viqr-unix) ",
             "((86 105 7879 116 32 78 97 109 32 224 32 7873 10) vietnamese-viqr-unix) ",
             "((86 105 7879 116 32 78 97 109 32 224 32 7873 10) vietnamese-viqr-unix))",
+        )
+    );
+}
+
+/// GNU's EOF read is a zero-byte `decode_coding_object` call, and it happens on
+/// the FILTER branch of a PIPE and nowhere else.
+///
+/// `read_process_output` raises `CODING_MODE_LAST_BLOCK` the first time
+/// `emacs_read` returns nothing and falls THROUGH to the decode; the second
+/// time -- and on any read ERROR -- the flag is already up (or `nbytes < 0`)
+/// and it returns without decoding anything (src/process.c:6313-6321).  So the
+/// filter branch runs the coding system's `:post-read-conversion` once more
+/// than there were chunks, with `produced_char` zero, and does not call the
+/// filter for it (`SBYTES (text) > 0`, :6569).
+///
+/// Two things narrow it, and both are rows here because both were measured
+/// under GNU Emacs 31.0.90 running this test's own program:
+///
+/// * `read_and_insert_process_output` -- the branch `fast-read-process-output'
+///   and the default filter take -- `return`s on `!nread` BEFORE deciding
+///   anything (:6464), so the buffer branch has no zero-byte decode at all.
+/// * A pty is not a pipe.  When the child on the far end of a pty exits, Linux
+///   answers the master with `EIO` rather than with a zero-byte read, so
+///   `nbytes < 0` takes the early return and the flag is never raised.  Entry
+///   159 sized this residual as "3 hook calls for 2 chunks" without naming the
+///   connection type; on a pty GNU runs the hook twice, exactly as this port
+///   already did.
+///
+/// Each row is `(FILTER-CHUNKS HOOK-CALLS LAST-CODING-SYSTEM-USED)`.
+#[test]
+fn an_eof_read_decodes_a_zero_byte_last_block_on_the_filter_branch() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defvar pw166-hooks 0)
+             (defun pw166-prc (len) (setq pw166-hooks (1+ pw166-hooks)) len)
+             (define-coding-system 'pw166-hook-utf8
+               "utf-8 whose :post-read-conversion counts the decodes it is run for"
+               :mnemonic ?U :coding-type 'utf-8 :charset-list '(unicode)
+               :post-read-conversion #'pw166-prc)
+             (defun pw166-run (conn filterp script)
+               (setq pw166-hooks 0 last-coding-system-used nil)
+               (let* ((buf (unless filterp (generate-new-buffer " *pw166*")))
+                      (acc nil)
+                      (p (make-process :name "pw166" :buffer buf :sentinel #'ignore
+                                       :connection-type conn
+                                       :coding (cons 'pw166-hook-utf8 'utf-8-unix)
+                                       :filter (when filterp (lambda (_p s) (push s acc)))
+                                       :command (list "{sh}" "-c" script))))
+                 (while (accept-process-output p 1))
+                 (while (process-live-p p) (accept-process-output p 0.05))
+                 (prog1 (list (length acc) pw166-hooks last-coding-system-used)
+                   (when buf (kill-buffer buf)))))
+             (list
+              ;; filter branch, pipe, nothing written: the hook still runs once,
+              ;; on zero characters, and no chunk reaches the filter.
+              (pw166-run 'pipe t "true")
+              ;; filter branch, pipe, one chunk: one hook call for the chunk and
+              ;; one for the last block.
+              (pw166-run 'pipe t "printf abc")
+              ;; the same on a pty: EIO, not a zero-byte read, so no last block.
+              (pw166-run 'pty t "true")
+              ;; the buffer branch has no zero-byte decode either way.
+              (pw166-run 'pipe nil "true")
+              (pw166-run 'pipe nil "printf abc")))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(0 1 pw166-hook-utf8) ",
+            "(1 2 pw166-hook-utf8) ",
+            "(0 0 nil) ",
+            "(0 0 nil) ",
+            "(0 1 pw166-hook-utf8))",
         )
     );
 }
