@@ -2506,7 +2506,7 @@ fn eval_list_form_throws_on_pending_host_input() {
     let result = ev.eval_str("(list 1 2)");
     assert!(matches!(
         result,
-        Err(EvalError::UncaughtThrow { tag, value })
+        Err(EvalError::UncaughtThrow { tag, value, .. })
             if tag == Value::symbol("tag") && value == Value::T
     ));
 

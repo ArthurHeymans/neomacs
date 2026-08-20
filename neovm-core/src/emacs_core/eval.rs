@@ -10457,11 +10457,11 @@ impl Context {
     pub fn eval_str(&mut self, source: &str) -> Result<Value, EvalError> {
         crate::tagged::gc::set_tagged_heap(&mut self.tagged_heap);
         let forms = super::value_reader::read_all(source, &self.obarray).map_err(|e| {
-            EvalError::Signal {
-                symbol: crate::emacs_core::intern::intern("error"),
-                data: vec![Value::string(format!("Read error: {}", e.message))],
-                raw_data: None,
-            }
+            EvalError::signal(
+                crate::emacs_core::intern::intern("error"),
+                vec![Value::string(format!("Read error: {}", e.message))],
+                None,
+            )
         })?;
         if forms.is_empty() {
             return Ok(Value::NIL);
@@ -10929,11 +10929,11 @@ impl Context {
         let forms = match super::value_reader::read_all(source, &self.obarray) {
             Ok(f) => f,
             Err(e) => {
-                return vec![Err(EvalError::Signal {
-                    symbol: intern("error"),
-                    data: vec![Value::string(format!("Read error: {}", e.message))],
-                    raw_data: None,
-                })];
+                return vec![Err(EvalError::signal(
+                    intern("error"),
+                    vec![Value::string(format!("Read error: {}", e.message))],
+                    None,
+                ))];
             }
         };
         // Root every parsed form upfront. The previous version only rooted

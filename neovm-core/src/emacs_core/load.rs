@@ -262,6 +262,7 @@ fn format_eval_error_in_state(eval: &super::eval::Context, err: &EvalError) -> S
             symbol,
             data,
             raw_data,
+            ..
         } => {
             let payload = if let Some(raw) = raw_data {
                 crate::emacs_core::error::print_value_in_state(eval, raw)
@@ -272,7 +273,7 @@ fn format_eval_error_in_state(eval: &super::eval::Context, err: &EvalError) -> S
             };
             format!("({} {})", resolve_sym(*symbol), payload)
         }
-        EvalError::UncaughtThrow { tag, value } => format!(
+        EvalError::UncaughtThrow { tag, value, .. } => format!(
             "(throw {} {})",
             crate::emacs_core::error::print_value_in_state(eval, tag),
             crate::emacs_core::error::print_value_in_state(eval, value),
@@ -296,6 +297,7 @@ fn format_load_form_error(err: &EvalError) -> String {
             symbol,
             data,
             raw_data,
+            ..
         } => {
             let payload = if let Some(raw) = raw_data {
                 format_value_for_error(raw)
@@ -402,31 +404,29 @@ fn read_error_for_load(
         // GNU `end_of_file_error` takes the datum from the STREAM
         // (`src/lread.c:2121-2132`); the readevalloop that noticed the
         // truncation has no say in it.
-        super::value_reader::ReadErrorKind::EndOfFile => EvalError::Signal {
-            symbol: intern("end-of-file"),
-            data: source.error_datum().into_iter().collect(),
-            raw_data: None,
-        },
-        super::value_reader::ReadErrorKind::Error => EvalError::Signal {
-            symbol: intern("error"),
-            data: vec![Value::string(e.message)],
-            raw_data: None,
-        },
-        super::value_reader::ReadErrorKind::InvalidReadSyntax => EvalError::Signal {
-            symbol: intern("error"),
-            data: vec![Value::string(format!(
+        super::value_reader::ReadErrorKind::EndOfFile => EvalError::signal(
+            intern("end-of-file"),
+            source.error_datum().into_iter().collect(),
+            None,
+        ),
+        super::value_reader::ReadErrorKind::Error => {
+            EvalError::signal(intern("error"), vec![Value::string(e.message)], None)
+        }
+        super::value_reader::ReadErrorKind::InvalidReadSyntax => EvalError::signal(
+            intern("error"),
+            vec![Value::string(format!(
                 "Read error in {}: {} at position {}",
                 path.display(),
                 e.message,
                 e.position
             ))],
-            raw_data: None,
-        },
-        super::value_reader::ReadErrorKind::Signal => EvalError::Signal {
-            symbol: intern(e.signal_symbol.as_deref().unwrap_or("error")),
-            data: e.signal_data,
-            raw_data: None,
-        },
+            None,
+        ),
+        super::value_reader::ReadErrorKind::Signal => EvalError::signal(
+            intern(e.signal_symbol.as_deref().unwrap_or("error")),
+            e.signal_data,
+            None,
+        ),
     }
 }
 
@@ -467,11 +467,11 @@ fn cached_form_requires_eager_replay(form: Value) -> bool {
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 fn generated_defalias(eval: &mut super::eval::Context, args: &[Value]) -> Result<Value, EvalError> {
     if !(2..=3).contains(&args.len()) {
-        return Err(EvalError::Signal {
-            symbol: intern("wrong-number-of-arguments"),
-            data: vec![Value::symbol("defalias"), Value::fixnum(args.len() as i64)],
-            raw_data: None,
-        });
+        return Err(EvalError::signal(
+            intern("wrong-number-of-arguments"),
+            vec![Value::symbol("defalias"), Value::fixnum(args.len() as i64)],
+            None,
+        ));
     }
     let values = eval_generated_form_args(eval, args)?;
     let result = eval
@@ -1391,10 +1391,12 @@ fn read_symbol_shorthands_value_text(
 ) -> Result<Option<ReadSymbolShorthands>, EvalError> {
     let Some((value, _)) =
         super::value_reader::read_one_with_source_multibyte(text, source_multibyte, 0, obarray)
-            .map_err(|err| EvalError::Signal {
-                symbol: intern("invalid-read-syntax"),
-                data: vec![Value::string(err.message)],
-                raw_data: None,
+            .map_err(|err| {
+                EvalError::signal(
+                    intern("invalid-read-syntax"),
+                    vec![Value::string(err.message)],
+                    None,
+                )
             })?
     else {
         return Ok(None);
@@ -2152,14 +2154,14 @@ pub(crate) fn load_file_with_requested_and_found_options(
     options: LoadOptions,
 ) -> Result<Value, EvalError> {
     if is_unsupported_compiled_path(path) {
-        return Err(EvalError::Signal {
-            symbol: intern("error"),
-            data: vec![Value::string(format!(
+        return Err(EvalError::signal(
+            intern("error"),
+            vec![Value::string(format!(
                 "Loading compressed compiled Elisp artifacts (.elc.gz) is unsupported in neomacs: {}",
                 path.display()
             ))],
-            raw_data: None,
-        });
+            None,
+        ));
     }
 
     // GNU Emacs only signals `Recursive load` once the same found filename is
@@ -2180,14 +2182,14 @@ pub(crate) fn load_file_with_requested_and_found_options(
                 .map(Value::heap_string)
                 .collect(),
         );
-        return Err(EvalError::Signal {
-            symbol: intern("error"),
-            data: vec![
+        return Err(EvalError::signal(
+            intern("error"),
+            vec![
                 Value::string("Recursive load"),
                 Value::cons(found_value, in_progress),
             ],
-            raw_data: None,
-        });
+            None,
+        ));
     }
     // Both pieces of load bookkeeping ride the specpdl, mirroring GNU
     // lread.c Fload (`record_unwind_protect (record_load_unwind, ...)` +
@@ -2249,14 +2251,16 @@ fn load_file_body(
 
     // Read raw bytes and decode (with Emacs-extended UTF-8 for .el,
     // or header-skipping for .elc).
-    let raw_bytes = std::fs::read(path).map_err(|e| EvalError::Signal {
-        symbol: intern("file-error"),
-        data: vec![Value::string(format!(
-            "Cannot read file: {}: {}",
-            path.display(),
-            e
-        ))],
-        raw_data: None,
+    let raw_bytes = std::fs::read(path).map_err(|e| {
+        EvalError::signal(
+            intern("file-error"),
+            vec![Value::string(format!(
+                "Cannot read file: {}: {}",
+                path.display(),
+                e
+            ))],
+            None,
+        )
     })?;
 
     // For .elc: skip the ;ELC magic header and detect lexical-binding from raw bytes.
@@ -3560,13 +3564,15 @@ fn collect_source_surface_from_paths(
     let mut state = SourceFileSurfaceState::default();
 
     for path in paths {
-        let bytes = fs::read(path).map_err(|err| EvalError::Signal {
-            symbol: intern("error"),
-            data: vec![Value::string(format!(
-                "{error_context}: failed reading {}: {err}",
-                path.display()
-            ))],
-            raw_data: None,
+        let bytes = fs::read(path).map_err(|err| {
+            EvalError::signal(
+                intern("error"),
+                vec![Value::string(format!(
+                    "{error_context}: failed reading {}: {err}",
+                    path.display()
+                ))],
+                None,
+            )
         })?;
         // Not GNU's `load`: this scans fixed files out of our own `lisp/`
         // tree into a THROWAWAY obarray to work out what the bootstrap must
@@ -3579,13 +3585,15 @@ fn collect_source_surface_from_paths(
         );
         let obarray = crate::emacs_core::symbol::Obarray::new();
         let forms = crate::emacs_core::value_reader::read_all_lisp_source(&source, &obarray)
-            .map_err(|err| EvalError::Signal {
-                symbol: intern("error"),
-                data: vec![Value::string(format!(
-                    "{error_context}: failed parsing {}: {err}",
-                    path.display()
-                ))],
-                raw_data: None,
+            .map_err(|err| {
+                EvalError::signal(
+                    intern("error"),
+                    vec![Value::string(format!(
+                        "{error_context}: failed parsing {}: {err}",
+                        path.display()
+                    ))],
+                    None,
+                )
             })?;
 
         for form in forms {
@@ -3747,13 +3755,15 @@ fn collect_loaddefs_surface_from_paths(
     let mut state = LoaddefsSurfaceState::default();
 
     for path in paths {
-        let bytes = fs::read(path).map_err(|err| EvalError::Signal {
-            symbol: intern("error"),
-            data: vec![Value::string(format!(
-                "{error_context}: failed reading {}: {err}",
-                path.display()
-            ))],
-            raw_data: None,
+        let bytes = fs::read(path).map_err(|err| {
+            EvalError::signal(
+                intern("error"),
+                vec![Value::string(format!(
+                    "{error_context}: failed reading {}: {err}",
+                    path.display()
+                ))],
+                None,
+            )
         })?;
         // Not GNU's `load`: this scans fixed files out of our own `lisp/`
         // tree into a THROWAWAY obarray to work out what the bootstrap must
@@ -3766,13 +3776,15 @@ fn collect_loaddefs_surface_from_paths(
         );
         let obarray = crate::emacs_core::symbol::Obarray::new();
         let forms = crate::emacs_core::value_reader::read_all_lisp_source(&source, &obarray)
-            .map_err(|err| EvalError::Signal {
-                symbol: intern("error"),
-                data: vec![Value::string(format!(
-                    "{error_context}: failed parsing {}: {err}",
-                    path.display()
-                ))],
-                raw_data: None,
+            .map_err(|err| {
+                EvalError::signal(
+                    intern("error"),
+                    vec![Value::string(format!(
+                        "{error_context}: failed parsing {}: {err}",
+                        path.display()
+                    ))],
+                    None,
+                )
             })?;
 
         for form in &forms {
@@ -4137,23 +4149,27 @@ pub(crate) fn apply_ldefs_boot_autoloads_for_names(
 ) -> Result<(), EvalError> {
     let project_root = runtime_project_root();
     let ldefs_path = project_root.join("lisp/ldefs-boot.el");
-    let bytes = fs::read(&ldefs_path).map_err(|err| EvalError::Signal {
-        symbol: intern("error"),
-        data: vec![Value::string(format!(
-            "ldefs-boot autoload restore: failed reading {}: {err}",
-            ldefs_path.display()
-        ))],
-        raw_data: None,
+    let bytes = fs::read(&ldefs_path).map_err(|err| {
+        EvalError::signal(
+            intern("error"),
+            vec![Value::string(format!(
+                "ldefs-boot autoload restore: failed reading {}: {err}",
+                ldefs_path.display()
+            ))],
+            None,
+        )
     })?;
     let source = decode_emacs_utf8_source_lisp(&bytes, eval.eol_conversion());
     let forms = crate::emacs_core::value_reader::read_all_lisp_source(&source, &eval.obarray)
-        .map_err(|err| EvalError::Signal {
-            symbol: intern("error"),
-            data: vec![Value::string(format!(
-                "ldefs-boot autoload restore: failed parsing {}: {err}",
-                ldefs_path.display()
-            ))],
-            raw_data: None,
+        .map_err(|err| {
+            EvalError::signal(
+                intern("error"),
+                vec![Value::string(format!(
+                    "ldefs-boot autoload restore: failed parsing {}: {err}",
+                    ldefs_path.display()
+                ))],
+                None,
+            )
         })?;
 
     // Phase: parsed Lisp forms in `forms` (a Vec<Value>) live on
@@ -5499,11 +5515,7 @@ fn runtime_image_load_error(
     );
     tracing::error!("{message}");
     let payload = Value::symbol(intern(&message));
-    EvalError::Signal {
-        symbol: intern("error"),
-        data: vec![payload],
-        raw_data: Some(payload),
-    }
+    EvalError::signal(intern("error"), vec![payload], Some(payload))
 }
 
 pub fn maybe_run_after_pdump_load_hook(eval: &mut super::eval::Context) -> bool {

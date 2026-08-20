@@ -407,3 +407,64 @@ fn in_flight_thread_blocked_payload_survives_a_collection() {
         "(\"remaining form\")"
     );
 }
+
+/// The boundary type has the same problem the flow did. `map_flow` converts a
+/// `Flow::Signal` into the PUBLIC `EvalError::Signal`, and before this entry
+/// that conversion moved `data`/`raw_data` out of the pinned `SignalData` and
+/// dropped the pin — so any boundary holding an `EvalError` while more Lisp
+/// runs (every `load_file` caller, the worker task boundary, the batch
+/// `--eval` reporter) was holding values the collector could not see.
+///
+/// 161 recorded this as needing a shape change across 73 use sites. It does
+/// not: an enum variant cannot have a private field, but it CAN have a field
+/// whose type has no constructor outside the module, which makes the literal
+/// unwritable and leaves every `{ symbol, data, .. }` pattern untouched.
+#[test]
+fn eval_error_signal_payload_survives_a_collection() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    // `map_flow` consumes the `Flow`, so the flow's own pin is gone by the
+    // time this returns: only the `EvalError`'s pin can keep the payload.
+    let err = crate::emacs_core::error::map_flow(crate::emacs_core::error::signal_with_data(
+        LispCondition::Error,
+        Value::list(vec![Value::string("boundary datum")]),
+    ));
+
+    eval.gc_collect();
+
+    let EvalError::Signal { raw_data, .. } = &err else {
+        panic!("map_flow of a signal is an EvalError::Signal");
+    };
+    let raw = raw_data.expect("signal_with_data records raw data");
+    assert!(
+        !raw.cons_car().is_dead(),
+        "the EvalError payload was collected while the error was still in \
+         flight at a boundary (its cons is on the free list)"
+    );
+    assert_eq!(print_value_with_eval(&eval, &raw), "(\"boundary datum\")");
+}
+
+/// The throw half of the same boundary.
+#[test]
+fn eval_error_uncaught_throw_payload_survives_a_collection() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    let err = crate::emacs_core::error::map_flow(Flow::throw(
+        Value::symbol("neovm-boundary-throw"),
+        Value::list(vec![Value::string("boundary thrown")]),
+    ));
+
+    eval.gc_collect();
+
+    let EvalError::UncaughtThrow { value, .. } = &err else {
+        panic!("map_flow of a throw is an EvalError::UncaughtThrow");
+    };
+    assert!(
+        !value.cons_car().is_dead(),
+        "the EvalError uncaught-throw payload was collected while the error \
+         was still in flight at a boundary"
+    );
+    assert_eq!(print_value_with_eval(&eval, value), "(\"boundary thrown\")");
+}

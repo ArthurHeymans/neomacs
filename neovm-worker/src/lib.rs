@@ -1012,6 +1012,7 @@ fn eval_error_to_task_error(err: EvalError) -> TaskError {
             symbol,
             data,
             raw_data,
+            ..
         } => {
             let payload = if let Some(raw) = raw_data {
                 emacs_core::print_value(&raw)
@@ -1030,7 +1031,7 @@ fn eval_error_to_task_error(err: EvalError) -> TaskError {
                 data: Some(payload),
             })
         }
-        EvalError::UncaughtThrow { tag, value } => TaskError::Failed(Signal {
+        EvalError::UncaughtThrow { tag, value, .. } => TaskError::Failed(Signal {
             symbol: "no-catch".to_string(),
             data: Some(format!(
                 "({} {})",
