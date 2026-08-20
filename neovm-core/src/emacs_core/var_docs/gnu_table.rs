@@ -35,6 +35,9 @@ from happening repeatedly and making Emacs nonfunctional."#),
     (r#"after-delete-frame-functions"#, r#"Functions run after deleting a frame.
 The functions are run with one arg, the frame that was deleted and
 which is now dead."#),
+    (r#"after-delete-frame-select-mru-frame"#, r#"Non-nil means `delete-frame' selects most recently used frame.
+If this is nil, `delete-frame' will select the oldest visible frame on
+the same terminal."#),
     (r#"after-init-time"#, r#"Value of `current-time' after loading the init files.
 This is nil during initialization."#),
     (r#"after-insert-file-functions"#, r#"A list of functions to be called at the end of `insert-file-contents'.
@@ -657,6 +660,12 @@ Maximum length of the history list is determined by the value
 of `history-length', which see."#),
     (r#"command-line-args"#, r#"Args passed by shell to Emacs, as a list of strings.
 Many arguments are deleted from the list as they are processed."#),
+    (r#"command-line-max-length"#, r#"Maximum length of a command and its arguments on this system.
+This is measured in characters.
+Used by `multiple-command-partition-arguments'.  Other code calls that
+function for cases in which it's known to be safe to run the command
+multiple times on subsequent partitions of the list of arguments.
+(In a shell script, you might use the `xargs' utility.)"#),
     (r#"comment-end-can-be-escaped"#, r#"Non-nil means an escaped ender inside a comment doesn't end the comment."#),
     (r#"comment-use-syntax-ppss"#, r#"Non-nil means `forward-comment' can use `syntax-ppss' internally."#),
     (r#"comp--#$"#, "Special value which will print as \"#$\"."),
@@ -1585,7 +1594,10 @@ EMACS_FONT_LOG is set at startup, it defaults to nil."#),
     (r#"font-slant-table"#, r#" Vector of font slant symbols vs the corresponding numeric values.
 See `font-weight-table' for the format of the vector.
 This variable cannot be set; trying to do so will signal an error."#),
-    (r#"font-use-system-font"#, r#"SKIP: real doc in xsettings.c."#),
+    (r#"font-use-system-font"#, r#"Non-nil means to apply the system defined font dynamically.
+When this is non-nil and the system defined fixed width font changes, we
+update frames dynamically.
+If this variable is nil, Emacs ignores system font changes."#),
     (r#"font-weight-table"#, r#" Vector of valid font weight values.
 Each element has the form:
     [NUMERIC-VALUE SYMBOLIC-NAME ALIAS-NAME ...]
@@ -2224,6 +2236,9 @@ see `kill-emacs-query-functions' instead.
 
 Before Emacs 24.1, the hook was not run in batch mode, i.e., if
 `noninteractive' was non-nil."#),
+    (r#"kill-emacs-on-sigint"#, r#"If non-nil, a SIGINT event causes Emacs to exit.
+If nil, a SIGINT event causes a `quit` signal instead.
+This is effective only in `noninteractive' sessions."#),
     (r#"large-hscroll-threshold"#, r#"Horizontal scroll of truncated lines above which to use redisplay shortcuts.
 
 The value should be a positive integer.
@@ -2829,6 +2844,11 @@ the system."#),
 Minibuffer-only frames don't count, but iconified frames do.
 This variable is not guaranteed to be accurate except while processing
 `frame-title-format' and `icon-title-format'."#),
+    (r#"multiple-terminals-merge-keyboards"#, r#"If non-nil, treat different terminals' keyboards as less isolated.
+If this option is non-nil, Emacs will not enter single-keyboard mode
+when entering a recursive edit.  It will still enter single-keyboard
+mode in certain other cases where doing so is necessary for the
+operation to work at all."#),
     (r#"mwheel-coalesce-scroll-events"#, r#"Non-nil means send a wheel event only for scrolling at least one screen line.
 Otherwise, a wheel event will be sent every time the mouse wheel is
 moved."#),
@@ -2883,7 +2903,6 @@ or a cons of coding systems which are used as above.
 
 See also the function `find-operation-coding-system'."#),
     (r#"next-screen-context-lines"#, r#"Number of lines of continuity when scrolling by screenfuls."#),
-    (r#"next-selection-coding-system"#, r#"SKIP: real doc in select.el."#),
     (r#"no-redraw-on-reenter"#, r#"Non-nil means no need to redraw entire frame after suspending.
 A non-nil value is useful if the terminal can automatically preserve
 Emacs's frame display when you reenter Emacs.
@@ -3485,8 +3504,26 @@ function should take care that the buffer is not modified while
 the coding system is being selected.
 
 The default value is `select-safe-coding-system' (which see)."#),
-    (r#"selection-coding-system"#, r#"SKIP: real doc in select.el."#),
-    (r#"selection-converter-alist"#, r#"SKIP: real doc in xselect.c."#),
+    (r#"selection-converter-alist"#, r#"An alist associating X Windows selection-types with functions.
+These functions are called to convert the selection, with three args:
+the name of the selection (typically `PRIMARY', `SECONDARY', or
+`CLIPBOARD'); a desired type to which the selection should be
+converted; and the local selection value (whatever was given to
+`x-own-selection-internal').
+
+On X Windows, the function can also be a cons of (PREDICATE
+. FUNCTION), where PREDICATE determines whether or not the selection
+type will appear in the list of selection types available to other
+programs, and FUNCTION is the function which is actually called.
+PREDICATE is called with the same arguments as FUNCTION, and should
+return a non-nil value if the data type is to appear in that list.
+
+The function should return the value to send to the X server
+(typically a string).  A return value of nil
+means that the conversion could not be done.
+A return value which is the symbol `NULL'
+means that a side-effect was executed,
+and there is no meaningful selection value."#),
     (r#"selection-inhibit-update-commands"#, r#"List of commands which should not update the selection.
 Normally, if `select-active-regions' is non-nil and the mark remains
 active after a command (i.e. the mark was not deactivated), the Emacs
@@ -3561,6 +3598,25 @@ returns non-nil."#),
     (r#"source-directory"#, r#"Directory in which Emacs sources were found when Emacs was built.
 You cannot count on them to still be there!"#),
     (r#"special-event-map"#, r#"Keymap defining bindings for special events to execute at low level."#),
+    (r#"special-mirror-table"#, r#"Char-table used to mirror special characters.
+
+This table is used to mirror special characters (truncation and
+continuation) under certain conditions.  For example, if a user modifies
+the display table to use a different continuation character like this:
+
+(set-display-table-slot standard-display-table 'wrap #x21A9)
+
+then, using this table, this character is mirrored accordingly when
+displaying R2L text.  The same applies to the truncation character which
+is mirrored depending if it appears on the right or on the left hand
+side of a window.
+
+This table comes pre-populated with some Unicode arrow chars but you can
+customize it by adding a character and its mirror both way like in the
+following example with the Pilcrow sign:
+
+(aset special-mirror-table #xB6 #x204B)
+(aset special-mirror-table #x204B #xB6)"#),
     (r#"standard-display-table"#, r#"Display table to use for buffers that specify none.
 It is also used for standard output and error streams.
 See `buffer-display-table' for more information."#),
@@ -3988,8 +4044,12 @@ This applies to commands from menus and tool bar buttons even when
 they are initiated from the keyboard.  If `use-dialog-box' is nil,
 that disables the use of a file dialog, regardless of the value of
 this variable."#),
-    (r#"use-short-answers"#, r#"Non-nil means `yes-or-no-p' uses shorter answers "y" or "n".
+    (r#"use-short-answers"#, r#"Non-nil means `yes-or-no-p' accepts single-key answers "y" or "n".
 When non-nil, `yes-or-no-p' will use `y-or-n-p' to read the answer.
+This means the user will be able to press just one key to answer, whereas
+by default the user needs to type the full "yes" or "no" response
+and then press RET.
+
 We recommend against setting this variable non-nil, because `yes-or-no-p'
 is intended to be used when users are expected not to respond too
 quickly, but to take their time and perhaps think about the answer.
@@ -4034,6 +4094,8 @@ bigger, or it may make it blink, or it may do nothing at all."#),
 A value of nil means to show the text pointer.  Other options are
 `arrow', `text', `hand', `vdrag', `hdrag', `nhdrag', `modeline', and
 `hourglass'."#),
+    (r#"w32--terminal-is-conhost"#, r#"Non-nil means Emacs text-mode terminal is MS-Windows ConHost.
+If nil, Emacs is displaying text-mode frames on the Windows Terminal."#),
     (r#"w32-add-wrapped-menu-bar-lines"#, r#"Non-nil means frame resizing accounts for wrapped menu bar lines.
 A value of nil means frame resizing does not add the height of wrapped
 menu bar lines when sending a frame resize request to the Windows API.
@@ -4398,10 +4460,10 @@ for displaying the new window from the window to split.  Deleting and
 resizing a window preferably resizes one adjacent window only.
 
 If this variable is t, splitting a window tries to get the space
-proportionally from all windows in the same combination.  This also
-allows splitting a window that is otherwise too small or of fixed size.
-Resizing and deleting a window proportionally resize all windows in the
-same combination.
+proportionally from all windows in the same combination.  This means
+that one can also split a window that is otherwise too small or of fixed
+size.  Resizing and deleting a window then proportionally resizes all
+windows in the same combination.
 
 Other values are reserved for future use.
 
@@ -4733,7 +4795,12 @@ not bypass window manager focus stealing prevention):
 
   - The symbol `raise-and-focus', which means to raise the window and
     focus it manually."#),
-    (r#"x-alt-keysym"#, r#"SKIP: real doc in xterm.c."#),
+    (r#"x-alt-keysym"#, r#"Which modifier value Emacs reports when Alt is depressed.
+This should be one of the symbols `ctrl', `alt', `hyper', `meta', or
+`super', representing a modifier to be reported for key events with the
+Alt modifier (e.g. the keysym Alt_L or Alt_R, if the keyboard features a
+dedicated key for Meta) depressed, with nil or any other value
+equivalent to `alt'."#),
     (r#"x-auto-preserve-selections"#, r#"Whether or not to transfer selection ownership when deleting a frame.
 When non-nil, deleting a frame that is currently the owner of a
 selection will cause its ownership to be transferred to another frame
@@ -4744,8 +4811,12 @@ selections whose names are contained within."#),
     (r#"x-bitmap-file-path"#, r#"List of directories to search for window system bitmap files."#),
     (r#"x-color-cache-bucket-size"#, r#"Max number of buckets allowed per display in the internal color cache.
 Values less than 1 mean 128.  This option is for debugging only."#),
-    (r#"x-ctrl-keysym"#, r#"SKIP: real doc in xterm.c."#),
-    (r#"x-cursor-fore-pixel"#, r#"SKIP: real doc in xfns.c."#),
+    (r#"x-ctrl-keysym"#, r#"Which modifier value Emacs reports when Ctrl is depressed.
+This should be one of the symbols `ctrl', `alt', `hyper', `meta', or
+`super', representing a modifier to be reported for key events with the
+Ctrl modifier (i.e. the keysym Ctrl_L or Ctrl_R) depressed, with nil or
+any other value equivalent to `ctrl'."#),
+    (r#"x-cursor-fore-pixel"#, r#"A string indicating the foreground color of the cursor box."#),
     (r#"x-detect-server-trust"#, r#"If non-nil, Emacs should detect whether or not it is trusted by X.
 
 If non-nil, Emacs will make an X request at connection startup that is
@@ -4838,17 +4909,15 @@ state.
 
 Set this variable only if your window manager cannot handle the
 transition between the various maximization states."#),
-    (r#"x-gtk-file-dialog-help-text"#, r#"SKIP: real doc in xfns.c."#),
+    (r#"x-gtk-file-dialog-help-text"#, r#"If non-nil, the GTK file chooser will show additional help text.
+If more space for files in the file chooser dialog is wanted, set this to nil
+to turn the additional text off."#),
     (r#"x-gtk-resize-child-frames"#, r#"If non-nil, resize child frames specially with GTK builds.
 If this is nil, resize child frames like any other frames.  This is the
 default and usually works with most desktops.  Some desktop environments
 (GNOME shell in particular when using the mutter window manager),
 however, may refuse to resize a child frame when Emacs is built with
 GTK3.  For those environments, the two settings below are provided.
-
-If this equals the symbol `hide', Emacs temporarily hides the child
-frame during resizing.  This approach seems to work reliably, may
-however induce some flicker when the frame is made visible again.
 
 If this equals the symbol `resize-mode', Emacs uses GTK's resize mode to
 always trigger an immediate resize of the child frame.  This method is
@@ -4858,18 +4927,29 @@ avoids, however, the unpleasant flicker induced by the hiding approach.
 
 This variable is considered a temporary workaround and will be hopefully
 eliminated in future versions of Emacs."#),
-    (r#"x-gtk-show-hidden-files"#, r#"SKIP: real doc in xfns.c."#),
+    (r#"x-gtk-show-hidden-files"#, r#"If non-nil, the GTK file chooser will by default show hidden files.
+Note that this is just the default, there is a toggle button on the file
+chooser to show or not show hidden files on a case by case basis."#),
     (r#"x-gtk-use-native-input"#, r#"Non-nil means to use GTK for input method support.
 This provides better support for some modern input methods, and is
 only effective when Emacs is built with GTK."#),
-    (r#"x-gtk-use-old-file-dialog"#, r#"SKIP: real doc in xfns.c."#),
+    (r#"x-gtk-use-old-file-dialog"#, r#"Non-nil means prompt with the old GTK file selection dialog.
+If nil or if the file selection dialog is not available, the new GTK file
+chooser is used instead.  To turn off all file dialogs set the
+variable `use-file-dialog'."#),
     (r#"x-gtk-use-window-move"#, r#"Non-nil means rely on gtk_window_move to set frame positions.
 If this variable is t (the default), the GTK build uses the function
 gtk_window_move to set or store frame positions and disables some time
 consuming frame position adjustments.  In newer versions of GTK, Emacs
 always uses gtk_window_move and ignores the value of this variable."#),
-    (r#"x-hourglass-pointer-shape"#, r#"SKIP: real text in xfns.c."#),
-    (r#"x-hyper-keysym"#, r#"SKIP: real doc in xterm.c."#),
+    (r#"x-hourglass-pointer-shape"#, r#"The shape of the pointer when Emacs is busy.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
+    (r#"x-hyper-keysym"#, r#"Which modifier value Emacs reports when Hyper is depressed.
+This should be one of the symbols `ctrl', `alt', `hyper', `meta', or
+`super', representing a modifier to be reported for key events with the
+Hyper modifier (i.e. the keysym Hyper_L or Hyper_R) depressed, with nil
+or any other value equivalent to `hyper'."#),
     (r#"x-input-coding-function"#, r#"Function used to determine the coding system used by input methods.
 It should accept a single argument, a string describing the locale of
 the input method, and return a coding system that can decode keyboard
@@ -4900,9 +4980,17 @@ frame placement via frame parameters, `set-frame-position', and
 or when a Lisp program explicitly clears the selection.)
 The functions are called with one argument, the selection type
 (a symbol, typically `PRIMARY', `SECONDARY', or `CLIPBOARD')."#),
-    (r#"x-max-tooltip-size"#, r#"SKIP: real doc in xfns.c."#),
-    (r#"x-meta-keysym"#, r#"SKIP: real doc in xterm.c."#),
-    (r#"x-mode-pointer-shape"#, r#"SKIP: real doc in xfns.c."#),
+    (r#"x-max-tooltip-size"#, r#"Maximum size for tooltips.
+Value is a pair (COLUMNS . ROWS).  Text larger than this is clipped."#),
+    (r#"x-meta-keysym"#, r#"Which modifier value Emacs reports when Meta is depressed.
+This should be one of the symbols `ctrl', `alt', `hyper', `meta', or
+`super', representing a modifier to be reported for key events with the
+Meta modifier (e.g. the keysym Alt_L or Alt_R, when the keyboard does
+not feature a dedicated key for Meta) depressed, with nil or any other
+value equivalent to `meta'."#),
+    (r#"x-mode-pointer-shape"#, r#"The shape of the pointer when over the mode line.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
     (r#"x-mouse-click-focus-ignore-position"#, r#"Non-nil means that a mouse click to focus a frame does not move point.
 This variable is used only when the window manager requires that you
 click on a frame to select it (give it focus).  In that case, a value
@@ -4918,10 +5006,21 @@ you, try increasing the value of
 This variable only takes effect if
 `x-mouse-click-focus-ignore-position' is non-nil, and should be
 adjusted if the default value does not work for whatever reason."#),
-    (r#"x-no-window-manager"#, r#"SKIP: real doc in xfns.c."#),
-    (r#"x-nontext-pointer-shape"#, r#"SKIP: real doc in xfns.c."#),
-    (r#"x-pixel-size-width-font-regexp"#, r#"SKIP: real doc in xfns.c."#),
-    (r#"x-pointer-shape"#, r#"SKIP: real text in xfns.c."#),
+    (r#"x-no-window-manager"#, r#"Non-nil if no X window manager is in use.
+Emacs doesn't try to figure this out; this is always nil
+unless you set it to something else."#),
+    (r#"x-nontext-pointer-shape"#, r#"The shape of the pointer when not over text.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
+    (r#"x-pixel-size-width-font-regexp"#, r#"Regexp matching a font name whose width is the same as `PIXEL_SIZE'.
+
+Since Emacs gets the width of a font matching this regexp from the
+PIXEL_SIZE field of the name, the font-finding mechanism gets faster for
+such a font.  This is especially effective for large fonts such as
+Chinese, Japanese, and Korean."#),
+    (r#"x-pointer-shape"#, r#"The shape of the pointer when over text.
+Changing the value does not affect existing frames
+unless you set the mouse color."#),
     (r#"x-popup-menu-function"#, r#"Function to call to pop up a menu.
  The function is called like `x-popup-menu'.  This is currently only
  used for frames on text terminals."#),
@@ -4975,7 +5074,9 @@ Note that this does not affect setting or owning selections."#),
 If the selection owner doesn't reply in this time, we give up.
 A value of 0 means wait as long as necessary.  This is initialized from the
 "*selectionTimeout" resource."#),
-    (r#"x-sensitive-text-pointer-shape"#, r#"SKIP: real text in xfns.c."#),
+    (r#"x-sensitive-text-pointer-shape"#, r#"The shape of the pointer when over mouse-sensitive text.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
     (r#"x-sent-selection-functions"#, r#"A list of functions to be called when Emacs answers a selection request.
 The functions are called with three arguments:
   - the selection name (typically `PRIMARY', `SECONDARY', or `CLIPBOARD');
@@ -5027,14 +5128,29 @@ reported as iconified."#),
     (r#"x-stretch-cursor"#, r#"Non-nil means draw block cursor as wide as the glyph under it.
 For example, if a block cursor is over a tab, it will be drawn as
 wide as that tab on the display."#),
-    (r#"x-super-keysym"#, r#"SKIP: real doc in xterm.c."#),
-    (r#"x-toolkit-scroll-bars"#, r#"SKIP: real doc in xterm.c."#),
+    (r#"x-super-keysym"#, r#"Which modifier value Emacs reports when Super is depressed.
+This should be one of the symbols `ctrl', `alt', `hyper', `meta', or
+`super', representing a modifier to be reported for key events with the
+Super modifier (i.e. the keysym Super_L or Super_R) depressed, with nil
+or any other value equivalent to `super'."#),
+    (r#"x-toolkit-scroll-bars"#, r#"Which toolkit scroll bars Emacs uses, if any.
+A value of nil means Emacs doesn't use toolkit scroll bars.
+With the X Window system, the value is a symbol describing the
+X toolkit.  Possible values are: gtk, motif, xaw, or xaw3d.
+With MS Windows, Haiku windowing or Nextstep, the value is t.
+With Android, the value is nil, but that is because Emacs on
+Android does not support scroll bars at all."#),
     (r#"x-treat-local-requests-remotely"#, r#"Whether to treat local selection requests as remote ones.
 
 If non-nil, selection converters for string types (`STRING',
 `UTF8_STRING', `COMPOUND_TEXT', etc) will encode the strings, even
 when Emacs itself is converting the selection."#),
-    (r#"x-underline-at-descent-line"#, r#"SKIP: real doc in xterm.c."#),
+    (r#"x-underline-at-descent-line"#, r#"Non-nil means to draw the underline at the same place as the descent line.
+(If `line-spacing' is in effect, that moves the underline lower by
+that many pixels.)
+A value of nil means to draw the underline according to the value of the
+variable `x-use-underline-position-properties', which is usually at the
+baseline level.  The default value is nil."#),
     (r#"x-use-fast-mouse-position"#, r#"How to make `mouse-position' faster.
 
 `mouse-position' and `mouse-pixel-position' default to querying the X
@@ -5047,18 +5163,49 @@ select text over slow X connections.
 
 If that is still too slow, setting this variable to the symbol
 `really-fast' will make Emacs return only cached values."#),
-    (r#"x-use-underline-position-properties"#, r#"SKIP: real doc in xterm.c."#),
-    (r#"x-wait-for-event-timeout"#, r#"SKIP: real doc in xterm.c."#),
-    (r#"x-window-bottom-edge-cursor"#, r#"SKIP: real text in xfns.c."#),
-    (r#"x-window-bottom-left-corner-cursor"#, r#"SKIP: real text in xfns.c."#),
-    (r#"x-window-bottom-right-corner-cursor"#, r#"SKIP: real text in xfns.c."#),
-    (r#"x-window-horizontal-drag-cursor"#, r#"SKIP: real text in xfns.c."#),
-    (r#"x-window-left-edge-cursor"#, r#"SKIP: real text in xfns.c."#),
-    (r#"x-window-right-edge-cursor"#, r#"SKIP: real text in xfns.c."#),
-    (r#"x-window-top-edge-cursor"#, r#"SKIP: real text in xfns.c."#),
-    (r#"x-window-top-left-corner-cursor"#, r#"SKIP: real text in xfns.c."#),
-    (r#"x-window-top-right-corner-cursor"#, r#"SKIP: real text in xfns.c."#),
-    (r#"x-window-vertical-drag-cursor"#, r#"SKIP: real text in xfns.c."#),
+    (r#"x-use-underline-position-properties"#, r#"Non-nil means make use of UNDERLINE_POSITION font properties.
+A value of nil means ignore them.  If you encounter fonts with bogus
+UNDERLINE_POSITION font properties, set this to nil.  You can also use
+`underline-minimum-offset' to override the font's UNDERLINE_POSITION for
+small font display sizes."#),
+    (r#"x-wait-for-event-timeout"#, r#"How long to wait for X events.
+
+Emacs will wait up to this many seconds to receive X events after
+making changes which affect the state of the graphical interface.
+Under some window managers this can take an indefinite amount of time,
+so it is important to limit the wait.
+
+If set to a non-float value, there will be no wait at all."#),
+    (r#"x-window-bottom-edge-cursor"#, r#"Pointer shape indicating a bottom x-window edge can be dragged.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
+    (r#"x-window-bottom-left-corner-cursor"#, r#"Pointer shape indicating a bottom left x-window corner can be dragged.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
+    (r#"x-window-bottom-right-corner-cursor"#, r#"Pointer shape indicating a bottom right x-window corner can be dragged.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
+    (r#"x-window-horizontal-drag-cursor"#, r#"Pointer shape to use for indicating a window can be dragged horizontally.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
+    (r#"x-window-left-edge-cursor"#, r#"Pointer shape indicating a left x-window edge can be dragged.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
+    (r#"x-window-right-edge-cursor"#, r#"Pointer shape indicating a right x-window edge can be dragged.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
+    (r#"x-window-top-edge-cursor"#, r#"Pointer shape indicating a top x-window edge can be dragged.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
+    (r#"x-window-top-left-corner-cursor"#, r#"Pointer shape indicating a top left x-window corner can be dragged.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
+    (r#"x-window-top-right-corner-cursor"#, r#"Pointer shape indicating a top right x-window corner can be dragged.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
+    (r#"x-window-vertical-drag-cursor"#, r#"Pointer shape to use for indicating a window can be dragged vertically.
+This variable takes effect when you create a new frame
+or when you set the mouse color."#),
     (r#"xft-color-font-whitelist"#, r#"List of "color" font families that don't actually have color glyphs.
 Some fonts (such as Source Code Pro) are reported as color fonts, but
 do not actually have glyphs with colors that can cause Xft crashes.

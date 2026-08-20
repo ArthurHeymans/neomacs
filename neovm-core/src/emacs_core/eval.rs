@@ -4315,9 +4315,24 @@ impl Context {
             // drafts/cursor-audit.md flagged the symbols as
             // missing entirely; Lisp code that tried
             // (setq x-pointer-shape ...) hit void-variable.
+            //
+            // `x-nontext-pointer-shape' and `x-mode-pointer-shape' are NOT in
+            // this list, and the omission is the point.  Every `DEFVAR_LISP'
+            // GNU has for either is inside
+            // `#if false /* This doesn't really do anything.  */' --
+            // `src/xfns.c:10333-10338' and `10347-10352', and the same pair in
+            // `src/androidfns.c'; `w32fns.c' and `haikufns.c' do not declare
+            // them at all.  A declaration in a dead preprocessor branch is not
+            // a declaration, so no GNU build binds the symbol and
+            // `(boundp 'x-mode-pointer-shape)' is nil under GNU 31.0.90.
+            // Seeding one here is entry 138's invented existence, reached
+            // through a case that is not about a platform: the C global
+            // `Vx_mode_pointer_shape' still exists and is still assigned
+            // `Qnil' on the line after the `#endif', which is what makes the
+            // seed look justified from the C side.  Nothing in GNU's `lisp/',
+            // this tree's `lisp/', or either editor's own sources reads
+            // either name.  (Ledger 168.)
             "x-pointer-shape",
-            "x-nontext-pointer-shape",
-            "x-mode-pointer-shape",
             "x-sensitive-text-pointer-shape",
             "x-hourglass-pointer-shape",
             "x-window-horizontal-drag-cursor",

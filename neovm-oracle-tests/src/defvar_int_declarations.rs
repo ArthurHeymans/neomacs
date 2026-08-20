@@ -182,6 +182,46 @@ fn oracle_remaining_defvar_int_initial_values_match_gnu() {
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
+/// `command-line-max-length` asserted by its DERIVATION rather than by its
+/// shape, because the shape is what let entry 138 leave the number unexplained.
+///
+/// The two editors report different numbers on this machine -- GNU 626432,
+/// Neomacs 1572864 -- and the declaration is identical: both compute
+/// `sysconf (_SC_ARG_MAX) / 4`, GNU's "crude way to go bytes->characters"
+/// (`src/callproc.c:2246-2252`).  glibc derives `_SC_ARG_MAX` from
+/// RLIMIT_STACK as `MAX (131072, MIN (stack / 4, 6 MiB))`, and both editors
+/// raise their own RLIMIT_STACK before that `sysconf` runs -- GNU in `main`,
+/// to `emacs_re_max_failures * ratio + extra` rounded to a page
+/// (`src/emacs.c:1563-1623`, ahead of `syms_of_callproc` at `src/emacs.c:2172`),
+/// which is 9788 KiB here; Neomacs to a flat 128 MiB
+/// (`neomacs-bin/src/main.rs:increase_stack_limit`), which lands on glibc's
+/// 6 MiB cap.  So the variable is not a constant in either editor: it is a
+/// report of that editor's stack policy.
+///
+/// Asking a child what stack limit it inherited and re-deriving the number
+/// makes the pin editor-independent and still exact.  It is the assertion that
+/// fails if anyone ever "fixes" the difference by writing GNU's 626432 into
+/// Rust -- which is this project's most repeated bug and would make the
+/// variable disagree with the machine it describes.
+#[test]
+fn oracle_command_line_max_length_is_derived_from_this_editors_stack_rlimit() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let* ((reported (with-temp-buffer
+                   (call-process "sh" nil t nil "-c" "ulimit -s")
+                   (car (split-string (buffer-string)))))
+       (stack (if (equal reported "unlimited")
+                  most-positive-fixnum
+                (* 1024 (string-to-number reported))))
+       (predicted (/ (max 131072 (min (/ stack 4) (* 6 1024 1024))) 4)))
+  (list (integerp command-line-max-length)
+        (> command-line-max-length 0)
+        (= command-line-max-length predicted)))"#;
+    let expect = expect_test::expect![r#""OK (t t t)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
 /// The whole family in one sweep: every name `grep DEFVAR_INT src/*.c` finds,
 /// asked whether it is bound and whether its slot is really an `intmax_t`.
 ///

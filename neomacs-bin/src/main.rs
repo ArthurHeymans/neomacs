@@ -3431,10 +3431,25 @@ pub fn run(mode: RuntimeMode) {
         }
     }
 
-    // Increase the stack size to 64 MB, matching GNU Emacs which adjusts
-    // RLIMIT_STACK in main(). Deep Elisp evaluation chains (startup.el →
-    // normal-top-level → command-line → init → Doom hooks) can exhaust
-    // the default 8 MB stack.
+    // Raise RLIMIT_STACK before anything deep runs. Deep Elisp evaluation
+    // chains (startup.el → normal-top-level → command-line → init → Doom
+    // hooks) recurse on the native stack here and exhaust the usual 8 MB.
+    //
+    // GNU also raises it in main(), but computes its target rather than
+    // choosing one: `emacs_re_max_failures * ratio + extra`, rounded to a page
+    // and sized for regex-emacs.c's backtrack stack (src/emacs.c:1563-1623),
+    // which is 9788 KiB on this machine against the 128 MiB below. That is a
+    // deliberately different policy, and it is OBSERVABLE from Lisp, so it is
+    // written down here rather than left to be rediscovered: glibc derives
+    // `_SC_ARG_MAX` from RLIMIT_STACK as `MAX (131072, MIN (stack / 4, 6 MiB))`,
+    // and `syms_of_callproc` initializes `command-line-max-length` to
+    // `sysconf (_SC_ARG_MAX) / 4` (src/callproc.c:2246-2252) AFTER this point
+    // in GNU's own startup (src/emacs.c:2172). 128 MiB lands on glibc's 6 MiB
+    // cap, so that variable reads 1572864 here where GNU reads 626432 -- one
+    // declaration, two stack policies. Both numbers are correct reports of the
+    // editor that produced them; see ledger entry 168 item 2, and
+    // `oracle_command_line_max_length_is_derived_from_this_editors_stack_rlimit`,
+    // which pins the derivation rather than either number.
     increase_stack_limit();
 
     // Initialize the C library locale from the environment (GNU emacs.c main()
@@ -4711,8 +4726,10 @@ fn publish_gui_frame(
     }
 }
 
-/// Increase the process stack size limit, matching GNU Emacs's behavior
-/// in emacs.c main() which adjusts RLIMIT_STACK.
+/// Raise the process stack size limit, as GNU Emacs's `main` does at
+/// `src/emacs.c:1563-1623` -- but to a flat target rather than GNU's computed
+/// one, and the difference is measurable in `command-line-max-length`. See the
+/// call site for the derivation.
 #[cfg(unix)]
 fn increase_stack_limit() {
     const TARGET_STACK_MB: u64 = 128;

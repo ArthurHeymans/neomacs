@@ -33,11 +33,54 @@
 //!
 //! `Int` (GNU's `Lisp_Intfwd`), `Bool` (`Lisp_Boolfwd`) and `BufferObj`
 //! (`Lisp_Buffer_Objfwd`) are wired.  `Obj` and `KboardObj` are not: Neomacs
-//! backs `DEFVAR_LISP` variables as ordinary `Plainval` obarray cells, which
-//! is observationally identical because those two variants enforce nothing on
-//! assignment, and every Rust subsystem reads the obarray directly rather
-//! than a static C global, so there is no "C side reads a stale static"
-//! desync to fix.  `KboardObj` additionally awaits per-kboard storage.
+//! backs `DEFVAR_LISP` and `DEFVAR_KBOARD` variables as ordinary `Plainval`
+//! obarray cells, and every Rust subsystem reads the obarray directly rather
+//! than a static C global, so there is no "C side reads a stale static" desync
+//! to fix.
+//!
+//! **That is not observationally identical, and the earlier claim here that it
+//! was is withdrawn** (measured 2026-08-20, ledger 168).  Being
+//! `SYMBOL_FORWARDED` costs one thing beyond the store rule, and it is not in
+//! the table above: `set_internal` refuses an unbind for a forwarded symbol --
+//! `error ("Built-in variable may not be unbound : %s")` at `src/data.c:1805-1808`,
+//! and the localized-with-forwarder twin at `1725-1728` -- because there is no
+//! "unbound" bit pattern in a C slot.  Sweeping the 563 names
+//! `grep DEFVAR_LISP src/*.c` finds plus the 14 `DEFVAR_KBOARD` ones under GNU
+//! 31.0.90 `-Q --batch`: GNU binds 490 + 14 and refuses `makunbound` for 487 +
+//! 14 of them.  The three it allows are the three it does not actually declare
+//! in this build -- `selection-coding-system` and
+//! `next-selection-coding-system` (C only in `w16select.c`/`w32select.c`, so
+//! here they come from `lisp/select.el`) and `echo-area-clear-hook`, whose
+//! `DEFVAR_LISP` is inside `#if 0` (`src/keyboard.c:14058-14061`) and which
+//! `Fset (Qecho_area_clear_hook, Qnil)` binds instead (`src/keyboard.c:14076`).
+//! So GNU's rule has no exceptions.  Neomacs refuses 5 of the 447 it binds in
+//! common -- the five that are constants (`most-positive-fixnum`,
+//! `most-negative-fixnum`, `font-weight-table`, `font-slant-table`,
+//! `font-width-table`), which is a different check.  **447 names disagree.**
+//!
+//! The residual is real; wiring `Lisp_Fwd_Obj` *storage* is nevertheless the
+//! wrong instrument for it, and that is a decision rather than an omission:
+//!
+//! - A `Lisp_Objfwd` owns a `Lisp_Object`, so the Rust counterpart would own a
+//!   [`Value`] inside a leaked `'static` descriptor for ~490 variables holding
+//!   lists, strings and keymaps.  The GC's symbol tracer is written against
+//!   the opposite invariant in as many words -- "Only `Plainval` holds a heap
+//!   value cell: ... forwarded = a raw fwd ptr -- none is a heap `Value` to
+//!   trace here" (`symbol.rs`, `read_symbol_children_consistent`) -- so this
+//!   would move 490 variables into the failure class ledger entries 161, 162
+//!   and 163 were spent on.
+//! - It buys nothing else.  `Lisp_Fwd_Obj`'s store arm is a plain assignment
+//!   plus a `buffer_defaults` fan-out (`src/data.c:1489-1516`) that Neomacs
+//!   already models through `BufferObj` and per-buffer defaults, and
+//!   `Lisp_Fwd_Kboard_Obj` checks nothing at all (`src/data.c:1529-1536`).
+//!
+//! What the 447 names actually need is the fact a `DEFVAR_*` records and a
+//! `define_special_variable` does not -- "GNU's C declares this one" -- which
+//! is a property of the declaration, not of where the bytes live, and which
+//! needs a measured name table of GNU's own answers in the shape entry 135's
+//! `GNU_BOOL_VARIABLES` and entry 141's `cus_start_platform_vars` already use.
+//! `check_forwarded_unbind` is already the single place that would consult it.
+//! Sized and handed over rather than half-built here.
 
 use super::value::Value;
 use crate::buffer::buffer::BufferSlotPredicateError;
