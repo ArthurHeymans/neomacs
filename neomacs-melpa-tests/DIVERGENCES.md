@@ -21124,6 +21124,19 @@ way before and after.
 ;; Neomacs, before and after => chunks ((97) (48 33 98 10))
 ```
 
+A second, wider sweep was written AFTER the fix rather than before it, because
+a change this shape earns its keep by the rows nobody thought to pin.
+`tmp/pw166/probe4.el` runs twelve more coding systems across a forced read
+boundary -- `chinese-iso-8bit`, `korean-iso-8bit`, `cp936`, `iso-2022-jp`,
+`iso-2022-cn`, `utf-16be` (which splits into THREE chunks), `utf-8-dos` with the
+CR at the boundary, a four-byte UTF-8 character, `chinese-big5-hkscs`, `cp437`
+and `emacs-mule` split at its second position byte -- and is `diff` clean
+against GNU.  EIGHT of the twelve were red against the pre-fix binary
+(`tmp/pw166/probe4-before.txt`).  The `utf-8-dos` row is the one that says the
+end-of-line lookahead moved correctly: GNU answers `(97 10 98 10)`, so the CR
+that ended read 1 waited for read 2's LF instead of becoming a `mac` newline of
+its own.
+
 `tmp/pw166/probe2b.el` and `tmp/pw166/probe2c.el` -- the hook counts by
 connection type and by branch, ten rows -- are byte-identical to GNU.
 `tmp/pw166/probe3.el` is `diff` clean except the bufferless default-filter row
@@ -21143,6 +21156,24 @@ not have to be told apart from anything.
 (`tmp/pw166/gcstress.log`).  The `--editor` is not optional: the environment
 variable this suite does NOT read is `NEOVM_BINARY_PATH`, and a run without
 `--editor` measures whatever binary the xtask defaults to.
+
+The MELPA suites that carry real process bytes -- the same eight name filters
+entries 151, 156 and 159 used, 42 tests -- are 42/42 green
+(`tmp/pw166/melpa3.log`).  On the first run `org_roam` failed on
+`ld.bfd: cannot find sqlite3-api.o`, which is entry 156's and entry 159's
+recorded flake verbatim -- two `make` invocations racing in one module build
+directory.  It was told apart from the change rather than re-run until green:
+it passes alone against the FIXED binary (`tmp/pw166/orgroam-after.log`) and
+alone against the PRE-FIX one (`tmp/pw166/orgroam-before.log`, with
+`NEOMACS_BIN` pointing at `tmp/pw166/refbin/neomacs`), and the whole 42 pass
+at `-j2`.
+
+A note for the next entry, because it cost a run here: the filter form
+`-E 'test(a) or test(b) or ...'` selected ZERO of the 933 MELPA tests and
+nextest reported it as `0 tests run: 0 passed, 933 skipped` with exit 0.  The
+regex form `-E 'test(/a|b|.../)'` selects the 42.  This is the trap in its
+purest shape -- a green-looking run that measured nothing -- and the only
+defence is to assert on the COUNT.
 
 `cargo nextest run -p neovm-core -p neomacs-layout-engine` is 11080/11080 green
 (54 skipped, `tmp/pw166/core3.log`), which is the 11078 this branch started
@@ -21212,9 +21243,11 @@ written to be replaced rather than to be believed.
 **`chinese-iso-8bit` through the `decode_bytes` fall-through.**  Every coding
 system that reaches the fall-through now is one in which each byte is a
 character -- except this family, which `decode_bytes` decodes with
-`encoding_rs`'s GBK.  In practice `euc_iso2022_spec` claims it first and the
-EUC decoder answers for it; the arm is a residual only if that ever stops being
-true.
+`encoding_rs`'s GBK and which would therefore answer `SourceConsumed::all` and
+mean something else by it.  Measured rather than assumed: `euc_iso2022_spec`
+claims it first, and `tmp/pw166/probe4.el`'s `chinese-iso-8bit` and `euc-cn`
+rows are `diff` clean against GNU.  The arm is a residual only if that ever
+stops being true, and it is listed here so that the next entry knows to look.
 
 **An invalid leading byte at a read boundary waits one read under a charset
 coding.**  GNU's `decode_coding_charset` looks the byte up in
