@@ -3791,17 +3791,57 @@ pub(crate) fn builtin_forward_comment(
 
     let count = expect_forward_comment_count(&args)?;
     let honor = parse_sexp_lookup_properties_enabled(eval);
+
+    if honor && count > 0 {
+        // GNU propertizes lazily, only as far as the scan actually reaches.
+        // Propertizing the whole accessible tail here made every post-edit
+        // `forward-comment` re-run syntax-propertize from the edit point to
+        // point-max, which is quadratic under newcomment's per-line loops.
+        // Instead propertize a bounded window; the scan below is side-effect
+        // free (point commits only at the end) and moves strictly forward, so
+        // if it stopped near the propertized frontier we widen and re-run.
+        let (current_id, point_char, end_char) = {
+            let buf = eval
+                .buffers
+                .current_buffer()
+                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+            (
+                buf.id(),
+                buf.point_char_pos().get(),
+                buf.accessible_char_region().end().get(),
+            )
+        };
+        let mut lookahead: usize = 4096;
+        loop {
+            let window_end = point_char.saturating_add(lookahead).min(end_char);
+            maybe_syntax_propertize_for_scan(eval, window_end.saturating_add(1))?;
+            let props = SyntaxProperties::for_scan(honor, &eval.obarray, &eval.buffers);
+            let (ok, final_pos, final_char) = {
+                let buf = eval
+                    .buffers
+                    .current_buffer()
+                    .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+                let (ok, final_pos) = forward_comment_scan_in_buffer(buf, count, props);
+                let final_char = buf.emacs_byte_pos_to_char_pos_clamped(final_pos).get();
+                (ok, final_pos, final_char)
+            };
+            // Comment start/end matching peeks at most one char past the
+            // cursor, so a stop 2+ chars inside the window read only
+            // propertized text.
+            if window_end >= end_char || final_char.saturating_add(2) <= window_end {
+                let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, final_pos);
+                return Ok(if ok { Value::T } else { Value::NIL });
+            }
+            lookahead = lookahead.saturating_mul(4);
+        }
+    }
+
     if honor {
+        // count <= 0: the scan only reads at or before point.
         let target = eval
             .buffers
             .current_buffer()
-            .map(|buf| {
-                if count > 0 {
-                    buf.accessible_char_region().end().get().saturating_add(1)
-                } else {
-                    buf.point_char_pos().get()
-                }
-            })
+            .map(|buf| buf.point_char_pos().get())
             .unwrap_or(0);
         if target > 0 {
             maybe_syntax_propertize_for_scan(eval, target)?;
@@ -3852,20 +3892,31 @@ fn forward_comment_in_buffers(
         let buf = buffers
             .get(current_id)
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
-        // One cache for the whole call: `forward-comment` examines every
-        // character it steps over, and until this existed each of those did a
-        // fresh interval lookup and a byte->char conversion.
-        let prop_cache = SyntaxPropByteRun::new(props);
-        let mut scanner = ForwardCommentCursor::new(buf);
-        let ok = if count > 0 {
-            forward_comment_forward(&mut scanner, count as u64, &prop_cache)
-        } else {
-            forward_comment_backward(&mut scanner, (-count) as u64, &prop_cache)
-        };
-        (ok, scanner.point_emacs_byte_pos())
+        forward_comment_scan_in_buffer(buf, count, props)
     };
     let _ = buffers.goto_buffer_emacs_byte_pos(current_id, final_pos);
     Ok(if ok { Value::T } else { Value::NIL })
+}
+
+/// Run the comment scan without moving point; returns (all-skipped, stop pos).
+/// The cursor only ever advances toward the scan direction, so for forward
+/// scans the stop position is also the maximum position examined.
+fn forward_comment_scan_in_buffer(
+    buf: &Buffer,
+    count: i64,
+    props: SyntaxProperties<'_>,
+) -> (bool, EmacsBytePos) {
+    // One cache for the whole call: `forward-comment` examines every
+    // character it steps over, and until this existed each of those did a
+    // fresh interval lookup and a byte->char conversion.
+    let prop_cache = SyntaxPropByteRun::new(props);
+    let mut scanner = ForwardCommentCursor::new(buf);
+    let ok = if count > 0 {
+        forward_comment_forward(&mut scanner, count as u64, &prop_cache)
+    } else {
+        forward_comment_backward(&mut scanner, (-count) as u64, &prop_cache)
+    };
+    (ok, scanner.point_emacs_byte_pos())
 }
 
 struct ForwardCommentCursor<'a> {
