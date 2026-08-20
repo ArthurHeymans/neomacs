@@ -192,8 +192,12 @@ impl Flow {
 
 /// A `Flow` payload whose Lisp values are pinned as GC roots by construction.
 ///
-/// Sealed: `InFlightRoots` is private to this module and has no public
-/// constructor, so the only implementors are the payload structs below.
+/// Sealed in practice: implementing it means producing an [`InFlightRoots`],
+/// and `InFlightRoots::pin` is private to this module — so the only
+/// implementors are the payload structs below, and a new one has to be written
+/// here, next to the pin. (The type itself is `pub` only because
+/// [`EvalError`]'s variants name it in a public enum's interface; it has all-
+/// private fields and no public constructor.)
 pub(crate) trait InFlightPinned {
     fn in_flight_roots(&self) -> &InFlightRoots;
 }
