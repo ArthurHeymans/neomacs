@@ -518,6 +518,20 @@ impl LispString {
         }
     }
 
+    /// Whether this string header has been RECLAIMED by the collector.
+    ///
+    /// GNU's own free-list test, in as many words: `sweep_strings` nulls
+    /// `s->u.s.data` on a dead string "so that we know it's free"
+    /// (src/alloc.c:1878-1882) and branches on `if (s->u.s.data)` at :1851.
+    /// Every live constructor here writes a non-null payload pointer
+    /// (`from_owned_payload` pushes the trailing NUL before taking the
+    /// pointer; `from_borrowed_bytes` and both sidecar installers reject
+    /// null), so a null `data` means exactly one thing.
+    #[inline]
+    pub(crate) fn is_reclaimed(&self) -> bool {
+        self.data.is_null()
+    }
+
     /// Try to view the data as a UTF-8 `&str`.
     /// Returns `None` if the bytes contain non-UTF-8 sequences (e.g. overlong
     /// C0/C1 raw-byte encodings from `.elc` files).
@@ -946,6 +960,24 @@ impl Drop for LispString {
             drop(unsafe { Box::from_raw(ptr) });
         }
         self.release_owned_storage();
+        // GNU `sweep_strings` ends a dead string with (src/alloc.c:1878-1882)
+        //
+        //     /* Reset the strings's `data' member so that we
+        //        know it's free.  */
+        //     s->u.s.data = NULL;
+        //
+        // beside `data->string = NULL` on the sdata (:1877), and reads the
+        // marker back at :1851 (`if (s->u.s.data)`) and :1892 ("S was on the
+        // free-list before").  It is the string-side equivalent of
+        // `dead_object ()` for conses: "is this header reclaimed" answered in
+        // O(1) — DIVERGENCES.md 161 §6, half two.
+        //
+        // `release_owned_storage` above only nulls a string that OWNED its
+        // bytes; a borrowed / mapped / static-rodata payload
+        // (`storage_capacity == 0`) returns early, which left a swept pdump
+        // string byte-identical to a live one and a stale borrow of it
+        // silently readable.  Null it unconditionally, as GNU does.
+        self.data = std::ptr::null();
     }
 }
 

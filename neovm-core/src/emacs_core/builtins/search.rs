@@ -577,9 +577,19 @@ fn handle_search_failure_in_manager(
     }
 }
 
+/// PATTERN is the Lisp value, not a borrow of its payload, and that is
+/// load-bearing (DIVERGENCES.md 163).
+///
+/// This function runs `syntax-propertize-function` — arbitrary Lisp, and so a
+/// GC safepoint — through `maybe_syntax_propertize_for_scan`. Taking
+/// `&LispString` meant every caller (`looking-at`, `posix-looking-at`, and
+/// every buffer regexp search) held a borrow into the heap across that Lisp
+/// call, sound only because the argument list roots the string. Taking the
+/// `Value` moves the borrow INSIDE, where the compiler can see that it ends
+/// before the evaluator is used mutably.
 fn prepare_current_buffer_regexp_syntax(
     eval: &mut super::eval::Context,
-    pattern: &crate::heap_types::LispString,
+    pattern: Value,
     case_fold: bool,
     posix: bool,
 ) -> Result<BufferRegexpSyntaxProperties, Flow> {
@@ -598,12 +608,16 @@ fn prepare_current_buffer_regexp_syntax(
 /// target (patterns whose scan range is genuinely unbounded).
 fn prepare_current_buffer_regexp_syntax_to(
     eval: &mut super::eval::Context,
-    pattern: &crate::heap_types::LispString,
+    pattern: Value,
     case_fold: bool,
     posix: bool,
     propertize_target_char: Option<i64>,
 ) -> Result<BufferRegexpSyntaxProperties, Flow> {
+    // The borrow of PATTERN's payload lives and dies inside this block, which
+    // is why it may not be a parameter: `maybe_syntax_propertize_for_scan`
+    // below runs `syntax-propertize-function`.
     let dependency = {
+        let pattern = eval.expect_lisp_string(pattern)?;
         let buf = eval
             .buffers
             .current_buffer()
@@ -641,7 +655,11 @@ fn prepare_buffer_regexp_search(
     case_fold: bool,
     posix: bool,
 ) -> Result<BufferRegexpSyntaxProperties, Flow> {
-    let pattern = expect_lisp_string(&args[0])?;
+    // GNU `search_command` (src/search.c) runs `CHECK_STRING (string)` before
+    // it looks at COUNT, so a non-string pattern signals even when the search
+    // would do nothing. Keep that order without carrying the borrow past the
+    // `syntax-propertize` below: `let _ =` drops it on this line.
+    let _ = eval.expect_lisp_string(args[0])?;
     let (_, opts, _, start_char) = current_search_context_in_manager(&eval.buffers, args, kind)?;
     if opts.steps == 0 {
         return Ok(
@@ -664,7 +682,7 @@ fn prepare_buffer_regexp_search(
             _ => None,
         },
     };
-    prepare_current_buffer_regexp_syntax_to(eval, pattern, case_fold, posix, target)
+    prepare_current_buffer_regexp_syntax_to(eval, args[0], case_fold, posix, target)
 }
 
 pub(crate) fn builtin_search_backward(
@@ -1041,8 +1059,7 @@ pub(crate) fn builtin_looking_at(eval: &mut super::eval::Context, args: Vec<Valu
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let pattern = expect_lisp_string(&args[0])?;
-    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, pattern, case_fold, false)?;
+    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, args[0], case_fold, false)?;
     let match_context = current_buffer_regexp_match_context(
         &eval.obarray,
         &eval.buffers,
@@ -1105,8 +1122,7 @@ pub(crate) fn builtin_looking_at_p(
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let pattern = expect_lisp_string(&args[0])?;
-    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, pattern, case_fold, false)?;
+    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, args[0], case_fold, false)?;
     let match_context = current_buffer_regexp_match_context(
         &eval.obarray,
         &eval.buffers,
@@ -1165,8 +1181,7 @@ pub(crate) fn builtin_posix_looking_at(
     let case_fold = dynamic_or_global_symbol_value(eval, SearchStateVariable::CaseFoldSearch)
         .map(|v| !v.is_nil())
         .unwrap_or(true);
-    let pattern = expect_lisp_string(&args[0])?;
-    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, pattern, case_fold, true)?;
+    let syntax_properties = prepare_current_buffer_regexp_syntax(eval, args[0], case_fold, true)?;
     let match_context = current_buffer_regexp_match_context(
         &eval.obarray,
         &eval.buffers,

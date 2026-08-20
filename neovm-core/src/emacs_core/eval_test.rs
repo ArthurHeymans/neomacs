@@ -19581,6 +19581,122 @@ fn gc_safe_point_exact_frees_stack_only_values() {
     );
 }
 
+/// The load-bearing claim behind DIVERGENCES.md 163's audit.
+///
+/// ~680 `Value::as_lisp_string` call sites hand out a `&'static LispString`
+/// into a mark-sweep heap, and the single largest group of them — 102 of the
+/// 235 that bind the borrow to a name — reads a SUBR'S OWN ARGUMENT. Every one
+/// of those is sound for one reason and one reason only: `apply_internal`
+/// pushes a backtrace frame carrying the arguments before dispatching, and
+/// `Context::trace_roots` visits it, so the argument is rooted for the whole
+/// call however much Lisp the subr runs.
+///
+/// GNU roots the same thing by name, in the same place: `mark_specpdl`'s
+/// `SPECPDL_BACKTRACE` arm marks `backtrace_function` and every
+/// `backtrace_args` slot (`src/eval.c`), which is what makes `Faset`-style C
+/// primitives free to hold `SDATA (arg)` across a `Fsignal`.
+///
+/// Nothing pinned that. This does, together with its control below: if the
+/// backtrace frame ever stops being a root, this test goes red at the exact
+/// invariant instead of leaving 102 borrow sites silently live.
+#[test]
+fn a_subr_argument_string_survives_a_collection_inside_the_subr() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.tagged_heap.set_gc_threshold(1);
+    ev.gc_collect_exact();
+
+    // A fresh string reachable from nothing but the argument list — exactly
+    // what a subr sees when Lisp calls it with a computed string.
+    let arg = Value::heap_string(crate::heap_types::LispString::from_utf8("subr-argument"));
+    let bt_count = ev.specpdl.len();
+    ev.push_backtrace_frame(Value::symbol("neovm-probe-subr"), &[arg]);
+
+    // The subr body borrows its argument...
+    let borrowed = arg.as_lisp_string().expect("the argument is a string");
+    assert_eq!(borrowed.as_bytes(), b"subr-argument");
+
+    // ...and then runs Lisp, i.e. crosses a safepoint. Force the collection
+    // that a safepoint may perform.
+    let gc_before = ev.gc_count;
+    while ev.gc_count == gc_before {
+        ev.gc_safe_point_exact();
+    }
+
+    // `as_lisp_string` panics on a reclaimed object now (its `data` is GNU's
+    // free marker), so a lost root aborts here rather than returning bytes
+    // from freed storage.
+    assert_eq!(
+        arg.as_lisp_string()
+            .expect("the argument is still a string")
+            .as_bytes(),
+        b"subr-argument",
+        "a subr's string argument must survive a collection that lands inside \
+         the subr: the backtrace frame is its root",
+    );
+    ev.unbind_to(bt_count);
+}
+
+/// The control for the test above, and the reason it does not pass for the
+/// wrong reason: the SAME string and the SAME safepoint, minus only the
+/// backtrace frame. Without that root the collector takes it, which is what
+/// makes the paired assertion evidence about rooting rather than about
+/// whether the collector runs at all.
+#[test]
+fn a_string_with_no_backtrace_frame_is_reclaimed_at_the_same_safepoint() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.tagged_heap.set_gc_threshold(1);
+    ev.gc_collect_exact();
+
+    // Keep one rooted string so the arena page survives and the doomed
+    // string's slot storage is still mapped when we inspect it.
+    let anchor = Value::heap_string(crate::heap_types::LispString::from_utf8("anchor"));
+    let anchor_scope = ev.save_specpdl_roots();
+    ev.push_specpdl_root(anchor);
+
+    let unrooted = Value::heap_string(crate::heap_types::LispString::from_utf8("subr-argument"));
+    let unrooted_ptr = unrooted.as_string_ptr().expect("string");
+
+    let gc_before = ev.gc_count;
+    while ev.gc_count == gc_before {
+        ev.gc_safe_point_exact();
+    }
+
+    assert!(
+        unsafe { (*unrooted_ptr).data.is_reclaimed() },
+        "the collector must take a string held only in a Rust local: this \
+         collector is precise and `set_stack_bottom` is a no-op \
+         (tagged/CONCURRENT_GC.md)",
+    );
+    ev.restore_specpdl_roots(anchor_scope);
+}
+
+/// The tripwire itself. Before DIVERGENCES.md 163 this read freed bytes and
+/// returned them, so a use-after-free surfaced (if at all) many frames later
+/// in the printer or the symbol resolver — 161's whole diagnosis problem.
+#[test]
+#[should_panic(expected = "use-after-free")]
+fn borrowing_a_reclaimed_string_aborts_at_the_scene() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.tagged_heap.set_gc_threshold(1);
+    ev.gc_collect_exact();
+
+    let anchor = Value::heap_string(crate::heap_types::LispString::from_utf8("anchor"));
+    let anchor_scope = ev.save_specpdl_roots();
+    ev.push_specpdl_root(anchor);
+
+    let doomed = Value::heap_string(crate::heap_types::LispString::from_utf8("doomed"));
+    let gc_before = ev.gc_count;
+    while ev.gc_count == gc_before {
+        ev.gc_safe_point_exact();
+    }
+    ev.restore_specpdl_roots(anchor_scope);
+
+    let _ = doomed.as_lisp_string();
+}
+
 /// Dropping an evaluator must retract the thread-local allocation slot it
 /// installed. A stale slot points at freed storage, and `with_tagged_heap`
 /// treats "non-null" as "usable": the next allocation is a use-after-free.

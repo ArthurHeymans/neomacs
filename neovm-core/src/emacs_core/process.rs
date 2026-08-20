@@ -16287,8 +16287,12 @@ pub(crate) fn builtin_getenv_internal(
             ],
         ));
     }
-    let varname = super::builtins::expect_lisp_string(&args[0])?;
-    super::environment::getenv_internal(eval, varname, args.get(1).copied().unwrap_or(Value::NIL))
+    // `getenv_internal` takes `&mut Context`, so a borrow of VARNAME's payload
+    // would span it. The name is short and this is not a hot path, so copy the
+    // bytes out rather than reason about whether the callee can reach a
+    // safepoint (DIVERGENCES.md 163).
+    let varname = eval.expect_lisp_string(args[0])?.clone();
+    super::environment::getenv_internal(eval, &varname, args.get(1).copied().unwrap_or(Value::NIL))
 }
 
 pub(crate) fn make_network_process_subfeatures() -> Value {

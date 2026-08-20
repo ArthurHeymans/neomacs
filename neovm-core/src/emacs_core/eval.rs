@@ -8863,6 +8863,51 @@ impl Context {
         }
     }
 
+    /// Borrow VALUE's string payload for as long as the collector provably
+    /// cannot run.
+    ///
+    /// This is the ergonomic front door to [`Value::lisp_string_in`], and the
+    /// reason it lives on `Context` rather than on `Value` is the whole
+    /// mechanism: the borrow it returns holds `&self`, and EVERY safepoint in
+    /// this engine is a `&mut self` method on `Context`
+    /// (`gc_safe_point`/`gc_safe_point_exact` here, `eval_sub`'s collect at
+    /// the interpreted-eval boundary, `apply_internal`'s at the funcall
+    /// boundary, `bytecode_branch_maybe_gc_and_quit` from the VM and the JIT,
+    /// and `builtin_garbage_collect`). So
+    ///
+    /// ```ignore
+    /// let s = ctx.lisp_string(v).unwrap();
+    /// ctx.apply(f, args)?;   // error[E0502]: cannot borrow `*ctx` as mutable
+    /// use_bytes(s.as_bytes());
+    /// ```
+    ///
+    /// does not compile, whereas the same code written with
+    /// `v.as_lisp_string()` compiles and reads freed memory. "Is this borrow
+    /// held across a safepoint" becomes a compile question.
+    ///
+    /// When a value genuinely must survive a safepoint, this is the wrong
+    /// tool: root it (DIVERGENCES.md 161/162) or copy the bytes out.
+    #[inline]
+    pub(crate) fn lisp_string(&self, value: Value) -> Option<&crate::heap_types::LispString> {
+        value.lisp_string_in(&self.tagged_heap)
+    }
+
+    /// [`Context::lisp_string`] with GNU's `CHECK_STRING` signal — the
+    /// drop-in replacement for `builtins::expect_lisp_string(&args[i])?` at a
+    /// site that must not hold the borrow across a safepoint.
+    #[inline]
+    pub(crate) fn expect_lisp_string(
+        &self,
+        value: Value,
+    ) -> Result<&crate::heap_types::LispString, Flow> {
+        self.lisp_string(value).ok_or_else(|| {
+            crate::emacs_core::error::signal(
+                crate::emacs_core::error::LispCondition::WrongTypeArgument,
+                vec![Value::symbol("stringp"), value],
+            )
+        })
+    }
+
     /// GC safe point used at evaluator boundaries.
     pub fn gc_safe_point(&mut self) {
         self.gc_safe_point_exact();

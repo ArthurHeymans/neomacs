@@ -263,7 +263,8 @@ pub(crate) fn builtin_inotify_add_watch(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("inotify-add-watch", &args, 3)?;
-    let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(expect_lisp_string(&args[0])?);
+    let path =
+        crate::emacs_core::fileio::lisp_file_name_to_path_buf(ctx.expect_lisp_string(args[0])?);
     validate_inotify_aspect(args[1])?;
     let aspects = inotify_aspect_names(args[1]);
     let callback = args[2];

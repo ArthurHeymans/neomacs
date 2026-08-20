@@ -473,9 +473,16 @@ pub(crate) use treesit::*;
 // Helpers
 // ===========================================================================
 
-pub(super) fn expect_lisp_string(
-    value: &Value,
-) -> Result<&'static crate::heap_types::LispString, Flow> {
+/// Borrow a string argument's payload, tied to the `Value` place it came from.
+///
+/// The returned lifetime is elided to `value`'s rather than `'static`
+/// (DIVERGENCES.md 163). Almost every caller passes `&args[i]`, so the borrow
+/// is tied to the argument slice — which is exactly what keeps the string
+/// alive: `apply_internal`'s backtrace frame roots the arguments for the whole
+/// subr call, the way GNU's `mark_specpdl` marks `backtrace_args`. Saying
+/// `'static` claimed something stronger and stopped the compiler from
+/// noticing when a borrow outlived the argument list.
+pub(super) fn expect_lisp_string(value: &Value) -> Result<&crate::heap_types::LispString, Flow> {
     value.as_lisp_string().ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,

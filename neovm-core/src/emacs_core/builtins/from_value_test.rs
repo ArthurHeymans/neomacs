@@ -48,17 +48,23 @@ fn f64_extracts_numbers_and_signals_numberp() {
     assert_wrong_type(f64::from_value(&mut eval, bad).unwrap_err(), "numberp", bad);
 }
 
+/// DIVERGENCES.md 163 deleted `impl FromValue for &'static LispString`: a
+/// conversion that takes its `Value` by value cannot hand back a borrow that
+/// outlives the call, and only `as_lisp_string`'s laundered `'static` let it
+/// typecheck. `StringDesignator` is the shape that survives — a private
+/// `&'static` field with an accessor that reborrows from `&self` — so this
+/// pins the borrowing conversion through it, plus the lossy sibling.
 #[test]
 fn lisp_string_borrow_and_lossy_string_signal_stringp() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
     let s = Value::string("héllo");
-    let borrowed = <&crate::heap_types::LispString>::from_value(&mut eval, s).unwrap();
-    assert_eq!(borrowed.schars(), 5);
+    let borrowed = StringDesignator::from_value(&mut eval, s).unwrap();
+    assert_eq!(borrowed.text().schars(), 5);
     assert_eq!(String::from_value(&mut eval, s).unwrap(), "héllo");
     let bad = Value::fixnum(7);
     assert_wrong_type(
-        <&crate::heap_types::LispString>::from_value(&mut eval, bad).unwrap_err(),
+        StringDesignator::from_value(&mut eval, bad).unwrap_err(),
         "stringp",
         bad,
     );

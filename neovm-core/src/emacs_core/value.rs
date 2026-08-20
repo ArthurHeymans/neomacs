@@ -305,6 +305,28 @@ fn as_neovm_int(value: u64) -> i64 {
     value as i64
 }
 
+/// A borrow was taken of a string object the collector has already reclaimed.
+///
+/// The check that reaches here is the string-side twin of `deadp`
+/// (`src/alloc.c:425-429`) reading back `dead_object ()`: GNU nulls
+/// `s->u.s.data` in `sweep_strings` "so that we know it's free"
+/// (`src/alloc.c:1878-1882`), and `LispString::drop` now does the same. Its
+/// job is DIVERGENCES.md 161 §6's: make the crime legible at the scene rather
+/// than thirty frames downstream in the printer or the symbol resolver.
+///
+/// Deliberately loud. A defensive `None` here would trade a crash for a quiet
+/// wrong answer over memory that is still corrupt.
+#[cold]
+#[inline(never)]
+fn reclaimed_string_borrowed(ptr: *const crate::tagged::header::StringObj) -> ! {
+    panic!(
+        "use-after-free: borrowed a string object the collector has reclaimed \
+         (StringObj at {ptr:?} has a null data pointer, GNU sweep_strings' \
+         free marker). A `&LispString` outlived its object — see \
+         `Value::as_lisp_string` and DIVERGENCES.md 163."
+    )
+}
+
 // ---------------------------------------------------------------------------
 // String text properties
 // ---------------------------------------------------------------------------
@@ -1931,9 +1953,63 @@ impl TaggedValue {
         self.as_utf8_str().map(f)
     }
 
-    /// Borrow the LispString for a string value.
+    /// Borrow the `LispString` for a string value.
+    ///
+    /// # The `'static` is a lie, and it is the seam DIVERGENCES.md 163 audits
+    ///
+    /// The referent lives in a mark-sweep, partly-concurrent heap. When the
+    /// collector reclaims the object, `sweep_range` runs `drop_in_place`,
+    /// which frees the byte buffer; the borrow returned here is not tied to
+    /// anything that keeps the object alive, so the borrow checker cannot
+    /// object. Two rules make the vast majority of the ~680 call sites sound
+    /// anyway, and they are the ones to check before adding another:
+    ///
+    /// 1. **Rooting.** A value need only be rooted before the next SAFEPOINT,
+    ///    not the next allocation (`tagged/CONCURRENT_GC.md`, "precise-rooting
+    ///    precondition"). A subr's own arguments are rooted for the whole
+    ///    call by the backtrace frame `apply_internal` pushes — GNU roots the
+    ///    same thing by name in `mark_specpdl`'s `SPECPDL_BACKTRACE` arm
+    ///    (`src/eval.c`) — so `args[i].as_lisp_string()` cannot be collected
+    ///    out from under the borrow.
+    /// 2. **Relocation.** `LispString::mutate_bytes` can move the payload, so
+    ///    a live borrow is also invalidated by `aset` on the same string with
+    ///    no collection involved. GNU has the identical hazard and is
+    ///    explicit about it: `compact_small_strings` relocates small string
+    ///    data on every GC, which is what `pin_string` exists for.
+    ///
+    /// Prefer [`Value::lisp_string_in`] / `Context::lisp_string` when either
+    /// rule is in doubt: the borrow they return is tied to a shared borrow of
+    /// the heap, and every safepoint in this engine needs `&mut Context`, so
+    /// holding one across a safepoint is a BORROW ERROR instead of a review
+    /// question.
     pub fn as_lisp_string(self) -> Option<&'static LispString> {
-        self.as_string_ptr().map(|p| unsafe { &(*p).data })
+        self.as_string_ptr().map(|p| {
+            let string = unsafe { &(*p).data };
+            if string.is_reclaimed() {
+                reclaimed_string_borrowed(p);
+            }
+            string
+        })
+    }
+
+    /// Borrow the `LispString` for as long as the collector provably cannot
+    /// run — the honest sibling of [`Value::as_lisp_string`].
+    ///
+    /// The returned borrow is tied to `heap`. Every GC safepoint in this
+    /// engine (`Context::gc_safe_point`, `eval_sub`, `apply_internal`, the
+    /// bytecode branch poll, and the `garbage-collect` subr) reaches
+    /// collection through a `&mut Context` that owns the heap, so the borrow
+    /// checker rejects any attempt to hold this reference across one. That is
+    /// the whole point: the type system already models "the collector may run
+    /// here", and it spells it `&mut`.
+    ///
+    /// This does NOT cover a `Value` parked in a `Vec`/`HashMap`/struct field
+    /// — a `Copy` word with no borrow to track. Those need an explicit root
+    /// (DIVERGENCES.md 161/162's `InFlightRoots`), not a lifetime.
+    #[inline]
+    pub fn lisp_string_in(self, heap: &crate::tagged::gc::TaggedHeap) -> Option<&LispString> {
+        let _ = heap;
+        self.as_lisp_string()
     }
 
     /// Check if a string is multibyte.

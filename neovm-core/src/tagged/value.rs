@@ -1006,6 +1006,20 @@ impl TaggedValue {
                         header.kind, self.0, ptr,
                     );
                 }
+                // The kind check above cannot see a slot reclaimed and handed
+                // back to the SAME class arena, which is the common case for
+                // strings. GNU's free marker can (DIVERGENCES.md 163):
+                // `sweep_strings` nulls `s->u.s.data` "so that we know it's
+                // free" (src/alloc.c:1878-1882).
+                if (*ptr).data.is_reclaimed() {
+                    panic!(
+                        "use-after-free: borrowed a string object the collector has \
+                         reclaimed (StringObj at {ptr:?} carries GNU sweep_strings' \
+                         null-data free marker). Tagged value = {:#x}. See \
+                         `Value::as_lisp_string` and DIVERGENCES.md 163.",
+                        self.0,
+                    );
+                }
                 (*ptr).data.as_utf8_str()
             }
         } else {

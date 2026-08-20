@@ -4779,7 +4779,7 @@ pub(crate) fn dispatch_file_handler(
     let Some(first) = args.first() else {
         return Ok(None);
     };
-    let Some(filename) = first.as_lisp_string() else {
+    let Some(filename) = eval.lisp_string(*first) else {
         return Ok(None);
     };
     let operation_sym = Value::symbol(operation_name);
@@ -6486,7 +6486,7 @@ pub(crate) fn builtin_write_region(
         return eval.funcall_general(handler, call_args);
     }
     if handler.is_nil()
-        && let Some(visit_arg) = args.get(4).and_then(|value| value.as_lisp_string())
+        && let Some(visit_arg) = args.get(4).and_then(|value| eval.lisp_string(*value))
     {
         let visit_handler = find_file_name_handler_lisp_for_eval(eval, visit_arg, op);
         if !visit_handler.is_nil() {

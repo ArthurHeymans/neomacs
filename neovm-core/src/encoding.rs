@@ -3121,7 +3121,7 @@ fn run_coding_with_conversion_hook(
     let base_coding = &apply_explicit_eol_suffix(base_coding, eol);
     if encode {
         let transformed = run_pre_write_conversion(ctx, hook, args[0])?;
-        let transformed_str = transformed.as_lisp_string().ok_or_else(|| {
+        let transformed_str = ctx.lisp_string(transformed).ok_or_else(|| {
             signal(
                 LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), transformed],
@@ -3149,7 +3149,7 @@ fn run_coding_with_conversion_hook(
             |_| true,
             ctx.eol_conversion(),
         )?;
-        let decoded_str = decoded.as_lisp_string().ok_or_else(|| {
+        let decoded_str = ctx.lisp_string(decoded).ok_or_else(|| {
             signal(
                 LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), decoded],
@@ -4033,7 +4033,7 @@ fn builtin_coding_string_in_context(
     if let (false, EntryDetection::Here(block)) = (encode, entry.detection()) {
         let base = coding_system_base(&coding).to_owned();
         if (base == "undecided" || base == "prefer-utf-8")
-            && let Some(src) = args[0].as_lisp_string()
+            && let Some(src) = ctx.lisp_string(args[0])
         {
             let bytes = lisp_string_coding_source_bytes(src);
             let detected = detect_undecided_coding(
@@ -4078,7 +4078,7 @@ fn builtin_coding_string_in_context(
         // `detect_coding` runs exactly ONE of its three arms, so this is keyed
         // on the ORIGINAL base: a `undecided` decode that detected `utf-16`
         // above does not then get re-based a second time.
-        if let Some(src) = args[0].as_lisp_string()
+        if let Some(src) = ctx.lisp_string(args[0])
             && let Some(found) =
                 detect_bom_auto_coding(&base, &lisp_string_coding_source_bytes(src), block)
         {
@@ -4346,7 +4346,7 @@ fn builtin_coding_string_in_context(
     // scanning the text the decoder just produced (src/coding.c:6785-6806) --
     // which is why the scan happens here, on `decoded`, and not on the source
     // bytes: in UTF-16 a CR is the byte pair 0D 00.
-    let result = match result.as_lisp_string() {
+    let result = match ctx.lisp_string(result) {
         Some(decoded) => {
             let resolution =
                 decoded_eol.resolve_for_decode(decoded.as_bytes(), ctx.eol_conversion());

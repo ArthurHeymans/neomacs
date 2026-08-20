@@ -1656,7 +1656,7 @@ pub(crate) fn builtin_intern_fn(eval: &mut super::eval::Context, args: Vec<Value
             );
         }
     }
-    let name = expect_lisp_string(&args[0])?;
+    let name = eval.expect_lisp_string(args[0])?;
 
     let effective_obarray = effective_obarray_arg(eval, &args);
 
@@ -3682,8 +3682,11 @@ pub(crate) fn builtin_set_this_command_keys(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set--this-command-keys", &args, 1)?;
-    let keys = expect_lisp_string(&args[0])?;
-    eval.set_this_command_keys_from_string(keys)?;
+    // Same shape as `getenv-internal`: the setter takes `&mut Context`, so the
+    // borrow would span it. One key sequence per command at most — copy the
+    // bytes out (DIVERGENCES.md 163).
+    let keys = eval.expect_lisp_string(args[0])?.clone();
+    eval.set_this_command_keys_from_string(&keys)?;
     Ok(Value::NIL)
 }
 
@@ -5955,7 +5958,8 @@ pub(crate) fn builtin_module_load(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("module-load", &args, 1)?;
-    let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(expect_lisp_string(&args[0])?);
+    let path =
+        crate::emacs_core::fileio::lisp_file_name_to_path_buf(ctx.expect_lisp_string(args[0])?);
     super::super::dynamic_module::load_module(ctx, path)
 }
 
