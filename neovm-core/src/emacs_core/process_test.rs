@@ -11876,3 +11876,48 @@ fn signal_process_reads_an_integer_as_an_os_pid_like_gnu() {
         "OK (:small (-1 -1 -1) :own 0 :own-pid-is-large t :still-live t)"
     );
 }
+
+/// `process-status`'s connection remapping is an `else if` chain, and its
+/// FIRST arm is `exit -> closed` (src/process.c:1195-1196); the
+/// `p->command == t` stop is the second (:1197-1198) and `run -> open` the
+/// third (:1199-1200).  So a connection that has finished reports `closed`
+/// however many times `stop-process` was called on it.
+///
+/// This port asked `command == t` first, which is invisible until something
+/// sets `p->command' on a connection that has already closed -- which is
+/// exactly what `stop-process` does, and what ledger 169 made this port start
+/// doing on a retired connection the way GNU does (`Fstop_process` :7267-7278
+/// has no liveness test at all).  It was the last divergent row of the
+/// three-kind neighbour sweep.
+///
+/// Measured, GNU Emacs 31.0.90: `closed`.
+#[test]
+fn a_stopped_but_finished_connection_reports_closed_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((obuf (generate-new-buffer " *pw169stop-out*"))
+                  (ebuf (generate-new-buffer " *pw169stop-err*"))
+                  (owner-done nil)
+                  (proc (make-process
+                         :name "pw169stop"
+                         :buffer obuf
+                         :command '("{sh}" "-c" "printf out; printf err 1>&2")
+                         :stderr ebuf
+                         :noquery t
+                         :sentinel (lambda (_p _e) (setq owner-done t))))
+                  (epipe (get-buffer-process ebuf)))
+             (set-process-sentinel epipe #'ignore)
+             (while (not owner-done) (accept-process-output nil 0.1))
+             (dotimes (_ 10) (accept-process-output nil 0.05))
+             (list :before (process-status epipe)
+                   :after-stop (progn (stop-process epipe) (process-status epipe))
+                   :after-continue (progn (continue-process epipe)
+                                          (process-status epipe))))"#
+    ));
+
+    assert_eq!(
+        result,
+        "OK (:before closed :after-stop closed :after-continue closed)"
+    );
+}

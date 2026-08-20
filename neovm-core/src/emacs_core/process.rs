@@ -9682,8 +9682,35 @@ pub(crate) fn process_effective_status(process: &Process) -> Value {
     }
 }
 
+/// GNU `Fprocess_status`'s connection remapping (src/process.c:1193-1201):
+///
+/// ```c
+///   if (NETCONN1_P (p) || SERIALCONN1_P (p) || PIPECONN1_P (p))
+///     {
+///       if (EQ (status, Qexit))          status = Qclosed;   /* :1195-1196 */
+///       else if (EQ (p->command, Qt))    status = Qstop;     /* :1197-1198 */
+///       else if (EQ (status, Qrun))      status = Qopen;     /* :1199-1200 */
+///     }
+/// ```
+///
+/// The chain is an `else if`, so `exit -> closed` WINS over the
+/// `command == t` stop: a connection that has finished reports `closed`
+/// however many times `stop-process` was called on it.  This port answered
+/// `command == t` first, which reported `stop` for a `:stderr` pipe that had
+/// already closed -- the last divergent row of ledger 169's three-kind
+/// neighbour sweep, and reachable only once `stop-process` started setting
+/// `p->command' on a retired connection the way GNU does.
 pub(crate) fn process_public_status_symbol(process: &Process) -> Value {
-    if process_stopped_for_io(process) {
+    if process_stopped_for_io(process)
+        && !matches!(
+            ProcessStatusSymbol::from_status_value(process_effective_status(process)),
+            Some(
+                ProcessStatusSymbol::Exit
+                    | ProcessStatusSymbol::Signal
+                    | ProcessStatusSymbol::Closed
+            )
+        )
+    {
         return ProcessStatusSymbol::Stop.value();
     }
     match ProcessStatusSymbol::from_status_value(process_effective_status(process)) {
