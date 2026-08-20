@@ -125,6 +125,29 @@ fn oracle_defvar_bool_variables_that_gnu_also_makes_buffer_local() {
 /// `debug-on-next-call' is the one name left out: setting it non-nil is what
 /// arms the debugger, and entering the debugger clears it again, so it cannot
 /// be probed by assignment.
+///
+/// Re-measured 2026-08-20 (ledger 168 item 4) and unchanged.
+/// `(list (default-value 'debug-on-next-call)
+///        (progn (set-default 'debug-on-next-call 5)
+///               (default-value 'debug-on-next-call))
+///        (progn (setq debug-on-next-call t) debug-on-next-call))`
+/// is `(nil nil t)` under GNU and `(nil t t)` here -- and GNU prints four
+/// debugger backtraces while answering, which is the mechanism showing itself:
+/// the `set-default` arms the flag, the very next `funcall` reaches
+/// `if (debug_on_next_call) do_debug_on_call (Qlambda, count)`
+/// (`src/eval.c:3189`, and `2601` in `eval_sub`, and `src/bytecode.c:798`),
+/// and `do_debug_on_call` clears it on its first line before calling the
+/// debugger (`src/eval.c:336-340`); `call_debugger` clears it again
+/// (`src/eval.c:298`).  The third element is `t` in both because `progn` and
+/// `setq` are special forms, so no funcall intervenes before the read.
+///
+/// Neomacs has the debugger this needs -- `call_debugger_for_signal` and the
+/// `debug_on_exit` flag on backtrace frames both exist -- and none of the three
+/// dispatch checks, so nothing ever disarms the flag.  That is a debugger gap
+/// worth its own entry (it is the same missing piece as `backtrace-debug`'s
+/// debug-on-exit, which `pop_bytecode_backtrace_frame_with_result` already
+/// leaves a landing site for), not a wrong value: the variable's declaration
+/// and its Boolean coercion are correct here.
 #[test]
 fn oracle_every_defvar_bool_variable_is_bound_and_canonical() {
     return_if_neovm_enable_oracle_proptest_not_set!();

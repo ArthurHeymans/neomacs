@@ -38,6 +38,48 @@
 
 pub(crate) mod gnu_table;
 
+/// GNU's `SKIP` marker is not documentation, and this is where that becomes
+/// unrepresentable rather than merely absent.
+///
+/// A variable that several window-system files declare keeps its text in one
+/// of them and a placeholder in the rest -- `x-pointer-shape` is `DEFVAR_LISP`
+/// in `src/xfns.c:10327`, `src/w32fns.c:11809`, `src/haikufns.c:3284` and
+/// `src/androidfns.c:3587`, three of which read
+/// `doc: /* SKIP: real doc in xfns.c.  */` -- so the string is maintained once.
+/// 170 `DEFVAR` blocks across GNU's `src/*.c` carry it, and
+/// `Fsnarf_documentation` refuses every one:
+///
+/// ```text
+/// /* Ignore docs that start with SKIP.  These mark
+///    placeholders where the real doc is elsewhere.  */
+/// if ((!NILP (Fboundp (sym)) || !NILP (Fmemq (sym, delayed_init)))
+///     && strncmp (end, "\nSKIP", 5))
+///   Fput (sym, Qvariable_documentation, make_fixnum (pos + end + 1 - buf));
+/// ```
+///
+/// (`src/doc.c:600-608`.)  So no GNU build shows one to a user.
+/// [`gnu_table`] is generated from ALL of `src/*.c` and used to keep the
+/// alphabetically first copy of a duplicated name, which handed 35 variables a
+/// placeholder instead of their text; the generator now drops a `SKIP` block
+/// so the next file's real copy wins.  The check below is what keeps that
+/// true: a regenerated table carrying a placeholder does not compile.
+const fn doc_is_a_skip_placeholder(doc: &str) -> bool {
+    let bytes = doc.as_bytes();
+    bytes.len() >= 4 && bytes[0] == b'S' && bytes[1] == b'K' && bytes[2] == b'I' && bytes[3] == b'P'
+}
+
+const _: () = {
+    let mut index = 0;
+    while index < gnu_table::GNU_VAR_DOCS.len() {
+        assert!(
+            !doc_is_a_skip_placeholder(gnu_table::GNU_VAR_DOCS[index].1),
+            "GNU_VAR_DOCS holds a SKIP placeholder; GNU never installs one \
+             (src/doc.c:600-608). Re-run scripts/extract_gnu_defvar_docs.py."
+        );
+        index += 1;
+    }
+};
+
 /// Look up the doc string for a built-in variable by name.
 /// Returns `None` if no entry exists. The returned `&'static str`
 /// points into `.rodata`.

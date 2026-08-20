@@ -103,8 +103,33 @@ def unescape_doc_comment(text: str) -> str:
     return "".join(out)
 
 
+def is_skip_placeholder(doc: str) -> bool:
+    """GNU's own test, verbatim: a DOC entry that starts with `SKIP` is not
+    documentation.
+
+    A variable that several window-system files declare -- `x-pointer-shape`
+    is in `xfns.c`, `w32fns.c`, `haikufns.c` and `androidfns.c` -- carries the
+    real text in exactly one of them and
+    `doc: /* SKIP: real doc in xfns.c.  */` in the rest, so the string never
+    has to be maintained four times.  `Fsnarf_documentation` refuses to install
+    such an entry -- `strncmp (end, "\\nSKIP", 5)` guarding the
+    `Fput (sym, Qvariable_documentation, ...)`, under the comment "Ignore docs
+    that start with SKIP.  These mark placeholders where the real doc is
+    elsewhere." (`src/doc.c:600-608`).  So no GNU build ever shows one to a
+    user, and a table row holding one is a generator bug rather than a value.
+
+    170 of GNU's `src/*.c` DEFVAR blocks carry the marker.
+    """
+    return doc.startswith("SKIP")
+
+
 def extract_defvars(src: str) -> list[tuple[str, str]]:
-    """Extract `(name, doc)` pairs from a single C source file."""
+    """Extract `(name, doc)` pairs from a single C source file.
+
+    Declarations whose doc text is a `SKIP` placeholder contribute nothing:
+    the caller must be free to take the next file's copy, which is where the
+    real text lives.
+    """
     results = []
     pos = 0
     while True:
@@ -114,7 +139,8 @@ def extract_defvars(src: str) -> list[tuple[str, str]]:
         name = m.group(2)
         doc, doc_end = find_doc_block(src, m.end())
         if doc is not None:
-            results.append((name, doc))
+            if not is_skip_placeholder(doc):
+                results.append((name, doc))
             pos = doc_end
         else:
             pos = m.end()
@@ -178,7 +204,8 @@ def main() -> int:
         return 1
 
     all_entries: list[tuple[str, str]] = []
-    seen_names: set[str] = set()
+    first_site: dict[str, tuple[str, str]] = {}
+    conflicts = 0
     for c_file in sorted(args.gnu_src.glob("*.c")):
         try:
             src = c_file.read_text(encoding="utf-8", errors="replace")
@@ -187,21 +214,32 @@ def main() -> int:
             continue
         entries = extract_defvars(src)
         for name, doc in entries:
-            if name in seen_names:
-                print(
-                    f"note: duplicate DEFVAR '{name}' in {c_file.name}, "
-                    f"keeping the earlier definition",
-                    file=sys.stderr,
-                )
+            if name in first_site:
+                where, kept = first_site[name]
+                # After the SKIP filter, a second REAL doc for the same name is
+                # the case GNU's convention is meant to prevent -- it keeps the
+                # text in one file, e.g. `xterm.c`, and marks every other copy
+                # SKIP (`src/doc.c:585-594`).  Where two real copies genuinely
+                # differ, which one this build would show depends on which file
+                # it compiles, and this table cannot know that; say so out loud
+                # rather than picking one silently.
+                if doc != kept:
+                    conflicts += 1
+                    print(
+                        f"note: '{name}' has DIFFERING real doc text in "
+                        f"{where} and {c_file.name}; keeping {where}",
+                        file=sys.stderr,
+                    )
                 continue
-            seen_names.add(name)
+            first_site[name] = (c_file.name, doc)
             all_entries.append((name, doc))
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     emit_rust(all_entries, args.output)
     print(
         f"extracted {len(all_entries)} DEFVAR docs from "
-        f"{args.gnu_src} -> {args.output}",
+        f"{args.gnu_src} -> {args.output} "
+        f"({conflicts} name(s) with differing real text in two files)",
         file=sys.stderr,
     )
     return 0
