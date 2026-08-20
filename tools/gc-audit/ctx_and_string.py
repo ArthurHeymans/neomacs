@@ -6,7 +6,7 @@ the heap at the same time."""
 import os
 import re
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from gcaudit_root import ROOT  # noqa: E402  (validated workspace root)
 FN = re.compile(r'^\s*(?:pub(?:\([^)]*\))?\s+)?(?:const\s+)?(?:async\s+)?(?:unsafe\s+)?'
                 r'fn\s+([A-Za-z_]\w*)')
 CTX = re.compile(r'&\s*mut\s+(?:[A-Za-z_:]*::)?Context\b')

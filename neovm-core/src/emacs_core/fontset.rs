@@ -854,8 +854,7 @@ fn parse_font_vector(items: &[Value]) -> StoredFontSpec {
         .and_then(|value| intern_font_name_value(&value))
         .or_else(|| {
             font_vector_get_flexible(items, "name")
-                .and_then(|value| value.as_lisp_string())
-                .map(parse_font_name_string)
+                .and_then(|value| value.as_lisp_string().map(parse_font_name_string))
                 .and_then(|spec| spec.family)
         });
     let registry = font_vector_get_flexible(items, "registry")
@@ -863,8 +862,7 @@ fn parse_font_vector(items: &[Value]) -> StoredFontSpec {
         .map(|registry| intern(&registry.to_ascii_lowercase()))
         .or_else(|| {
             font_vector_get_flexible(items, "name")
-                .and_then(|value| value.as_lisp_string())
-                .map(parse_font_name_string)
+                .and_then(|value| value.as_lisp_string().map(parse_font_name_string))
                 .and_then(|spec| spec.registry)
         });
     let lang = font_vector_get_flexible(items, "lang")

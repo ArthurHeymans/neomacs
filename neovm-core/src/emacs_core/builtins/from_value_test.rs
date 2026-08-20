@@ -51,9 +51,11 @@ fn f64_extracts_numbers_and_signals_numberp() {
 /// DIVERGENCES.md 163 deleted `impl FromValue for &'static LispString`: a
 /// conversion that takes its `Value` by value cannot hand back a borrow that
 /// outlives the call, and only `as_lisp_string`'s laundered `'static` let it
-/// typecheck. `StringDesignator` is the shape that survives — a private
-/// `&'static` field with an accessor that reborrows from `&self` — so this
-/// pins the borrowing conversion through it, plus the lossy sibling.
+/// typecheck. `StringDesignator` is the shape that survives — 167 made it
+/// carry the OPERAND rather than a borrow of it, so the accessor that
+/// reborrows from `&self` is now the only lifetime available rather than a
+/// convention — so this pins the borrowing conversion through it, plus the
+/// lossy sibling.
 #[test]
 fn lisp_string_borrow_and_lossy_string_signal_stringp() {
     crate::test_utils::init_test_tracing();
@@ -172,13 +174,13 @@ fn string_designator_accepts_symbols() {
     );
 
     let symbol = Value::symbol("abc");
-    let symbol_name = crate::emacs_core::intern::resolve_sym_lisp_name(
+    let symbol_name = crate::emacs_core::intern::resolve_lisp_visible_symbol_name(
         symbol.as_symbol_id().expect("symbol value has an id"),
     );
     let from_symbol = StringDesignator::from_value(&mut eval, symbol).unwrap();
     assert_eq!(from_symbol.text().as_bytes(), b"abc");
     assert!(
-        std::ptr::eq(from_symbol.text(), symbol_name),
+        std::ptr::eq(from_symbol.text(), symbol_name.text()),
         "GNU compares the symbol's existing name string instead of rebuilding it"
     );
     let bad = Value::fixnum(1);

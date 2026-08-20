@@ -2569,7 +2569,7 @@ impl Buffer {
     /// `&self` makes that a borrow error and costs nothing: every caller
     /// either clones immediately or uses the name inside the same `&`-borrow.
     pub fn file_name_lisp_string(&self) -> Option<&crate::heap_types::LispString> {
-        self.file_name_value().as_lisp_string()
+        self.slots[BUFFER_SLOT_FILE_NAME.index()].as_lisp_string()
     }
 
     /// Write `buffer-file-name`. Mirrors GNU `bset_filename`
@@ -2598,7 +2598,7 @@ impl Buffer {
     /// Tied to the buffer's borrow, not `'static` — see
     /// `file_name_lisp_string` (DIVERGENCES.md 163).
     pub fn auto_save_file_name_lisp_string(&self) -> Option<&crate::heap_types::LispString> {
-        self.auto_save_file_name_value().as_lisp_string()
+        self.slots[BUFFER_SLOT_AUTO_SAVE_FILE_NAME.index()].as_lisp_string()
     }
 
     /// Write `buffer-auto-save-file-name`. Mirrors GNU

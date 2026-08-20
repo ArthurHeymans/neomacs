@@ -148,7 +148,8 @@ fn process_environment_prefix(environment: Value) -> Vec<(OsString, Option<OsStr
     let mut entries = Vec::new();
     let mut tail = environment;
     while tail.is_cons() {
-        let Some(string) = tail.cons_car().as_lisp_string() else {
+        let car = tail.cons_car();
+        let Some(string) = car.as_lisp_string() else {
             break;
         };
         entries.push(split_environment_entry(string));

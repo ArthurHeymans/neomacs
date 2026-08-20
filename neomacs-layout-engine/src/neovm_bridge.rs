@@ -2564,7 +2564,7 @@ pub(crate) struct OverlayDisplayString {
 
 impl OverlayDisplayString {
     #[cfg(test)]
-    pub(crate) fn bytes(self) -> Option<&'static [u8]> {
+    pub(crate) fn bytes(&self) -> Option<&[u8]> {
         self.string.as_lisp_string().map(|string| string.as_bytes())
     }
 }

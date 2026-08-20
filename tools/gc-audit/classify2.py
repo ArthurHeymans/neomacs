@@ -19,7 +19,7 @@ import re
 import sys
 import json
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from gcaudit_root import ROOT  # noqa: E402  (validated workspace root)
 
 ACCESSOR = re.compile(r'\b(as_lisp_string|expect_lisp_string)\b')
 FN_RE = re.compile(r'^(\s*)(?:pub(?:\([^)]*\))?\s+)?(?:default\s+)?'

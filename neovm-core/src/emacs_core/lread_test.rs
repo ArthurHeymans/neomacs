@@ -201,8 +201,8 @@ fn eval_buffer_preserves_unibyte_filename_in_load_state() {
         .first()
         .copied()
         .expect("load-history should contain one entry");
-    let load_history_name = first_entry
-        .cons_car()
+    let load_history_name_value = first_entry.cons_car();
+    let load_history_name = load_history_name_value
         .as_lisp_string()
         .expect("load-history filename should stay a Lisp string");
     assert_eq!(load_history_name.as_bytes(), filename.as_bytes());

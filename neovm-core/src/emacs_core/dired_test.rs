@@ -115,7 +115,8 @@ fn directory_files_and_attributes_decodes_names_before_matching_and_returning_th
 
     let items = list_to_vec(&result).unwrap();
     assert_eq!(items.len(), 1);
-    let name = items[0].cons_car().as_lisp_string().unwrap();
+    let name_value = items[0].cons_car();
+    let name = name_value.as_lisp_string().unwrap();
     assert!(name.is_multibyte());
     assert_eq!(name.as_utf8_str(), Some("Übung – Lösung.zip"));
 

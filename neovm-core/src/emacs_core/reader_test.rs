@@ -389,8 +389,8 @@ fn read_from_string_ascii_string_literals_are_unibyte() {
     let result = builtin_read_from_string(&mut ev, vec![Value::string(r#""hello""#)]).unwrap();
     match result.kind() {
         ValueKind::Cons => {
-            let text = result
-                .cons_car()
+            let text_value = result.cons_car();
+            let text = text_value
                 .as_lisp_string()
                 .expect("reader should return a string object");
             assert!(!text.is_multibyte());
@@ -484,8 +484,8 @@ fn read_from_string_preserves_valid_utf8_runs_as_unibyte_bytes() {
     ]));
 
     let result = builtin_read_from_string(&mut ev, vec![input]).unwrap();
-    let text = result
-        .cons_car()
+    let text_value = result.cons_car();
+    let text = text_value
         .as_lisp_string()
         .expect("reader should return a string object");
 

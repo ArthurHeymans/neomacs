@@ -444,10 +444,10 @@ pub(crate) fn builtin_get_truename_buffer(
         // GNU skips buffers whose file_truename is not a string BEFORE
         // calling Fstring_equal, so a non-string FILENAME only signals once
         // some live buffer visits a file.
-        let Some(truename) = buf
-            .buffer_local_value("buffer-file-truename")
-            .and_then(|value| value.as_lisp_string())
-        else {
+        let Some(truename_value) = buf.buffer_local_value("buffer-file-truename") else {
+            continue;
+        };
+        let Some(truename) = truename_value.as_lisp_string() else {
             continue;
         };
         let filename = expect_lisp_string(&args[0])?;

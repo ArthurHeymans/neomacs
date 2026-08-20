@@ -185,27 +185,40 @@ impl FromValue for CharacterCode {
 /// every typed string-designator builtin has the same interpreter, bytecode,
 /// and JIT contract.
 ///
-/// The inner reference is `&'static` only because that is how the tagged heap
-/// hands out object interiors; it is NOT a claim that the string outlives the
-/// designator.  The field is therefore private and the only way out is
-/// [`StringDesignator::text`], whose result is reborrowed from `&self`, so a
-/// caller cannot park a `&'static LispString` beyond the designator's scope.
-/// (`Value::as_lisp_string` still launders `&'static` for the ~675 call sites
-/// that predate this type; narrowing those is a separate, much larger job.)
+/// DIVERGENCES.md 167: the designator now holds the OPERAND rather than a
+/// borrow of it, which is how GNU writes the same coercion --
+/// `if (SYMBOLP (s1)) s1 = SYMBOL_NAME (s1);` and only then `SDATA (s1)`
+/// (`src/fns.c:344-353`).  Until then the inner field was a
+/// `&'static LispString` with a doc comment explaining that the `'static` was
+/// not a claim about lifetime; the field is now a `Value` (or, for a symbol,
+/// the typed name view), so there is no `'static` left to explain and
+/// [`StringDesignator::text`] reborrows from `&self` because that is the only
+/// lifetime the data has.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct StringDesignator(&'static LispString);
+pub(crate) enum StringDesignator {
+    /// A string argument, carried as the value the caller passed.
+    String(Value),
+    /// A symbol operand, carried as its Lisp-visible name: an object on this
+    /// heap when the symbol has one, else its process-lifetime name atom.
+    SymbolName(crate::emacs_core::intern::LispVisibleSymbolName),
+}
 
 impl StringDesignator {
     /// Borrow the designated string, for no longer than the designator lives.
     pub(crate) fn text(&self) -> &LispString {
-        self.0
+        match self {
+            Self::String(value) => value
+                .as_lisp_string()
+                .expect("ValueKind::String must carry LispString payload"),
+            Self::SymbolName(name) => name.text(),
+        }
     }
 }
 
 impl FromValue for StringDesignator {
     fn from_value(eval: &mut eval::Context, value: Value) -> Result<Self, Flow> {
         let value = eval.unwrap_symbol(value);
-        expect_string_comparison_operand(&value).map(StringDesignator)
+        expect_string_comparison_operand(&value)
     }
 }
 
