@@ -51,6 +51,17 @@ pub(crate) fn char_pos_to_emacs_byte_pos_call_count() -> usize {
 /// `marker.c:202-203` but uses a `BufferText` content epoch rather than
 /// `chars_modiff`, so direct `BufferText` tests and non-buffer callers get the
 /// same invalidation semantics as full `insdel.rs` edits.
+/// One memoized syntax-prop-free run (see
+/// `syntax_prop_free_run_end_at_char_pos`). `epoch == 0` never matches a live
+/// buffer epoch, so the default entry is inert.
+#[derive(Clone, Copy, Default)]
+struct SyntaxRunMemoEntry {
+    epoch: u64,
+    tick: u64,
+    start: CharPos0,
+    end: CharPos0,
+}
+
 #[derive(Clone, Copy, Default)]
 struct PositionCache {
     /// BufferText content epoch when this entry was stored. Zero = invalid.
@@ -108,6 +119,9 @@ struct BufferTextStorage {
     anchor_cache_key: Cell<u64>,
     /// Round-robin replacement cursor for the anchor ring.
     anchor_cache_cursor: Cell<usize>,
+    /// Memo ring for `syntax_prop_free_run_end_at_char_pos` (see its doc).
+    syntax_run_memo: RefCell<[SyntaxRunMemoEntry; 4]>,
+    syntax_run_memo_cursor: Cell<usize>,
 }
 
 impl BufferTextStorage {
@@ -210,6 +224,8 @@ impl Clone for BufferTextStorage {
             anchor_cache: self.anchor_cache.clone(),
             anchor_cache_key: self.anchor_cache_key.clone(),
             anchor_cache_cursor: self.anchor_cache_cursor.clone(),
+            syntax_run_memo: self.syntax_run_memo.clone(),
+            syntax_run_memo_cursor: self.syntax_run_memo_cursor.clone(),
         }
     }
 }
@@ -273,6 +289,8 @@ impl BufferText {
                 anchor_cache: RefCell::new(Vec::new()),
                 anchor_cache_key: Cell::new(0),
                 anchor_cache_cursor: Cell::new(0),
+                syntax_run_memo: RefCell::new([SyntaxRunMemoEntry::default(); 4]),
+                syntax_run_memo_cursor: Cell::new(0),
             })),
         }
     }
@@ -392,6 +410,8 @@ impl BufferText {
         storage.pos_cache.set(PositionCache::default());
         storage.anchor_cache.borrow_mut().clear();
         storage.anchor_cache_key.set(0);
+        // Default entries have epoch 0, which never matches a live epoch.
+        *storage.syntax_run_memo.borrow_mut() = [SyntaxRunMemoEntry::default(); 4];
     }
 
     fn byte_range_to_char_range_with_storage(
@@ -1031,7 +1051,11 @@ impl BufferText {
     }
 
     pub fn text_props_replace(&self, table: TextPropertyTable) {
-        self.storage.borrow_mut().text_props = Rc::new(table);
+        let mut storage = self.storage.borrow_mut();
+        storage.text_props = Rc::new(table);
+        // A swapped-in table carries its own mutation-tick lineage, which can
+        // collide with the memo's stored ticks — drop the memo outright.
+        *storage.syntax_run_memo.borrow_mut() = [SyntaxRunMemoEntry::default(); 4];
     }
 
     pub fn replace_storage(&self, text: &str, multibyte: bool, text_props: TextPropertyTable) {
@@ -1185,11 +1209,35 @@ impl BufferText {
     }
 
     /// See [`crate::buffer::text_props::TextPropertyTable::syntax_prop_free_run_end`].
+    ///
+    /// Memoized in a small ring keyed by (content epoch, property mutation
+    /// tick): a fontification pass runs thousands of scans between edits, and
+    /// each scan's per-scan run cache starts cold — without this memo every
+    /// scan re-walked the same face-interval chain. A hit may return an end
+    /// short of `cap` (the stored walk's own lookahead); that is a valid,
+    /// merely conservative answer — the caller just refills again there.
     pub fn syntax_prop_free_run_end_at_char_pos(&self, pos: CharPos0, cap: CharPos0) -> CharPos0 {
-        self.storage
-            .borrow()
-            .text_props
-            .syntax_prop_free_run_end(pos, cap)
+        let storage = self.storage.borrow();
+        let epoch = storage.content_epoch;
+        let tick = storage.text_props.mutation_tick();
+        for entry in storage.syntax_run_memo.borrow().iter() {
+            if entry.epoch == epoch && entry.tick == tick && pos >= entry.start && pos < entry.end {
+                return entry.end.min(cap);
+            }
+        }
+        let end = storage.text_props.syntax_prop_free_run_end(pos, cap);
+        if end > pos {
+            let mut memo = storage.syntax_run_memo.borrow_mut();
+            let slot = storage.syntax_run_memo_cursor.get() % memo.len();
+            memo[slot] = SyntaxRunMemoEntry {
+                epoch,
+                tick,
+                start: pos,
+                end,
+            };
+            storage.syntax_run_memo_cursor.set(slot + 1);
+        }
+        end
     }
 
     /// See [`text_props::TextPropertyTable::has_any_non_nil_property_in_char_range`].

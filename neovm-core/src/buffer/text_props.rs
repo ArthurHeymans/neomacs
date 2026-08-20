@@ -1902,6 +1902,10 @@ enum ReplacementPropertyNames<'a> {
 pub struct TextPropertyTable {
     intervals: IntervalTree,
     property_names: ConservativePropertyNames,
+    /// Bumped by every mutating entry point; run-caching scanners key their
+    /// memos on it (together with the buffer content epoch) so a property
+    /// change invalidates them. Monotonic, wraps never (u64).
+    mutation_tick: u64,
 }
 
 impl TextPropertyTable {
@@ -1909,7 +1913,13 @@ impl TextPropertyTable {
         Self {
             intervals: IntervalTree::new(),
             property_names: ConservativePropertyNames::default(),
+            mutation_tick: 0,
         }
+    }
+
+    /// Current mutation tick — see the field doc.
+    pub fn mutation_tick(&self) -> u64 {
+        self.mutation_tick
     }
 
     /// Return the conservative presence state for `name` without descending the
@@ -2028,6 +2038,7 @@ impl TextPropertyTable {
         Self {
             intervals: IntervalTree::from_runs(runs),
             property_names,
+            mutation_tick: 0,
         }
     }
 
@@ -2036,6 +2047,7 @@ impl TextPropertyTable {
         Self {
             intervals: IntervalTree::from_runs_preserving_shape(runs),
             property_names,
+            mutation_tick: 0,
         }
     }
 
@@ -2044,6 +2056,7 @@ impl TextPropertyTable {
         runs: Vec<IntervalRun>,
         property_names: ReplacementPropertyNames<'_>,
     ) {
+        self.mutation_tick += 1;
         match property_names {
             ReplacementPropertyNames::Preserve => {}
             ReplacementPropertyNames::Include(names) => self.property_names.include(names),
@@ -2093,6 +2106,7 @@ impl TextPropertyTable {
     }
 
     fn put_property_raw(&mut self, range: CharRange, name: Value, value: Value) -> bool {
+        self.mutation_tick += 1;
         if range.is_empty() {
             return false;
         }
@@ -2148,6 +2162,7 @@ impl TextPropertyTable {
         name: Value,
         value: Value,
     ) -> bool {
+        self.mutation_tick += 1;
         if range.is_empty() {
             return false;
         }
@@ -2486,6 +2501,7 @@ impl TextPropertyTable {
     }
 
     fn remove_property_raw(&mut self, range: CharRange, name: Value) -> bool {
+        self.mutation_tick += 1;
         if range.is_empty() {
             return false;
         }
@@ -2508,6 +2524,7 @@ impl TextPropertyTable {
     }
 
     fn remove_all_properties_raw(&mut self, range: CharRange) {
+        self.mutation_tick += 1;
         if range.is_empty() {
             return;
         }
@@ -2526,6 +2543,7 @@ impl TextPropertyTable {
     }
 
     fn set_properties_raw(&mut self, range: CharRange, plist: Vec<(Value, Value)>) {
+        self.mutation_tick += 1;
         if range.is_empty() {
             return;
         }
@@ -2581,6 +2599,7 @@ impl TextPropertyTable {
         object_len: CharLen,
         plist: Vec<(Value, Value)>,
     ) {
+        self.mutation_tick += 1;
         if range.is_empty() {
             return;
         }
@@ -2837,6 +2856,7 @@ impl TextPropertyTable {
     }
 
     fn adjust_for_insert_raw(&mut self, pos: CharPos0, len: CharLen) {
+        self.mutation_tick += 1;
         if len.is_empty() {
             return;
         }
@@ -2849,6 +2869,7 @@ impl TextPropertyTable {
     }
 
     fn adjust_for_delete_raw(&mut self, range: CharRange) {
+        self.mutation_tick += 1;
         if range.is_empty() {
             return;
         }
@@ -2866,6 +2887,7 @@ impl TextPropertyTable {
     }
 
     fn adjust_for_replace_raw(&mut self, start: CharPos0, old_len: CharLen, new_len: CharLen) {
+        self.mutation_tick += 1;
         match new_len.cmp(&old_len) {
             std::cmp::Ordering::Greater => {
                 self.adjust_for_insert_raw(start, CharLen::new(new_len.get() - old_len.get()));
@@ -3117,6 +3139,7 @@ impl TextPropertyTable {
     }
 
     fn append_shifted_raw(&mut self, other: &TextPropertyTable, offset: CharLen) {
+        self.mutation_tick += 1;
         // Apply each inserted run's properties to its shifted range locally --
         // split at the run edges and set the run's plist on each covered
         // interval, O(log n) per run -- instead of extracting every run and
@@ -3184,6 +3207,7 @@ impl TextPropertyTable {
         other: &TextPropertyTable,
         offset: CharLen,
     ) {
+        self.mutation_tick += 1;
         for run in other.intervals.runs() {
             if run.is_empty_plist() {
                 continue;
@@ -3207,6 +3231,7 @@ impl TextPropertyTable {
     }
 
     fn merge_missing_shifted_raw(&mut self, other: &TextPropertyTable, offset: CharLen) {
+        self.mutation_tick += 1;
         let mut target_runs = self.intervals.runs();
         for source in other.intervals.runs() {
             if source.is_empty_plist() {
@@ -3241,6 +3266,7 @@ impl TextPropertyTable {
     }
 
     fn merge_adjacent_equal_properties_around(&mut self, range: CharRange) {
+        self.mutation_tick += 1;
         let mut runs = self.intervals.runs();
         let start = range.start();
         let end = range.end();
