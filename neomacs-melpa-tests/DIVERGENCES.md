@@ -19462,3 +19462,687 @@ message.
 > is rootedness, and mechanically it is `&mut`.
 
 Status: FIXED.
+
+
+## 163. `Value::as_lisp_string` promises the borrow checker `'static` about a mark-sweep heap 500 times, and the filter the brief prescribed -- "which borrows are still held across a safepoint" -- decides nothing, because 90% of this interpreter's function names can reach one -- MOSTLY BENIGN, and the six borrows that do cross a safepoint were found by the compiler rather than by reading -- FIXED
+
+Handed over as "the same family as ledgers 161 and 162 -- a Lisp value
+outliving what keeps it alive -- and the largest one left", with 677
+`as_lisp_string` and 172 `expect_lisp_string` sites and an instruction to
+apply 162's safepoint rule as the filter.
+
+The seam is real and one API in it was genuinely unsound.  The filter is not:
+applied mechanically it flags 86% of the candidate sites, and the reason is
+structural rather than a defect of the measurement.  What actually decides the
+question is a different property -- is the value ROOTED -- and the tree already
+has a mechanism that expresses it exactly, because every safepoint here is a
+`&mut Context` method.  So the answer is not new machinery; it is deleting a
+`'static` that opts out of the check the borrow checker would otherwise run.
+
+The headline: **500 production borrows; 206 that bind the borrow to a name and
+outlive their own line; 28 that a filter sharper than "safepoint-reachable"
+cannot clear by reading; 20 of those handed to the compiler, which found SIX
+held across a `&mut Context` call -- all six sound, and zero live
+use-after-free anywhere.**  Four of the six were `looking-at` and every buffer regexp
+search holding a borrow across `syntax-propertize-function`; they are
+restructured so the compiler proves the property instead of a reviewer
+asserting it.  One API -- `impl FromValue for &'static LispString` -- was
+unsound in shape and is deleted.  A reclaimed string is now recognizable the
+way GNU makes one recognizable.  And a new probe turned up one real
+behavioural divergence, in §10, which is the entry's most interesting result:
+the port is safe at the insert boundary BECAUSE it copies the string early,
+and copying early is exactly what makes it disagree with GNU.
+
+### 1. What makes a `&'static LispString` dangle here, precisely
+
+`neovm-core/src/emacs_core/value.rs`:
+
+```rust
+pub fn as_lisp_string(self) -> Option<&'static LispString> {
+    self.as_string_ptr().map(|p| unsafe { &(*p).data })
+}
+```
+
+Strings are arena-allocated (`alloc_string`, `gc.rs:4589`) and swept by
+`ObjectArena::sweep_range` (`gc.rs:2000-2056`), which runs `drop_in_place` on
+the dead slot.  `Drop for LispString` (`heap_types.rs`) calls
+`release_owned_storage`, which frees the byte buffer.  So a borrow that
+outlives its object reads a header whose payload pointer is dangling, in a slot
+the same arena will hand to the next string.  (That is the state as handed
+over; §7 makes the reclaimed header say so and the read abort.)
+
+Two rules bound the exposure, and they are different rules:
+
+* **Collection.** 162's, from the tree's own invariant
+  (`tagged/CONCURRENT_GC.md:264-273`): "Allocation never triggers a GC, so a
+  value need only be rooted before the next *safepoint*".
+* **Relocation.** `LispString::mutate_bytes` rebuilds the payload `Vec` and
+  writes back a possibly-reallocated pointer, so `aset` moves a string's bytes
+  with no collection involved.  GNU has the identical hazard and is explicit
+  about it: `compact_small_strings` (`src/alloc.c`) relocates small string data
+  on every GC, which is the entire reason `pin_string` exists.  A `char *` into
+  string data held across a GC is invalid in GNU *by construction*.
+
+  A `&LispString` survives relocation -- it borrows the HEADER, and `as_bytes`
+  re-reads `data` each call -- so relocation only bites a `&[u8]` taken
+  earlier.  It is still aliasing UB (`with_lisp_string_mut` hands out `&mut
+  LispString` while a shared borrow is live) and it is worth stating, but it is
+  not the sharp edge.
+
+### 2. The number handed over is 849; the seam is 793, and 500 of those are borrows
+
+Counted mechanically (`tools/gc-audit/classify2.py`) on the tree AS HANDED
+OVER, i.e. at merge base `bc0505a98`, before any change in this entry:
+
+| | |
+|---|---|
+| raw `grep` for `as_lisp_string\|expect_lisp_string` | **849** lines |
+| of which `expect_lisp_string_strict` / `expect_lisp_filename_string_strict` (`fileio.rs:1749/1765`) | **56** -- a DIFFERENT function returning an owned `LispString`; the grep matched a prefix |
+| accessor lines proper | **793** = 11 definitions + 6 comments + **776 uses** |
+| uses in test files or `#[cfg(test)]` modules | **245** |
+| **production uses** | **531** |
+
+And `expect_lisp_string` is six functions, not one.  Five of them --
+`bookmark.rs:350`, `dired.rs:54`, `lread.rs:40`, `minibuffer.rs:65`,
+`reader.rs:300` -- return an OWNED `LispString`; only `builtins/mod.rs:485` and
+`emacs_core/search.rs:63` return a reference.  Resolving each call to the
+definition it actually reaches (`tools/gc-audit/resolve_expect.py`):
+
+| | |
+|---|---|
+| production sites that really take a borrow | **500** |
+| production sites handed an owned clone | **31** |
+
+Of the 531 production sites, by the shape of the borrow:
+
+| class | count | why it is sound |
+|---|---|---|
+| **INLINE** -- never bound to a name | **270** | the borrow dies at the end of its own statement |
+| **OWNED** -- bound, but to `.clone()` / `.to_vec()` / a scalar | **26** | no borrow survives the expression |
+| **BOUND** -- a name is bound to the borrow | **235** | needs the live-range analysis below |
+
+Of the 235 BOUND: **209** are real borrows (26 reach an owned
+`expect_lisp_string`), and **3** of those are `let x = <borrow>; let x =
+x.clone();` on the next line, leaving **206** live borrows to account for.
+
+### 3. The safepoint filter, applied mechanically, decides nothing -- and that is the finding
+
+There are only seven safepoints in the tree.  Grepping for the safepoint
+functions, minus their own definitions and comments:
+
+| site | what it is |
+|---|---|
+| `eval.rs:8905` (`gc_safe_point` -> `gc_safe_point_exact`) | evaluator boundaries |
+| `eval.rs:10588` (`eval_sub`) | interpreted eval of a cons form |
+| `eval.rs:14471` (`apply_internal`) | funcall |
+| `eval.rs:14585` (`apply_with_frame_function` -> `maybe_gc_and_quit`) | funcall with a substituted frame function |
+| `bytecode/vm.rs:3387` (`bytecode_branch_maybe_gc_and_quit`) | the VM's branch poll |
+| `jit/compile.rs:2608` (same) | the JIT's loop poll |
+| `eval.rs:8316` (`gc_collect_from_current_roots_impl(true)`) | the `garbage-collect` subr |
+
+So "can this call reach a safepoint" is "can it reach `eval_sub`,
+`apply_internal`, the VM loop, or `garbage-collect`".  Built as a name-level
+call graph over `neovm-core` / `neomacs-bin` / `neomacs-layout-engine`
+(`tools/gc-audit/reach.py`; the graph is keyed by bare function name, which
+over-approximates and never under-approximates except through trait objects,
+fn pointers and macros):
+
+```text
+distinct fn names defined : 26484
+fn definitions total      : 30750
+names reaching a safepoint: 23877  (90.2% of defined names)
+```
+
+Applied to the 235 BOUND sites, that filter flags **201**.  It is not a filter;
+it is a tautology with extra steps.  **This is the coordinator's framing for
+this seam, and it does not survive contact with the measurement** -- exactly as
+162's "every Box/Vec/struct across a call that can allocate" did not.  162
+narrowed "allocation" to "safepoint" and that was the right narrowing *for a
+value riding the Rust stack out of one call*.  For a borrow held inside an
+interpreter's own leaf code the narrowing buys nothing, because everything an
+interpreter calls can, in principle, evaluate.
+
+### 4. What does decide it: rootedness, and a backtrace frame that had no test
+
+The question that discriminates is not "could a collection happen" but "would
+it take this string".  Census of what the 235 BOUND sites call
+`as_lisp_string` ON:
+
+| receiver | count |
+|---|---|
+| a subr's own argument (`args[i]`, `expect_lisp_string(&args[i])`) | **102** (96 as a borrow; dired's six reach its owned local) |
+| a buffer slot (`buf.file_name_value()`) | 4 |
+| everything else -- locals, parameters, cons cars, struct fields | 129 |
+
+The 102 are sound for one reason: `apply_internal` pushes a backtrace frame
+carrying the arguments (`push_backtrace_frame`, `eval.rs:13502`) before
+dispatching, and `Context::trace_roots`'s specpdl group visits it
+(`eval.rs:6241-6270`, `trace_backtrace_args` at `:13875`).  The argument is a
+root for the entire subr call, however much Lisp the subr runs.
+
+GNU roots exactly the same thing, by name, in the same place --
+`mark_specpdl`'s `SPECPDL_BACKTRACE` arm (`src/eval.c:4335-4343`):
+
+```c
+	case SPECPDL_BACKTRACE:
+	  {
+	    ptrdiff_t nargs = backtrace_nargs (pdl);
+	    mark_object (backtrace_function (pdl));
+	    if (nargs == UNEVALLED)
+	      nargs = 1;
+	    mark_objects (backtrace_args (pdl), nargs);
+	  }
+```
+
+That is what makes GNU's C primitives free to hold `SDATA (arg)` across a
+`Fsignal`, and it is the same arm 162 quoted for the "explicitly list all
+cases and abort" comment a few lines below.  So this is parity, not luck.
+
+**Nothing pinned it.**  Entry 163 adds the pin and its control
+(`emacs_core::eval::tests`):
+
+* `a_subr_argument_string_survives_a_collection_inside_the_subr` -- a fresh
+  string reachable only through a backtrace frame, a forced collection, the
+  bytes read back.
+* `a_string_with_no_backtrace_frame_is_reclaimed_at_the_same_safepoint` -- the
+  same string and the same safepoint minus only the frame, asserting the
+  collector really does take it.  Without this control the first test would be
+  green for the wrong reason.
+
+Red measured by disabling ONLY the root -- `SpecBinding::Backtrace1`'s
+`visit(*arg)` replaced by `let _ = arg;`, nothing else:
+
+```text
+Summary [0.315s] 2 tests run: 1 passed, 1 failed, 9155 skipped
+    FAIL  a_subr_argument_string_survives_a_collection_inside_the_subr
+
+thread ... panicked at neovm-core/src/emacs_core/value.rs:322:5:
+use-after-free: borrowed a string object the collector has reclaimed
+(StringObj at 0x7fffe82020c0 has a null data pointer, GNU sweep_strings' free
+marker). A `&LispString` outlived its object.
+```
+
+The control passed in the same run, which is what makes the pair evidence.
+
+### 5. The second reason 500 borrows are sound: this codebase already copies
+
+The dominant idiom at any boundary that runs Lisp is a clone, and it is
+everywhere:
+
+* `expect_lisp_string_strict` (56 sites) exists solely to hand back an owned
+  `LispString`.
+* Five modules shadow `expect_lisp_string` with an owned version (31 sites).
+* `builtin_lock_file` / `unlock_file` / `file_locked_p` each write
+  `let filename = filename.clone();` on the line after the borrow.
+* `builtin_message` roots `formatted` with `push_vm_frame_root` AND clones it
+  into `msg` before any of the display side effects run
+  (`builtins/misc_pure.rs:333-338`).
+* `builtin_all_completions_with_candidates` carries a comment saying so in as
+  many words: "Two-pass approach: first filter candidates using the predicate
+  (which may trigger GC via apply), then create string Values."
+* `CompletionPrefix::from_lisp_string` copies the characters out before the
+  predicate loop.
+
+The seam is therefore mostly benign, and it is benign *deliberately*.  What it
+lacks is not care; it is a way for the compiler to check the care.
+
+### 6. The type-level answer: the tree already spells "the collector may run here" `&mut`
+
+Every safepoint in §3 is a `&mut Context` method.  So a borrow whose lifetime
+is tied to `&Context` **cannot** be held across one -- the borrow checker
+rejects it, with no new machinery, no token threading and no runtime cost.
+`&'static` is precisely the annotation that opts out of that check.
+
+Three changes, in increasing order of how much they cost:
+
+**(a) Stop lying where it is free.**  `builtins::expect_lisp_string`
+(`builtins/mod.rs:485`), `search::expect_lisp_string` (`search.rs:63`),
+`Buffer::file_name_lisp_string` and `Buffer::auto_save_file_name_lisp_string`
+(`buffer/buffer.rs:2571/2600`) now elide their output lifetime to their input
+instead of claiming `'static`.  Zero churn at every call site -- and **one
+compile error in the whole workspace**:
+
+```text
+error[E0515]: cannot return value referencing function parameter `value`
+  --> neovm-core/src/emacs_core/builtins/from_value.rs:74:9
+   |
+74 |         expect_lisp_string(&value)
+   |         ^^^^^^^^^^^^^^^^^^^------^
+```
+
+`impl FromValue for &'static LispString`.  `FromValue::from_value` takes
+`value: Value` BY VALUE, so a borrow derived from it cannot outlive the call,
+yet `Self = &'static LispString` demands exactly that.  It was not a subtle
+lifetime question: it was a conversion whose result type outlives its own
+input, and it typechecked only because `as_lisp_string` launders `'static`.  It
+had no production users -- deleted, which surfaced exactly two more errors,
+both in `from_value_test.rs`, where the test now goes through
+`StringDesignator` instead.  `StringDesignator`, ten lines below it in
+the same file, is the shape that works, and its doc comment had already
+diagnosed this seam: "The inner reference is `&'static` only because that is
+how the tagged heap hands out object interiors; it is NOT a claim that the
+string outlives the designator.  The field is therefore private and the only
+way out is `StringDesignator::text`, whose result is reborrowed from `&self`."
+Private field, no public constructor, accessor reborrows -- 161's and 162's
+discipline, already applied to one type.
+
+**(b) The honest accessor.**  `Value::lisp_string_in(self, heap: &TaggedHeap)`
+and its front door `Context::lisp_string(&self, value)` /
+`Context::expect_lisp_string(&self, value)` return a borrow tied to `&Context`.
+
+```rust
+let s = ctx.lisp_string(v).unwrap();
+ctx.apply(f, args)?;   // error[E0502]: cannot borrow `*ctx` as mutable
+use_bytes(s.as_bytes());
+```
+
+**(c) The compiler-decided half of the audit.**  Filtering the 206 live BOUND
+borrows to those whose live range holds the evaluator across a call -- either a
+call passing `ctx`/`eval`, or one of the **59** functions measured to take BOTH
+`&mut Context` and a `&LispString` (`tools/gc-audit/ctx_and_string.py`) -- leaves **28**
+(`tools/gc-audit/pass5.py`).  Twenty of those were converted to (b).  The other eight were excluded for a
+stated reason rather than a hunch: two bind the borrow to `_` (so the live
+range the classifier computed is meaningless), two take it inside a
+`.filter(|v| ...)` closure that ends on its own line, three clone it
+immediately (`dired.rs:1247`, `process.rs:10656`, `builtins/misc_pure.rs:336`
+-- the last also `push_vm_frame_root`s the value first), and
+`builtins/collections.rs:109` has no `Context` at all.
+
+**Six of the twenty failed to compile**, and that is the audit result:
+
+| site | the `&mut Context` call the borrow spanned |
+|---|---|
+| `builtins/search.rs:665` `prepare_buffer_regexp_search` | `prepare_current_buffer_regexp_syntax_to` |
+| `builtins/search.rs:1043` `builtin_looking_at` | `prepare_current_buffer_regexp_syntax` |
+| `builtins/search.rs:1107` `builtin_looking_at_p` | same |
+| `builtins/search.rs:1167` `builtin_posix_looking_at` | same |
+| `builtins/symbols.rs:3686` `builtin_set_this_command_keys` | `set_this_command_keys_from_string` |
+| `process.rs:16291` `builtin_getenv_internal` | `environment::getenv_internal` |
+
+The first four matter.  `prepare_current_buffer_regexp_syntax_to` ends in
+`maybe_syntax_propertize_for_scan(eval, target)?`, which runs
+`syntax-propertize-function` -- arbitrary Lisp, and so a safepoint.  So
+`looking-at`, `looking-at-p`, `posix-looking-at` and **every buffer regexp
+search** held a borrow of `args[0]`'s payload across arbitrary user Lisp, in
+the hottest path in the editor.  Sound today, by §4's rooting, and only by it.
+
+Fixed the ideal way rather than by cloning a regexp on every `looking-at`: the
+two `prepare_current_buffer_regexp_syntax*` helpers now take the pattern
+`Value` instead of `&LispString`, so the borrow lives and dies inside the block
+that computes the syntax dependency, before the Lisp call.  The compiler
+proves the property instead of a reviewer asserting it, and the pattern is
+never copied.  (`prepare_buffer_regexp_search` keeps an explicit `let _ =
+eval.expect_lisp_string(args[0])?;` so GNU's `CHECK_STRING` still runs before
+`COUNT` is examined -- `search_command`, `src/search.c` -- including on the
+`steps == 0` early return.  That order is the one thing a restructure like this
+loses silently, so it was checked three ways rather than argued:
+`(re-search-forward 5 nil t 0)`, `(search-forward 5 nil t 0)`, `(looking-at 5)`,
+`(looking-at-p 5)` and `(posix-looking-at 5)` give
+`wrong-type-argument` under GNU Emacs 31.0.90, under this branch's binary, and
+under the pre-change one, with the same list of eight answers from all three.)
+
+The other two are cold -- one environment lookup, one key sequence per command
+-- and copy the bytes out, which the coordinator's own brief names as the right
+answer rather than a workaround where an immutable heap borrow collides with an
+existing `&mut` flow.
+
+After both fixes all twenty conversions compile, so among the twenty sites the
+audit could not clear by reading, the compiler now certifies that **no borrow
+crosses into `&mut Context`**.  That is the difference this entry is actually
+buying: not a bug fixed, but a property that was true by habit becoming a
+property that is true by construction.
+
+**Sizing the rest, since it was asked for.**  Of the 531 production sites,
+**174** are inside a function that already holds a `Context`; **357** are not
+(`tools/gc-audit/ctx_in_scope.py`; the biggest groups are `process.rs` 18,
+`builtins/search.rs` 15, `builtins/strings.rs` 15, `builtins/symbols.rs` 15,
+`minibuffer.rs` 14, `reader.rs` 14).  A full migration therefore is not 531
+call-site edits; it is threading a heap or `Context` parameter through two
+thirds of them, which is the viral cost that made branded `'gc` lifetimes the
+wrong trade in the first place.  **Recommended instead: leave `as_lisp_string`
+in place for leaf code with no evaluator, and require `Context::lisp_string` at
+any site that has one.**  That is 174 sites, mechanical, and it is the subset
+where the check can actually fire.
+
+**And the cost of tightening the accessor itself, measured rather than
+estimated.**  The strongest ZERO-CHURN tightening available is
+`as_lisp_string(&self) -> Option<&LispString>`: method-call syntax auto-refs,
+so every one of the ~680 sites still resolves, and what stops compiling is a
+borrow that outlives the `Value` PLACE it came from.  Applied to the whole
+workspace (`tools/gc-audit/exp_self_lifetime.py`), that is **20 compile errors** -- rustc's
+own tally is "16 previous errors" for the lib and "20" for the lib-test
+target, so **16 production** and 4 in test files:
+
+* **7 are genuine escapes**: six are E0515, "cannot return value referencing
+  function parameter" -- `emacs_core/buffer.rs:449`, `fontset.rs:857` and
+  `:866`, `intern.rs:1134`, `value.rs:2128` (`closure_docstring`), and
+  `value.rs:2012`, which is this entry's own `lisp_string_in` and is a
+  one-word fix -- and the seventh is `expect_string_comparison_operand`
+  (`builtins/mod.rs`, "lifetime may not live long enough"), whose string arm
+  cannot produce `'static` even though its symbol arm can.  Four of the six
+  E0515s are the identical shape, `.and_then(|value| value.as_lisp_string())`
+  -- a closure whose borrow outlives its by-value parameter, which is exactly
+  the shape of the `FromValue` impl §6(a) deleted.
+* **13 are temporaries** (E0716 / E0597 / E0515-on-temporary), each fixed by
+  binding the intermediate `Value` to a `let`:
+  `buf.file_name_value().as_lisp_string()`, `entry.cons_car().as_lisp_string()`
+  and friends.
+
+Not landed here.  It buys the ESCAPE property, not the safepoint property --
+a `Value` local can outlive a safepoint and still be unrooted -- and this entry
+already spends its risk budget on the hot search path.  It is a good, small,
+separately reviewable follow-up, and the number above is what it costs.
+
+### 7. Making a reclaimed string legible -- GNU already does this, and we did half of it
+
+161 §6's second half taught `set_free_next` to write `dead_object ()` into a
+reclaimed cons because "an unpoisoned reclaimed cons reads back as the
+perfectly ordinary `(nil . SOME-SYMBOL)` and the garbage travels".  Strings had
+the same hole and GNU closes it the same way, in `sweep_strings`
+(`src/alloc.c:1878-1882`):
+
+```c
+	  /* Reset the strings's `data' member so that we
+	     know it's free.  */
+	  s->u.s.data = NULL;
+```
+
+with `data->string = NULL` on the sdata beside it (`:1877`) and the marker read
+back at `:1851` and `:1892`.
+
+`LispString::drop` reached `release_owned_storage`, which nulls `data` -- but
+only for a string that OWNED its bytes.  A borrowed payload
+(`storage_capacity == 0`: every pdump-mapped and every static-rodata string)
+returned early, so a swept one stayed byte-identical to a live one.  `Drop`
+now nulls unconditionally, as GNU does, and `Value::as_lisp_string` /
+`Value::as_utf8_str` abort on it by name.
+
+Two parity pins (`tagged::gc::ownership_tests`), siblings of 161's
+`a_reclaimed_cons_is_recognizable_as_dead`:
+
+* `a_reclaimed_string_is_recognizable_as_dead`
+* `a_reclaimed_string_with_borrowed_bytes_is_also_marked_free`
+
+Red measured by disabling ONLY the unconditional null:
+
+```text
+Summary [0.270s] 5 tests run: 4 passed, 1 failed, 9152 skipped
+    FAIL  a_reclaimed_string_with_borrowed_bytes_is_also_marked_free
+
+GNU nulls `data` for EVERY dead string, not only for one whose bytes it owned
+(src/alloc.c:1878-1882)
+```
+
+The other four stay green, and that is correct rather than a weak test: an
+owned string's `data` is nulled by `release_owned_storage` either way, so only
+the borrowed-payload case discriminates.  The tripwire test
+(`borrowing_a_reclaimed_string_aborts_at_the_scene`) uses an owned string and
+is green under both -- what §4's red measurement shows is that it fires when a
+root is actually missing.
+
+A defensive `None` instead of the abort would do what 161 warned about at
+`intern.rs:603`: turn a loud crash into a quiet wrong answer over memory that
+is still corrupt.
+
+### 8. The detector
+
+`cargo xtask gc-stress` grew three probes, all validated against GNU Emacs
+31.0.90 before being pinned (`emacs --batch -Q -l <probe>` reproduces the
+`;;; expect:` line exactly):
+
+* `06-string-borrow-across-lisp-callback` -- `all-completions`,
+  `try-completion`, `test-completion` with a consing PREDICATE,
+  `replace-regexp-in-string` with a function REP, and `match-string` read back
+  after the search returned.  Every one is a Rust builtin that borrows a
+  string and then calls Lisp.  Strings are built with `concat` so they are
+  fresh heap objects rather than reader constants something already roots.
+* `07-string-borrow-across-change-hooks` -- the insert path, where the two
+  hazards meet: `insert_lisp_string_with_change_hooks_in_buffer` (`editfns.rs`)
+  and `insert_print_lisp_string_with_hooks` (`builtins/misc_eval.rs`) both take
+  `text: &LispString`, run `signal_before_text_change` (i.e.
+  `before-change-functions`), and only then read `text`.  Form 1 `aset`s from
+  inside the hook, so a string is RELOCATED mid-insert while a borrow into the
+  heap is live -- but deliberately a DIFFERENT string from the one being
+  inserted, because mutating the inserted one is a real divergence (§10) and
+  pinning it here would make the probe fail for a reason it is not testing.
+
+* `08-string-machinery-under-stress` -- breadth rather than a specific site:
+  regexp search with a real allocating `syntax-propertize-function` installed
+  (the exact path §6(c) restructured, since `looking-at`,
+  `re-search-forward` and `search-forward` all reach
+  `maybe_syntax_propertize_for_scan`), `format` carrying text properties,
+  completion with an allocating predicate, coding round trips, fresh
+  interning, buffered insertion with both change hooks, and
+  `replace-regexp-in-string` with a function replacement.  Two seconds under
+  `NEOVM_GC_STRESS=1`, with the dead-string tripwire armed throughout, and
+  byte-identical to GNU Emacs 31.0.90.
+
+**One of the two traps in the handover is not there.**  The harness's own
+output already goes to `repo_root/tmp/gc-stress` (`gc_stress.rs`, `out_dir`) --
+it never used `TMPDIR`.  What did was `04-load-boundary-eval-error`, which
+calls `make-temp-file`, so the CHILD's `temporary-file-directory` resolved to
+the inherited `$TMPDIR` and wrote into `/tmp`.  Fixed at the source rather than
+in the probe: the harness now sets the child's `TMPDIR` to
+`<out-dir>/tmp`, so every artifact a probe leaves behind lands beside its
+stdout.  The `--editor PATH` trap is real and is now stated in `usage_text`
+along with the fact that `NEOVM_BINARY_PATH` is not consulted.
+
+### 9. Hypotheses eliminated
+
+* **"The question is which borrows are still held across a safepoint"** (the
+  coordinator's, and the brief's central instruction).  Measured and refuted in
+  §3: 90.2% of function names in these three crates can reach a safepoint, so
+  the filter flags 201 of 235 candidates.  The narrowing that made 162's audit
+  finite does not make this one finite, because 162 was auditing values riding
+  the Rust stack OUT of the interpreter and this is auditing borrows taken
+  INSIDE it.  The filter that works is rootedness (§4) and, mechanically,
+  `&mut` (§6).
+* **"I expect the genuinely dangerous set to be small"** (the coordinator's).
+  Upheld, and smaller than "small": of 500 production borrows, the compiler
+  finds **6** held across a `&mut Context` call, and all six were sound.  Zero
+  live use-after-free was reproduced anywhere, with the dead-string tripwire
+  armed throughout -- see §11 for the counts.
+* **"849 sites."**  56 of them are `expect_lisp_string_strict`, a different
+  function that returns an owned clone; another 31 reach a module-local
+  `expect_lisp_string` that also returns an owned clone.  The seam is 500
+  production borrows, not 849 anything.
+* **"The harness writes probe files under `TMPDIR`, which resolves into
+  `/tmp`"** (the coordinator's).  Half right: the harness writes to
+  `./tmp/gc-stress`; one PROBE's `make-temp-file` went to `/tmp`.  §8.
+* **`aset_string_replacement` (`builtins/collections.rs:109`) as a live
+  aliasing bug.**  It binds `string` from `array.as_lisp_string()` and later
+  calls `array.with_lisp_string_mut(...)`, which is the one shape in the audit
+  where a shared and a mutable borrow of the same object coexist textually.
+  Not a live defect: `string`'s last use is the `is_multibyte`/`as_bytes` check
+  before the mutation, so NLL ends the shared borrow first.  Left alone;
+  recorded below because the `&'static` means the compiler is not the thing
+  keeping it correct.
+* **A defect in the completion builtins.**  `builtin_try_completion_with_
+  candidates` and its siblings hold `string` across `eval.apply` on paper.
+  They do not: `minibuffer.rs`'s `expect_lisp_string` returns an owned clone,
+  and `CompletionPrefix::from_lisp_string` copies the characters out before the
+  predicate loop.  Two of the three flags my own classifier raised here were
+  its own bugs, which is why §2 re-resolves every call to its definition.
+* **A defect in `dispatch_file_handler` (`fileio.rs:4782`).**
+  `find_file_name_handler_lisp_for_eval` takes `&Context`, not `&mut` -- the
+  codebase already uses the distinction §6 relies on to state "this runs no
+  Lisp", and the regexp match against `file-name-handler-alist` is pure Rust.
+  The `eval.funcall_general` afterwards is past the borrow's last use, and the
+  compiler now says so: the site converted to `eval.lisp_string(*first)` and
+  compiled.
+
+### 10. Found and NOT fixed
+
+* **`insert` snapshots the string BEFORE `before-change-functions`; GNU reads
+  it after.  A real divergence, found by probe 07, verified in both
+  directions.**  This is the one behavioural defect this entry turned up, and
+  it is the sharp edge of the entry's own thesis.
+
+  ```elisp
+  (list
+   (let ((s (copy-sequence "abcdefgh")))
+     (with-temp-buffer
+       (add-hook 'before-change-functions (lambda (&rest _) (aset s 0 ?Z)) nil t)
+       (insert s) (buffer-string)))
+   (let ((s (copy-sequence "abcdefgh")))
+     (with-temp-buffer
+       (add-hook 'before-change-functions (lambda (&rest _) (aset s 1 ?Y)) nil t)
+       (insert-before-markers s) (buffer-string)))
+   (let ((s (copy-sequence "abcdefgh")))
+     (with-temp-buffer
+       (add-hook 'before-change-functions
+                 (lambda (&rest _) (put-text-property 0 3 'face 'bold s)) nil t)
+       (insert s) (get-text-property 1 'face)))
+   (let ((s (copy-sequence "abcdefgh")))     ; control: no hook
+     (with-temp-buffer (insert s) (buffer-string))))
+  ```
+
+  ```text
+  GNU Emacs 31.0.90 => ("Zbcdefgh" "aYcdefgh" bold "abcdefgh")
+  neomacs           => ("abcdefgh" "abcdefgh" nil  "abcdefgh")
+  ```
+
+  GNU's contract is explicit in `insert_from_string_1`
+  (`src/insdel.c:1018-1055`).  `nchars`/`nbytes` come from the caller,
+  snapshotted before -- `general_insert_function` passes `SCHARS (val)` /
+  `SBYTES (val)` (`src/editfns.c`) -- and `prepare_to_modify_buffer (PT, PT,
+  NULL)` (`:1043`), which is what runs `before-change-functions`, sits BETWEEN
+  that and `copy_text (SDATA (string) + pos_byte, GPT_ADDR, nbytes, ...)`
+  (`:1053`).  Text properties are grafted later still, from
+  `string_intervals (string)`.  So the LENGTH is from before the hook and the
+  BYTES and PROPERTIES are from after.
+
+  `insert_one_piece` (`emacs_core/buffer.rs`) materializes the whole
+  `InsertPiece` -- converted bytes AND a clone of the text-property table --
+  from the argument before calling `signal_before_text_change`, so both are
+  pre-hook snapshots.  The third row is the one likely to bite in practice: a
+  before-change function that propertizes the string it is about to see
+  inserted loses the properties entirely.
+
+  Not fixed here, and the reason is a measurement I did not have time to make
+  rather than a design opinion.  The faithful shape needs the pre-hook step to
+  become a cheap MEASURE (GNU's `count_size_as_multibyte`) with a single
+  materialization after the hook -- which is strictly LESS work than today --
+  but a byte-count-only conversion written wrong breaks every insert in the
+  editor, and the naive alternative (materialize, hook, re-materialize)
+  doubles the conversion on the hottest path there is.  Either wants `perf
+  stat` first, per `feedback_no_wall_time_benchmarks`.  Probe 07 therefore
+  mutates a DIFFERENT string, so the harness gates memory safety rather than
+  this; the reproduction above is the pin until someone lands the fix.
+
+  It is worth naming what this says about the seam.  The port is safe at the
+  insert boundary BECAUSE it copies the string early, and copying early is
+  exactly what makes it disagree with GNU.  The `&'static` did not cause the
+  divergence; the defensive habit that makes the `&'static` survivable did.
+
+* **`insert_lisp_string_with_change_hooks_in_buffer` (`editfns.rs:618`) and
+  `insert_print_lisp_string_with_hooks` (`builtins/misc_eval.rs:1350`) are
+  latent traps.**  Both take `text: &LispString`, run
+  `signal_before_text_change` -- `before-change-functions`, arbitrary Lisp --
+  and read `text` afterwards.  Every caller today passes a borrow of an OWNED
+  local (`LispString::from_utf8`, `from_emacs_bytes`, a decoded `run.text`), so
+  nothing is wrong; the signature simply does not say so, and a future caller
+  passing `value.as_lisp_string()?` would compile.  Probe 07 covers the SHAPE
+  -- a hook that conses and relocates a string mid-insert -- not this.  The fix is a parameter type that cannot be a heap borrow, which
+  is a shape change across the insert boundary.
+* **`expect_string_comparison_operand` (`builtins/mod.rs:504`) still returns
+  `&'static`.**  Legitimately, for its symbol arm --
+  `resolve_sym_lisp_name` really is static, symbol names are never reclaimed --
+  but not for its string arm.  Contained today because its only consumer is
+  `StringDesignator`'s private field.  Splitting the two arms would let the
+  string one be honest.
+* **`Value::closure_docstring` (`value.rs:2125`) and
+  `obarray_lookup_name` (`builtins/symbols.rs:1523`)** are the two remaining
+  `&'static LispString` returners that are NOT symbol-name resolvers.  Both are
+  single-use and neither crosses a safepoint today; neither was touched.
+* **The 357 production borrow sites with no `Context` in scope.**  §6 sizes the
+  migration and recommends the 174 that do.  The rest need a parameter threaded
+  in, one call chain at a time, and none of them is known to be wrong.
+* **`aset_string_replacement`'s coexisting borrows.**  §9.  NLL saves it; the
+  `&'static` means NLL is not being asked the question.
+* **The dead-string check costs a load and a predictable branch on every
+  `as_lisp_string`, unmeasured.**  It is a null test on a word in the same
+  cache line as the `size`/`size_byte` the caller is about to read, and
+  `as_utf8_str` already carried an unconditional `header.kind` check, so the
+  precedent and the cost profile were both already there.  Nobody has run
+  `perf stat` on it.  If a string-heavy workload regresses, this is the first
+  place to look, and the discipline is `feedback_no_wall_time_benchmarks`.
+* **`try_resolve_sym` / `try_resolve_sym_lisp_string`** (`intern.rs:1494/1502`)
+  still have zero callers -- 161's residual, restated by 162, untouched again.
+  A disposition, since it has now been carried three times: they should be
+  DELETED, not wired up.  161 §6 argued that a defensive range check at
+  `intern.rs:603` "would have turned a loud crash into a quiet wrong answer
+  over memory that is still corrupt", and these two functions are that check
+  with a different name.
+* **The probe corpus is eight forms, not a fuzzer** -- 162's residual, three
+  notches less true and still true.
+* **The oracle is still not a detector for this class.**  38786 pins are green
+  on both sides of every change in this entry, as they were for 161 and 162.
+* **`detect_tty_background_mode` still reads `COLORFGBG`** (157's residual,
+  carried by 161 and 162, untouched).
+
+### 11. Gates
+
+Both suites ran against a `cargo xtask fresh-build --release` reporting
+`+ xtask fresh-build finished successfully (release)` with
+`no_byte_compile=false`, whose pdump (02:20:50, 15,461,439 bytes) is newer than
+its binary (02:19:09), and which is oracle-valid by the check that catches the
+stale-`.elc` failure mode: `(with-current-buffer "*scratch*" (buffer-string))`
+is `""`, not the startup message.  The worktree's copied `.elc` files were
+touched forward before the build.
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine`:
+  **11076 tests run: 11076 passed, 54 skipped** in 489.910 s, exit 0.
+  Merge-base baseline is 11071 + 54 skipped; the five new tests are the
+  subr-argument rooting pin, its no-backtrace-frame control, the
+  use-after-free tripwire, and the two reclaimed-string parity pins.
+* `cargo nextest run -p neovm-oracle-tests`:
+  **38786 tests run: 38786 passed, 0 skipped** in 658.896 s, exit 0.
+  Baseline 38786.  As in 161 and 162, the oracle is green on BOTH sides and
+  always was; §10 records that plainly so entry 164 does not read it as
+  evidence about borrows.
+* `cargo xtask gc-stress` on this branch's shipped binary: **8/8 probes
+  passed**, exit 0.  On the main checkout's PRE-change release binary
+  (`--editor <path>`; `NEOVM_BINARY_PATH` is not read): **8/8** as well.
+  That is the honest reading rather than a weak gate -- there was no live
+  use-after-free for the probes to catch, which is §9's conclusion reached
+  from the other direction.  What probe 07 DID catch on the pre-change binary,
+  before its form 1 was rewritten, is §10's insert divergence:
+  `expected ("Zbcdefgh" ...)`, `got ("abcdefgh" ...)`.
+* `cargo check --workspace --all-targets`: clean.
+* `cargo fmt --all --check`: clean.
+
+Two red measurements, each disabling ONE mechanism and nothing else:
+
+* the subr-argument root (`SpecBinding::Backtrace1`'s `visit(*arg)` ->
+  `let _ = arg;`): `2 tests run: 1 passed, 1 failed`, the failure being the
+  new tripwire naming the reclaimed object at `value.rs:322`.
+* the unconditional free marker (`self.data = std::ptr::null()` in
+  `LispString::drop`): `5 tests run: 4 passed, 1 failed`.
+
+**Two worktree traps, both costing a full suite run before they were
+recognised, both worth the next agent's ten seconds.**  A fresh worktree is
+missing more than `lisp/`'s generated files:
+
+1. `lisp/` and `leim/` are short 1,730 gitignored generated files
+   (`charprop.el`, `cp51932.el`, every `*-loaddefs.el`, every `.elc`).  Without
+   them the bootstrap dies with `file-missing` and ten display tests fail.
+   Copy them from the main checkout and `touch` the `.elc` forward so
+   `load-prefer-newer` does not treat them as stale.  (Recorded by 162; still
+   true.)
+2. `neovm-core/tests/test-module/target` is ALSO gitignored, and the thirteen
+   `compat_module_semantics` tests shell out to `cargo build --release` for it.
+   In a worktree that directory does not exist, so thirteen concurrent cargo
+   processes sit in `do_sys_poll` waiting on the registry and the suite
+   reports `11058 passed, 13 failed` after 992 s.  Copy that directory too.
+   The failure looks nothing like its cause: the test names mention modules,
+   not builds.
+
+One environmental failure, shown in both directions as required: an
+intermediate `cargo nextest` run died with
+`sccache: error: failed to execute compile ... Failed to read response header`
+on `flate2`, `itertools` and `bytemuck` -- the shared machine's sccache server
+had gone away.  Re-running the identical command succeeded; nothing in this
+branch touches those crates.
+
+Status: FIXED.
