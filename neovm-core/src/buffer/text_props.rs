@@ -368,12 +368,17 @@ struct IntervalNode {
     rear_sticky: bool,
     write_protect: bool,
     visible: bool,
+    /// Plist contains a `syntax-table` or `category` key (cached like the
+    /// bits above): the syntax scanner's run coalescing races through
+    /// bit-clear intervals with one bool compare instead of plist walks.
+    has_syntax_prop: bool,
     plist: IntervalPlist,
 }
 
 impl IntervalNode {
     fn new(length: CharLen, position: CharPos0, plist: IntervalPlist) -> Self {
-        let (front_sticky, rear_sticky, write_protect, visible) = Self::extract_cached(plist);
+        let (front_sticky, rear_sticky, write_protect, visible, has_syntax_prop) =
+            Self::extract_cached(plist);
         Self {
             total_length: length,
             position,
@@ -384,10 +389,12 @@ impl IntervalNode {
             rear_sticky,
             write_protect,
             visible,
+            has_syntax_prop,
             plist,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn with_cached(
         length: CharLen,
         position: CharPos0,
@@ -395,6 +402,7 @@ impl IntervalNode {
         rear_sticky: bool,
         write_protect: bool,
         visible: bool,
+        has_syntax_prop: bool,
         plist: IntervalPlist,
     ) -> Self {
         Self {
@@ -407,6 +415,7 @@ impl IntervalNode {
             rear_sticky,
             write_protect,
             visible,
+            has_syntax_prop,
             plist,
         }
     }
@@ -416,11 +425,12 @@ impl IntervalNode {
     }
 
     /// Extract cached booleans from a plist (mirrors GNU's cache bits).
-    fn extract_cached(plist: Value) -> (bool, bool, bool, bool) {
+    fn extract_cached(plist: Value) -> (bool, bool, bool, bool, bool) {
         let mut front_sticky = false;
         let mut rear_sticky = false;
         let mut write_protect = false;
         let mut visible = true;
+        let mut has_syntax_prop = false;
         for (key, value) in plist_pairs(plist) {
             if key.is_symbol() {
                 let name = key.as_symbol_name().unwrap_or("");
@@ -429,16 +439,24 @@ impl IntervalNode {
                     "rear-nonsticky" => rear_sticky = !value.is_truthy(),
                     "read-only" => write_protect = value.is_truthy(),
                     "invisible" => visible = !value.is_truthy(),
+                    "syntax-table" | "category" => has_syntax_prop = true,
                     _ => {}
                 }
             }
         }
-        (front_sticky, rear_sticky, write_protect, visible)
+        (
+            front_sticky,
+            rear_sticky,
+            write_protect,
+            visible,
+            has_syntax_prop,
+        )
     }
 
     /// Re-extract and update cached booleans from current plist.
     fn refresh_cache(&mut self) {
-        let (fs, rs, wp, vis) = Self::extract_cached(self.plist);
+        let (fs, rs, wp, vis, hsp) = Self::extract_cached(self.plist);
+        self.has_syntax_prop = hsp;
         self.front_sticky = fs;
         self.rear_sticky = rs;
         self.write_protect = wp;
@@ -453,6 +471,7 @@ struct IntervalRun {
     rear_sticky: bool,
     write_protect: bool,
     visible: bool,
+    has_syntax_prop: bool,
     plist: IntervalPlist,
 }
 
@@ -462,7 +481,7 @@ impl IntervalRun {
     }
 
     fn new_in_char_range(range: CharRange, plist: IntervalPlist) -> Self {
-        let (front_sticky, rear_sticky, write_protect, visible) =
+        let (front_sticky, rear_sticky, write_protect, visible, has_syntax_prop) =
             IntervalNode::extract_cached(plist);
         Self {
             range,
@@ -470,6 +489,7 @@ impl IntervalRun {
             rear_sticky,
             write_protect,
             visible,
+            has_syntax_prop,
             plist,
         }
     }
@@ -481,6 +501,7 @@ impl IntervalRun {
             rear_sticky: node.rear_sticky,
             write_protect: node.write_protect,
             visible: node.visible,
+            has_syntax_prop: node.has_syntax_prop,
             plist: node.plist,
         }
     }
@@ -514,7 +535,8 @@ impl IntervalRun {
     }
 
     fn refresh_cache(&mut self) {
-        let (fs, rs, wp, vis) = IntervalNode::extract_cached(self.plist);
+        let (fs, rs, wp, vis, hsp) = IntervalNode::extract_cached(self.plist);
+        self.has_syntax_prop = hsp;
         self.front_sticky = fs;
         self.rear_sticky = rs;
         self.write_protect = wp;
@@ -529,6 +551,7 @@ impl IntervalRun {
             self.rear_sticky,
             self.write_protect,
             self.visible,
+            self.has_syntax_prop,
             self.plist,
         )
     }
@@ -1217,6 +1240,7 @@ impl IntervalTree {
             self.nodes[id.0].rear_sticky,
             self.nodes[id.0].write_protect,
             self.nodes[id.0].visible,
+            self.nodes[id.0].has_syntax_prop,
             plist,
         );
         new.parent = Some(id);
@@ -2282,6 +2306,42 @@ impl TextPropertyTable {
                     }
                     return cap;
                 }
+            }
+        }
+    }
+
+    /// The end of the run from `pos` (capped at `cap`) over which NO interval
+    /// carries a `syntax-table`/`category` plist key, using the cached
+    /// per-node bit — one bool compare per boundary instead of plist walks.
+    ///
+    /// Only meaningful when the interval AT `pos` itself lacks the bit: a
+    /// bit-set interval's value can differ from its bit-set neighbor's, so
+    /// prop-bearing intervals are never merged — the walk stops at the first
+    /// one. Callers with a bit-set current interval must use the precise
+    /// `next_watched_property_change` instead.
+    pub fn syntax_prop_free_run_end(&self, pos: CharPos0, cap: CharPos0) -> CharPos0 {
+        if cap <= pos {
+            return cap;
+        }
+        let mut cursor = self.intervals.cursor_at(pos);
+        let Some((_, mut boundary, first)) = cursor.next() else {
+            return cap; // no intervals at all: implicit-nil to the cap
+        };
+        if first.has_syntax_prop {
+            return boundary.min(cap); // prop-bearing: just its own extent
+        }
+        loop {
+            if boundary >= cap {
+                return cap;
+            }
+            match cursor.next() {
+                Some((_, end, node)) => {
+                    if node.has_syntax_prop {
+                        return boundary;
+                    }
+                    boundary = end;
+                }
+                None => return cap, // trailing implicit-nil region
             }
         }
     }

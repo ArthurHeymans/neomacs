@@ -3001,6 +3001,11 @@ impl Buffer {
             .next_watched_property_change_at_char_pos(pos, cap, keys)
     }
 
+    /// See [`text_props::TextPropertyTable::syntax_prop_free_run_end`].
+    pub fn syntax_prop_free_run_end_at_char_pos(&self, pos: CharPos0, cap: CharPos0) -> CharPos0 {
+        self.text.syntax_prop_free_run_end_at_char_pos(pos, cap)
+    }
+
     /// Whether any property in `keys` is non-nil inside the bounded character
     /// `range`.  See
     /// [`TextPropertyTable::has_any_non_nil_property_in_char_range`].

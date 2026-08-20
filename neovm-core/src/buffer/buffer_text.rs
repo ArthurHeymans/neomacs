@@ -1180,6 +1180,14 @@ impl BufferText {
             .next_watched_property_change(pos, cap, keys)
     }
 
+    /// See [`crate::buffer::text_props::TextPropertyTable::syntax_prop_free_run_end`].
+    pub fn syntax_prop_free_run_end_at_char_pos(&self, pos: CharPos0, cap: CharPos0) -> CharPos0 {
+        self.storage
+            .borrow()
+            .text_props
+            .syntax_prop_free_run_end(pos, cap)
+    }
+
     /// See [`text_props::TextPropertyTable::has_any_non_nil_property_in_char_range`].
     pub fn has_any_non_nil_property_in_char_range(&self, range: CharRange, keys: &[Value]) -> bool {
         self.storage

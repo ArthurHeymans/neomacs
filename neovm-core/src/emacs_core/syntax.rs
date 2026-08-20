@@ -2851,10 +2851,12 @@ impl<'a> SyntaxPropByteRun<'a> {
         resolver: CharPropertyResolver<'_>,
     ) -> Option<Value> {
         let char_pos = buf.emacs_byte_pos_to_char_pos_clamped(byte_pos);
-        let (plist, start, end) = buf.interval_plist_run_at_char_pos(char_pos);
+        let (plist, _start, _end) = buf.interval_plist_run_at_char_pos(char_pos);
         let value = plist.and_then(|plist| resolver.resolve_interval_plist(plist));
+        // See `coalesced_syntax_run_end`: extend over face-only splits.
+        let end = coalesced_syntax_run_end(buf, char_pos, &resolver);
         self.run.set(
-            buffer_char_to_emacs_byte_pos(buf, start).get(),
+            byte_pos.get(),
             buffer_char_to_emacs_byte_pos(buf, end).get(),
             value,
         );
@@ -3166,10 +3168,50 @@ impl<'a> SyntaxPropRange<'a> {
         resolver: CharPropertyResolver<'_>,
     ) -> Option<Value> {
         let char_pos = offset_char_pos(CharPos0::ZERO, pos);
-        let (plist, start, end) = buf.interval_plist_run_at_char_pos(char_pos);
+        let (plist, start, _end) = buf.interval_plist_run_at_char_pos(char_pos);
         let value = plist.and_then(|plist| resolver.resolve_interval_plist(plist));
+        let end = coalesced_syntax_run_end(buf, char_pos, &resolver);
         self.run.set(start.get(), end.get(), value);
         value
+    }
+}
+
+/// End of the run over which the resolved `syntax-table` property is provably
+/// constant from `char_pos`: walk interval boundaries comparing only the keys
+/// resolution reads (the property, `category`, and its aliases), bounded to a
+/// fixed lookahead. Font-lock splits buffers into dense `face`-only intervals,
+/// so the RESOLVED run is typically far longer than the raw interval — this
+/// turns a per-interval root descent into a per-lookahead cursor walk.
+fn coalesced_syntax_run_end(
+    buf: &Buffer,
+    char_pos: CharPos0,
+    resolver: &CharPropertyResolver<'_>,
+) -> CharPos0 {
+    const COALESCE_LOOKAHEAD_CHARS: usize = 4096;
+    let total = buf.accessible_char_region().end();
+    let cap = CharPos0::new(
+        char_pos
+            .get()
+            .saturating_add(COALESCE_LOOKAHEAD_CHARS)
+            .min(total.get()),
+    );
+    let end = if resolver.supports_presence_coalescing() {
+        // Common case: race through `face`-only intervals on the cached
+        // presence bit; prop-bearing intervals are never merged.
+        buf.syntax_prop_free_run_end_at_char_pos(char_pos, cap)
+    } else {
+        // Aliases widen the key set and `default-text-properties` makes a
+        // key-free interval resolve differently from a gap: fall back to the
+        // raw single-interval run.
+        let (_, _, end) = buf.interval_plist_run_at_char_pos(char_pos);
+        end
+    };
+    // Degenerate cap (scan sitting at the region end): keep the run non-empty
+    // so the per-char fast path cannot loop on refills.
+    if end <= char_pos {
+        CharPos0::new(char_pos.get() + 1)
+    } else {
+        end
     }
 }
 

@@ -507,6 +507,39 @@ impl<'a> CharPropertyResolver<'a> {
         }
     }
 
+    /// Whether the snapshot carries `char-property-alias-alist` aliases for
+    /// the property (rare) — the fast presence-bit coalescing is only sound
+    /// without them.
+    pub(crate) fn has_aliases(&self) -> bool {
+        self.aliases.is_cons()
+    }
+
+    /// Whether run coalescing is sound for this snapshot: no aliases (they
+    /// widen the watched-key set) and no `default-text-properties` fallback
+    /// (a key-free INTERVAL resolves to the default while a GAP resolves to
+    /// nothing, so merging across that edge would blur two values).
+    pub(crate) fn supports_presence_coalescing(&self) -> bool {
+        !self.aliases.is_cons() && self.default.is_none()
+    }
+
+    /// Every plist key whose value can influence [`Self::resolve_interval_plist`]:
+    /// the property itself, `category` (a category symbol's plist can supply
+    /// it), and each snapshot alias. Two intervals whose plists agree (`eq`)
+    /// on all of these resolve identically — the run-coalescing scanners use
+    /// this with `next_watched_property_change` to skip boundaries that only
+    /// split other properties (font-lock `face` churn).
+    pub(crate) fn watched_keys(&self) -> smallvec::SmallVec<[Value; 4]> {
+        let mut keys = smallvec::SmallVec::new();
+        keys.push(self.prop);
+        keys.push(Value::symbol("category"));
+        let mut alias = self.aliases;
+        while alias.is_cons() {
+            keys.push(alias.cons_car());
+            alias = alias.cons_cdr();
+        }
+        keys
+    }
+
     /// Resolve the property from one interval's plist.
     ///
     /// Callers pass the plist of the interval covering the position, never a
