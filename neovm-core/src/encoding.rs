@@ -887,6 +887,16 @@ pub(crate) struct DecodedProcessRun {
     /// GNU `CODING_ID_NAME (coding->id)` once both rewrites have had their
     /// turn: the detected base carrying the resolved end-of-line type.
     pub(crate) used: &'static str,
+    /// GNU `coding->carryover` (src/coding.c:7466-7474): the trailing bytes
+    /// the DECODER could not consume, which
+    /// `read_process_output_set_last_coding_system` copies onto the process
+    /// after the decode (src/process.c:6448-6457) and the next read prepends.
+    ///
+    /// It comes back with the text and not with the read, because only the
+    /// decoder knows it -- which is the whole point of [`SourceConsumed`].  The
+    /// read that produced these bytes has already given the process record up,
+    /// and would have had to guess.
+    pub(crate) carryover: Vec<u8>,
 }
 
 /// GNU `CODING_ID_NAME (coding->id)` after a decode: the coding system the
@@ -1270,79 +1280,54 @@ impl SingleByteCharset {
     }
 }
 
-/// Decode UTF-8(-emacs) `bytes` into Emacs character codes, invoking `f` for
-/// each code in order. Valid (extended) UTF-8 sequences decode to their code
-/// point; any invalid byte becomes the eight-bit raw-byte char `0x3FFF00+byte`.
-fn for_each_utf8_emacs_code(bytes: &[u8], mut f: impl FnMut(u32)) {
-    let mut i = 0usize;
-
-    while i < bytes.len() {
-        let b0 = bytes[i];
+/// GNU `decode_coding_utf_8` (src/coding.c:1238-1425), as one character per
+/// call into [`decode_units`].
+///
+/// Every continuation byte is a `ONE_MORE_BYTE` (:1358, :1368, :1381, :1396),
+/// so a sequence cut by the end of a read leaves `coding->consumed` at its
+/// leading byte -- which is what makes the next read complete the character
+/// instead of seeing four eight-bit ones.  A leading byte whose continuation
+/// bytes are present but wrong is `invalid_code:` and produces exactly one
+/// eight-bit character (:1334-1338).
+fn decode_via_utf8(bytes: &[u8], eol: DosEolLookahead) -> DecodedSource {
+    decode_units(bytes, eol, |unit, sink| {
+        let b0 = unit.byte()?;
         if b0 < 0x80 {
-            f(b0 as u32);
-            i += 1;
-            continue;
+            sink.push(u32::from(b0), None);
+            return Ok(());
         }
-
-        if (0xC2..=0xDF).contains(&b0) && i + 1 < bytes.len() {
-            let b1 = bytes[i + 1];
-            if (b1 & 0xC0) == 0x80 {
-                let code = (((b0 & 0x1F) as u32) << 6) | ((b1 & 0x3F) as u32);
-                f(code);
-                i += 2;
-                continue;
+        // `(payload bits of the leading byte, how many continuation bytes,
+        //   the largest character the form may encode)`.
+        let form = match b0 {
+            0xC2..=0xDF => Some((u32::from(b0 & 0x1F), 1, u32::MAX)),
+            0xE0..=0xEF => Some((u32::from(b0 & 0x0F), 2, u32::MAX)),
+            0xF0..=0xF7 => Some((u32::from(b0 & 0x07), 3, u32::MAX)),
+            0xF8..=0xFB => Some((
+                u32::from(b0 & 0x03),
+                4,
+                crate::emacs_core::emacs_char::MAX_5_BYTE_CHAR,
+            )),
+            _ => None,
+        };
+        let Some((mut code, continuations, max)) = form else {
+            sink.push_raw(b0);
+            return Ok(());
+        };
+        let mut valid = true;
+        for _ in 0..continuations {
+            let byte = unit.byte()?;
+            if (byte & 0xC0) != 0x80 {
+                valid = false;
+                break;
             }
+            code = (code << 6) | u32::from(byte & 0x3F);
         }
-
-        if (0xE0..=0xEF).contains(&b0) && i + 2 < bytes.len() {
-            let (b1, b2) = (bytes[i + 1], bytes[i + 2]);
-            if (b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80 {
-                let code = (((b0 & 0x0F) as u32) << 12)
-                    | (((b1 & 0x3F) as u32) << 6)
-                    | ((b2 & 0x3F) as u32);
-                f(code);
-                i += 3;
-                continue;
-            }
+        if valid && code <= max {
+            sink.push(code, None);
+            return Ok(());
         }
-
-        if (0xF0..=0xF7).contains(&b0) && i + 3 < bytes.len() {
-            let (b1, b2, b3) = (bytes[i + 1], bytes[i + 2], bytes[i + 3]);
-            if (b1 & 0xC0) == 0x80 && (b2 & 0xC0) == 0x80 && (b3 & 0xC0) == 0x80 {
-                let code = (((b0 & 0x07) as u32) << 18)
-                    | (((b1 & 0x3F) as u32) << 12)
-                    | (((b2 & 0x3F) as u32) << 6)
-                    | ((b3 & 0x3F) as u32);
-                f(code);
-                i += 4;
-                continue;
-            }
-        }
-
-        if (0xF8..=0xFB).contains(&b0) && i + 4 < bytes.len() {
-            let (b1, b2, b3, b4) = (bytes[i + 1], bytes[i + 2], bytes[i + 3], bytes[i + 4]);
-            if (b1 & 0xC0) == 0x80
-                && (b2 & 0xC0) == 0x80
-                && (b3 & 0xC0) == 0x80
-                && (b4 & 0xC0) == 0x80
-            {
-                let code = (((b0 & 0x03) as u32) << 24)
-                    | (((b1 & 0x3F) as u32) << 18)
-                    | (((b2 & 0x3F) as u32) << 12)
-                    | (((b3 & 0x3F) as u32) << 6)
-                    | ((b4 & 0x3F) as u32);
-                if code <= crate::emacs_core::emacs_char::MAX_5_BYTE_CHAR {
-                    f(code);
-                    i += 5;
-                    continue;
-                }
-            }
-        }
-
-        // Invalid byte: treat as raw-byte char (matching GNU Emacs behavior).
-        f(crate::emacs_core::emacs_char::unibyte_to_char(bytes[i]));
-        i += 1;
-    }
+        invalid_code(unit, sink)
+    })
 }
 
 /// Decode UTF-8(-emacs) `bytes` directly into Emacs-internal storage bytes
@@ -1353,14 +1338,33 @@ fn for_each_utf8_emacs_code(bytes: &[u8], mut f: impl FnMut(u32)) {
 /// become the extended `0x3FFF00+byte` sequence while genuine Private-Use-Area
 /// characters (nerd-font glyphs in U+E000..F8FF) keep their real code points —
 /// the two can never be confused (issue #131).
+///
+/// The source is a COMPLETE one here, so a truncated trailing sequence is
+/// flushed as eight-bit characters the way GNU's `CODING_MODE_LAST_BLOCK` arm
+/// does (src/coding.c:7434-7462); [`decode_via_utf8`] is the door for a source
+/// that may still be continued.
 fn decode_utf8_to_emacs_bytes(bytes: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(bytes.len());
+    let decoded = decode_via_utf8(bytes, DosEolLookahead::NotRequired);
+    let mut out = decoded.bytes;
+    flush_last_block_into(&mut out, &bytes[decoded.consumed.bytes()..]);
+    out
+}
+
+/// GNU's `CODING_MODE_LAST_BLOCK` arm of `decode_coding`
+/// (src/coding.c:7434-7462): the bytes no decoder could consume are appended
+/// as characters, an ASCII byte as itself and anything else as the eight-bit
+/// character `BYTE8_TO_CHAR (c)`.
+fn flush_last_block_into(out: &mut Vec<u8>, tail: &[u8]) {
     let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-    for_each_utf8_emacs_code(bytes, |code| {
+    for &byte in tail {
+        let code = if byte < 0x80 {
+            u32::from(byte)
+        } else {
+            crate::emacs_core::emacs_char::unibyte_to_char(byte)
+        };
         let len = crate::emacs_core::emacs_char::char_string(code, &mut buf);
         out.extend_from_slice(&buf[..len]);
-    });
-    out
+    }
 }
 
 /// Prepare raw bytes for utf-8(-emacs) decoding (EOL conversion + optional BOM
@@ -2093,6 +2097,7 @@ fn transformed_region_string_in_context(
         direction,
         EncodingBoundary::CompleteText,
         CodingEntry::CodeConvertRegion,
+        &mut CodingRun::complete_source(),
     )
 }
 
@@ -2291,6 +2296,597 @@ impl CharsetRunBuilder {
     }
 }
 
+/// The part of GNU's `coding->spec.iso_2022` that outlives one call into the
+/// decoder: the four graphic registers' designations, which of them is invoked
+/// into GL, and a single shift that has been seen but not yet spent.
+///
+/// GNU never has to think about this, because a subprocess decodes through the
+/// process's own `struct coding_system` for the process's whole life
+/// (`proc_decode_coding_system[channel]`, src/process.c:6238) and
+/// `setup_coding_system` seeds the registers once
+/// (`CODING_ISO_INITIAL`, src/coding.c:5760-5775).  This port decodes each run
+/// as a separate call, so the state has to be an object with the same
+/// lifetime, and [`CodingDecoderState`] is where a process keeps it.
+///
+/// A designation is not carryover.  `ESC $ B` at the end of a read is a
+/// COMPLETE escape sequence: GNU consumes it and records it, and the next
+/// read's `$ "` is then a JIS X 0208 character rather than two ASCII ones.
+/// Holding the escape back instead would give the same answer for that one
+/// case and the wrong answer as soon as a character follows the designation in
+/// the same read.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Iso2022DecodeState {
+    /// GNU `CODING_ISO_DESIGNATION (coding, reg)`.  `None` in every register
+    /// means the state has not been seeded from the coding system yet.
+    designation: [Option<SymId>; 4],
+    seeded: bool,
+    /// GNU `CODING_ISO_INVOCATION (coding, 0)`.
+    gl: usize,
+    /// GNU `CODING_ISO_SINGLE_SHIFTING (coding)`, as the register it selects.
+    single_shift: Option<usize>,
+}
+
+impl Iso2022DecodeState {
+    /// GNU `setup_coding_system`'s seeding of the registers from the coding
+    /// system's `:initial` designations (src/coding.c:5760-5775), which
+    /// happens once per `struct coding_system` and not once per decode.
+    fn designate_initially(&mut self, spec: &crate::emacs_core::coding::Iso2022Spec) {
+        if self.seeded {
+            return;
+        }
+        self.designation = spec.initial;
+        self.seeded = true;
+    }
+}
+
+/// GNU `coding->spec`: the decoder state a `struct coding_system` carries
+/// between calls.
+///
+/// Only the ISO-2022 arm is here, and the reason is a measurement rather than
+/// an omission: it is the only decoder in this port whose state is observable
+/// across a read boundary.  Shift-JIS, EUC, the charset codings, `emacs-mule`
+/// and UTF-8 are stateless between characters -- everything they carry across a
+/// boundary is the incomplete character itself, which is `coding->carryover`
+/// and is handled by [`SourceConsumed`].  UTF-16's endianness and `emacs-mule`'s
+/// composition status are the two GNU also keeps here and this port does not;
+/// see the ledger entry.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CodingDecoderState {
+    iso_2022: Iso2022DecodeState,
+}
+
+impl CodingDecoderState {
+    fn iso_2022_mut(&mut self) -> &mut Iso2022DecodeState {
+        &mut self.iso_2022
+    }
+}
+
+/// The mutable half of GNU's `struct coding_system` for ONE conversion: what a
+/// decoder may carry IN from the previous run, and what it must carry OUT of
+/// this one.
+///
+/// GNU has no such type because it does not need one: `decode_coding_object`
+/// takes a `struct coding_system *`, and for a subprocess that pointer is the
+/// process's own struct with its `spec`, its `mode` and its `consumed` already
+/// in it (src/process.c:6238).  This port decodes each run as a separate call
+/// through a door that answers a Lisp string, so the three have to travel
+/// alongside the call.
+///
+/// [`Self::complete_source`] is what every door but a subprocess read passes,
+/// and it is a statement rather than a convenience: a string, a region and a
+/// file are `CODING_MODE_LAST_BLOCK` sources with no previous run to continue
+/// from and no next run to continue into.
+pub(crate) struct CodingRun<'a> {
+    /// GNU `coding->mode & CODING_MODE_LAST_BLOCK`.  With it set, bytes the
+    /// decoder could not consume are flushed as eight-bit characters
+    /// (src/coding.c:7434-7462); with it clear they become
+    /// `coding->carryover` (:7466-7474).
+    block: crate::emacs_core::coding::SourceBlock,
+    /// GNU `coding->spec`.  `None` at a door whose decoder has no previous
+    /// state to continue from, which is every door but a subprocess read.
+    state: Option<&'a mut CodingDecoderState>,
+    /// GNU `coding->consumed`, written by whichever decoder ran.
+    consumed: Option<SourceConsumed>,
+}
+
+impl<'a> CodingRun<'a> {
+    /// A source that is complete in every sense: the flag is set, so nothing
+    /// is ever held back, and there is no decoder state on either side of the
+    /// call.
+    pub(crate) fn complete_source() -> Self {
+        Self {
+            block: crate::emacs_core::coding::SourceBlock::Last,
+            state: None,
+            consumed: None,
+        }
+    }
+
+    /// One read of a subprocess: GNU's per-process `struct coding_system`,
+    /// with the `CODING_MODE_LAST_BLOCK` the read raised (or did not).
+    pub(crate) fn process_read(
+        state: &'a mut CodingDecoderState,
+        block: crate::emacs_core::coding::SourceBlock,
+    ) -> Self {
+        Self {
+            block,
+            state: Some(state),
+            consumed: None,
+        }
+    }
+
+    fn block(&self) -> crate::emacs_core::coding::SourceBlock {
+        self.block
+    }
+
+    /// Whether the tail no decoder consumed is flushed here or waits for the
+    /// next read.
+    fn flushes_last_block(&self) -> bool {
+        matches!(self.block, crate::emacs_core::coding::SourceBlock::Last)
+    }
+
+    fn record(&mut self, consumed: SourceConsumed) {
+        self.consumed = Some(consumed);
+    }
+
+    /// The decoder state to continue from, borrowed for one decode.  A door
+    /// with none gets a scratch one, which is the same thing GNU's
+    /// `setup_coding_system` hands a fresh `struct coding_system`.
+    fn decoder_state<'s>(
+        &'s mut self,
+        scratch: &'s mut CodingDecoderState,
+    ) -> &'s mut CodingDecoderState {
+        match self.state {
+            Some(ref mut state) => state,
+            None => scratch,
+        }
+    }
+
+    /// GNU `coding->carryover_bytes` (src/coding.c:7473): the bytes of the
+    /// character the decoder stopped in the middle of.
+    ///
+    /// A `Last` block has none by construction -- its tail was flushed as
+    /// characters -- and a run in which no decoder that CAN stop short ever
+    /// ran reports none either, which is the honest answer for a decoder in
+    /// which every byte is a character.
+    pub(crate) fn carryover_bytes(&self, source_len: usize) -> usize {
+        if self.flushes_last_block() {
+            return 0;
+        }
+        match self.consumed {
+            Some(consumed) => source_len.saturating_sub(consumed.bytes()),
+            None => 0,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GNU's decoder loop: `src_base`, `ONE_MORE_BYTE` and `coding->consumed`
+// ---------------------------------------------------------------------------
+
+/// GNU `coding->consumed` (src/coding.c:7477): how many of a source's bytes a
+/// decoder turned into characters.
+///
+/// It is a newtype rather than a bare `usize` because there is exactly one
+/// correct way to produce one -- take it off the cursor that drove the decode
+/// ([`decode_units`]) -- and a hand-computed count is the byte-length table
+/// this port keeps deleting.  Everything downstream is `src_bytes - consumed`:
+/// a process read's `coding->carryover` when `CODING_MODE_LAST_BLOCK` is clear
+/// (src/coding.c:7466-7474), and the binary flush when it is set (:7434-7462).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct SourceConsumed(usize);
+
+impl SourceConsumed {
+    /// Every byte of the source.
+    ///
+    /// This is a DECODER's answer and not a default: a decoder in which every
+    /// byte is a character (`raw-text`, the ISO-8859 charsets) genuinely
+    /// cannot stop short, and neither can one GNU implements in Lisp through
+    /// `:post-read-conversion` over `raw-text` (`utf-7`, `chinese-hz`) --
+    /// measured, GNU decodes each chunk of those independently, because the C
+    /// decoder underneath consumed the run before the hook ever saw it.
+    fn all(bytes: &[u8]) -> Self {
+        Self(bytes.len())
+    }
+
+    pub(crate) fn bytes(self) -> usize {
+        self.0
+    }
+}
+
+/// The source ran out in the middle of a character: GNU's
+/// `goto no_more_source` (src/coding.c:184).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct NoMoreSource;
+
+/// One character's worth of source, as GNU's `ONE_MORE_BYTE` reads it.
+///
+/// Its position is private: a decoder can take bytes and it can put back the
+/// character it is on, but it cannot say where that character ended, because
+/// where it ended is what the cursor reports and not what the decoder reports.
+struct UnitReader<'a> {
+    bytes: &'a [u8],
+    /// GNU `src_base - coding->source`.
+    start: usize,
+    /// GNU `src - coding->source`.
+    pos: usize,
+}
+
+impl<'a> UnitReader<'a> {
+    /// GNU `ONE_MORE_BYTE (c)` (src/coding.c:169-190).
+    fn byte(&mut self) -> Result<u8, NoMoreSource> {
+        let byte = *self.bytes.get(self.pos).ok_or(NoMoreSource)?;
+        self.pos += 1;
+        Ok(byte)
+    }
+
+    /// N more bytes at once, all or nothing -- the shape of a charset whose
+    /// dimension says how many position bytes follow its leading code.
+    fn take(&mut self, n: usize) -> Result<&'a [u8], NoMoreSource> {
+        let end = self.pos.checked_add(n).ok_or(NoMoreSource)?;
+        let slice = self.bytes.get(self.pos..end).ok_or(NoMoreSource)?;
+        self.pos = end;
+        Ok(slice)
+    }
+
+    /// GNU's `src = src_base`: several decoders read a byte, decide it is not
+    /// theirs, and put it back -- `decode_coding_utf_16`'s signature check
+    /// (src/coding.c:1601-1609), `decode_coding_utf_8`'s BOM check
+    /// (:1256-1272), and every `invalid_code:` label (:1334-1335).
+    fn rewind(&mut self) {
+        self.pos = self.start;
+    }
+}
+
+/// Where a [`DecodeSink`] was before a unit ran, so the unit can be undone
+/// whole.  GNU never needs this: its decoders write into `coding->charbuf`
+/// only once `ONE_MORE_BYTE` has succeeded for every byte of the character.
+#[derive(Clone, Copy, Debug)]
+struct DecodeMark {
+    out_len: usize,
+    char_index: usize,
+    last_char: Option<u32>,
+}
+
+/// The characters a decoder has produced, in Emacs's internal encoding, with
+/// the `(charset NAME)` runs GNU's `decode_coding_*` annotate them with
+/// (`ADD_CHARSET_DATA`, src/coding.c:7060-7078).
+struct DecodeSink {
+    out: Vec<u8>,
+    runs: CharsetRunBuilder,
+    char_index: usize,
+    buf: [u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH],
+    last_char: Option<u32>,
+}
+
+impl DecodeSink {
+    fn with_capacity(capacity: usize) -> Self {
+        Self {
+            out: Vec::with_capacity(capacity),
+            runs: CharsetRunBuilder::new(),
+            char_index: 0,
+            buf: [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH],
+            last_char: None,
+        }
+    }
+
+    /// One decoded character and the charset that decoded it.  `None` is
+    /// GNU's unannotated case: an ASCII character, or an eight-bit raw byte
+    /// taken through `invalid_code:`.
+    fn push(&mut self, code: u32, charset: Option<SymId>) {
+        self.runs.push(self.char_index, charset);
+        let len = crate::emacs_core::emacs_char::char_string(code, &mut self.buf);
+        self.out.extend_from_slice(&self.buf[..len]);
+        self.char_index += 1;
+        self.last_char = Some(code);
+    }
+
+    /// GNU's `invalid_code:` arm: a byte no rule of this decoder accepts
+    /// becomes the eight-bit character `BYTE8_TO_CHAR (c)`
+    /// (src/coding.c:1334-1338).
+    fn push_raw(&mut self, byte: u8) {
+        self.push(crate::emacs_core::emacs_char::unibyte_to_char(byte), None);
+    }
+
+    fn mark(&self) -> DecodeMark {
+        DecodeMark {
+            out_len: self.out.len(),
+            char_index: self.char_index,
+            last_char: self.last_char,
+        }
+    }
+
+    /// Undo everything a unit produced.  Only the byte buffer and the
+    /// character count need undoing: [`CharsetRunBuilder::push`] is a no-op for
+    /// the `None` charset, and a rolled-back unit either produced nothing (it
+    /// ran out of source) or produced a carriage return, which is ASCII.
+    fn rollback(&mut self, mark: DecodeMark) {
+        self.out.truncate(mark.out_len);
+        self.char_index = mark.char_index;
+        self.last_char = mark.last_char;
+    }
+
+    fn finish(self) -> (Vec<u8>, Vec<StringTextPropertyRun>) {
+        let char_index = self.char_index;
+        (self.out, self.runs.finish(char_index))
+    }
+}
+
+/// GNU's `eol_dos`, which every decoder computes for itself at the top rather
+/// than leaving to `decode_eol`:
+///
+/// ```c
+///   bool eol_dos
+///     = !inhibit_eol_conversion && EQ (CODING_ID_EOL_TYPE (coding->id), Qdos);
+/// ```
+///
+/// (src/coding.c:1250-1251 for UTF-8, and the same two lines in seven more
+/// decoders.)  A decoder with it set does `ONE_MORE_BYTE (byte_after_cr)` after
+/// producing a CR (:1348-1349), so a CR that ends the source is left
+/// UNCONSUMED and becomes `coding->carryover`.
+///
+/// It is an argument and not something a decoder here can work out, because
+/// this port spends the coding system's end-of-line leg BEFORE the decoder
+/// runs -- `decode_coding` calls `decode_eol` after the decoder
+/// (src/coding.c:7481), so the name the decoder is handed no longer carries the
+/// subsidiary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DosEolLookahead {
+    /// The coding system's eol type is `dos` and `inhibit-eol-conversion' is
+    /// nil, so a trailing CR waits for the next read.
+    Required,
+    /// Anything else.  Note which case this is NOT: a VECTOR eol type -- one
+    /// still waiting to be detected -- does not hold a CR back either, because
+    /// `CODING_ID_EOL_TYPE` is compared against `Qdos` and a vector is not it
+    /// (entry 134 measured this and got it wrong in the other direction).
+    NotRequired,
+}
+
+/// GNU's decoder loop, with `coding->consumed` as its return value.
+///
+/// Every `decode_coding_*` in src/coding.c is a `while (1)` whose first
+/// statement is `src_base = src;` and whose byte reads are `ONE_MORE_BYTE`, a
+/// macro that jumps to `no_more_source:` when the source runs out
+/// (src/coding.c:169-190).  The label's whole job is one line --
+/// `coding->consumed = src_base - coding->source;` (:1423, :1696, :2541,
+/// :3982, :4791, :4886, :5591) -- so the count is always the start of the
+/// character the decoder was in the middle of, and never something the decoder
+/// worked out for itself.
+///
+/// This is that shape, and it is the answer to the residual entry 159 handed
+/// over: a decoder here cannot report the wrong `consumed`, because it never
+/// reports one.  BODY decodes exactly one character (or one state change) per
+/// call; a BODY that runs off the end says [`NoMoreSource`], and the bytes it
+/// had taken are put back along with anything it had already pushed.
+fn decode_units<F>(bytes: &[u8], eol: DosEolLookahead, mut body: F) -> DecodedSource
+where
+    F: FnMut(&mut UnitReader<'_>, &mut DecodeSink) -> Result<(), NoMoreSource>,
+{
+    let mut sink = DecodeSink::with_capacity(bytes.len());
+    let mut consumed = 0usize;
+    while consumed < bytes.len() {
+        let mark = sink.mark();
+        let mut unit = UnitReader {
+            bytes,
+            start: consumed,
+            pos: consumed,
+        };
+        if body(&mut unit, &mut sink).is_err() {
+            sink.rollback(mark);
+            break;
+        }
+        if unit.pos <= consumed {
+            // A body that took nothing would spin forever.  GNU cannot write
+            // this down -- every path through a `decode_coding_*` loop passes
+            // at least one `ONE_MORE_BYTE` -- so treat it as the source having
+            // run out rather than as a reason to hang.
+            debug_assert!(
+                false,
+                "a decoder unit must consume at least one byte or the loop cannot terminate"
+            );
+            sink.rollback(mark);
+            break;
+        }
+        // GNU's `eol_dos` lookahead, in one place instead of the eight places
+        // it has it: the CR is produced, `ONE_MORE_BYTE (byte_after_cr)` is
+        // attempted, and an exhausted source unwinds the whole character.
+        if eol == DosEolLookahead::Required
+            && sink.last_char == Some(u32::from(b'\r'))
+            && unit.pos == bytes.len()
+        {
+            sink.rollback(mark);
+            break;
+        }
+        consumed = unit.pos;
+    }
+    let (out, runs) = sink.finish();
+    DecodedSource {
+        bytes: out,
+        runs,
+        consumed: SourceConsumed(consumed),
+    }
+}
+
+/// GNU's `invalid_code:` label, which every byte-oriented decoder ends with
+/// (src/coding.c:1334-1338, :4614-4618, :5577-5581):
+///
+/// ```c
+///  invalid_code:
+///   src = src_base;
+///   consumed_chars = consumed_chars_base;
+///   ONE_MORE_BYTE (c);
+///   *charbuf++ = ASCII_CHAR_P (c) ? c : BYTE8_TO_CHAR (c);
+/// ```
+///
+/// It rewinds to the start of the character, takes exactly ONE byte, and emits
+/// it as itself -- so a two-byte sequence whose second byte is not valid is
+/// re-examined from its second byte rather than skipped.
+fn invalid_code(unit: &mut UnitReader<'_>, sink: &mut DecodeSink) -> Result<(), NoMoreSource> {
+    unit.rewind();
+    let byte = unit.byte()?;
+    if byte < 0x80 {
+        sink.push(u32::from(byte), None);
+    } else {
+        sink.push_raw(byte);
+    }
+    Ok(())
+}
+
+/// What one decoder produced: the characters, their `(charset NAME)` runs, and
+/// GNU's `coding->consumed`.
+pub(crate) struct DecodedSource {
+    bytes: Vec<u8>,
+    runs: Vec<StringTextPropertyRun>,
+    consumed: SourceConsumed,
+}
+
+impl DecodedSource {
+    /// A decoder that consumed its whole source, which is a statement about
+    /// that decoder and not a default -- see [`SourceConsumed::all`].
+    fn whole(bytes: Vec<u8>, source: &[u8]) -> Self {
+        Self {
+            bytes,
+            runs: Vec::new(),
+            consumed: SourceConsumed::all(source),
+        }
+    }
+}
+
+/// GNU `decode_coding_utf_16` (src/coding.c:1580-1700), for a source that may
+/// still be continued.
+///
+/// Two bytes are two `ONE_MORE_BYTE`s (:1626-1627) and a surrogate pair is
+/// four (:1661-1670), so a read that ends inside either leaves the whole unit
+/// for the next one -- which is why a `utf-16le` subprocess picks up mid-pair
+/// instead of turning half a unit into a character.  The signature is the
+/// coding system's business and not the bytes': only a [`Utf16Bom::Declared`]
+/// system reads one, and only for its OWN endianness (:1594-1609).
+fn decode_via_utf16(
+    bytes: &[u8],
+    default_endian: Utf16Endian,
+    bom: Utf16Bom,
+    eol: DosEolLookahead,
+) -> DecodedSource {
+    let (endian, signature) = match (bom, bytes) {
+        (Utf16Bom::Declared, [0xFE, 0xFF, ..]) if matches!(default_endian, Utf16Endian::Big) => {
+            (Utf16Endian::Big, 2)
+        }
+        (Utf16Bom::Declared, [0xFF, 0xFE, ..]) if matches!(default_endian, Utf16Endian::Little) => {
+            (Utf16Endian::Little, 2)
+        }
+        _ => (default_endian, 0),
+    };
+    let body = &bytes[signature..];
+    let unit_at = move |pair: &[u8]| -> u16 {
+        let pair = [pair[0], pair[1]];
+        match endian {
+            Utf16Endian::Big => u16::from_be_bytes(pair),
+            Utf16Endian::Little => u16::from_le_bytes(pair),
+        }
+    };
+    let mut decoded = decode_units(body, eol, |unit, sink| {
+        let first = unit_at(unit.take(2)?);
+        if (0xD800..0xDC00).contains(&first) {
+            // A high surrogate needs its low half, and GNU reads it with two
+            // more `ONE_MORE_BYTE`s before producing anything.
+            let second = unit_at(unit.take(2)?);
+            if (0xDC00..0xE000).contains(&second) {
+                let code =
+                    0x1_0000 + ((u32::from(first) - 0xD800) << 10) + (u32::from(second) - 0xDC00);
+                sink.push(code, None);
+                return Ok(());
+            }
+            unit.rewind();
+            unit.take(2)?;
+        }
+        sink.push(
+            if (0xD800..0xE000).contains(&first) {
+                u32::from(char::REPLACEMENT_CHARACTER)
+            } else {
+                u32::from(first)
+            },
+            None,
+        );
+        Ok(())
+    });
+    decoded.consumed = SourceConsumed(signature + decoded.consumed.bytes());
+    decoded
+}
+
+/// GNU `decode_coding_big5` (src/coding.c:4700-4790).
+///
+/// The characters come from `encoding_rs`, which is what every other door in
+/// this port has always used for Big5; the read boundary comes from GNU's own
+/// loop, which is one `ONE_MORE_BYTE` for the leading byte and a second one
+/// for the trailing byte of anything at or above 0x80 (:4762-4766).  They are
+/// the same rule, and keeping them in one function is what stops them from
+/// drifting apart.
+fn decode_via_big5(bytes: &[u8], eol: DosEolLookahead) -> DecodedSource {
+    // The boundary first: `decode_units` is only being asked where the last
+    // complete character ends, so its sink is discarded and the text is
+    // decoded from the prefix.
+    let measured = decode_units(bytes, eol, |unit, sink| {
+        let b = unit.byte()?;
+        if b >= 0x80 {
+            unit.byte()?;
+        }
+        sink.push(u32::from(b), None);
+        Ok(())
+    });
+    let consumed = measured.consumed;
+    // `chinese-big5-hkscs` shares the table here, as it always has at this
+    // port's other doors: `encoding_rs` has no separate HKSCS decoder.
+    let (decoded, _, _) = BIG5.decode(&bytes[..consumed.bytes()]);
+    let text = decoded.into_owned();
+    let runs = charset_property_runs(&text, "big5", false);
+    DecodedSource {
+        bytes: text.into_bytes(),
+        runs,
+        consumed,
+    }
+}
+
+/// The two multi-byte decoders that this port reaches through
+/// [`decode_bytes`] rather than through a `decode_via_*` arm of its own, given
+/// a `coding->consumed` of their own.
+///
+/// `None` means the fall-through really is a decoder in which every byte is a
+/// character, or a source in which every byte is ASCII -- either way one that
+/// cannot stop short, so the caller may say `SourceConsumed::all` and mean it.
+fn decode_fallthrough_source(
+    bytes: &[u8],
+    coding: &str,
+    eol: DosEolLookahead,
+) -> Option<DecodedSource> {
+    // A pure-ASCII source under an ASCII-compatible coding takes
+    // `builtin_decode_coding_string_with_known`'s NOCOPY path, which may hand
+    // back the caller's own string object; nothing here may pre-empt that, and
+    // nothing needs to, because pure ASCII cannot stop short.
+    if coding_string_trivial_ascii_nocopy(bytes, coding, false) {
+        return None;
+    }
+    if let Some((endian, bom)) = utf16_coding_variant(coding) {
+        return Some(decode_via_utf16(bytes, endian, bom, eol));
+    }
+    match coding_system_family(coding) {
+        "chinese-big5" | "chinese-big5-hkscs" => Some(decode_via_big5(bytes, eol)),
+        "utf-8" | "utf-8-emacs" => {
+            let mut src = bytes;
+            let signature = if coding_system_consumes_utf8_signature(coding)
+                && src.starts_with(&[0xEF, 0xBB, 0xBF])
+            {
+                src = &src[3..];
+                3
+            } else {
+                0
+            };
+            let mut decoded = decode_via_utf8(src, eol);
+            decoded.consumed = SourceConsumed(signature + decoded.consumed.bytes());
+            Some(decoded)
+        }
+        _ => None,
+    }
+}
+
 /// Build a decoded multibyte Lisp string from Emacs internal `bytes`, attaching
 /// the `(charset NAME)` text-property `runs` GNU's `decode_coding_*` produce.
 fn decoded_string_with_charset_runs(bytes: Vec<u8>, runs: Vec<StringTextPropertyRun>) -> Value {
@@ -2301,42 +2897,58 @@ fn decoded_string_with_charset_runs(bytes: Vec<u8>, runs: Vec<StringTextProperty
     value
 }
 
+/// GNU `decode_coding_charset` (src/coding.c:5420-5470).
+///
+/// Its loop reads the leading byte with `ONE_MORE_BYTE` and then, for a
+/// charset of dimension N, N-1 more of them (:5452-5462) -- so a source that
+/// ends inside a multi-byte charset character stops the decoder rather than
+/// producing a raw byte, and `coding->consumed` is the start of that
+/// character.  This is what makes a `chinese-gbk` or `cp936` subprocess pick
+/// up in the next read where the previous one left off.
 fn decode_via_charset_list(
     bytes: &[u8],
     charset_list: &[SymId],
-) -> (Vec<u8>, Vec<StringTextPropertyRun>) {
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-    let mut pos = 0usize;
-    let mut char_index = 0usize;
-    let mut runs = CharsetRunBuilder::new();
-    while pos < bytes.len() {
+    eol: DosEolLookahead,
+) -> DecodedSource {
+    // The longest charset in the list decides how many bytes a unit may need;
+    // a source shorter than that at the end may still be a complete character
+    // in a shorter charset, which is why the width is tried per charset below.
+    decode_units(bytes, eol, |unit, sink| {
+        let start = unit.pos;
+        let rest = &unit.bytes[start..];
+        let mut short = false;
         let decoded = charset_list.iter().find_map(|&charset| {
-            crate::emacs_core::charset::charset_decode_char_from_bytes(charset, &bytes[pos..])
+            let dimension =
+                crate::emacs_core::charset::charset_dimension_by_sym(charset).unwrap_or(1) as usize;
+            if rest.len() < dimension {
+                // `ONE_MORE_BYTE` would have jumped to `no_more_source` here.
+                short = true;
+                return None;
+            }
+            crate::emacs_core::charset::charset_decode_char_from_bytes(charset, rest)
                 .map(|(ch, consumed)| (charset, ch, consumed))
         });
-        let (code, consumed, annotation) = match decoded {
+        match decoded {
             // GNU annotates a run with the charset that decoded it, but ASCII
             // characters (`charset->id == charset_ascii`) carry no property.
             Some((charset, ch, consumed)) => {
                 let annotation = if ch < 0x80 { None } else { Some(charset) };
-                (ch as u32, consumed, annotation)
+                unit.take(consumed)?;
+                sink.push(ch as u32, annotation);
+                Ok(())
             }
             // A byte no charset can decode becomes an eight-bit raw character
-            // with no `charset` annotation (GNU's `invalid_code` path).
-            None => (
-                crate::emacs_core::emacs_char::unibyte_to_char(bytes[pos]),
-                1,
-                None,
-            ),
-        };
-        runs.push(char_index, annotation);
-        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
-        out.extend_from_slice(&buf[..n]);
-        pos += consumed;
-        char_index += 1;
-    }
-    (out, runs.finish(char_index))
+            // with no `charset` annotation (GNU's `invalid_code` path) -- but
+            // only once the source is known to be complete, because a charset
+            // that ran out of bytes has not been refuted yet.
+            None if short => Err(NoMoreSource),
+            None => {
+                let byte = unit.byte()?;
+                sink.push_raw(byte);
+                Ok(())
+            }
+        }
+    })
 }
 
 /// If `coding` is an EUC-profile ISO-2022 coding system, return its designation
@@ -2428,40 +3040,46 @@ fn decode_euc_register(charset: Option<SymId>, bytes: &[u8]) -> Option<(u32, usi
 fn decode_via_euc(
     bytes: &[u8],
     spec: &crate::emacs_core::coding::Iso2022Spec,
-) -> (Vec<u8>, Vec<StringTextPropertyRun>) {
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-    let mut pos = 0usize;
-    let mut char_index = 0usize;
-    let mut runs = CharsetRunBuilder::new();
-    let raw = |b: u8| (crate::emacs_core::emacs_char::unibyte_to_char(b), 1, None);
-    while pos < bytes.len() {
-        let b = bytes[pos];
-        // `(code, consumed, source-charset)`.  A successful register decode
-        // annotates the run with that register's designated charset; ASCII and
-        // raw bytes carry no `charset` property (GNU's `decode_coding_iso_2022`).
-        let (code, consumed, charset) = if b < 0x80 {
-            (u32::from(b), 1, None)
-        } else if b == 0x8E {
-            decode_euc_register(spec.initial[2], &bytes[pos + 1..])
-                .map(|(ch, n)| (ch, n + 1, spec.initial[2]))
-                .unwrap_or_else(|| raw(b))
-        } else if b == 0x8F {
-            decode_euc_register(spec.initial[3], &bytes[pos + 1..])
-                .map(|(ch, n)| (ch, n + 1, spec.initial[3]))
-                .unwrap_or_else(|| raw(b))
-        } else {
-            decode_euc_register(spec.initial[1], &bytes[pos..])
-                .map(|(ch, n)| (ch, n, spec.initial[1]))
-                .unwrap_or_else(|| raw(b))
+    eol: DosEolLookahead,
+) -> DecodedSource {
+    decode_units(bytes, eol, |unit, sink| {
+        let b = unit.byte()?;
+        if b < 0x80 {
+            sink.push(u32::from(b), None);
+            return Ok(());
+        }
+        // `(register, does the single shift eat a byte of its own)`.  A
+        // successful register decode annotates the run with that register's
+        // designated charset; ASCII and raw bytes carry no `charset` property
+        // (GNU's `decode_coding_iso_2022`).
+        // SS2/SS3 spend a byte of their own; a plain GR byte is itself the
+        // first byte of the register's code point.
+        let (register, shift_bytes) = match b {
+            0x8E => (spec.initial[2], 1),
+            0x8F => (spec.initial[3], 1),
+            _ => (spec.initial[1], 0),
         };
-        runs.push(char_index, charset);
-        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
-        out.extend_from_slice(&buf[..n]);
-        pos += consumed;
-        char_index += 1;
-    }
-    (out, runs.finish(char_index))
+        let width = register
+            .and_then(crate::emacs_core::charset::charset_dimension_by_sym)
+            .unwrap_or(1) as usize;
+        let from = unit.start + shift_bytes;
+        let rest = &unit.bytes[from.min(unit.bytes.len())..];
+        // `ONE_MORE_BYTE` has to succeed for every position byte of the
+        // register's charset (src/coding.c:5533-5538); a source that ends
+        // inside one leaves the whole character for the next read.
+        if rest.len() < width {
+            return Err(NoMoreSource);
+        }
+        match decode_euc_register(register, rest) {
+            Some((ch, consumed)) => {
+                unit.rewind();
+                unit.take(shift_bytes + consumed)?;
+                sink.push(ch, register);
+                Ok(())
+            }
+            None => invalid_code(unit, sink),
+        }
+    })
 }
 
 /// JIS code point (jisx0208 row/cell) -> the two Shift-JIS bytes. Mirrors
@@ -2539,43 +3157,46 @@ fn encode_via_sjis(s: &crate::heap_types::LispString, charsets: &[SymId]) -> Vec
 
 /// Decode Shift-JIS bytes: ASCII, half-width katakana (0xA1-0xDF), and the
 /// two-byte JISX0208 sequences (`SJIS_TO_JIS`); other bytes become eight-bit raw.
-fn decode_via_sjis(bytes: &[u8], charsets: &[SymId]) -> (Vec<u8>, Vec<StringTextPropertyRun>) {
+/// GNU `decode_coding_sjis` (src/coding.c:4560-4625).
+///
+/// A Shift-JIS lead byte is followed by `ONE_MORE_BYTE (c1)` (:4586), so a
+/// lead byte that ends the source stops the decoder at `src_base` -- which is
+/// the whole reason this function reports what it consumed.
+fn decode_via_sjis(bytes: &[u8], charsets: &[SymId], eol: DosEolLookahead) -> DecodedSource {
     let kana = charsets[1];
     let kanji = charsets[2];
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-    let mut pos = 0usize;
-    let mut char_index = 0usize;
-    let mut runs = CharsetRunBuilder::new();
-    let raw = |b: u8| (crate::emacs_core::emacs_char::unibyte_to_char(b), 1, None);
-    while pos < bytes.len() {
-        let b = bytes[pos];
-        // `(code, consumed, source-charset)`: half-width katakana annotates the
-        // `katakana-jisx0201` charset, two-byte sequences annotate the JISX0208
-        // charset; ASCII and raw bytes carry no `charset` property.
-        let (code, consumed, charset) = if b < 0x80 {
-            (u32::from(b), 1, None)
-        } else if (0xA1..=0xDF).contains(&b) {
-            crate::emacs_core::charset::charset_decode_char(kana, i64::from(b & 0x7F))
-                .map(|ch| (ch as u32, 1, Some(kana)))
-                .unwrap_or_else(|| raw(b))
-        } else if ((0x81..=0x9F).contains(&b) || (0xE0..=0xFC).contains(&b))
-            && pos + 1 < bytes.len()
-        {
-            let jis = sjis_to_jis(b, bytes[pos + 1]);
-            crate::emacs_core::charset::charset_decode_char(kanji, i64::from(jis))
-                .map(|ch| (ch as u32, 2, Some(kanji)))
-                .unwrap_or_else(|| raw(b))
-        } else {
-            raw(b)
-        };
-        runs.push(char_index, charset);
-        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
-        out.extend_from_slice(&buf[..n]);
-        pos += consumed;
-        char_index += 1;
-    }
-    (out, runs.finish(char_index))
+    decode_units(bytes, eol, |unit, sink| {
+        let b = unit.byte()?;
+        // Half-width katakana annotates the `katakana-jisx0201` charset,
+        // two-byte sequences annotate the JISX0208 charset; ASCII and raw
+        // bytes carry no `charset` property.
+        if b < 0x80 {
+            sink.push(u32::from(b), None);
+            return Ok(());
+        }
+        if (0xA1..=0xDF).contains(&b) {
+            return match crate::emacs_core::charset::charset_decode_char(kana, i64::from(b & 0x7F))
+            {
+                Some(ch) => {
+                    sink.push(ch as u32, Some(kana));
+                    Ok(())
+                }
+                None => invalid_code(unit, sink),
+            };
+        }
+        if (0x81..=0x9F).contains(&b) || (0xE0..=0xFC).contains(&b) {
+            let trail = unit.byte()?;
+            let jis = sjis_to_jis(b, trail);
+            return match crate::emacs_core::charset::charset_decode_char(kanji, i64::from(jis)) {
+                Some(ch) => {
+                    sink.push(ch as u32, Some(kanji));
+                    Ok(())
+                }
+                None => invalid_code(unit, sink),
+            };
+        }
+        invalid_code(unit, sink)
+    })
 }
 
 /// Returns `Some(imap)` if `coding` is utf-7 (`imap=false`) or utf-7-imap.
@@ -3095,6 +3716,7 @@ fn run_coding_with_conversion_hook(
     hook: SymId,
     encode: bool,
     eol: crate::emacs_core::coding::EolType,
+    run: &mut CodingRun<'_>,
 ) -> Result<
     (
         Value,
@@ -3144,8 +3766,48 @@ fn run_coding_with_conversion_hook(
         // `insert-file-contents` reports `vietnamese-viqr-unix', not
         // `vietnamese-viqr'.
         let body = coding_name_with_eol_spent(base_coding).into_owned();
+        // GNU decodes through the SAME `struct coding_system` the hook then
+        // runs off, so `coding->consumed` is already on it when
+        // `decode_coding_object` reaches the hook (src/coding.c:8180).  Here
+        // the base decode reaches a door that answers a Lisp string, so the
+        // count is taken from the same decoder separately -- and only for a
+        // source that may still be continued, which is a subprocess read.
+        let source_bytes =
+            lisp_string_coding_source_bytes(args[0].as_lisp_string().ok_or_else(|| {
+                signal(
+                    LispCondition::WrongTypeArgument,
+                    vec![Value::symbol("stringp"), args[0]],
+                )
+            })?);
+        let dos_eol = if matches!(
+            coding_name_eol(&body),
+            crate::emacs_core::coding::EolType::Dos
+        ) && ctx.eol_conversion()
+            == crate::emacs_core::coding::EolConversion::Enabled
+        {
+            DosEolLookahead::Required
+        } else {
+            DosEolLookahead::NotRequired
+        };
+        let consumed = match decode_fallthrough_source(&source_bytes, &body, dos_eol) {
+            Some(decoded) => decoded.consumed,
+            None => SourceConsumed::all(&source_bytes),
+        };
+        run.record(consumed);
+        // A source that may still be continued is decoded only as far as the
+        // base decoder got: the rest is `coding->carryover` and belongs to the
+        // next read, and decoding it here would put it in the text AND in the
+        // carryover.  A `CODING_MODE_LAST_BLOCK` source keeps every byte,
+        // because its tail is flushed as characters rather than held back.
+        let source_arg = if run.flushes_last_block() || consumed.bytes() == source_bytes.len() {
+            args[0]
+        } else {
+            Value::heap_string(crate::heap_types::LispString::from_unibyte(
+                source_bytes[..consumed.bytes()].to_vec(),
+            ))
+        };
         let decoded = builtin_decode_coding_string_with_known(
-            vec![args[0], Value::symbol(&body)],
+            vec![source_arg, Value::symbol(&body)],
             |_| true,
             ctx.eol_conversion(),
         )?;
@@ -3252,53 +3914,60 @@ fn encode_via_emacs_mule(s: &crate::heap_types::LispString) -> Vec<u8> {
 }
 
 /// Decode emacs-mule to Emacs internal bytes.
-fn decode_via_emacs_mule(bytes: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-    let mut emit = |code: u32, out: &mut Vec<u8>| {
-        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
-        out.extend_from_slice(&buf[..n]);
-    };
-    // Decode a charset character: read `dim` position bytes from `bytes[at..]`,
-    // strip the high bit, look the code up in the charset.
-    let read_charset = |id: i64, at: usize| -> Option<(u32, usize)> {
-        let (cs, dim) = crate::emacs_core::charset::charset_by_emacs_mule_id(id)?;
-        let dim = dim.clamp(1, 2) as usize;
-        if at + dim > bytes.len() {
-            return None;
-        }
-        let mut code = 0i64;
-        for k in 0..dim {
-            code = (code << 8) | i64::from(bytes[at + k] & 0x7F);
-        }
-        let ch = crate::emacs_core::charset::charset_decode_char(cs, code)?;
-        Some((ch as u32, dim))
-    };
-    let raw = |b: u8| crate::emacs_core::emacs_char::unibyte_to_char(b);
-    let mut pos = 0usize;
-    while pos < bytes.len() {
-        let b = bytes[pos];
-        let (code, consumed) = if b < 0x80 {
-            (u32::from(b), 1)
-        } else if (0x9A..=0x9D).contains(&b) && pos + 1 < bytes.len() {
-            // Private leading code: next byte is the charset's emacs-mule id.
-            match read_charset(i64::from(bytes[pos + 1]), pos + 2) {
-                Some((ch, dim)) => (ch, 2 + dim),
-                None => (raw(b), 1),
-            }
-        } else if (0x81..=0x99).contains(&b) {
-            // Direct leading code == the charset's emacs-mule id.
-            match read_charset(i64::from(b), pos + 1) {
-                Some((ch, dim)) => (ch, 1 + dim),
-                None => (raw(b), 1),
-            }
-        } else {
-            (raw(b), 1)
+/// GNU `decode_coding_emacs_mule` (src/coding.c:2280-2545).
+///
+/// Its leading code is followed by `ONE_MORE_BYTE` per position byte
+/// (`emacs_mule_char`, :1750-1830), so a source that stops inside one leaves
+/// the character for the next read.
+fn decode_via_emacs_mule(bytes: &[u8], eol: DosEolLookahead) -> DecodedSource {
+    // Decode a charset character: read `dim` position bytes, strip the high
+    // bit, look the code up in the charset.  `None` means the leading code is
+    // not a charset this build knows; `Err` means the source ran out.
+    fn read_charset(
+        id: i64,
+        unit: &mut UnitReader<'_>,
+    ) -> Result<Option<(u32, SymId)>, NoMoreSource> {
+        let Some((cs, dim)) = crate::emacs_core::charset::charset_by_emacs_mule_id(id) else {
+            return Ok(None);
         };
-        emit(code, &mut out);
-        pos += consumed;
+        let dim = dim.clamp(1, 2) as usize;
+        let position = unit.take(dim)?;
+        let mut code = 0i64;
+        for byte in position {
+            code = (code << 8) | i64::from(byte & 0x7F);
+        }
+        Ok(crate::emacs_core::charset::charset_decode_char(cs, code).map(|ch| (ch as u32, cs)))
     }
-    out
+
+    decode_units(bytes, eol, |unit, sink| {
+        let b = unit.byte()?;
+        if b < 0x80 {
+            sink.push(u32::from(b), None);
+            return Ok(());
+        }
+        if (0x9A..=0x9D).contains(&b) {
+            // Private leading code: next byte is the charset's emacs-mule id.
+            let id = unit.byte()?;
+            return match read_charset(i64::from(id), unit)? {
+                Some((ch, _)) => {
+                    sink.push(ch, None);
+                    Ok(())
+                }
+                None => invalid_code(unit, sink),
+            };
+        }
+        if (0x81..=0x99).contains(&b) {
+            // Direct leading code == the charset's emacs-mule id.
+            return match read_charset(i64::from(b), unit)? {
+                Some((ch, _)) => {
+                    sink.push(ch, None);
+                    Ok(())
+                }
+                None => invalid_code(unit, sink),
+            };
+        }
+        invalid_code(unit, sink)
+    })
 }
 
 /// If `coding` is an ISO-2022 coding system that uses escape-sequence
@@ -3609,195 +4278,161 @@ fn encode_via_iso2022(
 }
 
 /// Decode bytes through the ISO-2022 escape-sequence machine to Emacs internal
-/// bytes (GNU `decode_coding_iso_2022`), plus the `(charset NAME)` text-property
-/// runs GNU attaches for each maximal run of characters from the same non-ASCII
-/// charset.
+/// bytes (GNU `decode_coding_iso_2022`, src/coding.c:3200-3990), plus the
+/// `(charset NAME)` text-property runs GNU attaches for each maximal run of
+/// characters from the same non-ASCII charset.
+///
+/// STATE is the part of GNU's `coding->spec.iso_2022` that survives a read:
+/// the four graphic registers' designations, which register is invoked into
+/// GL, and a pending single shift.  GNU keeps it in the process's own
+/// `struct coding_system`, so a designation set by one read is still in force
+/// in the next; here the caller owns it and hands it in, which is the same
+/// lifetime by a different route.
 fn decode_via_iso2022(
     bytes: &[u8],
     spec: &crate::emacs_core::coding::Iso2022Spec,
-) -> (Vec<u8>, Vec<StringTextPropertyRun>) {
+    state: &mut Iso2022DecodeState,
+    eol: DosEolLookahead,
+) -> DecodedSource {
     use crate::emacs_core::charset::{
         charset_by_iso_final, charset_decode_char, charset_iso2022_designation,
     };
     use crate::emacs_core::coding::IsoFlag;
     let seven = spec.flags.contains(IsoFlag::SevenBits);
     let ascii = intern("ascii");
-
-    let mut desig: [Option<SymId>; 4] = spec.initial;
-    let mut gl: usize = 0;
     let gr: i32 = if seven { -1 } else { 1 };
-    let mut single_shift: Option<usize> = None;
+    state.designate_initially(spec);
 
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut buf = [0u8; crate::emacs_core::emacs_char::MAX_MULTIBYTE_LENGTH];
-    let mut char_index = 0usize;
-    let mut runs = CharsetRunBuilder::new();
-    // Emit one decoded character, recording its source charset for the
-    // `(charset NAME)` text-property runs (`None` for ASCII / eight-bit raw).
-    let mut emit = |code: u32,
-                    charset: Option<SymId>,
-                    out: &mut Vec<u8>,
-                    char_index: &mut usize,
-                    runs: &mut CharsetRunBuilder| {
-        runs.push(*char_index, charset);
-        let n = crate::emacs_core::emacs_char::char_string(code, &mut buf);
-        out.extend_from_slice(&buf[..n]);
-        *char_index += 1;
-    };
-    let raw = |b: u8| crate::emacs_core::emacs_char::unibyte_to_char(b);
-
-    let mut i = 0usize;
-    while i < bytes.len() {
-        let b = bytes[i];
+    decode_units(bytes, eol, |unit, sink| {
+        let b = unit.byte()?;
         // --- Escape sequences ---------------------------------------------
-        if b == 0x1B && i + 1 < bytes.len() {
-            let e = bytes[i + 1];
+        if b == 0x1B {
+            // Every byte of an escape sequence is a `ONE_MORE_BYTE`
+            // (src/coding.c:3320-3460), so a sequence cut by the end of a read
+            // is left whole for the next one.
+            let e = unit.byte()?;
             match e {
                 0x4E => {
-                    single_shift = Some(2);
-                    i += 2;
-                    continue;
+                    state.single_shift = Some(2);
+                    return Ok(());
                 }
                 0x4F => {
-                    single_shift = Some(3);
-                    i += 2;
-                    continue;
+                    state.single_shift = Some(3);
+                    return Ok(());
                 }
                 0x6E => {
-                    gl = 2;
-                    i += 2;
-                    continue;
+                    state.gl = 2;
+                    return Ok(());
                 }
                 0x6F => {
-                    gl = 3;
-                    i += 2;
-                    continue;
+                    state.gl = 3;
+                    return Ok(());
                 }
-                0x24 if i + 2 < bytes.len() => {
+                0x24 => {
                     // Multi-byte (dim-2) designations.
-                    let i2 = bytes[i + 2];
-                    let (reg, chars_96, final_at, consumed) = match i2 {
-                        0x28..=0x2B if i + 3 < bytes.len() => {
-                            (usize::from(i2 - 0x28), false, i + 3, 4)
-                        }
-                        0x2C..=0x2F if i + 3 < bytes.len() => {
-                            (usize::from(i2 - 0x2C), true, i + 3, 4)
-                        }
+                    let i2 = unit.byte()?;
+                    let (reg, chars_96, final_byte) = match i2 {
+                        0x28..=0x2B => (usize::from(i2 - 0x28), false, unit.byte()?),
+                        0x2C..=0x2F => (usize::from(i2 - 0x2C), true, unit.byte()?),
                         // Short form `ESC $ F` (F in @ A B) -> dim-2 94-set, G0.
-                        0x40..=0x42 => (0, false, i + 2, 3),
+                        0x40..=0x42 => (0, false, i2),
                         _ => {
-                            out.push(0x1B);
-                            i += 1;
-                            continue;
+                            unit.rewind();
+                            unit.byte()?;
+                            sink.push(0x1B, None);
+                            return Ok(());
                         }
                     };
-                    if let Some((cs, _)) =
-                        charset_by_iso_final(i64::from(bytes[final_at]), 2, chars_96)
+                    if let Some((cs, _)) = charset_by_iso_final(i64::from(final_byte), 2, chars_96)
                     {
-                        desig[reg] = Some(cs);
+                        state.designation[reg] = Some(cs);
                     }
-                    i += consumed;
-                    continue;
+                    return Ok(());
                 }
-                0x28..=0x2B if i + 2 < bytes.len() => {
+                0x28..=0x2B => {
                     let reg = usize::from(e - 0x28);
-                    if let Some((cs, _)) = charset_by_iso_final(i64::from(bytes[i + 2]), 1, false) {
-                        desig[reg] = Some(cs);
+                    let final_byte = unit.byte()?;
+                    if let Some((cs, _)) = charset_by_iso_final(i64::from(final_byte), 1, false) {
+                        state.designation[reg] = Some(cs);
                     }
-                    i += 3;
-                    continue;
+                    return Ok(());
                 }
-                0x2C..=0x2F if i + 2 < bytes.len() => {
+                0x2C..=0x2F => {
                     let reg = usize::from(e - 0x2C);
-                    if let Some((cs, _)) = charset_by_iso_final(i64::from(bytes[i + 2]), 1, true) {
-                        desig[reg] = Some(cs);
+                    let final_byte = unit.byte()?;
+                    if let Some((cs, _)) = charset_by_iso_final(i64::from(final_byte), 1, true) {
+                        state.designation[reg] = Some(cs);
                     }
-                    i += 3;
-                    continue;
+                    return Ok(());
                 }
                 _ => {
-                    out.push(0x1B);
-                    i += 1;
-                    continue;
+                    unit.rewind();
+                    unit.byte()?;
+                    sink.push(0x1B, None);
+                    return Ok(());
                 }
             }
         }
         if b == 0x0E {
-            gl = 1;
-            i += 1;
-            continue;
+            state.gl = 1;
+            return Ok(());
         }
         if b == 0x0F {
-            gl = 0;
-            i += 1;
-            continue;
+            state.gl = 0;
+            return Ok(());
         }
         if !seven && b == 0x8E {
-            single_shift = Some(2);
-            i += 1;
-            continue;
+            state.single_shift = Some(2);
+            return Ok(());
         }
         if !seven && b == 0x8F {
-            single_shift = Some(3);
-            i += 1;
-            continue;
+            state.single_shift = Some(3);
+            return Ok(());
         }
         if b < 0x20 || b == 0x7F {
-            emit(u32::from(b), None, &mut out, &mut char_index, &mut runs);
-            i += 1;
-            continue;
+            sink.push(u32::from(b), None);
+            return Ok(());
         }
         // --- Graphic character --------------------------------------------
-        let reg = if let Some(r) = single_shift.take() {
+        let reg = if let Some(r) = state.single_shift.take() {
             r
         } else if b < 0x80 {
-            gl
+            state.gl
         } else if gr >= 0 {
             gr as usize
         } else {
             // 7-bit codec: stray high byte -> eight-bit raw (no `charset`).
-            emit(raw(b), None, &mut out, &mut char_index, &mut runs);
-            i += 1;
-            continue;
+            sink.push_raw(b);
+            return Ok(());
         };
-        let charset = desig[reg];
+        let charset = state.designation[reg];
         if charset == Some(ascii) {
-            emit(
-                u32::from(b & 0x7F),
-                None,
-                &mut out,
-                &mut char_index,
-                &mut runs,
-            );
-            i += 1;
-            continue;
+            sink.push(u32::from(b & 0x7F), None);
+            return Ok(());
         }
         if let Some(cs) = charset
             && let Some((_, dim, _)) = charset_iso2022_designation(cs)
         {
             let dim = dim.clamp(1, 2) as usize;
-            if i + dim <= bytes.len() {
-                let mut code = 0i64;
-                for k in 0..dim {
-                    code = (code << 8) | i64::from(bytes[i + k] & 0x7F);
-                }
-                if let Some(ch) = charset_decode_char(cs, code) {
-                    emit(ch as u32, Some(cs), &mut out, &mut char_index, &mut runs);
-                    i += dim;
-                    continue;
-                }
+            unit.rewind();
+            let position = unit.take(dim)?;
+            let mut code = 0i64;
+            for byte in position {
+                code = (code << 8) | i64::from(byte & 0x7F);
             }
+            if let Some(ch) = charset_decode_char(cs, code) {
+                sink.push(ch as u32, Some(cs));
+                return Ok(());
+            }
+            return invalid_code(unit, sink);
         }
-        emit(
-            if b < 0x80 { u32::from(b) } else { raw(b) },
-            None,
-            &mut out,
-            &mut char_index,
-            &mut runs,
-        );
-        i += 1;
-    }
-    (out, runs.finish(char_index))
+        if b < 0x80 {
+            sink.push(u32::from(b), None);
+        } else {
+            sink.push_raw(b);
+        }
+        Ok(())
+    })
 }
 
 /// Resolve `undecided` / `prefer-utf-8` to a concrete coding system by
@@ -3947,6 +4582,7 @@ fn builtin_coding_string_in_context(
     direction: CodingDirection,
     encoding_boundary: EncodingBoundary,
     entry: CodingEntry,
+    run: &mut CodingRun<'_>,
 ) -> EvalResult {
     let name = direction.string_function_name();
     let encode = direction.is_encode();
@@ -4004,6 +4640,11 @@ fn builtin_coding_string_in_context(
         && destination.is_none()
         && coding_ascii_identity_fast_path(ctx, &coding, &args, encode, ctx.eol_conversion())
     {
+        // Nothing was decoded, so nothing was left over: `code_convert_string`
+        // returns the argument's own bytes (src/coding.c:9609-9628).
+        run.record(SourceConsumed::all(&lisp_string_coding_source_bytes(
+            args[0].as_lisp_string().expect("string validated above"),
+        )));
         ctx.set_variable(
             "last-coding-system-used",
             Value::symbol(canonical_context_coding_name(ctx, &reported_coding)),
@@ -4164,6 +4805,7 @@ fn builtin_coding_string_in_context(
             let bytes = lisp_string_coding_source_bytes(
                 args[0].as_lisp_string().expect("string validated above"),
             );
+            run.record(SourceConsumed::all(&bytes));
             if encode {
                 Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes))
             } else {
@@ -4177,6 +4819,7 @@ fn builtin_coding_string_in_context(
                 hook,
                 encode,
                 coding_name_eol(&coding),
+                run,
             )?;
             if let Some(resolution) = resolution {
                 // GNU `adjust_coding_eol_type` (src/coding.c:6471) rewrites
@@ -4299,47 +4942,109 @@ fn builtin_coding_string_in_context(
         } else {
             builtin_encode_coding_string_with_known(args, |_| true, ctx.eol_conversion())?
         }
-    } else if let Some(imap) = utf7_coding {
-        let bytes = decode_via_utf7(&lisp_string_coding_source_bytes(&source_string()), imap);
-        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
-    } else if let Some(gb2312) = hz_coding {
-        let bytes = decode_via_hz(&lisp_string_coding_source_bytes(&source_string()), gb2312);
-        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
-    } else if emacs_mule {
-        let bytes = decode_via_emacs_mule(&lisp_string_coding_source_bytes(&source_string()));
-        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
-    } else if no_conv_multibyte {
-        let bytes = decode_raw_text_multibyte(&lisp_string_coding_source_bytes(&source_string()));
-        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
-    } else if utf8_signature {
-        let mut src = lisp_string_coding_source_bytes(&source_string());
-        if src.starts_with(&[0xEF, 0xBB, 0xBF]) {
-            src.drain(..3);
-        }
-        let bytes = decode_utf8_to_emacs_bytes(&src);
-        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
-    } else if let Some(spec) = ccl_coding {
-        let source_bytes = lisp_string_coding_source_bytes(&source_string());
-        let bytes = decode_via_ccl(&source_bytes, spec, &coding)?;
-        Value::heap_string(crate::heap_types::LispString::from_emacs_bytes(bytes))
-    } else if let Some((spec, _)) = &full_iso {
-        let source_bytes = lisp_string_coding_source_bytes(&source_string());
-        let (bytes, runs) = decode_via_iso2022(&source_bytes, spec);
-        decoded_string_with_charset_runs(bytes, runs)
-    } else if let Some((spec, _)) = &euc_coding {
-        let source_bytes = lisp_string_coding_source_bytes(&source_string());
-        let (bytes, runs) = decode_via_euc(&source_bytes, spec);
-        decoded_string_with_charset_runs(bytes, runs)
-    } else if let Some(charsets) = &sjis_coding {
-        let source_bytes = lisp_string_coding_source_bytes(&source_string());
-        let (bytes, runs) = decode_via_sjis(&source_bytes, charsets);
-        decoded_string_with_charset_runs(bytes, runs)
-    } else if let Some(charset_list) = &charset_coding {
-        let source_bytes = lisp_string_coding_source_bytes(&source_string());
-        let (bytes, runs) = decode_via_charset_list(&source_bytes, charset_list);
-        decoded_string_with_charset_runs(bytes, runs)
     } else {
-        builtin_decode_coding_string_with_known(args, |_| true, ctx.eol_conversion())?
+        // GNU's decoders, each of which reports `coding->consumed` for itself;
+        // see `decode_units`.  The end-of-line lookahead is passed in rather
+        // than derived from the name because the name's EOL leg was spent
+        // above -- GNU's decoders read it off `CODING_ID_EOL_TYPE (coding->id)`
+        // before the same conversion happens (src/coding.c:1250-1251).
+        let dos_eol = if matches!(decoded_eol, crate::emacs_core::coding::EolType::Dos)
+            && ctx.eol_conversion() == crate::emacs_core::coding::EolConversion::Enabled
+        {
+            DosEolLookahead::Required
+        } else {
+            DosEolLookahead::NotRequired
+        };
+        let mut scratch = CodingDecoderState::default();
+        let source_bytes = lisp_string_coding_source_bytes(&source_string());
+        let decoded = if let Some(imap) = utf7_coding {
+            // GNU implements utf-7 in Lisp, as a `:post-read-conversion` over
+            // `raw-text` (lisp/international/utf-7.el), so the C decoder under
+            // it consumes every byte and each chunk is converted on its own.
+            // Measured: a child writing `a+MEI` and then `-b` gives GNU the
+            // characters `a U+3042` and then the LITERAL `-b`.
+            Some(DecodedSource::whole(
+                decode_via_utf7(&source_bytes, imap),
+                &source_bytes,
+            ))
+        } else if let Some(gb2312) = hz_coding {
+            // The same, through lisp/language/china-util.el.
+            Some(DecodedSource::whole(
+                decode_via_hz(&source_bytes, gb2312),
+                &source_bytes,
+            ))
+        } else if emacs_mule {
+            Some(decode_via_emacs_mule(&source_bytes, dos_eol))
+        } else if no_conv_multibyte {
+            Some(DecodedSource::whole(
+                decode_raw_text_multibyte(&source_bytes),
+                &source_bytes,
+            ))
+        } else if utf8_signature {
+            let mut src = source_bytes.clone();
+            let signature = if src.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                src.drain(..3);
+                3
+            } else {
+                0
+            };
+            let mut decoded = decode_via_utf8(&src, dos_eol);
+            decoded.consumed = SourceConsumed(signature + decoded.consumed.bytes());
+            Some(decoded)
+        } else if let Some(spec) = ccl_coding {
+            // A CCL program decides for itself how many bytes it reads, and
+            // this port drives it to the end of the source; GNU's
+            // `decode_coding_ccl` does report `coding->consumed`
+            // (src/coding.c:5185), so a CCL coding system across a subprocess
+            // read boundary is the one decoder still owed an answer.
+            Some(DecodedSource::whole(
+                decode_via_ccl(&source_bytes, spec, &coding)?,
+                &source_bytes,
+            ))
+        } else if let Some((spec, _)) = &full_iso {
+            Some(decode_via_iso2022(
+                &source_bytes,
+                spec,
+                run.decoder_state(&mut scratch).iso_2022_mut(),
+                dos_eol,
+            ))
+        } else if let Some((spec, _)) = &euc_coding {
+            Some(decode_via_euc(&source_bytes, spec, dos_eol))
+        } else if let Some(charsets) = &sjis_coding {
+            Some(decode_via_sjis(&source_bytes, charsets, dos_eol))
+        } else if let Some(charset_list) = &charset_coding {
+            Some(decode_via_charset_list(
+                &source_bytes,
+                charset_list,
+                dos_eol,
+            ))
+        } else if let Some(decoded) = decode_fallthrough_source(&source_bytes, &coding, dos_eol) {
+            Some(decoded)
+        } else {
+            None
+        };
+        match decoded {
+            Some(mut decoded) => {
+                run.record(decoded.consumed);
+                let tail = &source_bytes[decoded.consumed.bytes()..];
+                if run.flushes_last_block() {
+                    // GNU `decode_coding`'s `CODING_MODE_LAST_BLOCK` arm
+                    // (src/coding.c:7434-7462): what no decoder could consume
+                    // is produced as characters, ASCII as itself and anything
+                    // else as an eight-bit character.
+                    flush_last_block_into(&mut decoded.bytes, tail);
+                }
+                decoded_string_with_charset_runs(decoded.bytes, decoded.runs)
+            }
+            // Every remaining coding system is one in which each byte is a
+            // character (the ISO-8859 charsets, `raw-text`, `binary`), so its
+            // decoder cannot stop short and `coding->consumed` is the whole
+            // source by construction rather than by default.
+            None => {
+                run.record(SourceConsumed::all(&source_bytes));
+                builtin_decode_coding_string_with_known(args, |_| true, ctx.eol_conversion())?
+            }
+        }
     };
     // The single decode-side pass (GNU `decode_coding`, src/coding.c:7481).
     // `for_decode` is where GNU's `decode_eol` resolves a VECTOR eol_type by
@@ -4420,6 +5125,7 @@ pub(crate) fn builtin_encode_coding_string_in_context(
         CodingDirection::Encode,
         EncodingBoundary::CompleteText,
         CodingEntry::CodeConvertString,
+        &mut CodingRun::complete_source(),
     )
 }
 
@@ -4433,6 +5139,7 @@ pub(crate) fn builtin_decode_coding_string_in_context(
         CodingDirection::Decode,
         EncodingBoundary::CompleteText,
         CodingEntry::CodeConvertString,
+        &mut CodingRun::complete_source(),
     )
 }
 
@@ -4480,6 +5187,7 @@ fn encode_external_text_with_boundary(
         // File I/O is GNU's `encode_coding_object` entry, not
         // `code_convert_string`: no identity fast path.
         CodingEntry::FileGap,
+        &mut CodingRun::complete_source(),
     )?;
     let bytes = encoded
         .as_lisp_string()
@@ -4550,6 +5258,7 @@ pub(crate) fn decode_file_bytes_in_context(
         // subsidiary `decode_eol` detected -- and detects with
         // `CODING_MODE_LAST_BLOCK` still CLEAR.
         CodingEntry::FileGap,
+        &mut CodingRun::complete_source(),
     )?;
     let text = decoded
         .as_lisp_string()
@@ -4592,15 +5301,20 @@ pub(crate) fn decode_process_run_in_context(
     ctx: &mut crate::emacs_core::eval::Context,
     bytes: &[u8],
     coding: &'static str,
+    state: &mut CodingDecoderState,
+    block: crate::emacs_core::coding::SourceBlock,
 ) -> Result<DecodedProcessRun, crate::emacs_core::error::Flow> {
     let source = Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes.to_vec()));
+    let mut run = CodingRun::process_read(state, block);
     let decoded = builtin_coding_string_in_context(
         ctx,
         vec![source, Value::symbol(coding)],
         CodingDirection::Decode,
         EncodingBoundary::CompleteText,
         CodingEntry::ProcessRun,
+        &mut run,
     )?;
+    let carryover_bytes = run.carryover_bytes(bytes.len());
     let text = decoded
         .as_lisp_string()
         .expect("decode-coding-string must return a Lisp string")
@@ -4618,6 +5332,7 @@ pub(crate) fn decode_process_run_in_context(
     Ok(DecodedProcessRun {
         text,
         used: resolve_sym(used),
+        carryover: bytes[bytes.len() - carryover_bytes..].to_vec(),
     })
 }
 

@@ -1803,6 +1803,8 @@ impl ResolvedProcessDecoding {
         self,
         ctx: &mut crate::emacs_core::eval::Context,
         bytes: &[u8],
+        state: &mut crate::encoding::CodingDecoderState,
+        block: crate::emacs_core::coding::SourceBlock,
     ) -> Result<ProcessDecodedRun, Flow> {
         match self {
             // `binary` and `no-conversion` have a CONCRETE `Qunix` eol type
@@ -1820,12 +1822,17 @@ impl ResolvedProcessDecoding {
             Self::Bytes(name) => Ok(ProcessDecodedRun {
                 text: LispString::from_unibyte(bytes.to_vec()),
                 coding: ProcessRunCoding { used: name },
+                // `decode_coding_raw_text` copies its source, so every byte is
+                // consumed and `coding->carryover_bytes` stays zero.
+                carryover: Vec::new(),
             }),
             Self::Coding(name) => {
-                let run = crate::encoding::decode_process_run_in_context(ctx, bytes, name)?;
+                let run =
+                    crate::encoding::decode_process_run_in_context(ctx, bytes, name, state, block)?;
                 Ok(ProcessDecodedRun {
                     text: run.text,
                     coding: ProcessRunCoding { used: run.used },
+                    carryover: run.carryover,
                 })
             }
         }
@@ -1864,17 +1871,25 @@ pub(crate) enum ProcessOutputMirror {
 #[derive(Debug)]
 pub(crate) struct PendingProcessRun {
     coding: ResolvedProcessDecoding,
+    /// The previous read's carryover followed by this read's bytes, which is
+    /// GNU's `chars` buffer after `nbytes += carryover` (src/process.c:6331).
+    ///
+    /// It is the WHOLE thing and not a prefix.  Where the last complete
+    /// character ends is the decoder's answer -- `coding->consumed`,
+    /// src/coding.c:7477 -- and the decoder has not run yet, so a read that
+    /// split this buffer here would be guessing.  Entry 159 handed that guess
+    /// over as a residual and it was a table of byte-length rules keyed on the
+    /// coding system's NAME.
     bytes: Vec<u8>,
-    /// GNU's `coding->carryover`, which
-    /// `read_process_output_set_last_coding_system` copies onto the process
-    /// AFTER the decode (src/process.c:6453-6459).  Holding it here rather
-    /// than writing it at the read is not bookkeeping tidiness: a
-    /// `:post-read-conversion` may call `accept-process-output` on this very
-    /// process, and GNU's re-entrant read then finds `p->decoding_carryover`
-    /// at zero (cleared at :6312) and decodes only its own bytes.  Storing the
-    /// tail before the decode would let the inner read consume it and the
-    /// outer decode use it too.
-    carryover: Vec<u8>,
+    /// GNU `coding->spec`, carried across the hand-off so an ISO-2022
+    /// designation set by one read is still in force in the next; see
+    /// [`ProcessCodingState::store_decoder`].
+    decoder: crate::encoding::CodingDecoderState,
+    /// GNU `coding->mode & CODING_MODE_LAST_BLOCK` as this read left it, which
+    /// the decode needs as well as the detection did: with it set the tail no
+    /// decoder could consume is flushed as eight-bit characters
+    /// (src/coding.c:7434-7462) instead of becoming the next read's carryover.
+    block: crate::emacs_core::coding::SourceBlock,
     mirror: ProcessOutputMirror,
 }
 
@@ -1920,6 +1935,11 @@ pub(crate) struct ProcessRunCoding {
 pub(crate) struct ProcessDecodedRun {
     pub(crate) text: LispString,
     pub(crate) coding: ProcessRunCoding,
+    /// GNU `coding->carryover`: what the DECODER could not consume.  It
+    /// arrives with the text rather than with the read, because until the
+    /// decoder has run nobody knows where the last complete character ended --
+    /// see `crate::encoding::SourceConsumed`.
+    pub(crate) carryover: Vec<u8>,
 }
 
 impl ProcessDecodedRun {
@@ -2087,6 +2107,7 @@ enum LastBlockArrival {
 pub struct ProcessCodingState {
     carryover: Vec<u8>,
     last_block: LastBlock,
+    decoder: crate::encoding::CodingDecoderState,
 }
 
 impl ProcessCodingState {
@@ -2109,6 +2130,27 @@ impl ProcessCodingState {
         self.carryover = carryover;
     }
 
+    /// GNU `coding->spec` as the next read must find it.
+    ///
+    /// GNU has no write-back here at all, because the decode ran through this
+    /// very struct: an ISO-2022 designation is in `coding->spec.iso_2022` the
+    /// instant the decoder records it.  This port hands a COPY to the decode
+    /// and takes the copy back afterwards, which differs from GNU in exactly
+    /// one case -- a `:post-read-conversion` that calls
+    /// `accept-process-output` on the process it is decoding for would see the
+    /// designations as of before its own run rather than after it.  The
+    /// carryover has the same shape and GNU makes the same choice for it, by
+    /// clearing `p->decoding_carryover` before the decode (:6312) and writing
+    /// the new one after (:6448).
+    fn store_decoder(&mut self, decoder: crate::encoding::CodingDecoderState) {
+        self.decoder = decoder;
+    }
+
+    /// The decoder state a run starts from.
+    fn decoder(&self) -> crate::encoding::CodingDecoderState {
+        self.decoder.clone()
+    }
+
     /// The three lines at src/process.c:6315-6321, as one answer.
     fn reach_last_block(&mut self) -> LastBlockArrival {
         match self.last_block {
@@ -2125,111 +2167,6 @@ impl ProcessCodingState {
     fn reset(&mut self) {
         *self = Self::default();
     }
-}
-
-fn process_coding_uses_utf8_carryover(name: &str) -> bool {
-    name == "emacs-internal"
-        || name == "mule-utf-8"
-        || name == "cp65001"
-        || name.starts_with("utf-8")
-        || name.starts_with("prefer-utf-8")
-        || name.starts_with("undecided")
-}
-
-/// Whether a trailing CR at a read boundary has to wait for the next chunk.
-///
-/// This is GNU's `eol_dos`, which every decoder computes for itself at the top:
-///
-/// ```c
-///   bool eol_dos
-///     = !inhibit_eol_conversion && EQ (CODING_ID_EOL_TYPE (coding->id), Qdos);
-/// ```
-///
-/// (src/coding.c:1250-1251 for UTF-8, and the same two lines in seven more
-/// decoders).  A decoder with `eol_dos` set does `ONE_MORE_BYTE (byte_after_cr)`
-/// after every CR (src/coding.c:1348-1349), so a CR at the very end of a read is
-/// left UNCONSUMED and becomes `coding->carryover`.
-///
-/// Note which case it is NOT.  `CODING_ID_EOL_TYPE` is compared against `Qdos`,
-/// so a VECTOR eol type -- one still waiting to be detected -- does NOT hold a
-/// CR back: the CR is decoded, and `decode_eol` then classifies the run that
-/// contains it.  Entry 134 held one back for the undecided case too, reasoning
-/// that the coding "may still resolve to dos"; measured against GNU 31.0.90,
-/// that is not what happens.  A child writing `a CR` and then, after a pause,
-/// `LF b CR LF` under `coding-system-for-read` `utf-8` reads as
-/// `(97 10 10 98 10 10)` in GNU -- the first chunk detected `mac` on its own and
-/// the choice then STUCK, which is the same stickiness this entry adds
-/// everywhere else.
-///
-/// The `!inhibit_eol_conversion` half is the other thing the C expression says,
-/// and it is why EOL_CONVERSION is a parameter: with the flag set, GNU's
-/// decoder never looks past a CR, so nothing is held back.  The bytes that
-/// finally reach the buffer are the same either way -- an inhibited decode
-/// copies the CR through and a held-back CR is flushed at EOF -- but a Lisp
-/// filter sees the run boundaries, so the split has to be GNU's.
-fn process_coding_uses_dos_eol_carryover(
-    name: &str,
-    eol_conversion: crate::emacs_core::coding::EolConversion,
-) -> bool {
-    eol_conversion == crate::emacs_core::coding::EolConversion::Enabled
-        && matches!(
-            crate::encoding::coding_name_eol(name),
-            crate::emacs_core::coding::EolType::Dos
-        )
-}
-
-fn utf8_expected_sequence_len(lead: u8) -> Option<usize> {
-    match lead {
-        0xC2..=0xDF => Some(2),
-        0xE0..=0xEF => Some(3),
-        0xF0..=0xF7 => Some(4),
-        0xF8..=0xFB => Some(5),
-        _ => None,
-    }
-}
-
-fn utf8_complete_prefix_len(bytes: &[u8]) -> usize {
-    let len = bytes.len();
-    let max_suffix = len.min(5);
-    for suffix_len in 1..=max_suffix {
-        let start = len - suffix_len;
-        let lead = bytes[start];
-        if let Some(expected) = utf8_expected_sequence_len(lead) {
-            let suffix = &bytes[start + 1..];
-            if suffix_len < expected && suffix.iter().all(|byte| (byte & 0xC0) == 0x80) {
-                return start;
-            }
-            return len;
-        }
-        if (lead & 0xC0) != 0x80 {
-            return len;
-        }
-    }
-    len
-}
-
-fn process_output_decode_prefix_len(
-    coding: &str,
-    bytes: &[u8],
-    flush: bool,
-    eol_conversion: crate::emacs_core::coding::EolConversion,
-) -> usize {
-    if flush {
-        return bytes.len();
-    }
-
-    let mut decode_len = if process_coding_uses_utf8_carryover(coding) {
-        utf8_complete_prefix_len(bytes)
-    } else {
-        bytes.len()
-    };
-    if process_coding_uses_dos_eol_carryover(coding, eol_conversion)
-        && decode_len > 0
-        && bytes[decode_len - 1] == b'\r'
-    {
-        decode_len -= 1;
-    }
-    decode_len
 }
 
 /// Encode the data passed to `process-send-string`/`process-send-region`
@@ -2285,56 +2222,45 @@ fn pending_process_output_run(
     mirror: ProcessOutputMirror,
     bytes: &[u8],
     block: crate::emacs_core::coding::SourceBlock,
-    eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> PendingProcessRun {
-    let flush = matches!(block, crate::emacs_core::coding::SourceBlock::Last);
     let decoding = ProcessOutputDecoding::for_process(proc.coding_decode, sink);
+    // GNU's `p->decoding_carryover = 0` (src/process.c:6312) followed by
+    // `memcpy (chars, SDATA (p->decoding_buf), carryover)` (:6255) and
+    // `nbytes += carryover` (:6331).  Taking the tail rather than copying it is
+    // what makes the clear and the prepend one act: a
+    // `:post-read-conversion` may call `accept-process-output` on this very
+    // process, and GNU's re-entrant read finds the carryover at zero.
+    let mut combined = proc.coding_state.take_carryover();
+    combined.reserve(bytes.len());
+    combined.extend_from_slice(bytes);
     if let ProcessOutputDecoding::Bytes(name) = decoding {
-        let mut combined = proc.coding_state.take_carryover();
-        combined.extend_from_slice(bytes);
         return PendingProcessRun {
             coding: ResolvedProcessDecoding::Bytes(name),
             bytes: combined,
-            carryover: Vec::new(),
+            decoder: crate::encoding::CodingDecoderState::default(),
+            block,
             mirror,
         };
     }
 
-    let mut combined = proc.coding_state.take_carryover();
-    combined.reserve(bytes.len());
-    combined.extend_from_slice(bytes);
     // Detection sees the WHOLE buffer that is about to be decoded, carryover
-    // included, and it runs before the read boundary is chosen.  Both halves
-    // are GNU's: `coding->src_bytes` is the carryover plus this read
-    // (src/process.c:6243-6254, `nbytes += carryover` at :6331), and
-    // `detect_coding` runs before any decoder hands bytes back as carryover
-    // (src/coding.c:8129-8130).  The order matters twice over, because the
-    // boundary rules below are properties of the decoder detection just chose:
-    // a `utf-8` answer holds a truncated multibyte tail back and an
-    // `iso-latin-1` answer holds nothing back, every byte of it being a
-    // character.
+    // included.  Both halves are GNU's: `coding->src_bytes` is the carryover
+    // plus this read (src/process.c:6243-6254, `nbytes += carryover` at :6331),
+    // and `detect_coding` runs before the decoder that reports
+    // `coding->consumed` (src/coding.c:8129-8130).
     //
-    // `flush` is GNU's `CODING_MODE_LAST_BLOCK`, which `read_process_output`
-    // raises only at EOF (src/process.c:6321).  Detection needs it for the same
-    // truncated tail the boundary rules below need it for -- it is what
-    // separates "these bytes are not UTF-8" from "this chunk stopped in the
-    // middle of a character" (src/coding.c:1215) -- so the one flag is spent
-    // twice here exactly as GNU spends its one flag twice.
+    // BLOCK is GNU's `CODING_MODE_LAST_BLOCK`, which `read_process_output`
+    // raises only at EOF (src/process.c:6321).  Detection needs it to tell
+    // "these bytes are not UTF-8" from "this chunk stopped in the middle of a
+    // character" (src/coding.c:1215), and the decode needs it to decide what to
+    // do with the tail -- so the one flag is spent twice here exactly as GNU
+    // spends its one flag twice.
     let resolved = decoding.detected(coding_systems, &combined, block);
-    let decode_len =
-        process_output_decode_prefix_len(resolved.name(), &combined, flush, eol_conversion);
-    // GNU's `p->decoding_carryover = 0` (src/process.c:6312) has already
-    // happened -- `combined` drained it above -- and the new tail is NOT
-    // written back here.  `read_process_output_set_last_coding_system` copies
-    // it onto the process after the decode (:6453-6459), and the decode can
-    // re-enter this function through a `:post-read-conversion` that calls
-    // `accept-process-output`; GNU's inner read then sees a zero carryover and
-    // so must ours.
-    let carryover = combined.split_off(decode_len);
     PendingProcessRun {
         coding: resolved,
         bytes: combined,
-        carryover,
+        decoder: proc.coding_state.decoder(),
+        block,
         mirror,
     }
 }
@@ -2471,7 +2397,6 @@ fn process_output_read_from_io_result(
     outcome: ProcessReadOutcome,
     bytes: &[u8],
     full_read_len: usize,
-    eol_conversion: crate::emacs_core::coding::EolConversion,
 ) -> ProcessBytesRead {
     let sink = destination.sink();
     match outcome {
@@ -2482,9 +2407,7 @@ fn process_output_read_from_io_result(
                 // non-empty carryover is still a READ as far as the caller is
                 // concerned, and only an empty one is the end of file.
                 let bytes_read = proc.coding_state.carryover_len();
-                if bytes_read == 0
-                    && destination.branch() == ProcessReadBranch::InsertIntoBuffer
-                {
+                if bytes_read == 0 && destination.branch() == ProcessReadBranch::InsertIntoBuffer {
                     // `read_and_insert_process_output` returns on `!nread`
                     // before `decode_coding_c_string` (:6464), so this branch
                     // has no zero-byte decode to make.
@@ -2497,7 +2420,6 @@ fn process_output_read_from_io_result(
                     mirror,
                     &[],
                     crate::emacs_core::coding::SourceBlock::Last,
-                    eol_conversion,
                 );
                 if bytes_read > 0 {
                     ProcessBytesRead::Data { run, bytes_read }
@@ -2516,7 +2438,6 @@ fn process_output_read_from_io_result(
                     mirror,
                     &bytes[..n],
                     crate::emacs_core::coding::SourceBlock::More,
-                    eol_conversion,
                 ),
                 bytes_read: n,
             }
@@ -3776,7 +3697,7 @@ enum ProcessBytesRead {
 #[derive(Debug)]
 struct DecodedPendingProcessRun {
     run: ProcessDecodedRun,
-    carryover: Vec<u8>,
+    decoder: crate::encoding::CodingDecoderState,
     mirror: ProcessOutputMirror,
 }
 
@@ -6164,7 +6085,6 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         destination: ProcessOutputDestination,
-        eol_conversion: crate::emacs_core::coding::EolConversion,
         coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> ProcessBytesRead {
         let Some(proc) = self.processes.get_mut(&id) else {
@@ -6195,7 +6115,6 @@ impl ProcessManager {
             ProcessReadOutcome::from_stream_read(&result),
             &buf,
             full_read_len,
-            eol_conversion,
         );
         read
     }
@@ -6210,7 +6129,6 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         destination: ProcessOutputDestination,
-        eol_conversion: crate::emacs_core::coding::EolConversion,
         coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> ProcessBytesRead {
         let Some(proc) = self.processes.get_mut(&id) else {
@@ -6232,7 +6150,6 @@ impl ProcessManager {
             ProcessReadOutcome::from_stream_read(&result),
             &buf,
             full_read_len,
-            eol_conversion,
         );
         read
     }
@@ -6246,7 +6163,6 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         destination: ProcessOutputDestination,
-        eol_conversion: crate::emacs_core::coding::EolConversion,
         coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> ProcessBytesRead {
         let Some(proc) = self.processes.get_mut(&id) else {
@@ -6275,7 +6191,6 @@ impl ProcessManager {
             ProcessReadOutcome::from_stream_read(&result),
             &buf,
             full_read_len,
-            eol_conversion,
         );
         read
     }
@@ -6287,7 +6202,6 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         destination: ProcessOutputDestination,
-        eol_conversion: crate::emacs_core::coding::EolConversion,
         coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> ProcessBytesRead {
         let Some(proc) = self.processes.get_mut(&id) else {
@@ -6309,7 +6223,6 @@ impl ProcessManager {
             ProcessReadOutcome::from_pty_read(&result),
             &buf,
             full_read_len,
-            eol_conversion,
         );
         read
     }
@@ -6318,7 +6231,6 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         destination: ProcessOutputDestination,
-        eol_conversion: crate::emacs_core::coding::EolConversion,
         coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> ProcessBytesRead {
         let Some(proc) = self.processes.get_mut(&id) else {
@@ -6338,7 +6250,6 @@ impl ProcessManager {
                 ProcessReadOutcome::from_stream_read(&result),
                 &buf,
                 full_read_len,
-                eol_conversion,
             );
             return read;
         }
@@ -6379,7 +6290,6 @@ impl ProcessManager {
                     ProcessReadOutcome::from_stream_read(&result),
                     &buf,
                     full_read_len,
-                    eol_conversion,
                 ),
                 RawNetworkRead::Udp(result) => match result {
                     Ok((n, addr)) => {
@@ -6394,7 +6304,6 @@ impl ProcessManager {
                                 ProcessOutputMirror::Stdout,
                                 &buf[..n],
                                 crate::emacs_core::coding::SourceBlock::More,
-                                eol_conversion,
                             ),
                             bytes_read: n,
                         }
@@ -6423,7 +6332,6 @@ impl ProcessManager {
                                 ProcessOutputMirror::Stdout,
                                 &buf[..n],
                                 crate::emacs_core::coding::SourceBlock::More,
-                                eol_conversion,
                             ),
                             bytes_read: n,
                         }
@@ -7589,7 +7497,6 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         destination: ProcessOutputDestination,
-        eol_conversion: crate::emacs_core::coding::EolConversion,
         coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> ProcessBytesRead {
         if self
@@ -7603,19 +7510,19 @@ impl ProcessManager {
 
         match source {
             Some(ProcessOutputSource::Pty) => {
-                self.read_pty_output_result(id, destination, eol_conversion, coding_systems)
+                self.read_pty_output_result(id, destination, coding_systems)
             }
             Some(ProcessOutputSource::ChildStdout) => {
-                self.read_child_stdout_result(id, destination, eol_conversion, coding_systems)
+                self.read_child_stdout_result(id, destination, coding_systems)
             }
             Some(ProcessOutputSource::ChildStderr) => {
-                self.read_child_stderr_result(id, destination, eol_conversion, coding_systems)
+                self.read_child_stderr_result(id, destination, coding_systems)
             }
             Some(ProcessOutputSource::Network) => {
-                self.read_network_output_result(id, destination, eol_conversion, coding_systems)
+                self.read_network_output_result(id, destination, coding_systems)
             }
             Some(ProcessOutputSource::Serial) => {
-                self.read_serial_output_result(id, destination, eol_conversion, coding_systems)
+                self.read_serial_output_result(id, destination, coding_systems)
             }
             None => ProcessBytesRead::NoSource,
         }
@@ -7648,19 +7555,10 @@ impl ProcessManager {
         destination: ProcessOutputDestination,
         coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     ) -> Option<PendingProcessRun> {
-        // It names the other thing it does not have, too: with no `Context`
-        // there is no `inhibit-eol-conversion' to read, so it chooses the read
-        // boundary the way an unbound variable would (`EolConversion::Enabled`,
-        // GNU's initial value at src/coding.c:12027).  Fixtures that need the
-        // other answer must drive a `Context`.
-        match self.read_process_output_result(
-            id,
-            destination,
-            crate::emacs_core::coding::EolConversion::Enabled,
-            coding_systems,
-        ) {
-            ProcessBytesRead::Data { run, .. }
-            | ProcessBytesRead::EofAfterLastBlock { run } => Some(run),
+        match self.read_process_output_result(id, destination, coding_systems) {
+            ProcessBytesRead::Data { run, .. } | ProcessBytesRead::EofAfterLastBlock { run } => {
+                Some(run)
+            }
             ProcessBytesRead::WouldBlock | ProcessBytesRead::Eof | ProcessBytesRead::NoSource => {
                 None
             }
@@ -7678,6 +7576,7 @@ impl ProcessManager {
         &mut self,
         id: ProcessId,
         carryover: Vec<u8>,
+        decoder: crate::encoding::CodingDecoderState,
         mirror: ProcessOutputMirror,
         text: &LispString,
     ) {
@@ -7685,6 +7584,7 @@ impl ProcessManager {
             return;
         };
         proc.coding_state.store_carryover(carryover);
+        proc.coding_state.store_decoder(decoder);
         let rendered = process_output_runtime_string(text);
         match mirror {
             ProcessOutputMirror::Stdout => proc.stdout.push_str(&rendered),
@@ -8071,22 +7971,23 @@ impl super::eval::Context {
         id: ProcessId,
         destination: ProcessOutputDestination,
     ) -> Result<ProcessOutputRead, Flow> {
-        let eol_conversion = self.eol_conversion();
         // Stage one: the read.  It borrows the `ProcessManager` mutably out of
         // `self` and gives it back with a [`PendingProcessRun`] -- bytes and a
-        // settled coding system, no text.
-        let (run, bytes_read, last_block) = match self.processes.read_process_output_result(
-            id,
-            destination,
-            eol_conversion,
-            &self.coding_systems,
-        ) {
-            ProcessBytesRead::Data { run, bytes_read } => (run, bytes_read, false),
-            ProcessBytesRead::EofAfterLastBlock { run } => (run, 0, true),
-            ProcessBytesRead::WouldBlock => return Ok(ProcessOutputRead::WouldBlock),
-            ProcessBytesRead::Eof => return Ok(ProcessOutputRead::Eof),
-            ProcessBytesRead::NoSource => return Ok(ProcessOutputRead::NoSource),
-        };
+        // settled coding system, no text.  It no longer needs
+        // `inhibit-eol-conversion': the trailing-CR lookahead that made it
+        // matter is `eol_dos`, and `eol_dos` is the DECODER's, as it is in GNU
+        // (src/coding.c:1250-1251).
+        let (run, bytes_read, last_block) =
+            match self
+                .processes
+                .read_process_output_result(id, destination, &self.coding_systems)
+            {
+                ProcessBytesRead::Data { run, bytes_read } => (run, bytes_read, false),
+                ProcessBytesRead::EofAfterLastBlock { run } => (run, 0, true),
+                ProcessBytesRead::WouldBlock => return Ok(ProcessOutputRead::WouldBlock),
+                ProcessBytesRead::Eof => return Ok(ProcessOutputRead::Eof),
+                ProcessBytesRead::NoSource => return Ok(ProcessOutputRead::NoSource),
+            };
         // Stage two: the decode, with the whole `Context` in hand because GNU's
         // decoder needs the whole editor -- ISO-2022's designations, CCL
         // programs and charset lists live in the evaluator, and
@@ -8095,8 +7996,13 @@ impl super::eval::Context {
         // Stage three: GNU's `read_process_output_set_last_coding_system`
         // (src/process.c:6417-6459), which runs after EVERY decoded run.
         self.record_process_run_coding(id, decoded.run.coding);
-        self.processes
-            .finish_process_run(id, decoded.carryover, decoded.mirror, &decoded.run.text);
+        self.processes.finish_process_run(
+            id,
+            decoded.run.carryover,
+            decoded.decoder,
+            decoded.mirror,
+            &decoded.run.text,
+        );
         if last_block {
             // GNU's zero-byte last block is delivered from INSIDE the read --
             // `read_and_dispose_of_process_output` calls the filter itself
@@ -8109,7 +8015,11 @@ impl super::eval::Context {
             // of its own, which GNU counts into `coding->produced_char`
             // (src/coding.c:8194) and hands to the filter like any other run.
             if !decoded.run.text.is_empty() {
-                let filter = self.processes.get(id).map(|p| p.filter).unwrap_or(Value::NIL);
+                let filter = self
+                    .processes
+                    .get(id)
+                    .map(|p| p.filter)
+                    .unwrap_or(Value::NIL);
                 self.run_process_filter_callback(id, filter, &decoded.run.text)?;
             }
             return Ok(ProcessOutputRead::Eof);
@@ -8146,14 +8056,15 @@ impl super::eval::Context {
         let PendingProcessRun {
             coding,
             bytes,
-            carryover,
+            mut decoder,
+            block,
             mirror,
         } = run;
         let saved_match_data = self.match_data.clone();
         let specpdl_count = self.specpdl.len();
         self.specbind(intern("inhibit-quit"), Value::T);
         self.specbind(intern("last-nonmenu-event"), Value::T);
-        let decoded = coding.decode_in_context(self, &bytes);
+        let decoded = coding.decode_in_context(self, &bytes, &mut decoder, block);
         // The `?` is deliberately AFTER the unwind, not on the call: a
         // `:post-read-conversion` that signals must still leave the bindings
         // popped and the match data restored, which is what GNU's specpdl does
@@ -8164,7 +8075,7 @@ impl super::eval::Context {
         self.match_data = saved_match_data;
         Ok(DecodedPendingProcessRun {
             run: decoded?,
-            carryover,
+            decoder,
             mirror,
         })
     }
