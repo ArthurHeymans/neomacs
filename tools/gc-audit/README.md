@@ -23,11 +23,18 @@ python3 tools/gc-audit/ctx_in_scope.py                         # sizing the Tier
 ```
 
 `exp_self_lifetime.py` is not an analysis; it patches
-`Value::as_lisp_string` to `(&self) -> Option<&LispString>` so `cargo check`
-reports every site where a borrow escapes its `Value`, and `--revert` puts it
-back.
+`Value::as_lisp_string` between its honest signature and the `&'static` one, so
+`cargo check` reports every site where a borrow escapes its `Value`.  Entry 163
+ran it to price the tightening (20 errors); 167 landed it, so the script now
+LOOSENS by default and `--revert` restores the honest signature.
+
+Every script resolves the workspace root through `gcaudit_root.py`, which
+raises rather than scanning nothing.  Entry 167 found that as committed they
+all pointed at `<repo>/tools`, so `classify2.py` reported `grep_lines 0 sites
+0` and `reach.py` reported `0 (0.0% of defined names)` -- both exiting 0.
 
 The one number worth re-reading before trusting any of this:
 `reach.py` reports that **90.2% of function names in these three crates can
 reach a GC safepoint**, which is why "does this borrow cross a safepoint" is
-not, on its own, a usable filter inside an interpreter.
+not, on its own, a usable filter inside an interpreter.  (Re-measured for 167:
+23906 of 26518, still 90.2%.)

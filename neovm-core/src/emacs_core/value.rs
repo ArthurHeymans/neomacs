@@ -1965,16 +1965,26 @@ impl TaggedValue {
         self.as_utf8_str().map(f)
     }
 
-    /// Borrow the `LispString` for a string value.
+    /// Borrow the `LispString` for a string value, for no longer than the
+    /// `Value` place it was read from.
     ///
-    /// # The `'static` is a lie, and it is the seam DIVERGENCES.md 163 audits
+    /// # What the lifetime does and does not say (DIVERGENCES.md 163, 167)
     ///
     /// The referent lives in a mark-sweep, partly-concurrent heap. When the
     /// collector reclaims the object, `sweep_range` runs `drop_in_place`,
-    /// which frees the byte buffer; the borrow returned here is not tied to
-    /// anything that keeps the object alive, so the borrow checker cannot
-    /// object. Two rules make the vast majority of the ~680 call sites sound
-    /// anyway, and they are the ones to check before adding another:
+    /// which frees the byte buffer. Until 167 this function returned
+    /// `&'static LispString` at ~500 production sites, which told the borrow
+    /// checker the referent outlives the process and so opted every one of
+    /// them out of the check it would otherwise run. It is `&self` now, so a
+    /// borrow that ESCAPES its `Value` -- returned from a closure that owns
+    /// the value, parked in a `'static` field, handed out of the function that
+    /// read it -- is a compile error. That cost 20 of them, and every one was
+    /// either a temporary or a genuine escape.
+    ///
+    /// It is NOT the safepoint property: a `Value` local can outlive a
+    /// safepoint and still be unrooted, so keeping the place alive is not
+    /// keeping the object alive. Two rules are what make the surviving borrows
+    /// sound, and they are the ones to check before adding another:
     ///
     /// 1. **Rooting.** A value need only be rooted before the next SAFEPOINT,
     ///    not the next allocation (`tagged/CONCURRENT_GC.md`, "precise-rooting
@@ -1994,7 +2004,56 @@ impl TaggedValue {
     /// the heap, and every safepoint in this engine needs `&mut Context`, so
     /// holding one across a safepoint is a BORROW ERROR instead of a review
     /// question.
-    pub fn as_lisp_string(self) -> Option<&'static LispString> {
+    ///
+    /// The escape property is a compile-time one, so this is the only place it
+    /// can be pinned. Restoring the `&'static` return type makes this doctest
+    /// stop failing, which is the red measurement for 167:
+    ///
+    /// ```compile_fail,E0515
+    /// use neovm_core::Value;
+    /// use neovm_core::heap_types::LispString;
+    ///
+    /// // A borrow of a heap string cannot outlive the `Value` it was read
+    /// // from: the collector is free to take the object the moment nothing
+    /// // roots it, and a `Value` on the Rust stack roots nothing.
+    /// fn escapes(value: Value) -> Option<&'static LispString> {
+    ///     value.as_lisp_string()
+    /// }
+    /// ```
+    pub fn as_lisp_string(&self) -> Option<&LispString> {
+        // SAFETY: the anchor is `self` -- the returned borrow is tied to the
+        // `Value` place it was read from, which is the strongest claim this
+        // function is entitled to make.
+        unsafe { self.as_lisp_string_reanchored() }
+    }
+
+    /// Borrow the `LispString` with an anchor this function cannot check.
+    ///
+    /// [`Value::as_lisp_string`] ties its result to the `Value` PLACE it was
+    /// read from. That is the honest thing to say about a `Copy` word pointing
+    /// into a mark-sweep heap, and it is what turns "is this borrow held
+    /// across a safepoint" from a review question into a compile question,
+    /// because every safepoint in this engine needs `&mut Context`.
+    ///
+    /// Three callers need to anchor the borrow somewhere ELSE. Each is listed
+    /// here, and the list is the point of the function:
+    ///
+    /// * [`Value::as_lisp_string`] itself, anchored to `&self`.
+    /// * [`Value::lisp_string_in`], anchored to a shared borrow of the heap --
+    ///   a STRONGER anchor than the place, and the one that makes holding the
+    ///   borrow across a safepoint a borrow error.
+    /// * [`Value::closure_docstring`], anchored to the closure the docstring
+    ///   slot belongs to.
+    ///
+    /// # Safety
+    ///
+    /// The caller must name the anchor the returned borrow is tied to, and
+    /// that anchor must keep the string object alive for all of it. This is
+    /// the only remaining launderer of a heap borrow's lifetime in `Value`
+    /// (DIVERGENCES.md 167); a fourth call site is an argument to be had, not
+    /// an edit to be made.
+    #[inline]
+    unsafe fn as_lisp_string_reanchored<'a>(self) -> Option<&'a LispString> {
         self.as_string_ptr().map(|p| {
             let string = unsafe { &(*p).data };
             if string.is_reclaimed() {
@@ -2019,9 +2078,16 @@ impl TaggedValue {
     /// — a `Copy` word with no borrow to track. Those need an explicit root
     /// (DIVERGENCES.md 161/162's `InFlightRoots`), not a lifetime.
     #[inline]
-    pub fn lisp_string_in(self, heap: &crate::tagged::gc::TaggedHeap) -> Option<&LispString> {
+    pub fn lisp_string_in<'a>(
+        self,
+        heap: &'a crate::tagged::gc::TaggedHeap,
+    ) -> Option<&'a LispString> {
         let _ = heap;
-        self.as_lisp_string()
+        // SAFETY: the anchor is `heap`. Reaching a collection needs `&mut
+        // Context`, which owns the heap, so this borrow cannot coexist with
+        // one -- a stronger anchor than `as_lisp_string`'s place, which is the
+        // whole reason this function exists.
+        unsafe { self.as_lisp_string_reanchored() }
     }
 
     /// Check if a string is multibyte.
@@ -2134,10 +2200,16 @@ impl TaggedValue {
         })
     }
 
-    pub fn closure_docstring(self) -> Option<Option<&'static LispString>> {
+    pub fn closure_docstring(&self) -> Option<Option<&LispString>> {
         self.closure_doc_value().map(|doc| {
             if doc.is_string() {
-                doc.as_lisp_string()
+                // SAFETY: the anchor is `self`. `doc` is this closure's own
+                // CLOSURE_DOC_STRING slot, so the string is reachable from the
+                // closure and outlives it only if the closure does; tying the
+                // borrow to `&self` says exactly that. The `doc` local is a
+                // copy of the slot and anchors nothing, which is why the safe
+                // accessor cannot express it.
+                unsafe { doc.as_lisp_string_reanchored() }
             } else {
                 None
             }
