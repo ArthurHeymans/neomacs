@@ -21168,12 +21168,14 @@ alone against the PRE-FIX one (`tmp/pw166/orgroam-before.log`, with
 `NEOMACS_BIN` pointing at `tmp/pw166/refbin/neomacs`), and the whole 42 pass
 at `-j2`.
 
-A note for the next entry, because it cost a run here: the filter form
-`-E 'test(a) or test(b) or ...'` selected ZERO of the 933 MELPA tests and
-nextest reported it as `0 tests run: 0 passed, 933 skipped` with exit 0.  The
-regex form `-E 'test(/a|b|.../)'` selects the 42.  This is the trap in its
-purest shape -- a green-looking run that measured nothing -- and the only
-defence is to assert on the COUNT.
+A note for the next entry, because it cost a run here and is not confined to
+MELPA: the filter form `-E 'test(a) or test(b) or ...'` selected ZERO of the
+933 MELPA tests, and nextest reported it as `0 tests run: 0 passed, 933
+skipped` with exit **0**.  Re-measured on `neovm-core` with this entry's own
+two pins, the same form selects ONE of the two and again exits 0.  The regex
+form -- `-E 'test(/a|b|.../)'` -- selects the 42 and the 2.  This is the trap
+in its purest shape, a green-looking run that measured nothing or half of it,
+and the only defence is to assert on the COUNT.
 
 `cargo nextest run -p neovm-core -p neomacs-layout-engine` is 11080/11080 green
 (54 skipped, `tmp/pw166/core3.log`), which is the 11078 this branch started
