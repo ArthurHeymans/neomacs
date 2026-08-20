@@ -292,7 +292,8 @@ fn engine_match_data_from_registers(regs: &MatchRegisters, offset: usize) -> Eng
     // `EngineMatchData::new` would re-map the whole Vec a second time, per
     // match, on the hottest search path.
     let num_groups = regs.num_regs();
-    let mut groups = Vec::with_capacity(gnu_search_regs_capacity(num_groups));
+    let mut groups = smallvec::SmallVec::<[Option<EmacsByteRange>; GNU_SEARCH_REGS_BASE_CAPACITY]>::new();
+    groups.reserve(gnu_search_regs_capacity(num_groups));
     for i in 0..num_groups {
         if regs.start[i] >= 0 && regs.end[i] >= 0 {
             groups.push(Some(
@@ -325,12 +326,22 @@ fn gnu_search_regs_capacity(required: usize) -> usize {
     }
 }
 
-fn extend_to_gnu_search_regs_capacity(groups: &mut Vec<Option<MatchGroup>>) {
+
+/// Inline-capacity group storage sized to GNU's base `search_regs`
+/// allocation: patterns with <= 7 groups (the overwhelming majority,
+/// and every literal search) publish match data with ZERO heap
+/// allocations. GNU reuses a global `search_regs` and never allocates
+/// per match; two mallocs per match showed up on single-char
+/// literal-search sweeps.
+pub(crate) type MatchGroupVec = smallvec::SmallVec<[Option<MatchGroup>; GNU_SEARCH_REGS_BASE_CAPACITY]>;
+
+fn extend_to_gnu_search_regs_capacity(groups: &mut MatchGroupVec) {
     groups.resize(gnu_search_regs_capacity(groups.len()), None);
 }
 
-fn gnu_single_group_vec(group: Option<MatchGroup>) -> Vec<Option<MatchGroup>> {
-    let mut groups = vec![group];
+fn gnu_single_group_vec(group: Option<MatchGroup>) -> MatchGroupVec {
+    let mut groups = MatchGroupVec::new();
+    groups.push(group);
     extend_to_gnu_search_regs_capacity(&mut groups);
     groups
 }
@@ -495,13 +506,13 @@ enum MatchDataKind {
     /// string object is available after `string-match`, but not after
     /// `set-match-data` restores an integer list saved by `match-data`.
     StringChars {
-        groups: Vec<Option<CharRange>>,
+        groups: smallvec::SmallVec<[Option<CharRange>; GNU_SEARCH_REGS_BASE_CAPACITY]>,
         searched: Option<SearchedString>,
     },
     /// Buffer identity and published Lisp-coordinate payload travel together.
     Buffer {
         id: BufferId,
-        groups: Vec<Option<LispCharMatchRange>>,
+        groups: smallvec::SmallVec<[Option<LispCharMatchRange>; GNU_SEARCH_REGS_BASE_CAPACITY]>,
     },
 }
 
@@ -512,7 +523,7 @@ enum MatchDataKind {
 /// before a search success crosses the regex module's interface.
 #[derive(Clone, Debug)]
 struct EngineMatchData {
-    groups: Vec<Option<EmacsByteRange>>,
+    groups: smallvec::SmallVec<[Option<EmacsByteRange>; GNU_SEARCH_REGS_BASE_CAPACITY]>,
 }
 
 /// A successful buffer search ready to commit to evaluator state.
@@ -823,7 +834,7 @@ impl MatchData {
 }
 
 impl EngineMatchData {
-    fn new(groups: Vec<Option<MatchGroup>>) -> Self {
+    fn new(groups: MatchGroupVec) -> Self {
         Self {
             groups: groups
                 .into_iter()
@@ -2843,8 +2854,30 @@ pub(crate) fn re_search_backward_with_posix(
 /// case-canon table (GNU's search `trt`) when a custom `set-case-syntax-pair`
 /// table is installed, else `None` so the engine's fast hardwired folding is
 /// used. Mirrors GNU search.c installing `BVAR (current_buffer, case_canon_table)`.
-fn buffer_search_translation(buf: &Buffer, case_fold: bool) -> Option<CaseTranslation> {
-    buffer_search_translation_table(buf, case_fold).map(CaseTranslation::from_char_table)
+fn buffer_search_translation(buf: &Buffer, case_fold: bool) -> Option<std::rc::Rc<CaseTranslation>> {
+    let table = buffer_search_translation_table(buf, case_fold)?;
+    // One-entry per-thread cache keyed by table IDENTITY: rebuilding the
+    // translation per search left its lazy 0..256 memo permanently cold, so
+    // every anchor-enumeration and verify lookup walked the char-table
+    // (+650M Ir on a literal-search sweep). Identity keying is the
+    // established policy — the compiled-pattern cache and GNU's own
+    // `compile_pattern` (search.c, `EQ (cp->buf.translate, translate)`)
+    // both key cached translations the same way.
+    thread_local! {
+        static LITERAL_TRT_CACHE: std::cell::RefCell<Option<(usize, std::rc::Rc<CaseTranslation>)>> =
+            const { std::cell::RefCell::new(None) };
+    }
+    Some(LITERAL_TRT_CACHE.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if let Some((bits, trt)) = cache.as_ref()
+            && *bits == table.bits()
+        {
+            return trt.clone();
+        }
+        let trt = std::rc::Rc::new(CaseTranslation::from_char_table(table));
+        *cache = Some((table.bits(), trt.clone()));
+        trt
+    }))
 }
 
 /// The case-canon table alone, for the regexp-compile path: the compiled
