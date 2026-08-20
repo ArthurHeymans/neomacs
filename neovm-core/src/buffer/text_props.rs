@@ -1930,6 +1930,19 @@ pub struct TextPropertyTable {
     syntax_prop_ranges: std::sync::Mutex<(u64, Vec<(CharPos0, CharPos0)>)>,
 }
 
+/// Clip a cached-range endpoint for a deletion of `range` (length
+/// `del_len`): positions past the deletion shift down, positions inside
+/// clamp to its start.
+fn clip_char_pos_for_delete(pos: CharPos0, range: CharRange, del_len: CharLen) -> CharPos0 {
+    if pos >= range.end() {
+        CharPos0::new(pos.get() - del_len.get())
+    } else if pos > range.start() {
+        range.start()
+    } else {
+        pos
+    }
+}
+
 impl Clone for TextPropertyTable {
     fn clone(&self) -> Self {
         use std::sync::atomic::Ordering;
@@ -2981,6 +2994,23 @@ impl TextPropertyTable {
         if len.is_empty() {
             return;
         }
+        // Position shifts don't bump syntax_prop_tick (values are unchanged),
+        // but the cached bit-set-interval RANGES hold positions — shift them
+        // in place so they stay truthful. (Serving stale positions here was a
+        // real bug: the interactive sim's typing phase doubled and could
+        // misclassify syntax runs near shifted properties.)
+        if let Ok(mut guard) = self.syntax_prop_ranges.lock()
+            && guard.0 == self.syntax_prop_tick + 1
+        {
+            for (start, end) in guard.1.iter_mut() {
+                if *start >= pos {
+                    *start = start.add_len(len);
+                    *end = end.add_len(len);
+                } else if *end > pos {
+                    *end = end.add_len(len);
+                }
+            }
+        }
 
         self.intervals.insert_default_at(pos, len);
     }
@@ -2993,6 +3023,18 @@ impl TextPropertyTable {
         self.mutation_tick += 1;
         if range.is_empty() {
             return;
+        }
+        // See adjust_for_insert_raw: keep the cached ranges positionally
+        // truthful. Deletion clips; an entry emptied by the clip is removed.
+        if let Ok(mut guard) = self.syntax_prop_ranges.lock()
+            && guard.0 == self.syntax_prop_tick + 1
+        {
+            let del_len = range.len();
+            for (start, end) in guard.1.iter_mut() {
+                *start = clip_char_pos_for_delete(*start, range, del_len);
+                *end = clip_char_pos_for_delete(*end, range, del_len);
+            }
+            guard.1.retain(|(start, end)| end > start);
         }
 
         self.intervals.delete_range(range);
@@ -3009,6 +3051,11 @@ impl TextPropertyTable {
 
     fn adjust_for_replace_raw(&mut self, start: CharPos0, old_len: CharLen, new_len: CharLen) {
         self.mutation_tick += 1;
+        // A replace both clips and shifts; just drop the cached ranges (rare
+        // relative to plain inserts/deletes) — the guard tick 0 never matches.
+        if let Ok(mut guard) = self.syntax_prop_ranges.lock() {
+            *guard = (0, Vec::new());
+        }
         match new_len.cmp(&old_len) {
             std::cmp::Ordering::Greater => {
                 self.adjust_for_insert_raw(start, CharLen::new(new_len.get() - old_len.get()));

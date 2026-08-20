@@ -244,6 +244,49 @@ fn regexp_word_boundaries_honor_script_and_category_overrides() {
 }
 
 #[test]
+fn syntax_table_property_positions_survive_insertion() {
+    // Regression pin (GNU-verified): the property stays glued to its shifted
+    // text after an insertion before it; the parse state is byte-identical
+    // to GNU's (34 = inside a `"`-delimited string at end of buffer).
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (insert "aa" (string 34) "x" (string 34) "bb")
+          (put-text-property 3 4 'syntax-table '(1))
+          (setq-local parse-sexp-lookup-properties t)
+          (parse-partial-sexp (point-min) (point-max))
+          (goto-char (point-min))
+          (insert "ZZZZ")
+          (nth 3 (parse-partial-sexp (point-min) (point-max))))
+        "#,
+    );
+    assert_eq!(result, "OK 34");
+}
+
+#[test]
+fn syntax_table_property_positions_survive_deletion() {
+    // Regression (found by the interactive sim, DIVERGED from GNU before the
+    // fix): the sparse syntax-prop range cache held char positions, and a
+    // deletion shifted the property LEFT without touching the cache — the
+    // override was applied at its stale position and the parse state came
+    // out nil where GNU reports 34.
+    crate::test_utils::init_test_tracing();
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"
+        (with-temp-buffer
+          (insert "ZZZZaa" (string 34) "x" (string 34) "bb")
+          (put-text-property 7 8 'syntax-table '(1))
+          (setq-local parse-sexp-lookup-properties t)
+          (parse-partial-sexp (point-min) (point-max))
+          (delete-region 1 5)
+          (nth 3 (parse-partial-sexp (point-min) (point-max))))
+        "#,
+    );
+    assert_eq!(result, "OK 34");
+}
+
+#[test]
 fn syntax_independent_regexp_does_not_trigger_propertization() {
     crate::test_utils::init_test_tracing();
     let result = crate::test_utils::runtime_startup_eval_one(
