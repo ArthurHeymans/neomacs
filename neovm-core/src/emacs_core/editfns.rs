@@ -426,6 +426,34 @@ pub(crate) fn signal_before_text_change(
     Ok(())
 }
 
+/// The before-change signal for an insertion, which needs a POSITION and not a
+/// measured change.
+///
+/// GNU's insertion core signals `prepare_to_modify_buffer (PT, PT, NULL)` --
+/// `insert_from_string_1` (src/insdel.c:1043), `insert_from_buffer_1`
+/// (:1287), `insert_1_both` (:906).  Both ends are `PT`, so the range is
+/// empty: the text about to be inserted is deliberately not part of what the
+/// hook is told about, which is exactly why GNU is free to read that text
+/// afterwards (`copy_text` at :1053, `string_intervals` at :1093).
+///
+/// Taking `EmacsBytePos` rather than a `TextChange` is the load-bearing part.
+/// A `TextChange` carries the NEW extent, so a caller had to measure -- and in
+/// practice fully materialize -- the inserted text before it could signal.
+/// This signature removes that obligation from the type, so the pre-hook
+/// snapshot cannot be reintroduced by accident.  See DIVERGENCES.md 164.
+pub(crate) fn signal_before_insertion_at_emacs_byte_pos(
+    ctx: &mut crate::emacs_core::eval::Context,
+    byte_pos: EmacsBytePos,
+) -> Result<(), Flow> {
+    signal_before_change_with_kind(
+        ctx,
+        EmacsByteRange::from_start_len(byte_pos, EmacsByteLen::ZERO),
+        BufferChangeKind::Characters,
+    )?;
+    deactivate_mark_after_preparing_change(ctx);
+    Ok(())
+}
+
 /// Run GNU's modification-hook protocol for a text-property-only change.
 /// Tree-sitter consumes characters, not properties, so this deliberately does
 /// not create an incremental parser edit.
