@@ -18932,7 +18932,9 @@ rc=0
 >   was standing in for: a variant CAN carry a field whose TYPE has no
 >   constructor outside the module, which makes the literal unwritable
 >   everywhere else while leaving all 73 `{ symbol, data, .. }` patterns
->   compiling untouched.  Only the 23 construction sites moved.
+>   compiling untouched.  The 23 construction sites moved; six patterns that
+>   happened to spell out every field gained a `..`; everything else is
+>   byte-identical.
 > * The specpdl `_ => {}` -- **CLOSED**, and GNU is the authority rather than
 >   taste: `mark_specpdl` (`src/eval.c:4374-4377`) carries the comment "While
 >   other loops that scan the specpdl use `default: break;` for simplicity, here
@@ -18985,5 +18987,445 @@ per-field root-group names this entry's instrumentation introduced
 (`misc:lexenv`, ...) were still in the tree.  That test asserts the group is
 named `misc` and is non-empty, which is exactly its job; the names were reverted
 and the suite is 11056/11056.
+
+Status: FIXED.
+
+
+## 162. The rest of the class entry 161 opened: a throw, a thread-yield and the public boundary error also carried Lisp values up the Rust stack with no root -- and GNU roots the same thing by name, so the missing group was a parity gap, not a design tax -- FIXED
+
+Entry 161 fixed `Flow::Signal` and listed eight things it had not.  This entry
+enumerates the class properly first, then closes five of them, refutes five
+look-alikes that were assumed into the class, and adds three findings of its
+own -- one of which is that 161's own reason for deferring the biggest residual
+does not hold.
+
+### 1. The class, restated precisely: a SAFEPOINT, not an allocation
+
+The handover framing was "every `Box`/`Vec`/struct that holds a `Value` across a
+call that can allocate".  Taken literally that is every function in the
+interpreter, and a codebase with that property would not run for a second.  The
+tree states the real rule, and it is much narrower
+(`neovm-core/src/tagged/CONCURRENT_GC.md:264-273`):
+
+> Every heap value the mutator will use after a safepoint MUST be reachable from
+> a seeded root ... **Allocation never triggers a GC**, so a value need only be
+> rooted before the next *safepoint*, not the next allocation.
+
+So the criterion for this audit is: **a Lisp value held outside the root set
+across a call that can reach a safe point** -- which in practice means a call
+that runs Lisp.  `gc_safe_point_exact` / `maybe_gc_and_quit` /
+`bytecode_branch_maybe_gc_and_quit` (`eval.rs`) are the safe points; `unbind_to`
+is the one that matters here, because it executes `unwind-protect` cleanup
+forms, buffer and binding restores, and variable watchers.
+
+That distinction is what makes the audit finite, and it is what separates the
+three real defects below from the five look-alikes in §3 that are refuted with
+a measurement rather than assumed into the class.
+
+### 2. GNU roots this BY NAME, and the conservative stack scan is its second line of defence
+
+161 said "GNU is safe here for free" and credited `mark_stack`.  That is true and
+incomplete, and the missing half changes what our gap is.
+
+`mark_one_thread` (`src/thread.c:665-692`) does three things in order:
+
+```c
+  mark_specpdl (thread->m_specpdl, thread->m_specpdl_ptr);
+  mark_c_stack (thread->m_stack_bottom, stack_top);
+  for (struct handler *handler = thread->m_handlerlist;
+       handler; handler = handler->next)
+    {
+      mark_object (handler->tag_or_ch);
+      mark_object (handler->val);
+    }
+```
+
+`handler->val` **is** the in-flight non-local-exit payload:
+`unwind_to_catch (catch, type, value)` (`src/eval.c:1404-1442`) writes
+`catch->val = value` *before* it unwinds, then runs
+`unbind_to (handlerlist->pdlcount, Qnil)` in a loop -- GNU runs the same
+allocating cleanups we do, with the payload live -- and only then `sys_longjmp`s.
+`Fthrow` (`src/eval.c:1445-1461`) is what puts the thrown value there.
+
+So GNU roots the payload of a signal or throw in flight **precisely, in the
+thread's own root walk**, and the conservative C-stack scan is redundancy on top.
+Our `handlers` root group (`eval.rs`, `Context::trace_roots`) visits a condition
+frame's `conditions`, `tag` and `handler` -- and has nothing corresponding to
+`val`, because in this engine the payload is not in the condition frame at all:
+it is in a Rust `Flow` travelling up the Rust stack.  The absent group is a
+straightforward GNU-parity gap.
+
+### 3. The audit
+
+Five enumerations, all mechanical, all counted.
+
+**A. `Flow` variants -- 4 audited, 2 defective.**
+
+| variant | payload | verdict |
+|---|---|---|
+| `Signal(Box<SignalData>)` | `symbol`, `data`, `raw_data` | fixed by 161 |
+| `Throw { tag, value }` | two Lisp values | **DEFECTIVE** (§4) |
+| `ThreadBlocked { blocker, remaining_forms }` | two Lisp values | **DEFECTIVE** (§4) |
+| `Shutdown(ShutdownRequest)` | `{ exit_code: i32, restart: bool }` (`eval.rs:2740-2743`) | **not defective** -- carries no Lisp value at all |
+
+**B. Error/flow/unwind-shaped types in `neovm-core` -- 43 audited, 8 carry a
+`Value`, 1 newly defective.**  (Every `struct`/`enum` whose name contains
+`Error`, `Flow`, `Exit`, `Signal`, `Unwind` or `Abort`, outside test modules;
+nine matched on the word `Value`, one of them -- `InFlightRoots` -- only inside
+a doc comment.)
+
+* `Flow` -- A above.
+* `SignalData` -- pinned by 161.
+* `InFlightRootTable` / `InFlightRoots` -- the pin machinery itself, seeded.
+* `MinibufferSessionUnwind` (`reader.rs:452`, five Lisp fields) -- **not
+  defective**: it is reached from the specpdl as
+  `SpecBinding::NativeUnwind { action: NativeUnwindAction::MinibufferSession }`
+  and traced through `NativeUnwindAction::trace_roots`.
+* `EvalError` -- **DEFECTIVE** (§5).
+* `CommandLoopExit::Error(Value)` / `Call(Value)` (`eval.rs:2051-2060`) -- **not
+  defective**.  Built at `eval.rs:6695/6698` from a thrown value and consumed at
+  `:6762/:6767`; the only call in between is `builtin_functionp_1`, which runs no
+  Lisp, and the arm holds the `Flow` by reference throughout, so the throw's own
+  pin covers it.
+* `KeyDesignatorError::WrongType(Value)` (`kbd.rs:23`) -- **not defective**.  One
+  construction site (`kbd.rs:157`), three consumers
+  (`interactive.rs:3584/3634`, `builtins/keymaps.rs:203`), each of which turns it
+  into a `signal(...)` in the same expression.  Allocation happens
+  (`Value::symbol("arrayp")`); a safepoint does not.
+* `ReadError { signal_data: Vec<Value> }` (`value_reader.rs:372`) -- **not
+  defective**, same argument.  Built by the pure-Rust reader (`signal_error`,
+  `value_reader.rs:2489`) and converted at `reader.rs:1014/1034`, `lread.rs:95`,
+  `load.rs:427`.  The reader evaluates nothing.
+
+**C. Thread-local statics in `neovm-core` -- 127 audited, 1 unseeded holder.**
+Fourteen root groups are seeded by `collect_thread_local_gc_roots`
+(`eval.rs:1642`).  Of the 127 `thread_local!` statics outside test modules, the
+ones holding Lisp values are the four standard-table objects across `syntax`,
+`casetab` and `category`, `SCRATCH_GC_ROOTS`, `IN_FLIGHT_ROOTS`, `CTX` (the
+`Context` itself),
+`GLOBAL_REFS`, `CHARSET_REGISTRY`, `CCL_REGISTRY`, `TERMINAL_MANAGER`,
+`FACE_ATTR_STATE`, `HASH_TABLE_TEST_ALIASES`, `FILE_NOTIFY_STATE`, the JIT reloc
+cache (`COMPILED` *and* `OSR_CACHE`, both walked by
+`collect_jit_reloc_gc_roots`, `jit/cache.rs:458-474`) and `SYMBOL_CACHE` -- all
+seeded -- plus **`PENDING_FLOW`**
+(`jit/compile.rs:205`, `RefCell<Option<Flow>>`), which is not.  That one is a
+single-slot handoff holding a whole `Flow` across JIT dispatch, so it inherits
+this entry's fix for free: with the payloads pinned by construction, a stashed
+`Flow::Throw` is rooted wherever it is parked.  `STATIC_SUBR_OBJECTS`
+(`tagged/value.rs:70`) holds leaked, never-moved subr objects and is excluded by
+construction.
+
+**D. `Context` fields -- 122 audited, 15 name `Value` in their type, 0 unrooted.**
+Fourteen are visited by `Context::trace_roots`; the fifteenth,
+`jit_root_stack_ptr: *mut Value`, is the raw alias of the traced
+`jit_root_stack`.  Three fields whose names do NOT appear in `trace_roots` were
+checked individually and are covered:
+
+* `backtrace_args_stack: Vec<LispArgVec>` -- traced indirectly, through
+  `SpecBinding::Backtrace { args }` -> `trace_backtrace_args`
+  (`eval.rs:13833-13854`), which indexes into it.
+* `sequence_temp_root_frames: Vec<SequenceTempRootFrame>` -- **not** a root
+  source; `refresh_current_sequence_temp_roots` (`eval.rs:14032`) mirrors its
+  contents into `eval_temp_roots`, which IS traced.
+* `load_read_cursors: Vec<LoadReadCursor>` (`eval.rs:2253`, two Lisp fields) --
+  covered, but by *convention* rather than by construction, and the convention is
+  a doc comment: `load.rs:1790-1795` pushes both `source` and `eof_source` as
+  specpdl roots, and `lread.rs:134` pushes `source_value` while its `eof_source`
+  is a buffer object kept alive by the heap's buffer registry.  Recorded in §10.
+
+**E. `SpecBinding` -- 17 variants, 15 handled, 2 absorbed by a catch-all** (§6).
+**`ConditionFrame` -- 4 variants, exhaustively matched already, no catch-all.**
+
+### 4. Throw and thread-yield: red first, then a generalized pin
+
+Written against the *pre-fix* shape so the red is a real measurement and not a
+compile error:
+
+```text
+Summary [0.145s] 2 tests run: 0 passed, 2 failed, 9147 skipped
+    FAIL neovm-core emacs_core::error::tests::red_in_flight_thread_blocked_payload_survives_a_collection
+    FAIL neovm-core emacs_core::error::tests::red_in_flight_throw_payload_survives_a_collection
+
+thread ... panicked at neovm-core/src/emacs_core/error_test.rs:344:5:
+the in-flight throw payload was collected while the throw was still unwinding
+(its cons is on the free list)
+```
+
+Both read back as `TaggedValue::DEAD` -- GNU's `dead_object ()`
+(`src/alloc.c:2592`, `deadp` at `:428`), which 161 taught `set_free_next` to
+write.  That poison is the only reason the failure is legible at the scene
+rather than thirty frames later.
+
+The fix generalizes 161's mechanism instead of copying it three times.
+`InFlightSignalRoots` becomes **`InFlightRoots`**: still a `!Send` handle over a
+thread-local slot table, but its constructor now takes any
+`IntoIterator<Item = Value>`.  `Flow::Throw(Box<ThrowData>)` and
+`Flow::ThreadBlocked(Box<ThreadBlockedData>)` join `Flow::Signal` in carrying an
+owned payload struct with a **private** `pin` field, so `Flow::throw` and
+`Flow::thread_blocked` are the only ways to build them and an unrooted payload
+is not representable.  The seeded group is renamed
+`in-flight-signal-thread-local` -> `in-flight-flow-thread-local`.
+
+The tuple shape was chosen over a `pin` field on the struct variants for one
+reason that is not cosmetic: a `Flow::Throw { tag, value, .. }` by-move pattern
+would silently drop the pin at the end of the arm while `tag`/`value` live on,
+which is 161's bug reintroduced by a `..`.  `Flow::Throw(thrown)` keeps the box,
+and with it the pin, for as long as anything reads through it.  56 use sites
+moved; 23 of them are now constructor calls.
+
+Red re-verified on the post-fix shape the way 161 did it -- disable ONLY
+`InFlightRoots::pin`, change nothing else:
+
+```text
+Summary [1.169s] 4 tests run: 0 passed, 4 failed, 9146 skipped
+    FAIL    in_flight_thread_blocked_payload_survives_a_collection
+    FAIL    in_flight_throw_payload_survives_a_collection
+    FAIL    in_flight_signal_payload_survives_a_collection
+    SIGABRT condition_case_binding_value_survives_a_collection
+```
+
+**A compile-time check for the next variant.**  `Flow::pinned_payload`
+(`error.rs`) is an exhaustive `match` over `Flow` returning a sealed
+`InFlightPinned`.  Nothing consumes its return value; it exists to **fail to
+compile**.  A new variant has to add an arm, and the arm has to name a type
+implementing a trait only a struct with a private `InFlightRoots` in that module
+can implement -- or state, as `Shutdown` does, that it carries no Lisp value.
+
+### 5. The boundary type: `EvalError` did not need a shape change
+
+161 deferred this with a specific reason: "an enum variant cannot carry a private
+field, so the fix is a shape change (`EvalError::Signal(Box<SignalData>)`)".
+The premise is true; the conclusion does not follow.  A variant cannot have a
+private *field*, but it can have a field whose **type** has no constructor
+outside the module.  That makes the struct literal unwritable everywhere else --
+which is the whole guarantee -- while `EvalError::Signal { symbol, data, .. }`
+patterns keep compiling untouched.  Of the 73 use sites, **the 23 construction
+sites moved** to `EvalError::signal` / `EvalError::uncaught_throw`, and six
+patterns that happened to spell out every field gained a `..`.  Every other site
+-- the dozens of `{ symbol, data, .. }` matches in tests and consumers -- is
+byte-identical.
+
+It was defective, and by the same measurement as the rest.  `map_flow`
+(`error.rs`) destructured `*sig` with `..`, which dropped `SignalData`'s pin;
+the two new pins go red with ONLY the `EvalError` pin disabled and `Flow`'s left
+intact:
+
+```text
+Summary [0.139s] 2 tests run: 0 passed, 2 failed, 9149 skipped
+    FAIL eval_error_uncaught_throw_payload_survives_a_collection
+    FAIL eval_error_signal_payload_survives_a_collection
+```
+
+`map_flow` also now keeps `sig` alive until the new pin has been taken, so the
+payload is never momentarily unrooted between two owners.
+
+A second measurement falls out of the compiler.  `InFlightRoots` is `!Send`, and
+the workspace builds unchanged with the **public boundary error** carrying one.
+Nothing in `neovm-core`, `neomacs-bin` or `neovm-worker` sends an `EvalError`
+across a thread today.
+
+### 6. The specpdl catch-all: GNU's own comment is the argument
+
+`Context::trace_roots`'s specpdl group ended in `_ => {}`.  Today that absorbs
+exactly two variants, `LoadsInProgress { len }` and `RequireStack { len }`, both
+of which carry a `usize` -- so it was not a live bug, and this entry says so
+plainly.  It is still the wrong construct, and the authority is GNU rather than
+taste.  `mark_specpdl` (`src/eval.c:4315-4379`) lists every kind and ends:
+
+```c
+	/* While other loops that scan the specpdl use "default: break;"
+	   for simplicity, here we explicitly list all cases and abort
+	   if we find an unexpected value, as a sanity check.  */
+	default:
+	  emacs_abort ();
+```
+
+GNU singles out the ROOT WALK as the one specpdl loop that may not have a
+default arm.  Ours now names all 17 variants; a new one carrying a `Value` fails
+to compile instead of failing to be marked.
+
+### 7. The detector
+
+161's last residual: `NEOVM_GC_STRESS` appeared in three files, all in-process,
+and nothing in the tree ever pointed it at a real `neomacs`.  It found its bug in
+eighteen seconds with a hand-rolled recipe.
+
+`cargo xtask gc-stress` (`xtask/src/gc_stress.rs`) runs `xtask/gc-stress/*.el`
+against the shipped release binary with `NEOVM_GC_STRESS=1` -- collect at EVERY
+allocation-bearing safe point, which turns "sometimes, when a collection lands in
+one specific window" into "always" -- and requires exit 0 plus each probe's
+`;;; expect:` line.  Five probes, one per shape of the class:
+
+1. `01-condition-case-cl-defun` -- 161's reduction: a `cl-defun` arity error
+   signalled with a buffer's `unwind-protect` cleanup pending.
+2. `02-throw-through-unwind-protect` -- this entry's: a throw through an
+   allocating cleanup, through a `let` unbind that fires a variable watcher, and
+   through two nested `unwind-protect`s.
+3. `03-signal-re-raised-from-handler` -- a `define-error` condition re-signalled
+   from its own handler, which also pins the error SYMBOL's property cells (GNU
+   reads `error-conditions` off the symbol OBJECT, `src/eval.c` `signal_or_quit`).
+4. `04-load-boundary-eval-error` -- a signal crossing `load` as an `EvalError`.
+5. `05-thread-yield-handoff` -- `make-thread` + `thread-yield` + `condition-case`.
+
+It runs in CI, in the shared-test-runtime job immediately after
+`fresh-build --release` (`.github/workflows/ci.yml`).  That placement is not
+arbitrary: the harness gates the SHIPPED binary, so the only job where it means
+anything is the one that just built it -- the same reason
+`neovm-oracle-tests/src/common.rs:161` gates `target/release/neomacs` rather
+than the source tree.
+
+**And it caught the bug, end to end, from Lisp, on a release binary.**  Run
+against the main checkout's pre-fix release build and against this branch's:
+
+```text
+pre-fix   4/5 probes passed
+  FAIL 02-throw-through-unwind-protect
+    expected: ((thrown datum) (thrown datum) (thrown datum))
+    got:      ((thrown datum) (unlet nil) (thrown datum))
+post-fix  5/5 probes passed
+```
+
+The middle element is the throw whose `catch` unwinds a `let`-binding that has
+a variable watcher on it.  `(unlet nil)` is not a wrong answer -- it is **the
+watcher's own argument list**.  The thrown cons was reclaimed mid-unwind and
+handed straight back out by the next allocation, which is
+`run_variable_watchers_by_id` building the arguments for its `"unlet"`
+operation (`eval.rs`, the `SpecBinding::Let` arm of `unbind_to_result`).  161
+needed two rounds of temporary instrumentation to see its equivalent; this is
+one `prin1`.
+
+**The `ulimit -v` cap is load-bearing, not hygiene.**  A garbage symbol id
+reaching `thread_local_record_canonical` asks the id-indexed symbol cache to
+resize to `id * 16` bytes -- 64 GiB for an id near `2^32`.  Without a cap the
+process touches it page by page and is OOM-killed with nothing to read; with one,
+the allocation fails fast and Rust prints the backtrace naming the caller.  That
+is how 161 read its own failure, and it is why the recipe is in the harness
+rather than in a ledger entry.
+
+### 8. `verify_marked_objects_owned`
+
+Wired up, not deleted.  It returns a problem COUNT now and runs in
+`complete_collection` -- after the mark drains, before the sweep, the one moment
+where "marked" and "owned" must agree -- behind a gate that is off unless
+`NEOVM_GC_VERIFY_MARKED=1` or a test turns it on, because the walk is O(live
+objects) per collection.  The call site asserts the count is zero, so it is a
+detector and not a log line, and `gc-stress` sets the variable on every probe.
+New pin: `post_mark_ownership_verification_runs_and_finds_nothing`.
+
+### 9. Hypotheses eliminated
+
+* **"Every `Box`/`Vec`/struct holding a `Value` across a call that can allocate"**
+  (the framing this entry was handed).  Wrong by the tree's own stated invariant:
+  allocation never collects, so the unit of exposure is a SAFEPOINT.  Getting
+  this wrong makes the class unbounded and the audit meaningless; getting it
+  right is what turned 43 candidate types into 8 that carry a Lisp value and
+  then into 1 new defect.
+* **"`Flow::Shutdown` is a fourth instance."**  `ShutdownRequest` is
+  `{ exit_code: i32, restart: bool }`.  No Lisp value, nothing to root.
+* **"`EvalError` needs `EvalError::Signal(Box<SignalData>)`"** (161's).  Refuted
+  in §5; the field-type trick costs 29 edits (23 constructions plus six
+  patterns that spelled out every field) instead of 73, and keeps every other
+  pattern site byte-identical.
+* **"The specpdl `_ => {}` is a live bug."**  It is not, today: it absorbs two
+  `usize`-only variants.  Fixed anyway, for the reason GNU gives.
+* **`sf_catch_value`'s post-catch window.**  Catching moves the value out of the
+  pinned `ThrowData` and then runs `unbind_to_result`, so in principle the value
+  crosses `unwind-protect` cleanups in a bare Rust local.  **No test
+  discriminates it**, and the reason is structural: by the time a throw reaches
+  its `catch`, every inner form has already popped its own bindings, so the
+  specpdl suffix at the catch's mark is empty and `unbind_to_result` runs
+  nothing.  Measured both ways -- the end-to-end probe passes with the guard
+  removed AND with the pin removed -- so the probe was deleted rather than kept
+  as a test that is green for the wrong reason.  The rooting was kept, guarded on
+  a non-empty suffix so the common case costs nothing, because it is what
+  `unbind_to_with_result` (`eval.rs:14157`, "GNU eval.c `unbind_to(count,
+  value)` carries VALUE through cleanup") already does for the ordinary eval
+  path and what the VM's own throw resume already does by hand
+  (`bytecode/vm.rs`, `push_vm_frame_root(tag/value)` around
+  `unbind_to(spec_depth)`).  Recorded here as by-construction consistency, NOT
+  as a measured fix.
+
+### 10. Found and NOT fixed
+
+* **`sf_catch_value`'s window has no discriminating test.**  §9.  Someone who can
+  construct a form that leaves a cleanup entry on the specpdl at a `catch`'s own
+  mark can turn this into a real pin; this entry could not.
+* **`LoadReadCursor` is rooted by convention, not by construction.**  Its
+  `source` and `eof_source` are kept alive by `push_specpdl_root` calls at two
+  separate call sites and by the buffer registry, with a doc comment as the only
+  link.  The same private-pin treatment would make the convention structural.
+  Audited and currently correct; not changed.
+* **`Value::as_lisp_string` still hands `&'static LispString` to ~675 call
+  sites** (161's residual, unchanged).  A borrow outliving its object rather than
+  an object outliving its root, but it fails identically.
+* **`try_resolve_sym` / `try_resolve_sym_lisp_string`** still have zero callers
+  (161's residual, unchanged).
+* **The probe corpus is five forms, not a fuzzer.**  `gc-stress` runs in CI now
+  (`.github/workflows/ci.yml`, the shared-test-runtime job, immediately after
+  `fresh-build --release` -- the step is meaningless anywhere else, since the
+  binary it stresses is the one that step produces), so the class has a standing
+  detector.  What it does NOT have is coverage: five hand-written probes cover
+  the shapes this entry and 161 already understand.  A generator over
+  `signal`/`throw`/`unwind-protect`/`condition-case`/thread nestings would cover
+  the ones nobody has thought of, and is the obvious next move.
+* **The oracle suite is still not a detector for this class**, and no amount of
+  growing it will make it one: it was green on both sides of 161's bug and it is
+  green on both sides of this one.  Recorded so entry 163 does not read a green
+  38k-pin run as evidence about rooting.
+* **The pin costs a `Vec` allocation per non-local exit, and nobody has measured
+  it.**  `InFlightRoots::pin` collects the traceable values into a `Vec` and
+  claims a slot; for a `throw` that is one allocation for at most two values,
+  and the tag is usually an interned symbol the obarray already roots.  Two
+  obvious reductions -- an inline small-vector in the slot, or skipping symbols
+  that are canonically interned -- are both cheap and both unmeasured.  This
+  entry deliberately did not trade correctness for them, and 161 shipped the
+  same cost on the signal path.  If a throw-heavy workload (`cl-block` /
+  `cl-return-from` expands to `catch` / `throw`) regresses, this is the first
+  place to look, and the measurement discipline is
+  `feedback_no_wall_time_benchmarks`: `perf stat` instructions, never wall
+  time.
+* **`thread-yield` in a non-main thread does not resume the rest of the body.**
+  Found while writing probe 5, and NOT this branch's: measured identically on
+  the pre-fix binary, with and without GC stress.
+  `(thread-join (make-thread (lambda () (thread-yield) (setq r 'done))))` leaves
+  `r` `nil`.  The `Flow::ThreadBlocked` continuation is built
+  (`make_thread_condition_case_continuation`, and the closure
+  `sf_lambda_call_value` builds from `remaining_forms`) and then apparently
+  never re-dispatched.  GNU has no continuation to rebuild: `Fthread_yield`
+  (`src/thread.c:734-740`) is `flush_stack_call_func (yield_callback, NULL);
+  return Qnil;` -- it releases the global lock, reacquires it, and RETURNS, so
+  the rest of the body simply runs.  Probe 5 is written around the gap rather
+  than through it, and says so.
+* **`detect_tty_background_mode` still reads `COLORFGBG`** (157's residual,
+  unchanged).
+
+### 11. Gates
+
+### 11. Gates
+
+Both suites ran against a `cargo xtask fresh-build --release` that reports
+`+ xtask fresh-build finished successfully (release)` with
+`no_byte_compile=false`, and whose pdump (23:33, 15,461,439 bytes) is newer than
+its binary (23:31).  The worktree's copied `.elc` files were touched forward
+before the build so `load-prefer-newer` did not treat them as stale, and the
+binary is oracle-valid by the check that catches that failure mode:
+`(with-current-buffer "*scratch*" (buffer-string))` is `""`, not the startup
+message.
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine`:
+  **11071 tests run: 11071 passed, 54 skipped** in 580.719 s, exit 0.
+  Merge-base baseline is 11066 + 54 skipped; the five new tests are the two
+  in-flight `Flow` pins, the two `EvalError` pins and the post-mark
+  ownership-verification pin.
+* `cargo nextest run -p neovm-oracle-tests`: **38786 tests run: 38786 passed, 0 skipped** in
+  757.043 s, exit 0.
+  Baseline 38786.  As in 161, the oracle is green on BOTH sides of this defect
+  and always was -- see §10.
+* `cargo xtask gc-stress` on this branch's shipped binary: **5/5 probes
+  passed**, exit 0.  On the main checkout's pre-fix release binary: **4/5**,
+  `02-throw-through-unwind-protect` failing with
+  `((thrown datum) (unlet nil) (thrown datum))`.
+* `cargo check --workspace --all-targets`: clean.
+* `cargo fmt --all --check`: clean.
 
 Status: FIXED.
