@@ -1219,7 +1219,7 @@ impl BufferText {
     pub fn syntax_prop_free_run_end_at_char_pos(&self, pos: CharPos0, cap: CharPos0) -> CharPos0 {
         let storage = self.storage.borrow();
         let epoch = storage.content_epoch;
-        let tick = storage.text_props.mutation_tick();
+        let tick = storage.text_props.syntax_prop_tick();
         for entry in storage.syntax_run_memo.borrow().iter() {
             if entry.epoch == epoch && entry.tick == tick && pos >= entry.start && pos < entry.end {
                 return entry.end.min(cap);

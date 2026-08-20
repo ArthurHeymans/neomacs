@@ -1898,7 +1898,7 @@ enum ReplacementPropertyNames<'a> {
 /// The backing store is a GNU-shaped augmented interval tree.  Callers still
 /// use absolute character positions; internally node starts are derived from
 /// subtree lengths.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TextPropertyTable {
     intervals: IntervalTree,
     property_names: ConservativePropertyNames,
@@ -1906,6 +1906,49 @@ pub struct TextPropertyTable {
     /// memos on it (together with the buffer content epoch) so a property
     /// change invalidates them. Monotonic, wraps never (u64).
     mutation_tick: u64,
+    /// Bumped only by mutations that can change `syntax-table`/`category`
+    /// presence or values: exact for by-name put/remove, conservative for
+    /// bulk plist replacement, and NOT bumped by pure position adjusts
+    /// (those always ride a content-epoch change). The syntax-run memo keys
+    /// on this so font-lock's per-token `face` writes stop invalidating it.
+    syntax_prop_tick: u64,
+    /// Lazy "does ANY interval carry a syntax-relevant key?" memo, packed as
+    /// `((syntax_prop_tick + 1) << 1) | any` — the +1 makes the default `0`
+    /// never match, and the answer self-recomputes on first query after a
+    /// syntax-relevant mutation. One full-tree bit scan per such mutation,
+    /// zero per-mutation bookkeeping. Atomic (not Cell) only so the table
+    /// stays `Sync` for the shared EMPTY static; ordering is Relaxed — a
+    /// racing recompute is just repeated work.
+    syntax_prop_any: std::sync::atomic::AtomicU64,
+    /// Lazy sorted list of the bit-set intervals' `[start, end)` bounds,
+    /// tagged with the `syntax_prop_tick + 1` it was built at (0 = never).
+    /// Sparse in practice (elisp-mode marks ~21 docstring delimiters in a
+    /// 50k-interval fontified buffer), so queries binary-search this instead
+    /// of walking thousands of face intervals. Mutex only for `Sync` (the
+    /// shared EMPTY static); the heap is per-thread, so it is uncontended —
+    /// and a failed try_lock just falls back to the cursor walk.
+    syntax_prop_ranges: std::sync::Mutex<(u64, Vec<(CharPos0, CharPos0)>)>,
+}
+
+impl Clone for TextPropertyTable {
+    fn clone(&self) -> Self {
+        use std::sync::atomic::Ordering;
+        Self {
+            intervals: self.intervals.clone(),
+            property_names: self.property_names.clone(),
+            mutation_tick: self.mutation_tick,
+            syntax_prop_tick: self.syntax_prop_tick,
+            syntax_prop_any: std::sync::atomic::AtomicU64::new(
+                self.syntax_prop_any.load(Ordering::Relaxed),
+            ),
+            syntax_prop_ranges: std::sync::Mutex::new(
+                self.syntax_prop_ranges
+                    .lock()
+                    .map(|g| g.clone())
+                    .unwrap_or((0, Vec::new())),
+            ),
+        }
+    }
 }
 
 impl TextPropertyTable {
@@ -1914,12 +1957,25 @@ impl TextPropertyTable {
             intervals: IntervalTree::new(),
             property_names: ConservativePropertyNames::default(),
             mutation_tick: 0,
+            syntax_prop_tick: 0,
+            syntax_prop_any: std::sync::atomic::AtomicU64::new(0),
+            syntax_prop_ranges: std::sync::Mutex::new((0, Vec::new())),
         }
     }
 
     /// Current mutation tick — see the field doc.
     pub fn mutation_tick(&self) -> u64 {
         self.mutation_tick
+    }
+
+    /// Current syntax-relevant mutation tick — see the field doc.
+    pub fn syntax_prop_tick(&self) -> u64 {
+        self.syntax_prop_tick
+    }
+
+    /// Whether a property NAME can influence syntax resolution.
+    fn name_is_syntax_relevant(name: Value) -> bool {
+        name.is_symbol_named("syntax-table") || name.is_symbol_named("category")
     }
 
     /// Return the conservative presence state for `name` without descending the
@@ -2039,6 +2095,9 @@ impl TextPropertyTable {
             intervals: IntervalTree::from_runs(runs),
             property_names,
             mutation_tick: 0,
+            syntax_prop_tick: 0,
+            syntax_prop_any: std::sync::atomic::AtomicU64::new(0),
+            syntax_prop_ranges: std::sync::Mutex::new((0, Vec::new())),
         }
     }
 
@@ -2048,6 +2107,9 @@ impl TextPropertyTable {
             intervals: IntervalTree::from_runs_preserving_shape(runs),
             property_names,
             mutation_tick: 0,
+            syntax_prop_tick: 0,
+            syntax_prop_any: std::sync::atomic::AtomicU64::new(0),
+            syntax_prop_ranges: std::sync::Mutex::new((0, Vec::new())),
         }
     }
 
@@ -2057,6 +2119,7 @@ impl TextPropertyTable {
         property_names: ReplacementPropertyNames<'_>,
     ) {
         self.mutation_tick += 1;
+        self.syntax_prop_tick += 1;
         match property_names {
             ReplacementPropertyNames::Preserve => {}
             ReplacementPropertyNames::Include(names) => self.property_names.include(names),
@@ -2107,6 +2170,9 @@ impl TextPropertyTable {
 
     fn put_property_raw(&mut self, range: CharRange, name: Value, value: Value) -> bool {
         self.mutation_tick += 1;
+        if Self::name_is_syntax_relevant(name) {
+            self.syntax_prop_tick += 1;
+        }
         if range.is_empty() {
             return false;
         }
@@ -2163,6 +2229,9 @@ impl TextPropertyTable {
         value: Value,
     ) -> bool {
         self.mutation_tick += 1;
+        if Self::name_is_syntax_relevant(name) {
+            self.syntax_prop_tick += 1;
+        }
         if range.is_empty() {
             return false;
         }
@@ -2338,6 +2407,33 @@ impl TextPropertyTable {
         if cap <= pos {
             return cap;
         }
+        // Whole-table fast path: no interval anywhere carries a
+        // syntax-relevant key (the overwhelmingly common buffer), so every
+        // run extends to the cap without walking anything.
+        if !self.has_any_syntax_prop_interval() {
+            return cap;
+        }
+        // Sparse fast path: binary-search the lazily built list of bit-set
+        // intervals instead of stepping every face interval up to the cap.
+        if let Ok(mut guard) = self.syntax_prop_ranges.try_lock() {
+            if guard.0 != self.syntax_prop_tick + 1 {
+                let mut ranges = Vec::new();
+                for (start, end, node) in self.intervals.cursor_at(CharPos0::ZERO) {
+                    if node.has_syntax_prop {
+                        ranges.push((start, end));
+                    }
+                }
+                *guard = (self.syntax_prop_tick + 1, ranges);
+            }
+            let ranges = &guard.1;
+            // First range whose end is beyond `pos`.
+            let idx = ranges.partition_point(|&(_, end)| end <= pos);
+            return match ranges.get(idx) {
+                Some(&(start, end)) if start <= pos => end.min(cap), // inside a prop interval
+                Some(&(start, _)) => start.min(cap),                 // prop-free until the next one
+                None => cap,
+            };
+        }
         let mut cursor = self.intervals.cursor_at(pos);
         let Some((_, mut boundary, first)) = cursor.next() else {
             return cap; // no intervals at all: implicit-nil to the cap
@@ -2359,6 +2455,25 @@ impl TextPropertyTable {
                 None => return cap, // trailing implicit-nil region
             }
         }
+    }
+
+    /// Whether ANY interval in the table carries a syntax-relevant plist key
+    /// (see the `syntax_prop_any` field doc for the lazy memo contract).
+    fn has_any_syntax_prop_interval(&self) -> bool {
+        use std::sync::atomic::Ordering;
+        let packed = self.syntax_prop_any.load(Ordering::Relaxed);
+        if packed >> 1 == self.syntax_prop_tick + 1 {
+            return packed & 1 == 1;
+        }
+        let any = self
+            .intervals
+            .cursor_at(CharPos0::ZERO)
+            .any(|(_, _, node)| node.has_syntax_prop);
+        self.syntax_prop_any.store(
+            ((self.syntax_prop_tick + 1) << 1) | u64::from(any),
+            Ordering::Relaxed,
+        );
+        any
     }
 
     /// Whether any property in `keys` has a non-nil value on the half-open
@@ -2502,6 +2617,9 @@ impl TextPropertyTable {
 
     fn remove_property_raw(&mut self, range: CharRange, name: Value) -> bool {
         self.mutation_tick += 1;
+        if Self::name_is_syntax_relevant(name) {
+            self.syntax_prop_tick += 1;
+        }
         if range.is_empty() {
             return false;
         }
@@ -2525,6 +2643,7 @@ impl TextPropertyTable {
 
     fn remove_all_properties_raw(&mut self, range: CharRange) {
         self.mutation_tick += 1;
+        self.syntax_prop_tick += 1;
         if range.is_empty() {
             return;
         }
@@ -2544,6 +2663,7 @@ impl TextPropertyTable {
 
     fn set_properties_raw(&mut self, range: CharRange, plist: Vec<(Value, Value)>) {
         self.mutation_tick += 1;
+        self.syntax_prop_tick += 1;
         if range.is_empty() {
             return;
         }
@@ -2600,6 +2720,7 @@ impl TextPropertyTable {
         plist: Vec<(Value, Value)>,
     ) {
         self.mutation_tick += 1;
+        self.syntax_prop_tick += 1;
         if range.is_empty() {
             return;
         }
@@ -3140,6 +3261,7 @@ impl TextPropertyTable {
 
     fn append_shifted_raw(&mut self, other: &TextPropertyTable, offset: CharLen) {
         self.mutation_tick += 1;
+        self.syntax_prop_tick += 1;
         // Apply each inserted run's properties to its shifted range locally --
         // split at the run edges and set the run's plist on each covered
         // interval, O(log n) per run -- instead of extracting every run and
@@ -3208,6 +3330,7 @@ impl TextPropertyTable {
         offset: CharLen,
     ) {
         self.mutation_tick += 1;
+        self.syntax_prop_tick += 1;
         for run in other.intervals.runs() {
             if run.is_empty_plist() {
                 continue;
@@ -3232,6 +3355,7 @@ impl TextPropertyTable {
 
     fn merge_missing_shifted_raw(&mut self, other: &TextPropertyTable, offset: CharLen) {
         self.mutation_tick += 1;
+        self.syntax_prop_tick += 1;
         let mut target_runs = self.intervals.runs();
         for source in other.intervals.runs() {
             if source.is_empty_plist() {

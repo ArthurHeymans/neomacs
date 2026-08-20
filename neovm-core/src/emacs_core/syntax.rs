@@ -5861,7 +5861,13 @@ pub(crate) fn builtin_parse_partial_sexp(
     // names a path. The per-keystroke syntax cost is O(parsed span); this is
     // the only way to see WHO parses from WHERE (syntax-ppss cache misses
     // parse from far back; a healthy cache parses tiny spans).
-    if let Ok(stats_path) = std::env::var("NEOMACS_SYNTAX_STATS_FILE")
+    // OnceLock, not a per-call env read: glibc getenv walks the environment
+    // linearly, and this runs on EVERY parse-partial-sexp — a fontification
+    // pass paid 185M Ir (58k calls) just asking for a debug knob.
+    static SYNTAX_STATS_FILE: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    if let Some(stats_path) = SYNTAX_STATS_FILE
+        .get_or_init(|| std::env::var("NEOMACS_SYNTAX_STATS_FILE").ok())
+        .as_deref()
         && !stats_path.is_empty()
         && let Ok(mut f) = std::fs::OpenOptions::new()
             .create(true)
