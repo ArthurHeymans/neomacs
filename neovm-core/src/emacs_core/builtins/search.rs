@@ -652,14 +652,17 @@ fn prepare_current_buffer_regexp_syntax_to(
 enum RegexpSearchPrep {
     /// `syntax-propertize` already ran far enough; search directly.
     Ready(BufferRegexpSyntaxProperties),
-    /// Unbounded forward search with a finite per-attempt span: the caller
-    /// runs the probe ladder in [`propertize_window_for_forward_regexp`]
-    /// before the committed search.
+    /// Forward search with a finite per-attempt span: the caller runs the
+    /// probe ladder in [`propertize_window_for_forward_regexp`] before the
+    /// committed search. `region_end_char` is the search's reachable end
+    /// (BOUND when given, else the accessible end), so the ladder's final
+    /// rung propertizes exactly what the conservative path always did.
     Windowed {
         syntax_properties: BufferRegexpSyntaxProperties,
         start_char: usize,
         region_end_char: usize,
         margin_chars: usize,
+        bound_byte: Option<usize>,
     },
 }
 
@@ -689,20 +692,27 @@ fn prepare_buffer_regexp_search(
     // The matcher's reachable range: a backward search only examines
     // positions at or before the starting point (matches end at or before
     // point), so propertizing through point suffices; a forward search is
-    // capped by its BOUND argument when given.
+    // capped by its BOUND argument when given. `opts.bound` has BOUND
+    // already coerced from fixnum OR marker (GNU
+    // `CHECK_FIXNUM_COERCE_MARKER`) — newcomment passes `copy-marker`
+    // bounds, and reading only fixnums here made every such search
+    // propertize to point-max instead of the region end.
     let target = match opts.direction {
         SearchDirection::Backward => Some(start_char.saturating_add(1)),
-        SearchDirection::Forward => match args.get(1) {
-            Some(v) if v.is_fixnum() => v.as_fixnum().map(|bound| bound.saturating_add(1)),
-            _ => None,
-        },
+        SearchDirection::Forward => opts.bound.and_then(|bound| {
+            eval.buffers.current_buffer().map(|buf| {
+                // 0-based char of the bound, +1 to 1-based, +1 past it.
+                buf.emacs_byte_pos_to_char_pos_clamped(bound).get() as i64 + 2
+            })
+        }),
     };
 
-    // An unbounded forward search whose pattern has a finite per-attempt
-    // span doesn't need the whole tail propertized up front: the probe
-    // ladder covers exactly as much as the search examines.
+    // A forward search whose pattern has a finite per-attempt span doesn't
+    // need its whole reachable range propertized up front: the probe ladder
+    // covers exactly as much as the search examines. This applies bounded
+    // searches too — newcomment-style loops pass the region end as BOUND,
+    // and re-propertizing edit..BOUND per iteration is the same quadratic.
     if matches!(opts.direction, SearchDirection::Forward)
-        && target.is_none()
         && opts.steps == 1
         && crate::emacs_core::syntax::parse_sexp_lookup_properties_enabled(eval)
     {
@@ -715,11 +725,15 @@ fn prepare_buffer_regexp_search(
         let covered = eval
             .buffers
             .current_buffer()
-            .map(|buf| buf.accessible_char_region().end().get())
-            .is_some_and(|end| {
-                // `end` is 0-based; full coverage means `--done` reached the
-                // 1-based point-max = end + 1, the old conservative target.
-                matches!(done.kind(), ValueKind::Fixnum(d) if d >= end as i64 + 1)
+            .map(|buf| buf.accessible_char_region().end().get() as i64 + 1)
+            .is_some_and(|accessible_target| {
+                // `accessible_target` is the 1-based point-max (end is
+                // 0-based); a BOUND caps the needed coverage at bound + 1,
+                // exactly the old conservative propertize target.
+                let full_target = target
+                    .map(|t| t.clamp(1, accessible_target))
+                    .unwrap_or(accessible_target);
+                matches!(done.kind(), ValueKind::Fixnum(d) if d >= full_target)
             });
         if covered {
             return Ok(RegexpSearchPrep::Ready(BufferRegexpSyntaxProperties::Honor));
@@ -738,9 +752,15 @@ fn prepare_buffer_regexp_search(
                 .then_some(span)
                 .flatten()
                 .map(|span| {
+                    let accessible_end = buf.accessible_char_region().end().get();
+                    // With a BOUND, the reachable end is the bound (target
+                    // holds bound + 1), clamped like the conservative path.
+                    let region_end_char = target
+                        .map(|t| ((t - 1).max(1) as usize).min(accessible_end))
+                        .unwrap_or(accessible_end);
                     (
                         start_char.max(1) as usize,
-                        buf.accessible_char_region().end().get(),
+                        region_end_char,
                         span.saturating_add(2),
                     )
                 })
@@ -751,6 +771,7 @@ fn prepare_buffer_regexp_search(
                 start_char,
                 region_end_char,
                 margin_chars,
+                bound_byte: opts.bound.map(|bound| bound.get()),
             });
         }
     }
@@ -775,6 +796,7 @@ fn resolve_regexp_search_prep(
             start_char,
             region_end_char,
             margin_chars,
+            bound_byte,
         } => {
             propertize_window_for_forward_regexp(
                 eval,
@@ -785,6 +807,7 @@ fn resolve_regexp_search_prep(
                 start_char,
                 region_end_char,
                 margin_chars,
+                bound_byte,
             )?;
             Ok(syntax_properties)
         }
@@ -818,8 +841,13 @@ fn propertize_window_for_forward_regexp(
     start_char: usize,
     region_end_char: usize,
     margin_chars: usize,
+    bound_byte: Option<usize>,
 ) -> Result<(), Flow> {
-    let mut lookahead = 4096usize.max(margin_chars.saturating_mul(4));
+    // Bounded searches come from region loops (newcomment et al.) whose
+    // matches sit within a line or two; start them on a small window so a
+    // per-edit retreat of `--done` re-propertizes only that much.
+    let base = if bound_byte.is_some() { 512usize } else { 4096usize };
+    let mut lookahead = base.max(margin_chars.saturating_mul(4));
     loop {
         let window_end = start_char.saturating_add(lookahead).min(region_end_char);
         crate::emacs_core::syntax::maybe_syntax_propertize_for_scan(
@@ -843,7 +871,7 @@ fn propertize_window_for_forward_regexp(
             super::regex::re_search_forward_lisp_with_posix(
                 buf,
                 pattern,
-                None,
+                bound_byte,
                 false,
                 case_fold,
                 posix,

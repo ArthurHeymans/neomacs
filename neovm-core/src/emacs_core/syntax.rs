@@ -3811,7 +3811,11 @@ pub(crate) fn builtin_forward_comment(
                 buf.accessible_char_region().end().get(),
             )
         };
-        let mut lookahead: usize = 4096;
+        // Comments being skipped are almost always within a line or two;
+        // a small first window keeps the per-edit re-propertize span near
+        // GNU's lazy charpos+1 granularity (a 4096 window made warm
+        // comment/uncomment loops re-propertize ~8x more text than GNU).
+        let mut lookahead: usize = 1024;
         loop {
             let window_end = point_char.saturating_add(lookahead).min(end_char);
             maybe_syntax_propertize_for_scan(eval, window_end.saturating_add(1))?;
