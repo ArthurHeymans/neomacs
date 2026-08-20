@@ -2002,7 +2002,7 @@ impl ProcessOutputSink {
 /// happens at all when the read produced no bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProcessReadBranch {
-    /// `read_and_insert_process_output` (src/process.c:6459), taken when
+    /// `read_and_insert_process_output` (src/process.c:6460), taken when
     /// `fast-read-process-output' is non-nil and the filter is still
     /// `internal-default-process-filter' (:6557-6559).  Its first statement is
     /// `if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (...)) return;`
@@ -2012,7 +2012,7 @@ pub enum ProcessReadBranch {
     InsertIntoBuffer,
     /// The filter branch (:6560-6575): `decode_coding_c_string` runs
     /// unconditionally -- zero bytes included -- and the filter is called only
-    /// for a non-empty result (`SBYTES (text) > 0`, :6569).
+    /// for a non-empty result (`SBYTES (text) > 0`, :6567).
     CallFilter,
 }
 
@@ -8006,7 +8006,7 @@ impl super::eval::Context {
         if last_block {
             // GNU's zero-byte last block is delivered from INSIDE the read --
             // `read_and_dispose_of_process_output` calls the filter itself
-            // (src/process.c:6569-6574) -- and `read_process_output` then
+            // (src/process.c:6567-6572) -- and `read_process_output` then
             // returns 0, which is the end of file its caller acts on (:6345).
             // Doing both here is what keeps the two from being separable: the
             // only variant that can carry a last block is consumed here, so no

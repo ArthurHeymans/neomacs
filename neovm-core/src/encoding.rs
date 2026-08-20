@@ -2302,7 +2302,7 @@ impl CharsetRunBuilder {
 ///
 /// GNU never has to think about this, because a subprocess decodes through the
 /// process's own `struct coding_system` for the process's whole life
-/// (`proc_decode_coding_system[channel]`, src/process.c:6238) and
+/// (`proc_decode_coding_system[channel]`, src/process.c:6242) and
 /// `setup_coding_system` seeds the registers once
 /// (`CODING_ISO_INITIAL`, src/coding.c:5760-5775).  This port decodes each run
 /// as a separate call, so the state has to be an object with the same
@@ -2368,7 +2368,7 @@ impl CodingDecoderState {
 /// GNU has no such type because it does not need one: `decode_coding_object`
 /// takes a `struct coding_system *`, and for a subprocess that pointer is the
 /// process's own struct with its `spec`, its `mode` and its `consumed` already
-/// in it (src/process.c:6238).  This port decodes each run as a separate call
+/// in it (src/process.c:6242).  This port decodes each run as a separate call
 /// through a door that answers a Lisp string, so the three have to travel
 /// alongside the call.
 ///

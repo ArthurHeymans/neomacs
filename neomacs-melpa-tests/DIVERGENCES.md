@@ -20928,7 +20928,7 @@ file its caller acts on.
 
 The branch is the other half.  `read_and_dispose_of_process_output` splits on
 `fast_read_process_output && EQ (p->filter, Qinternal_default_process_filter)`
-(:6557-6559), and `read_and_insert_process_output`'s first statement is
+(:6557-6558), and `read_and_insert_process_output`'s first statement is
 
 ```c
   if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (XBUFFER (p->buffer)))
@@ -20937,7 +20937,7 @@ The branch is the other half.  `read_and_dispose_of_process_output` splits on
 
 (:6464-6465) -- before `decode_coding_c_string`.  So the buffer branch has no
 zero-byte decode, and the filter branch calls the filter only for a non-empty
-result (`SBYTES (text) > 0`, :6569) while running the hook either way.
+result (`SBYTES (text) > 0`, :6567) while running the hook either way.
 
 This port had no flag at all.  "Flush" meant "there is carryover left", which
 is why a process with none decoded nothing at EOF, and why
@@ -20994,7 +20994,7 @@ process AFTER the decode (src/process.c:6448-6457).
 
 The second half is the state.  GNU decodes a subprocess through ONE
 `struct coding_system` for the process's whole life
-(`proc_decode_coding_system[channel]`, :6238), so an ISO-2022 designation set
+(`proc_decode_coding_system[channel]`, :6242), so an ISO-2022 designation set
 by one read is still in force in the next.  A designation is NOT carryover:
 `ESC $ B` at the end of a read is a COMPLETE escape sequence, GNU consumes it
 and records it, and holding it back instead would answer the first row above

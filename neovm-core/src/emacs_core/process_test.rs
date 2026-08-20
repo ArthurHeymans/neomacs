@@ -11054,7 +11054,7 @@ fn a_process_read_runs_the_coding_systems_post_read_conversion() {
 /// and it returns without decoding anything (src/process.c:6313-6321).  So the
 /// filter branch runs the coding system's `:post-read-conversion` once more
 /// than there were chunks, with `produced_char` zero, and does not call the
-/// filter for it (`SBYTES (text) > 0`, :6569).
+/// filter for it (`SBYTES (text) > 0`, :6567).
 ///
 /// Two things narrow it, and both are rows here because both were measured
 /// under GNU Emacs 31.0.90 running this test's own program:
@@ -11126,7 +11126,7 @@ fn an_eof_read_decodes_a_zero_byte_last_block_on_the_filter_branch() {
 /// boundary is the DECODER's answer rather than a rule about its name.
 ///
 /// GNU decodes a process through ONE `struct coding_system` for the process's
-/// whole life (`proc_decode_coding_system[channel]`, src/process.c:6238), and
+/// whole life (`proc_decode_coding_system[channel]`, src/process.c:6242), and
 /// each decoder ends by reporting how far it got:
 ///
 /// ```c
