@@ -3014,6 +3014,19 @@ impl Buffer {
         self.text.syntax_prop_free_run_end_at_char_pos(pos, cap)
     }
 
+    /// See [`crate::buffer::buffer_text::BufferText::syntax_byte_run_memo_lookup`].
+    pub fn syntax_byte_run_memo_lookup(
+        &self,
+        byte_pos: EmacsBytePos,
+    ) -> Option<(u64, u64, Option<Value>)> {
+        self.text.syntax_byte_run_memo_lookup(byte_pos)
+    }
+
+    /// See [`crate::buffer::buffer_text::BufferText::syntax_byte_run_memo_store`].
+    pub fn syntax_byte_run_memo_store(&self, start: u64, end: u64, value: Option<Value>) {
+        self.text.syntax_byte_run_memo_store(start, end, value);
+    }
+
     /// Whether any property in `keys` is non-nil inside the bounded character
     /// `range`.  See
     /// [`TextPropertyTable::has_any_non_nil_property_in_char_range`].

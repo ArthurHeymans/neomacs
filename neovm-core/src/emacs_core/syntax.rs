@@ -2850,16 +2850,25 @@ impl<'a> SyntaxPropByteRun<'a> {
         byte_pos: EmacsBytePos,
         resolver: CharPropertyResolver<'_>,
     ) -> Option<Value> {
+        // Byte-run memo: a hit answers with zero conversions and no interval
+        // lookup. Only sound when the resolver's coalescing preconditions
+        // hold (no aliases / no default fallback) — the same guard the
+        // char-side coalescing uses.
+        let coalesce = resolver.supports_presence_coalescing();
+        if coalesce && let Some((start, end, value)) = buf.syntax_byte_run_memo_lookup(byte_pos) {
+            self.run.set(start as usize, end as usize, value);
+            return value;
+        }
         let char_pos = buf.emacs_byte_pos_to_char_pos_clamped(byte_pos);
         let (plist, _start, _end) = buf.interval_plist_run_at_char_pos(char_pos);
         let value = plist.and_then(|plist| resolver.resolve_interval_plist(plist));
         // See `coalesced_syntax_run_end`: extend over face-only splits.
         let end = coalesced_syntax_run_end(buf, char_pos, &resolver);
-        self.run.set(
-            byte_pos.get(),
-            buffer_char_to_emacs_byte_pos(buf, end).get(),
-            value,
-        );
+        let end_byte = buffer_char_to_emacs_byte_pos(buf, end).get();
+        self.run.set(byte_pos.get(), end_byte, value);
+        if coalesce {
+            buf.syntax_byte_run_memo_store(byte_pos.get() as u64, end_byte as u64, value);
+        }
         value
     }
 }

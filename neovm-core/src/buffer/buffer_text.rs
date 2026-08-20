@@ -62,6 +62,21 @@ struct SyntaxRunMemoEntry {
     end: CharPos0,
 }
 
+/// Byte-coordinate twin of [`SyntaxRunMemoEntry`], carrying the RESOLVED
+/// `syntax-table` value for the run so the byte-addressed scanners' refill
+/// needs no byte<->char conversions and no interval lookup on a hit. The
+/// value bits are only handed out while (epoch, tick) match, and a live
+/// value is rooted by the interval plist it came from.
+#[derive(Clone, Copy, Default)]
+struct SyntaxByteRunMemoEntry {
+    epoch: u64,
+    tick: u64,
+    start: u64,
+    end: u64,
+    value_bits: u64,
+    value_present: bool,
+}
+
 #[derive(Clone, Copy, Default)]
 struct PositionCache {
     /// BufferText content epoch when this entry was stored. Zero = invalid.
@@ -122,6 +137,9 @@ struct BufferTextStorage {
     /// Memo ring for `syntax_prop_free_run_end_at_char_pos` (see its doc).
     syntax_run_memo: RefCell<[SyntaxRunMemoEntry; 4]>,
     syntax_run_memo_cursor: Cell<usize>,
+    /// Byte-coordinate run memo for the byte-addressed syntax scanners.
+    syntax_byte_run_memo: RefCell<[SyntaxByteRunMemoEntry; 4]>,
+    syntax_byte_run_memo_cursor: Cell<usize>,
 }
 
 impl BufferTextStorage {
@@ -226,6 +244,8 @@ impl Clone for BufferTextStorage {
             anchor_cache_cursor: self.anchor_cache_cursor.clone(),
             syntax_run_memo: self.syntax_run_memo.clone(),
             syntax_run_memo_cursor: self.syntax_run_memo_cursor.clone(),
+            syntax_byte_run_memo: self.syntax_byte_run_memo.clone(),
+            syntax_byte_run_memo_cursor: self.syntax_byte_run_memo_cursor.clone(),
         }
     }
 }
@@ -291,6 +311,8 @@ impl BufferText {
                 anchor_cache_cursor: Cell::new(0),
                 syntax_run_memo: RefCell::new([SyntaxRunMemoEntry::default(); 4]),
                 syntax_run_memo_cursor: Cell::new(0),
+                syntax_byte_run_memo: RefCell::new([SyntaxByteRunMemoEntry::default(); 4]),
+                syntax_byte_run_memo_cursor: Cell::new(0),
             })),
         }
     }
@@ -412,6 +434,7 @@ impl BufferText {
         storage.anchor_cache_key.set(0);
         // Default entries have epoch 0, which never matches a live epoch.
         *storage.syntax_run_memo.borrow_mut() = [SyntaxRunMemoEntry::default(); 4];
+        *storage.syntax_byte_run_memo.borrow_mut() = [SyntaxByteRunMemoEntry::default(); 4];
     }
 
     fn byte_range_to_char_range_with_storage(
@@ -1056,6 +1079,7 @@ impl BufferText {
         // A swapped-in table carries its own mutation-tick lineage, which can
         // collide with the memo's stored ticks — drop the memo outright.
         *storage.syntax_run_memo.borrow_mut() = [SyntaxRunMemoEntry::default(); 4];
+        *storage.syntax_byte_run_memo.borrow_mut() = [SyntaxByteRunMemoEntry::default(); 4];
     }
 
     pub fn replace_storage(&self, text: &str, multibyte: bool, text_props: TextPropertyTable) {
@@ -1238,6 +1262,49 @@ impl BufferText {
             storage.syntax_run_memo_cursor.set(slot + 1);
         }
         end
+    }
+
+    /// Byte-run memo lookup for the byte-addressed syntax scanners: on a hit
+    /// the refill needs no conversion and no interval lookup. Returns
+    /// `(start_byte, end_byte, resolved_value)`.
+    pub fn syntax_byte_run_memo_lookup(
+        &self,
+        byte_pos: EmacsBytePos,
+    ) -> Option<(u64, u64, Option<Value>)> {
+        let storage = self.storage.borrow();
+        let epoch = storage.content_epoch;
+        let tick = storage.text_props.syntax_prop_tick();
+        let pos = byte_pos.get() as u64;
+        for entry in storage.syntax_byte_run_memo.borrow().iter() {
+            if entry.epoch == epoch && entry.tick == tick && pos >= entry.start && pos < entry.end {
+                let value = entry
+                    .value_present
+                    .then(|| Value::from_bits(entry.value_bits as usize));
+                return Some((entry.start, entry.end, value));
+            }
+        }
+        None
+    }
+
+    /// Store a computed byte run (see `syntax_byte_run_memo_lookup`).
+    pub fn syntax_byte_run_memo_store(&self, start: u64, end: u64, value: Option<Value>) {
+        if end <= start {
+            return;
+        }
+        let storage = self.storage.borrow();
+        let epoch = storage.content_epoch;
+        let tick = storage.text_props.syntax_prop_tick();
+        let mut memo = storage.syntax_byte_run_memo.borrow_mut();
+        let slot = storage.syntax_byte_run_memo_cursor.get() % memo.len();
+        memo[slot] = SyntaxByteRunMemoEntry {
+            epoch,
+            tick,
+            start,
+            end,
+            value_bits: value.map_or(0, |v| v.bits() as u64),
+            value_present: value.is_some(),
+        };
+        storage.syntax_byte_run_memo_cursor.set(slot + 1);
     }
 
     /// See [`text_props::TextPropertyTable::has_any_non_nil_property_in_char_range`].
