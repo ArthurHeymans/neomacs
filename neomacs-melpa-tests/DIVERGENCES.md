@@ -19428,4 +19428,37 @@ message.
 * `cargo check --workspace --all-targets`: clean.
 * `cargo fmt --all --check`: clean.
 
+> **Note added 2026-08-20 by entry 163.**  Of the residuals in §10, none is
+> closed outright; three moved, and one claim in §1 needs a boundary drawn
+> around it.
+>
+> * **`Value::as_lisp_string`'s `&'static` seam -- audited and bounded, and
+>   one API in it was genuinely unsound.**  163 measured it: the 849 grep hits
+>   are 793 accessor lines, 531 production uses and **500 real borrows** (56
+>   hits are `expect_lisp_string_strict`, a different function returning an
+>   owned clone; 31 more reach a module-local `expect_lisp_string` that also
+>   returns one).  `impl FromValue for &'static LispString` was deleted: it
+>   took its `Value` BY VALUE and returned a borrow claiming to outlive it,
+>   which typechecked only because `as_lisp_string` launders `'static`.  Of
+>   the borrows the compiler can be made to judge, **six** are held across a
+>   `&mut Context` call; four of those were `looking-at` and every buffer
+>   regexp search holding a borrow across `syntax-propertize-function`, now
+>   restructured.  The `&'static` remains on `as_lisp_string` itself, for the
+>   357 production sites with no evaluator in scope.
+> * **The probe corpus** is seven forms now, not five.  Still not a fuzzer.
+> * **`try_resolve_sym` / `try_resolve_sym_lisp_string`** -- unchanged, but
+>   with a disposition recorded (163 §10) rather than a third restatement:
+>   they should be DELETED, not wired up, on 161 §6's own argument that a
+>   defensive range check "would have turned a loud crash into a quiet wrong
+>   answer over memory that is still corrupt".
+>
+> One boundary, not a correction.  §1's narrowing -- the unit of exposure is a
+> SAFEPOINT, not an allocation -- is right for the class that entry audited: a
+> Lisp value riding the Rust stack OUT of the interpreter, where the
+> candidates are a handful of `Flow`/`Error` types.  It does NOT generalize to
+> borrows taken INSIDE it.  163 built the call graph and measured **23,877 of
+> 26,484 function names (90.2%) as safepoint-reachable**, so the same filter
+> flags 201 of 235 candidate sites and decides nothing.  What decides it there
+> is rootedness, and mechanically it is `&mut`.
+
 Status: FIXED.
