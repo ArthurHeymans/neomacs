@@ -16,7 +16,7 @@ import sys
 import json
 import collections
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from gcaudit_root import ROOT, require_nonzero  # noqa: E402
 
 FN_RE = re.compile(r'^(\s*)(?:pub(?:\([^)]*\))?\s+)?(?:default\s+)?'
                    r'(?:const\s+)?(?:async\s+)?(?:unsafe\s+)?(?:extern\s+"[^"]*"\s+)?'
@@ -100,6 +100,7 @@ def main():
             if caller not in reach:
                 reach.add(caller)
                 work.append(caller)
+    require_nonzero('fn definitions', fn_count)
     print(f"distinct fn names defined : {len(defs)}", file=sys.stderr)
     print(f"fn definitions total      : {fn_count}", file=sys.stderr)
     print(f"names reaching a safepoint: {len(reach)} "

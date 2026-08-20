@@ -9,7 +9,7 @@ import re
 import sys
 import collections
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from gcaudit_root import ROOT  # noqa: E402  (validated workspace root)
 reach = set(json.load(open(os.path.join(ROOT, 'tmp/reach.json'))))
 sites = json.load(open(os.path.join(ROOT, 'tmp/sites2.json')))['sites']
 

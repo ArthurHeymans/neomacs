@@ -10,7 +10,7 @@ still be unrooted), but it is the escape property, and it is free.
 import os
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from gcaudit_root import ROOT  # noqa: E402  (validated workspace root)
 P = os.path.join(ROOT, 'neovm-core/src/emacs_core/value.rs')
 OLD = "    pub fn as_lisp_string(self) -> Option<&'static LispString> {"
 NEW = "    pub fn as_lisp_string(&self) -> Option<&LispString> {"

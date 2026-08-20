@@ -8,7 +8,7 @@ import json
 import os
 import re
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from gcaudit_root import ROOT, require_nonzero  # noqa: E402
 sites = json.load(open(os.path.join(ROOT, 'tmp/sites2.json')))['sites']
 FN = re.compile(r'^(\s*)(?:pub(?:\([^)]*\))?\s+)?(?:const\s+)?(?:async\s+)?(?:unsafe\s+)?'
                 r'fn\s+([A-Za-z_]\w*)')
@@ -57,6 +57,7 @@ for x in sites:
         without += 1
         without_by_file[x['file']] = without_by_file.get(x['file'], 0) + 1
 
+require_nonzero('production sites', with_ctx + without)
 print(f"production sites inside a fn holding a Context (or &mut self): {with_ctx}")
 print(f"production sites with NO Context in scope                    : {without}")
 print("top files with no Context in scope:")

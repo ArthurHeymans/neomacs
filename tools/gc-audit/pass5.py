@@ -15,7 +15,7 @@ import json
 import os
 import re
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from gcaudit_root import ROOT  # noqa: E402  (validated workspace root)
 sites = json.load(open(os.path.join(ROOT, 'tmp/sites2.json')))['sites']
 ctxstr = {l.strip() for l in open(os.path.join(ROOT, 'tmp/ctxstr-names.txt')) if l.strip()}
 
