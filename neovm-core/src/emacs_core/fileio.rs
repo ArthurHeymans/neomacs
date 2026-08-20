@@ -4037,7 +4037,7 @@ pub(crate) fn builtin_verify_visited_file_modtime(
     if recorded == VisitedFileModtime::Unknown {
         return Ok(Value::T);
     }
-    let Some(file_name) = buf.file_name_value().as_lisp_string() else {
+    let Some(file_name) = buf.file_name_lisp_string() else {
         return Ok(Value::T);
     };
     // Issue #131: encode the visited file name to its real OS path bytes via the
@@ -4143,7 +4143,7 @@ pub(crate) fn builtin_set_visited_file_modtime(eval: &mut Context, args: Vec<Val
     let path = eval
         .buffers
         .current_buffer()
-        .and_then(|b| b.file_name_value().as_lisp_string())
+        .and_then(|b| b.file_name_lisp_string())
         .map(lisp_file_name_to_path_buf);
     let Some(path) = path else {
         return Err(signal(
@@ -6829,8 +6829,8 @@ fn make_auto_save_file_name_for_buffer(
                     .and_then(|value| value.as_lisp_string().cloned())
             })
             .unwrap_or_else(|| crate::heap_types::LispString::from_utf8("/tmp/"));
-        let name = buf
-            .name_value()
+        let name_value = buf.name_value();
+        let name = name_value
             .as_lisp_string()
             .expect("buffer name must be a Lisp string");
         let mut safe_name_bytes = name.as_bytes().to_vec();

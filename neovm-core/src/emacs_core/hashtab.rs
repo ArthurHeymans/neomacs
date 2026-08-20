@@ -958,9 +958,13 @@ pub(crate) fn builtin_unintern(eval: &mut super::eval::Context, args: Vec<Value>
     expect_max_args("unintern", &args, 2)?;
     validate_optional_obarray_arg(&args)?;
 
-    enum UninternTarget {
-        Symbol(SymId, &'static crate::heap_types::LispString),
-        Name(std::borrow::Cow<'static, crate::heap_types::LispString>),
+    // DIVERGENCES.md 167: the name arm borrows `args[0]`'s payload, so the
+    // enum's lifetime is the ARGUMENT's, not `'static`. The symbol arm's
+    // process-lifetime atom coerces into it; writing `'static` here forced the
+    // string arm to launder one.
+    enum UninternTarget<'a> {
+        Symbol(SymId, &'a crate::heap_types::LispString),
+        Name(std::borrow::Cow<'a, crate::heap_types::LispString>),
     }
 
     let target = match args[0].kind() {

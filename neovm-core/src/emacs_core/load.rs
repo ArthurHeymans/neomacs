@@ -3856,7 +3856,8 @@ fn loaded_source_paths(eval: &mut super::eval::Context) -> Vec<PathBuf> {
             if !entry.is_cons() {
                 continue;
             };
-            let Some(path) = entry.cons_car().as_lisp_string() else {
+            let entry_car = entry.cons_car();
+            let Some(path) = entry_car.as_lisp_string() else {
                 continue;
             };
             let path = load_path_buf(path);

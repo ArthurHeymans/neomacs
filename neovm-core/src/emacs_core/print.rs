@@ -2318,7 +2318,8 @@ pub(crate) fn format_float_with_output_format(f: f64, output_format: Option<Valu
 }
 
 fn parse_float_output_format(value: Option<Value>) -> Option<(usize, u8, i32)> {
-    let bytes = value?.as_lisp_string()?.as_bytes();
+    let value = value?;
+    let bytes = value.as_lisp_string()?.as_bytes();
     let nul = bytes
         .iter()
         .position(|byte| *byte == 0)
