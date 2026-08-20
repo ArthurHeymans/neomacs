@@ -909,13 +909,43 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                     continue;
                 }
                 if unsafe { atomic_mark_owned_cons_ptr(ptr) } {
-                    let car = unsafe { (*ptr).load_car() };
-                    let cdr = unsafe { (*ptr).load_cdr() };
-                    if car.is_heap_object() {
-                        job.gray.push(car);
-                    }
-                    if cdr.is_heap_object() {
-                        job.gray.push(cdr);
+                    // cdr-chasing loop (GNU `mark_object`): mark a list spine
+                    // inline instead of round-tripping every cell through the
+                    // gray worklist. Each chased cell counts toward the stop
+                    // quantum; on quantum the unmarked tail goes back to gray
+                    // so the outer loop's stop check stays bounded.
+                    let mut ptr = ptr;
+                    loop {
+                        let car = unsafe { (*ptr).load_car() };
+                        let cdr = unsafe { (*ptr).load_cdr() };
+                        if car.is_heap_object() {
+                            job.gray.push(car);
+                        }
+                        if !cdr.is_cons() {
+                            if cdr.is_heap_object() {
+                                job.gray.push(cdr);
+                            }
+                            break;
+                        }
+                        since_stop_check += 1;
+                        if since_stop_check >= STOP_CHECK_QUANTUM {
+                            job.gray.push(cdr);
+                            break;
+                        }
+                        let cptr = cdr.xcons_ptr();
+                        let caddr = cptr as usize;
+                        if caddr >= job.claims.dump_lo && caddr < job.claims.dump_hi {
+                            break; // dump cons: permanent black
+                        }
+                        let cbase = caddr & !(CONS_BLOCK_ALIGN - 1);
+                        if !job.owned_bases.contains(&cbase) {
+                            job.deferred.lock().unwrap().push(cdr);
+                            break;
+                        }
+                        if !unsafe { atomic_mark_owned_cons_ptr(cptr) } {
+                            break; // already marked (shared tail)
+                        }
+                        ptr = cptr;
                     }
                 }
             } else if val.is_heap_object() {
@@ -8094,12 +8124,21 @@ impl TaggedHeap {
         if let crate::tagged::value::ValueKind::Symbol(id) = val.kind() {
             self.mark_symbol(id);
         } else if val.is_cons() {
-            let ptr = val.xcons_ptr();
-            if self.mark_cons(ptr) {
+            // GNU `mark_object`'s cdr-chasing loop: a list is marked along
+            // its spine inline, without a gray-queue push + pop + re-dispatch
+            // per cell — for a megacons list that round trip is a second
+            // multi-megabyte buffer streamed through the cache.
+            let mut ptr = val.xcons_ptr();
+            while self.mark_cons(ptr) {
                 let car = unsafe { (*ptr).load_car() };
                 let cdr = unsafe { (*ptr).load_cdr() };
                 self.mark_or_push_child(car, "cons-car");
+                if cdr.is_cons() {
+                    ptr = cdr.xcons_ptr();
+                    continue;
+                }
                 self.mark_or_push_child(cdr, "cons-cdr");
+                break;
             }
         } else if val.is_string() {
             let ptr = val.as_string_ptr().unwrap() as *mut StringObj;
