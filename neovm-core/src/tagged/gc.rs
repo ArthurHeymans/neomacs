@@ -1157,6 +1157,17 @@ fn note_heap_write_record(record: HeapWriteRecord) {
 /// cycle). No-ops outside a concurrent mark — a single thread-local load + branch,
 /// no heap touch — and for non-heap pre-images (fixnum / UNBOUND / nil /
 /// symbol-id), so cold-path callers pay essentially nothing when GC is idle.
+/// Feed live mutator stack roots to an active concurrent mark (see
+/// [`TaggedHeap::feed_satb_roots`]). No-op (one thread-local load) when no
+/// concurrent mark is running.
+#[inline]
+pub(crate) fn feed_concurrent_roots(values: &[TaggedValue]) {
+    if values.is_empty() || !TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.get()) {
+        return;
+    }
+    with_tagged_heap(|heap| heap.feed_satb_roots(values));
+}
+
 #[inline]
 pub(crate) fn note_root_overwrite(pre_image: TaggedValue) {
     if !pre_image.is_heap_object() {
@@ -7474,6 +7485,18 @@ impl TaggedHeap {
     /// Conses (exactly two children) bypass the dedup: their barrier is already
     /// O(1), and a per-write `HashSet` insert on the hot car/cdr path would cost
     /// more than it saves. Re-logging a cons's 2 children is still SATB-correct.
+    /// Hand a batch of LIVE mutator roots to the concurrent marker via the
+    /// SATB channel. Extra live values in the SATB log are always safe (the
+    /// marker treats each entry as gray; already-marked entries are skipped
+    /// by the atomic mark test) — this exists so young data reachable ONLY
+    /// from the mutator's stack marks CONCURRENTLY instead of all at once in
+    /// the stop-the-world termination fold. A value that dies before the
+    /// cycle ends floats one cycle, the standard SATB trade.
+    pub(crate) fn feed_satb_roots(&self, values: &[TaggedValue]) {
+        let mut shared = self.satb_shared.lock().unwrap();
+        shared.extend(values.iter().copied().filter(|v| v.is_heap_object()));
+    }
+
     fn push_value_children_to_satb_shared(&mut self, owner: TaggedValue) {
         debug_assert!(self.gray_queue.is_empty());
         // Multi-child owners are deduped once per cycle; conses fall through to

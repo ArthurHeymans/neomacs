@@ -9251,6 +9251,19 @@ impl Context {
         if self.gc_safe_point_exact_should_collect() {
             self.gc_collect_from_current_roots();
         }
+        // Concurrent root feeding: young data reachable only from the
+        // operand stacks (a loop building a list) is otherwise invisible to
+        // the concurrent marker until the STW termination fold — which then
+        // pays a full young-generation mark as pause. Both tiers funnel
+        // through here (the interpreter's backward branch and the native
+        // loop's `neovm_jit_backedge`, whose shims have already spilled live
+        // values to `bc_buf` / the root window), once per ~256 iterations.
+        if crate::tagged::gc::concurrent_mark_active() {
+            crate::tagged::gc::feed_concurrent_roots(&self.bc_buf);
+            crate::tagged::gc::feed_concurrent_roots(
+                &self.jit_root_stack[..self.jit_root_stack_top],
+            );
+        }
         self.maybe_quit()
     }
 }
