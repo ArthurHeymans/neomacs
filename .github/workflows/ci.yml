@@ -371,7 +371,11 @@ jobs:
 
       - name: Run deterministic package ecosystem compatibility tests
         run: |
-          IFS=' ' read -r -a libtest_args <<< "${LIBTEST_ARGS:-}"
+          if [ -n "${LIBTEST_ARGS:-}" ]; then
+            IFS=' ' read -r -a libtest_args <<< "${LIBTEST_ARGS}"
+          else
+            libtest_args=()
+          fi
           cargo nextest run \
             --archive-file neomacs-workspace-tests.tar.zst \
             --extract-to "$TMPDIR/nextest" \
