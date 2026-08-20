@@ -7738,6 +7738,19 @@ pub(crate) fn re_search(
     let use_fastmap = pattern.fastmap_accurate && !pattern.can_be_null && !fastmap_force_disabled();
     let translate = pattern.translate.as_ref();
 
+    // `^`-anchored pattern: a forward candidate can only match at position 0
+    // or right after a newline, so reject others with one byte compare
+    // instead of a full matcher entry (scratch borrow, register reset,
+    // dispatch) per fastmap hit. GNU enters the matcher and fails at
+    // `begline`; the candidate set is identical either way.
+    let bol_anchored = {
+        let mut pc = 0;
+        while pc < pattern.buffer.len() && pattern.buffer[pc] == RegexOp::NoOp as u8 {
+            pc += 1;
+        }
+        pc < pattern.buffer.len() && pattern.buffer[pc] == RegexOp::BegLine as u8
+    };
+
     // A fresh search starts with a clean overflow flag; a candidate match
     // that hits the fail-stack limit sets it, aborting the whole scan
     // (GNU re_search_2 propagates re_match_2_internal's -2 immediately).
@@ -7760,6 +7773,37 @@ pub(crate) fn re_search(
         // Forward search
         let end = (start + range as usize).min(text_len);
         let mut pos = start;
+        if bol_anchored {
+            // `^`-anchored: candidates are position 0 and each byte after a
+            // newline — drive the scan with memchr('\n') (SIMD) instead of
+            // entering the matcher at every fastmap hit only to fail at
+            // `begline`. The fastmap still pre-rejects a line whose first
+            // byte can't start a match; BOL positions are always char
+            // boundaries, so no continuation-byte check is needed.
+            loop {
+                if pos > end {
+                    return None;
+                }
+                if pos == 0 || text[pos - 1] == b'\n' {
+                    let first_ok = !use_fastmap
+                        || pos >= text_len
+                        || match translate {
+                            Some(table) => {
+                                pattern.fastmap[table.translate_byte(text[pos]) as usize]
+                            }
+                            None => pattern.fastmap[text[pos] as usize],
+                        };
+                    if first_ok && let Some(result) = try_candidate!(pos, end) {
+                        return Some((pos, result.1));
+                    }
+                }
+                let search_from = pos.min(text_len);
+                match memchr::memchr(b'\n', &text[search_from..text_len]) {
+                    Some(idx) => pos = search_from + idx + 1,
+                    None => return None,
+                }
+            }
+        }
         if use_fastmap {
             if let Some(pref) = &pattern.prefilter {
                 // SIMD multi-literal skip: jump straight to the next position
