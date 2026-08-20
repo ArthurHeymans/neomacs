@@ -20178,8 +20178,9 @@ did not have time to make rather than a design opinion", the worry being that
 "the naive alternative (materialize, hook, re-materialize) doubles the
 conversion on the hottest path there is".
 
-The measurement says **+31 instructions per string insert, +2 per character
-insert** -- +0.21% and +0.02% of those workloads. So the hot-path worry was
+The measurement says **+31 instructions per plain string insert, +37 for a
+propertized one, +2 for a character** -- +0.21%, +0.14% and +0.02% of those
+workloads. So the hot-path worry was
 right in kind and wrong by two orders of magnitude in size, and the reason it is
 small is not a micro-optimisation but a fact about GNU that decides the whole
 design: **GNU's before-change signal for an insertion is
@@ -20779,10 +20780,11 @@ with the citation so the next agent does not have to re-derive it.
   162's residual, restated. The insert-argument space in particular (unibyte vs
   multibyte source crossed with unibyte vs multibyte buffer crossed with what
   the hook does) is enumerable and was sampled, not covered.
-* **The oracle is still not a detector for this class.** 38786 pins are green on
-  both sides of this change, as they were for 161, 162 and 163. Recorded plainly
-  so entry 165 does not read oracle green as evidence about change-hook
-  ordering.
+* **The oracle is still not a detector for this class.** 38786 pins were green
+  at the merge base (163 §11) and are green here, across a change that alters
+  when every `insert` in the editor reads its argument -- and 13 of the 31 audit
+  forms were divergent the whole time. Recorded plainly so entry 165 does not
+  read oracle green as evidence about change-hook ordering.
 * **`detect_tty_background_mode` still reads `COLORFGBG`** -- 157's residual,
   carried by 161, 162 and 163, untouched again.
 
@@ -20803,8 +20805,9 @@ deleted first.
   pin and the four-door pin.
 * `cargo nextest run -p neovm-oracle-tests`:
   **38786 tests run: 38786 passed, 0 skipped** in 647.721 s, exit 0, zero
-  `FAIL` lines. Baseline 38786. As §12 records, this is green on both sides of
-  the change and always was.
+  `FAIL` lines. Baseline 38786. The pre-change side was not re-run here; 163
+  §11 records 38786/38786 at this branch's merge base, which is the honest
+  form of "green on both sides". §12 says what that is worth.
 * `cargo xtask gc-stress --editor <this branch's release binary>`:
   **9/9 probes passed**, exit 0. Baseline is 8/8; probe 09 is new.
 * **The negative control, which is what makes the 9/9 mean anything.** The same
