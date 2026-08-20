@@ -38,7 +38,19 @@ impl std::fmt::Debug for SymId {
         // read could deadlock. `try_read` degrades to the id on contention.
         match global_symbol_registry().try_read() {
             Some(registry) => match registry.slot(*self) {
-                Some(slot) => write!(f, "SymId({} {})", self.0, registry.names.resolve(slot.name)),
+                Some(slot) => {
+                    let name = registry.names.resolve_lisp_string(slot.name);
+                    match name.as_utf8_str() {
+                        Some(name) => write!(f, "SymId({} {name})", self.0),
+                        None => write!(
+                            f,
+                            "SymId({} <{} raw byte{}>)",
+                            self.0,
+                            name.as_bytes().len(),
+                            if name.as_bytes().len() == 1 { "" } else { "s" }
+                        ),
+                    }
+                }
                 None => write!(f, "SymId({})", self.0),
             },
             None => write!(f, "SymId({})", self.0),

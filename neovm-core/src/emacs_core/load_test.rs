@@ -40,6 +40,46 @@ fn load_name_equal_matches_lisp_equal_without_tagged_heap_allocation() {
     );
 }
 
+#[test]
+fn load_error_formatting_handles_raw_unibyte_symbol_names() {
+    crate::test_utils::init_test_tracing();
+    let name = crate::heap_types::LispString::from_unibyte(vec![0xff]);
+    let symbol = crate::emacs_core::intern::intern_lisp_string(&name);
+
+    assert_eq!(
+        format_value_for_error(&Value::from_sym_id(symbol)),
+        "\u{fffd}"
+    );
+}
+
+#[test]
+fn load_error_formatting_preserves_unibyte_symbol_encoding() {
+    crate::test_utils::init_test_tracing();
+    let name = crate::heap_types::LispString::from_unibyte(vec![0xc3, 0xa9]);
+    let symbol = crate::emacs_core::intern::intern_lisp_string(&name);
+
+    assert_eq!(
+        format_value_for_error(&Value::from_sym_id(symbol)),
+        "\u{fffd}\u{fffd}"
+    );
+}
+
+#[test]
+fn load_error_formatting_handles_raw_unibyte_signal_names() {
+    crate::test_utils::init_test_tracing();
+    let eval = Context::new();
+    let name = crate::heap_types::LispString::from_unibyte(vec![0xff]);
+    let symbol = crate::emacs_core::intern::intern_lisp_string(&name);
+    let error = EvalError::Signal {
+        symbol,
+        data: Vec::new(),
+        raw_data: None,
+    };
+
+    assert_eq!(format_load_form_error(&error), "(\u{fffd} nil)");
+    assert_eq!(format_eval_error_in_state(&eval, &error), "(\u{fffd} nil)");
+}
+
 fn isolated_runtime_bootstrap_eval() -> Context {
     let dump_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../target/test-cache/neovm-advice-stack-minibuffer-partial.pdump");
@@ -80,7 +120,7 @@ fn bootstrap_load_path_entries_use_gnu_windows_file_name_syntax() {
     let entries = bootstrap_load_path_entries(&lisp_dir);
     let first = entries
         .first()
-        .and_then(Value::as_lisp_string)
+        .and_then(|value| value.as_lisp_string())
         .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
         .expect("load-path should include lisp root");
     assert!(
@@ -9705,6 +9745,36 @@ fn nested_load_exact_gc_preserves_reader_load_file_name() {
     );
 
     let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn load_replaces_t_user_init_file_with_found_filename() {
+    crate::test_utils::init_test_tracing();
+    let temp = tempdir().expect("tempdir");
+    let file = temp.path().join("init.el");
+    fs::write(&file, "(setq vm-user-init-file-seen user-init-file)\n").expect("write fixture");
+
+    let mut eval = super::super::eval::Context::new();
+    eval.set_variable("user-init-file", Value::T);
+
+    let loaded = load_file(&mut eval, &file).expect("load fixture");
+    assert_eq!(loaded, Value::T);
+
+    let expected = crate::emacs_core::fileio::host_path_to_lisp_file_name_string(&file);
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("vm-user-init-file-seen")
+            .and_then(|value| value.as_utf8_str()),
+        Some(expected.as_str()),
+        "the init file must see its resolved filename while loading",
+    );
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("user-init-file")
+            .and_then(|value| value.as_utf8_str()),
+        Some(expected.as_str()),
+        "the resolved filename must persist after loading",
+    );
 }
 
 #[test]
