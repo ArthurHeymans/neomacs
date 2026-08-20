@@ -76,8 +76,8 @@ const PRELUDE: &str = r####"
 
 (defun pip384-test-wait-process (process)
   "Wait until PROCESS has run its sentinel, then report how it exited.
-The caller pins the shell buffer's whole text, and that text is
-"\nProcess shell finished\n" -- a line the SENTINEL writes.  So the pin
+The caller pins the shell buffer's whole text, and that text is the single
+line Process shell finished -- a line the SENTINEL writes.  So the pin
 cannot be taken before the sentinel has run, and waiting for the process to
 die is not that moment.  It is strictly earlier, by construction: GNU reaps
 the child in `handle_child_signal', setting `raw_status_new'
