@@ -2115,6 +2115,68 @@ fn canon_fold_literal_find(
     if pat.is_empty() {
         return Some(MatchGroup::new(0, 0));
     }
+    // Anchor lane instead of verifying at every char: enumerate the ASCII
+    // bytes that canonicalize to the pattern's first char (memo lookups),
+    // then scan ASCII stretches with SIMD (is_ascii + memchr) and verify
+    // only at anchor bytes. A non-ASCII char can also canonicalize into
+    // the anchor (e.g. U+212A KELVIN SIGN -> k), so any non-ASCII window
+    // falls back to the per-char verify walk for its span.
+    let mut anchors = [0u8; 2];
+    let mut n_anchors = 0usize;
+    for b in 0..128u8 {
+        if trt.translate(b as u32) == pat[0] {
+            if n_anchors == 2 {
+                n_anchors = 3;
+                break;
+            }
+            anchors[n_anchors] = b;
+            n_anchors += 1;
+        }
+    }
+    if n_anchors <= 2 {
+        const WINDOW: usize = 512;
+        let mut at = 0usize;
+        while at < text.len() {
+            let wend = at.saturating_add(WINDOW).min(text.len());
+            let window = &text[at..wend];
+            if window.is_ascii() {
+                let hit = match n_anchors {
+                    0 => None,
+                    1 => memchr::memchr(anchors[0], window),
+                    _ => memchr::memchr2(anchors[0], anchors[1], window),
+                };
+                match hit {
+                    Some(rel) => {
+                        let cand = at + rel;
+                        if let Some(end) = canon_fold_match_at(text, cand, &pat, multibyte, trt)
+                        {
+                            return Some(MatchGroup::new(cand, end));
+                        }
+                        at = cand + 1;
+                    }
+                    None => at = wend,
+                }
+            } else {
+                let mut wat = at;
+                while wat < wend {
+                    let b = text[wat];
+                    if b >= 0x80
+                        || (n_anchors >= 1 && b == anchors[0])
+                        || (n_anchors == 2 && b == anchors[1])
+                    {
+                        if let Some(end) = canon_fold_match_at(text, wat, &pat, multibyte, trt) {
+                            return Some(MatchGroup::new(wat, end));
+                        }
+                    }
+                    let (_code, len) = next_char_at(text, wat, multibyte);
+                    wat += len;
+                }
+                at = wat;
+            }
+        }
+        return None;
+    }
+    // Odd tables (3+ ASCII sources for one canonical char): original walk.
     let mut at = 0;
     loop {
         if let Some(end) = canon_fold_match_at(text, at, &pat, multibyte, trt) {
