@@ -2894,7 +2894,7 @@ fn yes_or_no_p_should_use_dialog(runtime: &impl KeyboardInputRuntime) -> bool {
 /// visible while waiting for the key. A nil/omitted or empty prompt shows
 /// nothing (GNU only echoes a non-empty string prompt).
 pub(crate) fn display_read_prompt(eval: &mut super::eval::Context, args: &[Value]) {
-    if let Some(prompt) = args.first().and_then(|v| v.as_lisp_string())
+    if let Some(prompt) = args.first().and_then(|v| eval.lisp_string(*v))
         && !prompt.is_empty()
     {
         eval.set_current_message(Some(prompt.clone()));

@@ -58,7 +58,9 @@ fn expect_integer_or_marker(val: &Value) -> Result<i64, Flow> {
     }
 }
 
-fn expect_lisp_string(val: &Value) -> Result<&'static crate::heap_types::LispString, Flow> {
+/// See `builtins::expect_lisp_string`: the borrow is tied to VAL's place, not
+/// to `'static` (DIVERGENCES.md 163).
+fn expect_lisp_string(val: &Value) -> Result<&crate::heap_types::LispString, Flow> {
     val.as_lisp_string().ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,

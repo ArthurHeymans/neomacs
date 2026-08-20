@@ -11999,6 +11999,75 @@ mod ownership_tests {
         );
     }
 
+    /// The string-side twin of `a_reclaimed_cons_is_recognizable_as_dead`.
+    ///
+    /// GNU `sweep_strings` (src/alloc.c:1878-1882) ends a dead string with
+    ///
+    /// ```c
+    ///   /* Reset the strings's `data' member so that we
+    ///      know it's free.  */
+    ///   s->u.s.data = NULL;
+    /// ```
+    ///
+    /// and reads the marker back at :1851 and :1892.  `LispString::drop` only
+    /// nulled `data` for a string that OWNED its bytes
+    /// (`release_owned_storage` returns early when `storage_capacity == 0`),
+    /// so a swept BORROWED payload — every pdump-mapped and static-rodata
+    /// string — stayed byte-identical to a live one and a stale borrow of it
+    /// read on silently (DIVERGENCES.md 163).
+    #[test]
+    fn a_reclaimed_string_is_recognizable_as_dead() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // The rooted string keeps the arena page populated, so the doomed
+        // slot's storage is still mapped and readable after the sweep — the
+        // same arrangement the cons pin above relies on.
+        let rooted = heap.alloc_string(crate::heap_types::LispString::from_utf8("rooted"));
+        let doomed = heap.alloc_string(crate::heap_types::LispString::from_utf8("doomed"));
+        let doomed_ptr = doomed.as_string_ptr().unwrap();
+        assert!(
+            !unsafe { (*doomed_ptr).data.is_reclaimed() },
+            "a live string must not look reclaimed",
+        );
+
+        heap.collect_exact(std::iter::once(rooted));
+
+        assert!(
+            !unsafe { (*rooted.as_string_ptr().unwrap()).data.is_reclaimed() },
+            "a rooted string must not be marked free",
+        );
+        assert!(
+            unsafe { (*doomed_ptr).data.is_reclaimed() },
+            "a reclaimed string must carry GNU's free marker (data == NULL, \
+             src/alloc.c:1878-1882): without it a `&LispString` that outlived \
+             its object is indistinguishable from a live borrow",
+        );
+    }
+
+    /// The borrowed-payload half of the parity, which is the half that was
+    /// actually missing: `release_owned_storage` returns early for a string
+    /// whose bytes it does not own, so before DIVERGENCES.md 163 a swept
+    /// mapped/rodata string kept a perfectly valid-looking `data` pointer.
+    #[test]
+    fn a_reclaimed_string_with_borrowed_bytes_is_also_marked_free() {
+        crate::test_utils::init_test_tracing();
+        // Static, NUL-terminated: exactly the shape a pdump-mapped or
+        // static-rodata payload has (`storage_capacity == 0`).
+        static BYTES: &[u8] = b"borrowed\0";
+        let borrowed =
+            unsafe { crate::heap_types::LispString::from_mapped_bytes(BYTES.as_ptr(), 8, 8, -1) };
+        assert!(!borrowed.is_reclaimed());
+        let mut owner = std::mem::ManuallyDrop::new(borrowed);
+        unsafe { std::ptr::drop_in_place(&mut *owner as *mut crate::heap_types::LispString) };
+        assert!(
+            owner.is_reclaimed(),
+            "GNU nulls `data` for EVERY dead string, not only for one whose \
+             bytes it owned (src/alloc.c:1878-1882)",
+        );
+    }
+
     /// `verify_marked_objects_owned` was written for the missing-root class
     /// and had zero callers — 161 listed it as "dead code written for exactly
     /// this failure". It is wired into `complete_collection` now, behind a

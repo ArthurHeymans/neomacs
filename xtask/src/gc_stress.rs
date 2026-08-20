@@ -46,8 +46,16 @@ const DEFAULT_TIMEOUT_SECS: u64 = 300;
 
 pub(crate) fn usage_text() -> &'static str {
     "\
-       cargo xtask gc-stress [--editor PATH] [--probe-dir DIR] [--filter SUBSTR]
-                             [--address-limit-kb N] [--timeout-secs N] [--list]
+       cargo xtask gc-stress [--editor PATH] [--probe-dir DIR] [--out-dir DIR]
+                             [--filter SUBSTR] [--address-limit-kb N]
+                             [--timeout-secs N] [--list]
+
+  --editor PATH is the ONLY way to point this at a binary other than
+  target/release/neomacs. NEOVM_BINARY_PATH (which the oracle harness reads)
+  is not consulted here; the 'against <path>' line printed at startup is the
+  authoritative statement of what is being stressed.
+  Probe stdout/stderr and the child's TMPDIR all land under --out-dir
+  (default ./tmp/gc-stress).
 "
 }
 
@@ -222,6 +230,16 @@ fn run_probe(options: &Options, probe: &Probe) -> Result<()> {
     let stdout_file = std::fs::File::create(&stdout_path)?;
     let stderr_file = std::fs::File::create(&stderr_path)?;
 
+    // A probe that calls `make-temp-file` / `with-temp-file` writes wherever
+    // `temporary-file-directory` points, which is `$TMPDIR` — inherited from
+    // whoever ran the harness, i.e. `/tmp`, a mount this project treats as
+    // unusable (feedback_never_slash_tmp). Route the child's temp files under
+    // the harness's own out-dir so every artifact a probe leaves behind lands
+    // in `./tmp/` with the probe's stdout and stderr.
+    let probe_tmp = options.out_dir.join("tmp");
+    std::fs::create_dir_all(&probe_tmp)
+        .map_err(|err| format!("cannot create {}: {err}", probe_tmp.display()))?;
+
     // `ulimit -v` has no portable Rust equivalent without a libc dependency,
     // and the cap has to apply to the CHILD, so go through the shell.
     let script = format!(
@@ -238,6 +256,7 @@ fn run_probe(options: &Options, probe: &Probe) -> Result<()> {
         // Debug-only inside neovm-core; harmless on a release binary, and the
         // right thing when someone points this at a debug build.
         .env("NEOVM_GC_VERIFY_MARKED", "1")
+        .env("TMPDIR", &probe_tmp)
         .stdout(stdout_file)
         .stderr(stderr_file)
         .spawn()

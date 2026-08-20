@@ -1167,7 +1167,7 @@ fn predicate_matches_node(
         return Ok(false);
     }
 
-    if let Some(pattern) = predicate.as_lisp_string() {
+    if let Some(pattern) = eval.lisp_string(predicate) {
         return crate::emacs_core::regex::predicate_match(pattern, node.kind())
             .map_err(|err| treesit_invalid_predicate(err.to_string(), predicate));
     }
@@ -1287,7 +1287,7 @@ fn predicate_matches_node(
         };
     }
 
-    if let Some(pattern) = head.as_lisp_string() {
+    if let Some(pattern) = eval.lisp_string(head) {
         if !predicate_function_p(eval, tail) {
             return Err(treesit_invalid_predicate(
                 "Dotted tree-sitter predicates expect a callable cdr",

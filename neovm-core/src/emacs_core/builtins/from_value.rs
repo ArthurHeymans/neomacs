@@ -67,13 +67,22 @@ impl FromValue for f64 {
     }
 }
 
-/// `stringp` — borrow the heap string payload. The borrow is only valid
-/// while no GC runs, exactly like `expect_lisp_string`.
-impl FromValue for &'static LispString {
-    fn from_value(_eval: &mut eval::Context, value: Value) -> Result<Self, Flow> {
-        expect_lisp_string(&value)
-    }
-}
+// `impl FromValue for &'static LispString` was here, and it was the one shape
+// in this file that could not be made honest (DIVERGENCES.md 163).
+//
+// `FromValue::from_value` takes `value: Value` BY VALUE, so a borrow derived
+// from it cannot outlive the call — yet `Self = &'static LispString` demands
+// exactly that. It only compiled because `Value::as_lisp_string` launders
+// `'static`; the moment `builtins::expect_lisp_string` started eliding its
+// lifetime to the argument's, rustc rejected it with E0515, "returns a value
+// referencing data owned by the current function". A conversion whose result
+// type outlives its own input is not expressible, and no typed builtin
+// declared a `&'static LispString` parameter, so it had no users to keep.
+//
+// `StringDesignator` below is the shape that works: a private `&'static`
+// field with no public constructor and an accessor that reborrows from
+// `&self`, so the borrow is bounded by the designator's own scope. Anything
+// that wants a borrowed string parameter should copy that, not this.
 
 /// `stringp` — lossy UTF-8 decode for text-only processing (mirrors
 /// `expect_string_lossy`; raw eight-bit bytes become U+FFFD).

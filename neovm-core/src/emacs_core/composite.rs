@@ -871,7 +871,7 @@ pub(crate) fn builtin_find_composition_internal(
     };
     let comp = Value::symbol("composition");
 
-    let found = if let Some(text) = args[2].as_lisp_string() {
+    let found = if let Some(text) = ctx.lisp_string(args[2]) {
         let len = text.schars() as i64;
         if pos < 0 || pos > len {
             return Err(signal(

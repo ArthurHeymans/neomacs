@@ -2560,7 +2560,15 @@ impl Buffer {
             .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
     }
 
-    pub fn file_name_lisp_string(&self) -> Option<&'static crate::heap_types::LispString> {
+    /// Borrow `buffer-file-name`'s payload, tied to the BUFFER's borrow.
+    ///
+    /// DIVERGENCES.md 163: returning `&'static` here laundered a `&self`
+    /// borrow of a buffer — itself obtained from `&ctx.buffers` — into a
+    /// reference with no owner, so a caller could keep reading the name after
+    /// the slot had been overwritten and the old string collected. Eliding to
+    /// `&self` makes that a borrow error and costs nothing: every caller
+    /// either clones immediately or uses the name inside the same `&`-borrow.
+    pub fn file_name_lisp_string(&self) -> Option<&crate::heap_types::LispString> {
         self.file_name_value().as_lisp_string()
     }
 
@@ -2587,9 +2595,9 @@ impl Buffer {
             .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
     }
 
-    pub fn auto_save_file_name_lisp_string(
-        &self,
-    ) -> Option<&'static crate::heap_types::LispString> {
+    /// Tied to the buffer's borrow, not `'static` — see
+    /// `file_name_lisp_string` (DIVERGENCES.md 163).
+    pub fn auto_save_file_name_lisp_string(&self) -> Option<&crate::heap_types::LispString> {
         self.auto_save_file_name_value().as_lisp_string()
     }
 
