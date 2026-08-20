@@ -984,6 +984,27 @@ impl<'a> BufferChars<'a> {
         let byte_pos = match self.cursor {
             Some((c_idx, c_byte, _)) if idx == c_idx => c_byte,
             Some((c_idx, c_byte, c_width)) if idx == c_idx + 1 => c_byte.add_len(c_width),
+            // Backward step (`char-before`-style peeks — the parser does
+            // these constantly): back over continuation bytes (at most 4 —
+            // the 5-byte internal encoding's worst case) instead of a full
+            // char->byte conversion per peek.
+            Some((c_idx, c_byte, _)) if idx + 1 == c_idx && c_byte.get() > 0 => {
+                let mut pos = c_byte.get() - 1;
+                if self.multibyte {
+                    let mut steps = 0;
+                    while pos > 0
+                        && steps < 4
+                        && self
+                            .buf
+                            .emacs_byte_at_pos(EmacsBytePos::new(pos))
+                            .is_some_and(|b| (b & 0xC0) == 0x80)
+                    {
+                        pos -= 1;
+                        steps += 1;
+                    }
+                }
+                EmacsBytePos::new(pos)
+            }
             _ => buffer_char_to_emacs_byte_pos(self.buf, self.base_char.add_len(CharLen::new(idx))),
         };
         let code = self.code_at_byte(byte_pos);
