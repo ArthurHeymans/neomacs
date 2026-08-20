@@ -278,13 +278,36 @@ text records only as much of the child's output as had been read" buffer))))
   (with-current-buffer buffer
     (buffer-substring-no-properties (point-min) (point-max))))
 
-(defun abs-test-drain-processes ()
-  "Wait until no subprocess is alive, then drain pending output and sentinels."
+(defun abs-test-await-flymake ()
+  "Wait until every Flymake backend this buffer started has REPORTED.
+Not until its processes are dead.  A Flymake backend turns the child's
+output into diagnostics inside the process sentinel, so the diagnostics
+this fixture pins do not exist until that sentinel has run -- and a
+subprocess is observably dead well before then.  GNU reaps the child in
+`handle_child_signal', which sets `raw_status_new' (src/process.c:7748),
+all `process-status' needs to answer `exit' (src/process.c:1188-1189), and
+in the same pass calls `delete_read_fd' (src/process.c:7760), so the pipe
+stops being read at exactly that moment; what the child had already written
+is recovered only by the drain loop in `status_notify'
+\(src/process.c:7896-7911), which runs just before `exec_sentinel'
+\(src/process.c:7937).
+
+The condition below is Flymake's own test for `every backend is done' --
+`flymake--handle-report' marks a backend reported (lisp/progmodes/flymake.el:1117)
+after publishing its diagnostics, and flymake.el:1123-1124 compares exactly
+these two sets to decide the run has settled."
   (let ((deadline (+ (float-time) 60)))
-    (while (and (cl-some #'process-live-p (process-list))
+    (while (and (cl-set-difference (flymake-running-backends)
+                                   (flymake-reporting-backends))
                 (< (float-time) deadline))
-      (accept-process-output nil 0.05)))
-  (while (accept-process-output nil 0.05)))
+      (accept-process-output nil 0.05))
+    (when (cl-set-difference (flymake-running-backends)
+                             (flymake-reporting-backends))
+      (error "abs-test-await-flymake: backends %S never reported; the \
+diagnostics below would record only as much of the checker's output as had \
+been read"
+             (cl-set-difference (flymake-running-backends)
+                                (flymake-reporting-backends))))))
 
 (defun abs-test-compilation-text ()
   "Return the compilation buffer with its wall-clock stamps replaced."
@@ -322,7 +345,7 @@ text records only as much of the child's output as had been read" buffer))))
 (defun abs-test-flymake-diagnostics ()
   "Run one flymake check in the current buffer and return its diagnostics."
   (flymake-start)
-  (abs-test-drain-processes)
+  (abs-test-await-flymake)
   (mapcar (lambda (diagnostic)
             (list (flymake-diagnostic-type diagnostic)
                   (flymake-diagnostic-beg diagnostic)

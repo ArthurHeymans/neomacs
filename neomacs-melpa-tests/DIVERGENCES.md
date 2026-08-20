@@ -8575,6 +8575,16 @@ Status: FIXED (harness defect).  The underlying `rg-filter' behaviour is
 upstream rg.el's and is unchanged; it is reproduced identically by GNU Emacs
 and Neomacs, so there is nothing to fix in the engine.
 
+*Note added 2026-08-20 by entry 165.*  This entry's screening question is now
+closed for the whole corpus.  Its population -- packages that put a function on
+`compilation-filter-hook' -- was re-derived independently and is 19 files in 18
+packages out of 792 cached, which matches entry 144's count rather than entry
+140's prose.  Every one of the 18 has now been audited: `ag', `rg' and `rustic'
+here, `rake' in 140, and the remaining fourteen in 144.  Nothing is outstanding
+for the read-boundary hazard except `haskell-mode', whose filter is exposed but
+whose suite never loads `haskell-compile' (verified: `haskell_mode/mod.rs:11-16'
+requires `haskell-mode' and four siblings, never `haskell-compile').
+
 ## 134. An undecided end-of-line type meant "leave it alone" where GNU means "detect it", so every file, string and subprocess read as `raw-text`, `undecided` or `utf-8` kept its CR LF -- FIXED
 
 Handed over by entry 131, which met this while fixing the asynchronous
@@ -10863,6 +10873,21 @@ Status: FIXED (harness defect, in four fixtures).  No package behaviour changed
 and no engine behaviour is implicated: every measurement above was reproduced
 identically by GNU Emacs 31.0.90 and Neomacs.
 
+*Note added 2026-08-20 by entry 165.*  The handover list at the end of this
+entry has been worked to the end, and two of its four readings were checked
+against the source rather than inherited.  `ggtags-global-filter'
+(ggtags.el:1580-1608), `haskell-compilation-filter-hook'
+(haskell-compile.el:129-140) and `overseer--remove-header' (overseer.el:79-81)
+all read exactly as described here.  `go-guru--compilation-filter-hook' does
+not: entry 144 showed the duplicate post-processing is idempotent, and the row
+is unreachable anyway -- `go_mode.rs' requires `go-mode' and mentions `go-guru'
+zero times.  The verbatim TODO this entry quotes is at go-guru.el:222-224, not
+:219-222.
+
+This entry's own count of "thirteen packages remain" is fourteen, and its
+"17 packages" is eighteen; 144 corrected both, and an independent re-derivation
+agrees with 144.
+
 ## 141. Five platform names were bound without being declared, so `let` bound them lexically, four held nil where GNU holds a value, and one of them is not a variable in any GNU build -- FIXED
 
 The residual entry 138 handed over: of the platform names it kept, five are
@@ -12068,6 +12093,39 @@ read-boundary hazard and six for 140's gate hazard, with `cargo` and `overseer`
 carrying both).  No package behaviour changed and no engine behaviour is
 implicated: every measurement above was reproduced identically by GNU Emacs
 31.0.90 and Neomacs.
+
+*Note added 2026-08-20 by entry 165.*  Three corrections and one closure.
+
+The residual recorded above -- "`rg` and `ant` gate causally on
+`get-buffer-process` going nil but return quietly if their deadline expires
+rather than signalling" -- was not accurate when it was written.  Both signal:
+`rg-test-wait' raises "search process never exited" inline (rg/mod.rs:158-163),
+and all three `ant' call sites wrap the wait in `unless ... error'
+(ant/workflows.rs:42-44, :58-60, :134-137).  Both predate this entry (ant in
+3060e3887, 2026-07-28; rg in 5c574c9b0, 2026-08-15; this entry in df6396f1f,
+2026-08-18).  Nothing to fix.
+
+The two fixtures recorded here as found-and-not-fixed -- `abs_mode`'s `*erlang*`
+pin and `helm_git_grep`'s `git grep` wait -- are fixed in entry 165, and so is
+`abs_mode`'s `abs-test-drain-processes`, which this entry did not name and which
+was the only gate in front of a Flymake diagnostics pin.
+
+The classification of `(get-buffer-process BUF)` going nil as *causal* is
+correct, and now for a measured reason rather than an assumed one: GNU removes
+the process at src/process.c:7926 and runs the sentinel at :7937 with no Lisp in
+between, and Neomacs runs the sentinel first and removes afterwards, so in both
+editors the process is gone from `process-list' only once the sentinel has run.
+Entry 165 measures that, and reports the ordering difference itself as an
+engine divergence.
+
+The second screen's scoping does not hold, though.  Intersecting the
+process-wait idiom with packages that touch `compilation-start',
+`define-compilation-mode', `compilation-mode', `grep-mode' or
+`compilation-shell-minor-mode' selects 33 suites, but the hazard has nothing to
+do with compilation -- a pin on a child's output in an ordinary buffer carries
+it identically.  Re-screening on the idiom alone found 37 loop sites in 28
+suites; entry 165 fixes seven of them in four suites and makes the screen a
+test.
 
 ## 145. An indirect buffer recorded its own missing modtime in the first-change undo entry, so undoing back to the saved text never cleared the modified flag -- FIXED
 
@@ -20831,3 +20889,308 @@ checkout for part of the run -- which is exactly why the gate is
 across three separately linked binaries.
 
 Status: FIXED.
+
+## 165. Both of entry 133's sweeps were already finished, so the finding is the screen itself: `process-live-p` going nil is the exact instant GNU STOPS reading the pipe, it means the opposite for a pipe process than for a child, and the corpus-wide re-screen -- freed from 144's compilation-only intersection -- found seven more clock-gated pins in four suites -- FIXED, and the ordering that makes the gate safe is INVERTED in this port
+
+The brief for this entry described two open sweeps: thirteen packages still
+unaudited for entry 133's `compilation-filter-hook' hazard, and a
+`process-live-p' fixture hazard whose corpus "was never swept".  Neither was
+open.  Entry 144, published two days earlier, audited the remaining packages to
+the end of the corpus and ran the fixture screen over all 792 suites.  So the
+first thing this entry owes is a check of that claim, and the second is the
+question 144 did not ask.
+
+### Sweep A is closed, and the four readings it handed on were checked
+
+The population was re-derived rather than inherited, with the same command 140
+and 144 used:
+
+```
+$ grep -rl --include='*.el' compilation-filter-hook tmp/melpa/source-package-cache/
+ag  arduino-cli-mode  buttercup  cargo  embark  embark-consult  ggtags
+go-mode(go-guru.el)  haskell-mode(haskell-compile.el)  inf-ruby  overseer
+rake  rg (x2)  rspec-mode  rustic  scala-mode  tree-sitter  tsc
+                                    # 19 files, 18 packages of 792 cached
+```
+
+19 files, 18 packages, 792 cached directories -- 144's numbers, not 140's.  All
+18 are audited: `ag', `rg' and `rustic' in 133, `rake' in 140, the other
+fourteen in 144.  Nothing remains.
+
+140's four "already read as exposed" were re-read against the sources:
+
+* `ggtags-global-filter' (ggtags.el:1580-1608) -- as described.  The
+  `re-search-backward' bounded below by `compilation-filter-start' is at
+  :1590-1593, and the `(count-lines compilation-filter-start (point))' that
+  feeds `ggtags-global-output-lines' is at :1594-1595.
+* `haskell-compilation-filter-hook' (haskell-compile.el:129-140) -- as
+  described.  `delete-matching-lines' with a `$'-anchored regexp over a region
+  ending at `(point)' is at :133-136.
+* `overseer--remove-header' (overseer.el:79-81) -- as described:
+  `delete-matching-lines' over `(point-min)' .. `(point-max)', installed at
+  :138.
+* `go-guru--compilation-filter-hook' -- **not** as described, and 144 was right
+  to say so.  The upstream TODO the brief asked to be quoted is real and is at
+  go-guru.el:222-224 (144 cites :219-222): "not quite right: the filter may be
+  called with chunks of output containing incomplete lines.  Moving to
+  beginning-of-line may cause duplicate post-processing."  But the row is
+  unreachable in this corpus -- `go_mode.rs' requires `cl-lib', `seq' and
+  `go-mode' (:10-12) and contains the string `go-guru' zero times -- and 144
+  measured the duplicate processing as idempotent.  A documented TODO is a
+  reason to look, not a finding.
+
+`haskell-mode' is the one exposed filter with nothing done about it, and that is
+correct: `haskell_mode/mod.rs:11-16' requires `haskell-mode',
+`haskell-align-imports', `haskell-decl-scan', `haskell-sort-imports' and
+`haskell-collapse', never `haskell-compile', so the hook is never installed and
+no process is ever started.
+
+### The root cause, which neither 140 nor 144 stated
+
+Both entries say process death is not the output having been read.  Neither says
+why it can be observed *early*, and the answer is sharper than "a bit early".
+
+`handle_child_signal' (src/process.c:7691, loop at :7736-7762) does two things
+to a terminated child in a single pass:
+
+```c
+	  p->raw_status = status;
+	  p->raw_status_new = 1;          /* :7747-7748 */
+	  ...
+	      p->alive = 0;               /* :7755 */
+	      if (p->infd >= 0) clear_desc_flag = 1;
+	      if (clear_desc_flag) delete_read_fd (p->infd);   /* :7760 */
+```
+
+`raw_status_new` is all `Fprocess_status' needs -- it calls `update_status'
+itself at src/process.c:1188-1189 -- so `process-live-p'
+(lisp/subr.el:3533-3540) goes nil right there.  And `delete_read_fd' at :7760
+removes the child's descriptor from the read set, so the event loop has
+**stopped reading the pipe** at that same instant.
+
+Whatever the child had already written is therefore recovered by exactly one
+thing: the explicit drain loop inside `status_notify', which reads `p->infd'
+directly regardless of the fd set (src/process.c:7896-7911) and runs
+immediately before `exec_sentinel' (:7937).  `compilation-handle-exit' marks its
+own text at lisp/progmodes/compile.el:2630-2631, which is why 140's marker
+works.
+
+So `process-live-p' going nil is not a slightly-too-early approximation of "the
+output ended".  It is the precise moment ordinary reading stops, and everything
+still queued arrives strictly afterwards.  That is why the window 140 measured
+at 3 runs in 15 exists at all.
+
+### Why a bare grep over-selects: for a pipe, death IS the output ending
+
+The same Lisp predicate means the opposite thing depending on what kind of
+process it is asked about, and this is what makes the mechanical screen usable
+rather than noisy.
+
+A pipe or network connection has no pid, so `handle_child_signal' cannot reach
+it.  Its status changes in one place only: when `read_process_output' returns 0.
+
+```c
+	      else if (nread == 0 && PIPECONN_P (proc))     /* :6072-6079 */
+		{
+		  XPROCESS (proc)->tick = ++process_tick;
+		  deactivate_process (proc);
+		  if (EQ (XPROCESS (proc)->status, Qrun))
+		    pset_status (XPROCESS (proc), list2 (Qexit, make_fixnum (0)));
+		}
+```
+
+A pipe read returns 0 only when the write end is closed and nothing is buffered,
+so for these `process-live-p' going nil *is* EOF -- causal, not the clock.  The
+network and serial cases land in the following `else' (:6082-6090) with the same
+property.  `PIPECONN_P' is `type == Qpipe' (:229), and `make-process :stderr
+BUFFER' builds exactly such a process, via `Fmake_pipe_process'
+(src/process.c:1882-1889).
+
+**Hypothesis eliminated.**  `blacken' looked like a textbook instance and is
+not.  `blacken-call-bin' (blacken.el:87-110) gives `black' a `:stderr
+error-buffer', sets both sentinels to `(lambda (process event))', and then waits
+only for the **main** process: `(while (process-live-p process)
+(accept-process-output process nil nil t))'.  It never waits for the stderr
+pipe at all, and the suite pins that pipe's buffer -- `:error-buffer (:text
+"owned black failure: invalid syntax Ω\n" ...)' (blacken/mod.rs:506) --
+behind `blacken374-test-settle-error-pipe' (:195-203), which is
+`process-live-p' plus one `accept-process-output'.  Every surface feature of the
+defect is present.  It is nevertheless safe, because `*blacken-error*' is a
+`PIPECONN_P' process and its death is its EOF.  A fix here would have been
+noise, and the reasoning is now recorded in the screen itself so the next reader
+does not repeat it.
+
+### Hypothesis eliminated: `get-buffer-process' going nil, and an engine divergence behind it
+
+144 classifies `(get-buffer-process BUF)' going nil as causal, alongside the
+`compilation-handle-exit' property.  In GNU that is not obviously true:
+`status_notify' calls `remove_process' at src/process.c:7926 -- and
+`delete-exited-processes' defaults to 1 (:8920), and `remove_process'
+(:958-966) deletes the entry from `Vprocess_alist' -- but `exec_sentinel' is
+eleven lines later at :7937.  Read as written, the process is gone before its
+sentinel runs, which would make the gate wrong.
+
+It is not wrong, because no Lisp runs between :7926 and :7937; a fixture loop
+cannot observe the window.  The classification stands.
+
+Testing that against both editors, however, turned up something else.  The order
+is **inverted in this port**: `Context::run_process_status_notification'
+(neovm-core/src/emacs_core/process.rs:8540) drains (:8558-8574), runs the
+sentinel (:8616), and only then deactivates and reaps (:8631-8633).  The comment
+block immediately above the reap (process.rs:8619-8625) describes GNU's removal
+semantics correctly and does not mention that it has been moved.  The port is
+also internally inconsistent: the explicit-delete paths do match GNU --
+`delete-process' reaps and then notifies (process.rs:13814-13817), as does
+`kill_buffer_processes' (:7721-7724) -- so `delete-process''s sentinel sees the
+process gone while an *exit* sentinel sees it present.
+
+Measured, `-Q --batch`, both editors, on a `make-process` running
+`sh -c "printf hi"` whose sentinel inspects itself:
+
+```
+;; GNU 31.0.90
+PW165-SENTINEL-VISIBILITY: (:event "finished" :get-buffer-process nil
+                            :get-process nil :in-process-list nil :buffer-text "hi")
+PW165-AFTER: get-buffer-process=nil
+;; Neomacs
+PW165-SENTINEL-VISIBILITY: (:event "finished" :get-buffer-process t
+                            :get-process t :in-process-list t :buffer-text "hi")
+PW165-AFTER: get-buffer-process=nil
+```
+
+Both agree once the sentinel has returned, which is why every fixture that gates
+on `get-buffer-process' is safe in both editors -- in GNU because removal and
+the sentinel are adjacent with no Lisp between, in Neomacs because removal is
+strictly after.  The divergence is confined to what a sentinel sees about
+itself, and it is real.  The probe is `tmp/pw165-sentinel-visibility.el'.
+
+This is **found and NOT fixed**.  The correction is a reorder of
+process.rs:8615-8634 to reap before the sentinel, and it has one prerequisite a
+future pass must check first: `run_process_sentinel_callback'
+(process.rs:7975-7996) builds its argument with `Value::make_process(pid)`, so
+whether it survives an earlier reap depends on the reaped process still
+resolving, and `notify_process_status_sentinel' (:7998-8005) reaches for
+`get_any' precisely because the deleted table has to be consulted.  The related
+comment at process.rs:8154-8164 records that this bug class already bit this
+file once, on the stderr pipe, in the other direction.  It deserves its own
+entry, its own red pin and its own oracle run, not a hurried reorder at the end
+of this one.
+
+### The question 144 did not ask: the screen is not about compilation
+
+144's second screen took the fixtures carrying a process-wait idiom (141 suites)
+and intersected them with the suites whose *package* touches
+`compilation-start', `define-compilation-mode', `(compilation-mode)',
+`grep-mode' or `compilation-shell-minor-mode' (33 suites), then read those 33.
+
+That scoping is not a property of the hazard.  Nothing about a truncated read
+requires a compilation buffer; a pin on a child's output in an ordinary buffer
+carries it identically, and 144 found `abs_mode''s `*erlang*' comint case only
+because it happened to be in the same file as a compilation one.
+
+Re-screening on the idiom alone -- `process-live-p' used as a `while' loop
+condition, no package reading at all -- gives **37 sites in 28 suites**, of
+which 22 suites were outside 144's intersection entirely.  Reading all 37:
+
+| verdict | sites | why |
+|---|---|---|
+| teardown | 13 | `delete-process' already called; the loop only confirms death |
+| causal witness | 6 | waits for a prompt the child wrote or a flag its sentinel set, and signals |
+| pipe EOF | 2 | the awaited process is `PIPECONN_P'; death is EOF (`blacken') |
+| output not pinned | 9 | pins a file the child closed, an exit status, or the liveness itself |
+| **clock-gated pin** | **7** | **fixed below** |
+
+### The seven, and why each is provable by reading
+
+* `pythonic/mod.rs:422` is the clearest case in the corpus.  The pin is
+  `:output "phase=prepare\nphase=publish\n" :events ((exit "finished"))`:
+  `:output` is assembled by the process **filter**, `:events` is pushed by the
+  **sentinel**, and the case is named
+  `asynchronous_process_streams_output_invokes_sentinel_and_exposes_process_contract`.
+  It waited for `process-live-p' plus one `accept-process-output'.  It now waits
+  for its own recorded sentinel event -- the witness was already in the fixture,
+  unused.
+* `apples_mode/workflows.rs` had the same inline shape copied into four cases
+  (:144, :214, :294, :307).  `apples-do-applescript' computes the value each
+  case pins *inside* the sentinel it installs -- `(funcall (or callback
+  'apples-result) (apples-buffer-string buf) ...)`, apples-mode.el:498-504 -- so
+  the pin cannot be taken before that sentinel has run.  All four now attach an
+  `:after' observer to `(process-sentinel process)' and signal if it never
+  fires.
+* `abs_mode/mod.rs:281` -- `abs-test-drain-processes', "wait until no subprocess
+  is alive, then drain pending output and sentinels", was the only gate in front
+  of `abs-test-flymake-diagnostics' (:322), which pins diagnostics a Flymake
+  backend builds from the checker's output in its process sentinel.  144 fixed
+  the `*erlang*' helper in the same file and left this one.  It now waits on
+  Flymake's own settled condition -- `(cl-set-difference (flymake-running-backends)
+  (flymake-reporting-backends))' going nil, which is the test flymake.el itself
+  uses at :1123-1124, with `flymake--handle-report' marking a backend reported
+  at :1117 after publishing its diagnostics.
+* `pipenv/mod.rs:73` pinned `:output "\nProcess shell finished\n"` -- the
+  sentinel's own line, and the entire pinned value -- behind `process-live-p'
+  followed by `(dotimes (_ 2) (accept-process-output process 0.02))`, under a
+  comment that says "Settle the real sentinel".  A fixture that names the fact
+  it needs and then waits out a fixed number of reads instead is the whole
+  pattern in one line.
+
+And the two entry 144 recorded as found-and-not-fixed:
+
+* `abs_mode`'s `*erlang*` pin ends with `Process inferior-erlang finished`,
+  which `internal-default-process-sentinel' writes.
+* `helm_git_grep/mod.rs:266` read the `git grep` output buffer the moment its
+  wait returned.  Its own `start-process' stand-in (:237-259) creates the
+  process, which is the one moment guaranteed to precede the sentinel, so the
+  witness is attached there.
+
+No pinned value moved in any of them.  `helm_git_grep' still reports
+`:process (:status exit :exit 0 :stable t)`, and `pipenv' still reports
+`:outcome (:status exit :exit 0)`.
+
+### The screen is a property of the fixture, so it is now a test
+
+`neomacs-melpa-tests/src/parity_tests/process_wait_audit.rs` classifies every
+`process-live-p' loop condition in the corpus with an enum verdict --
+`Teardown', `CausalWitness', `PipeEof', `OutputNotPinned', `NeedsAudit' --
+records the count per suite, and fails when a suite appears that is not
+classified, when a listed suite's count changes, or when a listed suite's last
+loop disappears.  The module docstring carries the GNU citations above, because
+the reason a `PipeEof' verdict is legitimate is exactly the thing a future
+reader will otherwise re-derive.
+
+Both halves were broken on purpose and reported the intended failure:
+
+```
+;; entry deleted        => blacken: 2 `process-live-p' loop(s) and no entry in PROCESS_WAIT_AUDIT...
+;; count changed to 4   => tide: PROCESS_WAIT_AUDIT records 4 `process-live-p' loop(s) but the fixture now has 1...
+;; restored             => 2 tests run: 2 passed, 933 skipped
+```
+
+`NEEDS_AUDIT_SITE_BUDGET` is a ratchet: it equals the sites still carrying the
+shape, and the test fails if that number grows.  It is 6 today.
+
+### Found and NOT fixed
+
+1. **The sentinel/removal inversion** in
+   `neovm-core/src/emacs_core/process.rs:8615-8634`, measured above.  An exit
+   sentinel in this port sees its own process in `process-list'; GNU's does not.
+   Needs its own entry.
+2. **Six sites in four suites** still gate a pin on the clock, recorded as
+   `NeedsAudit' with citations: `auctex_cluttex/workflows.rs:408,517` (pins
+   `:next "View"`, `:messages ("ClutTeX finished successfully.")` and
+   `(memq process compilation-in-progress)`, all written or cleared by AucTeX's
+   sentinel); `auctex_latexmk/mod.rs:145` (pins a transcript ending
+   `TeX Output finished at <time>`); `browse_at_remote/mod.rs:413` (death, then
+   three unchanged samples of the very buffer `workflows.rs:417` pins);
+   `ast_grep/backends.rs:596` (no trailing drain at all, pins a
+   filter-populated candidate table -- weak today only because the stand-in
+   writes to a file).  Each needs its own reproduction before its gate can be
+   chosen, which is why none was changed blind.
+3. **`haskell-mode`'s exposed `compilation-filter-hook` function**, latent: the
+   suite never loads `haskell-compile'.  A future case that does will need the
+   pipe guard 144 gave `cargo', `overseer' and `ggtags'.
+
+Status: FIXED (harness defect, in five fixtures and seven gate sites), plus one
+engine divergence found, measured and deliberately left for its own entry.  No
+package behaviour changed, and every measurement above was reproduced by GNU
+Emacs 31.0.90 and Neomacs -- including the one where they disagree, which is the
+point of reporting it.

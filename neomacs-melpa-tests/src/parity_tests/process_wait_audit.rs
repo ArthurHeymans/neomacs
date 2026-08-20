@@ -60,16 +60,10 @@ use ProcessWaitVerdict::*;
 /// loops it has, and why each one is accounted for.
 const PROCESS_WAIT_AUDIT: &[(&str, usize, ProcessWaitVerdict, &str)] = &[
     (
-        "abs_mode",
-        1,
-        Teardown,
-        "abs-test-drain-processes; the *erlang* pin now gates on the sentinel",
-    ),
-    (
         "activity_watch_mode",
         1,
-        NeedsAudit,
-        "aw-test-drain waits out every process, then drains until nothing arrives",
+        OutputNotPinned,
+        "the pin is requests.log, a file the curl stand-in wrote and closed",
     ),
     (
         "agitjo",
@@ -81,31 +75,31 @@ const PROCESS_WAIT_AUDIT: &[(&str, usize, ProcessWaitVerdict, &str)] = &[
         "ast_grep",
         1,
         NeedsAudit,
-        "pins process-status and a log file the child wrote",
+        "backends.rs:596 has no trailing drain; pins a filter-populated candidate table",
     ),
     (
         "async_backup",
         1,
-        NeedsAudit,
-        "process-live-p plus one accept-process-output",
+        OutputNotPinned,
+        "pins a file the child wrote and closed, plus the status the wait establishes",
     ),
     (
         "async_status",
         1,
-        NeedsAudit,
-        "pins the exit status and a file the child wrote",
+        OutputNotPinned,
+        "pins 0.75 read off disk, re-read after the wait by async-status--update-items",
     ),
     (
         "auctex_cluttex",
         2,
         NeedsAudit,
-        "pins TeX-sentinel-function state behind process-live-p plus one accept",
+        "pins :next, :messages and compilation-in-progress, all sentinel-written",
     ),
     (
         "auctex_latexmk",
         1,
         NeedsAudit,
-        "pins the latexmk output buffer behind process-live-p plus one accept",
+        "pins a transcript ending in TeX Output finished at <time>, sentinel-written",
     ),
     (
         "blacken",
@@ -117,7 +111,7 @@ const PROCESS_WAIT_AUDIT: &[(&str, usize, ProcessWaitVerdict, &str)] = &[
         "browse_at_remote",
         2,
         NeedsAudit,
-        "one teardown; one VC-annotate wait followed by stable-sample rounds",
+        "mod.rs:413 death then three unchanged samples of the buffer workflows.rs:417 pins",
     ),
     (
         "find_file_in_project",
@@ -140,14 +134,14 @@ const PROCESS_WAIT_AUDIT: &[(&str, usize, ProcessWaitVerdict, &str)] = &[
     (
         "magit",
         1,
-        NeedsAudit,
-        "drains every descriptor while the main child lives; Git gets a separate stderr pipe",
+        OutputNotPinned,
+        "everything pinned after it is repository state read back synchronously",
     ),
     (
         "magit_gitflow",
         1,
-        NeedsAudit,
-        "returns the exit status, but the case reads Magit buffers afterwards",
+        OutputNotPinned,
+        "pins the current branch, git log lines and release.json, all read back",
     ),
     (
         "nodejs_repl",
@@ -172,12 +166,6 @@ const PROCESS_WAIT_AUDIT: &[(&str, usize, ProcessWaitVerdict, &str)] = &[
         1,
         OutputNotPinned,
         "the case pins the process's own liveness after its buffer is killed",
-    ),
-    (
-        "pipenv",
-        1,
-        NeedsAudit,
-        "its own comment says it is settling the real sentinel by the clock",
     ),
     (
         "python_mode",
@@ -206,8 +194,8 @@ const PROCESS_WAIT_AUDIT: &[(&str, usize, ProcessWaitVerdict, &str)] = &[
     (
         "treemacs_magit",
         1,
-        NeedsAudit,
-        "waits for Magit's child, then reads Treemacs node state",
+        CausalWitness,
+        "asserts the post-commit hook produced exactly one new idle timer",
     ),
     (
         "zeal_at_point",
@@ -219,7 +207,7 @@ const PROCESS_WAIT_AUDIT: &[(&str, usize, ProcessWaitVerdict, &str)] = &[
 
 /// The unaudited backlog DIVERGENCES.md 165 hands on.  This number may shrink,
 /// never grow: a new clock gate must be classified, not appended.
-const NEEDS_AUDIT_SITE_BUDGET: usize = 13;
+const NEEDS_AUDIT_SITE_BUDGET: usize = 6;
 
 fn parity_tests_directory() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/parity_tests")
