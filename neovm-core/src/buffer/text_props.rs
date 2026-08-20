@@ -2132,7 +2132,6 @@ impl TextPropertyTable {
         property_names: ReplacementPropertyNames<'_>,
     ) {
         self.mutation_tick += 1;
-        self.syntax_prop_tick += 1;
         match property_names {
             ReplacementPropertyNames::Preserve => {}
             ReplacementPropertyNames::Include(names) => self.property_names.include(names),
@@ -2185,6 +2184,7 @@ impl TextPropertyTable {
         self.mutation_tick += 1;
         if Self::name_is_syntax_relevant(name) {
             self.syntax_prop_tick += 1;
+            self.syntax_ranges_note_put(range);
         }
         if range.is_empty() {
             return false;
@@ -2470,6 +2470,59 @@ impl TextPropertyTable {
         }
     }
 
+    /// `put` of a syntax-relevant property over `range`: keep the cached
+    /// range list truthful incrementally (drop overlapped entries, insert the
+    /// put range as one merged entry — the put wrote ONE value across it, so
+    /// treating it as a single constant run is sound), then revalidate the
+    /// guard for the just-bumped tick. Invalidating instead would cost a
+    /// full-tree rebuild scan on the next query — per syntax-propertize
+    /// write, which typing triggers constantly.
+    fn syntax_ranges_note_put(&mut self, range: CharRange) {
+        let Ok(mut guard) = self.syntax_prop_ranges.lock() else {
+            return;
+        };
+        // Valid for the PRE-bump tick (we just incremented)?
+        if guard.0 != self.syntax_prop_tick {
+            *guard = (0, Vec::new());
+            return;
+        }
+        if !range.is_empty() {
+            guard
+                .1
+                .retain(|&(s, e)| e <= range.start() || s >= range.end());
+            let idx = guard.1.partition_point(|&(s, _)| s < range.start());
+            guard.1.insert(idx, (range.start(), range.end()));
+        }
+        guard.0 = self.syntax_prop_tick + 1;
+        // The any-flag is monotone under put; refresh it too.
+        self.syntax_prop_any.store(
+            ((self.syntax_prop_tick + 1) << 1) | 1,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+
+    /// Revalidate the cached ranges for the just-bumped tick without
+    /// touching their contents (see `remove_property_raw`).
+    fn syntax_ranges_revalidate(&mut self) {
+        let Ok(mut guard) = self.syntax_prop_ranges.lock() else {
+            return;
+        };
+        if guard.0 == self.syntax_prop_tick {
+            guard.0 = self.syntax_prop_tick + 1;
+            let packed = self
+                .syntax_prop_any
+                .load(std::sync::atomic::Ordering::Relaxed);
+            if packed >> 1 == self.syntax_prop_tick {
+                self.syntax_prop_any.store(
+                    ((self.syntax_prop_tick + 1) << 1) | (packed & 1),
+                    std::sync::atomic::Ordering::Relaxed,
+                );
+            }
+        } else {
+            *guard = (0, Vec::new());
+        }
+    }
+
     /// Whether ANY interval in the table carries a syntax-relevant plist key
     /// (see the `syntax_prop_any` field doc for the lazy memo contract).
     fn has_any_syntax_prop_interval(&self) -> bool {
@@ -2632,6 +2685,11 @@ impl TextPropertyTable {
         self.mutation_tick += 1;
         if Self::name_is_syntax_relevant(name) {
             self.syntax_prop_tick += 1;
+            // Removal keeps existing entries: an entry only BOUNDS a run —
+            // the value always resolves fresh from the tree, and a stale
+            // presence entry just yields a shorter-than-optimal run. What
+            // must not happen is the full-rebuild scan per propertize flush.
+            self.syntax_ranges_revalidate();
         }
         if range.is_empty() {
             return false;
@@ -2657,6 +2715,9 @@ impl TextPropertyTable {
     fn remove_all_properties_raw(&mut self, range: CharRange) {
         self.mutation_tick += 1;
         self.syntax_prop_tick += 1;
+        // Pure removal: stale-presence entries only shorten runs (values
+        // always resolve fresh) — keep them and revalidate the guard.
+        self.syntax_ranges_revalidate();
         if range.is_empty() {
             return;
         }
@@ -2677,6 +2738,14 @@ impl TextPropertyTable {
     fn set_properties_raw(&mut self, range: CharRange, plist: Vec<(Value, Value)>) {
         self.mutation_tick += 1;
         self.syntax_prop_tick += 1;
+        if plist
+            .iter()
+            .any(|&(name, _)| Self::name_is_syntax_relevant(name))
+        {
+            self.syntax_ranges_note_put(range);
+        } else {
+            self.syntax_ranges_revalidate();
+        }
         if range.is_empty() {
             return;
         }
@@ -2734,6 +2803,14 @@ impl TextPropertyTable {
     ) {
         self.mutation_tick += 1;
         self.syntax_prop_tick += 1;
+        if plist
+            .iter()
+            .any(|&(name, _)| Self::name_is_syntax_relevant(name))
+        {
+            self.syntax_ranges_note_put(range);
+        } else {
+            self.syntax_ranges_revalidate();
+        }
         if range.is_empty() {
             return;
         }
@@ -3309,6 +3386,13 @@ impl TextPropertyTable {
     fn append_shifted_raw(&mut self, other: &TextPropertyTable, offset: CharLen) {
         self.mutation_tick += 1;
         self.syntax_prop_tick += 1;
+        if other.has_any_syntax_prop_interval() {
+            if let Ok(mut guard) = self.syntax_prop_ranges.lock() {
+                *guard = (0, Vec::new());
+            }
+        } else {
+            self.syntax_ranges_revalidate();
+        }
         // Apply each inserted run's properties to its shifted range locally --
         // split at the run edges and set the run's plist on each covered
         // interval, O(log n) per run -- instead of extracting every run and
@@ -3378,6 +3462,13 @@ impl TextPropertyTable {
     ) {
         self.mutation_tick += 1;
         self.syntax_prop_tick += 1;
+        if other.has_any_syntax_prop_interval() {
+            if let Ok(mut guard) = self.syntax_prop_ranges.lock() {
+                *guard = (0, Vec::new());
+            }
+        } else {
+            self.syntax_ranges_revalidate();
+        }
         for run in other.intervals.runs() {
             if run.is_empty_plist() {
                 continue;
@@ -3403,6 +3494,13 @@ impl TextPropertyTable {
     fn merge_missing_shifted_raw(&mut self, other: &TextPropertyTable, offset: CharLen) {
         self.mutation_tick += 1;
         self.syntax_prop_tick += 1;
+        if other.has_any_syntax_prop_interval() {
+            if let Ok(mut guard) = self.syntax_prop_ranges.lock() {
+                *guard = (0, Vec::new());
+            }
+        } else {
+            self.syntax_ranges_revalidate();
+        }
         let mut target_runs = self.intervals.runs();
         for source in other.intervals.runs() {
             if source.is_empty_plist() {
