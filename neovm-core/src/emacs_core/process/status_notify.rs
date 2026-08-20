@@ -7,20 +7,20 @@
 //! tick changed:
 //!
 //! ```c
-//!       if (p->raw_status_new)                       /* :7915 */
+//!       if (p->raw_status_new)                       /* :7914 */
 //!         update_status (p);
-//!       msg = status_message (p);                    /* :7917 */
+//!       msg = status_message (p);                    /* :7916 */
 //!
-//!       symbol = p->status;                          /* :7920 */
+//!       symbol = p->status;                          /* :7919 */
 //!       if (CONSP (p->status)) symbol = XCAR (p->status);
 //!
 //!       if (EQ (symbol, Qsignal) || EQ (symbol, Qexit)
 //!           || EQ (symbol, Qclosed))                 /* :7923-7924 */
 //!         {
 //!           if (delete_exited_processes)
-//!             remove_process (proc);                 /* :7926 */
+//!             remove_process (proc);                 /* :7927 */
 //!           else
-//!             deactivate_process (proc);             /* :7928 */
+//!             deactivate_process (proc);             /* :7929 */
 //!         }
 //!
 //!       p->update_tick = p->tick;                    /* :7935 */
@@ -51,7 +51,7 @@
 //!
 //! `exec_sentinel` is handed the `Lisp_Object proc` the notification loop
 //! already holds and passes it straight through (`list3 (sentinel, proc,
-//! reason)`, :7844-7846).  Nothing between `remove_process` and the sentinel
+//! reason)`, :7845-7846).  Nothing between `remove_process` and the sentinel
 //! re-derives the process from a name or a table: in GNU the process IDENTITY
 //! is the object, and `Vprocess_alist` is a *directory*, not the storage.  A
 //! removed process therefore still answers every accessor -- measured on the
@@ -103,7 +103,7 @@ pub(super) struct ProcessStatusNotification {
     /// removal, which is harmless there because `p` is the object.  This port
     /// reads it before, because `get` would answer `None` after.
     sentinel: Value,
-    /// GNU `status_message (p)` (:7917), built from the SETTLED status.
+    /// GNU `status_message (p)` (:7916), built from the SETTLED status.
     message: String,
 }
 
@@ -112,11 +112,11 @@ impl ProcessStatusNotification {
     /// `exec_sentinel` (src/process.c:7913-7937), for a process whose terminal
     /// status this port publishes from the wait loop.
     ///
-    /// In order: apply the pending raw status (GNU `update_status`, :7915-7916
+    /// In order: apply the pending raw status (GNU `update_status`, :7914-7915
     /// -- this port's `pending_status`/`status_notify_pending` pair is GNU's
-    /// `raw_status`/`raw_status_new`), build the message (:7917), and then, only
-    /// when the settled status is terminal (:7920-7924), take the
-    /// `delete-exited-processes` decision (:7925-7929).
+    /// `raw_status`/`raw_status_new`), build the message (:7916), and then, only
+    /// when the settled status is terminal (:7919-7924), take the
+    /// `delete-exited-processes` decision (:7926-7929).
     ///
     /// Returns `None` for an id that names no live process, which is the
     /// analogue of `FOR_EACH_PROCESS` simply not visiting it.
@@ -155,18 +155,18 @@ impl ProcessStatusNotification {
         Some(notification)
     }
 
-    /// The same `exec_sentinel` call for a process this port has ALREADY taken
-    /// out of the live table -- `delete-process` and `kill-buffer`'s process
-    /// teardown, which delete first and notify second.
+    /// The same `exec_sentinel` call for a notification that retires nothing.
     ///
-    /// GNU reaches the same place by a different route: `Fdelete_process`
-    /// (src/process.c:1083) stamps the status and calls `status_notify`
-    /// (:1128 / :1148), so the removal decision above still runs before the
-    /// sentinel; its own trailing `remove_process` (:1155) is the mop-up for
-    /// the `delete-exited-processes'-nil case and for a process with no infd.
+    /// Only `continue-process` uses it: GNU's `Fcontinue_process` sends SIGCONT
+    /// (src/process.c:7287) and the `"continued"` status that follows is not
+    /// one of `status_notify`'s terminal symbols (:7923-7924), so no removal
+    /// decision is due.  `delete-process` and `kill-buffer` do NOT come here --
+    /// they go through `settle_status_and_retire` like everything else, because
+    /// GNU's `Fdelete_process` reaches the sentinel through `status_notify`
+    /// (:1129 / :1149) and therefore takes the same removal decision.
     ///
-    /// Reads through `get_any`, because by construction the process is in the
-    /// deleted table.
+    /// Reads through `get_any`, so it answers for a process the caller has
+    /// already put in the deleted table.
     pub(super) fn for_retired_process(processes: &ProcessManager, id: ProcessId) -> Option<Self> {
         let proc = processes.get_any(id)?;
         Some(Self {

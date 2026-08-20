@@ -83,7 +83,7 @@ mod status_notify;
 use status_notify::ProcessStatusNotification;
 
 /// What GNU's `status_notify` does with a process whose status has just become
-/// terminal, chosen by `delete-exited-processes` (src/process.c:7925-7929, the
+/// terminal, chosen by `delete-exited-processes` (src/process.c:7926-7929, the
 /// variable at :8916-8920 with default 1).
 ///
 /// A bool at these call sites reads as "should we delete?", which is the
@@ -6538,27 +6538,45 @@ impl ProcessManager {
         }
     }
 
-    /// Delete a process entirely.
-    pub fn delete_process(&mut self, id: ProcessId) -> bool {
-        if let Some(mut proc) = self.processes.remove(&id) {
-            if matches!(
-                proc.kind,
-                ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
-            ) {
-                if !process_status_is_terminal_for_notify(&proc.status) {
-                    proc.status = process_status_exit_value(0);
-                }
-            } else if proc.status_notify_pending && !proc.pending_status.is_nil() {
-                proc.status = proc.pending_status;
-            } else if !process_status_is_exit_or_signal(&proc.status) {
-                kill_real_process_child(&mut proc, signal_kill_number());
-                proc.status = process_status_signal_value(signal_kill_number());
+    /// GNU `Fdelete_process`'s stamping half (src/process.c:1123-1150): kill the
+    /// child if it is still alive, settle the terminal status, and close the
+    /// channels -- everything EXCEPT taking the process out of the process
+    /// list.  GNU leaves that to `status_notify`'s `delete-exited-processes`
+    /// decision (:7926-7929) and to its own trailing `remove_process` (:1153),
+    /// which is why a `delete-process` sentinel still sees its process listed
+    /// when the flag is nil.
+    ///
+    /// Returns whether the id named a live process.
+    fn stamp_process_for_delete(&mut self, id: ProcessId) -> bool {
+        let Some(proc) = self.processes.get_mut(&id) else {
+            return false;
+        };
+        if matches!(
+            proc.kind,
+            ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
+        ) {
+            if !process_status_is_terminal_for_notify(&proc.status) {
+                proc.status = process_status_exit_value(0);
             }
-            wait_for_real_process_child_termination(&mut proc);
-            proc.status_notify_pending = false;
-            proc.pending_status = Value::NIL;
-            Self::deactivate_process_io(self.wait_backend.poller(), &mut proc);
-            self.deleted_processes.insert(id, proc);
+        } else if proc.status_notify_pending && !proc.pending_status.is_nil() {
+            proc.status = proc.pending_status;
+        } else if !process_status_is_exit_or_signal(&proc.status) {
+            kill_real_process_child(proc, signal_kill_number());
+            proc.status = process_status_signal_value(signal_kill_number());
+        }
+        wait_for_real_process_child_termination(proc);
+        proc.status_notify_pending = false;
+        proc.pending_status = Value::NIL;
+        Self::deactivate_process_io(self.wait_backend.poller(), proc);
+        true
+    }
+
+    /// Delete a process entirely: GNU `Fdelete_process` for a caller that runs
+    /// no sentinel of its own -- the stamping half above plus the
+    /// unconditional `remove_process` at src/process.c:1153.
+    pub fn delete_process(&mut self, id: ProcessId) -> bool {
+        if self.stamp_process_for_delete(id) {
+            self.reap_exited_process(id);
             true
         } else {
             self.deleted_processes.contains_key(&id)
@@ -7758,7 +7776,7 @@ impl super::eval::Context {
     }
 
     /// GNU `status_notify`'s branch on `delete_exited_processes`
-    /// (src/process.c:7925-7929); the variable is `DEFVAR_BOOL`'d at :8916 with
+    /// (src/process.c:7926-7929); the variable is `DEFVAR_BOOL`'d at :8916 with
     /// default 1.  Read once per notification, as GNU reads the C variable, so
     /// a sentinel that rebinds it cannot change the decision already taken for
     /// its own process.
@@ -7779,7 +7797,6 @@ impl super::eval::Context {
                 continue;
             }
 
-            let was_live = self.processes.get(id).is_some();
             let was_terminal = self
                 .processes
                 .get(id)
@@ -7788,10 +7805,13 @@ impl super::eval::Context {
                 .processes
                 .get(id)
                 .is_some_and(|proc| proc.status_notify_pending);
-            self.processes.delete_process(id);
-            if was_live && (!was_terminal || was_pending_notification) {
-                self.notify_process_status_sentinel(id)?;
-            }
+            // GNU `kill_buffer_processes` calls `Fdelete_process` for a
+            // network/serial/pipe process (src/process.c:8463-8464), so it
+            // inherits the stamp/`status_notify`/remove ordering above.
+            self.delete_process_running_its_sentinel(
+                id,
+                !was_terminal || was_pending_notification,
+            )?;
         }
         Ok(())
     }
@@ -8298,10 +8318,9 @@ impl super::eval::Context {
         )
     }
 
-    /// The sentinel for a process this port has already removed from the live
-    /// table -- `delete-process` and `kill-buffer`, which delete first and
-    /// notify second, matching GNU's `Fdelete_process` -> `status_notify`
-    /// ordering (src/process.c:1128/1148 then :1155).
+    /// The sentinel for a process this port has already taken out of the live
+    /// table.  Only `continue-process` reaches it now, and its `"continued"`
+    /// notification retires nothing.
     fn notify_process_status_sentinel(&mut self, pid: ProcessId) -> Result<(), Flow> {
         let Some(notification) =
             ProcessStatusNotification::for_retired_process(&self.processes, pid)
@@ -8309,6 +8328,62 @@ impl super::eval::Context {
             return Ok(());
         };
         self.run_status_notification_sentinel(notification)
+    }
+
+    /// GNU `Fdelete_process` (src/process.c:1083-1156), which is not "remove,
+    /// then notify" but "stamp, `status_notify`, remove":
+    ///
+    /// * :1123-1148 stamps the terminal status and kills the child;
+    /// * :1129 / :1149 call `status_notify`, which takes the
+    ///   `delete-exited-processes` decision (:7926-7929) and only then runs the
+    ///   sentinel (:7937) -- so with the flag nil the sentinel still sees its
+    ///   own process in `process-list`;
+    /// * :1153 removes it unconditionally, after the sentinel has returned.
+    ///
+    /// Measured, `emacs -Q --batch`, GNU Emacs 31.0.90, with
+    /// `delete-exited-processes` nil:
+    ///
+    /// ```text
+    /// PW169-DELETE-KEEP-SENTINEL: (:event "killed" :get-buffer-process t
+    ///                              :get-process t :in-process-list t)
+    /// PW169-DELETE-KEEP-AFTER:    (:get-process nil :in-process-list nil)
+    /// ```
+    ///
+    /// This port used to remove unconditionally before the sentinel, which was
+    /// right for the default flag and wrong for the other setting -- the same
+    /// class as the exit-path inversion this entry fixes, in the opposite
+    /// direction.
+    fn delete_process_running_its_sentinel(
+        &mut self,
+        id: ProcessId,
+        run_sentinel: bool,
+    ) -> Result<(), Flow> {
+        if !self.processes.stamp_process_for_delete(id) {
+            // Already gone: `delete-process` is idempotent and runs no sentinel.
+            self.processes.delete_process(id);
+            return Ok(());
+        }
+        let result = if run_sentinel {
+            let disposition = self.exited_process_disposition();
+            match ProcessStatusNotification::settle_status_and_retire(
+                &mut self.processes,
+                id,
+                ProcessIoTeardown::Terminal,
+                disposition,
+            ) {
+                Some(notification) => self.run_status_notification_sentinel(notification),
+                None => Ok(()),
+            }
+        } else {
+            Ok(())
+        };
+        // GNU's trailing `remove_process` (:1153) is unconditional, and it runs
+        // even when the sentinel signalled -- `exec_sentinel` swallows the
+        // error in its own `internal_condition_case_1` (:7845-7848), so the
+        // removal is never skipped.  Reap before propagating, for the same
+        // reason.
+        self.processes.reap_exited_process(id);
+        result
     }
 
     fn run_process_log_callback(
@@ -8682,7 +8757,7 @@ impl super::eval::Context {
                             proc.status = process_status_exit_value(256);
                         }
                         // Same `status_notify` ordering as the child exit path
-                        // below: the removal decision (src/process.c:7925-7929)
+                        // below: the removal decision (src/process.c:7926-7929)
                         // precedes `exec_sentinel' (:7937), and the type is what
                         // makes that the only expressible order.
                         let disposition = self.exited_process_disposition();
@@ -8889,7 +8964,7 @@ impl super::eval::Context {
 
         // GNU `status_notify` settles the status, builds the message and takes
         // the `delete-exited-processes' removal decision (src/process.c:
-        // 7915-7929) BEFORE `exec_sentinel' (:7937), so an exit sentinel sees
+        // 7914-7929) BEFORE `exec_sentinel' (:7937), so an exit sentinel sees
         // its own process already gone from `process-list'/`get-process'/
         // `get-buffer-process'.  This port had the two halves the other way
         // round (ledger 165, found and not fixed; ledger 169, fixed).  The
@@ -14077,7 +14152,6 @@ pub(crate) fn builtin_delete_process(
     } else {
         resolve_optional_process_or_current_buffer_in_state(&eval.processes, &eval.buffers, None)?
     };
-    let was_live = eval.processes.get(id).is_some();
     let was_terminal = eval
         .processes
         .get(id)
@@ -14086,10 +14160,7 @@ pub(crate) fn builtin_delete_process(
         .processes
         .get(id)
         .is_some_and(|proc| proc.status_notify_pending);
-    eval.processes.delete_process(id);
-    if was_live && (!was_terminal || was_pending_notification) {
-        eval.notify_process_status_sentinel(id)?;
-    }
+    eval.delete_process_running_its_sentinel(id, !was_terminal || was_pending_notification)?;
     Ok(Value::NIL)
 }
 

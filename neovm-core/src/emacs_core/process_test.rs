@@ -11220,9 +11220,9 @@ fn a_process_decoder_carries_its_state_and_its_carryover_across_a_read() {
 
 /// GNU's `status_notify` settles the process's presence in `Vprocess_alist`
 /// BEFORE it runs the sentinel: it applies the pending status
-/// (src/process.c:7915-7916), builds the message (:7917), then takes the
+/// (src/process.c:7914-7915), builds the message (:7916), then takes the
 /// removal decision -- `remove_process' when `delete-exited-processes' is
-/// non-nil, `deactivate_process' otherwise (:7921-7930) -- and only then calls
+/// non-nil, `deactivate_process' otherwise (:7926-7929) -- and only then calls
 /// `exec_sentinel' (:7937).  `get-buffer-process' (:8425-8427),
 /// `get-process' and `process-list' all walk `Vprocess_alist', so an exit
 /// sentinel in GNU sees its own process already gone.
@@ -11277,7 +11277,7 @@ fn exit_sentinel_sees_its_own_process_already_removed_like_gnu() {
 
 /// The same removal decision on a pty child.  GNU takes it in `status_notify`
 /// regardless of `connection-type`, because the decision reads only
-/// `p->status` (src/process.c:7920-7930).
+/// `p->status` (src/process.c:7919-7929).
 ///
 /// Measured, GNU Emacs 31.0.90:
 /// `PW169-PTY-SENTINEL: (:event "finished" :get-buffer-process nil
@@ -11323,7 +11323,7 @@ fn exit_sentinel_of_a_pty_child_sees_its_process_removed_like_gnu() {
 /// The removal is `delete-exited-processes'-gated, and this is what makes the
 /// ordering observable rather than merely early: GNU calls `remove_process'
 /// only under the flag and `deactivate_process' otherwise
-/// (src/process.c:7925-7929), and `deactivate_process' (:4812) does not touch
+/// (src/process.c:7926-7929), and `deactivate_process' (:4812) does not touch
 /// `Vprocess_alist'.  So with the flag nil GNU's exit sentinel DOES see its own
 /// process -- the opposite answer from the default -- which no "reap earlier"
 /// change may flatten.
@@ -11464,7 +11464,7 @@ fn each_sentinel_sees_only_the_processes_not_yet_retired_like_gnu() {
 /// deregistration from a directory and not destruction of the object: GNU's
 /// `remove_process' (src/process.c:957-966) only rewrites `Vprocess_alist',
 /// and `exec_sentinel' hands the sentinel the very `Lisp_Object proc' the
-/// notification loop already held (:7844-7846), never a re-lookup.
+/// notification loop already held (:7845-7846), never a re-lookup.
 ///
 /// Measured, GNU Emacs 31.0.90, on the value captured inside the sentinel:
 /// `PW169-REAPED-VALUE: (:eq-to-original t :processp t :name "pw169-val"
@@ -11514,6 +11514,103 @@ fn a_retired_process_value_still_answers_every_accessor_like_gnu() {
              :filter internal-default-process-filter \
              :command (\"{sh}\" \"-c\" \"printf hi\") \
              :type real :contact t :query-on-exit nil :plist nil)"
+        )
+    );
+}
+
+/// `delete-process` reaches the same retirement through the same code: GNU's
+/// `Fdelete_process` stamps the terminal status and calls `status_notify`
+/// (src/process.c:1128 for a network/pipe/serial process, :1148 for a child),
+/// so the sentinel it runs sees the `delete-exited-processes' decision rather
+/// than an unconditional removal.  `Fdelete_process`'s own trailing
+/// `remove_process' (:1155) is what makes the deletion unconditional, and it
+/// runs after the sentinel has returned.
+///
+/// So with the flag nil the deleted process is still listed inside its sentinel
+/// and gone immediately after -- the one place where "before" and "after" the
+/// sentinel differ.  Measured, GNU Emacs 31.0.90:
+///
+/// ```text
+/// PW169-DELETE-KEEP-SENTINEL: (:event "killed" :get-buffer-process t
+///                              :get-process t :in-process-list t)
+/// PW169-DELETE-KEEP-AFTER:    (:get-process nil :in-process-list nil)
+/// ```
+#[test]
+fn delete_process_sentinel_honours_delete_exited_processes_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((delete-exited-processes nil)
+                  (buf (generate-new-buffer " *pw169-del2*"))
+                  (seen :pending)
+                  (proc (make-process
+                         :name "pw169-del2"
+                         :buffer buf
+                         :command '("{sh}" "-c" "sleep 30")
+                         :noquery t
+                         :sentinel
+                         (lambda (p _event)
+                           (setq seen
+                                 (list :get-buffer-process
+                                       (and (get-buffer-process buf) t)
+                                       :get-process
+                                       (and (get-process "pw169-del2") t)
+                                       :in-process-list
+                                       (and (memq p (process-list)) t)))))))
+             (delete-process proc)
+             (list :in-sentinel seen
+                   :after (list :get-process
+                                (and (get-process "pw169-del2") t)
+                                :in-process-list
+                                (and (memq proc (process-list)) t))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (:in-sentinel (:get-buffer-process t :get-process t :in-process-list t) ",
+            ":after (:get-process nil :in-process-list nil))",
+        )
+    );
+}
+
+/// The default setting is unchanged by the above: `delete-exited-processes' is
+/// `t', so `status_notify' removes (src/process.c:7926) and the sentinel sees
+/// nothing.  Measured, GNU Emacs 31.0.90:
+/// `PW169-DELETE-SENTINEL: (:event "killed" :get-buffer-process nil
+///  :get-process nil :in-process-list nil :process-status signal)`
+#[test]
+fn delete_process_sentinel_sees_its_process_removed_by_default_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((buf (generate-new-buffer " *pw169-del*"))
+                  (seen :pending)
+                  (proc (make-process
+                         :name "pw169-del"
+                         :buffer buf
+                         :command '("{sh}" "-c" "sleep 30")
+                         :noquery t
+                         :sentinel
+                         (lambda (p event)
+                           (setq seen
+                                 (list :event (string-trim event)
+                                       :get-buffer-process
+                                       (and (get-buffer-process buf) t)
+                                       :get-process
+                                       (and (get-process "pw169-del") t)
+                                       :in-process-list
+                                       (and (memq p (process-list)) t)
+                                       :process-status (process-status p)))))))
+             (delete-process proc)
+             seen)"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (:event \"killed\" :get-buffer-process nil :get-process nil ",
+            ":in-process-list nil :process-status signal)",
         )
     );
 }
