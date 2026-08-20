@@ -322,3 +322,59 @@ fn condition_case_binding_value_survives_a_collection() {
         "(error \"Malformed argument list ends with\")"
     );
 }
+
+
+// ---------------------------------------------------------------------------
+// RED probes (pre-fix shape) for DIVERGENCES.md 162 -- temporary
+// ---------------------------------------------------------------------------
+
+#[test]
+fn red_in_flight_throw_payload_survives_a_collection() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let flow = Flow::Throw {
+        tag: Value::symbol("neovm-throw-probe"),
+        value: Value::list(vec![Value::string("thrown datum")]),
+    };
+    eval.gc_collect();
+    let Flow::Throw { value, .. } = &flow else {
+        panic!("throw flow");
+    };
+    assert!(value.is_cons(), "payload stays a cons: {value:?}");
+    assert!(
+        !value.cons_car().is_dead(),
+        "the in-flight throw payload was collected while the throw was still \
+         unwinding (its cons is on the free list)"
+    );
+    assert_eq!(print_value_with_eval(&eval, value), "(\"thrown datum\")");
+}
+
+#[test]
+fn red_in_flight_thread_blocked_payload_survives_a_collection() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let flow = Flow::ThreadBlocked {
+        blocker: Value::list(vec![Value::string("blocker datum")]),
+        remaining_forms: Value::list(vec![Value::string("remaining form")]),
+    };
+    eval.gc_collect();
+    let Flow::ThreadBlocked {
+        blocker,
+        remaining_forms,
+    } = &flow
+    else {
+        panic!("thread-blocked flow");
+    };
+    assert!(
+        !blocker.cons_car().is_dead(),
+        "the in-flight thread-blocked BLOCKER was collected"
+    );
+    assert!(
+        !remaining_forms.cons_car().is_dead(),
+        "the in-flight thread-blocked REMAINING-FORMS were collected"
+    );
+    assert_eq!(
+        print_value_with_eval(&eval, remaining_forms),
+        "(\"remaining form\")"
+    );
+}
