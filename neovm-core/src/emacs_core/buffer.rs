@@ -836,6 +836,22 @@ pub(crate) fn builtin_buffer_last_name(
     Ok(Value::NIL)
 }
 
+/// Interned-once ids for the buffer-access property gate — it runs on
+/// every buffer-text read primitive and re-hashed both names per call.
+#[inline(always)]
+fn buffer_access_fontify_functions_sym() -> crate::emacs_core::intern::SymId {
+    static SYMBOL: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+        std::sync::OnceLock::new();
+    *SYMBOL.get_or_init(|| crate::emacs_core::intern::intern("buffer-access-fontify-functions"))
+}
+
+#[inline(always)]
+fn buffer_access_fontified_property_sym() -> crate::emacs_core::intern::SymId {
+    static SYMBOL: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+        std::sync::OnceLock::new();
+    *SYMBOL.get_or_init(|| crate::emacs_core::intern::intern("buffer-access-fontified-property"))
+}
+
 /// (buffer-substring START END) → string
 fn update_buffer_properties_for_access(
     eval: &mut super::eval::Context,
@@ -843,13 +859,14 @@ fn update_buffer_properties_for_access(
     end: LispCharPos1,
 ) -> Result<(), Flow> {
     if eval
-        .visible_variable_value_or_nil("buffer-access-fontify-functions")
+        .visible_variable_value_or_nil_by_id(buffer_access_fontify_functions_sym())
         .is_nil()
     {
         return Ok(());
     }
 
-    let fontified_property = eval.visible_variable_value_or_nil("buffer-access-fontified-property");
+    let fontified_property =
+        eval.visible_variable_value_or_nil_by_id(buffer_access_fontified_property_sym());
     if !fontified_property.is_nil() {
         let needs_fontification = super::textprop::builtin_text_property_any(
             eval,
