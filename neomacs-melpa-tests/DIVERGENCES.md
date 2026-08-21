@@ -28778,7 +28778,7 @@ as `debug_while_redisplaying ? Qnil : Qt` (`src/eval.c:306-307`),
 `cancel_hourglass` (`:296`), and the jump to `Ftop_level` when the debugger
 perturbed an in-flight redisplay (`:326-330`) -- are declined here, with the
 measurement that in batch GNU answers `t` for the first and never reaches the
-other two.  A GUI probe has to come first; see §10.
+other two.  A GUI probe has to come first; see §11.
 
 ### 4. The three pop primitives: two were already safe by TYPE, and the third was not latent
 
