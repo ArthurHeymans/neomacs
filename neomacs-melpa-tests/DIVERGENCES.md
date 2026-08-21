@@ -23675,9 +23675,25 @@ FIRST thing it found in this area was a lookup that could never succeed:
 names are two letters and `Smulx` is not one.  `Su` IS two letters, so the
 question "does `tgetflag` resolve an extended terminfo BOOLEAN, or is this a
 second dead lookup?" is a real one and it cannot be answered by any terminal
-that exists.  It can be answered by `tic`.  Three synthetic entries
-(`tmp/pw175/ti/pw175.src`, compiled with `tic -x` into a private `TERMINFO`)
-probed by a 40-line ncurses program (`tmp/pw175/su_probe.c`):
+that exists.  It can be answered by `tic`.  The whole source is six lines, and
+it is reproduced here rather than only cited, because `tmp/` does not survive
+the worktree:
+
+```
+pw175-su-only|synthetic Su without Smulx,
+	Su,
+	use=xterm-256color,
+pw175-su-and-smulx|synthetic Su with Smulx,
+	Su, Smulx=\E[4:%p1%dm,
+	use=xterm-256color,
+pw175-neither|synthetic control with neither Su nor Smulx,
+	use=xterm-256color,
+```
+
+`tic -x -o <dir> pw175.src`, then `TERMINFO=<dir>` and a 40-line ncurses
+program that calls `tgetent`/`tgetflag`/`tgetstr` and then
+`setupterm`/`tigetflag`/`tigetstr` on each name
+(`tmp/pw175/ti/pw175.src`, `tmp/pw175/su_probe.c`):
 
 ```
 pw175-su-only        tgetflag(Su)=1  tigetflag(Su)=1   tigetstr(Smulx)=null   GNU: yes (Su fallback)
