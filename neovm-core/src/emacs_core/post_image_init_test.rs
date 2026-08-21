@@ -364,6 +364,33 @@ fn finalized_runtime() -> crate::emacs_core::eval::Context {
     crate::emacs_core::load::create_bootstrap_evaluator_cached().expect("cached bootstrap")
 }
 
+/// GNU `init_alloc` (src/alloc.c:7391-7392) zeroes `gc-elapsed` and `gcs-done`
+/// AFTER the image is loaded, so a dumped image does not hand the session
+/// loadup's collection count.
+///
+/// This is the row the screen's own NORMALIZATION nearly hid.  The probe
+/// compared "the counter was reset" as `gcs-done < 100`, and both editors
+/// answered `t` -- but GNU answers exactly `0` and this port answered `9`,
+/// which was visible only in the raw row printed beside it.  The fix came out
+/// of reading src/alloc.c rather than out of the comparison, which is the
+/// argument for reading every body BEFORE running the screen.
+#[test]
+fn runtime_gc_counters_are_zeroed_like_gnu_init_alloc() {
+    crate::test_utils::init_test_tracing();
+    let eval = finalized_runtime();
+
+    assert_eq!(
+        eval.visible_variable_value_or_nil("gcs-done").as_fixnum(),
+        Some(0),
+        "GNU src/alloc.c:7392 -- the session must not inherit loadup's GC count"
+    );
+    assert_eq!(
+        eval.visible_variable_value_or_nil("gc-elapsed").as_float(),
+        Some(0.0),
+        "GNU src/alloc.c:7391"
+    );
+}
+
 /// GNU `init_callproc_1` (src/callproc.c:1960-1963) builds `exec-path` as
 /// `$PATH` followed by the EMACSPATH/PATH_EXEC list whose CAR becomes
 /// `exec-directory`, so the last element of `exec-path` IS `exec-directory`:
