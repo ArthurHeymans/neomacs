@@ -6174,3 +6174,43 @@ fn set_visited_file_modtime_flags_are_the_two_values_visited_file_modtime_return
         other => panic!("unexpected flow: {other:?}"),
     }
 }
+
+/// GNU asks the file-name handler BEFORE it stats
+/// (`Fverify_visited_file_modtime`, src/fileio.c:6138-6143), which is the only
+/// reason a remote buffer can answer at all: the visited name is not a path on
+/// this filesystem, so the stat that follows can only fail.
+///
+/// Without the dispatch, a TRAMP buffer reports "the file changed" the instant
+/// it is visited, and `tramp-handle-lock-file` (lisp/net/tramp.el:5137-5149)
+/// turns that into `ask-user-about-supersession-threat` -- "Cannot resolve
+/// conflict in batch mode" (lisp/userlock.el:178) -- on the first keystroke.
+#[test]
+fn verify_visited_file_modtime_asks_the_file_name_handler_before_it_stats() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    eval.eval_str(
+        "(fset 'pw174-modtime-handler \
+         '(lambda (operation &rest _args) \
+            (if (eq operation 'verify-visited-file-modtime) 'handled nil)))",
+    )
+    .expect("define the stand-in handler");
+    eval.obarray.set_symbol_value(
+        "file-name-handler-alist",
+        Value::list(vec![Value::cons(
+            Value::string("\\`/pw174:"),
+            Value::symbol("pw174-modtime-handler"),
+        )]),
+    );
+    eval.eval_str("(setq buffer-file-name \"/pw174:payments:/workspace/config.txt\")")
+        .expect("visit a remote name");
+    // A recorded modtime is required: GNU returns t for an unknown one before
+    // it ever reaches the handler (src/fileio.c:6136).
+    eval.eval_str("(set-visited-file-modtime (list 27272 1328 0 0))")
+        .expect("record a modtime");
+
+    assert_eq!(
+        eval.eval_str("(verify-visited-file-modtime)")
+            .expect("verify-visited-file-modtime"),
+        Value::symbol("handled"),
+    );
+}

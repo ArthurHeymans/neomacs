@@ -4032,14 +4032,30 @@ pub(crate) fn builtin_verify_visited_file_modtime(
         .get(buffer_id)
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
     let recorded = buf.visited_file_modtime();
+    // GNU fileio.c:6135: `if (!STRINGP (BVAR (b, filename))) return Qt;` — a
+    // buffer that visits no file always matches.
+    let Some(file_name) = buf.file_name_lisp_string() else {
+        return Ok(Value::T);
+    };
     // GNU fileio.c:6136: `if (b->modtime.tv_nsec == UNKNOWN_MODTIME_NSECS)
     // return Qt;` — a buffer with no recorded time never complains.
     if recorded == VisitedFileModtime::Unknown {
         return Ok(Value::T);
     }
-    let Some(file_name) = buf.file_name_lisp_string() else {
-        return Ok(Value::T);
-    };
+    // GNU fileio.c:6138-6143: the handler is asked BEFORE the stat, on the
+    // buffer's own `BVAR (b, filename)` rather than an expanded copy, and its
+    // answer is returned verbatim.  That order is what makes the primitive
+    // usable at all for a remote buffer: the visited name is not a path on this
+    // filesystem, so the `emacs_fstatat` below can only fail, and the buffer
+    // would report "changed" from the moment it was visited.  TRAMP's own
+    // answer is `tramp-handle-verify-visited-file-modtime`
+    // (lisp/net/tramp.el:5938-5967), which compares the recorded time against
+    // the REMOTE attributes with a two-second tolerance.
+    let operation = Value::symbol("verify-visited-file-modtime");
+    let handler = find_file_name_handler_lisp_for_eval(eval, &file_name, operation);
+    if !handler.is_nil() {
+        return eval.funcall_general(handler, vec![operation, Value::make_buffer(buffer_id)]);
+    }
     // Issue #131: encode the visited file name to its real OS path bytes via the
     // filesystem-boundary helper, not the PUA-sentinel storage string, so a
     // non-UTF-8 file name still stats the right file.
