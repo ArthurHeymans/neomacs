@@ -12,8 +12,8 @@ use neovm_core::emacs_core::eval::{
 };
 use neovm_core::emacs_core::image::{ImageSpecKey, image_resolve_source_from_items};
 use neovm_core::emacs_core::image_catalog::{
-    AxisSize, ImageResolveRequest, ImageRotation, ImageScaleEnvironment, ImageScalePolicy,
-    ImageSizeSpec, numeric_image_scale,
+    AxisSize, ImageResolveRequest, ImageResolveSource, ImageRotation, ImageScaleEnvironment,
+    ImageScalePolicy, ImageSizeSpec, numeric_image_scale,
 };
 use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
 use neovm_core::face::Color as LispColor;
@@ -65,10 +65,156 @@ impl DisplayMediaKey {
 
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayImageLayout {
-    pub(crate) request: ImageResolveRequest,
+    request: UnresolvedDisplayImageRequest,
     pub(crate) scale: ImageScalePolicy,
     pub(crate) ascent: DisplayImageAscentPolicy,
     pub(crate) margin: DisplayImageMargin,
+}
+
+/// Parsed image request before GNU's face-relative dimensions become logical
+/// pixels.  Keeping this type private prevents unresolved Lisp units from
+/// leaking into the async catalog/renderer protocol.
+#[derive(Clone, Debug)]
+struct UnresolvedDisplayImageRequest {
+    source: ImageResolveSource,
+    size: DisplayImageSizeSpec,
+    rotation: ImageRotation,
+    fg_color: u32,
+    bg_color: u32,
+}
+
+/// Active-face metrics used by GNU image dimensions `(N . em/ch/cw)`.
+///
+/// These are logical layout pixels. Device scaling belongs to
+/// `ImageRealization` and is deliberately not represented here.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DisplayImageDimensionEnvironment {
+    font_size: f32,
+    character_height: f32,
+    character_width: f32,
+}
+
+impl DisplayImageDimensionEnvironment {
+    #[must_use]
+    pub fn new(font_size: f32, character_height: f32, character_width: f32) -> Self {
+        let valid = |value: f32| {
+            if value.is_finite() && value > 0.0 {
+                value
+            } else {
+                1.0
+            }
+        };
+        Self {
+            font_size: valid(font_size),
+            character_height: valid(character_height),
+            character_width: valid(character_width),
+        }
+    }
+
+    fn base(self, unit: DisplayImageRelativeUnit) -> f64 {
+        f64::from(match unit {
+            DisplayImageRelativeUnit::Em => self.font_size,
+            DisplayImageRelativeUnit::CharacterHeight => self.character_height,
+            DisplayImageRelativeUnit::CharacterWidth => self.character_width,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DisplayImageRelativeUnit {
+    Em,
+    CharacterHeight,
+    CharacterWidth,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DisplayImageDimension {
+    Pixels(u32),
+    Relative {
+        factor: f64,
+        unit: DisplayImageRelativeUnit,
+    },
+}
+
+impl DisplayImageDimension {
+    fn from_lisp(value: Value) -> Option<Self> {
+        if let Some(pixels) = value.as_fixnum().filter(|pixels| *pixels >= 0) {
+            return Some(Self::Pixels(pixels.min(i64::from(u32::MAX)) as u32));
+        }
+        if !value.is_cons() {
+            return None;
+        }
+        let factor = value.cons_car().as_number_f64()?;
+        if !factor.is_finite() || factor < 0.0 {
+            return None;
+        }
+        let unit = match value.cons_cdr().as_symbol_name()? {
+            "em" => DisplayImageRelativeUnit::Em,
+            "ch" => DisplayImageRelativeUnit::CharacterHeight,
+            "cw" => DisplayImageRelativeUnit::CharacterWidth,
+            _ => return None,
+        };
+        Some(Self::Relative { factor, unit })
+    }
+
+    fn resolve(self, environment: DisplayImageDimensionEnvironment) -> u32 {
+        match self {
+            Self::Pixels(pixels) => pixels,
+            Self::Relative { factor, unit } => {
+                let pixels = factor * environment.base(unit);
+                if pixels >= f64::from(u32::MAX) {
+                    u32::MAX
+                } else {
+                    pixels.ceil() as u32
+                }
+            }
+        }
+    }
+}
+
+/// GNU's mutually-exclusive intent for one unresolved image axis.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+enum DisplayImageAxisSize {
+    #[default]
+    Native,
+    Exact(DisplayImageDimension),
+    AtMost(DisplayImageDimension),
+}
+
+impl DisplayImageAxisSize {
+    fn resolve_precedence(
+        target: Option<DisplayImageDimension>,
+        at_most: Option<DisplayImageDimension>,
+    ) -> Self {
+        match (target, at_most) {
+            (Some(target), _) => Self::Exact(target),
+            (None, Some(at_most)) => Self::AtMost(at_most),
+            (None, None) => Self::Native,
+        }
+    }
+
+    fn into_protocol(self, environment: DisplayImageDimensionEnvironment) -> AxisSize {
+        match self {
+            Self::Native => AxisSize::Native,
+            Self::Exact(dimension) => AxisSize::Exact(dimension.resolve(environment)),
+            Self::AtMost(dimension) => AxisSize::AtMost(dimension.resolve(environment)),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct DisplayImageSizeSpec {
+    width: DisplayImageAxisSize,
+    height: DisplayImageAxisSize,
+}
+
+impl DisplayImageSizeSpec {
+    fn resolve(self, environment: DisplayImageDimensionEnvironment) -> ImageSizeSpec {
+        ImageSizeSpec::new(
+            self.width.into_protocol(environment),
+            self.height.into_protocol(environment),
+        )
+    }
 }
 
 /// One GNU `(slice X Y WIDTH HEIGHT)` operand. Fixnums are logical pixels,
@@ -181,11 +327,18 @@ pub(crate) fn parse_display_image_slice(value: Value) -> Option<DisplayImageSlic
 
 impl DisplayImageLayout {
     pub(crate) fn into_resolve_request(
-        mut self,
+        self,
         environment: ImageScaleEnvironment,
+        dimensions: DisplayImageDimensionEnvironment,
     ) -> ImageResolveRequest {
-        self.request.realization = environment.resolve(self.scale);
-        self.request
+        ImageResolveRequest {
+            source: self.request.source,
+            size: self.request.size.resolve(dimensions),
+            rotation: self.request.rotation,
+            fg_color: self.request.fg_color,
+            bg_color: self.request.bg_color,
+            realization: environment.resolve(self.scale),
+        }
     }
 }
 
@@ -338,11 +491,15 @@ pub(crate) fn parse_display_image_layout(
                     .map(ImageRotation::from_degrees)
                     .unwrap_or(ImageRotation::None);
             }
-            Some(ImageSpecKey::Width) => width = parse_image_dimension(value).or(width),
-            Some(ImageSpecKey::MaxWidth) => max_width = parse_image_dimension(value).or(max_width),
-            Some(ImageSpecKey::Height) => height = parse_image_dimension(value).or(height),
+            Some(ImageSpecKey::Width) => width = DisplayImageDimension::from_lisp(value).or(width),
+            Some(ImageSpecKey::MaxWidth) => {
+                max_width = DisplayImageDimension::from_lisp(value).or(max_width)
+            }
+            Some(ImageSpecKey::Height) => {
+                height = DisplayImageDimension::from_lisp(value).or(height)
+            }
             Some(ImageSpecKey::MaxHeight) => {
-                max_height = parse_image_dimension(value).or(max_height)
+                max_height = DisplayImageDimension::from_lisp(value).or(max_height)
             }
             Some(ImageSpecKey::Scale) => {
                 scale = parse_image_scale(value).unwrap_or(scale);
@@ -367,16 +524,15 @@ pub(crate) fn parse_display_image_layout(
     }
 
     Some(DisplayImageLayout {
-        request: ImageResolveRequest {
+        request: UnresolvedDisplayImageRequest {
             source,
-            size: ImageSizeSpec::new(
-                AxisSize::resolve(width, max_width),
-                AxisSize::resolve(height, max_height),
-            ),
+            size: DisplayImageSizeSpec {
+                width: DisplayImageAxisSize::resolve_precedence(width, max_width),
+                height: DisplayImageAxisSize::resolve_precedence(height, max_height),
+            },
             rotation,
             fg_color,
             bg_color,
-            realization: Default::default(),
         },
         scale,
         ascent,
@@ -910,13 +1066,61 @@ mod tests {
         let parsed = parse_display_image_layout(&image, 0, 0).expect("valid image spec");
         assert_eq!(parsed.scale, ImageScalePolicy::Default);
 
-        let request = parsed.into_resolve_request(ImageScaleEnvironment::new(
-            7.2,
-            1.75,
-            neovm_core::emacs_core::image_catalog::ImageDefaultScale::Auto,
-        ));
+        let request = parsed.into_resolve_request(
+            ImageScaleEnvironment::new(
+                7.2,
+                1.75,
+                neovm_core::emacs_core::image_catalog::ImageDefaultScale::Auto,
+            ),
+            DisplayImageDimensionEnvironment::new(14.0, 18.0, 7.2),
+        );
         assert_eq!(request.realization.layout_dimension(24), 18);
         assert_eq!(request.realization.raster_dimension(18), 32);
+    }
+
+    #[test]
+    fn image_dimensions_resolve_gnu_face_relative_units_in_logical_pixels() {
+        let mut eval = neovm_core::emacs_core::Context::new();
+        eval.setup_thread_locals();
+        let dimensions = DisplayImageDimensionEnvironment::new(14.0, 18.0, 7.2);
+        let scale = ImageScaleEnvironment::default();
+
+        let exact = Value::list(vec![
+            Value::symbol("image"),
+            Value::keyword("file"),
+            Value::string("/tmp/icon.svg"),
+            Value::keyword("width"),
+            Value::cons(Value::make_float(1.5), Value::symbol("em")),
+            Value::keyword("max-width"),
+            Value::cons(Value::fixnum(99), Value::symbol("cw")),
+            Value::keyword("height"),
+            Value::cons(Value::make_float(0.5), Value::symbol("ch")),
+        ]);
+        let exact_request = parse_display_image_layout(&exact, 0, 0)
+            .expect("valid image spec")
+            .into_resolve_request(scale, dimensions);
+        assert_eq!(
+            exact_request.size,
+            ImageSizeSpec::new(AxisSize::Exact(21), AxisSize::Exact(9)),
+            ":width must override :max-width before resolving relative units"
+        );
+
+        let clamped = Value::list(vec![
+            Value::symbol("image"),
+            Value::keyword("file"),
+            Value::string("/tmp/icon.svg"),
+            Value::keyword("max-width"),
+            Value::cons(Value::fixnum(2), Value::symbol("cw")),
+            Value::keyword("max-height"),
+            Value::fixnum(18),
+        ]);
+        let clamped_request = parse_display_image_layout(&clamped, 0, 0)
+            .expect("valid image spec")
+            .into_resolve_request(scale, dimensions);
+        assert_eq!(
+            clamped_request.size,
+            ImageSizeSpec::new(AxisSize::AtMost(15), AxisSize::AtMost(18))
+        );
     }
 
     #[test]

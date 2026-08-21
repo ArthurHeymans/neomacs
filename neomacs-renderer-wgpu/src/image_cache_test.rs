@@ -821,6 +821,44 @@ fn hidpi_svg_keeps_logical_layout_extent_and_uses_device_pixel_raster_extent() {
 }
 
 #[test]
+fn telega_cell_sized_custom_emoji_stays_logical_and_renders_the_full_image_at_2x() {
+    let mut pixels = Vec::with_capacity(128 * 128 * 4);
+    for y in 0..128 {
+        for x in 0..128 {
+            let color = match (x < 64, y < 64) {
+                (true, true) => [0xff, 0x00, 0x00, 0xff],
+                (false, true) => [0x00, 0xff, 0x00, 0xff],
+                (true, false) => [0x00, 0x00, 0xff, 0xff],
+                (false, false) => [0xff, 0xff, 0x00, 0xff],
+            };
+            pixels.extend_from_slice(&color);
+        }
+    }
+    let data = png_bytes(pixels, 128, 128);
+
+    let decoded = ImageCache::decode_data_with_metadata_at_realization(
+        &data,
+        ImageSizeSpec::new(AxisSize::Exact(16), AxisSize::AtMost(18)),
+        ImageRotation::None,
+        (0, 0),
+        1.0,
+        2.0,
+    )
+    .expect("custom emoji decode");
+
+    assert_eq!((decoded.metadata.width, decoded.metadata.height), (16, 16));
+    assert_eq!((decoded.raster_width, decoded.raster_height), (32, 32));
+    let pixel = |x: usize, y: usize| {
+        let start = (y * decoded.raster_width as usize + x) * 4;
+        &decoded.data[start..start + 4]
+    };
+    assert_eq!(pixel(0, 0), [0xff, 0x00, 0x00, 0xff]);
+    assert_eq!(pixel(31, 0), [0x00, 0xff, 0x00, 0xff]);
+    assert_eq!(pixel(0, 31), [0x00, 0x00, 0xff, 0xff]);
+    assert_eq!(pixel(31, 31), [0xff, 0xff, 0x00, 0xff]);
+}
+
+#[test]
 fn resolved_auto_scale_controls_both_svg_layout_and_raster_extents() {
     let data = br##"<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40">
         <text x="2" y="20">HiDPI</text>

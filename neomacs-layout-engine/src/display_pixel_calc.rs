@@ -149,10 +149,11 @@ impl PixelCalcImageSizes {
 /// Everything needed to turn an `(image …)` operand into pixels, owned so the
 /// evaluator never borrows the display host. GNU reads the equivalent straight
 /// off `it->f` / `it->face_id`.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct PixelCalcImageInputs {
     pub catalog: Option<crate::types::SharedImageCatalog>,
     pub scale: neovm_core::emacs_core::image_catalog::ImageScaleEnvironment,
+    pub dimensions: crate::display_spec::DisplayImageDimensionEnvironment,
     pub default_fg: u32,
     pub default_bg: u32,
 }
@@ -176,7 +177,7 @@ fn collect_space_image_operands(
         )
         && let Some(catalog) = inputs.catalog.as_ref()
     {
-        let request = layout.into_resolve_request(inputs.scale);
+        let request = layout.into_resolve_request(inputs.scale, inputs.dimensions);
         let placement = catalog.lookup(request).placement();
         sizes.insert(
             *value,

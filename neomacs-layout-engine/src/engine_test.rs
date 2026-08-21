@@ -10440,6 +10440,76 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
     assert_eq!(requests[0].bg_color, 0xff0000);
 }
 
+/// Telega sizes inline badges and custom emoji in character-cell units.  GNU
+/// resolves those units against the selected frame before image lookup; the
+/// renderer must never see the intrinsic 128px emoji as an unconstrained
+/// native-size image.
+#[test]
+fn layout_frame_rust_resolves_telega_cell_sized_images_before_catalog_lookup() {
+    let mut eval = Context::new();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    eval.set_display_host(Box::new(RecordingImageDisplayHost {
+        requests: Arc::clone(&requests),
+        video_requests: Arc::new(Mutex::new(Vec::new())),
+        webkit_requests: Arc::new(Mutex::new(Vec::new())),
+        surface_requests: Arc::new(Mutex::new(Vec::new())),
+    }));
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("aXXb");
+        buf.put_text_property(
+            1,
+            3,
+            Value::symbol("display"),
+            Value::list(vec![
+                Value::list(vec![
+                    Value::symbol("slice"),
+                    Value::fixnum(0),
+                    Value::NIL,
+                    Value::make_float(1.0),
+                    Value::NIL,
+                ]),
+                Value::list(vec![
+                    Value::symbol("image"),
+                    Value::keyword("type"),
+                    Value::symbol("svg"),
+                    Value::keyword("file"),
+                    Value::string("/tmp/telega-premium.svg"),
+                    Value::keyword("max-height"),
+                    Value::cons(Value::fixnum(1), Value::symbol("ch")),
+                    Value::keyword("width"),
+                    Value::cons(Value::fixnum(2), Value::symbol("cw")),
+                ]),
+            ]),
+        );
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-telega-cell-image", 320, 120, buf_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.char_width = 8.0;
+        frame.char_height = 18.0;
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let requests = requests.lock().expect("requests lock");
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].size,
+        ImageSizeSpec::new(AxisSize::Exact(16), AxisSize::AtMost(18)),
+        "character-cell units are logical layout dimensions, independent of device scale"
+    );
+}
+
 /// GNU xdisp applies non-replacing `(slice X Y WIDTH HEIGHT)` specs to the
 /// image replacement in the same `display` property.  Telega uses this exact
 /// form to split one multi-line photo into one image glyph per text row.

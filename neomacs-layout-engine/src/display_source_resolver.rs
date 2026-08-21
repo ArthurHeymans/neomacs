@@ -19,7 +19,7 @@ use crate::display_source::{
     DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
     DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
 };
-use crate::display_spec::DisplayImageSliceSpec;
+use crate::display_spec::{DisplayImageDimensionEnvironment, DisplayImageSliceSpec};
 use crate::display_spec::{
     DisplaySpecHead, parse_display_image_layout, parse_display_surface_source_layout,
     parse_display_video_layout, parse_display_webkit_layout,
@@ -872,6 +872,7 @@ pub(crate) struct DisplayMediaResolveParams<'a> {
     pub(crate) default_bg: u32,
     pub(crate) fallback_metrics: DisplayRowFallbackMetrics,
     pub(crate) image_scale_environment: ImageScaleEnvironment,
+    pub(crate) image_dimension_environment: DisplayImageDimensionEnvironment,
     pub(crate) image_slice: Option<DisplayImageSliceSpec>,
 }
 
@@ -892,7 +893,10 @@ fn resolve_image_display_property(
     let spec = parse_display_image_layout(display_prop, params.default_fg, params.default_bg)?;
     let ascent = spec.ascent;
     let margin = spec.margin;
-    let request = spec.into_resolve_request(params.image_scale_environment);
+    let request = spec.into_resolve_request(
+        params.image_scale_environment,
+        params.image_dimension_environment,
+    );
     let lookup = params.display_host.image_catalog()?.lookup(request);
     let placement = lookup.placement();
     let opaque_background = lookup
@@ -1020,7 +1024,10 @@ fn resolve_surface_channel(
     }
     if DisplaySpecHead::Image.is_head_of(value) {
         let spec = parse_display_image_layout(value, params.default_fg, params.default_bg)?;
-        let request = spec.into_resolve_request(params.image_scale_environment);
+        let request = spec.into_resolve_request(
+            params.image_scale_environment,
+            params.image_dimension_environment,
+        );
         let lookup = params.display_host.image_catalog()?.lookup(request);
         return Some((SurfaceChannelKind::Image, lookup.placement().image_id()));
     }
@@ -1063,6 +1070,11 @@ pub(crate) fn resolve_display_property_media(
     image_slice: Option<DisplayImageSliceSpec>,
 ) -> Option<DisplayMediaReplacement> {
     let face_metrics = display_media_face_metrics(resolved_face, fallback_metrics);
+    let font_size = if resolved_face.font_size.is_finite() && resolved_face.font_size > 0.0 {
+        resolved_face.font_size
+    } else {
+        face_metrics.row_height()
+    };
     resolve_display_media_property(
         display_prop,
         DisplayMediaResolveParams {
@@ -1071,6 +1083,11 @@ pub(crate) fn resolve_display_property_media(
             default_bg: resolved_face.bg,
             fallback_metrics: face_metrics,
             image_scale_environment,
+            image_dimension_environment: DisplayImageDimensionEnvironment::new(
+                font_size,
+                face_metrics.row_height(),
+                face_metrics.char_width(),
+            ),
             image_slice,
         },
     )
@@ -1080,6 +1097,13 @@ fn display_media_face_metrics(
     resolved_face: &ResolvedFace,
     fallback: DisplayRowFallbackMetrics,
 ) -> DisplayRowFallbackMetrics {
+    let char_width = if resolved_face.measured_char_width_px().is_finite()
+        && resolved_face.measured_char_width_px() > 0.0
+    {
+        resolved_face.measured_char_width_px()
+    } else {
+        fallback.char_width()
+    };
     let row_height =
         if resolved_face.font_line_height.is_finite() && resolved_face.font_line_height > 0.0 {
             resolved_face.font_line_height
@@ -1092,7 +1116,7 @@ fn display_media_face_metrics(
         fallback.ascent()
     }
     .min(row_height);
-    DisplayRowFallbackMetrics::from_default_face_extents(fallback.char_width(), row_height, ascent)
+    DisplayRowFallbackMetrics::from_default_face_extents(char_width, row_height, ascent)
 }
 
 pub(crate) fn same_resolved_face(lhs: &ResolvedFace, rhs: &ResolvedFace) -> bool {
@@ -1567,6 +1591,7 @@ mod tests {
         let table = FaceTable::new();
         let resolver = test_face_resolver(&table);
         let mut active_face = resolver.default_face().clone();
+        active_face.set_measured_char_width_px(11.0);
         active_face.font_line_height = 24.0;
         active_face.font_ascent = 20.0;
         let fallback = DisplayRowFallbackMetrics::from_default_face_extents(8.0, 18.0, 14.0);
@@ -1575,6 +1600,6 @@ mod tests {
 
         assert_eq!(metrics.row_height(), 24.0);
         assert_eq!(metrics.ascent(), 20.0);
-        assert_eq!(metrics.char_width(), 8.0);
+        assert_eq!(metrics.char_width(), 11.0);
     }
 }

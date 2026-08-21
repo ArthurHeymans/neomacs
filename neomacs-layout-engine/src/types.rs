@@ -151,6 +151,11 @@ impl WindowParams {
         crate::display_pixel_calc::PixelCalcImageInputs {
             catalog: self.space_image_catalog.clone(),
             scale: self.image_scale_environment,
+            dimensions: crate::display_spec::DisplayImageDimensionEnvironment::new(
+                self.font_pixel_size,
+                self.char_height,
+                self.char_width,
+            ),
             default_fg: self.default_fg,
             default_bg: self.default_bg,
         }

@@ -961,6 +961,11 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
                         .image_catalog_shared()
                         .map(crate::types::SharedImageCatalog),
                     scale: image_scale_environment,
+                    dimensions: crate::display_spec::DisplayImageDimensionEnvironment::new(
+                        row_face.font_size,
+                        geometry.height(),
+                        char_width,
+                    ),
                     default_fg: base_face.fg,
                     default_bg: base_face.bg,
                 });
