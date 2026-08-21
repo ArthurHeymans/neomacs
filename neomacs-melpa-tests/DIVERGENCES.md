@@ -26424,6 +26424,32 @@ roughly thirty `init_*` functions and this entry read four of them; the rest --
 -- were not compared.  A systematic screen of every post-loadup reset against
 this port's `finalize_cached_bootstrap_eval` is its own entry, and now has a
 named reason to exist and a table shape (`RUNTIME_LOADER_RESET`) to grow into.
+
+> **2026-08-21, entry 177: the screen is done, and "roughly thirty" is exactly
+> 29.**  GNU's `main` makes **57** `init_*` calls; 1 is above `load_pdump`
+> (src/emacs.c:1436) and 16 sit in the `if (!initialized)` block that only
+> `temacs` reaches, leaving **40** post-image call sites -- 25 unconditional on
+> GNU/Linux, 4 behind a build option this build has, 11 behind a platform macro
+> it never defines.  All **29** reachable ones were read; **9** of them were
+> found to establish no Lisp-visible state at all (including `init_dbusbind`,
+> whose `xputenv` lands *after* `set_initial_environment` snapshots
+> `process-environment` at src/emacs.c:2177 and is therefore invisible to
+> `getenv-internal` -- measured nil in a GNU build whose
+> `system-configuration-features` names DBUS).  Across the other 20, **82
+> facts** were compared under `-Q --batch` with a control row.  **Three rows
+> diverged, covering two defects**, both of them this section's predicted class:
+> `exec-path` never got `exec-directory` appended (GNU src/callproc.c:1963's
+> `nconc2`, so `(executable-find "neomacsclient")` answered nil), and
+> `charset-map-path` was nil where GNU derives `(<data-directory>charsets)`.
+> Every one of this section's ten facts is in the 82 and all ten are still
+> identical.  `RUNTIME_LOADER_RESET` grew into
+> `neovm-core/src/emacs_core/post_image_init.rs`, whose `PostImageInit` enum
+> makes a missing call site a compile error and whose tests assert absolute
+> counts so an EMPTY table is red rather than vacuously green.  This section's
+> own list of unread functions was a good guess and not a complete one: it named
+> `init_buffer`, `init_callproc`, `init_fileio`, `init_editfns`, `init_charset`,
+> `init_process_emacs`, `init_window` and `init_xdisp` -- eight of the
+> twenty-five it had not read.
 ### 11. Gates, and why a load average is the wrong number to gate on
 
 ```
