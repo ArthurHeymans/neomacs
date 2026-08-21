@@ -446,7 +446,7 @@ rank	package	downloads	status
 445	smart-mode-line	197854	covered
 446	importmagic	196625	covered
 447	rjsx-mode	194993	covered
-448	dired-hacks-utils	194917	todo
+448	dired-hacks-utils	194917	covered
 449	diredfl	194179	covered
 450	jedi-core	193743	todo
 451	info+	193519	removed
