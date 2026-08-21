@@ -3399,27 +3399,35 @@ fn window_text_pixel_size_from_pos(
     buffers: &crate::buffer::BufferManager,
     buf: &Buffer,
     from: Option<&Value>,
-) -> Result<EmacsBytePos, Flow> {
+) -> Result<(EmacsBytePos, Option<i64>), Flow> {
     let beg = buf.point_min_lisp_char_pos();
     let end = buf.point_max_lisp_char_pos();
     let beg_byte = buf.lisp_pos_to_emacs_byte_pos(beg);
     let end_byte = buf.lisp_pos_to_emacs_byte_pos(end);
 
     match from {
-        None => Ok(beg_byte),
-        Some(value) if value.is_nil() => Ok(beg_byte),
-        Some(value) if value.is_t() => Ok(first_non_empty_line_start_in_region(
-            buf,
-            EmacsByteRange::new(beg_byte, end_byte),
+        None => Ok((beg_byte, None)),
+        Some(value) if value.is_nil() => Ok((beg_byte, None)),
+        Some(value) if value.is_t() => Ok((
+            first_non_empty_line_start_in_region(buf, EmacsByteRange::new(beg_byte, end_byte)),
+            None,
         )),
         Some(value) if value.is_cons() => {
             let pos = integer_or_marker_value_in_buffers(buffers, value.cons_car())?;
-            expect_fixnum_arg("integerp", &value.cons_cdr())?;
-            Ok(buffer_lisp_pos_to_emacs_byte_pos_clipped(buf, pos, beg))
+            let y_offset = value.cons_cdr();
+            expect_fixnum_arg("integerp", &y_offset)?;
+            let y_offset = y_offset.as_fixnum().expect("validated fixnum");
+            Ok((
+                buffer_lisp_pos_to_emacs_byte_pos_clipped(buf, pos, beg),
+                (y_offset != 0).then_some(y_offset),
+            ))
         }
         Some(value) => {
             let pos = integer_or_marker_value_in_buffers(buffers, *value)?;
-            Ok(buffer_lisp_pos_to_emacs_byte_pos_clipped(buf, pos, beg))
+            Ok((
+                buffer_lisp_pos_to_emacs_byte_pos_clipped(buf, pos, beg),
+                None,
+            ))
         }
     }
 }
@@ -3532,14 +3540,49 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
         return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
     };
 
-    let buf = eval.buffers.get(buf_id);
-    let Some(buf) = buf else {
-        return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
+    let (initial_from_pos, y_offset, max_offset_rows) = {
+        let Some(buf) = eval.buffers.get(buf_id) else {
+            return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
+        };
+        let (from_pos, y_offset) =
+            window_text_pixel_size_from_pos(&eval.buffers, buf, args.get(1))?;
+        let accessible = buf.accessible_emacs_byte_region();
+        (
+            from_pos,
+            y_offset,
+            accessible
+                .end()
+                .get()
+                .saturating_sub(accessible.start().get())
+                .saturating_add(1),
+        )
     };
 
     // Determine FROM/TO range.
-    let from_pos = window_text_pixel_size_from_pos(&eval.buffers, buf, args.get(1))?;
-    let to_pos = window_text_pixel_size_to_pos(&eval.buffers, buf, args.get(2), from_pos)?;
+    let from_pos = if let Some(y_offset) = y_offset {
+        let rows = (((y_offset.unsigned_abs() as f64) / f64::from(char_h.max(1.0))).ceil()
+            as usize)
+            .min(max_offset_rows);
+        let lines = i64::try_from(rows).unwrap_or(i64::MAX) * y_offset.signum();
+        super::builtins::symbols::screen_line_offset_target(
+            eval,
+            Value::make_window(wid.0 as u64),
+            buf_id,
+            initial_from_pos,
+            lines,
+        )?
+    } else {
+        initial_from_pos
+    };
+    let (to_pos, reported_start) = {
+        let Some(buf) = eval.buffers.get(buf_id) else {
+            return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
+        };
+        (
+            window_text_pixel_size_to_pos(&eval.buffers, buf, args.get(2), from_pos)?,
+            y_offset.map(|_| Value::fixnum(buf.emacs_byte_pos_to_lisp_char_pos(from_pos).as_i64())),
+        )
+    };
     // GNU's TO=t means measure through the line ending the last non-empty line,
     // not through trailing blank lines.
     let apply_trim = args
@@ -3576,7 +3619,15 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     };
     let height = ((text_metrics.lines as f32 + mode_line_rows) * char_h).ceil() as i64;
 
-    Ok(Value::cons(Value::fixnum(width), Value::fixnum(height)))
+    if let Some(reported_start) = reported_start {
+        Ok(Value::list(vec![
+            Value::fixnum(width),
+            Value::fixnum(height),
+            reported_start,
+        ]))
+    } else {
+        Ok(Value::cons(Value::fixnum(width), Value::fixnum(height)))
+    }
 }
 
 fn resolve_live_window_for_text_pixel_size(

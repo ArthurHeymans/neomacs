@@ -2197,6 +2197,51 @@ fn vertical_motion_screen_width(eval: &mut super::eval::Context, window: Option<
         .max(1)
 }
 
+pub(crate) fn screen_line_offset_target(
+    eval: &mut super::eval::Context,
+    window: Value,
+    buffer_id: crate::buffer::BufferId,
+    pos: EmacsBytePos,
+    lines: i64,
+) -> Result<EmacsBytePos, Flow> {
+    let screen_width = vertical_motion_screen_width(eval, Some(window));
+    let truncate_lines =
+        super::window_cmds::window_truncates_lines_for_motion(eval, Some(window), buffer_id);
+    let mut target = current_screen_line_start_with_truncation(
+        eval,
+        buffer_id,
+        pos,
+        screen_width,
+        truncate_lines,
+    )?
+    .unwrap_or(pos);
+
+    if lines < 0 {
+        return previous_screen_line_target(
+            eval,
+            buffer_id,
+            target,
+            screen_width,
+            truncate_lines,
+            lines.unsigned_abs() as usize,
+        )
+        .map(|(target, _)| target);
+    }
+
+    for _ in 0..lines {
+        let Some(step) =
+            next_visible_line_start(eval, buffer_id, target, screen_width, truncate_lines)?
+        else {
+            break;
+        };
+        target = step.next;
+        if !step.counts_line {
+            break;
+        }
+    }
+    Ok(target)
+}
+
 fn line_start_at_or_before(buf: &crate::buffer::buffer::Buffer, pos: EmacsBytePos) -> EmacsBytePos {
     let accessible = buf.accessible_emacs_byte_region();
     let begv = accessible.start();
