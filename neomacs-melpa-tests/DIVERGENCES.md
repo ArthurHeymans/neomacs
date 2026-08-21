@@ -26968,6 +26968,39 @@ test with a fake database can attest.
    children are both already known when its pass begins; it does not cover the
    mid-loop case, and no probe here does.
 
+   **2026-08-21 -- ledger 180: NOT lifted, and now measured rather than
+   sized.**  The sizing above named the wrong change: the split it proposed is
+   not the fix and the service loop is untouched, because the pass already
+   discovers everything it needs while it is waiting -- it polls the child
+   itself, and on Linux the child's `pidfd` wakes the poller the moment it
+   terminates.  What is missing is discovery when NOBODY is waiting, which is
+   not in that loop at all.  180 transcribed GNU's `handle_child_signal` sweep
+   (:7734-7763), unit-tested it against a `ProcessManager` with no wait loop,
+   wired it to GNU's four Lisp-facing `update_status` sites, and took a 27-row
+   consumer screen from **11 divergent to 2** -- and then WITHDREW the wiring,
+   because a synchronous sweep is not a late signal.  GNU's record needs a
+   SIGCHLD to be delivered and handled; `waitpid (WNOHANG)` at the observation
+   is ground truth, and programs depend on the lag: `(while (process-live-p p)
+   (accept-process-output p 1))` loses its sentinel 0/60 in GNU and 4/60 with
+   the sweep wired, and `treemacs-magit`'s
+   `extending_a_real_commit_schedules_the_same_project_refresh` fails
+   DETERMINISTICALLY, because magit keys `magit-run-post-commit-hook` on
+   `last-command` and the sentinel then runs after the `let` that bound it has
+   unwound.  Notifying at the observation instead is worse still: it takes
+   GNU's removal decision (:7926-7929) and retires a process GNU does not
+   retire, breaking the three rows of the same screen that currently AGREE.
+   So the cap stands and its cause is now named: the port needs the TRIGGER --
+   a recorder that fires when the child dies and wakes the wait, GNU's
+   `handle_child_signal` + `child_signal_notify` pair -- not a different
+   placement of the sweep.  180 §7 and §10.1.  Three neighbours were fixed on
+   the way: `process-send-eof`'s missing liveness gate (:7451-7455), a wait
+   that returned having seen a child's EOF and not its status, and three pins
+   that were racing on the very fact this section is about.  This section's
+   own second measurement is re-run in 180 §5b, and the half of it that never
+   depended on the recording remains: GNU runs BOTH sentinels inside
+   `delete-process` because `status_notify (p, NULL)` (:1129) walks the whole
+   alist, and this port notifies only the process being deleted.
+
 2. **`(signal-process "N" SIG)` for a numeric STRING.**  GNU's string arm is
    `Fget_process` first and then `string_to_number (SSDATA (process), 10,
    &len)` with `len != SBYTES (process)` rejected (:7358-7365), so a numeric
@@ -28595,3 +28628,761 @@ clean tests is not a gate; it was re-run from scratch for the figure above.
 
 Status: FIXED (the seeding).  The 28 names it was masking are recorded in
 §9 and §12, attributed to one cause, and deliberately not fixed here.
+
+## 180. The largest open item in the process family, built, measured and then WITHDRAWN: GNU's SIGCHLD sweep transcribed and unit-tested, wired to GNU's own eight `update_status` sites, nine of eleven divergent rows closed -- and then unwired, because a synchronous sweep is not a late signal, and the difference costs `treemacs-magit` a deterministic failure and the commonest process idiom in Elisp its sentinel 4 times in 60 -- PINNED AS A DIVERGENCE, with three neighbouring fixes that stand on their own
+
+Entry 175 §8.1 filed this: "This port has no asynchronous child-status
+recording, and that is what caps section 3's fix."  It sized the GNU-shaped
+change as splitting this port's one service loop into GNU's two and called
+that "NOT a small change".  The split is not the change and the loop is
+untouched (§8); what was missing is discovery when nobody is waiting at all.
+
+The recording now exists, transcribed from `handle_child_signal` and
+exercised by a unit test that drives a `ProcessManager` with no wait loop.
+It is **not called from any Lisp entry point**, and §7 is the measurement
+that says why -- it is the section this entry exists for.  Two intermediate
+commits on this branch had it wired; the numbers in §5, §6 and §7 come from
+running the suites against those binaries, so "it would have worked" is not a
+claim here, it is a table.
+
+### 1. Reproduced in both editors, with the wait taken out of the probe entirely
+
+The question is what happens when *nobody waits*, so the probe contains no
+`accept-process-output`, no `sit-for` and no `sleep-for`.  Two spins were
+used and they agree.  `-Q --batch`, GNU Emacs 31.0.90 against
+`./target/release/neomacs` built in the MAIN tree at this branch's merge base
+`2733daaab`, provenance checked the way ledger 178 requires
+(`(documentation-property 'dos-codepage 'variable-documentation)` is `nil`).
+
+The first spin waits for a marker file the child touches immediately before
+exiting, then spins 0.6 s on `float-time` (`tmp/pw180/repro.el`).  The second
+takes the clock out too: it spins until `/proc` says the child is a **zombie**
+-- exited and not reaped -- which is a state only this port ever reaches
+(`tmp/pw180/zombie.el`).  Six process shapes:
+
+| shape | question | GNU 31.0.90 | Neomacs |
+|---|---|---|---|
+| child `exit 0`, pipe | `process-status` | `exit` | `run` |
+| | `process-live-p` | `nil` | `(run open listen connect stop)` |
+| child `exit 7`, pipe | `process-status` | `exit` | `run` |
+| | `process-exit-status` | `7` | `0` |
+| child `exit 0`, **pty** | `process-status` | `exit` | `run` |
+| child `kill -TERM $$` | `process-status` | `signal` | `run` |
+| | `process-exit-status` | `15` | `0` |
+| child that wrote output first | `process-status` | `exit` | `run` |
+| **`make-pipe-process`** | `process-status` | `open` | `open` |
+| | `process-live-p` | `(open listen connect stop)` | same |
+| all six | `get-process` | `t` | `t` |
+| all six | `(memq p (process-list))` | `t` | `t` |
+
+Three rows keep a fix honest.
+
+* **`get-process` and `process-list` agree, and must keep agreeing.**
+  `handle_child_signal` never rewrites `Vprocess_alist`; `remove_process`
+  (:957-966) is the only thing that does, and `status_notify` (:7926-7927)
+  calls it -- which has not run here.  A fix that retired the process early
+  would have made this table worse, and §7.4 is where that matters.
+* **The pipe process agrees, and must.**  Ledger 165's inversion, measured a
+  second time: a pipe has no pid, `handle_child_signal` passes `p->pid` to
+  `child_status_changed` (:7742), and `get_child_status` opens with
+  `eassert (child > 0)` (src/sysdep.c:462).  GNU's handler cannot reach a
+  pipe at all; its status changes only when `read_process_output` returns 0
+  (:6072-6079), inside the wait.  For a pipe, `process-live-p` going `nil`
+  means the OPPOSITE thing.
+* And one row that is not about Lisp at all:
+
+```
+after a 1-second pure-Lisp spin, no wait having run:
+  (cdr (assq 'state (process-attributes pid)))    GNU nil       Neomacs "Z"
+```
+
+GNU's handler *reaps* -- `child_status_changed` is `waitpid` -- so GNU's
+exited child leaves nothing behind, and this port leaves a zombie.  That row
+needs the trigger and not the sweep; §10.2.
+
+### 2. What a SIGCHLD handler may legitimately do, which is what decided the design
+
+This reading came before any design and it is decisive rather than
+background.  GNU licenses its handler to do almost nothing, in the comment
+block immediately above it (src/process.c:7666-7688):
+
+```text
+   All we do is change the status; we do not run sentinels or print
+   notifications.  That is saved for the next time keyboard input is
+   done, in order to avoid timing errors.                        /* :7669-7671 */
+
+   ** WARNING: this can be called during garbage collection.
+   Therefore, it must not be fooled by the presence of mark bits in
+   Lisp objects.                                                 /* :7673-7675 */
+
+   ** Malloc WARNING: This should never call malloc either directly or
+   indirectly; if it does, that is a bug.                        /* :7687-7688 */
+```
+
+and it enforces the third with a bug report inlined into
+`child_signal_notify` (:7616-7650), which used to end with `emacs_perror`
+and no longer does:
+
+```text
+     But this calls `emacs_perror', which in turn invokes a localized
+     version of strerror, which is not reentrant and must not be
+     called within a signal handler:
+       __lll_lock_wait_private () ... malloc () ... strerror_l () ...
+       emacs_perror (...) / child_signal_notify () / handle_child_signal (sig=17)
+     So we no longer check errors of emacs_write here.
+```
+
+What survives at the bottom of GNU's handler is one `emacs_write (fd,
+&dummy, 1)` to a self-pipe.  A fourth constraint is one file over:
+`deliver_process_signal` (src/sysdep.c:1729-1751) exists because "POSIX says
+any thread can receive a signal", and forwards to the main thread with
+`pthread_kill`.
+
+**Those four say a Rust port must not put the sweep in the handler.**  This
+port's process table is a `HashMap<ProcessId, Process>` owned by the Lisp
+thread; walking it from a handler on an arbitrary thread while the Lisp
+thread mutates it is a data race, and collecting from it allocates.  GNU gets
+away with `FOR_EACH_PROCESS` there only because its alist is conses, and it
+accepts the GC hazard explicitly.  So the answer is to transcribe the sweep
+onto the Lisp thread rather than to port the handler -- and §7 is where that
+answer runs out of road.
+
+**A fact worth having on its own, because its blast radius is much larger
+than this entry:** `grep -rn 'sigaction|signal_hook|SIGWINCH|SIGINT'` over
+`neovm-core`, `neomacs-bin`, `neomacs-display-runtime` and `neovm-worker`
+returns **zero production hits**.  This port installs no OS signal handlers
+at all.  SIGCHLD is only the one this entry needed; SIGWINCH, SIGINT, SIGHUP
+and SIGPIPE are in the same hole, and ledger 184 takes SIGUSR1/2 for the same
+reason.
+
+The other half of the reading is the *consumers*.  `grep -n 'update_status ('
+src/process.c` gives the definition at :717 and **exactly eight** call sites,
+and that closed list is the entry's domain:
+
+| GNU line | function | reached from Lisp as |
+|---|---|---|
+| :1143 | `Fdelete_process` | `delete-process` |
+| :1189 | `Fprocess_status` | `process-status`, and `process-live-p` through it |
+| :1213 | `Fprocess_exit_status` | `process-exit-status` |
+| :5562 | `wait_reading_process_output` | `accept-process-output` |
+| :6087 | `read_process_output`, pipe EOF | -- |
+| :6726 | `send_process` | `process-send-string`, `process-send-region` |
+| :7453 | `Fprocess_send_eof` | `process-send-eof` |
+| :7915 | `status_notify` | -- |
+
+`process-live-p` has no C of its own: it is
+`(memq (process-status process) '(run open listen connect stop))` at
+lisp/subr.el:3538-3540, so it rides on :1189 -- which is also why this port's
+Rust `builtin_process_live_p_impl` is `#[allow(dead_code)]` and unregistered,
+and correctly so.  The standing directive paid for itself: there was nothing
+to port.
+
+### 3. The failing test, red first -- and what became of it
+
+`a_child_that_exited_with_nobody_waiting_is_already_dead_to_lisp_like_gnu`
+and `the_async_child_recording_leaves_a_pidless_pipe_process_alone_like_gnu`,
+both driving the zombie handshake from Lisp, both asserting GNU's column.
+Red, before a line of the fix:
+
+```
+Summary [11.990s] 2 tests run: 0 passed, 2 failed, 9249 skipped
+  left:  "OK ((zombie-before . t) (status . run) (exit-status . 0)
+              (live-p run open listen connect stop) (get-process . t) (in-process-list . t))"
+  right: "OK ((zombie-before . t) (status . exit) (exit-status . 7) (live-p)
+              (get-process . t) (in-process-list . t))"
+```
+
+Green with the sweep wired.  Then §7 happened, and what ships is
+`a_child_that_exited_with_nobody_waiting_is_still_run_here_and_exit_in_gnu`
+-- the same probe, asserting the LEFT column, with GNU's in its docstring and
+a pointer to §7.  Pinning a divergence is a worse outcome than fixing it and
+a better one than shipping a regression, and the ledger has the failure mode
+to avoid: 176 found an eln-load-path doc test still pinning a divergence 173
+had removed.  This pin carries the reason and the citation so it cannot
+outlive its divergence quietly.
+
+**`zombie-before` is asserted `t` on purpose.**  A pin whose child had not
+actually exited would pass vacuously -- it would find `run` and `0` and agree
+with itself.  Asserting the zombie makes the probe carry its own evidence.
+
+(The first attempt at the red run failed differently and is worth one line:
+the worktree was missing **1,733** generated `lisp/` files and
+`neovm-core/tests/test-module/target`, so both tests died in bootstrap with
+`file-missing`.  That is the documented fresh-worktree trap; copying the
+ignored files across and clearing BOTH bootstrap fingerprint memos --
+`./target/` and the shared `~/.cache/neomacs/` one -- turned a 400-second
+bootstrap failure into an 11-second red.)
+
+### 4. The type: GNU's eight lines as the domain, and the divergence as a value
+
+`neovm-core/src/emacs_core/process/child_status.rs`, a sibling of ledger
+169's `status_notify.rs` and a child module of `process.rs`, so it can see
+`ProcessManager`'s private tables.
+
+`process_effective_status` (GNU `update_status`'s view, :717-721) and
+`process_public_status_symbol` (GNU `Fprocess_status`'s return value,
+:1188-1201) were `pub(crate)`; they are now private to `process.rs` and this
+child of it, and the only public spelling is two methods on
+`ObservedProcess`, whose fields are private and whose only constructors are
+`ProcessManager::observe(site, id)` and
+`ProcessManager::read_status_without_recording(hole, id)`.  **So a subr
+cannot report a process's status without naming which of GNU's eight
+`update_status` lines it is, or which enumerated hole.**  `ALL` is declared
+with length `COUNT`, derived from the last discriminant, and `gnu` and
+`recording` are exhaustive matches -- a ninth site is a compile error until it
+has a citation and a classification, and an emptied table fails
+`gnus_eight_update_status_sites_are_enumerated_and_four_are_the_asynchronous_ones`
+rather than passing over nothing.  That is ledger 177's `post_image_init.rs`
+shape applied to a set GNU defines by grep.
+
+The 4/4 split is the entry's finding in one number:
+
+* **`AlreadyRecorded { by }`** -- `wait_reading_process_output` and
+  `status_notify` are inside the machinery that has just done the discovery
+  itself; `read_process_output`'s pipe arm has no child to sweep; and
+  **`Fdelete_process` is in this group for a reason worth its own sentence.**
+  `p->raw_status_new = 0;` at :1123 THROWS THE RECORD AWAY before anything
+  else happens, so :1141's `if (p->raw_status_new)` can only be true for a
+  status that `record_kill_process`'s own SIGKILL produced between :1136 and
+  :1140.  Measured on a child that exited **7** with nobody waiting, both
+  editors answer `signal` and `9` -- GNU because it discarded the 7, this port
+  because it never recorded it.  Had `DeleteProcess` been classified with the
+  other four by symmetry, this port would have started answering `exit` / `7`
+  where GNU answers `signal` / `9`.  This is the reproduction ledger 169 §10.3
+  asked the next entry to start from, and it answers its open question: GNU
+  really does lose the exit code, deliberately.
+* **`AsynchronousInGnu { by, why }`** -- `Fprocess_status`,
+  `Fprocess_exit_status`, `send_process`, `Fprocess_send_eof`.  GNU reaches
+  all four with the record already made because a SIGCHLD handler made it at
+  some earlier instant.  The variant carries GNU's line that makes the record
+  and the reason this port does not make it here, so **the divergence is a
+  value with a citation rather than a comment**, and wiring it when the
+  trigger exists is four match arms and nothing else -- every Lisp-visible
+  status already comes through `ObservedProcess`.
+
+The population is a type too.  `SweepableChild::of` is GNU's `p->alive &&
+child_status_changed (p->pid, ...)` (:7741-7742) with the pid half enforced
+by `eassert (child > 0)` one frame down, and it is the ONLY constructor.  A
+pipe or network connection is therefore not skipped by an `if` inside the
+sweep -- it is not a member of the population, so 165's inversion is a case
+this code cannot express.  The pin asserts that directly:
+`SweepableChild::of(pipe, ...)` is `None`.
+
+And the *exceptions* are a type, because a guarantee with unlisted holes is
+not a guarantee.  `UnrecordedStatusRead` has one variant, `ModeLinePercentS`,
+with a citation and a written reason; `COUNT` is asserted, so a second hole
+cannot appear unremarked.
+
+**The scope is stated in the docstring rather than overclaimed**, and the
+neighbour audit forced that: the guarantee covers the Lisp-visible ANSWER,
+not the manager's internals.  `process_effective_status` still has five
+in-module callers and the bare `status` field has 24 direct reads.  Seven of
+those 24 reach a Lisp answer, and each goes through a named funnel whose GNU
+counterpart also reads `p->status` bare -- `Finternal_default_process_sentinel`
+does exactly that at :7958, and `Fcontinue_process` never consults it at all.
+
+Finally, the sweep itself is transcribed and **unit-tested without being
+called from anywhere**:
+`gnus_sigchld_sweep_records_an_exited_child_and_cannot_reach_a_pidless_process`
+drives a `ProcessManager` with no wait loop, waits through `/proc` until the
+child is a zombie, asserts the status is still `run`, calls
+`record_child_status_changes()`, and asserts `(exit . 7)` and that the
+process is still listed.  That test is what makes §7's withdrawal a decision
+about WIRING rather than an abandoned implementation.
+
+### 5. The consumer audit: 27 rows, 11 divergent -- and 2 with the sweep wired
+
+Every Lisp entry point the brief named plus the neighbours the same screen
+touches, each asked about a child that had exited with nobody waiting
+(`tmp/pw180/audit.el`, rendered by `tmp/pw180/table.py`):
+
+```
+row                     GNU 31.0.90                          Neomacs (shipped)
+process-status          exit                                 run                  DIVERGENT
+process-status/7        exit                                 run                  DIVERGENT
+process-status/sig      signal                               run                  DIVERGENT
+process-exit-status/0   0                                    0
+process-exit-status/7   7                                    0                    DIVERGENT
+process-exit-status/s   15                                   0                    DIVERGENT
+process-live-p          nil                                  (run open listen ...) DIVERGENT
+process-send-string     error "... not running: finished"    error "... no longer connected to pipe; closed it"  DIVERGENT
+process-send-eof        error "... not running: finished"    ok                   DIVERGENT
+process-send-region     error "... not running: finished"    error "... no longer connected to pipe; closed it"  DIVERGENT
+delete-process/status   signal                               signal
+delete-process/exit     9                                    9
+mode-line-%s            ""                                   ""
+get-process             t                                    t
+get-buffer-process      t                                    t
+process-list-memq       t                                    t
+process-running-child   t                                    t
+interrupt-process       ok                                   ok
+kill-process            ok                                   ok
+stop-process            ok                                   ok
+continue-process        ok                                   ok
+signal-process-0        -1                                   0                    DIVERGENT
+process-command         t                                    t
+process-id-nonnil       t                                    t
+process-attrs-state     nil                                  "Z"                  DIVERGENT
+accept-process-output   nil                                  nil
+purepipe-status         (open 0 t nil)                       (open 0 t nil)
+
+rows=27  divergent=11  agreeing=16
+```
+
+**`process-exit-status/0` is the row that says why the other two exit-status
+rows exist.**  Asked of a child that exited 0 it agrees, because this port's
+answer for "still running" is also 0 -- an agreement for the wrong reason.
+Asking `exit 7` and `kill -TERM` is what turns it into a measurement.
+
+Re-measured against a binary with the sweep wired (`cargo xtask fresh-build
+--release`, `finished successfully`, `no_byte_compile=false`, pdump newer
+than the binary, `*scratch*` empty, provenance `nil`), the same 27 rows gave
+**divergent=2, agreeing=25** -- the nine `update_status` rows all closed,
+every row that already agreed still agreeing, including the pipe control and
+the three `process-list` rows.  The two survivors are `signal-process-0` and
+`process-attrs-state`, the same fact seen twice: GNU's handler also REAPS, so
+GNU's child is gone from the OS and `kill (pid, 0)` fails `ESRCH` while
+`/proc` forgets it.  Neither is an `update_status` consumer, so no placement
+of the sweep closes them.
+
+**That 11 -> 2 is the size of what §7 withdraws, and it is quoted so the
+withdrawal is priced rather than asserted.**
+
+A separate control matters: asked of a child whose exit has ALREADY been
+notified, all three send rows agree in both editors at the merge base
+(`tmp/pw180/settled.el`, `status=exit` on both sides).  So the send
+divergences are caused by the missing record and not by an independently
+missing gate -- with ONE exception, which is §6.1.
+
+### 5b. Ledger 175 §8.1's own two measurements, re-run
+
+175 recorded the divergence as two lines and this entry owes both an after
+(`tmp/pw180/notify-order.el`: two children exit during a pure-Lisp spin, then
+ONE full notification pass is forced by `delete-process` on an unrelated pipe
+-- GNU's `Fdelete_process` calls `status_notify (p, NULL)` at :1129, a full
+walk of the alist).  Three runs each:
+
+```
+                                     GNU 31.0.90     Neomacs, 175       with the sweep wired
+(process-live-p a) after the spin    nil             (run open ...)     nil
+(process-status a) after the spin    exit            --                 exit
+where a's sentinel runs              delete-process  accept-process-out accept-process-out
+where b's sentinel runs              delete-process  accept-process-out accept-process-out
+notification order                   b then a        b then a           b then a
+```
+
+The first two lines are what the wiring closed and what §7 gives back.  The
+third and fourth it never closed: GNU runs both sentinels inside
+`delete-process` because `status_notify` walks the WHOLE alist there, and
+this port's `delete-process` notifies only the process being deleted.  §10.3.
+The order row is ledger 175 §3's fix, still holding on both sides.
+
+### 6. Three things that are fixed, and stand without the sweep
+
+**6.1 `process-send-eof` had no liveness gate at all on the non-PTY path.**
+GNU's `Fprocess_send_eof` gate is unconditional -- `update_status`, then
+`if (! EQ (p->status, Qrun)) error ("Process %s not running: %s", ...)`
+(:7451-7455) -- reached for every kind except a datagram connection, which
+returns at :7444-7445 before it.  This port had that gate only on the
+PTY-stdin branch.  The row is reachable with no recording at all once
+`delete-exited-processes` is nil, because then the sentinel has run, the
+status is settled, and GNU keeps the process in `Vprocess_alist`
+(:7926-7929).  Measured, three runs each:
+
+```
+                       GNU 31.0.90                          this port, before
+process-send-eof       error "... not running: finished"    ok
+process-send-string    error "... not running: finished"    same as GNU
+```
+
+Fixed with GNU's own datagram exemption above it, and pinned by
+`process_send_eof_rejects_a_finished_process_like_gnu`.  `process_allows_send`
+now reads the settled status too, which is what GNU's gate reads one line
+after `update_status`.
+
+**6.2 A wait must not return having seen a child's EOF and not its status.**
+A service pass checks child status BEFORE reading (`process.rs`:8810) and,
+for a readiness wake, again after (`:9084`).  The after-output check was
+gated on `!publish_status_before_readable_output`, so on an INITIAL-POLL pass
+it never ran -- and an initial poll always misses, because the pre-read check
+happens before the child has written anything and the child exits right after
+writing.  Such a pass returned having read the child's output to EOF and
+never noticed its exit.
+
+GNU cannot end up there, and two of its lines say why.
+`wait_reading_process_output` runs `status_notify (NULL, wait_proc)` as soon
+as the fd scan comes back empty (:5550-5556).  And `read_process_output`
+refuses to infer death from EOF at all -- for a real child, `nread == 0` only
+does `delete_read_fd (channel)`, under the comment *"If we can detect process
+termination, don't consider the process gone just because its pipe is
+closed"* (:6103-6110) -- so the status can only come from the record, and the
+wait has to be what looks for it.
+
+The follow-up now runs for an initial poll too, with the same
+`process_publishes_status_after_ready_output` gate and the same zero-duration
+backend wait it already used.  It was FOUND because the wiring made it
+Lisp-visible (§7.2) and it is KEPT because it is GNU's line whether or not
+anything sweeps.
+
+**6.3 Three existing pins were RESHAPED, and one of them was asserting the
+divergence.**  The shortest first: `start_process_and_query` ran `echo hello`
+and asserted `(process-status (get-process "my-proc"))` is **`run`** -- an
+expectation only satisfiable because this port cannot see a child exit
+without waiting.  Six runs of `start-process` + a 2 ms pure-Lisp spin +
+`process-status`:
+
+```
+                       immediate   after 2 ms
+GNU 31.0.90              run         exit       (6/6)
+Neomacs, merge base      run         run        (6/6)
+Neomacs, sweep wired     run         exit       (5/6)
+```
+
+**GNU answers `exit` there.**  The pin was asserting the divergence and went
+red because the divergence was fixed.  It now starts a child that is still
+alive, which makes `run` the right answer in both editors and takes the race
+out of the test.
+
+The other two spun on `process-status` while waiting for a sentinel:
+
+```elisp
+(while (and (memq (process-status proc) '(run open listen connect stop)) (< i 20))
+  (accept-process-output proc 0.05))
+```
+
+That shape asks the loop to exit on exactly the fact GNU records *before* the
+sentinel runs.  `tmp/pw180/hangup2.el` kills the process's buffer (SIGHUP to
+the child) and then spins in **pure Lisp with no `accept-process-output`
+anywhere**, in GNU Emacs 31.0.90:
+
+```
+PW180H2 status=signal iters=175 elapsed=0.0001 log=nil
+PW180H2 status=signal iters=204 elapsed=0.0001 log=nil
+PW180H2 status=signal iters=86  elapsed=0.0000 log=nil
+PW180H2 status=signal iters=117 elapsed=0.0001 log=nil
+PW180H2 status=signal iters=215 elapsed=0.0001 log=nil
+```
+
+GNU's own `process-status` stops saying `run` after 86-215 iterations --
+about 0.1 ms -- **with the sentinel list still `nil`**.  The original shapes
+passed in GNU only because SIGCHLD delivery lags the *first* `process-status`
+call by those ~50 us.  Both loops now wait for the SENTINEL rather than for
+the status, and both new shapes were re-derived against GNU Emacs 31.0.90
+before being adopted, 5 runs each, giving byte-identical expected values:
+
+```
+PW180R1 (signal nil t nil nil (("hangup\n" signal nil)))              x5
+PW180R2 (t t exit "resumed\n" ((stop "stopped (signal)\n")
+                               (run "run") (exit "finished\n")))      x5
+```
+
+Reshaping a pin is not relaxing one: for these two the expected VALUES are
+unchanged and were re-measured in GNU, and only the synchronisation changed;
+for `start_process_and_query` the value changed because GNU was consulted and
+disagreed with the old one.
+
+### 7. Why the sweep is transcribed and NOT wired -- the section this entry is for
+
+Wiring it means: at each of the four `AsynchronousInGnu` sites, run
+`record_child_status_changes()` before reading.  That was built, gated and
+measured.  It is withdrawn, and the case against it is three measurements and
+one dead end.
+
+**7.1 GNU's record is a LATE signal; a sweep is ground truth, and programs
+depend on the lateness.**  `handle_child_signal` runs only once a SIGCHLD has
+been delivered and handled, tens of microseconds after the child dies (§6.3's
+86-215 iterations).  `waitpid (WNOHANG)` at the observation has no such lag.
+The Lisp that notices is the commonest process idiom there is:
+
+```elisp
+(while (process-live-p p) (accept-process-output p 1))
+```
+
+Sixty runs of the oracle's own `divergence_process_multiline_output` form,
+counting how often the default sentinel's `"\nProcess ... finished\n"` failed
+to reach the buffer:
+
+```
+                       sentinel message missing
+GNU 31.0.90                     0 / 60
+Neomacs, merge base             0 / 60
+Neomacs, sweep wired            4 / 60
+```
+
+**7.2 Half of that was a real bug in this port, and fixing it was not
+enough.**  The 4/60 turned up as a FOURTH oracle red where three were
+expected, which is the whole reason failures are enumerated by name.  Its
+cause was §6.2's dead wait-loop line, and §6.2 is kept.  With it fixed the
+multiline shape went to **0/60** -- and the wider shape did not:
+
+```
+                       sentinel never ran     waits histogram
+GNU 31.0.90                 1 / 60            0:1  1:17  2:42
+Neomacs, sweep wired        5 / 60            1:43  2:17
+```
+
+GNU's `0:1` row is the proof that this is GNU's hole and not a new one: in
+one run of sixty, GNU's `process-live-p` was already `nil` before the FIRST
+`accept-process-output`, so GNU exited the loop with its sentinel unrun.
+What differs is the rate, and no synchronous sweep reproduces a signal's
+latency.
+
+**7.3 And a real package fails DETERMINISTICALLY, which is what settled it.**
+`treemacs-magit`'s `extending_a_real_commit_schedules_the_same_project_refresh`
+went red.  It was not flake: run in isolation it failed again; pointing
+`NEOMACS_BIN` at the merge-base binary made the same case pass; and a binary
+built from the FIRST of this branch's commits alone -- the sweep without §6.2
+-- failed as well, so the sweep is the cause and §6.2 is not.  The mechanism
+was read out of the failure rather than guessed.  A temporary diagnostic in
+the scenario printed
+
+```
+magit-post-refresh-hook = (magit-auto-revert-buffers magit-run-post-commit-hook
+                           magit-run-post-stage-hook magit-run-post-unstage-hook)
+treemacs-magit--timers = nil
+```
+
+`magit-run-post-commit-hook` is keyed on the command, and the test binds
+`(this-command nil)` and `(last-command 'magit-commit-extend)` **around** its
+`(await-process process)`, which is `(while (process-live-p process)
+(accept-process-output nil 0.02))`.  In GNU the sentinel runs inside that
+wait, inside the `let`, so the hook matches and the idle update is scheduled.
+With the sweep, `process-live-p` answers `nil` before any wait, the `let`
+unwinds, and the sentinel then runs against a `last-command` that no longer
+matches.  The idle timer is never created and the case errors
+`"Treemacs-Magit idle update was not scheduled"`.
+
+**7.4 The obvious repair is worse, and the reason is in §1's own table.**
+"Notify at the observation" -- run the pending `status_notify` from
+`process-status`, so the sentinel runs inside the `let` after all -- fixes
+7.1 and 7.3 and breaks something bigger: notifying takes GNU's removal
+decision (:7926-7929), so with `delete-exited-processes` at its default the
+process is RETIRED.  GNU does not retire without a wait, which is exactly
+what §1's `get-process`, `get-buffer-process` and `memq ... (process-list)`
+rows measure at `t` in both editors.  It would trade nine divergent rows for
+three, and it would make `process-status` a place where arbitrary Lisp runs,
+which GNU never does -- measured in the same probe: GNU's exit sentinel has
+NOT run after `process-status`.
+
+**7.5 So the fix needs the trigger.**  Not a different placement of the
+sweep: a real asynchronous recorder that makes the record when the child dies
+AND wakes the wait, which is precisely the pair GNU has
+(`handle_child_signal` then `child_signal_notify`, :7766-7767).  §10.1 sizes
+it.
+
+### 8. Hypotheses eliminated
+
+* **"The GNU-shaped fix is to split this port's one loop into GNU's two ...
+  and it is NOT a small change"** (175 §8.1).  **Refuted as the fix.**  The
+  loop's guards keep output ahead of status within a pass, but the pass
+  ALREADY discovers everything it needs while it is waiting -- it polls the
+  child itself, and on Linux the child's `pidfd` is registered with the poller
+  so the wait returns the moment the child terminates
+  (`process/sys/linux.rs`; the `fallback` backend uses the periodic scan).
+  What was missing is discovery when *nobody is waiting at all*, which is not
+  in that loop.  The loop is untouched by this entry: its four
+  `check_child_status_change` call sites (:8810, :9084, :9093, :9116) and
+  entry 54's fifth (`notify_stderr_pipe_owner_first`, :8220) keep their
+  guards, and §6.2 changes one condition inside one of them.
+* **"Actively polling `try_wait` in `Fprocess_status` would let the classic
+  `(while (process-live-p p) (accept-process-output p))` loop observe a death
+  between waits and exit before any wait delivers the pending sentinel -- GNU
+  reliably delivers the sentinel inside the next wait for that idiom"** (the
+  comment that stood above `builtin_process_status_impl`).  **Upheld, and it
+  is the finding.**  It cost this entry its headline: the hazard is real
+  (0/60 -> 4/60, and treemacs-magit deterministically), and only the word
+  "reliably" is wrong -- GNU loses the same sentinel 1/60 in the wider shape.
+  A comment that turns out to be load-bearing is worth more than the change
+  it blocks, and this one is now a citation-carrying enum variant instead of
+  a comment.
+* **"A pipe process needs the same treatment as a child."**  Refuted before
+  it was written, by `eassert (child > 0)` (src/sysdep.c:462) and by the
+  measurement: `make-pipe-process` answers `open` / live in BOTH editors after
+  the spin.  It is a pinned row and a `None` from `SweepableChild::of` rather
+  than a comment.
+* **"`Fdelete_process` is an `update_status` consumer, so it should sweep."**
+  Refuted by the line above it: :1123 discards the record first, and both
+  editors already answer `signal` / 9 for a child that exited 7.  Sweeping
+  there would have CREATED a divergence.
+* **"The send subrs need a new gate."**  Half refuted: with the status
+  already notified, `process-send-string` and `process-send-region` agree
+  with GNU at the merge base -- but `process-send-eof` does not, and that gate
+  was genuinely missing (§6.1).  Two of three needed only the record; the
+  third needed GNU's existing gate transcribed.
+* **"`process-live-p` needs fixing."**  It does not exist in Rust as anything
+  but dead code: lisp/subr.el:3538-3540 defines it in terms of
+  `process-status`, exactly as GNU does.
+* **"The mode-line `%s` spec can be measured from `--batch`."**  It cannot.
+  `(format-mode-line "%s")` answers `""` in both editors for a live process
+  AND an exited one -- and so does `(format-mode-line "%b")`, which is the
+  control showing the harness is inert there rather than the spec.  The site
+  is classified from GNU's source (`Fsymbol_name (Fprocess_status (obj))`,
+  src/xdisp.c:29717-29725) and left as the single enumerated hole, not
+  "verified equal".
+* **"The four extra oracle failures under load are divergences."**  Refuted:
+  at a runnable count of 93 -- more than twice the ~40 process work is
+  supposed to be gated under -- the wired branch failed four process tests
+  that pass in isolation at runnable 3 and pass in a clean full run.  Load is
+  not noise on process tests; it changes which ones fail.
+
+### 9. Gates
+
+Every number is a number, read out of a `./tmp/` log file rather than a pipe.
+Load is the runnable count from `/proc/loadavg`, because `uptime`'s 1-minute
+average lags by minutes on this box -- it read **970** while 32 tasks were
+runnable -- and both are given where they differ.
+
+```
+cargo fmt --all --check                    exit 0, 0 bytes of diff        runnable 5
+cargo check --workspace --all-targets      exit 0, 0 error lines,
+                                           "Finished ... in 14.36s"       runnable 5
+cargo nextest run -p neovm-core
+  -p neomacs-layout-engine                 11180 tests run:
+                                           11180 passed, 54 skipped       runnable 4-12
+cargo xtask fresh-build --release          "finished successfully",
+                                           no_byte_compile=false,
+                                           pdump 3 min newer than the
+                                           binary, *scratch* empty,
+                                           dos-codepage provenance nil
+cargo nextest run -p neovm-oracle-tests    38801 tests run:
+                                           38798 passed, 3 failed         runnable 12-35
+cargo xtask gc-stress
+  --editor ./target/release/neomacs        9/9 probes passed              runnable 12
+cargo nextest run -p neomacs-melpa-tests
+  --no-fail-fast                           953 tests run: 951 passed,
+                                           2 failed, 2 skipped            runnable 5-30
+```
+
+11180 is the brief's 11176 plus this branch's four new tests, and 54 skipped
+is unchanged.  The oracle's three are the brief's known upstream reds, named
+rather than counted:
+
+```
+div_core_divergence_surface_window_scroll_error_and_state_combo
+div_core_divergence_surface_window_start_end_scroll_state
+div_u5_window_scroll_functions_hook
+```
+
+and melpa's two are the same upstream window defect, also named:
+`evil_ediff_package_batch` and `smooth_scrolling_package_batch`, whose diffs
+are window `start-line` / `above` / `below` rows and nothing else.
+
+**The oracle was run four times and the middle two are quoted because leaving
+them out would be the more comfortable and the less honest choice:**
+
+```
+run 1  sweep wired    runnable 19-34   730s   38797 passed, 4 failed
+run 2  sweep wired    runnable 34-93  1567s   38794 passed, 7 failed
+run 3  sweep wired    runnable  3-34   744s   38798 passed, 3 failed
+run 4  as shipped     runnable 12-35   644s   38798 passed, 3 failed
+```
+
+Run 1's fourth red is §7.1's `divergence_process_multiline_output` -- a real
+regression in the commonest process idiom, found only because failures are
+enumerated by name.  Run 2's four EXTRA reds are all process tests at a
+runnable count of 93; all five pass in isolation at runnable 3
+(`5 tests run: 5 passed`) and run 3, which contains all of them, is clean.
+Load is not noise on process tests: it changes which ones fail.
+
+**A RED beside every green.**
+
+* The two end-to-end pins, before anything:
+  `2 tests run: 0 passed, 2 failed, 9249 skipped`, with
+  `left: "OK ((zombie-before . t) (status . run) (exit-status . 0) (live-p run open listen connect stop) ...)"`.
+* `zombie-before` is the surviving pin's own control: it is asserted `t`, so a
+  run whose child had NOT exited fails instead of agreeing with itself.
+* The send pin failed in the same run as the table pin --
+  `2 tests run: 1 passed, 1 failed` -- which is the cheapest evidence that the
+  table pin was not the one doing the work.
+* The three reshaped pins each went red first, and each left-hand value is in
+  §6.3: `"OK (signal nil t nil nil nil)"` (sentinel never ran),
+  `"OK (t t exit ... ((run \"stopped (signal)\n\") ...))"` (`run` where GNU
+  says `stop`), and `"OK exit"` against an expectation of `"OK run"` that GNU
+  does not share.
+* `treemacs_magit_package_batch` is the red that ended the wiring: **FAILED**
+  against a branch binary with the sweep, **1 test run: 1 passed** against the
+  merge-base binary through `NEOMACS_BIN`, and **PASSED** again as shipped.
+
+**Provenance, and a narrowing of the rule.**  The gate binary is
+`target/release/neomacs` sitting beside its own `target/release/neomacs.pdump`,
+both from `cargo xtask fresh-build --release`.  It is provably ON the image
+path rather than merely built from the right commit: an intermediate
+`cargo build --release --bin neomacs` in this branch produced a binary that
+PANICKED at startup with `pdump fingerprint mismatch (expected ...SLOT!!,
+found 6B8317DF...)` rather than silently bootstrapping from source.  So on
+this tree the hazard is not a mismatched pdump, which is fatal and loud, but a
+binary COPIED AWAY from its image.
+
+The end-to-end probes in §1, §5, §5b, §6 and §7 are shell measurements against
+GNU Emacs 31.0.90 and, for the "before" and "sweep wired" columns, binaries
+built in the MAIN tree and on this branch respectively.  They are evidence for
+the divergence and for the withdrawal, not gates on what ships; what ships is
+gated by the suites above.
+
+Status: **PINNED, with three fixes.**  The recording GNU makes from its SIGCHLD
+handler is transcribed, typed, unit-tested and deliberately not called; the
+divergence it would close is pinned as a divergence with GNU's column beside
+it; and the trigger it needs is sized in §10.1.  Fixed on the way: GNU's
+`process-send-eof` liveness gate (§6.1), a wait that returned having seen a
+child's EOF and not its status (§6.2), and three pins that were racing or
+asserting the divergence (§6.3).
+
+The single most useful thing in this entry is that the fix WORKED and was
+withdrawn anyway.  It closed nine of eleven divergent rows, passed the engine
+suite, and then cost a real package a deterministic failure -- and the way
+that was established was not an argument but three binaries: merge base
+passes, first-commit-only fails, as-shipped passes.  A change that is right
+about the value and wrong about the timing is still wrong, and the comment
+this entry set out to overrule turned out to be the most load-bearing line in
+the file.
+
+### 10. Found and NOT fixed
+
+1. **The recording itself, which needs the TRIGGER.**  §7.  The sweep is
+   written, typed and unit-tested; what is missing is something that runs it
+   when the child dies and wakes the wait, as GNU's handler does with
+   `child_signal_notify` (:7766-7767).  GNU's own constraints (§2) forbid the
+   sweep in a handler in a Rust port, so the shape is a dedicated reaper -- a
+   thread waiting on the `pidfd`s this port already registers, recording into
+   a queue and notifying the wait poller through the existing `WaitNotifier`.
+   Its cost is not the thread: `waitpid` must then have exactly ONE owner, and
+   today every `try_wait`/`poll_child_status` path reaps on the Lisp thread,
+   so a second reaper is a double-reap hazard across the whole file.  Its own
+   entry, and the same facility ledger 184 needs.
+2. **The two audit rows that are the REAPING half.**  `(signal-process p 0)`
+   answers 0 here and -1 in GNU; `(process-attributes pid)` answers `"Z"` and
+   `nil`.  GNU's handler calls `waitpid`, so its exited child is gone from the
+   OS within microseconds and this port's is a zombie until something reaps
+   it.  Neither is an `update_status` consumer, so even the wired sweep left
+   them (§5, `divergent=2`).  Same facility as 9.1; ledger 184 has them.
+3. **This port's `delete-process` does not run a FULL notification walk.**
+   `Fdelete_process` calls `status_notify (p, NULL)` at :1129 and :1149, and
+   `status_notify` walks the whole alist -- which is why 175 §8.1 found GNU
+   running BOTH unrelated children's sentinels inside `(delete-process
+   unrelated-pipe)`.  Re-measured in §5b.  Not attempted: it changes which
+   call runs arbitrary Lisp, the class ledger 169 spent a whole entry on.
+4. **`status_notify_pending` is still GNU's `raw_status_new` AND its
+   `tick != update_tick` at once.**  GNU consumes them separately --
+   `update_status` clears `raw_status_new` (:719-720) while `status_notify`
+   visits on `p->tick != p->update_tick` (:7890) -- so this port cannot settle
+   a status at an observation without also cancelling its notification, which
+   is why `observe` decodes without settling.  The reachable consequences
+   agree with GNU either way (§4's `delete-process` row is the one that would
+   have differed, and it agrees).  Ledger 169 §10.3's remaining half.
+5. **The mode-line `%s` spec does not go through `observe`.**  GNU's
+   `decode_mode_spec` spells it `Fsymbol_name (Fprocess_status (obj))`
+   (src/xdisp.c:29717-29725).  Here `expand_mode_line_percent_in_state`
+   (xdisp.rs:2644) holds `&ProcessManager`, and so does every frame of the
+   recursive mode-line renderer above it.  It is the one
+   `UnrecordedStatusRead` variant, with the citation and the reason in the
+   type.
+6. **This port installs NO OS signal handlers at all** -- zero production hits
+   for `sigaction|signal_hook|SIGWINCH|SIGINT` across `neovm-core`,
+   `neomacs-bin`, `neomacs-display-runtime` and `neovm-worker` (§2).
+   SIGWINCH, SIGINT, SIGHUP and SIGPIPE are all in that hole.  Ledger 184
+   takes SIGUSR1/2; the rest is unclaimed.
+7. **`process-attributes` deliberately does NOT sweep**, and the probes in
+   this entry depend on that: it is how the zombie handshake stays honest.
+   GNU's `Fprocess_attributes` reads the system tables and never consults
+   `Vprocess_alist`, so the classification is GNU's -- but the handshake would
+   need rewriting if that changed.
