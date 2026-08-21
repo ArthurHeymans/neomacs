@@ -2136,6 +2136,109 @@ fn test_window_text_pixel_size_plain_text_unchanged_by_fix() {
     assert_eq!(result.cons_cdr(), Value::fixnum(2));
 }
 
+#[test]
+fn window_text_pixel_size_cons_from_reports_offset_start() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\nc\nd\ne\n");
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(11), Value::fixnum(-3)),
+            Value::fixnum(11),
+            Value::NIL,
+            Value::NIL,
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(1), Value::fixnum(3), Value::fixnum(5),])
+    );
+}
+
+#[test]
+fn window_text_pixel_size_zero_cons_offset_preserves_pair_shape() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\n");
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(5), Value::fixnum(0)),
+            Value::fixnum(5),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(result, Value::cons(Value::fixnum(0), Value::fixnum(0)));
+}
+
+#[test]
+fn window_text_pixel_size_positive_cons_offset_moves_forward() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\nc\nd\ne\n");
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(1), Value::fixnum(3)),
+            Value::fixnum(11),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(1), Value::fixnum(2), Value::fixnum(7),])
+    );
+}
+
+#[test]
+fn window_text_pixel_size_cons_offset_counts_wrapped_rows() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert(&format!("{}\nb\nc\n", "a".repeat(400)));
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(406), Value::fixnum(-3)),
+            Value::fixnum(406),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(2), Value::fixnum(3), Value::fixnum(399),])
+    );
+}
+
 /// GNU's display iterator resolves every `face' property run while measuring
 /// text for `window-text-pixel-size'.  A missing named face is therefore a
 /// log-only diagnostic even when no redisplay callback is installed (the path
