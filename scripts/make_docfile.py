@@ -76,21 +76,35 @@ class _Stream:
     def __init__(self, data: bytes) -> None:
         self._data = data
         self._pos = 0
+        self._pushback: list[int] = []
 
     def getc(self) -> int:
+        if self._pushback:
+            return self._pushback.pop()
         if self._pos >= len(self._data):
-            self._pos += 1  # so ungetc after EOF still works
+            self._pos += 1  # `feof' only becomes true after a read past the end
             return EOF
         c = self._data[self._pos]
         self._pos += 1
         return c
 
     def ungetc(self, c: int) -> None:
-        if c != EOF and self._pos > 0:
-            self._pos -= 1
+        # C's `ungetc (EOF, f)' is a no-op; any other byte is pushed back and
+        # clears the end-of-file indicator.
+        if c != EOF:
+            self._pushback.append(c)
 
     def scanf_int(self) -> int | None:
-        """`fscanf (infile, "%d", &n)`: optional sign, then digits."""
+        """`fscanf (infile, "%d", &n)`: optional sign, then digits.
+
+        Returns None for a matching failure, which is `fscanf` returning 0:
+        the caller must leave its variable alone, and the stream is not
+        advanced.  `scan_c_stream` relies on both (`charset.c:845`).
+        """
+        while self._pushback:
+            # A pushed-back byte is part of the field `fscanf` is about to read.
+            self._pos -= 1
+            self._pushback.pop()
         start = self._pos
         while self._pos < len(self._data) and _isspace(self._data[self._pos]):
             self._pos += 1
@@ -108,7 +122,7 @@ class _Stream:
 
     @property
     def eof(self) -> bool:
-        return self._pos > len(self._data)
+        return self._pos > len(self._data) and not self._pushback
 
 
 @dataclass
@@ -180,19 +194,13 @@ def _scan_keyword_or_put_char(ch: int, state: _RcsocState) -> None:
         return
 
     if kw is not None and state.cur_keyword_ptr > 0:
-        # False alarm: emit the part we had scanned.
+        # "We scanned the beginning of a potential usage keyword, but it was a
+        # false alarm.  Output the part we scanned."  GNU does NOT re-test CH
+        # against the keyword's first byte afterwards, so `uusage:' at the head
+        # of a line is not a usage line; keep that.
         for i in range(state.cur_keyword_ptr):
             _put_char(kw[i], state)
         state.cur_keyword_ptr = 0
-        # `make-docfile' re-tests the character against the keyword's first
-        # byte after flushing, so `uusage:' still matches.
-        if (
-            state.cur_keyword_ptr < len(kw)
-            and kw[state.cur_keyword_ptr] == ch
-            and state.pending_newlines > 0
-        ):
-            _scan_keyword_or_put_char(ch, state)
-            return
     _put_char(ch, state)
 
 
