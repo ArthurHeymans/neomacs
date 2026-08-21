@@ -770,3 +770,141 @@ fn the_x_platform_variables_hold_gnus_defaults_and_bind_dynamically() {
         );
     }
 }
+
+// ===========================================================================
+// Ledger 170 -- `DEFVAR_LISP` / `DEFVAR_KBOARD` are SYMBOL_FORWARDED too
+// ===========================================================================
+
+/// GNU's `set_internal` refuses an unbind for any symbol whose redirect is
+/// `SYMBOL_FORWARDED` -- the arm reads the forwarder pointer and then signals
+/// without looking at what it points to (`src/data.c:1802-1809`).  So the
+/// refusal is a property of the DECLARATION, and `DEFVAR_LISP` names are
+/// refused exactly like `DEFVAR_INT` ones.  Measured under GNU Emacs 31.0.90
+/// `-Q --batch`:
+///
+/// ```elisp
+/// (condition-case e (makunbound 'after-load-alist) (error e))
+/// ;; => (error "Built-in variable may not be unbound : after-load-alist")
+/// ```
+///
+/// Swept over all 563 `DEFVAR_LISP` names plus the 14 `DEFVAR_KBOARD` ones,
+/// GNU refuses 487 + 14 and allows only the 3 it does not declare in this
+/// build (ledger 168, re-derived by ledger 170).
+#[test]
+fn defvar_lisp_makunbound_is_refused_like_gnu() {
+    let mut eval = ev();
+
+    for name in [
+        "after-load-alist",
+        "auto-composition-function",
+        "command-line-args",
+        "features",
+        "load-path",
+        "obarray",
+        "purify-flag",
+        "standard-output",
+    ] {
+        assert_eq!(
+            format_eval_result(&eval.eval_str(&format!(
+                "(condition-case e (makunbound '{name}) (error e))"
+            ))),
+            format!(r#"OK (error "Built-in variable may not be unbound : {name}")"#),
+            "{name}"
+        );
+        assert_eq!(
+            format_eval_result(&eval.eval_str(&format!("(boundp '{name})"))),
+            "OK t",
+            "{name} lost its binding"
+        );
+    }
+}
+
+/// The same refusal, reached through GNU's OTHER arm: once Lisp has localized
+/// the variable the symbol is `SYMBOL_LOCALIZED`, and `set_internal` signals
+/// from `if (unbinding_p && blv->fwd)` instead (`src/data.c:1723-1727`).
+/// Measured under GNU:
+///
+/// ```elisp
+/// (progn (make-local-variable 'after-load-alist)
+///        (condition-case e (makunbound 'after-load-alist) (error e)))
+/// ;; => (error "Built-in variable may not be unbound : after-load-alist")
+/// ```
+#[test]
+fn defvar_lisp_makunbound_is_refused_through_a_buffer_local_binding_like_gnu() {
+    let mut eval = ev();
+
+    for form in [
+        "(progn (make-local-variable 'after-load-alist)
+                (condition-case e (makunbound 'after-load-alist) (error e)))",
+        "(progn (make-variable-buffer-local 'after-load-alist)
+                (condition-case e (makunbound 'after-load-alist) (error e)))",
+        "(let ((after-load-alist nil))
+           (condition-case e (makunbound 'after-load-alist) (error e)))",
+    ] {
+        assert_eq!(
+            format_eval_result(&eval.eval_str(form)),
+            r#"OK (error "Built-in variable may not be unbound : after-load-alist")"#,
+            "{form}"
+        );
+    }
+}
+
+/// `Fdefvaralias` switches on the same tag and refuses a forwarded NEW-ALIAS
+/// with a different message (`src/eval.c:665-668`).  Measured under GNU:
+///
+/// ```elisp
+/// (condition-case e (defvaralias 'after-load-alist 'l170b) (error e))
+/// ;; => (error "Cannot make a built-in variable an alias: after-load-alist")
+/// ```
+#[test]
+fn defvar_lisp_cannot_become_a_variable_alias_like_gnu() {
+    let mut eval = ev();
+
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(progn (defvar l170b 7)
+                    (condition-case e (defvaralias 'after-load-alist 'l170b) (error e)))"
+        )),
+        r#"OK (error "Cannot make a built-in variable an alias: after-load-alist")"#
+    );
+}
+
+/// A `DEFVAR_KBOARD` variable is `SYMBOL_FORWARDED` with a
+/// `Lisp_Kboard_Objfwd`, and both `Fmake_variable_buffer_local`
+/// (`src/data.c:2220-2223`) and `Fmake_local_variable` (`src/data.c:2287-2290`)
+/// refuse it by name.  Measured under GNU:
+///
+/// ```elisp
+/// (condition-case e (make-local-variable 'prefix-arg) (error e))
+/// ;; => (error "Symbol prefix-arg may not be buffer-local")
+/// (condition-case e (makunbound 'prefix-arg) (error e))
+/// ;; => (error "Built-in variable may not be unbound : prefix-arg")
+/// ```
+#[test]
+fn defvar_kboard_is_forwarded_like_gnu() {
+    let mut eval = ev();
+
+    for name in ["prefix-arg", "last-command", "real-last-command"] {
+        assert_eq!(
+            format_eval_result(&eval.eval_str(&format!(
+                "(condition-case e (makunbound '{name}) (error e))"
+            ))),
+            format!(r#"OK (error "Built-in variable may not be unbound : {name}")"#),
+            "{name}"
+        );
+        assert_eq!(
+            format_eval_result(&eval.eval_str(&format!(
+                "(condition-case e (make-local-variable '{name}) (error e))"
+            ))),
+            format!(r#"OK (error "Symbol {name} may not be buffer-local")"#),
+            "{name}"
+        );
+        assert_eq!(
+            format_eval_result(&eval.eval_str(&format!(
+                "(condition-case e (make-variable-buffer-local '{name}) (error e))"
+            ))),
+            format!(r#"OK (error "Symbol {name} may not be buffer-local")"#),
+            "{name}"
+        );
+    }
+}
