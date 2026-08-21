@@ -5481,6 +5481,22 @@ impl Context {
         // DEFVAR_LISP, default nil (function to adjust reported mouse position).
         obarray.set_symbol_value("mouse-position-function", Value::NIL);
         obarray.make_special("mouse-position-function");
+        // `frame.c:7555' DEFVAR_KBOARD, and the kboard slot starts nil
+        // (`keyboard.c:13129', `kset_default_minibuffer_frame (kb, Qnil)').
+        // This port models kboard variables as globals, as it does for
+        // `last-kbd-macro' and `defining-kbd-macro' in `keyboard::pure'.
+        //
+        // It was assigned only by `post_image_init' and by the frame setup in
+        // `neomacs-bin', both of which run AFTER `loadup', so the name was
+        // unbound for the whole of loadup where GNU has it bound from
+        // `syms_of_frame' on.  Ledger 182 found it because
+        // `Fsnarf_documentation' asks `Fboundp' once, at the end of loadup:
+        // the variable was the only one of the DOC table's 766 bound names
+        // that the snarf could not see, so it was the only one left with no
+        // documentation.  The lazy lookup the snarf replaced asked the same
+        // question at query time and so could not see the gap.
+        obarray.set_symbol_value("default-minibuffer-frame", Value::NIL);
+        obarray.make_special("default-minibuffer-frame");
 
         // --- src/keymap.c: syms_of_keymap ---
         // DEFVAR_LISP, default nil (preferred modifier for `where-is').

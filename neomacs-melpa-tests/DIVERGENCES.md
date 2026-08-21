@@ -25805,6 +25805,20 @@ Two environmental notes, because both cost real time and both are recurrent:
   loadup and gated on `Fboundp`, and therefore the opposite of the one 178
   removed rather than a return to it.  Still open; 178 declined it as a change
   to all 894 rows' provenance and to the dump.
+
+  **FIXED by entry 182, 2026-08-21, and 178's diagnosis was right in every
+  part.**  `lisp/loadup.el:448` now calls a real `Snarf-documentation` over an
+  `etc/DOC` image in `make-docfile`'s record format, so the C text is the last
+  writer for every name that is both a `DEFVAR_*` and a preloaded Lisp
+  `defvar`.  This entry's "five lines" are four, and the four that remain are
+  the Neomacs-bound/GNU-unbound residual this entry already records --
+  `inhibit-try-cursor-movement`, `xwidget-list`, `xwidget-view-list`,
+  `xwidget-webkit-disable-javascript`.  182 also measured **why this entry's
+  surface had only one text difference to find**: the collision set is one name
+  in GNU too, because GNU's `define-minor-mode`s over C variables pass
+  `:variable` to suppress the macro's `defvar` ("It's defined in C, this stops
+  the 'define-minor-mode' macro from defining it again", `lisp/abbrev.el:61-63`)
+  and `lisp/simple.el:7639` is the one that does not.
 - **`STARTUP_VARIABLE_DOC_STUBS` and `STARTUP_VARIABLE_DOC_STRING_PROPERTIES`
   are gone, entry 178, 2026-08-21.**  This entry's "the rule, not a table"
   argument turned out to apply to two tables it did not look at: 1972 names
@@ -28565,6 +28579,24 @@ runtime-load case decided too (a `defvar` loaded *after* the dump is a later
 writer than snarf, so GNU's order there is the other way round).  Handed over
 with the citation rather than attempted.
 
+**Done by entry 182, 2026-08-21, exactly as described, and the runtime-load
+case needed no decision** -- once the snarf is a writer at a point in time,
+"last write wins" covers both directions and a `defvar` after the dump beats it
+for free.  Two corrections to this section, neither of which changes its
+conclusion:
+
+- **The size is not "exactly one name".**  One is the size of the doc-TEXT
+  difference; the plist entry itself is read by GNU's Lisp --
+  `(integerp (get object 'variable-documentation))` is `find-lisp-object-file-name`'s
+  test for "this variable is defined in C" (`lisp/help-fns.el:531-538`) -- and
+  that answered `C-source` for 761 names in GNU and `nil` for 765 here.  A
+  fallback reproduces a last writer's answers and none of its state.
+- **The overwrite can be observed directly rather than inferred**, and 182 did:
+  `(get 'indent-tabs-mode 'variable-documentation)` is `641753` in GNU's
+  `-Q --batch` image, and over the whole 894-name surface GNU has 762 bound
+  names carrying an integer and **zero** carrying the string or cons their Lisp
+  `defvar` put there first.
+
 ### 12. Found and NOT fixed
 
 - **The 28 of section 9**, one root cause: this port's dump does not provide
@@ -28576,7 +28608,10 @@ with the citation rather than attempted.
 - **Entry 173's `indent-tabs-mode`**, re-diagnosed in section 11 and still one
   line: `Fsnarf_documentation` is a last writer in GNU and a fallback here.
   The fix is a real `Snarf-documentation` over `gnu_table`, called from this
-  port's `loadup.el` where GNU calls it.
+  port's `loadup.el` where GNU calls it.  **Done by entry 182, 2026-08-21**,
+  and the line count "one" is corrected there: one for the doc text, 765 for
+  `(integerp (get sym 'variable-documentation))`, which is what
+  `lisp/help-fns.el:531-538` asks to decide that a variable is defined in C.
 - **`completion--flex-score-last-md` is bound by `eval.rs:4661` and GNU Emacs
   31 has no such name.**  Invented *existence*, entry 138's class rather than
   this one.  Its documentation now matches GNU; its boundness does not.
@@ -29722,3 +29757,474 @@ it is the only one.
   this shape rather than forbidding a leading newline outright.
 
 Status: FIXED.
+
+## 182. Entry 178's handed-over precedence: `Fsnarf_documentation` is a LAST WRITER and this port made it a fallback -- the doc TEXT that inverts is **one** name, because GNU's own Lisp writes `:variable` everywhere else, but the plist FACT the snarf writes is what `help-fns.el` asks to decide "defined in C", so the reach is **765** -- FIXED, by making `Snarf-documentation` real over an `etc/DOC` image in `make-docfile`'s record format
+
+Entry 178 diagnosed entry 173's last text difference and stopped one step short
+of it, with the citation on record:
+
+> `lisp/loadup.el:251` -- `(load "simple")` ... `lisp/loadup.el:476` --
+> `(Snarf-documentation "DOC")`, **225 lines later**, which `Fput`s the
+> `etc/DOC` offset **over the top of it**. ... **Not done here.**
+
+This entry does it, and the useful result is not the fix -- it is that the two
+obvious ways to size the bug give **1** and **765**, and both are right.
+
+Reproduced `-Q --batch` against GNU Emacs 31.0.90 and a `cargo xtask
+fresh-build --release` binary of this branch, `*scratch*` empty, pdump (15:18)
+newer than the binary (15:12).  Provenance checked with entry 178's own probe
+before anything was believed: `(documentation-property 'dos-codepage
+'variable-documentation)` is nil, which is post-173 code, and
+`(get 'indent-tabs-mode 'variable-documentation)` is a `(FILE . POS)` cons,
+which is the pre-182 state.
+
+### 1. Do not infer the overwrite -- GNU's own image is the proof
+
+The brief asks for the citation rather than the inference, and there is a
+better instrument than either: **ask GNU what is on the plist.**
+
+```
+(get 'indent-tabs-mode 'variable-documentation)   =>  641753
+```
+
+An integer.  `lisp/simple.el:7639` is `(define-minor-mode indent-tabs-mode
+"Toggle whether indentation can insert TAB characters." :group 'indent)`, whose
+expansion `Fput`s that sentence onto the plist at `lisp/loadup.el:251`; the
+integer is what is there afterwards.  Nothing but a later writer can do that.
+
+Asked of the whole DOC surface -- the 894 names of `var_docs::gnu_table`,
+generated from all of GNU's `src/*.c`:
+
+| GNU 31.0.90, `-Q --batch` | rows |
+| --- | --- |
+| bound, `variable-documentation` is an INTEGER | **762** |
+| bound, it is a string or a `(FILE . POS)` cons | **0** |
+| unbound, no entry | 132 |
+
+**762 of 762.**  There is no name on which GNU's dumped image keeps the Lisp
+docstring for something `etc/DOC` also documents.
+
+And the code, read before designing:
+
+| site | what |
+| --- | --- |
+| `lisp/loadup.el:251` | `(load "simple")` -- runs the file's `defvar`s |
+| `lisp/loadup.el:476` | `(Snarf-documentation "DOC")`, 225 lines later |
+| `src/doc.c:606-613` | `Fput (sym, Qvariable_documentation, make_fixnum (pos + end + 1 - buf))`, gated `(!NILP (Fboundp (sym)) \|\| !NILP (Fmemq (sym, delayed_init))) && strncmp (end, "\nSKIP", 5)` |
+| `src/doc.c:418` | the reader: `tem = Fget (symbol, prop)` and nothing else |
+| `src/doc.c:437-438` | `if (FIXNUMP (tem) ...) tem = get_doc_string (tem, 0)` |
+| `src/doc.c:254-260` | `get_doc_string`'s validity walk: the byte before the position must be `\n`, and walking back over the name must reach `^_` |
+| `src/doc.c:433-434` | `if (BASE_EQ (tem, make_fixnum (0))) tem = Qnil` |
+
+The `Fput` is the whole branch and it is unconditional once the gate passes.
+`Fput` is not a write-if-absent.  **So the snarfed doc is a last writer**, and
+"snarfed doc as a fallback" is not a smaller version of GNU's design -- it is
+the reverse of it.
+
+### 2. The spine, both halves: 1 name of text and 765 of state
+
+**The doc text inverts on exactly one name.**  Over the 894, the first line of
+`(documentation-property NAME 'variable-documentation t)` differs on five rows,
+and four of them are entry 173's recorded Neomacs-bound/GNU-unbound residual
+(`inhibit-try-cursor-movement`, `xwidget-list`, `xwidget-view-list`,
+`xwidget-webkit-disable-javascript`).  The fifth is `indent-tabs-mode`.
+
+That is not luck, and it is not this port being nearly right.  The collision
+set really is one, **in GNU too**: walking `load-history` for every preloaded
+file and intersecting with the 894 names gives
+
+```
+GNU 31.0.90 :  collisions: 1   indent-tabs-mode  simple.elc  int
+this port   :  collisions: 1   indent-tabs-mode  simple.elc  cons
+```
+
+Section 3 is why.
+
+**The plist entry inverts on 765.**  The doc text is not the only thing the
+snarf writes; it writes the *fact* that there is a DOC record, and GNU's own
+Lisp reads that fact:
+
+```elisp
+((and (not file-name) (symbolp object) (eq type 'defvar)
+      (integerp (get object 'variable-documentation)))
+  ;; A variable defined in C.  The form is from `describe-variable'.
+  ...)
+```
+
+(`lisp/help-fns.el:531-538`, `find-lisp-object-file-name`.)  `integerp` is
+GNU's Lisp-level test for "this variable is defined in C", and a port with no
+integers on any plist fails it every time.  Measured over the 894:
+
+| `(find-lisp-object-file-name NAME 'defvar)` | GNU | this port, before |
+| --- | --- | --- |
+| `C-source` | **761** | **0** |
+| a Lisp file | 1 | 1 |
+| nil | 0 | **765** |
+| unbound (not asked) | 132 | 128 |
+
+So `C-h v` on any of 765 built-in variables reported no source at all here,
+and one line of `help-fns.el` is the whole reason.  The same
+`(get sym 'variable-documentation)` fact is read as a boolean at eight more
+sites -- `lisp/help-mode.el:545`, `:658`, `:767`, `:934`,
+`lisp/apropos.el:522`, `:548`, `:957`, `lisp/wid-edit.el:3265`,
+`lisp/autoinsert.el:186` -- and across the whole obarray it was missing on 766
+symbols:
+
+| symbols carrying a `variable-documentation` | GNU | before |
+| --- | --- | --- |
+| integer (from `etc/DOC`) | **762** | **0** |
+| string | 537 | 128 |
+| `(FILE . POS)` cons | 1448 | 1832 |
+| total | 2747 | 1960 |
+
+**"The precedence is wrong but the outcome coincides except for one name" is
+true of the documentation TEXT and false of everything else.**  That is the
+entry's result: a fallback reproduces a last writer's *answers* almost exactly
+and reproduces none of its *state*.
+
+And the user-visible form of it, `C-h v case-fold-search` in `--batch`, first
+line of `*Help*` after the header:
+
+| | |
+| --- | --- |
+| GNU | `case-fold-search is a variable defined in 'C source code'.` |
+| before | (absent -- `describe-variable` prints `case-fold-search's value is t` and no `help-variable-def` button, because `lisp/help-fns.el:1403` got nil) |
+| after | byte-identical to GNU, button and all, over the whole buffer |
+
+
+### 3. Why the text collision is one name and not ten: GNU's Lisp says so
+
+Ten of the 894 names are also defined somewhere in GNU's `lisp/`.  Nine of them
+cannot collide, and the reason is written down in the source:
+
+```elisp
+(define-minor-mode abbrev-mode
+  "Toggle Abbrev mode in the current buffer. ..."
+  ;; It's defined in C, this stops the 'define-minor-mode' macro from
+  ;; defining it again.
+  :variable abbrev-mode)
+```
+
+(`lisp/abbrev.el:56-63`.)  `overwrite-mode` (`lisp/simple.el:9341`),
+`transient-mark-mode` (`:7637`), `auto-composition-mode`
+(`lisp/composite.el:924`), `menu-bar-mode` (`lisp/menu-bar.el:2632`),
+`tool-bar-mode` (`lisp/tool-bar.el:53`) and `tab-bar-mode`
+(`lisp/tab-bar.el:323`) all pass `:variable` for the same reason.
+`comp-ctxt` (`lisp/emacs-lisp/comp-cstr.el:221`) and `default-frame-alist`
+(`lisp/term/pc-win.el:83`) are docstring-less `defvar`s, so
+`src/eval.c:909-912`'s `if (!NILP (doc))` never fires.
+
+`indent-tabs-mode` is the tenth, and it is written **without** `:variable`.
+GNU's answer for it is `buffer.c`'s text anyway -- because the snarf runs after
+`simple.el` and overwrites.  **The one name where GNU's Lisp forgot the
+convention is exactly the one name where the order is observable, which is why
+a port can invert the order and see almost nothing.**
+
+### 4. The instrument mutated what it measured
+
+The first whole-obarray sweep reported GNU's `indent-tabs-mode` as a *cons*
+with `define-minor-mode`'s text -- i.e. it reported the bug as absent from GNU.
+The sweep was wrong, and the mechanism is worth recording because any future
+doc audit will hit it:
+
+```c
+static void reread_doc_file (Lisp_Object file)
+{
+  if (NILP (file)) Fsnarf_documentation (Vdoc_file_name);
+  else save_match_data_load (file, Qt, Qt, Qt, Qnil);
+}
+```
+
+(`src/doc.c:311-317`, reached from `src/doc.c:439-446`.)  When a
+`(FILE . POS)` docstring fails to read and `documentation-dynamic-reload` is
+non-nil -- **it defaults to `true`, `src/doc.c:733** -- GNU **re-loads the
+file**, which re-runs its `defvar`s.  In this GNU checkout the preloaded
+`.elc`s are newer than the dumped image, so a sweep over every symbol reaches a
+stale `simple.elc` offset, reloads `simple.el`, and the reload's
+`define-minor-mode` puts the Lisp docstring back over the snarfed integer.
+**A sweep that reads documentation is a WRITE.**
+
+Both the sweep and the new obarray-wide oracle pin now `(set
+'documentation-dynamic-reload nil)` first.  The 894-name probe never tripped it
+-- every one of its rows resolves out of `etc/DOC`, not out of a `.elc` -- which
+is why the primary measurement was unaffected.
+
+Recorded as a second finding: **GNU's own answer for `indent-tabs-mode` is
+state-dependent.**  After a doc-driven reload of `simple.el`, GNU answers
+"Non-nil if Indent-Tabs mode is enabled." too, and nothing re-snarfs.
+
+### 5. The fix: stop having a second doc source, and run GNU's one writer
+
+`lisp/loadup.el:448` in this tree already read `(Snarf-documentation "DOC")`,
+at GNU's place in the file.  It called a shim that returned nil.  It now calls
+the real thing, and the reader has nothing else to consult:
+
+- **`var_docs::DocImage`** is `GNU_VAR_DOCS` laid out in `make-docfile`'s record
+  format, `^_V<name>\n<text>`, terminated by a final `^_`.  It is built once,
+  ~300 kB, on the first snarf.
+- **`doc::snarf_variable_documentation`** is `Fsnarf_documentation`'s scan:
+  `oblookup` (which **does not intern** -- 132 of the 894 names have no symbol
+  in this build, and creating them would be a state GNU has none of), then
+  entry 173's `Fboundp` gate, then `Fput` of the record's position.
+- **`documentation_property_plan`** reads the plist and, for a fixnum, resolves
+  it through `DocImage::text_at`, which is `get_doc_string` including the
+  validity walk.  The name-keyed arm is gone.
+
+Why a byte image rather than a table of row indices: `Fdocumentation_property`
+resolves any fixnum, including one Lisp put there, and GNU answers nil for a
+number that does not point just past a record header.  Measured in GNU, `7`,
+`0`, `-1` and `12345678901` all answer nil.  A row index has no invalid values
+and could not reproduce that; a byte offset reproduces it exactly, and it keeps
+`fixnum 0` impossible to emit, which is what `src/doc.c:433-434` relies on.
+
+**The rendering is deliberately unchanged.**  The text still passes through
+`startup_doc_quote_style_display` / `_raw` before `substitute-command-keys`,
+exactly as the fallback did, so the 765 rows that were already right stay
+byte-identical.  This entry changes *when* the doc is written and *what the
+plist says*, not what the text is.
+
+### 6. The type-level answer: a doc read out of `etc/DOC` can only be written
+
+Entry 178 made `var_docs::lookup` return a proof-carrying `SnarfedDoc` so that
+`or_else(|| stub(name))` stopped compiling.  That killed the *third* source
+while leaving the shape of a fallback intact: `SnarfedDoc::text()` still handed
+a caller a `&'static str` keyed by name, which is precisely what a fallback
+needs and precisely what GNU has no function for.  GNU has two: a scan by name
+whose output goes on a plist, and `get_doc_string` by position.
+
+So `SnarfedDoc` loses `text()` and gains
+
+```rust
+pub(crate) fn position(self) -> i64
+```
+
+-- by value, so the proof is spent producing the number `Fput` stores.  There
+is no way to obtain the text of a snarfed record except by asking the DOC image
+for a **position**, and a position is only obtainable by having snarfed.  The
+old shape is not merely deleted; it is unspellable.
+
+### 7. The failing test first, and what it reports when the artifact is empty
+
+Ledger 173's law -- a predicate over rows that exist cannot see a row that was
+never written -- has an exact form for this change, because the change's whole
+content is *writing rows*.  The brief's question, "what does your check report
+when the artifact is EMPTY", answers itself: an emptied `GNU_VAR_DOCS`, a
+`Snarf-documentation` that stopped being called, or a `loadup.el` that dropped
+the call all produce **zero** installed records, and every diagonal about
+"nothing wrong is installed" then reports green.
+
+So every guard here carries the positive count next to the diagonal:
+
+* `every_variable_the_doc_image_documents_answers_out_of_the_doc_image` -- one
+  pass over the whole obarray joined to the DOC image on the Rust side, in the
+  post-`loadup` image.  Asserts `installed > 700` **before** it asserts the
+  diagonal is empty, and reports the offending NAMES rather than a count.
+* `the_dumped_image_has_no_documentation_for_a_variable_it_does_not_bind` --
+  entry 178's diagonal restated where it can now regress, and by name.
+* `oracle_the_dumped_image_documents_only_variables_it_binds` -- the same three
+  zeroes across editors, with `(> integers 700)` as the fourth column.
+* `snarfing_the_doc_image_interns_nothing` -- obarray length unchanged.
+* `every_doc_image_record_round_trips_through_its_position` -- and `checked >
+  700`.
+
+RED before the fix, quoted beside the green in section 9.
+
+### 8. What the `Fboundp` gate saw that a lazy lookup could not
+
+The first run of the obarray guard failed on exactly one name:
+`default-minibuffer-frame`.
+
+GNU declares it in `syms_of_frame` (`src/frame.c:7555`, `DEFVAR_KBOARD`) and
+the kboard slot starts nil (`src/keyboard.c:13129`), so it is bound from temacs
+on and the snarf sees it.  This port assigned it only in `post_image_init` and
+in `neomacs-bin`, **both of which run after `loadup`** -- so it was unbound for
+the whole of loadup, and it is the only one of the DOC table's 766 bound names
+the snarf could not see.
+
+The lazy lookup could not have found this: it asked `Fboundp` at query time,
+when the variable is bound, so it answered a doc and the gap was invisible.
+**Moving a question to the time GNU asks it is itself a test.**  Fixed by
+declaring the variable where GNU declares it.
+
+### 9. Measured after
+
+The same `cargo xtask fresh-build --release`, run again on this branch with
+both fingerprint memos deleted first (`~/.cache/neomacs/` and the worktree's),
+reporting `xtask fresh-build finished successfully (release)` and
+`no_byte_compile=false`, pdump (17:27) newer than the binary (17:25),
+`*scratch*` empty, and `(documentation-property 'dos-codepage
+'variable-documentation)` still nil.
+
+```
+(get 'indent-tabs-mode 'variable-documentation)          =>  106197
+(documentation-property 'indent-tabs-mode ... t)         =>  "Indentation can insert tabs if this is non-nil."
+```
+
+| the 894 DOC names | GNU | before | after |
+| --- | --- | --- | --- |
+| bound, entry is an INTEGER | 762 | **0** | **766** |
+| bound, entry is a string or cons | 0 | 1 | **0** |
+| bound, no entry | 0 | 765 | 0 |
+| unbound, no entry | 132 | 128 | 128 |
+| **first line of the doc differs from GNU** | -- | **5** | **4** |
+| plist entry TYPE differs from GNU | -- | 762 | **4** |
+| `find-lisp-object-file-name` says `C-source` | 761 | **0** | **765** |
+| ... says nil | 0 | 765 | **0** |
+
+The four remaining differing lines are entry 173's recorded
+Neomacs-bound/GNU-unbound residual and nothing else:
+`inhibit-try-cursor-movement`, `xwidget-list`, `xwidget-view-list`,
+`xwidget-webkit-disable-javascript`.  **Entry 173's "five lines" are four.**
+
+Whole obarray, `-Q --batch`, entry types:
+
+| | GNU | before | after |
+| --- | --- | --- | --- |
+| integer | **762** | 0 | **766** |
+| string | 537 | 128 | 128 |
+| `(FILE . POS)` cons | 1448 | 1832 | 1831 |
+| rows whose entry TYPE differs from GNU | -- | 1149 | **387** |
+
+The 387 that remain are `str` in GNU and `cons` here -- GNU's dumped image
+carries 386 preloaded Lisp docstrings inline where this port keeps the `.elc`
+reference, which resolves to the same text -- plus `x-display-name`, entry
+178's `featurep 'x` case.
+
+**And the collateral, which is the number that had to be zero.**  Diffing this
+port's own before and after over all 3474 symbols that are bound or carry an
+entry:
+
+| | rows |
+| --- | --- |
+| boundness changed | **0** |
+| plist entry changed | 766 |
+| **documentation text changed** | **1** -- `indent-tabs-mode` |
+
+One text moved, and it moved to GNU's.  The rendering path was deliberately
+left alone (`startup_doc_quote_style_display` / `_raw`, then
+`substitute-command-keys`), so the 765 rows that were already right are
+byte-identical to what they were.
+
+### 10. Found and NOT fixed
+
+- **`documentation-dynamic-reload` is declared here and its retry is not
+  implemented.**  `defvar_bool.rs:181` ships GNU's `true`
+  (`src/doc.c:720-733`), but `src/doc.c:311-317`'s `reread_doc_file` -- reached
+  from `src/doc.c:368-374` and `:439-446` when a docstring read returns nil --
+  has no counterpart.  GNU re-`load`s the `.elc` (or re-runs the whole
+  `Fsnarf_documentation` when the reference is a bare fixnum) and retries.
+  Measured in GNU:
+
+  ```
+  (get 'indent-tabs-mode 'variable-documentation)              => 641753
+  ;; read one doc whose simple.elc offset is stale, reload ON
+  (get 'indent-tabs-mode 'variable-documentation)              => ("simple.elc" . 250442)
+  (documentation-property 'indent-tabs-mode ... t)             => "Non-nil if Indent-Tabs mode is enabled."
+  ```
+
+  So **GNU's own answer for this entry's name is state-dependent**: after a
+  doc-driven reload of `simple.el`, the Lisp `defvar` is the last writer again
+  and nothing re-snarfs.  This port answers `buffer.c`'s text unconditionally,
+  which matches GNU's clean dumped image and not GNU-after-a-reload.  Left
+  alone deliberately: implementing the retry means implementing "the `.elc` on
+  disk is newer than the image", and this port's DOC stand-in lives in
+  `.rodata` and cannot go stale.
+- **`internal-doc-file-name` stays nil, and now that is a deviation rather
+  than a fact.**  GNU assigns `Vdoc_file_name = filename` inside a successful
+  `Fsnarf_documentation` (`src/doc.c:565`), so GNU answers `"DOC"`; the comment
+  at `eval.rs` justifying nil says "this port has no `etc/DOC` -- `doc.rs`'s
+  `Snarf-documentation` is a shim that opens nothing", and half of that is no
+  longer true.  Assigning `"DOC"` would send `help-C-file-name`
+  (`lisp/help-fns.el:359-373`) to `insert-file-contents-literally` on a file
+  that does not exist, which is worse than the nil.  The same applies to
+  `build-files`, which GNU fills from `buildobj.h` in the same function
+  (`src/doc.c:542-553`).  Both want a materialised DOC file, which is a
+  different entry.
+- **`x-display-name`, and the 27 names behind it**, are entry 178 section 9's
+  and untouched: this build does not provide the `x` feature, so
+  `lisp/loadup.el:316-320` preloads none of `x-dnd.el`, `term/common-win.el`
+  or `term/x-win.el`.  It is the only row of the whole-obarray diff that is
+  not a `str`/`cons` storage difference.
+- **The four Neomacs-bound/GNU-unbound names** are entry 173's and unchanged.
+  `inhibit-try-cursor-movement` is seeded at `xdisp.rs:5762` where GNU leaves
+  it behind `#ifdef GLYPH_DEBUG`; the three `xwidget` names are the same
+  shape.  They now answer *from the plist* rather than from a lazy lookup,
+  which changes nothing about them being wrong.
+- **`documentation-property` resolves a fixnum for ANY property name**, which
+  is GNU (`src/doc.c:437`, no test on PROP), but this port's DOC image holds
+  only `V` records.  A `function-documentation` fixnum therefore answers nil
+  here and a function's docstring in GNU.  Function docs are ledger 181's
+  surface and were deliberately not touched.
+- **The 15 `custom-initialize-delay` defcustoms** carry a docstring while
+  unbound in the image `loadup` leaves behind -- `user-mail-address`
+  (`lisp/startup.el:401-407`), `abbrev-file-name` (`lisp/abbrev.el:45`),
+  `compile-command`, `package-user-dir` and eleven more.  That is GNU's design
+  (`lisp/custom.el:142-161`), and `startup.el` binds them before a user can
+  see it, which is why the shipped-image diagonal is still 0 in both editors.
+  Recorded because entry 178's diagonal, stated without the word "integer",
+  is false on that intermediate surface -- and a future author reading 178
+  would think it a regression.
+
+### 11. Gates
+
+Load recorded from `/proc/loadavg`'s runnable field, which does not lag, beside
+`uptime`'s one-minute figure: **runnable 5-59 throughout, against `uptime`
+readings from 12.53 to 496.23** -- the two disagree by two orders of magnitude
+on this machine and only the runnable count predicted whether a suite would
+finish.
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`:
+  **11183 tests run: 11183 passed, 54 skipped** in 966.165 s, exit 0, zero
+  `FAIL` lines.  Baseline 11176 + 54; the seven extra are this entry's seven
+  new unit tests, all present by name in the `PASS` lines.
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast`, with
+  `NEOVM_FORCE_ORACLE_PATH` pointing at GNU 31.0.90:
+  **38805 tests run: 38802 passed, 3 failed, 0 skipped** in 1394.263 s.
+  Baseline 38801 with 38798 passing; the four extra are this entry's four new
+  pins.  The three failures are exactly the three the brief names as
+  pre-existing upstream, and **there is no fourth**:
+  `div_u5_window_scroll_functions_hook`,
+  `div_core_divergence_surface_window_start_end_scroll_state`,
+  `div_core_divergence_surface_window_scroll_error_and_state_combo`.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* `cargo check --workspace --all-targets`: exit 0, **0 errors**,
+  `Finished dev profile ... in 10m 10s`.
+* `cargo fmt --all --check`: exit 1 the first time and clean after `cargo fmt
+  --all`.  The reformat is three re-wrapped statements in `doc.rs` and
+  `doc_test.rs` and changes no token, which the diff shows line by line.  It
+  landed after the two suites and before the workspace check, so the check
+  above is of the formatted tree; no binary was rebuilt for it, and none
+  needed to be.
+
+**RED quoted beside every green.**
+
+* `oracle_a_c_variable_a_preloaded_lisp_file_redefines_keeps_the_c_text`, asked
+  of the PRE-fix release binary: `(get 'indent-tabs-mode
+  'variable-documentation)` was
+  `("<...>/lisp/simple.elc" . 250725)` and the doc was `"Non-nil if
+  Indent-Tabs mode is enabled."`, against the pin's `t` and `"Indentation can
+  insert tabs if this is non-nil."`.
+* `oracle_the_dumped_image_documents_only_variables_it_binds`, same binary:
+  `(0 0 0 nil)` against the pin's `(0 0 0 t)`.  **The fourth column is the
+  whole point**: the three zeroes were already green before the fix, on a port
+  that installed no documentation at all.
+* `every_variable_the_doc_image_documents_answers_out_of_the_doc_image` failed
+  on its first run naming one row, `default-minibuffer-frame`, which is
+  section 8.
+* `the_snarf_leaves_no_documentation_on_a_variable_the_image_does_not_bind`
+  failed on its first run naming fifteen, which is section 10's last bullet and
+  the reason the test asserts `integerp` rather than "any entry".
+* **The new oracle pins are not skipping.**  They sit behind
+  `return_if_neovm_enable_oracle_proptest_not_set!()`, which is the brief's
+  sixth false green -- a test that returns early and reports as passed.  With
+  `NEOVM_FORCE_ORACLE_PATH` set and one expectation corrupted from
+  `(0 0 0 t)` to `(0 0 0 nil)`: **4 tests run: 3 passed, 1 failed**.  (And its
+  report is a reminder of the trap ledger 176 named: the `Diff:` block reads
+  `"OK (0 0 0 nilt)"`, which is a character-level merge of the two and not a
+  value either editor produced.)  Restored afterwards.
+* The type-level guard's negative control is a compile error rather than a
+  test failure: `SnarfedDoc` has no `text()` and no constructor from a `&str`,
+  so the old fallback line does not typecheck at all.
+
+Status: FIXED.  Entry 173's five differing lines are four, and the four that
+remain are its own recorded Neomacs-bound/GNU-unbound residual.

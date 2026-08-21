@@ -25,30 +25,145 @@
 //! `text-quoting-style'. Pre-substituting here would lock in
 //! `'curve' regardless of preference.
 //!
-//! ## Lookup precedence
+//! ## Lookup precedence: there is ONE source, and this is not it
 //!
-//! GNU has two sources and this module is the second of them, so
-//! `documentation_property_plan' has two arms and no others:
-//!   1. Symbol's `variable-documentation' plist property, which in
-//!      GNU is written by Lisp `defvar'/`defconst'/`defcustom'
-//!      (`src/eval.c:911', and only when the doc is non-nil) or by
-//!      `defvaralias' (`src/eval.c:723');
-//!   2. `var_docs::lookup' behind [`SnarfedVariable`], standing in
-//!      for `Fsnarf_documentation' reading `etc/DOC' behind
-//!      `Fboundp' (`src/doc.c:606-613');
-//!   3. otherwise nil.
+//! `documentation-property' reads the symbol's plist and nothing
+//! else (`src/doc.c:418'). Two things write that plist, in this
+//! order:
+//!   1. Lisp `defvar'/`defconst'/`defcustom' (`src/eval.c:911', and
+//!      only when the doc is non-nil) and `defvaralias'
+//!      (`src/eval.c:723'), while the variable is being defined;
+//!   2. `Fsnarf_documentation', ONCE, from `lisp/loadup.el:476'
+//!      (`:448' here), after the C `DEFVAR's and after every
+//!      preloaded Lisp file -- `Fput'ting `etc/DOC's offset over
+//!      the top of whatever step 1 left there, for every name that
+//!      is bound and whose record does not start with `SKIP'
+//!      (`src/doc.c:606-613').
 //!
-//! Ledger 178 removed a third source that GNU does not have. Two
+//! **So the snarfed doc is a LAST WRITER, not a fallback**, and
+//! ledger 182 is the entry that turned this module around to match:
+//! [`lookup`] is step 2's scan and its result can only be written to
+//! a plist, while reads go through [`DocImage::text_at`], which is
+//! keyed by position. Measured over these 894 names in GNU 31.0.90
+//! `-Q --batch': 762 bound, and all 762 carry an INTEGER -- not one
+//! carries the string its preloaded Lisp `defvar' put there first.
+//!
+//! Ledger 178 removed a third source GNU does not have. Two
 //! hand-typed tables in `doc.rs', `STARTUP_VARIABLE_DOC_STUBS' and
 //! `STARTUP_VARIABLE_DOC_STRING_PROPERTIES', were pre-seeded onto
-//! 1972 symbols' plists during bootstrap, which put them in arm 1
-//! -- ahead of the gate. 35 unbound names answered with a doc where
-//! GNU answers nil, and the 70 STUBS names were seeded with the
-//! fixnum `0' that `src/doc.c:433-434' reserves for "no doc".
+//! 1972 symbols' plists during bootstrap, which put them ahead of
+//! the gate. 35 unbound names answered with a doc where GNU answers
+//! nil, and the 70 STUBS names were seeded with the fixnum `0' that
+//! `src/doc.c:433-434' reserves for "no doc".
 
 use std::marker::PhantomData;
+use std::sync::OnceLock;
 
 pub(crate) mod gnu_table;
+
+// ---------------------------------------------------------------------------
+// The `etc/DOC` stand-in, in GNU's own record format
+// ---------------------------------------------------------------------------
+
+/// GNU's `etc/DOC`, as this port has it: [`gnu_table::GNU_VAR_DOCS`] laid out
+/// in `make-docfile`'s record format, so that the two halves of GNU's design
+/// -- the scan that installs offsets and the read that resolves one -- are the
+/// same two functions here that they are in `src/doc.c`.
+///
+/// A record is `^_V<name>\n<text>`, and the number `Fsnarf_documentation`
+/// stores on the symbol's plist is the offset of `<text>`:
+/// `make_fixnum (pos + end + 1 - buf)` with `end` at the `\n`
+/// (`src/doc.c:613`).  The image ends with a final `^_` because
+/// `get_doc_string` reads up to the next one (`src/doc.c:220-228`).
+///
+/// **Why a byte image rather than a row index.**  `Fdocumentation_property`
+/// resolves *any* fixnum on the plist, including one Lisp put there, and GNU's
+/// answer for a fixnum that does not point at a record is nil -- the check at
+/// `src/doc.c:254-260`, which walks backwards over the name to the `^_`.  A
+/// row index has no invalid values, so it cannot reproduce that; a byte offset
+/// reproduces it exactly, and `(put 'x 'variable-documentation 7)` answers nil
+/// in both editors because 7 lands inside the first record's header.
+///
+/// GNU's `^A` unescaping (`src/doc.c:264-283`) has no counterpart here:
+/// `make-docfile` writes `^A` escapes for the three bytes that would be
+/// ambiguous in a text file, and [`gnu_table`] is Rust source carrying the
+/// unescaped text already.
+pub(crate) struct DocImage {
+    bytes: &'static [u8],
+    /// Byte offset of each `GNU_VAR_DOCS` row's text, parallel to the table.
+    positions: Vec<usize>,
+}
+
+static DOC_IMAGE: OnceLock<DocImage> = OnceLock::new();
+
+/// The image, built once per process on the first `Snarf-documentation`
+/// (`lisp/loadup.el:448`) and read from afterwards.
+pub(crate) fn doc_image() -> &'static DocImage {
+    DOC_IMAGE.get_or_init(DocImage::build)
+}
+
+impl DocImage {
+    fn build() -> Self {
+        let mut bytes = Vec::with_capacity(512 * 1024);
+        let mut positions = Vec::with_capacity(gnu_table::GNU_VAR_DOCS.len());
+        for (name, doc) in gnu_table::GNU_VAR_DOCS {
+            bytes.push(0x1f);
+            bytes.push(b'V');
+            bytes.extend_from_slice(name.as_bytes());
+            bytes.push(b'\n');
+            positions.push(bytes.len());
+            bytes.extend_from_slice(doc.as_bytes());
+        }
+        // `get_doc_string' reads to the next `^_'; the last record needs one.
+        bytes.push(0x1f);
+        Self {
+            bytes: Vec::leak(bytes),
+            positions,
+        }
+    }
+
+    /// GNU's `get_doc_string (POSITION, 0)` for the `etc/DOC` case: check that
+    /// POSITION points just past a `^_V<name>\n` header, and return the text
+    /// up to the next `^_`.
+    ///
+    /// `src/doc.c:254-260`:
+    ///
+    /// ```c
+    ///   int test = 1;
+    ///   if (get_doc_string_buffer[offset - test++] != '\n')
+    ///     return Qnil;
+    ///   while (get_doc_string_buffer[offset - test] > ' ')
+    ///     test++;
+    ///   if (get_doc_string_buffer[offset - test] != '\037')
+    ///     return Qnil;
+    /// ```
+    ///
+    /// `None` is where GNU returns nil.  A position outside the image is GNU's
+    /// `error ("Position %d out of range in doc string file")`; this port has
+    /// no file to be out of range of, so it answers nil there too.
+    pub(crate) fn text_at(&'static self, position: i64) -> Option<&'static str> {
+        let offset = usize::try_from(position).ok()?;
+        if offset == 0 || offset >= self.bytes.len() {
+            return None;
+        }
+        let mut test = 1_usize;
+        if *self.bytes.get(offset.checked_sub(test)?)? != b'\n' {
+            return None;
+        }
+        test += 1;
+        while *self.bytes.get(offset.checked_sub(test)?)? > b' ' {
+            test += 1;
+        }
+        if *self.bytes.get(offset.checked_sub(test)?)? != 0x1f {
+            return None;
+        }
+        let end = self.bytes[offset..]
+            .iter()
+            .position(|byte| *byte == 0x1f)
+            .map_or(self.bytes.len(), |index| offset + index);
+        std::str::from_utf8(&self.bytes[offset..end]).ok()
+    }
+}
 
 /// GNU's `SKIP` marker is not documentation, and this is where that becomes
 /// unrepresentable rather than merely absent.
@@ -117,40 +232,53 @@ const _: () = {
 /// and the `or_else` answered for 35 unbound names the gate had refused.
 /// `Option<SnarfedDoc>` does not unify with `Option<&'static str>`, so the
 /// same line is now a type error rather than a review comment.
+///
+/// Ledger 182 finished the job by taking the text away from the return value
+/// as well.  178's `SnarfedDoc::text()` still handed a reader a `&'static str`
+/// keyed by NAME, which is what a *fallback* needs; GNU has no such reader.
+/// Its two functions are this one -- the scan `Fsnarf_documentation` runs once
+/// over `etc/DOC`, whose result goes onto the plist and nowhere else -- and
+/// `get_doc_string`, which is keyed by POSITION and is
+/// [`DocImage::text_at`].  So [`SnarfedDoc`] now yields a position and is
+/// consumed doing it.
 #[inline]
 pub(crate) fn lookup(variable: SnarfedVariable<'_>) -> Option<SnarfedDoc<'_>> {
-    gnu_table::GNU_VAR_DOCS
+    let index = gnu_table::GNU_VAR_DOCS
         .iter()
-        .find(|(n, _)| *n == variable.name)
-        .map(|(_, doc)| SnarfedDoc {
-            text: doc,
-            gate: PhantomData,
-        })
+        .position(|(n, _)| *n == variable.name)?;
+    Some(SnarfedDoc {
+        position: doc_image().positions[index],
+        gate: PhantomData,
+    })
 }
 
-/// A doc string [`lookup`] read out of the `etc/DOC` stand-in, carrying the
-/// proof that `Fsnarf_documentation`'s gate was passed to get it.
+/// A record [`lookup`] found in the `etc/DOC` stand-in, carrying the proof
+/// that `Fsnarf_documentation`'s gate was passed to get it.
 ///
 /// The lifetime borrows the [`SnarfedVariable`] the gate produced, so the
 /// proof cannot outlive the question.  There is deliberately no constructor
-/// from a bare `&str` and no `Default`: the only way to hold one is to have
-/// asked `Fboundp` first.
-///
-/// [`text`](Self::text) is where the proof is spent, which is the one place a
-/// future author can still discard it -- but discarding it is now an explicit
-/// statement rather than the silent consequence of two `Option`s happening to
-/// share an element type.
+/// from a bare `&str`, no `Default`, and -- since ledger 182 -- **no way to
+/// get the text out**: the only thing that can be done with one is
+/// [`position`](Self::position), the number GNU's `Fput` stores.  A doc source
+/// that can only be written to a plist cannot be spliced in as a fallback
+/// *after* the plist has been consulted, which is the precedence GNU has
+/// (`lisp/loadup.el:251` writes, `:476` overwrites) and the one this port had
+/// backwards.
 #[derive(Debug)]
 pub(crate) struct SnarfedDoc<'a> {
-    text: &'static str,
+    position: usize,
     gate: PhantomData<SnarfedVariable<'a>>,
 }
 
 impl SnarfedDoc<'_> {
-    /// The doc text. Points into `.rodata`.
+    /// The value GNU stores on the plist: `make_fixnum (pos + end + 1 - buf)`,
+    /// the offset of the record's text (`src/doc.c:613`).
+    ///
+    /// Consumes the proof, because the gate is asked once per record per snarf
+    /// and the answer belongs on the symbol rather than in a caller's hand.
     #[inline]
-    pub(crate) fn text(&self) -> &'static str {
-        self.text
+    pub(crate) fn position(self) -> i64 {
+        self.position as i64
     }
 }
 

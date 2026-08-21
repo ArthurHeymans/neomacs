@@ -1432,8 +1432,12 @@ impl Obarray {
         }
     }
 
-    #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-    fn is_global_member(&self, id: SymId) -> bool {
+    /// GNU's `oblookup` outcome: is this name a symbol *in this obarray*?
+    ///
+    /// `Fsnarf_documentation` asks it of every `etc/DOC` record and skips the
+    /// ones that answer no (`if (SYMBOLP (sym))`, `src/doc.c:600`), which is
+    /// why scanning the DOC file cannot add symbols to the obarray.
+    pub(crate) fn is_global_member(&self, id: SymId) -> bool {
         self.slot(id).is_some_and(|sym| sym.interned_global)
     }
 

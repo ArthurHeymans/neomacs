@@ -325,6 +325,7 @@ mod single_key_description_advanced;
 mod skip;
 mod sleep_for_semantics;
 mod snarf_documentation_boundp_clause;
+mod snarf_documentation_last_writer;
 mod sort;
 mod special;
 mod split_string_advanced;
