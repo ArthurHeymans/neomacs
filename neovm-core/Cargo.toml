@@ -64,7 +64,7 @@ encoding_rs.workspace = true
 flate2.workspace = true
 rusqlite.workspace = true
 quick-xml.workspace = true
-tl.workspace = true
+libxml.workspace = true
 htmlize.workspace = true
 rodio = { version = "0.20", optional = true }
 # Cranelift JIT backend — optional, enabled by the `jit` feature. The workspace

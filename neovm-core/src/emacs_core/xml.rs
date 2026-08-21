@@ -1,7 +1,7 @@
 //! XML and HTML parsing support, matching GNU Emacs's xml.c.
 //!
 //! Provides real implementations for:
-//! - `libxml-parse-html-region` — HTML parsing via `tl` crate
+//! - `libxml-parse-html-region` — HTML parsing via libxml2
 //! - `libxml-parse-xml-region` — XML parsing via `quick-xml` crate
 //! - `libxml-available-p` — feature availability probe
 
@@ -10,6 +10,9 @@ use super::value::*;
 use crate::buffer::EmacsByteRange;
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::value::ValueKind;
+use libxml::parser::{Parser, ParserOptions};
+use libxml::tree::{Node, NodeType};
+use std::ffi::CStr;
 
 // ---------------------------------------------------------------------------
 // Argument helpers
@@ -374,225 +377,164 @@ fn make_element_node(tag: &str, attrs: Vec<Value>, children: Vec<Value>) -> Valu
 }
 
 // ---------------------------------------------------------------------------
-// HTML parsing via tl crate
+// HTML parsing via libxml2
 // ---------------------------------------------------------------------------
 
-/// A converted top-level HTML node, tagged with its element name (if it is an
-/// element) so the HTML5 document wrapper can classify it as head vs body.
-struct TopNode {
-    /// The lowercase element name, or `None` for text/comment nodes.
-    tag: Option<String>,
-    value: Value,
-}
-
-/// HTML elements that belong in `<head>` when they appear before any body
-/// content, matching how libxml2's HTML parser routes them. Notably `noscript`
-/// is *not* here: libxml2 places it in `<body>` in this fragment context.
-fn is_head_element(tag: &str) -> bool {
-    matches!(
-        tag,
-        "head" | "title" | "base" | "link" | "meta" | "style" | "script"
-    )
-}
-
-/// Parse region as HTML using tl and return Elisp parse tree.
-fn parse_html_region(data: &[u8], discard_comments: bool) -> Option<Value> {
-    let input = String::from_utf8_lossy(data);
-    let dom = tl::parse(&input, tl::ParserOptions::default()).ok()?;
-    let parser = dom.parser();
-    let handles = dom.children();
-
-    let mut nodes: Vec<TopNode> = Vec::new();
-    for handle in handles {
-        let node = handle.get(parser)?;
-        if let Some(top) = convert_tl_top_node(node, parser, discard_comments) {
-            nodes.push(top);
-        }
-    }
-
-    if nodes.is_empty() {
-        return Some(Value::NIL);
-    }
-
-    // libxml2's HTML parser performs full HTML5 tree construction, implicitly
-    // creating the <html>/<head>/<body> document structure. The `tl` crate
-    // returns the fragment verbatim, so reconstruct that wrapper here.
-    wrap_html_document(nodes)
-}
-
-/// Reconstruct libxml2's implicit `<html>`/`<head>`/`<body>` document structure
-/// around a parsed HTML fragment.
+/// Whether comments adjacent to the document element appear in the Lisp DOM.
 ///
-/// Faithfully covered (verified against GNU): bare fragments, plain text,
-/// `head`-routed elements (`title`/`meta`/`link`/`base`/`style`/`script`),
-/// an explicit `<head>`, and the head→body transition once body content
-/// appears. A fragment that already has a single `<html>` root, or that carries
-/// top-level comments, is left as libxml2's lighter handling would *not*
-/// rewrite it the same way, so those keep the pre-existing pass-through /
-/// `(top ...)` behavior rather than risk a wrong wrap.
-fn wrap_html_document(nodes: Vec<TopNode>) -> Option<Value> {
-    let has_html_root = nodes.len() == 1 && nodes[0].tag.as_deref() == Some("html");
-    let has_top_comment = nodes
-        .iter()
-        .any(|n| n.tag.is_none() && is_comment_node(&n.value));
+/// GNU Emacs's `DISCARD-COMMENTS` argument applies only to top-level comments;
+/// comments nested inside the document element are always retained.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TopLevelCommentPolicy {
+    Preserve,
+    Discard,
+}
 
-    if has_html_root || has_top_comment {
-        // Risky to rewrite faithfully — preserve previous behavior.
-        let values: Vec<Value> = nodes.into_iter().map(|n| n.value).collect();
-        if values.len() == 1 {
-            return Some(values.into_iter().next().unwrap());
+impl From<bool> for TopLevelCommentPolicy {
+    fn from(discard_comments: bool) -> Self {
+        if discard_comments {
+            Self::Discard
+        } else {
+            Self::Preserve
         }
-        return Some(Value::list(
+    }
+}
+
+/// Parse a region using the same parser and recovery policy as GNU Emacs.
+///
+/// HTML tokenization is deliberately owned by libxml2 rather than approximated
+/// in this adapter. In particular, raw-text elements such as `script` and
+/// malformed real-world documents require parser state that cannot be repaired
+/// reliably after a generic tokenizer has already split the input incorrectly.
+fn parse_html_region(data: &[u8], discard_comments: bool) -> Option<Value> {
+    let parser = Parser::default_html();
+    let document = parser
+        .parse_string_with_options(
+            data,
+            ParserOptions {
+                recover: true,
+                no_error: true,
+                no_warning: true,
+                no_blanks: true,
+                no_net: true,
+                encoding: Some("utf-8"),
+                ..ParserOptions::default()
+            },
+        )
+        .ok()?;
+    let root = document.get_root_element()?;
+
+    match TopLevelCommentPolicy::from(discard_comments) {
+        TopLevelCommentPolicy::Discard => html_node_to_value(&root),
+        TopLevelCommentPolicy::Preserve => html_document_to_value(&root),
+    }
+}
+
+/// Convert the document element and any adjacent top-level comments.
+///
+/// libxml2 exposes document-level comments as siblings of the root element.
+/// GNU returns `(top nil ...)` only when at least one such sibling converts to
+/// a Lisp DOM node; otherwise it returns the root element directly.
+fn html_document_to_value(root: &Node) -> Option<Value> {
+    let mut preceding = Vec::new();
+    let mut sibling = root.get_prev_sibling();
+    while let Some(node) = sibling {
+        sibling = node.get_prev_sibling();
+        preceding.push(node);
+    }
+    preceding.reverse();
+
+    let mut nodes = preceding;
+    nodes.push(root.clone());
+    sibling = root.get_next_sibling();
+    while let Some(node) = sibling {
+        sibling = node.get_next_sibling();
+        nodes.push(node);
+    }
+
+    let values: Vec<Value> = nodes.iter().filter_map(html_node_to_value).collect();
+    match values.len() {
+        0 => Some(Value::NIL),
+        1 => values.into_iter().next(),
+        _ => Some(Value::list(
             std::iter::once(Value::symbol("top"))
                 .chain(std::iter::once(Value::NIL))
                 .chain(values)
                 .collect(),
-        ));
-    }
-
-    // Partition top-level nodes into the head and body sections, honoring the
-    // head→body transition: once body content appears, later head-type
-    // elements stay in the body (matching libxml2).
-    let mut head: Vec<Value> = Vec::new();
-    let mut body: Vec<Value> = Vec::new();
-    let mut seen_body_content = false;
-
-    for node in nodes {
-        match node.tag.as_deref() {
-            Some("head") => {
-                // Unwrap an explicit <head>, merging its children into head.
-                head.extend(element_children(&node.value));
-            }
-            Some("body") => {
-                seen_body_content = true;
-                body.extend(element_children(&node.value));
-            }
-            Some(tag) if !seen_body_content && is_head_element(tag) => {
-                head.push(node.value);
-            }
-            _ => {
-                seen_body_content = true;
-                body.push(node.value);
-            }
-        }
-    }
-
-    // (html nil [head nil HEAD...] (body nil BODY...))
-    let has_head = !head.is_empty();
-    let has_body = !body.is_empty();
-    let mut html_children: Vec<Value> = vec![Value::symbol("html"), Value::NIL];
-    if has_head {
-        let mut head_node = vec![Value::symbol("head"), Value::NIL];
-        head_node.extend(head);
-        html_children.push(Value::list(head_node));
-    }
-    // libxml2 omits <body> only when there is exclusively head content.
-    if has_body || !has_head {
-        let mut body_node = vec![Value::symbol("body"), Value::NIL];
-        body_node.extend(body);
-        html_children.push(Value::list(body_node));
-    }
-    Some(Value::list(html_children))
-}
-
-/// Convert a top-level `tl` node, capturing its element tag (lowercased) so the
-/// HTML document wrapper can classify it. Returns `None` for nodes that convert
-/// to nothing (e.g. blank text or a discarded comment).
-fn convert_tl_top_node(
-    node: &tl::Node,
-    parser: &tl::Parser,
-    discard_comments: bool,
-) -> Option<TopNode> {
-    let value = convert_tl_node(node, parser, discard_comments)?;
-    let tag = match node {
-        tl::Node::Tag(element) => {
-            let raw_tag = element.name().as_utf8_str();
-            let name = raw_tag.strip_suffix('/').unwrap_or(raw_tag.as_ref());
-            Some(name.to_ascii_lowercase())
-        }
-        _ => None,
-    };
-    Some(TopNode { tag, value })
-}
-
-/// Is `value` a `(comment ...)` element node?
-fn is_comment_node(value: &Value) -> bool {
-    super::value::list_to_vec(value)
-        .and_then(|items| items.first().copied())
-        .and_then(|head| head.as_symbol_name())
-        .is_some_and(|name| name == "comment")
-}
-
-/// Return the children of an element node `(tag attrs child...)` (i.e. drop the
-/// leading tag symbol and attribute list).
-fn element_children(value: &Value) -> Vec<Value> {
-    match super::value::list_to_vec(value) {
-        Some(items) if items.len() > 2 => items[2..].to_vec(),
-        _ => Vec::new(),
+        )),
     }
 }
 
-fn convert_tl_node(node: &tl::Node, parser: &tl::Parser, discard_comments: bool) -> Option<Value> {
-    match node {
-        tl::Node::Raw(raw) => {
-            let text = raw.as_utf8_str();
-            if text.trim().is_empty() {
-                None
-            } else {
-                // GNU's libxml2 parser resolves HTML character references
-                // before `make_dom' copies an XML_TEXT_NODE into Lisp.  `tl'
-                // deliberately exposes source bytes, so normalize them at
-                // this adapter boundary using the HTML text context.
-                let text = htmlize::unescape(text.as_ref());
-                Some(Value::string(text.as_ref()))
-            }
+/// Convert a libxml2 node into GNU Emacs's Lisp DOM representation.
+fn html_node_to_value(node: &Node) -> Option<Value> {
+    match node.get_type()? {
+        NodeType::ElementNode => {
+            let children = node
+                .get_child_nodes()
+                .iter()
+                .filter_map(html_node_to_value)
+                .collect();
+            Some(make_element_node(
+                &node.get_name(),
+                ordered_html_attributes(node),
+                children,
+            ))
         }
-        tl::Node::Comment(comment) => {
-            if discard_comments {
-                None
-            } else {
-                let text = comment.as_utf8_str();
-                Some(Value::list(vec![
-                    Value::symbol("comment"),
-                    Value::NIL,
-                    Value::string(text.as_ref()),
-                ]))
-            }
-        }
-        tl::Node::Tag(element) => {
-            // The `tl` crate leaves the trailing `/` of an XHTML-style
-            // self-closing tag (`<hr/>`, `<rect/>`) in the tag name.
-            // libxml2's HTML parser never does that, so strip it to match GNU.
-            let raw_tag = element.name().as_utf8_str();
-            let tag = raw_tag.strip_suffix('/').unwrap_or(raw_tag.as_ref());
-            let attrs = convert_tl_attributes(element.attributes());
-            let children = element.children();
-            let children_handles = children.top();
-            let mut child_values = Vec::new();
-            for handle in children_handles.iter() {
-                let child_node = handle.get(parser)?;
-                if let Some(val) = convert_tl_node(child_node, parser, discard_comments) {
-                    child_values.push(val);
-                }
-            }
-            Some(make_element_node(tag, attrs, child_values))
-        }
+        NodeType::TextNode | NodeType::CDataSectionNode => Some(Value::string(node.get_content())),
+        NodeType::CommentNode => Some(Value::list(vec![
+            Value::symbol("comment"),
+            Value::NIL,
+            Value::string(node.get_content()),
+        ])),
+        NodeType::AttributeNode
+        | NodeType::EntityRefNode
+        | NodeType::EntityNode
+        | NodeType::PiNode
+        | NodeType::DocumentNode
+        | NodeType::DocumentTypeNode
+        | NodeType::DocumentFragNode
+        | NodeType::NotationNode
+        | NodeType::HtmlDocumentNode
+        | NodeType::DTDNode
+        | NodeType::ElementDecl
+        | NodeType::AttributeDecl
+        | NodeType::EntityDecl
+        | NodeType::NamespaceDecl
+        | NodeType::XIncludeStart
+        | NodeType::XIncludeEnd
+        | NodeType::DOCBDocumentNode => None,
     }
 }
 
-fn convert_tl_attributes(attrs: &tl::Attributes) -> Vec<Value> {
+/// Return attributes in source order, matching GNU Emacs's `make_dom`.
+///
+/// `libxml::tree::Node::get_properties` returns a hash map and therefore loses
+/// ordering. The linked attribute list is owned by `node`'s document and stays
+/// valid for this traversal. Values still go through the safe wrapper so the
+/// libxml2-allocated string is released with the correct allocator.
+fn ordered_html_attributes(node: &Node) -> Vec<Value> {
     let mut result = Vec::new();
-    for (key, val) in attrs.iter() {
-        let val_str = val.unwrap_or_default();
-        // Attribute reference recovery differs from text recovery when a
-        // semicolon is omitted and the next byte is alphanumeric or `='.
-        // libxml2 applies that context before exposing `property->content'.
-        let val_str = htmlize::unescape_attribute(val_str.as_ref());
-        result.push(Value::cons(
-            Value::symbol(key.as_ref()),
-            Value::string(val_str.as_ref()),
-        ));
+
+    // SAFETY: `node.node_ptr()` is non-null for a live `Node`. The document is
+    // retained by the caller for this entire traversal, and libxml2 terminates
+    // its attribute list with null. We only read the name/next fields.
+    let mut attribute = unsafe { (*node.node_ptr()).properties };
+    while !attribute.is_null() {
+        // SAFETY: each pointer comes from the live libxml2 attribute list.
+        let name_ptr = unsafe { (*attribute).name };
+        if !name_ptr.is_null() {
+            // SAFETY: libxml2 stores attribute names as NUL-terminated bytes.
+            let name = unsafe { CStr::from_ptr(name_ptr.cast()) }
+                .to_string_lossy()
+                .into_owned();
+            if let Some(value) = node.get_property(&name) {
+                result.push(Value::cons(Value::symbol(&name), Value::string(value)));
+            }
+        }
+        // SAFETY: `attribute` is a valid link in the document-owned list.
+        attribute = unsafe { (*attribute).next };
     }
+
     result
 }
 

@@ -451,6 +451,29 @@ fn libxml_parse_html_region_routes_head_elements_and_transitions_to_body() {
 }
 
 #[test]
+fn libxml_parse_html_region_treats_script_content_as_raw_text() {
+    crate::test_utils::init_test_tracing();
+
+    // `script` is an HTML raw-text element.  A JavaScript comparison must not
+    // be tokenized as a start tag: doing so corrupts the script node and leaves
+    // the following `<body>` nested under `<head>`, so EWW renders a blank
+    // page.  This is the minimized form of google.com's response.  Measured
+    // with GNU Emacs 31.0.90's public `libxml-parse-html-region` primitive.
+    let result = crate::test_utils::runtime_startup_eval_one(
+        r#"(with-temp-buffer
+             (insert "<html><head><script>for(;b<e;){}</script></head><body><p>visible</p></body></html>")
+             (let* ((dom (libxml-parse-html-region (point-min) (point-max)))
+                    (head (assq 'head (cddr dom)))
+                    (body (assq 'body (cddr dom))))
+               (list (mapcar #'car (cddr dom))
+                     (nth 2 (assq 'script (cddr head)))
+                     (nth 2 (assq 'p (cddr body))))))"#,
+    );
+
+    assert_eq!(result, r#"OK ((head body) "for(;b<e;){}" "visible")"#);
+}
+
+#[test]
 fn zlib_available_p_returns_true() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

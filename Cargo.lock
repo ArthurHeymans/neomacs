@@ -3251,6 +3251,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "libxml"
+version = "0.3.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0aba96591171f24c6909906eb05895902a49bbe2a6ff15bf8ff48d95774d67b"
+dependencies = [
+ "bindgen",
+ "libc",
+ "pkg-config",
+ "vcpkg",
+]
+
+[[package]]
 name = "libz-sys"
 version = "1.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3895,6 +3907,7 @@ dependencies = [
  "itoa",
  "libc",
  "libloading 0.9.0",
+ "libxml",
  "malachite",
  "memchr",
  "memmap2",
@@ -3928,7 +3941,6 @@ dependencies = [
  "strum",
  "sysinfo",
  "tempfile",
- "tl",
  "tracing",
  "tracing-appender",
  "tracing-log",
@@ -6767,12 +6779,6 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
-
-[[package]]
-name = "tl"
-version = "0.7.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b130bd8a58c163224b44e217b4239ca7b927d82bf6cc2fea1fc561d15056e3f7"
 
 [[package]]
 name = "tokio"
