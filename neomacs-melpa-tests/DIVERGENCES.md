@@ -23896,8 +23896,9 @@ harness's own stop.
 * **Entry 132**, "Both enforce nothing on assignment, so no divergence follows
   from that": true of the assignment, false of the declaration.  Entry 168
   measured the cost at 447 names; this entry adds that it is not only
-  `makunbound` -- `defvaralias` and, for `DEFVAR_KBOARD`, four more entry points
-  turn on the same tag.  A dated note is on 132.
+  `makunbound` -- `defvaralias` turns on the same tag, and a `DEFVAR_KBOARD`
+  name diverges on nine entry points more, for fifteen in all.  A dated note is
+  on 132.
 * **Entry 168**, item 3, "wiring `Lisp_Fwd_Obj` *storage* is nevertheless the
   wrong instrument": the first of its two reasons is refuted by
   `Obarray::trace_roots`, which 132 itself had already taught to root a
