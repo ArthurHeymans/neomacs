@@ -910,6 +910,7 @@ pub(crate) struct DisplayStretch {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayImageItem {
     pub(crate) image_id: i32,
+    pub(crate) source_rect: neomacs_display_protocol::ImageSourceRect,
     pub(crate) width: f32,
     pub(crate) height: f32,
     pub(crate) ascent: f32,
@@ -953,10 +954,15 @@ pub(crate) struct DisplayMediaReplacement {
 pub(crate) enum DisplayMediaReplacementKind {
     Image {
         image_id: u32,
+        source_rect: neomacs_display_protocol::ImageSourceRect,
         horizontal_margin: f32,
         vertical_margin: f32,
         opaque_background: Option<u32>,
     },
+    /// A valid image replacement whose GNU slice resolves to no pixels. The
+    /// source text is still consumed, but no placeholder or drawable glyph is
+    /// emitted.
+    EmptyImageSlice,
     Video {
         video_id: u32,
         loop_count: i32,
@@ -985,6 +991,7 @@ impl DisplayMediaReplacement {
         Self {
             kind: DisplayMediaReplacementKind::Image {
                 image_id: image.image_id.max(0) as u32,
+                source_rect: image.source_rect,
                 horizontal_margin,
                 vertical_margin,
                 opaque_background: image.opaque_background,
@@ -992,6 +999,15 @@ impl DisplayMediaReplacement {
             width: display_replacement_dimension(image.width) + 2.0 * horizontal_margin,
             height: display_replacement_dimension(image.height) + 2.0 * vertical_margin,
             ascent: display_replacement_ascent(image.ascent) + vertical_margin,
+        }
+    }
+
+    pub(crate) const fn empty_image_slice() -> Self {
+        Self {
+            kind: DisplayMediaReplacementKind::EmptyImageSlice,
+            width: 0.0,
+            height: 0.0,
+            ascent: 0.0,
         }
     }
 

@@ -10,14 +10,16 @@ use neovm_core::emacs_core::eval::{
     ShaderSurfaceLanguage, SurfaceResolveRequest, VideoResolveRequest, VideoResolveSource,
     WebKitResolveRequest, WebKitResolveSource,
 };
-use neovm_core::emacs_core::image::ImageSpecKey;
+use neovm_core::emacs_core::image::{ImageSpecKey, image_resolve_source_from_items};
 use neovm_core::emacs_core::image_catalog::{
-    AxisSize, ImageResolveRequest, ImageResolveSource, ImageRotation, ImageScaleEnvironment,
-    ImageScalePolicy, ImageSizeSpec, numeric_image_scale,
+    AxisSize, ImageResolveRequest, ImageRotation, ImageScaleEnvironment, ImageScalePolicy,
+    ImageSizeSpec, numeric_image_scale,
 };
 use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
 use neovm_core::face::Color as LispColor;
 use strum::{EnumString, IntoStaticStr};
+
+use neomacs_display_protocol::ImageSourceRect;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
@@ -67,6 +69,114 @@ pub(crate) struct DisplayImageLayout {
     pub(crate) scale: ImageScalePolicy,
     pub(crate) ascent: DisplayImageAscentPolicy,
     pub(crate) margin: DisplayImageMargin,
+}
+
+/// One GNU `(slice X Y WIDTH HEIGHT)` operand. Fixnums are logical pixels,
+/// floats are fractions of the realized image axis, and every other Lisp value
+/// has GNU's unspecified/default meaning.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum DisplayImageSliceValue {
+    Unspecified,
+    Pixels(f32),
+    Fraction(f32),
+}
+
+impl DisplayImageSliceValue {
+    fn from_lisp(value: Value) -> Self {
+        if let Some(pixels) = value.as_fixnum() {
+            return Self::Pixels(pixels as f32);
+        }
+        value
+            .as_float()
+            .filter(|fraction| fraction.is_finite())
+            .map(|fraction| Self::Fraction(fraction as f32))
+            .unwrap_or(Self::Unspecified)
+    }
+
+    fn resolve(self, axis_extent: f32, default: f32) -> f32 {
+        match self {
+            Self::Unspecified => default,
+            Self::Pixels(pixels) => pixels,
+            // GNU assigns the product to an integer glyph-slice field.
+            Self::Fraction(fraction) => (fraction * axis_extent).trunc(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct DisplayImageSliceSpec {
+    x: DisplayImageSliceValue,
+    y: DisplayImageSliceValue,
+    width: DisplayImageSliceValue,
+    height: DisplayImageSliceValue,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ResolvedDisplayImageSlice {
+    pub(crate) source_rect: ImageSourceRect,
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+}
+
+impl DisplayImageSliceSpec {
+    /// Resolve only after the catalog has supplied the realized image extent,
+    /// matching GNU `produce_image_glyph` rather than guessing during parsing.
+    pub(crate) fn resolve(
+        self,
+        image_width: f32,
+        image_height: f32,
+    ) -> Option<ResolvedDisplayImageSlice> {
+        if !image_width.is_finite()
+            || !image_height.is_finite()
+            || image_width <= 0.0
+            || image_height <= 0.0
+        {
+            return None;
+        }
+        let x = self.x.resolve(image_width, 0.0).clamp(0.0, image_width);
+        let y = self.y.resolve(image_height, 0.0).clamp(0.0, image_height);
+        let width = self
+            .width
+            .resolve(image_width, image_width)
+            .max(0.0)
+            .min(image_width - x);
+        let height = self
+            .height
+            .resolve(image_height, image_height)
+            .max(0.0)
+            .min(image_height - y);
+        let source_rect = ImageSourceRect::new(
+            x / image_width,
+            y / image_height,
+            width / image_width,
+            height / image_height,
+        )?;
+        Some(ResolvedDisplayImageSlice {
+            source_rect,
+            width,
+            height,
+        })
+    }
+}
+
+pub(crate) fn parse_display_image_slice(value: Value) -> Option<DisplayImageSliceSpec> {
+    let items = list_to_vec(&value)?;
+    if items.first()?.as_symbol_name() != Some("slice") {
+        return None;
+    }
+    let operand = |index| {
+        items
+            .get(index)
+            .copied()
+            .map(DisplayImageSliceValue::from_lisp)
+            .unwrap_or(DisplayImageSliceValue::Unspecified)
+    };
+    Some(DisplayImageSliceSpec {
+        x: operand(1),
+        y: operand(2),
+        width: operand(3),
+        height: operand(4),
+    })
 }
 
 impl DisplayImageLayout {
@@ -205,7 +315,7 @@ pub(crate) fn parse_display_image_layout(
         return None;
     }
 
-    let mut source = None;
+    let source = image_resolve_source_from_items(&items)?;
     // Kept apart per GNU: `:width`/`:height` are targets, `:max-*` are clamps.
     let (mut width, mut max_width) = (None, None);
     let (mut height, mut max_height) = (None, None);
@@ -221,17 +331,7 @@ pub(crate) fn parse_display_image_layout(
     while i + 1 < items.len() {
         let value = items[i + 1];
         match ImageSpecKey::from_lisp_value(items[i]) {
-            Some(ImageSpecKey::File) => {
-                source = value
-                    .as_lisp_string()
-                    .cloned()
-                    .map(ImageResolveSource::File);
-            }
-            Some(ImageSpecKey::Data) => {
-                source = value
-                    .as_lisp_string()
-                    .map(|data| ImageResolveSource::Data(data.as_bytes().to_vec()));
-            }
+            Some(ImageSpecKey::File | ImageSpecKey::Data | ImageSpecKey::BaseUri) => {}
             Some(ImageSpecKey::Rotation) => {
                 rotation = value
                     .as_number_f64()
@@ -268,7 +368,7 @@ pub(crate) fn parse_display_image_layout(
 
     Some(DisplayImageLayout {
         request: ImageResolveRequest {
-            source: source?,
+            source,
             size: ImageSizeSpec::new(
                 AxisSize::resolve(width, max_width),
                 AxisSize::resolve(height, max_height),
@@ -724,6 +824,7 @@ pub(crate) fn display_space_positive_number(value: Value) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use neovm_core::emacs_core::image_catalog::{ImageDataSource, ImageResolveSource};
 
     fn image_spec(ascent: Option<Value>) -> Value {
         let mut items = vec![
@@ -744,6 +845,52 @@ mod tests {
         parse_display_image_layout(&image_spec(value), 0, 0)
             .expect("valid image spec")
             .ascent
+    }
+
+    #[test]
+    fn image_data_base_uri_survives_as_an_explicit_resource_capability() {
+        let mut eval = neovm_core::emacs_core::Context::new();
+        eval.setup_thread_locals();
+        let image = Value::list(vec![
+            Value::symbol("image"),
+            Value::keyword("type"),
+            Value::symbol("svg"),
+            Value::keyword("data"),
+            Value::string("<svg/>"),
+            Value::keyword("base-uri"),
+            Value::string("/tmp/telega/dummy"),
+        ]);
+
+        let parsed = parse_display_image_layout(&image, 0, 0).expect("valid data image");
+        let ImageResolveSource::Data(ImageDataSource::WithBaseUri { data, base_uri }) =
+            parsed.request.source
+        else {
+            panic!("data plus :base-uri must remain a capability-bearing source");
+        };
+        assert_eq!(data, b"<svg/>");
+        assert_eq!(base_uri.as_utf8_str(), Some("/tmp/telega/dummy"));
+    }
+
+    #[test]
+    fn image_slice_resolves_fixnums_as_pixels_and_floats_as_fractions() {
+        let mut eval = neovm_core::emacs_core::Context::new();
+        eval.setup_thread_locals();
+        let slice = parse_display_image_slice(Value::list(vec![
+            Value::symbol("slice"),
+            Value::fixnum(8),
+            Value::make_float(0.25),
+            Value::make_float(0.5),
+            Value::fixnum(10),
+        ]))
+        .expect("slice spec");
+
+        let resolved = slice.resolve(40.0, 80.0).expect("non-empty crop");
+        assert_eq!((resolved.width, resolved.height), (20.0, 10.0));
+        let tolerance = 2.0 / u16::MAX as f32;
+        assert!((resolved.source_rect.x() - 0.2).abs() <= tolerance);
+        assert!((resolved.source_rect.y() - 0.25).abs() <= tolerance);
+        assert!((resolved.source_rect.width() - 0.5).abs() <= tolerance);
+        assert!((resolved.source_rect.height() - 0.125).abs() <= tolerance);
     }
 
     #[test]

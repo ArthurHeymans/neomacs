@@ -10731,6 +10731,7 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
     let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let media = DisplayMediaReplacement::image(DisplayImageItem {
         image_id: 42,
+        source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
         width: 64.0,
         height: 18.0,
         ascent: 14.0,
@@ -10753,6 +10754,7 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
 
     let xwidget_media = DisplayMediaReplacement::image(DisplayImageItem {
         image_id: 43,
+        source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
         width: 64.0,
         height: 10.0,
         ascent: 10.0,
@@ -10787,6 +10789,7 @@ fn display_replacement_media_append_item_resolves_direct_media_property() {
         &active_face,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+        None,
     )
     .expect("direct media replacement");
 
@@ -10813,6 +10816,7 @@ fn display_replacement_media_append_item_resolves_placeholder_item_without_host(
         &active_face,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
         neovm_core::emacs_core::image_catalog::ImageScaleEnvironment::default(),
+        None,
     )
     .expect("image placeholder");
 
@@ -10830,6 +10834,7 @@ fn display_replacement_media_append_item_names_row_extent_policy() {
     let item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 42,
+            source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
             width: 64.0,
             height: 10.0,
             ascent: 10.0,
@@ -11389,6 +11394,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
                 y,
                 width,
                 height,
+                ..
             } => Some((
                 *window_id,
                 *row_role,
@@ -11482,6 +11488,7 @@ fn display_replacement_append_context_installs_image_replacements() {
     let media_item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 42,
+            source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
             width: 64.0,
             height: 32.0,
             ascent: 32.0,
@@ -11551,6 +11558,7 @@ fn display_replacement_append_context_installs_image_replacements() {
                 y,
                 width,
                 height,
+                ..
             } => Some((
                 *window_id, *row_role, *clip_rect, *slot_id, *image_id, *x, *y, *width, *height,
             )),

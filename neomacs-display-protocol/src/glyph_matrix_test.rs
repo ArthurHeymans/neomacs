@@ -566,11 +566,11 @@ fn glyph_type_kind_codes_match_gnu_glyph_type() {
     );
     assert_eq!(
         GlyphType::Image {
+            source_rect: crate::ImageSourceRect::FULL,
             image_id: 7,
             width_cols: 1,
-            horizontal_margin: 0.0,
-            vertical_margin: 0.0,
-            opaque_background: None,
+            margins: crate::ImageMargins::default(),
+            opaque_background: crate::ImageOpaqueBackground::default(),
         }
         .gnu_kind(),
         GlyphTypeKind::Image
@@ -2162,11 +2162,11 @@ fn frame_chrome_materializes_nonzero_tab_origin_once() {
         .push(Glyph::stretch(2, FaceId::new(0)).with_pixel_geometry(16.0, 18.0, 14.0));
     let mut image = Glyph::char(' ', FaceId::new(0), 1);
     image.glyph_type = GlyphType::Image {
+        source_rect: crate::ImageSourceRect::FULL,
         image_id: 77,
         width_cols: 2,
-        horizontal_margin: 0.0,
-        vertical_margin: 0.0,
-        opaque_background: None,
+        margins: crate::ImageMargins::default(),
+        opaque_background: crate::ImageOpaqueBackground::default(),
     };
     tab_row.glyphs[GlyphArea::Text.index()].push(image.with_pixel_geometry(16.0, 16.0, 14.0));
 

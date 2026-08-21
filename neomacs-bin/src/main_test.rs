@@ -47,7 +47,8 @@ use neovm_core::emacs_core::eval::{
 };
 use neovm_core::emacs_core::image_catalog::{AxisSize, ImageRotation, ImageSizeSpec};
 use neovm_core::emacs_core::image_catalog::{
-    ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, ResolvedImageMetadata,
+    ImageCatalog, ImageDataSource, ImageLookup, ImageResolveRequest, ImageResolveSource,
+    ResolvedImageMetadata,
 };
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::load::{
@@ -1068,7 +1069,7 @@ fn primary_image_catalog_does_not_block_on_render_command_backpressure() {
         .send(RenderCommand::Asset(AssetCommand::ImageFree { id: 1 }))
         .expect("fill command queue");
     let request = ImageResolveRequest {
-        source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
+        source: ImageResolveSource::Data(ImageDataSource::Isolated(vec![0x89, b'P', b'N', b'G'])),
         size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
         rotation: ImageRotation::None,
         fg_color: 0,
@@ -1161,7 +1162,7 @@ fn primary_image_catalog_does_not_wait_for_renderer_metadata_lock() {
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let request = ImageResolveRequest {
-        source: ImageResolveSource::Data(vec![0x89, b'P', b'N', b'G']),
+        source: ImageResolveSource::Data(ImageDataSource::Isolated(vec![0x89, b'P', b'N', b'G'])),
         size: ImageSizeSpec::new(AxisSize::AtMost(18), AxisSize::AtMost(18)),
         rotation: ImageRotation::None,
         fg_color: 0,
@@ -1315,7 +1316,7 @@ fn primary_display_host_resolve_image_sync_returns_cached_decode_failure_promptl
         terminal_state: super::TerminalHostState::new(new_shared_terminals()),
     };
     let request = ImageResolveRequest {
-        source: ImageResolveSource::Data(vec![0xde, 0xad]),
+        source: ImageResolveSource::Data(ImageDataSource::Isolated(vec![0xde, 0xad])),
         size: ImageSizeSpec::new(AxisSize::AtMost(0), AxisSize::AtMost(0)),
         rotation: ImageRotation::None,
         fg_color: 0,

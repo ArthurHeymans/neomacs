@@ -1699,7 +1699,7 @@ pub(crate) fn tab_bar_image_relief_styles(
             });
             let background = gnu_image_relief_background(
                 face.and_then(|face| face.box_color),
-                opaque_background,
+                opaque_background.get(),
                 face.map(|face| face.background)
                     .unwrap_or_else(|| Color::from_pixel(fallback_background)),
             );

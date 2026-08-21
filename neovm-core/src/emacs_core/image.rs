@@ -18,8 +18,9 @@ use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_args_range, expect_max_args, expect_min_args};
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::image_catalog::{
-    AxisSize, ImageResolveRequest, ImageResolveSource, ImageRotation, ImageScaleEnvironment,
-    ImageScalePolicy, ImageSizeSpec, image_scale_environment, numeric_image_scale,
+    AxisSize, ImageDataSource, ImageResolveRequest, ImageResolveSource, ImageRotation,
+    ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, image_scale_environment,
+    numeric_image_scale,
 };
 use crate::window::FRAME_ID_BASE;
 use strum::{EnumString, IntoStaticStr};
@@ -255,6 +256,40 @@ impl ImageSpecKey {
     }
 }
 
+/// Decode the mutually exclusive image source capability once for every image
+/// consumer. A file source wins over in-memory data, and `:base-uri` has an
+/// effect only when paired with `:data`; this prevents layout and image
+/// builtins from constructing different catalog keys for the same Lisp spec.
+pub fn image_resolve_source_from_items(items: &[Value]) -> Option<ImageResolveSource> {
+    let mut file_source = None;
+    let mut data_source = None;
+    let mut base_uri = None;
+    let mut index = 1;
+    while index + 1 < items.len() {
+        let value = items[index + 1];
+        match ImageSpecKey::from_lisp_value(items[index]) {
+            Some(ImageSpecKey::File) => file_source = value.as_lisp_string().cloned(),
+            Some(ImageSpecKey::Data) => {
+                data_source = value.as_lisp_string().map(|data| data.as_bytes().to_vec());
+            }
+            Some(ImageSpecKey::BaseUri) => base_uri = value.as_lisp_string().cloned(),
+            _ => {}
+        }
+        index += 2;
+    }
+    match (file_source, data_source, base_uri) {
+        (Some(path), _, _) => Some(ImageResolveSource::File(path)),
+        (None, Some(data), Some(base_uri)) => {
+            Some(ImageResolveSource::Data(ImageDataSource::WithBaseUri {
+                data,
+                base_uri,
+            }))
+        }
+        (None, Some(data), None) => Some(ImageResolveSource::Data(ImageDataSource::Isolated(data))),
+        (None, None, _) => None,
+    }
+}
+
 /// AREA argument accepted by GNU `put-image` and `insert-image`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
@@ -441,7 +476,7 @@ pub(crate) fn image_resolve_request_from_spec(
         return None;
     }
 
-    let mut source = None;
+    let source = image_resolve_source_from_items(&items)?;
     // GNU keeps these four apart: `:width`/`:height` are targets that override
     // their `:max-` counterpart, `:max-width`/`:max-height` are clamps.
     let (mut width, mut max_width) = (None, None);
@@ -454,17 +489,7 @@ pub(crate) fn image_resolve_request_from_spec(
     while i + 1 < items.len() {
         let value = items[i + 1];
         match ImageSpecKey::from_lisp_value(items[i]) {
-            Some(ImageSpecKey::File) => {
-                source = value
-                    .as_lisp_string()
-                    .cloned()
-                    .map(ImageResolveSource::File);
-            }
-            Some(ImageSpecKey::Data) => {
-                source = value
-                    .as_lisp_string()
-                    .map(|data| ImageResolveSource::Data(data.as_bytes().to_vec()));
-            }
+            Some(ImageSpecKey::File | ImageSpecKey::Data | ImageSpecKey::BaseUri) => {}
             Some(ImageSpecKey::Rotation) => {
                 // GNU signals `Invalid image ':rotation' parameter` for a
                 // non-number and leaves the image upright (src/image.c:2921).
@@ -493,7 +518,7 @@ pub(crate) fn image_resolve_request_from_spec(
     }
 
     Some(ImageResolveRequest {
-        source: source?,
+        source,
         // GNU looks each key up independently, so precedence is by key rather
         // than by plist order.
         size: ImageSizeSpec::new(

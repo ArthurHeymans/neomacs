@@ -114,11 +114,12 @@ impl<'a> DisplaySourceContext<'a> {
     fn resolve_display_media_replacement(
         &mut self,
         display_prop: Value,
+        image_slice: Option<crate::display_spec::DisplayImageSliceSpec>,
         face: RenderFaceRef,
     ) -> Option<DisplayMediaReplacement> {
-        self.face_resolver
-            .as_mut()
-            .and_then(|resolver| resolver.resolve_display_media_replacement(display_prop, face))
+        self.face_resolver.as_mut().and_then(|resolver| {
+            resolver.resolve_display_media_replacement(display_prop, image_slice, face)
+        })
     }
 }
 
@@ -239,6 +240,7 @@ pub(crate) trait DisplayItemFaceResolver {
     fn resolve_display_media_replacement(
         &mut self,
         _display_prop: Value,
+        _image_slice: Option<crate::display_spec::DisplayImageSliceSpec>,
         _face: RenderFaceRef,
     ) -> Option<DisplayMediaReplacement> {
         None
@@ -3096,12 +3098,16 @@ impl DisplayPropertySourceReplacement {
                             DisplayItemKind::Stretch(layout.clone()),
                         ))
                     }
-                    DisplayMarginContent::Media { spec, replacement } => replacement
+                    DisplayMarginContent::Media {
+                        spec,
+                        replacement,
+                        image_slice,
+                    } => replacement
                         .direct_replacement()
                         .map(DisplayItemKind::MediaReplacement)
                         .or_else(|| {
                             context
-                                .resolve_display_media_replacement(*spec, face)
+                                .resolve_display_media_replacement(*spec, *image_slice, face)
                                 .filter(|media| replacement.accepts_media_replacement(media))
                                 .map(DisplayItemKind::MediaReplacement)
                         })
@@ -3119,14 +3125,14 @@ impl DisplayPropertySourceReplacement {
                 .map(DisplayItemKind::MediaReplacement)
                 .or_else(|| {
                     context
-                        .resolve_display_media_replacement(spec, face)
+                        .resolve_display_media_replacement(spec, classification.image_slice(), face)
                         .filter(|media| replacement.accepts_media_replacement(media))
                         .map(DisplayItemKind::MediaReplacement)
                 })
                 .map(Self::Item)
                 .unwrap_or(Self::Unresolved),
             None => context
-                .resolve_display_media_replacement(display_prop, face)
+                .resolve_display_media_replacement(display_prop, None, face)
                 .map(DisplayItemKind::MediaReplacement)
                 .map(Self::Item)
                 .unwrap_or(Self::Unresolved),

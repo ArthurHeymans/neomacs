@@ -19,6 +19,7 @@ use crate::display_source::{
     DisplayPropertyReplacementSourceItem, DisplayReplacementMediaSourceItem,
     DisplayReplacementMediaSourceResolution, DisplayReplacementSourceMappedTextItem,
 };
+use crate::display_spec::DisplayImageSliceSpec;
 use crate::display_spec::{
     DisplaySpecHead, parse_display_image_layout, parse_display_surface_source_layout,
     parse_display_video_layout, parse_display_webkit_layout,
@@ -362,6 +363,7 @@ pub(crate) fn resolve_display_replacement(
     resolved_face: &ResolvedFace,
     fallback_metrics: DisplayRowFallbackMetrics,
     image_scale_environment: ImageScaleEnvironment,
+    image_slice: Option<DisplayImageSliceSpec>,
 ) -> Option<ResolvedDisplayReplacement> {
     if let Some(media) = replacement.direct_replacement() {
         return Some(resolved_media_replacement(media));
@@ -373,6 +375,7 @@ pub(crate) fn resolve_display_replacement(
         resolved_face,
         fallback_metrics,
         image_scale_environment,
+        image_slice,
     )
     .filter(|media| replacement.accepts_media_replacement(media))
     {
@@ -393,6 +396,7 @@ impl DisplayReplacementMediaSourceItem {
         active_face_state: &DisplayRowActiveFaceState,
         fallback_metrics: DisplayRowFallbackMetrics,
         image_scale_environment: ImageScaleEnvironment,
+        image_slice: Option<DisplayImageSliceSpec>,
     ) -> Option<DisplayReplacementMediaSourceResolution> {
         match resolve_display_replacement(
             display_prop,
@@ -401,6 +405,7 @@ impl DisplayReplacementMediaSourceItem {
             active_face_state.resolved_face(),
             fallback_metrics,
             image_scale_environment,
+            image_slice,
         )? {
             ResolvedDisplayReplacement::Media(media) => {
                 Some(DisplayReplacementMediaSourceResolution::Media(Self::new(
@@ -476,7 +481,11 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
                 DisplayMarginContent::Stretch { layout, .. } => {
                     DisplayMarginEmissionContent::Item(DisplayItemKind::Stretch(layout.clone()))
                 }
-                DisplayMarginContent::Media { spec, replacement } => {
+                DisplayMarginContent::Media {
+                    spec,
+                    replacement,
+                    image_slice,
+                } => {
                     let resolution = DisplayReplacementMediaSourceItem::resolve_display_property(
                         *spec,
                         replacement,
@@ -484,6 +493,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
                         self.active_face_state,
                         fallback_metrics,
                         self.params.image_scale_environment,
+                        *image_slice,
                     )?;
                     let kind = match resolution {
                         DisplayReplacementMediaSourceResolution::Media(item) => {
@@ -527,6 +537,7 @@ impl<'a, 'source> DisplayPropertyReplacementSourceResolveRequest<'a, 'source> {
                     self.active_face_state,
                     fallback_metrics,
                     self.params.image_scale_environment,
+                    display_property.image_slice(),
                 )?;
                 DisplayPropertyReplacementSourceInputs::empty().with_media(media)
             }
@@ -752,6 +763,7 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
     fn resolve_display_media_replacement(
         &mut self,
         display_prop: Value,
+        image_slice: Option<DisplayImageSliceSpec>,
         face: RenderFaceRef,
     ) -> Option<DisplayMediaReplacement> {
         let face_basis = self.params.face_basis();
@@ -763,6 +775,7 @@ impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
             &resolved_face,
             fallback,
             self.params.image_scale_environment(),
+            image_slice,
         )
     }
 }
@@ -813,6 +826,7 @@ impl<B: LayoutBufferView> DisplayItemFaceResolver for BufferDisplaySourcePropert
     fn resolve_display_media_replacement(
         &mut self,
         display_prop: Value,
+        image_slice: Option<DisplayImageSliceSpec>,
         face: RenderFaceRef,
     ) -> Option<DisplayMediaReplacement> {
         let face_basis = self.params.face_basis();
@@ -824,6 +838,7 @@ impl<B: LayoutBufferView> DisplayItemFaceResolver for BufferDisplaySourcePropert
             &resolved_face,
             fallback,
             self.params.image_scale_environment(),
+            image_slice,
         )
     }
 }
@@ -857,6 +872,7 @@ pub(crate) struct DisplayMediaResolveParams<'a> {
     pub(crate) default_bg: u32,
     pub(crate) fallback_metrics: DisplayRowFallbackMetrics,
     pub(crate) image_scale_environment: ImageScaleEnvironment,
+    pub(crate) image_slice: Option<DisplayImageSliceSpec>,
 }
 
 pub(crate) fn resolve_display_media_property(
@@ -882,10 +898,24 @@ fn resolve_image_display_property(
     let opaque_background = lookup
         .ready_metadata()
         .and_then(|metadata| (!metadata.background_transparent).then_some(metadata.background));
-    let width = placement.width().max(1) as f32;
-    let height = placement.height().max(1) as f32;
+    let full_width = placement.width().max(1) as f32;
+    let full_height = placement.height().max(1) as f32;
+    let (source_rect, width, height) = match params.image_slice {
+        Some(slice) => {
+            let Some(resolved) = slice.resolve(full_width, full_height) else {
+                return Some(DisplayMediaReplacement::empty_image_slice());
+            };
+            (resolved.source_rect, resolved.width, resolved.height)
+        }
+        None => (
+            neomacs_display_protocol::ImageSourceRect::FULL,
+            full_width,
+            full_height,
+        ),
+    };
     Some(DisplayMediaReplacement::image(DisplayImageItem {
         image_id: display_media_id(placement.image_id()),
+        source_rect,
         width,
         height,
         ascent: ascent.resolve(
@@ -1030,6 +1060,7 @@ pub(crate) fn resolve_display_property_media(
     resolved_face: &ResolvedFace,
     fallback_metrics: DisplayRowFallbackMetrics,
     image_scale_environment: ImageScaleEnvironment,
+    image_slice: Option<DisplayImageSliceSpec>,
 ) -> Option<DisplayMediaReplacement> {
     let face_metrics = display_media_face_metrics(resolved_face, fallback_metrics);
     resolve_display_media_property(
@@ -1040,6 +1071,7 @@ pub(crate) fn resolve_display_property_media(
             default_bg: resolved_face.bg,
             fallback_metrics: face_metrics,
             image_scale_environment,
+            image_slice,
         },
     )
 }
@@ -1503,6 +1535,7 @@ mod tests {
             resolver.default_face(),
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ImageScaleEnvironment::default(),
+            None,
         );
 
         assert_eq!(resolved, Some(ResolvedDisplayReplacement::Media(media)));
@@ -1520,6 +1553,7 @@ mod tests {
             resolver.default_face(),
             DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ImageScaleEnvironment::default(),
+            None,
         );
 
         assert_eq!(

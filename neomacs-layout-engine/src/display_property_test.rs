@@ -370,6 +370,7 @@ fn align_to_keeps_fractional_image_width_operand() {
 fn display_replacement_property_accepts_only_matching_media_replacements() {
     let image = DisplayMediaReplacement::image(DisplayImageItem {
         image_id: 1,
+        source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
         width: 10.0,
         height: 20.0,
         ascent: 20.0,

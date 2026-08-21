@@ -2238,6 +2238,9 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn push_media(&mut self, media: DisplayMediaReplacement, face_id: FaceId, charpos: usize) {
+        if matches!(media.kind, DisplayMediaReplacementKind::EmptyImageSlice) {
+            return;
+        }
         let Some((width_cols, pixel_width)) =
             self.stretch_width(&media.replacement_stretch().width)
         else {
@@ -2246,16 +2249,25 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         let glyph_type = match media.kind {
             DisplayMediaReplacementKind::Image {
                 image_id,
+                source_rect,
                 horizontal_margin,
                 vertical_margin,
                 opaque_background,
             } => GlyphType::Image {
                 image_id: image_id as i32,
                 width_cols,
-                horizontal_margin,
-                vertical_margin,
-                opaque_background,
+                source_rect,
+                margins: neomacs_display_protocol::ImageMargins::new(
+                    horizontal_margin,
+                    vertical_margin,
+                ),
+                opaque_background: neomacs_display_protocol::ImageOpaqueBackground::new(
+                    opaque_background,
+                ),
             },
+            DisplayMediaReplacementKind::EmptyImageSlice => {
+                unreachable!("empty image slices return before glyph construction")
+            }
             DisplayMediaReplacementKind::Video {
                 video_id,
                 loop_count,

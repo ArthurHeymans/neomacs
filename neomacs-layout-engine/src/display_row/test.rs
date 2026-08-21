@@ -1850,7 +1850,7 @@ fn image_replacement_uses_only_ready_decoded_opaque_background_metadata() {
     {
         GlyphType::Image {
             opaque_background, ..
-        } => opaque_background,
+        } => opaque_background.get(),
         _ => panic!("expected image replacement"),
     };
 
@@ -3886,11 +3886,11 @@ fn measured_display_row_content_policy_ignores_allocated_row_height() {
     face.font_descent = 4;
     let mut image = Glyph::stretch(4, face.id).with_pixel_geometry(32.0, 24.0, 24.0);
     image.glyph_type = GlyphType::Image {
+        source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
         image_id: 77,
         width_cols: 4,
-        horizontal_margin: 0.0,
-        vertical_margin: 0.0,
-        opaque_background: None,
+        margins: neomacs_display_protocol::ImageMargins::default(),
+        opaque_background: neomacs_display_protocol::ImageOpaqueBackground::default(),
     };
     row.glyphs[GlyphArea::Text.index()].push(image);
     let measured = MeasuredDisplayRow::new(

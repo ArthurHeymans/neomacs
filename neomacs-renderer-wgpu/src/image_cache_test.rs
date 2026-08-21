@@ -94,7 +94,10 @@ fn decoder_worker_survives_a_panicking_request() {
     request_tx
         .send(DecodeRequest {
             load: following,
-            source: ImageSource::Data(png_bytes(vec![0x12, 0x34, 0x56, 0xff], 1, 1)),
+            source: ImageSource::Data {
+                data: png_bytes(vec![0x12, 0x34, 0x56, 0xff], 1, 1),
+                resources: crate::svg::SvgResourceContext::Isolated,
+            },
             size: Default::default(),
             rotation: Default::default(),
             realization: ImageRealization::with_device_scale(1.0, 1.0),
@@ -635,6 +638,55 @@ fn svg_does_not_load_images_relative_to_the_process_working_directory() {
 }
 
 #[test]
+fn svg_explicit_base_uri_resolves_a_relative_raster() {
+    let repository_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("renderer crate has a repository parent");
+    let base_uri = repository_root.join("telega-avatar.svg");
+    let data = br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4">
+        <image href="assets/logo-128.png" width="4" height="4"/>
+    </svg>"#;
+
+    let decoded = crate::svg::decode(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
+        ImageRealization::default(),
+        crate::svg::SvgResourceContext::BaseUri(base_uri.to_string_lossy().into_owned()),
+    )
+    .expect("an explicit :base-uri authorizes its relative raster");
+
+    assert!(
+        decoded.rgba.chunks_exact(4).any(|pixel| pixel[3] != 0),
+        "the referenced raster must contribute visible pixels"
+    );
+}
+
+#[test]
+fn svg_base_uri_cannot_authorize_parent_directory_escape() {
+    let repository_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("renderer crate has a repository parent");
+    let base_uri = repository_root
+        .join("neomacs-renderer-wgpu")
+        .join("telega-avatar.svg");
+    let data = br#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4">
+        <image href="../assets/logo-128.png" width="4" height="4"/>
+    </svg>"#;
+
+    let decoded = crate::svg::decode(
+        data,
+        ImageSizeSpec::new(AxisSize::Native, AxisSize::Native),
+        ImageRotation::None,
+        ImageRealization::default(),
+        crate::svg::SvgResourceContext::BaseUri(base_uri.to_string_lossy().into_owned()),
+    )
+    .expect("outer SVG remains valid");
+
+    assert!(decoded.rgba.chunks_exact(4).all(|pixel| pixel[3] == 0));
+}
+
+#[test]
 fn svg_keeps_embedded_data_images_enabled() {
     let data = br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">
         <image width="1" height="1" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%221%22%20height%3D%221%22%3E%3Crect%20width%3D%221%22%20height%3D%221%22%20fill%3D%22%23ff0000%22%2F%3E%3C%2Fsvg%3E"/>
@@ -756,6 +808,7 @@ fn hidpi_svg_keeps_logical_layout_extent_and_uses_device_pixel_raster_extent() {
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
         ImageRotation::None,
         neomacs_display_protocol::ImageRealization::with_device_scale(1.0, 1.75),
+        crate::svg::SvgResourceContext::Isolated,
     )
     .expect("SVG decode");
 
@@ -778,6 +831,7 @@ fn resolved_auto_scale_controls_both_svg_layout_and_raster_extents() {
         ImageSizeSpec::new(AxisSize::Native, AxisSize::AtMost(24)),
         ImageRotation::None,
         neomacs_display_protocol::ImageRealization::with_device_scale(1.3 / 1.75, 1.75),
+        crate::svg::SvgResourceContext::Isolated,
     )
     .expect("SVG decode");
 

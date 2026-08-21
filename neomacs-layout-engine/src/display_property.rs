@@ -3,8 +3,8 @@ use crate::display_item::{
     DisplaySurfaceItem, DisplayXwidgetItem,
 };
 use crate::display_spec::{
-    DisplayFringeLayout, DisplaySpaceKey, parse_display_fringe_layout,
-    parse_display_surface_layout, parse_display_xwidget_layout,
+    DisplayFringeLayout, DisplayImageSliceSpec, DisplaySpaceKey, parse_display_fringe_layout,
+    parse_display_image_slice, parse_display_surface_layout, parse_display_xwidget_layout,
 };
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::display_spec::{
@@ -28,6 +28,7 @@ pub(crate) struct DisplayPropertyClassification {
     /// display the LIST as that string, rendering the original text instead.
     replacement_spec: Value,
     modifiers: DisplayTextPropertyModifiers,
+    image_slice: Option<DisplayImageSliceSpec>,
 }
 
 impl Default for DisplayPropertyClassification {
@@ -36,6 +37,7 @@ impl Default for DisplayPropertyClassification {
             replacement: None,
             replacement_spec: Value::NIL,
             modifiers: DisplayTextPropertyModifiers::default(),
+            image_slice: None,
         }
     }
 }
@@ -54,6 +56,10 @@ impl DisplayPropertyClassification {
         self.modifiers
     }
 
+    pub(crate) fn image_slice(&self) -> Option<DisplayImageSliceSpec> {
+        self.image_slice
+    }
+
     #[cfg(test)]
     pub(crate) fn new_for_test(
         replacement: Option<DisplayReplacementProperty>,
@@ -64,6 +70,7 @@ impl DisplayPropertyClassification {
             replacement,
             replacement_spec,
             modifiers,
+            image_slice: None,
         }
     }
 }
@@ -111,6 +118,7 @@ pub(crate) enum DisplayMarginContent {
     Media {
         spec: Value,
         replacement: DisplayMediaReplacementProperty,
+        image_slice: Option<DisplayImageSliceSpec>,
     },
 }
 
@@ -159,6 +167,7 @@ impl DisplayMediaReplacementProperty {
             (
                 Self::Image,
                 crate::display_item::DisplayMediaReplacementKind::Image { .. }
+                    | crate::display_item::DisplayMediaReplacementKind::EmptyImageSlice
             ) | (
                 Self::Video,
                 crate::display_item::DisplayMediaReplacementKind::Video { .. }
@@ -208,6 +217,9 @@ pub(crate) fn classify_display_property(value: Value) -> DisplayPropertyClassifi
             result.replacement_spec = element.replacement_spec;
         }
         merge_modifiers(&mut result.modifiers, element.modifiers);
+        if element.image_slice.is_some() {
+            result.image_slice = element.image_slice;
+        }
         ControlFlow::Continue(())
     });
     // GNU suppresses inline modifiers once a replacement claims the text.
@@ -329,6 +341,9 @@ fn classify_single_display_spec(value: Value) -> DisplayPropertyClassification {
         replacement,
         replacement_spec: value,
         modifiers,
+        image_slice: matches!(kind, DisplaySpecKind::Slice)
+            .then(|| parse_display_image_slice(value))
+            .flatten(),
     }
 }
 
@@ -357,6 +372,7 @@ fn classify_margin_display_spec(value: Value) -> DisplayPropertyClassification {
         Some(DisplayReplacementProperty::Media(replacement)) => DisplayMarginContent::Media {
             spec: spec.content(),
             replacement,
+            image_slice: inner.image_slice,
         },
         Some(DisplayReplacementProperty::Fringe(_) | DisplayReplacementProperty::Margin(_))
         | None => return DisplayPropertyClassification::default(),
@@ -373,6 +389,7 @@ fn classify_margin_display_spec(value: Value) -> DisplayPropertyClassification {
         )),
         replacement_spec: value,
         modifiers: DisplayTextPropertyModifiers::default(),
+        image_slice: inner.image_slice,
     }
 }
 

@@ -16,6 +16,7 @@ use super::frame_glyphs::{
     GlyphRowRole, MaterializedFaceData, PhysCursor, PresentedWindowGeometry, WindowCursor,
     WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
+use super::image::{ImageMargins, ImageOpaqueBackground, ImageSourceRect};
 use super::types::{
     Color, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId, XwidgetId,
 };
@@ -38,9 +39,9 @@ pub enum GlyphType {
     Image {
         image_id: i32,
         width_cols: u16,
-        horizontal_margin: f32,
-        vertical_margin: f32,
-        opaque_background: Option<u32>,
+        source_rect: ImageSourceRect,
+        margins: ImageMargins,
+        opaque_background: ImageOpaqueBackground,
     },
     /// Inline video, represented by the same row primitive that reserves its
     /// layout slot.
@@ -905,16 +906,19 @@ impl GlyphRow {
                     GlyphType::Image {
                         image_id,
                         width_cols,
-                        horizontal_margin,
-                        vertical_margin,
+                        source_rect,
+                        margins,
                         opaque_background,
                     } => {
                         0x4000_0000
                             ^ (*image_id as u64)
                             ^ u64::from(*width_cols).rotate_left(3)
-                            ^ u64::from(horizontal_margin.to_bits()).rotate_left(7)
-                            ^ u64::from(vertical_margin.to_bits()).rotate_left(13)
-                            ^ u64::from(opaque_background.unwrap_or_default()).rotate_left(19)
+                            ^ u64::from(source_rect.x().to_bits()).rotate_left(5)
+                            ^ u64::from(source_rect.y().to_bits()).rotate_left(9)
+                            ^ u64::from(source_rect.width().to_bits()).rotate_left(15)
+                            ^ u64::from(source_rect.height().to_bits()).rotate_left(21)
+                            ^ u64::from(margins.packed()).rotate_left(7)
+                            ^ u64::from(opaque_background.packed()).rotate_left(19)
                     }
                     GlyphType::Video {
                         video_id,
@@ -2701,10 +2705,12 @@ impl FrameDisplayState {
                     }
                     GlyphType::Image {
                         image_id,
-                        horizontal_margin,
-                        vertical_margin,
+                        source_rect,
+                        margins,
                         ..
                     } => {
+                        let horizontal_margin = margins.horizontal();
+                        let vertical_margin = margins.vertical();
                         let baseline = y + if glyph_row.ascent_px > 0.0 {
                             glyph_row.ascent_px
                         } else {
@@ -2726,6 +2732,7 @@ impl FrameDisplayState {
                             clip_rect,
                             slot_id: Some(slot_id),
                             image_id: ImageId::new(*image_id as u32),
+                            source_rect: *source_rect,
                             x: x + horizontal_margin,
                             y: baseline - layout_ascent
                                 + vertical_margin

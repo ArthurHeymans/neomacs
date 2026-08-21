@@ -10440,6 +10440,81 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
     assert_eq!(requests[0].bg_color, 0xff0000);
 }
 
+/// GNU xdisp applies non-replacing `(slice X Y WIDTH HEIGHT)` specs to the
+/// image replacement in the same `display` property.  Telega uses this exact
+/// form to split one multi-line photo into one image glyph per text row.
+#[test]
+fn layout_frame_rust_crops_compound_display_images_to_the_requested_slice() {
+    let mut eval = Context::new();
+    eval.set_display_host(Box::new(RecordingImageDisplayHost::default()));
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert("aXb");
+        buf.put_text_property(
+            1,
+            2,
+            Value::symbol("display"),
+            Value::list(vec![
+                Value::list(vec![
+                    Value::symbol("slice"),
+                    Value::fixnum(0),
+                    Value::fixnum(8),
+                    Value::make_float(1.0),
+                    Value::fixnum(8),
+                ]),
+                Value::list(vec![
+                    Value::symbol("image"),
+                    Value::keyword("type"),
+                    Value::symbol("png"),
+                    Value::keyword("file"),
+                    Value::string("/tmp/neomacs-sliced-image.png"),
+                ]),
+            ]),
+        );
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-sliced-inline-image", 320, 120, buf_id);
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let presentation = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state")
+        .materialize();
+    let (source_rect, width, height) = presentation
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            FrameGlyph::Image {
+                source_rect,
+                width,
+                height,
+                ..
+            } => Some((*source_rect, *width, *height)),
+            _ => None,
+        })
+        .expect("sliced inline image glyph");
+
+    assert_eq!(width, 32.0, "a 1.0 slice width means the full image width");
+    assert_eq!(
+        height, 8.0,
+        "the row must reserve only the requested slice, not the full 24px image"
+    );
+    let source_rect_tolerance = 2.0 / u16::MAX as f32;
+    assert_eq!(source_rect.x(), 0.0);
+    assert!((source_rect.y() - 8.0 / 24.0).abs() <= source_rect_tolerance);
+    assert_eq!(source_rect.width(), 1.0);
+    assert!((source_rect.height() - 8.0 / 24.0).abs() <= source_rect_tolerance);
+}
+
 #[test]
 fn layout_frame_rust_renders_display_image_fallback_placeholder_through_row_builder() {
     let mut eval = Context::new();

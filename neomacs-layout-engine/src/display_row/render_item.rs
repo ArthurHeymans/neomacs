@@ -99,6 +99,7 @@ mod tests {
     fn image_margin_expands_the_slot_but_keeps_media_bounds_on_image_content() {
         let replacement = DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 7,
+            source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
             width: 20.0,
             height: 10.0,
             ascent: 8.0,
@@ -124,6 +125,7 @@ mod tests {
     fn media_replacement_remains_one_authoritative_row_item() {
         let replacement = DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 7,
+            source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
             width: 20.0,
             height: 10.0,
             ascent: 8.0,

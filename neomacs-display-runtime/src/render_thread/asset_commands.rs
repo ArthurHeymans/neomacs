@@ -73,6 +73,20 @@ impl RenderApp {
                 bg_color,
             } => {
                 clear_image_terminal(&self.image_metadata, id);
+                let (data, resources) = match data {
+                    neovm_core::emacs_core::image_catalog::ImageDataSource::Isolated(data) => {
+                        (data, neomacs_renderer_wgpu::SvgResourceContext::Isolated)
+                    }
+                    neovm_core::emacs_core::image_catalog::ImageDataSource::WithBaseUri {
+                        data,
+                        base_uri,
+                    } => (
+                        data,
+                        neomacs_renderer_wgpu::SvgResourceContext::BaseUri(
+                            base_uri.as_utf8_str().unwrap_or_default().to_owned(),
+                        ),
+                    ),
+                };
                 tracing::info!(
                     "Loading image data {}: {} bytes (size {:?})",
                     id,
@@ -88,6 +102,7 @@ impl RenderApp {
                         realization,
                         fg_color,
                         bg_color,
+                        resources,
                     );
                 } else {
                     tracing::warn!("Renderer not initialized, cannot load image data {}", id);

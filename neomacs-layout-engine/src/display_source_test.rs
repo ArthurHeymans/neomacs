@@ -398,12 +398,14 @@ impl DisplayItemFaceResolver for ResolvedDisplayPropertyResolver {
     fn resolve_display_media_replacement(
         &mut self,
         display_prop: Value,
+        _image_slice: Option<crate::display_spec::DisplayImageSliceSpec>,
         face: RenderFaceRef,
     ) -> Option<DisplayMediaReplacement> {
         self.seen_face = Some(face);
         if display_prop.cons_car().is_symbol_named("image") {
             Some(DisplayMediaReplacement::image(DisplayImageItem {
                 image_id: 42,
+                source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
                 width: 64.0,
                 height: 32.0,
                 ascent: 32.0,

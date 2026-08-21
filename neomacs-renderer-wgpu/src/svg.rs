@@ -9,6 +9,7 @@ use std::borrow::Cow;
 use std::io::Read;
 use std::ops::Range;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 use std::sync::{Arc, OnceLock};
 
@@ -26,6 +27,18 @@ pub(crate) struct DecodedSvg {
     pub(crate) raster_width: u32,
     pub(crate) raster_height: u32,
     pub(crate) rgba: Vec<u8>,
+}
+
+/// Filesystem authority available while parsing an in-memory SVG.
+///
+/// The isolated variant deliberately has no ambient current-directory
+/// fallback.  A base URI is an explicit capability originating in GNU's image
+/// spec and is the only way relative raster references can reach the filesystem.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub enum SvgResourceContext {
+    #[default]
+    Isolated,
+    BaseUri(String),
 }
 
 struct LoadedSvg {
@@ -56,7 +69,7 @@ pub(crate) fn query_dimensions(data: &[u8]) -> Option<(u32, u32)> {
 }
 
 fn query_dimensions_inner(data: &[u8]) -> Option<(u32, u32)> {
-    let loaded = load(data)?;
+    let loaded = load(data, &SvgResourceContext::Isolated)?;
     Some((
         loaded.natural_width.ceil() as u32,
         loaded.natural_height.ceil() as u32,
@@ -68,9 +81,10 @@ pub(crate) fn decode(
     size: ImageSizeSpec,
     rotation: ImageRotation,
     realization: ImageRealization,
+    resources: SvgResourceContext,
 ) -> Option<DecodedSvg> {
     catch_unwind(AssertUnwindSafe(|| {
-        decode_inner(data, size, rotation, realization)
+        decode_inner(data, size, rotation, realization, &resources)
     }))
     .ok()
     .flatten()
@@ -81,8 +95,9 @@ fn decode_inner(
     size: ImageSizeSpec,
     rotation: ImageRotation,
     realization: ImageRealization,
+    resources: &SvgResourceContext,
 ) -> Option<DecodedSvg> {
-    let loaded = load(data)?;
+    let loaded = load(data, resources)?;
     // A vector document rasterizes straight to the requested size, so GNU's
     // `compute_image_size` is applied against its natural extent here rather
     // than by resampling afterwards. Pixel extents use layout×report scale so
@@ -153,16 +168,16 @@ fn decode_inner(
     })
 }
 
-fn load(data: &[u8]) -> Option<LoadedSvg> {
+fn load(data: &[u8], resources: &SvgResourceContext) -> Option<LoadedSvg> {
     let data = bounded_svg_data(data)?;
     let geometry = root_geometry(data.as_ref())?;
     if let Some((natural_width, natural_height)) = geometry.view_box_dimensions() {
-        return load_with_dimensions(data, geometry, natural_width, natural_height);
+        return load_with_dimensions(data, geometry, natural_width, natural_height, resources);
     }
     if let (Some(natural_width), Some(natural_height)) = (geometry.width, geometry.height)
         && valid_dimensions(natural_width, natural_height)
     {
-        return load_with_dimensions(data, geometry, natural_width, natural_height);
+        return load_with_dimensions(data, geometry, natural_width, natural_height, resources);
     }
 
     // A dimensionless SVG has no viewport in GNU/librsvg. Relative child
@@ -170,10 +185,10 @@ fn load(data: &[u8]) -> Option<LoadedSvg> {
     // content first, then give the original document that measured viewport
     // so percentages (typically a 100% background) paint correctly.
     let measurement_data = suppress_unresolved_percentages(data.as_ref())?;
-    let options = svg_options(&geometry);
+    let options = svg_options(&geometry, resources);
     let measurement_tree = usvg::Tree::from_data(measurement_data.as_ref(), &options).ok()?;
     let (natural_width, natural_height) = fallback_dimensions(&measurement_tree)?;
-    load_with_dimensions(data, geometry, natural_width, natural_height)
+    load_with_dimensions(data, geometry, natural_width, natural_height, resources)
 }
 
 fn load_with_dimensions(
@@ -181,9 +196,10 @@ fn load_with_dimensions(
     geometry: RootGeometry,
     natural_width: f64,
     natural_height: f64,
+    resources: &SvgResourceContext,
 ) -> Option<LoadedSvg> {
     let (data, geometry) = normalize_root_dimensions(data, geometry, natural_width, natural_height);
-    let options = svg_options(&geometry);
+    let options = svg_options(&geometry, resources);
     let tree = usvg::Tree::from_data(data.as_ref(), &options).ok()?;
     Some(LoadedSvg {
         tree,
@@ -640,7 +656,7 @@ impl RootGeometry {
     }
 }
 
-fn svg_options(geometry: &RootGeometry) -> usvg::Options<'static> {
+fn svg_options(geometry: &RootGeometry, resources: &SvgResourceContext) -> usvg::Options<'static> {
     let defaults = usvg::Options::default();
     let default_size =
         if geometry.view_box.is_none() && (geometry.width.is_none() || geometry.height.is_none()) {
@@ -651,7 +667,7 @@ fn svg_options(geometry: &RootGeometry) -> usvg::Options<'static> {
     usvg::Options {
         dpi: DEFAULT_DPI as f32,
         fontdb: shared_font_database(),
-        image_href_resolver: restricted_image_href_resolver(),
+        image_href_resolver: restricted_image_href_resolver(resources),
         default_size,
         ..defaults
     }
@@ -666,13 +682,58 @@ fn shared_font_database() -> Arc<usvg::fontdb::Database> {
     }))
 }
 
-fn restricted_image_href_resolver() -> usvg::ImageHrefResolver<'static> {
+fn restricted_image_href_resolver(
+    resources: &SvgResourceContext,
+) -> usvg::ImageHrefResolver<'static> {
+    let base_directory = match resources {
+        SvgResourceContext::Isolated => None,
+        SvgResourceContext::BaseUri(uri) => explicit_base_directory(uri),
+    };
     usvg::ImageHrefResolver {
         resolve_data: Box::new(resolve_embedded_image),
-        // In-memory SVGs have no base file. Never let an image href inherit
-        // NeoMacs's process working directory as an ambient file capability.
-        resolve_string: Box::new(|_, _| None),
+        resolve_string: Box::new(move |href, _| {
+            resolve_relative_raster(href, base_directory.as_deref())
+        }),
     }
+}
+
+fn explicit_base_directory(uri: &str) -> Option<PathBuf> {
+    // Network base URIs are never fetched. `file://` and ordinary local paths
+    // are the filesystem forms GNU packages use here.
+    let path = PathBuf::from(uri.strip_prefix("file://").unwrap_or(uri));
+    let directory = if path.is_dir() || uri.ends_with(['/', '\\']) {
+        path
+    } else {
+        path.parent()?.to_path_buf()
+    };
+    directory.canonicalize().ok()
+}
+
+fn resolve_relative_raster(href: &str, base_directory: Option<&Path>) -> Option<usvg::ImageKind> {
+    let base_directory = base_directory?;
+    let relative = Path::new(href);
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_) | Component::CurDir))
+    {
+        return None;
+    }
+    let candidate = base_directory.join(relative).canonicalize().ok()?;
+    if !candidate.starts_with(base_directory) {
+        return None;
+    }
+    let mut data = Vec::new();
+    std::fs::File::open(candidate)
+        .ok()?
+        .take((MAX_SVG_INPUT_SIZE + 1) as u64)
+        .read_to_end(&mut data)
+        .ok()?;
+    if data.len() > MAX_SVG_INPUT_SIZE {
+        return None;
+    }
+    validate_embedded_raster(&data)?;
+    raster_image_from_magic(Arc::new(data))
 }
 
 pub(crate) fn resolve_embedded_image(

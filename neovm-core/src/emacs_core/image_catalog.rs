@@ -165,9 +165,18 @@ pub fn numeric_image_scale(value: Value) -> Option<ImageScaleFactor> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ImageDataSource {
+    /// Encoded bytes with no authority to resolve external resources.
+    Isolated(Vec<u8>),
+    /// Encoded bytes whose relative resources may be resolved against the
+    /// explicitly supplied GNU image `:base-uri`.
+    WithBaseUri { data: Vec<u8>, base_uri: LispString },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ImageResolveSource {
     File(LispString),
-    Data(Vec<u8>),
+    Data(ImageDataSource),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

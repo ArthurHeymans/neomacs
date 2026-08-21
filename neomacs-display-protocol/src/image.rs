@@ -1,5 +1,210 @@
 //! Immutable image geometry shared by layout, async decoding, and rendering.
 
+/// A normalized, non-empty rectangle sampled from an image texture.
+///
+/// Layout resolves GNU's pixel/fraction `(slice …)` operands once it knows the
+/// realized image size. Rendering receives only this closed normalized form,
+/// so it cannot reinterpret Lisp values or confuse crop geometry with window
+/// clipping geometry.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ImageSourceRect {
+    x_start: u16,
+    y_start: u16,
+    x_end: u16,
+    y_end: u16,
+}
+
+impl ImageSourceRect {
+    const NORMALIZED_MAX: f32 = u16::MAX as f32;
+
+    pub const FULL: Self = Self {
+        x_start: 0,
+        y_start: 0,
+        x_end: u16::MAX,
+        y_end: u16::MAX,
+    };
+
+    #[must_use]
+    pub fn new(x: f32, y: f32, width: f32, height: f32) -> Option<Self> {
+        let values = [x, y, width, height];
+        if values.iter().any(|value| !value.is_finite())
+            || x < 0.0
+            || y < 0.0
+            || width <= 0.0
+            || height <= 0.0
+            || x + width > 1.0 + f32::EPSILON
+            || y + height > 1.0 + f32::EPSILON
+        {
+            return None;
+        }
+        let encode = |value: f32| (value.clamp(0.0, 1.0) * Self::NORMALIZED_MAX).round() as u16;
+        let x_start = encode(x);
+        let y_start = encode(y);
+        let x_end = encode((x + width).min(1.0));
+        let y_end = encode((y + height).min(1.0));
+        (x_end > x_start && y_end > y_start).then_some(Self {
+            x_start,
+            y_start,
+            x_end,
+            y_end,
+        })
+    }
+
+    #[must_use]
+    pub fn x(self) -> f32 {
+        f32::from(self.x_start) / Self::NORMALIZED_MAX
+    }
+
+    #[must_use]
+    pub fn y(self) -> f32 {
+        f32::from(self.y_start) / Self::NORMALIZED_MAX
+    }
+
+    #[must_use]
+    pub fn width(self) -> f32 {
+        f32::from(self.x_end - self.x_start) / Self::NORMALIZED_MAX
+    }
+
+    #[must_use]
+    pub fn height(self) -> f32 {
+        f32::from(self.y_end - self.y_start) / Self::NORMALIZED_MAX
+    }
+
+    /// Map UV coordinates produced by frame/window clipping into this image
+    /// sample. Keeping this composition beside the crop type prevents the GPU
+    /// path from accidentally treating a clipped slice as a full texture.
+    #[must_use]
+    pub fn map_uv(self, u: f32, v: f32) -> (f32, f32) {
+        (self.x() + u * self.width(), self.y() + v * self.height())
+    }
+}
+
+/// GNU image margins are non-negative integer pixels. Store them in that
+/// domain instead of two `f32`s so adding crop state does not enlarge every
+/// glyph in every text row.
+#[derive(
+    Clone, Copy, Debug, Default, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize,
+)]
+pub struct ImageMargins {
+    horizontal: u16,
+    vertical: u16,
+}
+
+impl ImageMargins {
+    #[must_use]
+    pub fn new(horizontal: f32, vertical: f32) -> Self {
+        let encode = |value: f32| {
+            if value.is_finite() {
+                value.round().clamp(0.0, f32::from(u16::MAX)) as u16
+            } else {
+                0
+            }
+        };
+        Self {
+            horizontal: encode(horizontal),
+            vertical: encode(vertical),
+        }
+    }
+
+    #[must_use]
+    pub const fn horizontal(self) -> f32 {
+        self.horizontal as f32
+    }
+
+    #[must_use]
+    pub const fn vertical(self) -> f32 {
+        self.vertical as f32
+    }
+
+    #[must_use]
+    pub const fn packed(self) -> u32 {
+        (self.horizontal as u32) | ((self.vertical as u32) << 16)
+    }
+}
+
+/// Optional opaque image background packed into one word. Decoded image
+/// backgrounds are RGB24, leaving `0x01000000` as an impossible sentinel.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ImageOpaqueBackground(u32);
+
+impl ImageOpaqueBackground {
+    const NONE: u32 = 0x0100_0000;
+
+    #[must_use]
+    pub const fn new(color: Option<u32>) -> Self {
+        match color {
+            Some(color) => Self(color & 0x00ff_ffff),
+            None => Self(Self::NONE),
+        }
+    }
+
+    #[must_use]
+    pub const fn get(self) -> Option<u32> {
+        if self.0 == Self::NONE {
+            None
+        } else {
+            Some(self.0)
+        }
+    }
+
+    #[must_use]
+    pub const fn packed(self) -> u32 {
+        self.0
+    }
+}
+
+impl Default for ImageOpaqueBackground {
+    fn default() -> Self {
+        Self::new(None)
+    }
+}
+
+impl Default for ImageSourceRect {
+    fn default() -> Self {
+        Self::FULL
+    }
+}
+
+#[cfg(test)]
+mod image_source_rect_tests {
+    use super::{ImageMargins, ImageOpaqueBackground, ImageSourceRect};
+
+    const QUANTIZATION_TOLERANCE: f32 = 2.0 / u16::MAX as f32;
+
+    fn assert_approximately_eq(actual: f32, expected: f32) {
+        assert!(
+            (actual - expected).abs() <= QUANTIZATION_TOLERANCE,
+            "expected {expected}, got {actual}"
+        );
+    }
+
+    #[test]
+    fn window_clip_coordinates_are_mapped_inside_the_image_slice() {
+        let slice = ImageSourceRect::new(0.25, 0.5, 0.5, 0.25).expect("valid source rect");
+        for ((actual_u, actual_v), (expected_u, expected_v)) in [
+            (slice.map_uv(0.0, 0.0), (0.25, 0.5)),
+            (slice.map_uv(0.5, 0.5), (0.5, 0.625)),
+            (slice.map_uv(1.0, 1.0), (0.75, 0.75)),
+        ] {
+            assert_approximately_eq(actual_u, expected_u);
+            assert_approximately_eq(actual_v, expected_v);
+        }
+    }
+
+    #[test]
+    fn image_geometry_and_optional_background_remain_compact_and_unambiguous() {
+        assert_eq!(std::mem::size_of::<ImageSourceRect>(), 8);
+        assert_eq!(std::mem::size_of::<ImageMargins>(), 4);
+        assert_eq!(std::mem::size_of::<ImageOpaqueBackground>(), 4);
+        assert_eq!(ImageOpaqueBackground::new(None).get(), None);
+        assert_eq!(ImageOpaqueBackground::new(Some(0)).get(), Some(0));
+        assert_eq!(
+            ImageOpaqueBackground::new(Some(0x12_34_56)).get(),
+            Some(0x12_34_56)
+        );
+    }
+}
+
 /// One resolved image realization for one frame presentation.
 ///
 /// - `layout_scale` maps native/GNU image pixels into **logical** layout pixels

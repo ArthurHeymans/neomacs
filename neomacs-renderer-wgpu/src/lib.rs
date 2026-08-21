@@ -15,6 +15,7 @@ pub mod renderer;
 pub mod shader_surface;
 pub mod shader_surface_cache;
 mod svg;
+pub use svg::SvgResourceContext;
 pub mod vertex;
 pub mod xbm;
 pub mod xpm;

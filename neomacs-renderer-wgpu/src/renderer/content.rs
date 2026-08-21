@@ -1647,6 +1647,7 @@ impl WgpuRenderer {
             for (glyph_index, glyph) in frame.glyphs.iter().enumerate() {
                 if let FrameGlyph::Image {
                     image_id,
+                    source_rect,
                     x,
                     y,
                     width,
@@ -1664,6 +1665,8 @@ impl WgpuRenderer {
                     };
                     let ix = clipped.draw_x + offset_x;
                     let iy = clipped.draw_y + offset_y;
+                    let (u_min, v_min) = source_rect.map_uv(clipped.u_min, clipped.v_min);
+                    let (u_max, v_max) = source_rect.map_uv(clipped.u_max, clipped.v_max);
                     tracing::debug!(
                         "render_frame_content: image {} at ({:.1},{:.1}) size {:.1}x{:.1}",
                         image_id,
@@ -1679,10 +1682,10 @@ impl WgpuRenderer {
                             iy,
                             clipped.draw_width,
                             clipped.draw_height,
-                            clipped.u_min,
-                            clipped.u_max,
-                            clipped.v_min,
-                            clipped.v_max,
+                            u_min,
+                            u_max,
+                            v_min,
+                            v_max,
                         ),
                     });
                     if let Some(paint) = pointer_override.image_override(glyph_index)

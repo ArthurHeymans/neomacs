@@ -378,7 +378,7 @@ pub enum AssetCommand {
     /// Load image from encoded data bytes (PNG, JPEG, SVG, etc.)
     ImageLoadData {
         id: u32,
-        data: Vec<u8>,
+        data: neovm_core::emacs_core::image_catalog::ImageDataSource,
         size: ImageSizeSpec,
         rotation: ImageRotation,
         /// Immutable logical/device geometry captured for this load.

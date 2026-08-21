@@ -70,6 +70,7 @@ impl WgpuRenderer {
         realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
+        resources: crate::SvgResourceContext,
     ) {
         self.caches.image.load_data_with_id(
             id,
@@ -79,6 +80,7 @@ impl WgpuRenderer {
             realization,
             fg_color,
             bg_color,
+            resources,
         )
     }
 

@@ -475,11 +475,13 @@ fn tab_bar_image_relief_styles_resolve_color_source_per_image_slot() {
     let image = |image_id, face_id, opaque_background| {
         let mut glyph = Glyph::stretch(1, face_id).with_pixel_geometry(8.0, 8.0, 8.0);
         glyph.glyph_type = GlyphType::Image {
+            source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
             image_id,
             width_cols: 1,
-            horizontal_margin: 0.0,
-            vertical_margin: 0.0,
-            opaque_background,
+            margins: neomacs_display_protocol::ImageMargins::default(),
+            opaque_background: neomacs_display_protocol::ImageOpaqueBackground::new(
+                opaque_background,
+            ),
         };
         glyph
     };
@@ -523,11 +525,11 @@ fn tab_bar_image_relief_uses_glyph_at_visual_column_after_wide_stretch() {
     let mut row = GlyphRow::new(GlyphRowRole::TabBar);
     let mut image_glyph = Glyph::stretch(1, image_face).with_pixel_geometry(8.0, 8.0, 8.0);
     image_glyph.glyph_type = GlyphType::Image {
+        source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
         image_id: 1,
         width_cols: 1,
-        horizontal_margin: 0.0,
-        vertical_margin: 0.0,
-        opaque_background: None,
+        margins: neomacs_display_protocol::ImageMargins::default(),
+        opaque_background: neomacs_display_protocol::ImageOpaqueBackground::default(),
     };
     row.glyphs[GlyphArea::Text.index()] = vec![Glyph::stretch(3, fallback_face), image_glyph];
 
@@ -585,6 +587,7 @@ fn tab_pointer_test_frame(highlight_face: FaceId) -> FrameGlyphBuffer {
     frame.add_char('a', 0.0, 0.0, 8.0, 18.0, 14.0, false);
     frame.add_char(' ', 8.0, 0.0, 8.0, 18.0, 14.0, false);
     frame.glyphs.push(FrameGlyph::Image {
+        source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
         window_id: neomacs_display_protocol::DisplayWindowId::new(0),
         row_role: GlyphRowRole::TabBar,
         clip_rect: Some(neomacs_display_protocol::Rect::new(0.0, 0.0, 80.0, 18.0)),

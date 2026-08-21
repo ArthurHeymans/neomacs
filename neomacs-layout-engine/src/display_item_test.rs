@@ -66,6 +66,7 @@ fn display_item_inline_media_slots_are_source_neutral() {
         RenderFaceRef::Inherit,
         DisplayItemKind::MediaReplacement(DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 42,
+            source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
             width: 64.0,
             height: 32.0,
             ascent: 32.0,
@@ -99,6 +100,7 @@ fn display_item_inline_media_slots_are_source_neutral() {
         image.kind,
         DisplayItemKind::MediaReplacement(DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 42,
+            source_rect: neomacs_display_protocol::ImageSourceRect::FULL,
             width: 64.0,
             height: 32.0,
             ascent: 32.0,

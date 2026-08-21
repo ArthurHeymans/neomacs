@@ -375,7 +375,10 @@ struct DecodeRequest {
 /// Image source
 enum ImageSource {
     File(String),
-    Data(Vec<u8>),
+    Data {
+        data: Vec<u8>,
+        resources: crate::svg::SvgResourceContext,
+    },
     #[cfg(test)]
     Panic,
     /// Raw ARGB32 pixel data (A,R,G,B byte order, 4 bytes per pixel)
@@ -519,9 +522,14 @@ impl ImageCache {
                             ImageSource::File(path) => {
                                 Self::decode_file(&path, size, rotation, fg_bg, realization)
                             }
-                            ImageSource::Data(data) => {
-                                Self::decode_data(&data, size, rotation, fg_bg, realization)
-                            }
+                            ImageSource::Data { data, resources } => Self::decode_data(
+                                &data,
+                                size,
+                                rotation,
+                                fg_bg,
+                                realization,
+                                resources,
+                            ),
                             ImageSource::RawArgb32 {
                                 data,
                                 width,
@@ -616,7 +624,13 @@ impl ImageCache {
         }
         // Fallback: try SVG via the shared vector backend.
         let data = std::fs::read(path).ok()?;
-        Self::decode_svg_data(&data, size, rotation, realization)
+        Self::decode_svg_data(
+            &data,
+            size,
+            rotation,
+            realization,
+            crate::svg::SvgResourceContext::BaseUri(path.to_owned()),
+        )
     }
 
     /// Decode image data with size constraints
@@ -626,6 +640,7 @@ impl ImageCache {
         rotation: ImageRotation,
         fg_bg: (u32, u32),
         realization: ImageRealization,
+        resources: crate::svg::SvgResourceContext,
     ) -> Option<DecodedPixels> {
         if let Ok(img) = image::load_from_memory(data) {
             return Self::process_image(img)?.realize_bitmap(size, rotation, realization);
@@ -649,7 +664,7 @@ impl ImageCache {
             );
         }
         // Fallback: try SVG via the shared vector backend.
-        Self::decode_svg_data(data, size, rotation, realization)
+        Self::decode_svg_data(data, size, rotation, realization, resources)
     }
 
     #[cfg(test)]
@@ -707,7 +722,14 @@ impl ImageCache {
         fg_bg: (u32, u32),
         realization: ImageRealization,
     ) -> Option<DecodedImage> {
-        let pixels = Self::decode_data(data, size, rotation, fg_bg, realization)?;
+        let pixels = Self::decode_data(
+            data,
+            size,
+            rotation,
+            fg_bg,
+            realization,
+            crate::svg::SvgResourceContext::Isolated,
+        )?;
         Some(Self::decoded_image(
             ImageLoadToken {
                 id: 0,
@@ -802,8 +824,9 @@ impl ImageCache {
         size: ImageSizeSpec,
         rotation: ImageRotation,
         realization: ImageRealization,
+        resources: crate::svg::SvgResourceContext,
     ) -> Option<DecodedPixels> {
-        let decoded = crate::svg::decode(data, size, rotation, realization)?;
+        let decoded = crate::svg::decode(data, size, rotation, realization, resources)?;
         Some(DecodedPixels {
             layout_width: decoded.layout_width,
             layout_height: decoded.layout_height,
@@ -1040,6 +1063,7 @@ impl ImageCache {
         realization: ImageRealization,
         fg_color: u32,
         bg_color: u32,
+        resources: crate::svg::SvgResourceContext,
     ) {
         let load = self.begin_load(id);
         // Query dimensions for the pending-image placeholder.
@@ -1058,7 +1082,10 @@ impl ImageCache {
         self.states.insert(id, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             load,
-            source: ImageSource::Data(data.to_vec()),
+            source: ImageSource::Data {
+                data: data.to_vec(),
+                resources,
+            },
             size,
             rotation,
             realization,
@@ -1141,7 +1168,10 @@ impl ImageCache {
         self.states.insert(id, ImageState::Pending);
         let _ = self.decode_tx.send(DecodeRequest {
             load,
-            source: ImageSource::Data(data.to_vec()),
+            source: ImageSource::Data {
+                data: data.to_vec(),
+                resources: crate::svg::SvgResourceContext::Isolated,
+            },
             size,
             rotation,
             realization: ImageRealization::with_device_scale(1.0, raster_scale),
