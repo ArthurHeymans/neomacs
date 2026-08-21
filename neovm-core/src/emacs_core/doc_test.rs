@@ -186,7 +186,8 @@ fn documentation_property_wrong_arity() {
 #[test]
 fn snarf_documentation_returns_nil() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_snarf_documentation(vec![Value::string("DOC")]);
+    let mut evaluator = super::super::eval::Context::new();
+    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::string("DOC")]);
     assert!(result.is_ok());
     assert!(result.unwrap().is_nil());
 }
@@ -194,14 +195,16 @@ fn snarf_documentation_returns_nil() {
 #[test]
 fn snarf_documentation_wrong_type() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_snarf_documentation(vec![Value::fixnum(42)]);
+    let mut evaluator = super::super::eval::Context::new();
+    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::fixnum(42)]);
     assert!(result.is_err());
 }
 
 #[test]
 fn snarf_documentation_empty_path_errors() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_snarf_documentation(vec![Value::string("")]);
+    let mut evaluator = super::super::eval::Context::new();
+    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::string("")]);
     match result {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "error"),
         other => panic!("expected error signal, got {other:?}"),
@@ -211,7 +214,8 @@ fn snarf_documentation_empty_path_errors() {
 #[test]
 fn snarf_documentation_parent_dir_path_errors() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_snarf_documentation(vec![Value::string("../")]);
+    let mut evaluator = super::super::eval::Context::new();
+    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::string("../")]);
     match result {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "error"),
         other => panic!("expected error signal, got {other:?}"),
@@ -221,7 +225,8 @@ fn snarf_documentation_parent_dir_path_errors() {
 #[test]
 fn snarf_documentation_single_dot_path_errors() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_snarf_documentation(vec![Value::string(".")]);
+    let mut evaluator = super::super::eval::Context::new();
+    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::string(".")]);
     match result {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "error"),
         other => panic!("expected error signal, got {other:?}"),
@@ -231,7 +236,8 @@ fn snarf_documentation_single_dot_path_errors() {
 #[test]
 fn snarf_documentation_root_path_errors() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_snarf_documentation(vec![Value::string("/")]);
+    let mut evaluator = super::super::eval::Context::new();
+    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::string("/")]);
     match result {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "error"),
         other => panic!("expected error signal, got {other:?}"),
@@ -241,7 +247,8 @@ fn snarf_documentation_root_path_errors() {
 #[test]
 fn snarf_documentation_doc_dir_path_file_error() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_snarf_documentation(vec![Value::string("DOC/")]);
+    let mut evaluator = super::super::eval::Context::new();
+    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::string("DOC/")]);
     match result {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "file-error"),
         other => panic!("expected file-error signal, got {other:?}"),
@@ -251,7 +258,8 @@ fn snarf_documentation_doc_dir_path_file_error() {
 #[test]
 fn snarf_documentation_doc_subpath_file_error() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_snarf_documentation(vec![Value::string("DOC/a")]);
+    let mut evaluator = super::super::eval::Context::new();
+    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::string("DOC/a")]);
     match result {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "file-error"),
         other => panic!("expected file-error signal, got {other:?}"),
@@ -261,7 +269,8 @@ fn snarf_documentation_doc_subpath_file_error() {
 #[test]
 fn snarf_documentation_missing_path_errors() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_snarf_documentation(vec![Value::string("NO_SUCH_DOC_FILE")]);
+    let mut evaluator = super::super::eval::Context::new();
+    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::string("NO_SUCH_DOC_FILE")]);
     match result {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "file-missing"),
         other => panic!("expected file-missing signal, got {other:?}"),
@@ -271,7 +280,8 @@ fn snarf_documentation_missing_path_errors() {
 #[test]
 fn snarf_documentation_missing_dir_path_errors() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_snarf_documentation(vec![Value::string("NO_SUCH_DOC_DIR/")]);
+    let mut evaluator = super::super::eval::Context::new();
+    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::string("NO_SUCH_DOC_DIR/")]);
     match result {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "file-missing"),
         other => panic!("expected file-missing signal, got {other:?}"),
@@ -281,7 +291,8 @@ fn snarf_documentation_missing_dir_path_errors() {
 #[test]
 fn snarf_documentation_wrong_arity() {
     crate::test_utils::init_test_tracing();
-    let result = builtin_snarf_documentation(vec![]);
+    let mut evaluator = super::super::eval::Context::new();
+    let result = builtin_snarf_documentation(&mut evaluator, vec![]);
     assert!(result.is_err());
 }
 
@@ -1689,4 +1700,230 @@ fn documentation_property_eval_non_symbol_target_errors() {
         vec![Value::fixnum(1), Value::symbol("variable-documentation")],
     );
     assert!(result.is_err());
+}
+
+// =======================================================================
+// Ledger 182: `Fsnarf_documentation` is a LAST WRITER, not a fallback
+// =======================================================================
+
+/// The whole entry in one assertion.
+///
+/// `indent-tabs-mode` is a `DEFVAR_PER_BUFFER` in `src/buffer.c` **and** a
+/// `(define-minor-mode indent-tabs-mode ...)` in `lisp/simple.el:7639`, and
+/// both editors have both.  The order decides which text survives:
+///
+/// - `lisp/loadup.el:251` -- `(load "simple")`, whose `define-minor-mode`
+///   expands to a `defvar` with a docstring, so `src/eval.c:911` `Fput`s
+///   "Non-nil if Indent-Tabs mode is enabled." onto the plist;
+/// - `lisp/loadup.el:448` (GNU's `:476`) -- `(Snarf-documentation "DOC")`,
+///   197 lines later, whose `Fput` (`src/doc.c:613`) puts `buffer.c`'s record
+///   **over the top of it**.
+///
+/// Measured in GNU 31.0.90 `-Q --batch`:
+/// `(get 'indent-tabs-mode 'variable-documentation)` is `641753`.  A fixnum,
+/// not the string `simple.el` put there -- which is the whole proof that the
+/// snarf overwrites rather than defers.  Over all 894 names of the DOC
+/// stand-in, GNU has 762 bound and **762 integers**, with no string among
+/// them.
+#[test]
+fn snarf_documentation_is_the_last_writer_over_a_preloaded_lisp_defvar() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        "(integerp (get 'indent-tabs-mode 'variable-documentation))
+         (documentation-property 'indent-tabs-mode 'variable-documentation t)",
+    );
+    assert_eq!(results[0], "OK t");
+    assert_eq!(
+        results[1],
+        "OK \"Indentation can insert tabs if this is non-nil.\""
+    );
+}
+
+/// One `mapatoms` over the whole obarray, joined to the DOC stand-in on the
+/// Rust side, rather than N per-name pins -- ledger 173's law, which ledger
+/// 178 applied to the same table: *a predicate over rows that exist cannot
+/// see a row that was never written*, so a per-name pin reports green the
+/// moment the table it is about goes empty.
+///
+/// The empty state is closed here by asserting the POSITIVE count as well: an
+/// emptied `GNU_VAR_DOCS`, a snarf that never runs, or a `loadup.el` that
+/// stopped calling it all drive `installed` to zero and fail the first
+/// assertion, before the diagonal has a chance to report zero for the wrong
+/// reason.
+#[test]
+fn every_variable_the_doc_image_documents_answers_out_of_the_doc_image() {
+    crate::test_utils::init_test_tracing();
+    let eval = crate::test_utils::runtime_startup_context();
+    let obarray = eval.obarray();
+    let prop = crate::emacs_core::intern::intern("variable-documentation");
+
+    let mut bound = 0_usize;
+    let mut installed = 0_usize;
+    let mut answered_from_lisp: Vec<&str> = Vec::new();
+    for (name, _) in super::super::var_docs::gnu_table::GNU_VAR_DOCS {
+        let Some(id) = crate::emacs_core::intern::lookup_interned(name) else {
+            continue;
+        };
+        if !obarray.is_global_member(id) || !obarray.boundp_id(id) {
+            continue;
+        }
+        bound += 1;
+        let entry = crate::emacs_core::plist::plist_get(
+            obarray.symbol_plist_id(id),
+            &Value::from_sym_id(prop),
+        );
+        match entry {
+            Some(value) if value.is_fixnum() => installed += 1,
+            _ => answered_from_lisp.push(name),
+        }
+    }
+
+    assert!(
+        installed > 700,
+        "the DOC stand-in installed {installed} records; an empty table, a \
+         `Snarf-documentation' that no longer runs, or a `loadup.el' that \
+         stopped calling it would all report a clean diagonal below"
+    );
+    assert_eq!(
+        answered_from_lisp,
+        Vec::<&str>::new(),
+        "these names are documented by the DOC stand-in and bound, so GNU's \
+         snarf overwrote whatever Lisp put on their plist (src/doc.c:613)"
+    );
+    assert_eq!(bound, installed);
+}
+
+/// And the same image from the obarray's side: the counts GNU's `-Q --batch`
+/// answers `0` for.
+///
+/// `unbound with an entry` is ledger 178's diagonal, restated after the snarf
+/// has actually written to plists -- the state where it could regress.  The
+/// third is `src/doc.c:433-434`, the fixnum GNU reserves for "there is no
+/// doc"; `make-docfile` cannot emit it, and neither can the DOC image, whose
+/// every record's text starts after a `^_V<name>\n` header.
+#[test]
+fn the_dumped_image_has_no_documentation_for_a_variable_it_does_not_bind() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        "(list
+           (let ((n 0))
+             (mapatoms (lambda (s)
+               (if (get s 'variable-documentation)
+                   (if (boundp s) nil (setq n (1+ n))))))
+             n)
+           (let ((n 0))
+             (mapatoms (lambda (s)
+               (if (documentation-property s 'variable-documentation t)
+                   (if (boundp s) nil (setq n (1+ n))))))
+             n)
+           (let ((n 0))
+             (mapatoms (lambda (s)
+               (if (eq (get s 'variable-documentation) 0) (setq n (1+ n)))))
+             n))",
+    );
+    assert_eq!(results[0], "OK (0 0 0)");
+}
+
+/// `oblookup` does not intern (`src/doc.c:596-600`): a DOC record whose name
+/// this build has no symbol for is skipped by `if (SYMBOLP (sym))`.
+///
+/// The table is generated from ALL of GNU's `src/*.c`, so it names variables
+/// no build declares -- 132 of the 894 are unbound in GNU's own image.  A
+/// snarf that used `intern` would put every one of them in the obarray, which
+/// is a state GNU has zero of and which ledger 178's `mapatoms` diagonal is
+/// the check for.
+#[test]
+fn snarfing_the_doc_image_interns_nothing() {
+    crate::test_utils::init_test_tracing();
+    let mut evaluator = super::super::eval::Context::new();
+    let before = evaluator.obarray().len();
+    let installed = super::snarf_variable_documentation(&mut evaluator.obarray);
+    assert!(installed > 700, "installed {installed} records");
+    assert_eq!(evaluator.obarray().len(), before);
+    assert!(
+        crate::emacs_core::intern::lookup_interned("w32-quit-key")
+            .is_none_or(|id| !evaluator.obarray().is_global_member(id)),
+        "`w32-quit-key' has a DOC record and no declaration on this platform"
+    );
+}
+
+/// The snarf overwrites: run it over a plist that already carries a Lisp
+/// docstring for the same name, and the docstring is gone.
+///
+/// This is `Fput`, not a write-if-absent, and it is the difference between
+/// GNU's design and the one this port had.
+#[test]
+fn snarf_documentation_overwrites_a_docstring_already_on_the_plist() {
+    crate::test_utils::init_test_tracing();
+    let mut evaluator = super::super::eval::Context::new();
+    evaluator
+        .obarray
+        .put_property(
+            "indent-tabs-mode",
+            "variable-documentation",
+            Value::string("Non-nil if Indent-Tabs mode is enabled."),
+        )
+        .unwrap();
+
+    super::snarf_variable_documentation(&mut evaluator.obarray);
+
+    let result = builtin_documentation_property(
+        &mut evaluator,
+        vec![
+            Value::symbol("indent-tabs-mode"),
+            Value::symbol("variable-documentation"),
+            Value::T,
+        ],
+    )
+    .unwrap();
+    assert_eq!(
+        result.as_utf8_str(),
+        Some("Indentation can insert tabs if this is non-nil.")
+    );
+}
+
+/// `get_doc_string`'s validity check (`src/doc.c:254-260`), which is why the
+/// DOC stand-in is a byte image and not a row index.
+///
+/// GNU answers nil for a fixnum that does not point just past a `^_V<name>\n`
+/// header -- measured in GNU 31.0.90 `-Q --batch`,
+/// `(put 'x 'variable-documentation 7)` then `documentation-property` is nil,
+/// because offset 7 lands inside the first record's own header.  A row index
+/// has no invalid values and could not reproduce that.
+#[test]
+fn a_position_that_does_not_point_at_a_doc_record_answers_nil() {
+    crate::test_utils::init_test_tracing();
+    let image = super::super::var_docs::doc_image();
+    assert!(image.text_at(0).is_none());
+    assert!(image.text_at(7).is_none());
+    assert!(image.text_at(-1).is_none());
+    assert!(image.text_at(i64::MAX).is_none());
+}
+
+/// Every record in the DOC stand-in round-trips: the position the snarf would
+/// store resolves back to that row's exact text.
+#[test]
+fn every_doc_image_record_round_trips_through_its_position() {
+    crate::test_utils::init_test_tracing();
+    let mut evaluator = super::super::eval::Context::new();
+    let obarray = &mut evaluator.obarray;
+    let mut checked = 0_usize;
+    for (name, doc) in super::super::var_docs::gnu_table::GNU_VAR_DOCS {
+        let Some(id) = crate::emacs_core::intern::lookup_interned(name) else {
+            continue;
+        };
+        let Some(found) = super::super::var_docs::SnarfedVariable::if_bound_in(obarray, id, name)
+            .and_then(super::super::var_docs::lookup)
+        else {
+            continue;
+        };
+        let position = found.position();
+        assert_eq!(
+            super::super::var_docs::doc_image().text_at(position),
+            Some(*doc),
+            "record for {name} at position {position}"
+        );
+        checked += 1;
+    }
+    assert!(checked > 700, "checked {checked} records");
 }

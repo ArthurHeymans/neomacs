@@ -9397,7 +9397,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // -- Documentation/help --
     ctx.defsubr(
         "Snarf-documentation",
-        |_ctx, args| super::doc::builtin_snarf_documentation(args),
+        super::doc::builtin_snarf_documentation,
         1,
         Some(1),
     );

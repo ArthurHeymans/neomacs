@@ -593,7 +593,6 @@ fn documentation_property_plan(
     let prop = args[1];
     let (symbol_id, mut property_value) =
         super::builtins::symbols::symbol_property_get(eval, args[0], prop)?;
-    let mut documentation_symbol_id = symbol_id;
     let prop_is_variable_documentation = eq_value_swp(
         &prop,
         &Value::symbol("variable-documentation"),
@@ -610,65 +609,105 @@ fn documentation_property_plan(
         let plist = obarray.symbol_plist_id(indirect);
         property_value =
             crate::emacs_core::plist::plist_get_swp(plist, &prop, eval.symbols_with_pos_enabled);
-        documentation_symbol_id = indirect;
     }
 
-    let sym = resolve_sym(documentation_symbol_id);
     let raw = args.get(2).is_some_and(|v| v.is_truthy());
 
-    // `Fsnarf_documentation`'s `Fboundp` gate (`src/doc.c:606-613`), asked once
-    // here and passed to `var_docs::lookup` as the only key it accepts.  GNU
-    // asks it at dump time and stores the answer as a plist property; Neomacs
-    // has no DOC file to snarf, so the generated table is consulted lazily and
-    // the gate has to travel with the query.
-    let snarfed =
-        super::var_docs::SnarfedVariable::if_bound_in(obarray, documentation_symbol_id, sym);
-
-    // GNU's two sources, and there is no third (ledger 178).
-    //
-    // A plist entry exists only because Lisp `defvar'/`defvaralias' put one
-    // there (`src/eval.c:723`, `src/eval.c:911`); everything else GNU knows
-    // came from `Fsnarf_documentation' reading `etc/DOC' behind the gate
-    // above.  Neomacs has no DOC file, so `var_docs::gnu_table' stands in for
-    // it and is read lazily -- but only through [`var_docs::SnarfedDoc`],
-    // which cannot be constructed without the gate having said yes.
+    // GNU reads the plist and nothing else (`src/doc.c:418`), because by the
+    // time anyone asks, `Fsnarf_documentation` has already written every doc
+    // `etc/DOC` has onto the symbol it belongs to -- over the top of the Lisp
+    // `defvar`'s string where both exist (`lisp/loadup.el:251` then `:476`;
+    // ledger 182).  There is no name-keyed second source to fall back to: the
+    // fixnum on the plist IS the reference into the DOC image, and
+    // `DocImage::text_at` is `get_doc_string`.
     match property_value {
-        Some(value) => documentation_plan_from_property_value(lisp_directory.as_deref(), value),
-        // No plist entry: this is where `Fsnarf_documentation' would have put
-        // one, so ask its question and read `etc/DOC' if the answer is yes.
-        //
-        // The grave/curly conversion is applied here because a caller may be
-        // in a context where `substitute-command-keys' (lisp/help.el) is not
-        // reachable.
-        //
-        // Other property names fall through to nil: only
-        // `variable-documentation' has a central source.
-        _ if prop_is_variable_documentation => {
-            let Some(doc) = snarfed.and_then(super::var_docs::lookup) else {
-                return Ok(DocumentationPlan::Final(Value::NIL));
-            };
-            let text = doc.text();
-            let doc = if raw {
-                startup_doc_quote_style_raw(text)
-            } else {
-                startup_doc_quote_style_display(text)
-            };
-            Ok(DocumentationPlan::Final(Value::string(doc)))
+        Some(value) => {
+            // `src/doc.c:437-438`: `if (FIXNUMP (tem) ...) tem = get_doc_string
+            // (tem, 0);`, for whatever PROP names.  Nil for a fixnum that does
+            // not point at a record, which is `src/doc.c:254-260`.
+            if value.is_fixnum()
+                && let Some(text) = super::var_docs::doc_image().text_at(value.as_int().unwrap_or(0))
+            {
+                // The grave/curly conversion is applied here because a caller
+                // may be in a context where `substitute-command-keys'
+                // (lisp/help.el) is not reachable.
+                let doc = if raw {
+                    startup_doc_quote_style_raw(text)
+                } else {
+                    startup_doc_quote_style_display(text)
+                };
+                return Ok(DocumentationPlan::Final(Value::string(doc)));
+            }
+            documentation_plan_from_property_value(lisp_directory.as_deref(), value)
         }
         _ => Ok(DocumentationPlan::Final(Value::NIL)),
     }
+}
+
+/// `Fsnarf_documentation`'s scan (`src/doc.c:566-628`), over the `etc/DOC`
+/// stand-in.
+///
+/// Runs once, from `lisp/loadup.el:448`, which is GNU's `lisp/loadup.el:476`
+/// -- **after** the C `DEFVAR`s and after every preloaded Lisp file.  That
+/// ordering is the whole point: `Fput` is an overwrite, so a name that is both
+/// a C `DEFVAR` and a preloaded Lisp `defvar` ends up with the C text, and
+/// `indent-tabs-mode` answers `buffer.c`'s sentence rather than
+/// `define-minor-mode`'s (`lisp/simple.el:7639`).
+///
+/// Three clauses of GNU's are kept and one is not:
+///
+/// - `oblookup (Vobarray, ...)` **does not intern**, and neither does this:
+///   `etc/DOC` names variables no build declares, and creating them would put
+///   symbols in the obarray that GNU's does not have.
+/// - `!NILP (Fboundp (sym))` is [`var_docs::SnarfedVariable::if_bound_in`],
+///   ledger 173's gate, and is the only constructor for the key
+///   [`var_docs::lookup`] accepts.
+/// - `strncmp (end, "\nSKIP", 5)` is enforced at compile time instead, by the
+///   `const` assertion in `var_docs`: a regenerated table carrying a `SKIP`
+///   placeholder does not build.
+/// - `!NILP (Fmemq (sym, delayed_init))` has nothing to select here.  It is a
+///   Lisp-level escape hatch for preloaded `custom-initialize-delay`
+///   defcustoms (`lisp/custom.el:142-161`), and ledger 173 measured that no C
+///   `DEFVAR` name is on `custom-delayed-init-variables`.
+pub(crate) fn snarf_variable_documentation(obarray: &mut super::symbol::Obarray) -> usize {
+    let mut installed: Vec<(super::intern::SymId, i64)> = Vec::new();
+    for (name, _) in super::var_docs::gnu_table::GNU_VAR_DOCS {
+        // GNU's `oblookup': a name this obarray does not have is not a symbol,
+        // and `if (SYMBOLP (sym))' skips it (`src/doc.c:600').
+        let Some(id) = super::intern::lookup_interned(name) else {
+            continue;
+        };
+        if !obarray.is_global_member(id) {
+            continue;
+        }
+        let Some(doc) = super::var_docs::SnarfedVariable::if_bound_in(obarray, id, name)
+            .and_then(super::var_docs::lookup)
+        else {
+            continue;
+        };
+        installed.push((id, doc.position()));
+    }
+
+    let prop = intern("variable-documentation");
+    let count = installed.len();
+    for (id, position) in installed {
+        // `Fput (sym, Qvariable_documentation, make_fixnum (...))'
+        // (`src/doc.c:613`) -- an overwrite, not a default.
+        let _ = obarray.put_property_id(id, prop, Value::fixnum(position));
+    }
+    count
 }
 
 // ---------------------------------------------------------------------------
 // Pure builtins
 // ---------------------------------------------------------------------------
 
-/// `(Snarf-documentation FILENAME)` -- load documentation strings from
-/// the internal DOC file.
+/// `(Snarf-documentation FILENAME)` -- install every documentation string the
+/// DOC file has onto the symbol it belongs to.
 ///
-/// Compatibility implementation: accepts the canonical `"DOC"` token and
-/// preserves observed GNU Emacs error classes for invalid and missing paths.
-/// It does not load or parse an on-disk DOC table yet.
+/// For the canonical `"DOC"` name this runs [`snarf_variable_documentation`]
+/// over the `etc/DOC` stand-in.  Other names keep GNU's error classes for
+/// invalid and missing paths, which is what an on-disk DOC file would give.
 fn snarf_doc_path_invalid(filename: &str) -> bool {
     if filename.is_empty() {
         return true;
@@ -685,7 +724,10 @@ fn snarf_doc_path_invalid(filename: &str) -> bool {
     segments.all(|segment| segment == "." || segment == "..")
 }
 
-pub(crate) fn builtin_snarf_documentation(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_snarf_documentation(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("Snarf-documentation", &args, 1)?;
     let filename = match args[0].as_utf8_str() {
         Some(name) => name,
@@ -697,9 +739,8 @@ pub(crate) fn builtin_snarf_documentation(args: Vec<Value>) -> EvalResult {
         }
     };
 
-    // In batch compatibility mode, allow the canonical DOC token while
-    // preserving observable error classes for invalid/missing names.
     if filename == "DOC" {
+        snarf_variable_documentation(&mut eval.obarray);
         return Ok(Value::NIL);
     }
 
