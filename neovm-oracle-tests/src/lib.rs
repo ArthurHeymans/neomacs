@@ -77,6 +77,7 @@ mod cus_start_platform_declarations;
 mod cxxr_semantics;
 mod data_construction_strict_edge_semantics;
 mod dbus_inhibitor_lock_semantics;
+mod debug_on_next_call;
 mod decode_char_encode_char_advanced;
 mod defalias_advanced;
 mod defalias_fset_patterns;

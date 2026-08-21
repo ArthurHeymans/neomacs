@@ -39,6 +39,7 @@ pub mod custom;
 pub mod data;
 pub mod dbus;
 pub mod debug;
+pub mod debug_on_call;
 pub mod defvar_bool;
 pub mod dired;
 pub mod display;

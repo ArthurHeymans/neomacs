@@ -49,6 +49,25 @@ fn expect_wholenump(val: &Value) -> Result<i64, Flow> {
     }
 }
 
+/// GNU `CHECK_FIXNUM` (`src/lisp.h`): a fixnum of ANY sign, and `fixnump` --
+/// not `wholenump` -- is the predicate the signal names.
+///
+/// `Fbacktrace_debug` checks LEVEL twice and the two checks disagree:
+/// `CHECK_FIXNUM (level)` first (`src/eval.c:4022`), then `CHECK_FIXNAT
+/// (nframes)` inside `get_backtrace_frame` (`src/eval.c:3987`).  So GNU
+/// answers `(wrong-type-argument fixnump "x")` for a string and
+/// `(wrong-type-argument wholenump -1)` for a negative fixnum, and a single
+/// `wholenump` check cannot produce both.
+fn expect_fixnum(val: &Value) -> Result<i64, Flow> {
+    match val.kind() {
+        ValueKind::Fixnum(n) => Ok(n),
+        _ => Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("fixnump"), *val],
+        )),
+    }
+}
+
 fn expect_character_code(val: &Value) -> Result<i64, Flow> {
     match val.kind() {
         ValueKind::Fixnum(c) if (0..=0x3F_FFFF).contains(&c) => Ok(c),
@@ -643,17 +662,46 @@ pub(crate) fn builtin_backtrace_locals(
     Ok(Value::NIL)
 }
 
-/// `(backtrace-debug LEVEL FLAG &optional BASE)` -- batch-compatible helper.
+/// `(backtrace-debug LEVEL FLAG &optional BASE)` -- GNU `Fbacktrace_debug`
+/// (`src/eval.c:4016-4029`).
+///
+/// Sets the `debug_on_exit` bit on the activation frame LEVEL levels down, so
+/// that the debugger is entered again when that frame returns.  This is the
+/// half of the entry/exit mechanism that Lisp can reach directly;
+/// `do_debug_on_call` reaches the same setter from the `debug-on-next-call`
+/// side (`src/eval.c:339`).  See `emacs_core::debug_on_call`.
+///
+/// LEVEL 0 is `backtrace-debug`'s OWN frame: `get_backtrace_starting_at (Qnil)`
+/// is `backtrace_top ()` (`src/eval.c:3988`), which is the running subr.
+/// Measured under GNU: `(defun f (x) (backtrace-debug 0 t) (* x 3))` debugs
+/// `backtrace-debug`'s exit with value `t`, while `(backtrace-debug 1 t)`
+/// debugs `f`'s exit with value `(* x 3)`.
+///
+/// GNU checks LEVEL twice with two different predicates -- see [`expect_fixnum`].
 pub(crate) fn builtin_backtrace_debug(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("backtrace-debug", &args, 2)?;
     expect_max_args("backtrace-debug", &args, 3)?;
-    let _level = expect_wholenump(&args[0])?;
-    if let Some(base) = args.get(2) {
-        let _ = runtime_backtrace_frame_indices_from_base(eval, *base)?;
+    // eval.c:4022 `CHECK_FIXNUM (level)`.
+    let level = expect_fixnum(&args[0])?;
+    let base = args.get(2).copied().unwrap_or(Value::NIL);
+    // eval.c:4023 `get_backtrace_frame (level, base)`, whose first act is
+    // `CHECK_FIXNAT (nframes)` (eval.c:3987) -- the second, stricter check.
+    if level < 0 {
+        return Err(signal(
+            LispCondition::WrongTypeArgument,
+            vec![Value::symbol("wholenump"), args[0]],
+        ));
     }
+    let frame_indices = runtime_backtrace_frame_indices_from_base(eval, base)?;
+    // eval.c:4025 `if (backtrace_p (pdl))` -- walking off the end of the
+    // backtrace is not an error, it is simply nothing to set.
+    if let Some(index) = frame_indices.get(level as usize).copied() {
+        eval.set_backtrace_debug_on_exit(index, !args[1].is_nil());
+    }
+    // eval.c:4028 -- the FLAG is returned, unexamined and uncoerced.
     Ok(args[1])
 }
 

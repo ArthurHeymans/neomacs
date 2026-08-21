@@ -3786,6 +3786,16 @@ impl<'a> Vm<'a> {
                         // sets `quit-flag` immediately before a call: the callee
                         // must not run.
                         poll_quit!();
+                        // GNU `bytecode.c:795-799`: Bcall records its frame and
+                        // then tests `debug_on_next_call`.  Only `Bcall` does --
+                        // the inline opcodes (`Op::CallBuiltin`/
+                        // `Op::CallBuiltinSym`, GNU `bytecode.c:1412-1545`) are
+                        // deliberately not gated, so the arm cannot live in the
+                        // shared `call_function`.  This peek cannot arm
+                        // anything (it is a bare `bool`); it only steers the
+                        // call off the zero-copy fast paths onto the owned
+                        // route below, which takes the arm properly.
+                        let debug_armed = self.ctx.debug_on_next_call_is_armed();
                         let target = self.resolve_interpreter_stack_call_target(func_val, n);
                         let writeback_names = if matches!(
                             target,
@@ -3806,7 +3816,12 @@ impl<'a> Vm<'a> {
                         let writeback_args = writeback_names
                             .as_ref()
                             .map(|_| stk!()[args_start..].iter().copied().collect::<LispArgVec>());
-                        let result = if writeback_names.is_none() {
+                        let result = if debug_armed {
+                            let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
+                            vm_try!(self.with_bytecode_call_depth(|vm| {
+                                vm.call_function_debugged(func_val, args)
+                            }))
+                        } else if writeback_names.is_none() {
                             if let ResolvedStackCallTarget::Interpreter { call } = target {
                                 // Iterative Bcall keeps the cursor LIVE across
                                 // the whole transition (GNU keeps `top` in a
@@ -5987,6 +6002,36 @@ impl<'a> Vm<'a> {
         Value::NIL
     }
 
+    /// GNU `bytecode.c:795-799`: a `Bcall` that found `debug_on_next_call` set
+    /// records its backtrace frame and enters the ENTRY debugger before it
+    /// dispatches; the frame it recorded is also flagged `debug_on_exit`, so
+    /// the pop below re-enters the debugger on the way out.
+    ///
+    /// Deliberately not folded into [`Vm::call_function`]: that helper also
+    /// serves `Op::CallBuiltin` and `Op::Apply`, which correspond to GNU's
+    /// inline opcodes and to `Fapply`'s own dispatch -- neither of which GNU
+    /// arms at the bytecode level.
+    #[cold]
+    #[inline(never)]
+    fn call_function_debugged(&mut self, func_val: Value, args: LispArgVec) -> EvalResult {
+        let bt_count = self.ctx.specpdl.len();
+        self.ctx.push_backtrace_frame(func_val, &args);
+        let entered = match self
+            .ctx
+            .take_debug_on_call_arm(crate::emacs_core::debug_on_call::DebugOnCallCode::Funcall)
+        {
+            Some(arm) => self.ctx.do_debug_on_call(arm),
+            None => Ok(()),
+        };
+        let result = match entered {
+            Err(flow) => Err(flow),
+            Ok(()) => self.call_function_untraced_owned(func_val, args),
+        };
+        let result = self.ctx.dispatch_signal_result_if_needed(result);
+        self.ctx
+            .pop_bytecode_backtrace_frame_with_result(bt_count, result)
+    }
+
     fn call_function(&mut self, func_val: Value, args: impl Into<LispArgVec>) -> EvalResult {
         let args = args.into();
         let bt_count = self.ctx.specpdl.len();
@@ -6157,6 +6202,11 @@ impl<'a> Vm<'a> {
     /// The caller polls `maybe_quit` first (GNU `bytecode.c:Bcall` order).
     #[cfg(feature = "jit")]
     pub(crate) fn call_for_jit(&mut self, func_val: Value, args: LispArgVec) -> EvalResult {
+        // GNU `bytecode.c:795-799`.  This is the JIT's lowering of `Bcall`, so
+        // it carries the arm just as the interpreter's `Op::Call` arm does.
+        if self.ctx.debug_on_next_call_is_armed() {
+            return self.with_bytecode_call_depth(|vm| vm.call_function_debugged(func_val, args));
+        }
         let writeback_names = if args.first().is_some_and(|value| value.is_string()) {
             self.writeback_mutating_callable_names(&func_val)
         } else {
@@ -6223,6 +6273,15 @@ impl<'a> Vm<'a> {
         args_start: usize,
         nargs: usize,
     ) -> EvalResult {
+        // GNU `bytecode.c:795-799`, as in [`Vm::call_for_jit`]: the stack-args
+        // JIT lowering of `Bcall` arms too.
+        if self.ctx.debug_on_next_call_is_armed() {
+            let args: LispArgVec = self.ctx.bc_buf[args_start..args_start + nargs]
+                .iter()
+                .copied()
+                .collect();
+            return self.with_bytecode_call_depth(|vm| vm.call_function_debugged(func_val, args));
+        }
         let first_is_string = nargs > 0 && self.ctx.bc_buf[args_start].is_string();
         let writeback_names = if first_is_string {
             self.writeback_mutating_callable_names(&func_val)
@@ -6307,6 +6366,16 @@ impl<'a> Vm<'a> {
         args_start: usize,
         nargs: usize,
     ) -> EvalResult {
+        // GNU `bytecode.c:795-799`: the speculated subr call is still a
+        // `Bcall`, so it carries the arm like every other lowering of one.
+        if self.ctx.debug_on_next_call_is_armed() {
+            let func_val = Value::from_sym_id(sym_id);
+            let args: LispArgVec = self.ctx.bc_buf[args_start..args_start + nargs]
+                .iter()
+                .copied()
+                .collect();
+            return self.with_bytecode_call_depth(|vm| vm.call_function_debugged(func_val, args));
+        }
         self.with_bytecode_call_depth(|vm| {
             let func_val = Value::from_sym_id(sym_id);
             let entry = subr_entry_from_value(subr_value)
@@ -6393,6 +6462,15 @@ impl<'a> Vm<'a> {
         nargs: usize,
     ) -> Option<crate::emacs_core::jit::cache::NativeCallOutcome> {
         use core::sync::atomic::Ordering;
+        // GNU `bytecode.c:798`: a `Bcall` with `debug_on_next_call` set must
+        // record a frame and enter the entry debugger.  This native-to-native
+        // fast path has no way to run Lisp mid-call, so it deopts exactly the
+        // way a wrong arg count does -- `None` sends the call to the strict
+        // `call_for_jit`/`call_for_jit_stack` path, which arms it.  Cold: the
+        // flag is down in every non-debugging process.
+        if ctx.debug_on_next_call_is_armed() {
+            return None;
+        }
         let bc = callee.get_bytecode_data()?;
         let mut ptr = leaf_slot.load(Ordering::Relaxed)
             as *const crate::emacs_core::jit::compile::CompiledLeaf;
