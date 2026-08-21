@@ -5540,6 +5540,15 @@ impl Context {
         // DEFVAR_LISP, default nil (function to adjust reported mouse position).
         obarray.set_symbol_value("mouse-position-function", Value::NIL);
         obarray.make_special("mouse-position-function");
+        // DEFVAR_KBOARD, default nil (`src/frame.c:7555`).  It has to be bound
+        // HERE and not from `post_image_init`'s reset table, because
+        // `defvar_object::adopt` runs at the end of this bootstrap and can
+        // only tag names that already exist: bound later, the symbol stays
+        // `SYMBOL_PLAINVAL` and answers `special-variable-p` nil and
+        // `makunbound` yes, where GNU answers t and refuses.  Measured,
+        // `-Q --batch`: GNU `(t nil t)`, this port `(t nil nil)` (ledger 183).
+        obarray.set_symbol_value("default-minibuffer-frame", Value::NIL);
+        obarray.make_special("default-minibuffer-frame");
 
         // --- src/keymap.c: syms_of_keymap ---
         // DEFVAR_LISP, default nil (preferred modifier for `where-is').

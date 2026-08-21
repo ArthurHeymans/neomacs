@@ -469,7 +469,10 @@ fn rewinding_the_stamp_from_lisp_reopens_the_signal_debugger_once() {
 #[test]
 fn num_nonmacro_input_events_is_the_slot_the_stamp_reads() {
     let mut eval = signal_debugger_context();
-    probe(&mut eval, "(condition-case nil (error \"one\") (error nil))");
+    probe(
+        &mut eval,
+        "(condition-case nil (error \"one\") (error nil))",
+    );
     assert_eq!(
         probe(
             &mut eval,

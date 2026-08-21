@@ -1069,3 +1069,45 @@ fn a_defvar_parked_in_a_dead_preprocessor_region_is_not_a_declaration() {
         "OK echo-area-clear-hook"
     );
 }
+
+/// `default-minibuffer-frame` is `DEFVAR_KBOARD` (`src/frame.c:7555`), and
+/// this port bound it only from the post-image reset table -- which runs after
+/// `defvar_object::adopt`, so the symbol never got GNU's redirect tag.  Two
+/// Lisp facts followed.  Measured, `-Q --batch`:
+///
+/// ```text
+/// (list (boundp ...) (symbol-value ...) (special-variable-p ...))
+///                                   GNU (t nil t)   this port, before (t nil nil)
+/// (condition-case e (makunbound 'default-minibuffer-frame) (error e))
+///                                   GNU (error "Built-in variable may not be unbound : ...")
+///                                       this port, before: the symbol
+/// ```
+///
+/// This is the whole of ledger 170's `refused -> allowed` residual as it reads
+/// today -- one name of 578, re-measured on the image path (ledger 183 §8) --
+/// and the reason is the one-shot pass, not the name.
+#[test]
+fn a_defvar_kboard_name_bound_after_the_adoption_pass_still_gets_gnus_tag() {
+    let mut eval = ev();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(list (boundp 'default-minibuffer-frame)
+                   default-minibuffer-frame
+                   (special-variable-p 'default-minibuffer-frame))"
+        )),
+        "OK (t nil t)"
+    );
+    assert_eq!(
+        format_eval_result(
+            &eval.eval_str("(condition-case e (makunbound 'default-minibuffer-frame) (error e))")
+        ),
+        r#"OK (error "Built-in variable may not be unbound : default-minibuffer-frame")"#
+    );
+    // `DEFVAR_KBOARD` also refuses `make-local-variable` (`src/data.c:2287-2290`).
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(condition-case e (make-local-variable 'default-minibuffer-frame) (error e))"
+        )),
+        r#"OK (error "Symbol default-minibuffer-frame may not be buffer-local")"#
+    );
+}
