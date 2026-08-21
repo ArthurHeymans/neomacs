@@ -692,18 +692,14 @@ impl PostImageInit {
                 call_line: 2533,
                 body: "src/dbusbind.c:1987-1991",
                 guard: CallGuard::BuildOption("HAVE_DBUS"),
-                establishes: Establishes::Facts {
-                    constants: &[],
-                    derived: &[Derived::NotApplicable {
-                        what: "xputenv(\"DBUS_FATAL_WARNINGS=0\"), visible through \
-                               `process-environment'",
-                        gnu: "src/dbusbind.c:1990",
-                        why: "this port links no libdbus, so there is no library to \
-                              stop from aborting on a warning; adding the variable \
-                              would put a claim in the environment that nothing here \
-                              honours",
-                    }],
-                },
+                establishes: Establishes::NoLispVisibleState(
+                    "the body is one xputenv(\"DBUS_FATAL_WARNINGS=0\"), and that is \
+                     INVISIBLE to Lisp: `set_initial_environment' (src/emacs.c:2177) \
+                     has already snapshotted `environ' into `process-environment', \
+                     and `getenv-internal' searches only that list.  Measured -- a \
+                     GNU build whose system-configuration-features names DBUS still \
+                     answers nil to (getenv \"DBUS_FATAL_WARNINGS\").",
+                ),
             },
             Self::Xterm => PostImageInitSite {
                 c_name: "init_xterm",

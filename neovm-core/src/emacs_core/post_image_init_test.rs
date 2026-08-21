@@ -155,11 +155,11 @@ fn post_image_init_screened_sites_carry_their_evidence() {
         not_in_build, GNU_PLATFORM_ONLY,
         "every platform-only call site is classified NotInThisBuild"
     );
-    // init_standard_fds, init_signals, init_random, init_atimer, init_xterm,
-    // init_module_assertions, init_xdisp, init_fringe.
+    // init_standard_fds, init_signals, init_random, init_module_assertions,
+    // init_atimer, init_dbusbind, init_xterm, init_xdisp, init_fringe.
     assert_eq!(
-        screened_empty, 8,
-        "eight reachable call sites were read and establish no Lisp-visible \
+        screened_empty, 9,
+        "nine reachable call sites were read and establish no Lisp-visible \
          state; that is a result, not a gap"
     );
 }
@@ -207,8 +207,8 @@ fn post_image_init_derivations_are_classified_and_cited() {
         elsewhere, 21,
         "twenty-one are performed elsewhere on this port's startup path"
     );
-    // shared-game-score-directory and DBUS_FATAL_WARNINGS.
-    assert_eq!(not_applicable, 2, "two have nothing here to derive");
+    // shared-game-score-directory.
+    assert_eq!(not_applicable, 1, "one has nothing here to derive");
 }
 
 /// The five rows entry 174 shipped, named literally so deleting the table
