@@ -2824,8 +2824,22 @@ impl<'a> Vm<'a> {
             // path is exactly a specpdl pointer decrement.  Keeping the fast
             // pop behind the typed iterative continuation prevents the
             // generic release/unbind machinery from becoming a per-call tax.
-            self.ctx
-                .pop_fast_bytecode_backtrace_frame(continuation.backtrace);
+            match self
+                .ctx
+                .pop_fast_bytecode_backtrace_frame(continuation.backtrace)
+            {
+                crate::emacs_core::eval::FastBytecodePop::Popped => {}
+                // GNU `Breturn`'s `val = call_debugger (list2 (Qexit, val))`
+                // (`src/bytecode.c:825-828`): the exit debugger's return value
+                // REPLACES this call's, so it has to be spent here where the
+                // result is still in hand.  `backtrace-debug` can raise the
+                // flag on this frame from inside the call that is returning.
+                crate::emacs_core::eval::FastBytecodePop::OwesDebugOnExit(frame) => {
+                    result = self
+                        .ctx
+                        .pop_bytecode_backtrace_token_with_result(frame, result);
+                }
+            }
             aux_stack.restore_current(InterpreterDriverDepth::from_suspended_callers(
                 callers.len(),
             ));
@@ -2895,7 +2909,18 @@ impl<'a> Vm<'a> {
         // exactly the same observable unwind state as the generic path.
         self.ctx
             .truncate_condition_stack(cleanup.condition_stack_base);
-        if self.ctx.specpdl.len() != cleanup.specpdl_base {
+        // GNU `Breturn` tests `backtrace_debug_on_exit` BEFORE its
+        // `specpdl_ptr--` (`src/bytecode.c:825-828`) because the debugger's
+        // return value replaces the call's.  This return has no way to carry a
+        // replaced value or a nonlocal exit, so a flagged frame is part of the
+        // ineligibility test rather than something the pop discovers: the
+        // frame this return pops is the one immediately below the callee's
+        // base, which the line above just proved is the specpdl top.
+        let returning_frame = cleanup.specpdl_base.checked_sub(1);
+        if self.ctx.specpdl.len() != cleanup.specpdl_base
+            || returning_frame
+                .is_some_and(|index| self.ctx.backtrace_frame_wants_debug_on_exit(index))
+        {
             return InterpreterValueCompletion::NeedsSlowCleanup(value);
         }
 
@@ -2906,8 +2931,11 @@ impl<'a> Vm<'a> {
         // `Breturn` likewise restores its already-proven saved frame directly.
         let continuation = unsafe { callers.restore_current_unchecked(current) };
         self.leave_bytecode_call_depth();
+        // The eligibility gate above asked `backtrace_debug_on_exit` about
+        // exactly this index, so the checking pop would ask a second time on
+        // the interpreter's hottest return.
         self.ctx
-            .pop_fast_bytecode_backtrace_frame(continuation.backtrace);
+            .pop_fast_bytecode_backtrace_frame_unchecked(continuation.backtrace);
         aux_stack.restore_current(InterpreterDriverDepth::from_suspended_callers(
             callers.len(),
         ));
@@ -6869,8 +6897,14 @@ impl<'a> Vm<'a> {
             if let Some(value) = Self::try_dispatch_builtin_subr_fast_value_from_stack_args(
                 ctx, sym_id, args_start, nargs,
             ) {
-                ctx.pop_fast_bytecode_backtrace_frame(backtrace);
-                return Ok(value);
+                return match ctx.pop_fast_bytecode_backtrace_frame(backtrace) {
+                    crate::emacs_core::eval::FastBytecodePop::Popped => Ok(value),
+                    // GNU's exit debugger replaces the value it is shown
+                    // (`src/bytecode.c:825-828`).
+                    crate::emacs_core::eval::FastBytecodePop::OwesDebugOnExit(frame) => {
+                        ctx.pop_bytecode_backtrace_token_with_result(frame, Ok(value))
+                    }
+                };
             }
             match entry.function {
                 Some(function) => Self::dispatch_builtin_subr_from_stack_args_unchecked(

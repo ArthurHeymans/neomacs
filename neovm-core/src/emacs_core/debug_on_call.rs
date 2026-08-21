@@ -208,6 +208,29 @@ impl Context {
         }
     }
 
+    /// GNU `maybe_call_debugger`'s last conjunct:
+    /// `when_entered_debugger < num_nonmacro_input_events` (`src/eval.c:2212`).
+    ///
+    /// The read-back half of [`Context::call_debugger`]'s stamp, and the reason
+    /// the stamp exists at all: without it "the debugger itself signalled an
+    /// error" is an infinite loop, which is what the two slots' shared comment
+    /// says out loud (`src/eval.c:4544-4552`).  It gates the SIGNAL debugger
+    /// only -- `do_debug_on_call` and the six `debug_on_exit` sites call
+    /// `call_debugger` unconditionally, measured in both editors
+    /// (`the_reentry_guard_gates_the_signal_debugger_only`).
+    ///
+    /// Both operands are `DEFVAR_INT` slots Lisp can `setq`
+    /// (`src/eval.c:4554`, `src/keyboard.c:13903`), which is why they are read
+    /// through their forwarders here: rewinding the stamp or bumping the
+    /// counter from Lisp has to re-open the gate, exactly as it does in GNU.
+    pub(crate) fn debugger_reentry_is_permitted(&self) -> bool {
+        let when_entered = self
+            .obarray
+            .int_forwarder(when_entered_debugger_symbol())
+            .map_or(i64::MIN, super::forward::LispIntFwd::get_i64);
+        when_entered < self.num_nonmacro_input_events()
+    }
+
     /// GNU `call_debugger` (`src/eval.c:281-333`): `apply1 (Vdebugger, arg)`
     /// under the debugger's own bindings, returning what the debugger returned.
     ///
@@ -221,9 +244,10 @@ impl Context {
         // GNU exposes the slot as the `DEFVAR_INT`
         // `internal-when-entered-debugger` (`src/eval.c:4553-4554`) and reads
         // it back in `maybe_call_debugger` (`src/eval.c:2212`) to refuse a
-        // second debugger entry within one command.  Measured under GNU
+        // second debugger entry within one command --
+        // [`Context::debugger_reentry_is_permitted`].  Measured under GNU
         // `-Q --batch`: it reads `-1` at startup and `0` after one entry.
-        let events = self.command_loop.num_nonmacro_input_events as i64;
+        let events = self.num_nonmacro_input_events();
         self.obarray
             .set_symbol_value_id(when_entered_debugger_symbol(), Value::fixnum(events));
         let debugger = self
@@ -232,8 +256,26 @@ impl Context {
             .copied()
             .unwrap_or(Value::NIL);
         let count = self.specpdl.len();
+        // GNU's four `specbind`s, in GNU's order (`src/eval.c:306-314`).
+        // `debugger-may-continue` is `debug_while_redisplaying ? Qnil : Qt`
+        // there; this port has no redisplay re-entry to detect, and in batch
+        // GNU answers `t` -- see the ledger for what a GUI probe would have to
+        // establish before the conditional is worth porting.
         self.specbind(intern("debugger-may-continue"), Value::T);
+        // eval.c:308.  "Resetting redisplaying_p to 0 makes sure that debug
+        // output is displayed if the debugger is invoked during redisplay":
+        // the debugger must be able to draw even when its caller had display
+        // switched off.  Measured, `-Q --batch`, entering from inside
+        // `(let ((inhibit-redisplay t)) ...)`: GNU reads `nil` in the debugger
+        // and this port read `t` (`tmp/l183-p9.el`).
+        self.specbind(intern("inhibit-redisplay"), Value::NIL);
         self.specbind(intern("inhibit-debugger"), Value::T);
+        // eval.c:314, with GNU's own reason attached: "If we are debugging an
+        // error while `inhibit-changing-match-data' is bound to non-nil (e.g.,
+        // within a call to `string-match-p'), then make sure debugger code can
+        // still use match data."  Measured: a `string-match` run inside the
+        // debugger sets the match data in GNU and did not here.
+        self.specbind(intern("inhibit-changing-match-data"), Value::NIL);
         let result = self.apply(debugger, arg);
         self.unbind_to(count);
         result

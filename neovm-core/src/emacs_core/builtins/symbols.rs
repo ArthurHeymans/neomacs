@@ -507,6 +507,16 @@ fn make_alias_error_signal(
                 "Don\u{2019}t know how to make a buffer-local variable an alias: {new_name}"
             ))],
         ),
+        MakeAliasError::LetBound => signal(
+            "error",
+            vec![Value::string(format!(
+                // `src/eval.c:709-710`, through the same `doprnt`
+                // `text-quoting-style` path as the LOCALIZED message above.
+                // Measured under GNU 31.0.90 `-Q --batch` (`tmp/l183-p6.el`):
+                //   "Don\u{2019}t know how to make a let-bound variable an alias: l183p"
+                "Don\u{2019}t know how to make a let-bound variable an alias: {new_name}"
+            ))],
+        ),
     }
 }
 
@@ -535,6 +545,12 @@ pub(crate) fn defvaralias_impl(
         return Err(make_alias_error_signal(error, &new_name, args[1]));
     }
     let previous_target_id = resolve_variable_alias_id_in_obarray(&ctx.obarray, new_symbol)?;
+    // GNU's `if (NILP (Fboundp (base_variable)))` migration arm
+    // (`src/eval.c:679-685`).  Its `else if` twin -- the "Overwriting value of
+    // X by aliasing to Y" warning (`:686-701`) -- is measured missing and
+    // recorded in ledger 183 rather than added: it calls `display-warning`,
+    // which is Lisp, and 141 unit tests reach this primitive on a bare
+    // `Context` where no Lisp is loaded.
     if ctx.obarray.find_symbol_value(old_symbol).is_none()
         && let Some(alias_value) = ctx.obarray.find_symbol_value(new_symbol)
     {
@@ -542,6 +558,18 @@ pub(crate) fn defvaralias_impl(
         ctx.obarray.set_symbol_value_id(target, alias_value);
         ctx.sync_cached_runtime_binding_by_id(target, alias_value);
         ctx.refresh_gc_runtime_settings_after_change_by_id(target);
+    }
+    // GNU's fifth refusal, and it is deliberately down here: the specpdl scan
+    // runs AFTER the value migration above and after the "Overwriting value"
+    // warning (`src/eval.c:702-711`), so a refused `defvaralias` has already
+    // moved a value into an unbound BASE.  Measured in both editors
+    // (`tmp/l183-p7.el`).
+    if ctx.symbol_is_let_bound(new_symbol) {
+        return Err(make_alias_error_signal(
+            crate::emacs_core::symbol::MakeAliasError::LetBound,
+            &new_name,
+            args[1],
+        ));
     }
     ctx.note_macro_expansion_mutation();
     let docstring = args.get(2).cloned().unwrap_or(Value::NIL);

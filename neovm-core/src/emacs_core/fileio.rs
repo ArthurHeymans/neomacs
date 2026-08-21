@@ -7046,7 +7046,7 @@ pub(crate) fn builtin_do_auto_save(
     // any buffer needed writing. Keeping the record at the primitive boundary
     // also makes direct Lisp calls and idle-triggered calls obey the same
     // "new input is required before another automatic pass" invariant.
-    eval.command_loop.last_auto_save_input_events = eval.command_loop.num_nonmacro_input_events;
+    eval.command_loop.last_auto_save_input_events = eval.num_nonmacro_input_events();
 
     Ok(Value::NIL)
 }

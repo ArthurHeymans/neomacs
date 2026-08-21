@@ -678,6 +678,39 @@ impl SpecBinding {
             state: SavedRestrictionUnwind(Box::new(state)),
         }
     }
+
+    /// The symbol this entry dynamically rebinds, if it is one of GNU's
+    /// "subkinds of LET".
+    ///
+    /// GNU asks the same question as `(--p)->kind >= SPECPDL_LET`
+    /// (`src/eval.c:706`), which works only because `SPECPDL_LET`,
+    /// `SPECPDL_LET_LOCAL` and `SPECPDL_LET_DEFAULT` are the last three
+    /// enumerators and the comment on `src/lisp.h:3564` asks the next person
+    /// to keep it that way.  An ordinal comparison is not a property the
+    /// compiler checks; an exhaustive match is, so a new binding kind added
+    /// below cannot silently answer "not a let-binding" -- it will not
+    /// compile until this match says which it is.
+    pub(crate) fn let_bound_symbol(&self) -> Option<SymId> {
+        match *self {
+            Self::Let { sym_id, .. }
+            | Self::LetLocal { sym_id, .. }
+            | Self::LetDefault { sym_id, .. } => Some(sym_id),
+            Self::LexicalEnv { .. }
+            | Self::GcRoot { .. }
+            | Self::Backtrace { .. }
+            | Self::Backtrace1 { .. }
+            | Self::Backtrace2 { .. }
+            | Self::BacktraceNative { .. }
+            | Self::UnwindProtect { .. }
+            | Self::SaveExcursion { .. }
+            | Self::SaveCurrentBuffer { .. }
+            | Self::SaveRestriction { .. }
+            | Self::LoadsInProgress { .. }
+            | Self::RequireStack { .. }
+            | Self::NativeUnwind { .. }
+            | Self::Nop => None,
+        }
+    }
 }
 
 /// Native cleanups that must participate in GNU's specpdl unwind ordering.
@@ -938,6 +971,24 @@ impl BytecodeBacktraceFrame {
 
 const _: () =
     assert!(std::mem::size_of::<BytecodeBacktraceFrame>() == std::mem::size_of::<usize>());
+
+/// What [`Context::pop_fast_bytecode_backtrace_frame`] did.
+///
+/// GNU's `Breturn` cannot be a bare `specpdl_ptr--` for a frame carrying
+/// `debug_on_exit`: the exit debugger's return value REPLACES the call's
+/// (`src/bytecode.c:825-828`).  Handing the token back rather than returning a
+/// bare `bool` is what makes the refusal actionable -- a caller cannot pop the
+/// frame some other way without a token, and it cannot drop the token without
+/// tripping `BytecodeBacktraceFrame`'s own `#[must_use]`.
+#[must_use = "a refused fast pop leaves the frame on the specpdl owing a debugger entry"]
+pub(crate) enum FastBytecodePop {
+    /// The frame is gone: GNU's `specpdl_ptr--`.
+    Popped,
+    /// The frame owes `call_debugger (list2 (Qexit, val))` and is still on the
+    /// specpdl.  Spend it with
+    /// [`Context::pop_bytecode_backtrace_token_with_result`].
+    OwesDebugOnExit(BytecodeBacktraceFrame),
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct ThreadDynamicBindingState {
@@ -3860,6 +3911,14 @@ impl Context {
             return Ok(());
         }
         if self.skip_debugger(sig, &conditions)? {
+            return Ok(());
+        }
+        // GNU's last conjunct, and it is last there too: "See commentary on
+        // definition of `internal-when-entered-debugger'" (`src/eval.c:2210-2212`).
+        // A debugger that signals must not re-enter itself, so one entry per
+        // non-macro input event is the budget -- which in batch, where no such
+        // event ever arrives, is one entry per session.
+        if !self.debugger_reentry_is_permitted() {
             return Ok(());
         }
 
@@ -7709,13 +7768,13 @@ impl Context {
     fn command_loop_1_maybe_auto_save(&mut self) {
         let interval = match self.eval_symbol("auto-save-interval").ok() {
             Some(v) => match v.as_fixnum() {
-                Some(n) if n > 0 => n as u64,
+                Some(n) if n > 0 => n,
                 _ => return,
             },
             None => return,
         };
         let threshold = interval.max(20);
-        let current = self.command_loop.num_nonmacro_input_events;
+        let current = self.num_nonmacro_input_events();
         let last = self.command_loop.last_auto_save_input_events;
         if current.saturating_sub(last) <= threshold {
             return;
@@ -7734,7 +7793,7 @@ impl Context {
     /// the same `do-auto-save` primitive, and throttle a failing attempt so a
     /// broken hook cannot spin the command loop.
     pub(crate) fn run_command_loop_auto_save(&mut self, trigger: &'static str) {
-        self.command_loop.last_auto_save_input_events = self.command_loop.num_nonmacro_input_events;
+        self.command_loop.last_auto_save_input_events = self.num_nonmacro_input_events();
         let no_message = if self
             .eval_symbol("auto-save-no-message")
             .unwrap_or(Value::NIL)
@@ -14086,6 +14145,21 @@ impl Context {
         )
     }
 
+    /// GNU `Fdefvaralias`'s specpdl scan (`src/eval.c:702-711`): is SYMBOL
+    /// dynamically rebound anywhere on the current binding stack?
+    ///
+    /// GNU walks from `specpdl_ptr` down to `specpdl` -- the *whole* stack, not
+    /// the current frame -- and compares with `EQ`, so no alias resolution
+    /// happens: the question is about this exact symbol.  A binding that has
+    /// already been unwound is gone from the stack and therefore not found,
+    /// which is the difference between rows 1 and 2 of `tmp/l183-p6.el`.
+    pub(crate) fn symbol_is_let_bound(&self, symbol: SymId) -> bool {
+        self.specpdl
+            .iter()
+            .rev()
+            .any(|entry| entry.let_bound_symbol() == Some(symbol))
+    }
+
     /// GNU `backtrace_debug_on_exit` (`src/lisp.h:3733-3738`) for the frame at
     /// `index`, answering `false` for anything that is not a backtrace frame so
     /// that a caller unbinding a plain `let` region asks the question safely.
@@ -14743,8 +14817,53 @@ impl Context {
         self.pop_bytecode_backtrace_frame_with_result(frame.base(), result)
     }
 
+    /// GNU `Breturn`: `if (backtrace_debug_on_exit (pdl)) val = call_debugger
+    /// (list2 (Qexit, val));` and only then `specpdl_ptr--`
+    /// (`src/bytecode.c:825-828`).
+    ///
+    /// The pop cannot run the debugger itself -- it is a bare length store with
+    /// no result to replace -- so it REFUSES instead, handing the token back so
+    /// the caller can take [`Self::pop_bytecode_backtrace_token_with_result`],
+    /// which does. That makes "popped a frame that owed a debugger entry"
+    /// unconstructible through this API rather than merely unreached.
+    ///
+    /// Ledger 172 §7 argued no flagged frame could reach the fast pops, and
+    /// that was measured false: `backtrace-debug` flags an arbitrary live frame
+    /// by index, including a byte-compiled caller already routed to the fast
+    /// return.  Measured, `-Q --batch`, `tmp/l183-p10.el` -- a `byte-compile`d
+    /// function whose callee runs `(backtrace-debug 1 t)` calls the debugger
+    /// once in GNU and called it zero times here, while the interpreted twin
+    /// agreed in both editors.
     #[inline(always)]
-    pub(crate) fn pop_fast_bytecode_backtrace_frame(&mut self, frame: BytecodeBacktraceFrame) {
+    pub(crate) fn pop_fast_bytecode_backtrace_frame(
+        &mut self,
+        frame: BytecodeBacktraceFrame,
+    ) -> FastBytecodePop {
+        if self.backtrace_frame_wants_debug_on_exit(frame.base()) {
+            return FastBytecodePop::OwesDebugOnExit(frame);
+        }
+        self.pop_fast_bytecode_backtrace_frame_unchecked(frame);
+        FastBytecodePop::Popped
+    }
+
+    /// [`Self::pop_fast_bytecode_backtrace_frame`] without its
+    /// `backtrace_debug_on_exit` test.
+    ///
+    /// The single caller is the iterative driver's `Breturn`, whose eligibility
+    /// gate has already asked the question about this exact specpdl index --
+    /// `cleanup.specpdl_base - 1` -- three lines earlier and routed a flagged
+    /// frame to the generic unwind.  Asking twice on the hottest return path in
+    /// the interpreter buys nothing; asking NOWHERE is the bug this entry
+    /// fixes, which is why the proof is named at the call site.
+    #[inline(always)]
+    pub(crate) fn pop_fast_bytecode_backtrace_frame_unchecked(
+        &mut self,
+        frame: BytecodeBacktraceFrame,
+    ) {
+        debug_assert!(
+            !self.backtrace_frame_wants_debug_on_exit(frame.base()),
+            "the unchecked bytecode pop was handed a frame owing a debugger entry"
+        );
         let frame_word = frame.0;
         debug_assert_eq!(
             self.specpdl.len(),
