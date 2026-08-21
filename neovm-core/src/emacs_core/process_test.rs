@@ -2559,15 +2559,36 @@ fn process_manager_env() {
 
 // -- Elisp-level tests --------------------------------------------------
 
+/// `start-process` returns a process object that answers its accessors.
+///
+/// **The child is long-running on purpose (ledger 180).**  This used to run
+/// `echo hello`, whose child is gone before the second form is evaluated, and
+/// asserted `run` for its status -- which was only ever true because this port
+/// could not see a child exit without waiting.  Measured, `-Q --batch`, six
+/// runs of `start-process` + a 2 ms pure-Lisp spin + `process-status`:
+///
+/// ```text
+///                        immediate   after 2 ms
+///   GNU 31.0.90            run         exit      (6/6)
+///   Neomacs, merge base    run         run       (6/6)
+///   Neomacs, now           run         exit      (5/6)
+/// ```
+///
+/// So GNU answers `exit` there and the old expectation was the divergence,
+/// not the fix.  A child that is still alive makes `run` the right answer in
+/// both editors and takes the race out of the test, which is what this
+/// asserts.
 #[test]
 fn start_process_and_query() {
     crate::test_utils::init_test_tracing();
-    let echo = find_bin("echo");
+    let sh = find_bin("sh");
     let results = eval_all(&format!(
-        r#"(processp (start-process "my-proc" nil "{echo}" "hello"))
+        r#"(processp (start-process "my-proc" nil "{sh}" "-c" "sleep 30"))
            (process-status (get-process "my-proc"))
            (process-name (get-process "my-proc"))
-           (process-buffer (get-process "my-proc"))"#,
+           (prog1 (process-buffer (get-process "my-proc"))
+             (set-process-query-on-exit-flag (get-process "my-proc") nil)
+             (delete-process "my-proc"))"#,
     ));
     assert_eq!(results[0], "OK t");
     assert_eq!(results[1], "OK run");

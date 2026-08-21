@@ -9129,24 +9129,34 @@ impl super::eval::Context {
                     outcome.absorb(stderr_outcome);
                 }
 
-                // Initial poll passes already checked child status before
-                // reading.  A readiness-wake pass got here because output won
-                // the poll; GNU then does a no-wait follow-up (`wait =
-                // MINIMUM`) that can observe and publish a just-exited child
-                // before `accept-process-output` returns.  Model that as one
+                // The pass got here because output was available; GNU then
+                // does a no-wait follow-up (`wait = MINIMUM`) that can observe
+                // and publish a just-exited child before
+                // `accept-process-output` returns.  Model that as one
                 // zero-duration backend wait and one nonblocking status poll;
                 // this is a readiness drain, not a retry delay.
+                //
+                // This runs for an INITIAL-POLL pass as well, not only a
+                // readiness wake, and ledger 180 is why.  The pre-read status
+                // check at the top of the loop happens BEFORE the child has
+                // written its output, so on an initial poll it always misses a
+                // child that exits right after writing; without a follow-up the
+                // pass returns having read the output and left the exit
+                // unnoticed.  GNU cannot end up there: its record is made by
+                // SIGCHLD at any instant and `status_notify` runs from the same
+                // wait (src/process.c:5554), so `wait_reading_process_output`
+                // does not return having seen a child's EOF and not its status.
+                // Measured on the `(while (process-live-p p)
+                // (accept-process-output p 1))` idiom, 60 runs: the sentinel is
+                // lost 0/60 in GNU and was lost 4/60 here until this follow-up
+                // covered the initial poll too.
                 let publish_same_pass_after_output = self
                     .processes
                     .get(pid)
                     .is_some_and(process_publishes_status_after_ready_output);
-                let mut status_changed = !publish_status_before_readable_output
-                    && publish_same_pass_after_output
-                    && self.processes.check_child_status_change(pid);
-                if !status_changed
-                    && !publish_status_before_readable_output
-                    && publish_same_pass_after_output
-                {
+                let mut status_changed =
+                    publish_same_pass_after_output && self.processes.check_child_status_change(pid);
+                if !status_changed && publish_same_pass_after_output {
                     let _ = self.processes.wait_for_backend_events(
                         Duration::ZERO,
                         ProcessWaitBackendInterest::ProcessesOnly,

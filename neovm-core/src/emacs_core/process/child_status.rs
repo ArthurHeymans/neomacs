@@ -81,11 +81,12 @@
 //!
 //! **So the recording is placed where it is safe and made unavoidable by
 //! type instead.**  The sweep runs on the Lisp thread at GNU's own
-//! `update_status` call sites, and no Lisp-visible status can be read
-//! without it: [`ObservedProcess`] has private fields and one constructor,
-//! and that constructor takes an [`UpdateStatusSite`] naming which of GNU's
-//! eight `update_status` lines the caller is.  A reader that has not named a
-//! site cannot spell a status at all.
+//! `update_status` call sites, and a subr cannot report a status without it:
+//! [`ObservedProcess`] has private fields, and the constructor that sweeps
+//! takes an [`UpdateStatusSite`] naming which of GNU's eight `update_status`
+//! lines the caller is.  A subr that has not named a site cannot spell a
+//! status at all -- see [`ObservedProcess`] for the exact scope of that,
+//! which is the Lisp-visible answer and not the manager's own internals.
 //!
 //! # Why that is Lisp-indistinguishable from GNU's placement
 //!
@@ -302,20 +303,38 @@ impl UpdateStatusSite {
     }
 }
 
-/// A process whose child status has been recorded, and the only thing in
-/// this crate that can produce a Lisp-visible status value.
+/// A process whose child status has been recorded, and the only route by
+/// which a *subr* can obtain one.
 ///
-/// [`process_effective_status`] and [`process_public_status_symbol`] are
-/// private to the parent module and take a `&Process`, so they cannot be
-/// reached from a subr; the two methods here are the only public spelling,
-/// and an `ObservedProcess` cannot be built except through
-/// [`ProcessManager::observe`], which runs the sweep for every site whose
-/// [`Recording`] says so.
+/// [`process_effective_status`] (GNU `update_status`'s view, src/process.c:
+/// 717-721) and [`process_public_status_symbol`] (GNU `Fprocess_status`'s
+/// return value, :1188-1201) were `pub(crate)`; they are now private to the
+/// parent module and to this child of it, so no `builtins` entry point can
+/// call either.  The two methods below are their only public spelling, and
+/// an `ObservedProcess` has private fields and exactly two constructors:
+/// [`ProcessManager::observe`], which sweeps for every site whose
+/// [`Recording`] says so, and
+/// [`ProcessManager::read_status_without_recording`], which takes an
+/// enumerated [`UnrecordedStatusRead`].
 ///
-/// That is the whole point: "the child has exited and Lisp still reads
-/// `run`" is not rejected by a check, it is a sentence with no grammar.  To
-/// write it you would need a status value, and every status value comes from
-/// here.
+/// **The scope of that guarantee, stated exactly, because it is narrower
+/// than "nothing can read a status".**  It covers the Lisp-visible ANSWER:
+/// to write a subr that reports a process's status, you must name a GNU
+/// `update_status` line or one of the enumerated holes.  It does not cover
+/// the manager's own internals, which read the `status` field directly and
+/// must -- 24 such reads, of which the seven that reach a Lisp answer all go
+/// through a named funnel (`gnu_process_status_message_for_status` for the
+/// sentinel text, `process_status_ends_target_wait` for the wait, the
+/// `live_process_ids` predicates for the service order, and
+/// `internal-default-process-sentinel`, `delete-process` and
+/// `continue-process`, none of which GNU passes through `update_status`
+/// either: GNU's own `Finternal_default_process_sentinel` reads `p->status`
+/// bare at :7958, and `Fcontinue_process` never touches it).
+///
+/// Within that scope the point stands: "the child has exited and Lisp still
+/// reads `run`" is not rejected by a check, it is a sentence with no
+/// grammar -- to write it you would need a status value, and a subr's status
+/// values all come from here.
 pub(crate) struct ObservedProcess<'a> {
     proc: &'a Process,
 }
