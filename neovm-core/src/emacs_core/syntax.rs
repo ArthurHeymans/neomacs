@@ -3159,6 +3159,15 @@ impl<'a> SyntaxPropRange<'a> {
     /// value over the run is exactly as sound as caching the raw one was -- and
     /// keeps the category indirection off the per-character path.
     #[inline]
+    /// True when the cached run POSITIVELY covers `pos` with no
+    /// `syntax-table` property — the precondition for the parse loop's
+    /// flat-ASCII batch path. Outside the cached run this answers false
+    /// and the caller takes the full per-char path (which refills).
+    #[inline]
+    fn covered_prop_free(&self, pos: usize) -> bool {
+        matches!(self.run.get(pos), Some(None))
+    }
+
     fn syntax_table_prop_at_char(&self, buf: &Buffer, pos: usize) -> Option<Value> {
         // In-run fast path: two integer compares, as in GNU's
         // UPDATE_SYNTAX_TABLE_FORWARD -- and free of any test of `props`, which
@@ -5565,6 +5574,17 @@ fn parse_state_from_range_with_options(
     // `effective_syntax_entry_for_abs_char`.
     let prop_cache = SyntaxPropRange::new(props);
 
+    // Long parses classify ASCII chars through a flat local table while the
+    // prop cache positively covers the position with no `syntax-table`
+    // property: one array index replaces the layered per-char prop-cell
+    // check + Option<Cell> memo decode. The eager 128-entry fill loses on
+    // short scans (see the ascii-memo variant table above), so it is gated
+    // on span length; entries are `syntax_entry_from_table` — the identical
+    // computation the memo caches — so this is behavior-preserving by
+    // construction.
+    let flat_ascii: Option<[SyntaxEntry; 128]> = (to_idx >= 256)
+        .then(|| std::array::from_fn(|cp| syntax_entry_from_table(table, cp as u8 as char)));
+
     let mut state = PartialParseState::from_oldstate(oldstate);
     let mut idx = 0;
     let mut atom_start: Option<i64> = None;
@@ -5579,7 +5599,13 @@ fn parse_state_from_range_with_options(
         let abs_char = from_char + idx;
         let pos1 = (abs_char + 1) as i64;
         let ch = chars.char_at(idx);
-        let (class, flags) = syntax_class_and_flags(buf, table, ch, abs_char, &prop_cache);
+        let entry = match &flat_ascii {
+            Some(flat) if (ch as u32) < 128 && prop_cache.covered_prop_free(abs_char) => {
+                flat[ch as usize]
+            }
+            _ => effective_syntax_entry_for_abs_char(buf, table, ch, abs_char, &prop_cache),
+        };
+        let (class, flags) = (entry.class, entry.flags);
 
         // GNU INC_FROM records `prev_from_syntax` for every position it steps
         // over; element 10 of the result reports it when the final position

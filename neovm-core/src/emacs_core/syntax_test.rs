@@ -3132,15 +3132,38 @@ fn ascii_syntax_memo_decodes_each_char_at_most_once_per_scan() {
     .unwrap();
     let decodes = syntax_table_decodes_for_test();
 
-    // The memo decodes at most one entry per distinct character; anything
-    // approaching the scan length means it is not engaging at all.
+    // Long scans (>= 256 chars) may eagerly build the flat 128-entry ASCII
+    // table — a bounded, span-amortized cost that replaced the per-char memo
+    // decode on the batch path (measured -88M Ir on a fontify pass). The
+    // invariant is that decode cost is bounded by the ALPHABET (128 + the
+    // distinct non-batched stragglers), never by the scan length.
     assert!(
-        decodes <= distinct,
-        "decoded {decodes} entries over a {chars}-char scan of only {distinct} \
-         distinct chars -- cost is tracking scan length, not alphabet size"
+        decodes <= 128 + distinct,
+        "decoded {decodes} entries over a {chars}-char scan -- cost must be \
+         bounded by the ASCII alphabet, not the scan length"
     );
     assert!(
         decodes * 4 < chars,
-        "decoded {decodes} entries over a {chars}-char scan -- the memo is not holding"
+        "decoded {decodes} entries over a {chars}-char scan -- neither the \
+         flat table nor the memo is holding"
+    );
+
+    // SHORT scans must keep the lazy on-miss memo: font-lock drives
+    // parse-partial-sexp over many short ranges, and an eager 128-entry
+    // fill measured strictly worse there (see the memo's variant table).
+    reset_syntax_table_decodes_for_test();
+    let _ =
+        builtin_parse_partial_sexp(&mut eval, vec![Value::fixnum(1), Value::fixnum(40)]).unwrap();
+    let short_decodes = syntax_table_decodes_for_test();
+    let short_distinct = {
+        let mut seen = text.chars().take(39).collect::<Vec<_>>();
+        seen.sort_unstable();
+        seen.dedup();
+        seen.len()
+    };
+    assert!(
+        short_decodes <= short_distinct,
+        "short scan decoded {short_decodes} entries for {short_distinct} \
+         distinct chars -- the lazy memo must survive on short spans"
     );
 }
