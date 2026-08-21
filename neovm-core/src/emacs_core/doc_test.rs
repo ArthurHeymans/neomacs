@@ -287,7 +287,8 @@ fn snarf_documentation_doc_subpath_file_error() {
 fn snarf_documentation_missing_path_errors() {
     crate::test_utils::init_test_tracing();
     let mut evaluator = super::super::eval::Context::new();
-    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::string("NO_SUCH_DOC_FILE")]);
+    let result =
+        builtin_snarf_documentation(&mut evaluator, vec![Value::string("NO_SUCH_DOC_FILE")]);
     match result {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "file-missing"),
         other => panic!("expected file-missing signal, got {other:?}"),
@@ -298,7 +299,8 @@ fn snarf_documentation_missing_path_errors() {
 fn snarf_documentation_missing_dir_path_errors() {
     crate::test_utils::init_test_tracing();
     let mut evaluator = super::super::eval::Context::new();
-    let result = builtin_snarf_documentation(&mut evaluator, vec![Value::string("NO_SUCH_DOC_DIR/")]);
+    let result =
+        builtin_snarf_documentation(&mut evaluator, vec![Value::string("NO_SUCH_DOC_DIR/")]);
     match result {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "file-missing"),
         other => panic!("expected file-missing signal, got {other:?}"),

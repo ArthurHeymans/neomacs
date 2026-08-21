@@ -626,7 +626,8 @@ fn documentation_property_plan(
             // (tem, 0);`, for whatever PROP names.  Nil for a fixnum that does
             // not point at a record, which is `src/doc.c:254-260`.
             if value.is_fixnum()
-                && let Some(text) = super::var_docs::doc_image().text_at(value.as_int().unwrap_or(0))
+                && let Some(text) =
+                    super::var_docs::doc_image().text_at(value.as_int().unwrap_or(0))
             {
                 // The grave/curly conversion is applied here because a caller
                 // may be in a context where `substitute-command-keys'
