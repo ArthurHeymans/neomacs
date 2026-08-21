@@ -23482,6 +23482,21 @@ GNU 31.0.90         12         0
 Neomacs, before      5         7
 ```
 
+Re-measured on the EXACT shape the Rust pin uses -- each child touches a marker
+file immediately before exiting and the spin waits for both markers rather than
+for the clock, so a loaded machine delays the spin instead of splitting the
+pass -- three runs of six on each editor (`tmp/pw175/notify-order6.el`, load
+average 145 falling to 75):
+
+```
+                          b-then-a   a-then-b
+GNU 31.0.90                  18          0
+Neomacs at the merge base     7         11
+```
+
+Eighteen and zero against seven and eleven is the divergence stated as
+precisely as this pair of editors allows.
+
 `live_process_ids` -- the list that drives the service pass which both drains
 output and publishes status, i.e. this port's `FOR_EACH_PROCESS` -- returned
 `HashMap` iteration order.  169 recorded the defect as "this port runs
@@ -23599,8 +23614,15 @@ line-oriented scripts cannot see:
 **51, then, and the compiler decided the rest.**  37 were converted
 mechanically (`tmp/pw175/tier1_apply.py`) and `cargo check -p neovm-core
 --all-targets` was asked which of them are an edit and which are a
-restructure.  Ten errors at five sites; **27 land**.  The ten are not one
-class, which is the result worth keeping:
+restructure.  **Ten errors at seven sites, and 27 land.**  Five of the seven
+are reverted, two are repaired with a `*`, and five more that COMPILED were
+reverted by judgement rather than by the compiler -- `minibuffer.rs`'s three
+`*-with-candidates` subrs plus `builtin_flex_cost_gotoh`'s two arguments, all
+of which go through the cloning local helper, so converting them would remove a
+string copy from the completion path.  That is a semantic change on a hot path,
+not a clarity change, and it is not this entry's to make.  37 - 5 - 5 = 27.
+
+The ten errors are not one class, which is the result worth keeping:
 
 | site | what the compiler said | verdict |
 |---|---|---|
@@ -23813,6 +23835,34 @@ cargo check --workspace --all-targets      exit 0, 635 crates,
                                            "Finished in 4m 48s"   load ~90
 cargo check -p neovm-core --all-targets    exit 0, 0 errors       load ~95
 ```
+
+The pins, each run in isolation with the `test(/a|b/)` form -- never
+`test(a) or test(b)`, which ledger 169 measured selecting 1 of 2 pins -- and
+asserted on `N passed` with N > 0:
+
+```
+-p neovm-core -E 'test(/two_processes_notified_in_one_pass_run_their_sentinels_
+  newest_first_like_gnu|the_notification_walk_permutes_only_the_pending_entries|
+  signal_process_takes_a_negative_integer_as_a_process_group_like_gnu|
+  signal_process_reads_an_integer_as_an_os_pid_like_gnu/)'
+                                           4 tests run: 4 passed  load 26-58
+
+-p neomacs -E 'test(/the_su_flag_is_a_styled_underline_where_smulx_is_absent_
+  like_gnu|capability_names_match_the_ones_gnu_reads_in_init_tty|
+  screen_terminfo_reports_no_italics_but_keeps_bold_and_underline/)'
+                                           3 tests run: 3 passed  load 22-36
+
+-p neovm-core -E 'test(/^emacs_core::process::/)'   -- the whole module that
+  owns every line §1-§4 changed, since `live_process_ids`'s order governs the
+  service pass for ALL process work and not only the sentinel order:
+                             305 tests run: 305 passed  load 25-52
+```
+
+That last one is the number worth having, because the `live_process_ids` sort
+is not a local change: it reorders the pass that drains output and dispatches
+filters as well as the one that publishes status, and 305 of 305 in the module
+that owns it is the cheapest evidence available that the reorder is GNU's and
+not merely different.
 
 **NOT RUN, by the coordinator's instruction, and named rather than implied:**
 
