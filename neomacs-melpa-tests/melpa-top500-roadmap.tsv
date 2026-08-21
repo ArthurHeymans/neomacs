@@ -467,7 +467,7 @@ rank	package	downloads	status
 466	string-edit-at-point	186754	covered
 467	general	186705	covered
 468	ample-theme	186324	covered
-469	python-environment	186244	todo
+469	python-environment	186244	covered
 470	biblio-core	186070	todo
 471	ido-completing-read+	185921	todo
 472	prescient	185867	covered
