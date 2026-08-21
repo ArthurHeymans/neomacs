@@ -291,13 +291,22 @@ mod tests {
     use super::*;
 
     /// Measured against GNU Emacs 31.0.90's `src/*.c`, 2026-08-21:
-    /// 564 `DEFVAR_LISP`/`DEFVAR_LISP_NOPRO` names and 14 `DEFVAR_KBOARD`
+    /// 562 `DEFVAR_LISP`/`DEFVAR_LISP_NOPRO` names and 14 `DEFVAR_KBOARD`
     /// ones.  The generator keeps the first declaration of a name it sees, so
     /// a variable several window-system files declare counts once.
+    ///
+    /// It was 564 + 14 until ledger 183: the extractor scanned raw C text and
+    /// therefore saw seven `DEFVAR` heads parked inside `#if 0`, of which five
+    /// (`x-pointer-shape` and four cursor names in `w32fns.c`) are also
+    /// declared in `xfns.c` and belong here anyway.  Two are not declared
+    /// anywhere else and had no business being rows -- `echo-area-clear-hook`
+    /// (`src/keyboard.c:14059`) and `w32-generate-fake-inodes`
+    /// (`src/w32proc.c:4831`) -- and the first of them cost two Lisp-visible
+    /// facts, because this port DOES have the variable.
     #[test]
     fn table_matches_gnu_counts() {
         let table = gnu_table::GNU_OBJECT_VARIABLES;
-        assert_eq!(table.len(), 578);
+        assert_eq!(table.len(), 576);
         assert_eq!(
             table
                 .iter()

@@ -498,6 +498,16 @@ fn num_nonmacro_input_events_is_the_slot_the_stamp_reads() {
 /// (signal-with-guard-shut nil)
 /// ```
 ///
+/// The `code` is `lambda` there and `t` here, and neither is a divergence:
+/// `debug-on-next-call` is a one-shot, so in a loaded FILE the arm is spent by
+/// whatever `readevalloop` funcalls between two top-level forms
+/// (`Ffuncall`, `src/eval.c:3190`, code `Qlambda`), while a single evaluated
+/// form reaches the `car` through `eval_sub` (`src/eval.c:2602`, code `Qt`).
+/// Re-measured as ONE form (`tmp/l183-p16.el`), which is what `eval_str` does,
+/// GNU answers `(((error) 0) ((t exit t exit) 0) nil)` and the merge-base
+/// binary answered `(((error) 0) ((t exit t exit) 0) (error))` -- the same
+/// single divergent row.
+///
 /// The guard is a conjunct of `maybe_call_debugger` (`src/eval.c:2212`) and of
 /// nothing else: `do_debug_on_call` (`src/eval.c:335-341`) and the six
 /// `debug_on_exit` sites call `call_debugger` unconditionally.  So a shut
@@ -532,7 +542,7 @@ fn the_reentry_guard_gates_the_signal_debugger_only() {
                     (car '(3 4))
                     (list (reverse l183-log) internal-when-entered-debugger))"
         ),
-        "((lambda exit lambda exit) 0)"
+        "((t exit t exit) 0)"
     );
     assert_eq!(
         probe(
