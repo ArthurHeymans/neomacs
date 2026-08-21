@@ -480,7 +480,7 @@ rank	package	downloads	status
 479	bundler	182228	removed
 480	tao-theme	181467	covered
 481	aio	180349	covered
-482	request-deferred	179757	todo
+482	request-deferred	179757	covered
 483	gruber-darker-theme	178888	todo
 484	cape	177896	covered
 485	elm-mode	177436	todo
