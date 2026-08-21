@@ -3,9 +3,10 @@ use crate::buffer_source::consumption::{BufferSourceConsumedItem, BufferSourceCo
 use crate::buffer_source::text_source::{BufferTextCursorItem, BufferTextSourceCursor};
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayImageItem, DisplayItem,
-    DisplayItemKind, DisplayLength, DisplayMediaReplacement, DisplayRowBreakReason,
-    DisplaySourceId, DisplaySourceMappedText, DisplaySourcePosition, DisplayStretch,
-    DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef, SourceSpan,
+    DisplayItemKind, DisplayLength, DisplayMediaReplacement, DisplayPointerOccurrence,
+    DisplayRowBreakReason, DisplaySourceId, DisplaySourceMappedText, DisplaySourcePosition,
+    DisplayStretch, DisplayStretchWidth, DisplayTextRun, GlyphlessMethod, RenderFaceRef,
+    SourceSpan,
 };
 use crate::display_property::DisplayReplacementProperty;
 use crate::display_source::DisplaySourceTextPosition;
@@ -2214,7 +2215,15 @@ fn buffer_text_source_cursor_reports_nested_replacement_source_position() {
         item.kind,
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::from_string_run(
             "Y",
-            DisplaySourcePosition::lisp_string(1, 0, 0),
+            DisplaySourcePosition::lisp_string_in_occurrence(
+                1,
+                0,
+                0,
+                DisplayPointerOccurrence::BufferDisplayReplacement {
+                    buffer_id,
+                    anchor_charpos: CharPos0::ZERO,
+                },
+            ),
         ))
     );
     assert_eq!(

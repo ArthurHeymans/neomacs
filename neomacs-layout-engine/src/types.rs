@@ -5,6 +5,7 @@
 //! that renderers consume without owning display semantics.
 
 use neomacs_display_protocol::cursor::CursorBarWidth;
+use neomacs_display_protocol::glyph_matrix::OverlayStringKind;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::emacs_core::image_catalog::{
     ImageCatalog, ImageLookup, ImageResolveRequest, ImageScaleEnvironment,
@@ -32,16 +33,85 @@ impl LayoutCharPos0 {
 /// the real point to derive row decoration such as
 /// `line-number-current-line`.  Keeping the roles distinct prevents replay
 /// code from suppressing viewport adjustment by counterfeiting semantic state.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PartialBodyWalkStart(LayoutCharPos0);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OverlayStringWalkStart {
+    anchor: LayoutCharPos0,
+    overlay_id: u64,
+    kind: OverlayStringKind,
+    char_index: usize,
+}
+
+impl OverlayStringWalkStart {
+    pub const fn new(
+        anchor: i64,
+        overlay_id: u64,
+        kind: OverlayStringKind,
+        char_index: usize,
+    ) -> Self {
+        Self {
+            anchor: LayoutCharPos0::new(anchor),
+            overlay_id,
+            kind,
+            char_index,
+        }
+    }
+
+    pub const fn anchor(self) -> i64 {
+        self.anchor.get()
+    }
+
+    pub const fn overlay_id(self) -> u64 {
+        self.overlay_id
+    }
+
+    pub const fn kind(self) -> OverlayStringKind {
+        self.kind
+    }
+
+    pub const fn char_index(self) -> usize {
+        self.char_index
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PartialBodyWalkStart {
+    Buffer(LayoutCharPos0),
+    OverlayString(OverlayStringWalkStart),
+}
 
 impl PartialBodyWalkStart {
     pub const fn new(value: i64) -> Self {
-        Self(LayoutCharPos0::new(value))
+        Self::Buffer(LayoutCharPos0::new(value))
     }
 
+    pub const fn overlay_string(
+        anchor: i64,
+        overlay_id: u64,
+        kind: OverlayStringKind,
+        char_index: usize,
+    ) -> Self {
+        Self::OverlayString(OverlayStringWalkStart::new(
+            anchor, overlay_id, kind, char_index,
+        ))
+    }
+
+    pub const fn buffer_anchor(self) -> i64 {
+        match self {
+            Self::Buffer(position) => position.get(),
+            Self::OverlayString(start) => start.anchor(),
+        }
+    }
+
+    #[cfg(test)]
     pub const fn get(self) -> i64 {
-        self.0.get()
+        self.buffer_anchor()
+    }
+
+    pub const fn overlay_string_start(self) -> Option<OverlayStringWalkStart> {
+        match self {
+            Self::Buffer(_) => None,
+            Self::OverlayString(start) => Some(start),
+        }
     }
 }
 

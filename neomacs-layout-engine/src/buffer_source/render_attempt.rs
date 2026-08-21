@@ -7,6 +7,7 @@ use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_frame_output::FrameOutputOwner;
 use crate::display_row::face_state::DisplayRowMeasurementMode;
 use crate::display_row::source_render::{TextRowOutputRenderState, TextRowSourceRenderState};
+use crate::display_status_line::WindowChromePresentedPointerPlan;
 use crate::display_text_window_row_lifecycle::{
     TextWindowBeginRequest, TextWindowCursorEffectsRequest, TextWindowVisibilityRetryOutcome,
 };
@@ -34,6 +35,7 @@ pub(crate) struct BufferSourceRenderAttemptContext<'a, 'face> {
     face_resolver: &'face FaceResolver,
     face_attempt: FrameFaceAttempt,
     window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+    window_chrome_pointer_plans: &'a mut Vec<WindowChromePresentedPointerPlan>,
 }
 
 /// Which live window state may be published by a completed row walk.
@@ -180,6 +182,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
         face_resolver: &'face FaceResolver,
         face_attempt: FrameFaceAttempt,
         window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+        window_chrome_pointer_plans: &'a mut Vec<WindowChromePresentedPointerPlan>,
     ) -> Self {
         Self {
             output: BufferSourceOutputState::from_parts(output, evaluator),
@@ -187,6 +190,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
             face_resolver,
             face_attempt,
             window_snapshots,
+            window_chrome_pointer_plans,
         }
     }
 
@@ -198,6 +202,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
         face_resolver: &'face FaceResolver,
         face_attempt: FrameFaceAttempt,
         window_snapshots: &'a mut Vec<WindowDisplaySnapshot>,
+        window_chrome_pointer_plans: &'a mut Vec<WindowChromePresentedPointerPlan>,
     ) -> Self {
         Self::new(
             frame_output.text_window_output_target(),
@@ -206,6 +211,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
             face_resolver,
             face_attempt,
             window_snapshots,
+            window_chrome_pointer_plans,
         )
     }
 
@@ -228,6 +234,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
         &'face FaceResolver,
         FrameFaceAttempt,
         &'a mut Vec<WindowDisplaySnapshot>,
+        &'a mut Vec<WindowChromePresentedPointerPlan>,
     ) {
         (
             self.output,
@@ -235,6 +242,7 @@ impl<'a, 'face> BufferSourceRenderAttemptContext<'a, 'face> {
             self.face_resolver,
             self.face_attempt,
             self.window_snapshots,
+            self.window_chrome_pointer_plans,
         )
     }
 }

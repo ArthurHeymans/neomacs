@@ -21,12 +21,13 @@ use crate::window_layout::{WindowLayoutBox, WindowPartitionSignature};
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, PhysCursor};
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
 use neomacs_display_protocol::glyph_matrix::{
-    GlyphArea, GlyphMatrix, GlyphPointerOccurrenceIdentity, GlyphPointerSourceKind, GlyphRow,
-    MatrixRow,
+    GlyphArea, GlyphMatrix, GlyphPointerOccurrenceIdentity, GlyphPointerSourceKind,
+    GlyphProvenance, GlyphRow, GlyphSourceOccurrenceIdentity, MatrixRow,
 };
 use neomacs_display_protocol::types::FaceId;
 #[cfg(test)]
 use neomacs_display_protocol::types::Rect;
+use neovm_core::buffer::OverlayStringLineDamage;
 use neovm_core::buffer::position::LispCharPos1;
 use neovm_core::window::{DisplayPointSnapshot, DisplayRowSnapshot};
 
@@ -47,6 +48,8 @@ pub enum LayoutClass {
     Scroll,
     /// Localized edit; only intersecting rows relaid (Phase 3).
     Edit,
+    /// Localized visual/overlay mutation; only affected rows relaid.
+    Visual,
 }
 
 /// Gate bit on a retained matrix.
@@ -70,7 +73,8 @@ pub enum MatrixValidity {
 /// [`WindowParams`]. Phase 0b/1 adds the neovm-core source-of-truth signals
 /// (`chars`/`props`/`overlay` modified ticks + `face_change_count`). Any move
 /// of these — or of geometry/window_start — escalates a window out of the
-/// cursor-only fast path to a full rebuild ([`Self::cursor_only_eligible`]).
+/// cursor-only fast path for classification by the typed edit/visual/full
+/// predicates ([`Self::cursor_only_eligible`]).
 ///
 /// `PartialEq` is the reuse predicate: two keys are equal iff EVERY layout input
 /// is identical. f32 fields compare bitwise-exactly — for an unchanged frame the
@@ -144,12 +148,10 @@ pub struct RetainedWindowKey {
     /// `set-face-attribute` / theme load / face-remap that mutate pixels with
     /// no buffer tick.
     pub face_change_count: u64,
-    /// Global display-variable change counter (adversarial-review fix). Bumped
-    /// by `mark_redisplay_dirty_if_display_var` for the whole DISPLAY_AFFECTING
-    /// set (truncate-lines, bidi-*, ctl-arrow, buffer-display-table /
-    /// -invisibility-spec, fill-column-indicator, overlay-arrow,
-    /// display-line-numbers, …) — none of which move a buffer/face tick.
-    pub display_var_change_count: u64,
+    /// Typed global + per-buffer display-variable epoch. Display-affecting
+    /// inputs do not move a text/face/overlay tick, but a child-frame buffer's
+    /// local cursor/layout settings must not invalidate unrelated buffers.
+    pub display_variable_epoch: neovm_core::emacs_core::DisplayVariableEpoch,
 }
 
 impl RetainedWindowKey {
@@ -219,7 +221,8 @@ impl RetainedWindowKey {
             props_modified_tick,
             overlay_modified_tick,
             face_change_count: evaluator.face_change_count,
-            display_var_change_count: evaluator.display_var_change_count,
+            display_variable_epoch: evaluator
+                .display_variable_epoch_for_buffer(neovm_core::buffer::BufferId(p.buffer_id)),
         }
     }
 
@@ -261,7 +264,8 @@ impl RetainedWindowKey {
     /// char edits (GNU BUF_COMPUTE_UNCHANGED parity, textprop.c), so the
     /// dirty span bounds BOTH kinds of damage; GNU's try_window_id likewise
     /// proceeds through property changes and hard-bails only on overlay
-    /// modiff (xdisp.c GIVE_UP 200). An overlay/face move still escalates to
+    /// modiff (xdisp.c GIVE_UP 200). Overlay damage is deliberately rejected
+    /// here and classified by [`Self::overlay_eligible`]; face movement remains
     /// a full rebuild. `point` may also move with the edit.
     pub fn edit_eligible(prev: &Self, curr: &Self) -> bool {
         if prev.chars_modified_tick == curr.chars_modified_tick
@@ -277,6 +281,20 @@ impl RetainedWindowKey {
         // consequence, not an escalation. `buffer_begv` is NOT aligned, so a
         // narrowing change (or an edit before BEGV) still escalates to Full.
         aligned.buffer_size = curr.buffer_size;
+        aligned == *curr
+    }
+
+    /// Whether bounded overlay damage may use localized replay: only the
+    /// overlay generation (and point, which selection UIs commonly co-move)
+    /// changed.  Text/property/face/geometry changes remain distinct causes
+    /// and therefore cannot be smuggled through this predicate.
+    pub fn overlay_eligible(prev: &Self, curr: &Self) -> bool {
+        if prev.overlay_modified_tick == curr.overlay_modified_tick {
+            return false;
+        }
+        let mut aligned = prev.clone();
+        aligned.overlay_modified_tick = curr.overlay_modified_tick;
+        aligned.point = curr.point;
         aligned == *curr
     }
 }
@@ -310,6 +328,11 @@ pub struct RetainedWindowMatrix {
     /// construct the same-row precondition does not pin, so chrome that shows
     /// one is never reused.
     pub(crate) chrome_uses_column: bool,
+    /// The retained chrome contains evaluator-owned string-local mouse
+    /// actions. Those action ids belong to one immutable presentation, so the
+    /// row may be retained for paint but must be re-shaped when composing the
+    /// next presentation in order to register fresh Lisp targets.
+    pub(crate) chrome_has_interactions: bool,
     /// The buffer's modified flag when this chrome was generated — GNU's
     /// `w->last_had_star`. GNU compares it in `redisplay_internal`
     /// (xdisp.c:17487-17488, `if ((SAVE_MODIFF < MODIFF) != w->last_had_star)
@@ -361,6 +384,26 @@ pub struct CursorOnlyReplay {
     pub retained_cursor: Option<PhysCursor>,
     /// Sealed frame-face generation that owns every ID in `body_rows`.
     pub(crate) face_generation: FrameFaceGeneration,
+}
+
+/// Whether cursor replay preserves already-presented geometry or must derive a
+/// new cursor placement. Structural row safety is relevant only to relocation:
+/// retaining an identical matrix cannot introduce a placement GNU did not
+/// already accept in the previous presentation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CursorReplayIntent {
+    Retain,
+    Relocate(PointMotionBodyDependency),
+}
+
+impl CursorReplayIntent {
+    fn between(retained: &RetainedWindowKey, current: &RetainedWindowKey) -> Self {
+        if retained.point == current.point {
+            Self::Retain
+        } else {
+            Self::Relocate(current.display_line_numbers.point_motion_body_dependency())
+        }
+    }
 }
 
 /// Reuse plan for the pure-scroll fast path (Phase 2): the overlapping retained
@@ -480,6 +523,95 @@ pub struct EditDamage {
     span_newlines: usize,
 }
 
+/// Bounded visual damage from an overlay mutation.  It shares the replay
+/// geometry of a zero-delta edit, but remains a separate domain type so text
+/// and overlay invalidation cannot be confused at call sites.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OverlayBufferVisualDamage {
+    span_start: i64,
+    span_end: i64,
+    span_newlines: usize,
+}
+
+impl OverlayBufferVisualDamage {
+    pub fn new(span_start: i64, span_end: i64, span_newlines: usize) -> Self {
+        Self {
+            span_start,
+            span_end,
+            span_newlines,
+        }
+    }
+
+    pub(crate) fn replay_shape(self) -> EditDamage {
+        EditDamage::new(self.span_start, self.span_end, 0, self.span_newlines)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OverlayVisualDamage {
+    Buffer(OverlayBufferVisualDamage),
+    Strings(Vec<OverlayStringLineDamage>),
+}
+
+impl OverlayVisualDamage {
+    pub fn buffer(span_start: i64, span_end: i64, span_newlines: usize) -> Self {
+        Self::Buffer(OverlayBufferVisualDamage::new(
+            span_start,
+            span_end,
+            span_newlines,
+        ))
+    }
+
+    pub fn strings(changes: &[OverlayStringLineDamage]) -> Self {
+        Self::Strings(changes.to_vec())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LocalizedReplayDamage {
+    Text(EditDamage),
+    Overlay(OverlayBufferVisualDamage),
+}
+
+impl LocalizedReplayDamage {
+    fn replay_shape(self) -> EditDamage {
+        match self {
+            Self::Text(damage) => damage,
+            Self::Overlay(damage) => damage.replay_shape(),
+        }
+    }
+
+    fn eligible(self, prev: &RetainedWindowKey, curr: &RetainedWindowKey) -> bool {
+        match self {
+            Self::Text(_) => RetainedWindowKey::edit_eligible(prev, curr),
+            Self::Overlay(_) => RetainedWindowKey::overlay_eligible(prev, curr),
+        }
+    }
+
+    /// Whether the localized replay may be useful with no retained prefix.
+    ///
+    /// Overlay damage has zero character-position delta: re-walking the top
+    /// affected rows and retaining the untouched suffix is still a genuine,
+    /// safe win.  A text edit at the first visible row keeps the established
+    /// conservative fallback because every later row's buffer positions may
+    /// move.  Spell this as an exhaustive domain decision so a future damage
+    /// kind must choose its policy at compile time.
+    fn permits_suffix_only_replay(self) -> bool {
+        match self {
+            Self::Text(_) => false,
+            Self::Overlay(_) => true,
+        }
+    }
+
+    /// Whether unchanged character geometry makes the span proof automatic.
+    fn preserves_character_geometry(self) -> bool {
+        match self {
+            Self::Text(_) => false,
+            Self::Overlay(_) => true,
+        }
+    }
+}
+
 impl EditDamage {
     pub fn new(span_start: i64, span_end_new: i64, delta: i64, span_newlines: usize) -> Self {
         Self {
@@ -518,8 +650,120 @@ impl EditDamage {
 
 /// What a bounded edit-replay walk must produce for the reused-below rows to
 /// remain valid. All values are in post-edit (NEW) coordinates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExpectedBoundWalkSource {
+    Buffer,
+    OverlayStringSpan {
+        start_occurrence: GlyphSourceOccurrenceIdentity,
+        start_char_index: usize,
+        end: ExpectedOverlayStringSpanEnd,
+    },
+}
+
+/// How a bounded overlay-string walk is allowed to finish.
+///
+/// A fully visible line must reach the exact logical source end.  A
+/// right-truncated line deliberately cannot do that; it instead proves that
+/// the same source occurrence still reaches a renderer-owned clipping edge.
+/// Keeping these states distinct prevents a partial source walk from being
+/// mistaken for intentional truncation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ExpectedOverlayStringSpanEnd {
+    Logical {
+        occurrence: GlyphSourceOccurrenceIdentity,
+        char_index_exclusive: usize,
+    },
+    Truncated {
+        occurrence: GlyphSourceOccurrenceIdentity,
+        char_index_start: usize,
+        char_index_exclusive: usize,
+    },
+}
+
+impl ExpectedBoundWalkSource {
+    fn string_coordinate(
+        row: &GlyphRow,
+        glyph: &neomacs_display_protocol::glyph_matrix::Glyph,
+    ) -> Option<(GlyphSourceOccurrenceIdentity, usize)> {
+        let GlyphProvenance::Str { source, index } = glyph.provenance else {
+            return None;
+        };
+        Some((row.string_source(source)?.occurrence(), index))
+    }
+
+    pub fn matches_start(self, row: &GlyphRow) -> bool {
+        let Self::OverlayStringSpan {
+            start_occurrence,
+            start_char_index,
+            ..
+        } = self
+        else {
+            return true;
+        };
+        let Some(glyph) = row.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .find(|glyph| !glyph.padding)
+        else {
+            return false;
+        };
+        let Some((occurrence, char_index)) = Self::string_coordinate(row, glyph) else {
+            return false;
+        };
+        occurrence == start_occurrence && char_index == start_char_index
+    }
+
+    pub fn matches_end(self, row: &GlyphRow) -> bool {
+        let Self::OverlayStringSpan { end, .. } = self else {
+            return true;
+        };
+        if let ExpectedOverlayStringSpanEnd::Truncated {
+            occurrence,
+            char_index_start,
+            char_index_exclusive,
+        } = end
+        {
+            return row.truncated_right
+                && row.glyphs[GlyphArea::Text.index()].iter().any(|glyph| {
+                    Self::string_coordinate(row, glyph).is_some_and(
+                        |(glyph_occurrence, char_index)| {
+                            glyph_occurrence == occurrence
+                                && char_index_start <= char_index
+                                && char_index < char_index_exclusive
+                        },
+                    )
+                });
+        }
+        let ExpectedOverlayStringSpanEnd::Logical {
+            occurrence: end_occurrence,
+            char_index_exclusive: end_char_index_exclusive,
+        } = end
+        else {
+            unreachable!("truncated overlay-string end handled above")
+        };
+        let Some(glyph) = row.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .rev()
+            .find(|glyph| {
+                !glyph.padding && !matches!(glyph.provenance, GlyphProvenance::Redisplay(_))
+            })
+        else {
+            return false;
+        };
+        let Some((occurrence, char_index)) = Self::string_coordinate(row, glyph) else {
+            return false;
+        };
+        occurrence == end_occurrence
+            && (char_index.checked_add(1) == Some(end_char_index_exclusive)
+                || char_index.checked_add(2) == Some(end_char_index_exclusive))
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ExpectedBoundWalk {
+    /// The regenerated span must begin in the source coordinate space the
+    /// replay plan selected. This prevents a missing/reordered overlay string
+    /// from accidentally satisfying buffer-coordinate row-count checks.
+    pub source: ExpectedBoundWalkSource,
     /// The last walked row must end exactly here (old span-end charpos shifted
     /// by the edit delta) — position continuity with the first reused-below row.
     pub last_row_end_charpos: usize,
@@ -662,6 +906,7 @@ impl RetainedWindowMatrix {
     fn chrome_reuse_baseline(&self, ctx: ChromeReuseContext) -> bool {
         !ctx.chrome_dirty
             && !self.chrome_uses_column
+            && !self.chrome_has_interactions
             && self.chrome_modified_flag == ctx.buffer_modified
     }
 
@@ -758,9 +1003,8 @@ impl RetainedWindowMatrix {
         if !RetainedWindowKey::cursor_only_eligible(&self.key, curr) {
             return None;
         }
-        let point_moved = self.key.point != curr.point;
-        let point_dependency = curr.display_line_numbers.point_motion_body_dependency();
-        if point_moved && point_dependency == PointMotionBodyDependency::EntireWindow {
+        let intent = CursorReplayIntent::between(&self.key, curr);
+        if intent == CursorReplayIntent::Relocate(PointMotionBodyDependency::EntireWindow) {
             // GNU xdisp.c refuses cursor-only redisplay for relative and visual
             // line numbers: every gutter value is derived from point, so the
             // retained body as a whole is stale.
@@ -793,8 +1037,7 @@ impl RetainedWindowMatrix {
             return None;
         }
         let (new_cursor_row_index, cursor_row) = new_cursor?;
-        if point_moved
-            && point_dependency == PointMotionBodyDependency::CurrentDisplayRow
+        if intent == CursorReplayIntent::Relocate(PointMotionBodyDependency::CurrentDisplayRow)
             && retained_cursor_row_index != Some(new_cursor_row_index)
         {
             // Absolute line numbers bake the current-line face into the left
@@ -802,27 +1045,28 @@ impl RetainedWindowMatrix {
             // even though the underlying number stays absolute.
             return None;
         }
-        if cursor_row.continued
-            || cursor_row.truncated_left
-            || cursor_row.left_fringe_bitmap.is_some()
-        {
-            return None;
-        }
-        // Scroll-safety (GNU `try_cursor_movement` / `make_cursor_line_fully_visible`):
-        // a point move onto the top or bottom visible row can trigger a window
-        // scroll to keep point visible, which the cursor-only path does NOT
-        // perform (it never re-derives window_start). Bail on a boundary row
-        // unless the window is already pinned to that buffer edge:
-        //   * bottom row with more buffer below (`!ends_at_zv`) → may scroll down,
-        //   * top row while the window is scrolled off the buffer start → may scroll up.
-        let first_body_index = body_rows.first().map(|(idx, _)| *idx);
-        let last_body_index = body_rows.last().map(|(idx, _)| *idx);
-        let window_at_buffer_top = curr.window_start <= curr.buffer_begv + 1;
-        if Some(new_cursor_row_index) == last_body_index && !cursor_row.ends_at_zv {
-            return None;
-        }
-        if Some(new_cursor_row_index) == first_body_index && !window_at_buffer_top {
-            return None;
+        if matches!(intent, CursorReplayIntent::Relocate(_)) {
+            if cursor_row.continued
+                || cursor_row.truncated_left
+                || cursor_row.left_fringe_bitmap.is_some()
+            {
+                return None;
+            }
+            // Scroll-safety (GNU `try_cursor_movement` /
+            // `make_cursor_line_fully_visible`): a point move onto the top or
+            // bottom visible row can trigger a window scroll to keep point
+            // visible, which the cursor-only path does not perform. Bail on a
+            // boundary row unless the window is already pinned to that buffer
+            // edge.
+            let first_body_index = body_rows.first().map(|(idx, _)| *idx);
+            let last_body_index = body_rows.last().map(|(idx, _)| *idx);
+            let window_at_buffer_top = curr.window_start <= curr.buffer_begv + 1;
+            if Some(new_cursor_row_index) == last_body_index && !cursor_row.ends_at_zv {
+                return None;
+            }
+            if Some(new_cursor_row_index) == first_body_index && !window_at_buffer_top {
+                return None;
+            }
         }
         let body_row_snapshots = self
             .display_snapshot
@@ -842,9 +1086,10 @@ impl RetainedWindowMatrix {
             // needs the chrome dirty flags off the evaluator. `None` = walk.
             chrome: None,
             cursor_style: cursor_style.unwrap_or(CursorStyle::FilledBox),
-            retained_cursor: (self.key.point == curr.point)
-                .then(|| self.presented_cursor.clone())
-                .flatten(),
+            retained_cursor: match intent {
+                CursorReplayIntent::Retain => self.presented_cursor.clone(),
+                CursorReplayIntent::Relocate(_) => None,
+            },
             face_generation: self.face_generation,
         })
     }
@@ -984,13 +1229,279 @@ impl RetainedWindowMatrix {
         damage: EditDamage,
         allow_below_reuse: bool,
     ) -> Option<ScrollReplay> {
+        self.localized_replay(curr, LocalizedReplayDamage::Text(damage), allow_below_reuse)
+    }
+
+    /// Build the zero-delta counterpart of [`Self::edit_replay`] for bounded
+    /// overlay damage.  Keeping a distinct entry point makes the overlay tick
+    /// predicate exhaustive while sharing the post-walk continuity proof.
+    pub fn overlay_replay(
+        &self,
+        curr: &RetainedWindowKey,
+        damage: OverlayVisualDamage,
+        allow_below_reuse: bool,
+    ) -> Option<ScrollReplay> {
+        match damage {
+            OverlayVisualDamage::Buffer(damage) => self.localized_replay(
+                curr,
+                LocalizedReplayDamage::Overlay(damage),
+                allow_below_reuse,
+            ),
+            OverlayVisualDamage::Strings(changes) => {
+                self.overlay_string_replay(curr, &changes, allow_below_reuse)
+            }
+        }
+    }
+
+    fn overlay_string_replay(
+        &self,
+        curr: &RetainedWindowKey,
+        changes: &[OverlayStringLineDamage],
+        allow_below_reuse: bool,
+    ) -> Option<ScrollReplay> {
+        if self.validity != MatrixValidity::Valid
+            || !allow_below_reuse
+            || !RetainedWindowKey::overlay_eligible(&self.key, curr)
+            || curr.vscroll != 0
+            || changes.is_empty()
+            || changes.iter().any(|change| {
+                change.old_range().is_empty()
+                    || change.new_range().is_empty()
+                    || !change.line_count_is_preserved()
+                    || change.old_range().start() != change.new_range().start()
+            })
+        {
+            return None;
+        }
+
+        let mut body: Vec<(usize, &MatrixRow)> = Vec::new();
+        for (index, row) in self.matrix.rows.iter().enumerate() {
+            if !row.enabled || Self::is_chrome_role(row.role) {
+                continue;
+            }
+            if !row.glyphs[GlyphArea::LeftMargin.index()].is_empty()
+                || row.continued
+                || row.truncated_left
+            {
+                return None;
+            }
+            body.push((index, row));
+        }
+        if body.is_empty() {
+            return None;
+        }
+
+        let occurrence_for =
+            |change: OverlayStringLineDamage| GlyphSourceOccurrenceIdentity::OverlayString {
+                overlay_id: change.overlay_id(),
+                kind: change.kind(),
+            };
+        let row_indices_for =
+            |row: &GlyphRow,
+             occurrence: GlyphSourceOccurrenceIdentity,
+             range: neovm_core::buffer::OverlayStringCharRange| {
+                row.glyphs
+                    .iter()
+                    .flatten()
+                    .filter_map(|glyph| match glyph.provenance {
+                        GlyphProvenance::Str { source, index }
+                            if row
+                                .string_source(source)
+                                .is_some_and(|source| source.occurrence() == occurrence)
+                                && range.start() <= index
+                                && index < range.end() =>
+                        {
+                            Some(index)
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+            };
+
+        let mut first_dirty = body.len();
+        let mut last_dirty = 0;
+        for &change in changes {
+            let occurrence = occurrence_for(change);
+            let mut change_first = None;
+            let mut change_last = None;
+            for (body_index, (_, row)) in body.iter().enumerate() {
+                if !row_indices_for(row, occurrence, change.old_range()).is_empty() {
+                    change_first.get_or_insert(body_index);
+                    change_last = Some(body_index);
+                }
+            }
+            let Some(change_first) = change_first else {
+                return None;
+            };
+            let Some(change_last) = change_last else {
+                return None;
+            };
+            if change_first < first_dirty {
+                first_dirty = change_first;
+            }
+            last_dirty = last_dirty.max(change_last);
+        }
+
+        // A source-local restart begins at a complete logical line.  Require
+        // that occurrence to own the first text glyph on the retained row;
+        // otherwise content preceding it on the same physical row would be
+        // omitted and the conservative full rebuild is the only valid plan.
+        let first_text_glyph = body[first_dirty].1.glyphs[GlyphArea::Text.index()]
+            .iter()
+            .find(|glyph| !glyph.padding);
+        let Some(first_text_glyph) = first_text_glyph else {
+            return None;
+        };
+        let GlyphProvenance::Str {
+            source: first_source,
+            index: first_index,
+        } = first_text_glyph.provenance
+        else {
+            return None;
+        };
+        let first_occurrence = body[first_dirty]
+            .1
+            .string_source(first_source)?
+            .occurrence();
+        let first_change = changes.iter().copied().find(|change| {
+            occurrence_for(*change) == first_occurrence && change.old_range().start() == first_index
+        })?;
+
+        // The bounded walk must also consume through the last changed logical
+        // line. A fully visible line proves this with its exact source end. A
+        // right-truncated line cannot expose that end, so it proves a distinct
+        // clipping boundary owned by the retained row.
+        let last_row = body[last_dirty].1;
+        let expected_end = if last_row.truncated_right {
+            let (occurrence, change) = last_row.glyphs[GlyphArea::Text.index()]
+                .iter()
+                .rev()
+                .filter(|glyph| !glyph.padding)
+                .find_map(|glyph| {
+                    let (occurrence, char_index) =
+                        ExpectedBoundWalkSource::string_coordinate(last_row, glyph)?;
+                    let change = changes.iter().copied().find(|change| {
+                        occurrence_for(*change) == occurrence
+                            && change.old_range().start() <= char_index
+                            && char_index < change.old_range().end()
+                    })?;
+                    Some((occurrence, change))
+                })?;
+            ExpectedOverlayStringSpanEnd::Truncated {
+                occurrence,
+                char_index_start: change.new_range().start(),
+                char_index_exclusive: change.new_range().end(),
+            }
+        } else {
+            let last_text_glyph =
+                last_row.glyphs[GlyphArea::Text.index()]
+                    .iter()
+                    .rev()
+                    .find(|glyph| {
+                        !glyph.padding && !matches!(glyph.provenance, GlyphProvenance::Redisplay(_))
+                    })?;
+            let GlyphProvenance::Str {
+                source: last_source,
+                index: last_index,
+            } = last_text_glyph.provenance
+            else {
+                return None;
+            };
+            let occurrence = last_row.string_source(last_source)?.occurrence();
+            let change = changes.iter().copied().find(|change| {
+                occurrence_for(*change) == occurrence
+                    && (last_index.checked_add(1) == Some(change.old_range().end())
+                        || last_index.checked_add(2) == Some(change.old_range().end()))
+            })?;
+            ExpectedOverlayStringSpanEnd::Logical {
+                occurrence,
+                char_index_exclusive: change.new_range().end(),
+            }
+        };
+        let cursor_style = body
+            .iter()
+            .find_map(|(_, row)| row.cursor_type)
+            .unwrap_or(CursorStyle::FilledBox);
+        let mut reused_rows = Vec::with_capacity(body.len() - (last_dirty - first_dirty + 1));
+        let mut reused_indices = rustc_hash::FxHashSet::default();
+        for &(index, row) in body
+            .iter()
+            .take(first_dirty)
+            .chain(body.iter().skip(last_dirty + 1))
+        {
+            let row = if row.cursor_col.is_some() || row.cursor_type.is_some() {
+                let mut stripped = GlyphRow::clone(row);
+                stripped.cursor_col = None;
+                stripped.cursor_type = None;
+                MatrixRow::new(stripped)
+            } else {
+                MatrixRow::clone(row)
+            };
+            reused_indices.insert(index as i64);
+            reused_rows.push((index, row));
+        }
+        let reused_row_snapshots = self
+            .display_snapshot
+            .rows
+            .iter()
+            .filter(|row| reused_indices.contains(&row.row))
+            .cloned()
+            .collect();
+        let reused_points = self
+            .display_snapshot
+            .points
+            .iter()
+            .filter(|point| reused_indices.contains(&point.row))
+            .cloned()
+            .collect();
+        let dirty_rows = || body[first_dirty..=last_dirty].iter().map(|(_, row)| *row);
+        Some(ScrollReplay {
+            dvpos: 0.0,
+            reused_rows,
+            reused_row_snapshots,
+            reused_points,
+            walk_start: PartialBodyWalkStart::overlay_string(
+                first_change.anchor().get() as i64,
+                first_change.overlay_id(),
+                first_change.kind(),
+                first_change.new_range().start(),
+            ),
+            exposed_row_base: body[first_dirty].0,
+            exposed_row_count: last_dirty - first_dirty + 1,
+            exposed_text_y: body[first_dirty].1.pixel_y,
+            new_window_start: curr.window_start,
+            new_point: curr.point,
+            cursor_style,
+            bound_walk: true,
+            expected_walk: Some(ExpectedBoundWalk {
+                source: ExpectedBoundWalkSource::OverlayStringSpan {
+                    start_occurrence: first_occurrence,
+                    start_char_index: first_change.new_range().start(),
+                    end: expected_end,
+                },
+                last_row_end_charpos: last_row.end_charpos,
+                total_height_px: dirty_rows().map(|row| row.height_px).sum(),
+                row_count: last_dirty - first_dirty + 1,
+            }),
+            chrome: None,
+            face_generation: self.face_generation,
+        })
+    }
+
+    fn localized_replay(
+        &self,
+        curr: &RetainedWindowKey,
+        localized_damage: LocalizedReplayDamage,
+        allow_below_reuse: bool,
+    ) -> Option<ScrollReplay> {
+        let damage = localized_damage.replay_shape();
         let dirty_start = damage.start();
         let dirty_end_old = damage.end_old();
         let span_newlines = damage.span_newlines();
         if self.validity != MatrixValidity::Valid {
             return None;
         }
-        if !RetainedWindowKey::edit_eligible(&self.key, curr) || curr.vscroll != 0 {
+        if !localized_damage.eligible(&self.key, curr) || curr.vscroll != 0 {
             return None;
         }
         let mut body: Vec<(usize, &MatrixRow)> = Vec::new();
@@ -1023,9 +1534,6 @@ impl RetainedWindowMatrix {
         let first_dirty_by_charpos = body
             .iter()
             .position(|(_, row)| row.end_charpos as i64 >= dirty_start)?;
-        if first_dirty_by_charpos == 0 {
-            return None;
-        }
         // A row's CHARPOS is unchanged above the edit, but its pointer
         // identities (mouse-face source ranges, display-replacement anchors)
         // carry the RANGE's positions, and a range reaching the edit point is
@@ -1053,9 +1561,11 @@ impl RetainedWindowMatrix {
             .take_while(|(_, row)| row_pointers_stable(row))
             .count();
         let first_dirty = first_dirty_by_charpos.min(stable_prefix);
-        if first_dirty == 0 {
-            return None;
-        }
+        // A dirty top row has no prefix to reuse, but can still win through the
+        // bounded below-reuse path.  This is Vertico's common first C-j: row 0
+        // loses the selection overlay, row 1 gains it, and every later row is
+        // retained.  If the continuity proof below fails, the unbounded replay
+        // fallback explicitly declines instead of pretending to reuse nothing.
         let pointer_shrunk_prefix = first_dirty < first_dirty_by_charpos;
         let cursor_style = body
             .iter()
@@ -1195,11 +1705,19 @@ impl RetainedWindowMatrix {
                 .filter(|row| (row.end_charpos as i64) < dirty_end_old)
                 .count();
             let line_structure_preserved = span_newlines == old_span_newlines;
+            // A zero-delta visual replay already walks every affected row and
+            // validates its row-count/height/end-position continuity after the
+            // walk. It does not need the text-edit path's monospace/fit proof:
+            // no character positions or untouched glyph widths move. This is
+            // what permits realistic Vertico rows containing Unicode icons or
+            // aligned display properties to retain their unaffected suffix.
+            let span_geometry_proven =
+                localized_damage.preserves_character_geometry() || (monospace && stays_one_row);
             if !pointer_shrunk_prefix
+                && (first_dirty > 0 || localized_damage.permits_suffix_only_replay())
                 && span_last + 1 < body.len()
                 && line_structure_preserved
-                && monospace
-                && stays_one_row
+                && span_geometry_proven
                 && below_pointers_shiftable
                 && (delta >= 0 || below_pointer_free())
             {
@@ -1306,6 +1824,7 @@ impl RetainedWindowMatrix {
                     cursor_style,
                     bound_walk: true,
                     expected_walk: Some(ExpectedBoundWalk {
+                        source: ExpectedBoundWalkSource::Buffer,
                         last_row_end_charpos: (span_end_row.end_charpos as i64 + delta) as usize,
                         total_height_px: span_rows().map(|row| row.height_px).sum(),
                         row_count: span_count,
@@ -1316,6 +1835,9 @@ impl RetainedWindowMatrix {
             }
         }
 
+        if first_dirty == 0 {
+            return None;
+        }
         Some(ScrollReplay {
             dvpos: 0.0,
             reused_rows,
@@ -1361,6 +1883,8 @@ pub struct LayoutStats {
     pub scroll_windows: usize,
     /// Windows that took the localized-edit fast path (Phase 3).
     pub edit_windows: usize,
+    /// Windows that took the bounded visual/overlay replay path.
+    pub visual_windows: usize,
     /// Wall-time spent evaluating the reuse predicate (Phase 0a: ~0). Tracked
     /// because the predicate could approach relayout cost for screenfuls of
     /// short rows when the dirty set is small (spec §6).
@@ -1375,7 +1899,11 @@ impl LayoutStats {
 
     /// Total windows laid out this frame, across all classifications.
     pub fn total_windows(&self) -> usize {
-        self.full_windows + self.cursor_only_windows + self.scroll_windows + self.edit_windows
+        self.full_windows
+            + self.cursor_only_windows
+            + self.scroll_windows
+            + self.edit_windows
+            + self.visual_windows
     }
 
     /// Bump the per-class window counter for one laid-out window.
@@ -1385,6 +1913,7 @@ impl LayoutStats {
             LayoutClass::CursorOnly => self.cursor_only_windows += 1,
             LayoutClass::Scroll => self.scroll_windows += 1,
             LayoutClass::Edit => self.edit_windows += 1,
+            LayoutClass::Visual => self.visual_windows += 1,
         }
     }
 }
@@ -1436,7 +1965,7 @@ mod scroll_classifier_tests {
             props_modified_tick: 5,
             overlay_modified_tick: 5,
             face_change_count: 5,
-            display_var_change_count: 5,
+            display_variable_epoch: Default::default(),
         }
     }
 
@@ -1480,6 +2009,7 @@ mod scroll_classifier_tests {
             presented_cursor: None,
             face_generation: FrameFaceGeneration::default(),
             chrome_uses_column: false,
+            chrome_has_interactions: false,
             chrome_modified_flag: false,
         }
     }
@@ -1525,6 +2055,39 @@ mod scroll_classifier_tests {
         assert_eq!(
             replay.retained_face_ids(),
             vec![FaceId::new(27), FaceId::new(31)]
+        );
+    }
+
+    #[test]
+    fn unchanged_structural_cursor_row_reuses_the_retained_matrix() {
+        let mut retained = synthetic_matrix(0, 3);
+        retained.key.point = 5;
+        let cursor_row = MatrixRow::make_mut(&mut retained.matrix.rows[0]);
+        cursor_row.cursor_type = Some(CursorStyle::FilledBox);
+        cursor_row.continued = true;
+        let unchanged = retained.key.clone();
+
+        let replay = retained
+            .cursor_only_replay(&unchanged)
+            .expect("an unchanged point needs no unsafe cursor relocation");
+
+        assert_eq!(replay.body_rows.len(), 3);
+        assert_eq!(replay.new_point, 5);
+    }
+
+    #[test]
+    fn presentation_owned_chrome_interactions_force_fresh_chrome_shaping() {
+        let mut retained = synthetic_matrix(0, 3);
+        let clean = ChromeReuseContext {
+            chrome_dirty: false,
+            buffer_modified: false,
+        };
+        assert!(retained.chrome_reuse_baseline(clean));
+
+        retained.chrome_has_interactions = true;
+        assert!(
+            !retained.chrome_reuse_baseline(clean),
+            "a prior presentation's opaque interaction ids must never be reused"
         );
     }
 
@@ -1815,9 +2378,8 @@ mod scroll_classifier_tests {
         );
     }
 
-    /// Props tick movement alone now qualifies for the edit path (GNU
-    /// try_window_id proceeds through property changes); overlay/face moves
-    /// still escalate.
+    /// Props tick movement qualifies for the edit path; bounded overlay damage
+    /// has its own typed predicate and face movement still escalates.
     #[test]
     fn edit_eligible_accepts_props_tick_movement_but_not_overlay_or_face() {
         let prev = synthetic_key(0, 10);
@@ -1828,6 +2390,11 @@ mod scroll_classifier_tests {
         let mut overlay_moved = props_only.clone();
         overlay_moved.overlay_modified_tick = 6;
         assert!(!RetainedWindowKey::edit_eligible(&prev, &overlay_moved));
+
+        let mut overlay_only = synthetic_key(0, 12);
+        overlay_only.overlay_modified_tick = 6;
+        assert!(RetainedWindowKey::overlay_eligible(&prev, &overlay_only));
+        assert!(!RetainedWindowKey::overlay_eligible(&prev, &props_only));
 
         let mut face_moved = props_only.clone();
         face_moved.face_change_count = 6;

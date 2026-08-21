@@ -34,6 +34,7 @@ pub(crate) enum DisplaySourcePosition {
         source_id: DisplaySourceId,
         char_index: usize,
         byte_index: usize,
+        occurrence: DisplayPointerOccurrence,
     },
     Synthetic {
         source_id: DisplaySourceId,
@@ -55,10 +56,25 @@ impl DisplaySourcePosition {
     }
 
     pub(crate) const fn lisp_string(source_id: u64, char_index: usize, byte_index: usize) -> Self {
+        Self::lisp_string_in_occurrence(
+            source_id,
+            char_index,
+            byte_index,
+            DisplayPointerOccurrence::Source,
+        )
+    }
+
+    pub(crate) const fn lisp_string_in_occurrence(
+        source_id: u64,
+        char_index: usize,
+        byte_index: usize,
+        occurrence: DisplayPointerOccurrence,
+    ) -> Self {
         Self::LispString {
             source_id: DisplaySourceId::new(source_id),
             char_index,
             byte_index,
+            occurrence,
         }
     }
 
@@ -96,14 +112,33 @@ impl DisplaySourcePosition {
                 source_id,
                 char_index,
                 byte_index,
+                occurrence,
             } => Self::lisp_string(
                 source_id.get(),
                 char_index.saturating_add(char_offset),
                 byte_index.saturating_add(byte_offset),
-            ),
+            )
+            .with_lisp_string_occurrence(*occurrence),
             Self::Synthetic { source_id, offset } => {
                 Self::synthetic(source_id.get(), offset.saturating_add(char_offset))
             }
+        }
+    }
+
+    const fn with_lisp_string_occurrence(self, occurrence: DisplayPointerOccurrence) -> Self {
+        match self {
+            Self::LispString {
+                source_id,
+                char_index,
+                byte_index,
+                ..
+            } => Self::LispString {
+                source_id,
+                char_index,
+                byte_index,
+                occurrence,
+            },
+            source => source,
         }
     }
 }
@@ -194,6 +229,30 @@ pub(crate) enum DisplayPointerOccurrence {
     },
 }
 
+impl DisplayPointerOccurrence {
+    pub(crate) fn protocol_identity(
+        self,
+    ) -> neomacs_display_protocol::glyph_matrix::GlyphSourceOccurrenceIdentity {
+        use neomacs_display_protocol::glyph_matrix::GlyphSourceOccurrenceIdentity;
+        match self {
+            Self::Source => GlyphSourceOccurrenceIdentity::Source,
+            Self::OverlayString { overlay_id, kind } => {
+                GlyphSourceOccurrenceIdentity::OverlayString {
+                    overlay_id: neovm_core::buffer::overlay::overlay_identity_key(overlay_id),
+                    kind,
+                }
+            }
+            Self::BufferDisplayReplacement {
+                buffer_id,
+                anchor_charpos,
+            } => GlyphSourceOccurrenceIdentity::BufferDisplayReplacement {
+                buffer_id: buffer_id.0,
+                anchor: anchor_charpos.get() as u64,
+            },
+        }
+    }
+}
+
 impl DisplayPointerSourceRange {
     #[cfg(test)]
     pub(crate) fn ending_at(source: DisplaySourcePosition, end_char_index: usize) -> Self {
@@ -252,7 +311,7 @@ impl DisplayPointerSourceRange {
         &self,
     ) -> neomacs_display_protocol::glyph_matrix::GlyphPointerSourceIdentity {
         use neomacs_display_protocol::glyph_matrix::{
-            GlyphPointerOccurrenceIdentity, GlyphPointerSourceIdentity, GlyphPointerSourceKind,
+            GlyphPointerSourceIdentity, GlyphPointerSourceKind,
         };
         let (kind, source_id) = match self.source {
             DisplaySourcePosition::Buffer { buffer_id, .. } => {
@@ -265,28 +324,15 @@ impl DisplayPointerSourceRange {
                 (GlyphPointerSourceKind::Synthetic, source_id.get())
             }
         };
-        let occurrence = match self.occurrence {
-            DisplayPointerOccurrence::Source => GlyphPointerOccurrenceIdentity::Source,
-            DisplayPointerOccurrence::OverlayString { overlay_id, kind } => {
-                GlyphPointerOccurrenceIdentity::OverlayString {
-                    overlay_id: overlay_id.bits() as u64,
-                    after: matches!(kind, crate::display_origin::OverlayStringKind::After),
-                }
-            }
-            DisplayPointerOccurrence::BufferDisplayReplacement {
-                buffer_id,
-                anchor_charpos,
-            } => GlyphPointerOccurrenceIdentity::BufferDisplayReplacement {
-                buffer_id: buffer_id.0,
-                anchor: anchor_charpos.get() as u64,
-            },
-        };
+        let occurrence = self.occurrence.protocol_identity();
         GlyphPointerSourceIdentity {
             kind,
             source_id,
             range_start: self.start_char_index as u64,
             range_end: self.end_char_index as u64,
-            property_owner: self.overlay_owner.map_or(0, |owner| owner.bits() as u64),
+            property_owner: self.overlay_owner.map_or(0, |owner| {
+                neovm_core::buffer::overlay::overlay_identity_key(owner)
+            }),
             occurrence,
         }
     }

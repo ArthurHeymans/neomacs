@@ -2283,6 +2283,47 @@ pub(crate) enum SymbolValueLookup {
     Unbound,
 }
 
+/// Storage identity for one display-variable transition.  Display variables
+/// are frequently rebound temporarily while child-frame packages construct a
+/// frame.  The buffer belongs in the identity: two buffers changing the same
+/// variable are independent transitions and must never cancel each other.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum DisplayVariableWriteScope {
+    Global,
+    Buffer(crate::buffer::BufferId),
+}
+
+/// The display-variable state observed by one buffer's windows.
+///
+/// Global inputs and buffer-local inputs have independent epochs so changing a
+/// child-frame buffer cannot invalidate unrelated windows in its parent frame.
+/// Keeping both components in one value makes it impossible for layout callers
+/// to accidentally compare only half of the invalidation identity.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+pub struct DisplayVariableEpoch {
+    global: u64,
+    buffer: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct DisplayVariableWriteKey {
+    symbol: SymId,
+    scope: DisplayVariableWriteScope,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DisplayVariableTransition {
+    retained: Value,
+    current: Value,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PendingDisplayVariableWrite {
+    key: DisplayVariableWriteKey,
+    old: Value,
+    new: Value,
+}
+
 pub struct Context {
     /// Tagged pointer heap — sole GC and allocator.
     pub(crate) tagged_heap: Box<crate::tagged::gc::TaggedHeap>,
@@ -2594,14 +2635,21 @@ pub struct Context {
     /// frame's authoritative Lisp face specifications.  Equal identity means
     /// redisplay can reuse the table without scanning every face again.
     materialized_face_table_source: Option<(crate::window::FrameId, u64)>,
-    /// Incremented when any display-affecting buffer-local/global variable is
-    /// set (truncate-lines, bidi-*, ctl-arrow, buffer-display-table,
-    /// buffer-invisibility-spec, fill-column-indicator, overlay-arrow,
-    /// display-line-numbers, …). These change layout with NO buffer-text/face/
-    /// overlay tick, so the incremental fast paths key on this counter to force
-    /// a full rebuild (adversarial-review fix). Rare event → a global counter
-    /// (over-invalidating all windows) is acceptable and simpler than per-var keys.
-    pub display_var_change_count: u64,
+    /// Epochs of net display-variable state, split by storage scope. A global
+    /// write invalidates every window; a buffer-local write invalidates only
+    /// windows displaying that buffer.
+    display_var_global_change_count: u64,
+    display_var_buffer_change_counts: rustc_hash::FxHashMap<crate::buffer::BufferId, u64>,
+    /// Exact retained -> current transitions since the last accepted frame set.
+    /// Values are GC roots (see `trace_roots`) so equality can be composed
+    /// without hashes, pointer stability assumptions, or collision risk.
+    display_var_pending_writes:
+        rustc_hash::FxHashMap<DisplayVariableWriteKey, DisplayVariableTransition>,
+    /// Scopes whose exposed epoch already includes the current pending cycle.
+    display_var_pending_generations: rustc_hash::FxHashSet<DisplayVariableWriteScope>,
+    /// A legacy mutation path supplied no old/new values, so the cycle cannot
+    /// be cancelled even if all typed transitions return to their baseline.
+    display_var_unknown_dirty: bool,
     /// Explicit redisplay invalidation generation, used for state that GNU
     /// marks with update_mode_lines/window redisplay flags.
     redisplay_generation: u64,
@@ -3505,7 +3553,11 @@ impl Context {
         ev.coding_systems = CodingSystemManager::new();
         ev.face_table = FaceTable::new();
         ev.face_change_count = 0;
-        ev.display_var_change_count = 0;
+        ev.display_var_global_change_count = 0;
+        ev.display_var_buffer_change_counts.clear();
+        ev.display_var_pending_writes.clear();
+        ev.display_var_pending_generations.clear();
+        ev.display_var_unknown_dirty = false;
         ev.redisplay_generation = 0;
         ev.media_generation = 0;
         ev.last_redisplay_signature = None;
@@ -5899,7 +5951,11 @@ impl Context {
             face_table: FaceTable::new(),
             face_change_count: 0,
             materialized_face_table_source: None,
-            display_var_change_count: 0,
+            display_var_global_change_count: 0,
+            display_var_buffer_change_counts: rustc_hash::FxHashMap::default(),
+            display_var_pending_writes: rustc_hash::FxHashMap::default(),
+            display_var_pending_generations: rustc_hash::FxHashSet::default(),
+            display_var_unknown_dirty: false,
             redisplay_generation: 0,
             chrome_dirty: Default::default(),
             context_instance_id: next_context_instance_id(),
@@ -6097,7 +6153,11 @@ impl Context {
             face_table,
             face_change_count: 0,
             materialized_face_table_source: None,
-            display_var_change_count: 0,
+            display_var_global_change_count: 0,
+            display_var_buffer_change_counts: rustc_hash::FxHashMap::default(),
+            display_var_pending_writes: rustc_hash::FxHashMap::default(),
+            display_var_pending_generations: rustc_hash::FxHashSet::default(),
+            display_var_unknown_dirty: false,
             redisplay_generation: 0,
             chrome_dirty: Default::default(),
             context_instance_id: next_context_instance_id(),
@@ -6212,6 +6272,11 @@ impl Context {
         group("eval_temp");
         for root in self.eval_temp_roots.iter().copied() {
             visit(root);
+        }
+        group("display_var_transitions");
+        for transition in self.display_var_pending_writes.values() {
+            visit(transition.retained);
+            visit(transition.current);
         }
         group("treesit");
         for root in self.treesit.roots() {
@@ -8050,6 +8115,133 @@ impl Context {
     ///
     /// `sym_id` is resolved through `defvaralias` first so an alias of a
     /// display variable (e.g. an obsolete alias) still nudges redisplay.
+    fn display_variable_write_scope(&self, sym_id: SymId) -> DisplayVariableWriteScope {
+        self.variable_watcher_where_for_set_by_id(sym_id)
+            .as_buffer_id()
+            .map(DisplayVariableWriteScope::Buffer)
+            .unwrap_or(DisplayVariableWriteScope::Global)
+    }
+
+    /// Return the complete display-variable invalidation identity for windows
+    /// displaying `buffer`. Callers compare this value atomically: the global
+    /// component covers process-wide inputs and the buffer component covers
+    /// only that buffer's local inputs.
+    pub fn display_variable_epoch_for_buffer(
+        &self,
+        buffer: crate::buffer::BufferId,
+    ) -> DisplayVariableEpoch {
+        DisplayVariableEpoch {
+            global: self.display_var_global_change_count,
+            buffer: self
+                .display_var_buffer_change_counts
+                .get(&buffer)
+                .copied()
+                .unwrap_or(0),
+        }
+    }
+
+    fn display_variable_scope_has_damage(&self, scope: DisplayVariableWriteScope) -> bool {
+        (scope == DisplayVariableWriteScope::Global && self.display_var_unknown_dirty)
+            || self
+                .display_var_pending_writes
+                .keys()
+                .any(|key| key.scope == scope)
+    }
+
+    fn adjust_display_variable_epoch(&mut self, scope: DisplayVariableWriteScope) {
+        let has_damage = self.display_variable_scope_has_damage(scope);
+        let epoch_is_pending = self.display_var_pending_generations.contains(&scope);
+        let epoch = match scope {
+            DisplayVariableWriteScope::Global => &mut self.display_var_global_change_count,
+            DisplayVariableWriteScope::Buffer(buffer) => self
+                .display_var_buffer_change_counts
+                .entry(buffer)
+                .or_insert(0),
+        };
+        match (epoch_is_pending, has_damage) {
+            (false, true) => {
+                *epoch = epoch.wrapping_add(1);
+                self.display_var_pending_generations.insert(scope);
+            }
+            (true, false) => {
+                *epoch = epoch.wrapping_sub(1);
+                self.display_var_pending_generations.remove(&scope);
+            }
+            (false, false) | (true, true) => {}
+        }
+    }
+
+    /// Capture one display-variable write before its storage is replaced.
+    /// The returned token owns no policy: callers commit it only after the
+    /// underlying write succeeds.
+    pub(crate) fn capture_display_variable_write(
+        &self,
+        sym_id: SymId,
+        new: Value,
+    ) -> Option<PendingDisplayVariableWrite> {
+        let resolved =
+            builtins::resolve_variable_alias_id_in_obarray(&self.obarray, sym_id).ok()?;
+        if !crate::buffer::buffer::variable_affects_display_by_sym_id(resolved) {
+            return None;
+        }
+        let old = match self.find_symbol_value_by_id(resolved).ok()? {
+            SymbolValueLookup::Bound(value) => value,
+            SymbolValueLookup::Unbound => Value::UNBOUND,
+        };
+        Some(PendingDisplayVariableWrite {
+            key: DisplayVariableWriteKey {
+                symbol: resolved,
+                scope: self.display_variable_write_scope(resolved),
+            },
+            old,
+            new,
+        })
+    }
+
+    /// Merge a successful write into retained -> current display-variable
+    /// damage.  Returning to the exact retained value cancels the transition;
+    /// if every transition cancels, the generation returns to its retained
+    /// value and incremental redisplay remains eligible.
+    pub(crate) fn commit_display_variable_write(
+        &mut self,
+        write: Option<PendingDisplayVariableWrite>,
+    ) {
+        let Some(write) = write else {
+            return;
+        };
+        self.invalidate_redisplay();
+        if crate::buffer::buffer::variable_affects_chrome_by_sym_id(write.key.symbol) {
+            self.chrome_dirty.mark_all();
+        }
+
+        let values_equal =
+            |left: Value, right: Value| equal_value_including_properties(&left, &right, 0);
+        if let Some(transition) = self.display_var_pending_writes.get_mut(&write.key) {
+            transition.current = write.new;
+            if values_equal(transition.retained, transition.current) {
+                self.display_var_pending_writes.remove(&write.key);
+            }
+        } else if !values_equal(write.old, write.new) {
+            self.display_var_pending_writes.insert(
+                write.key,
+                DisplayVariableTransition {
+                    retained: write.old,
+                    current: write.new,
+                },
+            );
+        }
+
+        self.adjust_display_variable_epoch(write.key.scope);
+    }
+
+    /// Seal display-variable transitions after every frame in one redisplay
+    /// set has consumed the generation, mirroring overlay damage ownership.
+    pub fn acknowledge_display_variable_writes(&mut self) {
+        self.display_var_pending_writes.clear();
+        self.display_var_pending_generations.clear();
+        self.display_var_unknown_dirty = false;
+    }
+
     pub(crate) fn mark_redisplay_dirty_if_display_var(&mut self, sym_id: SymId) {
         let resolved =
             builtins::resolve_variable_alias_id_in_obarray(&self.obarray, sym_id).unwrap_or(sym_id);
@@ -8065,9 +8257,11 @@ impl Context {
                 self.chrome_dirty.mark_all();
             }
             // A display-affecting variable changed: the incremental fast paths
-            // key on this counter so they re-lay instead of reusing rows shaped
-            // under the old setting (the four buffer/face ticks do not move here).
-            self.display_var_change_count = self.display_var_change_count.wrapping_add(1);
+            // key on the typed epoch so they re-lay instead of reusing rows
+            // shaped under the old setting. This legacy path lacks an exact
+            // storage scope and therefore conservatively invalidates globally.
+            self.display_var_unknown_dirty = true;
+            self.adjust_display_variable_epoch(DisplayVariableWriteScope::Global);
         }
     }
 
@@ -11095,17 +11289,32 @@ impl Context {
                 if let Some(buf) = self.buffers.get_mut(buf_id)
                     && offset < buf.slots.len()
                 {
+                    let old = buf.slots[offset];
                     buf.slots[offset] = value;
                     self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
-                    self.mark_redisplay_dirty_if_display_var(sym_id);
+                    let resolved =
+                        builtins::resolve_variable_alias_id_in_obarray(&self.obarray, sym_id)
+                            .unwrap_or(sym_id);
+                    self.commit_display_variable_write(
+                        crate::buffer::buffer::variable_affects_display_by_sym_id(resolved)
+                            .then_some(PendingDisplayVariableWrite {
+                                key: DisplayVariableWriteKey {
+                                    symbol: resolved,
+                                    scope: DisplayVariableWriteScope::Buffer(buf_id),
+                                },
+                                old,
+                                new: value,
+                            }),
+                    );
                     return;
                 }
             }
         }
+        let display_write = self.capture_display_variable_write(sym_id, value);
         self.obarray.set_symbol_value(name, value);
         self.sync_cached_runtime_binding_by_id(sym_id, value);
         self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
-        self.mark_redisplay_dirty_if_display_var(sym_id);
+        self.commit_display_variable_write(display_write);
     }
 
     #[inline]
@@ -16881,6 +17090,7 @@ pub(crate) fn set_runtime_binding_in_state(
     sym_id: SymId,
     value: Value,
 ) -> Result<Option<crate::buffer::BufferId>, Flow> {
+    let display_write = ctx.capture_display_variable_write(sym_id, value);
     let locus = set_runtime_binding(
         &mut ctx.obarray,
         &mut ctx.buffers,
@@ -16895,7 +17105,7 @@ pub(crate) fn set_runtime_binding_in_state(
     // here so a `(setq truncate-lines t)` evaluated from byte-compiled
     // code repaints without waiting for the next keystroke, exactly like
     // the tree-walk interpreter.
-    ctx.mark_redisplay_dirty_if_display_var(sym_id);
+    ctx.commit_display_variable_write(display_write);
     Ok(locus)
 }
 
@@ -17996,6 +18206,7 @@ impl Context {
         // this write has to see what the forwarder accepted, not what the
         // caller passed.
         let value = checked.value();
+        let display_write = self.capture_display_variable_write(sym_id, value);
         let locus = store_runtime_binding(
             &mut self.obarray,
             &mut self.buffers,
@@ -18007,7 +18218,7 @@ impl Context {
         self.sync_cached_runtime_binding_by_id(sym_id, value);
         self.sync_keyboard_runtime_binding_by_id(sym_id, value);
         self.refresh_gc_runtime_settings_after_change_by_id(sym_id);
-        self.mark_redisplay_dirty_if_display_var(sym_id);
+        self.commit_display_variable_write(display_write);
         Ok(locus)
     }
 

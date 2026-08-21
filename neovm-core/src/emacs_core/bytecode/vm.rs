@@ -5587,6 +5587,8 @@ impl<'a> Vm<'a> {
                             "set",
                             &where_value,
                         )?;
+                        let display_write =
+                            self.ctx.capture_display_variable_write(resolved, value);
                         if let Some(buf) = self.ctx.buffers.get_mut(buf_id) {
                             buf.slots[offset] = value;
                             if flags_idx >= 0 {
@@ -5601,7 +5603,7 @@ impl<'a> Vm<'a> {
                         // redisplay dirty itself. This is the hot path for
                         // `(setq truncate-lines t)` run from byte-compiled
                         // code — the common case in real usage.
-                        self.ctx.mark_redisplay_dirty_if_display_var(resolved);
+                        self.ctx.commit_display_variable_write(display_write);
                         return Ok(());
                     }
                 }
@@ -5629,6 +5631,7 @@ impl<'a> Vm<'a> {
                 "set",
                 &where_value,
             )?;
+            let display_write = self.ctx.capture_display_variable_write(resolved, value);
             let new_alist = self.ctx.obarray.set_internal_localized(
                 resolved,
                 value,
@@ -5645,7 +5648,7 @@ impl<'a> Vm<'a> {
             // Finding 6: a LOCALIZED display variable set from
             // byte-compiled code must also nudge redisplay (this arm
             // returns without `set_runtime_binding_in_state`).
-            self.ctx.mark_redisplay_dirty_if_display_var(resolved);
+            self.ctx.commit_display_variable_write(display_write);
             return Ok(());
         }
 

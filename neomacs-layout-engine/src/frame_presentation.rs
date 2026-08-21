@@ -12,7 +12,7 @@ use neomacs_display_protocol::{
 };
 use neovm_core::window::WindowDisplaySnapshot;
 
-use crate::display_status_line::TabBarPresentedPointerPlan;
+use crate::display_status_line::{TabBarPresentedPointerPlan, WindowChromePresentedPointerPlan};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub(crate) struct FrameRevision(PresentationId);
@@ -84,6 +84,7 @@ impl From<SealFramePresentationError> for PresentationComposeError {
 pub(crate) struct PresentationInputs<'a> {
     window_snapshots: &'a [WindowDisplaySnapshot],
     tab_bar_pointer: Option<TabBarPresentedPointerPlan>,
+    window_chrome_pointer: Vec<WindowChromePresentedPointerPlan>,
 }
 
 impl<'a> PresentationInputs<'a> {
@@ -91,6 +92,7 @@ impl<'a> PresentationInputs<'a> {
         Self {
             window_snapshots,
             tab_bar_pointer: None,
+            window_chrome_pointer: Vec::new(),
         }
     }
 
@@ -99,6 +101,14 @@ impl<'a> PresentationInputs<'a> {
         pointer: Option<TabBarPresentedPointerPlan>,
     ) -> Self {
         self.tab_bar_pointer = pointer;
+        self
+    }
+
+    pub(crate) fn with_window_chrome_pointer(
+        mut self,
+        pointer: Vec<WindowChromePresentedPointerPlan>,
+    ) -> Self {
+        self.window_chrome_pointer = pointer;
         self
     }
 }
@@ -121,6 +131,7 @@ impl PresentationComposer {
         let pointer = crate::presentation::pointer::PresentationPointerPlan::compile(
             &transport,
             inputs.tab_bar_pointer,
+            inputs.window_chrome_pointer,
         )?;
         spatial.seal(&mut transport)?;
         pointer.seal(&mut transport);

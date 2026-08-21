@@ -323,17 +323,38 @@ impl GlyphStringBufferRange {
     }
 }
 
-/// One string occurrence referenced by glyphs in a row.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum OverlayStringKind {
+    Before,
+    After,
+}
+
+/// Stable identity of one occurrence of a glyph's source object.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum GlyphSourceOccurrenceIdentity {
+    Source,
+    OverlayString {
+        overlay_id: u64,
+        kind: OverlayStringKind,
+    },
+    BufferDisplayReplacement {
+        buffer_id: u64,
+        anchor: u64,
+    },
+}
+
+/// One string source referenced by glyphs in a row.
 ///
 /// GNU leaves replacement coverage out of `struct glyph` and recovers it by
 /// scanning display properties.  NeoMacs already knows the exact range while
 /// constructing the row, so it records that range once here.  Keeping the
-/// occurrence in a side table avoids duplicating two buffer positions in every
+/// source in a side table avoids duplicating identity and coverage in every
 /// glyph while preserving exact cursor and incremental-redisplay semantics.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GlyphStringSource {
     string: GlyphStringId,
     covered_buffer: Option<GlyphStringBufferRange>,
+    occurrence: GlyphSourceOccurrenceIdentity,
 }
 
 impl GlyphStringSource {
@@ -341,6 +362,7 @@ impl GlyphStringSource {
         Self {
             string,
             covered_buffer: None,
+            occurrence: GlyphSourceOccurrenceIdentity::Source,
         }
     }
 
@@ -351,7 +373,13 @@ impl GlyphStringSource {
         Self {
             string,
             covered_buffer: Some(covered_buffer),
+            occurrence: GlyphSourceOccurrenceIdentity::Source,
         }
+    }
+
+    pub const fn in_occurrence(mut self, occurrence: GlyphSourceOccurrenceIdentity) -> Self {
+        self.occurrence = occurrence;
+        self
     }
 
     pub const fn string(self) -> GlyphStringId {
@@ -360,6 +388,10 @@ impl GlyphStringSource {
 
     pub const fn covered_buffer_range(self) -> Option<GlyphStringBufferRange> {
         self.covered_buffer
+    }
+
+    pub const fn occurrence(self) -> GlyphSourceOccurrenceIdentity {
+        self.occurrence
     }
 
     pub const fn covers_buffer_charpos(self, charpos: usize) -> bool {
@@ -585,12 +617,7 @@ pub enum GlyphPointerSourceKind {
     Synthetic,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
-pub enum GlyphPointerOccurrenceIdentity {
-    Source,
-    OverlayString { overlay_id: u64, after: bool },
-    BufferDisplayReplacement { buffer_id: u64, anchor: u64 },
-}
+pub type GlyphPointerOccurrenceIdentity = GlyphSourceOccurrenceIdentity;
 
 impl Glyph {
     /// Create a simple character glyph with default attributes.
@@ -778,6 +805,14 @@ pub struct GlyphRow {
     pub cursor_type: Option<CursorStyle>,
     /// Row has been truncated on the left.
     pub truncated_left: bool,
+    /// Row has been truncated on the right.
+    ///
+    /// This is semantic redisplay state, independent of whether the frontend
+    /// has a fringe in which to draw GNU's right-truncation bitmap.  Retaining
+    /// it on the row lets incremental layout distinguish a deliberately
+    /// clipped source line from an incompletely materialized one.
+    #[serde(default)]
+    pub truncated_right: bool,
     /// Row has a continuation mark on the right.
     pub continued: bool,
     /// Row's paragraph base direction is right-to-left. GNU `reversed_p`: such
@@ -861,6 +896,7 @@ impl GlyphRow {
             cursor_col: None,
             cursor_type: None,
             truncated_left: false,
+            truncated_right: false,
             continued: false,
             reversed_p: false,
             displays_text: false,
@@ -1188,6 +1224,7 @@ impl GlyphRow {
         self.cursor_col = None;
         self.cursor_type = None;
         self.truncated_left = false;
+        self.truncated_right = false;
         self.continued = false;
         self.reversed_p = false;
         self.displays_text = false;

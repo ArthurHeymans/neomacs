@@ -15,14 +15,15 @@
 //! (`resolve_fringe_indicator_bitmap_index`, the Stage-6 resolver) so a buffer
 //! can rebind them, exactly like GNU's `get_logical_fringe_bitmap`.
 //!
-//! neomacs records row state two ways: the hscroll left-truncation lives on
-//! `GlyphRow::truncated_left` (set by the hscroll marker), while right-edge
-//! truncation / continuation / continuation-line live in [`DisplayRowFlags`]
-//! (`Truncated` / `Continued` / `Continuation`). This installer reads both and
-//! sets `GlyphRow::left_fringe_bitmap` / `right_fringe_bitmap` — but only when
-//! that slot is still empty, so an explicit `(left-fringe …)` display spec and
-//! the empty-line filler (which run first / on separate rows) keep precedence,
-//! matching GNU's `row->left_user_fringe_bitmap` short-circuit.
+//! During a row walk, right-edge truncation / continuation / continuation-line
+//! live in [`DisplayRowFlags`] (`Truncated` / `Continued` / `Continuation`).
+//! Finalization retains the first two semantic states on `GlyphRow`, alongside
+//! hscroll's `GlyphRow::truncated_left`; this installer reads the same transient
+//! flags to select fringe bitmaps.  It sets `GlyphRow::left_fringe_bitmap` /
+//! `right_fringe_bitmap` only when that slot is still empty, so an explicit
+//! `(left-fringe …)` display spec and the empty-line filler (which run first /
+//! on separate rows) keep precedence, matching GNU's
+//! `row->left_user_fringe_bitmap` short-circuit.
 
 use crate::display_row::geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::neovm_bridge::{LayoutBufferView, resolve_fringe_indicator_bitmap_index};
@@ -75,7 +76,7 @@ impl FringeArrowBitmaps {
 
 /// Per-row decoration request for the truncation/continuation fringe arrows.
 /// Built for every installed body row from [`DisplayRowFlags`] and applied to
-/// the live `GlyphRow` (which also carries `truncated_left` / `reversed_p`).
+/// the live `GlyphRow`, which also retains the semantic edge state.
 pub(crate) struct TruncationContinuationFringeRequest {
     /// First text-area display-row index (`display_text_row_base`).
     display_text_row_base: usize,

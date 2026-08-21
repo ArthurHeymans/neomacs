@@ -21,17 +21,60 @@ use crate::heap_types::LispString;
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
-/// Lisp mouse area retained by an immutable displayed presentation.
+/// Frame-owned Lisp mouse area retained by an immutable presentation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum PresentedMouseArea {
+pub enum PresentedFrameMouseArea {
     TabBar,
+}
+
+/// Window-owned Lisp mouse area retained by an immutable presentation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PresentedWindowMouseArea {
+    TabLine,
+    HeaderLine,
+    ModeLine,
+}
+
+/// The Lisp object and area that own a presentation-time mouse target.
+///
+/// Keeping frame and window chrome in separate enum arms prevents a new
+/// string-local window interaction from accidentally publishing a frame in
+/// `posn-window` (the bug that made tab-line clicks fall through to the generic
+/// binding).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PresentedMouseOwner {
+    Frame(PresentedFrameMouseArea),
+    Window {
+        window: crate::window::WindowId,
+        area: PresentedWindowMouseArea,
+    },
 }
 
 /// Evaluator-owned meaning for one opaque renderer interaction id.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PresentedMouseTarget {
-    pub area: PresentedMouseArea,
+    pub owner: PresentedMouseOwner,
     pub posn_string: Value,
+}
+
+impl PresentedMouseTarget {
+    pub const fn frame_chrome(area: PresentedFrameMouseArea, posn_string: Value) -> Self {
+        Self {
+            owner: PresentedMouseOwner::Frame(area),
+            posn_string,
+        }
+    }
+
+    pub const fn window_chrome(
+        window: crate::window::WindowId,
+        area: PresentedWindowMouseArea,
+        posn_string: Value,
+    ) -> Self {
+        Self {
+            owner: PresentedMouseOwner::Window { window, area },
+            posn_string,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -4905,11 +4948,32 @@ impl crate::emacs_core::eval::Context {
                 if self.frames.get(frame_id).is_none() || button == 0 {
                     return Ok(None);
                 }
-                let area = match target.area {
-                    PresentedMouseArea::TabBar => "tab-bar",
+                let (window_or_frame, area) = match target.owner {
+                    PresentedMouseOwner::Frame(area) => (
+                        Value::make_frame(frame_id.0),
+                        match area {
+                            PresentedFrameMouseArea::TabBar => "tab-bar",
+                        },
+                    ),
+                    PresentedMouseOwner::Window { window, area } => {
+                        let Some(frame) = self.frames.get(frame_id) else {
+                            return Ok(None);
+                        };
+                        if frame.find_window(window).is_none() {
+                            return Ok(None);
+                        }
+                        (
+                            Value::make_window(window.0),
+                            match area {
+                                PresentedWindowMouseArea::TabLine => "tab-line",
+                                PresentedWindowMouseArea::HeaderLine => "header-line",
+                                PresentedWindowMouseArea::ModeLine => "mode-line",
+                            },
+                        )
+                    }
                 };
                 let position = Self::mouse_posn_descriptor_value(MousePosnDescriptor {
-                    window_or_frame: Value::make_frame(frame_id.0),
+                    window_or_frame,
                     area: Some(area),
                     x: x.round() as i64,
                     y: y.round() as i64,

@@ -394,6 +394,7 @@ impl BufferSourceWalkSetup {
             source_render,
             DisplaySourceRowProgressState::new(&mut self.x, &mut self.col),
             &mut self.row_geometry,
+            &mut self.row_flags,
             &mut self.cursor_info,
             &mut self.hit_rows,
             &mut self.hit_row_range,

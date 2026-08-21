@@ -8,18 +8,15 @@ fn presented_interactions_retain_exact_posn_string_until_retirement() {
     let posn_string = Value::cons(caption, Value::fixnum(0));
     let interaction = interactions.register_mouse_target(
         presentation,
-        PresentedMouseTarget {
-            area: PresentedMouseArea::TabBar,
-            posn_string,
-        },
+        PresentedMouseTarget::frame_chrome(PresentedFrameMouseArea::TabBar, posn_string),
     );
 
     assert_eq!(
         interactions.resolve(presentation, interaction),
-        Some(PresentedMouseTarget {
-            area: PresentedMouseArea::TabBar,
+        Some(PresentedMouseTarget::frame_chrome(
+            PresentedFrameMouseArea::TabBar,
             posn_string,
-        })
+        ))
     );
 
     let mut roots = Vec::new();
@@ -41,10 +38,7 @@ fn presented_pointer_preserves_phase_and_installs_snapshot_posn_string() {
     let posn_string = Value::cons(Value::string("tab"), Value::fixnum(0));
     let interaction = eval.register_presented_mouse_target(
         presentation,
-        PresentedMouseTarget {
-            area: PresentedMouseArea::TabBar,
-            posn_string,
-        },
+        PresentedMouseTarget::frame_chrome(PresentedFrameMouseArea::TabBar, posn_string),
     );
 
     let press = eval
@@ -82,6 +76,46 @@ fn presented_pointer_preserves_phase_and_installs_snapshot_posn_string() {
         assert_eq!(position[1].as_symbol_name(), Some("tab-bar"));
         assert_eq!(position[4], posn_string);
     }
+}
+
+#[test]
+fn presented_window_chrome_pointer_uses_window_posn_and_typed_area() {
+    let mut eval = crate::emacs_core::Context::new();
+    let buffer = eval
+        .buffer_manager_mut()
+        .create_buffer("window-chrome-pointer");
+    let frame = eval
+        .frame_manager_mut()
+        .create_frame("window-chrome-pointer", 200, 100, buffer);
+    let window = eval
+        .frame_manager()
+        .get(frame)
+        .expect("frame")
+        .selected_window;
+    let presentation = eval.begin_interaction_presentation();
+    let posn_string = Value::cons(Value::string("tab"), Value::fixnum(2));
+    let interaction = eval.register_presented_mouse_target(
+        presentation,
+        PresentedMouseTarget::window_chrome(window, PresentedWindowMouseArea::TabLine, posn_string),
+    );
+
+    let event = eval
+        .handle_read_char_input_event(InputEvent::PresentedPointer {
+            presentation,
+            interaction,
+            pressed: true,
+            button: 1,
+            x: 24.0,
+            y: 8.0,
+            emacs_frame_id: frame.0,
+        })
+        .expect("event conversion")
+        .expect("mouse event");
+    let event = crate::emacs_core::value::list_to_vec(&event).expect("event list");
+    let position = crate::emacs_core::value::list_to_vec(&event[1]).expect("position descriptor");
+    assert_eq!(position[0], Value::make_window(window.0));
+    assert_eq!(position[1].as_symbol_name(), Some("tab-line"));
+    assert_eq!(position[4], posn_string);
 }
 
 #[test]
@@ -276,10 +310,10 @@ fn presented_pointer_fixture() -> (crate::emacs_core::Context, crate::window::Fr
     let presentation = eval.begin_interaction_presentation();
     let interaction = eval.register_presented_mouse_target(
         presentation,
-        PresentedMouseTarget {
-            area: PresentedMouseArea::TabBar,
-            posn_string: Value::cons(Value::string("tab"), Value::fixnum(0)),
-        },
+        PresentedMouseTarget::frame_chrome(
+            PresentedFrameMouseArea::TabBar,
+            Value::cons(Value::string("tab"), Value::fixnum(0)),
+        ),
     );
     (eval, frame, presentation, interaction)
 }
@@ -452,10 +486,10 @@ fn presentation_discard_event_removes_only_prepared_geometry() {
         .expect("prepare discarded presentation");
     let interaction = eval.register_presented_mouse_target(
         discarded.get(),
-        PresentedMouseTarget {
-            area: PresentedMouseArea::TabBar,
-            posn_string: Value::string("discarded"),
-        },
+        PresentedMouseTarget::frame_chrome(
+            PresentedFrameMouseArea::TabBar,
+            Value::string("discarded"),
+        ),
     );
 
     eval.command_loop

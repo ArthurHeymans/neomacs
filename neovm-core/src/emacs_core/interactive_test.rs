@@ -2374,6 +2374,57 @@ fn current_active_maps_and_key_binding_use_live_window_position_buffer() {
 }
 
 #[test]
+fn key_binding_prefers_the_clicked_strings_keymap() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(let* ((global (make-sparse-keymap))
+                      (string-map (make-sparse-keymap))
+                      (text (propertize " tab-beta " 'keymap string-map))
+                      (position (list (selected-window)
+                                      'tab-line
+                                      '(75 . 63)
+                                      0
+                                      (cons text 5)
+                                      nil
+                                      '(0 . 0))))
+                 (use-global-map global)
+                 (define-key global [tab-line down-mouse-1] 'mouse-drag-tab-line)
+                 (define-key string-map [tab-line down-mouse-1] 'tab-line-select-tab)
+                 (list (eq (car (current-active-maps t position)) string-map)
+                       (key-binding [tab-line down-mouse-1] t nil position)))"#
+        ),
+        "OK (t tab-line-select-tab)"
+    );
+}
+
+#[test]
+fn clicked_string_local_map_absence_obeys_the_presentation_area() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        eval_one(
+            r#"(let* ((global (make-sparse-keymap))
+                      (buffer-map (make-sparse-keymap))
+                      (text "plain")
+                      (mode-line-position
+                       (list (selected-window) 'mode-line '(10 . 10) 0
+                             (cons text 2) nil '(0 . 0)))
+                      (display-string-position
+                       (list (selected-window) 1 '(10 . 10) 0
+                             (cons text 2) 1 '(0 . 0))))
+                 (use-global-map global)
+                 (use-local-map buffer-map)
+                 (list
+                  (memq buffer-map (current-active-maps t mode-line-position))
+                  (if (memq buffer-map
+                            (current-active-maps t display-string-position))
+                      t nil)))"#
+        ),
+        "OK (nil t)"
+    );
+}
+
+#[test]
 fn global_key_binding_bootstrap_matches_subr_el() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

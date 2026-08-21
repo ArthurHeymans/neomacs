@@ -1,13 +1,8 @@
 use crate::display_face_policy::BaseFacePolicy;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+pub(crate) use neomacs_display_protocol::glyph_matrix::OverlayStringKind;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub(crate) enum OverlayStringKind {
-    Before,
-    After,
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayPropertySource {

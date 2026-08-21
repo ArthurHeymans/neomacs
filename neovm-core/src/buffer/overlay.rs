@@ -1099,7 +1099,7 @@ fn compare_overlay_precedence(left: Value, right: Value) -> Ordering {
     }
 }
 
-fn overlay_identity_key(overlay: Value) -> u64 {
+pub fn overlay_identity_key(overlay: Value) -> u64 {
     overlay
         .as_overlay_data()
         .map(|data| data.serial)

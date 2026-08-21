@@ -116,6 +116,23 @@ The presence of child frame support on TTY frames can be checked with
 Recent versions of Posframe and Corfu are known to use child frames on
 TTYs if they are supported.
 
+---
+** NeoMacs redisplay remains incremental while child frames are visible.
+Retained window layout is now owned by its logical frame, so displaying a
+Posframe or another child frame no longer forces the parent frame to be
+fully laid out again.  This improves interactive completion latency.
+
+---
+** NeoMacs localizes completion selection overlay updates.
+Moving a Vertico or Consult selection now relays only the affected candidate
+rows instead of rebuilding the complete candidate window.  This particularly
+improves the first 'C-j' movement in large completion lists.
+
+---
+** Tab-line tabs can now be selected with mouse-1 in NeoMacs.
+Window chrome now preserves the displayed string position and its local
+keymap in mouse events, matching GNU Emacs's 'posn-string' behavior.
+
 +++
 ** Several font-lock face variables are now obsolete.
 The following variables are now obsolete: 'font-lock-builtin-face',
@@ -1999,6 +2016,11 @@ will leave the text as-is; in that case, EWW will automatically enable
 visually wrapped at word boundaries.
 
 ** EWW
+
+---
+*** NeoMacs now renders pages containing complex inline scripts.
+HTML raw-text elements such as 'script' are now parsed with libxml2's
+recovery semantics.  This fixes blank EWW pages on sites such as Google.
 
 ---
 *** EWW now enables 'visual-wrap-prefix-mode' when 'shr-fill-text' is nil.

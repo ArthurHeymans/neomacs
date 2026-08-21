@@ -28,6 +28,7 @@ where
 {
     frame_id: FrameId,
     window_id: WindowId,
+    presentation_id: u64,
     params: &'a WindowParams,
     frame_params: &'a FrameParams,
     layout_box: &'a WindowLayoutBox,
@@ -45,6 +46,7 @@ where
     pub(crate) fn new(
         frame_id: FrameId,
         window_id: WindowId,
+        presentation_id: u64,
         params: &'a WindowParams,
         frame_params: &'a FrameParams,
         layout_box: &'a WindowLayoutBox,
@@ -56,6 +58,7 @@ where
         Self {
             frame_id,
             window_id,
+            presentation_id,
             params,
             frame_params,
             layout_box,
@@ -86,6 +89,7 @@ where
         let Self {
             frame_id,
             window_id,
+            presentation_id,
             params,
             frame_params,
             layout_box,
@@ -244,6 +248,7 @@ where
             &mut walk_setup,
             state,
             chrome_plan.render_request(
+                presentation_id,
                 params,
                 *layout_box,
                 geometry.mode_line_display_row,

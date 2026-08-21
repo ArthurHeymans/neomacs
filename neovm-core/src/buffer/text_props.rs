@@ -3357,6 +3357,47 @@ impl TextPropertyTable {
         true
     }
 
+    /// Compare equally-sized ranges from two independent string interval
+    /// tables. Positions are relative to each source string; callers cannot
+    /// accidentally compare them as buffer coordinates.
+    pub fn ranges_equal_including_property_values(
+        left: Option<&TextPropertyTable>,
+        left_start: usize,
+        right: Option<&TextPropertyTable>,
+        right_start: usize,
+        len: usize,
+    ) -> bool {
+        let mut offset = 0;
+        while offset < len {
+            let left_pos = CharPos0::new(left_start + offset);
+            let right_pos = CharPos0::new(right_start + offset);
+            let left_plist = left
+                .and_then(|table| table.plist_at(left_pos))
+                .unwrap_or_default();
+            let right_plist = right
+                .and_then(|table| table.plist_at(right_pos))
+                .unwrap_or_default();
+            if !plists_equal_values_equal(&left_plist, &right_plist) {
+                return false;
+            }
+
+            let left_end = CharPos0::new(left_start + len);
+            let right_end = CharPos0::new(right_start + len);
+            let left_next = left
+                .map(|table| table.next_interval_boundary_after(left_pos, left_end))
+                .unwrap_or(left_end)
+                .get()
+                .saturating_sub(left_start);
+            let right_next = right
+                .map(|table| table.next_interval_boundary_after(right_pos, right_end))
+                .unwrap_or(right_end)
+                .get()
+                .saturating_sub(right_start);
+            offset = left_next.min(right_next).max(offset + 1).min(len);
+        }
+        true
+    }
+
     pub fn slice_char_range(&self, range: CharRange) -> TextPropertyTable {
         self.slice_raw(range)
     }

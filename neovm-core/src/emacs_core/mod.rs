@@ -174,7 +174,9 @@ pub use error::{
     EvalError, format_eval_result, format_eval_result_bytes_with_eval,
     format_eval_result_with_eval, print_value_bytes_with_eval, print_value_with_eval,
 };
-pub use eval::{Context, GuiFrameHostRequest, PopupMenuEntry, PopupMenuRequest};
+pub use eval::{
+    Context, DisplayVariableEpoch, GuiFrameHostRequest, PopupMenuEntry, PopupMenuRequest,
+};
 pub use intern::SymId;
 pub use print::{print_value, print_value_bytes, print_value_with_buffers};
 pub use symbol::Obarray;

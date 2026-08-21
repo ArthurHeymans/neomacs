@@ -658,6 +658,7 @@ impl<'rows, 'emit, 'surface>
                         x,
                         col,
                         self.row_build.row_geometry,
+                        self.row_build.row_flags,
                         self.cursor_info,
                         self.hit_capture.hit_rows,
                         self.hit_capture.hit_row_range,

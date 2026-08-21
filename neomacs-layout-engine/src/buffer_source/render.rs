@@ -217,6 +217,7 @@ impl<'rows, 'request, 'emit, 'surface, 'face>
                 x,
                 col,
                 self.state.row_build.row_geometry,
+                self.state.row_build.row_flags,
                 self.state.cursor_info,
                 self.state.hit_capture.hit_rows,
                 self.state.hit_capture.hit_row_range,

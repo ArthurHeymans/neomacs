@@ -38,6 +38,26 @@ pub(crate) struct TextWindowRightEdgeMarkers<'a> {
     pub(crate) char_width: f32,
 }
 
+/// Semantic right-edge state for every body row.
+///
+/// GNU keeps `truncated_on_right_p` / continuation state on `glyph_row` even
+/// when no fringe or terminal marker is drawn.  The row flags are transient
+/// while building a window; this request transfers their durable meaning to
+/// the retained matrix before incremental-layout validation runs.
+pub(crate) struct TextWindowRowEdgeStates<'a> {
+    pub(crate) display_text_row_base: usize,
+    pub(crate) row_flags: &'a DisplayRowFlags,
+}
+
+impl<'a> TextWindowRowEdgeStates<'a> {
+    pub(crate) fn new(display_text_row_base: usize, row_flags: &'a DisplayRowFlags) -> Self {
+        Self {
+            display_text_row_base,
+            row_flags,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextWindowRightBorder {
     pub(crate) ch: char,
@@ -279,6 +299,22 @@ impl DisplayWindowRowMutation for TextWindowRightEdgeMarkerMutation<'_, '_, '_, 
     }
 }
 
+struct TextWindowRowEdgeStateMutation {
+    truncated_right: bool,
+    continued: bool,
+}
+
+impl DisplayWindowRowMutation for TextWindowRowEdgeStateMutation {
+    type Output = ();
+
+    fn apply(self, row: &mut GlyphRow, _matrix_cols: usize) -> Self::Output {
+        if row.enabled {
+            row.truncated_right = self.truncated_right;
+            row.continued = self.continued;
+        }
+    }
+}
+
 struct RightBorderTextRenderRequest<'face> {
     text: String,
     area: GlyphArea,
@@ -453,6 +489,25 @@ pub(crate) fn install_text_window_right_edge_markers(
                 char_width: request.char_width,
                 base_face: &base_face,
                 render_services: &mut render_services,
+            },
+        );
+    }
+}
+
+pub(crate) fn install_text_window_row_edge_states(
+    output_builder: &mut DisplayOutputBuilder,
+    request: TextWindowRowEdgeStates<'_>,
+) {
+    for row_idx in 0..request.row_flags.len() {
+        let _ = output_builder.apply_current_window_row_mutation(
+            request.display_text_row_base + row_idx,
+            TextWindowRowEdgeStateMutation {
+                truncated_right: request
+                    .row_flags
+                    .is_set(row_idx, DisplayRowFlagKind::Truncated),
+                continued: request
+                    .row_flags
+                    .is_set(row_idx, DisplayRowFlagKind::Continued),
             },
         );
     }

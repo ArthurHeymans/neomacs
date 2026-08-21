@@ -496,6 +496,78 @@ pub fn get_string_text_properties_table_for_value(value: Value) -> Option<TextPr
     }
 }
 
+/// Copy one half-open character range from a Lisp string, preserving its text
+/// properties.
+///
+/// Display presentation uses this narrow semantic operation when GNU would
+/// retain an individual source string as a glyph object but NeoMacs has
+/// already flattened that object into a larger property-preserving string.
+/// Keeping the range in [`CharRange`] prevents byte offsets, buffer positions,
+/// and Lisp's 1-based positions from entering that boundary.
+pub fn copy_lisp_string_char_range(value: Value, range: CharRange) -> Option<Value> {
+    let source = value.as_lisp_string()?;
+    if range.is_empty() || range.end().get() > source.schars() {
+        return None;
+    }
+    let start = range.start().get();
+    let end = range.end().get();
+    let (byte_start, byte_end) = if source.is_multibyte() {
+        (source.char_to_byte_pos(start), source.char_to_byte_pos(end))
+    } else {
+        (start, end)
+    };
+    source
+        .slice_with_char_bounds(byte_start, byte_end, start, end)
+        .map(Value::heap_string)
+}
+
+/// Compare two equally-sized Lisp-string character ranges, including text
+/// properties, without allocating substring objects or retaining either Lisp
+/// value beyond the mutation boundary.
+pub(crate) fn lisp_string_char_ranges_equal_including_properties(
+    left: Value,
+    left_range: CharRange,
+    right: Value,
+    right_range: CharRange,
+) -> bool {
+    let Some(left_string) = left.as_lisp_string() else {
+        return false;
+    };
+    let Some(right_string) = right.as_lisp_string() else {
+        return false;
+    };
+    let left_len = left_range
+        .end()
+        .get()
+        .saturating_sub(left_range.start().get());
+    let right_len = right_range
+        .end()
+        .get()
+        .saturating_sub(right_range.start().get());
+    if left_len != right_len
+        || left_range.end().get() > left_string.schars()
+        || right_range.end().get() > right_string.schars()
+    {
+        return false;
+    }
+    let left_byte_start = left_string.char_to_byte_pos(left_range.start().get());
+    let left_byte_end = left_string.char_to_byte_pos(left_range.end().get());
+    let right_byte_start = right_string.char_to_byte_pos(right_range.start().get());
+    let right_byte_end = right_string.char_to_byte_pos(right_range.end().get());
+    if left_string.as_bytes()[left_byte_start..left_byte_end]
+        != right_string.as_bytes()[right_byte_start..right_byte_end]
+    {
+        return false;
+    }
+    TextPropertyTable::ranges_equal_including_property_values(
+        string_text_props_nonempty(left),
+        left_range.start().get(),
+        string_text_props_nonempty(right),
+        right_range.start().get(),
+        left_len,
+    )
+}
+
 /// Borrow a string's live interval table for a read-only comparison, with the
 /// same empty→None normalization as `get_string_text_properties_table_for_value`
 /// but WITHOUT cloning the tree.  `equal-including-properties` only reads the

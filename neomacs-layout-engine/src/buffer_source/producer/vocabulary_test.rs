@@ -143,6 +143,7 @@ fn a_lisp_string_position_maps_to_the_str_arm() {
             string: ProducedStringId::new(42),
             index: 3,
             covered_buffer: None,
+            occurrence: GlyphSourceOccurrenceIdentity::Source,
         }
     );
 }

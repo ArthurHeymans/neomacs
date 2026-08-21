@@ -38,6 +38,7 @@ use crate::emacs_core::intern::{SymId, intern};
 use crate::emacs_core::value::{RuntimeBindingValue, Value, ValueKind, eq_value};
 use crate::gc_trace::GcTrace;
 use crate::window::WindowId;
+pub use neomacs_display_protocol::glyph_matrix::OverlayStringKind;
 use rustc_hash::FxHashMap;
 
 #[cfg(test)]
@@ -2073,6 +2074,323 @@ pub struct OutermostRestrictionResetState {
     pub affected_buffers: Vec<BufferId>,
 }
 
+/// Pending buffer-local redisplay damage caused by overlay mutations.
+///
+/// Unlike text, overlays belong to an individual buffer (indirect buffers may
+/// share text while carrying different overlays), so this state deliberately
+/// lives on [`Buffer`] rather than the shared [`BufferText`].  Bounded damage
+/// lets redisplay replay only affected rows; operations whose extent cannot be
+/// proven use `Unbounded` and retain the conservative full-layout fallback.
+/// A half-open range in one overlay string's character coordinate space.
+/// This is intentionally not [`CharRange`], whose positions belong to buffer
+/// text; the two coordinate spaces must never be interchangeable by accident.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OverlayStringCharRange {
+    start: usize,
+    end: usize,
+}
+
+impl OverlayStringCharRange {
+    pub const fn new(start: usize, end: usize) -> Self {
+        Self {
+            start,
+            end: if end < start { start } else { end },
+        }
+    }
+
+    pub const fn start(self) -> usize {
+        self.start
+    }
+
+    pub const fn end(self) -> usize {
+        self.end
+    }
+
+    pub const fn is_empty(self) -> bool {
+        self.start == self.end
+    }
+}
+
+/// A changed set of complete logical lines in one overlay string.  This type
+/// deliberately excludes render-equivalent string replacement: callers that
+/// receive it have compile-time proof that there are rows to replay.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OverlayStringLineDamage {
+    overlay_id: u64,
+    kind: OverlayStringKind,
+    anchor: CharPos0,
+    old_range: OverlayStringCharRange,
+    new_range: OverlayStringCharRange,
+    old_line_count: usize,
+    new_line_count: usize,
+}
+
+impl OverlayStringLineDamage {
+    pub const fn new(
+        overlay_id: u64,
+        kind: OverlayStringKind,
+        anchor: CharPos0,
+        old_range: OverlayStringCharRange,
+        new_range: OverlayStringCharRange,
+        old_line_count: usize,
+        new_line_count: usize,
+    ) -> Self {
+        Self {
+            overlay_id,
+            kind,
+            anchor,
+            old_range,
+            new_range,
+            old_line_count,
+            new_line_count,
+        }
+    }
+
+    pub const fn overlay_id(self) -> u64 {
+        self.overlay_id
+    }
+
+    pub const fn kind(self) -> OverlayStringKind {
+        self.kind
+    }
+
+    pub const fn anchor(self) -> CharPos0 {
+        self.anchor
+    }
+
+    pub const fn old_range(self) -> OverlayStringCharRange {
+        self.old_range
+    }
+
+    pub const fn new_range(self) -> OverlayStringCharRange {
+        self.new_range
+    }
+
+    pub const fn old_line_count(self) -> usize {
+        self.old_line_count
+    }
+
+    pub const fn new_line_count(self) -> usize {
+        self.new_line_count
+    }
+
+    pub const fn line_count_is_preserved(self) -> bool {
+        self.old_line_count == self.new_line_count
+    }
+}
+
+/// Exact overlay-string mutation evidence recorded while both Lisp values are
+/// still available.  `overlay-put` follows GNU's identity-based mutation
+/// semantics, so a freshly allocated but render-equivalent string still
+/// advances `OVERLAY_MODIFF`.  Keeping that event as an explicit enum variant
+/// lets damage composition discard its visual effect without confusing it
+/// with a changed zero-length string.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OverlayStringDamage {
+    RenderEquivalent {
+        overlay_id: u64,
+        kind: OverlayStringKind,
+        anchor: CharPos0,
+    },
+    ChangedLines(OverlayStringLineDamage),
+}
+
+impl OverlayStringDamage {
+    pub const fn render_equivalent(
+        overlay_id: u64,
+        kind: OverlayStringKind,
+        anchor: CharPos0,
+    ) -> Self {
+        Self::RenderEquivalent {
+            overlay_id,
+            kind,
+            anchor,
+        }
+    }
+
+    pub const fn changed_lines(damage: OverlayStringLineDamage) -> Self {
+        Self::ChangedLines(damage)
+    }
+
+    pub const fn overlay_id(self) -> u64 {
+        match self {
+            Self::RenderEquivalent { overlay_id, .. } => overlay_id,
+            Self::ChangedLines(damage) => damage.overlay_id(),
+        }
+    }
+
+    pub const fn kind(self) -> OverlayStringKind {
+        match self {
+            Self::RenderEquivalent { kind, .. } => kind,
+            Self::ChangedLines(damage) => damage.kind(),
+        }
+    }
+
+    pub const fn anchor(self) -> CharPos0 {
+        match self {
+            Self::RenderEquivalent { anchor, .. } => anchor,
+            Self::ChangedLines(damage) => damage.anchor(),
+        }
+    }
+
+    pub const fn line_damage(self) -> Option<OverlayStringLineDamage> {
+        match self {
+            Self::RenderEquivalent { .. } => None,
+            Self::ChangedLines(damage) => Some(damage),
+        }
+    }
+}
+
+/// A `move-overlay` call that reasserted an overlay's current extent.
+///
+/// GNU still advances `OVERLAY_MODIFF` for this operation and uses the
+/// zero-width old/new span as redisplay evidence. Preserve that semantic event
+/// separately from actual buffer-coordinate movement: flattening both into one
+/// `CharRange` loses the fact that a later exact string replacement on the same
+/// zero-width occurrence can account for the boundary refresh.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StationaryOverlayExtent {
+    overlay_id: u64,
+    range: CharRange,
+}
+
+impl StationaryOverlayExtent {
+    pub const fn new(overlay_id: u64, range: CharRange) -> Self {
+        Self { overlay_id, range }
+    }
+
+    pub const fn overlay_id(self) -> u64 {
+        self.overlay_id
+    }
+
+    pub const fn range(self) -> CharRange {
+        self.range
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BoundedOverlayDamage {
+    buffer_range: Option<CharRange>,
+    stationary_extents: smallvec::SmallVec<[StationaryOverlayExtent; 4]>,
+    string_changes: smallvec::SmallVec<[OverlayStringDamage; 4]>,
+}
+
+impl BoundedOverlayDamage {
+    const MAX_STATIONARY_EXTENTS: usize = 32;
+    const MAX_STRING_CHANGES: usize = 32;
+
+    pub fn for_buffer_range(range: CharRange) -> Self {
+        Self {
+            buffer_range: Some(range),
+            stationary_extents: smallvec::SmallVec::new(),
+            string_changes: smallvec::SmallVec::new(),
+        }
+    }
+
+    pub fn for_stationary_extent(extent: StationaryOverlayExtent) -> Self {
+        Self {
+            // A non-empty stationary extent can affect ordinary buffer glyphs
+            // and therefore remains ordinary buffer-coordinate damage. The
+            // typed event is retained as well so a zero-width boundary is not
+            // widened into an unrelated character merely to prove it happened.
+            buffer_range: (!extent.range.is_empty()).then_some(extent.range),
+            stationary_extents: smallvec::smallvec![extent],
+            string_changes: smallvec::SmallVec::new(),
+        }
+    }
+
+    pub fn for_overlay_string(change: OverlayStringDamage) -> Self {
+        Self {
+            buffer_range: None,
+            stationary_extents: smallvec::SmallVec::new(),
+            string_changes: smallvec::smallvec![change],
+        }
+    }
+
+    pub const fn buffer_range(&self) -> Option<CharRange> {
+        self.buffer_range
+    }
+
+    pub fn stationary_extents(&self) -> &[StationaryOverlayExtent] {
+        &self.stationary_extents
+    }
+
+    pub fn string_changes(&self) -> &[OverlayStringDamage] {
+        &self.string_changes
+    }
+
+    fn try_union(mut self, next: Self) -> Option<Self> {
+        self.buffer_range = match (self.buffer_range, next.buffer_range) {
+            (None, range) | (range, None) => range,
+            (Some(left), Some(right)) => Some(CharRange::new(
+                left.start().min(right.start()),
+                left.end().max(right.end()),
+            )),
+        };
+        for extent in next.stationary_extents {
+            if !self.stationary_extents.contains(&extent) {
+                if self.stationary_extents.len() >= Self::MAX_STATIONARY_EXTENTS {
+                    return None;
+                }
+                self.stationary_extents.push(extent);
+            }
+        }
+        for change in next.string_changes {
+            let same_occurrence = self.string_changes.iter().position(|pending| {
+                pending.overlay_id() == change.overlay_id()
+                    && pending.kind() == change.kind()
+                    && pending.anchor() == change.anchor()
+            });
+            if let Some(index) = same_occurrence {
+                // A render-equivalent refresh is an identity mutation but not
+                // a coordinate transition.  It is therefore the identity
+                // element when composing retained -> current visual damage.
+                // Two genuine line changes still introduce an unknowable
+                // intermediate coordinate space and remain conservative.
+                match (self.string_changes[index], change) {
+                    (OverlayStringDamage::RenderEquivalent { .. }, next) => {
+                        self.string_changes[index] = next;
+                    }
+                    (_, OverlayStringDamage::RenderEquivalent { .. }) => {}
+                    (
+                        OverlayStringDamage::ChangedLines(_),
+                        OverlayStringDamage::ChangedLines(_),
+                    ) => return None,
+                }
+                continue;
+            }
+            if self.string_changes.len() >= Self::MAX_STRING_CHANGES {
+                return None;
+            }
+            self.string_changes.push(change);
+        }
+        Some(self)
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum OverlayDamage {
+    /// No overlay mutation since the last accepted redisplay.
+    #[default]
+    Clean,
+    /// The union of every affected half-open character range.
+    Bounded(BoundedOverlayDamage),
+    /// An overlay mutation occurred, but its visual extent is not bounded.
+    Unbounded,
+}
+
+impl OverlayDamage {
+    fn union(self, next: Self) -> Self {
+        match (self, next) {
+            (Self::Unbounded, _) | (_, Self::Unbounded) => Self::Unbounded,
+            (Self::Clean, damage) | (damage, Self::Clean) => damage,
+            (Self::Bounded(left), Self::Bounded(right)) => {
+                left.try_union(right).map_or(Self::Unbounded, Self::Bounded)
+            }
+        }
+    }
+}
+
 /// Complete buffer state reconstructed from a pdump image.
 ///
 /// This is intentionally crate-private: pdump loading needs to restore the
@@ -2213,6 +2531,10 @@ pub struct Buffer {
     /// GNU `BUF_OVERLAY_MODIFF`: incremented when live overlay ranges or
     /// properties change so redisplay observes overlay-only UI updates.
     pub(crate) overlay_modified_tick: i64,
+    /// Exact visual extent behind `overlay_modified_tick`, acknowledged only
+    /// after an accepted redisplay.  Kept separate from shared text damage so
+    /// indirect buffers cannot invalidate one another's private overlays.
+    pub(crate) overlay_damage: std::cell::RefCell<OverlayDamage>,
     /// Shared undo owner for this text.
     pub(crate) undo_state: SharedUndoState,
     /// Handle on the editor's ONE saved point-before-command-or-undo, GNU's
@@ -2389,6 +2711,7 @@ impl Buffer {
             local_flags: 0,
             overlays: OverlayList::new(),
             overlay_modified_tick: 1,
+            overlay_damage: std::cell::RefCell::new(OverlayDamage::Clean),
             undo_state: SharedUndoState::new(),
             saved_point_before_command,
         }
@@ -2421,6 +2744,8 @@ impl Buffer {
             local_flags: parts.local_flags,
             overlays: parts.overlays,
             overlay_modified_tick: parts.overlay_modified_tick,
+            // A restored dump has no retained display matrix to invalidate.
+            overlay_damage: std::cell::RefCell::new(OverlayDamage::Clean),
             undo_state: parts.undo_state,
             saved_point_before_command: parts.saved_point_before_command,
         }
@@ -3831,8 +4156,73 @@ impl Buffer {
         self.overlay_modified_tick
     }
 
-    pub fn increment_overlay_modified_tick(&mut self) {
+    /// Overlay damage accumulated since the last accepted redisplay.
+    pub fn overlay_damage(&self) -> OverlayDamage {
+        self.overlay_damage.borrow().clone()
+    }
+
+    /// Record a bounded overlay mutation in buffer character coordinates and
+    /// advance the overlay modification tick atomically with that evidence.
+    fn record_overlay_damage(&mut self, damage: OverlayDamage) {
+        let accumulated = std::mem::take(&mut *self.overlay_damage.borrow_mut());
+        *self.overlay_damage.borrow_mut() = accumulated.union(damage);
         self.overlay_modified_tick = self.overlay_modified_tick.wrapping_add(1);
+    }
+
+    /// Convert an overlay's byte extent at the mutation boundary into the
+    /// character-coordinate damage consumed by incremental redisplay.
+    pub(crate) fn record_overlay_damage_in_emacs_byte_range(&mut self, range: EmacsByteRange) {
+        let range = self.text.byte_range_to_char_range(range);
+        // Overlay strings live on boundaries: `before-string` at START and
+        // `after-string` at END. Include the end boundary's containing row by
+        // extending one character when possible. This also gives a moved
+        // zero-width overlay a non-empty damage witness at both positions.
+        let z = CharPos0::new(self.text.char_count().get());
+        let end = if range.end() < z {
+            CharPos0::new(range.end().get() + 1)
+        } else {
+            range.end()
+        };
+        let range = CharRange::new(range.start(), end);
+        self.record_overlay_damage(OverlayDamage::Bounded(
+            BoundedOverlayDamage::for_buffer_range(range),
+        ));
+    }
+
+    pub(crate) fn record_overlay_string_damage(&mut self, damage: OverlayStringDamage) {
+        self.record_overlay_damage(OverlayDamage::Bounded(
+            BoundedOverlayDamage::for_overlay_string(damage),
+        ));
+    }
+
+    /// Record GNU's `move-overlay` generation change when the clipped old and
+    /// new extents are identical. This is not `Clean`: callers can use an
+    /// idempotent move as a redisplay boundary. Keeping it typed prevents a
+    /// zero-width Vertico anchor refresh from contaminating the exact
+    /// string-coordinate damage recorded by the following `overlay-put`.
+    pub(crate) fn record_stationary_overlay_extent(
+        &mut self,
+        overlay_id: u64,
+        range: EmacsByteRange,
+    ) {
+        let range = self.text.byte_range_to_char_range(range);
+        self.record_overlay_damage(OverlayDamage::Bounded(
+            BoundedOverlayDamage::for_stationary_extent(StationaryOverlayExtent::new(
+                overlay_id, range,
+            )),
+        ));
+    }
+
+    /// Acknowledge overlay damage after an accepted redisplay.  The tick is a
+    /// historical generation and is intentionally not reset.
+    pub fn reset_overlay_damage(&self) {
+        *self.overlay_damage.borrow_mut() = OverlayDamage::Clean;
+    }
+
+    /// Conservative compatibility entry point for mutation sites that cannot
+    /// yet prove an affected range.
+    pub fn increment_overlay_modified_tick(&mut self) {
+        self.record_overlay_damage(OverlayDamage::Unbounded);
     }
 
     pub fn is_modified(&self) -> bool {
@@ -5572,16 +5962,45 @@ impl BufferManager {
     pub fn delete_all_buffer_overlays(&mut self, id: BufferId) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
         if !buf.overlays.is_empty() {
+            let damage = buf
+                .overlays
+                .overlays_in_gnu_lists_order()
+                .into_iter()
+                .filter_map(|overlay| {
+                    buf.overlays
+                        .overlay_start_emacs_byte_pos(overlay)
+                        .zip(buf.overlays.overlay_end_emacs_byte_pos(overlay))
+                        .map(|(start, end)| EmacsByteRange::new(start, end))
+                })
+                .reduce(|left, right| {
+                    EmacsByteRange::new(
+                        left.start().min(right.start()),
+                        left.end().max(right.end()),
+                    )
+                });
             buf.overlays.delete_all_overlays();
-            buf.increment_overlay_modified_tick();
+            if let Some(damage) = damage {
+                buf.record_overlay_damage_in_emacs_byte_range(damage);
+            } else {
+                buf.increment_overlay_modified_tick();
+            }
         }
         Some(())
     }
 
     pub fn delete_buffer_overlay(&mut self, id: BufferId, overlay_id: Value) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
+        let damage = buf
+            .overlays
+            .overlay_start_emacs_byte_pos(overlay_id)
+            .zip(buf.overlays.overlay_end_emacs_byte_pos(overlay_id))
+            .map(|(start, end)| EmacsByteRange::new(start, end));
         if buf.overlays.delete_overlay(overlay_id) {
-            buf.increment_overlay_modified_tick();
+            if let Some(damage) = damage {
+                buf.record_overlay_damage_in_emacs_byte_range(damage);
+            } else {
+                buf.increment_overlay_modified_tick();
+            }
         }
         Some(())
     }
@@ -5594,12 +6013,19 @@ impl BufferManager {
         value: Value,
     ) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
-        buf.overlays.overlay_put(overlay_id, name, value).ok()?;
-        // An overlay property change (face/display/before-string/invisible/...) can
-        // alter layout with no buffer-text edit; bump the overlay tick so the
-        // incremental fast paths re-lay instead of reusing stale rows (GNU bumps
-        // the overlay modiff on any overlay change).
-        buf.increment_overlay_modified_tick();
+        let damage = buf
+            .overlays
+            .overlay_start_emacs_byte_pos(overlay_id)
+            .zip(buf.overlays.overlay_end_emacs_byte_pos(overlay_id))
+            .map(|(start, end)| EmacsByteRange::new(start, end));
+        let changed = buf.overlays.overlay_put(overlay_id, name, value).ok()?;
+        if changed {
+            if let Some(damage) = damage {
+                buf.record_overlay_damage_in_emacs_byte_range(damage);
+            } else {
+                buf.increment_overlay_modified_tick();
+            }
+        }
         Some(())
     }
 
@@ -5952,12 +6378,22 @@ impl BufferManager {
         range: EmacsByteRange,
     ) -> Option<()> {
         let buf = self.buffers.get_mut(&id)?;
+        let old_range = buf
+            .overlays
+            .overlay_start_emacs_byte_pos(overlay_id)
+            .zip(buf.overlays.overlay_end_emacs_byte_pos(overlay_id))
+            .map(|(start, end)| EmacsByteRange::new(start, end));
         buf.overlays
             .move_overlay_to_emacs_byte_range(overlay_id, range);
-        // Moving an overlay (e.g. hl-line following the cursor) changes which
-        // lines it covers with no buffer-text edit; bump the overlay tick so the
-        // cursor-only / scroll fast paths re-lay the affected rows.
-        buf.increment_overlay_modified_tick();
+        if let Some(old_range) = old_range {
+            let damage = EmacsByteRange::new(
+                old_range.start().min(range.start()),
+                old_range.end().max(range.end()),
+            );
+            buf.record_overlay_damage_in_emacs_byte_range(damage);
+        } else {
+            buf.increment_overlay_modified_tick();
+        }
         Some(())
     }
 

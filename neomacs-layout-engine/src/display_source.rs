@@ -2393,6 +2393,18 @@ impl LispStringSourceCursor {
         })
     }
 
+    pub(crate) fn new_at_char_index(
+        source_id: u64,
+        value: Value,
+        base_face: RenderFaceRef,
+        origin: LispStringSourceOrigin,
+        char_index: usize,
+    ) -> Option<Self> {
+        let mut stack = LispStringSourceStack::with_root(source_id, value, base_face, origin)?;
+        stack.seek_root_to_char_index(char_index);
+        Some(Self { stack })
+    }
+
     pub(crate) fn discard_until_row_break(&mut self) -> bool {
         let mut context = DisplaySourceContext::empty();
         while let Some(item) = self.next_item(&mut context) {
@@ -2561,6 +2573,12 @@ impl LispStringSourceStack {
         let id = self.next_source_id;
         self.next_source_id = self.next_source_id.saturating_add(1);
         id
+    }
+
+    fn seek_root_to_char_index(&mut self, char_index: usize) {
+        if let Some(root) = self.frames.first_mut() {
+            root.char_index = char_index.min(root.char_count());
+        }
     }
 }
 
@@ -2776,17 +2794,28 @@ impl LispStringSourceFrame {
 
     #[allow(dead_code)]
     fn source_position(&self) -> DisplaySourcePosition {
-        DisplaySourcePosition::lisp_string(
+        DisplaySourcePosition::lisp_string_in_occurrence(
             self.source_id,
             self.char_index,
             self.byte_offset(self.char_index),
+            self.pointer_occurrence,
         )
     }
 
     fn span(&self, start: usize, end: usize) -> SourceSpan {
         SourceSpan::new(
-            DisplaySourcePosition::lisp_string(self.source_id, start, self.byte_offset(start)),
-            DisplaySourcePosition::lisp_string(self.source_id, end, self.byte_offset(end)),
+            DisplaySourcePosition::lisp_string_in_occurrence(
+                self.source_id,
+                start,
+                self.byte_offset(start),
+                self.pointer_occurrence,
+            ),
+            DisplaySourcePosition::lisp_string_in_occurrence(
+                self.source_id,
+                end,
+                self.byte_offset(end),
+                self.pointer_occurrence,
+            ),
         )
     }
 

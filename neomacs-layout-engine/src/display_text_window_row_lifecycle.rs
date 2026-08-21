@@ -11,7 +11,7 @@ use crate::display_row::geometry::{
 };
 use crate::display_row::source_render::TextRowOutputRenderState;
 use crate::display_row::special_glyphs::{
-    TextWindowRightEdgeMarkers, TextWindowTerminalRightBorder,
+    TextWindowRightEdgeMarkers, TextWindowRowEdgeStates, TextWindowTerminalRightBorder,
     install_text_window_terminal_right_border,
 };
 use crate::display_row::walk_state::{
@@ -710,6 +710,8 @@ impl<'a> TextWindowBodyInstallRequest<'a> {
         state: TextWindowBodyInstallState<'_, '_, '_>,
     ) -> TextWindowRedisplayPositions {
         let context = self.context;
+        let row_edge_states =
+            TextWindowRowEdgeStates::new(context.display_text_row_base, context.row_flags);
         let right_edge_markers = TextWindowRightEdgeMarkers::for_reserved_special_column(
             context.reserve_right_special_col,
             context.reserve_right_border_col,
@@ -728,6 +730,7 @@ impl<'a> TextWindowBodyInstallRequest<'a> {
                 window_start: context.window_start,
                 text_start_byte: context.text_start_byte,
                 byte_idx: context.byte_idx,
+                row_edge_states,
                 right_edge_markers,
             },
             Some(state.render_services),

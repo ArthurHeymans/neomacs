@@ -6,8 +6,8 @@
 //! handoff.
 
 use super::display_status_line::{
-    ChromeRowRenderServices, DisplayRowOutputProgress, WindowChromeRowsRenderRequest,
-    WindowChromeRowsRenderState,
+    ChromeRowRenderServices, DisplayRowOutputProgress, WindowChromePresentedPointerPlan,
+    WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
 };
 use crate::coords::layout_i64_char_pos_to_lisp_char_pos;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
@@ -23,7 +23,8 @@ use crate::display_row::geometry::{
 };
 use crate::display_row::measured_state::MeasuredDisplayRow;
 use crate::display_row::special_glyphs::{
-    TextWindowRightEdgeMarkers, install_text_window_right_edge_markers,
+    TextWindowRightEdgeMarkers, TextWindowRowEdgeStates, install_text_window_right_edge_markers,
+    install_text_window_row_edge_states,
 };
 use crate::display_row::text_output::{TextOutputSpan, TextRowOutput};
 use crate::display_row::walk_state::HitRowRangeTracker;
@@ -522,6 +523,7 @@ pub(crate) fn render_window_chrome_rows(
     output: TextWindowOutputTarget<'_>,
     output_emitter: &mut WindowOutputEmitter,
     evaluator: &mut Context,
+    pointer_plans: &mut Vec<WindowChromePresentedPointerPlan>,
     request: WindowChromeRowsRenderRequest<'_, '_>,
     render_services: ChromeRowRenderServices<'_, '_>,
 ) -> WindowChromeMetrics {
@@ -529,6 +531,7 @@ pub(crate) fn render_window_chrome_rows(
         output,
         output_emitter,
         evaluator,
+        pointer_plans,
         render_services,
     ))
 }
@@ -629,6 +632,7 @@ pub(crate) struct TextWindowBodyOutputInstall<'a> {
     pub(crate) window_start: i64,
     pub(crate) text_start_byte: usize,
     pub(crate) byte_idx: usize,
+    pub(crate) row_edge_states: TextWindowRowEdgeStates<'a>,
     pub(crate) right_edge_markers: Option<TextWindowRightEdgeMarkers<'a>>,
 }
 
@@ -1043,6 +1047,7 @@ pub(crate) fn install_text_window_body_output(
         redisplay_positions,
     );
     install_text_window_finished_rows(output.reborrow(), output_emitter);
+    install_text_window_row_edge_states(output.builder(), request.row_edge_states);
     if let Some(markers) = request.right_edge_markers {
         let render_services =
             render_services.expect("right-edge markers require chrome render services");

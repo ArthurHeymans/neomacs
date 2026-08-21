@@ -17,8 +17,10 @@ pub mod undo;
 pub mod visited_file_modtime;
 
 pub use buffer::{
-    Buffer, BufferId, BufferManager, BufferTextSnapshot, InsertionType, LabeledRestriction,
-    LabeledRestrictionLabel, SavedRestrictionKind, SavedRestrictionState,
+    BoundedOverlayDamage, Buffer, BufferId, BufferManager, BufferTextSnapshot, InsertionType,
+    LabeledRestriction, LabeledRestrictionLabel, OverlayDamage, OverlayStringCharRange,
+    OverlayStringDamage, OverlayStringKind, OverlayStringLineDamage, SavedRestrictionKind,
+    SavedRestrictionState, StationaryOverlayExtent,
 };
 pub(crate) use buffer_text::BufferText;
 pub use overlay::{Overlay, OverlayList};

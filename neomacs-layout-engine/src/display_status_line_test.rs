@@ -128,6 +128,7 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
     symbol_values.insert("align-to".to_string(), Value::make_int(12));
 
     let render = WindowChromeDisplayRowRequest {
+        presentation_id: 1,
         window_id: 42,
         kind: WindowChromeKind::ModeLine,
         selected: true,
@@ -177,6 +178,7 @@ fn header_line_fills_the_complete_window_width_with_its_base_face() {
         ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
 
     let render = WindowChromeDisplayRowRequest {
+        presentation_id: 1,
         window_id: 42,
         kind: WindowChromeKind::HeaderLine,
         selected: true,
@@ -266,6 +268,7 @@ fn window_chrome_gui_tab_and_mode_lines_use_font_backed_glyph_advances() {
             ChromeRowRenderServices::new(&mut font_metrics, &face_resolver, &mut face_ids);
 
         let render = WindowChromeDisplayRowRequest {
+            presentation_id: 1,
             window_id: 42,
             kind,
             selected,
@@ -842,6 +845,7 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
 
     // Plain mode line: measured height stays at the allocated/char height.
     let plain = WindowChromeDisplayRowRequest {
+        presentation_id: 1,
         window_id: 7,
         kind: WindowChromeKind::ModeLine,
         selected: true,
@@ -879,6 +883,7 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
         }],
     );
     let tall = WindowChromeDisplayRowRequest {
+        presentation_id: 1,
         window_id: 7,
         kind: WindowChromeKind::ModeLine,
         selected: true,

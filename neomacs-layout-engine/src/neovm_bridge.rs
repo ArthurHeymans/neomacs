@@ -3096,7 +3096,9 @@ impl<'a, B: LayoutBufferView + ?Sized> RustTextPropAccess<'a, B> {
 /// - else equal (a stable sort keeps collection order).
 fn compare_overlay_entries(e1: &OverlayDisplayString, e2: &OverlayDisplayString) -> Ordering {
     if e1.after_string_p != e2.after_string_p {
-        if e1.overlay_id.bits() == e2.overlay_id.bits() {
+        if neovm_core::buffer::overlay::overlay_identity_key(e1.overlay_id)
+            == neovm_core::buffer::overlay::overlay_identity_key(e2.overlay_id)
+        {
             // Same overlay: before-string in front of after-string.
             if e1.after_string_p {
                 Ordering::Greater

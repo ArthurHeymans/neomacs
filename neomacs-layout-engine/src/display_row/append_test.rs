@@ -58,7 +58,7 @@ use crate::display_row::lisp_string::{
 };
 use crate::display_row::overlay_string::{
     BufferOverlayStringTextRowRenderContext, OverlayStringRenderRowContext,
-    OverlayStringRenderState, OverlayStringRowBreakRenderContext,
+    OverlayStringRenderState, OverlayStringRowBoundary, OverlayStringRowBreakRenderContext,
 };
 use crate::display_row::replacement::*;
 use crate::display_row::source_render::{
@@ -5157,6 +5157,7 @@ fn buffer_overlay_string_render_context_disabled_keeps_render_state() {
             &mut x,
             &mut col,
             &mut ctx.geometry,
+            &mut ctx.row_flags,
             &mut cursor_info,
             &mut ctx.hit_rows,
             &mut hit_row_range,
@@ -5211,6 +5212,7 @@ fn overlay_string_row_break_context_finishes_current_row() {
             &mut x,
             &mut col,
             &mut ctx.geometry,
+            &mut ctx.row_flags,
             &mut cursor_info,
             &mut ctx.hit_rows,
             &mut hit_row_range,
@@ -5219,7 +5221,8 @@ fn overlay_string_row_break_context_finishes_current_row() {
         );
 
         assert_eq!(
-            OverlayStringRowBreakRenderContext::new(5, row_context).finish_row(&mut state),
+            OverlayStringRowBreakRenderContext::new(5, row_context)
+                .finish_row(&mut state, OverlayStringRowBoundary::LogicalLineBreak),
             DisplayRowTransitionContinuation::Continue
         );
     }
@@ -7592,6 +7595,7 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
                 ),
                 DisplaySourceRowProgressState::new(&mut x, &mut col),
                 &mut context.geometry,
+                &mut context.row_flags,
                 &mut cursor_info,
                 &mut context.hit_rows,
                 &mut hit_row_range,
@@ -7853,6 +7857,8 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     let row = &state.window_matrices[0].matrix.rows[0];
     assert_eq!(row.height_px, 20.0);
     assert_eq!(row.ascent_px, 15.0);
+    assert!(row.truncated_right);
+    assert!(!row.continued);
     let text = &row.glyphs[GlyphArea::Text.index()];
     assert!(matches!(text[4].glyph_type, GlyphType::Char { ch: '$' }));
     assert_eq!(text[4].face_id, FaceId::new(9));

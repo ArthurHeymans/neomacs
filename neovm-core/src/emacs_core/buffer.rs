@@ -9,14 +9,15 @@ use crate::emacs_core::error::{
 
 use crate::buffer::{
     Buffer, BufferId, BufferManager, CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
-    EmacsByteRange, LispBytePos1, LispCharPos1, TextChange, TextEditRange, TextExtent,
+    EmacsByteRange, LispBytePos1, LispCharPos1, OverlayStringCharRange, OverlayStringDamage,
+    OverlayStringKind, OverlayStringLineDamage, TextChange, TextEditRange, TextExtent,
     TextPositionAnchor,
 };
 use crate::emacs_core::filelock;
 use crate::emacs_core::misc;
 use crate::emacs_core::value::{
     ValueKind, VecLikeType, equal_value, get_string_text_properties_table_for_value,
-    set_string_text_properties_table_for_value,
+    lisp_string_char_ranges_equal_including_properties, set_string_text_properties_table_for_value,
 };
 use crate::window::FrameManager;
 
@@ -5044,10 +5045,9 @@ pub(crate) fn builtin_make_overlay_in_buffers(
         rear_advance,
     });
     buf.overlays.insert_overlay(overlay);
-    // Creating an overlay changes what redisplay must consider (it can carry a
-    // face/display/before-string the moment a property is attached), so bump
-    // the modification tick here — matching move/put/delete, which already do.
-    buf.increment_overlay_modified_tick();
+    // GNU deliberately does not invalidate redisplay here: a fresh overlay has
+    // no properties and therefore no visual contribution.  The first
+    // overlay-put records this range if/when it becomes visible.
     Ok(overlay)
 }
 
@@ -5076,14 +5076,117 @@ pub(crate) fn builtin_overlay_put(eval: &mut super::eval::Context, args: Vec<Val
     builtin_overlay_put_in_buffers(&mut eval.buffers, args)
 }
 
+fn overlay_string_logical_lines(value: Value) -> Option<(usize, Vec<CharRange>)> {
+    if value.is_nil() {
+        return Some((0, Vec::new()));
+    }
+    let string = value.as_lisp_string()?;
+    let mut lines = Vec::new();
+    let mut start_byte = 0;
+    for (byte_index, byte) in string.as_bytes().iter().copied().enumerate() {
+        if byte == b'\n' {
+            let end_byte = byte_index + 1;
+            lines.push(CharRange::new(
+                CharPos0::new(string.byte_to_char_pos(start_byte)),
+                CharPos0::new(string.byte_to_char_pos(end_byte)),
+            ));
+            start_byte = end_byte;
+        }
+    }
+    if start_byte < string.sbytes() {
+        lines.push(CharRange::new(
+            CharPos0::new(string.byte_to_char_pos(start_byte)),
+            CharPos0::new(string.schars()),
+        ));
+    }
+    Some((string.schars(), lines))
+}
+
+/// Find the smallest complete-logical-line ranges whose replacement changes
+/// an overlay string's rendered output.  Complete lines give the layout layer
+/// a valid source restart boundary; equality includes text properties because
+/// Vertico normally changes the selected face even when candidate text is
+/// otherwise identical.
+fn overlay_string_changed_line_ranges(
+    old: Value,
+    new: Value,
+) -> Option<(OverlayStringCharRange, OverlayStringCharRange, usize, usize)> {
+    let (old_len, old_lines) = overlay_string_logical_lines(old)?;
+    let (new_len, new_lines) = overlay_string_logical_lines(new)?;
+    let mut common_prefix = 0;
+    while common_prefix < old_lines.len().min(new_lines.len())
+        && lisp_string_char_ranges_equal_including_properties(
+            old,
+            old_lines[common_prefix],
+            new,
+            new_lines[common_prefix],
+        )
+    {
+        common_prefix += 1;
+    }
+
+    let mut common_suffix = 0;
+    while common_suffix < old_lines.len().saturating_sub(common_prefix)
+        && common_suffix < new_lines.len().saturating_sub(common_prefix)
+    {
+        let old_index = old_lines.len() - common_suffix - 1;
+        let new_index = new_lines.len() - common_suffix - 1;
+        if !lisp_string_char_ranges_equal_including_properties(
+            old,
+            old_lines[old_index],
+            new,
+            new_lines[new_index],
+        ) {
+            break;
+        }
+        common_suffix += 1;
+    }
+
+    let old_start = old_lines
+        .get(common_prefix)
+        .map_or(old_len, |range| range.start().get());
+    let old_end = old_lines
+        .get(old_lines.len().saturating_sub(common_suffix + 1))
+        .map_or(old_start, |range| range.end().get());
+    let new_start = new_lines
+        .get(common_prefix)
+        .map_or(new_len, |range| range.start().get());
+    let new_end = new_lines
+        .get(new_lines.len().saturating_sub(common_suffix + 1))
+        .map_or(new_start, |range| range.end().get());
+    Some((
+        OverlayStringCharRange::new(old_start, old_end),
+        OverlayStringCharRange::new(new_start, new_end),
+        old_lines
+            .len()
+            .saturating_sub(common_prefix + common_suffix),
+        new_lines
+            .len()
+            .saturating_sub(common_prefix + common_suffix),
+    ))
+}
+
 pub(crate) fn builtin_overlay_put_in_buffers(
     buffers: &mut BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("overlay-put", &args, 3)?;
     let overlay = expect_overlay(&args[0])?;
+    let overlay_buffer_id = resolve_overlay_buffer_id(overlay);
+    let string_kind = if args[1].is_symbol_named("before-string") {
+        Some(OverlayStringKind::Before)
+    } else if args[1].is_symbol_named("after-string") {
+        Some(OverlayStringKind::After)
+    } else {
+        None
+    };
+    let old_overlay_string = overlay_buffer_id
+        .zip(string_kind)
+        .and_then(|(buf_id, _)| buffers.get(buf_id))
+        .and_then(|buf| buf.overlays.overlay_get(overlay, &args[1]))
+        .unwrap_or(Value::NIL);
     let val = args[2];
-    let changed = if let Some(buf_id) = resolve_overlay_buffer_id(overlay) {
+    let changed = if let Some(buf_id) = overlay_buffer_id {
         buffers
             .get_mut(buf_id)
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?
@@ -5098,11 +5201,51 @@ pub(crate) fn builtin_overlay_put_in_buffers(
             })
             .unwrap()?
     };
-    if let Some(buf_id) = resolve_overlay_buffer_id(overlay)
+    if let Some(buf_id) = overlay_buffer_id
         && changed
     {
         if let Some(buf) = buffers.get_mut(buf_id) {
-            buf.increment_overlay_modified_tick();
+            let damage = buf
+                .overlays
+                .overlay_start_emacs_byte_pos(overlay)
+                .zip(buf.overlays.overlay_end_emacs_byte_pos(overlay))
+                .map(|(start, end)| EmacsByteRange::new(start, end));
+            let string_damage = string_kind.zip(damage).and_then(|(kind, extent)| {
+                let anchor_byte = match kind {
+                    OverlayStringKind::Before => extent.start(),
+                    OverlayStringKind::After => extent.end(),
+                };
+                let anchor = buf.emacs_byte_pos_to_char_pos_clamped(anchor_byte);
+                let (old_range, new_range, old_line_count, new_line_count) =
+                    overlay_string_changed_line_ranges(old_overlay_string, val)?;
+                let overlay_id = crate::buffer::overlay::overlay_identity_key(overlay);
+                Some(
+                    if old_range.is_empty()
+                        && new_range.is_empty()
+                        && old_line_count == 0
+                        && new_line_count == 0
+                    {
+                        OverlayStringDamage::render_equivalent(overlay_id, kind, anchor)
+                    } else {
+                        OverlayStringDamage::changed_lines(OverlayStringLineDamage::new(
+                            overlay_id,
+                            kind,
+                            anchor,
+                            old_range,
+                            new_range,
+                            old_line_count,
+                            new_line_count,
+                        ))
+                    },
+                )
+            });
+            if let Some(damage) = string_damage {
+                buf.record_overlay_string_damage(damage);
+            } else if let Some(damage) = damage {
+                buf.record_overlay_damage_in_emacs_byte_range(damage);
+            } else {
+                buf.increment_overlay_modified_tick();
+            }
         }
         let evaporate = args[1].is_symbol_named("evaporate") && val.is_truthy();
         let is_empty = buffers
@@ -5301,16 +5444,45 @@ pub(crate) fn builtin_move_overlay_in_buffers(
             .get_mut(new_buf_id)
             .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
         let byte_range = elisp_range_to_byte_clipped_full(buf, beg, end);
+        let old_range = buf
+            .overlays
+            .overlay_start_emacs_byte_pos(overlay)
+            .zip(buf.overlays.overlay_end_emacs_byte_pos(overlay))
+            .map(|(start, end)| EmacsByteRange::new(start, end));
         buf.overlays
             .move_overlay_to_emacs_byte_range(overlay, byte_range);
-        buf.increment_overlay_modified_tick();
+        if let Some(old_range) = old_range {
+            if old_range == byte_range {
+                buf.record_stationary_overlay_extent(
+                    crate::buffer::overlay::overlay_identity_key(overlay),
+                    byte_range,
+                );
+            } else {
+                buf.record_overlay_damage_in_emacs_byte_range(EmacsByteRange::new(
+                    old_range.start().min(byte_range.start()),
+                    old_range.end().max(byte_range.end()),
+                ));
+            }
+        } else {
+            buf.increment_overlay_modified_tick();
+        }
         Ok(args[0])
     } else {
         if let Some(old_buf_id) = old_buf_id
             && let Some(buf) = buffers.get_mut(old_buf_id)
-            && buf.overlays.detach_overlay(overlay)
         {
-            buf.increment_overlay_modified_tick();
+            let old_range = buf
+                .overlays
+                .overlay_start_emacs_byte_pos(overlay)
+                .zip(buf.overlays.overlay_end_emacs_byte_pos(overlay))
+                .map(|(start, end)| EmacsByteRange::new(start, end));
+            if buf.overlays.detach_overlay(overlay) {
+                if let Some(old_range) = old_range {
+                    buf.record_overlay_damage_in_emacs_byte_range(old_range);
+                } else {
+                    buf.increment_overlay_modified_tick();
+                }
+            }
         }
 
         let new_buf = buffers
@@ -5323,7 +5495,7 @@ pub(crate) fn builtin_move_overlay_in_buffers(
             object.end = byte_range.end().get();
         });
         new_buf.overlays.insert_overlay(overlay);
-        new_buf.increment_overlay_modified_tick();
+        new_buf.record_overlay_damage_in_emacs_byte_range(byte_range);
         if byte_range.is_empty()
             && new_buf
                 .overlays
@@ -5331,7 +5503,7 @@ pub(crate) fn builtin_move_overlay_in_buffers(
                 .is_some_and(|value| value.is_truthy())
             && new_buf.overlays.delete_overlay(overlay)
         {
-            new_buf.increment_overlay_modified_tick();
+            new_buf.record_overlay_damage_in_emacs_byte_range(byte_range);
         }
         Ok(args[0])
     }

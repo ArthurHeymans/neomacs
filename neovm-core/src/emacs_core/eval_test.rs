@@ -2586,10 +2586,10 @@ fn input_pending_services_presentation_retirement_without_redisplay() {
     let presentation = ev.begin_interaction_presentation();
     let interaction = ev.register_presented_mouse_target(
         presentation,
-        crate::keyboard::PresentedMouseTarget {
-            area: crate::keyboard::PresentedMouseArea::TabBar,
-            posn_string: Value::cons(Value::string("tab"), Value::fixnum(0)),
-        },
+        crate::keyboard::PresentedMouseTarget::frame_chrome(
+            crate::keyboard::PresentedFrameMouseArea::TabBar,
+            Value::cons(Value::string("tab"), Value::fixnum(0)),
+        ),
     );
     ev.command_loop
         .keyboard
@@ -22596,17 +22596,93 @@ fn alloc_probe_bytecode_hash_isolation() {
 #[test]
 fn display_affecting_var_set_bumps_display_var_change_count() {
     let mut eval = Context::new();
-    let before = eval.display_var_change_count;
+    let buffer = eval.buffer_manager().current_buffer_id().unwrap();
+    let before = eval.display_variable_epoch_for_buffer(buffer);
     eval.mark_redisplay_dirty_if_display_var(intern("truncate-lines"));
-    let after = eval.display_var_change_count;
-    assert!(
-        after > before,
-        "a display-affecting var must bump display_var_change_count ({before} -> {after})"
+    let after = eval.display_variable_epoch_for_buffer(buffer);
+    assert_ne!(
+        after, before,
+        "a display-affecting var must advance the display-variable epoch"
     );
     eval.mark_redisplay_dirty_if_display_var(intern("neomacs--definitely-not-a-display-var"));
     assert_eq!(
-        eval.display_var_change_count, after,
-        "an ordinary variable must not bump the display-var counter"
+        eval.display_variable_epoch_for_buffer(buffer),
+        after,
+        "an ordinary variable must not advance the display-variable epoch"
+    );
+}
+
+#[test]
+fn temporary_display_variable_writes_cancel_before_redisplay() {
+    let mut eval = Context::new();
+    let buffer = eval.buffer_manager().current_buffer_id().unwrap();
+    let before = eval.display_variable_epoch_for_buffer(buffer);
+
+    eval.eval_str(
+        r#"(let ((retained cursor-type))
+             (setq cursor-type '(bar . 7))
+             (setq cursor-type retained))"#,
+    )
+    .expect("temporarily rebind cursor-type");
+
+    assert_eq!(
+        eval.display_variable_epoch_for_buffer(buffer),
+        before,
+        "a display variable restored before redisplay has no net generation change"
+    );
+    assert!(
+        eval.display_var_pending_writes.is_empty(),
+        "the retained -> temporary -> retained transition must cancel exactly"
+    );
+}
+
+#[test]
+fn accepted_display_variable_transition_becomes_the_next_retained_generation() {
+    let mut eval = Context::new();
+    let buffer = eval.buffer_manager().current_buffer_id().unwrap();
+    let before = eval.display_variable_epoch_for_buffer(buffer);
+    eval.eval_str("(setq cursor-type '(bar . 7))")
+        .expect("change cursor-type");
+    assert_ne!(eval.display_variable_epoch_for_buffer(buffer), before);
+
+    eval.acknowledge_display_variable_writes();
+    let retained = eval.display_variable_epoch_for_buffer(buffer);
+    eval.eval_str("(setq cursor-type '(bar . 7))")
+        .expect("reassert retained cursor-type");
+    assert_eq!(
+        eval.display_variable_epoch_for_buffer(buffer),
+        retained,
+        "an equal write after acknowledgement must not invent a new generation"
+    );
+}
+
+#[test]
+fn buffer_local_display_variable_damage_does_not_invalidate_other_buffers() {
+    let mut eval = Context::new();
+    let current = eval
+        .buffer_manager()
+        .current_buffer_id()
+        .expect("Context has a current buffer");
+    let other = eval
+        .eval_str("(get-buffer-create \" *display-epoch-other*\")")
+        .expect("create another buffer")
+        .as_buffer_id()
+        .expect("get-buffer-create returns a buffer");
+    let current_before = eval.display_variable_epoch_for_buffer(current);
+    let other_before = eval.display_variable_epoch_for_buffer(other);
+
+    eval.eval_str("(setq cursor-type '(bar . 7))")
+        .expect("change a buffer-local display variable");
+
+    assert_ne!(
+        eval.display_variable_epoch_for_buffer(current),
+        current_before,
+        "the buffer whose display input changed must receive a new epoch"
+    );
+    assert_eq!(
+        eval.display_variable_epoch_for_buffer(other),
+        other_before,
+        "a buffer-local display input must not invalidate unrelated buffers"
     );
 }
 

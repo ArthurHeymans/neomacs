@@ -9,9 +9,10 @@ use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
     BuiltTabBar, ChromeRowRenderServices, FrameTabBarDisplayRowRender,
     FrameTabBarDisplayRowRequest, ResizeMiniWindowsMode, ScratchGcRootScope,
-    TabBarPresentedPointerPlan, build_tab_bar_display, gnu_tab_bar_pointer_appearance_style,
-    max_mini_window_lines_from_value, tab_bar_effective_mouse_faces, tab_bar_image_relief_styles,
-    tab_bar_pointer_slot_plan, tab_bar_presented_pointer_plan,
+    TabBarPresentedPointerPlan, WindowChromePresentedPointerPlan, build_tab_bar_display,
+    gnu_tab_bar_pointer_appearance_style, max_mini_window_lines_from_value,
+    tab_bar_effective_mouse_faces, tab_bar_image_relief_styles, tab_bar_pointer_slot_plan,
+    tab_bar_presented_pointer_plan,
 };
 use super::gui_chrome::{
     collect_gui_menu_bar_items_for_frame, collect_gui_tool_bar_items,
@@ -72,8 +73,8 @@ use crate::frame_face_arena::{
 };
 use crate::frame_layout_transaction::{FrameLayoutCoordinator, FrameRelayoutRequest};
 use crate::incremental_layout::{
-    CursorOnlyReplay, EditDamage, LayoutClass, LayoutStats, MatrixValidity, RetainedWindowKey,
-    RetainedWindowMatrix, RowDamage, ScrollReplay,
+    CursorOnlyReplay, EditDamage, LayoutClass, LayoutStats, MatrixValidity, OverlayVisualDamage,
+    RetainedWindowKey, RetainedWindowMatrix, RowDamage, ScrollReplay,
 };
 use crate::window_layout::{
     WindowChromeMetrics, WindowDividerLayout, WindowLayoutBox, WindowLayoutOutcome,
@@ -335,6 +336,18 @@ fn tab_bar_button_relief_geometry(evaluator: &neovm_core::emacs_core::Context) -
     (horizontal_margin, vertical_margin, thickness)
 }
 
+/// GNU's accepted "current matrices" for one logical frame.
+///
+/// Window ids are unique today, but making the frame the owner here prevents a
+/// child-frame redisplay from evicting its parent's incremental-layout state.
+/// Keeping matrices and their intrinsic chrome measurements in the same value
+/// also makes it impossible to commit one without the other.
+#[derive(Default)]
+struct RetainedFrameLayout {
+    window_matrices: rustc_hash::FxHashMap<DisplayWindowId, RetainedWindowMatrix>,
+    window_chrome_metrics: rustc_hash::FxHashMap<DisplayWindowId, WindowChromeMetrics>,
+}
+
 /// The main Rust layout engine.
 ///
 /// Called on the Emacs thread during redisplay. Reads buffer/state from
@@ -367,6 +380,8 @@ pub struct LayoutEngine {
     frame_output: FrameOutputOwner,
     /// Source-addressed tab-bar pointer plan awaiting canonical glyph indices.
     pending_tab_bar_pointer: Option<TabBarPresentedPointerPlan>,
+    /// Evaluator-owned string-local actions for freshly shaped window chrome.
+    pending_window_chrome_pointer: Vec<WindowChromePresentedPointerPlan>,
     /// The last completed `FrameDisplayState`, produced by `layout_frame_rust()`.
     /// Used by the TTY redisplay path to drive `TtyRif` on the evaluator thread.
     pub last_frame_display_state: Option<neomacs_display_protocol::SealedFramePresentation>,
@@ -376,15 +391,13 @@ pub struct LayoutEngine {
     /// retries discard that attempt, and only a sealed presentation replaces
     /// the committed arena.
     frame_face_arenas: rustc_hash::FxHashMap<neovm_core::window::FrameId, FrameFaceArena>,
-    /// Per-window retained layout, owned across cycles (incremental-layout
-    /// Phase 0a). Committed at the accepted `break` only; NOT read yet — the
-    /// engine still rebuilds every window every cycle. The container a later
-    /// phase reuses rows out of.
-    retained_window_matrices: rustc_hash::FxHashMap<DisplayWindowId, RetainedWindowMatrix>,
-    /// Accepted intrinsic chrome metrics, the Rust equivalent of GNU's
-    /// current-matrix tab/header/mode-line heights.  They seed the next
-    /// speculative layout and are replaced only by a sealed frame.
-    retained_window_chrome_metrics: rustc_hash::FxHashMap<DisplayWindowId, WindowChromeMetrics>,
+    /// Accepted layout state, keyed by its owning logical frame.
+    ///
+    /// `publish_gui_frame` lays out every visible native frame in turn. A
+    /// process-global window map would make each frame replace the preceding
+    /// frame's retained matrices, defeating every incremental fast path when a
+    /// posframe or child frame is visible.
+    retained_frames: rustc_hash::FxHashMap<neovm_core::window::FrameId, RetainedFrameLayout>,
     /// Windows that took the Phase 1 cursor-only fast path this frame (their body
     /// rows were reused, not relaid). Populated as each window is laid out, read
     /// by the commit path to attribute rows to `reused_rows` and classify the
@@ -394,16 +407,19 @@ pub struct LayoutEngine {
     /// `(reused_shifted_row_count, dvpos)`. Read by the commit path to attribute
     /// rows + classify `Scroll` + emit `RowDamage::ReusedShifted`.
     scroll_window_ids: rustc_hash::FxHashMap<DisplayWindowId, (usize, f32)>,
-    /// Windows that took the Phase 3 localized-edit fast path this frame, mapped
-    /// to their reused (verbatim, above-the-edit) row count. Read by the commit
-    /// path to attribute rows + classify `Edit`.
-    edit_window_ids: rustc_hash::FxHashMap<DisplayWindowId, usize>,
+    /// Windows that took a localized replay, mapped to their reused row count
+    /// and the semantic damage class that selected the replay.
+    localized_window_ids: rustc_hash::FxHashMap<DisplayWindowId, (usize, LocalizedLayoutClass)>,
     /// Per-buffer dirty span snapshotted BEFORE this frame's fontification
     /// pass (GNU: the this_line decision reads BEG/END_UNCHANGED before
     /// fontification fires). Phase A edit classification consumes this so the
     /// span is the keystroke's damage, not the jit-lock chunk the
     /// fontification pass is about to rewrite. Keyed by buffer id.
     pre_fontify_dirty_spans: rustc_hash::FxHashMap<u64, Option<(i64, i64)>>,
+    /// Overlay damage is buffer-local (unlike shared indirect-buffer text), so
+    /// it is snapshotted separately and classified exhaustively as bounded or
+    /// unbounded before fontification/evaluation can introduce more changes.
+    pre_fontify_overlay_damage: rustc_hash::FxHashMap<u64, neovm_core::buffer::OverlayDamage>,
     /// Phase 3 below-reuse switch (default true). The localized edit fast path
     /// reuses the rows BELOW the dirty span too (charpos-shifted, same pixel_y),
     /// relaying ONLY the edited line — but ONLY for a simple insert that provably
@@ -416,16 +432,124 @@ pub struct LayoutEngine {
     layout_stats: LayoutStats,
 }
 
+/// Controls when an accepted frame may acknowledge buffer-local redisplay
+/// damage.
+///
+/// A standalone layout is useful to focused tests and synchronous consumers,
+/// but a native redisplay normally covers a set of frames.  Deferring the
+/// acknowledgement is what lets every frame displaying the same buffer see
+/// the same typed damage witness.
+enum BufferDamageAcknowledgement<'a> {
+    Immediate,
+    AfterFrameSet(&'a mut rustc_hash::FxHashSet<u64>),
+}
+
+/// One GNU-style redisplay set.
+///
+/// GNU delays `mark_window_display_accurate` until all frames have been
+/// redisplayed because that operation clears buffer damage used by later
+/// frames.  Holding both the engine and evaluator in this scope makes that
+/// lifetime explicit: accepted frames accumulate buffer ids, and `Drop`
+/// acknowledges them only after the caller has finished the set.
+#[must_use = "lay out every frame in the redisplay set before dropping it"]
+pub struct RedisplayFrameSet<'a> {
+    engine: &'a mut LayoutEngine,
+    evaluator: &'a mut neovm_core::emacs_core::Context,
+    acknowledged_buffers: rustc_hash::FxHashSet<u64>,
+}
+
+impl RedisplayFrameSet<'_> {
+    pub fn layout_frame_rust(
+        &mut self,
+        frame_id: neovm_core::window::FrameId,
+    ) -> Option<neovm_core::window::WindowEndRecord> {
+        self.layout_frame_rust_for_purpose(frame_id, LayoutPurpose::Redisplay)
+    }
+
+    pub fn layout_frame_rust_for_purpose(
+        &mut self,
+        frame_id: neovm_core::window::FrameId,
+        purpose: LayoutPurpose,
+    ) -> Option<neovm_core::window::WindowEndRecord> {
+        self.engine.layout_frame_rust_with_acknowledgement(
+            self.evaluator,
+            frame_id,
+            purpose,
+            BufferDamageAcknowledgement::AfterFrameSet(&mut self.acknowledged_buffers),
+        )
+    }
+
+    pub fn take_last_frame_display_state(
+        &mut self,
+    ) -> Option<neomacs_display_protocol::SealedFramePresentation> {
+        self.engine.last_frame_display_state.take()
+    }
+
+    pub fn last_layout_stats(&self) -> &LayoutStats {
+        self.engine.last_layout_stats()
+    }
+}
+
+impl Drop for RedisplayFrameSet<'_> {
+    fn drop(&mut self) {
+        acknowledge_buffer_damage(
+            self.evaluator,
+            std::mem::take(&mut self.acknowledged_buffers),
+        );
+    }
+}
+
+fn acknowledge_buffer_damage(
+    evaluator: &mut neovm_core::emacs_core::Context,
+    buffer_ids: impl IntoIterator<Item = u64>,
+) {
+    for buffer_id in buffer_ids {
+        if let Some(buffer) = evaluator
+            .buffer_manager()
+            .get(neovm_core::buffer::BufferId(buffer_id))
+        {
+            buffer.reset_unchanged_region();
+            buffer.reset_overlay_damage();
+        }
+    }
+    evaluator.acknowledge_display_variable_writes();
+}
+
 /// One window's incremental-layout decision, gathered before the frame admits
 /// any retained face IDs or allocates any fresh ones.
 ///
 /// Keeping the alternatives in one type makes the face namespace a property of
 /// the frame plan, rather than an ordering side effect of whichever window
 /// happens to render first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LocalizedLayoutClass {
+    Edit,
+    Visual,
+}
+
+impl From<LocalizedLayoutClass> for LayoutClass {
+    fn from(class: LocalizedLayoutClass) -> Self {
+        match class {
+            LocalizedLayoutClass::Edit => LayoutClass::Edit,
+            LocalizedLayoutClass::Visual => LayoutClass::Visual,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum IncrementalBodyReplayClass {
+    Scroll,
+    Localized(LocalizedLayoutClass),
+}
+
+struct IncrementalBodyReplay {
+    replay: ScrollReplay,
+    class: IncrementalBodyReplayClass,
+}
+
 struct IncrementalWindowPlan {
     cursor_only: Option<CursorOnlyReplay>,
-    scroll: Option<ScrollReplay>,
-    is_edit: bool,
+    body: Option<IncrementalBodyReplay>,
 }
 
 impl IncrementalWindowPlan {
@@ -433,21 +557,24 @@ impl IncrementalWindowPlan {
         self.cursor_only
             .as_ref()
             .map(|replay| replay.face_generation)
-            .or_else(|| self.scroll.as_ref().map(|replay| replay.face_generation))
+            .or_else(|| self.body.as_ref().map(|body| body.replay.face_generation))
     }
 
     fn retained_face_ids(&self) -> Vec<FaceId> {
         self.cursor_only
             .as_ref()
             .map(CursorOnlyReplay::retained_face_ids)
-            .or_else(|| self.scroll.as_ref().map(ScrollReplay::retained_face_ids))
+            .or_else(|| {
+                self.body
+                    .as_ref()
+                    .map(|body| body.replay.retained_face_ids())
+            })
             .unwrap_or_default()
     }
 
     fn disable_reuse(&mut self) {
         self.cursor_only = None;
-        self.scroll = None;
-        self.is_edit = false;
+        self.body = None;
     }
 }
 
@@ -500,6 +627,30 @@ impl Default for LayoutEngine {
 }
 
 impl LayoutEngine {
+    /// Start one native redisplay transaction spanning all participating
+    /// frames. Buffer damage is acknowledged when the returned scope ends.
+    pub fn redisplay_frame_set<'a>(
+        &'a mut self,
+        evaluator: &'a mut neovm_core::emacs_core::Context,
+    ) -> RedisplayFrameSet<'a> {
+        RedisplayFrameSet {
+            engine: self,
+            evaluator,
+            acknowledged_buffers: rustc_hash::FxHashSet::default(),
+        }
+    }
+
+    fn retained_window_matrix(
+        &self,
+        frame_id: neovm_core::window::FrameId,
+        window_id: DisplayWindowId,
+    ) -> Option<&RetainedWindowMatrix> {
+        self.retained_frames
+            .get(&frame_id)?
+            .window_matrices
+            .get(&window_id)
+    }
+
     /// Discard every value owned by one speculative frame-layout attempt.
     ///
     /// A retry must not inherit output or fast-path classifications from the
@@ -508,10 +659,11 @@ impl LayoutEngine {
     fn reset_frame_attempt_state(&mut self) {
         self.frame_output.reset();
         self.pending_tab_bar_pointer = None;
+        self.pending_window_chrome_pointer.clear();
         self.window_snapshots.clear();
         self.cursor_only_window_ids.clear();
         self.scroll_window_ids.clear();
-        self.edit_window_ids.clear();
+        self.localized_window_ids.clear();
     }
 
     fn accept_frame_relayout_request(
@@ -640,14 +792,15 @@ impl LayoutEngine {
             prev_background: None,
             frame_output: FrameOutputOwner::new(),
             pending_tab_bar_pointer: None,
+            pending_window_chrome_pointer: Vec::new(),
             last_frame_display_state: None,
             frame_face_arenas: rustc_hash::FxHashMap::default(),
-            retained_window_matrices: rustc_hash::FxHashMap::default(),
-            retained_window_chrome_metrics: rustc_hash::FxHashMap::default(),
+            retained_frames: rustc_hash::FxHashMap::default(),
             cursor_only_window_ids: rustc_hash::FxHashSet::default(),
             scroll_window_ids: rustc_hash::FxHashMap::default(),
-            edit_window_ids: rustc_hash::FxHashMap::default(),
+            localized_window_ids: rustc_hash::FxHashMap::default(),
             pre_fontify_dirty_spans: rustc_hash::FxHashMap::default(),
+            pre_fontify_overlay_damage: rustc_hash::FxHashMap::default(),
             allow_below_reuse: true,
             layout_stats: LayoutStats::default(),
         }
@@ -670,14 +823,15 @@ impl LayoutEngine {
             prev_background: None,
             frame_output: FrameOutputOwner::new(),
             pending_tab_bar_pointer: None,
+            pending_window_chrome_pointer: Vec::new(),
             last_frame_display_state: None,
             frame_face_arenas: rustc_hash::FxHashMap::default(),
-            retained_window_matrices: rustc_hash::FxHashMap::default(),
-            retained_window_chrome_metrics: rustc_hash::FxHashMap::default(),
+            retained_frames: rustc_hash::FxHashMap::default(),
             cursor_only_window_ids: rustc_hash::FxHashSet::default(),
             scroll_window_ids: rustc_hash::FxHashMap::default(),
-            edit_window_ids: rustc_hash::FxHashMap::default(),
+            localized_window_ids: rustc_hash::FxHashMap::default(),
             pre_fontify_dirty_spans: rustc_hash::FxHashMap::default(),
+            pre_fontify_overlay_damage: rustc_hash::FxHashMap::default(),
             allow_below_reuse: true,
             layout_stats: LayoutStats::default(),
         }
@@ -744,11 +898,26 @@ impl LayoutEngine {
     /// Renderer-facing purposes produce `last_frame_display_state` and prepare
     /// a presentation. A synchronous query lays out only its target window and
     /// returns the exact end record without replacing renderer-facing state.
-    pub fn layout_frame_rust_for_purpose(
+    pub(crate) fn layout_frame_rust_for_purpose(
         &mut self,
         evaluator: &mut neovm_core::emacs_core::Context,
         frame_id: neovm_core::window::FrameId,
         purpose: LayoutPurpose,
+    ) -> Option<neovm_core::window::WindowEndRecord> {
+        self.layout_frame_rust_with_acknowledgement(
+            evaluator,
+            frame_id,
+            purpose,
+            BufferDamageAcknowledgement::Immediate,
+        )
+    }
+
+    fn layout_frame_rust_with_acknowledgement(
+        &mut self,
+        evaluator: &mut neovm_core::emacs_core::Context,
+        frame_id: neovm_core::window::FrameId,
+        purpose: LayoutPurpose,
+        buffer_damage_acknowledgement: BufferDamageAcknowledgement<'_>,
     ) -> Option<neovm_core::window::WindowEndRecord> {
         let query_window = purpose.query_window();
         // Incremental-layout instrumentation (Phase 0a): start each frame from
@@ -841,7 +1010,11 @@ impl LayoutEngine {
         // speculative output; only an iteration that requests no relayout can
         // reach presentation sealing below.
         let mut layout_coordinator = FrameLayoutCoordinator::new(MAX_FRAME_LAYOUT_RETRIES);
-        let mut window_chrome_metrics = self.retained_window_chrome_metrics.clone();
+        let mut window_chrome_metrics = self
+            .retained_frames
+            .get(&frame_id)
+            .map(|retained| retained.window_chrome_metrics.clone())
+            .unwrap_or_default();
         let committed_face_arena = self
             .frame_face_arenas
             .get(&frame_id)
@@ -938,12 +1111,16 @@ impl LayoutEngine {
             // the span repaints via jit-lock's deferred contextual pass
             // (jit-lock-context-timer), same as GNU.
             self.pre_fontify_dirty_spans.clear();
+            self.pre_fontify_overlay_damage.clear();
             for params in &window_params_list {
                 let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
                 if let Some(buffer) = evaluator.buffer_manager().get(buf_id) {
                     self.pre_fontify_dirty_spans
                         .entry(params.buffer_id)
                         .or_insert_with(|| buffer.changed_char_range());
+                    self.pre_fontify_overlay_damage
+                        .entry(params.buffer_id)
+                        .or_insert_with(|| buffer.overlay_damage());
                 }
             }
 
@@ -1074,33 +1251,44 @@ impl LayoutEngine {
                     if query_window.is_some() {
                         return IncrementalWindowPlan {
                             cursor_only: None,
-                            scroll: None,
-                            is_edit: false,
+                            body: None,
                         };
                     }
-                    let cursor_only = self.build_cursor_only_replay(params, *layout_box, evaluator);
-                    let mut is_edit = false;
-                    let scroll = if cursor_only.is_none() {
+                    let cursor_only =
+                        self.build_cursor_only_replay(frame_id, params, *layout_box, evaluator);
+                    let body = if cursor_only.is_none() {
                         if let Some(scroll) =
-                            self.build_scroll_replay(params, *layout_box, evaluator)
+                            self.build_scroll_replay(frame_id, params, *layout_box, evaluator)
                         {
-                            Some(scroll)
+                            Some(IncrementalBodyReplay {
+                                replay: scroll,
+                                class: IncrementalBodyReplayClass::Scroll,
+                            })
                         } else if let Some(edit) =
-                            self.build_edit_replay(params, *layout_box, evaluator)
+                            self.build_edit_replay(frame_id, params, *layout_box, evaluator)
                         {
-                            is_edit = true;
-                            Some(edit)
+                            Some(IncrementalBodyReplay {
+                                replay: edit,
+                                class: IncrementalBodyReplayClass::Localized(
+                                    LocalizedLayoutClass::Edit,
+                                ),
+                            })
+                        } else if let Some(visual) =
+                            self.build_overlay_replay(frame_id, params, *layout_box, evaluator)
+                        {
+                            Some(IncrementalBodyReplay {
+                                replay: visual,
+                                class: IncrementalBodyReplayClass::Localized(
+                                    LocalizedLayoutClass::Visual,
+                                ),
+                            })
                         } else {
                             None
                         }
                     } else {
                         None
                     };
-                    IncrementalWindowPlan {
-                        cursor_only,
-                        scroll,
-                        is_edit,
-                    }
+                    IncrementalWindowPlan { cursor_only, body }
                 })
                 .collect();
 
@@ -1212,6 +1400,7 @@ impl LayoutEngine {
                 let window_layout = self.layout_window_rust(
                     evaluator,
                     frame_id,
+                    presentation_id,
                     params,
                     &frame_params,
                     &layout_box,
@@ -1223,8 +1412,7 @@ impl LayoutEngine {
                         MAX_WINDOW_VISIBILITY_RETRIES
                     },
                     plan.cursor_only,
-                    plan.scroll,
-                    plan.is_edit,
+                    plan.body,
                     position_publication,
                     &face_attempt,
                 );
@@ -1619,15 +1807,22 @@ impl LayoutEngine {
                 crate::display_status_line::chrome_generation_record()
                     .into_iter()
                     .collect();
+            let interactive_chrome_windows: rustc_hash::FxHashSet<DisplayWindowId> = self
+                .pending_window_chrome_pointer
+                .iter()
+                .filter(|plan| !plan.is_empty())
+                .map(WindowChromePresentedPointerPlan::window_id)
+                .collect();
             for entry in &mut frame_state.window_matrices {
                 let window_id = entry.window_id;
                 let cursor_only = self.cursor_only_window_ids.contains(&window_id);
                 let scroll_reused = self.scroll_window_ids.get(&window_id).copied();
-                let edit_reused = self.edit_window_ids.get(&window_id).copied();
+                let localized_reused = self.localized_window_ids.get(&window_id).copied();
                 // Fast paths classify body vs chrome by ROLE (they reuse the
                 // buffer-text `Text` rows and re-walk all chrome roles); a full
                 // rebuild counts by the `mode_line` flag (the Phase 0a baseline).
-                let role_based = cursor_only || scroll_reused.is_some() || edit_reused.is_some();
+                let role_based =
+                    cursor_only || scroll_reused.is_some() || localized_reused.is_some();
                 let mut enabled_body = 0usize;
                 let mut enabled_chrome = 0usize;
                 for row in &entry.matrix.rows {
@@ -1657,13 +1852,13 @@ impl LayoutEngine {
                     next_layout_stats.reused_shifted_rows += reused;
                     next_layout_stats.relaid_body_rows += enabled_body - reused;
                     next_layout_stats.record_window_class(LayoutClass::Scroll);
-                } else if let Some(reused) = edit_reused {
-                    // Rows above the edit reused verbatim; the dirty line + below
-                    // were relaid.
+                } else if let Some((reused, class)) = localized_reused {
+                    // Unaffected rows were retained; only the localized text or
+                    // visual damage span was walked.
                     let reused = reused.min(enabled_body);
                     next_layout_stats.reused_rows += reused;
                     next_layout_stats.relaid_body_rows += enabled_body - reused;
-                    next_layout_stats.record_window_class(LayoutClass::Edit);
+                    next_layout_stats.record_window_class(class.into());
                 } else {
                     next_layout_stats.relaid_body_rows += enabled_body;
                     next_layout_stats.record_window_class(LayoutClass::Full);
@@ -1693,7 +1888,7 @@ impl LayoutEngine {
                             } else {
                                 RowDamage::New
                             }
-                        } else if let Some(reused) = edit_reused {
+                        } else if let Some((reused, _)) = localized_reused {
                             if body_seen < reused {
                                 RowDamage::Reused
                             } else {
@@ -1755,10 +1950,17 @@ impl LayoutEngine {
                                 .get(&window_id.get())
                                 .map(|record| record.uses_column)
                                 .unwrap_or_else(|| {
-                                    self.retained_window_matrices
-                                        .get(&window_id)
+                                    self.retained_window_matrix(frame_id, window_id)
                                         .is_some_and(|prev| prev.chrome_uses_column)
                                 }),
+                            chrome_has_interactions: if chrome_generation
+                                .contains_key(&window_id.get())
+                            {
+                                interactive_chrome_windows.contains(&window_id)
+                            } else {
+                                self.retained_window_matrix(frame_id, window_id)
+                                    .is_some_and(|prev| prev.chrome_has_interactions)
+                            },
                             // GNU `w->last_had_star`. Read fresh rather than
                             // carried forward: a window that skipped chrome
                             // kept the flag its chrome was generated with, and
@@ -1791,7 +1993,10 @@ impl LayoutEngine {
         };
         let presentation_inputs =
             crate::frame_presentation::PresentationInputs::new(&self.window_snapshots)
-                .with_tab_bar_pointer(self.pending_tab_bar_pointer.take());
+                .with_tab_bar_pointer(self.pending_tab_bar_pointer.take())
+                .with_window_chrome_pointer(std::mem::take(
+                    &mut self.pending_window_chrome_pointer,
+                ));
         let sealed = match crate::frame_presentation::PresentationComposer::compose(
             resolved,
             presentation_inputs,
@@ -1808,7 +2013,6 @@ impl LayoutEngine {
         // Commit retained state only after the visual, spatial, and revision
         // invariants have sealed. A rejected presentation cannot acknowledge
         // buffer edits or replace the GNU "current matrix" analogue.
-        self.retained_window_chrome_metrics = accepted_window_chrome_metrics;
         self.layout_stats = next_layout_stats;
         // Per-frame incremental-layout observability: append one line per
         // accepted frame when NEOMACS_LAYOUT_STATS_FILE names a path. This is
@@ -1826,11 +2030,12 @@ impl LayoutEngine {
             {
                 let _ = writeln!(
                     f,
-                    "full={} cursor_only={} scroll={} edit={} relaid_body={} relaid_chrome={} reused={} reused_shifted={}",
+                    "full={} cursor_only={} scroll={} edit={} visual={} relaid_body={} relaid_chrome={} reused={} reused_shifted={}",
                     s.full_windows,
                     s.cursor_only_windows,
                     s.scroll_windows,
                     s.edit_windows,
+                    s.visual_windows,
                     s.relaid_body_rows,
                     s.relaid_chrome_rows,
                     s.reused_rows,
@@ -1842,14 +2047,20 @@ impl LayoutEngine {
         // CUMULATIVE counters line per accepted frame; aggregation takes the
         // last line per pid.
         crate::buffer_source::row_route::route_stats_append_report();
-        self.retained_window_matrices = next_retained_window_matrices;
+        self.retained_frames.insert(
+            frame_id,
+            RetainedFrameLayout {
+                window_matrices: next_retained_window_matrices,
+                window_chrome_metrics: accepted_window_chrome_metrics,
+            },
+        );
         self.frame_face_arenas.insert(frame_id, sealed_face_arena);
-        for buffer_id in acked_buffer_ids {
-            if let Some(buffer) = evaluator
-                .buffer_manager()
-                .get(neovm_core::buffer::BufferId(buffer_id))
-            {
-                buffer.reset_unchanged_region();
+        match buffer_damage_acknowledgement {
+            BufferDamageAcknowledgement::Immediate => {
+                acknowledge_buffer_damage(evaluator, acked_buffer_ids)
+            }
+            BufferDamageAcknowledgement::AfterFrameSet(buffer_ids) => {
+                buffer_ids.extend(acked_buffer_ids);
             }
         }
         self.last_frame_display_state = Some(sealed);
@@ -1920,6 +2131,7 @@ impl LayoutEngine {
     /// break; never overwritten until this frame's commit).
     fn build_cursor_only_replay(
         &self,
+        frame_id: neovm_core::window::FrameId,
         params: &WindowParams,
         layout_box: WindowLayoutBox,
         evaluator: &neovm_core::emacs_core::Context,
@@ -1933,7 +2145,7 @@ impl LayoutEngine {
         // reuses its body verbatim instead of full-rebuilding when another window
         // is edited.
         let window_id = DisplayWindowId::new(params.window_id);
-        let prev = self.retained_window_matrices.get(&window_id)?;
+        let prev = self.retained_window_matrix(frame_id, window_id)?;
         let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
         let mut replay = prev.cursor_only_replay(&curr_key)?;
         if prev.chrome_reusable_after_cursor_move(&replay, chrome_reuse_context(params, evaluator))
@@ -1950,9 +2162,10 @@ impl LayoutEngine {
     /// retained matrix yet or no body (non-chrome, text-displaying) rows.
     pub fn current_body_row_metrics(
         &self,
+        frame_id: neovm_core::window::FrameId,
         window_id: DisplayWindowId,
     ) -> Option<Vec<crate::pixel_scroll::ScrollRowMetric>> {
-        let retained = self.retained_window_matrices.get(&window_id)?;
+        let retained = self.retained_window_matrix(frame_id, window_id)?;
         let rows: Vec<crate::pixel_scroll::ScrollRowMetric> = retained
             .matrix
             .rows
@@ -1980,10 +2193,10 @@ impl LayoutEngine {
         window_id: neovm_core::window::WindowId,
         delta_px: i32,
     ) -> Option<()> {
-        let metrics = self.current_body_row_metrics(DisplayWindowId::new(window_id.0 as i64))?;
-
         // Read the current window-start (1-based) and vscroll (stored <= 0).
         let frame_id = evaluator.frame_manager().find_window_frame_id(window_id)?;
+        let metrics =
+            self.current_body_row_metrics(frame_id, DisplayWindowId::new(window_id.0 as i64))?;
         let (cur_start_1based, cur_vscroll_raw) = match evaluator
             .frame_manager()
             .get(frame_id)?
@@ -2021,6 +2234,7 @@ impl LayoutEngine {
     /// the same reason as [`Self::build_cursor_only_replay`].
     fn build_scroll_replay(
         &self,
+        frame_id: neovm_core::window::FrameId,
         params: &WindowParams,
         layout_box: WindowLayoutBox,
         evaluator: &neovm_core::emacs_core::Context,
@@ -2029,7 +2243,7 @@ impl LayoutEngine {
             return None;
         }
         let window_id = DisplayWindowId::new(params.window_id);
-        let prev = self.retained_window_matrices.get(&window_id)?;
+        let prev = self.retained_window_matrix(frame_id, window_id)?;
         let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
         // A genuine scroll keeps walking chrome, and structurally rather than by
         // trusting a trigger: `%p` is computed from window-start/window-end, so
@@ -2047,6 +2261,7 @@ impl LayoutEngine {
     /// the buffer. Selected window only.
     fn build_edit_replay(
         &self,
+        frame_id: neovm_core::window::FrameId,
         params: &WindowParams,
         layout_box: WindowLayoutBox,
         evaluator: &neovm_core::emacs_core::Context,
@@ -2055,7 +2270,7 @@ impl LayoutEngine {
             return None;
         }
         let window_id = DisplayWindowId::new(params.window_id);
-        let prev = self.retained_window_matrices.get(&window_id)?;
+        let prev = self.retained_window_matrix(frame_id, window_id)?;
         let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
         let buffer = evaluator
             .buffer_manager()
@@ -2138,10 +2353,113 @@ impl LayoutEngine {
         Some(replay)
     }
 
+    /// Localized visual replay for an overlay-only generation change in any
+    /// window. Selection is already an exact field of [`RetainedWindowKey`], so
+    /// a window whose selected state changed is rejected by the normal replay
+    /// predicate; an unchanged non-selected window is just another view of the
+    /// damaged buffer and can reuse unaffected rows. This matters for child-
+    /// frame UIs such as Vertico, whose candidate window need not own frame
+    /// selection while its display-string overlay changes. GNU's
+    /// `modify_overlay` composes the old/new extent into BEG/END_UNCHANGED;
+    /// NeoMacs keeps the buffer-local equivalent as `OverlayDamage` because
+    /// indirect buffers share text but not overlays.
+    fn build_overlay_replay(
+        &self,
+        frame_id: neovm_core::window::FrameId,
+        params: &WindowParams,
+        layout_box: WindowLayoutBox,
+        evaluator: &neovm_core::emacs_core::Context,
+    ) -> Option<ScrollReplay> {
+        let pending_damage = self
+            .pre_fontify_overlay_damage
+            .get(&params.buffer_id)
+            .cloned()
+            .unwrap_or_default();
+        let window_id = DisplayWindowId::new(params.window_id);
+        let prev = self.retained_window_matrix(frame_id, window_id)?;
+        let curr_key = RetainedWindowKey::from_params(params, layout_box, evaluator);
+        let buffer = evaluator
+            .buffer_manager()
+            .get(neovm_core::buffer::BufferId(params.buffer_id))?;
+        let range = match pending_damage {
+            neovm_core::buffer::OverlayDamage::Bounded(damage) => damage,
+            neovm_core::buffer::OverlayDamage::Clean
+            | neovm_core::buffer::OverlayDamage::Unbounded => return None,
+        };
+        let changes = range.string_changes();
+        let visual_changes = changes
+            .iter()
+            .filter_map(|change| change.line_damage())
+            .collect::<Vec<_>>();
+        // Vertico reasserts each zero-width overlay endpoint immediately before
+        // replacing that occurrence's display string. GNU records both events.
+        // Preserve the stationary extent in core, then prove here that every
+        // such boundary is owned by an exact string replacement at the same
+        // anchor. Only that composition may discard the otherwise-conservative
+        // boundary invalidation; a lone idempotent move still falls back.
+        let stationary_extents_are_subsumed = range.stationary_extents().iter().all(|extent| {
+            extent.range().is_empty()
+                && changes.iter().any(|change| {
+                    change.overlay_id() == extent.overlay_id()
+                        && change.anchor() == extent.range().start()
+                })
+        });
+        let (damage, replay_shape) = match (range.buffer_range(), changes) {
+            (Some(_), changes) if !changes.is_empty() => return None,
+            (None, changes) if !changes.is_empty() && stationary_extents_are_subsumed => {
+                if visual_changes.is_empty() {
+                    return None;
+                }
+                (OverlayVisualDamage::strings(&visual_changes), None)
+            }
+            (Some(range), _) => {
+                let dirty_start = range.start().get() as i64;
+                let dirty_end = range.end().get() as i64;
+                let span_newlines = (dirty_start..dirty_end)
+                    .filter(|&cp| {
+                        let byte = buffer.char_pos_to_emacs_byte_pos_clamped(
+                            neovm_core::buffer::CharPos0::new(cp as usize),
+                        );
+                        buffer.char_at_emacs_byte_pos(byte) == Some('\n')
+                    })
+                    .count();
+                let shape = EditDamage::new(dirty_start, dirty_end, 0, span_newlines);
+                (
+                    OverlayVisualDamage::buffer(dirty_start, dirty_end, span_newlines),
+                    Some(shape),
+                )
+            }
+            (None, _) => return None,
+        };
+        let Some(mut replay) = prev.overlay_replay(&curr_key, damage, self.allow_below_reuse)
+        else {
+            return None;
+        };
+        if let Some(replay_shape) = replay_shape {
+            if prev.chrome_reusable_after_edit(
+                &replay,
+                replay_shape,
+                chrome_reuse_context(params, evaluator),
+                |from, to| {
+                    (from.max(0)..to.max(0)).any(|cp| {
+                        let byte = buffer.char_pos_to_emacs_byte_pos_clamped(
+                            neovm_core::buffer::CharPos0::new(cp as usize),
+                        );
+                        buffer.char_at_emacs_byte_pos(byte) == Some('\n')
+                    })
+                },
+            ) {
+                replay.chrome = prev.retained_chrome();
+            }
+        }
+        Some(replay)
+    }
+
     fn layout_window_rust(
         &mut self,
         evaluator: &mut neovm_core::emacs_core::Context,
         frame_id: neovm_core::window::FrameId,
+        presentation_id: u64,
         params: &WindowParams,
         frame_params: &FrameParams,
         layout_box: &WindowLayoutBox,
@@ -2152,18 +2470,20 @@ impl LayoutEngine {
         // the *original* params (before any echo-buffer swap below), reading the
         // same retained key the predicate was snapshotted from. Phase B (here)
         // consumes the plan inside the render path in place of the body walk.
-        // `is_edit` only steers the commit-path stats classification.
+        // The body replay carries its semantic class through to commit-path
+        // instrumentation; a raw boolean cannot confuse scroll/edit/visual.
         cursor_only_replay: Option<CursorOnlyReplay>,
-        scroll_replay: Option<ScrollReplay>,
-        is_edit: bool,
+        body_replay: Option<IncrementalBodyReplay>,
         position_publication: WindowPositionPublication,
         face_attempt: &FrameFaceAttempt,
     ) -> WindowLayoutOutcome {
         let window_id = neovm_core::window::WindowId(params.window_id as u64);
-        let scroll_dvpos = scroll_replay
+        let body_replay_class = body_replay.as_ref().map(|body| body.class);
+        let scroll_dvpos = body_replay
             .as_ref()
-            .map(|replay| replay.dvpos)
+            .map(|body| body.replay.dvpos)
             .unwrap_or(0.0);
+        let scroll_replay = body_replay.map(|body| body.replay);
         // `params` already names the semantic display source chosen before
         // fontification and incremental classification.
         let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
@@ -2209,6 +2529,7 @@ impl LayoutEngine {
         let render_outcome = BufferWindowRenderRequest::new(
             frame_id,
             window_id,
+            presentation_id,
             params,
             frame_params,
             layout_box,
@@ -2226,6 +2547,7 @@ impl LayoutEngine {
                 face_resolver,
                 face_attempt.clone(),
                 &mut self.window_snapshots,
+                &mut self.pending_window_chrome_pointer,
             ),
             &mut self.text_buf,
             remaining_visibility_retries,
@@ -2256,6 +2578,7 @@ impl LayoutEngine {
                 return self.layout_window_rust(
                     evaluator,
                     frame_id,
+                    presentation_id,
                     params,
                     frame_params,
                     layout_box,
@@ -2264,7 +2587,6 @@ impl LayoutEngine {
                     remaining_visibility_retries,
                     None,
                     None,
-                    false,
                     position_publication,
                     face_attempt,
                 );
@@ -2281,6 +2603,7 @@ impl LayoutEngine {
                 return self.layout_window_rust(
                     evaluator,
                     frame_id,
+                    presentation_id,
                     &retry_params,
                     frame_params,
                     layout_box,
@@ -2289,7 +2612,6 @@ impl LayoutEngine {
                     remaining_visibility_retries.saturating_sub(1),
                     None,
                     None,
-                    false,
                     position_publication,
                     face_attempt,
                 );
@@ -2324,6 +2646,7 @@ impl LayoutEngine {
                 return self.layout_window_rust(
                     evaluator,
                     frame_id,
+                    presentation_id,
                     &retry_params,
                     frame_params,
                     layout_box,
@@ -2332,7 +2655,6 @@ impl LayoutEngine {
                     remaining_visibility_retries.saturating_sub(1),
                     None,
                     None,
-                    false,
                     position_publication,
                     face_attempt,
                 );
@@ -2357,11 +2679,14 @@ impl LayoutEngine {
                 }
                 if let Some(reused) = scroll_reused_rows {
                     let window_id = DisplayWindowId::new(params.window_id);
-                    if is_edit {
-                        self.edit_window_ids.insert(window_id, reused);
-                    } else {
-                        self.scroll_window_ids
-                            .insert(window_id, (reused, scroll_dvpos));
+                    match body_replay_class.expect("reused rows require a body replay") {
+                        IncrementalBodyReplayClass::Scroll => {
+                            self.scroll_window_ids
+                                .insert(window_id, (reused, scroll_dvpos));
+                        }
+                        IncrementalBodyReplayClass::Localized(class) => {
+                            self.localized_window_ids.insert(window_id, (reused, class));
+                        }
                     }
                 }
                 redisplay_positions

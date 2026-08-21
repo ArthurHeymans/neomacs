@@ -2105,6 +2105,92 @@ fn publish_gui_frame_sends_every_visible_top_level_frame_tree() {
     assert_eq!(published, vec![selected, second]);
 }
 
+fn shared_vertico_candidate_expression(selected: usize) -> String {
+    let mut parts = vec![r#"" \n""#.to_string()];
+    for index in 0..20 {
+        let marker = if index == selected {
+            r#"(propertize "▶" 'face 'highlight)"#.to_string()
+        } else {
+            r#"(propertize "_" 'display " ")"#.to_string()
+        };
+        parts.push(format!(
+            r#"(concat {marker}
+                       " candidate-{index:02}-engine.rs"
+                       (propertize " " 'display '(space :align-to (+ left 81)))
+                       "│-rw-r--r--│ 606k│2026-06-11 Thu 14:26:35│\n")"#
+        ));
+    }
+    format!("(concat {})", parts.join(" "))
+}
+
+#[test]
+fn publish_gui_frame_preserves_shared_damage_until_every_frame_is_laid_out() {
+    let mut eval = Context::new();
+    let shared_buffer = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    eval.buffer_manager_mut()
+        .get_mut(shared_buffer)
+        .expect("shared buffer")
+        .insert("engine");
+    let selected =
+        eval.frame_manager_mut()
+            .create_frame("shared-buffer-primary", 500, 442, shared_buffer);
+    let second =
+        eval.frame_manager_mut()
+            .create_frame("shared-buffer-frame", 500, 442, shared_buffer);
+    for frame_id in [selected, second] {
+        eval.frame_manager_mut()
+            .get_mut(frame_id)
+            .expect("GUI frame")
+            .set_window_system(Some(Value::symbol("neo")));
+    }
+
+    let initial = shared_vertico_candidate_expression(0);
+    eval.eval_str(&format!(
+        r#"(progn
+              (setq truncate-lines t)
+              (setq neomacs-test-shared-count (make-overlay (point-min) (point-min)))
+              (overlay-put neomacs-test-shared-count 'before-string " 1/2101  ")
+              (setq neomacs-test-shared-candidates (make-overlay (point-max) (point-max)))
+              (overlay-put neomacs-test-shared-candidates 'before-string {initial}))"#
+    ))
+    .expect("install shared Vertico-shaped overlays");
+
+    LAYOUT_ENGINE.with(|engine| engine.borrow_mut().enable_cosmic_metrics());
+    let (frame_tx, frame_rx) = crossbeam_channel::unbounded();
+    publish_gui_frame(&mut eval, &frame_tx, None);
+    frame_rx.try_iter().for_each(drop);
+
+    let next = shared_vertico_candidate_expression(1);
+    eval.eval_str(&format!(
+        r#"(progn
+              (move-overlay neomacs-test-shared-count (point-min) (point-min))
+              (overlay-put neomacs-test-shared-count 'before-string " 2/2101  ")
+              (move-overlay neomacs-test-shared-candidates (point-max) (point-max))
+              (overlay-put neomacs-test-shared-candidates 'before-string {next}))"#
+    ))
+    .expect("advance shared Vertico selection");
+
+    publish_gui_frame(&mut eval, &frame_tx, None);
+    LAYOUT_ENGINE.with(|engine| {
+        let engine = engine.borrow();
+        assert_eq!(
+            engine.last_layout_stats().visual_windows,
+            1,
+            "the final frame must retain the shared overlay damage witness: {:?}",
+            engine.last_layout_stats()
+        );
+        assert!(
+            engine.last_layout_stats().relaid_body_rows <= 4,
+            "the final frame should relay only changed display rows: {:?}",
+            engine.last_layout_stats()
+        );
+    });
+}
+
 #[test]
 fn rejected_gui_frame_is_discarded_instead_of_becoming_active() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])

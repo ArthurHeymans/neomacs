@@ -4719,19 +4719,18 @@ fn publish_gui_frame(
         neovm_core::window::RenderFrameVisibility::VisibleOnly,
     );
 
-    let mut sent_any = false;
-    for node in forest
+    let frame_ids = forest
         .into_iter()
         .flat_map(|tree| tree.frames_bottom_to_top)
-    {
-        let prepared = frame_layout::layout_frame_display_state(
-            evaluator,
-            node.frame_id,
-            frame_layout::FrameLayoutPurpose::Redisplay,
-        );
-        let Some(prepared) = prepared else {
-            continue;
-        };
+        .map(|node| node.frame_id);
+    let prepared_frames = frame_layout::layout_frame_display_states(
+        evaluator,
+        frame_ids,
+        frame_layout::FrameLayoutPurpose::Redisplay,
+    );
+
+    let mut sent_any = false;
+    for prepared in prepared_frames {
         let (ticket, display_state) = prepared.into_submission();
         match frame_tx.try_send(display_state) {
             Ok(()) => sent_any = true,

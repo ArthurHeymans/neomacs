@@ -443,13 +443,13 @@ fn get_char_property_delegates() {
 }
 
 #[test]
-fn overlay_lifecycle_bumps_overlay_modified_tick() {
+fn overlay_visible_mutations_bump_overlay_modified_tick() {
     crate::test_utils::init_test_tracing();
     let mut eval = eval_with_text("abcdef");
 
-    // Creating an overlay must bump the tick. This was an asymmetry:
-    // move/put/delete bumped `overlay_modified_tick` but `make-overlay` did
-    // not, so incremental redisplay could miss a freshly created overlay.
+    // GNU `make-overlay` only allocates and attaches the propertyless overlay;
+    // it does not call `modify_overlay` because the new object contributes no
+    // pixels yet.  The first property mutation is the redisplay boundary.
     let before_make = eval
         .buffer_manager()
         .current_buffer()
@@ -461,9 +461,9 @@ fn overlay_lifecycle_bumps_overlay_modified_tick() {
         .current_buffer()
         .expect("current buffer")
         .overlay_modified_tick();
-    assert!(
-        after_make > before_make,
-        "make-overlay must bump overlay_modified_tick (before={before_make} after={after_make})"
+    assert_eq!(
+        after_make, before_make,
+        "propertyless make-overlay must not bump overlay_modified_tick"
     );
 
     // Putting a display-affecting property bumps it too (already worked).
@@ -2246,6 +2246,345 @@ fn move_overlay_changes_range() {
     let end = builtin_overlay_end(&mut eval, vec![ov]).unwrap();
     assert!(start.is_fixnum());
     assert!(end.is_fixnum());
+}
+
+#[test]
+fn overlay_damage_tracks_property_and_old_plus_new_move_extents() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("hello world");
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    let initial_tick = eval
+        .buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .overlay_modified_tick();
+    let ov = builtin_make_overlay(&mut eval, vec![Value::fixnum(1), Value::fixnum(6)]).unwrap();
+    assert_eq!(
+        eval.buffers
+            .get(buffer_id)
+            .expect("buffer")
+            .overlay_modified_tick(),
+        initial_tick,
+        "a propertyless new overlay has no visual contribution"
+    );
+    assert_eq!(
+        eval.buffers
+            .get(buffer_id)
+            .expect("buffer")
+            .overlay_damage(),
+        crate::buffer::OverlayDamage::Clean
+    );
+    eval.buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .reset_overlay_damage();
+
+    builtin_overlay_put(
+        &mut eval,
+        vec![ov, Value::symbol("face"), Value::symbol("bold")],
+    )
+    .unwrap();
+    assert_eq!(
+        eval.buffers
+            .get(buffer_id)
+            .expect("buffer")
+            .overlay_damage(),
+        crate::buffer::OverlayDamage::Bounded(
+            crate::buffer::BoundedOverlayDamage::for_buffer_range(crate::buffer::CharRange::new(
+                crate::buffer::CharPos0::new(0),
+                crate::buffer::CharPos0::new(6),
+            ),),
+        ),
+        "overlay-put damages the current extent and its after-string boundary"
+    );
+
+    eval.buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .reset_overlay_damage();
+    builtin_move_overlay(&mut eval, vec![ov, Value::fixnum(3), Value::fixnum(8)]).unwrap();
+    assert_eq!(
+        eval.buffers
+            .get(buffer_id)
+            .expect("buffer")
+            .overlay_damage(),
+        crate::buffer::OverlayDamage::Bounded(
+            crate::buffer::BoundedOverlayDamage::for_buffer_range(crate::buffer::CharRange::new(
+                crate::buffer::CharPos0::new(0),
+                crate::buffer::CharPos0::new(8),
+            ),),
+        ),
+        "move-overlay damages the old/new union including the after-string boundary"
+    );
+}
+
+#[test]
+fn overlay_string_damage_tracks_complete_property_changed_lines_with_stable_identity() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abcdef");
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    let overlay = eval
+        .eval_str(
+            "(setq neomacs-test-overlay-string-damage \
+                   (make-overlay (point-max) (point-max)))",
+        )
+        .expect("create rooted EOB overlay");
+    eval.eval_str(
+        r#"(overlay-put neomacs-test-overlay-string-damage 'before-string
+             (concat "head\n"
+                     (propertize "row0\n" 'face 'highlight)
+                     "row1\n"
+                     "tail\n"))"#,
+    )
+    .expect("install retained overlay string");
+    eval.buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .reset_overlay_damage();
+
+    let identity_before_gc = crate::buffer::overlay::overlay_identity_key(overlay);
+    eval.gc_collect_exact();
+    let moved_overlay = eval
+        .eval_str("neomacs-test-overlay-string-damage")
+        .expect("read rooted overlay after GC");
+    assert_eq!(
+        crate::buffer::overlay::overlay_identity_key(moved_overlay),
+        identity_before_gc,
+        "overlay occurrence identity must not depend on a movable heap address"
+    );
+
+    eval.eval_str(
+        r#"(overlay-put neomacs-test-overlay-string-damage 'before-string
+             (concat "head\n"
+                     "row0\n"
+                     (propertize "row1\n" 'face 'highlight)
+                     "tail\n"))"#,
+    )
+    .expect("move the selected face between otherwise equal lines");
+
+    let damage = eval
+        .buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .overlay_damage();
+    let crate::buffer::OverlayDamage::Bounded(damage) = damage else {
+        panic!("property-only overlay-string change must stay bounded: {damage:?}");
+    };
+    assert_eq!(damage.buffer_range(), None);
+    let [change] = damage.string_changes() else {
+        panic!("expected one overlay-string change: {damage:?}");
+    };
+    let change = change
+        .line_damage()
+        .expect("property-only visual change must carry changed lines");
+    assert_eq!(change.overlay_id(), identity_before_gc);
+    assert_eq!(change.kind(), crate::buffer::OverlayStringKind::Before);
+    assert_eq!(change.anchor(), crate::buffer::CharPos0::new(6));
+    assert_eq!(
+        change.old_range(),
+        crate::buffer::OverlayStringCharRange::new(5, 15)
+    );
+    assert_eq!(
+        change.new_range(),
+        crate::buffer::OverlayStringCharRange::new(5, 15)
+    );
+    assert_eq!((change.old_line_count(), change.new_line_count()), (2, 2));
+}
+
+#[test]
+fn stationary_overlay_extent_composes_with_exact_string_damage() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abcdef");
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    let overlay = eval
+        .eval_str(
+            r#"(setq neomacs-test-stationary-string-overlay
+                     (make-overlay (point-max) (point-max)))"#,
+        )
+        .expect("create EOB overlay");
+    eval.eval_str(
+        r#"(overlay-put neomacs-test-stationary-string-overlay
+                        'before-string "row0\nrow1\n")"#,
+    )
+    .expect("install retained overlay string");
+    eval.buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .reset_overlay_damage();
+
+    eval.eval_str(
+        r#"(progn
+             (move-overlay neomacs-test-stationary-string-overlay
+                           (point-max) (point-max))
+             (overlay-put neomacs-test-stationary-string-overlay
+                          'before-string "ROW0\nrow1\n"))"#,
+    )
+    .expect("run Vertico-style stationary move and string replacement");
+
+    let damage = eval
+        .buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .overlay_damage();
+    let crate::buffer::OverlayDamage::Bounded(damage) = damage else {
+        panic!("stationary extent plus exact string damage must stay bounded: {damage:?}");
+    };
+    assert_eq!(damage.buffer_range(), None);
+    let [stationary] = damage.stationary_extents() else {
+        panic!("expected one stationary overlay extent: {damage:?}");
+    };
+    assert_eq!(
+        stationary.overlay_id(),
+        crate::buffer::overlay::overlay_identity_key(overlay)
+    );
+    assert_eq!(
+        stationary.range(),
+        crate::buffer::CharRange::new(
+            crate::buffer::CharPos0::new(6),
+            crate::buffer::CharPos0::new(6),
+        )
+    );
+    assert_eq!(damage.string_changes().len(), 1);
+}
+
+#[test]
+fn render_equivalent_overlay_string_refresh_composes_with_later_visual_change() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abcdef");
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    let overlay = eval
+        .eval_str(
+            r#"(setq neomacs-test-refreshed-overlay-string
+                     (make-overlay (point-max) (point-max)))"#,
+        )
+        .expect("create EOB overlay");
+    eval.eval_str(
+        r#"(overlay-put neomacs-test-refreshed-overlay-string
+                        'before-string "row0\nrow1\n")"#,
+    )
+    .expect("install retained overlay string");
+    eval.buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .reset_overlay_damage();
+
+    eval.eval_str(
+        r#"(progn
+             ;; Vertico first publishes a freshly allocated but render-
+             ;; equivalent candidate string, then changes selected-row faces.
+             (overlay-put neomacs-test-refreshed-overlay-string
+                          'before-string
+                          (copy-sequence "row0\nrow1\n"))
+             (overlay-put neomacs-test-refreshed-overlay-string
+                          'before-string "ROW0\nrow1\n"))"#,
+    )
+    .expect("refresh then visually change one overlay occurrence");
+
+    let damage = eval
+        .buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .overlay_damage();
+    let crate::buffer::OverlayDamage::Bounded(damage) = damage else {
+        panic!("render-equivalent refresh must compose with later damage: {damage:?}");
+    };
+    let [change] = damage.string_changes() else {
+        panic!("expected one composed visual string change: {damage:?}");
+    };
+    let change = change
+        .line_damage()
+        .expect("composed mutation must carry changed lines");
+    assert_eq!(
+        change.overlay_id(),
+        crate::buffer::overlay::overlay_identity_key(overlay)
+    );
+    assert_eq!(
+        change.old_range(),
+        crate::buffer::OverlayStringCharRange::new(0, 5)
+    );
+    assert_eq!(
+        change.new_range(),
+        crate::buffer::OverlayStringCharRange::new(0, 5)
+    );
+}
+
+#[test]
+fn overlay_string_damage_keeps_distinct_occurrences_separate() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abcdef");
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.eval_str(
+        r#"(progn
+             (setq neomacs-test-overlay-string-a
+                   (make-overlay (point-min) (point-min)))
+             (setq neomacs-test-overlay-string-b
+                   (make-overlay (point-max) (point-max)))
+             (overlay-put neomacs-test-overlay-string-a 'before-string "a0\na1\n")
+             (overlay-put neomacs-test-overlay-string-b 'before-string "b0\nb1\n"))"#,
+    )
+    .expect("install two retained overlay strings");
+    eval.buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .reset_overlay_damage();
+
+    eval.eval_str(
+        r#"(progn
+             (overlay-put neomacs-test-overlay-string-a 'before-string "A0\na1\n")
+             (overlay-put neomacs-test-overlay-string-b 'before-string "b0\nB1\n"))"#,
+    )
+    .expect("change two distinct overlay occurrences");
+
+    let damage = eval
+        .buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .overlay_damage();
+    let crate::buffer::OverlayDamage::Bounded(damage) = damage else {
+        panic!("distinct occurrences should compose as bounded damage: {damage:?}");
+    };
+    assert_eq!(damage.string_changes().len(), 2);
+    assert_ne!(
+        damage.string_changes()[0].overlay_id(),
+        damage.string_changes()[1].overlay_id()
+    );
+}
+
+#[test]
+fn repeated_overlay_string_damage_before_redisplay_is_unbounded() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = eval_with_text("abcdef");
+    let buffer_id = eval.buffers.current_buffer_id().expect("current buffer");
+    eval.eval_str(
+        r#"(progn
+             (setq neomacs-test-repeated-overlay-string
+                   (make-overlay (point-max) (point-max)))
+             (overlay-put neomacs-test-repeated-overlay-string
+                          'before-string "row0\nrow1\n"))"#,
+    )
+    .expect("install retained overlay string");
+    eval.buffers
+        .get(buffer_id)
+        .expect("buffer")
+        .reset_overlay_damage();
+
+    eval.eval_str(
+        r#"(progn
+             (overlay-put neomacs-test-repeated-overlay-string
+                          'before-string "ROW0\nrow1\n")
+             (overlay-put neomacs-test-repeated-overlay-string
+                          'before-string "row0\nROW1\n"))"#,
+    )
+    .expect("mutate one occurrence twice before redisplay");
+
+    assert_eq!(
+        eval.buffers
+            .get(buffer_id)
+            .expect("buffer")
+            .overlay_damage(),
+        crate::buffer::OverlayDamage::Unbounded,
+        "intermediate string coordinates cannot be composed safely"
+    );
 }
 
 #[test]

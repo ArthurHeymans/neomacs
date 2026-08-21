@@ -13,8 +13,8 @@ use crate::display_origin::{DisplayOrigin, OverlayStringKind};
 use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::builder::{DisplayRowGlyphSlot, DisplayRowPosition};
 use crate::display_row::geometry::{
-    DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
-    DisplayRowYRecording,
+    DisplayRowFlagKind, DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState,
+    DisplayRowLimit, DisplayRowYPositions, DisplayRowYRecording,
 };
 use crate::display_row::lisp_string::{
     LispStringSourceAppendRequest, LispStringSourceAppendSessionRequest, LispStringSourceId,
@@ -35,6 +35,7 @@ use crate::hit_test::HitRow;
 use crate::neovm_bridge::{
     LayoutBufferView, OverlayDisplayString, ResolvedFace, RustTextPropAccess,
 };
+use crate::types::OverlayStringWalkStart;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::value::get_string_text_properties_table_for_value;
@@ -90,12 +91,14 @@ impl OverlayStringRenderSource {
     pub(crate) fn append_request(
         self,
         position: DisplayRowPosition,
+        start_char_index: usize,
     ) -> LispStringSourceAppendRequest {
         LispStringSourceAppendRequest::new(position, LispStringSourceId::OVERLAY_STRING, self.value)
             .with_source_origin(LispStringSourceOrigin::OverlayString {
                 overlay_id: self.overlay_id,
                 kind: self.kind,
             })
+            .starting_at_char_index(start_char_index)
     }
 }
 
@@ -110,12 +113,19 @@ impl<'a> OverlayStringRenderRequest<'a> {
         }
     }
 
-    pub(crate) fn render<B: LayoutBufferView>(
+    pub(crate) fn render_from_char_index<B: LayoutBufferView>(
         self,
         buffer: &B,
         state: &mut OverlayStringRenderState<'_>,
+        start_char_index: usize,
     ) -> DisplayRowTransitionContinuation {
-        render_overlay_string(buffer, self.source, self.row_context, state)
+        render_overlay_string(
+            buffer,
+            self.source,
+            self.row_context,
+            state,
+            start_char_index,
+        )
     }
 }
 
@@ -193,6 +203,7 @@ pub(crate) struct OverlayStringRenderState<'a> {
     pub(crate) x: &'a mut f32,
     pub(crate) col: &'a mut usize,
     pub(crate) geometry: &'a mut DisplayRowGeometryState,
+    pub(crate) row_flags: &'a mut DisplayRowFlags,
     pub(crate) cursor_info: &'a mut CursorCaptureState,
     pub(crate) hit_rows: &'a mut Vec<HitRow>,
     pub(crate) hit_row_range: &'a mut HitRowRangeTracker,
@@ -213,6 +224,7 @@ impl<'a> OverlayStringRenderState<'a> {
         x: &'a mut f32,
         col: &'a mut usize,
         geometry: &'a mut DisplayRowGeometryState,
+        row_flags: &'a mut DisplayRowFlags,
         cursor_info: &'a mut CursorCaptureState,
         hit_rows: &'a mut Vec<HitRow>,
         hit_row_range: &'a mut HitRowRangeTracker,
@@ -224,6 +236,7 @@ impl<'a> OverlayStringRenderState<'a> {
             x,
             col,
             geometry,
+            row_flags,
             cursor_info,
             hit_rows,
             hit_row_range,
@@ -261,6 +274,14 @@ impl<'a> OverlayStringRenderState<'a> {
             state.face_scan,
         );
     }
+
+    fn mark_current_row_truncated(&mut self, row_limit: DisplayRowLimit) {
+        self.geometry.mark_current_row_flag_kind(
+            self.row_flags,
+            DisplayRowFlagKind::Truncated,
+            row_limit,
+        );
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -273,6 +294,7 @@ pub(crate) struct BufferOverlayStringTextRowRenderContext<'a> {
     row_base: usize,
     max_rows: usize,
     continuation_row_prelude: Option<BufferSourceContinuationRowPreludeRequest>,
+    replay_start: Option<OverlayStringWalkStart>,
 }
 
 impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
@@ -295,6 +317,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             row_base,
             max_rows,
             continuation_row_prelude: None,
+            replay_start: None,
         }
     }
 
@@ -304,6 +327,24 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
     ) -> Self {
         self.continuation_row_prelude = Some(request);
         self
+    }
+
+    pub(crate) fn with_replay_start(
+        mut self,
+        replay_start: Option<OverlayStringWalkStart>,
+    ) -> Self {
+        self.replay_start = replay_start;
+        self
+    }
+
+    /// Whether the buffer anchor that precedes the EOB overlay-string stream
+    /// belongs to this walk.  A source-local replay beginning inside the string
+    /// has retained that boundary on an earlier row already; publishing it at
+    /// the partial walk's first row would move point geometry to the dirty row.
+    pub(crate) fn publishes_eob_buffer_anchor(self) -> bool {
+        !self
+            .replay_start
+            .is_some_and(|start| start.char_index() > 0)
     }
 
     /// The window overlay strings are collected FOR, or `None` when this row
@@ -346,11 +387,26 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             return DisplayRowTransitionContinuation::Continue;
         }
         let row_context = self.row_context();
+        let mut replay_start = self
+            .replay_start
+            .filter(|start| start.anchor() == anchor_charpos);
         for overlay_string in strings.iter().copied() {
             let kind = if overlay_string.after_string_p {
                 OverlayStringKind::After
             } else {
                 OverlayStringKind::Before
+            };
+            let start_char_index = if let Some(start) = replay_start {
+                if neovm_core::buffer::overlay::overlay_identity_key(overlay_string.overlay_id)
+                    != start.overlay_id()
+                    || kind != start.kind()
+                {
+                    continue;
+                }
+                replay_start = None;
+                start.char_index()
+            } else {
+                0
             };
             let continuation = OverlayStringRenderRequest::new(
                 OverlayStringRenderSource::new(
@@ -360,7 +416,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
                 ),
                 row_context,
             )
-            .render(buffer, state);
+            .render_from_char_index(buffer, state, start_char_index);
             if continuation.should_break() {
                 return continuation;
             }
@@ -379,6 +435,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         x: &mut f32,
         col: &mut usize,
         geometry: &mut DisplayRowGeometryState,
+        row_flags: &mut DisplayRowFlags,
         cursor_info: &mut CursorCaptureState,
         hit_rows: &mut Vec<HitRow>,
         hit_row_range: &mut HitRowRangeTracker,
@@ -400,6 +457,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             x,
             col,
             geometry,
+            row_flags,
             cursor_info,
             hit_rows,
             hit_row_range,
@@ -420,6 +478,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
         x: &mut f32,
         col: &mut usize,
         geometry: &mut DisplayRowGeometryState,
+        row_flags: &mut DisplayRowFlags,
         cursor_info: &mut CursorCaptureState,
         hit_rows: &mut Vec<HitRow>,
         hit_row_range: &mut HitRowRangeTracker,
@@ -433,6 +492,7 @@ impl<'a> BufferOverlayStringTextRowRenderContext<'a> {
             x,
             col,
             geometry,
+            row_flags,
             cursor_info,
             hit_rows,
             hit_row_range,
@@ -460,6 +520,12 @@ pub(crate) struct OverlayStringRowBreakRenderContext<'a> {
     row_context: OverlayStringRenderRowContext<'a>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OverlayStringRowBoundary {
+    LogicalLineBreak,
+    RightTruncation,
+}
+
 impl<'a> OverlayStringRowBreakRenderContext<'a> {
     pub(crate) fn new(anchor_charpos: i64, row_context: OverlayStringRenderRowContext<'a>) -> Self {
         Self {
@@ -471,7 +537,11 @@ impl<'a> OverlayStringRowBreakRenderContext<'a> {
     pub(crate) fn finish_row(
         self,
         state: &mut OverlayStringRenderState<'_>,
+        boundary: OverlayStringRowBoundary,
     ) -> DisplayRowTransitionContinuation {
+        if boundary == OverlayStringRowBoundary::RightTruncation {
+            state.mark_current_row_truncated(self.row_context.row_limit());
+        }
         let content_x = self.row_context.content_x();
         let geometry_transition = DisplayRowLineBreakTransitionRequest::new(
             state.hit_row_range.range_to(self.anchor_charpos),
@@ -509,6 +579,7 @@ fn render_overlay_string<B: LayoutBufferView>(
     source_request: OverlayStringRenderSource,
     row_context: OverlayStringRenderRowContext<'_>,
     state: &mut OverlayStringRenderState<'_>,
+    start_char_index: usize,
 ) -> DisplayRowTransitionContinuation {
     let anchor_charpos = source_request.anchor_i64();
     let text_value = source_request.value();
@@ -524,8 +595,10 @@ fn render_overlay_string<B: LayoutBufferView>(
     let max_x = row_context.right_edge();
     let row_limit = row_context.row_limit();
     let row_break_context = OverlayStringRowBreakRenderContext::new(anchor_charpos, row_context);
-    let append_request =
-        source_request.append_request(DisplayRowPosition::new(*state.x, *state.col));
+    let append_request = source_request.append_request(
+        DisplayRowPosition::new(*state.x, *state.col),
+        start_char_index,
+    );
     let session_request = LispStringSourceAppendSessionRequest::new(
         append_request,
         base_face.face_id(),
@@ -576,7 +649,8 @@ fn render_overlay_string<B: LayoutBufferView>(
         *state.col = end.col();
 
         if matches!(stop, DisplayRowRenderStop::RowBreak(_)) {
-            let continuation = row_break_context.finish_row(state);
+            let continuation =
+                row_break_context.finish_row(state, OverlayStringRowBoundary::LogicalLineBreak);
             if continuation.should_break() {
                 return continuation;
             }
@@ -586,12 +660,14 @@ fn render_overlay_string<B: LayoutBufferView>(
             DisplayRowRenderStop::SourceExhausted => break,
             DisplayRowRenderStop::Clipped => {
                 if source_context.discard_pending_until_row_break() {
-                    let continuation = row_break_context.finish_row(state);
+                    let continuation = row_break_context
+                        .finish_row(state, OverlayStringRowBoundary::RightTruncation);
                     if continuation.should_break() {
                         return continuation;
                     }
                     continue;
                 }
+                state.mark_current_row_truncated(row_limit);
                 break;
             }
             DisplayRowRenderStop::RowBreak(_) => unreachable!("row break handled above"),

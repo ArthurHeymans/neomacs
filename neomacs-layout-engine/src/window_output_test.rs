@@ -35,8 +35,9 @@ use crate::display_row::builder::{
     DisplayRowAppendProgress, DisplayRowAppendStatus, DisplayRowGlyphSlot, DisplayRowPosition,
 };
 use crate::display_row::geometry::{
-    DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
+    DisplayRowFlags, DisplayRowGeometryState, DisplayRowLimit, DisplayRowYPositions,
 };
+use crate::display_row::special_glyphs::TextWindowRowEdgeStates;
 use crate::display_row::text_output::TextRowOutput;
 use crate::display_row::walk_state::HitRowRangeTracker;
 use crate::display_status_line::DisplayRowOutputProgress;
@@ -1244,6 +1245,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
             window_start: 3,
             text_start_byte: 100,
             byte_idx: 4,
+            row_edge_states: TextWindowRowEdgeStates::new(0, &DisplayRowFlags::new(0)),
             right_edge_markers: None,
         },
         None,

@@ -234,6 +234,7 @@ pub(crate) struct LispStringSourceAppendRequest {
     pub(crate) source_id: LispStringSourceId,
     pub(crate) value: Value,
     source_origin: LispStringSourceOrigin,
+    start_char_index: usize,
 }
 
 impl LispStringSourceAppendRequest {
@@ -247,6 +248,7 @@ impl LispStringSourceAppendRequest {
             source_id,
             value,
             source_origin: LispStringSourceOrigin::Normal,
+            start_char_index: 0,
         }
     }
 
@@ -255,12 +257,18 @@ impl LispStringSourceAppendRequest {
         self
     }
 
+    pub(crate) fn starting_at_char_index(mut self, char_index: usize) -> Self {
+        self.start_char_index = char_index;
+        self
+    }
+
     fn into_source(self, base_face_id: FaceId) -> Option<LispStringSourceCursor> {
-        LispStringSourceCursor::new(
+        LispStringSourceCursor::new_at_char_index(
             self.source_id.raw(),
             self.value,
             RenderFaceRef::FaceId(base_face_id),
             self.source_origin,
+            self.start_char_index,
         )
     }
 }

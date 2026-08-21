@@ -2273,6 +2273,64 @@ struct ActiveMapPosition {
     buffer_object: Value,
     buffer_local_map: Value,
     char_pos: Option<i64>,
+    clicked_string: Option<ClickedStringMapPosition>,
+}
+
+/// The string-local map source encoded by GNU's `POSN_STRING` slot.
+///
+/// Keeping this distinct from the buffer position prevents a displayed
+/// string's zero-based character offset from being mistaken for a Lisp buffer
+/// position.  The presentation may be a mode/header line or another displayed
+/// string (including tab-line, overlay, and `display` property strings), whose
+/// absent-property precedence differs in GNU `Fcurrent_active_maps`.
+#[derive(Clone, Copy, Debug)]
+struct ClickedStringMapPosition {
+    string: Value,
+    char_index: i64,
+    precedence: ClickedStringMapPrecedence,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ClickedStringMapPrecedence {
+    /// A present string property supersedes the buffer property.  Otherwise
+    /// retain the buffer property, as GNU does for ordinary displayed strings.
+    PresentPropertyOverrides,
+    /// Mode/header-line strings replace buffer properties even when their
+    /// corresponding string property is nil, because point is unrelated.
+    AlwaysOverrides,
+}
+
+impl ClickedStringMapPrecedence {
+    fn string_property_wins(self, string_property: Value) -> bool {
+        !string_property.is_nil() || matches!(self, Self::AlwaysOverrides)
+    }
+}
+
+fn clicked_string_map_position(position_slots: &[Value]) -> Option<ClickedStringMapPosition> {
+    let posn_string = *position_slots.get(4)?;
+    if !posn_string.is_cons() {
+        return None;
+    }
+
+    let string = posn_string.cons_car();
+    let char_index = posn_string.cons_cdr().as_fixnum()?;
+    let string_len = string.as_lisp_string()?.schars();
+    if char_index < 0 || usize::try_from(char_index).ok()? >= string_len {
+        return None;
+    }
+
+    let area = position_slots.get(1).copied().unwrap_or(Value::NIL);
+    let precedence = if area == Value::symbol("mode-line") || area == Value::symbol("header-line") {
+        ClickedStringMapPrecedence::AlwaysOverrides
+    } else {
+        ClickedStringMapPrecedence::PresentPropertyOverrides
+    };
+
+    Some(ClickedStringMapPosition {
+        string,
+        char_index,
+        precedence,
+    })
 }
 
 fn active_map_position(
@@ -2289,6 +2347,7 @@ fn active_map_position(
         buffer_object: Value::make_buffer(buffer.id),
         buffer_local_map: buffer.local_map(),
         char_pos: Some(buffer.point_lisp_char_pos().as_i64()),
+        clicked_string: None,
     };
 
     let Some(position) = position else {
@@ -2316,6 +2375,7 @@ fn active_map_position(
                 buffer_object: Value::make_buffer(buffer_id),
                 buffer_local_map: target_buffer.local_map(),
                 char_pos: Some(target_buffer.point_lisp_char_pos().as_i64()),
+                clicked_string: None,
             }));
         }
 
@@ -2338,6 +2398,7 @@ fn active_map_position(
             buffer_object: Value::make_buffer(buffer.id),
             buffer_local_map: buffer.local_map(),
             char_pos: Some(char_pos),
+            clicked_string: None,
         }));
     }
 
@@ -2353,6 +2414,7 @@ fn active_map_position(
         None => return Ok(Some(default_position)),
     };
     let char_pos = slots[5].as_int().or_else(|| slots[1].as_int());
+    let clicked_string = clicked_string_map_position(&slots);
 
     for frame_id in frames.frame_list() {
         let Some(frame) = frames.get(frame_id) else {
@@ -2383,10 +2445,50 @@ fn active_map_position(
             buffer_object: Value::make_buffer(buffer_id),
             buffer_local_map: target_buffer.local_map(),
             char_pos,
+            clicked_string,
         }));
     }
 
     Ok(Some(default_position))
+}
+
+fn map_property_at_active_position(
+    obarray: &Obarray,
+    buffers: &crate::buffer::BufferManager,
+    position: ActiveMapPosition,
+    property: LocalMapProperty,
+) -> Result<Value, Flow> {
+    let buffer_property = match position.char_pos {
+        Some(char_pos) => keymap_property_at_position(
+            obarray,
+            buffers,
+            position.buffer_object,
+            char_pos,
+            property,
+        )?,
+        None => Value::NIL,
+    };
+
+    let Some(clicked_string) = position.clicked_string else {
+        return Ok(buffer_property);
+    };
+    let string_property = super::builtins::textprop::builtin_get_text_property_in_state(
+        obarray,
+        buffers,
+        vec![
+            Value::fixnum(clicked_string.char_index),
+            Value::from_sym_id(property.symbol_id()),
+            clicked_string.string,
+        ],
+    )?;
+    if clicked_string
+        .precedence
+        .string_property_wins(string_property)
+    {
+        Ok(string_property)
+    } else {
+        Ok(buffer_property)
+    }
 }
 
 fn keymap_property_at_position(
@@ -2477,20 +2579,20 @@ fn current_local_map_for_position(
         return Ok(fallback_local_map);
     };
 
-    if let Some(char_pos) = active_position.char_pos {
-        let property = keymap_property_at_position(
-            obarray,
-            buffers,
-            active_position.buffer_object,
-            char_pos,
-            LocalMapProperty::LocalMap,
-        )?;
-        return Ok(
-            maybe_keymap_in_obarray(obarray, &property).unwrap_or(active_position.buffer_local_map)
-        );
-    }
-
-    Ok(active_position.buffer_local_map)
+    let property = map_property_at_active_position(
+        obarray,
+        buffers,
+        active_position,
+        LocalMapProperty::LocalMap,
+    )?;
+    let fallback = match active_position.clicked_string {
+        Some(ClickedStringMapPosition {
+            precedence: ClickedStringMapPrecedence::AlwaysOverrides,
+            ..
+        }) => Value::NIL,
+        _ => active_position.buffer_local_map,
+    };
+    Ok(maybe_keymap_in_obarray(obarray, &property).unwrap_or(fallback))
 }
 
 fn position_keymap(
@@ -2503,15 +2605,10 @@ fn position_keymap(
         return Ok(Value::NIL);
     };
 
-    let Some(char_pos) = active_position.char_pos else {
-        return Ok(Value::NIL);
-    };
-
-    let property = keymap_property_at_position(
+    let property = map_property_at_active_position(
         obarray,
         buffers,
-        active_position.buffer_object,
-        char_pos,
+        active_position,
         LocalMapProperty::Keymap,
     )?;
     Ok(maybe_keymap_in_obarray(obarray, &property).unwrap_or(Value::NIL))

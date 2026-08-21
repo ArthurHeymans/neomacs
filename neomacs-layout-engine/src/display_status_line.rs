@@ -53,16 +53,22 @@ use neomacs_display_protocol::frame_chrome::{
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::{Color, FaceId, Rect};
 use neomacs_display_protocol::{
-    FrameRect, PointerAppearanceId, PointerDrawMode, PointerImageRelief, PresentedPrimitiveKind,
+    DisplayWindowId, FrameRect, PointerAppearanceId, PointerDrawMode, PointerImageRelief,
+    PresentedPointerRegion, PresentedPointerSourceMap, PresentedPrimitiveKind, PresentedRegionId,
+    PresentedRegionKind,
 };
-use neovm_core::buffer::BufferId;
+use neovm_core::buffer::{BufferId, CharPos0, CharRange};
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 use neovm_core::emacs_core::keymap::{KeymapMarker, MenuItemProperty, is_list_keymap};
-use neovm_core::emacs_core::value::list_to_vec;
-use neovm_core::keyboard::{PresentedMouseArea, PresentedMouseTarget};
+use neovm_core::emacs_core::value::{
+    copy_lisp_string_char_range, get_string_text_properties_table_for_value, list_to_vec,
+};
+use neovm_core::keyboard::{
+    PresentedFrameMouseArea, PresentedMouseTarget, PresentedWindowMouseArea,
+};
 use neovm_core::window::{FrameId, WindowId};
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
@@ -517,6 +523,7 @@ impl<'face> ChromeLispStringRowRequest<'face> {
 }
 
 pub(crate) struct WindowChromeDisplayRowRequest<'face> {
+    pub(crate) presentation_id: u64,
     pub(crate) window_id: u64,
     pub(crate) kind: WindowChromeKind,
     pub(crate) selected: bool,
@@ -533,6 +540,7 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
 }
 
 pub(crate) struct WindowChromeRowsRenderRequest<'face, 'params> {
+    pub(crate) presentation_id: u64,
     pub(crate) params: &'params WindowParams,
     pub(crate) layout_box: WindowLayoutBox,
     pub(crate) tab_line_face: Option<&'face ResolvedFace>,
@@ -638,6 +646,7 @@ impl WindowChromeRowsPlan {
 
     pub(crate) fn render_request<'face, 'params>(
         &'face self,
+        presentation_id: u64,
         params: &'params WindowParams,
         layout_box: WindowLayoutBox,
         mode_line_display_row: usize,
@@ -646,6 +655,7 @@ impl WindowChromeRowsPlan {
         buffer_name: &'params str,
     ) -> WindowChromeRowsRenderRequest<'face, 'params> {
         WindowChromeRowsRenderRequest {
+            presentation_id,
             params,
             layout_box,
             tab_line_face: self.tab_line_face.as_ref(),
@@ -696,6 +706,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
         state: &mut WindowChromeRowsRenderState<'_, '_, 'face>,
     ) -> WindowChromeMetrics {
         let params = self.params;
+        let presentation_id = self.presentation_id;
         let regions = self.layout_box.regions();
         let chrome_width = regions
             .mode_line
@@ -736,6 +747,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             .unwrap_or_else(|| Value::string(""));
             if let Some(height) = state.render_display_row(
                 WindowChromeDisplayRowRequest {
+                    presentation_id,
                     window_id: params.window_id as u64,
                     kind: WindowChromeKind::TabLine,
                     selected: params.selected,
@@ -776,6 +788,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             .unwrap_or_else(|| Value::string(""));
             if let Some(height) = state.render_display_row(
                 WindowChromeDisplayRowRequest {
+                    presentation_id,
                     window_id: params.window_id as u64,
                     kind: WindowChromeKind::HeaderLine,
                     selected: params.mode_line_active,
@@ -835,6 +848,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             };
             if let Some(height) = state.render_display_row(
                 WindowChromeDisplayRowRequest {
+                    presentation_id,
                     window_id: params.window_id as u64,
                     kind: WindowChromeKind::ModeLine,
                     selected: params.mode_line_active,
@@ -946,6 +960,15 @@ impl ChromeDisplayRowRenderedRequest {
 struct WindowChromeDisplayRowRenderRequest<'face> {
     output: ChromeRowOutput,
     row: ChromeDisplayRowRenderRequest<'face>,
+    interaction_source: WindowChromeInteractionSource,
+}
+
+#[derive(Clone, Copy)]
+struct WindowChromeInteractionSource {
+    presentation_id: u64,
+    window_id: WindowId,
+    kind: WindowChromeKind,
+    text: Value,
 }
 
 /// How a chrome row is anchored vertically once its real (measured) height is
@@ -1004,6 +1027,17 @@ impl<'face> WindowChromeDisplayRowRenderRequest<'face> {
             ChromeRowVerticalAnchor::Bottom(window_bottom) => window_bottom - measured_height,
         };
         measured.reanchor_y(final_y);
+        if let Some(plan) = window_chrome_presented_pointer_plan(
+            state.evaluator,
+            self.interaction_source.presentation_id,
+            self.interaction_source.window_id,
+            self.interaction_source.kind,
+            self.interaction_source.text,
+            measured.rendered(),
+            measured.bounds(),
+        ) {
+            state.pointer_plans.push(plan);
+        }
         let progress = measured.output_progress();
         state.output.install_measured_window_display_row(&measured);
         state.output_emitter.emit_chrome_progress(
@@ -1044,6 +1078,12 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
         self,
         face_ids: &mut FrameFaceAttempt,
     ) -> WindowChromeDisplayRowRenderRequest<'face> {
+        let interaction_source = WindowChromeInteractionSource {
+            presentation_id: self.presentation_id,
+            window_id: WindowId(self.window_id),
+            kind: self.kind,
+            text: self.text,
+        };
         let render_request = self
             .lisp_string_row_request()
             .with_symbol_values(self.symbol_values)
@@ -1067,6 +1107,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
         WindowChromeDisplayRowRenderRequest {
             output: self.output,
             row,
+            interaction_source,
         }
     }
 }
@@ -1075,6 +1116,7 @@ pub(crate) struct WindowChromeRowsRenderState<'state, 'services, 'face> {
     output: TextWindowOutputTarget<'state>,
     output_emitter: &'state mut WindowOutputEmitter,
     evaluator: &'state mut Context,
+    pointer_plans: &'state mut Vec<WindowChromePresentedPointerPlan>,
     render_services: ChromeRowRenderServices<'services, 'face>,
 }
 
@@ -1083,12 +1125,14 @@ impl<'state, 'services, 'face> WindowChromeRowsRenderState<'state, 'services, 'f
         output: TextWindowOutputTarget<'state>,
         output_emitter: &'state mut WindowOutputEmitter,
         evaluator: &'state mut Context,
+        pointer_plans: &'state mut Vec<WindowChromePresentedPointerPlan>,
         render_services: ChromeRowRenderServices<'services, 'face>,
     ) -> Self {
         Self {
             output,
             output_emitter,
             evaluator,
+            pointer_plans,
             render_services,
         }
     }
@@ -1501,6 +1545,206 @@ pub(crate) struct TabBarPointerSlotPlan {
     enabled: bool,
     close: bool,
     mouse_face: Value,
+}
+
+/// One exact string-local mouse target laid over a finalized window-chrome
+/// glyph slot.  The target is evaluator-owned; this plan contains only its
+/// opaque presentation id and immutable frame geometry.
+#[derive(Clone, Copy, Debug)]
+struct WindowChromePointerRunPlan {
+    owner: PresentedRegionId,
+    bounds: FrameRect,
+    interaction: InteractionId,
+}
+
+/// One semantic string component inside the flattened chrome row.
+///
+/// NeoMacs' mode-line walker returns a property-preserving flat string, while
+/// GNU redisplay keeps the individual source string as `glyph->object`.
+/// Mouse commands such as `tab-line-select-tab` intentionally inspect
+/// positions 0/1 of that component. This typed span restores the same object
+/// boundary from the interactive property interval and prevents a root-string
+/// character offset from leaking into `posn-string`.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct WindowChromeInteractionComponentSpan {
+    range: CharRange,
+}
+
+impl WindowChromeInteractionComponentSpan {
+    fn at(
+        properties: &neovm_core::buffer::TextPropertyTable,
+        char_index: usize,
+        text_len: usize,
+        keymap_property: Value,
+    ) -> Option<Self> {
+        let (keymap, start, end) = properties.get_property_run_at_char_pos(
+            CharPos0::new(char_index),
+            keymap_property,
+            text_len,
+        );
+        if keymap.is_none_or(Value::is_nil) || start >= end {
+            return None;
+        }
+        Some(Self {
+            range: CharRange::new(start, end),
+        })
+    }
+
+    fn local_char_index(self, root_char_index: usize) -> Option<i64> {
+        let local = root_char_index.checked_sub(self.range.start().get())?;
+        (root_char_index < self.range.end().get())
+            .then(|| i64::try_from(local).ok())
+            .flatten()
+    }
+
+    fn materialize(self, root: Value) -> Option<Value> {
+        copy_lisp_string_char_range(root, self.range)
+    }
+}
+
+/// Presentation-time click semantics emitted by tab/header/mode line shaping.
+///
+/// Hover appearance remains source-addressed in the glyph matrix.  Click
+/// meaning is a separate projection because it owns Lisp values and must die
+/// with the evaluator presentation.  Composition joins the two projections by
+/// their common owner + finalized geometry.
+#[derive(Debug)]
+pub(crate) struct WindowChromePresentedPointerPlan {
+    window_id: DisplayWindowId,
+    runs: Vec<WindowChromePointerRunPlan>,
+}
+
+impl WindowChromePresentedPointerPlan {
+    pub(crate) fn window_id(&self) -> DisplayWindowId {
+        self.window_id
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.runs.is_empty()
+    }
+}
+
+fn window_chrome_pointer_area(kind: WindowChromeKind) -> PresentedWindowMouseArea {
+    match kind {
+        WindowChromeKind::TabLine => PresentedWindowMouseArea::TabLine,
+        WindowChromeKind::HeaderLine => PresentedWindowMouseArea::HeaderLine,
+        WindowChromeKind::ModeLine => PresentedWindowMouseArea::ModeLine,
+    }
+}
+
+fn window_chrome_presented_region_kind(kind: WindowChromeKind) -> PresentedRegionKind {
+    match kind {
+        WindowChromeKind::TabLine => PresentedRegionKind::TabLine,
+        WindowChromeKind::HeaderLine => PresentedRegionKind::HeaderLine,
+        WindowChromeKind::ModeLine => PresentedRegionKind::ModeLine,
+    }
+}
+
+fn window_chrome_presented_pointer_plan(
+    evaluator: &mut Context,
+    presentation: u64,
+    window_id: WindowId,
+    kind: WindowChromeKind,
+    text: Value,
+    rendered: &RenderedDisplayRow,
+    bounds: Rect,
+) -> Option<WindowChromePresentedPointerPlan> {
+    let properties = get_string_text_properties_table_for_value(text)?;
+    let text_len = text.as_lisp_string()?.schars();
+    let keymap_property = Value::symbol("keymap");
+    let display_window_id = DisplayWindowId::new(i64::try_from(window_id.0).ok()?);
+    let owner = PresentedRegionId::new(
+        Some(display_window_id),
+        window_chrome_presented_region_kind(kind),
+    );
+    let area = window_chrome_pointer_area(kind);
+    let mut runs = Vec::new();
+    let mut components = HashMap::<WindowChromeInteractionComponentSpan, Value>::new();
+    for slot in rendered.source_slots() {
+        let Some(char_index) = slot.source().lisp_string_char_index() else {
+            continue;
+        };
+        let Some(component_span) = WindowChromeInteractionComponentSpan::at(
+            &properties,
+            char_index,
+            text_len,
+            keymap_property,
+        ) else {
+            continue;
+        };
+        if slot.width_px() <= 0.0 {
+            continue;
+        }
+        let component = match components.get(&component_span).copied() {
+            Some(component) => component,
+            None => {
+                let component = component_span.materialize(text)?;
+                components.insert(component_span, component);
+                component
+            }
+        };
+        let local_char_index = component_span.local_char_index(char_index)?;
+        let posn_string = Value::cons(component, Value::fixnum(local_char_index));
+        let interaction = evaluator.register_presented_mouse_target(
+            presentation,
+            PresentedMouseTarget::window_chrome(window_id, area, posn_string),
+        );
+        let run_bounds = FrameRect::new(
+            bounds.x + slot.x_px(),
+            bounds.y,
+            slot.width_px(),
+            bounds.height,
+        )
+        .ok()?;
+        runs.push(WindowChromePointerRunPlan {
+            owner,
+            bounds: run_bounds,
+            interaction: InteractionId::new(interaction),
+        });
+    }
+    (!runs.is_empty()).then_some(WindowChromePresentedPointerPlan {
+        window_id: display_window_id,
+        runs,
+    })
+}
+
+fn frame_rect_contains(outer: FrameRect, inner: FrameRect) -> bool {
+    inner.x() >= outer.x()
+        && inner.y() >= outer.y()
+        && inner.x() + inner.width() <= outer.x() + outer.width()
+        && inner.y() + inner.height() <= outer.y() + outer.height()
+}
+
+/// Join evaluator-owned window-chrome actions onto the source-addressed hover
+/// map. Interaction regions are published first so their exact glyph slot wins
+/// hit priority; when an encompassing mouse-face region exists it contributes
+/// the same appearance id, preserving hover and click in one unified hit.
+pub(crate) fn apply_window_chrome_presented_pointer_plans(
+    source: PresentedPointerSourceMap,
+    plans: Vec<WindowChromePresentedPointerPlan>,
+) -> PresentedPointerSourceMap {
+    if plans.is_empty() {
+        return source;
+    }
+    let mut regions = Vec::new();
+    for run in plans.into_iter().flat_map(|plan| plan.runs) {
+        let appearance = source
+            .regions()
+            .iter()
+            .find(|region| {
+                region.owner() == Some(run.owner)
+                    && frame_rect_contains(region.bounds(), run.bounds)
+            })
+            .and_then(PresentedPointerRegion::appearance);
+        regions.push(PresentedPointerRegion::new_owned(
+            run.owner,
+            run.bounds,
+            Some(run.interaction),
+            appearance,
+        ));
+    }
+    regions.extend(source.regions().iter().cloned());
+    PresentedPointerSourceMap::new(regions, source.appearances().to_vec())
 }
 
 pub(crate) fn tab_bar_pointer_slot_plan(
@@ -1959,10 +2203,7 @@ pub(crate) fn tab_bar_presented_pointer_plan(
             };
             let interaction = evaluator.register_presented_mouse_target(
                 presentation,
-                PresentedMouseTarget {
-                    area: PresentedMouseArea::TabBar,
-                    posn_string,
-                },
+                PresentedMouseTarget::frame_chrome(PresentedFrameMouseArea::TabBar, posn_string),
             );
             targets.insert((item_index, close), interaction);
             interaction

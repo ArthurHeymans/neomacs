@@ -486,8 +486,14 @@ impl BufferSourceOutputSetup {
     where
         B: LayoutBufferView,
     {
-        let (mut output, font_metrics, face_resolver, mut face_ids, window_snapshots) =
-            state.into_parts();
+        let (
+            mut output,
+            font_metrics,
+            face_resolver,
+            mut face_ids,
+            window_snapshots,
+            window_chrome_pointer_plans,
+        ) = state.into_parts();
         let retry_checkpoint = output.capture_retry_checkpoint();
         let default_face_id = default_face.reserve_effective_face_id(face_resolver, &mut face_ids);
 
@@ -505,6 +511,9 @@ impl BufferSourceOutputSetup {
         let row_fallback_metrics = default_face.row_metrics_for_body_width(geometry.char_width);
         let row_prelude_context =
             local_display_policy.row_prelude_context(line_number_cols, row_fallback_metrics);
+        let overlay_replay_start = scroll
+            .as_ref()
+            .and_then(|replay| replay.walk_start.overlay_string_start());
         let overlay_text_row = BufferOverlayStringTextRowRenderContext::new(
             has_overlays,
             output_window_id,
@@ -516,7 +525,8 @@ impl BufferSourceOutputSetup {
             self.body_install_context.display_text_row_base(),
             geometry.max_rows,
         )
-        .with_continuation_row_prelude(row_prelude_context.continuation_row_prelude());
+        .with_continuation_row_prelude(row_prelude_context.continuation_row_prelude())
+        .with_replay_start(overlay_replay_start);
         let loop_context = BufferSourceLoopRequestContext::new(
             buffer_id,
             source.text_start_byte(),
@@ -761,6 +771,7 @@ impl BufferSourceOutputSetup {
                     output.reborrow(),
                     &mut output_emitter,
                     evaluator,
+                    window_chrome_pointer_plans,
                     chrome_request,
                     render_services.reborrow(),
                 ),
@@ -826,6 +837,18 @@ impl BufferSourceOutputSetup {
             );
             let (mut output, evaluator) = output.into_parts();
 
+            // The body walk owns right-edge state in its transient flag table;
+            // materialize it before bounded-replay validation examines the
+            // regenerated rows. The ordinary body-install path performs the
+            // same transfer before publishing the retained matrix.
+            crate::display_row::special_glyphs::install_text_window_row_edge_states(
+                output.builder(),
+                crate::display_row::special_glyphs::TextWindowRowEdgeStates::new(
+                    geometry.display_text_row_base,
+                    &walk_setup.row_flags,
+                ),
+            );
+
             // Post-walk validation (GNU try_window_id: the regenerated region
             // must sync back up with the reused rows). The bounded walk just
             // relaid the dirty span optimistically; if the span's structure
@@ -839,6 +862,16 @@ impl BufferSourceOutputSetup {
                 let mut height = 0.0f32;
                 let mut last_end = None;
                 let mut broken = false;
+                let source_start_matches = output
+                    .builder()
+                    .current_window_row(scroll.exposed_row_base)
+                    .is_some_and(|row| expected.source.matches_start(row));
+                let source_end_matches = output
+                    .builder()
+                    .current_window_row(
+                        scroll.exposed_row_base + expected.row_count.saturating_sub(1),
+                    )
+                    .is_some_and(|row| expected.source.matches_end(row));
                 for i in 0..expected.row_count {
                     match output
                         .builder()
@@ -855,6 +888,8 @@ impl BufferSourceOutputSetup {
                     }
                 }
                 if broken
+                    || !source_start_matches
+                    || !source_end_matches
                     || last_end != Some(expected.last_row_end_charpos)
                     || (height - expected.total_height_px).abs() >= 0.5
                 {
@@ -975,6 +1010,7 @@ impl BufferSourceOutputSetup {
                     output.reborrow(),
                     &mut output_emitter,
                     evaluator,
+                    window_chrome_pointer_plans,
                     chrome_request,
                     render_services.reborrow(),
                 ),
@@ -1179,6 +1215,7 @@ impl BufferSourceOutputSetup {
             output.reborrow(),
             &mut output_emitter,
             evaluator,
+            window_chrome_pointer_plans,
             chrome_request,
             render_services.reborrow(),
         );

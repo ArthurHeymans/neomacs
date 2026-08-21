@@ -113,7 +113,7 @@ impl BufferWindowSourceRequest {
         max_rows: usize,
     ) -> Self {
         let mut request = Self::from_window_params(params, max_rows);
-        request.requested_window_start = walk_start.get();
+        request.requested_window_start = walk_start.buffer_anchor();
         request
     }
 

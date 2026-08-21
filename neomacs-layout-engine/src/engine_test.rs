@@ -2991,6 +2991,66 @@ fn phase1_cursor_move_is_cursor_only() {
     );
 }
 
+/// A child-frame redisplay must not evict the parent frame's GNU-current-matrix
+/// analogue.  Vertico posframes alternate parent and child layout through one
+/// `LayoutEngine`; a single global retained map makes each frame erase the
+/// other's entries and turns every candidate movement into two full rebuilds.
+#[test]
+fn retained_layout_survives_alternating_frame_redisplay() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, parent_frame, parent_buffer, _parent_window) =
+        incr_editing_frame(&text, 800, 600);
+
+    let child_buffer = eval
+        .buffer_manager_mut()
+        .create_buffer(" *incremental-child-frame*");
+    {
+        let buffer = eval
+            .buffer_manager_mut()
+            .get_mut(child_buffer)
+            .expect("child buffer");
+        buffer.insert(&text);
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(0));
+    }
+    let child_frame =
+        eval.frame_manager_mut()
+            .create_frame("incremental-child", 600, 320, child_buffer);
+    let child_window = eval
+        .frame_manager()
+        .get(child_frame)
+        .expect("child frame")
+        .selected_window;
+    if let neovm_core::window::Window::Leaf { window_start, .. } = eval
+        .frame_manager_mut()
+        .get_mut(child_frame)
+        .expect("child frame")
+        .find_window_mut(child_window)
+        .expect("child window")
+    {
+        *window_start = LispCharPos1::ONE;
+    }
+
+    let mut engine = LayoutEngine::new_without_font_metrics();
+    engine.layout_frame_rust(&mut eval, parent_frame);
+    engine.layout_frame_rust(&mut eval, child_frame);
+
+    eval.buffer_manager_mut()
+        .get_mut(parent_buffer)
+        .expect("parent buffer")
+        .goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    engine.layout_frame_rust(&mut eval, parent_frame);
+
+    let stats = engine.last_layout_stats();
+    assert_eq!(
+        stats.cursor_only_windows, 1,
+        "laying out a child frame must preserve the parent's retained matrix; got {stats:?}"
+    );
+    assert!(
+        stats.reused_rows > 0,
+        "the returning parent frame should reuse retained body rows; got {stats:?}"
+    );
+}
+
 /// GNU xterm.c:pgtk_set_cursor_gc draws a filled box with the frame cursor
 /// color behind a glyph whose foreground is resolved from that glyph's face
 /// background.  A cursor-only replay must preserve that paint, not replace its
@@ -3208,17 +3268,19 @@ fn relative_line_numbers_follow_point_across_incremental_redisplay() {
 }
 
 /// Phase 1 — an OVERLAY change (hl-line / show-paren / region) co-moving with
-/// the cursor MUST bail to a full rebuild: the overlay tick moved, so the
-/// retained rows are no longer trustworthy. This is the invalidation-completeness
-/// guarantee (spec §3) — silently staying cursor-only here would ship stale rows.
+/// the cursor MUST leave the cursor-only path: the overlay tick moved, so the
+/// retained affected rows are no longer trustworthy.  Bounded overlay damage
+/// may proceed through the typed localized-visual path, which re-walks the
+/// affected rows and retains only the untouched suffix.
 #[test]
-fn phase1_overlay_change_bails_to_full() {
+fn phase1_overlay_change_routes_to_localized_visual_replay() {
     let text = "(defun f (a b) (+ a b))\n".repeat(40);
     let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(&text, 800, 600);
     let mut engine = LayoutEngine::new();
     let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
-        // Use the Lisp `make-overlay` builtin (the path hl-line / show-paren take)
-        // so the overlay tick is bumped, exactly as real code does.
+        // Use the Lisp property mutation path taken by hl-line/show-paren.  A
+        // propertyless make is invisible; `overlay-put` supplies both the tick
+        // and exact bounded damage.
         eval.eval_str("(overlay-put (make-overlay 1 24) 'face 'highlight)")
             .expect("make-overlay");
         let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
@@ -3230,8 +3292,13 @@ fn phase1_overlay_change_bails_to_full() {
         m.stats
     );
     assert_eq!(
-        m.stats.reused_rows, 0,
-        "overlay change forces a full rebuild"
+        m.stats.visual_windows, 1,
+        "bounded overlay damage must use the localized visual class"
+    );
+    assert!(
+        m.stats.reused_rows > 0,
+        "localized visual replay must retain unaffected rows (got {:?})",
+        m.stats
     );
 }
 
@@ -3822,9 +3889,10 @@ fn current_body_row_metrics_reads_retained_matrix_rows() {
     engine.layout_frame_rust(&mut eval, frame_id);
 
     let metrics = engine
-        .current_body_row_metrics(neomacs_display_protocol::types::DisplayWindowId::new(
-            selected_window.0 as i64,
-        ))
+        .current_body_row_metrics(
+            frame_id,
+            neomacs_display_protocol::types::DisplayWindowId::new(selected_window.0 as i64),
+        )
         .expect("body row metrics after a layout populates the retained matrix");
     assert!(!metrics.is_empty(), "expected some body rows");
     assert!(
@@ -22126,13 +22194,141 @@ fn resetting_speculative_frame_output_discards_fast_path_classification() {
     let window = neomacs_display_protocol::DisplayWindowId::new(7);
     engine.cursor_only_window_ids.insert(window);
     engine.scroll_window_ids.insert(window, (3, 16.0));
-    engine.edit_window_ids.insert(window, 2);
+    engine
+        .localized_window_ids
+        .insert(window, (2, LocalizedLayoutClass::Edit));
 
     engine.reset_frame_attempt_state();
 
     assert!(engine.cursor_only_window_ids.is_empty());
     assert!(engine.scroll_window_ids.is_empty());
-    assert!(engine.edit_window_ids.is_empty());
+    assert!(engine.localized_window_ids.is_empty());
+}
+
+/// GNU's tab-line mouse maps are string-local: redisplay must publish the
+/// exact propertized `(STRING . POSITION)` under the pointer, not merely the
+/// surrounding semantic tab-line band.  Otherwise mouse-1 falls through to
+/// the generic tab-line binding and never selects the clicked buffer.
+#[test]
+fn tab_line_glyphs_publish_their_string_local_mouse_interaction() {
+    let mut eval =
+        create_bootstrap_evaluator_cached_with_features(&["x", "neomacs"]).expect("bootstrap");
+    apply_runtime_startup_state(&mut eval).expect("runtime startup state");
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("tab-line-pointer", 640, 240, buffer_id);
+    eval.obarray_mut()
+        .set_symbol_value("layout-target-frame", Value::make_frame(frame_id.0));
+    eval.eval_str(
+        r#"
+          (require 'tab-line)
+          (select-frame layout-target-frame)
+          (let ((alpha (get-buffer-create "tab-alpha"))
+                (beta (get-buffer-create "tab-beta")))
+            (setq-local
+             tab-line-format
+             (concat
+              (propertize " alpha "
+                          'face 'tab-line-tab-current
+                          'mouse-face 'tab-line-highlight
+                          'keymap tab-line-tab-map
+                          'tab alpha)
+              (propertize " beta "
+                          'face 'tab-line-tab-inactive
+                          'mouse-face 'tab-line-highlight
+                          'keymap tab-line-tab-map
+                          'tab beta))))
+        "#,
+    )
+    .expect("configure a propertized tab line");
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("tab-line presentation");
+    let materialized = state.materialize();
+    let beta = eval
+        .eval_str(r#"(get-buffer "tab-beta")"#)
+        .expect("beta buffer");
+    let targets = materialized
+        .presented_pointer()
+        .regions()
+        .iter()
+        .filter(|region| {
+            region.owner().is_some_and(|owner| {
+                owner.kind() == neomacs_display_protocol::PresentedRegionKind::TabLine
+            })
+        })
+        .filter_map(|region| region.interaction())
+        .filter_map(|interaction| {
+            eval.resolve_presented_mouse_target(state.presentation_id.get(), interaction.get())
+        })
+        .collect::<Vec<_>>();
+    let target = targets
+        .into_iter()
+        .find(|target| {
+            let posn_string = target.posn_string;
+            if !posn_string.is_cons() {
+                return false;
+            }
+            eval.eval_form(Value::list(vec![
+                Value::symbol("get-text-property"),
+                posn_string.cons_cdr(),
+                Value::list(vec![Value::symbol("quote"), Value::symbol("tab")]),
+                Value::list(vec![Value::symbol("quote"), posn_string.cons_car()]),
+            ]))
+            .is_ok_and(|tab| tab == beta)
+        })
+        .expect("beta glyph must publish a string-local click interaction");
+    assert_eq!(
+        target.owner,
+        neovm_core::keyboard::PresentedMouseOwner::Window {
+            window: eval
+                .frame_manager()
+                .get(frame_id)
+                .expect("frame")
+                .selected_window,
+            area: neovm_core::keyboard::PresentedWindowMouseArea::TabLine,
+        },
+        "tab-line posn-window must be the owning leaf window, never the frame"
+    );
+    assert!(
+        target.posn_string.is_cons(),
+        "GNU tab-line events expose (STRING . POSITION) through posn-string"
+    );
+    let caption = target.posn_string.cons_car();
+    let char_index = target.posn_string.cons_cdr();
+    let exact_tab = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("get-text-property"),
+            char_index,
+            Value::list(vec![Value::symbol("quote"), Value::symbol("tab")]),
+            Value::list(vec![Value::symbol("quote"), caption]),
+        ]))
+        .expect("read displayed tab property");
+    assert_eq!(
+        exact_tab, beta,
+        "the exact displayed position must retain the beta buffer property"
+    );
+    let component_tab = eval
+        .eval_form(Value::list(vec![
+            Value::symbol("tab-line--get-tab-property"),
+            Value::list(vec![Value::symbol("quote"), Value::symbol("tab")]),
+            Value::list(vec![Value::symbol("quote"), caption]),
+        ]))
+        .expect("read the component-local tab property like tab-line-select-tab");
+    assert_eq!(
+        component_tab, beta,
+        "GNU posn-string names the clicked tab component, not the concatenated tab-line root"
+    );
 }
 
 #[test]
@@ -23341,6 +23537,671 @@ fn phase3_plain_edit_is_localized() {
         m.total_body_rows,
         "body rows conserved (got {:?})",
         m.stats
+    );
+}
+
+/// Moving a selection overlay (Vertico/Consult's steady-state update) is
+/// localized visual damage, not a text edit and not a reason to rebuild every
+/// visible candidate row.  Both the overlay's old and new rows must be walked;
+/// the unaffected prefix/suffix remain valid retained rows.
+#[test]
+fn moving_selection_overlay_relays_only_affected_rows() {
+    const LINE: &str = "候選 candidate λ\n";
+    let line_chars = LINE.chars().count();
+    let text = LINE.repeat(40);
+    let (mut eval, frame_id, _buf_id, _win) = incr_editing_frame(&text, 800, 600);
+    // Consult/Vertico opens on its first candidate; the first C-j moves this
+    // overlay from display row 0 to row 1.
+    let old_start = 1;
+    let old_end = old_start + line_chars - 1;
+    eval.eval_str(&format!(
+        "(progn (setq neomacs-test-selection-overlay \
+           (make-overlay {old_start} {old_end})) \
+           (overlay-put neomacs-test-selection-overlay 'face 'highlight))"
+    ))
+    .expect("install initial selection overlay");
+
+    let new_start = 1 + line_chars;
+    let new_end = new_start + line_chars - 1;
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        eval.eval_str(&format!(
+            "(move-overlay neomacs-test-selection-overlay {new_start} {new_end})"
+        ))
+        .expect("move selection overlay one candidate row");
+    });
+
+    assert!(m.total_body_rows > 10, "test needs a screenful of rows");
+    assert_eq!(
+        m.stats.visual_windows, 1,
+        "the text window must use the typed visual replay class: {:?}",
+        m.stats
+    );
+    assert!(
+        m.stats.relaid_body_rows <= 3,
+        "only the old/new selection rows plus the minibuffer should be relaid: {:?}",
+        m.stats
+    );
+    assert_eq!(
+        m.stats.reused_rows + m.stats.relaid_body_rows,
+        m.total_body_rows,
+        "localized visual replay must conserve body rows: {:?}",
+        m.stats
+    );
+}
+
+#[test]
+fn moving_selection_overlay_matches_full_rebuild_golden() {
+    const LINE: &str = "候選 candidate λ\n";
+    let line_chars = LINE.chars().count();
+    let text = LINE.repeat(40);
+    let old_start = 1;
+    let old_end = old_start + line_chars - 1;
+    let new_start = 1 + line_chars;
+    let new_end = new_start + line_chars - 1;
+
+    let (mut eval_ref, frame_ref, _buf_ref, _win_ref) = incr_editing_frame(&text, 800, 600);
+    eval_ref
+        .eval_str(&format!(
+            "(overlay-put (make-overlay {new_start} {new_end}) 'face 'highlight)"
+        ))
+        .expect("install final-state reference overlay");
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    let (mut eval, frame_id, _buf_id, _win) = incr_editing_frame(&text, 800, 600);
+    eval.eval_str(&format!(
+        "(progn (setq neomacs-test-selection-overlay \
+           (make-overlay {old_start} {old_end})) \
+           (overlay-put neomacs-test-selection-overlay 'face 'highlight))"
+    ))
+    .expect("install initial selection overlay");
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    eval.eval_str(&format!(
+        "(move-overlay neomacs-test-selection-overlay {new_start} {new_end})"
+    ))
+    .expect("move selection overlay");
+    engine.layout_frame_rust(&mut eval, frame_id);
+    assert_eq!(engine.last_layout_stats().visual_windows, 1);
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+
+    assert_eq!(
+        incremental, reference,
+        "localized overlay replay must be byte-identical to a full rebuild"
+    );
+}
+
+/// Vertico does not move an overlay through candidate buffer text.  Its
+/// candidate rows live in one multiline `before-string` on a zero-width EOB
+/// overlay; every selection change replaces that string and also replaces a
+/// count string on a zero-width BOB overlay.  Buffer coordinates therefore
+/// cannot distinguish the changed display rows: redisplay needs the overlay
+/// occurrence and string-local coordinates retained on those rows.
+fn vertico_candidate_string_expression(selected: usize) -> String {
+    let mut parts = vec![r#""\n""#.to_string()];
+    for index in 0..20 {
+        let row = if index == selected {
+            format!(r#"(propertize "▶ candidate {index:02} λ\n" 'face 'highlight)"#)
+        } else {
+            format!(r#""  candidate {index:02} λ\n""#)
+        };
+        parts.push(row);
+    }
+    format!("(concat {})", parts.join(" "))
+}
+
+/// A reduced form of the real Consult + Marginalia rows captured from Vertico:
+/// the unselected marker is a display replacement, the annotation starts at an
+/// absolute alignment stretch, and the logical suffix extends beyond a
+/// truncating window's visible right edge.
+fn rich_vertico_candidate_string_expression(selected: usize) -> String {
+    // Vertico prefixes its candidate block with one trailing input-row space
+    // before the first logical line break.
+    let mut parts = vec![r#"" \n""#.to_string()];
+    for index in 0..20 {
+        let marker = if index == selected {
+            r#"(propertize "▶" 'face 'highlight)"#.to_string()
+        } else {
+            r#"(propertize "_" 'display " ")"#.to_string()
+        };
+        let row = format!(
+            r#"(concat {marker}
+                       " candidate-{index:02}-engine.rs"
+                       (propertize " " 'display '(space :align-to (+ left 81)))
+                       "│-rw-r--r--│ 606k│2026-06-11 Thu 14:26:35│\n")"#
+        );
+        parts.push(if index == selected {
+            format!(r#"(propertize {row} 'face 'highlight)"#)
+        } else {
+            row
+        });
+    }
+    format!("(concat {})", parts.join(" "))
+}
+
+#[test]
+fn vertico_style_before_strings_relay_only_changed_display_rows() {
+    let initial_candidates = vertico_candidate_string_expression(0);
+    let next_candidates = vertico_candidate_string_expression(1);
+
+    let (mut eval_ref, frame_ref, _buf_ref, _win_ref) = incr_editing_frame("engine", 800, 600);
+    eval_ref
+        .eval_str(&format!(
+            r#"(progn
+                  (overlay-put (make-overlay (point-min) (point-min))
+                               'before-string "[2/20] ")
+                  (overlay-put (make-overlay (point-max) (point-max))
+                               'before-string {next_candidates}))"#
+        ))
+        .expect("install final Vertico-shaped display strings");
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    let (mut eval, frame_id, _buf_id, _win) = incr_editing_frame("engine", 800, 600);
+    eval.eval_str(&format!(
+        r#"(progn
+              (setq neomacs-test-vertico-count-overlay
+                    (make-overlay (point-min) (point-min)))
+              (overlay-put neomacs-test-vertico-count-overlay
+                           'before-string "[1/20] ")
+              (setq neomacs-test-vertico-candidates-overlay
+                    (make-overlay (point-max) (point-max)))
+              (overlay-put neomacs-test-vertico-candidates-overlay
+                           'before-string
+                           {initial_candidates}))"#
+    ))
+    .expect("install Vertico-shaped display strings");
+
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        eval.eval_str(&format!(
+            r#"(progn
+                  (move-overlay neomacs-test-vertico-count-overlay
+                                (point-min) (point-min))
+                  (overlay-put neomacs-test-vertico-count-overlay
+                               'before-string "[2/20] ")
+                  (move-overlay neomacs-test-vertico-candidates-overlay
+                                (point-max) (point-max))
+                  (overlay-put neomacs-test-vertico-candidates-overlay
+                               'before-string
+                               {next_candidates}))"#
+        ))
+        .expect("advance Vertico-shaped selection");
+    });
+
+    assert!(m.total_body_rows > 15, "test needs a full candidate list");
+    assert_eq!(
+        m.stats.visual_windows, 1,
+        "overlay-string mutations must use typed visual replay: {:?}",
+        m.stats
+    );
+    assert!(
+        m.stats.relaid_body_rows <= 4,
+        "only the count and old/new selected candidate rows should be relaid: {:?}",
+        m.stats
+    );
+    assert_eq!(
+        m.stats.reused_rows + m.stats.relaid_body_rows,
+        m.total_body_rows,
+        "localized display-string replay must conserve body rows: {:?}",
+        m.stats
+    );
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+    assert_eq!(
+        incremental, reference,
+        "localized display-string replay must be byte-identical to a full rebuild"
+    );
+}
+
+#[test]
+fn truncated_rich_vertico_refresh_then_selection_relays_only_changed_display_rows() {
+    let initial_candidates = rich_vertico_candidate_string_expression(0);
+    let next_candidates = rich_vertico_candidate_string_expression(1);
+    let (mut eval, frame_id, _buf_id, _win) = incr_editing_frame("engine", 500, 600);
+    eval.eval_str(&format!(
+        r#"(progn
+              (setq truncate-lines t)
+              (setq neomacs-test-rich-count-overlay
+                    (make-overlay (point-min) (point-min)))
+              (overlay-put neomacs-test-rich-count-overlay
+                           'before-string " 1/2101  ")
+              (setq neomacs-test-rich-candidates-overlay
+                    (make-overlay (point-max) (point-max)))
+              (overlay-put neomacs-test-rich-candidates-overlay
+                           'before-string
+                           {initial_candidates}))"#
+    ))
+    .expect("install rich Vertico-shaped display strings");
+
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        eval.eval_str(&format!(
+            r#"(let ((retained-cursor cursor-type)
+                     (retained-remapping face-remapping-alist))
+                  ;; Posframe temporarily changes display variables while it
+                  ;; refreshes the child frame, then restores both before the
+                  ;; redisplay set is published.
+                  (setq cursor-type nil)
+                  (setq face-remapping-alist
+                        (cons '(default default) retained-remapping))
+                  (setq face-remapping-alist retained-remapping)
+                  (setq cursor-type retained-cursor)
+                  ;; A real Vertico update first republishes freshly allocated
+                  ;; but render-equivalent strings while refreshing geometry.
+                  (move-overlay neomacs-test-rich-count-overlay
+                                (point-min) (point-min))
+                  (overlay-put neomacs-test-rich-count-overlay
+                               'before-string (copy-sequence " 1/2101  "))
+                  (move-overlay neomacs-test-rich-candidates-overlay
+                                (point-max) (point-max))
+                  (overlay-put neomacs-test-rich-candidates-overlay
+                               'before-string
+                               {initial_candidates})
+                  (move-overlay neomacs-test-rich-count-overlay
+                                (point-min) (point-min))
+                  (overlay-put neomacs-test-rich-count-overlay
+                               'before-string " 2/2101  ")
+                  (move-overlay neomacs-test-rich-candidates-overlay
+                                (point-max) (point-max))
+                  (overlay-put neomacs-test-rich-candidates-overlay
+                               'before-string
+                               {next_candidates}))"#
+        ))
+        .expect("advance rich Vertico-shaped selection");
+    });
+
+    assert_eq!(
+        m.stats.visual_windows, 1,
+        "truncated display-rich candidate rows must use typed visual replay: {:?}",
+        m.stats
+    );
+    assert!(
+        m.stats.relaid_body_rows <= 4,
+        "only the count and old/new selected rows should be relaid: {:?}",
+        m.stats
+    );
+    assert!(
+        m.stats.reused_rows > 15,
+        "the unchanged candidate rows must be retained: {:?}",
+        m.stats
+    );
+}
+
+#[test]
+fn vertico_style_before_strings_relay_in_nonselected_window() {
+    let initial_candidates = vertico_candidate_string_expression(0);
+    let next_candidates = vertico_candidate_string_expression(1);
+
+    let (mut eval, frame_id, buf_id, selected_window) = incr_editing_frame("engine", 1200, 600);
+    let nonselected_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split a non-selected Vertico display window");
+    eval.eval_str(&format!(
+        r#"(progn
+              (setq neomacs-test-vertico-count-overlay
+                    (make-overlay (point-min) (point-min)))
+              (overlay-put neomacs-test-vertico-count-overlay
+                           'before-string "[1/20] ")
+              (setq neomacs-test-vertico-candidates-overlay
+                    (make-overlay (point-max) (point-max)))
+              (overlay-put neomacs-test-vertico-candidates-overlay
+                           'before-string
+                           {initial_candidates}))"#
+    ))
+    .expect("install Vertico-shaped display strings");
+
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        eval.eval_str(&format!(
+            r#"(progn
+                  (move-overlay neomacs-test-vertico-count-overlay
+                                (point-min) (point-min))
+                  (overlay-put neomacs-test-vertico-count-overlay
+                               'before-string "[2/20] ")
+                  (move-overlay neomacs-test-vertico-candidates-overlay
+                                (point-max) (point-max))
+                  (overlay-put neomacs-test-vertico-candidates-overlay
+                               'before-string
+                               {next_candidates}))"#
+        ))
+        .expect("advance Vertico-shaped selection");
+    });
+
+    assert_eq!(
+        eval.frame_manager()
+            .get(frame_id)
+            .expect("frame")
+            .selected_window,
+        selected_window,
+        "the Vertico-shaped peer must remain non-selected"
+    );
+    let nonselected_trace = window_layout_trace(&eval, &engine, frame_id, nonselected_window);
+    assert!(
+        nonselected_trace.matrix_rows.len() > 15,
+        "test needs a full candidate list in the non-selected window"
+    );
+    assert_eq!(
+        m.stats.visual_windows, 2,
+        "both selected and non-selected views of the changed overlay string must use typed visual replay: {:?}",
+        m.stats
+    );
+    assert_eq!(
+        m.stats.full_windows, 1,
+        "only the frame's minibuffer placeholder may remain full; neither Vertico-shaped content window may fall back: {:?}",
+        m.stats
+    );
+    assert!(
+        m.stats.relaid_body_rows <= 8,
+        "each window should relay only the count and old/new selected rows: {:?}",
+        m.stats
+    );
+}
+
+/// GNU delays `mark_window_display_accurate` until every frame has consumed
+/// the buffer's unchanged-region evidence.  A parent minibuffer and its
+/// Vertico child frame display the same buffer, so accepting the parent must
+/// not erase typed overlay-string damage before the child lays out.
+#[test]
+fn overlay_damage_survives_all_frames_in_one_redisplay_set() {
+    let initial_candidates = rich_vertico_candidate_string_expression(0);
+    let next_candidates = rich_vertico_candidate_string_expression(1);
+    let (mut eval, parent_frame, buffer_id, _parent_window) = incr_editing_frame("engine", 500, 40);
+    let child_frame = eval
+        .frame_manager_mut()
+        .create_frame("vertico-child", 500, 442, buffer_id);
+    eval.eval_str(&format!(
+        r#"(progn
+              (setq truncate-lines t)
+              (setq neomacs-test-frame-set-count-overlay
+                    (make-overlay (point-min) (point-min)))
+              (overlay-put neomacs-test-frame-set-count-overlay
+                           'before-string " 1/2101  ")
+              (setq neomacs-test-frame-set-candidates-overlay
+                    (make-overlay (point-max) (point-max)))
+              (overlay-put neomacs-test-frame-set-candidates-overlay
+                           'before-string {initial_candidates}))"#
+    ))
+    .expect("install shared Vertico-shaped display strings");
+
+    let mut engine = LayoutEngine::new();
+    {
+        let mut frame_set = engine.redisplay_frame_set(&mut eval);
+        let _ = frame_set.layout_frame_rust(parent_frame);
+        let _ = frame_set.layout_frame_rust(child_frame);
+    }
+    eval.eval_str(&format!(
+        r#"(progn
+              (move-overlay neomacs-test-frame-set-count-overlay
+                            (point-min) (point-min))
+              (overlay-put neomacs-test-frame-set-count-overlay
+                           'before-string " 2/2101  ")
+              (move-overlay neomacs-test-frame-set-candidates-overlay
+                            (point-max) (point-max))
+              (overlay-put neomacs-test-frame-set-candidates-overlay
+                           'before-string {next_candidates}))"#
+    ))
+    .expect("advance shared Vertico selection");
+
+    {
+        let mut frame_set = engine.redisplay_frame_set(&mut eval);
+        let _ = frame_set.layout_frame_rust(parent_frame);
+        let _ = frame_set.layout_frame_rust(child_frame);
+    }
+    let stats = engine.last_layout_stats();
+    assert_eq!(
+        stats.visual_windows, 1,
+        "the child must consume the same typed damage witness as the parent: {stats:?}"
+    );
+    assert!(
+        stats.relaid_body_rows <= 4,
+        "the child should relay only the changed display rows: {stats:?}"
+    );
+    assert_eq!(
+        eval.buffer_manager()
+            .get(buffer_id)
+            .expect("shared buffer")
+            .overlay_damage(),
+        neovm_core::buffer::OverlayDamage::Clean,
+        "dropping the complete frame set must acknowledge its shared damage"
+    );
+}
+
+#[test]
+fn stationary_overlay_extent_without_string_replacement_keeps_full_fallback() {
+    let (mut eval, frame_id, _buf_id, _win) = incr_editing_frame("engine", 800, 600);
+    eval.eval_str(
+        r#"(progn
+             (setq neomacs-test-stationary-overlay
+                   (make-overlay (point-max) (point-max)))
+             (overlay-put neomacs-test-stationary-overlay
+                          'before-string "candidate\n"))"#,
+    )
+    .expect("install stationary overlay");
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        eval.eval_str("(move-overlay neomacs-test-stationary-overlay (point-max) (point-max))")
+            .expect("reassert overlay extent");
+    });
+
+    assert_eq!(
+        m.stats.visual_windows, 0,
+        "a stationary invalidation without exact replacement evidence must stay conservative"
+    );
+    assert!(
+        m.stats.full_windows > 0,
+        "a lone stationary invalidation must retain the full fallback: {:?}",
+        m.stats
+    );
+}
+
+#[test]
+fn eob_overlay_string_replay_seeks_to_a_deep_changed_line() {
+    let initial_candidates = vertico_candidate_string_expression(10);
+    let next_candidates = vertico_candidate_string_expression(11);
+
+    let (mut eval_ref, frame_ref, _buf_ref, _win_ref) = incr_editing_frame("engine", 800, 600);
+    eval_ref
+        .eval_str(&format!(
+            "(overlay-put (make-overlay (point-max) (point-max)) \
+             'before-string {next_candidates})"
+        ))
+        .expect("install final deep candidate selection");
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    let (mut eval, frame_id, _buf_id, _win) = incr_editing_frame("engine", 800, 600);
+    eval.eval_str(&format!(
+        "(progn \
+           (setq neomacs-test-deep-candidates-overlay \
+                 (make-overlay (point-max) (point-max))) \
+           (overlay-put neomacs-test-deep-candidates-overlay \
+                        'before-string {initial_candidates}))"
+    ))
+    .expect("install initial deep candidate selection");
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        eval.eval_str(&format!(
+            "(overlay-put neomacs-test-deep-candidates-overlay \
+             'before-string {next_candidates})"
+        ))
+        .expect("advance deep candidate selection");
+    });
+
+    assert_eq!(m.stats.visual_windows, 1, "expected string-local replay");
+    assert!(
+        m.stats.relaid_body_rows <= 3,
+        "only the old/new selected lines plus the minibuffer should be relaid: {:?}",
+        m.stats
+    );
+    assert!(
+        m.stats.reused_rows > 15,
+        "rows both above and below the source-local restart should be reused: {:?}",
+        m.stats
+    );
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+    if incremental != reference {
+        let row = incremental
+            .matrix_rows
+            .iter()
+            .zip(&reference.matrix_rows)
+            .position(|(incremental, reference)| incremental != reference);
+        let incremental_text = trace_text_rows(&incremental);
+        let reference_text = trace_text_rows(&reference);
+        let point = incremental
+            .points
+            .iter()
+            .zip(&reference.points)
+            .position(|(incremental, reference)| incremental != reference);
+        let output_row = incremental
+            .output_rows
+            .iter()
+            .zip(&reference.output_rows)
+            .position(|(incremental, reference)| incremental != reference);
+        panic!(
+            "deep source-local replay differs from a full rebuild: first matrix row={row:?}, incremental text={:?}, reference text={:?}, row counts={}/{}, first point={point:?} {:?}/{:?}, first output row={output_row:?} {:?}/{:?}, cursor_equal={}, visible_span_equal={}, window_end_equal={}",
+            row.and_then(|index| incremental_text.get(index)),
+            row.and_then(|index| reference_text.get(index)),
+            incremental.matrix_rows.len(),
+            reference.matrix_rows.len(),
+            point.and_then(|index| incremental.points.get(index)),
+            point.and_then(|index| reference.points.get(index)),
+            output_row.and_then(|index| incremental.output_rows.get(index)),
+            output_row.and_then(|index| reference.output_rows.get(index)),
+            incremental.phys_cursor == reference.phys_cursor,
+            incremental.visible_span == reference.visible_span,
+            (incremental.window_end_pos, incremental.window_end_bytepos)
+                == (reference.window_end_pos, reference.window_end_bytepos),
+        );
+    }
+}
+
+#[test]
+fn unbounded_overlay_damage_keeps_full_rebuild_fallback() {
+    const LINE: &str = "candidate line\n";
+    let text = LINE.repeat(40);
+    let (mut eval, frame_id, buf_id, _win) = incr_editing_frame(&text, 800, 600);
+    eval.eval_str("(overlay-put (make-overlay 1 15) 'face 'highlight)")
+        .expect("install overlay");
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        // Compatibility path for mutation sites that cannot prove a visual
+        // extent: tick movement is retained, but replay must stay conservative.
+        eval.buffer_manager_mut()
+            .get_mut(buf_id)
+            .expect("buffer")
+            .increment_overlay_modified_tick();
+    });
+
+    assert_eq!(
+        m.stats.visual_windows, 0,
+        "unbounded damage must not enter localized visual replay"
+    );
+    assert!(
+        m.stats.relaid_body_rows > 10,
+        "unbounded damage retains the conservative full-layout fallback: {:?}",
+        m.stats
+    );
+}
+
+#[test]
+fn geometry_changing_overlay_replay_misprediction_falls_back_to_full_golden() {
+    const LINE: &str = "short row\n";
+    let text = LINE.repeat(40);
+
+    let (mut eval_ref, frame_ref, _buf_ref, _win_ref) = incr_editing_frame(&text, 240, 600);
+    eval_ref
+        .eval_str(
+            "(let ((ov (make-overlay 1 10)))
+               (overlay-put ov 'face 'highlight)
+               (overlay-put ov 'before-string (make-string 80 ?x)))",
+        )
+        .expect("install geometry-changing reference overlay");
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    let (mut eval, frame_id, _buf_id, _win) = incr_editing_frame(&text, 240, 600);
+    eval.eval_str(
+        "(progn
+           (setq neomacs-test-selection-overlay (make-overlay 1 10))
+           (overlay-put neomacs-test-selection-overlay 'face 'highlight))",
+    )
+    .expect("install initial overlay");
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    eval.eval_str(
+        "(overlay-put neomacs-test-selection-overlay
+                      'before-string (make-string 80 ?x))",
+    )
+    .expect("make overlay row wrap");
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().visual_windows,
+        0,
+        "post-walk geometry mismatch must discard the speculative visual replay"
+    );
+    let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
+    assert_eq!(
+        incremental, reference,
+        "the replay-free retry must match a full rebuild after geometry changes"
+    );
+}
+
+#[test]
+fn wrapping_overlay_string_replay_misprediction_falls_back_to_full_golden() {
+    let final_string = r#"(concat "\n" (make-string 80 ?x) "\ntail\n")"#;
+
+    let (mut eval_ref, frame_ref, _buf_ref, _win_ref) = incr_editing_frame("engine", 240, 600);
+    eval_ref
+        .eval_str(&format!(
+            "(overlay-put (make-overlay (point-max) (point-max)) \
+             'before-string {final_string})"
+        ))
+        .expect("install wrapping final overlay string");
+    let mut ref_engine = LayoutEngine::new();
+    ref_engine.layout_frame_rust(&mut eval_ref, frame_ref);
+    let reference = selected_window_layout_trace(&eval_ref, &ref_engine, frame_ref);
+
+    let (mut eval, frame_id, _buf_id, _win) = incr_editing_frame("engine", 240, 600);
+    eval.eval_str(
+        r#"(progn
+             (setq neomacs-test-wrapping-overlay-string
+                   (make-overlay (point-max) (point-max)))
+             (overlay-put neomacs-test-wrapping-overlay-string
+                          'before-string "\nshort\ntail\n"))"#,
+    )
+    .expect("install single-row retained overlay string");
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    eval.eval_str(&format!(
+        "(overlay-put neomacs-test-wrapping-overlay-string \
+         'before-string {final_string})"
+    ))
+    .expect("make the changed logical line wrap");
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    assert_eq!(
+        engine.last_layout_stats().visual_windows,
+        0,
+        "a source-local walk whose row geometry changed must be discarded"
+    );
+    assert_eq!(
+        selected_window_layout_trace(&eval, &engine, frame_id),
+        reference,
+        "overlay-string replay fallback must match a fresh full rebuild"
     );
 }
 

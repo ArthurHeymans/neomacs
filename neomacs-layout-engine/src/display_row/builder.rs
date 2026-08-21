@@ -1131,11 +1131,13 @@ impl DisplayTextSourceMapping<'_> {
                 string,
                 index,
                 covered_buffer,
+                occurrence,
             } => {
                 let source = match covered_buffer {
                     Some(range) => GlyphStringSource::replacement(string, range),
                     None => GlyphStringSource::new(string),
-                };
+                }
+                .in_occurrence(occurrence);
                 let source = row
                     .push_string_source(source)
                     .expect("display row string-source table exhausted");

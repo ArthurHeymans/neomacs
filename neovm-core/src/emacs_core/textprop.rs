@@ -3120,11 +3120,6 @@ pub(crate) fn builtin_remove_overlays(
         (start, end)
     };
 
-    let buf = eval
-        .buffers
-        .get_mut(buf_id)
-        .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
-
     let filter_name = if args.len() >= 3 && !args[2].is_nil() {
         Some(expect_property_key(&args[2])?)
     } else {
@@ -3137,26 +3132,33 @@ pub(crate) fn builtin_remove_overlays(
         None
     };
 
-    // Collect overlay ids in range.
-    let accessible = buf.accessible_emacs_byte_region();
-    let ids = buf.overlays.overlays_in_accessible_emacs_byte_range(
-        EmacsByteRange::new(start_pos, end_pos),
-        accessible.end(),
-    );
+    let overlays_to_delete = {
+        let buf = eval
+            .buffers
+            .get(buf_id)
+            .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
+        let accessible = buf.accessible_emacs_byte_region();
+        buf.overlays
+            .overlays_in_accessible_emacs_byte_range(
+                EmacsByteRange::new(start_pos, end_pos),
+                accessible.end(),
+            )
+            .into_iter()
+            .filter(|overlay| match (&filter_name, &filter_val) {
+                (Some(name), Some(val)) => buf
+                    .overlays
+                    .overlay_get(*overlay, name)
+                    .is_some_and(|v| equal_value(&v, val, 0)),
+                (Some(name), None) => buf.overlays.overlay_get(*overlay, name).is_some(),
+                _ => true,
+            })
+            .collect::<Vec<_>>()
+    };
 
-    // Filter and delete.
-    for overlay in ids {
-        let should_delete = match (&filter_name, &filter_val) {
-            (Some(name), Some(val)) => buf
-                .overlays
-                .overlay_get(overlay, name)
-                .is_some_and(|v| equal_value(&v, val, 0)),
-            (Some(name), None) => buf.overlays.overlay_get(overlay, name).is_some(),
-            _ => true,
-        };
-        if should_delete {
-            buf.overlays.delete_overlay(overlay);
-        }
+    // Route deletion through BufferManager's single mutation boundary so the
+    // overlay tick and exact old extent are recorded together.
+    for overlay in overlays_to_delete {
+        let _ = eval.buffers.delete_buffer_overlay(buf_id, overlay);
     }
 
     Ok(Value::NIL)

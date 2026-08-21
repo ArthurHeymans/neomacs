@@ -9,7 +9,10 @@ use neomacs_display_protocol::{
     FrameDisplayState, FrameRect, GlyphRowRole, PresentedPointerMapError, PresentedPointerSourceMap,
 };
 
-use crate::display_status_line::TabBarPresentedPointerPlan;
+use crate::display_status_line::{
+    TabBarPresentedPointerPlan, WindowChromePresentedPointerPlan,
+    apply_window_chrome_presented_pointer_plans,
+};
 use crate::presentation::presented_pointer_map::{
     PresentedPointerMapBuildError, PresentedPointerMapBuilder,
 };
@@ -41,8 +44,12 @@ impl PresentationPointerPlan {
     pub(crate) fn compile(
         state: &FrameDisplayState,
         tab_bar: Option<TabBarPresentedPointerPlan>,
+        window_chrome: Vec<WindowChromePresentedPointerPlan>,
     ) -> Result<Self, PresentationPointerError> {
-        let mut source = window_pointer_source_map(state)?;
+        let mut source = apply_window_chrome_presented_pointer_plans(
+            window_pointer_source_map(state)?,
+            window_chrome,
+        );
         if let Some(tab_bar) = tab_bar {
             let band = state
                 .frame_chrome

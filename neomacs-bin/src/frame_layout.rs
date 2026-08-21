@@ -69,6 +69,10 @@ pub struct PreparedFrameDisplay {
 }
 
 impl PreparedFrameDisplay {
+    pub fn frame_id(&self) -> FrameId {
+        self.ticket.frame_id
+    }
+
     pub fn into_submission(self) -> (PreparedPresentationTicket, SealedFramePresentation) {
         (self.ticket, self.state)
     }
@@ -127,38 +131,70 @@ impl FrameLayoutPurpose {
     }
 }
 
+#[cfg(test)]
 pub fn layout_frame_display_state(
     evaluator: &mut Context,
     frame_id: FrameId,
     purpose: FrameLayoutPurpose,
 ) -> Option<PreparedFrameDisplay> {
+    layout_frame_display_states(evaluator, [frame_id], purpose)
+        .into_iter()
+        .next()
+}
+
+/// Lay out one complete native frame set before acknowledging shared buffer
+/// damage.
+///
+/// A buffer can be visible in a parent frame and a child/posframe at once.
+/// GNU therefore waits until every frame has redisplayed before clearing its
+/// unchanged-region and overlay-change evidence.  Taking the frame ids as one
+/// batch makes that lifetime the frontend's default operation.
+pub fn layout_frame_display_states(
+    evaluator: &mut Context,
+    frame_ids: impl IntoIterator<Item = FrameId>,
+    purpose: FrameLayoutPurpose,
+) -> Vec<PreparedFrameDisplay> {
+    let frame_ids: Vec<_> = frame_ids.into_iter().collect();
     LAYOUT_ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         // Smooth scroll (Phase 1, T4): drain a pending trackpad pixel-scroll for
-        // this frame and apply it (sub-line vscroll) before re-laying.
-        if purpose.consumes_pending_input()
-            && let Some(delta) = evaluator.take_pending_pixel_scroll_for_frame(frame_id)
-            && let Some(window_id) = evaluator
-                .frame_manager()
-                .get(frame_id)
-                .map(|frame| frame.selected_window)
-        {
-            // SIGN: trackpad delta_y vs scroll direction is verified on-screen
-            // (T5); flip this negation if it scrolls the wrong way.
-            let delta_px = (-delta).round() as i32;
-            let _ = engine.pixel_scroll_window(evaluator, window_id, delta_px);
+        // each frame and apply it (sub-line vscroll) before opening the frame
+        // set, whose borrow intentionally prevents unrelated evaluator work.
+        if purpose.consumes_pending_input() {
+            for &frame_id in &frame_ids {
+                if let Some(delta) = evaluator.take_pending_pixel_scroll_for_frame(frame_id)
+                    && let Some(window_id) = evaluator
+                        .frame_manager()
+                        .get(frame_id)
+                        .map(|frame| frame.selected_window)
+                {
+                    // SIGN: trackpad delta_y vs scroll direction is verified
+                    // on-screen (T5); flip this negation if it scrolls the
+                    // wrong way.
+                    let delta_px = (-delta).round() as i32;
+                    let _ = engine.pixel_scroll_window(evaluator, window_id, delta_px);
+                }
+            }
         }
-        let _ = engine.layout_frame_rust_for_purpose(evaluator, frame_id, purpose.engine_purpose());
-        let state = engine.last_frame_display_state.take()?;
-        Some(PreparedFrameDisplay {
-            ticket: PreparedPresentationTicket {
-                frame_id,
-                presentation: neovm_core::window::geometry::PresentationId::new(
-                    state.presentation_id.get(),
-                ),
-            },
-            state,
-        })
+
+        let mut prepared = Vec::with_capacity(frame_ids.len());
+        let mut frame_set = engine.redisplay_frame_set(evaluator);
+        for frame_id in frame_ids {
+            let _ = frame_set.layout_frame_rust_for_purpose(frame_id, purpose.engine_purpose());
+            let Some(state) = frame_set.take_last_frame_display_state() else {
+                continue;
+            };
+            prepared.push(PreparedFrameDisplay {
+                ticket: PreparedPresentationTicket {
+                    frame_id,
+                    presentation: neovm_core::window::geometry::PresentationId::new(
+                        state.presentation_id.get(),
+                    ),
+                },
+                state,
+            });
+        }
+        prepared
     })
 }
 
@@ -184,30 +220,28 @@ pub fn collect_snapshot_states(
         .next()
         .ok_or_else(|| "no render frame tree for the selected frame".to_string())?;
 
-    let mut states = Vec::new();
-    for node in tree.frames_bottom_to_top {
+    let frame_ids = tree.frames_bottom_to_top.into_iter().filter_map(|node| {
         let keep = match target {
             SnapshotTarget::All => true,
             SnapshotTarget::Selected => node.frame_id == selected,
             SnapshotTarget::Frame(id) => node.frame_id.0 == *id,
         };
-        if !keep {
-            continue;
-        }
-        let Some(prepared) =
-            layout_frame_display_state(evaluator, node.frame_id, FrameLayoutPurpose::Snapshot)
-        else {
-            continue;
-        };
-        states.push(prepared.discard(evaluator));
-    }
+        keep.then_some(node.frame_id)
+    });
+    let mut states: Vec<_> =
+        layout_frame_display_states(evaluator, frame_ids, FrameLayoutPurpose::Snapshot)
+            .into_iter()
+            .map(|prepared| prepared.discard(evaluator))
+            .collect();
 
     // A live frame outside the selected frame's tree (another top-level
     // frame): lay it out directly with its canonical root placement.
     if states.is_empty()
         && let SnapshotTarget::Frame(id) = target
         && let Some(prepared) =
-            layout_frame_display_state(evaluator, FrameId(*id), FrameLayoutPurpose::Snapshot)
+            layout_frame_display_states(evaluator, [FrameId(*id)], FrameLayoutPurpose::Snapshot)
+                .into_iter()
+                .next()
     {
         states.push(prepared.discard(evaluator));
     }
@@ -282,25 +316,23 @@ pub fn run_tty_layout_tree(
         .frame_manager()
         .frames_in_reverse_z_order(root_id, RenderFrameVisibility::VisibleOnly);
 
-    let root_state = layout_frame_display_state(evaluator, root_id, FrameLayoutPurpose::Redisplay)?
-        .activate(evaluator)
-        .ok()?;
-
-    let mut child_states = Vec::new();
-    for frame_id in frame_order {
-        if frame_id == root_id {
-            continue;
-        }
-        let Some(prepared) =
-            layout_frame_display_state(evaluator, frame_id, FrameLayoutPurpose::Redisplay)
-        else {
-            continue;
-        };
-        let Ok(state) = prepared.activate(evaluator) else {
-            continue;
-        };
-        child_states.push(state);
+    let frame_ids = std::iter::once(root_id).chain(
+        frame_order
+            .into_iter()
+            .filter(|frame_id| *frame_id != root_id),
+    );
+    let mut prepared =
+        layout_frame_display_states(evaluator, frame_ids, FrameLayoutPurpose::Redisplay)
+            .into_iter();
+    let prepared_root = prepared.next()?;
+    if prepared_root.frame_id() != root_id {
+        return None;
     }
+    let root_state = prepared_root.activate(evaluator).ok()?;
+
+    let child_states = prepared
+        .filter_map(|prepared| prepared.activate(evaluator).ok())
+        .collect();
 
     Some((root_state, child_states))
 }

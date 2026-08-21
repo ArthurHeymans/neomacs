@@ -16,7 +16,8 @@ use crate::display_item::{
 };
 use crate::display_source::{DisplaySourceStepItem, DisplaySourceTextPosition};
 pub(crate) use neomacs_display_protocol::glyph_matrix::{
-    GlyphStringBufferRange, GlyphStringId as ProducedStringId, RedisplayGlyphProvenance,
+    GlyphSourceOccurrenceIdentity, GlyphStringBufferRange, GlyphStringId as ProducedStringId,
+    RedisplayGlyphProvenance,
 };
 
 /// Producer-side provenance before a string occurrence is assigned its
@@ -35,6 +36,7 @@ pub(crate) enum ProducedGlyphProvenance {
         string: ProducedStringId,
         index: usize,
         covered_buffer: Option<GlyphStringBufferRange>,
+        occurrence: GlyphSourceOccurrenceIdentity,
     },
     Redisplay(RedisplayGlyphProvenance),
 }
@@ -44,11 +46,16 @@ impl ProducedGlyphProvenance {
         Self::Buffer { charpos }
     }
 
-    pub(crate) const fn string(string: ProducedStringId, index: usize) -> Self {
+    pub(crate) const fn string_in_occurrence(
+        string: ProducedStringId,
+        index: usize,
+        occurrence: GlyphSourceOccurrenceIdentity,
+    ) -> Self {
         Self::Str {
             string,
             index,
             covered_buffer: None,
+            occurrence,
         }
     }
 
@@ -61,6 +68,7 @@ impl ProducedGlyphProvenance {
             string,
             index,
             covered_buffer: Some(covered_buffer),
+            occurrence: GlyphSourceOccurrenceIdentity::Source,
         }
     }
 
@@ -90,10 +98,12 @@ impl ProducedGlyphProvenance {
                 string,
                 index,
                 covered_buffer,
+                occurrence,
             } => Self::Str {
                 string,
                 index: index.saturating_add(char_offset),
                 covered_buffer,
+                occurrence,
             },
             Self::Redisplay(provenance) => Self::Redisplay(provenance),
         }
@@ -142,8 +152,13 @@ pub(crate) fn provenance_from_source_position(
         DisplaySourcePosition::LispString {
             source_id,
             char_index,
+            occurrence,
             ..
-        } => ProducedGlyphProvenance::string(ProducedStringId::new(source_id.get()), *char_index),
+        } => ProducedGlyphProvenance::string_in_occurrence(
+            ProducedStringId::new(source_id.get()),
+            *char_index,
+            occurrence.protocol_identity(),
+        ),
         DisplaySourcePosition::Synthetic { .. } => ProducedGlyphProvenance::mark(),
     }
 }
@@ -174,7 +189,12 @@ pub(crate) fn source_mapped_text_glyph(
     };
     let provenance = provenance_from_source_position(glyph_string_start).advanced_by(char_offset);
     let (
-        ProducedGlyphProvenance::Str { string, index, .. },
+        ProducedGlyphProvenance::Str {
+            string,
+            index,
+            occurrence,
+            ..
+        },
         DisplaySourcePosition::Buffer {
             char_pos: covered_start,
             ..
@@ -187,11 +207,15 @@ pub(crate) fn source_mapped_text_glyph(
     else {
         return provenance;
     };
-    ProducedGlyphProvenance::string_replacement(
+    ProducedGlyphProvenance::Str {
         string,
         index,
-        GlyphStringBufferRange::new(covered_start.get(), covered_end.get()),
-    )
+        covered_buffer: Some(GlyphStringBufferRange::new(
+            covered_start.get(),
+            covered_end.get(),
+        )),
+        occurrence,
+    }
 }
 
 /// GNU `it->current.pos` and `it->position` as one struct, so they can never be

@@ -16,8 +16,8 @@ use crate::display_row::append_context::DisplayRowAppendSurface;
 use crate::display_row::builder::DisplayRowPosition;
 use crate::display_row::face_state::DisplayRowActiveFaceState;
 use crate::display_row::geometry::{
-    DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange, DisplayRowLimit,
-    DisplayRowScopedValue, DisplayRowYPositions,
+    DisplayRowFlags, DisplayRowGeometryDefaults, DisplayRowGeometryState, DisplayRowHitRange,
+    DisplayRowLimit, DisplayRowScopedValue, DisplayRowYPositions,
 };
 use crate::display_row::line_end::{
     LineEndContext, LineEndExtend, LineEndFillGeometry, LineEndIndicator,
@@ -387,6 +387,7 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
         source_render: TextRowSourceRenderState<'_>,
         row_progress: DisplaySourceRowProgressState<'_>,
         row_geometry: &mut DisplayRowGeometryState,
+        row_flags: &mut DisplayRowFlags,
         cursor_info: &mut CursorCaptureState,
         hit_rows: &mut Vec<HitRow>,
         hit_row_range: &mut HitRowRangeTracker,
@@ -404,16 +405,19 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
             self.accessible_end,
             self.point_charpos,
         );
-        let point_is_visible_eob = tail.point_is_visible_eob();
-        tail.capture_cursor_if_point(
-            cursor_info,
-            self.active_face_state,
-            row_geometry,
-            row_progress.x(),
-            row_progress.col(),
-        );
+        let publishes_eob_buffer_anchor = self.overlay_context.publishes_eob_buffer_anchor();
+        let point_is_visible_eob = publishes_eob_buffer_anchor && tail.point_is_visible_eob();
+        if publishes_eob_buffer_anchor {
+            tail.capture_cursor_if_point(
+                cursor_info,
+                self.active_face_state,
+                row_geometry,
+                row_progress.x(),
+                row_progress.col(),
+            );
+        }
 
-        if tail.is_at_accessible_end() {
+        if publishes_eob_buffer_anchor && tail.is_at_accessible_end() {
             let face_metrics = self.active_face_state.metrics();
             source_render.output_emitter().push_text_insertion_boundary(
                 layout_i64_char_pos_to_lisp_char_pos(self.charpos),
@@ -439,6 +443,7 @@ impl<'a> BufferSourceEndOfBufferTailRenderContext<'a> {
                 x,
                 col,
                 row_geometry,
+                row_flags,
                 cursor_info,
                 hit_rows,
                 hit_row_range,
