@@ -3,7 +3,17 @@
 //! Provides:
 //! - `documentation` — retrieve docstring from a function
 //! - `documentation-property` — retrieve documentation property
-//! - `Snarf-documentation` — internal DOC file loader compatibility shim
+//! - `Snarf-documentation` — install every documentation string the DOC file
+//!   has onto the symbol it belongs to, once, from `lisp/loadup.el:448`
+//!
+//! Those last two are GNU's reader and GNU's writer, and they meet on the
+//! symbol's plist and nowhere else (`src/doc.c:418`, `src/doc.c:613`).  The
+//! writer runs after the C `DEFVAR`s and after every preloaded Lisp file, and
+//! its `Fput` is an overwrite -- so a name that is both a `DEFVAR_*` and a
+//! preloaded Lisp `defvar` ends up with the C text.  Ledger 182 is the entry
+//! that turned this port around to match; before it, the `etc/DOC` stand-in
+//! was consulted lazily and only when the plist was empty, which is a fallback
+//! and therefore the opposite order.
 
 use super::error::{EvalResult, Flow, signal};
 use super::intern::{intern, resolve_sym};

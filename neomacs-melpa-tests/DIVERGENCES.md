@@ -29054,8 +29054,10 @@ finish.
   `Finished dev profile ... in 10m 10s`.
 * `cargo fmt --all --check`: exit 1 the first time and clean after `cargo fmt
   --all`.  The reformat is three re-wrapped statements in `doc.rs` and
-  `doc_test.rs` and changes no token, which the diff shows line by line; it
-  landed after the suites and no binary was rebuilt for it.
+  `doc_test.rs` and changes no token, which the diff shows line by line.  It
+  landed after the two suites and before the workspace check, so the check
+  above is of the formatted tree; no binary was rebuilt for it, and none
+  needed to be.
 
 **RED quoted beside every green.**
 
