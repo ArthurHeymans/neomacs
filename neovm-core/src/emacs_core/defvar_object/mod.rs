@@ -81,6 +81,54 @@ impl GnuObjectForward {
     }
 }
 
+/// Whether GNU KEEPS the `declared_special` flag its `DEFVAR_*` just set.
+///
+/// `defvar_lisp_nopro` sets it unconditionally (`src/lread.c:5274`), so the
+/// overwhelming majority of rows are [`Special`](Self::Special) and the flag
+/// could be read straight off the `DEFVAR` head.  Three names in GNU's `src/`
+/// have it taken back off again on a following line, and because that line
+/// FOLLOWS the declaration, a generator that scrapes `DEFVAR` heads is
+/// structurally unable to see it -- which is exactly how ledger 176's
+/// `features` divergence got in, and the same shape as ledger 173's extractor
+/// bugs one file over.
+///
+/// It is a field on the declaration row rather than a separate list because
+/// the failure mode being designed out is DRIFT between the two halves: a
+/// hand-maintained exception list beside a generated declaration table is one
+/// GNU spelling away from being silently wrong, and was.  Making it a variant
+/// means the generator has to decide for every row, an exception cannot exist
+/// without the declaration it belongs to, and adding a row without stating
+/// which it is does not compile.
+///
+/// GNU spells the un-declaration two ways, and both count:
+///
+/// * `Fmake_var_non_special (Qfeatures);` -- a call to the same primitive Lisp
+///   reaches as `internal-make-var-non-special` (`src/fns.c:6823`, declared at
+///   `src/fns.c:6817`), under the comment "Let people use lexically scoped
+///   vars named `features'."
+/// * a direct store the line names the symbol in --
+///   `XSYMBOL (Qtop_level)->u.s.declared_special = false;`
+///   (`src/keyboard.c:13955`, declared at `:13951`) and
+///   `XBARE_SYMBOL (intern ("values"))->u.s.declared_special = false;`
+///   (`src/lread.c:5596`, declared at `:5592`).
+///
+/// The other two `declared_special = false` sites in GNU are NOT exceptions of
+/// this shape, and what disqualifies them is structural rather than which file
+/// they are in: neither names a symbol.  `src/alloc.c:3672` is
+/// `p->u.s.declared_special = false` initialising a freshly allocated symbol,
+/// and `src/eval.c:1071` is the body of `internal-make-var-non-special`
+/// itself, clearing the flag on whatever symbol it was handed at runtime.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum GnuSpecialness {
+    /// `DEFVAR_*` alone: the symbol stays special, so `let` under
+    /// `lexical-binding` rebinds the global dynamically.
+    Special,
+    /// `DEFVAR_*` and then an explicit un-declaration: `let` under
+    /// `lexical-binding` makes an ordinary lexical variable the global never
+    /// sees.
+    NonSpecial,
+}
+
 /// One GNU `DEFVAR_LISP' / `DEFVAR_KBOARD' declaration.
 #[derive(Copy, Clone, Debug)]
 pub struct GnuObjectVariable {
@@ -88,6 +136,8 @@ pub struct GnuObjectVariable {
     pub name: &'static str,
     /// The forward variant the macro installs.
     pub kind: GnuObjectForward,
+    /// Whether GNU keeps the `declared_special` flag the macro sets.
+    pub special: GnuSpecialness,
 }
 
 /// What [`adopt_one`] did with a row.
@@ -170,6 +220,18 @@ pub fn adopt(obarray: &mut Obarray) -> AdoptionCounts {
     let mut counts = AdoptionCounts::default();
     for var in gnu_table::GNU_OBJECT_VARIABLES {
         counts.record(adopt_one(obarray, var));
+    }
+    // GNU's own order: declare every name, then take `declared_special` back
+    // off the ones that ask for it (`src/fns.c:6817` then `:6823`).  Driven by
+    // the same generated table as the declarations, so the two halves are
+    // refreshed from the mirror together and cannot drift -- see
+    // [`GnuSpecialness`].
+    for var in gnu_table::GNU_OBJECT_VARIABLES {
+        if var.special == GnuSpecialness::NonSpecial
+            && super::intern::lookup_interned(var.name).is_some()
+        {
+            obarray.make_non_special(var.name);
+        }
     }
     counts
 }
