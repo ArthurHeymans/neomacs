@@ -66,9 +66,17 @@
                   (display &optional xrm-string must-succeed))
 (defvar initial-window-system)
 
-;; Define x-display-name if not set
-(defvar x-display-name nil
-  "The display name specifying the display to connect to.")
+;; `x-display-name' is NOT re-declared here.  It belongs to
+;; `term/common-win.el' (:145), which this file requires above and which
+;; `lisp/loadup.el' now preloads, exactly as GNU's six window-system branches
+;; do -- and no `term/FOO-win.el' in GNU re-declares it either; `term/x-win.el'
+;; only writes `(defvar x-display-name)' at :1223, the value-less form that
+;; silences the compiler.  A second `defvar' WITH a docstring is not a no-op:
+;; `internal--define-uninitialized-variable' (src/eval.c:911) installs the
+;; docstring unconditionally, so the copy that used to sit here -- "The display
+;; name specifying the display to connect to." -- overwrote GNU's text ("The
+;; name of the window display on which Emacs was started ...") the moment a GUI
+;; frame opened.  DIVERGENCES.md 179.
 
 (add-to-list 'display-format-alist '(".*" . neo))
 
