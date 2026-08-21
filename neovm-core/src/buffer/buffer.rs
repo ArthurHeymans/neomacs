@@ -2839,15 +2839,25 @@ impl Buffer {
     /// Convert a 0-based character position to an Emacs byte position,
     /// clamping to the buffer text length.
     pub fn char_pos_to_emacs_byte_pos_clamped(&self, char_pos: CharPos0) -> EmacsBytePos {
-        self.text
-            .char_pos_to_emacs_byte_pos(char_pos.min(self.total_char_end_pos()))
+        let char_pos = char_pos.min(self.total_char_end_pos());
+        // Point is a maintained (char, byte) pair, and scans resume AT
+        // point constantly (parse-partial-sexp moves point to its stop and
+        // the next call starts there) — the text layer would otherwise walk
+        // from its nearest stride anchor for the same answer.
+        if char_pos == self.point.char_pos() {
+            return self.point.emacs_byte_pos();
+        }
+        self.text.char_pos_to_emacs_byte_pos(char_pos)
     }
 
     /// Convert an Emacs byte position to a 0-based character position,
     /// clamping to the buffer text length.
     pub fn emacs_byte_pos_to_char_pos_clamped(&self, byte_pos: EmacsBytePos) -> CharPos0 {
-        self.text
-            .emacs_byte_pos_to_char_pos(byte_pos.min(self.total_emacs_byte_end_pos()))
+        let byte_pos = byte_pos.min(self.total_emacs_byte_end_pos());
+        if byte_pos == self.point.emacs_byte_pos() {
+            return self.point.char_pos();
+        }
+        self.text.emacs_byte_pos_to_char_pos(byte_pos)
     }
 
     pub fn emacs_byte_pos_to_lisp_char_pos(&self, byte_pos: EmacsBytePos) -> LispCharPos1 {
