@@ -4156,17 +4156,38 @@ pub(crate) fn builtin_set_visited_file_modtime(eval: &mut Context, args: Vec<Val
             )],
         ));
     }
-    let path = eval
+    let file_name = eval
         .buffers
         .current_buffer()
-        .and_then(|b| b.file_name_lisp_string())
-        .map(lisp_file_name_to_path_buf);
-    let Some(path) = path else {
+        .and_then(|b| b.file_name_lisp_string());
+    let Some(file_name) = file_name else {
         return Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), Value::NIL],
         ));
     };
+    // GNU fileio.c:6209-6216: expand the buffer's file name, then ask the
+    // handler BEFORE stat'ing, and return its answer -- "the handler can find
+    // the file name the same way we did".  This is the writing half of the same
+    // rule `verify-visited-file-modtime` obeys above, and a remote buffer needs
+    // both: only the handler can reach the file, so without this the buffer
+    // keeps whatever `insert-file-contents` left it -- here the wall clock at
+    // visit time.  The gap between that and the file's own mtime grows with
+    // however long the connection took to open, and once it exceeds TRAMP's
+    // two-second tolerance (lisp/net/tramp.el:5962) the buffer reports
+    // "changed" and the first edit dies in
+    // `ask-user-about-supersession-threat`.
+    let expanded = builtin_expand_file_name(
+        eval,
+        vec![Value::heap_string(file_name.clone()), Value::NIL],
+    )?;
+    let expanded = expect_lisp_filename_string_strict(&expanded)?;
+    let operation = Value::symbol("set-visited-file-modtime");
+    let handler = find_file_name_handler_lisp_for_eval(eval, &expanded, operation);
+    if !handler.is_nil() {
+        return eval.funcall_general(handler, vec![operation, Value::NIL]);
+    }
+    let path = lisp_file_name_to_path_buf(&expanded);
     if let Ok(meta) = std::fs::metadata(&path) {
         let buf = eval
             .buffers

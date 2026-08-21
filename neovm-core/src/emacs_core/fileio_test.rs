@@ -6214,3 +6214,51 @@ fn verify_visited_file_modtime_asks_the_file_name_handler_before_it_stats() {
         Value::symbol("handled"),
     );
 }
+
+/// The other half of the same GNU rule: `Fset_visited_file_modtime` with no
+/// argument asks the file-name handler before it stats (src/fileio.c:6211-6216),
+/// because for a remote buffer only the handler can reach the file.
+///
+/// Without it the buffer keeps whatever `insert-file-contents` left -- in this
+/// port, the wall clock at visit time -- and the gap between that and the
+/// file's own mtime grows with however long the connection took to open.  Once
+/// it passes TRAMP's two-second tolerance (lisp/net/tramp.el:5962) the buffer
+/// reports "changed" and the first edit dies in
+/// `ask-user-about-supersession-threat`.
+#[test]
+fn set_visited_file_modtime_asks_the_file_name_handler_before_it_stats() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    // GNU expands the buffer's file name first (src/fileio.c:6209), and that
+    // expansion is itself a handled operation, so the stand-in must answer it
+    // the way a real handler does -- by returning the name.
+    eval.eval_str(
+        "(fset 'pw174-set-modtime-handler \
+         '(lambda (operation &rest args) \
+            (cond ((eq operation 'set-visited-file-modtime) \
+                   (setq pw174-set-modtime-called operation) nil) \
+                  ((eq operation 'expand-file-name) (car args)) \
+                  (t nil))))",
+    )
+    .expect("define the stand-in handler");
+    eval.eval_str("(setq pw174-set-modtime-called nil)")
+        .expect("seed the witness");
+    eval.obarray.set_symbol_value(
+        "file-name-handler-alist",
+        Value::list(vec![Value::cons(
+            Value::string("\\`/pw174:"),
+            Value::symbol("pw174-set-modtime-handler"),
+        )]),
+    );
+    eval.eval_str("(setq buffer-file-name \"/pw174:payments:/workspace/config.txt\")")
+        .expect("visit a remote name");
+
+    eval.eval_str("(set-visited-file-modtime)")
+        .expect("set-visited-file-modtime");
+
+    assert_eq!(
+        eval.eval_str("pw174-set-modtime-called")
+            .expect("read the witness"),
+        Value::symbol("set-visited-file-modtime"),
+    );
+}
