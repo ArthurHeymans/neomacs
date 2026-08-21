@@ -455,6 +455,26 @@ impl LispIntFwd {
         crate::tagged::header::load_value_atomic(unsafe { &*self.value.get() })
     }
 
+    /// The slot as GNU's C reads it: a plain `intmax_t`, no Lisp object.
+    ///
+    /// GNU's C never goes through `do_symval_forwarding` for its own globals --
+    /// `num_nonmacro_input_events` and `when_entered_debugger` are compared as
+    /// integers (`src/eval.c:2212`) -- so a caller that wants the number should
+    /// not have to re-derive the invariant [`LispInteger`] already carries.
+    #[inline]
+    pub fn get_i64(&self) -> i64 {
+        let stored = self.get();
+        match stored.as_fixnum() {
+            Some(small) => small,
+            // `set` takes a `LispInteger`, whose constructors both guarantee
+            // `intmax_t` range, so this conversion cannot fail.
+            None => stored
+                .as_bignum()
+                .and_then(|big| i64::try_from(big).ok())
+                .unwrap_or(0),
+        }
+    }
+
     /// Borrow the stored integer. The descriptor is leaked at registration, so
     /// the borrow is genuinely `'static`.
     #[inline]
@@ -576,6 +596,16 @@ pub struct LispBufferObjFwd {
 /// `Fmake_variable_buffer_local` and `Fmake_local_variable` both signal
 /// "Symbol %s may not be buffer-local" for it (`src/data.c:2220-2223`,
 /// `src/data.c:2287-2288`) -- and those key on the TYPE, not on the offset.
+///
+/// The second half of the same single-terminal limitation, which ledger 170
+/// named and ledger 183 re-checked against the source: `specbind` records
+/// `specpdl_ptr->let.where.kbd = kboard_for_bindings ()` for a keyboard
+/// variable and takes `SPECPDL_LET` rather than `SPECPDL_LET_LOCAL`
+/// (`src/eval.c:3681-3683`), so `unbind_to` restores the old value into the
+/// keyboard the binding was made on.  With one keyboard there is nowhere else
+/// to restore it to, so the field has no counterpart here; a second terminal
+/// would need both it and the offset back, together, and neither is
+/// observable from Lisp until then.
 #[repr(C)]
 pub struct LispKboardObjFwd {
     pub ty: LispFwdType,

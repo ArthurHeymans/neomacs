@@ -944,3 +944,170 @@ fn defvar_kboard_binding_locus_is_the_terminal_like_gnu() {
         "OK nil"
     );
 }
+
+// ===========================================================================
+// Ledger 183 -- ledger 170's fifth refusal: a LET-BOUND new alias
+// ===========================================================================
+
+/// GNU scans the whole specpdl for any `kind >= SPECPDL_LET` binding of
+/// NEW-ALIAS and refuses (`src/eval.c:704-711`).  Measured under GNU Emacs
+/// 31.0.90 `-Q --batch` (`tmp/l183-p6.el`), four rows:
+///
+/// ```text
+/// 1 plain-let      (refused "Don’t know how to make a let-bound variable an alias: l183p")
+/// 2 unwound-let    allowed
+/// 3 base-let-bound allowed
+/// 4 let-local      (refused "Don’t know how to make a buffer-local variable an alias: l183v")
+/// ```
+///
+/// Row 2 is what makes this a specpdl question and not a symbol-flag one: the
+/// same symbol, once the binding has been unwound, is accepted.  Row 3 is what
+/// makes it a question about NEW-ALIAS only.  Row 4 is the pre-existing
+/// LOCALIZED refusal reached first, and both editors already agreed on it.
+#[test]
+fn a_let_bound_variable_cannot_become_an_alias_like_gnu() {
+    let mut eval = ev();
+    eval.eval_str(
+        "(progn (defvar l183p 1) (defvar l183q 2)
+                (defvar l183r 3) (defvar l183s 4)
+                (defvar l183t 5) (defvar l183u 6) nil)",
+    )
+    .expect("setup should evaluate");
+
+    // 1. NEW-ALIAS is let-bound right now.
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(let ((l183p 9))
+               (condition-case e (defvaralias 'l183p 'l183q) (error e)))"
+        )),
+        "OK (error \"Don\u{2019}t know how to make a let-bound variable an alias: l183p\")"
+    );
+    // 2. the binding is gone again: accepted.
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(progn (let ((l183r 9)) nil)
+                    (condition-case e (defvaralias 'l183r 'l183s) (error e)))"
+        )),
+        "OK l183s"
+    );
+    // 3. BASE let-bound, NEW-ALIAS not: accepted.
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(let ((l183u 9))
+               (condition-case e (defvaralias 'l183t 'l183u) (error e)))"
+        )),
+        "OK l183u"
+    );
+}
+
+/// GNU performs the refusal AFTER the value migration and the "Overwriting
+/// value" warning, not with the redirect switch (`src/eval.c:682-711`) -- the
+/// warning for row 1 of `tmp/l183-p6.el` is printed by the run that then
+/// refuses.  So the refused call is not a no-op, and pinning the order is what
+/// stops a future reader from folding the check into
+/// `Obarray::check_variable_alias` where it would be cheaper and wrong.
+#[test]
+fn the_let_bound_refusal_happens_after_the_value_migration() {
+    let mut eval = ev();
+    // BASE unbound, NEW-ALIAS bound and let-bound: GNU's `if (NILP (Fboundp
+    // (base_variable)))` arm copies NEW-ALIAS's *current* (let-bound) value
+    // into BASE before the specpdl scan refuses.
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(progn (defvar l183x 1)
+                    (let ((l183x 9))
+                      (condition-case nil (defvaralias 'l183x 'l183y) (error nil)))
+                    (list (boundp 'l183y) l183y))"
+        )),
+        "OK (t 9)"
+    );
+}
+
+/// GNU's `DEFVAR_LISP ("echo-area-clear-hook", ...)` is parked inside a dead
+/// preprocessor region (`src/keyboard.c:14057-14061`), so no build has ever
+/// compiled it -- the name is an ordinary plain Lisp variable there.  The
+/// generated declaration table scraped the head anyway and this port therefore
+/// forwarded it, which costs two Lisp-visible facts.  Measured, `-Q --batch`:
+///
+/// ```text
+/// (list (boundp 'echo-area-clear-hook)          GNU      (t nil nil)
+///       (symbol-value 'echo-area-clear-hook)    before   (t nil t)
+///       (special-variable-p 'echo-area-clear-hook))
+/// (condition-case e (makunbound 'echo-area-clear-hook) (error e))
+///                                               GNU      echo-area-clear-hook
+///                                               before   (error "Built-in variable may not be unbound : echo-area-clear-hook")
+/// ```
+///
+/// The fix is in `scripts/extract_gnu_defvar_object_names.py`, which now
+/// blanks those regions before scanning; this pin is what says the table was
+/// regenerated.  Ledger 183, same failure class as ledger 176's `features`.
+#[test]
+fn a_defvar_parked_in_a_dead_preprocessor_region_is_not_a_declaration() {
+    assert!(
+        !crate::emacs_core::defvar_object::gnu_table::GNU_OBJECT_VARIABLES
+            .iter()
+            .any(|var| matches!(
+                var.name,
+                "echo-area-clear-hook" | "w32-generate-fake-inodes"
+            )),
+        "a dead-region DEFVAR head is back in the generated table"
+    );
+
+    let mut eval = ev();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(list (boundp 'echo-area-clear-hook)
+                   (symbol-value 'echo-area-clear-hook)
+                   (special-variable-p 'echo-area-clear-hook))"
+        )),
+        "OK (t nil nil)"
+    );
+    assert_eq!(
+        format_eval_result(
+            &eval.eval_str("(condition-case e (makunbound 'echo-area-clear-hook) (error e))")
+        ),
+        "OK echo-area-clear-hook"
+    );
+}
+
+/// `default-minibuffer-frame` is `DEFVAR_KBOARD` (`src/frame.c:7555`), and
+/// this port bound it only from the post-image reset table -- which runs after
+/// `defvar_object::adopt`, so the symbol never got GNU's redirect tag.  Two
+/// Lisp facts followed.  Measured, `-Q --batch`:
+///
+/// ```text
+/// (list (boundp ...) (symbol-value ...) (special-variable-p ...))
+///                                   GNU (t nil t)   this port, before (t nil nil)
+/// (condition-case e (makunbound 'default-minibuffer-frame) (error e))
+///                                   GNU (error "Built-in variable may not be unbound : ...")
+///                                       this port, before: the symbol
+/// ```
+///
+/// This is the whole of ledger 170's `refused -> allowed` residual as it reads
+/// today -- one name of 578, re-measured on the image path (ledger 183 §8) --
+/// and the reason is the one-shot pass, not the name.
+#[test]
+fn a_defvar_kboard_name_bound_after_the_adoption_pass_still_gets_gnus_tag() {
+    let mut eval = ev();
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(list (boundp 'default-minibuffer-frame)
+                   default-minibuffer-frame
+                   (special-variable-p 'default-minibuffer-frame))"
+        )),
+        "OK (t nil t)"
+    );
+    assert_eq!(
+        format_eval_result(
+            &eval.eval_str("(condition-case e (makunbound 'default-minibuffer-frame) (error e))")
+        ),
+        r#"OK (error "Built-in variable may not be unbound : default-minibuffer-frame")"#
+    );
+    // `DEFVAR_KBOARD` also refuses `make-local-variable` (`src/data.c:2287-2290`).
+    assert_eq!(
+        format_eval_result(&eval.eval_str(
+            "(condition-case e (make-local-variable 'default-minibuffer-frame) (error e))"
+        )),
+        r#"OK (error "Symbol default-minibuffer-frame may not be buffer-local")"#
+    );
+}

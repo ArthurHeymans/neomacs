@@ -149,7 +149,6 @@ pub(crate) static GNU_OBJECT_VARIABLES: &[GnuObjectVariable] = &[
     GnuObjectVariable { name: r#"dynamic-library-alist"#, kind: G, special: S }, // emacs.c:3621
     GnuObjectVariable { name: r#"dynamic-library-suffixes"#, kind: G, special: S }, // lread.c:5640
     GnuObjectVariable { name: r#"ebrowse-program-name"#, kind: G, special: S }, // callproc.c:2218
-    GnuObjectVariable { name: r#"echo-area-clear-hook"#, kind: G, special: S }, // keyboard.c:14059
     GnuObjectVariable { name: r#"echo-keystrokes"#, kind: G, special: S }, // keyboard.c:13857
     GnuObjectVariable { name: r#"emacs-copyright"#, kind: G, special: S }, // emacs.c:3601
     GnuObjectVariable { name: r#"emacs-version"#, kind: G, special: S }, // emacs.c:3605
@@ -501,7 +500,6 @@ pub(crate) static GNU_OBJECT_VARIABLES: &[GnuObjectVariable] = &[
     GnuObjectVariable { name: r#"w32-enable-caps-lock"#, kind: G, special: S }, // w32fns.c:11707
     GnuObjectVariable { name: r#"w32-enable-num-lock"#, kind: G, special: S }, // w32fns.c:11701
     GnuObjectVariable { name: r#"w32-enable-palette"#, kind: G, special: S }, // w32fns.c:11754
-    GnuObjectVariable { name: r#"w32-generate-fake-inodes"#, kind: G, special: S }, // w32proc.c:4831
     GnuObjectVariable { name: r#"w32-get-true-file-attributes"#, kind: G, special: S }, // w32proc.c:4840
     GnuObjectVariable { name: r#"w32-grab-focus-on-raise"#, kind: G, special: S }, // w32term.c:8285
     GnuObjectVariable { name: r#"w32-lwindow-modifier"#, kind: G, special: S }, // w32fns.c:11722

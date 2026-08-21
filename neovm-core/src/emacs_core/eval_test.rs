@@ -22552,7 +22552,10 @@ fn bytecode_backtraces_reference_the_live_caller_stack_for_every_arity() {
                 .collect::<LispArgVec>()
         );
 
-        ev.pop_fast_bytecode_backtrace_frame(backtrace);
+        assert!(matches!(
+            ev.pop_fast_bytecode_backtrace_frame(backtrace),
+            crate::emacs_core::eval::FastBytecodePop::Popped
+        ));
         ev.bc_buf.truncate(args_start);
     }
 }
@@ -22614,7 +22617,7 @@ fn bytecode_backtrace_token_rejects_an_unbalanced_fast_pop() {
     let mut ev = Context::new();
     let backtrace = ev.push_backtrace_frame_from_bc_stack(Value::symbol("callee"), 0, 0);
     ev.push_specpdl_root(Value::T);
-    ev.pop_fast_bytecode_backtrace_frame(backtrace);
+    let _ = ev.pop_fast_bytecode_backtrace_frame(backtrace);
 }
 
 #[test]

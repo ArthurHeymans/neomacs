@@ -64,12 +64,65 @@ SUBJECT_QSYM = re.compile(r"^(Q\w+)$")
 SUBJECT_INTERN = re.compile(r'^intern\s*\(\s*"([^"]+)"\s*\)$')
 DEFSYM = re.compile(r'\bDEFSYM\s*\(\s*(Q\w+)\s*,\s*"([^"]+)"\s*\)')
 
+IF_OPEN = re.compile(r"^\s*#\s*(?:if|ifdef|ifndef)\b")
+IF_ZERO = re.compile(r"^\s*#\s*if\s+0\b")
+IF_ELSE = re.compile(r"^\s*#\s*el(?:se|if)\b")
+IF_CLOSE = re.compile(r"^\s*#\s*endif\b")
+
+
+def strip_if_zero(text: str) -> str:
+    """Blank out every `#if 0' ... `#else'/`#endif' region, keeping offsets.
+
+    A generator that scrapes C text sees declarations the compiler never
+    does.  GNU has seven `DEFVAR_LISP' heads parked inside `#if 0', and one of
+    them -- `echo-area-clear-hook' (`src/keyboard.c:14059') -- is in a file
+    this port DOES have the variable for, so the spurious row made the symbol
+    `SYMBOL_FORWARDED' and `special' here while GNU leaves it an ordinary
+    plain Lisp variable.  Measured, `-Q --batch':
+    `(list (boundp 'echo-area-clear-hook) (special-variable-p ...))'
+    answers `(t nil)' in GNU and answered `(t t)' here, and `makunbound' was
+    refused where GNU allows it (ledger 183).
+
+    Same failure class as ledger 176's `features' and ledger 173's extractor
+    bugs: the fix belongs in the generator, not in a hand-maintained list of
+    exceptions beside it.  Replacement preserves every byte offset (only
+    non-newline characters are blanked) so `file:line' comments stay true.
+
+    `#ifdef'/`#ifndef'/`#if <cond>' are deliberately NOT evaluated -- those
+    guard platform files whose names belong in the table (`w32fns.c`'s
+    `x-pointer-shape` is also declared in `xfns.c`), and `adopt` reports a
+    name this build lacks as `Absent` rather than acting on it.  `#if 0' is
+    different in kind: it is dead in EVERY build.
+    """
+    out = []
+    depth = 0
+    dead_at = None
+    for line in text.split("\n"):
+        if IF_OPEN.match(line):
+            depth += 1
+            if dead_at is None and IF_ZERO.match(line):
+                dead_at = depth
+        elif IF_CLOSE.match(line):
+            if dead_at is not None and depth == dead_at:
+                dead_at = None
+            depth = max(0, depth - 1)
+        elif IF_ELSE.match(line):
+            if dead_at is not None and depth == dead_at:
+                dead_at = None
+        out.append(" " * len(line) if dead_at is not None else line)
+    return "\n".join(out)
+
+
+def read_live_source(path: Path) -> str:
+    """The C text a compiler would see, minus `#if 0' regions."""
+    return strip_if_zero(path.read_text(encoding="utf-8", errors="replace"))
+
 
 def collect(src: Path):
     """name -> (kind, "file:line"), keeping the first declaration seen."""
     found = {}
     for path in sorted(src.glob("*.c")):
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = read_live_source(path)
         for match in DECL.finditer(text):
             macro, name = match.group(1), match.group(2)
             if name in found:
@@ -83,7 +136,7 @@ def collect_defsyms(src: Path):
     """Qidentifier -> Lisp name, from GNU's own `DEFSYM' table."""
     syms = {}
     for path in sorted(src.glob("*.c")):
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = read_live_source(path)
         for match in DEFSYM.finditer(text):
             syms.setdefault(match.group(1), match.group(2))
     return syms
@@ -103,7 +156,7 @@ def collect_non_special(src: Path, defsyms):
     found = {}
     unresolved = []
     for path in sorted(src.glob("*.c")):
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = read_live_source(path)
 
         def site(match):
             return f"{path.name}:{text.count(chr(10), 0, match.start()) + 1}"

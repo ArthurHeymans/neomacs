@@ -1763,10 +1763,41 @@ pub struct KeyboardRuntime {
     pub kboard: KBoard,
 }
 
+/// GNU's `num_nonmacro_input_events` slot, reached by its Lisp name because
+/// in GNU the Lisp name *is* the slot (`src/keyboard.c:13903`).
+fn num_nonmacro_input_events_symbol() -> crate::emacs_core::intern::SymId {
+    static SYMBOL: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+        std::sync::OnceLock::new();
+    *SYMBOL.get_or_init(|| intern("num-nonmacro-input-events"))
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum InputEventHistoryDisposition {
     Record,
     SuppressDuringMacroPlayback,
+}
+
+/// Whether an event that was just recorded advances GNU's
+/// `num_nonmacro_input_events` (`src/keyboard.c:3576`).
+///
+/// The counter is the `DEFVAR_INT` `num-nonmacro-input-events`
+/// (`src/keyboard.c:13903`) -- Lisp and C read and write the *same*
+/// `intmax_t`, which `maybe_call_debugger` compares against
+/// `when_entered_debugger` (`src/eval.c:2212`).  A second Rust-side copy of it
+/// was what made `(setq num-nonmacro-input-events 5)` invisible to the stamp
+/// (ledger 183), so [`CommandLoop`] no longer holds one: it reports the
+/// decision and the layer that owns the obarray performs the increment.
+///
+/// `#[must_use]` because dropping the answer is exactly the bug: the event was
+/// recorded in the lossage ring and the counter silently did not move.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use = "a recorded non-macro event must advance num-nonmacro-input-events"]
+pub enum NonmacroInputEvent {
+    /// `record_char` reached its `num_nonmacro_input_events++`.
+    Counted,
+    /// The event came from an executing keyboard macro, which GNU excludes
+    /// (`src/keyboard.c:3469-3590`).
+    SuppressedByMacroPlayback,
 }
 
 impl KeyboardRuntime {
@@ -2137,17 +2168,12 @@ pub struct CommandLoop {
     idle_start_time: Option<std::time::Instant>,
     /// Last idle epoch preserved across non-user internal events.
     last_idle_start_time: Option<std::time::Instant>,
-    /// Number of non-macro input events that have been read by the
-    /// command loop. Mirrors GNU `num_nonmacro_input_events` at
-    /// `src/keyboard.c:106`, which is incremented from
-    /// `record_char` whenever the event did *not* come from an
-    /// executing keyboard macro. Used by the `auto-save-interval`
-    /// check in `command_loop_1` (audit Finding 9).
-    pub num_nonmacro_input_events: u64,
     /// Value of `num_nonmacro_input_events` the last time an
     /// auto-save fired from the command loop. GNU tracks this in
-    /// the global `last_auto_save` at `src/keyboard.c:107`.
-    pub last_auto_save_input_events: u64,
+    /// `static intmax_t last_auto_save` (`src/keyboard.c:237`) -- a plain C
+    /// static with no `DEFVAR`, so unlike the counter it compares against it
+    /// is right for it to live here.
+    pub last_auto_save_input_events: i64,
     /// Size of the most recently selected non-minibuffer buffer, in
     /// characters. GNU keeps this separately because a minibuffer input wait
     /// should scale idle auto-save latency from the edited buffer, not from
@@ -2167,7 +2193,6 @@ impl CommandLoop {
             inhibit_quit: false,
             idle_start_time: None,
             last_idle_start_time: None,
-            num_nonmacro_input_events: 0,
             last_auto_save_input_events: 0,
             last_non_minibuffer_size: 0,
         }
@@ -2223,19 +2248,27 @@ impl CommandLoop {
         self.keyboard.read_raw_command_keys()
     }
 
-    pub fn record_input_event(&mut self, event: Value) {
+    pub fn record_input_event(&mut self, event: Value) -> NonmacroInputEvent {
         // GNU `read_char` publishes every accepted event through
         // `last-input-event`, but `record_char` excludes keyboard-macro
         // playback from recent-keys, the dribble file, and
         // `num_nonmacro_input_events` (keyboard.c:3385,3469-3590). Keep that
         // history policy here rather than making callers skip the whole
         // publication operation.
+        //
+        // The counter itself is NOT bumped here: it is the `DEFVAR_INT`
+        // `num-nonmacro-input-events` (`src/keyboard.c:13903`), which lives in
+        // the obarray this type cannot see.  Returning the decision instead of
+        // duplicating the counter is what keeps GNU's one slot one slot; see
+        // [`NonmacroInputEvent`].
         match self.keyboard.input_event_history_disposition() {
             InputEventHistoryDisposition::Record => {
-                self.num_nonmacro_input_events = self.num_nonmacro_input_events.saturating_add(1);
                 self.keyboard.record_input_event(event);
+                NonmacroInputEvent::Counted
             }
-            InputEventHistoryDisposition::SuppressDuringMacroPlayback => {}
+            InputEventHistoryDisposition::SuppressDuringMacroPlayback => {
+                NonmacroInputEvent::SuppressedByMacroPlayback
+            }
         }
     }
 
@@ -5198,9 +5231,7 @@ impl crate::emacs_core::eval::Context {
     /// means there has been no input since the last auto-save or the user has
     /// disabled idle auto-saving.
     fn command_idle_auto_save_delay(&mut self) -> Option<std::time::Duration> {
-        if self.command_loop.num_nonmacro_input_events
-            <= self.command_loop.last_auto_save_input_events
-        {
+        if self.num_nonmacro_input_events() <= self.command_loop.last_auto_save_input_events {
             return None;
         }
 
@@ -6459,7 +6490,36 @@ impl crate::emacs_core::eval::Context {
 
     pub(crate) fn record_input_event(&mut self, event: Value) {
         self.assign("last-input-event", event);
-        self.command_loop.record_input_event(event);
+        match self.command_loop.record_input_event(event) {
+            NonmacroInputEvent::Counted => self.advance_num_nonmacro_input_events(),
+            NonmacroInputEvent::SuppressedByMacroPlayback => {}
+        }
+    }
+
+    /// GNU's `num_nonmacro_input_events` (`src/keyboard.c:106`), which is the
+    /// `DEFVAR_INT` `num-nonmacro-input-events` (`src/keyboard.c:13903`) and
+    /// not a separate global: `record_char` increments the same `intmax_t`
+    /// Lisp reads, and `maybe_call_debugger` compares it against
+    /// `when_entered_debugger` (`src/eval.c:2212`).
+    ///
+    /// Reading it through the forwarder rather than from a Rust field is the
+    /// whole point -- a `setq` of the Lisp name has to move the counter, and
+    /// before ledger 183 it did not, because there were two slots.
+    pub(crate) fn num_nonmacro_input_events(&self) -> i64 {
+        self.obarray
+            .int_forwarder(num_nonmacro_input_events_symbol())
+            .map_or(0, crate::emacs_core::forward::LispIntFwd::get_i64)
+    }
+
+    /// GNU `record_char`'s `num_nonmacro_input_events++` (`src/keyboard.c:3576`).
+    fn advance_num_nonmacro_input_events(&mut self) {
+        let next = self.num_nonmacro_input_events().saturating_add(1);
+        if let Some(fwd) = self
+            .obarray
+            .int_forwarder(num_nonmacro_input_events_symbol())
+        {
+            fwd.set(crate::emacs_core::forward::LispInteger::from_i64(next));
+        }
     }
 
     pub(crate) fn record_recent_command(&mut self, command: Value) {

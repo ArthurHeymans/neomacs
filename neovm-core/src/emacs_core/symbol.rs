@@ -558,6 +558,19 @@ pub enum MakeAliasError {
     /// Following `base`'s alias chain reaches `new_alias` — would
     /// create `cyclic-variable-indirection`.
     Cycle,
+    /// `new_alias` is dynamically rebound somewhere on the specpdl
+    /// (`src/eval.c:702-711`).  GNU rejects with "Don't know how to make a
+    /// let-bound variable an alias".
+    ///
+    /// The only member of this set that is NOT decidable from the obarray:
+    /// GNU asks the binding stack, and it asks it *after* the value migration
+    /// and the "Overwriting value" warning rather than in the redirect switch
+    /// with the other four.  So [`Obarray::check_variable_alias`] cannot raise
+    /// it and does not try; `defvaralias_impl` raises it at GNU's position
+    /// from [`crate::emacs_core::eval::Context::symbol_is_let_bound`].  It
+    /// lives in this enum anyway so the refusal set and its messages stay in
+    /// one place (ledger 183).
+    LetBound,
 }
 
 impl LispSymbol {
@@ -1986,6 +1999,28 @@ impl Obarray {
             // stores a `Box::leak`ed descriptor (see `Obarray::forwarder`).
             SymbolRedirect::Forwarded => unsafe { &*sym.val.fwd }.as_bool_fwd(),
             SymbolRedirect::Localized => self.blv(id)?.fwd?.as_bool_fwd(),
+            _ => None,
+        }
+    }
+
+    /// The `Lisp_Intfwd` cell behind a `DEFVAR_INT` symbol -- GNU's
+    /// `intmax_t *`, which C code reads and writes as a plain global.
+    ///
+    /// `num_nonmacro_input_events` (`src/keyboard.c:13903`) and
+    /// `when_entered_debugger` (`src/eval.c:4554`) are both this, and both are
+    /// read by C in the same expression Lisp can `setq` (`src/eval.c:2212`) --
+    /// so the counter and the Lisp variable have to be one slot, not two.
+    /// Same two-redirect handling as [`Obarray::bool_forwarder`].
+    pub fn int_forwarder(
+        &self,
+        id: SymId,
+    ) -> Option<&'static crate::emacs_core::forward::LispIntFwd> {
+        let sym = self.slot(id)?;
+        match sym.flags.redirect() {
+            // Safety: `install_*fwd` is the only writer of this arm and always
+            // stores a `Box::leak`ed descriptor (see `Obarray::forwarder`).
+            SymbolRedirect::Forwarded => unsafe { &*sym.val.fwd }.as_int_fwd(),
+            SymbolRedirect::Localized => self.blv(id)?.fwd?.as_int_fwd(),
             _ => None,
         }
     }

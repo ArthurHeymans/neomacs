@@ -793,13 +793,15 @@ fn runtime_backtrace_frame_indices_from_base(
         let pair_car = base.cons_car();
         let pair_cdr = base.cons_cdr();
         if let Some(raw_offset) = pair_car.as_fixnum() {
-            if raw_offset < 0 {
-                return Err(signal(
-                    LispCondition::WrongTypeArgument,
-                    vec![Value::symbol("wholenump"), pair_car],
-                ));
-            }
-            offset = raw_offset as usize;
+            // GNU reads the offset with a bare `XFIXNUM` -- there is no
+            // `CHECK_FIXNAT` on the car, unlike the LEVEL argument
+            // (`src/eval.c:3966` against `:3986`) -- and spends it in
+            // `while (backtrace_p (pdl) && offset-- > 0)` (`src/eval.c:3977`).
+            // A negative offset is therefore not an error there, it is a loop
+            // that does not run.  Measured, `-Q --batch`, `tmp/l183-p13.el`
+            // row 9: `(backtrace-frame 0 '(-1 . f))` answers f's own frame in
+            // GNU and signalled `(wrong-type-argument wholenump -1)` here.
+            offset = usize::try_from(raw_offset).unwrap_or(0);
             base_function = pair_cdr;
         }
     }
