@@ -5646,6 +5646,31 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
 
     obarray.set_symbol_value("inhibit-redisplay", Value::NIL);
     obarray.make_special("inhibit-redisplay");
+    // The five `syms_of_xdisp' DEFVAR_LISPs entry 173's sweep found this port
+    // short of.  Each carries GNU's own initializer; none is a nil placeholder
+    // standing in for one.
+    //
+    // xdisp.c:39191 DEFVAR_LISP, `Vdebug_on_message = Qnil'.
+    obarray.define_special_variable("debug-on-message", Value::NIL);
+    // xdisp.c:38549 DEFVAR_LISP, `Vdisplay_pixels_per_inch = make_float (72.0)'
+    // -- a float, not the fixnum 72: `default_pixels_per_inch_x' reads it with
+    // `XFLOATINT' after a `NUMBERP' test, and `frame-char-width' arithmetic
+    // divides by it.
+    obarray.define_special_variable("display-pixels-per-inch", Value::make_float(72.0));
+    // xdisp.c:38910 DEFVAR_LISP, `Vmenu_updating_frame = Qnil'.
+    obarray.define_special_variable("menu-updating-frame", Value::NIL);
+    // xdisp.c:39225 / 39230 DEFVAR_LISP, both `Fmake_hash_table (0, NULL)' --
+    // an ordinary `eql' table, which `redisplay_internal' fills with cause
+    // counters when `redisplay--variables' is instrumented.  An empty table is
+    // not the same value as nil: `puthash' on nil signals.
+    obarray.define_special_variable(
+        "redisplay--all-windows-cause",
+        Value::hash_table(crate::emacs_core::value::HashTableTest::Eql),
+    );
+    obarray.define_special_variable(
+        "redisplay--mode-lines-cause",
+        Value::hash_table(crate::emacs_core::value::HashTableTest::Eql),
+    );
     // GNU xdisp.c `DEFVAR_LISP ("special-mirror-table", Vspecial_mirror_table)`:
     // a char-table of characters bidi display mirrors specially (paired
     // punctuation such as ¶<->‹). GNU inits it to an empty char-table

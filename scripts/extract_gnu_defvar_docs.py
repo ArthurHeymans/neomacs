@@ -48,19 +48,43 @@ DEFVAR_HEAD = re.compile(
     r'\bDEFVAR_(LISP|BOOL|INT|KBOARD|LISP_NOPRO|PER_BUFFER)\s*\(\s*"([^"]+)"\s*,'
 )
 
+# `make-docfile' skips ALL whitespace between the `doc' keyword's colon and the
+# opening `/*', newlines included:
+#
+#     if (c == ':')
+#       {
+#         doc_keyword = true;
+#         do
+#           c = getc (infile);
+#         while (c_isspace (c));
+#       }
+#     bool comment = c == '/' && (c = getc (infile)) == '*';
+#
+# (`lib-src/make-docfile.c:1148-1157'.)  Searching for the literal `"doc: /*"'
+# instead silently dropped nine `DEFVAR' blocks from the generated table:
+# `inhibit-message' (`src/xdisp.c:38216', two spaces),
+# `xft-font-ascent-descent-override' (`src/xftfont.c:800', two spaces),
+# `macroexp--dynvars' (`src/lread.c:5931', three spaces), and the six
+# `treesit-*' names whose `/*' is on the NEXT line (`src/treesit.c:5355'
+# onward).  A dropped row is not a visible failure -- the name simply has no
+# documentation -- which is why this went unnoticed until entry 173 diffed the
+# generated table's name set against `src/*.c'.
+DOC_MARKER = re.compile(r"doc:\s*/\*")
+
 
 def find_doc_block(text: str, start: int) -> tuple[str | None, int]:
     """Find the `doc: /* ... */)` block starting at or after `start`.
     Returns (doc_text, end_offset) or (None, start) on failure.
     """
-    doc_marker = text.find("doc: /*", start)
-    if doc_marker == -1:
+    match = DOC_MARKER.search(text, start)
+    if match is None:
         return None, start
+    doc_marker = match.start()
     # Bound the search: don't cross another DEFVAR boundary.
     next_defvar = text.find("DEFVAR_", start + 1)
     if next_defvar != -1 and next_defvar < doc_marker:
         return None, start
-    body_start = doc_marker + len("doc: /*")
+    body_start = match.end()
     body_end = text.find("*/", body_start)
     if body_end == -1:
         return None, start
@@ -123,14 +147,21 @@ def is_skip_placeholder(doc: str) -> bool:
     return doc.startswith("SKIP")
 
 
-def extract_defvars(src: str) -> list[tuple[str, str]]:
+def extract_defvars(src: str) -> tuple[list[tuple[str, str]], list[str]]:
     """Extract `(name, doc)` pairs from a single C source file.
 
     Declarations whose doc text is a `SKIP` placeholder contribute nothing:
     the caller must be free to take the next file's copy, which is where the
     real text lives.
+
+    Also returns the names of `DEFVAR` heads for which no `doc:` block could be
+    found at all.  Every `DEFVAR_*` in GNU's `src/*.c` has one -- `make-docfile`
+    would otherwise emit no `^_V` record for it -- so a non-empty second element
+    means the scanner is out of step with `make-docfile`, which is exactly the
+    failure entry 173 found and which is silent in the generated table.
     """
     results = []
+    undocumented: list[str] = []
     pos = 0
     while True:
         m = DEFVAR_HEAD.search(src, pos)
@@ -143,8 +174,9 @@ def extract_defvars(src: str) -> list[tuple[str, str]]:
                 results.append((name, doc))
             pos = doc_end
         else:
+            undocumented.append(name)
             pos = m.end()
-    return results
+    return results, undocumented
 
 
 def rust_string_literal(s: str) -> str:
@@ -205,6 +237,7 @@ def main() -> int:
 
     all_entries: list[tuple[str, str]] = []
     first_site: dict[str, tuple[str, str]] = {}
+    undocumented_heads: list[str] = []
     conflicts = 0
     for c_file in sorted(args.gnu_src.glob("*.c")):
         try:
@@ -212,7 +245,9 @@ def main() -> int:
         except OSError as e:
             print(f"warning: cannot read {c_file}: {e}", file=sys.stderr)
             continue
-        entries = extract_defvars(src)
+        entries, undocumented = extract_defvars(src)
+        for name in undocumented:
+            undocumented_heads.append(f"{c_file.name}:{name}")
         for name, doc in entries:
             if name in first_site:
                 where, kept = first_site[name]
@@ -233,6 +268,21 @@ def main() -> int:
                 continue
             first_site[name] = (c_file.name, doc)
             all_entries.append((name, doc))
+
+    if undocumented_heads:
+        # Refuse to write a table that is quietly smaller than GNU's source.
+        # A `DEFVAR_*` whose `doc:` block this scanner cannot find produces no
+        # row at all, and a missing row looks exactly like "GNU has no doc for
+        # that name" from every direction except this one.
+        print(
+            f"error: {len(undocumented_heads)} DEFVAR head(s) with no doc: block; "
+            f"the scanner is out of step with make-docfile "
+            f"(lib-src/make-docfile.c:1148-1157):",
+            file=sys.stderr,
+        )
+        for head in undocumented_heads:
+            print(f"  {head}", file=sys.stderr)
+        return 1
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     emit_rust(all_entries, args.output)

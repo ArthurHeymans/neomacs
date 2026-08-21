@@ -86,21 +86,85 @@ const _: () = {
 ///
 /// O(n) linear scan over `gnu_table::GNU_VAR_DOCS`. Called only on
 /// documentation-query paths, never from `eval`/`funcall`/dispatch.
+///
+/// The argument is a [`SnarfedVariable`] rather than a `&str` because the
+/// table is not a list of answers -- it is a stand-in for `etc/DOC`, which is
+/// bigger than any one build, and reading a record out of it is only legal
+/// after `Fsnarf_documentation`'s `Fboundp` gate has said yes.
 #[inline]
-pub(crate) fn lookup(name: &str) -> Option<&'static str> {
-    // `gnu_table' is generated from ALL of GNU's `src/*.c', the platform files
-    // included, but a `DEFVAR_*' attaches the doc string and binds the symbol
-    // in the same statement -- so a variable whose C file this build does not
-    // compile has no `variable-documentation' either.  Measured under GNU
-    // 31.0.90, `-Q --batch': `(documentation-property 'dos-hyper-key
-    // 'variable-documentation)' is nil, and so is
-    // `(boundp 'dos-hyper-key)'.  The one table that already answers "does any
-    // build reachable from here declare this name" answers this too.
-    if crate::emacs_core::cus_start_platform_vars::is_name_gnu_leaves_unbound_here(name) {
-        return None;
-    }
+pub(crate) fn lookup(variable: SnarfedVariable<'_>) -> Option<&'static str> {
     gnu_table::GNU_VAR_DOCS
         .iter()
-        .find(|(n, _)| *n == name)
+        .find(|(n, _)| *n == variable.name)
         .map(|(_, doc)| *doc)
+}
+
+/// A built-in variable name that **this build binds** -- the only kind
+/// `Fsnarf_documentation` installs a doc string for, and therefore the only
+/// key [`lookup`] accepts.
+///
+/// GNU's DOC file is written by `make-docfile`, a text scanner that does not
+/// evaluate the preprocessor and does not know which files this build
+/// compiles, so `etc/DOC` names variables no build has.  GNU filters at the
+/// other end instead, once, at dump time (`lisp/loadup.el:476`):
+///
+/// ```c
+/// /* Ignore docs that start with SKIP.  These mark
+///    placeholders where the real doc is elsewhere.  */
+/// if ((!NILP (Fboundp (sym)) || !NILP (Fmemq (sym, delayed_init)))
+///     && strncmp (end, "\nSKIP", 5))
+///   Fput (sym, Qvariable_documentation, make_fixnum (pos + end + 1 - buf));
+/// ```
+///
+/// (`src/doc.c:606-613`; the comment fifteen lines up, `src/doc.c:585-594`,
+/// says GNU used to filter by `build_files` and now relies on this.)  The
+/// `Fput` is the whole branch: **an unbound name's doc is not recorded
+/// differently, it is not recorded at all**, so `documentation-property`
+/// answers nil.  Measured over the 881 names entry 168 left in this table,
+/// GNU 31.0.90 `-Q --batch`: 751 bound names have a doc, 130 unbound names
+/// have nil, and there is no name on either diagonal.
+///
+/// Only boundness can decide this, which is why entry 168's `SKIP` prefix test
+/// was not enough and why a hand-written list of "names GNU leaves unbound
+/// here" is the wrong instrument.  Three examples the text cannot see:
+/// `internal-interpreter-environment` is `DEFVAR_LISP`'d at `src/eval.c:4569`
+/// and **uninterned three lines later** (`src/eval.c:4578`, "Don't export this
+/// variable to Elisp"); `x-mode-pointer-shape`'s only declarations sit inside
+/// `#if false` (`src/xfns.c:10333-10352`) while `echo-area-clear-hook`'s sits
+/// inside `#if 0` but is bound by an `Fset` on the line after the `#endif`
+/// (`src/keyboard.c:14058-14076`), so the two `#if 0` cases split; and
+/// `xft-font-ascent-descent-override` is real, documented and compiled out
+/// whenever Cairo beats Xft (`configure.ac:7228-7231`).
+///
+/// The `Fmemq (sym, delayed_init)` half of GNU's condition is a Lisp-level
+/// escape hatch for preloaded `custom-initialize-delay` defcustoms, which
+/// `lisp/custom.el:142-161` marks special and deliberately leaves unbound.
+/// It is not reachable from this table: no C `DEFVAR` name is on
+/// `custom-delayed-init-variables`, which is exactly why the 751/130 split
+/// above has no exceptions.
+pub(crate) struct SnarfedVariable<'a> {
+    name: &'a str,
+}
+
+impl<'a> SnarfedVariable<'a> {
+    /// GNU's `Fboundp (sym)`, asked of this build's obarray.
+    ///
+    /// `None` -- the symbol is unbound here -- is the answer that means "this
+    /// build has no such variable, so it has no documentation either".
+    ///
+    /// The question is asked of the **global/default** binding, not the
+    /// current buffer's: GNU asks it once during `loadup`, in a `*scratch*`
+    /// with no buffer-local bindings, and the result is a property on the
+    /// symbol rather than something re-decided per query.  Constants
+    /// (`most-positive-fixnum` and friends) count as bound for the same reason
+    /// `Fboundp` says so -- `SYMBOL_CONSTANT_P` is a write barrier, not an
+    /// unbound value cell.
+    #[inline]
+    pub(crate) fn if_bound_in(
+        obarray: &crate::emacs_core::symbol::Obarray,
+        id: crate::emacs_core::intern::SymId,
+        name: &'a str,
+    ) -> Option<Self> {
+        (obarray.boundp_id(id) || obarray.is_constant_id(id)).then_some(Self { name })
+    }
 }

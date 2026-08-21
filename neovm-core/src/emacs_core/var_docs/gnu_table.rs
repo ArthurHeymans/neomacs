@@ -2062,6 +2062,13 @@ to explicitly specify some coding system that doesn't use ISO-2022
 escape sequence (e.g., `latin-1') on reading by \[universal-coding-system-argument]."#),
     (r#"inhibit-load-charset-map"#, r#"Inhibit loading of charset maps.  Used when dumping Emacs."#),
     (r#"inhibit-menubar-update"#, r#"Non-nil means don't update menu bars.  Internal use only."#),
+    (r#"inhibit-message"#, r#"Non-nil means calls to `message' are not displayed.
+They are still logged to the *Messages* buffer.
+
+Do NOT set this globally to a non-nil value, as doing that will
+disable messages everywhere, including in I-search and other
+places where they are necessary.  This variable is intended to
+be let-bound around code that needs to disable messages temporarily."#),
     (r#"inhibit-modification-hooks"#, r#"Non-nil means don't run any of the hooks that respond to buffer changes.
 This affects `before-change-functions' and `after-change-functions',
 as well as hooks attached to text properties and overlays.
@@ -2535,6 +2542,8 @@ For internal use only."#),
     (r#"lucid--menu-grab-keyboard"#, r#"If non-nil, grab keyboard during menu operations.
 This is only relevant when using the Lucid X toolkit.  It can be
 convenient to disable this for debugging purposes."#),
+    (r#"macroexp--dynvars"#, r#"List of variables declared dynamic in the current scope.
+Only valid during macro-expansion.  Internal use only."#),
     (r#"main-thread"#, r#"The main thread of Emacs."#),
     (r#"major-mode"#, r#"Symbol for current buffer's major mode.
 The default value (normally `fundamental-mode') affects new buffers.
@@ -3907,6 +3916,75 @@ internal character representation."#),
 Vector recording all translation tables ever defined.
 Each element is a pair (SYMBOL . TABLE) relating the table to the
 symbol naming it.  The ID of a translation table is an index into this vector."#),
+    (r#"treesit-extra-load-path"#, r#"Additional directories to look for tree-sitter language definitions.
+The value should be a list of directories.
+When trying to load a tree-sitter language definition,
+Emacs first looks in the directories mentioned in this variable,
+then in the `tree-sitter' subdirectory of `user-emacs-directory', and
+then in the system default locations for dynamic libraries, in that order.
+The first writeable directory in the list is special: it's used as the
+default directory when automatically installing the language grammar
+using `treesit-ensure-installed'."#),
+    (r#"treesit-language-remap-alist"#, r#"An alist remapping language symbols.
+
+The value should be an alist of (LANGUAGE-A . LANGUAGE-B).  When such
+pair exists in the alist, creating a parser for LANGUAGE-A actually
+creates a parser for LANGUAGE-B.  Basically, anything that requires or
+applies to LANGUAGE-A will be redirected to LANGUAGE-B instead."#),
+    (r#"treesit-languages-require-line-column-tracking"#, r#"A list of languages that need line-column tracking.
+
+Most tree-sitter language grammars don't require line and column
+tracking to work, but some languages do.  When creating a parser, if the
+language is in this list, Emacs enables line-column tracking for the
+buffer."#),
+    (r#"treesit-load-name-override-list"#, r#"An override list for unconventional tree-sitter libraries.
+
+By default, Emacs assumes the dynamic library for LANG is
+libtree-sitter-LANG.EXT, where EXT is the OS specific extension for
+dynamic libraries.  Emacs also assumes that the name of the C function
+the library provides is tree_sitter_LANG.  If that is not the case,
+you can add an entry
+
+    (LANG LIBRARY-BASE-NAME FUNCTION-NAME)
+
+to this list, where LIBRARY-BASE-NAME is the filename of the dynamic
+library without the file-name extension, and FUNCTION-NAME is the
+function provided by the library."#),
+    (r#"treesit-major-mode-remap-alist"#, r#"Alist mapping file-specified modes to ts-modes.
+
+The value should be an alist of (MODE . TS-MODE).
+This alist is used to modify the value of `major-mode-remap-alist'
+depending on customization of `treesit-enabled-modes'."#),
+    (r#"treesit-thing-settings"#, r#"A list defining things.
+
+The value should be defined by the major mode, and should be an alist
+of the form (LANGUAGE . DEFINITIONS), where LANGUAGE is a language
+symbol and DEFINITIONS is a list whose elements are of the form
+
+    (THING PRED)
+
+THING is a symbol representing the thing, like `defun', `defclass',
+`sexp', `sentence', `comment', or any other symbol that is meaningful
+for the major mode; PRED defines what kind of node can be qualified
+as THING.
+
+PRED can be a regexp string that matches the type of the node; it can
+be a predicate function that takes the node as the sole argument and
+returns t if the node is the thing, and nil otherwise; it can be a
+cons (REGEXP . FN), which is a combination of a regexp and a predicate
+function, and the node has to match both to qualify as the thing.
+
+PRED can also be recursively defined.  It can be:
+
+ (or PRED...), meaning satisfying any of the inner PREDs qualifies the node;
+ (and PRED...) meaning satisfying all of the inner PREDs qualifies the node;
+ (not PRED), meaning not satisfying the inner PRED qualifies the node.
+
+There are two pre-defined predicates, `named' and `anonymous'.  They
+match named nodes and anonymous nodes, respectively.
+
+Finally, PRED can refer to other THINGs defined in this list by using
+the symbol of that THING.  For example, (or sexp sentence)."#),
     (r#"truncate-lines"#, r#"Non-nil means do not display continuation lines.
 Instead, give each line of text just one screen line.
 
@@ -5212,6 +5290,8 @@ do not actually have glyphs with colors that can cause Xft crashes.
 
 The font families in this list will not be ignored when
 `xft-ignore-color-fonts' is non-nil."#),
+    (r#"xft-font-ascent-descent-override"#, r#"Non-nil means override the ascent and descent values for Xft font driver.
+This is needed with some fonts to correct vertical overlap of glyphs."#),
     (r#"xft-ignore-color-fonts"#, r#"
 Non-nil means don't query fontconfig for color fonts, since they often
 cause Xft crashes.  Only has an effect in Xft builds."#),

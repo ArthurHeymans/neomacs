@@ -1183,6 +1183,16 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     );
     // composite.c:2231 DEFVAR_LISP, init Qt.
     obarray.define_special_variable("auto-composition-mode", Value::T);
+    // composite.c:2215 DEFVAR_LISP,
+    // `Vcompose_chars_after_function = intern_c_string ("compose-chars-after")'.
+    // The initializer is the SYMBOL, not a function object: `Fcompose_region'
+    // funcalls whatever the variable names, and `lisp/composite.el:212' defines
+    // `compose-chars-after' itself.  Seeding nil here would have been a
+    // different default from GNU's, not a milder one.
+    obarray.define_special_variable(
+        "compose-chars-after-function",
+        Value::symbol("compose-chars-after"),
+    );
 }
 
 // ---------------------------------------------------------------------------
