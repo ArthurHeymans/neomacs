@@ -11956,8 +11956,19 @@ fn a_stopped_but_finished_connection_reports_closed_like_gnu() {
 /// names the coding system the last CONVERSION used, and no conversion
 /// happened.
 ///
+/// The last five rows detach the buffer HALF WAY THROUGH, which is where the
+/// two disjuncts differ from a process that never had one: the decoder is
+/// already live, so a run that decoded anyway would report a coding system for
+/// a process GNU leaves alone.  The child traps `SIGHUP` because `kill-buffer`
+/// signals the buffer's process (`kill_buffer_processes`, src/buffer.c), and
+/// these rows are about the READ rather than about the signal.  The reset of
+/// `last-coding-system-used` deliberately comes AFTER `process-send-string`,
+/// because the encode side writes it too and GNU's row would otherwise carry
+/// the send's answer rather than the read's.
+///
 /// Each row is `(HOOK-CALLS LAST-CODING-SYSTEM-USED PROCESS-DECODE-CODING)`,
-/// and `last-coding-system-used` is pre-set to `pw171-untouched' so that "GNU
+/// with the filter chunk count appended for the mid-stream rows, and
+/// `last-coding-system-used` is pre-set to `pw171-untouched' so that "GNU
 /// wrote nothing" is a value rather than the absence of one.
 ///
 /// Measured under GNU Emacs 31.0.90 running this test's own program.
@@ -11977,7 +11988,7 @@ fn a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu() {
                (setq pw171-hooks 0 last-coding-system-used 'pw171-untouched)
                (let* ((acc nil)
                       (p (make-process :name "pw171" :buffer buffer :sentinel #'ignore
-                                       :connection-type conn
+                                       :connection-type conn :noquery t
                                        :coding (cons coding 'utf-8-unix)
                                        :filter (when filterp (lambda (_p s) (push s acc)))
                                        :command (list "{sh}" "-c" script))))
@@ -11986,11 +11997,38 @@ fn a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu() {
                  (prog1 (list pw171-hooks last-coding-system-used
                               (car (process-coding-system p)))
                    (when (buffer-live-p buffer) (kill-buffer buffer)))))
+             ;; DETACH says how the process stops having a live buffer half way
+             ;; through: nil is `(set-process-buffer p nil)', GNU's
+             ;; `NILP (p->buffer)'; 'kill is `(kill-buffer BUF)', GNU's
+             ;; `!BUFFER_LIVE_P (XBUFFER (p->buffer))'.
+             (defun pw171-mid (detach filterp coding)
+               (let* ((acc nil) (seen nil)
+                      (buf (generate-new-buffer " *pw171m*"))
+                      (p (make-process :name "pw171m" :buffer buf :sentinel #'ignore
+                                       :connection-type 'pipe :noquery t
+                                       :coding (cons coding 'utf-8-unix)
+                                       :filter (when filterp
+                                                 (lambda (_p s) (push s acc) (setq seen t)))
+                                       :command
+                                       (list "{sh}" "-c"
+                                             "trap '' HUP; printf abc; read x; printf 'd\\303\\251f'"))))
+                 (while (if filterp (not seen)
+                          (zerop (with-current-buffer buf (buffer-size))))
+                   (accept-process-output p 1))
+                 (if (eq detach 'kill) (kill-buffer buf) (set-process-buffer p nil))
+                 (process-send-string p "go\n")
+                 (setq pw171-hooks 0 last-coding-system-used 'pw171-untouched acc nil)
+                 (while (accept-process-output p 1))
+                 (while (process-live-p p) (accept-process-output p 0.05))
+                 (list pw171-hooks last-coding-system-used
+                       (car (process-coding-system p)) (length acc))))
              (list
               ;; `NILP (p->buffer)': the default filter with no buffer at all.
               (pw171-run nil nil 'pipe 'pw171-hook-utf8 "printf abc")
-              ;; `!BUFFER_LIVE_P': a buffer that WAS one.  The same disjunct,
-              ;; and the reason the answer cannot be cached on the process.
+              ;; `!BUFFER_LIVE_P' from the start.  `Fget_buffer_create' hands a
+              ;; dead buffer object straight back -- "even if it is dead",
+              ;; src/buffer.c:581-582 -- so `make-process' accepts it and this
+              ;; row is a read rather than a signal.
               (pw171-run (let ((b (generate-new-buffer " *pw171d*"))) (kill-buffer b) b)
                          nil 'pipe 'pw171-hook-utf8 "printf abc")
               ;; the same on a pty, where there is no last block to confuse it
@@ -12011,7 +12049,14 @@ fn a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu() {
               ;; over UTF-8 bytes resolves to `utf-8-unix' on the filter branch
               ;; and stays `undecided' when nothing decoded it.
               (pw171-run nil nil 'pipe 'undecided "printf 'a\\303\\251\\n'")
-              (pw171-run nil t 'pipe 'undecided "printf 'a\\303\\251\\n'")))"#
+              (pw171-run nil t 'pipe 'undecided "printf 'a\\303\\251\\n'")
+              ;; the same two disjuncts reached MID-STREAM, with a decoder that
+              ;; has already run once and a character split across the read.
+              (pw171-mid nil nil 'pw171-hook-utf8)
+              (pw171-mid 'kill nil 'pw171-hook-utf8)
+              (pw171-mid nil t 'pw171-hook-utf8)
+              (pw171-mid nil nil 'undecided)
+              (pw171-mid nil t 'undecided)))"#
     ));
 
     assert_eq!(
@@ -12025,7 +12070,12 @@ fn a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu() {
             "(2 pw171-hook-utf8 pw171-hook-utf8) ",
             "(2 pw171-hook-utf8 pw171-hook-utf8) ",
             "(0 pw171-untouched undecided) ",
-            "(0 utf-8-unix utf-8-unix))",
+            "(0 utf-8-unix utf-8-unix) ",
+            "(0 pw171-untouched pw171-hook-utf8 0) ",
+            "(0 pw171-untouched pw171-hook-utf8 0) ",
+            "(2 pw171-hook-utf8 pw171-hook-utf8 1) ",
+            "(0 pw171-untouched undecided 0) ",
+            "(0 utf-8 utf-8 1))",
         )
     );
 }
