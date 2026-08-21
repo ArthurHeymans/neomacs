@@ -1179,7 +1179,7 @@ pub(crate) fn builtin_skip_chars_forward(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("skip-chars-forward", &args, 1)?;
-    let set_codes = match args[0].as_lisp_string() {
+    let set_codes = match ctx.lisp_string(args[0]) {
         Some(string) => super::builtins::lisp_string_char_codes(string),
         None => {
             return Err(signal(
@@ -1229,7 +1229,7 @@ pub(crate) fn builtin_skip_chars_backward(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("skip-chars-backward", &args, 1)?;
-    let set_codes = match args[0].as_lisp_string() {
+    let set_codes = match ctx.lisp_string(args[0]) {
         Some(string) => super::builtins::lisp_string_char_codes(string),
         None => {
             return Err(signal(

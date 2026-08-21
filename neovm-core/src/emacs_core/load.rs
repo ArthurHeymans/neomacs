@@ -3857,7 +3857,7 @@ fn loaded_source_paths(eval: &mut super::eval::Context) -> Vec<PathBuf> {
                 continue;
             };
             let entry_car = entry.cons_car();
-            let Some(path) = entry_car.as_lisp_string() else {
+            let Some(path) = eval.lisp_string(entry_car) else {
                 continue;
             };
             let path = load_path_buf(path);

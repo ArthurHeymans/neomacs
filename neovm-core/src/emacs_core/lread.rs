@@ -1183,7 +1183,7 @@ fn read_coding_system_via_completing_read(
     eval.specbind(super::intern::intern("completion-ignore-case"), Value::T);
     let val = super::reader::builtin_completing_read(eval, completing_args);
     let val = eval.unbind_to_with_result(count, val)?;
-    let Some(name) = val.as_lisp_string() else {
+    let Some(name) = eval.lisp_string(val) else {
         return Ok(Value::NIL);
     };
     if name.schars() == 0 {

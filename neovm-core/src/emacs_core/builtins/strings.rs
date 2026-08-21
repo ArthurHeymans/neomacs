@@ -2771,7 +2771,7 @@ pub(crate) fn builtin_clear_buffer_auto_save_failure(args: Vec<Value>) -> EvalRe
 pub(crate) fn builtin_string_width(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("string-width", &args, 1)?;
     expect_max_args("string-width", &args, 3)?;
-    let ls = args[0].as_lisp_string().ok_or_else(|| {
+    let ls = ctx.lisp_string(args[0]).ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), args[0]],

@@ -283,7 +283,7 @@ fn message_echo_result(
     if result.is_nil() {
         return Ok(EchoMessageSetResult::EchoArea(msg.clone()));
     }
-    if let Some(string) = result.as_lisp_string() {
+    if let Some(string) = ctx.lisp_string(result) {
         return Ok(EchoMessageSetResult::EchoArea(string.clone()));
     }
     Ok(EchoMessageSetResult::LispHandled)
@@ -333,7 +333,7 @@ pub(crate) fn builtin_message(ctx: &mut super::eval::Context, args: Vec<Value>) 
     // side effects. Keep that object rooted while those side effects allocate.
     let root_scope = ctx.save_vm_roots();
     ctx.push_vm_frame_root(formatted);
-    let msg = match formatted.as_lisp_string() {
+    let msg = match ctx.lisp_string(formatted) {
         Some(string) => string.clone(),
         None => crate::heap_types::LispString::from_emacs_bytes(Vec::new()),
     };
@@ -418,7 +418,7 @@ pub(crate) fn builtin_message_box(ctx: &mut super::eval::Context, args: Vec<Valu
     }
     // GNU Emacs: always calls format-message, even for single-arg.
     let formatted = super::strings::builtin_format_message(ctx, args.clone())?;
-    if let Some(ls) = formatted.as_lisp_string() {
+    if let Some(ls) = ctx.lisp_string(formatted) {
         tracing::info!(msg = %crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()));
     }
     Ok(formatted)
@@ -434,7 +434,7 @@ pub(crate) fn builtin_message_or_box(
     }
     // GNU Emacs: always calls format-message, even for single-arg.
     let formatted = super::strings::builtin_format_message(ctx, args.clone())?;
-    if let Some(ls) = formatted.as_lisp_string() {
+    if let Some(ls) = ctx.lisp_string(formatted) {
         tracing::info!(msg = %crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()));
     }
     Ok(formatted)

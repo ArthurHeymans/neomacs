@@ -3316,7 +3316,8 @@ pub(crate) fn builtin_open_dribble_file(
         eval.command_loop.keyboard.kboard.close_dribble_file();
         return Ok(Value::NIL);
     }
-    let path = crate::emacs_core::fileio::lisp_file_name_to_path_buf(expect_lisp_string(&args[0])?);
+    let path =
+        crate::emacs_core::fileio::lisp_file_name_to_path_buf(eval.expect_lisp_string(args[0])?);
     if let Err(err) = eval.command_loop.keyboard.kboard.open_dribble_file(&path) {
         return Err(signal(
             LispCondition::FileError,

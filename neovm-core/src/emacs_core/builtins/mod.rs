@@ -5572,7 +5572,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
             use crate::emacs_core::value::LambdaParams;
 
             // Bytecode strings are unibyte and may contain non-UTF-8 bytes.
-            let raw_bytes = if let Some(ls) = bytestr.as_lisp_string() {
+            let raw_bytes = if let Some(ls) = ctx.lisp_string(bytestr) {
                 ls.as_bytes().to_vec()
             } else {
                 return Err(super::error::signal(

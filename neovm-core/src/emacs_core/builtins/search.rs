@@ -1802,7 +1802,7 @@ pub(crate) fn builtin_match_string(
         };
         let start = group.start();
         let end = group.end();
-        if let Some(string) = args[1].as_lisp_string() {
+        if let Some(string) = eval.lisp_string(args[1]) {
             let (byte_start, byte_end) = (
                 char_pos_to_byte_lisp_string(string, start),
                 char_pos_to_byte_lisp_string(string, end),
@@ -1828,7 +1828,7 @@ pub(crate) fn builtin_match_string(
     // Otherwise, if the match was against a string, use that string.
     if let Some(searched) = md.searched_string() {
         if let super::regex::SearchedString::Heap(val) = searched
-            && let Some(string) = val.as_lisp_string()
+            && let Some(string) = eval.lisp_string(*val)
         {
             if let Some(slice) = slice_lisp_string(string, true) {
                 return Ok(slice);
@@ -2646,7 +2646,7 @@ pub(crate) fn builtin_replace_match(
             && !md.source().is_string()
             && md.group(subexp).is_some()
         {
-            let newtext_lisp = expect_lisp_string(&args[0])?;
+            let newtext_lisp = eval.expect_lisp_string(args[0])?;
             let fixedcase = args.get(1).is_some_and(|arg| arg.is_truthy());
             let literal = args.get(2).is_some_and(|arg| arg.is_truthy());
             let raw_subexp = args.get(4).copied().unwrap_or(Value::NIL);

@@ -17718,6 +17718,29 @@ entry's own fifth finding: unmeasurable against ncurses as shipped.  Note that
 this makes it the SECOND capability in this area whose absence proves nothing,
 so a future fix here wants a synthetic terminfo entry (`tic` on a hand-written
 `Su`-without-`Smulx` source) rather than a search for a real terminal.
+
+**2026-08-21 -- ledger 175: the synthetic entry was built, and it answered a
+different question than the one it was proposed for.  FIXED.**  The fallback's
+zero-firing count stands and was not re-derived.  What `tic` settles is the
+prerequisite THIS entry's own first finding raises: `tgetstr ("Smulx")` answers
+null on every terminal that has `Smulx`, so "is `tgetflag (\"Su\")` a second
+dead lookup?" is a real question and no existing terminal can answer it.  Three
+entries built with `tic -x` into a private `TERMINFO`
+(`tmp/pw175/ti/pw175.src`) and probed with ncurses directly
+(`tmp/pw175/su_probe.c`):
+
+```
+pw175-su-only        tgetflag(Su)=1  tigetflag(Su)=1   tigetstr(Smulx)=null   GNU: yes (Su fallback)
+pw175-su-and-smulx   tgetflag(Su)=1  tigetflag(Su)=1   tigetstr(Smulx)=FOUND  GNU: yes (Smulx)
+pw175-neither        tgetflag(Su)=0  tigetflag(Su)=-1  tigetstr(Smulx)=null   GNU: no
+```
+
+`tgetflag` DOES resolve an extended terminfo boolean, unlike `tgetstr` for an
+extended string, so GNU's fallback is live code and this port's gap is real for
+a terminfo carrying the flag without the string.  One line:
+`has(Terminfo("Smulx")) || database.get_termcap_flag("Su")`, pinned against the
+table-backed fake database.  The SEQUENCE residual named just above is
+unchanged.  175 §6.
 ## 159. A subprocess was decoded by a second, poorer decoder, and the obstacle to sharing the real one was a borrow -- so the borrow was split rather than the decision copied -- FIXED
 
 Entry 151's first hand-back, restated by entry 156 and declined by it on a
@@ -22160,6 +22183,22 @@ restructure (6 of 20).  That is a real diff on paths this entry cannot
 re-verify inside its budget, against a benefit that is entirely in the future.
 It is a good next job and the number above is what it costs.
 
+**2026-08-21 -- ledger 175: 27 of them landed, and the 63 is really 51.**  The
+table above re-measures exactly (160 / 87 INLINE / 10 OWNED / 63 BOUND / 59
+longer than a line, same per-file distribution), and then shrinks twice for
+reasons these line-oriented scripts cannot see.  FOUR of the 63 have no
+`Context` at all -- `ctx_in_scope.py`'s regex accepts `&mut self`, which is any
+type's method, and `value_reader.rs:1807/2072` are `impl ReaderToken` while
+`xdisp.rs:1785/1820` are `impl ModeLineRendered`.  EIGHT more do not borrow:
+five files own a LOCAL `expect_lisp_string` returning an owned clone
+(`bookmark.rs:350`, `lread.rs:40`, `minibuffer.rs:65`, `reader.rs:300`,
+`dired.rs:54`), so those sites are OWNED wearing a BOUND label.  Of the 37
+attempted, 27 convert with no restructure; the compiler rejected five sites, one
+of which -- `builtins/treesit.rs:3090` -- is the first measured FALSE POSITIVE
+of this accessor, because the anchor is `&self` on the whole `Context` and so
+also rejects `&mut eval.buffers` calls that cannot reach a safepoint at all.
+175 §5.
+
 ### 9. Hypotheses eliminated
 
 * **"They are shipped so the numbers in that entry can be re-measured rather
@@ -23204,6 +23243,23 @@ pinned by `signal_process_reads_an_integer_as_an_os_pid_like_gnu`.
    only.  Entry 54 already special-cased the one case where it was Lisp-visible
    (a `:stderr` pipe must not be notified before its owner), which is a reason to
    think a general fix belongs with that machinery and not with this ordering.
+
+   **2026-08-21 -- ledger 175: CLOSED, and two of the three claims above were
+   sharpened rather than confirmed.**  The walk citation holds (the cons is in
+   `make_process` at :953, and `FOR_EACH_PROCESS` at :7885 goes through
+   `FOR_EACH_ALIST_VALUE` at :343).  But (a) the order is NOT observable as
+   first probed -- GNU itself answers `b a` 14 times and `a b` 6 in twenty runs,
+   because `status_notify` runs only when the fd scan comes back empty, so WHICH
+   processes share a pass is a race; it becomes 12/12 and 8/8 deterministic only
+   once the pass is constructed rather than raced for.  And (b) this port did
+   not run `pw169-a` first, it ran whichever `HashMap` iteration put first --
+   `live_process_ids` returned unordered iteration, so the answer differed per
+   run (5 `b a` / 7 `a b` in twelve).  Fixed by sorting it on descending
+   `ProcessId`, `list_processes`'s own identity.  The suggestion that the fix
+   belongs with entry 54's machinery is refuted: `notify_stderr_pipe_owner_first`
+   performs DISCOVERY (`check_child_status_change` on a process that is not in
+   the ready list), not ordering, so the newest-first walk subsumes its ordering
+   and cannot subsume its purpose.  175 §1-§3.
 2. **Entry 166's decode residual belongs to a different entry, and here is its
    price.**  GNU's `read_and_insert_process_output` returns before decoding
    anything when the process has no live buffer (`if (!nread || NILP (p->buffer)
@@ -23270,6 +23326,16 @@ pinned by `signal_process_reads_an_integer_as_an_os_pid_like_gnu`.
    falls through to the designator resolver, which errors.  Untouched here
    because the fix above only removed a table lookup and did not widen the
    accepted domain; sized, not diagnosed.
+
+   **2026-08-21 -- ledger 175: FIXED, and the domain was wider than this
+   sizing.**  GNU's gate is `NUMBERP`, not "integer": `get_process` is called
+   only for a non-number (:7369-7370), so a bignum and an INTEGRAL FLOAT reach
+   `CONS_TO_INTEGER` too, and this port's `pid >= 0` guard rejected all three
+   classes.  `process_attributes_pid_arg` already WAS `CONS_TO_INTEGER`, so the
+   fix is a rename to `cons_to_os_pid` and a widened arm rather than a new
+   function.  A numeric STRING (:7358-7365) is a separate residual and stays
+   open, because this port's `string-to-number` trims leading whitespace where
+   GNU's `string_to_number` does not.  175 §4 and §8.2.
 
 ### 10. Gates
 
@@ -23902,3 +23968,530 @@ sweep for copies of GNU accessors carrying an invented liveness or
 existence clause, across the whole port rather than in `process.rs` where this
 entry happened to be standing.  Four were found here without looking for them,
 in one file, by one probe.
+## 175. Four small leftovers, and three of them turned on a measurement rather than a reading: the notification order is deterministic in GNU only when you take the pass away from the race, `signal-process`'s domain is `NUMBERP` and not "non-negative", and the `Su` fallback ledger 158 called unmeasurable is measurable with `tic` -- FIXED
+
+Four handed-over items from 169, 167 and 158, reproduced one at a time before
+anything was touched.  Three were fixed, one was resized, and the reason to
+read this entry is that the two ordering claims in it are BOTH true and BOTH
+half-right: GNU's status walk really is newest-first, and the sentinel order it
+produces is still a coin flip unless you construct the pass yourself.
+
+### 1. The notification walk order is newest-first, and the first probe said it was not
+
+169's first residual: "GNU visits processes newest-first, because
+`FOR_EACH_PROCESS` walks `Vprocess_alist` and `create_process` conses onto its
+front (:953)."  Verified, and the chain is four citations rather than one:
+
+* `status_notify` iterates `FOR_EACH_PROCESS (tail, proc)` (src/process.c:7885);
+* `FOR_EACH_PROCESS` is `FOR_EACH_ALIST_VALUE (Vprocess_alist, ...)` (:343);
+* the cons onto the front is in `make_process`, not `create_process`
+  (`Vprocess_alist = Fcons (Fcons (name, val), Vprocess_alist);`, :953);
+* `Fprocess_list` is `Fmapcar (Qcdr, Vprocess_alist)` (:1749) -- the SAME list,
+  which is why `list_processes` here already sorts on descending `ProcessId`.
+
+So within one pass GNU is newest-first.  The brief asked whether that is
+OBSERVABLE, and the first probe said no.  `tmp/pw175/notify-order.el` -- two
+children that exit immediately, then `accept-process-output` until both
+sentinels have run -- gave GNU Emacs 31.0.90 **`b a` four times and `a b`
+twice** in six runs.  Made larger and with the two children exiting
+simultaneously (`tmp/pw175/notify-order2.el`, 20 runs each):
+
+```
+                 b-then-a   a-then-b
+GNU 31.0.90         14         6
+Neomacs             3         17
+```
+
+A 70/30 split is not a rule, and a pin written against it would be flaky in GNU
+itself.  The reason is that `status_notify` is not called per wake: it runs
+when the fd scan comes back empty (:5554, :5854), so WHICH processes share a
+pass is a race even though the walk inside a pass is not.
+
+**The probe that settles it takes the race away.**  A pure-Lisp busy loop --
+`(while (< (float-time) deadline) nil)` -- never enters
+`wait_reading_process_output`, so no pass can run while both children exit; then
+ONE pass is forced by `delete-process` on an unrelated `make-pipe-process`,
+which is `Fdelete_process`'s `status_notify (p, NULL)` at :1129, a FULL walk of
+the alist.  `tmp/pw175/notify-order3.el`, eight runs: GNU **8/8 `b a`**.
+
+That is the item's answer: observable, and deterministic once the pass is
+constructed rather than raced for.
+
+### 2. And the same probe found the reason this port cannot be raced into GNU's answer at all
+
+`tmp/pw175/notify-order4.el` records WHERE each sentinel runs, not just in what
+order:
+
+```
+GNU        run0..4   b@delete-c a@delete-c        (all five)
+Neomacs    run0..4   b@apo a@apo / a@apo b@apo    (three orders, five runs)
+```
+
+GNU has already run both sentinels by the time `delete-process` returns, and
+this port has not run either -- because GNU's SIGCHLD handler
+`handle_child_signal` (:7691) walks `FOR_EACH_PROCESS` itself and stamps
+`p->tick`, `p->raw_status` and `p->raw_status_new` for EVERY exited child
+(:7735-7762) with no wait involved, while this port learns a child has exited
+only inside a poll pass.  The same probe shows it in one Lisp value: after the
+spin, GNU answers `(process-live-p a)` = `nil` and this port answers
+`(run open listen connect stop)` -- `memq`'s tail, i.e. still running.
+
+That is a bigger divergence than the one this entry set out to fix, it belongs
+to its own entry, and it is recorded in section 8 rather than fixed here.
+
+### 3. The port's order was not oldest-first, it was a coin flip -- and the fix is `list_processes`'s own identity
+
+With the pass isolated on both sides (`tmp/pw175/notify-order5.el`: both
+children have already exited when the first `accept-process-output` runs),
+twelve runs each:
+
+```
+                 b-then-a   a-then-b
+GNU 31.0.90         12         0
+Neomacs, before      5         7
+```
+
+Re-measured on the EXACT shape the Rust pin uses -- each child touches a marker
+file immediately before exiting and the spin waits for both markers rather than
+for the clock, so a loaded machine delays the spin instead of splitting the
+pass -- three runs of six on each editor (`tmp/pw175/notify-order6.el`, load
+average 145 falling to 75):
+
+```
+                          b-then-a   a-then-b
+GNU 31.0.90                  18          0
+Neomacs at the merge base     7         11
+```
+
+Eighteen and zero against seven and eleven is the divergence stated as
+precisely as this pair of editors allows.
+
+`live_process_ids` -- the list that drives the service pass which both drains
+output and publishes status, i.e. this port's `FOR_EACH_PROCESS` -- returned
+`HashMap` iteration order.  169 recorded the defect as "this port runs
+`pw169-a`'s sentinel first"; it is worse than that, because a `HashMap` with a
+`RandomState` gives a different answer per run.
+
+Fixed by sorting on descending `ProcessId`, which is exactly the identity
+`list_processes` already uses to reproduce `process-list` -- monotonic counter,
+so descending id IS newest-first.  One line and a doc comment.
+
+The readiness-wake path takes the poller's ready list instead, and that one is
+the analogue of GNU's fd scan rather than of the alist walk.  GNU keeps the two
+orders SEPARATE -- `wait_reading_process_output` reads ready descriptors in fd
+order while `status_notify` walks the alist -- so
+`order_pending_status_notifications_newest_first` permutes only the entries that
+have a status to report, newest-first among themselves, and leaves every other
+position exactly where the poller put it.  `the_notification_walk_permutes_only_
+the_pending_entries` pins that shape directly, because the end-to-end pin cannot
+reach it.
+
+169 suggested the general fix "belongs with that machinery" -- entry 54's
+`notify_stderr_pipe_owner_first`.  It does not, and the reason is worth
+recording: 54's helper does not merely reorder, it CALLS
+`check_child_status_change(owner_id)` on a process that may not be in the ready
+list at all, which is a discovery step and not an ordering step.  The
+newest-first walk subsumes 54's ordering (an implicit `:stderr` pipe is created
+BEFORE its owner, so the owner has the higher id and is visited first) but not
+its discovery, so the helper stays.
+
+Pinned by `two_processes_notified_in_one_pass_run_their_sentinels_newest_first_
+like_gnu`, which runs the shape six times per test because the defect is a coin
+flip: one run reproduces it 58% of the time, six runs 1 - 0.42^6.
+
+### 4. `(signal-process N SIG)` for a negative integer: the domain is `NUMBERP`, and it was guarded `>= 0`
+
+169's fifth residual, reproduced first and then found to be larger than it was
+filed as.  GNU's `internal-default-signal-process`:
+
+* calls `get_process` only for a NON-number -- `else if (!NUMBERP (process))
+  process = get_process (process);` (:7369-7370);
+* takes every number through `CONS_TO_INTEGER (process, pid_t, pid)`
+  (:7375-7376), which is
+  `cons_to_signed (cons, TYPE_MINIMUM (pid_t), TYPE_MAXIMUM (pid_t))`
+  (src/lisp.h:4188-4191) -- pid_t's FULL SIGNED range, so a fixnum, a bignum
+  and an INTEGRAL float are all in domain and a negative one is not rejected;
+* then `return make_fixnum (kill (pid, signo));` (:7397), where a negative pid
+  is a POSIX process GROUP.
+
+Measured, `-Q --batch`, GNU Emacs 31.0.90 against this port at the merge base
+(`tmp/pw175/signal-negative.el`, `tmp/pw175/signal-string2.el`; signal 0
+throughout, so nothing is actually signalled):
+
+```
+                                  GNU 31.0.90   Neomacs, before
+(signal-process -99999 0)             -1        (wrong-type-argument processp -99999)
+(signal-process (- child-pid) 0)       0        (wrong-type-argument processp -682594)
+(signal-process (- child-pid) 'TERM)   0        (wrong-type-argument processp -682594)
+(signal-process 99999999.0 0)         -1        (wrong-type-argument processp 99999999.0)
+(signal-process -99999999.9 0)      error       (wrong-type-argument processp -99999999.9)
+(signal-process 1e300 0)            error       (wrong-type-argument processp 1e+300)
+(signal-process BIGNUM 0)           error       (wrong-type-argument processp ...)
+(signal-process '(1 . 2) 0)      (wrong-type-argument processp (1 . 2))   same
+```
+
+The three `error` rows are all one message,
+`"Not an in-range integer, integral float, or cons of integers"` -- and note the
+cons row: despite `CONS_TO_INTEGER`'s name, a cons never reaches it here,
+because a cons is not `NUMBERP` and goes to `get_process`.  Both editors agree
+on that row already.
+
+**The fix is a widening and a rename, not a new function.**
+`process_attributes_pid_arg` in this port already WAS `CONS_TO_INTEGER` --
+fixnum, bignum, integral-float, range-checked against `pid_t`, with GNU's exact
+message -- so it is renamed `cons_to_os_pid`, documented as the shared
+conversion, and used from both `process-attributes` and the signal resolver.
+The resolver's arm goes from `ValueKind::Fixnum(pid) if pid >= 0` to the three
+number kinds.  Pinned by
+`signal_process_takes_a_negative_integer_as_a_process_group_like_gnu`, whose
+expected value is the GNU column above.
+
+The child's own group exists in both editors for the same reason: GNU puts each
+child in its own group, and this port's `isolate_child_command` `setsid`s it,
+which subsumes `setpgid (0, 0)`.
+
+### 5. The remaining Tier-1 sites: 167's 63 is really 51, and the compiler sorted them
+
+167 s8's table re-measured from the same scripts (`classify2.py` +
+`ctx_in_scope.py`'s enclosing-fn test, combined in
+`tmp/pw175/tier1_sites.py`):
+
+| class | 167 | here |
+|---|---|---|
+| sites with a `Context` in reach | 160 | 160 |
+| INLINE | 85 | 87 |
+| OWNED | 10 | 10 |
+| **BOUND** | **63** | **63** |
+| of those, live range > one line | 59 | 59 |
+
+The per-file distribution reproduces exactly (`builtins/search.rs` 6,
+`dired.rs` 5, `minibuffer.rs` 5, `builtins/misc_pure.rs` 4).  So 167's number
+is confirmed as measured -- and then it shrinks twice for reasons the
+line-oriented scripts cannot see:
+
+* **Four of the 63 have no `Context` at all.**  `ctx_in_scope.py`'s regex
+  accepts `&mut self` as evidence of a `Context`, and `&mut self` is any type's
+  method.  `value_reader.rs:1807` and `:2072` are in `impl ReaderToken`;
+  `xdisp.rs:1785` and `:1820` are in `impl ModeLineRendered`.
+  `Context::lisp_string` is unreachable at all four.
+* **Eight more do not borrow.**  Five files own a LOCAL `expect_lisp_string`
+  that returns an owned CLONE -- `bookmark.rs:350`, `lread.rs:40`,
+  `minibuffer.rs:65`, `reader.rs:300`, `dired.rs:54` -- while the shared one
+  (`builtins/mod.rs:485`) and `search.rs:63` borrow.  A site that clones has no
+  borrow to anchor; those sites are OWNED wearing a BOUND label.
+
+**51, then, and the compiler decided the rest.**  37 were converted
+mechanically (`tmp/pw175/tier1_apply.py`) and `cargo check -p neovm-core
+--all-targets` was asked which of them are an edit and which are a
+restructure.  **Ten errors at seven sites, and 27 land.**  Five of the seven
+are reverted, two are repaired with a `*`, and five more that COMPILED were
+reverted by judgement rather than by the compiler -- `minibuffer.rs`'s three
+`*-with-candidates` subrs plus `builtin_flex_cost_gotoh`'s two arguments, all
+of which go through the cloning local helper, so converting them would remove a
+string copy from the completion path.  That is a semantic change on a hot path,
+not a clarity change, and it is not this entry's to make.  37 - 5 - 5 = 27.
+
+The ten errors are not one class, which is the result worth keeping:
+
+| site | what the compiler said | verdict |
+|---|---|---|
+| `bookmark.rs:398` | consumer wants an owned `LispString` | its helper clones; OWNED, reverted |
+| `lread.rs:1053` `builtin_locate_file` | `E0502` at :1061, :1065 | its helper clones; the conversion INTRODUCES a borrow across `normalize_locate_file_public_predicate` and `locate_file_with_path_and_suffixes`, both `&mut Context`, the second of which funcalls PREDICATE. Reverted, and worth its own entry |
+| `lread.rs:1087` `builtin_locate_file_internal` | `E0502` at :1096 | same |
+| `builtins/treesit.rs:3090` | `E0502` x3 on `eval.buffers` | **a false positive**: `Context::lisp_string` borrows the WHOLE `Context`, so it rejects `&mut eval.buffers` calls that cannot reach a safepoint at all -- a safepoint needs `&mut Context`. Reverted |
+| `builtins/search.rs:1611` | `&SearchedString`, not `Value` | a newtype accessor change, not an anchor change. Reverted |
+
+Two more were only a `&Value` where the accessor takes a `Value`
+(`builtins/search.rs:1603`, `editfns.rs:1901`) and land with a `*`.
+
+This is cleanup and it is priced as cleanup: 27 one-line conversions in 16
+files, no behaviour change anywhere -- `builtins::expect_lisp_string` and
+`Context::expect_lisp_string` raise the byte-identical
+`(wrong-type-argument stringp VALUE)`, and `Value::as_lisp_string` and
+`Context::lisp_string` return the same borrow of the same bytes.  What changes
+is what the compiler checks: at those 27 sites, holding the borrow across a
+safepoint is now `E0502` instead of a reviewer's opinion.
+
+The treesit row deserves its own sentence, because it is the first measured
+FALSE POSITIVE of the tool 163 designed and 167 landed, and 163 did not predict
+it: the anchor is `&self` on the whole `Context`, so it cannot distinguish "you
+may collect here" from "you touched a disjoint field".  Its false-positive rate
+in this sample is one site in 37.
+
+### 6. The `Su` styled-underline fallback: 158 called it unmeasurable, and `tic` measures it
+
+GNU's second source for styled underlines sits directly below the `Smulx`
+lookup 158 fixed:
+
+```c
+  if (!tty->TF_set_underline_style && tgetflag ("Su"))
+    /* Default to the kitty escape sequence. ... */
+    tty->TF_set_underline_style = "\x1b[4:%p1%dm";
+```
+
+(src/term.c:4700-4703, and :4705-4708 sets `TF_set_underline_color` from the
+same field, which is why one boolean carries both here.)
+
+The coordinator's measurement stands and was not re-derived: of the 3,697
+entries `toe -a` lists on this machine exactly ONE has `Su` -- `xterm-kitty` --
+and it ships `Smulx` too, so `!TF_set_underline_style` is false and the
+fallback fires ZERO times.  LATENT, not live.
+
+**Worth doing, and here is why rather than a shrug.**  158's own finding is
+that a capability's absence from ncurses as shipped proves nothing, because the
+FIRST thing it found in this area was a lookup that could never succeed:
+`tgetstr ("Smulx")` answers null on every entry that has `Smulx`, since termcap
+names are two letters and `Smulx` is not one.  `Su` IS two letters, so the
+question "does `tgetflag` resolve an extended terminfo BOOLEAN, or is this a
+second dead lookup?" is a real one and it cannot be answered by any terminal
+that exists.  It can be answered by `tic`.  The whole source is six lines, and
+it is reproduced here rather than only cited, because `tmp/` does not survive
+the worktree:
+
+```
+pw175-su-only|synthetic Su without Smulx,
+	Su,
+	use=xterm-256color,
+pw175-su-and-smulx|synthetic Su with Smulx,
+	Su, Smulx=\E[4:%p1%dm,
+	use=xterm-256color,
+pw175-neither|synthetic control with neither Su nor Smulx,
+	use=xterm-256color,
+```
+
+`tic -x -o <dir> pw175.src`, then `TERMINFO=<dir>` and a 40-line ncurses
+program that calls `tgetent`/`tgetflag`/`tgetstr` and then
+`setupterm`/`tigetflag`/`tigetstr` on each name
+(`tmp/pw175/ti/pw175.src`, `tmp/pw175/su_probe.c`):
+
+```
+pw175-su-only        tgetflag(Su)=1  tigetflag(Su)=1   tigetstr(Smulx)=null   GNU: yes (Su fallback)
+pw175-su-and-smulx   tgetflag(Su)=1  tigetflag(Su)=1   tigetstr(Smulx)=FOUND  GNU: yes (Smulx)
+pw175-neither        tgetflag(Su)=0  tigetflag(Su)=-1  tigetstr(Smulx)=null   GNU: no
+```
+
+`tgetflag` resolves it.  GNU's fallback is live code with no terminal to run it
+on, this port had no `Su` term, and the gap is real for anyone whose terminfo
+carries the flag without the string -- which is the configuration the flag
+exists for.  The fix is the one line the C is:
+`has(Terminfo("Smulx")) || database.get_termcap_flag("Su")`, pinned by
+`the_su_flag_is_a_styled_underline_where_smulx_is_absent_like_gnu` against the
+table-backed fake database.  The synthetic terminfo is evidence for the
+prerequisite, not a gate -- it answers "can `tgetflag` see it", which no unit
+test with a fake database can attest.
+
+### 7. Hypotheses eliminated
+
+* **"GNU visits processes newest-first [and therefore the sentinel order
+  differs]"** (169 residual 1).  Upheld for the WALK and refuted for the
+  observable as first probed: 14/6 and 4/2 splits in GNU itself, s1.  It
+  becomes deterministic (12/12, 8/8) only when the pass is constructed instead
+  of raced for, and that is the probe the fix is pinned against.
+* **"This port runs `pw169-a`'s sentinel first"** (169's measurement).
+  Sharpened: it runs whichever `HashMap` iteration put first, which is a
+  different answer per run (5/7 in twelve). s3.
+* **"A general fix belongs with entry 54's machinery"** (169 residual 1).
+  Refuted: 54's helper performs DISCOVERY (`check_child_status_change` on a
+  process that is not in the ready list), not ordering, so the newest-first
+  walk subsumes its ordering and cannot subsume its purpose.  s3.
+* **"`signal-process` for a negative integer ... sized, not diagnosed"**
+  (169 residual 5).  Reproduced and found bigger: the guard also rejected an
+  integral float and a bignum, because the domain GNU uses is `NUMBERP` and not
+  "integer".  s4.
+* **"That is 63 sites"** (167 s8).  Re-measured at 63 exactly, then reduced to
+  **51** by two facts the scripts cannot see -- four sites whose `&mut self` is
+  not a `Context`, and eight whose helper clones.  s5.
+* **"`Context::lisp_string` makes holding a borrow across a safepoint a compile
+  error"** (163 (b)).  Upheld, and now bounded: it also makes holding one
+  across a `&mut` use of a DISJOINT `Context` field a compile error, which is
+  not a hazard.  One site in 37.  s5.
+* **"The `Su` path is unmeasurable against ncurses as shipped"** (158's
+  coordinator note).  Upheld for the FALLBACK and refuted for the question that
+  blocks it: whether `tgetflag` can see an extended boolean is measurable with
+  `tic`, and the answer is yes.  s6.
+
+### 8. Found and NOT fixed
+
+1. **This port has no asynchronous child-status recording, and that is what
+   caps section 3's fix.**  GNU's `handle_child_signal` (src/process.c:7691)
+   walks `FOR_EACH_PROCESS` in the SIGCHLD handler and stamps `p->tick`,
+   `p->raw_status` and `p->raw_status_new` for every exited child (:7735-7762),
+   so by the time ANY notification pass runs, every changed status is already
+   known and the newest-first walk orders all of them.  This port discovers a
+   change inside the same loop that publishes it
+   (`check_child_status_change` in `poll_process_output_for_ids`), so a change
+   discovered mid-loop is published in discovery order however the list was
+   sorted.  Two measurements, both from `tmp/pw175/notify-order3.el` and
+   `notify-order4.el`:
+
+   ```
+   after a pure-Lisp spin, no wait having run:
+     (process-live-p exited-child)   GNU nil       Neomacs (run open listen connect stop)
+   which call runs the sentinels:
+     GNU     both at (delete-process unrelated-pipe)
+     Neomacs both at the later (accept-process-output)
+   ```
+
+   The GNU-shaped fix is to split this port's one loop into GNU's two -- a
+   discovery sweep over all live processes, then a newest-first notification
+   walk over what it marked -- and it is NOT a small change: the loop's
+   `publish_status_before_readable_output`,
+   `defers_status_poll_while_readable_pty` and
+   `defers_pty_status_after_explicit_coding` guards all gate the CALL to
+   `check_child_status_change`, so hoisting discovery defeats them.  Sized, not
+   attempted.  The end-to-end pin in section 3 is green because its two
+   children are both already known when its pass begins; it does not cover the
+   mid-loop case, and no probe here does.
+
+2. **`(signal-process "N" SIG)` for a numeric STRING.**  GNU's string arm is
+   `Fget_process` first and then `string_to_number (SSDATA (process), 10,
+   &len)` with `len != SBYTES (process)` rejected (:7358-7365), so a numeric
+   string is an OS pid exactly like the integer.  This port answers `nil` for
+   every string that is not a live process name.  Measured
+   (`tmp/pw175/signal-string2.el`):
+
+   ```
+                                  GNU 31.0.90   Neomacs
+   (signal-process "99999999" 0)      -1          nil
+   (signal-process "-99999" 0)        -1          nil
+   (signal-process "0" 0)              0          nil
+   (signal-process "010" 0)           -1          nil
+   (signal-process " 99999999" 0)    nil          nil      <- string_to_number does not skip whitespace
+   (signal-process "99999999 " 0)    nil          nil      <- len != SBYTES
+   (signal-process "12.5" 0)        error         nil      <- a NUMBER, then out of cons_to_signed's domain
+   ```
+
+   Not fixed here for one reason and it is a real one: this port's
+   `string-to-number` TRIMS leading whitespace before scanning
+   (`builtins/strings.rs`), and GNU's `string_to_number` (src/lread.c:4502)
+   does not -- `Fstring_to_number` trims, its callee does not.  So the
+   conversion this arm needs is a non-trimming, length-reporting variant that
+   does not exist yet, with its own float/bignum matrix (the `"12.5"` row is a
+   number that then RAISES).  That is a parser, not a widening, and it is a
+   different GNU line from the one this entry fixed.
+
+3. **`builtin_locate_file` and `builtin_locate_file_internal` hold a string
+   across a funcall of PREDICATE the moment their helper stops cloning.**
+   `lread.rs:1053/1087` go through `lread.rs:40`, a local `expect_lisp_string`
+   that returns an owned clone, so there is no hazard TODAY.  Converting them
+   to the anchored accessor is `E0502` against
+   `normalize_locate_file_public_predicate(eval, ...)` and
+   `locate_file_with_path_and_suffixes(eval, &filename, ...)`, the second of
+   which calls PREDICATE -- arbitrary Lisp.  The ideal fix is 163's: pass the
+   `Value` and take the borrow inside, below the Lisp call.  Not attempted.
+
+4. **The five local cloning `expect_lisp_string` helpers.**
+   `bookmark.rs:350`, `lread.rs:40`, `minibuffer.rs:65`, `reader.rs:300` and
+   `dired.rs:54` each clone where `builtins/mod.rs:485` and `search.rs:63`
+   borrow.  Deleting them in favour of the shared one removes a string copy
+   from, among others, the three `*-with-candidates` completion subrs -- but
+   that is a semantic change on a hot path (owned to borrowed), not a clarity
+   change, and it belongs to whoever measures it.  Eight of 167's 63 sites are
+   these.
+
+5. **`builtins/treesit.rs:3090` and `builtins/search.rs:1611`.**  The first is
+   the anchor's false positive (s5) and needs nothing; the second needs a
+   `SearchedString` accessor that reborrows, which is `StringDesignator`'s
+   shape (163 (a)) applied to a second newtype.
+
+6. **The remaining Tier-1 sites after this entry: 24.**  51 eligible minus the
+   27 landed.  They are the ones this entry did not attempt -- the `_`-bound
+   ones, the closure-local ones, and the `.cloned()` ones the classifier calls
+   BOUND (`fileio.rs:5661`, `builtins/symbols.rs:5233`).  Each is preventive by
+   167's own argument; none is known to be wrong.
+
+7. **The `compile_fail` doctest on `Value::as_lisp_string` is still NOT
+   gated.**  167's residual, unchanged and re-checked: `cargo nextest` does not
+   run doctests and the repository's `cargo` wrapper refuses `cargo test`.
+
+8. **`detect_tty_background_mode` still reads `COLORFGBG`.**  157's residual,
+   carried by 161, 162, 163 and 167, untouched again.
+
+9. **The styled-underline SEQUENCE is still a fixed rule.**  158's own second
+   residual, unchanged by section 6: GNU emits `TF_set_underline_style` through
+   `tparam`, so a terminal whose `Smulx` is not the kitty spelling gets its own
+   string.  This entry adds the `Su` SOURCE, not the sequence.
+
+### 9. Gates, and the four this entry deliberately did NOT run
+
+```
+cargo fmt --all --check                    exit 0, no diff        load 260
+cargo check --workspace --all-targets      exit 0, 635 crates,
+                                           "Finished in 4m 48s"   load ~90
+cargo check -p neovm-core --all-targets    exit 0, 0 errors       load ~95
+```
+
+The pins, each run in isolation with the `test(/a|b/)` form -- never
+`test(a) or test(b)`, which ledger 169 measured selecting 1 of 2 pins -- and
+asserted on `N passed` with N > 0:
+
+```
+-p neovm-core -E 'test(/two_processes_notified_in_one_pass_run_their_sentinels_
+  newest_first_like_gnu|the_notification_walk_permutes_only_the_pending_entries|
+  signal_process_takes_a_negative_integer_as_a_process_group_like_gnu|
+  signal_process_reads_an_integer_as_an_os_pid_like_gnu/)'
+                                           4 tests run: 4 passed  load 26-58
+
+-p neomacs -E 'test(/the_su_flag_is_a_styled_underline_where_smulx_is_absent_
+  like_gnu|capability_names_match_the_ones_gnu_reads_in_init_tty|
+  screen_terminfo_reports_no_italics_but_keeps_bold_and_underline/)'
+                                           3 tests run: 3 passed  load 22-36
+
+-p neovm-core -E 'test(/^emacs_core::process::/)'   -- the whole module that
+  owns every line §1-§4 changed, since `live_process_ids`'s order governs the
+  service pass for ALL process work and not only the sentinel order:
+                             305 tests run: 305 passed  load 25-52
+```
+
+That last one is the number worth having, because the `live_process_ids` sort
+is not a local change: it reorders the pass that drains output and dispatches
+filters as well as the one that publishes status, and 305 of 305 in the module
+that owns it is the cheapest evidence available that the reorder is GNU's and
+not merely different.
+
+**NOT RUN, by the coordinator's instruction, and named rather than implied:**
+
+```
+cargo nextest run -p neovm-core -p neomacs-layout-engine   NOT RUN
+cargo xtask fresh-build --release                          NOT RUN
+cargo nextest run -p neovm-oracle-tests                    NOT RUN
+cargo xtask gc-stress --editor ./target/release/neomacs    NOT RUN
+```
+
+Six agents were sharing a 32-core box that hit a **1-minute load average of
+995** and then ran out of disk entirely (`df` reported 0G available on a 3.7T
+filesystem).  The coordinator re-runs all four on the merged tree, so a
+per-branch sweep here would be both unreliable and redundant.  What that means
+for this entry is stated plainly: the four numbers above are the only ones it
+is entitled to, and nothing in sections 1-6 has been gated against the engine
+suite, the oracle or gc-stress.
+
+**Two measurements were discarded rather than reported, and the reason is the
+better half of this section.**
+
+* Two engine-suite runs died mid-run -- `4370/11120` and `4988/11120`, both
+  ending `Cancelling due to signal: 24 tests still running` with every one of
+  the 24 killed by SIGKILL rather than failing an assertion.  At load 995 with
+  1G of free memory and no swap, that is the OOM killer, not a test result.  A
+  grep for "failed" finds "24 failed" in both.
+* One `cargo check --workspace` "failure" was
+  `couldn't create a temp dir: No space left on device`, and the redirect log
+  for the run after it came back **0 bytes** -- which greps identical to a clean
+  run.  Every number above was re-measured after space was reclaimed, and each
+  log was checked for a nonzero size and a `Finished` line before being
+  believed.
+
+The end-to-end probes in sections 1-4 and 6 are shell-level measurements against
+GNU Emacs 31.0.90 and the merge-base binary
+(`/home/exec/.../neomacs/target/release/neomacs`, built in the MAIN tree, so
+oracle-valid), taken before the branch's own release build was attempted.  They
+are evidence for the divergence, not a gate on the fix; the fix is gated by the
+pins named in each section.
+
+Status: FIXED -- three engine defects and one resize.  §1-§3 the notification
+walk order (169 residual 1), §4 `signal-process`'s number domain (169 residual
+5), §6 the `Su` styled-underline fallback (158's coordinator note), and §5 the
+27 Tier-1 conversions with the remainder honestly re-sized from 63 to 51.  The
+single most useful thing in it is a negative: the first probe of the ordering
+item looked exactly like a refutation, and treating it as one would have closed
+a real divergence permanently.

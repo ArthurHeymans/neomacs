@@ -1898,7 +1898,7 @@ pub(crate) fn builtin_translate_region_internal(
     let table = &args[2];
 
     // ----- Validate TABLE ----------------------------------------------------
-    let table_str = table.as_lisp_string();
+    let table_str = eval.lisp_string(*table);
     let is_str_table = table_str.is_some();
     let is_ct_table = is_char_table(table);
     if !is_str_table && !is_ct_table {

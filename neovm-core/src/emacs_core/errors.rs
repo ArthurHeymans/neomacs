@@ -784,7 +784,7 @@ pub(crate) fn builtin_error_message_string(
         return Ok(message);
     }
     let rendered = error_message_string_rendered(eval, &args[0])?;
-    Ok(match rendered.as_lisp_string() {
+    Ok(match eval.lisp_string(rendered) {
         Some(string) => Value::heap_string(string.without_properties()),
         None => rendered,
     })

@@ -11877,6 +11877,207 @@ fn signal_process_reads_an_integer_as_an_os_pid_like_gnu() {
     );
 }
 
+/// GNU's PROCESS argument to `internal-default-signal-process` is a NUMBER
+/// domain, not a non-negative one.  `get_process` is called only for a
+/// non-number (src/process.c:7369-7370); every number goes to
+/// `CONS_TO_INTEGER (process, pid_t, pid)` (:7375-7376) and then to
+/// `kill (pid, signo)` (:7397).  `CONS_TO_INTEGER` is `cons_to_signed` over
+/// `pid_t`'s full signed range (src/lisp.h:4188-4191), so it accepts a
+/// fixnum, a bignum and an INTEGRAL float, negative ones included -- and a
+/// negative pid is a POSIX process GROUP, which is why GNU does not
+/// range-check it.
+///
+/// This port guarded the arm `pid >= 0`, so a negative integer fell through to
+/// the designator resolver and raised.  Measured, `-Q --batch`
+/// (`tmp/pw175/signal-negative.el`), GNU Emacs 31.0.90 against this port
+/// before the fix:
+///
+/// ```text
+///                                   GNU 31.0.90   Neomacs, before
+/// (signal-process -99999 0)         -1            (wrong-type-argument processp -99999)
+/// (signal-process (- child-pid) 0)  0             (wrong-type-argument processp -682594)
+/// (signal-process 99999999.0 0)     -1            (wrong-type-argument processp 99999999.0)
+/// (signal-process -99999999.9 0)    error         (wrong-type-argument processp -99999999.9)
+/// ```
+///
+/// `-1` is `kill` failing with ESRCH; the child's own group exists because
+/// every child is `setsid`-ed into one (`isolate_child_command`), which is
+/// also GNU's arrangement.  Signal 0 throughout, so nothing is signalled.
+/// Ledger 169 residual 5, ledger 175.
+#[test]
+fn signal_process_takes_a_negative_integer_as_a_process_group_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((p (make-process
+                      :name "pw175-siggroup"
+                      :buffer (generate-new-buffer " *pw175sig*")
+                      :command '("{sh}" "-c" "sleep 30")
+                      :noquery t
+                      :sentinel #'ignore))
+                  (try (lambda (thunk)
+                         (condition-case e (funcall thunk)
+                           (error (list 'error (car e) (cadr e)))))))
+             (prog1
+                 (list :absent-group (funcall try (lambda () (signal-process -99999 0)))
+                       :own-group    (funcall try (lambda ()
+                                                    (signal-process (- (process-id p)) 0)))
+                       :own-pid      (funcall try (lambda () (signal-process (process-id p) 0)))
+                       :integral-float (funcall try (lambda () (signal-process 99999999.0 0)))
+                       :fractional-float (funcall try (lambda () (signal-process -99999999.9 0)))
+                       :huge-float   (funcall try (lambda () (signal-process 1e300 0)))
+                       :bignum       (funcall try
+                                              (lambda ()
+                                                (signal-process 99999999999999999999999999 0)))
+                       :cons         (funcall try (lambda () (signal-process '(1 . 2) 0)))
+                       :still-live   (and (process-live-p p) t))
+               (delete-process p)))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (:absent-group -1 :own-group 0 :own-pid 0 :integral-float -1",
+            " :fractional-float (error error \"Not an in-range integer, integral float,",
+            " or cons of integers\")",
+            " :huge-float (error error \"Not an in-range integer, integral float,",
+            " or cons of integers\")",
+            " :bignum (error error \"Not an in-range integer, integral float,",
+            " or cons of integers\")",
+            " :cons (error wrong-type-argument processp) :still-live t)"
+        )
+    );
+}
+
+/// GNU's status-notification walk is NEWEST-FIRST, and it is observable.
+///
+/// `status_notify` iterates `FOR_EACH_PROCESS` (src/process.c:7885), which is
+/// `FOR_EACH_ALIST_VALUE (Vprocess_alist, ...)` (:343), and `make_process`
+/// conses each new process onto the FRONT of that alist (:953).  So when one
+/// pass finds two processes whose status has changed, the one created LAST
+/// gets its sentinel first.  `process-list` is the same list
+/// (`Fmapcar (Qcdr, Vprocess_alist)`, :1749), which this port already
+/// reproduces by sorting on descending `ProcessId` (`list_processes`).
+///
+/// This port took the poller's ready list instead, which is a `HashMap`
+/// iteration order -- so the order was not merely oldest-first, it was
+/// RANDOM.  Measured, `-Q --batch`, twelve runs of
+/// `tmp/pw175/notify-order5.el` (two children that have already exited when
+/// the first notification pass runs):
+///
+/// ```text
+///                             b-then-a    a-then-b
+/// GNU Emacs 31.0.90              12           0
+/// Neomacs, before                 5           7
+/// ```
+///
+/// And on the exact shape below (`tmp/pw175/notify-order6.el`, three runs of
+/// six on each editor, against the merge-base binary built in the main tree):
+///
+/// ```text
+///                             b-then-a    a-then-b
+/// GNU Emacs 31.0.90              18           0
+/// Neomacs at the merge base       7          11
+/// ```
+///
+/// Six runs are pinned rather than one because the defect is a coin flip:
+/// one run reproduces it only 58% of the time.  Each child touches a marker
+/// file immediately before exiting, and the spin waits for BOTH markers rather
+/// than for the clock, so a loaded machine makes this test slower instead of
+/// splitting the two statuses across two passes -- which is the one condition
+/// under which GNU's own answer is not `b a` either.  Ledger 169 residual 1,
+/// ledger 175.
+#[test]
+fn two_processes_notified_in_one_pass_run_their_sentinels_newest_first_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let ((orders nil)
+                 (dir (file-name-as-directory (make-temp-file "pw175order" t))))
+             (dotimes (i 6)
+               (let* ((order nil)
+                      (marker (lambda (tag) (expand-file-name (format "%s-%d" tag i) dir)))
+                      (sentinel (lambda (p _m)
+                                  (when (memq (process-status p) '(exit signal))
+                                    (push (substring (process-name p) 6 7) order))))
+                      (spawn (lambda (tag)
+                               (make-process
+                                :name (format "pw175-%s-%d" tag i) :buffer nil :noquery t
+                                :command (list "{sh}" "-c"
+                                               (format ": > %s; exit 0"
+                                                       (funcall marker tag)))
+                                :sentinel sentinel)))
+                      (a (funcall spawn "a"))
+                      (b (funcall spawn "b")))
+                 ;; A pure-Lisp spin runs no notification pass, so no sentinel
+                 ;; can fire while it runs.  Spin until each child has said it
+                 ;; is about to exit, so a loaded machine delays the spin rather
+                 ;; than splitting the pass, then give both the exit itself.
+                 (let ((deadline (+ (float-time) 20)))
+                   (while (and (< (float-time) deadline)
+                               (not (and (file-exists-p (funcall marker "a"))
+                                         (file-exists-p (funcall marker "b")))))
+                     nil)
+                   (setq deadline (+ (float-time) 0.4))
+                   (while (< (float-time) deadline) nil))
+                 (accept-process-output nil 1)
+                 (accept-process-output nil 1)
+                 (ignore-errors (delete-process a))
+                 (ignore-errors (delete-process b))
+                 (push (mapconcat #'identity (nreverse order) "") orders)))
+             (delete-directory dir t)
+             (nreverse orders))"#
+    ));
+
+    assert_eq!(result, r#"OK ("ba" "ba" "ba" "ba" "ba" "ba")"#);
+}
+
+/// The readiness-wake path takes the poller's list, not the process list, so
+/// its notification order is reconciled by permuting ONLY the entries that
+/// have a status to report -- newest-first among themselves, every other
+/// position left exactly where the poller put it.  That is GNU's split: the
+/// output/filter walk in `wait_reading_process_output` is in fd order while
+/// `status_notify` walks the alist (src/process.c:7885, :953).
+#[test]
+fn the_notification_walk_permutes_only_the_pending_entries() {
+    crate::test_utils::init_test_tracing();
+    let mut pm = ProcessManager::new();
+    let ids: Vec<ProcessId> = (0..4)
+        .map(|i| {
+            pm.create_process_with_kind(
+                format!("pw175-order-{i}").into(),
+                Value::NIL,
+                String::new(),
+                vec![],
+                ProcessKindWithoutDevice::Pipe,
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+            )
+        })
+        .collect();
+    for index in [0usize, 2] {
+        pm.get_mut(ids[index])
+            .expect("pipe process")
+            .status_notify_pending = true;
+    }
+
+    let mut walk = ids.clone();
+    super::order_pending_status_notifications_newest_first(&pm, &mut walk);
+
+    assert_eq!(
+        walk,
+        vec![ids[2], ids[1], ids[0], ids[3]],
+        "the two pending entries swap into newest-first order; the other two do not move"
+    );
+
+    // One pending process is already in GNU's order, so nothing moves.
+    pm.get_mut(ids[2])
+        .expect("pipe process")
+        .status_notify_pending = false;
+    let mut walk = ids.clone();
+    super::order_pending_status_notifications_newest_first(&pm, &mut walk);
+    assert_eq!(walk, ids);
+}
+
 /// `process-status`'s connection remapping is an `else if` chain, and its
 /// FIRST arm is `exit -> closed` (src/process.c:1195-1196); the
 /// `p->command == t` stop is the second (:1197-1198) and `run -> open` the
