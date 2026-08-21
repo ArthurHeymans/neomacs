@@ -14,7 +14,7 @@ use std::str::FromStr;
 use std::sync::{Arc, OnceLock};
 
 use crate::image_cache::constrain_dimensions;
-use neomacs_display_protocol::{ImageRealization, ImageRotation, ImageSizeSpec};
+use neomacs_display_protocol::{ImageFaceColors, ImageRealization, ImageRotation, ImageSizeSpec};
 
 pub(crate) struct DecodedSvg {
     /// Size consumed by redisplay in logical Emacs pixels.
@@ -55,6 +55,18 @@ struct RootGeometry {
     height_value_range: Option<Range<usize>>,
     view_box: Option<(f64, f64)>,
     start_tag_insert_pos: usize,
+    has_color_attribute: bool,
+}
+
+/// Why the SVG tree is being constructed.
+///
+/// Measurement has no face paint. Rasterization always does, matching GNU's
+/// `lookup_image`/`svg_load_image` contract and making an omitted
+/// `currentColor` source a compile-time error at the parser seam.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SvgParsePurpose {
+    Measure,
+    Rasterize(ImageFaceColors),
 }
 
 const DEFAULT_DPI: f64 = 96.0;
@@ -69,7 +81,11 @@ pub(crate) fn query_dimensions(data: &[u8]) -> Option<(u32, u32)> {
 }
 
 fn query_dimensions_inner(data: &[u8]) -> Option<(u32, u32)> {
-    let loaded = load(data, &SvgResourceContext::Isolated)?;
+    let loaded = load(
+        data,
+        &SvgResourceContext::Isolated,
+        SvgParsePurpose::Measure,
+    )?;
     Some((
         loaded.natural_width.ceil() as u32,
         loaded.natural_height.ceil() as u32,
@@ -81,10 +97,11 @@ pub(crate) fn decode(
     size: ImageSizeSpec,
     rotation: ImageRotation,
     realization: ImageRealization,
+    face_colors: ImageFaceColors,
     resources: SvgResourceContext,
 ) -> Option<DecodedSvg> {
     catch_unwind(AssertUnwindSafe(|| {
-        decode_inner(data, size, rotation, realization, &resources)
+        decode_inner(data, size, rotation, realization, face_colors, &resources)
     }))
     .ok()
     .flatten()
@@ -95,9 +112,10 @@ fn decode_inner(
     size: ImageSizeSpec,
     rotation: ImageRotation,
     realization: ImageRealization,
+    face_colors: ImageFaceColors,
     resources: &SvgResourceContext,
 ) -> Option<DecodedSvg> {
-    let loaded = load(data, resources)?;
+    let loaded = load(data, resources, SvgParsePurpose::Rasterize(face_colors))?;
     // A vector document rasterizes straight to the requested size, so GNU's
     // `compute_image_size` is applied against its natural extent here rather
     // than by resampling afterwards. Pixel extents use layout×report scale so
@@ -168,9 +186,14 @@ fn decode_inner(
     })
 }
 
-fn load(data: &[u8], resources: &SvgResourceContext) -> Option<LoadedSvg> {
+fn load(
+    data: &[u8],
+    resources: &SvgResourceContext,
+    purpose: SvgParsePurpose,
+) -> Option<LoadedSvg> {
     let data = bounded_svg_data(data)?;
     let geometry = root_geometry(data.as_ref())?;
+    let data = inherit_face_current_color(data, &geometry, purpose);
     if let Some((natural_width, natural_height)) = geometry.view_box_dimensions() {
         return load_with_dimensions(data, geometry, natural_width, natural_height, resources);
     }
@@ -189,6 +212,30 @@ fn load(data: &[u8], resources: &SvgResourceContext) -> Option<LoadedSvg> {
     let measurement_tree = usvg::Tree::from_data(measurement_data.as_ref(), &options).ok()?;
     let (natural_width, natural_height) = fallback_dimensions(&measurement_tree)?;
     load_with_dimensions(data, geometry, natural_width, natural_height, resources)
+}
+
+/// Establish GNU's face-foreground inheritance for SVG `currentColor`.
+///
+/// A presentation attribute is deliberately used instead of an inline style:
+/// author CSS and an explicit root `color` retain their normal precedence.
+fn inherit_face_current_color<'a>(
+    data: Cow<'a, [u8]>,
+    geometry: &RootGeometry,
+    purpose: SvgParsePurpose,
+) -> Cow<'a, [u8]> {
+    let SvgParsePurpose::Rasterize(face_colors) = purpose else {
+        return data;
+    };
+    if geometry.has_color_attribute {
+        return data;
+    }
+
+    let declaration = format!(" color=\"#{:06X}\"", face_colors.foreground());
+    let mut painted = Vec::with_capacity(data.len() + declaration.len());
+    painted.extend_from_slice(&data[..geometry.start_tag_insert_pos]);
+    painted.extend_from_slice(declaration.as_bytes());
+    painted.extend_from_slice(&data[geometry.start_tag_insert_pos..]);
+    Cow::Owned(painted)
 }
 
 fn load_with_dimensions(
@@ -616,6 +663,7 @@ fn root_geometry(data: &[u8]) -> Option<RootGeometry> {
         height_value_range: height_attribute.map(|attribute| attribute.range_value()),
         view_box,
         start_tag_insert_pos,
+        has_color_attribute: root.attribute("color").is_some(),
     })
 }
 

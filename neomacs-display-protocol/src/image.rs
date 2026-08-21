@@ -11,6 +11,63 @@ pub enum ImageStateChange {
     Freed,
 }
 
+/// The realized face colors that participate in GNU image realization.
+///
+/// GNU keys an image by both colors and makes the foreground available to
+/// vector images as CSS `currentColor`.  Keeping the pair typed prevents an
+/// image backend from accidentally accepting geometry while silently dropping
+/// its face paint context.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ImageFaceColors {
+    foreground: u32,
+    background: u32,
+}
+
+impl Default for ImageFaceColors {
+    fn default() -> Self {
+        Self::new(0x00ff_ffff, 0x0000_0000)
+    }
+}
+
+impl ImageFaceColors {
+    #[must_use]
+    pub const fn new(foreground: u32, background: u32) -> Self {
+        Self {
+            foreground: foreground & 0x00ff_ffff,
+            background: background & 0x00ff_ffff,
+        }
+    }
+
+    #[must_use]
+    pub const fn foreground(self) -> u32 {
+        self.foreground
+    }
+
+    #[must_use]
+    pub const fn background(self) -> u32 {
+        self.background
+    }
+
+    #[must_use]
+    pub const fn foreground_rgba(self) -> [u8; 4] {
+        Self::rgba(self.foreground)
+    }
+
+    #[must_use]
+    pub const fn background_rgba(self) -> [u8; 4] {
+        Self::rgba(self.background)
+    }
+
+    const fn rgba(pixel: u32) -> [u8; 4] {
+        [
+            ((pixel >> 16) & 0xff) as u8,
+            ((pixel >> 8) & 0xff) as u8,
+            (pixel & 0xff) as u8,
+            0xff,
+        ]
+    }
+}
+
 /// A normalized, non-empty rectangle sampled from an image texture.
 ///
 /// Layout resolves GNU's pixel/fraction `(slice …)` operands once it knows the
@@ -178,7 +235,7 @@ impl Default for ImageSourceRect {
 
 #[cfg(test)]
 mod image_source_rect_tests {
-    use super::{ImageMargins, ImageOpaqueBackground, ImageSourceRect};
+    use super::{ImageFaceColors, ImageMargins, ImageOpaqueBackground, ImageSourceRect};
 
     const QUANTIZATION_TOLERANCE: f32 = 2.0 / u16::MAX as f32;
 
@@ -213,6 +270,20 @@ mod image_source_rect_tests {
             ImageOpaqueBackground::new(Some(0x12_34_56)).get(),
             Some(0x12_34_56)
         );
+    }
+
+    #[test]
+    fn image_face_colors_are_opaque_rgb_without_a_black_sentinel() {
+        let colors = ImageFaceColors::new(0x12_34_56, 0);
+
+        assert_eq!(colors.foreground(), 0x12_34_56);
+        assert_eq!(colors.foreground_rgba(), [0x12, 0x34, 0x56, 0xff]);
+        assert_eq!(colors.background(), 0);
+        assert_eq!(colors.background_rgba(), [0, 0, 0, 0xff]);
+
+        let defaults = ImageFaceColors::default();
+        assert_eq!(defaults.foreground_rgba(), [0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(defaults.background_rgba(), [0, 0, 0, 0xff]);
     }
 }
 

@@ -266,8 +266,7 @@ impl ImageCatalog for AsyncImageCatalog {
                 source: source.clone(),
                 size: Default::default(),
                 rotation: Default::default(),
-                fg_color: 0,
-                bg_color: 0,
+                face_colors: Default::default(),
                 realization: Default::default(),
             })
             .0
@@ -506,8 +505,7 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
             size: request.size,
             rotation: request.rotation,
             realization: request.realization,
-            fg_color: request.fg_color,
-            bg_color: request.bg_color,
+            face_colors: request.face_colors,
         }),
         ImageResolveSource::Data(data) => RenderCommand::Asset(AssetCommand::ImageLoadData {
             id: image_id,
@@ -515,8 +513,7 @@ fn image_load_command(request: &ImageResolveRequest, image_id: u32) -> RenderCom
             size: request.size,
             rotation: request.rotation,
             realization: request.realization,
-            fg_color: request.fg_color,
-            bg_color: request.bg_color,
+            face_colors: request.face_colors,
         }),
     }
 }
@@ -557,8 +554,7 @@ mod tests {
             source: ImageResolveSource::File(LispString::from_utf8(path)),
             size: ImageSizeSpec::new(AxisSize::AtMost(24), AxisSize::AtMost(24)),
             rotation: Default::default(),
-            fg_color: 0,
-            bg_color: 0,
+            face_colors: Default::default(),
             realization: Default::default(),
         }
     }

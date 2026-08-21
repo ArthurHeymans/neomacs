@@ -9776,8 +9776,8 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
     );
     let requests = requests.lock().expect("image requests lock");
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].fg_color, 0x00112233);
-    assert_eq!(requests[0].bg_color, 0x00445566);
+    assert_eq!(requests[0].face_colors.foreground(), 0x00112233);
+    assert_eq!(requests[0].face_colors.background(), 0x00445566);
 }
 
 struct SourceMappedTextWidthByFace;

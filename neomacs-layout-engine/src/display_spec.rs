@@ -12,8 +12,8 @@ use neovm_core::emacs_core::eval::{
 };
 use neovm_core::emacs_core::image::{ImageSpecKey, image_resolve_source_from_items};
 use neovm_core::emacs_core::image_catalog::{
-    AxisSize, ImageResolveRequest, ImageResolveSource, ImageRotation, ImageScaleEnvironment,
-    ImageScalePolicy, ImageSizeSpec, numeric_image_scale,
+    AxisSize, ImageFaceColors, ImageResolveRequest, ImageResolveSource, ImageRotation,
+    ImageScaleEnvironment, ImageScalePolicy, ImageSizeSpec, numeric_image_scale,
 };
 use neovm_core::emacs_core::value::{ValueKind, list_to_vec};
 use neovm_core::face::Color as LispColor;
@@ -79,8 +79,7 @@ struct UnresolvedDisplayImageRequest {
     source: ImageResolveSource,
     size: DisplayImageSizeSpec,
     rotation: ImageRotation,
-    fg_color: u32,
-    bg_color: u32,
+    face_colors: ImageFaceColors,
 }
 
 /// Active-face metrics used by GNU image dimensions `(N . em/ch/cw)`.
@@ -335,8 +334,7 @@ impl DisplayImageLayout {
             source: self.request.source,
             size: self.request.size.resolve(dimensions),
             rotation: self.request.rotation,
-            fg_color: self.request.fg_color,
-            bg_color: self.request.bg_color,
+            face_colors: self.request.face_colors,
             realization: environment.resolve(self.scale),
         }
     }
@@ -531,8 +529,7 @@ pub(crate) fn parse_display_image_layout(
                 height: DisplayImageAxisSize::resolve_precedence(height, max_height),
             },
             rotation,
-            fg_color,
-            bg_color,
+            face_colors: ImageFaceColors::new(fg_color, bg_color),
         },
         scale,
         ascent,
@@ -1204,7 +1201,8 @@ mod tests {
             parse_display_image_layout(&explicit, 0, 0)
                 .unwrap()
                 .request
-                .bg_color,
+                .face_colors
+                .background(),
             0x12_34_56
         );
     }

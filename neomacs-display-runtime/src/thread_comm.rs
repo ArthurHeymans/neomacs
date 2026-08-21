@@ -8,7 +8,7 @@ use crossbeam_channel::{Receiver, Sender, TrySendError, bounded, unbounded};
 use std::time::Instant;
 
 use neomacs_display_protocol::SealedFramePresentation;
-use neomacs_display_protocol::{ImageRealization, ImageRotation, ImageSizeSpec};
+use neomacs_display_protocol::{ImageFaceColors, ImageRealization, ImageRotation, ImageSizeSpec};
 pub use neomacs_display_protocol::{
     ImageStateChange, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource, ToolBarItem,
     ToolBarItemType, VisualConfig,
@@ -430,10 +430,8 @@ pub enum AssetCommand {
         rotation: ImageRotation,
         /// Immutable logical/device geometry captured for this load.
         realization: ImageRealization,
-        /// Foreground color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
-        fg_color: u32,
-        /// Background color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
-        bg_color: u32,
+        /// Realized face colors used by color-relative formats (SVG/XBM).
+        face_colors: ImageFaceColors,
     },
     /// Load image from encoded data bytes (PNG, JPEG, SVG, etc.)
     ImageLoadData {
@@ -443,10 +441,8 @@ pub enum AssetCommand {
         rotation: ImageRotation,
         /// Immutable logical/device geometry captured for this load.
         realization: ImageRealization,
-        /// Foreground color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
-        fg_color: u32,
-        /// Background color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
-        bg_color: u32,
+        /// Realized face colors used by color-relative formats (SVG/XBM).
+        face_colors: ImageFaceColors,
     },
     /// Load image from raw ARGB32 pixel data
     ImageLoadArgb32 {

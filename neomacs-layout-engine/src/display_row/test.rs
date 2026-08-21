@@ -1741,8 +1741,8 @@ fn render_lisp_string_row_resolves_image_display_property_through_display_host()
     assert_eq!((image.pixel_width, image.pixel_height), (64.0, 32.0));
     let requests = host.image_requests.lock().expect("image requests lock");
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].fg_color, 0x00112233);
-    assert_eq!(requests[0].bg_color, 0x00445566);
+    assert_eq!(requests[0].face_colors.foreground(), 0x00112233);
+    assert_eq!(requests[0].face_colors.background(), 0x00445566);
 }
 
 #[test]

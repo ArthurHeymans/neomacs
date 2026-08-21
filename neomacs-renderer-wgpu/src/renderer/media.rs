@@ -4,7 +4,7 @@ use super::super::image_cache::ImageCache;
 #[cfg(any(feature = "video", feature = "wpe-webkit"))]
 use super::super::vertex::GlyphVertex;
 use super::WgpuRenderer;
-use neomacs_display_protocol::{ImageRealization, ImageRotation, ImageSizeSpec};
+use neomacs_display_protocol::{ImageFaceColors, ImageRealization, ImageRotation, ImageSizeSpec};
 
 impl WgpuRenderer {
     /// Load image from file path (async - returns immediately)
@@ -14,13 +14,12 @@ impl WgpuRenderer {
         path: &str,
         size: ImageSizeSpec,
         rotation: ImageRotation,
-        fg_color: u32,
-        bg_color: u32,
+        face_colors: ImageFaceColors,
     ) -> u32 {
         let raster_scale = self.scale_factor;
         self.caches
             .image
-            .load_file(path, size, rotation, fg_color, bg_color, raster_scale)
+            .load_file(path, size, rotation, face_colors, raster_scale)
     }
 
     /// Load image from file path with a pre-allocated ID (for threaded mode)
@@ -31,18 +30,11 @@ impl WgpuRenderer {
         size: ImageSizeSpec,
         rotation: ImageRotation,
         realization: ImageRealization,
-        fg_color: u32,
-        bg_color: u32,
+        face_colors: ImageFaceColors,
     ) {
-        self.caches.image.load_file_with_id(
-            id,
-            path,
-            size,
-            rotation,
-            realization,
-            fg_color,
-            bg_color,
-        )
+        self.caches
+            .image
+            .load_file_with_id(id, path, size, rotation, realization, face_colors)
     }
 
     /// Load image from data (async - returns immediately)
@@ -51,13 +43,12 @@ impl WgpuRenderer {
         data: &[u8],
         size: ImageSizeSpec,
         rotation: ImageRotation,
-        fg_color: u32,
-        bg_color: u32,
+        face_colors: ImageFaceColors,
     ) -> u32 {
         let raster_scale = self.scale_factor;
         self.caches
             .image
-            .load_data(data, size, rotation, fg_color, bg_color, raster_scale)
+            .load_data(data, size, rotation, face_colors, raster_scale)
     }
 
     /// Load image from data with pre-allocated ID (for threaded mode)
@@ -68,8 +59,7 @@ impl WgpuRenderer {
         size: ImageSizeSpec,
         rotation: ImageRotation,
         realization: ImageRealization,
-        fg_color: u32,
-        bg_color: u32,
+        face_colors: ImageFaceColors,
         resources: crate::SvgResourceContext,
     ) {
         self.caches.image.load_data_with_id(
@@ -78,8 +68,7 @@ impl WgpuRenderer {
             size,
             rotation,
             realization,
-            fg_color,
-            bg_color,
+            face_colors,
             resources,
         )
     }

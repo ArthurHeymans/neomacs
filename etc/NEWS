@@ -801,6 +801,11 @@ in the SVG is set to 'currentcolor', or set the image spec's ':css'
 value to 'svg {fill: currentcolor;}'.
 
 ---
+** SVG 'currentcolor' now inherits the displaying face foreground.
+NeoMacs previously rendered an SVG without an explicit CSS 'color' as
+black, even when the image was displayed by a face with another foreground.
+
+---
 ** Errors signaled by 'emacsclient' connections can now enter the debugger.
 If 'debug-on-error' is non-nil, errors signaled by Lisp programs
 executed due to 'emacsclient' connections will now enter the Lisp

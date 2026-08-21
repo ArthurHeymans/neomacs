@@ -530,8 +530,10 @@ pub(crate) fn image_resolve_request_from_spec(
         // resolves through `DEFAULT_FACE_ID` (image.c `lookup_image`). Using
         // zeros here gave the same spec a different key than the one layout
         // builds from the resolved face, so every measured image decoded twice.
-        fg_color: default_colors.0,
-        bg_color: default_colors.1,
+        face_colors: crate::emacs_core::image_catalog::ImageFaceColors::new(
+            default_colors.0,
+            default_colors.1,
+        ),
         realization: environment.resolve(scale),
     })
 }

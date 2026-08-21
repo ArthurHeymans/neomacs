@@ -10436,8 +10436,8 @@ fn layout_frame_rust_emits_inline_image_glyphs_for_display_image_specs() {
         requests[0].size,
         ImageSizeSpec::new(AxisSize::AtMost(32), AxisSize::AtMost(24))
     );
-    assert_eq!(requests[0].fg_color, 0x112233);
-    assert_eq!(requests[0].bg_color, 0xff0000);
+    assert_eq!(requests[0].face_colors.foreground(), 0x112233);
+    assert_eq!(requests[0].face_colors.background(), 0xff0000);
 }
 
 /// Telega sizes inline badges and custom emoji in character-cell units.  GNU

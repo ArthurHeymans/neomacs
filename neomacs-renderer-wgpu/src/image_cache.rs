@@ -6,7 +6,7 @@
 //! - GPU texture upload when ready
 //! - LRU cache with memory limits
 
-use neomacs_display_protocol::{ImageRealization, ImageRotation, ImageSizeSpec};
+use neomacs_display_protocol::{ImageFaceColors, ImageRealization, ImageRotation, ImageSizeSpec};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::fs::File;
@@ -369,10 +369,8 @@ struct DecodeRequest {
     rotation: ImageRotation,
     /// Semantic and device geometry resolved by evaluator/layout.
     realization: ImageRealization,
-    /// Foreground color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
-    fg_color: u32,
-    /// Background color as 0xAARRGGBB for monochrome formats (XBM). 0 = default.
-    bg_color: u32,
+    /// Realized face paint inherited by color-relative formats.
+    face_colors: ImageFaceColors,
 }
 
 /// Image source
@@ -514,46 +512,38 @@ impl ImageCache {
                         size,
                         rotation,
                         realization,
-                        fg_color,
-                        bg_color,
+                        face_colors,
                     } = request;
-                    let result = catch_unwind(AssertUnwindSafe(|| {
-                        let fg_bg = (fg_color, bg_color);
-                        match source {
-                            #[cfg(test)]
-                            ImageSource::Panic => panic!("injected decoder panic"),
-                            ImageSource::File(path) => {
-                                Self::decode_file(&path, size, rotation, fg_bg, realization)
-                            }
-                            ImageSource::Data { data, resources } => Self::decode_data(
-                                &data,
-                                size,
-                                rotation,
-                                fg_bg,
-                                realization,
-                                resources,
-                            ),
-                            ImageSource::RawArgb32 {
-                                data,
-                                width,
-                                height,
-                                stride,
-                            } => Self::convert_argb32_to_rgba(&data, width, height, stride)
-                                .map(DecodedPixels::from_raster_tuple)
-                                .and_then(|pixels| {
-                                    pixels.realize_bitmap(size, rotation, realization)
-                                }),
-                            ImageSource::RawRgb24 {
-                                data,
-                                width,
-                                height,
-                                stride,
-                            } => Self::convert_rgb24_to_rgba(&data, width, height, stride)
-                                .map(DecodedPixels::from_raster_tuple)
-                                .and_then(|pixels| {
-                                    pixels.realize_bitmap(size, rotation, realization)
-                                }),
+                    let result = catch_unwind(AssertUnwindSafe(|| match source {
+                        #[cfg(test)]
+                        ImageSource::Panic => panic!("injected decoder panic"),
+                        ImageSource::File(path) => {
+                            Self::decode_file(&path, size, rotation, face_colors, realization)
                         }
+                        ImageSource::Data { data, resources } => Self::decode_data(
+                            &data,
+                            size,
+                            rotation,
+                            face_colors,
+                            realization,
+                            resources,
+                        ),
+                        ImageSource::RawArgb32 {
+                            data,
+                            width,
+                            height,
+                            stride,
+                        } => Self::convert_argb32_to_rgba(&data, width, height, stride)
+                            .map(DecodedPixels::from_raster_tuple)
+                            .and_then(|pixels| pixels.realize_bitmap(size, rotation, realization)),
+                        ImageSource::RawRgb24 {
+                            data,
+                            width,
+                            height,
+                            stride,
+                        } => Self::convert_rgb24_to_rgba(&data, width, height, stride)
+                            .map(DecodedPixels::from_raster_tuple)
+                            .and_then(|pixels| pixels.realize_bitmap(size, rotation, realization)),
                     }));
 
                     let outcome = match result {
@@ -583,25 +573,12 @@ impl ImageCache {
         }
     }
 
-    /// Convert 0xAARRGGBB color to [R,G,B,A] array.
-    /// If color is 0 (default), return the provided fallback.
-    fn argb_to_rgba(color: u32, fallback: [u8; 4]) -> [u8; 4] {
-        if color == 0 {
-            return fallback;
-        }
-        let a = ((color >> 24) & 0xFF) as u8;
-        let r = ((color >> 16) & 0xFF) as u8;
-        let g = ((color >> 8) & 0xFF) as u8;
-        let b = (color & 0xFF) as u8;
-        [r, g, b, a]
-    }
-
     /// Decode image file with size constraints
     fn decode_file(
         path: &str,
         size: ImageSizeSpec,
         rotation: ImageRotation,
-        fg_bg: (u32, u32),
+        face_colors: ImageFaceColors,
         realization: ImageRealization,
     ) -> Option<DecodedPixels> {
         if let Ok(img) = image::open(path) {
@@ -616,8 +593,8 @@ impl ImageCache {
             );
         }
         // Fallback: try XBM
-        let fg = Self::argb_to_rgba(fg_bg.0, [255, 255, 255, 255]);
-        let bg = Self::argb_to_rgba(fg_bg.1, [0, 0, 0, 255]);
+        let fg = face_colors.foreground_rgba();
+        let bg = face_colors.background_rgba();
         if let Some(result) = crate::xbm::decode_xbm_file(Path::new(path), fg, bg) {
             return DecodedPixels::from_raster_tuple(result).realize_bitmap(
                 size,
@@ -632,6 +609,7 @@ impl ImageCache {
             size,
             rotation,
             realization,
+            face_colors,
             crate::svg::SvgResourceContext::BaseUri(path.to_owned()),
         )
     }
@@ -641,7 +619,7 @@ impl ImageCache {
         data: &[u8],
         size: ImageSizeSpec,
         rotation: ImageRotation,
-        fg_bg: (u32, u32),
+        face_colors: ImageFaceColors,
         realization: ImageRealization,
         resources: crate::svg::SvgResourceContext,
     ) -> Option<DecodedPixels> {
@@ -657,8 +635,8 @@ impl ImageCache {
             );
         }
         // Fallback: try XBM
-        let fg = Self::argb_to_rgba(fg_bg.0, [255, 255, 255, 255]);
-        let bg = Self::argb_to_rgba(fg_bg.1, [0, 0, 0, 255]);
+        let fg = face_colors.foreground_rgba();
+        let bg = face_colors.background_rgba();
         if let Some(result) = crate::xbm::decode_xbm_data(data, fg, bg) {
             return DecodedPixels::from_raster_tuple(result).realize_bitmap(
                 size,
@@ -667,7 +645,7 @@ impl ImageCache {
             );
         }
         // Fallback: try SVG via the shared vector backend.
-        Self::decode_svg_data(data, size, rotation, realization, resources)
+        Self::decode_svg_data(data, size, rotation, realization, face_colors, resources)
     }
 
     #[cfg(test)]
@@ -729,7 +707,7 @@ impl ImageCache {
             data,
             size,
             rotation,
-            fg_bg,
+            ImageFaceColors::new(fg_bg.0, fg_bg.1),
             realization,
             crate::svg::SvgResourceContext::Isolated,
         )?;
@@ -827,9 +805,11 @@ impl ImageCache {
         size: ImageSizeSpec,
         rotation: ImageRotation,
         realization: ImageRealization,
+        face_colors: ImageFaceColors,
         resources: crate::svg::SvgResourceContext,
     ) -> Option<DecodedPixels> {
-        let decoded = crate::svg::decode(data, size, rotation, realization, resources)?;
+        let decoded =
+            crate::svg::decode(data, size, rotation, realization, face_colors, resources)?;
         Some(DecodedPixels {
             layout_width: decoded.layout_width,
             layout_height: decoded.layout_height,
@@ -1039,8 +1019,7 @@ impl ImageCache {
         path: &str,
         size: ImageSizeSpec,
         rotation: ImageRotation,
-        fg_color: u32,
-        bg_color: u32,
+        face_colors: ImageFaceColors,
         raster_scale: f32,
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
@@ -1050,8 +1029,7 @@ impl ImageCache {
             size,
             rotation,
             ImageRealization::with_device_scale(1.0, raster_scale),
-            fg_color,
-            bg_color,
+            face_colors,
         );
         id
     }
@@ -1064,8 +1042,7 @@ impl ImageCache {
         size: ImageSizeSpec,
         rotation: ImageRotation,
         realization: ImageRealization,
-        fg_color: u32,
-        bg_color: u32,
+        face_colors: ImageFaceColors,
         resources: crate::svg::SvgResourceContext,
     ) {
         let load = self.begin_load(id);
@@ -1092,8 +1069,7 @@ impl ImageCache {
             size,
             rotation,
             realization,
-            fg_color,
-            bg_color,
+            face_colors,
         });
     }
 
@@ -1106,8 +1082,7 @@ impl ImageCache {
         size: ImageSizeSpec,
         rotation: ImageRotation,
         realization: ImageRealization,
-        fg_color: u32,
-        bg_color: u32,
+        face_colors: ImageFaceColors,
     ) {
         let load = self.begin_load(id);
         // Query dimensions for the pending-image placeholder.
@@ -1131,8 +1106,7 @@ impl ImageCache {
             size,
             rotation,
             realization,
-            fg_color,
-            bg_color,
+            face_colors,
         });
     }
 
@@ -1148,8 +1122,7 @@ impl ImageCache {
         data: &[u8],
         size: ImageSizeSpec,
         rotation: ImageRotation,
-        fg_color: u32,
-        bg_color: u32,
+        face_colors: ImageFaceColors,
         raster_scale: f32,
     ) -> u32 {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
@@ -1178,8 +1151,7 @@ impl ImageCache {
             size,
             rotation,
             realization: ImageRealization::with_device_scale(1.0, raster_scale),
-            fg_color,
-            bg_color,
+            face_colors,
         });
 
         id
@@ -1223,8 +1195,7 @@ impl ImageCache {
             size,
             rotation,
             realization: ImageRealization::default(),
-            fg_color: 0,
-            bg_color: 0,
+            face_colors: ImageFaceColors::default(),
         });
 
         id
@@ -1268,8 +1239,7 @@ impl ImageCache {
             size,
             rotation,
             realization: ImageRealization::default(),
-            fg_color: 0,
-            bg_color: 0,
+            face_colors: ImageFaceColors::default(),
         });
 
         id
@@ -1299,8 +1269,7 @@ impl ImageCache {
             },
             size: ImageSizeSpec::default(),
             realization: ImageRealization::default(),
-            fg_color: 0,
-            bg_color: 0,
+            face_colors: ImageFaceColors::default(),
         });
     }
 
@@ -1328,8 +1297,7 @@ impl ImageCache {
             },
             size: ImageSizeSpec::default(),
             realization: ImageRealization::default(),
-            fg_color: 0,
-            bg_color: 0,
+            face_colors: ImageFaceColors::default(),
         });
     }
 
