@@ -9577,24 +9577,44 @@ fn resolve_get_process_designator_in_state(
     }
 }
 
+/// GNU's `Fget_buffer` (src/buffer.c:479-491), which is how both of this
+/// port's buffer-keyed process lookups name a buffer:
+///
+/// ```c
+///   if (BUFFERP (buffer_or_name))
+///     return buffer_or_name;
+///   CHECK_STRING (buffer_or_name);
+///   return Fcdr (assoc_ignore_text_properties (buffer_or_name, Vbuffer_alist));
+/// ```
+///
+/// Three things it does NOT do, each of which this function used to.  A buffer
+/// OBJECT comes back as given, dead or alive -- the docstring's "If
+/// BUFFER-OR-NAME is a buffer, return it as given" (:483) -- so a process
+/// whose buffer was killed is still findable by that buffer, which is the
+/// state `Fget_buffer_process`'s own docstring describes ("Return nil if all
+/// processes associated with BUFFER have been deleted or killed",
+/// src/process.c:8414-8415: the BUFFER may outlive nothing at all).  A name is
+/// matched against `Vbuffer_alist`, which holds only live buffers.  And `nil`
+/// is not a designator for anything: `Fget_buffer_process` answers it with
+/// `if (NILP (buffer)) return Qnil;` (:8421) rather than reaching for the
+/// selected window, and `Fmake_network_process` reads `buffer_defaults` for it
+/// (:4132-4135).
+///
+/// This is deliberately NOT `get_process`'s rule (src/process.c:1045-1048),
+/// which errors with "Attempt to get process for a dead buffer": that is a
+/// PROCESS designator and this is a buffer one.  The two neighbours above it
+/// implement `get_process`, and they are right to differ.
 fn resolve_buffer_for_process_lookup_in_state(
-    frames: &FrameManager,
     buffers: &BufferManager,
     value: &Value,
 ) -> Result<Option<crate::buffer::BufferId>, Flow> {
     match value.kind() {
-        ValueKind::Nil => Ok(frames
-            .selected_frame()
-            .and_then(|frame| frame.selected_window())
-            .and_then(|window| window.buffer_id())),
+        ValueKind::Nil => Ok(None),
         ValueKind::String => {
             let name_str = process_owned_runtime_string(*value);
             Ok(buffers.find_buffer_by_name(&name_str))
         }
-        ValueKind::Veclike(VecLikeType::Buffer) => {
-            let bid = value.as_buffer_id().unwrap();
-            Ok(buffers.get(bid).map(|_| bid))
-        }
+        ValueKind::Veclike(VecLikeType::Buffer) => Ok(value.as_buffer_id()),
         _ => Err(signal_wrong_type_string(*value)),
     }
 }
@@ -13458,11 +13478,7 @@ pub(crate) fn builtin_make_network_process(
     // `coding-system-for-read/write` precedence over the operation/default
     // codings; URL binds the read side to `binary` around this call.
     let multibyte = ProcessBufferMultibyteness {
-        process_buffer: match resolve_buffer_for_process_lookup_in_state(
-            &eval.frames,
-            &eval.buffers,
-            &buffer,
-        ) {
+        process_buffer: match resolve_buffer_for_process_lookup_in_state(&eval.buffers, &buffer) {
             Ok(Some(bid)) => eval
                 .buffers
                 .get(bid)
@@ -15699,14 +15715,15 @@ pub(crate) fn builtin_set_process_buffer_impl(
 ) -> EvalResult {
     expect_args("set-process-buffer", &args, 2)?;
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
+    // `if (!NILP (buffer)) CHECK_BUFFER (buffer);` (src/process.c:1302-1303),
+    // and `CHECK_BUFFER` is `CHECK_TYPE (BUFFERP (x), Qbufferp, x)` and
+    // nothing else (src/buffer.h:762-766).  A DEAD buffer is a buffer, and
+    // handing one over is how a process legitimately reaches the state
+    // `read_and_insert_process_output` (:6464),
+    // `internal-default-process-sentinel` (:7969-7971) and
+    // `setup_process_coding_systems` (:8395) each guard against.
     match args[1].kind() {
-        ValueKind::Nil => {}
-        ValueKind::Veclike(VecLikeType::Buffer) => {
-            let bid = args[1].as_buffer_id().unwrap();
-            let _ = buffers
-                .get(bid)
-                .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-        }
+        ValueKind::Nil | ValueKind::Veclike(VecLikeType::Buffer) => {}
         _ => return Err(signal_wrong_type_bufferp(args[1])),
     };
     let proc = processes.get_any_mut(id).ok_or_else(|| {
@@ -16391,18 +16408,16 @@ pub(crate) fn builtin_get_buffer_process(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_get_buffer_process_impl(&eval.frames, &eval.buffers, &eval.processes, args)
+    builtin_get_buffer_process_impl(&eval.buffers, &eval.processes, args)
 }
 
 pub(crate) fn builtin_get_buffer_process_impl(
-    frames: &FrameManager,
     buffers: &BufferManager,
     processes: &ProcessManager,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("get-buffer-process", &args, 1)?;
-    let Some(buffer_id) = resolve_buffer_for_process_lookup_in_state(frames, buffers, &args[0])?
-    else {
+    let Some(buffer_id) = resolve_buffer_for_process_lookup_in_state(buffers, &args[0])? else {
         return Ok(Value::NIL);
     };
     match processes.find_by_buffer_id(buffer_id) {

@@ -12079,3 +12079,114 @@ fn a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu() {
         )
     );
 }
+
+/// A process may hold a buffer that is not live, and every neighbour of the
+/// read has to say so the way GNU does.
+///
+/// GNU never refuses the state and guards it at each use instead, which is why
+/// there are three `BUFFER_LIVE_P` tests downstream of one
+/// `Fget_buffer_create`: `read_and_insert_process_output` (src/process.c:6464),
+/// `internal-default-process-sentinel`, whose own comment is "Avoid error if
+/// buffer is deleted (probably that's why the process is dead, too)"
+/// (:7969-7971), and `setup_process_coding_systems` (:8395).  The three doors
+/// IN are as deliberate.  `Fget_buffer_create` returns a buffer object "as
+/// given, even if it is dead" (src/buffer.c:581-582), and all four process
+/// constructors go through it (:1849-1851, :3091-3094, :3223-3226, :4017).
+/// `Fset_process_buffer`'s only check is `CHECK_BUFFER`, which is
+/// `CHECK_TYPE (BUFFERP (x), Qbufferp, x)` and nothing else (:1302-1303,
+/// src/buffer.h:762-766).  And `Fget_buffer_process` looks its argument up
+/// with `Fget_buffer` (:8422), which hands a buffer object straight back -- so
+/// a dead buffer still finds its process -- and answers a nil argument with
+/// `Qnil` outright (:8421) rather than reaching for the selected window.
+///
+/// `get_process` (:1045-1048) is the one place that DOES error, with "Attempt
+/// to get process for a dead buffer", and it is a PROCESS designator rather
+/// than a buffer one; the last row pins that difference so the next reader
+/// does not unify them.
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program.
+#[test]
+fn a_process_may_hold_a_buffer_that_is_not_live_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw171n-dead (tag)
+               (let ((b (generate-new-buffer (format " *pw171n%s*" tag))))
+                 (kill-buffer b) b))
+             (list
+              ;; make-process accepts it, and the process runs to completion.
+              (let* ((b (pw171n-dead "a"))
+                     (p (make-process :name "pw171n-a" :buffer b :noquery t
+                                      :sentinel #'ignore
+                                      :command (list "{sh}" "-c" "printf ab"))))
+                (while (process-live-p p) (accept-process-output p 0.05))
+                (list (processp p) (eq (process-buffer p) b)
+                      (buffer-live-p (process-buffer p))
+                      (marker-buffer (process-mark p))
+                      (process-status p)))
+              ;; make-pipe-process too, which is the other constructor a
+              ;; :stderr pipe goes through.
+              (let* ((p (make-pipe-process :name "pw171n-b" :buffer (pw171n-dead "b")
+                                           :noquery t)))
+                (prog1 (list (processp p) (buffer-live-p (process-buffer p))
+                             (process-status p))
+                  (delete-process p)))
+              ;; the DEFAULT sentinel, which must not signal when it cannot
+              ;; insert its status message.
+              (let* ((p (make-process :name "pw171n-c" :buffer (pw171n-dead "c") :noquery t
+                                      :command (list "{sh}" "-c" "printf ab"))))
+                (while (process-live-p p) (accept-process-output p 0.05))
+                (dotimes (_ 5) (accept-process-output nil 0.02))
+                (list (process-status p)))
+              ;; `internal-default-process-filter' called by hand answers nil
+              ;; and inserts nowhere.
+              (let* ((p (make-process :name "pw171n-d" :buffer (pw171n-dead "d") :noquery t
+                                      :sentinel #'ignore
+                                      :command (list "{sh}" "-c" "sleep 5"))))
+                (prog1 (list (internal-default-process-filter p "hi"))
+                  (delete-process p)))
+              ;; set-process-buffer accepts one, and returns it.
+              (let* ((b (pw171n-dead "e"))
+                     (p (make-process :name "pw171n-e" :buffer nil :noquery t
+                                      :sentinel #'ignore
+                                      :command (list "{sh}" "-c" "sleep 5"))))
+                (prog1 (list (eq (set-process-buffer p b) b)
+                             (buffer-live-p (process-buffer p)))
+                  (delete-process p)))
+              ;; get-buffer-process finds a process by its DEAD buffer, and
+              ;; answers nil for a nil argument even when the selected window
+              ;; shows a buffer that has one.
+              (let* ((b (pw171n-dead "f"))
+                     (p (make-process :name "pw171n-f" :buffer b :noquery t
+                                      :sentinel #'ignore
+                                      :command (list "{sh}" "-c" "sleep 5")))
+                     (q (make-process :name "pw171n-g" :buffer (current-buffer) :noquery t
+                                      :sentinel #'ignore
+                                      :command (list "{sh}" "-c" "sleep 5"))))
+                (prog1 (list (eq (get-buffer-process b) p)
+                             (get-buffer-process nil)
+                             (eq (get-buffer-process (current-buffer)) q))
+                  (delete-process p) (delete-process q)))
+              ;; and the one that DOES error, because it is `get_process':
+              ;; a dead buffer as a PROCESS designator.
+              (let ((b (pw171n-dead "h")))
+                (list (condition-case e (process-status b) (error (cadr e)))
+                      (condition-case e (delete-process b) (error (cadr e)))))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(t t nil nil exit) ",
+            "(t nil open) ",
+            "(exit) ",
+            "(nil) ",
+            "(t nil) ",
+            "(t nil t) ",
+            "(\"Attempt to get process for a dead buffer\" ",
+            "\"Attempt to get process for a dead buffer\"))",
+        )
+    );
+}
