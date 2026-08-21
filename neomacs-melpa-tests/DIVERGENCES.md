@@ -23871,9 +23871,18 @@ green:**
 
 `cargo check -p neovm-core --all-targets` exit 0 and
 `cargo fmt --all -- --check` exit 0, both re-run after the last edit (load 35).
-The GNU-side sweeps in §1, §3 and §7 are ~1200 `-Q --batch` process launches
-against prebuilt binaries; they were taken at load 12-40, before the
-filesystem filled.
+`cargo check --workspace --all-targets` exit 0 (load 52.35 at start, 43.75 at
+finish) -- it reports two warnings, `maybe_keymap_in_obarray` unused in
+`builtins/keymaps.rs` and an unused doc comment in `jit/aot.rs`, both in files
+this branch does not touch.  The GNU-side sweeps in §1, §3 and §7 are ~1200
+`-Q --batch` process launches against prebuilt binaries; they were taken at
+load 12-40, before the filesystem filled.
+
+The workspace check is the one gate here that was *scheduled* rather than run
+on demand: at the moment it was wanted the box was at load 742 on 32 cores, so
+it went behind a poller that waited for the 1-minute average to fall below 60
+and then ran once.  That is the cheap version of what §10's last paragraph
+argues for, and it is why this entry can report the figure at all.
 
 **NOT run, and the branch is handed over saying so:**
 
