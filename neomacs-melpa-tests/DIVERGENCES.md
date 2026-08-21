@@ -28755,6 +28755,16 @@ true of the documentation TEXT and false of everything else.**  That is the
 entry's result: a fallback reproduces a last writer's *answers* almost exactly
 and reproduces none of its *state*.
 
+And the user-visible form of it, `C-h v case-fold-search` in `--batch`, first
+line of `*Help*` after the header:
+
+| | |
+| --- | --- |
+| GNU | `case-fold-search is a variable defined in 'C source code'.` |
+| before | (absent -- `describe-variable` prints `case-fold-search's value is t` and no `help-variable-def` button, because `lisp/help-fns.el:1403` got nil) |
+| after | byte-identical to GNU, button and all, over the whole buffer |
+
+
 ### 3. Why the text collision is one name and not ten: GNU's Lisp says so
 
 Ten of the 894 names are also defined somewhere in GNU's `lisp/`.  Nine of them
