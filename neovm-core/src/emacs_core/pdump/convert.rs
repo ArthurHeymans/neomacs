@@ -1420,28 +1420,49 @@ impl<'a> LoadDecoder<'a> {
                     with_tagged_heap(|heap| heap.alloc_macro(vec![Value::NIL; len]))
                 }
             }
-            DumpHeapObject::ByteCode(_) => Value::make_bytecode(ByteCodeFunction {
-                source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
-                ops: Vec::new(),
-                ops_sealed: false,
-                stack_verified: false,
-                constants: Vec::new().into(),
-                max_stack: 0,
-                params: LambdaParams::simple(Vec::new()),
-                arglist: Value::NIL,
-                lexical: false,
-                env: None,
-                gnu_byte_offset_map: None,
-                gnu_bytecode_bytes: None,
-                docstring: None,
-                doc_form: None,
-                interactive: None,
-                closure_slot_count: 4,
-                extra_slots: Vec::new(),
-                #[cfg(feature = "jit")]
-                runtime: crate::emacs_core::jit::Runtime::new(),
-                lazy_gnu_code: None,
-            }),
+            DumpHeapObject::ByteCode(_) => {
+                let function = ByteCodeFunction {
+                    source_id: crate::emacs_core::bytecode::fresh_bytecode_source_id(),
+                    ops: Vec::new(),
+                    ops_sealed: false,
+                    stack_verified: false,
+                    constants: Vec::new().into(),
+                    max_stack: 0,
+                    params: LambdaParams::simple(Vec::new()),
+                    arglist: Value::NIL,
+                    lexical: false,
+                    env: None,
+                    gnu_byte_offset_map: None,
+                    gnu_bytecode_bytes: None,
+                    docstring: None,
+                    doc_form: None,
+                    interactive: None,
+                    closure_slot_count: 4,
+                    extra_slots: Vec::new(),
+                    #[cfg(feature = "jit")]
+                    runtime: crate::emacs_core::jit::Runtime::new(),
+                    lazy_gnu_code: None,
+                };
+                // Install into the image-reserved ByteCodeObj when the dump
+                // mapped one (same space-then-populate deal markers use);
+                // populate overwrites the fields in place either way.
+                if let Some(ptr) =
+                    self.mapped_typed_object_for_object::<ByteCodeObj>(id, "bytecode")?
+                {
+                    unsafe {
+                        std::ptr::write(
+                            ptr,
+                            ByteCodeObj {
+                                header: VecLikeHeader::new(VecLikeType::ByteCode),
+                                data: function,
+                            },
+                        );
+                        Value::from_veclike_ptr(ptr.cast::<VecLikeHeader>())
+                    }
+                } else {
+                    Value::make_bytecode(function)
+                }
+            }
             DumpHeapObject::Record(items) => {
                 let len = self.mapped_slot_count_or(id, items.len())?;
                 if let Some(ptr) = self.mapped_typed_object_for_object::<RecordObj>(id, "record")? {

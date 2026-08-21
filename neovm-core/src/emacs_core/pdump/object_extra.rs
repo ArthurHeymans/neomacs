@@ -568,7 +568,7 @@ fn mapped_object_is_self_contained(
                 | VecLikeType::Record
                 | VecLikeType::CharTable
                 | VecLikeType::SubCharTable => Ok(true),
-                VecLikeType::Marker | VecLikeType::Overlay => Ok(false),
+                VecLikeType::Marker | VecLikeType::Overlay | VecLikeType::ByteCode => Ok(false),
                 other => Err(DumpError::ImageFormatError(format!(
                     "unexpected mapped vectorlike type {other:?} in object-starts"
                 ))),

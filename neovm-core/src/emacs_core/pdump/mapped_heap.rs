@@ -15,8 +15,9 @@ use super::types::{
 use super::value_fixups::RawValueFixup;
 use crate::heap_types::LispString;
 use crate::tagged::header::{
-    CharTableObj, ConsCell, FloatObj, GcHeader, HeapObjectKind, LambdaObj, MacroObj, MarkerObj,
-    OverlayObj, RecordObj, StringObj, SubCharTableObj, VecLikeHeader, VecLikeType, VectorObj,
+    ByteCodeObj, CharTableObj, ConsCell, FloatObj, GcHeader, HeapObjectKind, LambdaObj, MacroObj,
+    MarkerObj, OverlayObj, RecordObj, StringObj, SubCharTableObj, VecLikeHeader, VecLikeType,
+    VectorObj,
 };
 use crate::tagged::value::TaggedValue;
 use bytemuck::{Pod, Zeroable};
@@ -501,6 +502,9 @@ pub(crate) fn rebuild_heap_metadata(heap: &mut DumpTaggedHeap) -> Result<(), Dum
             DumpHeapObject::Record(_) => {
                 heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<RecordObj>());
             }
+            DumpHeapObject::ByteCode(_) => {
+                heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<ByteCodeObj>());
+            }
             DumpHeapObject::Marker(_) => {
                 heap.mapped_veclikes[index] = Some(layout.reserve_typed_object::<MarkerObj>());
             }
@@ -607,6 +611,9 @@ fn extract_tagged_heap_payloads(heap: &mut DumpTaggedHeap) -> MappedHeapPayload 
             }
             DumpHeapObject::Record(_) => {
                 heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<RecordObj>());
+            }
+            DumpHeapObject::ByteCode(_) => {
+                heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<ByteCodeObj>());
             }
             DumpHeapObject::Marker(_) => {
                 heap.mapped_veclikes[index] = Some(builder.reserve_typed_object::<MarkerObj>());
@@ -868,6 +875,14 @@ impl MappedHeapBuilder {
                     }
                 }
                 DumpHeapObject::ByteCode(function) => {
+                    if let Some(span) = heap.mapped_veclikes.get(index).copied().flatten() {
+                        // Space only: the loader placeholder ptr::writes the
+                        // full ByteCodeObj (header + empty function) and
+                        // populate installs the fields — same two-phase deal
+                        // markers use. Baking the header here keeps the image
+                        // self-describing for veclike_type().
+                        self.write_raw_veclike_header(span.offset as usize, VecLikeType::ByteCode);
+                    }
                     if let Some(span) = heap.mapped_slots.get(index).copied().flatten() {
                         let mut offset = span.offset as usize;
                         for slot in &function.constants {
