@@ -2602,10 +2602,15 @@ impl Obarray {
                                 _ => buf_fwd.default,
                             });
                         }
-                        _ => {
-                            // Phase 8a stub: other forwarder types
-                            // not yet implemented. Return the legacy
-                            // PLAINVAL fallback for now.
+                        // `Int`, `Bool`, `Obj` and `KboardObj` keep their
+                        // storage in the descriptor, so none of the buffer
+                        // context this function was handed applies to them;
+                        // the buffer-free walk reads them through
+                        // `do_symval_forwarding` and is the whole answer.
+                        LispFwdType::Int
+                        | LispFwdType::Bool
+                        | LispFwdType::Obj
+                        | LispFwdType::KboardObj => {
                             return self.find_symbol_value(current);
                         }
                     }
