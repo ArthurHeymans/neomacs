@@ -16,6 +16,7 @@ use crate::emacs_core::error::LispCondition;
 pub(crate) use crate::emacs_core::error::{
     expect_args, expect_fixnum, expect_max_args, expect_min_args,
 };
+use crate::window::body::{WindowBodyAxis, WindowBodyCellSize, WindowBodyUnit};
 use crate::window::{
     CombinationLimit, CursorTypeSymbol, DeleteResize, FrameFullscreen, FrameId, FrameManager,
     FrameParam, FrameParamKey, Rect, SplitDirection, SplitPlacement, Window,
@@ -85,6 +86,20 @@ fn expect_buffer_name_string(value: &Value) -> Result<String, Flow> {
                 vec![Value::symbol("stringp"), *value],
             )
         })
+}
+
+/// Decode the optional Lisp unit argument accepted by `window-body-*`.
+///
+/// This deliberately mirrors GNU `window_body_unit_from_symbol`: `nil` means
+/// canonical frame cells, the exact symbol `remap` means buffer-remapped
+/// default-face cells, and every other non-nil value means pixels.
+fn window_body_unit_from_lisp(value: Option<&Value>) -> WindowBodyUnit {
+    match value {
+        None => WindowBodyUnit::CanonicalChars,
+        Some(value) if value.is_nil() => WindowBodyUnit::CanonicalChars,
+        Some(value) if value.is_symbol_named("remap") => WindowBodyUnit::RemappedChars,
+        Some(_) => WindowBodyUnit::Pixels,
+    }
 }
 
 fn find_buffer_by_name_arg(
@@ -3034,15 +3049,26 @@ pub(crate) fn builtin_window_pixel_width(
 }
 /// `(window-body-height &optional WINDOW PIXELWISE)` -> integer.
 ///
-/// Returns the body height of WINDOW. When PIXELWISE is non-nil,
-/// return pixels; otherwise return character lines.
+/// Returns the body height of WINDOW.  PIXELWISE follows GNU's three-state
+/// contract: nil uses canonical lines, `remap` uses the buffer-remapped
+/// default face, and every other non-nil value uses pixels.
 /// Body excludes mode-line (one row) for non-minibuffer windows.
 pub(crate) fn builtin_window_body_height(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     eval.sync_pending_resize_events();
-    window_body_height_impl(&mut eval.frames, &mut eval.buffers, args)
+    expect_max_args("window-body-height", &args, 2)?;
+    let unit = window_body_unit_from_lisp(args.get(1));
+    let _ = ensure_selected_frame_id_in_state(&mut eval.frames, &mut eval.buffers);
+    let (fid, wid) = resolve_window_id_with_pred_in_state(
+        &mut eval.frames,
+        &mut eval.buffers,
+        args.first(),
+        "window-live-p",
+    )?;
+    let remapped = remapped_window_body_cell_size(eval, fid, unit);
+    window_body_height_for_window(&eval.frames, fid, wid, unit, remapped)
 }
 
 fn window_body_height_impl(
@@ -3054,68 +3080,90 @@ fn window_body_height_impl(
     let _ = ensure_selected_frame_id_in_state(frames, buffers);
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    let w = get_leaf(frames, fid, wid)?;
-    let pixelwise = args.get(1).is_some_and(|v| v.is_truthy());
-    if pixelwise {
-        if let Some(geometry) = redisplay_window_regions(frames, fid, wid)? {
-            return Ok(Value::fixnum(geometry.text_body().height().get() as i64));
-        }
-        let total = window_height_pixels(w);
-        let body = if is_minibuffer_window(frames, fid, wid) {
-            total
-        } else {
-            let mode_line_height = frames
-                .get(fid)
-                .map(|frame| frame.char_height.max(0.0) as i64)
-                .unwrap_or(0);
-            total.saturating_sub(mode_line_height)
-        };
-        Ok(Value::fixnum(body))
-    } else {
-        let char_height = frames
-            .get(fid)
-            .map(|frame| frame.char_height.max(1.0))
-            .unwrap_or(16.0);
-        let body_lines = match redisplay_window_regions(frames, fid, wid)? {
-            Some(geometry) => (geometry.text_body().height().get() / char_height).floor() as i64,
-            None => window_body_height_lines(frames, fid, wid, w),
-        };
-        Ok(Value::fixnum(body_lines))
+    let unit = window_body_unit_from_lisp(args.get(1));
+    window_body_height_for_window(frames, fid, wid, unit, None)
+}
+
+fn canonical_window_body_cell_size(frames: &FrameManager, fid: FrameId) -> WindowBodyCellSize {
+    frames
+        .get(fid)
+        .map(|frame| WindowBodyCellSize::new(frame.char_width, frame.char_height))
+        .unwrap_or_else(|| WindowBodyCellSize::new(8.0, 16.0))
+}
+
+fn remapped_window_body_cell_size(
+    eval: &mut super::eval::Context,
+    fid: FrameId,
+    unit: WindowBodyUnit,
+) -> Option<WindowBodyCellSize> {
+    if unit != WindowBodyUnit::RemappedChars {
+        return None;
     }
+    let font = super::font::resolve_current_buffer_remapped_default_face_font(eval, fid)?;
+    Some(WindowBodyCellSize::new(font.char_width, font.line_height))
+}
+
+fn window_body_height_for_window(
+    frames: &FrameManager,
+    fid: FrameId,
+    wid: WindowId,
+    unit: WindowBodyUnit,
+    remapped: Option<WindowBodyCellSize>,
+) -> EvalResult {
+    let window = get_leaf(frames, fid, wid)?;
+    let pixels = match redisplay_window_regions(frames, fid, wid)? {
+        Some(geometry) => geometry.text_body().height().get() as i64,
+        None => {
+            let total = window_height_pixels(window);
+            if is_minibuffer_window(frames, fid, wid) {
+                total
+            } else {
+                let mode_line_height = frames
+                    .get(fid)
+                    .map(|frame| frame.char_height.max(0.0) as i64)
+                    .unwrap_or(0);
+                total.saturating_sub(mode_line_height)
+            }
+        }
+    };
+    Ok(Value::fixnum(unit.measure(
+        WindowBodyAxis::Height,
+        pixels,
+        canonical_window_body_cell_size(frames, fid),
+        remapped,
+    )))
 }
 /// `(window-body-width &optional WINDOW PIXELWISE)` -> integer.
 ///
-/// Returns the body width of WINDOW. When PIXELWISE is non-nil,
-/// return pixels; otherwise return character columns.
+/// Returns the body width of WINDOW.  PIXELWISE follows GNU's three-state
+/// contract: nil uses canonical columns, `remap` uses the buffer-remapped
+/// default face, and every other non-nil value uses pixels.
 pub(crate) fn builtin_window_body_width(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
     eval.sync_pending_resize_events();
-    let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
     expect_max_args("window-body-width", &args, 2)?;
-    let _ = ensure_selected_frame_id_in_state(frames, buffers);
-    let (fid, wid) =
-        resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
-    let w = get_leaf(frames, fid, wid)?;
-    let pixelwise = args.get(1).is_some_and(|v| v.is_truthy());
-    if pixelwise {
-        let width = match redisplay_window_regions(frames, fid, wid)? {
-            Some(geometry) => geometry.text_body().width().get() as i64,
-            None => window_body_width_pixels(frames, fid, w),
-        };
-        Ok(Value::fixnum(width))
-    } else {
-        let cw = frames
-            .get(fid)
-            .map(|f| f.char_width.max(1.0))
-            .unwrap_or(8.0);
-        let width = match redisplay_window_regions(frames, fid, wid)? {
-            Some(geometry) => geometry.text_body().width().get() as i64,
-            None => window_body_width_pixels(frames, fid, w),
-        };
-        Ok(Value::fixnum((width as f32 / cw).floor() as i64))
-    }
+    let unit = window_body_unit_from_lisp(args.get(1));
+    let _ = ensure_selected_frame_id_in_state(&mut eval.frames, &mut eval.buffers);
+    let (fid, wid) = resolve_window_id_with_pred_in_state(
+        &mut eval.frames,
+        &mut eval.buffers,
+        args.first(),
+        "window-live-p",
+    )?;
+    let remapped = remapped_window_body_cell_size(eval, fid, unit);
+    let window = get_leaf(&eval.frames, fid, wid)?;
+    let pixels = match redisplay_window_regions(&eval.frames, fid, wid)? {
+        Some(geometry) => geometry.text_body().width().get() as i64,
+        None => window_body_width_pixels(&eval.frames, fid, window),
+    };
+    Ok(Value::fixnum(unit.measure(
+        WindowBodyAxis::Width,
+        pixels,
+        canonical_window_body_cell_size(&eval.frames, fid),
+        remapped,
+    )))
 }
 /// `(window-text-height &optional WINDOW PIXELWISE)` -> integer.
 pub(crate) fn builtin_window_text_height(

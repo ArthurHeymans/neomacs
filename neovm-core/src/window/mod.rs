@@ -16,6 +16,7 @@ use crate::gc_trace::GcTrace;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
+pub(crate) mod body;
 mod display;
 mod frame_params;
 pub mod geometry;

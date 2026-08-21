@@ -209,6 +209,21 @@ impl RecordingDisplayHost {
     }
 }
 
+fn remapped_mono_font_metrics() -> ResolvedFrameFont {
+    ResolvedFrameFont {
+        family: LispString::from_utf8("Remapped Mono"),
+        foundry: None,
+        weight: FontWeight::NORMAL,
+        slant: FontSlant::Normal,
+        width: FontWidth::Normal,
+        postscript_name: Some(LispString::from_utf8("RemappedMono-Regular")),
+        height_tenths: 240,
+        font_size_px: 28.0,
+        char_width: 16.0,
+        line_height: 32.0,
+    }
+}
+
 impl DisplayHost for RecordingDisplayHost {
     fn realize_gui_frame(&mut self, request: GuiFrameHostRequest) -> Result<(), String> {
         self.realized.borrow_mut().push(request);
@@ -1022,6 +1037,79 @@ fn window_body_width_pixelwise() {
     let val: i64 = r.strip_prefix("OK ").unwrap().trim().parse().unwrap();
     // PIXELWISE=t returns pixel width (frame 800).
     assert_eq!(val, 800);
+}
+
+#[test]
+fn window_body_width_remap_without_face_remapping_returns_columns() {
+    crate::test_utils::init_test_tracing();
+    let r = eval_one_with_frame("(window-body-width nil 'remap)");
+    assert_eq!(r, "OK 100");
+}
+
+#[test]
+fn window_body_remap_uses_the_current_buffer_default_face_metrics() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let buffer = eval.buffers.create_buffer("*remapped-window-body*");
+    eval.buffers.set_current(buffer);
+    let frame_id = eval.frames.create_frame("F1", 800, 600, buffer);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+    eval.set_display_host(Box::new(RecordingDisplayHost::with_resolved_frame_font(
+        remapped_mono_font_metrics(),
+    )));
+
+    let value = eval
+        .eval_str(
+            "(progn
+               (set (make-local-variable 'face-remapping-alist)
+                    '((default (:height 2.0))))
+               (list (window-body-width)
+                     (window-body-width nil 'remap)
+                     (window-body-height)
+                     (window-body-height nil 'remap)))",
+        )
+        .expect("window body units");
+
+    assert_eq!(
+        crate::emacs_core::print::print_value(&value),
+        "(97 48 35 17)"
+    );
+}
+
+#[test]
+fn window_body_remap_uses_the_current_buffers_face_remapping_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let displayed = eval.buffers.create_buffer("*displayed-window-body*");
+    eval.buffers.set_current(displayed);
+    let frame_id = eval.frames.create_frame("F1", 800, 600, displayed);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+
+    // GNU's `window_body_width` reads the buffer-local
+    // `Vface_remapping_alist` of the current buffer.  The WINDOW argument
+    // supplies geometry; it does not switch buffers as a side effect.
+    let query_buffer = eval.buffers.create_buffer("*query-window-body*");
+    eval.buffers.set_current(query_buffer);
+    eval.set_display_host(Box::new(RecordingDisplayHost::with_resolved_frame_font(
+        remapped_mono_font_metrics(),
+    )));
+
+    let value = eval
+        .eval_str(
+            "(progn
+               (set (make-local-variable 'face-remapping-alist)
+                    '((default (:height 2.0))))
+               (window-body-width nil 'remap))",
+        )
+        .expect("remapped width");
+
+    assert_eq!(value, Value::fixnum(48));
 }
 
 #[test]

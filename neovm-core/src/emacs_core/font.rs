@@ -2266,12 +2266,16 @@ fn resolve_face_layers_from_value(value: &Value) -> Vec<FaceLayer> {
 /// Extract the `face-remapping-alist` for a specific buffer.
 ///
 /// Checks the buffer-local binding first; falls back to the global value.
-fn face_remapping_for_buffer(eval: &super::eval::Context, buffer: &Buffer) -> FaceRemapping {
+fn face_remapping_value_for_buffer(eval: &super::eval::Context, buffer: &Buffer) -> Value {
     // Buffer-local binding takes priority
-    let value = buffer
+    buffer
         .get_buffer_local("face-remapping-alist")
         .or_else(|| eval.obarray().symbol_value("face-remapping-alist").copied())
-        .unwrap_or(Value::NIL);
+        .unwrap_or(Value::NIL)
+}
+
+fn face_remapping_for_buffer(eval: &super::eval::Context, buffer: &Buffer) -> FaceRemapping {
+    let value = face_remapping_value_for_buffer(eval, buffer);
 
     if value.is_nil() {
         FaceRemapping::new()
@@ -2280,21 +2284,52 @@ fn face_remapping_for_buffer(eval: &super::eval::Context, buffer: &Buffer) -> Fa
     }
 }
 
+fn face_remapping_value_for_current_buffer(eval: &super::eval::Context) -> Value {
+    eval.buffers
+        .current_buffer()
+        .map(|buffer| face_remapping_value_for_buffer(eval, buffer))
+        .unwrap_or_else(|| {
+            eval.obarray()
+                .symbol_value("face-remapping-alist")
+                .copied()
+                .unwrap_or(Value::NIL)
+        })
+}
+
+/// Resolve the default face after applying the current buffer's local face
+/// remapping and ask the display host for its actual cell metrics.
+///
+/// This is the evaluator-side equivalent of GNU `lookup_named_face` in
+/// `window_body_width`/`window_body_height`: GNU reads the buffer-local
+/// `Vface_remapping_alist` of the current buffer even when the query names a
+/// different window.  It returns `None` when no remapping is active or when no
+/// live host can realize the face; callers then use canonical frame metrics.
+pub(crate) fn resolve_current_buffer_remapped_default_face_font(
+    eval: &mut super::eval::Context,
+    frame_id: FrameId,
+) -> Option<super::eval::ResolvedFrameFont> {
+    let remapping_value = face_remapping_value_for_current_buffer(eval);
+    if remapping_value.is_nil() {
+        return None;
+    }
+
+    let remapping = FaceRemapping::from_lisp(&remapping_value);
+    let face_table = runtime_face_table_from_frame_lisp_faces(eval, frame_id, true);
+    let remapped_default = face_table.resolve_with_remapping("default", &remapping);
+    eval.display_host
+        .as_mut()?
+        .resolve_frame_font(frame_id, remapped_default)
+        .ok()
+        .flatten()
+}
+
 /// Extract the `face-remapping-alist` from the current buffer (if any).
 pub(crate) fn face_remapping_for_current_buffer(eval: &super::eval::Context) -> FaceRemapping {
-    if let Some(buf) = eval.buffers.current_buffer() {
-        face_remapping_for_buffer(eval, buf)
+    let value = face_remapping_value_for_current_buffer(eval);
+    if value.is_nil() {
+        FaceRemapping::new()
     } else {
-        let value = eval
-            .obarray()
-            .symbol_value("face-remapping-alist")
-            .copied()
-            .unwrap_or(Value::NIL);
-        if value.is_nil() {
-            FaceRemapping::new()
-        } else {
-            FaceRemapping::from_lisp(&value)
-        }
+        FaceRemapping::from_lisp(&value)
     }
 }
 
