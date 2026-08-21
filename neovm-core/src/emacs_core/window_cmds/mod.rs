@@ -5114,7 +5114,7 @@ fn screen_line_viewport(
     body_height: i64,
     buffer_end: EmacsBytePos,
 ) -> Result<ScreenLineViewport, Flow> {
-    let exclusive_end = crate::emacs_core::builtins::screen_line_motion_target(
+    let exclusive_end = crate::emacs_core::indent::screen_line_motion_target(
         eval,
         buffer_id,
         start,
@@ -5149,7 +5149,7 @@ fn scroll_origin(
     match viewport.locate(point) {
         PointViewportLocation::Visible => Ok(ScrollOrigin::WindowStart(window_start)),
         PointViewportLocation::Before | PointViewportLocation::After => {
-            let recovered = crate::emacs_core::builtins::screen_line_motion_target(
+            let recovered = crate::emacs_core::indent::screen_line_motion_target(
                 eval,
                 buffer_id,
                 point,
@@ -5213,7 +5213,7 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
     let pos;
     let mut next_point = pt;
     if lines > 0 {
-        pos = crate::emacs_core::builtins::screen_line_motion_target(
+        pos = crate::emacs_core::indent::screen_line_motion_target(
             eval,
             buffer_id,
             EmacsBytePos::new(start),
@@ -5232,7 +5232,7 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
         if start <= begv {
             return Err(scroll_down_batch_error());
         }
-        pos = crate::emacs_core::builtins::screen_line_motion_target(
+        pos = crate::emacs_core::indent::screen_line_motion_target(
             eval,
             buffer_id,
             EmacsBytePos::new(start),
@@ -5256,7 +5256,7 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
         )?;
         match viewport.locate(EmacsBytePos::new(pt)) {
             PointViewportLocation::After => {
-                next_point = crate::emacs_core::builtins::screen_line_motion_target(
+                next_point = crate::emacs_core::indent::screen_line_motion_target(
                     eval,
                     buffer_id,
                     viewport.exclusive_end,
@@ -5335,7 +5335,7 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
     // way redisplay counts them. Walking buffer newlines here instead made a
     // hidden line consume one of the ARG lines and left window-start one line
     // short of GNU's.
-    let (pos, _moved) = crate::emacs_core::builtins::symbols::screen_line_motion_target(
+    let (pos, _moved) = crate::emacs_core::indent::screen_line_motion_target(
         eval,
         buffer_id,
         pt,

@@ -39,9 +39,7 @@ use super::register::RegisterManager;
 use super::symbol::{ConstantWrite, Obarray};
 use super::threads::ThreadManager;
 use super::value::*;
-use crate::buffer::{
-    BufferId, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1,
-};
+use crate::buffer::{BufferId, BufferManager, CharPos0, EmacsBytePos, LispCharPos1};
 use crate::face::{Face as RuntimeFace, FaceTable, FontSlant, FontWeight, FontWidth};
 use crate::gc_trace::GcTrace;
 use crate::tagged::header::{
@@ -276,13 +274,7 @@ struct RedisplaySignature {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RedisplayFrameSignature {
-    id: u64,
-    width: u32,
-    height: u32,
-    char_width: u32,
-    char_height: u32,
-    font_pixel_size: u32,
-    visible: bool,
+    layout: crate::window::FrameLayoutInputState,
     selected_window: u64,
     window_state_change: bool,
     windows: Vec<RedisplayWindowSignature>,
@@ -290,45 +282,21 @@ struct RedisplayFrameSignature {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RedisplayWindowSignature {
-    id: u64,
-    buffer_id: u64,
-    bounds: (u32, u32, u32, u32),
-    window_start: LispCharPos1,
+    layout: crate::window::WindowLayoutInputState,
     window_end: crate::window::WindowEndState,
-    point: LispCharPos1,
     old_point: LispCharPos1,
-    hscroll: usize,
-    vscroll: i32,
-    preserve_vscroll_p: bool,
     buffer: Option<RedisplayBufferSignature>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RedisplayBufferSignature {
-    id: u64,
-    modified_tick: i64,
-    chars_modified_tick: i64,
-    overlay_modified_tick: i64,
+    layout: crate::window::BufferLayoutInputState,
     save_modified_tick: i64,
     autosave_modified_tick: i64,
     point: CharPos0,
     point_emacs_byte: EmacsBytePos,
-    begv: CharPos0,
-    begv_emacs_byte: EmacsBytePos,
-    zv: CharPos0,
-    zv_emacs_byte: EmacsBytePos,
-    total_chars: CharLen,
-    total_emacs_bytes: EmacsByteLen,
     last_window_start: LispCharPos1,
     last_selected_window: Option<u64>,
-}
-
-fn redisplay_f32_bits(value: f32) -> u32 {
-    if value == 0.0 {
-        0.0f32.to_bits()
-    } else {
-        value.to_bits()
-    }
 }
 
 /// Authoritative builtin registration entry.  The Lisp-visible static
@@ -8264,13 +8232,16 @@ impl Context {
                         .map(|window| match &window.buffer {
                             Some(buffer) => format!(
                                 "w{}:b{}:tick{}:chars{}:total{}",
-                                window.id,
-                                buffer.id,
-                                buffer.modified_tick,
-                                buffer.chars_modified_tick,
-                                buffer.total_chars.get()
+                                window.layout.id.0,
+                                buffer.layout.id.0,
+                                buffer.layout.modified_tick,
+                                buffer.layout.chars_modified_tick,
+                                buffer.layout.total_chars.get()
                             ),
-                            None => format!("w{}:b{}:NO-BUFFER-SIG", window.id, window.buffer_id),
+                            None => format!(
+                                "w{}:b{}:NO-BUFFER-SIG",
+                                window.layout.id.0, window.layout.buffer_id.0
+                            ),
                         })
                         .collect()
                 })
@@ -8404,28 +8375,18 @@ impl Context {
                 let Some(state) = window.redisplay_state() else {
                     continue;
                 };
+                let Some(layout) = frame.window_layout_inputs(window_id) else {
+                    continue;
+                };
                 windows.push(RedisplayWindowSignature {
-                    id: state.id.0,
-                    buffer_id: state.buffer_id.0,
-                    bounds: state.bounds,
-                    window_start: state.window_start,
+                    layout,
                     window_end: state.window_end,
-                    point: state.point,
                     old_point: state.old_point,
-                    hscroll: state.hscroll,
-                    vscroll: state.vscroll,
-                    preserve_vscroll_p: state.preserve_vscroll_p,
                     buffer: self.redisplay_buffer_signature(state.buffer_id),
                 });
             }
             RedisplayFrameSignature {
-                id: frame.id.0,
-                width: frame.width,
-                height: frame.height,
-                char_width: redisplay_f32_bits(frame.char_width),
-                char_height: redisplay_f32_bits(frame.char_height),
-                font_pixel_size: redisplay_f32_bits(frame.font_pixel_size),
-                visible: frame.visible,
+                layout: frame.layout_inputs(),
                 selected_window: frame.selected_window.0,
                 window_state_change: frame.window_state_change,
                 windows,
@@ -8450,23 +8411,12 @@ impl Context {
         id: crate::buffer::BufferId,
     ) -> Option<RedisplayBufferSignature> {
         let buffer = self.buffers.get(id)?;
-        let accessible_chars = buffer.accessible_char_region();
-        let accessible_bytes = buffer.accessible_emacs_byte_region();
         Some(RedisplayBufferSignature {
-            id: buffer.id.0,
-            modified_tick: buffer.modified_tick(),
-            chars_modified_tick: buffer.chars_modified_tick(),
-            overlay_modified_tick: buffer.overlay_modified_tick(),
+            layout: self.buffer_layout_inputs(id)?,
             save_modified_tick: buffer.save_modified_tick(),
             autosave_modified_tick: buffer.autosave_modified_tick,
             point: buffer.point_char_pos(),
             point_emacs_byte: buffer.point_emacs_byte_pos(),
-            begv: accessible_chars.start(),
-            begv_emacs_byte: accessible_bytes.start(),
-            zv: accessible_chars.end(),
-            zv_emacs_byte: accessible_bytes.end(),
-            total_chars: buffer.total_char_len(),
-            total_emacs_bytes: buffer.total_emacs_byte_len(),
             last_window_start: buffer.last_window_start,
             last_selected_window: buffer.last_selected_window.map(|id| id.0),
         })

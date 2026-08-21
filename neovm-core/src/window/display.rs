@@ -1,9 +1,45 @@
 use super::{
-    Frame, FrameManager, FrameParam, HorizontalScrollBarType, VerticalScrollBarType, Window,
-    WindowDisplayState, WindowId, WindowMargins,
+    BufferLayoutInputState, Frame, FrameId, FrameManager, FrameParam, HorizontalScrollBarType,
+    VerticalScrollBarType, Window, WindowDisplaySnapshot, WindowDisplaySnapshotFreshness,
+    WindowDisplayState, WindowId, WindowLayoutInputState, WindowMargins,
 };
 use crate::buffer::{BufferId, LispCharPos1};
 use crate::emacs_core::value::Value;
+use std::cell::Cell;
+
+thread_local! {
+    /// Mutation generation for retained-layout inputs that contain char tables.
+    ///
+    /// Char tables are mutable heap objects, so their tagged `Value` identity
+    /// does not change when a display table is edited in place. Keeping the
+    /// epoch local to the evaluator thread avoids unrelated parallel contexts
+    /// invalidating one another while making every in-thread mutation visible.
+    static CHAR_TABLE_LAYOUT_MUTATION_EPOCH: Cell<u64> = const { Cell::new(0) };
+
+    /// Unique identities for window-parameter states created on this
+    /// evaluator thread.  Window trees are cloned for saved configurations,
+    /// so a counter stored on the window itself can fork and later collide.
+    static WINDOW_PARAMETERS_LAYOUT_GENERATION: Cell<u64> = const { Cell::new(0) };
+}
+
+pub(crate) fn char_table_layout_mutation_epoch() -> u64 {
+    CHAR_TABLE_LAYOUT_MUTATION_EPOCH.with(Cell::get)
+}
+
+pub(crate) fn note_char_table_layout_mutation() {
+    CHAR_TABLE_LAYOUT_MUTATION_EPOCH.with(|epoch| epoch.set(epoch.get().wrapping_add(1)));
+}
+
+pub(super) fn next_window_parameters_generation() -> u64 {
+    WINDOW_PARAMETERS_LAYOUT_GENERATION.with(|generation| {
+        let next = generation
+            .get()
+            .checked_add(1)
+            .expect("window parameter layout generation exhausted");
+        generation.set(next);
+        next
+    })
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WindowBufferDisplayDefaults {
@@ -276,6 +312,143 @@ pub fn resolve_window_scroll_bar_geometry(
             0
         },
         horizontal_area_height,
+    }
+}
+
+impl Frame {
+    /// Canonical projection of every live-window input that can affect rows.
+    ///
+    /// Keeping effective margins, fringes, and scroll-bar partitions here
+    /// makes redisplay skipping and retained-row freshness share one source of
+    /// truth, including frame-default values inherited by a window.
+    pub(crate) fn window_layout_inputs(
+        &self,
+        window_id: WindowId,
+    ) -> Option<WindowLayoutInputState> {
+        let window = self.find_window(window_id)?;
+        let state = window.redisplay_state()?;
+        let Window::Leaf {
+            margins, display, ..
+        } = window
+        else {
+            return None;
+        };
+        let is_window_system = self.effective_window_system().is_some();
+        let left_fringe_width = if is_window_system {
+            if display.left_fringe_width >= 0 {
+                display.left_fringe_width
+            } else {
+                frame_default_left_fringe_width(self)
+            }
+        } else {
+            0
+        };
+        let right_fringe_width = if is_window_system {
+            if display.right_fringe_width >= 0 {
+                display.right_fringe_width
+            } else {
+                frame_default_right_fringe_width(self)
+            }
+        } else {
+            0
+        };
+        let is_minibuffer = self.minibuffer_window == Some(window_id);
+        let scroll_bars = resolve_window_scroll_bar_geometry(self, display, is_minibuffer);
+
+        Some(WindowLayoutInputState {
+            id: state.id,
+            buffer_id: state.buffer_id,
+            bounds: state.bounds,
+            window_start: state.window_start,
+            point: state.point,
+            hscroll: state.hscroll,
+            vscroll: state.vscroll,
+            preserve_vscroll_p: state.preserve_vscroll_p,
+            margins: *margins,
+            display_table_identity: display.display_table.bits(),
+            char_table_mutation_epoch: char_table_layout_mutation_epoch(),
+            window_parameters_generation: window.parameters_generation(),
+            left_fringe_width,
+            right_fringe_width,
+            fringes_outside_margins: display.fringes_outside_margins,
+            left_scroll_bar_width: scroll_bars.left_area_width,
+            right_scroll_bar_width: scroll_bars.right_area_width,
+            horizontal_scroll_bar_height: scroll_bars.horizontal_area_height,
+        })
+    }
+}
+
+impl crate::emacs_core::eval::Context {
+    /// Canonical buffer-layout projection shared with redisplay skipping.
+    pub(crate) fn buffer_layout_inputs(
+        &self,
+        buffer_id: BufferId,
+    ) -> Option<BufferLayoutInputState> {
+        let buffer = self.buffers.get(buffer_id)?;
+        Some(BufferLayoutInputState {
+            id: buffer.id,
+            modified_tick: buffer.modified_tick(),
+            chars_modified_tick: buffer.chars_modified_tick(),
+            props_modified_tick: buffer.props_modified_tick(),
+            overlay_modified_tick: buffer.overlay_modified_tick(),
+            accessible_chars: buffer.accessible_char_region().range(),
+            accessible_bytes: buffer.accessible_emacs_byte_region().range(),
+            total_chars: buffer.total_char_len(),
+            total_emacs_bytes: buffer.total_emacs_byte_len(),
+        })
+    }
+
+    /// Capture the complete layout identity for one live window.
+    ///
+    /// This is the single freshness boundary for consumers of retained rows.
+    /// Its frame/window/buffer projections are also used by the redisplay skip
+    /// signature, so both cache policies evolve together.
+    pub fn window_display_snapshot_freshness(
+        &self,
+        frame_id: FrameId,
+        window_id: WindowId,
+        buffer_id: BufferId,
+    ) -> Option<WindowDisplaySnapshotFreshness> {
+        let frame = self.frames.get(frame_id)?;
+        let window = frame.window_layout_inputs(window_id)?;
+        if window.buffer_id != buffer_id {
+            return None;
+        }
+        Some(WindowDisplaySnapshotFreshness {
+            context_instance_id: self.context_instance_id(),
+            frame: frame.layout_inputs(),
+            window,
+            buffer: self.buffer_layout_inputs(buffer_id)?,
+            face_change_count: self.face_change_count,
+            display_var_change_count: self.display_var_change_count,
+            redisplay_generation: self.redisplay_generation(),
+            media_generation: self.media_generation(),
+            function_epoch: self.obarray().function_epoch(),
+        })
+    }
+
+    /// Return retained rows only while every layout input still matches.
+    ///
+    /// Older snapshots without a full token retain the legacy `buffer_modiff`
+    /// gate. Fixtures with neither value explicitly opt into trusted synthetic
+    /// geometry.
+    pub fn fresh_window_display_snapshot(
+        &self,
+        frame_id: FrameId,
+        window_id: WindowId,
+        buffer_id: BufferId,
+    ) -> Option<&WindowDisplaySnapshot> {
+        let current = self.window_display_snapshot_freshness(frame_id, window_id, buffer_id)?;
+        let snapshot = self.frames.get(frame_id)?.redisplay_snapshot(window_id)?;
+        if let Some(recorded) = snapshot.layout_freshness {
+            return (recorded == current).then_some(snapshot);
+        }
+        if let Some(recorded_modiff) = snapshot.buffer_modiff
+            && recorded_modiff != current.buffer.modified_tick
+        {
+            return None;
+        }
+        Some(snapshot)
     }
 }
 

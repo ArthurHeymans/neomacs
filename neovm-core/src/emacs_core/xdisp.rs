@@ -3506,6 +3506,160 @@ fn invalid_named_face_diagnostics_in_buffer_region(
     diagnostics
 }
 
+/// Resolve a vertical pixel offset from the last live layout.
+///
+/// GNU moves a display iterator through rows using each row's realized pixel
+/// height.  The redisplay snapshot is neomacs's equivalent source of truth;
+/// the character-height scanner in `window_text_pixel_offset_target` is only
+/// a fallback when the requested motion leaves the cached visible rows.
+enum LiveWindowTextPixelOffset {
+    Target {
+        position: EmacsBytePos,
+        occupied: bool,
+    },
+    ScanLines(i64),
+}
+
+fn live_window_text_pixel_offset(
+    eval: &super::eval::Context,
+    frame_id: FrameId,
+    window_id: WindowId,
+    buffer_id: BufferId,
+    from: EmacsBytePos,
+    y_offset: i64,
+    char_height: f32,
+) -> Option<LiveWindowTextPixelOffset> {
+    let buffer = eval.buffers.get(buffer_id)?;
+    let from = buffer.emacs_byte_pos_to_lisp_char_pos(from);
+    let accessible_start = buffer.point_min_lisp_char_pos();
+    let accessible_end = buffer.point_max_lisp_char_pos();
+    let snapshot = eval.fresh_window_display_snapshot(frame_id, window_id, buffer_id)?;
+
+    let is_text_row = |row: &&DisplayRowSnapshot| {
+        row.start_buffer_pos
+            .zip(row.end_buffer_pos)
+            .is_some_and(|(start, end)| {
+                accessible_start <= start && start <= end && end <= accessible_end
+            })
+    };
+    let current_row = snapshot.rows.iter().filter(is_text_row).find(|row| {
+        row.start_buffer_pos
+            .zip(row.end_buffer_pos)
+            .is_some_and(|(start, end)| start <= from && from <= end)
+    })?;
+    let target_y = current_row.y.saturating_add(y_offset);
+    if let Some(target_row) = snapshot
+        .rows
+        .iter()
+        .filter(is_text_row)
+        .find(|row| target_y >= row.y && target_y < row.y.saturating_add(row.height.max(1)))
+    {
+        let target = target_row.start_buffer_pos?;
+        let occupied = target < accessible_end
+            || target_row.end_x > target_row.start_x
+            || target_row.end_col > target_row.start_col;
+        return Some(LiveWindowTextPixelOffset::Target {
+            position: buffer.lisp_pos_to_emacs_byte_pos(target),
+            occupied,
+        });
+    }
+
+    let char_height = f64::from(char_height.max(1.0));
+    if y_offset > 0 {
+        let last_row = snapshot.rows.iter().filter(is_text_row).next_back()?;
+        let last_bottom = last_row.y.saturating_add(last_row.height.max(1));
+        if target_y < last_bottom {
+            return None;
+        }
+        let known_crossings = snapshot
+            .rows
+            .iter()
+            .filter(is_text_row)
+            .filter(|row| row.y > current_row.y)
+            .count();
+        let remaining_pixels = target_y.saturating_sub(last_bottom) as f64;
+        let unknown_crossings = (remaining_pixels / char_height).floor() as usize;
+        let lines = known_crossings
+            .saturating_add(1)
+            .saturating_add(unknown_crossings);
+        return Some(LiveWindowTextPixelOffset::ScanLines(
+            i64::try_from(lines).unwrap_or(i64::MAX),
+        ));
+    }
+
+    let first_row = snapshot.rows.iter().filter(is_text_row).next()?;
+    if target_y >= first_row.y {
+        return None;
+    }
+    let known_crossings = snapshot
+        .rows
+        .iter()
+        .filter(is_text_row)
+        .filter(|row| row.y < current_row.y)
+        .count();
+    let remaining_pixels = first_row.y.saturating_sub(target_y) as f64;
+    let unknown_crossings = (remaining_pixels / char_height).ceil() as usize;
+    let lines = known_crossings.saturating_add(unknown_crossings);
+    Some(LiveWindowTextPixelOffset::ScanLines(
+        -i64::try_from(lines).unwrap_or(i64::MAX),
+    ))
+}
+
+fn window_text_pixel_offset_target(
+    eval: &mut super::eval::Context,
+    frame_id: FrameId,
+    window_id: WindowId,
+    buffer_id: BufferId,
+    from: EmacsBytePos,
+    y_offset: i64,
+    char_height: f32,
+    max_offset_rows: usize,
+) -> Result<(EmacsBytePos, bool), Flow> {
+    let lines = match live_window_text_pixel_offset(
+        eval,
+        frame_id,
+        window_id,
+        buffer_id,
+        from,
+        y_offset,
+        char_height,
+    ) {
+        Some(LiveWindowTextPixelOffset::Target { position, occupied }) => {
+            return Ok((position, y_offset > 0 && occupied));
+        }
+        Some(LiveWindowTextPixelOffset::ScanLines(lines)) => lines,
+        None => {
+            let offset_rows = (y_offset.unsigned_abs() as f64) / f64::from(char_height.max(1.0));
+            // GNU's forward pixel motion stays on the current display row
+            // until the offset reaches its lower edge. Backward motion instead
+            // selects the preceding row for any negative displacement.
+            let rows = if y_offset > 0 {
+                offset_rows.floor() as usize
+            } else {
+                offset_rows.ceil() as usize
+            }
+            .min(max_offset_rows);
+            i64::try_from(rows).unwrap_or(i64::MAX) * y_offset.signum()
+        }
+    };
+    let max_lines = i64::try_from(max_offset_rows).unwrap_or(i64::MAX);
+    let lines = lines.clamp(-max_lines, max_lines);
+    let window = Some(Value::make_window(window_id.0));
+    let motion =
+        super::indent::scan_screen_line_motion_target(eval, buffer_id, from, window, lines)?;
+    let target = if lines > 0 && motion.moved < lines {
+        motion.last_occupied_target
+    } else {
+        motion.target
+    };
+    let occupied = y_offset > 0
+        && eval
+            .buffers
+            .get(buffer_id)
+            .is_some_and(|buffer| target < buffer.accessible_emacs_byte_region().end());
+    Ok((target, occupied))
+}
+
 /// `(window-text-pixel-size &optional WINDOW FROM TO X-LIMIT Y-LIMIT MODE)` evaluator-backed variant.
 ///
 /// Computes approximate pixel dimensions of text in the window region.
@@ -3540,15 +3694,17 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
         return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
     };
 
-    let (initial_from_pos, y_offset, max_offset_rows) = {
+    let (initial_from_pos, to_pos, y_offset, max_offset_rows) = {
         let Some(buf) = eval.buffers.get(buf_id) else {
             return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
         };
         let (from_pos, y_offset) =
             window_text_pixel_size_from_pos(&eval.buffers, buf, args.get(1))?;
+        let to_pos = window_text_pixel_size_to_pos(&eval.buffers, buf, args.get(2), from_pos)?;
         let accessible = buf.accessible_emacs_byte_region();
         (
             from_pos,
+            to_pos,
             y_offset,
             accessible
                 .end()
@@ -3559,29 +3715,25 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
     };
 
     // Determine FROM/TO range.
-    let from_pos = if let Some(y_offset) = y_offset {
-        let rows = (((y_offset.unsigned_abs() as f64) / f64::from(char_h.max(1.0))).ceil()
-            as usize)
-            .min(max_offset_rows);
-        let lines = i64::try_from(rows).unwrap_or(i64::MAX) * y_offset.signum();
-        super::builtins::symbols::screen_line_offset_target(
+    let (from_pos, offset_landed_on_occupied_row) = if let Some(y_offset) = y_offset {
+        window_text_pixel_offset_target(
             eval,
-            Value::make_window(wid.0 as u64),
+            fid,
+            wid,
             buf_id,
             initial_from_pos,
-            lines,
+            y_offset,
+            char_h,
+            max_offset_rows,
         )?
     } else {
-        initial_from_pos
+        (initial_from_pos, false)
     };
-    let (to_pos, reported_start) = {
+    let reported_start = {
         let Some(buf) = eval.buffers.get(buf_id) else {
             return Ok(Value::cons(Value::fixnum(0), Value::fixnum(0)));
         };
-        (
-            window_text_pixel_size_to_pos(&eval.buffers, buf, args.get(2), from_pos)?,
-            y_offset.map(|_| Value::fixnum(buf.emacs_byte_pos_to_lisp_char_pos(from_pos).as_i64())),
-        )
+        y_offset.map(|_| Value::fixnum(buf.emacs_byte_pos_to_lisp_char_pos(from_pos).as_i64()))
     };
     // GNU's TO=t means measure through the line ending the last non-empty line,
     // not through trailing blank lines.
@@ -3599,7 +3751,7 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
 
     // Count lines and max columns in the region, honoring `display` text
     // properties (e.g. `(space :align-to N)`) that change a line's pixel width.
-    let text_metrics = region_text_metrics_with_display(
+    let mut text_metrics = region_text_metrics_with_display(
         eval,
         buf_id,
         from_pos,
@@ -3610,6 +3762,15 @@ pub(crate) fn builtin_window_text_pixel_size_ctx(
         None,
         wrap_columns,
     );
+    if offset_landed_on_occupied_row && from_pos >= to_pos {
+        // GNU keeps the adjusted iterator's current row in the vertical
+        // extent even when its original, pre-clipped TO is now at or before
+        // FROM.  No text width is traversed in that case.
+        text_metrics = RegionTextMetrics {
+            lines: 1,
+            max_columns: 0,
+        };
+    }
 
     let width = (text_metrics.max_columns as f32 * char_w).ceil() as i64;
     let mode_line_rows = if window_text_pixel_size_includes_mode_line(args.get(5)) {

@@ -1194,6 +1194,19 @@ fn register_builtin(ctx: &mut super::eval::Context, builtin: BuiltinRegistration
     }
 }
 
+pub(crate) fn register_builtin_requires_eval_state(
+    ctx: &mut super::eval::Context,
+    name: &'static str,
+    func: fn(&mut super::eval::Context, Vec<Value>) -> EvalResult,
+    min_args: u16,
+    max_args: Option<u16>,
+) {
+    register_builtin(
+        ctx,
+        BuiltinRegistration::requires_eval_state(name, func, min_args, max_args),
+    );
+}
+
 /// Register all builtins via defsubr — function pointer dispatch.
 ///
 /// This replaces the giant match-by-name block in dispatch_builtin.
@@ -2895,13 +2908,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(1),
         super::interactive::BuiltinInteractiveSpec::String("p"),
     );
-    ctx.defsubr_interactive(
-        "indent-to",
-        super::indent::builtin_indent_to,
-        1,
-        Some(2),
-        super::interactive::BuiltinInteractiveSpec::String("NIndent to column: "),
-    );
+    super::indent::syms_of_indent(ctx);
     ctx.defsubr(
         "selected-window",
         super::window_cmds::builtin_selected_window,
@@ -3319,15 +3326,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(2),
         super::interactive::BuiltinInteractiveSpec::String("P\np"),
-    );
-    register_builtin(
-        ctx,
-        BuiltinRegistration::requires_eval_state(
-            "vertical-motion",
-            builtin_vertical_motion,
-            1,
-            Some(3),
-        ),
     );
     ctx.defsubr(
         "next-window",
@@ -4211,25 +4209,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         2,
         Some(3),
     );
-    ctx.defsubr(
-        "current-indentation",
-        super::indent::builtin_current_indentation,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "current-column",
-        super::indent::builtin_current_column,
-        0,
-        Some(0),
-    );
-    ctx.defsubr_interactive(
-        "move-to-column",
-        super::indent::builtin_move_to_column,
-        1,
-        Some(2),
-        super::interactive::BuiltinInteractiveSpec::String("NMove to column: "),
-    );
     ctx.defsubr_interactive(
         "eval-buffer",
         super::lread::builtin_eval_buffer,
@@ -4442,12 +4421,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         super::process::builtin_set_process_inherit_coding_system_flag,
         2,
         Some(2),
-    );
-    ctx.defsubr(
-        "compute-motion",
-        super::indent::builtin_compute_motion,
-        7,
-        Some(7),
     );
     ctx.defsubr(
         "frame-parameter",
@@ -9287,12 +9260,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         Some(1),
         super::interactive::BuiltinInteractiveSpec::String("P"),
-    );
-    ctx.defsubr(
-        "line-number-display-width",
-        super::indent::builtin_line_number_display_width,
-        0,
-        None,
     );
     ctx.defsubr(
         "long-line-optimizations-p",

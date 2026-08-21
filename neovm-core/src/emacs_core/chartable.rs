@@ -1121,6 +1121,7 @@ pub(crate) fn fill_char_table_from_fillarray(table: &Value, item: Value) -> Resu
             obj.defalt = item;
             obj.contents.fill(item);
         });
+        crate::window::note_char_table_layout_mutation();
         return Ok(());
     }
 
@@ -1130,6 +1131,7 @@ pub(crate) fn fill_char_table_from_fillarray(table: &Value, item: Value) -> Resu
     // slot, but it does not rewrite the separate ASCII cache slot.
     ct_set_range_no_ascii_cache(&mut vec, 0, MAX_CHAR, item);
     let _ = table.replace_vector_data(vec);
+    crate::window::note_char_table_layout_mutation();
     Ok(())
 }
 
@@ -1164,6 +1166,7 @@ pub(crate) fn builtin_set_char_table_range(
         ValueKind::Nil => {
             if table.is_char_table() {
                 let _ = table.with_char_table_mut(|obj| obj.defalt = *value);
+                crate::window::note_char_table_layout_mutation();
                 return Ok(*value);
             }
             table.with_vector_data_mut(|vec| {
@@ -1175,6 +1178,7 @@ pub(crate) fn builtin_set_char_table_range(
             if table.is_char_table() {
                 set_char_table_ascii(*table, *value);
                 let _ = table.with_char_table_mut(|obj| obj.contents.fill(*value));
+                crate::window::note_char_table_layout_mutation();
                 return Ok(*value);
             }
             let key = Value::cons(Value::fixnum(0), Value::fixnum(MAX_CHAR));
@@ -1190,6 +1194,7 @@ pub(crate) fn builtin_set_char_table_range(
             };
             if table.is_char_table() {
                 char_table_set_char_direct(*table, ch, *value);
+                crate::window::note_char_table_layout_mutation();
                 return Ok(*value);
             }
             table.with_vector_data_mut(|vec| {
@@ -1205,6 +1210,7 @@ pub(crate) fn builtin_set_char_table_range(
             if min <= max {
                 if table.is_char_table() {
                     char_table_set_range_direct(*table, min, max, *value);
+                    crate::window::note_char_table_layout_mutation();
                     return Ok(*value);
                 }
                 let key = Value::cons(Value::fixnum(min), Value::fixnum(max));
@@ -1216,6 +1222,7 @@ pub(crate) fn builtin_set_char_table_range(
         _ => return Err(invalid_range_error("set-char-table-range", obarray)),
     }
 
+    crate::window::note_char_table_layout_mutation();
     Ok(*value)
 }
 
@@ -2000,6 +2007,7 @@ pub(crate) fn builtin_set_char_table_parent(args: Vec<Value>) -> EvalResult {
     } else {
         let _ = table.set_vector_slot(CT_PARENT, *parent);
     }
+    crate::window::note_char_table_layout_mutation();
     Ok(*parent)
 }
 
@@ -2962,6 +2970,7 @@ pub(crate) fn builtin_set_char_table_extra_slot(args: Vec<Value>) -> EvalResult 
             ));
         }
         let _ = table.with_char_table_mut(|obj| obj.extras.ensure_owned()[n as usize] = *value);
+        crate::window::note_char_table_layout_mutation();
         return Ok(*value);
     }
     let v = table.as_vector_data().unwrap();
@@ -2982,6 +2991,7 @@ pub(crate) fn builtin_set_char_table_extra_slot(args: Vec<Value>) -> EvalResult 
         store_value_atomic(&mut vec[slot_idx], *value);
         maybe_optimize_completed_translation_table(vec, n);
     });
+    crate::window::note_char_table_layout_mutation();
     Ok(*value)
 }
 

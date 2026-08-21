@@ -8,9 +8,10 @@
 //! - The **minibuffer window** is a special single-line window at the bottom.
 
 use crate::buffer::{
-    BufferId, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1,
-    TextPositionAnchor,
+    BufferId, BufferManager, CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos,
+    EmacsByteRange, LispCharPos1, TextPositionAnchor,
 };
+use crate::emacs_core::intern::SymId;
 use crate::emacs_core::value::{HashTableTest, Value};
 use crate::gc_trace::GcTrace;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -28,6 +29,7 @@ pub mod window_markers;
 
 pub use split::{CombinationLimit, DeleteOutcome, DeleteResize, ParentSeal, SplitAttachment};
 
+pub(crate) use display::note_char_table_layout_mutation;
 pub use display::{
     WindowBufferDisplayDefaults, WindowFringeDefaults, WindowScrollBarDefaults,
     WindowScrollBarGeometry, resolve_window_scroll_bar_geometry,
@@ -479,6 +481,59 @@ pub struct WindowRedisplayState {
     pub preserve_vscroll_p: bool,
 }
 
+/// Frame inputs that can change display-row geometry.
+///
+/// Redisplay skipping and retained-row freshness both consume this projection,
+/// so a new frame layout input cannot be added to one cache policy while being
+/// forgotten by the other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameLayoutInputState {
+    pub(crate) id: FrameId,
+    pub(crate) geometry: (u32, u32, u32, u32, u32),
+    pub(crate) device_scale_bits: u64,
+    pub(crate) visible: bool,
+    pub(crate) displays_chrome: bool,
+    pub(crate) has_window_system: bool,
+    pub(crate) window_system_symbol: Option<SymId>,
+}
+
+/// Window inputs that can change display-row geometry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowLayoutInputState {
+    pub(crate) id: WindowId,
+    pub(crate) buffer_id: BufferId,
+    pub(crate) bounds: (u32, u32, u32, u32),
+    pub(crate) window_start: LispCharPos1,
+    pub(crate) point: LispCharPos1,
+    pub(crate) hscroll: usize,
+    pub(crate) vscroll: i32,
+    pub(crate) preserve_vscroll_p: bool,
+    pub(crate) margins: WindowMargins,
+    pub(crate) display_table_identity: usize,
+    pub(crate) char_table_mutation_epoch: u64,
+    pub(crate) window_parameters_generation: u64,
+    pub(crate) left_fringe_width: i32,
+    pub(crate) right_fringe_width: i32,
+    pub(crate) fringes_outside_margins: bool,
+    pub(crate) left_scroll_bar_width: i64,
+    pub(crate) right_scroll_bar_width: i64,
+    pub(crate) horizontal_scroll_bar_height: i64,
+}
+
+/// Buffer inputs that can change display-row positions or geometry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BufferLayoutInputState {
+    pub(crate) id: BufferId,
+    pub(crate) modified_tick: i64,
+    pub(crate) chars_modified_tick: i64,
+    pub(crate) props_modified_tick: i64,
+    pub(crate) overlay_modified_tick: i64,
+    pub(crate) accessible_chars: CharRange,
+    pub(crate) accessible_bytes: EmacsByteRange,
+    pub(crate) total_chars: CharLen,
+    pub(crate) total_emacs_bytes: EmacsByteLen,
+}
+
 /// Zero-based glyph-matrix row coordinate.
 ///
 /// This deliberately does not accept or expose buffer positions, display
@@ -876,6 +931,8 @@ pub enum Window {
         dedicated: Value,
         /// Lisp-visible per-window parameter alist, newest entries first.
         parameters: WindowParameters,
+        /// Monotonic identity for changes to `parameters`.
+        parameters_generation: u64,
         /// Live-window history state mirrored from GNU `struct window`.
         history: WindowHistoryState,
         /// Desired height in lines (for fixed windows, 0 = flexible).
@@ -970,6 +1027,8 @@ pub enum Window {
         left_col: i64,
         /// Lisp-visible per-window parameter alist, newest entries first.
         parameters: WindowParameters,
+        /// Monotonic identity for changes to `parameters`.
+        parameters_generation: u64,
         /// Combination limit — prevents recombination when non-nil.
         /// Mirrors GNU Emacs `w->combination_limit`.
         combination_limit: bool,
@@ -1004,6 +1063,7 @@ impl Window {
             old_point: LispCharPos1::ONE,
             dedicated: Value::NIL,
             parameters: Vec::new(),
+            parameters_generation: 0,
             history: WindowHistoryState::default(),
             fixed_height: 0,
             fixed_width: 0,
@@ -1346,8 +1406,34 @@ impl Window {
 
     /// Return a mutable reference to this window's Lisp-visible parameter alist.
     pub fn parameters_mut(&mut self) -> &mut WindowParameters {
+        let next_generation = display::next_window_parameters_generation();
         match self {
-            Window::Leaf { parameters, .. } | Window::Internal { parameters, .. } => parameters,
+            Window::Leaf {
+                parameters,
+                parameters_generation,
+                ..
+            }
+            | Window::Internal {
+                parameters,
+                parameters_generation,
+                ..
+            } => {
+                *parameters_generation = next_generation;
+                parameters
+            }
+        }
+    }
+
+    pub const fn parameters_generation(&self) -> u64 {
+        match self {
+            Window::Leaf {
+                parameters_generation,
+                ..
+            }
+            | Window::Internal {
+                parameters_generation,
+                ..
+            } => *parameters_generation,
         }
     }
 
@@ -1873,8 +1959,34 @@ pub struct WindowDisplaySnapshot {
     /// recomputes from current buffer state. `None` disables the staleness
     /// gate (used by test fixtures that install a synthetic snapshot).
     pub buffer_modiff: Option<i64>,
+    /// Complete identity of the layout inputs that produced this snapshot.
+    ///
+    /// Production redisplay records this token. Display primitives compare it
+    /// with the evaluator's current token before consuming rows, so overlay
+    /// edits, narrowing, face changes, display variables and window geometry
+    /// cannot leave query-visible layout stale. `None` is reserved for
+    /// synthetic test fixtures that intentionally install trusted rows.
+    pub layout_freshness: Option<WindowDisplaySnapshotFreshness>,
     /// Exact end record produced by the same row walk as this snapshot.
     pub window_end_record: Option<WindowEndRecord>,
+}
+
+/// Opaque identity of every mutable input used to lay out one live window.
+///
+/// Construction and comparison live on `Context`; keeping these fields opaque
+/// prevents individual snapshot consumers from inventing partial freshness
+/// checks that drift apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowDisplaySnapshotFreshness {
+    pub(crate) context_instance_id: u64,
+    pub(crate) frame: FrameLayoutInputState,
+    pub(crate) window: WindowLayoutInputState,
+    pub(crate) buffer: BufferLayoutInputState,
+    pub(crate) face_change_count: u64,
+    pub(crate) display_var_change_count: u64,
+    pub(crate) redisplay_generation: u64,
+    pub(crate) media_generation: u64,
+    pub(crate) function_epoch: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2121,6 +2233,7 @@ impl Default for WindowDisplaySnapshot {
             points: Vec::new(),
             rows: Vec::new(),
             buffer_modiff: None,
+            layout_freshness: None,
             window_end_record: None,
         }
     }
@@ -2592,6 +2705,25 @@ impl Frame {
                 self.parameter("window-system")
                     .filter(|value| value.is_truthy())
             })
+    }
+
+    pub fn layout_inputs(&self) -> FrameLayoutInputState {
+        let window_system = self.effective_window_system();
+        FrameLayoutInputState {
+            id: self.id,
+            geometry: (
+                self.width,
+                self.height,
+                redisplay_f32_bits(self.char_width),
+                redisplay_f32_bits(self.char_height),
+                redisplay_f32_bits(self.font_pixel_size),
+            ),
+            device_scale_bits: self.device_scale_factor.to_bits(),
+            visible: self.visible,
+            displays_chrome: self.displays_chrome,
+            has_window_system: window_system.is_some(),
+            window_system_symbol: window_system.and_then(Value::as_symbol_id),
+        }
     }
 
     /// Update the frame's internal window-system kind and keep the Lisp-visible
@@ -4711,6 +4843,7 @@ fn make_split_sibling(
         buffer_id,
         bounds: sibling_bounds,
         parameters,
+        parameters_generation,
         dedicated,
         history,
         window_start,
@@ -4727,6 +4860,7 @@ fn make_split_sibling(
         *buffer_id = new_buffer_id;
         *sibling_bounds = bounds;
         parameters.clear();
+        *parameters_generation = 0;
         // GNU `make_window` leaves `w->dedicated` nil, and
         // `Fsplit_window_internal` copies only decorations (margins, fringes,
         // scroll bars) from the reference -- never the dedication.  Inheriting
@@ -4946,6 +5080,7 @@ fn split_window_in_tree(
                 },
                 bounds: old_bounds,
                 parameters: Vec::new(),
+                parameters_generation: 0,
                 combination_limit: new_parent_seal,
                 new_pixel: None,
                 new_total: None,
@@ -5065,6 +5200,7 @@ fn split_window_in_tree(
             },
             bounds: old_bounds,
             parameters: Vec::new(),
+            parameters_generation: 0,
             combination_limit: new_parent_seal,
             new_pixel: None,
             new_total: None,

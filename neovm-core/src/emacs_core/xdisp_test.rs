@@ -2165,6 +2165,130 @@ fn window_text_pixel_size_cons_from_reports_offset_start() {
 }
 
 #[test]
+fn window_text_pixel_size_clips_to_before_applying_from_offset() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\nc\nd\ne\n");
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(11), Value::fixnum(-3)),
+            Value::fixnum(1),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(1), Value::fixnum(3), Value::fixnum(5),])
+    );
+}
+
+#[test]
+fn window_text_pixel_size_keeps_row_height_when_offset_moves_past_to() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\nc\nd\ne\n");
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(1), Value::fixnum(3)),
+            Value::fixnum(3),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(0), Value::fixnum(1), Value::fixnum(7),])
+    );
+}
+
+#[test]
+fn window_text_pixel_size_negative_offset_at_clipped_to_has_zero_height() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\nc\n");
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(1), Value::fixnum(-1)),
+            Value::fixnum(1),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(0), Value::fixnum(0), Value::fixnum(1),])
+    );
+}
+
+#[test]
+fn window_text_pixel_size_offset_to_trailing_empty_row_has_zero_height() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\nc\n");
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(1), Value::fixnum(3)),
+            Value::fixnum(1),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(0), Value::fixnum(0), Value::fixnum(7),])
+    );
+}
+
+#[test]
+fn window_text_pixel_size_offset_in_empty_buffer_has_zero_height() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(1), Value::fixnum(1)),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(0), Value::fixnum(0), Value::fixnum(1),])
+    );
+}
+
+#[test]
 fn window_text_pixel_size_zero_cons_offset_preserves_pair_shape() {
     crate::test_utils::init_test_tracing();
     let (mut eval, selected_window) = pixel_size_tty_context();
@@ -2210,6 +2334,493 @@ fn window_text_pixel_size_positive_cons_offset_moves_forward() {
     assert_eq!(
         result,
         Value::list(vec![Value::fixnum(1), Value::fixnum(2), Value::fixnum(7),])
+    );
+}
+
+#[test]
+fn window_text_pixel_size_positive_subrow_offset_stays_on_current_row() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .char_height = 16.0;
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\nc\n");
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(1), Value::fixnum(1)),
+            Value::fixnum(7),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(1), Value::fixnum(48), Value::fixnum(1),])
+    );
+}
+
+#[test]
+fn window_text_pixel_size_offset_uses_live_row_pixel_heights() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .char_height = 16.0;
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\nc\n");
+
+    let row = |row, y, height, start, end| crate::window::DisplayRowSnapshot {
+        row,
+        y,
+        height,
+        start_buffer_pos: Some(crate::buffer::LispCharPos1::new(start)),
+        end_buffer_pos: Some(crate::buffer::LispCharPos1::new(end)),
+        ..Default::default()
+    };
+    let window_id = crate::window::WindowId(selected_window as u64);
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id,
+            rows: vec![
+                row(0, 0, 10, 1, 2),
+                row(1, 10, 30, 3, 4),
+                row(2, 40, 10, 5, 6),
+            ],
+            ..Default::default()
+        }]);
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(1), Value::fixnum(15)),
+            Value::fixnum(7),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(1), Value::fixnum(32), Value::fixnum(3),])
+    );
+}
+
+#[test]
+fn window_text_pixel_size_rejects_snapshot_after_overlay_change() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .char_height = 16.0;
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\nc\n");
+    let buffer_modiff = eval.buffers.get(buf_id).expect("buffer").modified_tick();
+    let overlay_modiff = eval
+        .buffers
+        .get(buf_id)
+        .expect("buffer")
+        .overlay_modified_tick();
+
+    let row = |row, y, height, start, end| crate::window::DisplayRowSnapshot {
+        row,
+        y,
+        height,
+        start_buffer_pos: Some(crate::buffer::LispCharPos1::new(start)),
+        end_buffer_pos: Some(crate::buffer::LispCharPos1::new(end)),
+        ..Default::default()
+    };
+    let window_id = crate::window::WindowId(selected_window as u64);
+    let frame_id = eval.frames.selected_frame().expect("selected frame").id;
+    let layout_freshness = eval
+        .window_display_snapshot_freshness(frame_id, window_id, buf_id)
+        .expect("freshness token");
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id,
+            rows: vec![
+                row(0, 0, 10, 1, 2),
+                row(1, 10, 30, 3, 4),
+                row(2, 40, 10, 5, 6),
+            ],
+            buffer_modiff: Some(buffer_modiff),
+            layout_freshness: Some(layout_freshness),
+            ..Default::default()
+        }]);
+
+    eval.eval_str(
+        "(let ((overlay (make-overlay 1 2)))\
+           (overlay-put overlay 'help-echo \"changed\"))",
+    )
+    .expect("mutate overlay state after snapshot");
+    let buffer = eval.buffers.get(buf_id).expect("buffer");
+    assert_eq!(buffer.modified_tick(), buffer_modiff);
+    assert_ne!(buffer.overlay_modified_tick(), overlay_modiff);
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(1), Value::fixnum(15)),
+            Value::fixnum(7),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(1), Value::fixnum(48), Value::fixnum(1),])
+    );
+}
+
+#[test]
+fn window_text_pixel_size_rejects_snapshot_after_narrowing() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .char_height = 16.0;
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\nc\n");
+    let buffer_modiff = eval.buffers.get(buf_id).expect("buffer").modified_tick();
+
+    let row = |row, y, start, end| crate::window::DisplayRowSnapshot {
+        row,
+        y,
+        height: 10,
+        start_buffer_pos: Some(crate::buffer::LispCharPos1::new(start)),
+        end_buffer_pos: Some(crate::buffer::LispCharPos1::new(end)),
+        ..Default::default()
+    };
+    let window_id = crate::window::WindowId(selected_window as u64);
+    let frame_id = eval.frames.selected_frame().expect("selected frame").id;
+    let layout_freshness = eval
+        .window_display_snapshot_freshness(frame_id, window_id, buf_id)
+        .expect("freshness token");
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id,
+            rows: vec![row(0, 0, 1, 2), row(1, 10, 3, 4), row(2, 20, 5, 6)],
+            buffer_modiff: Some(buffer_modiff),
+            layout_freshness: Some(layout_freshness),
+            ..Default::default()
+        }]);
+
+    eval.eval_str("(narrow-to-region 3 7)")
+        .expect("narrow after snapshot");
+    assert!(
+        eval.fresh_window_display_snapshot(frame_id, window_id, buf_id)
+            .is_none()
+    );
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(3), Value::fixnum(-1)),
+            Value::fixnum(7),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(1), Value::fixnum(32), Value::fixnum(3),])
+    );
+}
+
+#[test]
+fn retained_display_rows_reject_window_system_changes() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers.get_mut(buf_id).expect("buffer").insert("a\n");
+    let window_id = crate::window::WindowId(selected_window as u64);
+    let frame_id = eval.frames.selected_frame().expect("selected frame").id;
+    let layout_freshness = eval
+        .window_display_snapshot_freshness(frame_id, window_id, buf_id)
+        .expect("freshness token");
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id,
+            layout_freshness: Some(layout_freshness),
+            ..Default::default()
+        }]);
+    assert!(
+        eval.fresh_window_display_snapshot(frame_id, window_id, buf_id)
+            .is_some()
+    );
+
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol("neo")));
+
+    assert!(
+        eval.fresh_window_display_snapshot(frame_id, window_id, buf_id)
+            .is_none()
+    );
+}
+
+#[test]
+fn retained_display_rows_reject_window_margin_changes() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let window_id = crate::window::WindowId(selected_window as u64);
+    let frame_id = eval.frames.selected_frame().expect("selected frame").id;
+    let layout_freshness = eval
+        .window_display_snapshot_freshness(frame_id, window_id, buf_id)
+        .expect("freshness token");
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id,
+            layout_freshness: Some(layout_freshness),
+            ..Default::default()
+        }]);
+    assert!(
+        eval.fresh_window_display_snapshot(frame_id, window_id, buf_id)
+            .is_some()
+    );
+
+    eval.eval_str("(set-window-margins (selected-window) 2 1)")
+        .expect("change window margins after snapshot");
+
+    assert!(
+        eval.fresh_window_display_snapshot(frame_id, window_id, buf_id)
+            .is_none()
+    );
+}
+
+#[test]
+fn retained_display_rows_reject_window_display_table_changes() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let window_id = crate::window::WindowId(selected_window as u64);
+    let frame_id = eval.frames.selected_frame().expect("selected frame").id;
+    let display_table = eval
+        .eval_str("(make-char-table 'display-table)")
+        .expect("make display table");
+    eval.frames
+        .set_window_display_table(window_id, display_table);
+    let layout_freshness = eval
+        .window_display_snapshot_freshness(frame_id, window_id, buf_id)
+        .expect("freshness token");
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id,
+            layout_freshness: Some(layout_freshness),
+            ..Default::default()
+        }]);
+    assert!(
+        eval.fresh_window_display_snapshot(frame_id, window_id, buf_id)
+            .is_some()
+    );
+
+    crate::emacs_core::chartable::builtin_set_char_table_range(
+        vec![
+            display_table,
+            Value::fixnum('a' as i64),
+            Value::vector(vec![Value::fixnum('A' as i64)]),
+        ],
+        None,
+    )
+    .expect("mutate installed display table in place");
+    assert_eq!(
+        eval.frames.window_display_table(window_id).bits(),
+        display_table.bits()
+    );
+
+    assert!(
+        eval.fresh_window_display_snapshot(frame_id, window_id, buf_id)
+            .is_none()
+    );
+}
+
+#[test]
+fn retained_display_rows_reject_window_face_filter_parameter_changes() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let window_id = crate::window::WindowId(selected_window as u64);
+    let frame_id = eval.frames.selected_frame().expect("selected frame").id;
+    let layout_freshness = eval
+        .window_display_snapshot_freshness(frame_id, window_id, buf_id)
+        .expect("freshness token");
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id,
+            layout_freshness: Some(layout_freshness),
+            ..Default::default()
+        }]);
+    assert!(
+        eval.fresh_window_display_snapshot(frame_id, window_id, buf_id)
+            .is_some()
+    );
+
+    eval.eval_str("(set-window-parameter (selected-window) 'indent-bars-whr 'right)")
+        .expect("change a :window face-filter parameter after snapshot");
+
+    assert!(
+        eval.fresh_window_display_snapshot(frame_id, window_id, buf_id)
+            .is_none()
+    );
+}
+
+#[test]
+fn retained_display_rows_reject_restored_window_parameter_state() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let window_id = crate::window::WindowId(selected_window as u64);
+    let frame_id = eval.frames.selected_frame().expect("selected frame").id;
+    let saved_window = eval
+        .frames
+        .selected_frame()
+        .expect("selected frame")
+        .selected_window()
+        .expect("selected window")
+        .clone();
+
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .selected_window_mut()
+        .expect("selected window")
+        .parameters_mut()
+        .push((Value::symbol("indent-bars-whr"), Value::symbol("right")));
+    let layout_freshness = eval
+        .window_display_snapshot_freshness(frame_id, window_id, buf_id)
+        .expect("freshness token");
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id,
+            layout_freshness: Some(layout_freshness),
+            ..Default::default()
+        }]);
+    assert!(
+        eval.fresh_window_display_snapshot(frame_id, window_id, buf_id)
+            .is_some()
+    );
+
+    let mut restored_window = saved_window;
+    restored_window
+        .parameters_mut()
+        .push((Value::symbol("indent-bars-whr"), Value::symbol("left")));
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .root_window = restored_window;
+
+    assert!(
+        eval.fresh_window_display_snapshot(frame_id, window_id, buf_id)
+            .is_none()
+    );
+}
+
+#[test]
+fn window_text_pixel_size_preserves_pixel_progress_beyond_live_rows() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .char_height = 16.0;
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers
+        .get_mut(buf_id)
+        .expect("buffer")
+        .insert("a\nb\nc\nd\n");
+
+    let row = |row, y, start, end| crate::window::DisplayRowSnapshot {
+        row,
+        y,
+        height: 5,
+        start_buffer_pos: Some(crate::buffer::LispCharPos1::new(start)),
+        end_buffer_pos: Some(crate::buffer::LispCharPos1::new(end)),
+        ..Default::default()
+    };
+    let window_id = crate::window::WindowId(selected_window as u64);
+    eval.frames
+        .selected_frame_mut()
+        .expect("selected frame")
+        .commit_redisplay_cache_for_test(vec![crate::window::WindowDisplaySnapshot {
+            window_id,
+            rows: vec![row(0, 0, 1, 2), row(1, 5, 3, 4), row(2, 10, 5, 6)],
+            ..Default::default()
+        }]);
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(1), Value::fixnum(15)),
+            Value::fixnum(9),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(1), Value::fixnum(16), Value::fixnum(7),])
+    );
+}
+
+#[test]
+fn window_text_pixel_size_forward_offset_stays_on_final_unterminated_row() {
+    crate::test_utils::init_test_tracing();
+    let (mut eval, selected_window) = pixel_size_tty_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    eval.buffers.get_mut(buf_id).expect("buffer").insert("abc");
+
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![
+            Value::make_window(selected_window as u64),
+            Value::cons(Value::fixnum(1), Value::fixnum(1)),
+        ],
+    )
+    .expect("window-text-pixel-size");
+
+    assert_eq!(
+        result,
+        Value::list(vec![Value::fixnum(3), Value::fixnum(1), Value::fixnum(1),])
     );
 }
 

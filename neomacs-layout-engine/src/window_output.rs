@@ -1664,16 +1664,17 @@ impl WindowOutputEmitter {
         // redisplay — otherwise a stale snapshot returns positions that never
         // advance (e.g. `shr-fill-line` inserting text while rendering hangs at
         // 100% CPU).
-        let buffer_modiff = {
-            let buffer_id = evaluator
-                .frame_manager()
-                .get(frame_id)
-                .and_then(|frame| frame.find_window(window_id))
-                .and_then(|window| window.buffer_id());
-            buffer_id
-                .and_then(|buffer_id| evaluator.buffer_manager().get(buffer_id))
-                .map(|buffer| buffer.modified_tick())
-        };
+        let buffer_id = evaluator
+            .frame_manager()
+            .get(frame_id)
+            .and_then(|frame| frame.find_window(window_id))
+            .and_then(|window| window.buffer_id());
+        let buffer_modiff = buffer_id
+            .and_then(|buffer_id| evaluator.buffer_manager().get(buffer_id))
+            .map(|buffer| buffer.modified_tick());
+        let layout_freshness = buffer_id.and_then(|buffer_id| {
+            evaluator.window_display_snapshot_freshness(frame_id, window_id, buffer_id)
+        });
         let snapshot = WindowDisplaySnapshot {
             window_id,
             cell_origin,
@@ -1689,6 +1690,7 @@ impl WindowOutputEmitter {
             points: self.points,
             rows: self.rows,
             buffer_modiff,
+            layout_freshness,
             window_end_record: None,
         };
         if self.publish_live

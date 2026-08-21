@@ -8547,14 +8547,14 @@ fn scroll_down_page_scans_buffer_once_not_once_per_screen_row() {
     crate::window::window_markers::set_window_point_with_marker(&mut ev.buffers, window, end);
     crate::window::window_markers::set_window_start_with_marker(&mut ev.buffers, window, end);
 
-    crate::emacs_core::builtins::reset_screen_line_scan_steps_for_test();
+    crate::emacs_core::indent::reset_screen_line_scan_steps_for_test();
     crate::emacs_core::indent::reset_display_stop_recomputes_for_test();
     super::builtin_scroll_down(&mut ev, vec![Value::NIL]).expect("page up from end");
     let after_start = super::builtin_window_start(&mut ev, vec![Value::make_window(window_id.0)])
         .expect("window-start after page up")
         .as_fixnum()
         .expect("window-start is an integer");
-    let scan_steps = crate::emacs_core::builtins::screen_line_scan_steps_for_test();
+    let scan_steps = crate::emacs_core::indent::screen_line_scan_steps_for_test();
     let buffer_bytes = ev
         .buffers
         .get(buffer_id)

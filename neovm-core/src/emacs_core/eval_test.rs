@@ -1958,8 +1958,11 @@ fn overlay_property_change_invalidates_redisplay_signature() {
         .expect("buffer should still have a redisplay signature");
 
     assert_ne!(before, after);
-    assert_eq!(before.modified_tick, after.modified_tick);
-    assert_ne!(before.overlay_modified_tick, after.overlay_modified_tick);
+    assert_eq!(before.layout.modified_tick, after.layout.modified_tick);
+    assert_ne!(
+        before.layout.overlay_modified_tick,
+        after.layout.overlay_modified_tick
+    );
 }
 
 #[test]
@@ -4043,6 +4046,7 @@ fn read_char_mouse_press_uses_clicked_window_geometry() {
             logical_cursor: None,
             phys_cursor: None,
             buffer_modiff: None,
+            layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
@@ -4163,6 +4167,7 @@ fn read_key_sequence_uses_clicked_window_local_map_for_mouse_event() {
             logical_cursor: None,
             phys_cursor: None,
             buffer_modiff: None,
+            layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
@@ -4268,6 +4273,7 @@ fn read_key_sequence_drops_unbound_down_mouse_before_bound_click() {
             logical_cursor: None,
             phys_cursor: None,
             buffer_modiff: None,
+            layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
@@ -4836,6 +4842,7 @@ fn read_key_sequence_uses_clicked_window_buffer_local_minor_mode_maps() {
             logical_cursor: None,
             phys_cursor: None,
             buffer_modiff: None,
+            layout_freshness: None,
             window_end_record: None,
             points: vec![crate::window::DisplayPointSnapshot {
                 buffer_pos: crate::buffer::LispCharPos1::new(77),
@@ -4938,6 +4945,7 @@ fn read_key_sequence_prefixes_mode_line_mouse_click_for_lookup() {
             logical_cursor: None,
             phys_cursor: None,
             buffer_modiff: None,
+            layout_freshness: None,
             window_end_record: None,
             points: Vec::new(),
             rows: Vec::new(),
