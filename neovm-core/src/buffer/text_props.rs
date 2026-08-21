@@ -2708,6 +2708,43 @@ impl TextPropertyTable {
         changed
     }
 
+    /// Strip every property in `names` over `range` in ONE split+collect
+    /// interval walk. The per-name variant repeats that walk (and its
+    /// callers repeat their undo-run walk) per property; font-lock
+    /// unfontify removes several properties per edit.
+    pub fn remove_properties_in_char_range(&mut self, range: CharRange, names: &[Value]) -> bool {
+        self.mutation_tick += 1;
+        if names
+            .iter()
+            .any(|name| Self::name_is_syntax_relevant(*name))
+        {
+            self.syntax_prop_tick += 1;
+            // Same policy as the single-name removal: presence entries only
+            // bound runs, so keep them and revalidate the guard.
+            self.syntax_ranges_revalidate();
+        }
+        if range.is_empty() || names.is_empty() {
+            return false;
+        }
+        let mut changed = false;
+        let affected = self
+            .intervals
+            .existing_intervals_overlapping_after_splits(range);
+        for (_, id) in affected {
+            let mut node_changed = false;
+            for name in names {
+                if plist_value_remove(&mut self.intervals.nodes[id.0].plist, *name) {
+                    node_changed = true;
+                }
+            }
+            if node_changed {
+                self.intervals.nodes[id.0].refresh_cache();
+                changed = true;
+            }
+        }
+        changed
+    }
+
     pub fn remove_all_properties_in_char_range(&mut self, range: CharRange) {
         self.remove_all_properties_raw(range);
     }

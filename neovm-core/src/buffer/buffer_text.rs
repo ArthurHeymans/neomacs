@@ -1393,6 +1393,16 @@ impl BufferText {
             .remove_property_in_char_range(range, name)
     }
 
+    pub fn text_props_remove_properties_in_emacs_byte_range(
+        &self,
+        byte_range: EmacsByteRange,
+        names: &[Value],
+    ) -> bool {
+        let range = self.byte_range_to_char_range(byte_range);
+        Rc::make_mut(&mut self.storage.borrow_mut().text_props)
+            .remove_properties_in_char_range(range, names)
+    }
+
     pub fn text_props_remove_all_in_emacs_byte_range(&self, byte_range: EmacsByteRange) {
         let range = self.byte_range_to_char_range(byte_range);
         Rc::make_mut(&mut self.storage.borrow_mut().text_props)

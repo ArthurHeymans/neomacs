@@ -3074,6 +3074,17 @@ impl Buffer {
         )
     }
 
+    pub fn text_props_remove_properties_in_emacs_byte_range(
+        &mut self,
+        range: EmacsByteRange,
+        names: &[Value],
+    ) -> bool {
+        self.text.text_props_remove_properties_in_emacs_byte_range(
+            self.clamped_emacs_byte_range(range),
+            names,
+        )
+    }
+
     pub fn text_props_remove_property_in_emacs_byte_range(
         &mut self,
         range: EmacsByteRange,
@@ -5737,6 +5748,30 @@ impl BufferManager {
             .text
             .text_props_merge_adjacent_equal_around_emacs_byte_range(byte_range);
         Some(())
+    }
+
+    /// Batched sibling of
+    /// [`Self::remove_buffer_text_property_in_emacs_byte_range`]: one
+    /// undo-run walk and one interval walk cover every name. Undo entries
+    /// for distinct names commute, so per-run interleaving is equivalent
+    /// to the per-name sequential order.
+    pub fn remove_buffer_text_properties_in_emacs_byte_range(
+        &mut self,
+        id: BufferId,
+        byte_range: EmacsByteRange,
+        names: &[Value],
+    ) -> Option<bool> {
+        let buf = self.buffers.get_mut(&id)?;
+        let mut entries = Vec::new();
+        for run in buffer_text_property_undo_runs(buf, byte_range) {
+            for &name in names {
+                if let Some(old_value) = plist_get_eq(&run.plist, name) {
+                    entries.push(TextPropertyUndoEntry::new(name, old_value, run.range));
+                }
+            }
+        }
+        record_buffer_text_property_undo_entries(buf, entries);
+        Some(buf.text_props_remove_properties_in_emacs_byte_range(byte_range, names))
     }
 
     pub fn remove_buffer_text_property_in_emacs_byte_range(

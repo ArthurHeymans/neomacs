@@ -2367,28 +2367,16 @@ pub(crate) fn builtin_remove_list_of_text_properties_in_buffers(
         range
     };
 
-    let mut changed = false;
-    for name in names {
-        let byte_end_pos = byte_range.end();
-        let mut cursor = byte_range.start();
-        while cursor < byte_end_pos {
-            let Some(buf) = buffers.get(buf_id) else {
-                break;
-            };
-            if buf
-                .text_props_get_property_at_emacs_byte_pos(cursor, name)
-                .is_some()
-            {
-                changed = true;
-                break;
-            }
-            match buf.text_props_next_change_after_emacs_byte_pos(cursor) {
-                Some(next) if next > cursor && next < byte_end_pos => cursor = next,
-                _ => break,
-            }
-        }
-        let _ = buffers.remove_buffer_text_property_in_emacs_byte_range(buf_id, byte_range, name);
-    }
+    // One char-converted interval walk answers "does any of the names
+    // occur in the range" for every name at once. The per-name byte
+    // cursor walk this replaces paid two byte<->char conversions plus two
+    // tree queries PER interval boundary PER name — font-lock unfontify
+    // (`face`+`font-lock-face` over a freshly fontified region) made it
+    // the single hottest path in a kill/yank loop.
+    let changed = buffers.get(buf_id).is_some_and(|buf| {
+        buf.text_props_range_has_any_property_named_in_emacs_byte_range(byte_range, &names)
+    });
+    let _ = buffers.remove_buffer_text_properties_in_emacs_byte_range(buf_id, byte_range, &names);
     if changed {
         let _ = buffers.record_buffer_text_property_modification(buf_id, byte_range);
     }
