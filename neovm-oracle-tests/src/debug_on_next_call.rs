@@ -233,7 +233,7 @@ fn oracle_backtrace_debug_checks_level_with_two_different_predicates() {
           (backtrace-debug 1 2 3 4)
           (backtrace-debug 0 nil 'no-such-function)))"#;
     let expect = expect_test::expect![[
-        r#""OK (((backtrace-debug) (wrong-number-of-arguments backtrace-debug 0)) ((backtrace-debug 0) (wrong-number-of-arguments backtrace-debug 1)) ((backtrace-debug -1 nil) (wrong-type-argument wholenump -1)) ((backtrace-debug \"x\" nil) (wrong-type-argument fixnump \"x\")) ((backtrace-debug 1.0 nil) (wrong-type-argument fixnump 1.0)) ((backtrace-debug 99999 nil) nil) ((backtrace-debug 1 2 3 4) (wrong-number-of-arguments backtrace-debug 4)) ((backtrace-debug 0 nil (quote no-such-function)) nil))""#
+        r#""OK (((backtrace-debug) (wrong-number-of-arguments backtrace-debug 0)) ((backtrace-debug 0) (wrong-number-of-arguments backtrace-debug 1)) ((backtrace-debug -1 nil) (wrong-type-argument wholenump -1)) ((backtrace-debug \"x\" nil) (wrong-type-argument fixnump \"x\")) ((backtrace-debug 1.0 nil) (wrong-type-argument fixnump 1.0)) ((backtrace-debug 99999 nil) nil) ((backtrace-debug 1 2 3 4) (wrong-number-of-arguments backtrace-debug 4)) ((backtrace-debug 0 nil 'no-such-function) nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

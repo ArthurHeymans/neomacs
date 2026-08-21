@@ -1325,10 +1325,64 @@ fn documentation_property_eval_load_suffixes_integer_property_returns_string() {
     );
 }
 
+/// `native-comp-eln-load-path` is declared inside `#ifdef HAVE_NATIVE_COMP`,
+/// so a build without native compilation does not have the variable and GNU
+/// records no documentation for it.
+///
+/// GNU's `DEFVAR_LISP ("native-comp-eln-load-path", ...)` is at
+/// `src/comp.c:5742`, between the `#ifdef HAVE_NATIVE_COMP` that opens
+/// `syms_of_comp` (`src/comp.c:5568`) and the `#endif` that closes it
+/// (`src/comp.c:5826`); only `defsubr (&Snative_comp_available_p)`
+/// (`src/comp.c:5828`) sits outside.  Every Lisp reference is a valueless
+/// `(defvar native-comp-eln-load-path)` -- `lisp/startup.el:520`,
+/// `lisp/subr.el:3333`, `lisp/emacs-lisp/comp.el:43`,
+/// `lisp/emacs-lisp/comp-common.el:34` -- which makes the name special without
+/// binding it, and the one `setq` (`lisp/startup.el:538`) is reached only
+/// behind `(featurep 'native-compile)`, itself provided inside the same
+/// `#ifdef` (`src/comp.c:5825`).
+///
+/// This port is such a build: `native-comp-available-p` answers nil
+/// unconditionally, and nothing here ever binds the name.  So is the GNU
+/// binary the oracle runs against, measured directly -- `(boundp
+/// 'native-comp-eln-load-path)`, `(native-comp-available-p)` and
+/// `(featurep 'native-compile)` are all nil there, and
+/// `(documentation-property 'native-comp-eln-load-path
+/// 'variable-documentation)` is nil.
+///
+/// Three assertions, because "nil" alone would also pass if the doc record had
+/// simply been lost:
+///
+/// 1. the name is UNBOUND here, which is the reason;
+/// 2. the generated table still CARRIES the record, because GNU's `etc/DOC`
+///    carries it too -- `make-docfile` is a text scanner that ignores the
+///    preprocessor and `comp.o` is unconditionally in `base_obj`
+///    (`src/Makefile.in:459`, `470`, `667`);
+/// 3. `documentation-property` nevertheless answers nil, because
+///    `Fsnarf_documentation` gates the `Fput` on `Fboundp`
+///    (`src/doc.c:603-615`) -- see the comment at `src/doc.c:586-595`, which
+///    says in as many words that this is how docs for names another
+///    configuration declares are kept out.
+///
+/// Until ledger 173 added that gate this test asserted the doc string, i.e. it
+/// pinned a divergence: the port answered where GNU answers nil.
 #[test]
-fn documentation_property_eval_native_comp_eln_load_path_integer_property_returns_string() {
+fn documentation_property_eval_native_comp_eln_load_path_is_nil_when_unbound() {
     crate::test_utils::init_test_tracing();
     let mut evaluator = super::super::eval::Context::new();
+
+    let id = crate::emacs_core::intern::intern("native-comp-eln-load-path");
+    assert!(
+        !evaluator.obarray().boundp_id(id),
+        "this build must not bind a variable GNU declares only under HAVE_NATIVE_COMP"
+    );
+    assert!(
+        crate::emacs_core::var_docs::gnu_table::GNU_VAR_DOCS
+            .iter()
+            .any(|(name, doc)| *name == "native-comp-eln-load-path"
+                && doc.contains("native-compiled *.eln files")),
+        "the DOC record must stay in the table; GNU's etc/DOC has it too"
+    );
+
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1337,15 +1391,9 @@ fn documentation_property_eval_native_comp_eln_load_path_integer_property_return
         ],
     )
     .unwrap();
-    // The doc text now comes from the var_docs GNU table (Phase
-    // A7-A10), which preserves GNU's actual wording: "native-
-    // compiled *.eln files" rather than the legacy STUBS shim's
-    // "natively-compiled". The legacy spelling was a transcription
-    // artifact -- the GNU source uses "native-compiled".
     assert!(
-        result
-            .as_utf8_str()
-            .is_some_and(|s| s.contains("native-compiled *.eln files"))
+        result.is_nil(),
+        "GNU records no documentation for an unbound name, so documentation-property answers nil; got {result:?}"
     );
 }
 

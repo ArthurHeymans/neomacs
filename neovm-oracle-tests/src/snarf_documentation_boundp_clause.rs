@@ -48,8 +48,16 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 /// - `w32-quit-key`, `dos-codepage`, `haiku-control-keysym`,
 ///   `android-os-language`, `pgtk-keysym-table` -- the file is not compiled on
 ///   this platform, the case `src/doc.c:585-594` names.
-/// - `comp-abi-hash`, `comp-native-version-dir` -- `comp.c` is compiled but
-///   `syms_of_comp`'s declarations sit behind `#ifdef HAVE_NATIVE_COMP`.
+/// - `comp-abi-hash`, `comp-native-version-dir`, `native-comp-eln-load-path`
+///   -- `comp.c` is compiled but `syms_of_comp`'s declarations sit behind
+///   `#ifdef HAVE_NATIVE_COMP` (`src/comp.c:5568` to `src/comp.c:5826`; the
+///   third is declared at `src/comp.c:5742`).  The third one is here because
+///   ledger 176 found a unit test asserting its doc STRING: before entry 173's
+///   clause landed the port answered where GNU answers nil, and the test
+///   pinned that.  Its four Lisp mentions are all valueless `(defvar ...)`
+///   forms (`lisp/startup.el:520`, `lisp/subr.el:3333`,
+///   `lisp/emacs-lisp/comp.el:43`, `lisp/emacs-lisp/comp-common.el:34`), which
+///   make the name special without binding it.
 /// - `byte-metering-on` -- `bytecode.c`, behind `#ifdef BYTE_CODE_METER`.
 /// - `inhibit-try-window-id` -- `xdisp.c`, behind `#ifdef GLYPH_DEBUG`.  Its
 ///   sibling `inhibit-try-cursor-movement` is deliberately left out: Neomacs
@@ -72,11 +80,12 @@ fn oracle_a_variable_this_build_does_not_bind_has_no_documentation() {
                   (and (stringp doc) (car (split-string doc "\n"))))))
         '(w32-quit-key dos-codepage haiku-control-keysym android-os-language
           pgtk-keysym-table comp-abi-hash comp-native-version-dir
+          native-comp-eln-load-path
           byte-metering-on inhibit-try-window-id
           internal-interpreter-environment lucid--menu-grab-keyboard
           motif-version-string sfnt-raster-glyphs-exactly debug-end-pos))"#;
     let expect = expect_test::expect![[
-        r#""OK ((w32-quit-key nil nil) (dos-codepage nil nil) (haiku-control-keysym nil nil) (android-os-language nil nil) (pgtk-keysym-table nil nil) (comp-abi-hash nil nil) (comp-native-version-dir nil nil) (byte-metering-on nil nil) (inhibit-try-window-id nil nil) (internal-interpreter-environment nil nil) (lucid--menu-grab-keyboard nil nil) (motif-version-string nil nil) (sfnt-raster-glyphs-exactly nil nil) (debug-end-pos nil nil))""#
+        r#""OK ((w32-quit-key nil nil) (dos-codepage nil nil) (haiku-control-keysym nil nil) (android-os-language nil nil) (pgtk-keysym-table nil nil) (comp-abi-hash nil nil) (comp-native-version-dir nil nil) (native-comp-eln-load-path nil nil) (byte-metering-on nil nil) (inhibit-try-window-id nil nil) (internal-interpreter-environment nil nil) (lucid--menu-grab-keyboard nil nil) (motif-version-string nil nil) (sfnt-raster-glyphs-exactly nil nil) (debug-end-pos nil nil))""#
     ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -24123,6 +24123,28 @@ harness's own stop.
   of measured answers consulted by `check_forwarded_unbind`, would have fixed
   `makunbound` and left the `defvaralias` and `DEFVAR_KBOARD` rows in §3
   standing.  A dated note is on 168.
+
+> **2026-08-21, entry 176: the adoption sets `declared_special`, and GNU takes
+> it back off three names, not two.**  This entry's table gives all 578 rows the
+> `declared_special` that `defvar_lisp_nopro` sets (`src/lread.c:5274`), which
+> is right for 575 of them.  The merged 170-175 sweep failed
+> `compat_bootstrap_runtime_state` on it: with `features` special, the audit's
+> own `(let ((features '(cl-lib ...))) ...)` rebound the global under
+> `lexical-binding` and `featurep` -- which reads `Vfeatures` (`src/fns.c:3731`)
+> -- answered back the list the probe had just written.  GNU un-declares
+> `features` at `src/fns.c:6823`, four lines below its own `DEFVAR_LISP`, under
+> the comment "Let people use lexically scoped vars named `features'."  The
+> coordinator's interim fix carried `values` and `top-level` because it was
+> derived from a grep for `declared_special = false`, and GNU spells this third
+> one as a CALL: `Fmake_var_non_special (Qfeatures)`.  176 moves the exception
+> into the generated row as a `special:` column, so both halves refresh from the
+> mirror together and an exception cannot exist without its declaration.  This
+> entry's own gates could not have caught it: the flag is invisible to every
+> probe in §3 (unbind refusal, `defvaralias`, `make-local-variable`), and only
+> a `let` under `lexical-binding` can see it.  Nothing about the leaked
+> descriptor or the value it carries was involved -- see 176 §4, where that lead
+> is measured and eliminated.
+
 ## 171. The reported divergence is FOUR rows and not one, and the fourth is a signalled error rather than a coding difference: `(make-process :buffer B)` for a killed B errors where GNU returns a process, which is why GNU's `!BUFFER_LIVE_P` disjunct was unreachable here and why nothing that runs could have found it -- FIXED, four defects, and the mirrors 166 priced the untangling at have zero readers
 
 Entry 169 measured the GNU side so this entry would not have to (169 section 9
@@ -25149,6 +25171,25 @@ worth its own entry and it is small") was accurate about the parts it named --
 three dispatch checks and `do_debug_on_call` -- and short by the JIT's three
 lowerings, `backtrace-debug`'s missing store, the `fixnump`/`wholenump` split and
 `call_debugger`'s absence as a shared function.
+
+> **2026-08-21, entry 176: the `backtrace-debug` pin recorded a print form
+> neither editor produces.**  Running the oracle gate on the merged 170-175 tree
+> failed `oracle_backtrace_debug_checks_level_with_two_different_predicates` on
+> the last row of its own probe list: the pin expects `((backtrace-debug 0 nil
+> (quote no-such-function)) nil)` and both editors produce `((backtrace-debug 0
+> nil 'no-such-function) nil)`, because `print-quoted` defaults to t and `prin1`
+> writes the reader shorthand.  Measured against GNU 31.0.90 and a release
+> binary of this tree, the row is byte-identical on both sides, so it was a
+> stale pin and not a divergence -- the two strings differ by exactly the seven
+> characters of `(quote )` against `'`, 498 bytes against 491.  176 corrects the
+> expect; nothing about this entry's finding changes.
+>
+> It survived this entry's own gates because the test opens with
+> `return_if_neovm_enable_oracle_proptest_not_set!()`: an oracle suite run
+> without `NEOVM_FORCE_ORACLE_PATH` returns before asserting anything and
+> nextest reports the test as passed.  A green oracle suite is evidence only
+> about the tests that ran, and `0 skipped` is the line that says they did.
+
 ## 173. Entry 168's handed-over clause: GNU decides a built-in variable's documentation by asking `Fboundp`, once, at dump time -- so the port of it is a question rather than a filter, and the 49 names it "would break" turn out to be 49 declarations missing from `syms_of_*` blocks this port already declares from, nought of which cannot be bound here -- FIXED
 
 Entry 168 sized this and deliberately stopped: gating on boundness "would fix
@@ -25803,6 +25844,30 @@ Status: FIXED.
 > deterministically erased, while the `ack:` line requires the child to be
 > scheduled after Emacs's write and is therefore a race.  174 removes `ack:`
 > from the stand-in's stdout; the pinned value is unchanged.
+
+
+> **2026-08-21, entry 176: the clause was right, and it turned a test that had
+> been pinning the old answer red.**  The merged 170-175 sweep failed
+> `documentation_property_eval_native_comp_eln_load_path_integer_property_returns_string`,
+> which asserted a doc STRING for `native-comp-eln-load-path`.  GNU answers nil:
+> the variable is declared at `src/comp.c:5742`, inside the `#ifdef
+> HAVE_NATIVE_COMP` that spans `src/comp.c:5568-5826`, and the oracle binary --
+> like this port -- has no native compilation, so `boundp` is nil and this
+> entry's own clause withholds the doc.  That is the clause working.  What this
+> entry did not record is that landing it makes any test pinning the previous
+> answer fail, and one existed; 176 rewrites it to assert GNU's answer and adds
+> the name beside its siblings `comp-abi-hash` and `comp-native-version-dir` in
+> this entry's oracle pin.  176's neighbour audit swept the other 20
+> `variable-documentation` tests in `doc_test.rs` and found no second instance.
+>
+> One correction to this entry's scope rather than its content: the gate is
+> authoritative only for names with **no seeded plist entry**.
+> `eval.rs:5175-5185` pre-seeds `variable-documentation` for every name in
+> `STARTUP_VARIABLE_DOC_STUBS` and `STARTUP_VARIABLE_DOC_STRING_PROPERTIES`, and
+> those plist arms answer before `SnarfedVariable::if_bound_in` is consulted --
+> one of them through an `or_else` that falls back to the stub even when the
+> gate said no.  `ctl-x-4-map` is unbound here and gets its doc anyway.  176
+> records it as found-and-not-fixed with the reasoning.
 
 ## 174. The dump is written from inside `-l loadup`, so the image carries mid-load state -- `load-in-progress` never left `t`, and `f-this-file` is only the caller that had a test; plus the other seven standing melpa failures, attributed one by one -- FIXED (four engine defects, two fixtures), two left open with their measurement
 
@@ -26993,3 +27058,417 @@ walk order (169 residual 1), §4 `signal-process`'s number domain (169 residual
 single most useful thing in it is a negative: the first probe of the ordering
 item looked exactly like a refutation, and treating it as one would have closed
 a real divergence permanently.
+
+## 176. The merged 170-175 sweep's two remaining failures: GNU takes `declared_special` back off `features` too, and it spells that one as a CALL -- so the hand-maintained exception list was one GNU spelling away from silently wrong; and the eln-load-path doc test had been pinning a divergence that entry 173 removed -- FIXED
+
+Ledgers 170-175 landed as six branches, each gated on compile, fmt and its own
+pins in isolation.  The merged tree failed three tests no branch gate could
+have caught.  The coordinator fixed one (`values`) and handed over two.  Both
+are fixed here.  Both failed **in isolation**, so neither is environmental, and
+both were reproduced before anything was read.
+
+Neither turned out to be what its brief guessed, and in opposite directions:
+the first is a defect ledger 170 **created** and not, as the lead proposed, a
+pre-existing one it exposed; the second is a defect ledger 173 **removed**,
+leaving behind a test that had been pinning it.
+
+### 1. `compat_bootstrap_runtime_state` -- reproduced
+
+`neovm-core/tests/compat_bootstrap_runtime_state.rs`, run alone, twice (11.4 s
+cold, 3.97 s warm), oracle `NEOVM_FORCE_ORACLE_PATH` = GNU 31.0.90:
+
+```
+GNU:   ((cl-lib nil) (cl-macs nil) (cl-seq nil) (cl-extra nil) (gv nil) (icons nil) (pcase nil))
+NeoVM: ((cl-lib t)   (cl-macs t)   (cl-seq t)   (cl-extra t)   (gv t)   (icons t)   (pcase t))
+```
+
+The variable half of the same probe **already matched**, in both editors:
+`pcase--memoize`, `pcase--dontwarn-upats`, `pcase--find-macro-def-regexp`,
+`icon-preference`, `icon` and `icon-button` are all unbound on both sides.
+That is the shape of the answer: an editor that had genuinely loaded `pcase`
+would have `pcase--memoize` bound.  Neither editor has loaded it.  Only the
+`features` answer disagreed, and it disagreed with the rest of its own probe.
+
+### 2. The GNU source, read before designing
+
+`Vfeatures` is declared, initialised, given a `Q`-identifier -- and then
+un-declared, four lines later:
+
+```c
+  DEFVAR_LISP ("features", Vfeatures,
+    doc: /* A list of symbols which are the features of the executing Emacs.
+Used by `featurep' and `require', and altered by `provide'.  */);
+  Vfeatures = list1 (Qemacs);
+  DEFSYM (Qfeatures, "features");
+  /* Let people use lexically scoped vars named `features'.  */
+  Fmake_var_non_special (Qfeatures);
+```
+
+(`src/fns.c:6817-6823`.)  GNU says why in the comment.  `Fmake_var_non_special`
+is the Lisp-visible `internal-make-var-non-special`, and its body is the same
+one line the other exceptions write out longhand:
+
+```c
+DEFUN ("internal-make-var-non-special", Fmake_var_non_special,
+       Smake_var_non_special, 1, 1, 0,
+       doc: /* Internal function.  */)
+     (Lisp_Object symbol)
+{
+  CHECK_SYMBOL (symbol);
+  XSYMBOL (symbol)->u.s.declared_special = false;
+  return Qnil;
+}
+```
+
+(`src/eval.c:1065-1073`.)  Every `DEFVAR_*` sets that flag on the way in --
+`defvar_lisp_nopro`, `src/lread.c:5274` -- which is what makes it readable off
+the `DEFVAR` head for the other 575 rows.
+
+`Ffeaturep` reads the **global**: `tem = Fmemq (feature, Vfeatures);`
+(`src/fns.c:3731`, in the `DEFUN` at `src/fns.c:3719`).  So whether a `let` of
+the name `features` can change `featurep`'s answer is decided entirely by
+whether the symbol is special.
+
+The exhaustive enumeration over GNU's `src/`, both spellings:
+
+| site | name | spelling |
+| --- | --- | --- |
+| `src/fns.c:6823` (declared `:6817`) | `features` | `Fmake_var_non_special (Qfeatures);` |
+| `src/keyboard.c:13955` (declared `:13951`) | `top-level` | `XSYMBOL (Qtop_level)->u.s.declared_special = false;` |
+| `src/lread.c:5596` (declared `:5592`) | `values` | `XBARE_SYMBOL (intern ("values"))->u.s.declared_special = false;` |
+| `src/alloc.c:3672` | -- | `p->u.s.declared_special = false;` -- fresh symbol init |
+| `src/eval.c:1071` | -- | the body of the primitive itself |
+
+The last two are not exceptions, and what disqualifies them is **structural
+rather than which file they are in: neither names a symbol.**  One writes
+through a C pointer to a just-allocated symbol, the other through whatever
+parameter it was handed at runtime.  A per-name exception has to have a name.
+
+### 3. Root cause
+
+The audit's own form opens:
+
+```elisp
+(let ((features '(cl-lib cl-macs cl-seq cl-extra gv icons pcase))
+      (vars '(...)))
+  ...)
+```
+
+and the oracle harness evaluates with `lexical-binding` = t
+(`neovm-core/tests/common/mod.rs:115`, `(eval (read source-buf) t)`).  In GNU
+`features` is not special, so that `let` makes an ordinary lexical variable,
+the global `Vfeatures` is untouched, and `featurep` answers nil for all seven.
+
+Ledger 170 adopted all 578 `DEFVAR_LISP`/`DEFVAR_KBOARD` names and gave each
+the `declared_special` its macro implies; `features` is row `fns.c:6817` of
+that table.  Special, the `let` rebinds the global dynamically, and `featurep`
+reads back exactly the list the test had just written -- t, seven times.  The
+probe was reporting its own argument.
+
+Measured directly, GNU: `(special-variable-p 'features)` -> nil;
+`(eval '(let ((features '(cl-lib))) (featurep 'cl-lib)) t)` -> nil;
+the same form with `lexical-binding` nil -> **t**.  The scoping is the whole
+mechanism.
+
+**So 170 created this, rather than exposing something pre-existing.**  Before
+170 `features` was not special here either, which happened to match GNU.
+
+### 4. The `Box::leak` lead -- eliminated, and it was the coordinator's
+
+The handover proposed, explicitly as a lead and not a conclusion, that 170 did
+not create a divergence but made a pre-existing one visible: `alloc_objfwd`
+(`neovm-core/src/emacs_core/forward.rs:669`) `Box::leak`s a descriptor seeded
+with the value the symbol holds at adoption time, `features` is in that table,
+so a bootstrap that loads `cl-lib` where GNU's does not would become newly
+observable once `features` forwards.
+
+Refuted by measuring the surface instead of reasoning about it.  A probe of the
+real bootstrap path -- `create_bootstrap_evaluator_cached` ->
+`apply_runtime_startup_state` -> `snapshot_evaluator` -> `restore_snapshot`,
+i.e. the three stages the harness actually uses -- asked
+`(list (featurep 'pcase) (featurep 'cl-lib) (length features) ...)` at each:
+
+```
+AFTER-BOOTSTRAP: (nil nil 116 nil)
+AFTER-STARTUP:   (nil nil 116 nil)
+AFTER-RESTORE:   (nil nil 116 nil)
+```
+
+The global `features` was never wrong, at any stage.  `load.rs:443`'s
+`TRANSIENT_RUNTIME_FEATURES` and `clear_transient_runtime_features` already
+remove those seven names (plus `rx`) at the end of
+`apply_runtime_startup_state`, and they worked.  Nothing about the value, the
+leaked descriptor, or the pdump round-trip was involved -- only one bit that
+travels with the symbol and not with its value.
+
+Eliminated with it: "our loadup provides what GNU's does not."  GNU's does not
+either, and for a reason its own file states -- `lisp/loadup.el:149-157` loads
+`pcase` only when `macroexpand-all` is not already compiled, and
+`lisp/loadup.el:181-195` `require`s `gv` only when `add-hook` is still
+interpreted.  Both are bootstrap-only branches; a pdump build takes neither.
+GNU's dumped image has 128 features and none of the seven.  `grep -n features
+lisp/loadup.el` returns nothing at all: loadup never filters the list.
+
+The release-binary probe the handover flagged as "a different surface" is
+consistent with all of this and needed no reconciling: it reported `:cl-lib t`
+because it asked a differently-shaped question, not because the two surfaces
+disagree about `features`.
+
+### 5. Why the coordinator's own `values` fix did not cover it
+
+`DECLARED_SPECIAL_EXCEPTIONS` was derived from a grep for `declared_special =
+false` and found two names.  GNU spells the third as a call.  The list was
+correct about everything it could see and silently incomplete about the rest.
+
+This is entry 173's class one level up.  173's extractor bugs were a generator
+unable to see a statement that **follows** a `DEFVAR`; this is a hand list
+unable to see a second **spelling** of that statement.  The handover anticipated
+the first half of that -- "a generator that sees `declared_special = false` is
+better" -- and a generator that saw only `declared_special = false` would still
+have missed `features`.
+
+### 6. The fix: the exception is a column on the declaration, not a list beside it
+
+`scripts/extract_gnu_defvar_object_names.py` now reads both spellings,
+resolves `Q`-identifiers through GNU's own `DEFSYM` table, and emits a
+`special:` column on every row.  A site qualifies only if it names a symbol
+(`Q<sym>` resolvable via `DEFSYM`, or `intern ("name")`); the script errors on a
+`Q` it cannot resolve, errors on a name un-declared but never `DEFVAR`'d, and
+reports what it skipped.  Run against GNU 31.0.90:
+
+```
+578 names (564 Lisp_Objfwd, 14 Lisp_Kboard_Objfwd) -> .../defvar_object/gnu_table.rs
+3 un-declared as special: features (fns.c:6823), top-level (keyboard.c:13955), values (lread.c:5596)
+  skipped eval.c:1071: `symbol' is not a symbol literal
+```
+
+`src/alloc.c:3672` never matched at all -- it has no `XSYMBOL` wrapper -- and
+`src/eval.c:1071` was skipped by the naming rule, out loud, with its reason.
+
+The row set is unchanged: **578 rows before, 578 after**, and stripping the new
+column reproduces the committed table byte-for-byte apart from the header.
+
+**Why a column and not a better list** -- the handover invited the argument.  A
+two-name list with citations is defensible exactly as long as the citations are
+complete, and these were not; the failure mode being designed out is drift
+between a generated half and a hand-maintained half.  As a column: the
+generator has to decide for every row, an exception cannot exist without the
+declaration it belongs to, both halves refresh from the mirror in one run, and
+a row that omits the field does not compile.  `GnuSpecialness` is a two-variant
+enum rather than a `bool` for the same reason `GnuObjectForward` is
+(`neovm-core/src/emacs_core/defvar_object/mod.rs`).
+
+Applied after the adoption loop rather than inside it, which is GNU's own
+order -- declare, then unset -- and guarded on the name being interned, so a
+name this build does not have is still left alone.
+
+### 7. Pins
+
+`neovm-core/tests/compat_defvar_non_special_exceptions.rs`, both red first:
+
+- `compat_defvar_non_special_exceptions_match_gnu_emacs` -- the three
+  exceptions and four controls GNU keeps special.  GNU's answer, `(name
+  special-variable-p reaches-the-global)`:
+  `(features nil nil) (top-level nil nil) (values nil nil) (load-path t t)
+  (case-fold-search t t) (debug-on-error t t) (print-length t t)`.  The
+  controls are what stop it passing against a port that made everything
+  lexical.  `default-directory` is deliberately **not** a control: GNU
+  type-checks it on store, so binding it to a marker signals instead of
+  reporting.
+- `compat_lexical_features_binding_does_not_reach_featurep` -- the exact shape
+  the audit tripped on.  Before: GNU `(nil nil (nil nil nil))`, NeoVM
+  `(t nil (t t t))`.
+
+The coordinator's `compat_lread_special_binding_semantics` still passes, now
+through the generated table rather than the list it added.
+
+### 8. `documentation-property` for `native-comp-eln-load-path` -- the test was wrong
+
+Reproduced in isolation:
+`assertion failed: result.as_utf8_str().is_some_and(|s| s.contains("native-compiled *.eln files"))`
+(`neovm-core/src/emacs_core/doc_test.rs:1345`).
+
+Read first, then measured.  GNU declares the variable inside the native-comp
+guard:
+
+```c
+  DEFVAR_LISP ("native-comp-eln-load-path", Vnative_comp_eln_load_path,
+    doc: /* List of directories to look for native-compiled *.eln files.
+```
+
+(`src/comp.c:5742`.)  `syms_of_comp` opens with `#ifdef HAVE_NATIVE_COMP` at
+`src/comp.c:5568` and closes at `src/comp.c:5826`; only `defsubr
+(&Snative_comp_available_p)` at `:5828` is outside.  A build without native
+compilation therefore does not have the variable, and
+`Fsnarf_documentation` gates the `Fput` on `Fboundp` (`src/doc.c:603-615`)
+precisely so that a name another configuration declares gets no doc here --
+the comment at `src/doc.c:586-595` says so in as many words.
+
+**Measured, not inferred.**  The oracle GNU binary:
+
+```
+(boundp 'native-comp-eln-load-path)                                    -> nil
+(native-comp-available-p)                                              -> nil
+(featurep 'native-compile)                                             -> nil
+(documentation-property 'native-comp-eln-load-path 'variable-documentation) -> nil
+```
+
+This port is the same kind of build: `builtin_native_comp_available_p` returns
+`Value::NIL` unconditionally
+(`neovm-core/src/emacs_core/builtins/symbols.rs:3254-3257`), nothing in Rust
+declares the name, and all four Lisp mentions are valueless `(defvar ...)`
+forms -- `lisp/startup.el:520`, `lisp/subr.el:3333`,
+`lisp/emacs-lisp/comp.el:43`, `lisp/emacs-lisp/comp-common.el:34` -- which make
+a name special without binding it.  The one `setq` (`lisp/startup.el:538`) is
+reached only behind `(featurep 'native-compile)`, provided inside the same
+`#ifdef` (`src/comp.c:5825`).
+
+So nil is GNU's answer and nil is the right answer.  **The test was pinning a
+divergence.**  Before entry 173 added the `Fboundp` clause this port answered
+where GNU answers nil, the test asserted that, and 173 removing the divergence
+is what turned it red.  Not an extractor bug, and the doc was not lost: the
+record is still in `var_docs::gnu_table` and belongs there, because GNU's own
+`etc/DOC` carries it too -- `make-docfile` is a text scanner that ignores the
+preprocessor and `comp.o` is unconditionally scanned (`src/Makefile.in:459`,
+`:470`, `:667`).
+
+Deliberately **not** bisected.  Once GNU's own answer is measured, the commit
+that changed ours is not what decides which answer is right.
+
+The test now asserts GNU's answer in three parts, because a bare nil would also
+pass if the record had been lost: the name is unbound here, the generated table
+still carries the doc text, and `documentation-property` answers nil anyway.
+The name also joins its two siblings `comp-abi-hash` and
+`comp-native-version-dir` in 173's oracle pin
+(`neovm-oracle-tests/src/snarf_documentation_boundp_clause.rs`), so the fact is
+measured against GNU rather than asserted from a comment.
+
+### 9. Neighbour audit
+
+Every `variable-documentation` test in `doc_test.rs` was checked on two axes:
+does this port bind the name, and at what preprocessor depth does GNU declare
+it.  21 tests; 20 name variables this port binds and GNU declares at depth 0
+(`load-path` `src/lread.c:5607`, `fill-column` `src/buffer.c:5237`,
+`case-fold-search` `src/buffer.c:5981`, `unread-command-events`
+`src/keyboard.c:13753`, `auto-hscroll-mode` `src/xdisp.c:38865`,
+`coding-system-alist` `src/coding.c:11949`, `exec-directory`
+`src/callproc.c:2114`, `process-environment` `src/callproc.c:2144`,
+`yes-or-no-prompt` `src/fns.c:6867`, `debug-on-error` `src/eval.c:4466`, and
+the rest).  `native-comp-eln-load-path` was the only one of its class.
+
+### Found and NOT fixed
+
+**The `Fboundp` gate is authoritative only for names with no seeded plist
+entry.**  `ctl-x-4-map` is unbound in a bare `Context` and
+`documentation-property` returns its doc string regardless.  The gate at
+`neovm-core/src/emacs_core/doc.rs:7993-7999` is consulted only on the
+fall-through arm; `neovm-core/src/emacs_core/eval.rs:5175-5185` pre-seeds a
+`variable-documentation` plist property for every name in
+`STARTUP_VARIABLE_DOC_STUBS` and `STARTUP_VARIABLE_DOC_STRING_PROPERTIES`, and
+the plist arms (`doc.rs:8004-8008` and `doc.rs:8017-8030`) answer before the
+gate is reached -- the first of them via an `or_else` that falls back to the
+stub even when the gate said no.  `ctl-x-4-map` (`doc.rs:1922`) is the one
+tested name currently riding that bypass while unbound; `fill-column`
+(`doc.rs:599`) and `header-line-format` (`doc.rs:619`) take the same `or_else`
+arm but are genuinely bound, so it does not bite them.
+
+Not fixed here for a reason and not for lack of time: `ctl-x-4-map` is a Lisp
+`defvar` (`lisp/subr.el:1732`), so a bare `Context` -- which has loaded no Lisp
+-- is not a GNU-comparable surface for it, and the question of whether the
+`STARTUP_VARIABLE_DOC_*` seeding should exist at all is entry 168's table
+question rather than this entry's.  Recorded so that the gate's true scope is
+on the record rather than assumed from 173's entry, which describes it as
+though it governed every query.
+
+Entry 170's `Adoption::Alias` and `Adoption::Localized` residual is untouched
+here.
+
+### 10. A third failure, found by running the gate the sweep had not run
+
+The brief noted the oracle suite was **not yet run on the merged tree** and
+might hold more.  It held one:
+`debug_on_next_call::oracle_backtrace_debug_checks_level_with_two_different_predicates`,
+entry 172's, failing on the last row of its own probe list.  Pinned:
+
+```
+((backtrace-debug 0 nil (quote no-such-function)) nil)
+```
+
+Produced, by BOTH editors, byte-identically:
+
+```
+((backtrace-debug 0 nil 'no-such-function) nil)
+```
+
+`print-quoted` defaults to t, so `prin1` writes a quote form with the reader
+shorthand.  The two strings differ by exactly seven characters -- the width of
+`(quote )` against `'` -- and by nothing else: 498 bytes against 491.  That is
+the arithmetic, not the `Diff:` block, which for this pin is the usual
+character-level merge and reads as though both spellings were present at once.
+
+**A failure whose value names both editors is a pin that was never right.**
+Measured directly against GNU 31.0.90 and this branch's release binary, the row
+is identical on both sides, so there is no divergence to fix and the expect
+string is simply wrong.
+
+How it survived its own branch is worth recording, because it is the false
+green in its purest form: the test opens with
+`return_if_neovm_enable_oracle_proptest_not_set!()`, so an oracle suite run
+**without** `NEOVM_FORCE_ORACLE_PATH` returns before asserting anything and
+nextest reports the test as passed.  A green oracle suite is only evidence
+about the tests that ran, and `0 skipped` is the line that says they did.
+
+### 11. Gates
+
+Taken on this branch, at `runnable` from `/proc/loadavg` rather than
+`uptime`'s lagging one-minute figure -- during this session the two read 4 and
+447 within the same second.
+
+| gate | result | load at start |
+| --- | --- | --- |
+| `cargo check --workspace --all-targets` | exit 0, 0 errors | -- |
+| `cargo fmt --all --check` | exit 0 | -- |
+| `cargo nextest run -p neovm-core -p neomacs-layout-engine` | **11152 run, 11152 passed, 0 failed, 54 skipped** (437.6 s) | runnable 6 |
+| `cargo nextest run -p neovm-oracle-tests --no-fail-fast` | **38799 run, 38799 passed, 0 failed, 0 skipped** (653.1 s) | runnable 7 |
+| `cargo xtask gc-stress --editor ./target/release/neomacs` | **9/9 probes passed** | runnable 5 |
+
+The unit gate's baseline was 11150 passed on the merged tree once the
+coordinator's `values` fix was in; the two extra are this entry's two new pins.
+The oracle gate's stated baseline of 38790 predates the merge -- 170-175 added
+nine tests of their own -- and it is quoted here at 38799 because that is what
+this tree contains.
+
+Both suites were run with `NEOVM_FORCE_ORACLE_PATH` set, and the oracle one
+with `--no-fail-fast`: its first run stopped at 1502/38799 on the failure in
+§10, which is a truncated run and not a gate.  `0 skipped` on the oracle line
+is the assertion that the `NEOVM_FORCE_ORACLE_PATH`-gated tests actually ran.
+
+`cargo xtask fresh-build --release` reported `finished successfully (release)`
+and `skip_build=false no_byte_compile=false`, and left a 15.33 MB
+`neomacs.pdump` written after the binary it belongs to.  The worktree
+oracle-validity check passes: `(with-current-buffer "*scratch*" (buffer-string))`
+is `""`, so the `.elc` are not the stale copies a plain `cargo build --release`
+in a worktree leaves behind.  Both bootstrap fingerprint memos -- the one in
+`target/` and the one in `~/.cache/neomacs/` that every worktree shares -- were
+deleted before the first suite ran, so no number above can have been served a
+stale image.
+
+The same release binary answers the four questions this entry turns on:
+`(special-variable-p 'features)` nil, `(let ((features '(cl-lib))) (featurep
+'cl-lib))` under `lexical-binding` nil, `(featurep 'pcase)` nil, and
+`(documentation-property 'native-comp-eln-load-path 'variable-documentation)`
+nil -- GNU's answers, all four.
+
+Status: FIXED -- two defects.  §1-§7 `features` was made special by a
+declaration table that could not see GNU un-declaring it, and §8 a test that
+had been pinning a divergence entry 173 removed.  The most useful thing in it
+is that both briefs guessed the direction wrong in opposite ways, and in both
+cases the correction came from measuring a surface rather than reasoning about
+a mechanism: three probe stages that were all clean killed the `Box::leak`
+story, and four questions put to the GNU binary settled the doc test without a
+bisect.
+
+Addendum, same day: running the oracle gate that the merged sweep had not
+run found a third failure, entry 172's `backtrace-debug` pin, stale rather
+than divergent.  §10 has it and a dated note is on 172.  Final gates in §11:
+11152/11152 unit, 38799/38799 oracle with `0 skipped`, gc-stress 9/9.
