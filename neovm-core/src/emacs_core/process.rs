@@ -2551,10 +2551,10 @@ fn process_output_read_from_io_result(
 
 /// The one thing GNU still does to the process for a read it will not decode.
 ///
-/// `p->decoding_carryover = 0` is at src/process.c:6311, ABOVE both the
+/// `p->decoding_carryover = 0` is at src/process.c:6312, ABOVE both the
 /// zero-byte test and the branch, so it is spent on every read that reaches
 /// `read_and_dispose_of_process_output` -- and the only place a new carryover
-/// is written is `read_process_output_set_last_coding_system` (:6448-6457),
+/// is written is `read_process_output_set_last_coding_system` (:6449-6455),
 /// which a discarded read never reaches.  So a process whose buffer is killed
 /// mid-stream loses the tail its last decode held back, exactly as GNU does.
 ///
