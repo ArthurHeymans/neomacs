@@ -23794,11 +23794,18 @@ Run, with the load average each was taken at, because this week has shown that
 a gate number without one is not attributable:
 
 ```
-cargo fmt --all --check                                  clean        (load 91)
-cargo check --workspace --all-targets                    clean        (load 129, and again at 265)
+cargo fmt --all --check                                  clean        (load 269)
+cargo check --workspace --all-targets                    clean        (load 269)
 cargo nextest run -p neovm-core -E 'test(/a_process_may_hold_a_buffer_that_is_not_live_like_gnu|a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu/)'
-                              2 tests run: 2 passed      (load 20)
+                              2 tests run: 2 passed      (load 276 -> 225)
 ```
+
+The pins were also run at load 20 earlier, with the same answer; the numbers
+above are the last run, on the final tree, and they are the higher load of the
+two on purpose -- a pin that passes under contention is worth more than one
+that passes on a quiet box.  These two are deterministic in a way the process
+suites are not: they drive their own child, wait on a handshake rather than a
+clock, and both editors' answers are in the test.
 
 The two pins are `a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu`
 (13 rows) and `a_process_may_hold_a_buffer_that_is_not_live_like_gnu`
