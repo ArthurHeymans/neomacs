@@ -25836,6 +25836,20 @@ Two environmental notes, because both cost real time and both are recurrent:
   `src/*.c` names, the two-name gap being the `SKIP`-only selection pair).  That
   diff wants to be a script run beside the generator; it is not one yet, so the
   class is narrowed rather than closed.
+
+  > **CLOSED 2026-08-21, entry 181.**  There is no head regex left in either
+  > generator.  Both now scan with `scripts/make_docfile.py`, a
+  > character-for-character port of GNU's `lib-src/make-docfile.c`, in which the
+  > head and its `doc:` block are read by one pass of one state machine and
+  > therefore cannot disagree.  The diff this bullet asks for is the generator's
+  > first statement -- `verify_against_make_docfile` runs GNU's own compiled
+  > `make-docfile` over the same files and refuses to write the table unless the
+  > two DOC streams are byte-identical -- which is stronger than a name-set diff
+  > because it sees a row emitted WRONGLY as well as a row not emitted, and
+  > because it is not a predicate over the artifact an empty stream fails at
+  > byte 0.  Measured: the shared scanner regenerates this entry's committed
+  > 894-row `var_docs/gnu_table.rs` byte for byte, so the variable side is
+  > unchanged.
 - **`scripts/extract_gnu_defun_docs.py` has both of this entry's extractor
   bugs.**  It searches for the literal `"doc: /*"` (`line 69`) and strips a
   single leading space, exactly as the DEFVAR extractor did, and it feeds
@@ -25845,6 +25859,29 @@ Two environmental notes, because both cost real time and both are recurrent:
   missing or malformed by the same mechanism.  Sized, not fixed: it is a
   different table with a different blast radius and wants its own entry, and it
   should take the fail-closed absence guard with it.
+
+  > **CLOSED 2026-08-21, entry 181, and the size was low by a factor of
+  > fourteen: 86 rows, not six.**  The six markers named here are real --
+  > `window.c:2324`, `2351`, `2390` are `doc:  /*` with two spaces and
+  > `xwidget.c:3374`, `3384`, `3395` likewise -- but this entry counted MARKERS,
+  > and on the DEFUN side one bad marker damages THREE rows, because the
+  > function extractor's `doc:` search was unbounded where the DEFVAR one was
+  > bounded by `text.find("DEFVAR_", start + 1)`: the miss took the NEXT
+  > function's comment, its victim lost its own, and the heads in between were
+  > stepped over.  Seven thieves, seven victims, twelve collateral.
+  >
+  > Four more mechanisms had no variable-side analogue: 30 `DEFUN` heads the
+  > head regex never matched (27 because it anchored on `\s*$` after the
+  > interactive spec and GNU puts `doc:` on that line, 2 because MIN is a C
+  > identifier, 1 a `DEFUN` inside a comment), and 37 rows serving GNU's own
+  > `SKIP` placeholder -- the function table never had entry 168's `SKIP`
+  > filter, so `(documentation 'x-display-list)` answered
+  > "SKIP: real doc in xfns.c.".
+  >
+  > Against GNU's own `make-docfile` output the committed table was 1703 rows to
+  > GNU's 1733, with 86 differing; it is now 1733 with 0 differing.  Both
+  > extractors share the port, and the fail-closed guard this bullet asked for
+  > travelled with it in the stronger form described above.
 - **`(featurep 'x)` is nil here while this port declares 71 of GNU's X-only
   names.**  `syms_of_xfns` does `Fprovide (Qx, Qnil)` in the same block as
   `x-gtk-resize-child-frames` (`src/xfns.c:10498`), so a port that
