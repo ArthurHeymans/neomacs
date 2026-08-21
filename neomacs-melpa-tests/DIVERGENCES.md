@@ -23361,3 +23361,537 @@ stop outrank an exit.  **Two of those four were regressions this branch itself
 introduced, caught by re-running the audit against the rebuilt binary** -- which
 is the argument for diffing the fix against the merge base as well as against
 GNU, rather than against GNU alone.
+
+## 171. The reported divergence is FOUR rows and not one, and the fourth is a signalled error rather than a coding difference: `(make-process :buffer B)` for a killed B errors where GNU returns a process, which is why GNU's `!BUFFER_LIVE_P` disjunct was unreachable here and why nothing that runs could have found it -- FIXED, four defects, and the mirrors 166 priced the untangling at have zero readers
+
+Entry 169 measured the GNU side so this entry would not have to (169 section 9
+item 2), and it priced the divergence at one row: `last-coding-system-used`
+after a default-filter read with no buffer.  Reproduced first, it is four, and
+they are not all the same kind of thing.
+
+```
+row                 GNU 31.0.90                          Neomacs at a83f3785e
+nobuf               (0 pw171-untouched pw171-hook-utf8)  (1 pw171-hook-utf8 pw171-hook-utf8)
+killedbuf           (0 pw171-untouched pw171-hook-utf8)  error "Selecting deleted buffer"
+nobuf-pty           (0 pw171-untouched pw171-hook-utf8)  (1 pw171-hook-utf8 pw171-hook-utf8)
+nobuf-undecided     (0 pw171-untouched undecided)        (0 utf-8-unix utf-8-unix)
+```
+
+`killedbuf` is the one worth leading with, because it is a different failure
+class from the one 166 handed over.  166 and 169 both describe a MISSING GUARD
+-- GNU returns early and this port decodes anyway.  `killedbuf` is an INVENTED
+SIGNAL: `(make-process :buffer B)` for a killed `B` errors here, where GNU's
+`Fget_buffer_create` returns a buffer object "as given, even if it is dead"
+(src/buffer.c:581-582) and hands the process a dead buffer quite deliberately.
+
+The two are causally linked, and that is the entry's result.  GNU's early
+return is `if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (XBUFFER
+(p->buffer))) return;` -- one `if`, three disjuncts (src/process.c:6464-6465).
+Entry 166 closed `!nread`.  The third disjunct, `!BUFFER_LIVE_P`, was
+**unreachable in this port**, because the only ways to give a process a dead
+buffer all signalled.  So no probe anyone could write would have shown the
+missing guard: 166 met it by reading and 169 priced it from GNU alone, and both
+of them described only the `NILP (p->buffer)` half. **A port that refuses a
+state cannot discover that it handles the state wrongly.**  The neighbour audit
+that fixing `make-process` made possible then found two more of the same
+invented signal, in `set-process-buffer` and `get-buffer-process`.
+
+166's stated cost, meanwhile, was not a cost.  It handed the residual over with
+"this port's `proc.stdout` / `proc.stderr` diagnostic mirrors (issue #131) are
+fed FROM the decoded text, so a unit fixture that reads `get_output` on a
+bufferless process would stop seeing anything.  It is a fix about the mirrors,
+not about coding."  The mirrors have **no readers at all**.  At the merge base
+the two fields occur seven times in the workspace: two declarations, two
+initialisers, two `push_str`s, and one read -- and that one read is the body of
+`get_output`, which nothing calls.  `get_output` itself has exactly one
+occurrence in the workspace and it is its own definition.
+
+### 1. Reproduced first, in both editors, with the controls
+
+`tmp/pw171/pin-rows.el` and `tmp/pw171/midkill.el`, against GNU Emacs 31.0.90
+and against this branch's merge-base `cargo xtask fresh-build --release`
+binary, at load average 7-20.  Each row is
+`(POST-READ-CONVERSION-CALLS LAST-CODING-SYSTEM-USED PROCESS-DECODE-CODING)`,
+and `last-coding-system-used` is pre-set to `pw171-untouched` so that "GNU
+wrote nothing" is a value rather than the absence of one.  The four divergent
+rows are in the lead above; here they are with the controls that make them
+mean something.
+
+```
+row                 GNU 31.0.90                          Neomacs at a83f3785e
+nobuf               (0 pw171-untouched pw171-hook-utf8)  (1 pw171-hook-utf8 pw171-hook-utf8)
+killedbuf           (0 pw171-untouched pw171-hook-utf8)  error "Selecting deleted buffer"
+nobuf-pty           (0 pw171-untouched pw171-hook-utf8)  (1 pw171-hook-utf8 pw171-hook-utf8)
+livebuf             (1 pw171-hook-utf8 pw171-hook-utf8)  same
+filter-nobuf        (2 pw171-hook-utf8 pw171-hook-utf8)  same
+slow-nobuf          (2 pw171-hook-utf8 pw171-hook-utf8)  same
+nobuf-undecided     (0 pw171-untouched undecided)        (0 utf-8-unix utf-8-unix)
+filter-undecided    (0 utf-8-unix utf-8-unix)            same
+```
+
+The three `same` rows are the controls, and they are what make the four
+divergent ones a rule rather than four observations: a Lisp filter with no
+buffer decodes, the default filter with a LIVE buffer decodes, and the default
+filter with `fast-read-process-output` nil decodes.  The port already agreed on
+all three, so what it got wrong is exactly the branch GNU returns early from
+and nothing else.
+
+`killedbuf` being a signal rather than an answer means the `!BUFFER_LIVE_P`
+disjunct was not reachable at creation time, so it was re-measured mid-stream,
+where it is:
+
+```
+row                 GNU 31.0.90                             Neomacs at a83f3785e
+nil-default         (0 pw171-untouched pw171-hook-utf8 0)   (1 pw171-hook-utf8 pw171-hook-utf8 0)
+kill-default        (0 pw171-untouched pw171-hook-utf8 0)   (1 pw171-hook-utf8 pw171-hook-utf8 0)
+nil-filter          (2 pw171-hook-utf8 pw171-hook-utf8 1)   same
+nil-default-un      (0 pw171-untouched undecided 0)         (0 utf-8 utf-8 0)
+nil-filter-un       (0 utf-8 utf-8 1)                       same
+```
+
+Those rows detach the buffer half way through -- `nil` is
+`(set-process-buffer p nil)` and `kill` is `(kill-buffer BUF)` -- so the
+disjuncts are reached with a decoder that has already run once and a character
+split across the read boundary.  Two things had to be got right for the rows to
+mean anything, and both are in the pin:
+
+* the child does `trap '' HUP`, because `kill-buffer` signals the buffer's
+  process (`kill_buffer_processes`, src/buffer.c) and the first version of this
+  probe was measuring a dead child rather than a discarded read;
+* `last-coding-system-used` is reset AFTER `process-send-string`, because the
+  ENCODE side writes it too.  Before that reordering GNU's row read
+  `utf-8-unix` and this port's read `pw171-untouched`, which looks exactly like
+  the divergence under investigation and is a different one entirely -- see
+  "Found and NOT fixed" (2).
+
+### 2. GNU's source for this topic, and why skipping the decode costs it nothing
+
+`read_process_output` decodes nothing itself.  It hands the bytes to
+`read_and_dispose_of_process_output` (src/process.c:6338), which chooses
+between two branches:
+
+```c
+  if (fast_read_process_output
+      && EQ (p->filter, Qinternal_default_process_filter))
+    read_and_insert_process_output (p, chars, nbytes, coding);
+  else
+    {
+      decode_coding_c_string (coding, (unsigned char *) chars, nbytes, Qt);
+      text = coding->dst_object;
+
+      read_process_output_set_last_coding_system (p, coding);
+
+      if (SBYTES (text) > 0)
+	internal_condition_case_1 (read_process_output_call, ...);
+    }
+```
+
+(:6557-6572.  `fast_read_process_output` is a `DEFVAR_BOOL` defaulting to true,
+:8980-8985.)  And `read_and_insert_process_output`'s first statement, before
+any of its own work, is
+
+```c
+  if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (XBUFFER (p->buffer)))
+    return;
+```
+
+(:6464-6465.)  One `if`, three disjuncts, standing above
+`decode_coding_c_string` (:6502) and above
+`read_process_output_set_last_coding_system` (:6506).
+
+The reason GNU loses no `last-coding-system-used` semantics by returning there
+is that the function which publishes them is only ever called after a decode.
+`read_process_output_set_last_coding_system` (:6417-6457) writes four things
+and nothing else:
+
+```c
+  Vlast_coding_system_used = CODING_ID_NAME (coding->id);      /* :6421 */
+  if (!EQ (p->decode_coding_system, Vlast_coding_system_used))
+    {
+      pset_decode_coding_system (p, Vlast_coding_system_used); /* :6425 */
+      ...
+	  pset_encode_coding_system                             /* :6440-6444 */
+	    (p, coding_inherit_eol_type (Vlast_coding_system_used, Qnil));
+    }
+  if (coding->carryover_bytes > 0)
+    ...  p->decoding_carryover = coding->carryover_bytes;      /* :6449-6455 */
+```
+
+Every one of the four is a report of what a conversion just did:
+`CODING_ID_NAME (coding->id)` is the id `detect_coding` and
+`adjust_coding_eol_type` have finished with, and `coding->carryover_bytes` is
+what the decoder could not consume.  A decode that never ran has no id to
+report and no carryover to store, and `Vlast_coding_system_used` still names
+the coding system the last actual conversion used -- which is what the variable
+is for.  The one field that IS spent unconditionally is spent above the branch:
+`p->decoding_carryover = 0` at :6312, so a discarded read still drops the tail
+its predecessor held back.  It is a complete rule, not an omission with a hole
+in it.
+
+The two disjuncts are also not defensive coding.  GNU deliberately lets a
+process hold a buffer that is not live, and the same test appears twice more
+downstream -- `internal-default-process-sentinel`, whose comment is "Avoid
+error if buffer is deleted (probably that's why the process is dead, too)"
+(:7969-7971), and `setup_process_coding_systems`, which asks `BUFFERP` rather
+than `BUFFER_LIVE_P` and reads `enable_multibyte_characters` (:8395-8398).
+Section 5 is what happens when you check that this port agrees.
+
+### 3. The diagnostic mirrors: the answer is that they should not exist
+
+166 asked whether the mirror should be fed from raw bytes, decoded lazily, or
+not exist on this path.  None of the three: it is not "on this path", it is on
+no path.
+
+```
+$ grep -rn "get_output(" --include=*.rs .
+neovm-core/src/emacs_core/process.rs:7673:    pub fn get_output(&self, id: ProcessId) -> Option<&str> {
+```
+
+One hit, and it is the definition.  The only other mention in the workspace is
+a comment in `process_raw_bytes_test.rs:109` explaining that the test does NOT
+use it and reads `undecoded_bytes()` instead.  That is a grep, and greps are
+not the standing proof rule (Phase 4: "dead code needs rustc with cfg(test) ON,
+not grep"), so the fields were deleted and `cargo check --workspace
+--all-targets` was asked:
+
+```
+error[E0560]: struct `emacs_core::process::Process` has no field named `stdout`
+error[E0560]: struct `emacs_core::process::Process` has no field named `stderr`
+```
+
+**Two errors, both initialisers, zero readers.**  Nothing in the workspace --
+including every `#[cfg(test)]` module, which `--all-targets` compiles -- ever
+read either field.
+
+So the cost of removing them is negative, and it is worth stating what was
+being paid for nothing.  `finish_process_run` called
+`process_output_runtime_string`, which is `to_utf8_lossy` over the decoded
+bytes -- a fresh `String` allocated and copied on **every read of every
+process** -- and then `push_str`ed it onto a `String` that is never cleared and
+never truncated.  Grepping the merge-base file for `stdout.clear`,
+`stderr.clear` or an assignment finds nothing: the mirror grew for the life of
+the process record.  For a long-running comint or LSP process that is every
+byte it ever produced, retained until the process is garbage.  This is a
+code-reading result and it is recorded as one -- no RSS A/B was taken, because
+settling it would have cost a merge-base `fresh-build` and the entry's numbers
+do not depend on it.
+
+Deleted with them: `ProcessOutputMirror`, the `mirror` argument threaded
+through six read functions and both run types, `process_output_runtime_string`,
+and `get_output`.
+
+### 4. The type-level fix: one `if`, asked in one place
+
+The standing lesson of this chain is that a second place deciding the same
+thing drifts.  166 closed `!nread` with an inline test beside the read:
+
+```rust
+if bytes_read == 0 && destination.branch() == ProcessReadBranch::InsertIntoBuffer {
+    return ProcessBytesRead::Eof;
+}
+```
+
+That is one disjunct of a three-disjunct `if`, written where the other two
+could not be seen.  The fix is to put all three in one function and give the
+type a variant for the outcome they produce:
+
+```rust
+pub enum ProcessReadBranch {
+    InsertIntoBuffer,      // a LIVE buffer to insert into
+    DiscardUndecoded,      // GNU's early return, the process half of :6464
+    CallFilter,            // the filter branch, :6560-6575
+}
+
+impl ProcessOutputDestination {
+    fn disposition_for(self, nbytes: usize) -> ProcessRunDisposition {
+        match self.branch {
+            ProcessReadBranch::CallFilter => ProcessRunDisposition::Decode,
+            ProcessReadBranch::DiscardUndecoded => ProcessRunDisposition::Discard,
+            ProcessReadBranch::InsertIntoBuffer if nbytes == 0 => ProcessRunDisposition::Discard,
+            ProcessReadBranch::InsertIntoBuffer => ProcessRunDisposition::Decode,
+        }
+    }
+}
+```
+
+`ProcessReadBranch::of` takes the two process-side disjuncts from the
+process's CURRENT filter and buffer, which is where GNU takes them from and why
+they cannot be settled at `make-process` time; `disposition_for` supplies the
+third, which only the read knows.  Three arms, four lines, and the `if` reads
+like the C.
+
+`ProcessOutputSink` was deliberately NOT folded into this.  The two look like
+one question and are not: `setup_process_coding_systems` (:8380-8409) does not
+consult `fast-read-process-output` at all, so a unibyte process buffer with the
+default filter reaches the sink's `UnibyteProcessBuffer` and the branch's
+`CallFilter` at the same time when `fast-read-process-output` is nil.  Two C
+functions, two rules, two types -- which is what 166's own doc comment already
+said, and this entry only had to not break it.
+
+`ProcessBytesRead::Discarded { bytes_read }` is the fourth type.  A discarded
+read is not an empty `PendingProcessRun`: it has no coding system either,
+because `detect_coding` never ran on it, and a variant is the only way to make
+"decode this discarded run" unsayable.  Its `bytes_read` still travels, because
+GNU's caller counts the read as activity whether or not anything was made of
+it (`read_process_output` returns `nbytes`, :6345) -- so
+`(accept-process-output P)` still answers `t` for a bufferless process that
+produced output, in both editors.
+
+One deliberate non-difference, so the next reader does not file it as one.
+GNU reaches its early return from INSIDE
+`read_and_dispose_of_process_output`, which has already `specbind`ed
+`inhibit-quit` and `last-nonmenu-event`, saved the match data nonrecursively
+and raised `running_asynch_code` (:6540-6555), and whose caller has already
+called `record_unwind_current_buffer` (:6335) and saved `Vdeactivate_mark`
+(:6329).  This port takes those bindings inside `decode_pending_process_run`,
+which a discarded read never reaches, so they are not taken at all.  Nothing
+between the two points runs Lisp on that path -- there is no decode, no
+`:post-read-conversion` and no filter -- so every one of them is saved and
+restored around a no-op in GNU.  Checked rather than assumed: the
+`accept-returns-t-for-discard` audit row and the mid-stream rows both agree
+with GNU, and the mid-stream rows in particular pass through
+`process-send-string` and a live decoder either side of the discard.
+
+Two smaller things came out of writing it.  `discard_process_run_undecoded` is
+one line with :6312 on it, because the carryover clear is spent above the
+branch and a process whose buffer goes away mid-stream must lose the tail its
+last decode held back.  And the two datagram arms of
+`read_network_output_result` built a `PendingProcessRun` themselves, which made
+them a second place deciding whether a run is decoded -- exactly the shape this
+chain keeps removing, three months after the last time.  They go through
+`process_run_from_bytes` with everything else now.
+
+### 5. The audit found three more, and they are all one invented liveness test
+
+`tmp/pw171/audit.el` -- 18 probes over the constructors, the accessors, the
+default sentinel, `internal-default-process-filter`, the unibyte insert arm and
+the datagram path -- diffed against GNU, plus `tmp/pw171/gbp-nil.el`.  Run
+against a binary that already carried the read fix and the `make-process` fix
+(load average 12), three rows still differed:
+
+```
+row                        GNU 31.0.90                    Neomacs
+get-buffer-process/dead    (t)                            (nil)
+set-process-buffer/dead    (#<killed buffer> nil)         error "Selecting deleted buffer"
+get-buffer-process nil     nil                            #<process n1>
+```
+
+Those three are equally divergent at the merge base, and that is derived rather
+than measured: neither of the two fixes that binary carried touches
+`Fget_buffer`, `set-process-buffer` or `get-buffer-process`.  The merge-base
+binary itself was not kept, and the rows above the three could not have been
+measured on it anyway -- `make-process/dead` signals there, so every row that
+starts by making a process against a dead buffer answers `:err` rather than an
+answer to compare.  That is the point of section 6's first eliminated
+hypothesis, and it is the reason this audit was worth running at all.
+
+All three are the same mistake as the `make-process` one and all four are the
+same mistake as this chain's own recurring one: a **second copy of a GNU
+function, with a clause GNU does not have**.
+
+* `parse_make_process_buffer_in_state` is this port's copy of
+  `Fget_buffer_create`, which every process constructor calls (:1849-1851,
+  :3091-3094, :3223-3226, :4017).  GNU's docstring is explicit -- "If
+  BUFFER-OR-NAME is a buffer instead of a string, return it as given, **even if
+  it is dead**.  The return value is never nil." (src/buffer.c:581-582) -- and
+  this port's own `get-buffer-create` already agrees with it, byte for byte,
+  when asked directly.  The copy inside the constructors did not.
+* `resolve_buffer_for_process_lookup_in_state` is this port's copy of
+  `Fget_buffer` (src/buffer.c:479-491), and it had **three** clauses GNU does
+  not: a liveness test on a buffer object, and -- for the `nil` argument -- a
+  reach into the selected window, where `Fget_buffer_process` answers
+  `if (NILP (buffer)) return Qnil;` (:8421) and `Fmake_network_process` reads
+  `buffer_defaults` (:4132-4135).  The nil-argument row was reachable before
+  this branch and is the one divergence here that has nothing to do with dead
+  buffers at all.
+* `set-process-buffer`'s check is `CHECK_BUFFER` and `CHECK_BUFFER` is
+  `CHECK_TYPE (BUFFERP (x), Qbufferp, x)` and nothing else (:1302-1303,
+  src/buffer.h:762-766).
+
+What makes the pattern worth naming rather than just fixing: the invented
+clause was not harmless, it was **load-bearing in the wrong direction**.  By
+refusing the state, it made GNU's three `BUFFER_LIVE_P` guards unreachable, so
+the missing guard in `read_and_insert_process_output` could not be found by
+running anything -- 166 met it while reading, not while measuring, and 169
+priced it from GNU alone.  A port that refuses a state cannot discover that it
+handles the state wrongly.
+
+The two resolvers next door were deliberately left alone: they implement
+`get_process` (:1045-1048), which really does `error ("Attempt to get process
+for a dead buffer")`, and they are right to differ because a PROCESS designator
+is not a buffer one.  The last row of
+`a_process_may_hold_a_buffer_that_is_not_live_like_gnu` pins them apart so the
+next reader does not unify them.
+
+### 6. Hypotheses eliminated
+
+* **"The killed-buffer row is the missing `BUFFER_LIVE_P` disjunct."**  It is
+  not; it is `make-process` refusing the buffer, three functions earlier.
+  Isolated with `tmp/pw171/iso.el`, which walks the row one call at a time and
+  shows the error landing on `make-process` itself while GNU answers `process`.
+  Fixing the read alone left the row red, which is how the premise fell.
+* **"GNU's unibyte insert arm (:6479-6486) skips
+  `read_process_output_set_last_coding_system` too, so it is a second
+  residual."**  It does skip it, and it is not observable: measured,
+  `unibyte-buffer/raw-text` and `unibyte-buffer/utf-8` both answer
+  `(raw-text (97 195 169))` in GNU, because `setup_process_coding_systems`
+  rewrote the coding system to `raw-text` (:8397) and `raw-text` still reaches
+  the `else` arm that DOES report.  This port agrees on both rows, before and
+  after.
+* **"`setup_process_coding_systems` asking `BUFFERP` rather than
+  `BUFFER_LIVE_P` (:8395) is a divergence, because this port's
+  `ProcessOutputSink::of` asks liveness."**  Probed with
+  `tmp/pw171/residuals.el` R4 -- a unibyte buffer killed mid-stream, then a
+  Lisp filter attached -- and both editors answer
+  `(raw-text (100 195 169 102))`.  Recorded as measured-identical rather than
+  as unexamined.
+* **"An empty UDP datagram takes the new `nbytes == 0` arm and changes
+  something."**  `tmp/pw171/residuals.el` R3: both editors answer `open` and
+  neither treats it as end of file.
+* **"`(accept-process-output P)` will stop answering `t` for a bufferless
+  process now that its reads are discarded."**  It does not, in either editor:
+  the `accept-returns-t-for-discard` audit row is `(t)` on both sides, which is
+  `read_process_output` returning `nbytes` at :6345 rather than 0.
+
+### 7. Found and NOT fixed here
+
+1. **`make-process` with a NAMED `:buffer` does not run
+   `buffer-list-update-hook`.**  GNU reaches the buffer through
+   `Fget_buffer_create` (src/process.c:1851), so creating one runs the hook
+   like any other `get-buffer-create`; this port's constructor copy calls
+   `BufferManager::create_buffer` directly.  Measured,
+   `tmp/pw171/residuals.el` R1: GNU `(t t)`, Neomacs `(nil t)` -- the buffer is
+   created either way, the hook is not run.  Untouched because closing it is
+   the OTHER half of the same duplication and needs a `Context` where three of
+   the five call sites have only a `BufferManager`, which is a plumbing change
+   rather than a coding one.  It is the natural next step from this entry's
+   section 5, and it is sized rather than diagnosed.
+2. **`process-send-string` does not write `last-coding-system-used`.**  GNU's
+   `send_process` encodes through `encode_coding_object`, which sets it like
+   every other conversion.  Measured, `tmp/pw171/residuals.el` R2: after
+   `(process-send-string P "x\n")` on a `utf-8-unix` process, GNU answers
+   `utf-8-unix` and this port answers the untouched sentinel.  This is the
+   ENCODE side and therefore a different entry; it is recorded here because it
+   nearly cost this one its mid-stream rows -- see section 1 -- and because two
+   sibling branches were working on the coding write-back while this was
+   measured, so the next reader should re-measure before adopting it.
+3. **The 105-line table's last two arms are still owed, and are 166's.**  The
+   CCL decoder still consumes its whole source where GNU's
+   `decode_coding_ccl` reports `coding->consumed` (src/coding.c:5185), and
+   `chinese-hz` is still a Rust reimplementation of a coding system GNU
+   implements in Lisp.  Neither moved here and neither is this entry's; they
+   are restated only so that the count of open items after 166 is honest.
+4. **`ProcessOutputSink::of` still asks buffer liveness where GNU's
+   `setup_process_coding_systems` asks `BUFFERP` (:8395).**  Hypothesis (3) of
+   section 6 shows the difference is not observable through any probe written
+   here, and a killed buffer's `enable_multibyte_characters` is not a value
+   this port keeps.  Listed so the next entry knows the line was read and left
+   alone on purpose, not missed.
+
+### 8. Gates -- and the four this entry did NOT run
+
+Run, with the load average each was taken at, because this week has shown that
+a gate number without one is not attributable:
+
+```
+cargo fmt --all --check                                  clean        (load 91)
+cargo check --workspace --all-targets                    clean        (load 129, and again at 265)
+cargo nextest run -p neovm-core -E 'test(/a_process_may_hold_a_buffer_that_is_not_live_like_gnu|a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu/)'
+                              2 tests run: 2 passed      (load 20)
+```
+
+The two pins are `a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu`
+(13 rows) and `a_process_may_hold_a_buffer_that_is_not_live_like_gnu`
+(7 rows), so the engine count on the merged tree should be the merge base's
+11117 plus two.
+
+**NOT run, deliberately, and named so that nobody reads this entry as claiming
+them:** the full `neovm-core` + `neomacs-layout-engine` suite, the
+`neovm-oracle-tests` oracle, `cargo xtask gc-stress`, and the 42-test MELPA
+process subset.  The box carried six agents at once while this branch was
+written; the coordinator's instruction was to hand the branch over and gate
+once on the merged tree, where a failure is attributable to a branch rather
+than to five neighbours.  So this entry's status is "the pins pass and the
+workspace compiles", not "the suites are green", and the merge is where that
+second claim gets made.
+
+One engine run was attempted and is **discarded rather than reported**: at load
+average 1005 it ended `6376/11119 tests run: 6352 passed, 24 failed`, and all
+24 "failures" are `test aborted with signal 9: SIGKILL` with 4743 tests never
+started.  That is the OOM killer, not a result -- a partial run with SIGKILLs
+in it is not a partial pass.
+
+The 42-test MELPA process subset was reconstructed rather than trusted.  The
+ledger names it as "the eight name filters entries 151, 156, 159 and 166 used,
+42 tests" without listing them, so the eight were taken from entry 139 via 151
+(`diredfl`, `rg`, `slime`, `sly`, `ivy_rich`, `async_http_queue`, `auto_pause`,
+`git_rebase_mode`), applied as substrings to a full `cargo nextest list`, and
+**the union counted: exactly 42**.  That matters because of the standing false
+green -- `-E 'test(a) or test(b)'` picked 0 of 933 melpa tests this week -- and
+counting the selection before running it is the version of that check that
+costs nothing.  Whoever runs the subset should use
+`-E 'test(/diredfl|rg|slime|sly|ivy_rich|async_http_queue|auto_pause|git_rebase_mode/)'`
+and assert on `42 tests run`, not on the word `ok`.
+
+**And the gate that is not a number.**  Every probe was diffed against GNU
+Emacs 31.0.90 with `diff`, not read by eye:
+
+```
+probe                     rows   before          after
+tmp/pw171/pin2.el          13    4 divergent     0
+tmp/pw171/audit.el         18    3 divergent     0   (see section 5 on provenance)
+tmp/pw171/neigh.el          7    could not run   0
+tmp/pw171/residuals.el      4    2 divergent     2   (items 1 and 2 below, not this entry's)
+```
+
+`tmp/pw171/probes.sh` re-runs all of them against any editor and diffs each
+against a fresh GNU run, so the next reader gets a command rather than a
+description.  `neigh.el`'s "could not run" is literal: at the merge base its
+first row signals, and a probe that signals has no rows to compare.
+
+### 9. A trap that cost an hour, and reads as something else entirely
+
+When the disk filled -- five agents' `target/` directories at 34 GB each --
+`cargo nextest` did not report a full disk.  It reported:
+
+```
+error: [double-spawn] failed to exec `".../deps/compat_batch_kbd_macro_..." "--list" ...`
+Caused by:
+  Permission denied (os error 13)
+```
+
+That is a **permissions** error on the face of it, and there is nothing wrong
+with any permission.  ENOSPC during linking had left test binaries written but
+with the executable bit never set: `-rw-r--r--` where the neighbouring
+successful link is `-rwxr-xr-x`, at full size, 228 MB, looking entirely normal
+to `ls -la` unless you are reading the mode column.  Nine of those and 182
+zero-length files had to be deleted before the suite could even list its tests
+(`find target/debug/deps -maxdepth 1 -type f ! -name '*.*' ! -perm -u+x
+-delete`, then the same with `-size 0`).
+
+Two things worth carrying forward.  A `cargo clean` would have fixed it and is
+forbidden here for good reasons, so the targeted delete above is the move.  And
+a log truncated by ENOSPC greps identically to a clean one -- `grep -c FAIL`
+answers `0` for both -- which is the same shape as the four standing false
+greens: **assert on a positive count, never on the absence of a failure**.
+
+Status: FIXED -- four engine defects, and the reported one is the cheapest of
+the four.  The other three came out of the audit that fixing the first one made
+possible: `make-process` and `set-process-buffer` refusing a dead buffer GNU
+accepts, and `get-buffer-process` answering neither a dead buffer nor a nil
+argument the way GNU does.  The reason all three had gone unseen is one
+sentence: a copy of a GNU function with an extra clause makes the state GNU's
+real code guards against unreachable, so nothing that runs can find the missing
+guard.
+
+**On whether `killedbuf` wanted its own number.**  It is a different failure
+class and it repeats three times, so the question is fair; the answer here is
+no, and the reason is that its fix and this entry's fix cannot be pinned
+apart.  `a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu` has a
+`!BUFFER_LIVE_P` row, and that row cannot be written at all until
+`make-process` accepts the state -- one branch, one pin, one entry.  What DOES
+deserve its own number is the pattern rather than these three instances: a
+sweep for copies of GNU accessors carrying an invented liveness or
+existence clause, across the whole port rather than in `process.rs` where this
+entry happened to be standing.  Four were found here without looking for them,
+in one file, by one probe.
