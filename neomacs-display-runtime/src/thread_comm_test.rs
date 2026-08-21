@@ -22,6 +22,18 @@ fn sealed_test_state(mut state: FrameDisplayState) -> SealedFramePresentation {
     SealedFramePresentation::seal(state).unwrap()
 }
 
+fn unpresented_pointer(x: f32, y: f32, target_frame_id: u64, action: PointerAction) -> InputEvent {
+    InputEvent::PositionedPointer(PositionedPointerInput {
+        position: PointerPosition {
+            x,
+            y,
+            target_frame_id,
+        },
+        target: PointerTarget::Unpresented,
+        action,
+    })
+}
+
 // ===================================================================
 // Constants
 // ===================================================================
@@ -256,21 +268,21 @@ fn render_comms_send_input_delivers_event() {
     let comms = ThreadComms::new();
     let (emacs, render) = comms.split();
 
-    render.send_input(InputEvent::MouseMove {
-        x: 100.0,
-        y: 200.0,
-        modifiers: 0,
-        target_frame_id: 0,
-    });
+    render.send_input(unpresented_pointer(
+        100.0,
+        200.0,
+        0,
+        PointerAction::Move { modifiers: 0 },
+    ));
 
     // Event should be receivable
     let evt = emacs.input_rx.try_recv().unwrap();
     match evt {
-        InputEvent::MouseMove { x, y, .. } => {
-            assert_eq!(x, 100.0);
-            assert_eq!(y, 200.0);
+        InputEvent::PositionedPointer(PositionedPointerInput { position, .. }) => {
+            assert_eq!(position.x, 100.0);
+            assert_eq!(position.y, 200.0);
         }
-        other => panic!("Expected MouseMove, got {:?}", other),
+        other => panic!("Expected PositionedPointer, got {:?}", other),
     }
 }
 
@@ -304,33 +316,41 @@ fn input_event_key_construction() {
 
 #[test]
 fn input_event_mouse_button_construction() {
-    let event = InputEvent::MouseButton {
-        button: 1,
-        x: 50.5,
-        y: 100.3,
-        pressed: true,
-        modifiers: 0,
-        target_frame_id: 0,
-        webkit_id: 0,
-        webkit_rel_x: 0,
-        webkit_rel_y: 0,
-    };
+    let event = unpresented_pointer(
+        50.5,
+        100.3,
+        0,
+        PointerAction::Button {
+            button: 1,
+            pressed: true,
+            modifiers: 0,
+            webkit: None,
+        },
+    );
     match event {
-        InputEvent::MouseButton {
-            button,
-            x,
-            y,
-            pressed,
-            modifiers,
-            target_frame_id,
-            ..
-        } => {
+        InputEvent::PositionedPointer(PositionedPointerInput {
+            position,
+            target: PointerTarget::Unpresented,
+            action:
+                PointerAction::Button {
+                    button,
+                    pressed,
+                    modifiers,
+                    webkit,
+                },
+        }) => {
+            assert_eq!(
+                position,
+                PointerPosition {
+                    x: 50.5,
+                    y: 100.3,
+                    target_frame_id: 0
+                }
+            );
             assert_eq!(button, 1);
-            assert_eq!(x, 50.5);
-            assert_eq!(y, 100.3);
             assert!(pressed);
             assert_eq!(modifiers, 0);
-            assert_eq!(target_frame_id, 0);
+            assert_eq!(webkit, None);
         }
         _ => panic!("Wrong variant"),
     }
@@ -338,23 +358,17 @@ fn input_event_mouse_button_construction() {
 
 #[test]
 fn input_event_mouse_move_construction() {
-    let event = InputEvent::MouseMove {
-        x: 200.0,
-        y: 300.0,
-        modifiers: 1,
-        target_frame_id: 42,
-    };
+    let event = unpresented_pointer(200.0, 300.0, 42, PointerAction::Move { modifiers: 1 });
     match event {
-        InputEvent::MouseMove {
-            x,
-            y,
-            modifiers,
-            target_frame_id,
-        } => {
-            assert_eq!(x, 200.0);
-            assert_eq!(y, 300.0);
+        InputEvent::PositionedPointer(PositionedPointerInput {
+            position,
+            target: PointerTarget::Unpresented,
+            action: PointerAction::Move { modifiers },
+        }) => {
+            assert_eq!(position.x, 200.0);
+            assert_eq!(position.y, 300.0);
             assert_eq!(modifiers, 1);
-            assert_eq!(target_frame_id, 42);
+            assert_eq!(position.target_frame_id, 42);
         }
         _ => panic!("Wrong variant"),
     }
@@ -362,49 +376,44 @@ fn input_event_mouse_move_construction() {
 
 #[test]
 fn input_event_mouse_scroll_construction() {
-    let event = InputEvent::MouseScroll {
-        delta_x: 0.0,
-        delta_y: -3.0,
-        x: 400.0,
-        y: 500.0,
-        modifiers: 0,
-        pixel_precise: false,
-        target_frame_id: 0,
-        webkit_id: 0,
-        webkit_rel_x: 0,
-        webkit_rel_y: 0,
-    };
+    let event = unpresented_pointer(
+        400.0,
+        500.0,
+        0,
+        PointerAction::Scroll {
+            delta: ScrollDelta::Lines { x: 0.0, y: -3.0 },
+            modifiers: 0,
+            webkit: None,
+        },
+    );
     match event {
-        InputEvent::MouseScroll {
-            delta_x,
-            delta_y,
-            pixel_precise,
+        InputEvent::PositionedPointer(PositionedPointerInput {
+            action: PointerAction::Scroll { delta, .. },
             ..
-        } => {
-            assert_eq!(delta_x, 0.0);
-            assert_eq!(delta_y, -3.0);
-            assert!(!pixel_precise);
+        }) => {
+            assert_eq!(delta, ScrollDelta::Lines { x: 0.0, y: -3.0 });
         }
         _ => panic!("Wrong variant"),
     }
 }
 
 #[test]
-fn input_event_mouse_scroll_pixel_precise() {
-    let event = InputEvent::MouseScroll {
-        delta_x: 10.5,
-        delta_y: -25.3,
-        x: 0.0,
-        y: 0.0,
-        modifiers: 0,
-        pixel_precise: true,
-        target_frame_id: 0,
-        webkit_id: 0,
-        webkit_rel_x: 0,
-        webkit_rel_y: 0,
-    };
+fn input_event_pixel_scroll_uses_a_distinct_delta_variant() {
+    let event = unpresented_pointer(
+        0.0,
+        0.0,
+        0,
+        PointerAction::Scroll {
+            delta: ScrollDelta::Pixels { x: 10.5, y: -25.3 },
+            modifiers: 0,
+            webkit: None,
+        },
+    );
     match event {
-        InputEvent::MouseScroll { pixel_precise, .. } => assert!(pixel_precise),
+        InputEvent::PositionedPointer(PositionedPointerInput {
+            action: PointerAction::Scroll { delta, .. },
+            ..
+        }) => assert_eq!(delta, ScrollDelta::Pixels { x: 10.5, y: -25.3 }),
         _ => panic!("Wrong variant"),
     }
 }
@@ -1552,12 +1561,7 @@ fn channel_sends_multiple_input_events_in_order() {
             pressed: true,
             emacs_frame_id: 0,
         },
-        InputEvent::MouseMove {
-            x: 10.0,
-            y: 20.0,
-            modifiers: 0,
-            target_frame_id: 0,
-        },
+        unpresented_pointer(10.0, 20.0, 0, PointerAction::Move { modifiers: 0 }),
         InputEvent::WindowResize {
             width: 800,
             height: 600,

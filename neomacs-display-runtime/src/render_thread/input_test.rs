@@ -23,13 +23,21 @@ use winit::window::ResizeDirection;
 /// and `titlebar_hit_test`.  Only the fields those methods read are
 /// meaningful; everything else is set to harmless defaults.
 fn make_test_app(width: u32, height: u32, scale_factor: f64) -> RenderApp {
+    make_test_app_with_input(width, height, scale_factor).0
+}
+
+fn make_test_app_with_input(
+    width: u32,
+    height: u32,
+    scale_factor: f64,
+) -> (RenderApp, crate::thread_comm::EmacsComms) {
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
 
     use crate::thread_comm::ThreadComms;
 
     let comms = ThreadComms::new();
-    let (_emacs, render) = comms.split();
+    let (emacs, render) = comms.split();
     let image_metadata = Arc::new((Mutex::new(HashMap::new()), std::sync::Condvar::new()));
     let shared_monitors = Arc::new((Mutex::new(Vec::new()), std::sync::Condvar::new()));
 
@@ -61,7 +69,7 @@ fn make_test_app(width: u32, height: u32, scale_factor: f64) -> RenderApp {
             .unwrap(),
         );
     }
-    app
+    (app, emacs)
 }
 
 #[test]
@@ -170,54 +178,60 @@ fn set_test_frame_placement(
 }
 
 #[test]
-fn incoherent_presented_observation_drops_the_raw_pointer_event() {
-    let expected = PresentationId::new(8);
-    let requested = PresentationId::new(7);
-    let result = RenderApp::pair_presented_region_with_raw_input(
-        Err(
-            neomacs_display_protocol::PresentedHitError::StalePresentation {
-                expected,
-                requested,
-            },
-        ),
-        crate::thread_comm::InputEvent::MouseMove {
-            x: 1.0,
-            y: 2.0,
-            modifiers: 0,
-            target_frame_id: 1,
-        },
+fn wheel_input_atomically_carries_its_presented_region() {
+    let (mut app, emacs) = make_test_app_with_input(200, 100, 1.0);
+    let window_id = winit::window::WindowId::dummy();
+    app.frame_windows.primary_winit_id = Some(window_id);
+
+    let window = app.frame_windows.primary_window_mut().unwrap();
+    window.render.set_emacs_frame_id(0x42);
+    window.render.set_mouse_pos((50.0, 40.0));
+    let mut frame = FrameGlyphBuffer::with_size(200.0, 100.0);
+    frame.presentation_id = PresentationId::new(91);
+    frame
+        .install_presented_hit_index(
+            PresentedHitIndex::from_parts(
+                frame.presentation_id,
+                vec![PresentedHitRegion::new(
+                    Some(neomacs_display_protocol::DisplayWindowId::new(1)),
+                    PresentedRegionKind::TextBody,
+                    FrameRect::new(0.0, 0.0, 200.0, 100.0).unwrap(),
+                    0,
+                )],
+                vec![],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+    window.render.set_current_frame(Some(frame), None);
+
+    app.handle_mouse_wheel(
+        window_id,
+        winit::event::MouseScrollDelta::LineDelta(0.0, -1.0),
     );
 
     assert!(matches!(
-        result,
-        Err(neomacs_display_protocol::PresentedHitError::StalePresentation {
-            expected: actual_expected,
-            requested: actual_requested,
-        }) if actual_expected == expected && actual_requested == requested
+        emacs.input_rx.try_recv().unwrap(),
+        crate::thread_comm::InputEvent::PositionedPointer(
+            crate::thread_comm::PositionedPointerInput {
+                position: crate::thread_comm::PointerPosition {
+                    x: 50.0,
+                    y: 40.0,
+                    target_frame_id: 0x42,
+                },
+                target: crate::thread_comm::PointerTarget::Presented {
+                    presentation: 91,
+                    hit: Some(hit),
+                },
+                action: crate::thread_comm::PointerAction::Scroll {
+                    delta: crate::thread_comm::ScrollDelta::Lines { x: 0.0, y: -1.0 },
+                    ..
+                },
+            }
+        ) if hit.region().window()
+            == Some(neomacs_display_protocol::DisplayWindowId::new(1))
     ));
-}
-
-#[test]
-fn incoherent_presented_observation_drops_the_raw_mouse_button_event() {
-    let result = RenderApp::pair_presented_region_with_raw_input(
-        Err(neomacs_display_protocol::PresentedHitError::InvalidRegionGeometry),
-        crate::thread_comm::InputEvent::MouseButton {
-            button: 1,
-            x: 1.0,
-            y: 2.0,
-            pressed: true,
-            modifiers: 0,
-            target_frame_id: 1,
-            webkit_id: 0,
-            webkit_rel_x: 0,
-            webkit_rel_y: 0,
-        },
-    );
-
-    assert!(matches!(
-        result,
-        Err(neomacs_display_protocol::PresentedHitError::InvalidRegionGeometry)
-    ));
+    assert!(emacs.input_rx.try_recv().is_err());
 }
 
 fn presented_pointer_integration_relief(pressed: bool) -> PointerImageRelief {

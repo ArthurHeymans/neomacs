@@ -1,13 +1,35 @@
 use super::*;
 
+fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
+    let mut converted = super::convert_display_event(event).into_iter();
+    let event = converted.next();
+    assert!(
+        converted.next().is_none(),
+        "test expected a single converted evaluator event"
+    );
+    event
+}
+
+fn unpresented_pointer(
+    x: f32,
+    y: f32,
+    target_frame_id: u64,
+    action: PointerAction,
+) -> DisplayEvent {
+    DisplayEvent::PositionedPointer(PositionedPointerInput {
+        position: neomacs_display_runtime::thread_comm::PointerPosition {
+            x,
+            y,
+            target_frame_id,
+        },
+        target: PointerTarget::Unpresented,
+        action,
+    })
+}
+
 #[test]
 fn mouse_move_is_excluded_from_input_bridge_debug_logging() {
-    let event = DisplayEvent::MouseMove {
-        x: 1.0,
-        y: 2.0,
-        modifiers: 0,
-        target_frame_id: 7,
-    };
+    let event = unpresented_pointer(1.0, 2.0, 7, PointerAction::Move { modifiers: 0 });
 
     assert!(!should_log_display_event(&event));
 }
@@ -165,12 +187,14 @@ fn key_transport_preserves_source_frame_identity() {
 
 #[test]
 fn mouse_modifiers_use_core_transport_mapping() {
-    let display_event = DisplayEvent::MouseMove {
-        x: 1.0,
-        y: 2.0,
-        modifiers: keyboard::RENDER_SHIFT_MASK | keyboard::RENDER_CTRL_MASK,
-        target_frame_id: 7,
-    };
+    let display_event = unpresented_pointer(
+        1.0,
+        2.0,
+        7,
+        PointerAction::Move {
+            modifiers: keyboard::RENDER_SHIFT_MASK | keyboard::RENDER_CTRL_MASK,
+        },
+    );
     let event = convert_display_event(&display_event);
 
     match event {
@@ -190,17 +214,17 @@ fn mouse_modifiers_use_core_transport_mapping() {
 
 #[test]
 fn mouse_button_preserves_target_frame_for_keyboard_owner() {
-    let display_event = DisplayEvent::MouseButton {
-        button: 1,
-        x: 10.0,
-        y: 20.0,
-        pressed: true,
-        modifiers: 0,
-        target_frame_id: 42,
-        webkit_id: 0,
-        webkit_rel_x: 0,
-        webkit_rel_y: 0,
-    };
+    let display_event = unpresented_pointer(
+        10.0,
+        20.0,
+        42,
+        PointerAction::Button {
+            button: 1,
+            pressed: true,
+            modifiers: 0,
+            webkit: None,
+        },
+    );
     let event = convert_display_event(&display_event);
 
     match event {
@@ -351,7 +375,7 @@ fn monitor_changes_convert_to_core_monitor_snapshot() {
 }
 
 #[test]
-fn presented_region_round_trips_without_recomputing_the_hit() {
+fn positioned_wheel_expands_to_observation_then_scroll_without_recomputing_the_hit() {
     let window = neomacs_display_protocol::DisplayWindowId::new(3);
     let hit = neomacs_display_protocol::PresentedHitIndex::from_parts(
         neomacs_display_protocol::PresentationId::new(9),
@@ -370,21 +394,69 @@ fn presented_region_round_trips_without_recomputing_the_hit() {
         25.0,
     ))
     .unwrap();
-    let event = convert_display_event(&DisplayEvent::PresentedRegion {
-        presentation: 9,
-        hit,
-        x: 5.0,
-        y: 25.0,
-        target_frame_id: 44,
-    });
+    let events: Vec<_> = super::convert_display_event(&DisplayEvent::PositionedPointer(
+        neomacs_display_runtime::thread_comm::PositionedPointerInput {
+            position: neomacs_display_runtime::thread_comm::PointerPosition {
+                x: 5.0,
+                y: 25.0,
+                target_frame_id: 44,
+            },
+            target: neomacs_display_runtime::thread_comm::PointerTarget::Presented {
+                presentation: 9,
+                hit,
+            },
+            action: neomacs_display_runtime::thread_comm::PointerAction::Scroll {
+                delta: neomacs_display_runtime::thread_comm::ScrollDelta::Lines { x: 0.0, y: -1.0 },
+                modifiers: 0,
+                webkit: None,
+            },
+        },
+    ))
+    .into_iter()
+    .collect();
     assert!(matches!(
-        event,
-        Some(KbInputEvent::PresentedRegion {
+        events.as_slice(),
+        [KbInputEvent::PresentedRegion {
             presentation: 9,
             hit: forwarded,
             x: 5.0,
             y: 25.0,
             target_frame_id: 44,
-        }) if forwarded == hit
+        }, KbInputEvent::MouseScroll {
+            delta_x: 0.0,
+            delta_y: -1.0,
+            x: 5.0,
+            y: 25.0,
+            target_frame_id: 44,
+            ..
+        }] if *forwarded == hit
+    ));
+}
+
+#[test]
+fn positioned_pixel_scroll_maps_typed_pixels_to_core_smooth_scroll() {
+    let events: Vec<_> = super::convert_display_event(&unpresented_pointer(
+        12.0,
+        18.0,
+        44,
+        PointerAction::Scroll {
+            delta: ScrollDelta::Pixels { x: 1.5, y: -7.25 },
+            modifiers: keyboard::RENDER_SHIFT_MASK,
+            webkit: None,
+        },
+    ))
+    .into_iter()
+    .collect();
+
+    assert!(matches!(
+        events.as_slice(),
+        [KbInputEvent::PixelScroll {
+            delta_x: 1.5,
+            delta_y: -7.25,
+            x: 12.0,
+            y: 18.0,
+            modifiers,
+            target_frame_id: 44,
+        }] if modifiers.shift
     ));
 }

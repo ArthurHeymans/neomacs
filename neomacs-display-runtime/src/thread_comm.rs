@@ -35,6 +35,75 @@ pub struct MonitorInfo {
     pub name: Option<String>,
 }
 
+/// Frame-local logical coordinates shared by one pointer action and its
+/// presentation-qualified target. Keeping the coordinates here prevents the
+/// semantic hit and raw action from disagreeing about where the input occurred.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PointerPosition {
+    pub x: f32,
+    pub y: f32,
+    pub target_frame_id: u64,
+}
+
+/// How a pointer position relates to the immutable presentation on screen.
+///
+/// `Unpresented` is explicit for exposed/native surface area. A producer cannot
+/// accidentally omit presentation state from a pointer action.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PointerTarget {
+    Presented {
+        presentation: u64,
+        hit: Option<neomacs_display_protocol::PresentedHit>,
+    },
+    Unpresented,
+}
+
+/// Optional renderer-owned WebKit target for button and scroll forwarding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WebKitPointerTarget {
+    pub id: u32,
+    pub relative_x: i32,
+    pub relative_y: i32,
+}
+
+/// The unit carried by a scroll delta. This replaces the invalid state where a
+/// boolean precision flag can disagree with the meaning of the numbers.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ScrollDelta {
+    Lines { x: f32, y: f32 },
+    Pixels { x: f32, y: f32 },
+}
+
+/// Pointer action interpreted at one [`PointerPosition`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PointerAction {
+    Button {
+        button: u32,
+        pressed: bool,
+        modifiers: u32,
+        webkit: Option<WebKitPointerTarget>,
+    },
+    Move {
+        modifiers: u32,
+    },
+    Scroll {
+        delta: ScrollDelta,
+        modifiers: u32,
+        webkit: Option<WebKitPointerTarget>,
+    },
+}
+
+/// Atomic display-to-evaluator pointer input.
+///
+/// The transport has one variant for native move, button, and scroll actions,
+/// so target qualification cannot be sent, reordered, or forgotten separately.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PositionedPointerInput {
+    pub position: PointerPosition,
+    pub target: PointerTarget,
+    pub action: PointerAction,
+}
+
 /// Input event from render thread to Emacs
 #[derive(Debug, Clone)]
 pub enum InputEvent {
@@ -43,7 +112,10 @@ pub enum InputEvent {
     /// This transport fact deliberately carries no terminal-sequence or
     /// modifier interpretation.  The evaluator applies
     /// `keyboard-coding-system` and `input-decode-map` in input order.
-    RawTtyBytes { bytes: Vec<u8>, emacs_frame_id: u64 },
+    RawTtyBytes {
+        bytes: Vec<u8>,
+        emacs_frame_id: u64,
+    },
     Key {
         keysym: u32,
         modifiers: u32,
@@ -51,51 +123,7 @@ pub enum InputEvent {
         /// Emacs frame_id of the window that produced the key event
         emacs_frame_id: u64,
     },
-    MouseButton {
-        button: u32,
-        x: f32,
-        y: f32,
-        pressed: bool,
-        modifiers: u32,
-        /// Emacs frame_id targeted by hit testing (root frame or child frame)
-        target_frame_id: u64,
-        /// WebKit view ID hit by render-thread glyph search (0 = none)
-        webkit_id: u32,
-        /// Coordinates relative to the WebKit view (valid when webkit_id != 0)
-        webkit_rel_x: i32,
-        webkit_rel_y: i32,
-    },
-    MouseMove {
-        x: f32,
-        y: f32,
-        modifiers: u32,
-        /// Emacs frame_id targeted by hit testing (root frame or child frame)
-        target_frame_id: u64,
-    },
-    /// Semantic pointer observation resolved against the displayed presentation.
-    PresentedRegion {
-        presentation: u64,
-        hit: Option<neomacs_display_protocol::PresentedHit>,
-        x: f32,
-        y: f32,
-        target_frame_id: u64,
-    },
-    MouseScroll {
-        delta_x: f32,
-        delta_y: f32,
-        x: f32,
-        y: f32,
-        modifiers: u32,
-        /// True if deltas are in pixels (touchpad), false if in lines (mouse wheel)
-        pixel_precise: bool,
-        /// Emacs frame_id targeted by hit testing (root frame or child frame)
-        target_frame_id: u64,
-        /// WebKit view ID hit by render-thread glyph search (0 = none)
-        webkit_id: u32,
-        /// Coordinates relative to the WebKit view (valid when webkit_id != 0)
-        webkit_rel_x: i32,
-        webkit_rel_y: i32,
-    },
+    PositionedPointer(PositionedPointerInput),
     WindowResize {
         width: u32,
         height: u32,
@@ -114,7 +142,9 @@ pub enum InputEvent {
         emacs_frame_id: u64,
     },
     /// Monitor configuration changed on the active terminal.
-    MonitorsChanged { monitors: Vec<MonitorInfo> },
+    MonitorsChanged {
+        monitors: Vec<MonitorInfo>,
+    },
     /// The wgpu device was lost (user shader hang → driver reset) and the
     /// render thread rebuilt its GPU state from scratch. Every renderer-side
     /// media object (decoded images, videos, webkit textures, shader
@@ -123,24 +153,41 @@ pub enum InputEvent {
     DisplayReset,
     /// WebKit view title changed
     #[cfg(feature = "wpe-webkit")]
-    WebKitTitleChanged { id: u32, title: String },
+    WebKitTitleChanged {
+        id: u32,
+        title: String,
+    },
     /// WebKit view URL changed
     #[cfg(feature = "wpe-webkit")]
-    WebKitUrlChanged { id: u32, url: String },
+    WebKitUrlChanged {
+        id: u32,
+        url: String,
+    },
     /// WebKit view load progress changed
     #[cfg(feature = "wpe-webkit")]
-    WebKitProgressChanged { id: u32, progress: f64 },
+    WebKitProgressChanged {
+        id: u32,
+        progress: f64,
+    },
     /// WebKit view finished loading
     #[cfg(feature = "wpe-webkit")]
-    WebKitLoadFinished { id: u32 },
+    WebKitLoadFinished {
+        id: u32,
+    },
     /// Image decoding completed or renderer residency was lost.
-    ImageStateChanged { id: u32, change: ImageStateChange },
+    ImageStateChanged {
+        id: u32,
+        change: ImageStateChange,
+    },
     /// A shader surface failed to build on the render thread AFTER the Lisp
     /// thread's naga pre-validation accepted it (the naga-accepts /
     /// wgpu-rejects edge, e.g. a device limit). Carries the surface id and the
     /// renderer's error so the evaluator can surface it to Lisp instead of the
     /// failure only living in a log line + a silently-blank quad.
-    SurfaceCreateFailed { id: u32, error: String },
+    SurfaceCreateFailed {
+        id: u32,
+        error: String,
+    },
     /// Terminal creation failed after the evaluator reserved its typed ID.
     #[cfg(feature = "neo-term")]
     TerminalCreateFailed {
@@ -149,7 +196,9 @@ pub enum InputEvent {
     },
     /// Terminal child process exited
     #[cfg(feature = "neo-term")]
-    TerminalExited { id: crate::terminal::TerminalId },
+    TerminalExited {
+        id: crate::terminal::TerminalId,
+    },
     /// Terminal title changed
     #[cfg(feature = "neo-term")]
     TerminalTitleChanged {
@@ -157,11 +206,20 @@ pub enum InputEvent {
         title: String,
     },
     /// Popup menu selection made (index into menu items, -1 = cancelled)
-    MenuSelection { index: i32 },
+    MenuSelection {
+        index: i32,
+    },
     /// File(s) dropped onto the window
-    FileDrop { paths: Vec<String>, x: f32, y: f32 },
+    FileDrop {
+        paths: Vec<String>,
+        x: f32,
+        y: f32,
+    },
     /// Toolbar button clicked (index into toolbar items)
-    ToolBarClick { index: i32, emacs_frame_id: u64 },
+    ToolBarClick {
+        index: i32,
+        emacs_frame_id: u64,
+    },
     /// Pointer observation resolved against an immutable displayed presentation.
     PresentedPointer {
         presentation: u64,
@@ -183,7 +241,9 @@ pub enum InputEvent {
         emacs_frame_id: u64,
     },
     /// Renderer no longer displays or generates hits for this presentation.
-    PresentationRetired { presentation: u64 },
+    PresentationRetired {
+        presentation: u64,
+    },
     /// Menu bar item clicked. `menu_x` is the Emacs menu-bar column used by
     /// legacy Lisp paths; `key` is the exact rendered top-level menu key; and
     /// `anchor` is the frame-local logical-pixel rectangle used by the native
@@ -794,7 +854,10 @@ impl RenderComms {
     fn is_lossy_input_event(event: &InputEvent) -> bool {
         matches!(
             event,
-            InputEvent::MouseMove { .. } | InputEvent::MenuSelection { index: -1 }
+            InputEvent::PositionedPointer(PositionedPointerInput {
+                action: PointerAction::Move { .. },
+                ..
+            }) | InputEvent::MenuSelection { index: -1 }
         ) || {
             #[cfg(feature = "wpe-webkit")]
             {
@@ -822,10 +885,11 @@ impl RenderComms {
         match event {
             InputEvent::RawTtyBytes { .. } => "raw-tty-bytes",
             InputEvent::Key { .. } => "key",
-            InputEvent::MouseButton { .. } => "mouse-button",
-            InputEvent::MouseMove { .. } => "mouse-move",
-            InputEvent::PresentedRegion { .. } => "presented-region",
-            InputEvent::MouseScroll { .. } => "mouse-scroll",
+            InputEvent::PositionedPointer(PositionedPointerInput { action, .. }) => match action {
+                PointerAction::Button { .. } => "positioned-pointer-button",
+                PointerAction::Move { .. } => "positioned-pointer-move",
+                PointerAction::Scroll { .. } => "positioned-pointer-scroll",
+            },
             InputEvent::WindowResize { .. } => "window-resize",
             InputEvent::WindowClose { .. } => "window-close",
             InputEvent::WindowFocus { .. } => "window-focus",

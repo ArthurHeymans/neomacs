@@ -5,13 +5,65 @@
 //! while converting the display transport into the core input transport.
 
 use neomacs_display_runtime::thread_comm::{
-    InputEvent as DisplayEvent, MonitorInfo as DisplayMonitorInfo,
+    InputEvent as DisplayEvent, MonitorInfo as DisplayMonitorInfo, PointerAction, PointerTarget,
+    PositionedPointerInput, ScrollDelta,
 };
 use neovm_core::emacs_core::builtins::NeomacsMonitorInfo;
 use neovm_core::keyboard::{self, InputEvent as KbInputEvent, MouseButton};
 
 pub(crate) fn should_log_display_event(event: &DisplayEvent) -> bool {
-    !matches!(event, DisplayEvent::MouseMove { .. })
+    !matches!(
+        event,
+        DisplayEvent::PositionedPointer(PositionedPointerInput {
+            action: PointerAction::Move { .. },
+            ..
+        })
+    )
+}
+
+/// Allocation-free result of adapting one display event to the evaluator
+/// queue. A positioned pointer input may expand to an observation followed by
+/// its action; all other inputs produce at most one event.
+#[derive(Debug)]
+#[must_use]
+pub(crate) struct EvaluatorInputBatch {
+    events: [Option<KbInputEvent>; 2],
+}
+
+impl EvaluatorInputBatch {
+    fn none() -> Self {
+        Self {
+            events: [None, None],
+        }
+    }
+
+    fn one(event: KbInputEvent) -> Self {
+        Self {
+            events: [Some(event), None],
+        }
+    }
+
+    fn optional(event: Option<KbInputEvent>) -> Self {
+        event.map_or_else(Self::none, Self::one)
+    }
+
+    fn positioned(observation: Option<KbInputEvent>, action: KbInputEvent) -> Self {
+        match observation {
+            Some(observation) => Self {
+                events: [Some(observation), Some(action)],
+            },
+            None => Self::one(action),
+        }
+    }
+}
+
+impl IntoIterator for EvaluatorInputBatch {
+    type Item = KbInputEvent;
+    type IntoIter = std::iter::Flatten<std::array::IntoIter<Option<KbInputEvent>, 2>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.events.into_iter().flatten()
+    }
 }
 
 pub(crate) fn convert_monitor_infos(monitors: &[DisplayMonitorInfo]) -> Vec<NeomacsMonitorInfo> {
@@ -32,10 +84,96 @@ pub(crate) fn convert_monitor_infos(monitors: &[DisplayMonitorInfo]) -> Vec<Neom
 
 /// Convert a display runtime input event to a neovm-core keyboard input event.
 ///
-/// Returns `None` for events that should be silently dropped (e.g. key
-/// releases, modifier-only keys).
-pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
+/// The batch is empty for input that should be silently dropped (for example,
+/// key releases and modifier-only keys). Presented pointer input expands to an
+/// observation immediately followed by its raw evaluator action.
+pub(crate) fn convert_display_event(event: &DisplayEvent) -> EvaluatorInputBatch {
+    if let DisplayEvent::PositionedPointer(input) = event {
+        return convert_positioned_pointer_input(*input);
+    }
+    EvaluatorInputBatch::optional(convert_single_display_event(event))
+}
+
+fn convert_positioned_pointer_input(input: PositionedPointerInput) -> EvaluatorInputBatch {
+    let position = input.position;
+    let observation = match input.target {
+        PointerTarget::Presented { presentation, hit } => Some(KbInputEvent::PresentedRegion {
+            presentation,
+            hit,
+            x: position.x,
+            y: position.y,
+            target_frame_id: position.target_frame_id,
+        }),
+        PointerTarget::Unpresented => None,
+    };
+    let action = match input.action {
+        PointerAction::Button {
+            button,
+            pressed,
+            modifiers,
+            ..
+        } => {
+            let button = match button {
+                1 => MouseButton::Left,
+                2 => MouseButton::Middle,
+                3 => MouseButton::Right,
+                4 => MouseButton::Button4,
+                5 => MouseButton::Button5,
+                _ => return EvaluatorInputBatch::none(),
+            };
+            if pressed {
+                KbInputEvent::MousePress {
+                    button,
+                    x: position.x,
+                    y: position.y,
+                    modifiers: keyboard::render_modifiers_to_modifiers(modifiers),
+                    target_frame_id: position.target_frame_id,
+                }
+            } else {
+                KbInputEvent::MouseRelease {
+                    button,
+                    x: position.x,
+                    y: position.y,
+                    target_frame_id: position.target_frame_id,
+                }
+            }
+        }
+        PointerAction::Move { modifiers } => KbInputEvent::MouseMove {
+            x: position.x,
+            y: position.y,
+            modifiers: keyboard::render_modifiers_to_modifiers(modifiers),
+            target_frame_id: position.target_frame_id,
+        },
+        PointerAction::Scroll {
+            delta, modifiers, ..
+        } => {
+            let modifiers = keyboard::render_modifiers_to_modifiers(modifiers);
+            match delta {
+                ScrollDelta::Lines { x, y } => KbInputEvent::MouseScroll {
+                    delta_x: x,
+                    delta_y: y,
+                    x: position.x,
+                    y: position.y,
+                    modifiers,
+                    target_frame_id: position.target_frame_id,
+                },
+                ScrollDelta::Pixels { x, y } => KbInputEvent::PixelScroll {
+                    delta_x: x,
+                    delta_y: y,
+                    x: position.x,
+                    y: position.y,
+                    modifiers,
+                    target_frame_id: position.target_frame_id,
+                },
+            }
+        }
+    };
+    EvaluatorInputBatch::positioned(observation, action)
+}
+
+fn convert_single_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
     match event {
+        DisplayEvent::PositionedPointer(_) => unreachable!("handled by convert_display_event"),
         DisplayEvent::RawTtyBytes {
             bytes,
             emacs_frame_id,
@@ -60,99 +198,6 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
             )?;
             tracing::debug!("input_bridge: converted to {:?}", event);
             Some(event)
-        }
-        DisplayEvent::MouseButton {
-            button,
-            x,
-            y,
-            pressed,
-            modifiers,
-            target_frame_id,
-            ..
-        } => {
-            let mb = match *button {
-                1 => MouseButton::Left,
-                2 => MouseButton::Middle,
-                3 => MouseButton::Right,
-                4 => MouseButton::Button4,
-                5 => MouseButton::Button5,
-                _ => return None,
-            };
-            if *pressed {
-                Some(KbInputEvent::MousePress {
-                    button: mb,
-                    x: *x,
-                    y: *y,
-                    modifiers: keyboard::render_modifiers_to_modifiers(*modifiers),
-                    target_frame_id: *target_frame_id,
-                })
-            } else {
-                Some(KbInputEvent::MouseRelease {
-                    button: mb,
-                    x: *x,
-                    y: *y,
-                    target_frame_id: *target_frame_id,
-                })
-            }
-        }
-        DisplayEvent::MouseMove {
-            x,
-            y,
-            modifiers,
-            target_frame_id,
-            ..
-        } => Some(KbInputEvent::MouseMove {
-            x: *x,
-            y: *y,
-            modifiers: keyboard::render_modifiers_to_modifiers(*modifiers),
-            target_frame_id: *target_frame_id,
-        }),
-        DisplayEvent::PresentedRegion {
-            presentation,
-            hit,
-            x,
-            y,
-            target_frame_id,
-        } => Some(KbInputEvent::PresentedRegion {
-            presentation: *presentation,
-            hit: *hit,
-            x: *x,
-            y: *y,
-            target_frame_id: *target_frame_id,
-        }),
-        DisplayEvent::MouseScroll {
-            delta_x,
-            delta_y,
-            x,
-            y,
-            modifiers,
-            target_frame_id,
-            pixel_precise,
-            ..
-        } => {
-            let modifiers = keyboard::render_modifiers_to_modifiers(*modifiers);
-            if *pixel_precise {
-                // Trackpad pixel-precise → smooth scroll (Phase 1, T4): applied as a
-                // sub-line vscroll by the layout pass, not a discrete wheel event.
-                Some(KbInputEvent::PixelScroll {
-                    delta_x: *delta_x,
-                    delta_y: *delta_y,
-                    x: *x,
-                    y: *y,
-                    modifiers,
-                    target_frame_id: *target_frame_id,
-                })
-            } else {
-                // Mouse wheel → discrete wheel event (existing mwheel behavior).
-                Some(KbInputEvent::MouseScroll {
-                    delta_x: *delta_x,
-                    delta_y: *delta_y,
-                    x: *x,
-                    y: *y,
-                    modifiers,
-                    target_frame_id: *target_frame_id,
-                })
-            }
         }
         DisplayEvent::MenuSelection { index } => {
             Some(KbInputEvent::MenuSelection { index: *index })

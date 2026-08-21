@@ -3127,7 +3127,9 @@ fn run_gui_evaluator_worker(
                     tracing::debug!("input-bridge: received display event {:?}", event);
                 }
                 record_primary_window_resize(&primary_window_size_for_input, &event);
-                if let Some(kb_event) = input_bridge::convert_display_event(&event) {
+                let mut queued_input = false;
+                let mut evaluator_disconnected = false;
+                for kb_event in input_bridge::convert_display_event(&event) {
                     if should_log {
                         tracing::debug!(
                             "input-bridge: converted display event {:?} to keyboard event {:?}",
@@ -3139,8 +3141,15 @@ fn run_gui_evaluator_worker(
                         quit_requested.store(true, std::sync::atomic::Ordering::Relaxed);
                     }
                     if input_tx.send(kb_event).is_err() {
+                        evaluator_disconnected = true;
                         break;
                     }
+                    queued_input = true;
+                }
+                if evaluator_disconnected {
+                    break;
+                }
+                if queued_input {
                     if let Some(notifier) = &input_notifier
                         && let Err(error) = notifier.notify()
                     {
@@ -3715,7 +3724,9 @@ pub fn run(mode: RuntimeMode) {
                         tracing::debug!("input-bridge: received display event {:?}", event);
                     }
                     record_primary_window_resize(&primary_window_size_for_input, &event);
-                    if let Some(kb_event) = input_bridge::convert_display_event(&event) {
+                    let mut queued_input = false;
+                    let mut evaluator_disconnected = false;
+                    for kb_event in input_bridge::convert_display_event(&event) {
                         if should_log {
                             tracing::debug!(
                                 "input-bridge: converted display event {:?} to keyboard event {:?}",
@@ -3727,8 +3738,15 @@ pub fn run(mode: RuntimeMode) {
                             quit_requested.store(true, std::sync::atomic::Ordering::Relaxed);
                         }
                         if input_tx.send(kb_event).is_err() {
-                            break; // Context dropped
+                            evaluator_disconnected = true;
+                            break;
                         }
+                        queued_input = true;
+                    }
+                    if evaluator_disconnected {
+                        break; // Context dropped
+                    }
+                    if queued_input {
                         if let Some(notifier) = &input_notifier
                             && let Err(error) = notifier.notify()
                         {

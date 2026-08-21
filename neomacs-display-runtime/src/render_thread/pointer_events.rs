@@ -6,7 +6,10 @@ use super::input::{MenuBarHit, frame_chrome_hit, frame_chrome_owns_pointer};
 use super::state::PresentedInteractionKey;
 use crate::backend::wgpu::NEOMACS_SUPER_MASK;
 use crate::core::frame_glyphs::FrameGlyph;
-use crate::thread_comm::InputEvent;
+use crate::thread_comm::{
+    InputEvent, PointerAction, PointerPosition, PointerTarget, PositionedPointerInput, ScrollDelta,
+    WebKitPointerTarget,
+};
 use neomacs_display_protocol::frame_chrome::{ChromeAction, FrameChromeKind};
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta};
@@ -118,31 +121,44 @@ fn surface_glyph_hit_test(glyphs: &[FrameGlyph], x: f32, y: f32) -> Option<(u32,
 }
 
 impl RenderApp {
-    fn presented_region_input_event(
+    fn positioned_pointer_input_event(
         render: &super::frame_windows::GuiFrameRenderState,
-        target_frame_id: u64,
-        x: f32,
-        y: f32,
-    ) -> Result<Option<InputEvent>, neomacs_display_protocol::PresentedHitError> {
-        let Some((presentation, hit)) =
-            render.presented_region_observation(target_frame_id, x, y)?
-        else {
-            return Ok(None);
+        owner: PointerOwner,
+        position: PointerPosition,
+        action: PointerAction,
+    ) -> Result<InputEvent, neomacs_display_protocol::PresentedHitError> {
+        let target = if owner.target().is_some() {
+            match render.presented_region_observation(
+                position.target_frame_id,
+                position.x,
+                position.y,
+            )? {
+                Some((presentation, hit)) => PointerTarget::Presented {
+                    presentation: presentation.get(),
+                    hit,
+                },
+                None => PointerTarget::Unpresented,
+            }
+        } else {
+            PointerTarget::Unpresented
         };
-        Ok(Some(InputEvent::PresentedRegion {
-            presentation: presentation.get(),
-            hit,
-            x,
-            y,
-            target_frame_id,
+        Ok(InputEvent::PositionedPointer(PositionedPointerInput {
+            position,
+            target,
+            action,
         }))
     }
 
-    pub(super) fn pair_presented_region_with_raw_input(
-        observation: Result<Option<InputEvent>, neomacs_display_protocol::PresentedHitError>,
-        raw: InputEvent,
-    ) -> Result<(Option<InputEvent>, InputEvent), neomacs_display_protocol::PresentedHitError> {
-        observation.map(|observation| (observation, raw))
+    fn webkit_pointer_target(
+        id: u32,
+        relative_x: i32,
+        relative_y: i32,
+    ) -> Option<WebKitPointerTarget> {
+        (id != 0).then_some(WebKitPointerTarget {
+            id,
+            relative_x,
+            relative_y,
+        })
     }
 
     pub(super) fn suppress_root_chrome_hover(
@@ -993,31 +1009,25 @@ impl RenderApp {
                     {
                         renderer.surface_mouse_press(surface_id, u, v);
                     }
-                    let raw = InputEvent::MouseButton {
-                        button: btn,
+                    let position = PointerPosition {
                         x: ev_x,
                         y: ev_y,
+                        target_frame_id: target_fid,
+                    };
+                    let action = PointerAction::Button {
+                        button: btn,
                         pressed: state == ElementState::Pressed,
                         modifiers: self.modifiers,
-                        target_frame_id: target_fid,
-                        webkit_id: wk_id,
-                        webkit_rel_x: wk_rx,
-                        webkit_rel_y: wk_ry,
+                        webkit: Self::webkit_pointer_target(wk_id, wk_rx, wk_ry),
                     };
-                    match Self::pair_presented_region_with_raw_input(
-                        Self::presented_region_input_event(
-                            &window_state.render,
-                            target_fid,
-                            ev_x,
-                            ev_y,
-                        ),
-                        raw,
+                    match Self::positioned_pointer_input_event(
+                        &window_state.render,
+                        pointer_owner,
+                        position,
+                        action,
                     ) {
-                        Ok((observation, raw)) => {
-                            if let Some(observation) = observation {
-                                captured_events.push(observation);
-                            }
-                            event = Some(raw);
+                        Ok(input) => {
+                            event = Some(input);
                             if state == ElementState::Pressed {
                                 window_state.render.clear_presented_capture();
                                 window_state
@@ -1255,23 +1265,19 @@ impl RenderApp {
                 window_state.render.mark_dirty();
             }
             if event.is_none() {
-                let raw = InputEvent::MouseMove {
+                let position = PointerPosition {
                     x: ev_x,
                     y: ev_y,
-                    modifiers,
                     target_frame_id: target_fid,
                 };
-                let observation = if pointer_owner.target().is_some() {
-                    Self::presented_region_input_event(&window_state.render, target_fid, ev_x, ev_y)
-                } else {
-                    Ok(None)
-                };
-                match Self::pair_presented_region_with_raw_input(observation, raw) {
-                    Ok((observation, raw)) => {
-                        if let Some(observation) = observation {
-                            self.comms.send_input(observation);
-                        }
-                        event = Some(raw);
+                match Self::positioned_pointer_input_event(
+                    &window_state.render,
+                    pointer_owner,
+                    position,
+                    PointerAction::Move { modifiers },
+                ) {
+                    Ok(input) => {
+                        event = Some(input);
                     }
                     Err(error) => {
                         tracing::error!(
@@ -1299,11 +1305,12 @@ impl RenderApp {
     pub(super) fn handle_mouse_wheel(&mut self, window_id: WindowId, delta: MouseScrollDelta) {
         if let Some(window_state) = self.frame_windows.get_by_winit(window_id) {
             let scale = window_state.scale_factor();
-            let (dx, dy, pixel_precise) = match delta {
-                MouseScrollDelta::LineDelta(x, y) => (x, y, false),
-                MouseScrollDelta::PixelDelta(pos) => {
-                    ((pos.x / scale) as f32, (pos.y / scale) as f32, true)
-                }
+            let delta = match delta {
+                MouseScrollDelta::LineDelta(x, y) => ScrollDelta::Lines { x, y },
+                MouseScrollDelta::PixelDelta(pos) => ScrollDelta::Pixels {
+                    x: (pos.x / scale) as f32,
+                    y: (pos.y / scale) as f32,
+                },
             };
             let pointer_owner = Self::pointer_owner(
                 window_state,
@@ -1319,18 +1326,35 @@ impl RenderApp {
             });
             let (wk_id, wk_rx, wk_ry) =
                 Self::webkit_target_for_frame_window(window_state, target_fid, ev_x, ev_y);
-            self.comms.send_input(InputEvent::MouseScroll {
-                delta_x: dx,
-                delta_y: dy,
+            let position = PointerPosition {
                 x: ev_x,
                 y: ev_y,
-                modifiers: self.modifiers,
-                pixel_precise,
                 target_frame_id: target_fid,
-                webkit_id: wk_id,
-                webkit_rel_x: wk_rx,
-                webkit_rel_y: wk_ry,
-            });
+            };
+            let action = PointerAction::Scroll {
+                delta,
+                modifiers: self.modifiers,
+                webkit: Self::webkit_pointer_target(wk_id, wk_rx, wk_ry),
+            };
+            match Self::positioned_pointer_input_event(
+                &window_state.render,
+                pointer_owner,
+                position,
+                action,
+            ) {
+                Ok(input) => {
+                    self.comms.send_input(input);
+                }
+                Err(error) => {
+                    tracing::error!(
+                        ?error,
+                        target_fid,
+                        ev_x,
+                        ev_y,
+                        "dropping incoherent mouse-wheel input"
+                    );
+                }
+            }
             self.record_idle_dim_activity(window_id);
         }
     }
