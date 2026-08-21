@@ -14,7 +14,7 @@ use crate::buffer::{
 use crate::emacs_core::value::{HashTableTest, Value};
 use crate::gc_trace::GcTrace;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 
 mod display;
 mod frame_params;
@@ -2436,7 +2436,7 @@ impl Frame {
             // "unspecified-bg".  GUI frame creation overwrites these with
             // concrete black/white defaults after it installs a window system.
             parameters: {
-                let mut params = HashMap::new();
+                let mut params = HashMap::default();
                 params.insert(
                     FrameParam::ForegroundColor.symbol(),
                     Value::string("unspecified-fg"),
@@ -2468,7 +2468,7 @@ impl Frame {
             defer_next_gui_parameter_resize: false,
             pending_gui_resize: None,
             presentation_state: FramePresentationState::default(),
-            redisplay_cache: HashMap::new(),
+            redisplay_cache: HashMap::default(),
             window_hook_record: FrameWindowHookRecord::default(),
             window_state_change: false,
             face_hash_table: Value::hash_table(HashTableTest::Eq),
@@ -3640,15 +3640,15 @@ pub struct FrameManager {
 impl FrameManager {
     pub fn new() -> Self {
         Self {
-            frames: HashMap::new(),
+            frames: HashMap::default(),
             frame_init_hook: None,
             selected: None,
             next_frame_id: FRAME_ID_BASE,
             last_tty_frame_name: None,
             next_window_id: 1,
             old_selected_window: None,
-            deleted_windows: HashSet::new(),
-            deleted_window_parameters: HashMap::new(),
+            deleted_windows: HashSet::default(),
+            deleted_window_parameters: HashMap::default(),
             window_select_count: 0,
         }
     }
@@ -3999,7 +3999,7 @@ impl FrameManager {
             return None;
         }
         let mut current = id;
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         while seen.insert(current) {
             let Some(parent) = self.frame_parent_id(current) else {
                 return Some(current);
@@ -4012,7 +4012,7 @@ impl FrameManager {
     /// Return true when ANCESTOR is in DESCENDANT's parent-frame chain.
     pub fn frame_ancestor_p(&self, ancestor: FrameId, descendant: FrameId) -> bool {
         let mut current = descendant;
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         while seen.insert(current) {
             let Some(parent) = self.frame_parent_id(current) else {
                 return false;
@@ -4072,7 +4072,7 @@ impl FrameManager {
 
     fn frame_ancestors_visible_p(&self, id: FrameId) -> bool {
         let mut current = Some(id);
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         while let Some(frame_id) = current {
             if !seen.insert(frame_id) {
                 return false;
@@ -4139,7 +4139,7 @@ impl FrameManager {
         let mut viewport_x = 0.0_f32;
         let mut viewport_y = 0.0_f32;
         let mut current = Some(id);
-        let mut seen = HashSet::new();
+        let mut seen = HashSet::default();
         while let Some(frame_id) = current {
             if !seen.insert(frame_id) {
                 return None;
@@ -4465,7 +4465,7 @@ impl FrameManager {
         let root_normal_lines = root.normal_lines();
         let root_normal_cols = root.normal_cols();
 
-        let mut kept_ids = HashSet::new();
+        let mut kept_ids = HashSet::default();
         collect_window_ids(&replacement, &mut kept_ids);
         let mut removed_windows = Vec::new();
         collect_window_metadata(root, &mut removed_windows);

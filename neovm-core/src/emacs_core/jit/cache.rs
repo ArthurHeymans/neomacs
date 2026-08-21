@@ -16,8 +16,8 @@
 //!   dead functions linger until thread exit (a bounded leak), never a
 //!   use-after-free.
 
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -118,7 +118,7 @@ thread_local! {
     /// coarse `inline_epoch`-vs-live-epoch backstop in `try_run_compiled` remains the
     /// correctness floor regardless — this map is a pure churn-reduction optimization.
     /// Same thread/scope as COMPILED (its values are only meaningful as COMPILED keys).
-    static INLINE_DEPS: RefCell<HashMap<SymId, HashSet<u64>>> = RefCell::new(HashMap::new());
+    static INLINE_DEPS: RefCell<HashMap<SymId, HashSet<u64>>> = RefCell::new(HashMap::default());
 
     /// The tagged-heap identity the cached leaves were compiled against. The JIT
     /// cache is thread-local, but every leaf's reloc vector + baked addresses
@@ -137,7 +137,7 @@ thread_local! {
     // cache entries plus their entry depth.
     #[allow(clippy::type_complexity)]
     static OSR_CACHE: RefCell<HashMap<(u64, usize), Option<(Rc<CompiledLeaf>, usize)>>> =
-        RefCell::new(HashMap::new());
+        RefCell::new(HashMap::default());
 }
 
 /// Whether `func`'s body carries any op that establishes dynamic state the OSR

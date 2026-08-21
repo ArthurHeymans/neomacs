@@ -332,8 +332,8 @@ pub(crate) fn upsert_frame_face_hash_entry(table: Value, key: Value, value: Valu
     });
 }
 
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::OnceLock;
 
@@ -968,8 +968,8 @@ struct FaceAttrState {
 }
 
 thread_local! {
-    static CREATED_LISP_FACES: RefCell<HashSet<SymId>> = RefCell::new(HashSet::new());
-    static CREATED_FACE_IDS: RefCell<HashMap<SymId, i64>> = RefCell::new(HashMap::new());
+    static CREATED_LISP_FACES: RefCell<HashSet<SymId>> = RefCell::new(HashSet::default());
+    static CREATED_FACE_IDS: RefCell<HashMap<SymId, i64>> = RefCell::new(HashMap::default());
     static NEXT_CREATED_FACE_ID: RefCell<i64> = const { RefCell::new(FIRST_DYNAMIC_FACE_ID) };
     static FACE_ATTR_STATE: RefCell<FaceAttrState> = RefCell::new(FaceAttrState::default());
     /// Generation counter bumped whenever the defined-face set
@@ -1111,7 +1111,7 @@ fn compute_face_names_sorted_by_id_desc() -> Vec<String> {
     // Dedup by interned symbol id (O(n)) rather than a linear string scan
     // (O(n^2)).  Bootstrap and created faces share the global obarray, so equal
     // names map to the same `SymId`.
-    let mut seen: HashSet<SymId> = HashSet::new();
+    let mut seen: HashSet<SymId> = HashSet::default();
     let mut names: Vec<String> = Vec::new();
     for face in GNU_BOOTSTRAP_LISP_FACES.iter() {
         let name = face.name();
@@ -4389,7 +4389,7 @@ pub(crate) fn builtin_internal_set_font_selection_order(args: Vec<Value>) -> Eva
     let valid_keywords = [":width", ":height", ":weight", ":slant"];
     let valid = if let Some(values) = list_to_vec(order) {
         if values.len() == valid_keywords.len() {
-            let mut seen = HashSet::new();
+            let mut seen = HashSet::default();
             values.iter().all(|value| {
                 if let Some(id) = value.as_keyword_id() {
                     let s = resolve_sym(id);

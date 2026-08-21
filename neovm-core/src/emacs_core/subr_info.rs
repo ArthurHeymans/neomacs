@@ -12,7 +12,7 @@ use super::value::*;
 use crate::emacs_core::error::LispCondition;
 use crate::emacs_core::error::{expect_args, expect_max_args, expect_min_args};
 use crate::tagged::header::{SubrDispatchKind, SubrObj};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use std::sync::OnceLock;
 
 // ---------------------------------------------------------------------------
@@ -250,7 +250,7 @@ fn is_cxr_subr_name(name: &str) -> bool {
 static SUBR_ARITY_ORACLE: OnceLock<HashMap<String, (u16, Option<u16>)>> = OnceLock::new();
 
 fn build_subr_arity_oracle() -> HashMap<String, (u16, Option<u16>)> {
-    let mut map = HashMap::new();
+    let mut map = HashMap::default();
     for line in include_str!("subr_info_test.rs").lines() {
         let Some(rest) = line.split("assert_subr_arity(\"").nth(1) else {
             continue;
