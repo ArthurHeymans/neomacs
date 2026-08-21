@@ -9645,6 +9645,73 @@ fn startup_string_variable_docs_are_seeded_at_startup() {
     assert_eq!(results[129], "OK nil");
 }
 
+/// GNU's `Fsnarf_documentation` diagonal, asked of the whole obarray rather
+/// than of a list of names.
+///
+/// GNU installs a `variable-documentation` from exactly three places, and
+/// every one of them is downstream of the variable actually existing:
+///
+/// - `src/doc.c:606-613`, `Fsnarf_documentation`, where the `Fput` is the
+///   *entire* branch under `(!NILP (Fboundp (sym)) || !NILP (Fmemq (sym,
+///   delayed_init))) && strncmp (end, "\nSKIP", 5)`.  An unbound name's doc is
+///   not recorded differently; it is not recorded at all.
+/// - `src/eval.c:911`, `Finternal__define_uninitialized_variable` -- the
+///   callee of Lisp `defvar`/`defconst`/`defcustom` -- and only `if (!NILP
+///   (doc))`.
+/// - `src/eval.c:723`/`:741`, `Fdefvaralias` and
+///   `Finternal-delete-indirect-variable`.
+///
+/// There is no fourth, and in particular **there is no pre-seeding**: nothing
+/// in GNU writes a `variable-documentation` for a name before that name has a
+/// value.  `src/doc.c:433-434` makes the point twice over by reserving the
+/// fixnum `0` as "no doc" -- `if (BASE_EQ (tem, make_fixnum (0))) tem = Qnil;`
+/// -- a value `make-docfile` never emits, since the smallest real offset is
+/// `end + 1 - buf`.
+///
+/// So the diagonal is a property of the image, not of any table, and that is
+/// why this test is a `mapatoms` rather than a list of names: ledger 173's law
+/// is that a predicate over rows that exist cannot see a row that was never
+/// written, and a per-name pin over a doc table reports green the moment the
+/// table is empty.  A `mapatoms` over 17k symbols has no empty state.
+///
+/// Measured under GNU Emacs 31.0.90 `-Q --batch`: 18815 symbols, 2747 with a
+/// `variable-documentation`, **zero** unbound-yet-documented and **zero**
+/// holding the reserved `0`.
+///
+/// Ledger 178.  Before it, this port answered `(35 35 70)` in the shipped
+/// image and roughly nineteen hundred in a bare `Context`, because
+/// `eval.rs` pre-seeded a `variable-documentation` for all 1972 names of the
+/// `STARTUP_VARIABLE_DOC_*` tables -- 70 of them with GNU's own "no doc"
+/// sentinel.
+#[test]
+fn no_unbound_symbol_carries_a_variable_documentation() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_all(
+        "(list
+          ;; unbound, yet the plist carries a `variable-documentation'
+          (let ((n 0))
+            (mapatoms
+             (lambda (s)
+               (if (get s 'variable-documentation)
+                   (if (boundp s) nil (setq n (1+ n))))))
+            n)
+          ;; unbound, yet `documentation-property' answers
+          (let ((n 0))
+            (mapatoms
+             (lambda (s)
+               (if (documentation-property s 'variable-documentation t)
+                   (if (boundp s) nil (setq n (1+ n))))))
+            n)
+          ;; carrying GNU's reserved `no doc' sentinel (src/doc.c:433-434)
+          (let ((n 0))
+            (mapatoms
+             (lambda (s)
+               (if (eq (get s 'variable-documentation) 0) (setq n (1+ n)))))
+            n))",
+    );
+    assert_eq!(results[0], "OK (0 0 0)");
+}
+
 #[test]
 fn startup_variable_documentation_property_counts_match_oracle_snapshot() {
     crate::test_utils::init_test_tracing();

@@ -121,6 +121,76 @@ fn oracle_the_c_variables_gnu_declares_here_are_declared_here_too() {
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
+/// Ledger 178: the clause above was authoritative only for names with no
+/// seeded plist entry, and these eight rode the bypass.
+///
+/// `eval.rs` pre-seeded a `variable-documentation` for all 1972 names of the
+/// `STARTUP_VARIABLE_DOC_STUBS` and `STARTUP_VARIABLE_DOC_STRING_PROPERTIES`
+/// tables, and the plist arms of `documentation_property_plan` answered before
+/// the gate was reached -- the offset arm through an `or_else` that fell back
+/// to the hand-typed stub *even when the gate had said no*.  So 35 unbound
+/// names answered with a doc anyway.
+///
+/// These eight are the ones where that also diverged from GNU, and they are
+/// the sharpest case available: **GNU Emacs 31 does not have these variables
+/// at all.**  Not a `DEFVAR_*` in `src/*.c`, not a `defvar` in `lisp/**/*.el`,
+/// not a row in `var_docs::gnu_table`; the only mentions left in the GNU tree
+/// are the removal notes -- `binary-as-unsigned` at `etc/NEWS.27` ("The
+/// experimental variable 'binary-as-unsigned' has been removed"),
+/// `load-convert-to-unibyte` at `etc/NEWS` ("The obsolete variable ... has
+/// been removed"), `display-comint-buffer-action` and
+/// `display-tex-shell-buffer-action` at `etc/NEWS.30`, `redisplay-dont-pause`
+/// at `etc/NEWS.24`, and `ccl-encode-ethio-font`, `font-ccl-encoder-alist` and
+/// `pure-space-overflow` nowhere whatsoever.
+///
+/// A hand-typed doc for a variable upstream deleted is an invented default in
+/// the doc's shape: there is no GNU text for it to be a copy of.
+#[test]
+fn oracle_a_variable_gnu_emacs_no_longer_has_is_not_documented_here() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(mapcar (lambda (s)
+          (list s (boundp s)
+                (let ((doc (documentation-property s 'variable-documentation)))
+                  (and (stringp doc) (car (split-string doc "\n"))))))
+        '(binary-as-unsigned ccl-encode-ethio-font display-comint-buffer-action
+          display-tex-shell-buffer-action font-ccl-encoder-alist
+          load-convert-to-unibyte pure-space-overflow redisplay-dont-pause))"#;
+    let expect = expect_test::expect![[
+        r#""OK ((binary-as-unsigned nil nil) (ccl-encode-ethio-font nil nil) (display-comint-buffer-action nil nil) (display-tex-shell-buffer-action nil nil) (font-ccl-encoder-alist nil nil) (load-convert-to-unibyte nil nil) (pure-space-overflow nil nil) (redisplay-dont-pause nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
+/// The other three names ledger 178 measured as divergent, which the gate
+/// could never have caught because all three are BOUND here.
+///
+/// `flex-score-match-tightness` and `hs-special-modes-alist` are the purest
+/// form of the bug: GNU spells both `(defvar NAME nil)` with **no docstring**
+/// (`lisp/minibuffer.el:4920`, `lisp/progmodes/hideshow.el:626`), so
+/// `Finternal__define_uninitialized_variable`'s `if (!NILP (doc))`
+/// (`src/eval.c:909-912`) never fires and `documentation-property` is nil in
+/// GNU by construction.  The seed table supplied a sentence GNU has never
+/// had.  `completion--flex-score-last-md` is a name GNU 31 deleted, kept alive
+/// here by a Rust bootstrap `set_symbol_value` (`eval.rs:4661`) as well as by
+/// the seed table, so it is bound here and unbound there.
+#[test]
+fn oracle_a_lisp_defvar_without_a_docstring_has_no_documentation() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(mapcar (lambda (s)
+          (list s (boundp s)
+                (let ((doc (documentation-property s 'variable-documentation)))
+                  (and (stringp doc) (car (split-string doc "\n"))))))
+        '(flex-score-match-tightness hs-special-modes-alist))"#;
+    let expect = expect_test::expect![[
+        r#""OK ((flex-score-match-tightness t nil) (hs-special-modes-alist t nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
 /// The extractor's own blind spot, which is the same class of bug entry 168
 /// fixed and is only safe to fix once the clause above exists.
 ///
