@@ -1022,10 +1022,6 @@ pub struct Process {
     pub read_output_delay: Duration,
     /// Whether the next non-targeted service pass should skip this process once.
     pub read_output_skip: bool,
-    /// Captured stdout.
-    pub stdout: String,
-    /// Captured stderr.
-    pub stderr: String,
     /// Query-on-exit flag state.
     pub query_on_exit_flag: bool,
     /// Process filter callback (or default marker symbol).
@@ -1889,19 +1885,6 @@ impl ResolvedProcessDecoding {
     }
 }
 
-/// Which of a process record's two diagnostic output mirrors a run belongs to.
-///
-/// The mirrors (`proc.stdout` / `proc.stderr`, issue #131) hold the DECODED
-/// text, so they can only be appended to once the decode has run -- which is
-/// after the `ProcessManager` borrow has been given up.  Naming the mirror in
-/// the pending run is what carries that decision across the hand-off instead of
-/// re-deriving it from the process's source a second time.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ProcessOutputMirror {
-    Stdout,
-    Stderr,
-}
-
 /// One run of a subprocess's output as the READ leaves it: the bytes the
 /// decoder is about to be given, the coding system `detect_coding` has already
 /// settled on, and the tail the read boundary held back.
@@ -1940,7 +1923,6 @@ pub(crate) struct PendingProcessRun {
     /// decoder could consume is flushed as eight-bit characters
     /// (src/coding.c:7434-7462) instead of becoming the next read's carryover.
     block: crate::emacs_core::coding::SourceBlock,
-    mirror: ProcessOutputMirror,
 }
 
 impl PendingProcessRun {
@@ -2042,28 +2024,90 @@ impl ProcessOutputSink {
     }
 }
 
-/// Which of `read_and_dispose_of_process_output`'s two branches a read takes
-/// (src/process.c:6557-6576).
+/// What `read_and_dispose_of_process_output` does with one read
+/// (src/process.c:6518-6585).
 ///
-/// This is a DIFFERENT question from [`ProcessOutputSink`], and the two are
-/// answered from the same two facts in two different C functions, which is why
-/// they are two types.  The sink says what the decode PRODUCES
-/// (`setup_process_coding_systems`, :8395-8400); this says whether the decode
-/// happens at all when the read produced no bytes.
+/// GNU writes two branches (:6557-6559) and then splits the first one again
+/// with an early return, so there are three outcomes and this has three
+/// variants.  It is a DIFFERENT question from [`ProcessOutputSink`], and the
+/// two are answered from the same two facts in two different C functions,
+/// which is why they are two types: the sink says what a decode PRODUCES
+/// (`setup_process_coding_systems`, :8380-8400, which does not consult
+/// `fast-read-process-output' at all), this says whether the decode happens.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProcessReadBranch {
-    /// `read_and_insert_process_output` (src/process.c:6460), taken when
-    /// `fast-read-process-output' is non-nil and the filter is still
-    /// `internal-default-process-filter' (:6557-6559).  Its first statement is
-    /// `if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (...)) return;`
-    /// (:6464-6465), so GNU's zero-byte last block is never decoded on this
-    /// branch and the coding system's `:post-read-conversion' does not run for
-    /// it.
+    /// `read_and_insert_process_output` (src/process.c:6459-6460) reached with a
+    /// LIVE buffer to insert into, which is where `fast-read-process-output'
+    /// and the default filter send a read (:6557-6558).
     InsertIntoBuffer,
+    /// The same function reached with no live buffer, where its first
+    /// statement returns before `decode_coding_c_string` (:6502) and before
+    /// `read_process_output_set_last_coding_system` (:6506):
+    ///
+    /// ```c
+    ///   if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (XBUFFER (p->buffer)))
+    ///     return;
+    /// ```
+    ///
+    /// (:6464-6465.)  The bytes were read -- `read_process_output` still
+    /// returns `nbytes` and its caller still counts it as activity (:6345,
+    /// :6027) -- and are then dropped undecoded, so no `:post-read-conversion'
+    /// runs, `last-coding-system-used' is not written and the process's own
+    /// decode coding system is not made sticky.
+    DiscardUndecoded,
     /// The filter branch (:6560-6575): `decode_coding_c_string` runs
     /// unconditionally -- zero bytes included -- and the filter is called only
     /// for a non-empty result (`SBYTES (text) > 0`, :6567).
     CallFilter,
+}
+
+impl ProcessReadBranch {
+    /// GNU's choice of branch, taken from the process's CURRENT filter and
+    /// buffer because GNU re-runs `setup_process_coding_systems` on every
+    /// `set-process-buffer` (src/process.c:1312) and `set-process-filter`
+    /// (:1404) and asks `p->buffer` again inside the read itself.
+    fn of(proc: &Process, buffers: &BufferManager, fast_read_process_output: bool) -> Self {
+        // `fast_read_process_output && EQ (p->filter,
+        // Qinternal_default_process_filter)` (src/process.c:6557-6558): both
+        // conjuncts, because a user who sets `fast-read-process-output' to nil
+        // is asking for the filter branch even with the default filter.
+        if !fast_read_process_output
+            || !matches!(
+                ProcessFilterDispatch::from_lisp(proc.filter),
+                ProcessFilterDispatch::Default
+            )
+        {
+            return Self::CallFilter;
+        }
+        // `NILP (p->buffer) || !BUFFER_LIVE_P (XBUFFER (p->buffer))`, the two
+        // disjuncts of :6464 that are properties of the process rather than of
+        // the read.  A process whose buffer was killed answers the second one,
+        // which is why this cannot be settled once at `make-process` time.
+        match proc.buffer.as_buffer_id().and_then(|id| buffers.get(id)) {
+            Some(_) => Self::InsertIntoBuffer,
+            None => Self::DiscardUndecoded,
+        }
+    }
+}
+
+/// Whether one read's bytes are converted at all -- GNU's
+/// `read_and_insert_process_output` first statement, whole
+/// (src/process.c:6464-6465).
+///
+/// It exists so that the three disjuncts of that one `if` are asked in one
+/// place.  Two of them are properties of the process and are already spent by
+/// [`ProcessReadBranch::of`]; the third, `!nread`, is a property of the read
+/// and is only known here.  Splitting them across two call sites is how this
+/// area drifted before: entry 166 closed `!nread` with an inline test next to
+/// the read and left the other two unasked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProcessRunDisposition {
+    /// `decode_coding_c_string` runs (:6502 on the buffer branch, :6562 on the
+    /// filter branch), and `read_process_output_set_last_coding_system` with
+    /// it (:6506, :6565).
+    Decode,
+    /// GNU returns before either, and the bytes are dropped where they lie.
+    Discard,
 }
 
 /// Everything a read has to know about where its output is going.
@@ -2080,6 +2124,20 @@ pub struct ProcessOutputDestination {
 }
 
 impl ProcessOutputDestination {
+    /// GNU's two decisions for one read: `setup_process_coding_systems`
+    /// (src/process.c:8380-8409) and `read_and_dispose_of_process_output`'s
+    /// branch (:6557-6559).  They are taken together because they are taken
+    /// from the same two facts, and separately because GNU asks them in two
+    /// functions with two different rules -- the sink ignores
+    /// `fast-read-process-output' and the branch does not, so a unibyte
+    /// process buffer can reach the FILTER branch.
+    fn of(proc: &Process, buffers: &BufferManager, fast_read_process_output: bool) -> Self {
+        Self {
+            sink: ProcessOutputSink::of(proc, buffers),
+            branch: ProcessReadBranch::of(proc, buffers, fast_read_process_output),
+        }
+    }
+
     /// The destination a Lisp filter gives: GNU's filter branch, and a decoded
     /// (multibyte unless the coding system is `CODING_FOR_UNIBYTE`) string.
     pub(crate) fn to_filter() -> Self {
@@ -2093,8 +2151,21 @@ impl ProcessOutputDestination {
         self.sink
     }
 
-    fn branch(self) -> ProcessReadBranch {
-        self.branch
+    /// GNU's `if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (...)) return;`
+    /// (src/process.c:6464-6465), with `nbytes` supplying the disjunct the
+    /// branch could not know.  `nbytes` is GNU's `nread`, i.e. this read's
+    /// bytes plus the carryover it was prepended to (`nbytes += carryover`,
+    /// :6331) -- not the raw `emacs_read` return.
+    fn disposition_for(self, nbytes: usize) -> ProcessRunDisposition {
+        match self.branch {
+            // The filter branch has no such statement: it decodes zero bytes
+            // as readily as a thousand (:6562), which is entry 166's last
+            // block.
+            ProcessReadBranch::CallFilter => ProcessRunDisposition::Decode,
+            ProcessReadBranch::DiscardUndecoded => ProcessRunDisposition::Discard,
+            ProcessReadBranch::InsertIntoBuffer if nbytes == 0 => ProcessRunDisposition::Discard,
+            ProcessReadBranch::InsertIntoBuffer => ProcessRunDisposition::Decode,
+        }
     }
 }
 
@@ -2269,7 +2340,6 @@ fn pending_process_output_run(
     proc: &mut Process,
     coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     sink: ProcessOutputSink,
-    mirror: ProcessOutputMirror,
     bytes: &[u8],
     block: crate::emacs_core::coding::SourceBlock,
 ) -> PendingProcessRun {
@@ -2289,7 +2359,6 @@ fn pending_process_output_run(
             bytes: combined,
             decoder: crate::encoding::CodingDecoderState::default(),
             block,
-            mirror,
         };
     }
 
@@ -2311,17 +2380,7 @@ fn pending_process_output_run(
         bytes: combined,
         decoder: proc.coding_state.decoder(),
         block,
-        mirror,
     }
-}
-
-fn process_output_runtime_string(output: &LispString) -> String {
-    // Issue #131: this only feeds the `proc.stdout: String` diagnostic mirror
-    // (read solely via `get_output` in tests). The byte-faithful process output
-    // that is actually inserted into the process buffer flows through
-    // `read_process_output` as a `LispString`. A lossy UTF-8 rendering here
-    // keeps real Unicode (incl. PUA) and avoids the buggy storage-string form.
-    crate::emacs_core::emacs_char::to_utf8_lossy(output.as_bytes())
 }
 
 fn process_read_buffer_len(proc: &Process) -> usize {
@@ -2443,12 +2502,10 @@ fn process_output_read_from_io_result(
     proc: &mut Process,
     coding_systems: &crate::emacs_core::coding::CodingSystemManager,
     destination: ProcessOutputDestination,
-    mirror: ProcessOutputMirror,
     outcome: ProcessReadOutcome,
     bytes: &[u8],
     full_read_len: usize,
 ) -> ProcessBytesRead {
-    let sink = destination.sink();
     match outcome {
         ProcessReadOutcome::EndOfStream => match proc.coding_state.reach_last_block() {
             LastBlockArrival::AlreadyRaised => ProcessBytesRead::Eof,
@@ -2457,43 +2514,91 @@ fn process_output_read_from_io_result(
                 // non-empty carryover is still a READ as far as the caller is
                 // concerned, and only an empty one is the end of file.
                 let bytes_read = proc.coding_state.carryover_len();
-                if bytes_read == 0 && destination.branch() == ProcessReadBranch::InsertIntoBuffer {
-                    // `read_and_insert_process_output` returns on `!nread`
-                    // before `decode_coding_c_string` (:6464), so this branch
-                    // has no zero-byte decode to make.
-                    return ProcessBytesRead::Eof;
-                }
-                let run = pending_process_output_run(
-                    proc,
-                    coding_systems,
-                    sink,
-                    mirror,
-                    &[],
-                    crate::emacs_core::coding::SourceBlock::Last,
-                );
-                if bytes_read > 0 {
-                    ProcessBytesRead::Data { run, bytes_read }
-                } else {
-                    ProcessBytesRead::EofAfterLastBlock { run }
+                match destination.disposition_for(bytes_read) {
+                    ProcessRunDisposition::Discard => {
+                        discard_process_run_undecoded(proc);
+                        if bytes_read == 0 {
+                            ProcessBytesRead::Eof
+                        } else {
+                            ProcessBytesRead::Discarded { bytes_read }
+                        }
+                    }
+                    ProcessRunDisposition::Decode => {
+                        let run = pending_process_output_run(
+                            proc,
+                            coding_systems,
+                            destination.sink(),
+                            &[],
+                            crate::emacs_core::coding::SourceBlock::Last,
+                        );
+                        if bytes_read > 0 {
+                            ProcessBytesRead::Data { run, bytes_read }
+                        } else {
+                            ProcessBytesRead::EofAfterLastBlock { run }
+                        }
+                    }
                 }
             }
         },
         ProcessReadOutcome::Bytes(n) => {
             update_process_adaptive_read_buffering(proc, n, n == full_read_len);
-            ProcessBytesRead::Data {
-                run: pending_process_output_run(
-                    proc,
-                    coding_systems,
-                    sink,
-                    mirror,
-                    &bytes[..n],
-                    crate::emacs_core::coding::SourceBlock::More,
-                ),
-                bytes_read: n,
-            }
+            process_run_from_bytes(proc, coding_systems, destination, &bytes[..n])
         }
         ProcessReadOutcome::WouldBlock => ProcessBytesRead::WouldBlock,
         ProcessReadOutcome::Failed => ProcessBytesRead::Eof,
+    }
+}
+
+/// The one thing GNU still does to the process for a read it will not decode.
+///
+/// `p->decoding_carryover = 0` is at src/process.c:6312, ABOVE both the
+/// zero-byte test and the branch, so it is spent on every read that reaches
+/// `read_and_dispose_of_process_output` -- and the only place a new carryover
+/// is written is `read_process_output_set_last_coding_system` (:6449-6455),
+/// which a discarded read never reaches.  So a process whose buffer is killed
+/// mid-stream loses the tail its last decode held back, exactly as GNU does.
+///
+/// Nothing else on the process is touched: `coding->spec` is the decoder's and
+/// no decoder ran, and `CODING_MODE_LAST_BLOCK` was already raised at :6321,
+/// above the branch, by [`ProcessCodingState::reach_last_block`].
+fn discard_process_run_undecoded(proc: &mut Process) {
+    drop(proc.coding_state.take_carryover());
+}
+
+/// One non-final read's bytes, routed through GNU's
+/// `read_and_dispose_of_process_output` (src/process.c:6518-6585).
+///
+/// Every door into that function goes through here: the `io::Result` one and
+/// the datagram one, which has to record the sender's address before it can
+/// hand the bytes on.  Sharing it is the point -- a second place that built a
+/// [`PendingProcessRun`] itself would be a second place deciding whether a run
+/// is decoded, and that decision has drifted every time this area has grown
+/// one.
+fn process_run_from_bytes(
+    proc: &mut Process,
+    coding_systems: &crate::emacs_core::coding::CodingSystemManager,
+    destination: ProcessOutputDestination,
+    bytes: &[u8],
+) -> ProcessBytesRead {
+    let bytes_read = bytes.len();
+    // GNU's `nread`: this read plus the carryover it is prepended to
+    // (`nbytes += carryover`, :6331).
+    let nread = bytes_read + proc.coding_state.carryover_len();
+    match destination.disposition_for(nread) {
+        ProcessRunDisposition::Discard => {
+            discard_process_run_undecoded(proc);
+            ProcessBytesRead::Discarded { bytes_read }
+        }
+        ProcessRunDisposition::Decode => ProcessBytesRead::Data {
+            run: pending_process_output_run(
+                proc,
+                coding_systems,
+                destination.sink(),
+                bytes,
+                crate::emacs_core::coding::SourceBlock::More,
+            ),
+            bytes_read,
+        },
     }
 }
 
@@ -3736,6 +3841,16 @@ enum ProcessBytesRead {
     EofAfterLastBlock {
         run: PendingProcessRun,
     },
+    /// GNU's `read_and_insert_process_output` early return
+    /// (src/process.c:6464-6465) with bytes in hand: the read happened and its
+    /// caller must count it (`read_process_output` returns `nbytes`, :6345),
+    /// but nothing was converted, so there is no run to decode and nothing to
+    /// report.  A variant rather than an empty [`PendingProcessRun`], because
+    /// a discarded read has no coding system -- `detect_coding` never ran on
+    /// it either.
+    Discarded {
+        bytes_read: usize,
+    },
     WouldBlock,
     Eof,
     NoSource,
@@ -3748,7 +3863,6 @@ enum ProcessBytesRead {
 struct DecodedPendingProcessRun {
     run: ProcessDecodedRun,
     decoder: crate::encoding::CodingDecoderState,
-    mirror: ProcessOutputMirror,
 }
 
 /// The same read, after the coding system it used has been recorded.
@@ -5497,8 +5611,6 @@ impl ProcessManager {
             adaptive_read_buffering: read_config.adaptive_read_buffering,
             read_output_delay: Duration::ZERO,
             read_output_skip: false,
-            stdout: String::new(),
-            stderr: String::new(),
             query_on_exit_flag: true,
             filter: Value::symbol(DEFAULT_PROCESS_FILTER_SYMBOL),
             sentinel: Value::symbol(DEFAULT_PROCESS_SENTINEL_SYMBOL),
@@ -6170,7 +6282,6 @@ impl ProcessManager {
             proc,
             coding_systems,
             destination,
-            ProcessOutputMirror::Stdout,
             ProcessReadOutcome::from_stream_read(&result),
             &buf,
             full_read_len,
@@ -6205,7 +6316,6 @@ impl ProcessManager {
             proc,
             coding_systems,
             destination,
-            ProcessOutputMirror::Stdout,
             ProcessReadOutcome::from_stream_read(&result),
             &buf,
             full_read_len,
@@ -6246,7 +6356,6 @@ impl ProcessManager {
             proc,
             coding_systems,
             destination,
-            ProcessOutputMirror::Stderr,
             ProcessReadOutcome::from_stream_read(&result),
             &buf,
             full_read_len,
@@ -6278,7 +6387,6 @@ impl ProcessManager {
             proc,
             coding_systems,
             destination,
-            ProcessOutputMirror::Stdout,
             ProcessReadOutcome::from_pty_read(&result),
             &buf,
             full_read_len,
@@ -6305,7 +6413,6 @@ impl ProcessManager {
                 proc,
                 coding_systems,
                 destination,
-                ProcessOutputMirror::Stdout,
                 ProcessReadOutcome::from_stream_read(&result),
                 &buf,
                 full_read_len,
@@ -6345,7 +6452,6 @@ impl ProcessManager {
                     proc,
                     coding_systems,
                     destination,
-                    ProcessOutputMirror::Stdout,
                     ProcessReadOutcome::from_stream_read(&result),
                     &buf,
                     full_read_len,
@@ -6355,17 +6461,7 @@ impl ProcessManager {
                         update_process_adaptive_read_buffering(proc, n, n == full_read_len);
                         proc.datagram_socket_addr = Some(addr);
                         proc.datagram_address = socket_addr_to_lisp_value(addr);
-                        ProcessBytesRead::Data {
-                            run: pending_process_output_run(
-                                proc,
-                                coding_systems,
-                                destination.sink(),
-                                ProcessOutputMirror::Stdout,
-                                &buf[..n],
-                                crate::emacs_core::coding::SourceBlock::More,
-                            ),
-                            bytes_read: n,
-                        }
+                        process_run_from_bytes(proc, coding_systems, destination, &buf[..n])
                     }
                     Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                         ProcessBytesRead::WouldBlock
@@ -6383,17 +6479,7 @@ impl ProcessManager {
                                 crate::emacs_core::fileio::path_to_lisp_file_name(&path),
                             );
                         }
-                        ProcessBytesRead::Data {
-                            run: pending_process_output_run(
-                                proc,
-                                coding_systems,
-                                destination.sink(),
-                                ProcessOutputMirror::Stdout,
-                                &buf[..n],
-                                crate::emacs_core::coding::SourceBlock::More,
-                            ),
-                            bytes_read: n,
-                        }
+                        process_run_from_bytes(proc, coding_systems, destination, &buf[..n])
                     }
                     Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                         ProcessBytesRead::WouldBlock
@@ -7636,16 +7722,19 @@ impl ProcessManager {
             ProcessBytesRead::Data { run, .. } | ProcessBytesRead::EofAfterLastBlock { run } => {
                 Some(run)
             }
-            ProcessBytesRead::WouldBlock | ProcessBytesRead::Eof | ProcessBytesRead::NoSource => {
-                None
-            }
+            // A discarded read has no run by construction, and this entry
+            // point's only caller passes `to_filter()`, which never discards.
+            ProcessBytesRead::Discarded { .. }
+            | ProcessBytesRead::WouldBlock
+            | ProcessBytesRead::Eof
+            | ProcessBytesRead::NoSource => None,
         }
     }
 
     /// The half of GNU's `read_process_output_set_last_coding_system`
     /// (src/process.c:6417-6459) that belongs to the process record rather than
     /// to the evaluator: the carryover the decoder could not consume, and the
-    /// diagnostic mirror of the text it produced.
+    /// decoder state it ended in.
     ///
     /// Both happen AFTER the decode, which is GNU's order and not an
     /// arrangement of convenience -- see [`PendingProcessRun::carryover`].
@@ -7654,24 +7743,12 @@ impl ProcessManager {
         id: ProcessId,
         carryover: Vec<u8>,
         decoder: crate::encoding::CodingDecoderState,
-        mirror: ProcessOutputMirror,
-        text: &LispString,
     ) {
         let Some(proc) = self.get_mut(id) else {
             return;
         };
         proc.coding_state.store_carryover(carryover);
         proc.coding_state.store_decoder(decoder);
-        let rendered = process_output_runtime_string(text);
-        match mirror {
-            ProcessOutputMirror::Stdout => proc.stdout.push_str(&rendered),
-            ProcessOutputMirror::Stderr => proc.stderr.push_str(&rendered),
-        }
-    }
-
-    /// Get stdout output from a process.
-    pub fn get_output(&self, id: ProcessId) -> Option<&str> {
-        self.processes.get(&id).map(|p| p.stdout.as_str())
     }
 
     /// Get an environment variable (checking overrides first, then OS).
@@ -7989,26 +8066,11 @@ impl super::eval::Context {
     /// the process's buffer and filter every time either changes, so this is
     /// evaluated per read rather than cached on the process.
     fn process_output_sink(&self, id: ProcessId) -> ProcessOutputDestination {
+        let fast_read = self.fast_read_process_output_enabled();
         let Some(proc) = self.processes.get(id) else {
             return ProcessOutputDestination::to_filter();
         };
-        // `fast_read_process_output && EQ (p->filter,
-        // Qinternal_default_process_filter)` (src/process.c:6557-6559): both
-        // conjuncts, because a user who sets `fast-read-process-output' to nil
-        // is asking for the filter branch even with the default filter.
-        let branch = if self.fast_read_process_output_enabled()
-            && matches!(
-                ProcessFilterDispatch::from_lisp(proc.filter),
-                ProcessFilterDispatch::Default
-            ) {
-            ProcessReadBranch::InsertIntoBuffer
-        } else {
-            ProcessReadBranch::CallFilter
-        };
-        ProcessOutputDestination {
-            sink: ProcessOutputSink::of(proc, &self.buffers),
-            branch,
-        }
+        ProcessOutputDestination::of(proc, &self.buffers, fast_read)
     }
 
     /// GNU's `fast_read_process_output` (src/process.c:8980), the Lisp variable
@@ -8067,6 +8129,18 @@ impl super::eval::Context {
             {
                 ProcessBytesRead::Data { run, bytes_read } => (run, bytes_read, false),
                 ProcessBytesRead::EofAfterLastBlock { run } => (run, 0, true),
+                // `read_and_insert_process_output` returned at :6464 without
+                // decoding, so stages two and three below have nothing to do:
+                // no text for a filter, no `last-coding-system-used', no
+                // sticky rewrite of the process's coding system.  The count
+                // still travels, because GNU's caller counts the read as
+                // activity whether or not anything was made of it.
+                ProcessBytesRead::Discarded { bytes_read } => {
+                    return Ok(ProcessOutputRead::Data {
+                        data: LispString::from_utf8(""),
+                        bytes_read,
+                    });
+                }
                 ProcessBytesRead::WouldBlock => return Ok(ProcessOutputRead::WouldBlock),
                 ProcessBytesRead::Eof => return Ok(ProcessOutputRead::Eof),
                 ProcessBytesRead::NoSource => return Ok(ProcessOutputRead::NoSource),
@@ -8079,13 +8153,8 @@ impl super::eval::Context {
         // Stage three: GNU's `read_process_output_set_last_coding_system`
         // (src/process.c:6417-6459), which runs after EVERY decoded run.
         self.record_process_run_coding(id, decoded.run.coding);
-        self.processes.finish_process_run(
-            id,
-            decoded.run.carryover,
-            decoded.decoder,
-            decoded.mirror,
-            &decoded.run.text,
-        );
+        self.processes
+            .finish_process_run(id, decoded.run.carryover, decoded.decoder);
         if last_block {
             // GNU's zero-byte last block is delivered from INSIDE the read --
             // `read_and_dispose_of_process_output` calls the filter itself
@@ -8141,7 +8210,6 @@ impl super::eval::Context {
             bytes,
             mut decoder,
             block,
-            mirror,
         } = run;
         let saved_match_data = self.match_data.clone();
         let specpdl_count = self.specpdl.len();
@@ -8159,7 +8227,6 @@ impl super::eval::Context {
         Ok(DecodedPendingProcessRun {
             run: decoded?,
             decoder,
-            mirror,
         })
     }
 
@@ -9510,24 +9577,44 @@ fn resolve_get_process_designator_in_state(
     }
 }
 
+/// GNU's `Fget_buffer` (src/buffer.c:479-491), which is how both of this
+/// port's buffer-keyed process lookups name a buffer:
+///
+/// ```c
+///   if (BUFFERP (buffer_or_name))
+///     return buffer_or_name;
+///   CHECK_STRING (buffer_or_name);
+///   return Fcdr (assoc_ignore_text_properties (buffer_or_name, Vbuffer_alist));
+/// ```
+///
+/// Three things it does NOT do, each of which this function used to.  A buffer
+/// OBJECT comes back as given, dead or alive -- the docstring's "If
+/// BUFFER-OR-NAME is a buffer, return it as given" (:483) -- so a process
+/// whose buffer was killed is still findable by that buffer, which is the
+/// state `Fget_buffer_process`'s own docstring describes ("Return nil if all
+/// processes associated with BUFFER have been deleted or killed",
+/// src/process.c:8414-8415: the BUFFER may outlive nothing at all).  A name is
+/// matched against `Vbuffer_alist`, which holds only live buffers.  And `nil`
+/// is not a designator for anything: `Fget_buffer_process` answers it with
+/// `if (NILP (buffer)) return Qnil;` (:8421) rather than reaching for the
+/// selected window, and `Fmake_network_process` reads `buffer_defaults` for it
+/// (:4132-4135).
+///
+/// This is deliberately NOT `get_process`'s rule (src/process.c:1045-1048),
+/// which errors with "Attempt to get process for a dead buffer": that is a
+/// PROCESS designator and this is a buffer one.  The two neighbours above it
+/// implement `get_process`, and they are right to differ.
 fn resolve_buffer_for_process_lookup_in_state(
-    frames: &FrameManager,
     buffers: &BufferManager,
     value: &Value,
 ) -> Result<Option<crate::buffer::BufferId>, Flow> {
     match value.kind() {
-        ValueKind::Nil => Ok(frames
-            .selected_frame()
-            .and_then(|frame| frame.selected_window())
-            .and_then(|window| window.buffer_id())),
+        ValueKind::Nil => Ok(None),
         ValueKind::String => {
             let name_str = process_owned_runtime_string(*value);
             Ok(buffers.find_buffer_by_name(&name_str))
         }
-        ValueKind::Veclike(VecLikeType::Buffer) => {
-            let bid = value.as_buffer_id().unwrap();
-            Ok(buffers.get(bid).map(|_| bid))
-        }
+        ValueKind::Veclike(VecLikeType::Buffer) => Ok(value.as_buffer_id()),
         _ => Err(signal_wrong_type_string(*value)),
     }
 }
@@ -10146,6 +10233,22 @@ fn parse_make_process_buffer(
     parse_make_process_buffer_in_state(&mut eval.buffers, value)
 }
 
+/// Every process constructor's `:buffer`, which in GNU is one call to
+/// `Fget_buffer_create` -- `Fmake_process` at src/process.c:1849-1851,
+/// `Fmake_pipe_process` at :3091-3094, `Fmake_serial_process` at :3223-3226
+/// and `Fmake_network_process` at :4017.
+///
+/// A buffer OBJECT comes back as it was handed in, and GNU's docstring says so
+/// in as many words: "If BUFFER-OR-NAME is a buffer instead of a string,
+/// return it as given, even if it is dead.  The return value is never nil."
+/// (src/buffer.c:581-582.)  That is not an oversight of GNU's -- it is the
+/// state three later `BUFFER_LIVE_P` tests exist to handle:
+/// `read_and_insert_process_output` (:6464),
+/// `internal-default-process-sentinel`, whose own comment is "Avoid error if
+/// buffer is deleted (probably that's why the process is dead, too)"
+/// (:7969-7971), and `setup_process_coding_systems` (:8395).  Refusing the
+/// dead buffer here made all three unreachable and turned `make-process` into
+/// a signal where GNU returns a process.
 fn parse_make_process_buffer_in_state(
     buffers: &mut BufferManager,
     value: &Value,
@@ -10159,13 +10262,7 @@ fn parse_make_process_buffer_in_state(
                 .unwrap_or_else(|| buffers.create_buffer(&name_str));
             Ok(Value::make_buffer(id))
         }
-        ValueKind::Veclike(VecLikeType::Buffer) => {
-            let bid = value.as_buffer_id().unwrap();
-            buffers
-                .get(bid)
-                .map(|_| *value)
-                .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))
-        }
+        ValueKind::Veclike(VecLikeType::Buffer) => Ok(*value),
         _ => Err(signal_wrong_type_string(*value)),
     }
 }
@@ -13381,11 +13478,7 @@ pub(crate) fn builtin_make_network_process(
     // `coding-system-for-read/write` precedence over the operation/default
     // codings; URL binds the read side to `binary` around this call.
     let multibyte = ProcessBufferMultibyteness {
-        process_buffer: match resolve_buffer_for_process_lookup_in_state(
-            &eval.frames,
-            &eval.buffers,
-            &buffer,
-        ) {
+        process_buffer: match resolve_buffer_for_process_lookup_in_state(&eval.buffers, &buffer) {
             Ok(Some(bid)) => eval
                 .buffers
                 .get(bid)
@@ -15622,14 +15715,15 @@ pub(crate) fn builtin_set_process_buffer_impl(
 ) -> EvalResult {
     expect_args("set-process-buffer", &args, 2)?;
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
+    // `if (!NILP (buffer)) CHECK_BUFFER (buffer);` (src/process.c:1302-1303),
+    // and `CHECK_BUFFER` is `CHECK_TYPE (BUFFERP (x), Qbufferp, x)` and
+    // nothing else (src/buffer.h:762-766).  A DEAD buffer is a buffer, and
+    // handing one over is how a process legitimately reaches the state
+    // `read_and_insert_process_output` (:6464),
+    // `internal-default-process-sentinel` (:7969-7971) and
+    // `setup_process_coding_systems` (:8395) each guard against.
     match args[1].kind() {
-        ValueKind::Nil => {}
-        ValueKind::Veclike(VecLikeType::Buffer) => {
-            let bid = args[1].as_buffer_id().unwrap();
-            let _ = buffers
-                .get(bid)
-                .ok_or_else(|| signal("error", vec![Value::string("Selecting deleted buffer")]))?;
-        }
+        ValueKind::Nil | ValueKind::Veclike(VecLikeType::Buffer) => {}
         _ => return Err(signal_wrong_type_bufferp(args[1])),
     };
     let proc = processes.get_any_mut(id).ok_or_else(|| {
@@ -16314,18 +16408,16 @@ pub(crate) fn builtin_get_buffer_process(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_get_buffer_process_impl(&eval.frames, &eval.buffers, &eval.processes, args)
+    builtin_get_buffer_process_impl(&eval.buffers, &eval.processes, args)
 }
 
 pub(crate) fn builtin_get_buffer_process_impl(
-    frames: &FrameManager,
     buffers: &BufferManager,
     processes: &ProcessManager,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("get-buffer-process", &args, 1)?;
-    let Some(buffer_id) = resolve_buffer_for_process_lookup_in_state(frames, buffers, &args[0])?
-    else {
+    let Some(buffer_id) = resolve_buffer_for_process_lookup_in_state(buffers, &args[0])? else {
         return Ok(Value::NIL);
     };
     match processes.find_by_buffer_id(buffer_id) {

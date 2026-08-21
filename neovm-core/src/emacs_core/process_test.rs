@@ -11921,3 +11921,272 @@ fn a_stopped_but_finished_connection_reports_closed_like_gnu() {
         "OK (:before closed :after-stop closed :after-continue closed)"
     );
 }
+
+/// GNU decodes NOTHING for a default filter with no live buffer, and the
+/// skipped decode takes `last-coding-system-used', the process's own sticky
+/// coding system and the `:post-read-conversion' hook with it.
+///
+/// `read_and_dispose_of_process_output` chooses between two branches
+/// (src/process.c:6557-6559):
+///
+/// ```c
+///   if (fast_read_process_output
+///       && EQ (p->filter, Qinternal_default_process_filter))
+///     read_and_insert_process_output (p, chars, nbytes, coding);
+///   else
+///     { decode_coding_c_string (...); ... }
+/// ```
+///
+/// and `read_and_insert_process_output`'s first statement is
+///
+/// ```c
+///   if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (XBUFFER (p->buffer)))
+///     return;
+/// ```
+///
+/// (:6464-6465).  Three disjuncts, one `if`, and it stands BEFORE
+/// `decode_coding_c_string` (:6502) and before
+/// `read_process_output_set_last_coding_system` (:6506).  Entry 166 closed the
+/// `!nread` disjunct; the other two are this entry's, and they are not a
+/// nicety: `read_process_output_set_last_coding_system` is the only writer of
+/// `Vlast_coding_system_used` on this path (:6421) and the only writer of
+/// `p->decode_coding_system` (:6425), so a decode that never runs cannot
+/// report a coding system and cannot make one sticky.  That is why GNU loses
+/// no `last-coding-system-used` semantics by skipping the decode: the variable
+/// names the coding system the last CONVERSION used, and no conversion
+/// happened.
+///
+/// The last five rows detach the buffer HALF WAY THROUGH, which is where the
+/// two disjuncts differ from a process that never had one: the decoder is
+/// already live, so a run that decoded anyway would report a coding system for
+/// a process GNU leaves alone.  The child traps `SIGHUP` because `kill-buffer`
+/// signals the buffer's process (`kill_buffer_processes`, src/buffer.c), and
+/// these rows are about the READ rather than about the signal.  The reset of
+/// `last-coding-system-used` deliberately comes AFTER `process-send-string`,
+/// because the encode side writes it too and GNU's row would otherwise carry
+/// the send's answer rather than the read's.
+///
+/// Each row is `(HOOK-CALLS LAST-CODING-SYSTEM-USED PROCESS-DECODE-CODING)`,
+/// with the filter chunk count appended for the mid-stream rows, and
+/// `last-coding-system-used` is pre-set to `pw171-untouched' so that "GNU
+/// wrote nothing" is a value rather than the absence of one.
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program.
+#[test]
+fn a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defvar pw171-hooks 0)
+             (defun pw171-prc (len) (setq pw171-hooks (1+ pw171-hooks)) len)
+             (define-coding-system 'pw171-hook-utf8
+               "utf-8 whose :post-read-conversion counts the decodes it is run for"
+               :mnemonic ?U :coding-type 'utf-8 :charset-list '(unicode)
+               :post-read-conversion #'pw171-prc)
+             (defun pw171-run (buffer filterp conn coding script)
+               (setq pw171-hooks 0 last-coding-system-used 'pw171-untouched)
+               (let* ((acc nil)
+                      (p (make-process :name "pw171" :buffer buffer :sentinel #'ignore
+                                       :connection-type conn :noquery t
+                                       :coding (cons coding 'utf-8-unix)
+                                       :filter (when filterp (lambda (_p s) (push s acc)))
+                                       :command (list "{sh}" "-c" script))))
+                 (while (accept-process-output p 1))
+                 (while (process-live-p p) (accept-process-output p 0.05))
+                 (prog1 (list pw171-hooks last-coding-system-used
+                              (car (process-coding-system p)))
+                   (when (buffer-live-p buffer) (kill-buffer buffer)))))
+             ;; DETACH says how the process stops having a live buffer half way
+             ;; through: nil is `(set-process-buffer p nil)', GNU's
+             ;; `NILP (p->buffer)'; 'kill is `(kill-buffer BUF)', GNU's
+             ;; `!BUFFER_LIVE_P (XBUFFER (p->buffer))'.
+             (defun pw171-mid (detach filterp coding)
+               (let* ((acc nil) (seen nil)
+                      (buf (generate-new-buffer " *pw171m*"))
+                      (p (make-process :name "pw171m" :buffer buf :sentinel #'ignore
+                                       :connection-type 'pipe :noquery t
+                                       :coding (cons coding 'utf-8-unix)
+                                       :filter (when filterp
+                                                 (lambda (_p s) (push s acc) (setq seen t)))
+                                       :command
+                                       (list "{sh}" "-c"
+                                             "trap '' HUP; printf abc; read x; printf 'd\\303\\251f'"))))
+                 (while (if filterp (not seen)
+                          (zerop (with-current-buffer buf (buffer-size))))
+                   (accept-process-output p 1))
+                 (if (eq detach 'kill) (kill-buffer buf) (set-process-buffer p nil))
+                 (process-send-string p "go\n")
+                 (setq pw171-hooks 0 last-coding-system-used 'pw171-untouched acc nil)
+                 (while (accept-process-output p 1))
+                 (while (process-live-p p) (accept-process-output p 0.05))
+                 (list pw171-hooks last-coding-system-used
+                       (car (process-coding-system p)) (length acc))))
+             (list
+              ;; `NILP (p->buffer)': the default filter with no buffer at all.
+              (pw171-run nil nil 'pipe 'pw171-hook-utf8 "printf abc")
+              ;; `!BUFFER_LIVE_P' from the start.  `Fget_buffer_create' hands a
+              ;; dead buffer object straight back -- "even if it is dead",
+              ;; src/buffer.c:581-582 -- so `make-process' accepts it and this
+              ;; row is a read rather than a signal.
+              (pw171-run (let ((b (generate-new-buffer " *pw171d*"))) (kill-buffer b) b)
+                         nil 'pipe 'pw171-hook-utf8 "printf abc")
+              ;; the same on a pty, where there is no last block to confuse it
+              (pw171-run nil nil 'pty 'pw171-hook-utf8 "printf abc")
+              ;; control: a LIVE buffer on the same branch decodes the data
+              ;; read -- and only that one, because entry 166's `!nread'
+              ;; disjunct still holds for the zero-byte last block.
+              (pw171-run (generate-new-buffer " *pw171a*") nil 'pipe 'pw171-hook-utf8 "printf abc")
+              ;; control: a Lisp filter has no buffer either and decodes BOTH
+              ;; reads, because it is the other branch entirely.
+              (pw171-run nil t 'pipe 'pw171-hook-utf8 "printf abc")
+              ;; `fast-read-process-output' nil sends the DEFAULT filter down
+              ;; the filter branch, so the very same process decodes.  Both
+              ;; conjuncts of :6557-6558, not just the filter one.
+              (let ((fast-read-process-output nil))
+                (pw171-run nil nil 'pipe 'pw171-hook-utf8 "printf abc"))
+              ;; the sticky rewrite the skipped decode also skips: `undecided'
+              ;; over UTF-8 bytes resolves to `utf-8-unix' on the filter branch
+              ;; and stays `undecided' when nothing decoded it.
+              (pw171-run nil nil 'pipe 'undecided "printf 'a\\303\\251\\n'")
+              (pw171-run nil t 'pipe 'undecided "printf 'a\\303\\251\\n'")
+              ;; the same two disjuncts reached MID-STREAM, with a decoder that
+              ;; has already run once and a character split across the read.
+              (pw171-mid nil nil 'pw171-hook-utf8)
+              (pw171-mid 'kill nil 'pw171-hook-utf8)
+              (pw171-mid nil t 'pw171-hook-utf8)
+              (pw171-mid nil nil 'undecided)
+              (pw171-mid nil t 'undecided)))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(0 pw171-untouched pw171-hook-utf8) ",
+            "(0 pw171-untouched pw171-hook-utf8) ",
+            "(0 pw171-untouched pw171-hook-utf8) ",
+            "(1 pw171-hook-utf8 pw171-hook-utf8) ",
+            "(2 pw171-hook-utf8 pw171-hook-utf8) ",
+            "(2 pw171-hook-utf8 pw171-hook-utf8) ",
+            "(0 pw171-untouched undecided) ",
+            "(0 utf-8-unix utf-8-unix) ",
+            "(0 pw171-untouched pw171-hook-utf8 0) ",
+            "(0 pw171-untouched pw171-hook-utf8 0) ",
+            "(2 pw171-hook-utf8 pw171-hook-utf8 1) ",
+            "(0 pw171-untouched undecided 0) ",
+            "(0 utf-8 utf-8 1))",
+        )
+    );
+}
+
+/// A process may hold a buffer that is not live, and every neighbour of the
+/// read has to say so the way GNU does.
+///
+/// GNU never refuses the state and guards it at each use instead, which is why
+/// there are three `BUFFER_LIVE_P` tests downstream of one
+/// `Fget_buffer_create`: `read_and_insert_process_output` (src/process.c:6464),
+/// `internal-default-process-sentinel`, whose own comment is "Avoid error if
+/// buffer is deleted (probably that's why the process is dead, too)"
+/// (:7969-7971), and `setup_process_coding_systems` (:8395).  The three doors
+/// IN are as deliberate.  `Fget_buffer_create` returns a buffer object "as
+/// given, even if it is dead" (src/buffer.c:581-582), and all four process
+/// constructors go through it (:1849-1851, :3091-3094, :3223-3226, :4017).
+/// `Fset_process_buffer`'s only check is `CHECK_BUFFER`, which is
+/// `CHECK_TYPE (BUFFERP (x), Qbufferp, x)` and nothing else (:1302-1303,
+/// src/buffer.h:762-766).  And `Fget_buffer_process` looks its argument up
+/// with `Fget_buffer` (:8422), which hands a buffer object straight back -- so
+/// a dead buffer still finds its process -- and answers a nil argument with
+/// `Qnil` outright (:8421) rather than reaching for the selected window.
+///
+/// `get_process` (:1045-1048) is the one place that DOES error, with "Attempt
+/// to get process for a dead buffer", and it is a PROCESS designator rather
+/// than a buffer one; the last row pins that difference so the next reader
+/// does not unify them.
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program.
+#[test]
+fn a_process_may_hold_a_buffer_that_is_not_live_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw171n-dead (tag)
+               (let ((b (generate-new-buffer (format " *pw171n%s*" tag))))
+                 (kill-buffer b) b))
+             (list
+              ;; make-process accepts it, and the process runs to completion.
+              (let* ((b (pw171n-dead "a"))
+                     (p (make-process :name "pw171n-a" :buffer b :noquery t
+                                      :sentinel #'ignore
+                                      :command (list "{sh}" "-c" "printf ab"))))
+                (while (process-live-p p) (accept-process-output p 0.05))
+                (list (processp p) (eq (process-buffer p) b)
+                      (buffer-live-p (process-buffer p))
+                      (marker-buffer (process-mark p))
+                      (process-status p)))
+              ;; make-pipe-process too, which is the other constructor a
+              ;; :stderr pipe goes through.
+              (let* ((p (make-pipe-process :name "pw171n-b" :buffer (pw171n-dead "b")
+                                           :noquery t)))
+                (prog1 (list (processp p) (buffer-live-p (process-buffer p))
+                             (process-status p))
+                  (delete-process p)))
+              ;; the DEFAULT sentinel, which must not signal when it cannot
+              ;; insert its status message.
+              (let* ((p (make-process :name "pw171n-c" :buffer (pw171n-dead "c") :noquery t
+                                      :command (list "{sh}" "-c" "printf ab"))))
+                (while (process-live-p p) (accept-process-output p 0.05))
+                (dotimes (_ 5) (accept-process-output nil 0.02))
+                (list (process-status p)))
+              ;; `internal-default-process-filter' called by hand answers nil
+              ;; and inserts nowhere.
+              (let* ((p (make-process :name "pw171n-d" :buffer (pw171n-dead "d") :noquery t
+                                      :sentinel #'ignore
+                                      :command (list "{sh}" "-c" "sleep 5"))))
+                (prog1 (list (internal-default-process-filter p "hi"))
+                  (delete-process p)))
+              ;; set-process-buffer accepts one, and returns it.
+              (let* ((b (pw171n-dead "e"))
+                     (p (make-process :name "pw171n-e" :buffer nil :noquery t
+                                      :sentinel #'ignore
+                                      :command (list "{sh}" "-c" "sleep 5"))))
+                (prog1 (list (eq (set-process-buffer p b) b)
+                             (buffer-live-p (process-buffer p)))
+                  (delete-process p)))
+              ;; get-buffer-process finds a process by its DEAD buffer, and
+              ;; answers nil for a nil argument even when the selected window
+              ;; shows a buffer that has one.
+              (let* ((b (pw171n-dead "f"))
+                     (p (make-process :name "pw171n-f" :buffer b :noquery t
+                                      :sentinel #'ignore
+                                      :command (list "{sh}" "-c" "sleep 5")))
+                     (q (make-process :name "pw171n-g" :buffer (current-buffer) :noquery t
+                                      :sentinel #'ignore
+                                      :command (list "{sh}" "-c" "sleep 5"))))
+                (prog1 (list (eq (get-buffer-process b) p)
+                             (get-buffer-process nil)
+                             (eq (get-buffer-process (current-buffer)) q))
+                  (delete-process p) (delete-process q)))
+              ;; and the one that DOES error, because it is `get_process':
+              ;; a dead buffer as a PROCESS designator.
+              (let ((b (pw171n-dead "h")))
+                (list (condition-case e (process-status b) (error (cadr e)))
+                      (condition-case e (delete-process b) (error (cadr e)))))))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(t t nil nil exit) ",
+            "(t nil open) ",
+            "(exit) ",
+            "(nil) ",
+            "(t nil) ",
+            "(t nil t) ",
+            "(\"Attempt to get process for a dead buffer\" ",
+            "\"Attempt to get process for a dead buffer\"))",
+        )
+    );
+}
