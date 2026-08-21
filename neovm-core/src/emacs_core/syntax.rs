@@ -3255,6 +3255,7 @@ fn syntax_entry_from_table(table: &SyntaxTable, ch: char) -> SyntaxEntry {
         .unwrap_or_else(|| SyntaxEntry::simple(table.char_syntax(ch)))
 }
 
+#[inline]
 fn effective_syntax_entry_for_char_at_byte(
     buf: &Buffer,
     table: &SyntaxTable,
@@ -3299,6 +3300,10 @@ pub(crate) fn regexp_syntax_class_at_emacs_byte(
 /// neomacs's own ~5 type-tag derefs + cons decode. The memo caches the
 /// identical `syntax_entry_from_table` computation used for non-ASCII below, so
 /// it is behavior-preserving by construction.
+// Inlined into the parse/scan loops: this runs once per character
+// stepped (8.7M calls on a fontify pass) and the un-inlined five-arg
+// call cost more than the fast path it guards.
+#[inline]
 fn effective_syntax_entry_for_abs_char(
     buf: &Buffer,
     table: &SyntaxTable,
@@ -5504,6 +5509,7 @@ impl PartialParseState {
     }
 }
 
+#[inline]
 fn syntax_class_and_flags(
     buf: &Buffer,
     table: &SyntaxTable,
