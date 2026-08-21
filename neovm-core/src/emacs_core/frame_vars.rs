@@ -65,11 +65,19 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("initial-frame-alist", Value::NIL);
     // dispnew.c:7508 DEFVAR_LISP, zero-init nil; startup assigns the real one.
     obarray.define_special_variable("initial-window-system", Value::NIL);
-    // GNU graphical builds load term/common-win.el during loadup, which binds
-    // this public display variable even for batch sessions.  Neomacs defers
-    // its side-effectful GUI terminal layer until GUI startup, so preserve the
-    // stable frame-variable surface here instead.
-    obarray.define_special_variable("x-display-name", Value::NIL);
+    // `x-display-name' is NOT declared here, and the comment that used to sit
+    // on this line is why: it read "GNU graphical builds load
+    // term/common-win.el during loadup, which binds this public display
+    // variable even for batch sessions", and then declared the variable in
+    // Rust instead of loading the file.  GNU has no C `DEFVAR' for the name --
+    // `grep -rn 'x-display-name' src/' finds nothing, and `symbol-file' in a
+    // GNU image answers `term/common-win.elc' -- so a Rust declaration was a
+    // reimplementation of Lisp we already ship, which is the one thing this
+    // port does not do.  It also produced a state GNU never has: bound with no
+    // documentation, because a declaration carries no docstring.
+    // `lisp/loadup.el' now preloads `term/common-win' where GNU preloads it,
+    // and the `defvar' at `lisp/term/common-win.el:145' both binds the name and
+    // documents it.  DIVERGENCES.md 179.
     // GNU `DEFVAR_KBOARD` both installs the forwarded value and declares the
     // symbol special.  Neomacs models the selected-frame value separately,
     // but Lisp bindings must retain the same dynamic-scope contract.
@@ -131,15 +139,51 @@ mod tests {
     use super::*;
     use crate::emacs_core::eval::Context;
 
+    /// `x-display-name` is a Lisp `defvar`, so nothing may bind it before Lisp
+    /// runs.
+    ///
+    /// This replaces `graphical_backend_display_name_is_bound_in_batch_like_gnu`,
+    /// whose name asserted a fact GNU does not have.  GNU binds the name from
+    /// `lisp/term/common-win.el:145`, a `defvar` with a docstring, which its
+    /// `loadup.el` preloads from every window-system branch; there is no
+    /// `DEFVAR` for it anywhere in `src/`, so in GNU the moment this test
+    /// models -- after the C declarations and before any `.el` -- has
+    /// `x-display-name` unbound.  Declaring it here bound it with NO
+    /// documentation, a combination GNU produces for this name never, and it
+    /// hid the real defect: `loadup.el` was not preloading `term/common-win`
+    /// at all.
+    ///
+    /// The dumped image's side of the same statement is
+    /// `window_system_preload_test::term_common_win_is_preloaded_because_this_build_has_a_window_system`,
+    /// which asserts the name is bound AND documented once loadup has run.
+    ///
+    /// DIVERGENCES.md 179.
     #[test]
-    fn graphical_backend_display_name_is_bound_in_batch_like_gnu() {
+    fn display_name_is_not_declared_before_lisp_because_gnu_has_no_c_defvar() {
+        crate::test_utils::init_test_tracing();
+        let eval = Context::new();
+
+        assert_eq!(eval.obarray().symbol_value("x-display-name").copied(), None);
+        assert!(!eval.obarray().is_special("x-display-name"));
+    }
+
+    /// The neighbour that IS a C `DEFVAR`, kept as the contrast.
+    ///
+    /// `x-resource-name` is `frame.c:7395` `DEFVAR_LISP`, under
+    /// `HAVE_WINDOW_SYSTEM`, and this build has a window system -- so unlike
+    /// `x-display-name` it is correctly declared before Lisp.  Having the two
+    /// side by side is what makes the rule readable: the question is not
+    /// whether the name starts with `x-`, it is which of GNU's two sources
+    /// defines it.
+    #[test]
+    fn resource_name_is_declared_before_lisp_because_gnu_defvars_it_in_c() {
         crate::test_utils::init_test_tracing();
         let eval = Context::new();
 
         assert_eq!(
-            eval.obarray().symbol_value("x-display-name").copied(),
+            eval.obarray().symbol_value("x-resource-name").copied(),
             Some(Value::NIL)
         );
-        assert!(eval.obarray().is_special("x-display-name"));
+        assert!(eval.obarray().is_special("x-resource-name"));
     }
 }
