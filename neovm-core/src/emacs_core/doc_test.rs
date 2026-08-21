@@ -1063,11 +1063,64 @@ fn documentation_property_eval_load_path_raw_t_preserves_ascii_quotes() {
     assert!(raw.contains("`default-directory'"));
 }
 
+/// `ctl-x-4-map`'s documentation, on the surface that has one.
+///
+/// This test used to run against a bare `Context` and assert that RAW and
+/// DISPLAY were *equal*.  Both halves were artefacts of a bootstrap seed that
+/// ledger 178 removed, and the seed's text is why:
+///
+/// ```ignore
+/// ("ctl-x-4-map", "Keymap for subcommands of C-x 4."),
+/// ```
+///
+/// GNU's text is `"Keymap for subcommands of \\`C-x 4'."`
+/// (`lisp/subr.el:1732-1733`), so the row had hard-coded the *rendered* form
+/// -- the output of `substitute-command-keys`, not the docstring -- which made
+/// RAW and DISPLAY agree for a reason GNU does not share.  And nothing else
+/// could have answered in a bare `Context`: `ctl-x-4-map` is a Lisp `defvar`,
+/// not a `DEFVAR_*`, so it is absent from `var_docs::gnu_table`, and GNU's own
+/// answer before `subr.el` runs is nil.
+///
+/// Entry 176 recorded exactly this: a bare `Context` is not a GNU-comparable
+/// surface for a Lisp `defvar`.  So the test moves to the one that is -- the
+/// runtime-startup image, where the `defvar` has run -- and pins what both
+/// editors answer there.  Measured `-Q --batch`, byte-identical in GNU
+/// 31.0.90 and in this port: DISPLAY is `"Keymap for subcommands of C-x 4."`
+/// with a `help-key-binding` face on the key, RAW keeps the `\\`...'` markup,
+/// and the two therefore **differ**.
 #[test]
-fn documentation_property_eval_ctl_x_4_map_raw_matches_display_when_no_markup() {
+fn documentation_property_eval_ctl_x_4_map_raw_keeps_the_markup_display_renders() {
+    crate::test_utils::init_test_tracing();
+    let results = bootstrap_eval_all(
+        "(documentation-property 'ctl-x-4-map 'variable-documentation)
+         (documentation-property 'ctl-x-4-map 'variable-documentation t)",
+    );
+
+    assert_eq!(
+        results[0],
+        "OK #(\"Keymap for subcommands of C-x 4.\" 26 31 \
+         (font-lock-face help-key-binding face help-key-binding))"
+    );
+    assert_eq!(results[1], "OK \"Keymap for subcommands of \\\\`C-x 4'.\"");
+    assert_ne!(results[0], results[1]);
+}
+
+/// And the same name in a bare `Context`, which is the fact ledger 178 changed.
+///
+/// Nothing has defined `ctl-x-4-map` yet, so there is no documentation to
+/// give: GNU's `Fsnarf_documentation` would not have recorded one for an
+/// unbound name (`src/doc.c:606-613`, where the `Fput` is the whole branch),
+/// and its Lisp `defvar` has not run.  Before entry 178 the bootstrap seed
+/// answered here.
+#[test]
+fn documentation_property_eval_ctl_x_4_map_is_nil_before_subr_el_defines_it() {
     crate::test_utils::init_test_tracing();
     let mut evaluator = super::super::eval::Context::new();
-    let display = builtin_documentation_property(
+    assert!(
+        !evaluator.obarray().boundp_id(intern("ctl-x-4-map")),
+        "a bare Context has not loaded lisp/subr.el, so the name is unbound"
+    );
+    let doc = builtin_documentation_property(
         &mut evaluator,
         vec![
             Value::symbol("ctl-x-4-map"),
@@ -1076,25 +1129,7 @@ fn documentation_property_eval_ctl_x_4_map_raw_matches_display_when_no_markup() 
         ],
     )
     .unwrap();
-    let raw = builtin_documentation_property(
-        &mut evaluator,
-        vec![
-            Value::symbol("ctl-x-4-map"),
-            Value::symbol("variable-documentation"),
-            Value::T,
-        ],
-    )
-    .unwrap();
-    let display = display
-        .as_utf8_str()
-        .expect("display documentation-property should return a string");
-    let raw = raw
-        .as_utf8_str()
-        .expect("raw documentation-property should return a string");
-
-    assert!(display.contains("C-x 4"));
-    assert!(!display.contains("\\`C-x 4'"));
-    assert_eq!(raw, display);
+    assert!(doc.is_nil(), "expected nil, got {doc:?}");
 }
 
 #[test]

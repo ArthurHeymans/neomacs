@@ -22,7 +22,6 @@ pub use super::display_host::{
     DisplayHost, TerminalCreateRequest, TerminalDisplayTarget, TerminalFloatPlacement,
     TerminalGridSize, TerminalId,
 };
-use super::doc::{STARTUP_VARIABLE_DOC_STRING_PROPERTIES, STARTUP_VARIABLE_DOC_STUBS};
 use super::error::*;
 use super::interactive::InteractiveRegistry;
 use super::intern::{
@@ -5170,20 +5169,33 @@ impl Context {
         obarray.set_symbol_value("input-method-use-echo-area", Value::NIL);
         obarray.set_symbol_value("input-method-verbose-flag", Value::symbol("default"));
         obarray.set_symbol_value("unread-command-events", Value::NIL);
-        // GNU Emacs seeds core startup vars with integer
-        // `variable-documentation` offsets in the DOC table.
-        for &(name, _) in STARTUP_VARIABLE_DOC_STUBS {
-            obarray
-                .put_property(name, "variable-documentation", Value::fixnum(0))
-                .expect("startup variable-documentation plist should always be valid");
-        }
-        // Some startup docs are string-valued in GNU Emacs (not integer offsets).
-        for &(name, doc) in STARTUP_VARIABLE_DOC_STRING_PROPERTIES {
-            obarray
-                .put_property(name, "variable-documentation", Value::string(doc))
-                .expect("startup variable-documentation plist should always be valid");
-        }
-
+        // No `variable-documentation` is seeded here, and ledger 178 is why.
+        //
+        // This used to write one for all 1972 names of two hand-typed tables
+        // in `doc.rs`, under the comment "GNU Emacs seeds core startup vars
+        // with integer `variable-documentation` offsets in the DOC table".
+        // GNU does no such thing.  Every `variable-documentation` GNU installs
+        // is downstream of the variable existing: `Fsnarf_documentation` puts
+        // one on a name this build BINDS (`src/doc.c:606-613`, where the
+        // `Fput` is the entire branch), Lisp `defvar` puts one on a name it is
+        // defining and only when the docstring is non-nil (`src/eval.c:911`),
+        // and `Fdefvaralias` copies one across an alias edge
+        // (`src/eval.c:723`).  There is no fourth writer and nothing runs
+        // before the variable is there.
+        //
+        // The 70 offset rows made the point a second time by seeding
+        // `(fixnum 0)`, which is precisely the value GNU reserves to mean
+        // "there is no doc" -- `if (BASE_EQ (tem, make_fixnum (0))) tem =
+        // Qnil;` (`src/doc.c:433-434`) -- and which `make-docfile` can never
+        // emit, the smallest real offset being `end + 1 - buf`.
+        //
+        // A seeded row landed on the symbol's plist, which is the FIRST arm
+        // `documentation_property_plan` consults, so it answered ahead of
+        // `Fsnarf_documentation`'s `Fboundp` gate: 35 unbound names carried a
+        // doc where GNU carries none.  Measured GNU 31.0.90 `-Q --batch`:
+        // 18815 symbols, zero unbound-yet-documented, zero holding the
+        // reserved `0`.  `no_unbound_symbol_carries_a_variable_documentation`
+        // is the guard.
         // Bootstrap primitive function cells that GNU `simple.el` references
         // before its own Elisp defs overwrite them. Without these placeholders,
         // loaded GNU bytecode can capture `nil` for forward/runtime calls into

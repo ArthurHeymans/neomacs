@@ -9378,273 +9378,6 @@ fn emacs_copyright_is_bound_at_startup() {
     assert_eq!(results[2], "OK 0");
 }
 
-#[test]
-fn startup_string_variable_docs_are_seeded_at_startup() {
-    crate::test_utils::init_test_tracing();
-    let results = eval_all(
-        "(stringp (get 'kill-ring 'variable-documentation))
-         (integerp (get 'kill-ring 'variable-documentation))
-         (stringp (get 'kill-ring-yank-pointer 'variable-documentation))
-         (integerp (get 'kill-ring-yank-pointer 'variable-documentation))
-         (stringp (get 'after-init-hook 'variable-documentation))
-         (integerp (get 'after-init-hook 'variable-documentation))
-         (stringp (get 'Buffer-menu-buffer-list 'variable-documentation))
-         (integerp (get 'Buffer-menu-buffer-list 'variable-documentation))
-         (stringp (get 'Info-default-directory-list 'variable-documentation))
-         (integerp (get 'Info-default-directory-list 'variable-documentation))
-         (stringp (get 'auto-coding-alist 'variable-documentation))
-         (integerp (get 'auto-coding-alist 'variable-documentation))
-         (stringp (get 'auto-save--timer 'variable-documentation))
-         (integerp (get 'auto-save--timer 'variable-documentation))
-         (stringp (get 'backup-directory-alist 'variable-documentation))
-         (integerp (get 'backup-directory-alist 'variable-documentation))
-         (stringp (get 'before-init-hook 'variable-documentation))
-         (integerp (get 'before-init-hook 'variable-documentation))
-         (stringp (get 'blink-cursor-mode 'variable-documentation))
-         (integerp (get 'blink-cursor-mode 'variable-documentation))
-         (stringp (get 'buffer-offer-save 'variable-documentation))
-         (integerp (get 'buffer-offer-save 'variable-documentation))
-         (stringp (get 'buffer-quit-function 'variable-documentation))
-         (integerp (get 'buffer-quit-function 'variable-documentation))
-         (stringp (get 'command-line-functions 'variable-documentation))
-         (integerp (get 'command-line-functions 'variable-documentation))
-         (stringp (get 'comment-start 'variable-documentation))
-         (integerp (get 'comment-start 'variable-documentation))
-         (stringp (get 'completion-styles 'variable-documentation))
-         (integerp (get 'completion-styles 'variable-documentation))
-         (stringp (get 'context-menu-mode 'variable-documentation))
-         (integerp (get 'context-menu-mode 'variable-documentation))
-         (stringp (get 'current-input-method 'variable-documentation))
-         (integerp (get 'current-input-method 'variable-documentation))
-         (stringp (get 'custom-enabled-themes 'variable-documentation))
-         (integerp (get 'custom-enabled-themes 'variable-documentation))
-         (stringp (get 'default-input-method 'variable-documentation))
-         (integerp (get 'default-input-method 'variable-documentation))
-         (stringp (get 'default-korean-keyboard 'variable-documentation))
-         (integerp (get 'default-korean-keyboard 'variable-documentation))
-         (stringp (get 'delete-selection-mode 'variable-documentation))
-         (integerp (get 'delete-selection-mode 'variable-documentation))
-         (stringp (get 'display-buffer-alist 'variable-documentation))
-         (integerp (get 'display-buffer-alist 'variable-documentation))
-         (stringp (get 'eldoc-mode 'variable-documentation))
-         (integerp (get 'eldoc-mode 'variable-documentation))
-         (stringp (get 'emacs-major-version 'variable-documentation))
-         (integerp (get 'emacs-major-version 'variable-documentation))
-         (stringp (get 'file-name-shadow-mode 'variable-documentation))
-         (integerp (get 'file-name-shadow-mode 'variable-documentation))
-         (stringp (get 'fill-prefix 'variable-documentation))
-         (integerp (get 'fill-prefix 'variable-documentation))
-         (stringp (get 'font-lock-comment-start-skip 'variable-documentation))
-         (integerp (get 'font-lock-comment-start-skip 'variable-documentation))
-         (stringp (get 'font-lock-mode 'variable-documentation))
-         (integerp (get 'font-lock-mode 'variable-documentation))
-         (stringp (get 'global-font-lock-mode 'variable-documentation))
-         (integerp (get 'global-font-lock-mode 'variable-documentation))
-         (stringp (get 'grep-command 'variable-documentation))
-         (integerp (get 'grep-command 'variable-documentation))
-         (stringp (get 'help-window-select 'variable-documentation))
-         (integerp (get 'help-window-select 'variable-documentation))
-         (stringp (get 'icomplete-mode 'variable-documentation))
-         (integerp (get 'icomplete-mode 'variable-documentation))
-         (stringp (get 'indent-line-function 'variable-documentation))
-         (integerp (get 'indent-line-function 'variable-documentation))
-         (stringp (get 'input-method-history 'variable-documentation))
-         (integerp (get 'input-method-history 'variable-documentation))
-         (stringp (get 'isearch-mode-hook 'variable-documentation))
-         (integerp (get 'isearch-mode-hook 'variable-documentation))
-         (stringp (get 'jit-lock-mode 'variable-documentation))
-         (integerp (get 'jit-lock-mode 'variable-documentation))
-         (stringp (get 'jka-compr-load-suffixes 'variable-documentation))
-         (integerp (get 'jka-compr-load-suffixes 'variable-documentation))
-         (stringp (get 'keyboard-coding-system 'variable-documentation))
-         (integerp (get 'keyboard-coding-system 'variable-documentation))
-         (stringp (get 'kill-ring-max 'variable-documentation))
-         (integerp (get 'kill-ring-max 'variable-documentation))
-         (stringp (get 'line-number-mode 'variable-documentation))
-         (integerp (get 'line-number-mode 'variable-documentation))
-         (stringp (get 'list-buffers-directory 'variable-documentation))
-         (integerp (get 'list-buffers-directory 'variable-documentation))
-         (stringp (get 'lock-file-mode 'variable-documentation))
-         (integerp (get 'lock-file-mode 'variable-documentation))
-         (stringp (get 'mail-user-agent 'variable-documentation))
-         (integerp (get 'mail-user-agent 'variable-documentation))
-         (stringp (get 'menu-bar-mode-hook 'variable-documentation))
-         (integerp (get 'menu-bar-mode-hook 'variable-documentation))
-         (stringp (get 'minibuffer-local-completion-map 'variable-documentation))
-         (integerp (get 'minibuffer-local-completion-map 'variable-documentation))
-         (stringp (get 'mouse-wheel-mode 'variable-documentation))
-         (integerp (get 'mouse-wheel-mode 'variable-documentation))
-         (stringp (get 'next-error-function 'variable-documentation))
-         (integerp (get 'next-error-function 'variable-documentation))
-         (stringp (get 'package-user-dir 'variable-documentation))
-         (integerp (get 'package-user-dir 'variable-documentation))
-         (stringp (get 'prettify-symbols-mode 'variable-documentation))
-         (integerp (get 'prettify-symbols-mode 'variable-documentation))
-         (stringp (get 'previous-transient-input-method 'variable-documentation))
-         (integerp (get 'previous-transient-input-method 'variable-documentation))
-         (stringp (get 'process-file-side-effects 'variable-documentation))
-         (integerp (get 'process-file-side-effects 'variable-documentation))
-         (stringp (get 'process-menu-mode-map 'variable-documentation))
-         (integerp (get 'process-menu-mode-map 'variable-documentation))
-         (stringp (get 'prog-mode-map 'variable-documentation))
-         (integerp (get 'prog-mode-map 'variable-documentation))
-         (stringp (get 'query-about-changed-file 'variable-documentation))
-         (integerp (get 'query-about-changed-file 'variable-documentation))
-         (stringp (get 'read-extended-command-predicate 'variable-documentation))
-         (integerp (get 'read-extended-command-predicate 'variable-documentation))
-         (stringp (get 'regexp-search-ring-max 'variable-documentation))
-         (integerp (get 'regexp-search-ring-max 'variable-documentation))
-         (stringp (get 'safe-local-variable-values 'variable-documentation))
-         (integerp (get 'safe-local-variable-values 'variable-documentation))
-         (stringp (get 'selection-coding-system 'variable-documentation))
-         (integerp (get 'selection-coding-system 'variable-documentation))
-         (stringp (get 'show-paren-mode 'variable-documentation))
-         (integerp (get 'show-paren-mode 'variable-documentation))
-         (stringp (get 'tab-bar-format 'variable-documentation))
-         (integerp (get 'tab-bar-format 'variable-documentation))
-         (stringp (get 'tool-bar-map 'variable-documentation))
-         (integerp (get 'tool-bar-map 'variable-documentation))
-         (stringp (get 'transient-mark-mode-hook 'variable-documentation))
-         (integerp (get 'transient-mark-mode-hook 'variable-documentation))
-         (stringp (get 'user-emacs-directory 'variable-documentation))
-         (integerp (get 'user-emacs-directory 'variable-documentation))
-         (stringp (get 'window-size-fixed 'variable-documentation))
-         (integerp (get 'window-size-fixed 'variable-documentation))
-         (stringp (get 'yank-transform-functions 'variable-documentation))
-         (integerp (get 'yank-transform-functions 'variable-documentation))",
-    );
-    assert_eq!(results[0], "OK t");
-    assert_eq!(results[1], "OK nil");
-    assert_eq!(results[2], "OK t");
-    assert_eq!(results[3], "OK nil");
-    assert_eq!(results[4], "OK t");
-    assert_eq!(results[5], "OK nil");
-    assert_eq!(results[6], "OK t");
-    assert_eq!(results[7], "OK nil");
-    assert_eq!(results[8], "OK t");
-    assert_eq!(results[9], "OK nil");
-    assert_eq!(results[10], "OK t");
-    assert_eq!(results[11], "OK nil");
-    assert_eq!(results[12], "OK t");
-    assert_eq!(results[13], "OK nil");
-    assert_eq!(results[14], "OK t");
-    assert_eq!(results[15], "OK nil");
-    assert_eq!(results[16], "OK t");
-    assert_eq!(results[17], "OK nil");
-    assert_eq!(results[18], "OK t");
-    assert_eq!(results[19], "OK nil");
-    assert_eq!(results[20], "OK t");
-    assert_eq!(results[21], "OK nil");
-    assert_eq!(results[22], "OK t");
-    assert_eq!(results[23], "OK nil");
-    assert_eq!(results[24], "OK t");
-    assert_eq!(results[25], "OK nil");
-    assert_eq!(results[26], "OK t");
-    assert_eq!(results[27], "OK nil");
-    assert_eq!(results[28], "OK t");
-    assert_eq!(results[29], "OK nil");
-    assert_eq!(results[30], "OK t");
-    assert_eq!(results[31], "OK nil");
-    assert_eq!(results[32], "OK t");
-    assert_eq!(results[33], "OK nil");
-    assert_eq!(results[34], "OK t");
-    assert_eq!(results[35], "OK nil");
-    assert_eq!(results[36], "OK t");
-    assert_eq!(results[37], "OK nil");
-    assert_eq!(results[38], "OK t");
-    assert_eq!(results[39], "OK nil");
-    assert_eq!(results[40], "OK t");
-    assert_eq!(results[41], "OK nil");
-    assert_eq!(results[42], "OK t");
-    assert_eq!(results[43], "OK nil");
-    assert_eq!(results[44], "OK t");
-    assert_eq!(results[45], "OK nil");
-    assert_eq!(results[46], "OK t");
-    assert_eq!(results[47], "OK nil");
-    assert_eq!(results[48], "OK t");
-    assert_eq!(results[49], "OK nil");
-    assert_eq!(results[50], "OK t");
-    assert_eq!(results[51], "OK nil");
-    assert_eq!(results[52], "OK t");
-    assert_eq!(results[53], "OK nil");
-    assert_eq!(results[54], "OK t");
-    assert_eq!(results[55], "OK nil");
-    assert_eq!(results[56], "OK t");
-    assert_eq!(results[57], "OK nil");
-    assert_eq!(results[58], "OK t");
-    assert_eq!(results[59], "OK nil");
-    assert_eq!(results[60], "OK t");
-    assert_eq!(results[61], "OK nil");
-    assert_eq!(results[62], "OK t");
-    assert_eq!(results[63], "OK nil");
-    assert_eq!(results[64], "OK t");
-    assert_eq!(results[65], "OK nil");
-    assert_eq!(results[66], "OK t");
-    assert_eq!(results[67], "OK nil");
-    assert_eq!(results[68], "OK t");
-    assert_eq!(results[69], "OK nil");
-    assert_eq!(results[70], "OK t");
-    assert_eq!(results[71], "OK nil");
-    assert_eq!(results[72], "OK t");
-    assert_eq!(results[73], "OK nil");
-    assert_eq!(results[74], "OK t");
-    assert_eq!(results[75], "OK nil");
-    assert_eq!(results[76], "OK t");
-    assert_eq!(results[77], "OK nil");
-    assert_eq!(results[78], "OK t");
-    assert_eq!(results[79], "OK nil");
-    assert_eq!(results[80], "OK t");
-    assert_eq!(results[81], "OK nil");
-    assert_eq!(results[82], "OK t");
-    assert_eq!(results[83], "OK nil");
-    assert_eq!(results[84], "OK t");
-    assert_eq!(results[85], "OK nil");
-    assert_eq!(results[86], "OK t");
-    assert_eq!(results[87], "OK nil");
-    assert_eq!(results[88], "OK t");
-    assert_eq!(results[89], "OK nil");
-    assert_eq!(results[90], "OK t");
-    assert_eq!(results[91], "OK nil");
-    assert_eq!(results[92], "OK t");
-    assert_eq!(results[93], "OK nil");
-    assert_eq!(results[94], "OK t");
-    assert_eq!(results[95], "OK nil");
-    assert_eq!(results[96], "OK t");
-    assert_eq!(results[97], "OK nil");
-    assert_eq!(results[98], "OK t");
-    assert_eq!(results[99], "OK nil");
-    assert_eq!(results[100], "OK t");
-    assert_eq!(results[101], "OK nil");
-    assert_eq!(results[102], "OK t");
-    assert_eq!(results[103], "OK nil");
-    assert_eq!(results[104], "OK t");
-    assert_eq!(results[105], "OK nil");
-    assert_eq!(results[106], "OK t");
-    assert_eq!(results[107], "OK nil");
-    assert_eq!(results[108], "OK t");
-    assert_eq!(results[109], "OK nil");
-    assert_eq!(results[110], "OK t");
-    assert_eq!(results[111], "OK nil");
-    assert_eq!(results[112], "OK t");
-    assert_eq!(results[113], "OK nil");
-    assert_eq!(results[114], "OK t");
-    assert_eq!(results[115], "OK nil");
-    assert_eq!(results[116], "OK t");
-    assert_eq!(results[117], "OK nil");
-    assert_eq!(results[118], "OK t");
-    assert_eq!(results[119], "OK nil");
-    assert_eq!(results[120], "OK t");
-    assert_eq!(results[121], "OK nil");
-    assert_eq!(results[122], "OK t");
-    assert_eq!(results[123], "OK nil");
-    assert_eq!(results[124], "OK t");
-    assert_eq!(results[125], "OK nil");
-    assert_eq!(results[126], "OK t");
-    assert_eq!(results[127], "OK nil");
-    assert_eq!(results[128], "OK t");
-    assert_eq!(results[129], "OK nil");
-}
-
 /// GNU's `Fsnarf_documentation` diagonal, asked of the whole obarray rather
 /// than of a list of names.
 ///
@@ -9712,61 +9445,46 @@ fn no_unbound_symbol_carries_a_variable_documentation() {
     assert_eq!(results[0], "OK (0 0 0)");
 }
 
+/// The same diagonal counted from the other side: how much
+/// `variable-documentation` exists at all before any Lisp has run.
+///
+/// GNU's answer is "none".  Nothing installs a `variable-documentation` before
+/// the variable exists -- `Fsnarf_documentation` runs from `loadup.el:476`,
+/// after the C `DEFVAR`s and after the preloaded Lisp, and its `Fput` is
+/// gated on `Fboundp` (`src/doc.c:606-613`); Lisp `defvar` installs one only
+/// while defining the variable and only when the docstring is non-nil
+/// (`src/eval.c:909-912`).  A bare `Context` is the moment before all of that,
+/// so both counts are zero.
+///
+/// This test replaces two that asserted `OK (70 1902)` -- one counting the
+/// plist entries, one counting the ones that resolved to a string.  Those were
+/// the size of the `STARTUP_VARIABLE_DOC_*` seeding rather than a fact about
+/// GNU, and ledger 178 removed the seeding: it put a doc on the FIRST arm
+/// `documentation_property_plan` consults, ahead of the `Fboundp` gate, so 35
+/// unbound names in the shipped image answered where GNU answers nil.  The 70
+/// integer rows were seeded with `(fixnum 0)`, the value `src/doc.c:433-434`
+/// reserves to mean "there is no doc".
+///
+/// The C variables this port declares keep their documentation: it comes from
+/// `var_docs::gnu_table` through `Fsnarf_documentation`'s gate, which is a
+/// lookup rather than a plist entry, so it is deliberately not counted here.
 #[test]
-fn startup_variable_documentation_property_counts_match_oracle_snapshot() {
+fn no_variable_documentation_is_installed_before_any_lisp_runs() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
         "(list
           (let ((n 0))
             (mapatoms
              (lambda (s)
-               (let ((d (get s 'variable-documentation)))
-                 (if (integerp d) (progn (setq n (1+ n)))))))
+               (if (integerp (get s 'variable-documentation)) (setq n (1+ n)))))
             n)
           (let ((n 0))
             (mapatoms
              (lambda (s)
-               (let ((d (get s 'variable-documentation)))
-                 (if (stringp d) (progn (setq n (1+ n)))))))
+               (if (stringp (get s 'variable-documentation)) (setq n (1+ n)))))
             n))",
     );
-    // Phase A10 of the v5 audit (Option A for variables) deleted
-    // 691 redundant entries from STARTUP_VARIABLE_DOC_STUBS that
-    // are now covered by var_docs::lookup. The remaining 70 STUBS
-    // entries are neomacs-specific and still get an integer 0
-    // sentinel pre-pushed onto their `variable-documentation' plist.
-    // STRING_PROPERTIES is unchanged at 1902 entries (only 2
-    // overlapped with GNU and they were left in place).
-    assert_eq!(results[0], "OK (70 1902)");
-}
-
-#[test]
-fn startup_variable_documentation_runtime_resolution_counts_match_oracle_snapshot() {
-    crate::test_utils::init_test_tracing();
-    let results = eval_all(
-        "(list
-          (let ((n 0))
-            (mapatoms
-             (lambda (s)
-               (let ((d (get s 'variable-documentation)))
-                 (if (and (integerp d)
-                          (stringp (documentation-property s 'variable-documentation t)))
-                   (progn (setq n (1+ n)))))))
-            n)
-          (let ((n 0))
-            (mapatoms
-             (lambda (s)
-               (let ((d (get s 'variable-documentation)))
-                 (if (and (stringp d)
-                          (stringp (documentation-property s 'variable-documentation t)))
-                   (progn (setq n (1+ n)))))))
-            n))",
-    );
-    // See `startup_variable_documentation_property_counts_*' for
-    // why these counts shrank from 761 to 70. The integer-sentinel
-    // path still resolves through the legacy STUBS dispatch, which
-    // covers exactly the 70 surviving entries.
-    assert_eq!(results[0], "OK (70 1902)");
+    assert_eq!(results[0], "OK (0 0)");
 }
 
 #[test]
