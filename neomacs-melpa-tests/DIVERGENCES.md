@@ -22996,6 +22996,19 @@ building, which is why the two suites took 964 s and 727 s against ledger 164's
   GNU, with `xwidget-webkit-disable-javascript`: a build-feature difference
   entry 138 already justified, re-confirmed by this entry's sweep, which found
   no other name Neomacs binds and GNU does not.
+
+  **The sweep's scope is why it found none, entry 178, 2026-08-21.**  It ran
+  over `var_docs::gnu_table`'s 894 C `DEFVAR` names.  The two hand-typed
+  `STARTUP_VARIABLE_DOC_*` tables in `doc.rs` held another 1972 names, mostly
+  Lisp variables, and were outside it -- so this entry's "the rule, not a
+  table" argument never reached them.  178 measured them and deleted both:
+  they seeded a `variable-documentation` onto 1972 symbols during bootstrap,
+  ahead of the `Fboundp` gate, 35 of which answered while unbound in the
+  shipped image.  Eight were for variables GNU Emacs 31 no longer has at all,
+  and two for names GNU spells as a docstring-less `(defvar NAME nil)`.  GNU
+  has no pre-seeding: four writers in `src/`, every one downstream of the
+  variable existing, and `src/doc.c:433-434` reserves the fixnum `0` -- the
+  value 70 of the seeded rows carried -- to mean "there is no doc".
 - `strings-consed` and the six allocation counters entry 132 left reading 0 are
   unchanged.
 - `Lisp_Fwd_Obj` and `Lisp_Fwd_Kboard_Obj` remain unwired -- deliberately, for
@@ -25776,6 +25789,29 @@ Two environmental notes, because both cost real time and both are recurrent:
   question about the plist/stub precedence order in
   `documentation_property_plan` rather than about the table.  One line, sized,
   not diagnosed.
+
+  **Diagnosed by entry 178, 2026-08-21, and it is not the stub half.**  178
+  deleted the stubs outright and this line did not move.  GNU and this port
+  have the *identical* `(define-minor-mode indent-tabs-mode)` at
+  `lisp/simple.el:7639`; the difference is ordering.  `lisp/loadup.el:251`
+  loads `simple.el`, which `Fput`s the minor mode's docstring, and
+  `lisp/loadup.el:476` calls `Snarf-documentation` **225 lines later**, which
+  `Fput`s `etc/DOC`'s offset over the top of it.  **`Fsnarf_documentation` is a
+  last writer, not a fallback**, so GNU's dumped image carries the C text for
+  every name that is both a `DEFVAR_*` and a preloaded Lisp `defvar`.  This
+  port consults `gnu_table` only when the plist is empty, which inverts that.
+  The fix is to call a real `Snarf-documentation` over `gnu_table` from this
+  port's `loadup.el` where GNU calls it -- which is a seeding, at the END of
+  loadup and gated on `Fboundp`, and therefore the opposite of the one 178
+  removed rather than a return to it.  Still open; 178 declined it as a change
+  to all 894 rows' provenance and to the dump.
+- **`STARTUP_VARIABLE_DOC_STUBS` and `STARTUP_VARIABLE_DOC_STRING_PROPERTIES`
+  are gone, entry 178, 2026-08-21.**  This entry's "the rule, not a table"
+  argument turned out to apply to two tables it did not look at: 1972 names
+  were seeded with a `variable-documentation` during bootstrap, ahead of the
+  `Fboundp` gate 173 added, 70 of them holding the fixnum `0` that
+  `src/doc.c:433-434` reserves to mean "no doc".  GNU has no pre-seeding at
+  all.
 - **`inhibit-try-cursor-movement` is seeded here and unbound in GNU, and the
   seed's own justification is refuted by GNU's answer.**  GNU declares three
   names inside `#ifdef GLYPH_DEBUG` -- `inhibit-try-window-id`,
@@ -27406,6 +27442,23 @@ question rather than this entry's.  Recorded so that the gate's true scope is
 on the record rather than assumed from 173's entry, which describes it as
 though it governed every query.
 
+**Sized and FIXED by entry 178, 2026-08-21, and the objection above holds
+exactly as far as it was drawn.**  The bypass reaches **35** names in the
+shipped image and **1725** in a bare `Context`; `ctl-x-4-map` is one of the
+1725 and not one of the 35, because `subr.el`'s `defvar` runs during loadup and
+overwrites the seed with GNU's own text.  So the example was real on the
+surface it was taken from, and that surface is the one this entry agrees is not
+GNU-comparable for it -- the test named above now runs against the
+runtime-startup image instead, and pins what both editors answer there.
+
+The entry-168 question is answered by reading GNU rather than by weighing the
+port: `grep -rn Qvariable_documentation src/` yields four writers, all of them
+downstream of the variable existing, and `src/doc.c:433-434` reserves the
+fixnum `0` -- the value 70 of the seeded rows carried -- to mean "there is no
+doc".  **The seeding is the anomaly.**  Deleted, 7374 lines, and the `or_else`
+described above is now a type error: `var_docs::lookup` returns a
+proof-carrying `SnarfedDoc` that does not unify with `Option<&'static str>`.
+
 Entry 170's `Adoption::Alias` and `Adoption::Localized` residual is untouched
 here.
 
@@ -28058,3 +28111,487 @@ Status: FIXED -- three engine defects, each reproduced before it was touched
 and re-measured against the rebuilt binary afterwards.  Screen re-run on the
 rebuilt image: **82 audited, 0 divergent**, both control rows still behaving,
 and the two raw GC rows now byte-identical to GNU's.
+
+## 178. Entry 176's handed-over bypass: a bootstrap loop wrote a `variable-documentation` onto 1972 symbols, which is a source GNU does not have -- 70 of them holding the exact fixnum GNU reserves to mean "there is no doc" -- so the gate entry 173 built was consulted only where nothing had answered first; deleting the seeding costs 11 divergences and unmasks 28, and all 28 are one cause -- FIXED, with the 28 recorded
+
+Entry 176 found the scope of 173's `Fboundp` gate and wrote it down rather than
+fixing it:
+
+> The `Fboundp` gate is authoritative **only for names with no seeded plist
+> entry.**
+
+That is right, and this entry sizes it, reads GNU for the question 176 said
+belonged to entry 168, and answers it: **the seeding is the anomaly.**  The
+count is 35 in the shipped image and 1725 in a bare `Context`.
+
+Reproduced `-Q --batch` against GNU Emacs 31.0.90 and a `cargo xtask
+fresh-build --release` binary of this branch, `*scratch*` empty, pdump newer
+than the binary.
+
+### 1. The first binary was pre-173, and it made the bypass look like 61
+
+Before any of the numbers below: the release binary sitting in the shared
+checkout at `target/release/neomacs` was **not built from the source beside
+it**, despite an mtime (11:13) an hour and a half *newer* than `main`'s HEAD
+(09:38, `2c9d1d477`, entry 176's merge).  Measured with it, the whole-obarray
+probe reported 61 unbound names answering with a doc, 26 of them outside the
+seed tables.
+
+Four probes settle it without a bisect.  `dos-codepage`,
+`w32-num-mouse-buttons`, `motif-version-string` and `x-mode-pointer-shape` are
+unbound and answered a doc -- 173's gate refuses every one, and 176's own entry
+records `x-mode-pointer-shape` as closed.  `ns-antialias-text`, `dos-hyper-key`
+and `imagemagick-render-type` answered nil -- those three are on the 25-name
+`is_name_gnu_leaves_unbound_here` list that 173 *replaced*.  That is the
+pre-173 behaviour exactly: the old table filter live, the new gate absent.
+
+Rebuilt in this worktree, the same probe reports **35**, all of them inside the
+seed tables.  The 26 extras were the stale binary's.
+
+The lesson is the one the campaign already knows in a different shape -- a
+worktree binary is not oracle-valid -- restated: **a binary newer than HEAD is
+not thereby built from HEAD.**  Ask it a question whose answer changed, and ask
+one whose answer changed in the other direction, because a single probe cannot
+distinguish "stale" from "hole in the gate".
+
+### 2. GNU, read before designing
+
+The question that decides the shape is 176's: does GNU have any equivalent of a
+pre-seeded `variable-documentation`?
+
+`grep -rn Qvariable_documentation src/` over GNU Emacs 31.0.90 returns four
+writers and one reader, and that is the whole set:
+
+| site | what |
+| --- | --- |
+| `src/doc.c:613` | `Fsnarf_documentation`, gated `(!NILP (Fboundp (sym)) \|\| !NILP (Fmemq (sym, delayed_init))) && strncmp (end, "\nSKIP", 5)` |
+| `src/eval.c:911` | `Finternal__define_uninitialized_variable`, the callee of Lisp `defvar`/`defconst`/`defcustom`, **and only `if (!NILP (doc))`** |
+| `src/eval.c:723` | `Fdefvaralias`, copying the docstring across an alias edge |
+| `src/eval.c:741` | `Finternal-delete-indirect-variable`, clearing it |
+| `src/doc.c:423` | `Fdocumentation_property`, the reader |
+
+Every writer is downstream of the variable existing.  `Fsnarf_documentation`
+runs once, from `lisp/loadup.el:476`, after the C `DEFVAR`s and after the
+preloaded Lisp; `Finternal__define_uninitialized_variable` runs while defining
+the variable.  **Nothing in GNU writes a `variable-documentation` before the
+name has a value, and nothing writes one from a table keyed by name.**
+
+GNU makes the point a second time, in the reader:
+
+```c
+  if (BASE_EQ (tem, make_fixnum (0)))
+    tem = Qnil;
+```
+
+(`src/doc.c:433-434`.)  **Fixnum `0` is reserved to mean "there is no doc".**
+`make-docfile` cannot emit it -- the stored offset is `make_fixnum (pos + end +
+1 - buf)` and `end + 1 - buf` is at least 1 for the first record -- so the
+value exists only as a sentinel.
+
+So the answer to 176's question is no, twice over: GNU has no pre-seeding, and
+the specific value this port pre-seeded is GNU's own word for "nothing here".
+
+### 3. What this port did, and the spine: 35
+
+`neovm-core/src/emacs_core/eval.rs:5173-5185` ran two loops over two
+hand-typed tables in `doc.rs`:
+
+```rust
+// GNU Emacs seeds core startup vars with integer
+// `variable-documentation` offsets in the DOC table.
+for &(name, _) in STARTUP_VARIABLE_DOC_STUBS {
+    obarray.put_property(name, "variable-documentation", Value::fixnum(0))
+```
+
+The comment is the invented premise, and section 2 is why it is false.
+`STARTUP_VARIABLE_DOC_STUBS` held **70** names, seeded with the reserved `0`;
+`STARTUP_VARIABLE_DOC_STRING_PROPERTIES` held **1902**, seeded with a
+hand-typed string.  No overlap: **1972 symbols**.
+
+A seed lands on the symbol's plist, which is the *first* arm
+`documentation_property_plan` consults -- ahead of the gate.  Measured over
+those 1972 names:
+
+| | GNU 31.0.90 | this port, before |
+| --- | --- | --- |
+| bound, documented | 1961 | 1937 |
+| bound, nil | 2 | 0 |
+| unbound, nil | 9 | 0 |
+| **unbound, documented** | **0** | **35** |
+
+**35 is the answer to "how many names does the bypass reach".**  Asked of the
+whole obarray rather than of this list it is the same 35, and the diagonal is
+what GNU has none of:
+
+| whole obarray, `-Q --batch` | GNU | before | after |
+| --- | --- | --- | --- |
+| symbols | 18815 | 17379 | 17345 |
+| with a `variable-documentation` | 2747 | 2065 | 1960 |
+| holding the reserved `0` | **0** | **70** | **0** |
+| unbound, with a plist entry | **0** | **35** | **0** |
+| unbound, `documentation-property` answers | **0** | **35** | **0** |
+
+In a bare `Context`, before any Lisp, the same three counts were `1725 / 1725 /
+70` against GNU's `0 / 0 / 0`.
+
+### 4. Eight of the divergences are for variables GNU Emacs no longer has
+
+Of the 1972, eleven answered differently from GNU.  Eight are as clean a case
+of an invented default as the campaign has produced: **GNU Emacs 31 does not
+have the variable at all.**  Not a `DEFVAR_*` in `src/*.c`, not a `defvar` in
+`lisp/**/*.el`, not a row in `var_docs::gnu_table`.  The only mentions left in
+the GNU tree are the notes recording their removal:
+
+- `binary-as-unsigned` -- `etc/NEWS.27`, "The experimental variable
+  'binary-as-unsigned' has been removed."
+- `load-convert-to-unibyte` -- `etc/NEWS`, "The obsolete variable
+  'load-convert-to-unibyte' has been removed."
+- `display-comint-buffer-action`, `display-tex-shell-buffer-action` --
+  `etc/NEWS.30`, obsoleted in Emacs 30.
+- `redisplay-dont-pause` -- `etc/NEWS.24`.
+- `ccl-encode-ethio-font`, `font-ccl-encoder-alist`, `pure-space-overflow` --
+  nowhere in the tree at all, not even a NEWS entry.
+
+A hand-typed doc for a variable upstream deleted is not a stale copy of GNU's
+text.  There is no GNU text for it to be a copy of.
+
+### 5. And two are docstring-less `defvar`s, which is the mechanism in miniature
+
+`flex-score-match-tightness` (`lisp/minibuffer.el:4920`) and
+`hs-special-modes-alist` (`lisp/progmodes/hideshow.el:626`, autoloaded through
+`lisp/loaddefs.el:17191`) are spelled by GNU as
+
+```elisp
+(defvar flex-score-match-tightness nil)
+```
+
+-- no docstring.  `Finternal__define_uninitialized_variable`'s `if (!NILP
+(doc))` (`src/eval.c:909-912`) therefore never fires, and GNU's
+`documentation-property` is nil **by construction**, for a name GNU binds and
+this port binds too.  The seed table supplied a sentence that has never
+existed.  No boundness gate could have caught these: both editors answer `t` to
+`boundp`.
+
+The eleventh, `completion--flex-score-last-md`, is a name GNU 31 deleted, kept
+bound here by a Rust bootstrap `set_symbol_value` (`eval.rs:4661`) in addition
+to being seeded.  Removing the seed fixes its doc; its existence is section 9.
+
+### 6. The fix: delete the source GNU does not have
+
+One deletion, not thirty-five patches.  `eval.rs`'s two loops, both tables,
+`startup_variable_doc_stub`, `startup_variable_doc_offset_symbol`,
+`startup_variable_doc_string_symbol`, and the two `match` arms they fed --
+**7374 lines out of `doc.rs`**, which was ninety per cent seed table.
+
+What remains is GNU's two sources and nothing else:
+
+```rust
+match property_value {
+    Some(value) => documentation_plan_from_property_value(lisp_directory.as_deref(), value),
+    _ if prop_is_variable_documentation => {
+        let Some(doc) = snarfed.and_then(super::var_docs::lookup) else {
+            return Ok(DocumentationPlan::Final(Value::NIL));
+        };
+        ...
+```
+
+The first arm is the plist, which a Lisp `defvar` writes exactly where GNU
+writes it.  The second is `var_docs::gnu_table` standing in for `etc/DOC`,
+reachable only through 173's `SnarfedVariable`.  A `variable-documentation`
+that is `fixnum 0` now falls into the first arm and
+`documentation_plan_from_property_value` answers nil for it, which is
+`src/doc.c:433-434`.
+
+Three unit tests depended on the seeding.  All three were measuring its size --
+`OK (70 1902)` twice, and a 130-assertion `startup_string_variable_docs_are_
+seeded_at_startup` -- so none of them was a fact about GNU, and they are
+replaced by two that assert GNU's diagonal.
+
+### 7. The type-level answer: the gate's `no` no longer composes
+
+The bad state 176 named is precise: `.or_else(...)` **after** a gate said no.
+It compiled because the gate's answer and the stub had the same type.
+
+```rust
+snarfed.and_then(var_docs::lookup)          // Option<&'static str>
+       .or_else(|| startup_variable_doc_stub(sym))  // Option<&'static str>
+```
+
+`Option<T>::or_else` is exactly the operation "if this is None, here is another
+one", and two doc sources of the same element type slot together silently.  So
+`var_docs::lookup` now returns a proof-carrying newtype instead:
+
+```rust
+pub(crate) fn lookup(variable: SnarfedVariable<'_>) -> Option<SnarfedDoc<'_>>
+
+pub(crate) struct SnarfedDoc<'a> {
+    text: &'static str,
+    gate: PhantomData<SnarfedVariable<'a>>,
+}
+```
+
+`SnarfedDoc` has no constructor from a `&str`, no `Default`, and a lifetime
+borrowed from the `SnarfedVariable` the gate produced, so the proof cannot
+outlive the question.  `Option<SnarfedDoc>` does not unify with
+`Option<&'static str>`.  Verified by putting the bad line back:
+
+```
+error[E0308]: mismatched types
+   --> neovm-core/src/emacs_core/doc.rs:647:87
+    | ... .or_else(|| Some("stub")) else {
+    |                      ^^^^^^ expected `SnarfedDoc<'_>`, found `&str`
+```
+
+Honest about its limit: `SnarfedDoc::text` spends the proof, and a future
+author who calls it first can still `or_else` on the `&'static str`.  That is
+now an explicit act rather than the silent consequence of two `Option`s
+sharing an element type.
+
+And the guard that does not depend on any of this is section 3's diagonal.
+Ledger 173's law -- a predicate over rows that exist cannot see a row that was
+never written -- applies directly to a doc table: a per-name pin over
+`STARTUP_VARIABLE_DOC_*` would have reported green the moment the table was
+emptied, which is the state this entry produces.  So the guard is a `mapatoms`
+over the whole obarray, which has no empty state:
+`no_unbound_symbol_carries_a_variable_documentation` and
+`no_variable_documentation_is_installed_before_any_lisp_runs`.
+
+### 8. Measured after, including what got worse
+
+| over the 1972 seeded names | before | after |
+| --- | --- | --- |
+| unbound yet documented | 35 | **0** |
+| answers differing from GNU | 11 | 28 |
+
+**The differing-line count went up by 17, and that is the honest result rather
+than a regression to hide.**  Every one of the 11 is fixed.  Twenty-eight are
+unmasked, and all twenty-eight are one cause, section 9.
+
+Only **four** bound names changed answer at all, and three moved toward GNU:
+`flex-score-match-tightness` and `hs-special-modes-alist` now answer nil where
+GNU answers nil, `completion--flex-score-last-md` likewise.  The fourth is
+`x-display-name`, which is section 9's cause in its bound form.
+
+The 1933 remaining bound names are untouched: their doc comes from the Lisp
+`defvar` that defines them or from `gnu_table` behind the gate, which is where
+GNU's comes from.
+
+### 9. The 28 names the seeding was masking, and they are one bug
+
+`(featurep 'x)` is `t` in GNU's dumped image and `nil` in this port's, even
+`--batch`, because GNU is built with X support.  So `lisp/loadup.el:304-309`
+preloads `x-dnd.el`, `term/common-win.el` and `term/x-win.el` into GNU's dump
+and the identical form at our `lisp/loadup.el:316-320` preloads none of them.
+Twenty-seven of the twenty-eight are variables those three files `defvar`:
+
+- `lisp/x-dnd.el` -- 18 names, the `x-dnd-*` family.
+- `lisp/term/x-win.el` -- 5: `x-colors`, `x-gtk-stock-map`, `x-initialized`,
+  `x-preedit-overlay`, `x-display-cursor-at-start-of-preedit-string`.
+- `lisp/term/common-win.el` -- 4: `x-alternatives-map`, `x-display-name`,
+  `emacs-save-session-functions`, `icon-map-list`.
+
+The twenty-eighth, `tool-bar-position`, is the same shape through a different
+feature: `lisp/tool-bar.el:364` reads `(if (featurep 'move-toolbar) (defcustom
+tool-bar-position ...))`, and this build does not provide `move-toolbar`.
+
+So the class is **"a variable defined by Lisp that runs only behind a `featurep`
+this build does not provide"** -- which is the Lisp-side twin of the very case
+`Fsnarf_documentation`'s `Fboundp` gate exists for on the C side, the one
+`src/doc.c:585-594` describes as "we don't report docs for eg w32-specific
+items on X".  GNU answers nil for both halves.  This port answered nil for the
+C half after 173 and a hand-typed sentence for the Lisp half, which is the
+opposite of the gate.
+
+**Not fixed here, deliberately.**  Providing `x` at dump time is a change to
+what the image preloads, not to `documentation-property`, and it would pull in
+`term/x-win.el`'s references to X primitives.  It is one root cause with one
+site, which is a better thing to hand over than twenty-eight hand-typed rows
+that drift.  Recorded with its measurement so the next author does not
+re-seed: the seeding did not make these names right, it made this divergence
+invisible to the only check that could see it.
+
+### 10. Two things the normalization nearly hid, and the raw rows printed beside them
+
+The comparison above reports each name as `doc` or `nil`, which is a
+normalization, and entry 177's `gcs-done` lesson is that a normalized row can
+agree while the raw values do not.  So the raw first line of every answer was
+diffed too, over all 1972 names, in both editors:
+
+| | rows differing |
+| --- | --- |
+| normalized (`doc` / `nil`) | 28 |
+| raw (`boundp`, first line of the docstring) | 29 |
+
+The extra row is `completion--flex-score-last-md`, which differs on `boundp`
+alone -- both editors answer nil for its doc.  Nothing else was hidden: the
+1933 names whose answers agree agree on the text as well.
+
+Applied to the state *before* the fix, the same check corrects the framing of
+the 27:
+
+**the seeded text was right.**  For all 27, the seeded docstring's first line
+is byte-identical to what GNU answers.  These rows were faithful copies of
+GNU's own docstrings -- from `x-dnd.el`, `term/x-win.el` and
+`term/common-win.el` -- attached to names this build leaves void.  So the
+invention was not the text, it was the *existence*: a `documentation-property`
+that answers for a variable with no value, which is a state GNU produces zero
+times in 18815 symbols.
+
+The other four are invention in the ordinary sense, since GNU has no text at
+all to copy:
+
+| name | what the table said | what GNU answers |
+| --- | --- | --- |
+| `flex-score-match-tightness` | "Controls how the \`flex' completion style scores its matches." | nil |
+| `hs-special-modes-alist` | "Alist for initializing the hideshow variables for different modes." | nil |
+| `pure-space-overflow` | "Non-nil if building Emacs overflowed pure space." | nil (name removed) |
+| `binary-as-unsigned` | "Non-nil means \`format' %x and %o treat integers as unsigned." | nil (name removed) |
+
+### 11. Entry 173's last text difference, re-diagnosed -- and GNU's snarf is a LAST WRITER
+
+173's `indent-tabs-mode` residual is worth correcting because its diagnosis was
+one layer off.  173 wrote:
+
+> the table has GNU's text and something upstream of `var_docs::lookup`
+> answers first, which makes it a question about the plist/stub precedence
+> order
+
+The stub half is gone now and the line is unchanged, so it was never the stub.
+GNU and this port have the *identical* `(define-minor-mode indent-tabs-mode)`
+at `lisp/simple.el:7639`, and GNU still answers `buffer.c`'s
+`DEFVAR_PER_BUFFER` text while this port answers the minor mode's.  The reason
+is ordering:
+
+- `lisp/loadup.el:251` -- `(load "simple")`, which runs the
+  `define-minor-mode` and `Fput`s its docstring.
+- `lisp/loadup.el:476` -- `(Snarf-documentation "DOC")`, **225 lines later**,
+  which `Fput`s the `etc/DOC` offset **over the top of it**.
+
+**`Fsnarf_documentation` is a last writer, not a fallback.**  For any name that
+is both a C `DEFVAR` and a preloaded Lisp `defvar`, GNU's dumped image carries
+the C text.  This port consults `var_docs::gnu_table` lazily and only when the
+plist is empty, which is a *fallback*, so the Lisp text wins forever and the
+precedence is inverted.  Size on 173's 894-name surface: exactly one name.
+
+The ideal long-term shape follows from that, and it is the opposite of what
+this entry deleted rather than a return to it: **GNU's model IS a seeding --
+run once, at the END of loadup, over the DOC stand-in, gated on `Fboundp`.**
+What `eval.rs` had was a caricature of it: at the START of bootstrap, from a
+hand-typed table, ungated.  A real `Snarf-documentation` over `gnu_table`,
+called from this port's `loadup.el` where GNU calls it, would fix
+`indent-tabs-mode`, make the precedence exact, and make the diagonal in
+section 3 hold by construction rather than by the absence of a writer.
+
+**Not done here.**  It changes the provenance of all 894 rows and touches the
+dump, which is a larger blast radius than this entry's, and it needs the
+runtime-load case decided too (a `defvar` loaded *after* the dump is a later
+writer than snarf, so GNU's order there is the other way round).  Handed over
+with the citation rather than attempted.
+
+### 12. Found and NOT fixed
+
+- **The 28 of section 9**, one root cause: this port's dump does not provide
+  the `x` feature, so `lisp/loadup.el:316-320` preloads none of `x-dnd.el`,
+  `term/common-win.el` or `term/x-win.el`, where GNU's `lisp/loadup.el:304-309`
+  preloads all three; `tool-bar-position` is the same shape behind
+  `move-toolbar` (`lisp/tool-bar.el:364`).  Their docstrings were faithful
+  copies; what was invented was the variable's existence.
+- **Entry 173's `indent-tabs-mode`**, re-diagnosed in section 11 and still one
+  line: `Fsnarf_documentation` is a last writer in GNU and a fallback here.
+  The fix is a real `Snarf-documentation` over `gnu_table`, called from this
+  port's `loadup.el` where GNU calls it.
+- **`completion--flex-score-last-md` is bound by `eval.rs:4661` and GNU Emacs
+  31 has no such name.**  Invented *existence*, entry 138's class rather than
+  this one.  Its documentation now matches GNU; its boundness does not.
+- **Entry 173's `inhibit-try-cursor-movement`** is untouched: this port seeds
+  the variable (`xdisp.rs:5762`) where GNU leaves it unbound behind `#ifdef
+  GLYPH_DEBUG`.  Unrelated to the doc tables, and still one of 173's five.
+- **`set-mark-command` is bound to a different key here, found by the
+  display-path check and pre-existing.**  Section 10's raw diff in DISPLAY mode
+  turned up one name beyond the 28: `set-mark-command-repeat-pop`, whose
+  docstring GNU renders as "repeating **C-SPC** after popping mark" and this
+  port as "repeating **C-@**".  It is not a documentation bug -- the docstring
+  is byte-identical in both trees (`lisp/simple.el:7400`), and
+  `(key-description [?\C-@])` is `"C-@"` in **both** editors.  It is the
+  keymap:
+
+  ```
+  (where-is-internal 'set-mark-command global-map t)
+    GNU     -> [67108896]   ; the SPC keysym with the control bit, C-SPC
+    neomacs -> [0]          ; ASCII NUL
+  ```
+
+  Confirmed pre-existing by asking the older pre-173 binary the same question,
+  which answers `[0]` too.  Recorded rather than chased: it belongs to whoever
+  owns `global-map`, not to `documentation-property`.
+- **The melpa `sqlite3-api` build race** of section 13's gates is a harness
+  defect, not a divergence: `closql` and `org_roam` build the same module in
+  the same directory and `nextest` runs them concurrently.  It is invisible
+  under `-j1` and it lands on either editor at random, which is why it has been
+  reported as two different things.
+
+### 13. Gates
+
+Every release-binary gate ran against a `cargo xtask fresh-build --release` of
+this branch in this worktree, with the shared
+`~/.cache/neomacs/neovm-bootstrap-fingerprint-memo-v1` deleted first, the build
+reporting `xtask fresh-build finished successfully (release)` and
+`no_byte_compile=false`, the pdump (11:51) newer than the binary (11:49), and
+`(with-current-buffer "*scratch*" (buffer-string))` empty.  Load recorded from
+`/proc/loadavg`'s runnable field, which does not lag, alongside `uptime`'s:
+**runnable 4-11 throughout, against `uptime` one-minute figures of 12.53 to
+132.70** -- the two disagree by an order of magnitude on this machine and the
+runnable count is the one that predicted whether a suite would finish.
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`:
+  **11162 tests run: 11162 passed, 54 skipped** in 599.763 s, exit 0, zero
+  `FAIL` lines.  Baseline 11162 + 54 -- unchanged, after a 7374-line deletion.
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast`, with
+  `NEOVM_FORCE_ORACLE_PATH` set to the GNU 31.0.90 binary:
+  **38801 tests run: 38798 passed, 3 failed, 0 skipped** in 697.465 s.
+  Baseline 38799 with 38796 passing; the two extra tests are this entry's two
+  new pins and both appear by name in the `PASS` lines.  The three failures are
+  exactly the three the brief names as pre-existing upstream --
+  `div_u5_window_scroll_functions_hook`,
+  `div_core_divergence_surface_window_start_end_scroll_state`,
+  `div_core_divergence_surface_window_scroll_error_and_state_combo` -- and
+  **there is no fourth**.
+* `cargo nextest run -p neomacs-melpa-tests --no-fail-fast`:
+  **934 tests run: 930 passed, 4 failed, 2 skipped** in 550.408 s.  Two are the
+  coordinator's corrected upstream pair, `smooth_scrolling_package_batch` and
+  `evil_ediff_package_batch`.  The other two, `closql_package_batch` and
+  `org_roam_package_batch`, are **environmental and proven so**: both die on
+  the same shared `sqlite3-api` module build, `ld.bfd: cannot find
+  sqlite3-api.o`, which is two `make all` runs racing in one package
+  directory -- and the tell is that `closql` lost the race on **GNU's** side
+  (`GNU Emacs baseline failed`) while `org_roam` lost it on ours, which no
+  neomacs defect can produce.  Re-run serially: `cargo nextest run -E
+  'test(/closql_package_batch|org_roam_package_batch/)' -j1` gives **2 tests
+  run: 2 passed**.  So **zero melpa failures are attributable to this branch**.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0.
+* `cargo check --workspace --all-targets`: 0 errors.
+* `cargo fmt --all --check`: clean, exit 0.
+
+**RED quoted beside every green, because a doc-table change is exactly the kind
+that reports success by having nothing left to check.**
+
+* The diagonal test before the fix:
+  `1 test run: 0 passed, 1 failed, 9235 skipped`, `left: "OK (1725 1725 70)"`,
+  `right: "OK (0 0 0)"`.
+* The two new oracle pins are behind
+  `return_if_neovm_enable_oracle_proptest_not_set!()`, which is the sixth false
+  green -- a test that returns early and reports as passed.  Corrupting one row
+  of `oracle_a_variable_gnu_emacs_no_longer_has_is_not_documented_here` with
+  `NEOVM_FORCE_ORACLE_PATH` set gives **2 tests run: 1 passed, 1 failed**, so
+  they are running rather than skipping.
+* The type-level guard's negative control: putting the deleted `or_else` back
+  gives `error[E0308]: mismatched types ... expected SnarfedDoc<'_>, found
+  &str`.  A compile error, not a test failure.
+
+**One run is deliberately NOT quoted as a gate.**  An earlier unit run reached
+11160 of 11162 with zero `FAIL` lines and then exited **137** -- killed, no
+`Summary` line.  That is the fifth false green in the brief's list, and 11160
+clean tests is not a gate; it was re-run from scratch for the figure above.
+
+Status: FIXED (the seeding).  The 28 names it was masking are recorded in
+§9 and §12, attributed to one cause, and deliberately not fixed here.

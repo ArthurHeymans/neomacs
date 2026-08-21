@@ -27,14 +27,26 @@
 //!
 //! ## Lookup precedence
 //!
-//! `documentation_property_plan' consults sources in this order:
-//!   1. Symbol's `variable-documentation' plist property (set by
-//!      Lisp `defvar' or by `Snarf-documentation' in GNU's case)
-//!   2. `STARTUP_VARIABLE_DOC_STUBS' / `_STRING_PROPERTIES' (the
-//!      legacy hand-typed tables, shrinking in Phase A10)
-//!   3. `var_docs::lookup(name)' (this module — covers all
-//!      upstream GNU DEFVAR_* variables)
-//!   4. nil (no doc available)
+//! GNU has two sources and this module is the second of them, so
+//! `documentation_property_plan' has two arms and no others:
+//!   1. Symbol's `variable-documentation' plist property, which in
+//!      GNU is written by Lisp `defvar'/`defconst'/`defcustom'
+//!      (`src/eval.c:911', and only when the doc is non-nil) or by
+//!      `defvaralias' (`src/eval.c:723');
+//!   2. `var_docs::lookup' behind [`SnarfedVariable`], standing in
+//!      for `Fsnarf_documentation' reading `etc/DOC' behind
+//!      `Fboundp' (`src/doc.c:606-613');
+//!   3. otherwise nil.
+//!
+//! Ledger 178 removed a third source that GNU does not have. Two
+//! hand-typed tables in `doc.rs', `STARTUP_VARIABLE_DOC_STUBS' and
+//! `STARTUP_VARIABLE_DOC_STRING_PROPERTIES', were pre-seeded onto
+//! 1972 symbols' plists during bootstrap, which put them in arm 1
+//! -- ahead of the gate. 35 unbound names answered with a doc where
+//! GNU answers nil, and the 70 STUBS names were seeded with the
+//! fixnum `0' that `src/doc.c:433-434' reserves for "no doc".
+
+use std::marker::PhantomData;
 
 pub(crate) mod gnu_table;
 
@@ -81,8 +93,7 @@ const _: () = {
 };
 
 /// Look up the doc string for a built-in variable by name.
-/// Returns `None` if no entry exists. The returned `&'static str`
-/// points into `.rodata`.
+/// Returns `None` if no entry exists.
 ///
 /// O(n) linear scan over `gnu_table::GNU_VAR_DOCS`. Called only on
 /// documentation-query paths, never from `eval`/`funcall`/dispatch.
@@ -91,12 +102,56 @@ const _: () = {
 /// table is not a list of answers -- it is a stand-in for `etc/DOC`, which is
 /// bigger than any one build, and reading a record out of it is only legal
 /// after `Fsnarf_documentation`'s `Fboundp` gate has said yes.
+///
+/// The *return* is a [`SnarfedDoc`] rather than a `&'static str` for the
+/// mirror-image reason, and that is ledger 178's correction: a gate whose
+/// answer is an `Option<&'static str>` composes with `or_else`, so a second
+/// doc source of the same type can be spliced in *after* the gate has said no
+/// and the compiler will not object.  That is exactly what happened -- the
+/// pre-176 code read
+///
+/// ```ignore
+/// snarfed.and_then(var_docs::lookup).or_else(|| startup_variable_doc_stub(sym))
+/// ```
+///
+/// and the `or_else` answered for 35 unbound names the gate had refused.
+/// `Option<SnarfedDoc>` does not unify with `Option<&'static str>`, so the
+/// same line is now a type error rather than a review comment.
 #[inline]
-pub(crate) fn lookup(variable: SnarfedVariable<'_>) -> Option<&'static str> {
+pub(crate) fn lookup(variable: SnarfedVariable<'_>) -> Option<SnarfedDoc<'_>> {
     gnu_table::GNU_VAR_DOCS
         .iter()
         .find(|(n, _)| *n == variable.name)
-        .map(|(_, doc)| *doc)
+        .map(|(_, doc)| SnarfedDoc {
+            text: doc,
+            gate: PhantomData,
+        })
+}
+
+/// A doc string [`lookup`] read out of the `etc/DOC` stand-in, carrying the
+/// proof that `Fsnarf_documentation`'s gate was passed to get it.
+///
+/// The lifetime borrows the [`SnarfedVariable`] the gate produced, so the
+/// proof cannot outlive the question.  There is deliberately no constructor
+/// from a bare `&str` and no `Default`: the only way to hold one is to have
+/// asked `Fboundp` first.
+///
+/// [`text`](Self::text) is where the proof is spent, which is the one place a
+/// future author can still discard it -- but discarding it is now an explicit
+/// statement rather than the silent consequence of two `Option`s happening to
+/// share an element type.
+#[derive(Debug)]
+pub(crate) struct SnarfedDoc<'a> {
+    text: &'static str,
+    gate: PhantomData<SnarfedVariable<'a>>,
+}
+
+impl SnarfedDoc<'_> {
+    /// The doc text. Points into `.rodata`.
+    #[inline]
+    pub(crate) fn text(&self) -> &'static str {
+        self.text
+    }
 }
 
 /// A built-in variable name that **this build binds** -- the only kind
