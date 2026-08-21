@@ -1962,6 +1962,30 @@ impl Obarray {
         self.forwarder(id).map(|fwd| fwd.ty)
     }
 
+    /// The `Lisp_Boolfwd` cell behind a `DEFVAR_BOOL` symbol -- GNU's `bool *`,
+    /// which C code reads directly (`debug_on_next_call` is
+    /// `globals.f_debug_on_next_call`, `src/globals.h:1170-1171`) rather than
+    /// through a symbol lookup.
+    ///
+    /// Both redirects that can own the descriptor are handled: `Forwarded`
+    /// normally, and the BLV after `make_blv` copied it there
+    /// (`src/data.c:2112-2140`).  In the localized case GNU's swap-in leaves
+    /// the current buffer's value in that same cell, so the cell is still the
+    /// right thing to read.
+    pub fn bool_forwarder(
+        &self,
+        id: SymId,
+    ) -> Option<&'static crate::emacs_core::forward::LispBoolFwd> {
+        let sym = self.slot(id)?;
+        match sym.flags.redirect() {
+            // Safety: `install_*fwd` is the only writer of this arm and always
+            // stores a `Box::leak`ed descriptor (see `Obarray::forwarder`).
+            SymbolRedirect::Forwarded => unsafe { &*sym.val.fwd }.as_bool_fwd(),
+            SymbolRedirect::Localized => self.blv(id)?.fwd?.as_bool_fwd(),
+            _ => None,
+        }
+    }
+
     /// Set the `local_if_set` flag on a LOCALIZED symbol's BLV. Used
     /// by `make-variable-buffer-local` (Phase 6) which differs from
     /// `make-local-variable` only in this flag. Phase 4 exposes the

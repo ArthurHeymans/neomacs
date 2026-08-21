@@ -17,6 +17,7 @@ use super::bookmark::BookmarkManager;
 use super::builtins;
 use super::coding::CodingSystemManager;
 use super::custom::CustomManager;
+use super::debug_on_call::DebugOnCallCode;
 pub use super::display_host::{
     DisplayHost, TerminalCreateRequest, TerminalDisplayTarget, TerminalFloatPlacement,
     TerminalGridSize, TerminalId,
@@ -3978,26 +3979,19 @@ impl Context {
     }
 
     fn call_debugger_for_signal(&mut self, sig: &SignalData) -> Result<(), Flow> {
-        let debugger = self
-            .obarray
-            .symbol_value("debugger")
-            .copied()
-            .unwrap_or(Value::NIL);
         let rendered = super::error::format_signal_data_with_eval(self, sig);
         tracing::error!(
             "entering Lisp debugger for signal: symbol={} data={}",
             format_symbol_name_for_diagnostic(sig.symbol),
             rendered
         );
-        let specpdl_count = self.specpdl.len();
-        self.specbind(intern("debugger-may-continue"), Value::T);
-        self.specbind(intern("inhibit-debugger"), Value::T);
-        let result = self.apply(
-            debugger,
-            vec![Value::symbol("error"), make_signal_binding_value(sig)],
-        );
-        self.unbind_to(specpdl_count);
-        result.map(|_| ())
+        // GNU `call_debugger (list2 (Qdebug, ...))` from `maybe_call_debugger`:
+        // one shared entry point with the `debug-on-next-call` and
+        // `debug-on-exit` sites, so the bindings it installs -- and the
+        // `debug_on_next_call = 0` at `src/eval.c:298` -- cannot be one thing
+        // for a signal and another thing for a call.
+        self.call_debugger(vec![Value::symbol("error"), make_signal_binding_value(sig)])
+            .map(|_| ())
     }
 
     /// GNU emacs.c / data.c / fns.c-level startup globals: version and
@@ -10711,8 +10705,16 @@ impl Context {
         // the frame UNEVALLED throughout.
         let outer_bt_count = self.specpdl.len();
         self.push_unevalled_backtrace_frame(original_fun, original_args);
-        let dispatch_result =
-            self.eval_sub_cons_dispatch(original_fun, original_args, outer_bt_count);
+        // GNU eval.c:2601-2602, immediately after `record_in_backtrace` and
+        // before any dispatch: `if (debug_on_next_call) do_debug_on_call (Qt,
+        // count)`.  Taking the arm IS the disarm (see `debug_on_call`), and
+        // the same call flags this frame's `debug_on_exit`.
+        let dispatch_result = match self.take_debug_on_call_arm(DebugOnCallCode::EvalForm) {
+            Some(arm) => self.do_debug_on_call(arm).and_then(|()| {
+                self.eval_sub_cons_dispatch(original_fun, original_args, outer_bt_count)
+            }),
+            None => self.eval_sub_cons_dispatch(original_fun, original_args, outer_bt_count),
+        };
         let result = self.dispatch_signal_result_if_needed(dispatch_result);
         self.record_sequence_temp_roots_from_backtrace(outer_bt_count);
         self.unbind_to_with_result(outer_bt_count, result)
@@ -13974,6 +13976,127 @@ impl Context {
         }
     }
 
+    /// True when the specpdl entry at `index` is a backtrace frame at all --
+    /// GNU's `eassert (pdl->kind == SPECPDL_BACKTRACE)`
+    /// (`src/eval.c:146, 154`, `src/lisp.h:3736`).
+    pub(crate) fn specpdl_entry_is_backtrace(&self, index: usize) -> bool {
+        matches!(
+            self.specpdl.get(index),
+            Some(
+                SpecBinding::Backtrace { .. }
+                    | SpecBinding::Backtrace1 { .. }
+                    | SpecBinding::Backtrace2 { .. }
+                    | SpecBinding::BacktraceNative { .. }
+            )
+        )
+    }
+
+    /// GNU `backtrace_debug_on_exit` (`src/lisp.h:3733-3738`) for the frame at
+    /// `index`, answering `false` for anything that is not a backtrace frame so
+    /// that a caller unbinding a plain `let` region asks the question safely.
+    pub(crate) fn backtrace_frame_wants_debug_on_exit(&self, index: usize) -> bool {
+        match self.specpdl.get(index) {
+            Some(SpecBinding::Backtrace { debug_on_exit, .. })
+            | Some(SpecBinding::Backtrace1 { debug_on_exit, .. }) => *debug_on_exit,
+            // Structurally false, by the variants' own contract.
+            Some(SpecBinding::Backtrace2 { .. } | SpecBinding::BacktraceNative { .. }) => false,
+            _ => false,
+        }
+    }
+
+    /// GNU `set_backtrace_debug_on_exit` (`src/eval.c:151-156`).
+    ///
+    /// GNU's `bt` struct always has the bit (`src/lisp.h:3628`); this port's
+    /// specpdl entry does not, because [`SpecBinding::Backtrace2`] and
+    /// [`SpecBinding::BacktraceNative`] drop it to stay inside the hot entry's
+    /// size budget and are documented as "structurally false".  Setting the
+    /// flag on one of those therefore *promotes* the frame to the owned
+    /// [`SpecBinding::Backtrace`] shape rather than silently losing the
+    /// debugger entry -- the promotion is the payment for the size win, and it
+    /// is on a cold path by construction (nothing but a debugger sets this).
+    ///
+    /// Returns whether a backtrace frame was found, mirroring GNU's
+    /// `if (backtrace_p (pdl))` guard in `Fbacktrace_debug` (`src/eval.c:4025`).
+    pub(crate) fn set_backtrace_debug_on_exit(&mut self, index: usize, flag: bool) -> bool {
+        match self.specpdl.get_mut(index) {
+            Some(SpecBinding::Backtrace { debug_on_exit, .. })
+            | Some(SpecBinding::Backtrace1 { debug_on_exit, .. }) => {
+                *debug_on_exit = flag;
+                true
+            }
+            Some(SpecBinding::Backtrace2 { .. } | SpecBinding::BacktraceNative { .. }) => {
+                if !flag {
+                    // Already false by the variant's contract; nothing to do,
+                    // and in particular nothing to promote.
+                    return true;
+                }
+                self.promote_backtrace_frame_for_debug_on_exit(index);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Rewrite the compact frame at `index` into the owned
+    /// [`SpecBinding::Backtrace`] shape with `debug_on_exit` set.
+    ///
+    /// The one subtlety is `backtrace_args_stack`: its slots are pushed in
+    /// specpdl order and released LIFO (`release_backtrace_args_in_specpdl_suffix`
+    /// asserts exactly that), so a promotion in the middle of the stack has to
+    /// *insert* at the position this frame's slot would have occupied and shift
+    /// the frames above it, not push on top.  For the entry-debugger path the
+    /// frame is always the specpdl top and the insert degenerates to a push.
+    #[cold]
+    #[inline(never)]
+    fn promote_backtrace_frame_for_debug_on_exit(&mut self, index: usize) {
+        let (function, values) = match &self.specpdl[index] {
+            SpecBinding::Backtrace2 {
+                function,
+                arg0,
+                arg1,
+            } => (*function, smallvec::smallvec![*arg0, *arg1]),
+            SpecBinding::BacktraceNative {
+                function,
+                args_ptr,
+                nargs,
+            } => {
+                let (function, args_ptr, nargs) = (*function, *args_ptr, *nargs as usize);
+                // SAFETY: variant contract -- the native caller's call-args
+                // slot outlives this entry, and the entry is live here.
+                let values = (0..nargs)
+                    .map(|i| Value::from_bits(unsafe { *args_ptr.add(i) } as usize))
+                    .collect::<LispArgVec>();
+                (function, values)
+            }
+            _ => return,
+        };
+
+        // The slot's position: the first owned slot belonging to a frame ABOVE
+        // this one, or the top of the stack when there is none.
+        let mut insert_at = self.backtrace_args_stack.len();
+        for binding in &self.specpdl[index + 1..] {
+            if let SpecBinding::Backtrace { args, .. } = binding
+                && let Some(owned) = args.owned_index()
+            {
+                insert_at = insert_at.min(owned);
+            }
+        }
+        self.backtrace_args_stack.insert(insert_at, values);
+        for binding in self.specpdl[index + 1..].iter_mut() {
+            if let SpecBinding::Backtrace { args, .. } = binding
+                && let Some(owned) = args.owned_index()
+                && owned >= insert_at
+            {
+                *args = BacktraceArgs::evaluated(owned + 1);
+            }
+        }
+        self.specpdl[index] = SpecBinding::Backtrace {
+            function,
+            args: BacktraceArgs::evaluated(insert_at),
+            debug_on_exit: true,
+        };
+    }
+
     #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
     pub(crate) fn backtrace_args_len(&self, args: &BacktraceArgs) -> usize {
         match args.view() {
@@ -14356,6 +14479,20 @@ impl Context {
                 return result;
             }
         }
+        // GNU's six `if (backtrace_debug_on_exit (...)) val = call_debugger
+        // (list2 (Qexit, val));` sites, as one.  Reaching here means the suffix
+        // is not all-trivial, and `trivial_spec_binding_pop` treats exactly the
+        // `debug_on_exit: true` frames as non-trivial -- so no fast path above
+        // can have skipped a flagged frame, and this is the only place one can
+        // be popped.  GNU runs the debugger BEFORE `specpdl_ptr--` so the frame
+        // is still in the backtrace it shows.
+        let result = self.run_debug_on_exit(count, result);
+        if self.specpdl.len() <= count {
+            // The debugger's own Lisp unwound past this region (a `throw` out
+            // of `debug` reaches `top-level`); there is nothing left to pop.
+            return result;
+        }
+
         if self.specpdl[count..]
             .iter()
             .all(spec_binding_has_trivial_unbind)
@@ -14586,11 +14723,30 @@ impl Context {
             if self.gc_safe_point_exact_should_collect() {
                 self.gc_collect_from_current_roots();
             }
+            // GNU Ffuncall eval.c:3185-3190 in order: record_in_backtrace,
+            // maybe_gc, then `if (debug_on_next_call) do_debug_on_call
+            // (Qlambda, count)`.  Only when a frame was recorded -- GNU's
+            // Ffuncall always records one, and `record_backtrace: false` is
+            // this port's marker for a caller that already did.
+            let armed = if record_backtrace {
+                self.take_debug_on_call_arm(DebugOnCallCode::Funcall)
+            } else {
+                None
+            };
+            let entered = match armed {
+                Some(arm) => self.do_debug_on_call(arm),
+                None => Ok(()),
+            };
             // GNU does not probe stack space for every funcall. Keep growth
             // checks at the function-application boundary, but only on coarse
             // depth intervals so normal startup is not dominated by TLS lookups
             // in stacker::maybe_grow.
-            self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(function, args))
+            match entered {
+                Err(flow) => Err(flow),
+                Ok(()) => {
+                    self.maybe_grow_eval_stack(|ctx| ctx.funcall_general_untraced(function, args))
+                }
+            }
         };
         self.depth -= 1;
         let result = self.dispatch_signal_result_if_needed(result);
@@ -14714,7 +14870,15 @@ impl Context {
         let args = args.into();
         let bt_count = self.specpdl.len();
         self.push_backtrace_frame(function, &args);
-        let result = self.funcall_general_untraced(function, args);
+        // Same GNU Ffuncall arm site as `apply_internal` (eval.c:3189-3190):
+        // this entry records its own backtrace frame, so it is a funcall in
+        // GNU's sense and must be armable.
+        let result = match self.take_debug_on_call_arm(DebugOnCallCode::Funcall) {
+            Some(arm) => self
+                .do_debug_on_call(arm)
+                .and_then(|()| self.funcall_general_untraced(function, args)),
+            None => self.funcall_general_untraced(function, args),
+        };
         let result = self.dispatch_signal_result_if_needed(result);
         self.unbind_to_with_result(bt_count, result)
     }

@@ -11368,14 +11368,24 @@ fn vm_backtrace_and_recursion_builtins_use_shared_runtime_state() {
     crate::test_utils::init_test_tracing();
     assert_eq!(
         vm_eval_str(
-            "(let ((thread (current-thread)))
-               (list
-                 (car (car (backtrace--frames-from-thread thread)))
-                 (backtrace--locals 1)
-                 (backtrace-debug 1 2)
-                 (backtrace-eval 1 2)
-                 (backtrace-frame--internal '(lambda (&rest _) nil) 0 nil)
-                 (integerp (recursion-depth))))"
+            // Ledger 172: `backtrace-debug' really sets the frame's
+            // debug-on-exit bit now, so the flagged `list' frame enters the
+            // debugger on the way out.  GNU does the same for this exact form
+            // -- `emacs -Q --batch' prints "Debugger entered--returning value:
+            // (t nil 2 1 nil t)" and still answers `(t nil 2 1 nil t)',
+            // because `debug' returns the value it was handed.  This bare VM
+            // context has no debug.el, so the stand-in below is that same
+            // identity and the answer is unchanged.
+            "(progn
+               (setq debugger (lambda (&rest args) (nth 1 args)))
+               (let ((thread (current-thread)))
+                 (list
+                   (car (car (backtrace--frames-from-thread thread)))
+                   (backtrace--locals 1)
+                   (backtrace-debug 1 2)
+                   (backtrace-eval 1 2)
+                   (backtrace-frame--internal '(lambda (&rest _) nil) 0 nil)
+                   (integerp (recursion-depth)))))"
         ),
         "OK (t nil 2 1 nil t)"
     );
