@@ -3421,16 +3421,35 @@ impl Buffer {
 
     /// Emacs character code immediately before Emacs byte position `pos`, or `None`.
     pub fn char_code_before_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<u32> {
+        let prior_byte = self.prior_char_start_emacs_byte_pos(pos)?;
+        self.text.char_code_at_emacs_byte_pos(prior_byte)
+    }
+
+    /// Byte position where the character ending at `pos` starts: step back
+    /// over continuation bytes, at most 4 (the 5-byte internal encoding's
+    /// worst case). The internal encoding is self-synchronizing like UTF-8,
+    /// the same invariant the syntax scanner's backward step relies on —
+    /// the previous implementation did a byte->char AND a char->byte
+    /// conversion (two anchored scans) per backward peek, and regexp
+    /// word-boundary checks peek backward per candidate position.
+    fn prior_char_start_emacs_byte_pos(&self, pos: EmacsBytePos) -> Option<EmacsBytePos> {
         if pos == EmacsBytePos::ZERO || pos > self.total_emacs_byte_end_pos() {
             return None;
         }
-        let char_pos = self.text.emacs_byte_pos_to_char_pos(pos);
-        if char_pos == CharPos0::ZERO {
-            return None;
+        let mut prior = pos.get() - 1;
+        if self.get_multibyte() {
+            let mut steps = 0;
+            while prior > 0
+                && steps < 4
+                && self
+                    .emacs_byte_at_pos(EmacsBytePos::new(prior))
+                    .is_some_and(|b| (b & 0xC0) == 0x80)
+            {
+                prior -= 1;
+                steps += 1;
+            }
         }
-        let prior_char = char_pos.saturating_sub_len(CharLen::new(1));
-        let prior_byte = self.text.char_pos_to_emacs_byte_pos(prior_char);
-        self.text.char_code_at_emacs_byte_pos(prior_byte)
+        Some(EmacsBytePos::new(prior))
     }
 
     /// Emacs-byte width of the character starting at `pos`.
@@ -3447,15 +3466,7 @@ impl Buffer {
 
     /// Emacs-byte width of the character ending at `pos`.
     pub fn char_before_emacs_byte_len(&self, pos: EmacsBytePos) -> Option<EmacsByteLen> {
-        if pos == EmacsBytePos::ZERO || pos > self.total_emacs_byte_end_pos() {
-            return None;
-        }
-        let char_pos = self.text.emacs_byte_pos_to_char_pos(pos);
-        if char_pos == CharPos0::ZERO {
-            return None;
-        }
-        let prior_char = char_pos.saturating_sub_len(CharLen::new(1));
-        let prior_byte = self.text.char_pos_to_emacs_byte_pos(prior_char);
+        let prior_byte = self.prior_char_start_emacs_byte_pos(pos)?;
         Some(pos.saturating_offset_from(prior_byte))
     }
 
