@@ -127,11 +127,10 @@ def main() -> int:
 
     # And for mirrors with no compiled make-docfile: every `DEFVAR_*` head in
     # GNU's `src/*.c` yields a `doc:` block, so a head without one means the
-    # scanner has drifted.  (The two heads GNU itself cannot read are DEFUNs,
-    # in `treesit.c`; see `extract_gnu_defun_docs.py`.)
-    undocumented = [
-        f"{f}:{n}" for (f, n, _) in scan.heads_without_doc if not n.startswith("treesit-")
-    ]
+    # scanner has drifted.  The two heads GNU itself cannot read are DEFUNs in
+    # `treesit.c`, and they are excluded by `(file, name)` rather than by a
+    # name prefix, so a treesit DEFVAR that lost its doc still fails closed.
+    undocumented = make_docfile.unexpected_heads_without_doc(scan)
     if undocumented:
         print(
             f"error: {len(undocumented)} DEF* head(s) with no doc: block; the "

@@ -617,6 +617,35 @@ def verify_against_make_docfile(src: Path, doc_stream: bytes) -> str | None:
     )
 
 
+# `make-docfile` emits nothing for a head whose doc marker it cannot read, and
+# it `continue`s silently rather than complaining -- so a head with no doc block
+# is not by itself a scanner bug.  GNU has exactly two, both `DEFUN`s in
+# `src/treesit.c`, both spelled `doc : /*` with a space before the colon:
+# `scan_c_stream` does `while (c_isalpha (c)) c = getc (infile); if (c == ':')`,
+# so the space ends the keyword scan, `doc_keyword` stays false, and the `/*`
+# two characters later is never reached.  GNU Emacs itself answers nil for both
+# names -- verified against `emacs -Q --batch`, not inferred -- so reproducing
+# the omission is parity rather than damage.
+#
+# The set is exhaustive on purpose, and matched on `(file, name)` rather than on
+# a name prefix.  A THIRD head with no doc block means either GNU gained a typo
+# or this port drifted from `make-docfile`, and either way no table may be
+# written until a human has looked.
+GNU_HEADS_WITH_NO_DOC_BLOCK = {
+    ("treesit.c", "treesit-tracking-line-column-p"),
+    ("treesit.c", "treesit-parser-tracking-line-column-p"),
+}
+
+
+def unexpected_heads_without_doc(scan: "ScanResult") -> list[str]:
+    """`file:name` for every head with no doc block that GNU does not have."""
+    return [
+        f"{f}:{n}"
+        for (f, n, _) in scan.heads_without_doc
+        if (f, n) not in GNU_HEADS_WITH_NO_DOC_BLOCK
+    ]
+
+
 def is_skip_placeholder(doc: str) -> bool:
     """`Fsnarf_documentation`'s own test: `strncmp (end, "\\nSKIP", 5)`.
 

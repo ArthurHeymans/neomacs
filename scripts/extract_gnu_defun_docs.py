@@ -64,23 +64,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import make_docfile  # noqa: E402
 
-# `make-docfile` emits nothing for a `DEFUN` head whose doc marker it cannot
-# read, and it `continue`s silently rather than complaining -- so a head with
-# no doc block is not by itself a scanner bug.  GNU has exactly two, both in
-# `src/treesit.c`, both spelled `doc : /*` with a space before the colon:
-# `scan_c_stream` does `while (c_isalpha (c)) c = getc (infile); if (c == ':')`,
-# so the space ends the keyword scan, `doc_keyword` stays false, and the `/*`
-# two characters later is never reached.  GNU Emacs itself answers nil for both
-# names -- verified against `emacs -Q --batch`, not inferred -- so reproducing
-# the omission is parity rather than damage.
-#
-# The list is exhaustive on purpose.  A THIRD head with no doc block means
-# either GNU gained a typo or this port drifted from `make-docfile`, and either
-# way the table must not be written until a human has looked.
-GNU_HEADS_WITH_NO_DOC_BLOCK = {
-    ("treesit.c", "treesit-tracking-line-column-p"),
-    ("treesit.c", "treesit-parser-tracking-line-column-p"),
-}
 
 
 def rust_string_literal(s: str) -> str:
@@ -164,10 +147,7 @@ def main() -> int:
 
     # Guard 2, for the mirrors that have no compiled make-docfile: the set of
     # heads with no doc block must be GNU's own two and nothing else.
-    unexpected = [
-        (f, n) for (f, n, _) in scan.heads_without_doc
-        if (f, n) not in GNU_HEADS_WITH_NO_DOC_BLOCK
-    ]
+    unexpected = make_docfile.unexpected_heads_without_doc(scan)
     if unexpected:
         print(
             f"error: {len(unexpected)} DEF* head(s) with no doc: block that GNU "
@@ -175,8 +155,8 @@ def main() -> int:
             f"(lib-src/make-docfile.c:1139-1157):",
             file=sys.stderr,
         )
-        for f, n in unexpected:
-            print(f"  {f}:{n}", file=sys.stderr)
+        for head in unexpected:
+            print(f"  {head}", file=sys.stderr)
         return 1
 
     all_entries: list[tuple[str, str]] = []
