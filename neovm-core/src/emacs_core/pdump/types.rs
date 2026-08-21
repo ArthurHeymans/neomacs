@@ -237,7 +237,7 @@ pub enum DumpByteCodeInstructions {
     Decoded(Vec<crate::emacs_core::bytecode::opcode::Op>),
     /// Original GNU bytecode. Decoded instructions and byte-offset maps are
     /// derived from this stream and therefore do not belong in the dump.
-    Gnu(Vec<u8>),
+    Gnu(DumpByteData),
 }
 
 // ---------------------------------------------------------------------------

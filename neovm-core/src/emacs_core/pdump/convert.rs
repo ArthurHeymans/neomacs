@@ -2287,7 +2287,9 @@ pub(crate) fn dump_bytecode(
     bc: &ByteCodeFunction,
 ) -> DumpByteCodeFunction {
     let instructions = match &bc.gnu_bytecode_bytes {
-        Some(bytes) => DumpByteCodeInstructions::Gnu(bytes.clone()),
+        Some(bytes) => {
+            DumpByteCodeInstructions::Gnu(DumpByteData::owned(bytes.as_slice().to_vec()))
+        }
         None => DumpByteCodeInstructions::Decoded(bc.executable_ops().to_vec()),
     };
     DumpByteCodeFunction {
@@ -3858,7 +3860,28 @@ fn load_bytecode_owned(
 ) -> Result<ByteCodeFunction, DumpError> {
     let (ops, gnu_bytecode_bytes) = match bc.instructions {
         DumpByteCodeInstructions::Decoded(ops) => (ops, None),
-        DumpByteCodeInstructions::Gnu(bytes) => (Vec::new(), Some(bytes)),
+        DumpByteCodeInstructions::Gnu(data) => {
+            let bytes = match data {
+                DumpByteData::Owned(bytes) => crate::tagged::header::LispByteVec::owned(bytes),
+                // The span points into the retained dump image; aliasing it
+                // skips one Vec alloc + copy per dumped function.
+                DumpByteData::Mapped(_) => {
+                    let mapped_heap = decoder.state.mapped_heap.ok_or_else(|| {
+                        DumpError::ImageFormatError(
+                            "mapped gnu bytecode span without a heap image".into(),
+                        )
+                    })?;
+                    let bytes = mapped_heap.bytes(&data)?;
+                    unsafe { crate::tagged::header::LispByteVec::mapped(bytes.ptr, bytes.len) }
+                }
+                DumpByteData::StaticRoData { .. } => {
+                    return Err(DumpError::ImageFormatError(
+                        "gnu bytecode bytes cannot come from static rodata".into(),
+                    ));
+                }
+            };
+            (Vec::new(), Some(bytes))
+        }
     };
     let params = load_lambda_params_owned(bc.params);
     let arglist = bc

@@ -4164,7 +4164,7 @@ impl TaggedHeap {
             .saturating_add(
                 data.gnu_bytecode_bytes
                     .as_ref()
-                    .map_or(0, |bytes| bytes.capacity().saturating_mul(size_of::<u8>())),
+                    .map_or(0, |bytes| bytes.owned_bytes()),
             )
             .saturating_add(Self::vector_storage_bytes(&data.extra_slots))
             .saturating_add(data.docstring.as_ref().map_or(0, |doc| doc.sbytes()))
@@ -4312,9 +4312,9 @@ impl TaggedHeap {
         if let Some(bytes) = &data.gnu_bytecode_bytes {
             stats = stats.add(PayloadLayout {
                 logical_bytes: bytes.len(),
-                capacity_bytes: bytes.capacity(),
-                owned: bytes.capacity() > 0,
-                mapped: false,
+                capacity_bytes: bytes.owned_bytes(),
+                owned: bytes.owned_bytes() > 0,
+                mapped: bytes.owned_bytes() == 0 && bytes.len() > 0,
             });
         }
         stats = stats.add(PayloadLayout {
@@ -14117,7 +14117,10 @@ mod bytecode_arena_tests {
         f.constants = constants.into();
         f.ops = vec![Op::Nil; n_ops];
         if payload > 0 {
-            f.gnu_bytecode_bytes = Some(vec![0xAA; payload]);
+            f.gnu_bytecode_bytes = Some(crate::tagged::header::LispByteVec::owned(vec![
+                0xAA;
+                payload
+            ]));
         }
         f
     }

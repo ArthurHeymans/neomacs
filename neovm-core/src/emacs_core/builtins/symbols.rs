@@ -6640,7 +6640,7 @@ fn make_byte_code_from_parts_with_slots(
         .expect("validated bytecode string")
         .as_bytes()
         .to_vec();
-    let gnu_bytecode_bytes = Some(raw_bytes.clone());
+    let gnu_bytecode_bytes = Some(crate::tagged::header::LispByteVec::owned(raw_bytes.clone()));
     let _ = bytecode_str.with_lisp_string_mut(|string| string.pin_immovable());
 
     // 3. Extract constants from vector

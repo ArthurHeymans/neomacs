@@ -162,7 +162,7 @@ pub struct ByteCodeFunction {
     /// bytecode string and pass it to `make-byte-code` for closure prototype
     /// generation.  Without preserving the original bytes, those round-trips
     /// produce empty bytecode functions.
-    pub gnu_bytecode_bytes: Option<Vec<u8>>,
+    pub gnu_bytecode_bytes: Option<crate::tagged::header::LispByteVec>,
     /// Optional docstring.
     pub docstring: Option<LispString>,
     /// Optional documentation form (e.g., oclosure type symbol in slot 4).

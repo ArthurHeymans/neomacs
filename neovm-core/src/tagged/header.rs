@@ -417,6 +417,93 @@ pub struct LispValueVec {
     storage: LispValueVecStorage,
 }
 
+/// Byte storage that may alias the mapped dump image — the byte twin of
+/// [`LispValueVec`]. Mapped storage is read-only; every consumer of the
+/// wrapped bytes reads through `as_slice`.
+pub struct LispByteVec {
+    storage: LispByteVecStorage,
+}
+
+enum LispByteVecStorage {
+    Owned(Vec<u8>),
+    Mapped { ptr: *const u8, len: usize },
+}
+
+// Mapped bytes are read-only through shared references, same contract as
+// `LispValueVecStorage`.
+unsafe impl Send for LispByteVecStorage {}
+unsafe impl Sync for LispByteVecStorage {}
+
+impl LispByteVec {
+    pub fn owned(bytes: Vec<u8>) -> Self {
+        Self {
+            storage: LispByteVecStorage::Owned(bytes),
+        }
+    }
+
+    /// SAFETY: `ptr..ptr+len` must stay valid and immutable for the
+    /// process lifetime (the mapped dump image satisfies this).
+    pub unsafe fn mapped(ptr: *const u8, len: usize) -> Self {
+        Self {
+            storage: LispByteVecStorage::Mapped { ptr, len },
+        }
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        match &self.storage {
+            LispByteVecStorage::Owned(bytes) => bytes,
+            LispByteVecStorage::Mapped { ptr, len } => unsafe {
+                std::slice::from_raw_parts(*ptr, *len)
+            },
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.as_slice().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.as_slice().is_empty()
+    }
+
+    /// Bytes owned on the Rust heap (0 for mapped storage) — GC size
+    /// accounting.
+    pub fn owned_bytes(&self) -> usize {
+        match &self.storage {
+            LispByteVecStorage::Owned(bytes) => bytes.capacity(),
+            LispByteVecStorage::Mapped { .. } => 0,
+        }
+    }
+}
+
+impl std::ops::Deref for LispByteVec {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+
+impl Clone for LispByteVec {
+    fn clone(&self) -> Self {
+        match &self.storage {
+            LispByteVecStorage::Owned(bytes) => Self::owned(bytes.clone()),
+            LispByteVecStorage::Mapped { ptr, len } => Self {
+                storage: LispByteVecStorage::Mapped {
+                    ptr: *ptr,
+                    len: *len,
+                },
+            },
+        }
+    }
+}
+
+impl std::fmt::Debug for LispByteVec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_slice().fmt(f)
+    }
+}
+
 #[repr(transparent)]
 pub struct LispValueSlice([TaggedValue]);
 

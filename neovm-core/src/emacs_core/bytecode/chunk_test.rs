@@ -56,7 +56,7 @@ fn gnu_ir_is_decoded_only_on_first_access() {
     let mut func = ByteCodeFunction::new(LambdaParams::simple(vec![]));
     func.ops = ops.clone();
     func.gnu_byte_offset_map = Some(offset_map);
-    func.gnu_bytecode_bytes = Some(raw);
+    func.gnu_bytecode_bytes = Some(crate::tagged::header::LispByteVec::owned(raw));
 
     func.defer_gnu_decode();
     assert!(func.resident_ops().is_empty());
@@ -73,7 +73,7 @@ fn cloning_deferred_gnu_code_does_not_copy_decoded_ir() {
     let mut func = ByteCodeFunction::new(LambdaParams::simple(vec![]));
     func.ops = vec![Op::Return];
     func.gnu_byte_offset_map = Some(Vec::new());
-    func.gnu_bytecode_bytes = Some(raw);
+    func.gnu_bytecode_bytes = Some(crate::tagged::header::LispByteVec::owned(raw));
     func.defer_gnu_decode();
     assert_eq!(func.executable_ops(), &[Op::Return]);
 

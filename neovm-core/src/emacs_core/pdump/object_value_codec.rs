@@ -475,9 +475,9 @@ fn write_byte_code(out: &mut Vec<u8>, function: &DumpByteCodeFunction) -> Result
             write_u8(out, BYTECODE_DECODED);
             write_ops(out, ops);
         }
-        DumpByteCodeInstructions::Gnu(bytes) => {
+        DumpByteCodeInstructions::Gnu(data) => {
             write_u8(out, BYTECODE_GNU);
-            write_bytes(out, bytes)?;
+            write_byte_data(out, data)?;
         }
     }
     write_values(out, &function.constants)?;
@@ -1175,7 +1175,7 @@ impl<'a> Cursor<'a> {
     fn read_byte_code(&mut self) -> Result<DumpByteCodeFunction, DumpError> {
         let instructions = match self.read_u8("bytecode instruction source")? {
             BYTECODE_DECODED => DumpByteCodeInstructions::Decoded(self.read_ops()?),
-            BYTECODE_GNU => DumpByteCodeInstructions::Gnu(self.read_bytes()?),
+            BYTECODE_GNU => DumpByteCodeInstructions::Gnu(self.read_byte_data()?),
             other => {
                 return Err(DumpError::ImageFormatError(format!(
                     "unknown bytecode instruction source {other}"
@@ -1525,7 +1525,7 @@ mod tests {
                 cdr: DumpValue::Str(DumpHeapRef { index: 0 }),
             },
             DumpHeapObject::ByteCode(DumpByteCodeFunction {
-                instructions: DumpByteCodeInstructions::Gnu(vec![0xC0, 0x87]),
+                instructions: DumpByteCodeInstructions::Gnu(DumpByteData::owned(vec![0xC0, 0x87])),
                 constants: vec![DumpValue::Bignum("12345678901234567890".into())],
                 max_stack: 4,
                 params: DumpLambdaParams {

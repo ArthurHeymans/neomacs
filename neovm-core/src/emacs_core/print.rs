@@ -1203,7 +1203,9 @@ fn with_bytecode_literal_slots<R>(value: &Value, f: impl FnOnce(&[Value]) -> R) 
     crate::emacs_core::eval::push_scratch_gc_root(arglist);
 
     let code = if let Some(bytes) = &bc.gnu_bytecode_bytes {
-        Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes.clone()))
+        Value::heap_string(crate::heap_types::LispString::from_unibyte(
+            bytes.as_slice().to_vec(),
+        ))
     } else {
         Value::NIL
     };

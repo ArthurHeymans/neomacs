@@ -195,7 +195,9 @@ pub(crate) fn bytecode_to_closure_vector(value: &Value) -> Vec<Value> {
     let code = if let Some(bytes) = &bc.gnu_bytecode_bytes {
         // Store raw bytes directly as a unibyte string.
         // GNU Emacs bytecode strings are unibyte — each byte is one character.
-        Value::heap_string(crate::heap_types::LispString::from_unibyte(bytes.clone()))
+        Value::heap_string(crate::heap_types::LispString::from_unibyte(
+            bytes.as_slice().to_vec(),
+        ))
     } else {
         Value::NIL
     };

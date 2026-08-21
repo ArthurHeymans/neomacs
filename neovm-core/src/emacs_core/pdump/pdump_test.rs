@@ -77,7 +77,7 @@ fn dumped_gnu_bytecode_does_not_duplicate_derived_instructions() {
         GnuByteOffsetMapEntry::new(0, 0),
         GnuByteOffsetMapEntry::new(1, 1),
     ]);
-    function.gnu_bytecode_bytes = Some(vec![0xC1, 0x87]);
+    function.gnu_bytecode_bytes = Some(crate::tagged::header::LispByteVec::owned(vec![0xC1, 0x87]));
 
     let mut eval = Context::new();
     eval.obarray
@@ -96,7 +96,7 @@ fn dumped_gnu_bytecode_does_not_duplicate_derived_instructions() {
     assert!(
         matches!(
             &dumped.instructions,
-            DumpByteCodeInstructions::Gnu(bytes) if bytes == &[0xC1, 0x87]
+            DumpByteCodeInstructions::Gnu(crate::emacs_core::pdump::types::DumpByteData::Owned(bytes)) if bytes == &[0xC1, 0x87]
         ),
         "GNU bytecode bytes must be the sole instruction source; decoded instructions and byte offsets are derived load-time state"
     );

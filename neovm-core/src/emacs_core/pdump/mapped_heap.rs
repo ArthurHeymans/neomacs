@@ -647,6 +647,17 @@ fn extract_tagged_heap_payloads(heap: &mut DumpTaggedHeap) -> MappedHeapPayload 
             }
         }
 
+        // GNU bytecode bytes ride the image the same way string payloads do;
+        // the loader aliases the span instead of copying a Vec per function.
+        if let DumpHeapObject::ByteCode(function) = object
+            && let super::types::DumpByteCodeInstructions::Gnu(data) = &mut function.instructions
+            && let DumpByteData::Owned(bytes) = data
+        {
+            let owned = std::mem::take(bytes);
+            let span = builder.push_bytes(&owned);
+            *data = DumpByteData::mapped(span.offset, span.len);
+        }
+
         let slot_count = match object {
             DumpHeapObject::Vector(slots)
             | DumpHeapObject::Lambda(slots)
