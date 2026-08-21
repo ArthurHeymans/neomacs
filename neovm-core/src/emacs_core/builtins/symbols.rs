@@ -504,7 +504,12 @@ fn make_alias_error_signal(
         MakeAliasError::Localized => signal(
             "error",
             vec![Value::string(format!(
-                "Don't know how to make a buffer-local variable an alias: {new_name}"
+                // GNU's `error' runs its format string through `doprnt',
+                // which applies `text-quoting-style' -- so the apostrophe in
+                // the C source at `src/eval.c:672' reaches Lisp as U+2019.
+                // Measured under GNU 31.0.90 `-Q --batch':
+                //   "Don\u{2019}t know how to make a buffer-local variable an alias: l170z"
+                "Don\u{2019}t know how to make a buffer-local variable an alias: {new_name}"
             ))],
         ),
     }
