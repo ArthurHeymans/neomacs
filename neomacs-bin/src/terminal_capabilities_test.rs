@@ -173,6 +173,58 @@ fn capability_names_match_the_ones_gnu_reads_in_init_tty() {
     assert!(caps.supports(TtyCapability::Underline));
 }
 
+/// GNU has a SECOND source for styled underlines, immediately below the
+/// `Smulx` lookup: `if (!tty->TF_set_underline_style && tgetflag ("Su"))
+/// tty->TF_set_underline_style = "\x1b[4:%p1%dm";` (src/term.c:4700-4703) --
+/// the kitty default its own comment calls "not recommended".  Because
+/// `TF_set_underline_style` also gates `TF_set_underline_color` (:4705-4708),
+/// the flag turns on both, which is why one boolean models it here.
+///
+/// Ledger 158 recorded this as LATENT: of the 3,697 entries `toe -a` lists on
+/// this machine exactly one carries `Su` -- `xterm-kitty` -- and it ships
+/// `Smulx` too, so the `!TF_set_underline_style` guard is false and the
+/// fallback fires zero times.  That made it the SECOND capability in this area
+/// whose absence from the shipped database proves nothing, the first being the
+/// `tgetstr`-vs-`tigetstr` namespace trap 158 fixed for `Smulx` itself.  The
+/// prerequisite that trap raises -- can `tgetflag` even SEE an extended
+/// terminfo boolean? -- is settled with `tic`, not with a search for a real
+/// terminal (`tmp/pw175/pw175.src`, `tmp/pw175/su_probe.c`):
+///
+/// ```text
+/// pw175-su-only        tgetflag(Su)=1  tigetstr(Smulx)=null  => GNU: yes (Su fallback)
+/// pw175-su-and-smulx   tgetflag(Su)=1  tigetstr(Smulx)=FOUND => GNU: yes (Smulx)
+/// pw175-neither        tgetflag(Su)=0  tigetstr(Smulx)=null  => GNU: no
+/// ```
+///
+/// So `Su` is NOT a second dead lookup: unlike `tgetstr ("Smulx")`, which
+/// answers null on every entry that has it, `tgetflag ("Su")` resolves the
+/// extended boolean and GNU's fallback works.  Ledger 175.
+#[test]
+fn the_su_flag_is_a_styled_underline_where_smulx_is_absent_like_gnu() {
+    let mut su_only = FakeCapabilityDatabase::screen_256color().with_flag("Su");
+    assert!(
+        resolve_tty_attribute_capabilities(&mut su_only).underline_styled,
+        "Su without Smulx is GNU's kitty-sequence fallback (term.c:4700-4703)"
+    );
+    assert!(
+        resolve_tty_attribute_capabilities(&mut su_only).supports(TtyCapability::UnderlineStyled)
+    );
+
+    let mut both = FakeCapabilityDatabase::screen_256color()
+        .with_string("Smulx", "\x1b[4:%p1%dm")
+        .with_flag("Su");
+    assert!(
+        resolve_tty_attribute_capabilities(&mut both).underline_styled,
+        "Smulx alone already answers; the flag is not consulted"
+    );
+
+    let mut neither = FakeCapabilityDatabase::screen_256color();
+    assert!(
+        !resolve_tty_attribute_capabilities(&mut neither).underline_styled,
+        "neither source: no styled underline, and so no underline colour"
+    );
+}
+
 #[test]
 fn a_terminal_with_no_attribute_strings_supports_nothing() {
     let mut database = FakeCapabilityDatabase::bare().with_number("Co", 0);

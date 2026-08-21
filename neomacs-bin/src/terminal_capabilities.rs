@@ -102,6 +102,7 @@ pub(crate) fn open_terminal_capability_database(
 /// | `so` | termcap | `TS_standout_mode` | inverse video |
 /// | `us` | termcap | `TS_enter_underline_mode` | underline |
 /// | `Smulx` | terminfo | `TF_set_underline_style` | styled underline |
+/// | `Su` | termcap flag | `TF_set_underline_style` | styled underline, kitty default |
 /// | `md` | termcap | `TS_enter_bold_mode` | bold |
 /// | `mh` | termcap | `TS_enter_dim_mode` | dim (and GNU's italic fallback) |
 /// | `ZH` | termcap | `TS_enter_italic_mode` | italic (`sitm`) |
@@ -138,7 +139,16 @@ pub(crate) fn resolve_tty_attribute_capabilities(
     TtyAttributeCapabilities {
         standout_sequence: standout.map(|sequence| canonical_cap(&sequence)),
         underline: has(database, Termcap("us")),
-        underline_styled: has(database, Terminfo("Smulx")),
+        // GNU takes styled underlines from EITHER source, `Smulx` first:
+        // `if (!tty->TF_set_underline_style && tgetflag ("Su"))
+        //    tty->TF_set_underline_style = "\x1b[4:%p1%dm";`
+        // (src/term.c:4700-4703).  Because that field also gates
+        // `TF_set_underline_color` (:4705-4708), one boolean carries both.
+        // `Su` is a flag, not a string, so it is read with `tgetflag` -- and
+        // unlike `tgetstr ("Smulx")`, `tgetflag` really does resolve an
+        // extended terminfo boolean (ledger 175, measured with a `tic`-built
+        // entry because no shipped entry has `Su` without `Smulx`).
+        underline_styled: has(database, Terminfo("Smulx")) || database.get_termcap_flag("Su"),
         bold: has(database, Termcap("md")),
         dim: has(database, Termcap("mh")),
         italic: has(database, Termcap("ZH")),
