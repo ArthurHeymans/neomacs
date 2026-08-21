@@ -129,6 +129,30 @@ pub fn signal_description(signum: i32) -> String {
     "unknown".to_string()
 }
 
+/// An errno's `strerror` text, exactly as GNU's `emacs_strerror`
+/// (src/sysdep.c) hands it to `emacs_perror`: `strerror` verbatim, with a
+/// fixed fallback when the number has no description.
+pub fn errno_description(errno: i32) -> String {
+    #[cfg(unix)]
+    {
+        // SAFETY: `strerror` returns NULL or a valid C string; the same
+        // contract `signal_description` relies on for `strsignal`.
+        let raw = unsafe {
+            let p = libc::strerror(errno);
+            if p.is_null() {
+                None
+            } else {
+                Some(std::ffi::CStr::from_ptr(p).to_string_lossy().into_owned())
+            }
+        };
+        if let Some(text) = raw {
+            return text;
+        }
+    }
+    let _ = errno;
+    "Invalid error number".to_string()
+}
+
 /// Map a `strsignal`-style description (as produced by `portable_pty`'s
 /// `ExitStatus`) back to a signal number by scanning the platform's signal
 /// table. Both the PTY layer and this lookup call `strsignal`, so the

@@ -14883,3 +14883,56 @@ fn load_source_eol_detection_matches_the_shared_decoder() {
         );
     }
 }
+
+/// GNU writes its dump from INSIDE `-l loadup`: `lisp/loadup.el` calls
+/// `dump-emacs-portable` while loadup.el is still being loaded, so the image
+/// is captured with `load-in-progress` at t and `load-file-name` naming
+/// loadup.el.  `init_lread` (GNU src/lread.c:5522-5528), called from `main`
+/// on every startup whether or not the image came from a dump
+/// (src/emacs.c:2220), resets that state before any Lisp runs.
+///
+/// Neomacs dumps the same way and restores through
+/// `finalize_cached_bootstrap_eval`, so it owes the same reset.  It cleared
+/// the Rust-side stacks and left the Lisp variables alone; `load-in-progress`
+/// was the one that survived, and a wedged `t` is visible to ordinary
+/// packages: `f.el`'s `f-this-file' returns `load-file-name' whenever
+/// `load-in-progress' is non-nil, so at top level it answered nil here and
+/// `(buffer-file-name)' in GNU.
+#[test]
+fn runtime_loader_state_reset_matches_gnu_init_lread() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+
+    // The state a dump taken during `-l loadup` carries.
+    eval.set_variable("values", Value::list(vec![Value::fixnum(1)]));
+    eval.set_variable("load-in-progress", Value::T);
+    eval.set_variable("load-file-name", Value::string("/build/lisp/loadup.el"));
+    eval.set_variable(
+        "load-true-file-name",
+        Value::string("/build/lisp/loadup.el"),
+    );
+    eval.set_variable("standard-input", Value::NIL);
+    eval.loads_in_progress
+        .push(crate::heap_types::LispString::from_utf8(
+            "/build/lisp/loadup.el",
+        ));
+    eval.require_stack.push(intern("cl-lib"));
+
+    clear_runtime_loader_state(&mut eval);
+
+    for (name, expected) in [
+        ("values", Value::NIL),
+        ("load-in-progress", Value::NIL),
+        ("load-file-name", Value::NIL),
+        ("load-true-file-name", Value::NIL),
+        ("standard-input", Value::T),
+    ] {
+        assert_eq!(
+            eval.visible_variable_value_or_nil(name),
+            expected,
+            "GNU init_lread resets `{name}'"
+        );
+    }
+    assert!(eval.loads_in_progress.is_empty());
+    assert!(eval.require_stack.is_empty());
+}

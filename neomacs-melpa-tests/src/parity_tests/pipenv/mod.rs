@@ -521,6 +521,28 @@ fn public_open_resolves_owned_python_module_without_ambient_lookup() -> ParityBa
     )
 }
 
+/// The stand-in shell writes exactly one line to stdout, and it writes it
+/// before the init command is sent.
+///
+/// `pipenv-shell' ends with `comint-send-input' immediately followed by
+/// `comint-clear-buffer' (pipenv.el:314-323), so the pinned buffer text is
+/// decided INSIDE the package, before this fixture regains control -- there is
+/// no instant at which a wait could be inserted.  What survives the clear is
+/// therefore whatever the child wrote after Emacs's last read, and the only
+/// read the fixture can order against is the untimed `accept-process-output'
+/// inside `comint-send-input''s echo loop (lisp/comint.el:2065-2079), which
+/// runs because `pipenv-shell' sets `comint-process-echoes'.
+///
+/// `ready\n' is written at child startup, so it precedes the tty echo in the
+/// same stream and any read that delivers the echo has already delivered it:
+/// it is deterministically erased, which is what makes the empty pre-sentinel
+/// buffer a positive witness that `comint-clear-buffer' ran.  An `ack:' line
+/// written in response to the init command is on the other side of that
+/// boundary -- the child must be scheduled after Emacs's write -- so pinning a
+/// buffer that may or may not contain it pinned a race.  Entry 169 measured it
+/// at 8 passed / 4 failed over twelve solo runs on BOTH editors, with
+/// byte-identical failing text; the boundary log still proves the child read
+/// the init command on stdin.
 fn public_shell_sends_init_command_and_closes_owned_comint_process() -> ParityBatchCase {
     ParityBatchCase::value(
         "public_shell_sends_init_command_and_closes_owned_comint_process",
@@ -543,7 +565,6 @@ fn public_shell_sends_init_command_and_closes_owned_comint_process() -> ParityBa
              "while IFS= read -r line; do\n"
              "  if [ \"$line\" = 'exec pipenv shell' ]; then\n"
              "    printf 'stdin<%s>\\n' \"$line\" >>\"$PIP384_LOG\"\n"
-             "    printf 'ack:%s\\n' \"$line\"\n"
              "  else\n"
              "    printf 'UNRECORDED-STDIN<%s>\\n' \"$line\" >>\"$PIP384_LOG\"\n"
              "    exit 86\n"

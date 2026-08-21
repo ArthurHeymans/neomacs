@@ -104,6 +104,45 @@ const AUTO_SAVE_BUFFERS_ENHANCED_TEST_PRELUDE: &str = r####"
   "Remove ROOT and its contents when it exists."
   (when (and root (file-exists-p root))
     (delete-directory root t)))
+
+(defun neomacs-asbe-test--outermost-checkout (path)
+  "Return the OUTERMOST ancestor directory of PATH holding a checkout marker.
+
+`auto-save-buffers-enhanced-add-checkout-path-into-include-regexps'
+walks from the visited buffer's `default-directory' up to `/' and keeps
+the LAST marker it sees rather than the first
+\(auto-save-buffers-enhanced.el:288-305), so the include rule it records
+names the OUTERMOST checkout.  `locate-dominating-file' answers the
+INNERMOST one, and the two coincide only when PATH has exactly one
+checkout ancestor.
+
+That is false in a nested Git worktree, which is how this suite is run
+during development: the worktree root carries a `.git' FILE and the main
+checkout above it a `.git' DIRECTORY, both of which `file-exists-p'
+accepts.  Deriving the expectation from the innermost marker therefore
+made the case fail in BOTH editors with the same value -- a
+path-dependent pin, not a divergence -- and leaked a raw host path into
+the snapshot, because only paths at or below the workspace root are
+normalized.
+
+Signal rather than return nil when no ancestor carries a marker: the
+case's `:duplicate-rules' pin needs both visited files to resolve to the
+same checkout root, which requires a marker at or above the sandbox."
+  (let ((directory (file-name-as-directory (expand-file-name path)))
+        (outermost nil))
+    (catch 'root
+      (while t
+        (when (or (file-exists-p (expand-file-name ".svn" directory))
+                  (file-exists-p (expand-file-name ".cvs" directory))
+                  (file-exists-p (expand-file-name ".git" directory)))
+          (setq outermost directory))
+        (let ((parent (file-name-directory (directory-file-name directory))))
+          (when (equal parent directory)
+            (throw 'root t))
+          (setq directory parent))))
+    (unless outermost
+      (error "No checkout marker above %s; the sandbox needs one" path))
+    outermost))
 "####;
 
 fn auto_save_buffers_enhanced_oracle() -> CachedMelpaOracle {

@@ -21,7 +21,9 @@ use crate::emacs_core::process::{HostInterfaceEntry, ProcessId};
 mod signals;
 #[cfg(unix)]
 pub use signals::signal_number_from_description;
-pub use signals::{send_signal, send_signal_to_group, signal_description, signal_name_number};
+pub use signals::{
+    errno_description, send_signal, send_signal_to_group, signal_description, signal_name_number,
+};
 
 mod process_status;
 pub use process_status::process_is_alive;
