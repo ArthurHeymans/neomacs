@@ -28698,7 +28698,7 @@ after a 1-second pure-Lisp spin, no wait having run:
 
 GNU's handler *reaps* -- `child_status_changed` is `waitpid` -- so GNU's
 exited child leaves nothing behind, and this port leaves a zombie.  That row
-needs the trigger and not the sweep; §10.2.
+needs the trigger and not the sweep; §9.2.
 
 ### 2. What a SIGCHLD handler may legitimately do, which is what decided the design
 
@@ -28848,7 +28848,7 @@ The 4/4 split is the entry's finding in one number:
   editors answer `signal` and `9` -- GNU because it discarded the 7, this port
   because it never recorded it.  Had `DeleteProcess` been classified with the
   other four by symmetry, this port would have started answering `exit` / `7`
-  where GNU answers `signal` / `9`.  This is the reproduction ledger 169 §10.3
+  where GNU answers `signal` / `9`.  This is the reproduction ledger 169 §9.3
   asked the next entry to start from, and it answers its open question: GNU
   really does lose the exit code, deliberately.
 * **`AsynchronousInGnu { by, why }`** -- `Fprocess_status`,
@@ -28974,7 +28974,7 @@ notification order                   b then a        b then a           b then a
 The first two lines are what the wiring closed and what §7 gives back.  The
 third and fourth it never closed: GNU runs both sentinels inside
 `delete-process` because `status_notify` walks the WHOLE alist there, and
-this port's `delete-process` notifies only the process being deleted.  §10.3.
+this port's `delete-process` notifies only the process being deleted.  §9.3.
 The order row is ledger 175 §3's fix, still holding on both sides.
 
 ### 6. Three things that are fixed, and stand without the sweep
@@ -29167,7 +29167,7 @@ NOT run after `process-status`.
 **7.5 So the fix needs the trigger.**  Not a different placement of the
 sweep: a real asynchronous recorder that makes the record when the child dies
 AND wakes the wait, which is precisely the pair GNU has
-(`handle_child_signal` then `child_signal_notify`, :7766-7767).  §10.1 sizes
+(`handle_child_signal` then `child_signal_notify`, :7766-7767).  §9.1 sizes
 it.
 
 ### 8. Hypotheses eliminated
@@ -29225,7 +29225,58 @@ it.
   that pass in isolation at runnable 3 and pass in a clean full run.  Load is
   not noise on process tests; it changes which ones fail.
 
-### 9. Gates
+### 9. Found and NOT fixed
+
+1. **The recording itself, which needs the TRIGGER.**  §7.  The sweep is
+   written, typed and unit-tested; what is missing is something that runs it
+   when the child dies and wakes the wait, as GNU's handler does with
+   `child_signal_notify` (:7766-7767).  GNU's own constraints (§2) forbid the
+   sweep in a handler in a Rust port, so the shape is a dedicated reaper -- a
+   thread waiting on the `pidfd`s this port already registers, recording into
+   a queue and notifying the wait poller through the existing `WaitNotifier`.
+   Its cost is not the thread: `waitpid` must then have exactly ONE owner, and
+   today every `try_wait`/`poll_child_status` path reaps on the Lisp thread,
+   so a second reaper is a double-reap hazard across the whole file.  Its own
+   entry, and the same facility ledger 184 needs.
+2. **The two audit rows that are the REAPING half.**  `(signal-process p 0)`
+   answers 0 here and -1 in GNU; `(process-attributes pid)` answers `"Z"` and
+   `nil`.  GNU's handler calls `waitpid`, so its exited child is gone from the
+   OS within microseconds and this port's is a zombie until something reaps
+   it.  Neither is an `update_status` consumer, so even the wired sweep left
+   them (§5, `divergent=2`).  Same facility as 9.1; ledger 184 has them.
+3. **This port's `delete-process` does not run a FULL notification walk.**
+   `Fdelete_process` calls `status_notify (p, NULL)` at :1129 and :1149, and
+   `status_notify` walks the whole alist -- which is why 175 §8.1 found GNU
+   running BOTH unrelated children's sentinels inside `(delete-process
+   unrelated-pipe)`.  Re-measured in §5b.  Not attempted: it changes which
+   call runs arbitrary Lisp, the class ledger 169 spent a whole entry on.
+4. **`status_notify_pending` is still GNU's `raw_status_new` AND its
+   `tick != update_tick` at once.**  GNU consumes them separately --
+   `update_status` clears `raw_status_new` (:719-720) while `status_notify`
+   visits on `p->tick != p->update_tick` (:7890) -- so this port cannot settle
+   a status at an observation without also cancelling its notification, which
+   is why `observe` decodes without settling.  The reachable consequences
+   agree with GNU either way (§4's `delete-process` row is the one that would
+   have differed, and it agrees).  Ledger 169 §9.3's remaining half.
+5. **The mode-line `%s` spec does not go through `observe`.**  GNU's
+   `decode_mode_spec` spells it `Fsymbol_name (Fprocess_status (obj))`
+   (src/xdisp.c:29717-29725).  Here `expand_mode_line_percent_in_state`
+   (xdisp.rs:2644) holds `&ProcessManager`, and so does every frame of the
+   recursive mode-line renderer above it.  It is the one
+   `UnrecordedStatusRead` variant, with the citation and the reason in the
+   type.
+6. **This port installs NO OS signal handlers at all** -- zero production hits
+   for `sigaction|signal_hook|SIGWINCH|SIGINT` across `neovm-core`,
+   `neomacs-bin`, `neomacs-display-runtime` and `neovm-worker` (§2).
+   SIGWINCH, SIGINT, SIGHUP and SIGPIPE are all in that hole.  Ledger 184
+   takes SIGUSR1/2; the rest is unclaimed.
+7. **`process-attributes` deliberately does NOT sweep**, and the probes in
+   this entry depend on that: it is how the zombie handshake stays honest.
+   GNU's `Fprocess_attributes` reads the system tables and never consults
+   `Vprocess_alist`, so the classification is GNU's -- but the handshake would
+   need rewriting if that changed.
+
+### 10. Gates
 
 Every number is a number, read out of a `./tmp/` log file rather than a pipe.
 Load is the runnable count from `/proc/loadavg`, because `uptime`'s 1-minute
@@ -29322,7 +29373,7 @@ gated by the suites above.
 Status: **PINNED, with three fixes.**  The recording GNU makes from its SIGCHLD
 handler is transcribed, typed, unit-tested and deliberately not called; the
 divergence it would close is pinned as a divergence with GNU's column beside
-it; and the trigger it needs is sized in §10.1.  Fixed on the way: GNU's
+it; and the trigger it needs is sized in §9.1.  Fixed on the way: GNU's
 `process-send-eof` liveness gate (§6.1), a wait that returned having seen a
 child's EOF and not its status (§6.2), and three pins that were racing or
 asserting the divergence (§6.3).
@@ -29336,53 +29387,3 @@ about the value and wrong about the timing is still wrong, and the comment
 this entry set out to overrule turned out to be the most load-bearing line in
 the file.
 
-### 10. Found and NOT fixed
-
-1. **The recording itself, which needs the TRIGGER.**  §7.  The sweep is
-   written, typed and unit-tested; what is missing is something that runs it
-   when the child dies and wakes the wait, as GNU's handler does with
-   `child_signal_notify` (:7766-7767).  GNU's own constraints (§2) forbid the
-   sweep in a handler in a Rust port, so the shape is a dedicated reaper -- a
-   thread waiting on the `pidfd`s this port already registers, recording into
-   a queue and notifying the wait poller through the existing `WaitNotifier`.
-   Its cost is not the thread: `waitpid` must then have exactly ONE owner, and
-   today every `try_wait`/`poll_child_status` path reaps on the Lisp thread,
-   so a second reaper is a double-reap hazard across the whole file.  Its own
-   entry, and the same facility ledger 184 needs.
-2. **The two audit rows that are the REAPING half.**  `(signal-process p 0)`
-   answers 0 here and -1 in GNU; `(process-attributes pid)` answers `"Z"` and
-   `nil`.  GNU's handler calls `waitpid`, so its exited child is gone from the
-   OS within microseconds and this port's is a zombie until something reaps
-   it.  Neither is an `update_status` consumer, so even the wired sweep left
-   them (§5, `divergent=2`).  Same facility as 9.1; ledger 184 has them.
-3. **This port's `delete-process` does not run a FULL notification walk.**
-   `Fdelete_process` calls `status_notify (p, NULL)` at :1129 and :1149, and
-   `status_notify` walks the whole alist -- which is why 175 §8.1 found GNU
-   running BOTH unrelated children's sentinels inside `(delete-process
-   unrelated-pipe)`.  Re-measured in §5b.  Not attempted: it changes which
-   call runs arbitrary Lisp, the class ledger 169 spent a whole entry on.
-4. **`status_notify_pending` is still GNU's `raw_status_new` AND its
-   `tick != update_tick` at once.**  GNU consumes them separately --
-   `update_status` clears `raw_status_new` (:719-720) while `status_notify`
-   visits on `p->tick != p->update_tick` (:7890) -- so this port cannot settle
-   a status at an observation without also cancelling its notification, which
-   is why `observe` decodes without settling.  The reachable consequences
-   agree with GNU either way (§4's `delete-process` row is the one that would
-   have differed, and it agrees).  Ledger 169 §10.3's remaining half.
-5. **The mode-line `%s` spec does not go through `observe`.**  GNU's
-   `decode_mode_spec` spells it `Fsymbol_name (Fprocess_status (obj))`
-   (src/xdisp.c:29717-29725).  Here `expand_mode_line_percent_in_state`
-   (xdisp.rs:2644) holds `&ProcessManager`, and so does every frame of the
-   recursive mode-line renderer above it.  It is the one
-   `UnrecordedStatusRead` variant, with the citation and the reason in the
-   type.
-6. **This port installs NO OS signal handlers at all** -- zero production hits
-   for `sigaction|signal_hook|SIGWINCH|SIGINT` across `neovm-core`,
-   `neomacs-bin`, `neomacs-display-runtime` and `neovm-worker` (§2).
-   SIGWINCH, SIGINT, SIGHUP and SIGPIPE are all in that hole.  Ledger 184
-   takes SIGUSR1/2; the rest is unclaimed.
-7. **`process-attributes` deliberately does NOT sweep**, and the probes in
-   this entry depend on that: it is how the zombie handshake stays honest.
-   GNU's `Fprocess_attributes` reads the system tables and never consults
-   `Vprocess_alist`, so the classification is GNU's -- but the handshake would
-   need rewriting if that changed.
