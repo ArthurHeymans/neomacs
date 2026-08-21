@@ -99,6 +99,7 @@ pub mod pdump;
 pub mod perf_trace;
 pub mod plist;
 pub(crate) mod position;
+pub(crate) mod post_image_init;
 pub(crate) mod prefix;
 pub mod print;
 pub mod process;
