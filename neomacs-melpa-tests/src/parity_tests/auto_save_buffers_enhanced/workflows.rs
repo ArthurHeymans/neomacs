@@ -573,8 +573,10 @@ fn checkout_only_mode_keeps_outermost_duplicate_rules_and_saves_sibling_files() 
        (project (file-name-as-directory (expand-file-name "project Ω" root)))
        (inside-path (expand-file-name "src/notes.txt" project))
        (sibling-path (expand-file-name "sibling outside inner.txt" root))
-       (outer-checkout
-        (file-name-as-directory (locate-dominating-file root ".git")))
+       ;; The package keeps the OUTERMOST checkout ancestor, not the
+       ;; innermost one `locate-dominating-file' returns; see
+       ;; `neomacs-asbe-test--outermost-checkout'.
+       (outer-checkout (neomacs-asbe-test--outermost-checkout root))
        (expected-rule (concat "^" (regexp-quote outer-checkout)))
        inside sibling result)
   (make-directory (expand-file-name ".git" project) t)

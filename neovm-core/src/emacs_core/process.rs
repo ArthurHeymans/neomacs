@@ -2885,11 +2885,77 @@ fn gnu_process_status_message_for_process(proc: &Process) -> String {
     gnu_process_status_message(proc.status)
 }
 
-fn async_process_spawn_failure_exit_code(message: &str) -> i32 {
-    if message.contains("os error 2") || message.contains("No such file") {
-        127
-    } else {
-        126
+/// What became of the child `spawn_child_with_environment` tried to start.
+///
+/// GNU's parent never learns that the exec failed.  `child_setup` runs in the
+/// forked child; when `execvp` fails it calls `exec_failed`
+/// (src/callproc.c:1206-1216), which writes `emacs_perror`'s diagnostic to its
+/// own STDERR and `_exit`s with `EXIT_ENOENT` (127) for `ENOENT` and
+/// `EXIT_CANNOT_INVOKE` (126) otherwise (src/process.h:273-274).  A failed exec
+/// is therefore a STATE of the process -- some output, then an exit status --
+/// and not an error of the launcher.
+///
+/// Modelling it as `Err(String)` is what made the caller recover the exit code
+/// by searching the message text for `"os error 2"`.  The errno travels here
+/// instead, so the 127/126 split is GNU's comparison rather than a substring
+/// match on a platform's phrasing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ChildSpawnOutcome {
+    /// The child exists and its fds are installed on the process record.
+    Spawned,
+    /// No child exists: `execvp` failed with this errno.
+    ExecFailed(i32),
+}
+
+impl ChildSpawnOutcome {
+    /// GNU's `exec_failed` exit code (src/callproc.c:1215).
+    fn exec_failure_exit_code(errno: i32) -> i32 {
+        if errno == libc::ENOENT { 127 } else { 126 }
+    }
+}
+
+/// GNU's `initial_argv0`: the name Emacs was invoked as, which `emacs_perror`
+/// prefixes to every diagnostic (src/sysdep.c:2870-2871, "emacs" when unset).
+fn emacs_invocation_argv0() -> String {
+    std::env::args_os()
+        .next()
+        .map(|arg| std::path::Path::new(&arg).display().to_string())
+        .unwrap_or_else(|| "emacs".to_string())
+}
+
+/// Write the line GNU's failed child writes, to the file its stderr would
+/// have been.
+///
+/// `exec_failed` reaches `emacs_perror` (src/sysdep.c:2867-2887), which writes
+/// `"<argv0>: <program>: <strerror>\n"` to STDERR.  For a pty process that
+/// STDERR is the pty slave, so the parent reads the line as ordinary process
+/// output before the exit status arrives.  No child ever exists here --
+/// `Command::spawn` reports the exec failure to the parent and reaps it -- so
+/// the parent opens the slave under the same name the child would have had on
+/// fd 2 and writes the same bytes.  `O_NOCTTY` keeps that open from claiming a
+/// controlling terminal for the editor.
+#[cfg(unix)]
+fn write_exec_failure_diagnostic_to_tty(
+    tty: &std::path::Path,
+    program: &std::ffi::OsStr,
+    errno: i32,
+) {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let message = format!(
+        "{}: {}: {}\n",
+        emacs_invocation_argv0(),
+        std::path::Path::new(program).display(),
+        sys::errno_description(errno)
+    );
+    if let Ok(mut slave) = std::fs::OpenOptions::new()
+        .write(true)
+        .custom_flags(libc::O_NOCTTY)
+        .open(tty)
+    {
+        let _ = slave.write_all(message.as_bytes());
+        let _ = slave.flush();
     }
 }
 
@@ -5702,6 +5768,7 @@ impl ProcessManager {
     /// pipe-based `std::process::Command` path is used.
     pub fn spawn_child(&mut self, id: ProcessId, use_pty: bool) -> Result<(), String> {
         self.spawn_child_with_environment(id, use_pty, None)
+            .map(|_| ())
     }
 
     pub(crate) fn spawn_child_with_environment(
@@ -5709,29 +5776,29 @@ impl ProcessManager {
         id: ProcessId,
         use_pty: bool,
         child_environment: Option<super::environment::ChildEnvironment>,
-    ) -> Result<(), String> {
+    ) -> Result<ChildSpawnOutcome, String> {
         let proc = self
             .processes
             .get_mut(&id)
             .ok_or_else(|| "Process not found".to_string())?;
 
         if proc.live_io.child.is_some() || proc.live_io.pty_child.is_some() {
-            return Ok(()); // Already spawned
+            return Ok(ChildSpawnOutcome::Spawned); // Already spawned
         }
 
         // Don't spawn non-real processes
         if proc.kind != ProcessKind::Real {
-            return Ok(());
+            return Ok(ChildSpawnOutcome::Spawned);
         }
 
         let Some(argv) = process_spawn_lisp_argv(proc) else {
-            return Ok(()); // No program to run
+            return Ok(ChildSpawnOutcome::Spawned); // No program to run
         };
         if argv.is_empty()
             || argv[0].as_bytes().is_empty()
             || env_var_name_bytes_eq(argv[0].as_bytes(), b"nil")
         {
-            return Ok(());
+            return Ok(ChildSpawnOutcome::Spawned);
         }
 
         // Collect env overrides into a temporary Vec so we don't borrow
@@ -5758,17 +5825,17 @@ impl ProcessManager {
         id: ProcessId,
         child_environment: Option<&super::environment::ChildEnvironment>,
         env_overrides: &[(LispString, Option<LispString>)],
-    ) -> Result<(), String> {
+    ) -> Result<ChildSpawnOutcome, String> {
         let proc = self
             .processes
             .get_mut(&id)
             .ok_or_else(|| "Process not found".to_string())?;
 
         let Some(argv) = process_spawn_lisp_argv(proc) else {
-            return Ok(());
+            return Ok(ChildSpawnOutcome::Spawned);
         };
         if argv.is_empty() {
-            return Ok(());
+            return Ok(ChildSpawnOutcome::Spawned);
         }
 
         // GNU's `create_process` sends stdout and stderr to one pipe unless
@@ -5880,7 +5947,7 @@ impl ProcessManager {
         // connects the child's stderr fd to the stderr pipe-process's
         // READ_FROM_SUBPROCESS.  Otherwise it stays on the main process record.
         self.route_child_stderr_to_pipe_process(id, stderr_pipe_id, stderr);
-        Ok(())
+        Ok(ChildSpawnOutcome::Spawned)
     }
 
     /// Wire a freshly spawned child's stderr handle into the stderr
@@ -5948,7 +6015,7 @@ impl ProcessManager {
         id: ProcessId,
         child_environment: Option<&super::environment::ChildEnvironment>,
         env_overrides: &[(LispString, Option<LispString>)],
-    ) -> Result<(), String> {
+    ) -> Result<ChildSpawnOutcome, String> {
         let proc = self
             .processes
             .get_mut(&id)
@@ -5986,10 +6053,10 @@ impl ProcessManager {
             .map_err(|e| format!("Failed to create PTY: {}", e))?;
 
         let Some(argv) = argv else {
-            return Ok(());
+            return Ok(ChildSpawnOutcome::Spawned);
         };
         if argv.is_empty() {
-            return Ok(());
+            return Ok(ChildSpawnOutcome::Spawned);
         }
 
         let argv_os = argv
@@ -6007,6 +6074,11 @@ impl ProcessManager {
             sys::configure_child_pty_tty(tty_path.as_os_str())
                 .map_err(|e| format!("Failed to configure PTY child tty: {e}"))?;
         }
+
+        // GNU's `emacs_perror` names the program that could not be exec'd, so
+        // keep it before `CommandBuilder::from_argv` consumes the argv.
+        let program_os = argv_os[0].clone();
+        let mut outcome = ChildSpawnOutcome::Spawned;
 
         // With a separate stderr pipe-process we cannot use portable_pty's
         // `spawn_command` (it hardwires the child's stdin/stdout/stderr all to
@@ -6091,21 +6163,40 @@ impl ProcessManager {
                 }
             }
 
-            let pty_child = pty_pair
-                .slave
-                .spawn_command(cmd)
-                .map_err(|e| format!("Failed to spawn PTY child: {}", e))?;
-            // GNU records the child's real OS pid; portable_pty exposes it via
-            // `Child::process_id`.
-            let os_pid = pty_child.process_id();
-            let child_status_source = os_pid.and_then(ChildStatusSource::open);
-            if let Some(status_source) = child_status_source.as_ref() {
-                status_source.register_with_poller(self.wait_backend.poller(), id);
-            }
-            if let Some(proc) = self.processes.get_mut(&id) {
-                proc.os_pid = os_pid;
-                proc.live_io.child_status_source = child_status_source;
-                proc.live_io.pty_child = Some(pty_child);
+            match pty_pair.slave.spawn_command(cmd) {
+                Ok(pty_child) => {
+                    // GNU records the child's real OS pid; portable_pty exposes
+                    // it via `Child::process_id`.
+                    let os_pid = pty_child.process_id();
+                    let child_status_source = os_pid.and_then(ChildStatusSource::open);
+                    if let Some(status_source) = child_status_source.as_ref() {
+                        status_source.register_with_poller(self.wait_backend.poller(), id);
+                    }
+                    if let Some(proc) = self.processes.get_mut(&id) {
+                        proc.os_pid = os_pid;
+                        proc.live_io.child_status_source = child_status_source;
+                        proc.live_io.pty_child = Some(pty_child);
+                    }
+                }
+                Err(error) => {
+                    // The exec failed.  GNU's forked child is still alive at
+                    // this point and writes `emacs_perror`'s line to its own
+                    // STDERR -- which here IS the pty -- before `_exit`ing
+                    // (src/callproc.c:1206-1216).  There is no child to do it,
+                    // so the parent writes the same bytes to the same tty, and
+                    // the PTY master below is installed exactly as for a
+                    // successful spawn: the reader finds the diagnostic and
+                    // then EOF, and the caller supplies GNU's exit status.
+                    let errno = error
+                        .chain()
+                        .find_map(|cause| cause.downcast_ref::<std::io::Error>())
+                        .and_then(|io| io.raw_os_error())
+                        .unwrap_or(libc::ENOENT);
+                    if let Some(tty_path) = tty_name_path.as_ref() {
+                        write_exec_failure_diagnostic_to_tty(tty_path, &program_os, errno);
+                    }
+                    outcome = ChildSpawnOutcome::ExecFailed(errno);
+                }
             }
             (None, None)
         };
@@ -6155,7 +6246,7 @@ impl ProcessManager {
         // Route the child's stderr to the stderr pipe-process record, shared
         // with the pipe spawn path (GNU `create_process` forkerr wiring).
         self.route_child_stderr_to_pipe_process(id, stderr_pipe_id, child_stderr);
-        Ok(())
+        Ok(outcome)
     }
 
     /// Poll one child-status transition and stage it for sentinel delivery.
@@ -15321,16 +15412,26 @@ fn builtin_make_process_impl_with_environment(
         proc.coding_explicitly_set = coding_val.is_some_and(|coding| !coding.is_nil());
     }
 
-    if let Err(e) = processes.spawn_child_with_environment(id, use_pty, child_environment) {
-        if use_pty {
-            let exit_code = async_process_spawn_failure_exit_code(&e);
-            processes.set_child_status_pending(id, process_status_exit_value(exit_code));
-            return Ok(Value::make_process(id));
+    match processes.spawn_child_with_environment(id, use_pty, child_environment) {
+        Ok(ChildSpawnOutcome::Spawned) => {}
+        // GNU's parent never sees the exec failure: the forked child reports it
+        // on its own stderr and exits 127/126 (src/callproc.c:1206-1216), so
+        // `make-process` returns a live process object that dies immediately.
+        Ok(ChildSpawnOutcome::ExecFailed(errno)) => {
+            processes.set_child_status_pending(
+                id,
+                process_status_exit_value(ChildSpawnOutcome::exec_failure_exit_code(errno)),
+            );
         }
-        return Err(signal(
-            LispCondition::FileMissing,
-            vec![Value::string("Doing vfork"), Value::string(e)],
-        ));
+        // A launcher failure proper -- no pty could be allocated, the record
+        // vanished.  The pipe path still reports a failed exec this way; that
+        // asymmetry is measured but not reproduced, see DIVERGENCES.md 174.
+        Err(e) => {
+            return Err(signal(
+                LispCondition::FileMissing,
+                vec![Value::string("Doing vfork"), Value::string(e)],
+            ));
+        }
     }
 
     Ok(Value::make_process(id))

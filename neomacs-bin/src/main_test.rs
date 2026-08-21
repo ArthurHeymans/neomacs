@@ -2709,15 +2709,20 @@ fn configure_gnu_startup_state_clears_window_system_for_tty_boots() {
         "background-mode is DERIVED by frame-set-background-mode (lisp/frame.el:1526); \
          Rust must not seed it"
     );
-    // What the detection DOES write is GNU's own input channel for it: the
-    // TERMINAL parameter `frame-terminal-default-bg-mode' reads
-    // (lisp/frame.el:1588-1598), the slot xterm.el fills from an OSC-11 reply.
+    // Nor may the TERMINAL parameter be invented, and that is the half
+    // DIVERGENCES.md 157 handed on.  `frame-terminal-default-bg-mode'
+    // (lisp/frame.el:1588-1599) is the FIRST clause of
+    // `frame--current-background-mode' (lisp/frame.el:1505-1524), so a non-nil
+    // value there WINS over the colour and the tty type -- permanently, for the
+    // life of the terminal.  GNU's only writer is `xterm--set-background-mode'
+    // (lisp/term/xterm.el:1309-1316), from a real OSC-11 reply; with no reply
+    // the slot stays nil and the mode is derived from the background colour.
     assert_eq!(
         eval.eval_str("(terminal-parameter nil 'background-mode)")
             .expect("terminal-parameter probe"),
-        Value::symbol(detect_tty_background_mode()),
-        "live TTY startup records the detected background on the TERMINAL, for \
-         frame-set-background-mode to derive the frame parameter from"
+        Value::NIL,
+        "background-mode on the TERMINAL is GNU's OSC-11 reply slot \
+         (lisp/term/xterm.el:1309-1316); Rust must not seed it from a guess"
     );
     let frame = eval
         .frame_manager()

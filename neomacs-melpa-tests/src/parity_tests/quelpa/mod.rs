@@ -274,6 +274,24 @@ introduced by Quelpa's in-memory caches."
       (setenv "GIT_CONFIG_GLOBAL" (neomacs-quelpa-test-path root "no-gitconfig"))
       (setenv "GIT_TERMINAL_PROMPT" "0")
       (setenv "GIT_ALLOW_PROTOCOL" "file")
+      ;; Quelpa runs its Git commands through `make-process' with no
+      ;; `:connection-type' (quelpa.el:615-618), so they inherit
+      ;; `process-connection-type' -- a PTY.  Git turns its pager ON when
+      ;; stdout is a terminal, and it only sets LESS=FRX -- the F that means
+      ;; quit-if-one-screen -- when LESS is UNSET.  A developer shell that
+      ;; exports LESS for its own reasons therefore leaves `git tag' paging and
+      ;; waiting for a keypress that no one can send, until quelpa's own
+      ;; `timeout -k 60 600' kills it with status 124.  Measured on this
+      ;; machine, `git tag' on a PTY with three tags:
+      ;;
+      ;;   as the sandbox ran it   exit=124  elapsed=10.0s   (LESS=-R inherited)
+      ;;   with LESS unset         exit=0    elapsed=0.0s
+      ;;   with GIT_PAGER=cat      exit=0    elapsed=0.0s
+      ;;
+      ;; The sandbox already refuses the system and global config, the terminal
+      ;; prompt and every protocol but file; the pager was the one ambient
+      ;; channel left open.  GIT_PAGER outranks both `core.pager' and PAGER.
+      (setenv "GIT_PAGER" "cat")
       (unwind-protect
           (neomacs-quelpa-test-deep-copy (funcall function root))
         (dolist (buffer (buffer-list))

@@ -4695,12 +4695,59 @@ pub(crate) fn exec_path_dirs_from_os(path: Option<std::ffi::OsString>) -> Vec<St
         .collect()
 }
 
+/// The value GNU's `init_lread` restores a loader variable to.
+///
+/// GNU assigns exactly two constants in that block (src/lread.c:5522-5528),
+/// so this enum makes a third unrepresentable in the table below.
+#[derive(Clone, Copy)]
+enum LoaderResetValue {
+    Nil,
+    T,
+}
+
+impl LoaderResetValue {
+    fn value(self) -> Value {
+        match self {
+            LoaderResetValue::Nil => Value::NIL,
+            LoaderResetValue::T => Value::T,
+        }
+    }
+}
+
+/// Every Lisp-visible loader variable GNU clears on EVERY startup.
+///
+/// GNU writes its dump from inside `-l loadup` -- `lisp/loadup.el` calls
+/// `dump-emacs-portable` while loadup.el is still being loaded -- so the image
+/// is captured with `load-in-progress` at t and `load-file-name` naming
+/// loadup.el.  `init_lread` (src/lread.c:5522-5528) is called from `main` on
+/// every startup, dumped image or not (src/emacs.c:2220), and resets that
+/// state before any Lisp runs.
+///
+/// GNU's block also clears `Vloads_in_progress` (src/lread.c:5528), which is a
+/// static C variable and not a Lisp variable (src/lread.c:237); its Neomacs
+/// counterpart is the `loads_in_progress` stack cleared below.
+const RUNTIME_LOADER_RESET: &[(&str, LoaderResetValue)] = &[
+    ("values", LoaderResetValue::Nil),           // GNU src/lread.c:5522
+    ("load-in-progress", LoaderResetValue::Nil), // GNU src/lread.c:5524
+    ("load-file-name", LoaderResetValue::Nil),   // GNU src/lread.c:5525
+    ("load-true-file-name", LoaderResetValue::Nil), // GNU src/lread.c:5526
+    ("standard-input", LoaderResetValue::T),     // GNU src/lread.c:5527
+];
+
 fn clear_runtime_loader_state(eval: &mut super::eval::Context) {
     // These stacks only describe in-flight bootstrap loads/requires.
     // Letting them leak into the runtime surface makes later `require`
     // calls falsely look recursive/already-active.
     eval.require_stack.clear();
     eval.loads_in_progress.clear();
+    // The Lisp half of the same fact.  Clearing only the stacks left
+    // `load-in-progress` wedged at t for the whole session, which ordinary
+    // packages read: `f.el`'s `f-this-file' answers `load-file-name' whenever
+    // `load-in-progress' is non-nil, so at top level it returned nil here
+    // where GNU returns `(buffer-file-name)'.
+    for (name, reset) in RUNTIME_LOADER_RESET {
+        eval.set_variable(name, reset.value());
+    }
 }
 
 fn finalize_cached_bootstrap_eval(

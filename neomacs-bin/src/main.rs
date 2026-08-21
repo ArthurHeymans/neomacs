@@ -4473,7 +4473,6 @@ fn configure_gnu_startup_state(eval: &mut Context, frame_id: FrameId, startup: &
 fn seed_live_tty_frame_parameters(eval: &mut Context, frame_id: FrameId, startup: &StartupOptions) {
     let tty_name = tty_init::detect_tty_name(startup);
     let tty_type = tty_init::detect_tty_type();
-    let bg_mode = tty_init::detect_tty_background_mode();
     if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
         frame.set_parameter(Value::symbol("tty"), Value::string(tty_name));
         if let Some(tty_type) = tty_type {
@@ -4482,25 +4481,29 @@ fn seed_live_tty_frame_parameters(eval: &mut Context, frame_id: FrameId, startup
             frame.remove_parameter(Value::symbol("tty-type"));
         }
     }
-    // NOT the `background-mode' FRAME parameter: that one is DERIVED, by
-    // `frame-set-background-mode' (lisp/frame.el:1526), and seeding it directly
-    // is DIVERGENCES.md 157's bug.  GNU's own input channel for a terminal that
-    // can report its background is the TERMINAL parameter --
-    // `frame-terminal-default-bg-mode' (lisp/frame.el:1588-1598) ends
-    // `(terminal-parameter frame 'background-mode)', and that is exactly the
-    // slot xterm.el writes from the terminal's OSC-11 reply
-    // (`xterm--set-background-mode', lisp/term/xterm.el:1309-1316, reached from
-    // :1019).  Write the detected value there and let the Lisp derive the frame
-    // parameter, as GNU does.
+    // NEITHER `background-mode' slot is written here.
+    //
+    // The FRAME parameter is DERIVED, by `frame-set-background-mode'
+    // (lisp/frame.el:1526); seeding it directly is DIVERGENCES.md 157's bug.
+    // Entry 157 moved the detected value onto GNU's own channel instead -- the
+    // TERMINAL parameter that `frame-terminal-default-bg-mode'
+    // (lisp/frame.el:1588-1599) reads -- and recorded that the HEURISTIC still
+    // diverged, for a later entry.  DIVERGENCES.md 174 is that entry, and the
+    // answer is that the value must not be invented at all.
+    //
+    // `frame-terminal-default-bg-mode' is the FIRST clause of the `cond' in
+    // `frame--current-background-mode' (lisp/frame.el:1505-1524), so a non-nil
+    // terminal parameter WINS over the background colour and the tty type --
+    // and it wins permanently, which is why a light theme could never move the
+    // mode.  GNU's only writer of that slot is `xterm--set-background-mode'
+    // (lisp/term/xterm.el:1309-1316), from a real OSC-11 reply; `COLORFGBG'
+    // appears nowhere in GNU.  With no reply the slot stays nil and GNU derives
+    // the mode from the colour, defaulting to `light' for a tty type matching
+    // "^\(xterm\|rxvt\|dtterm\|eterm\)" and `dark' otherwise.
     //
     // `display-type' needs no input at all: `frame-set-background-mode'
     // computes it as `color' iff `(tty-display-color-p frame)', which is t for
     // a live colour terminal.
-    if let Err(error) = eval.eval_str(&format!(
-        "(set-terminal-parameter nil 'background-mode '{bg_mode})"
-    )) {
-        tracing::warn!(?error, "failed to record detected tty background mode");
-    }
 }
 
 fn ensure_gnu_startup_terminal_frame(eval: &mut Context, opening_frame_id: FrameId) -> FrameId {

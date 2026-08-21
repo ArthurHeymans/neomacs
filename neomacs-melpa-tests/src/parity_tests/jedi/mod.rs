@@ -79,6 +79,21 @@ authors (app.py for RPC workflows, names.py for defined_names).")
    (regexp-quote (directory-file-name jedi--test-root))
    "@@ROOT@@" text t t))
 
+(defun jedi--test-editor-path ()
+  "Return the absolute path of the editor under test.
+A child that cannot be exec'd reports the failure itself, and GNU's
+`emacs_perror' prefixes that line with `initial_argv0'
+\(src/sysdep.c:2867-2887, reached from `exec_failed', src/callproc.c:1206-1216).
+So the diagnostic differs between the two editors by construction, and a
+pin that keeps the raw path records where THIS machine built GNU Emacs
+rather than what either editor did."
+  (expand-file-name invocation-name invocation-directory))
+
+(defun jedi--test-normalize-editor (text)
+  "Replace the running editor's own program path in TEXT."
+  (replace-regexp-in-string
+   (regexp-quote (jedi--test-editor-path)) "@@EMACS@@" text t t))
+
 (defun jedi--test-install-standin ()
   "Install the EPC stand-in as `python' ahead of PATH and point
 `jedi:server-command' at it."
@@ -176,7 +191,8 @@ from (no imports, so the module tree stays small)."
 (defun jedi--test-result (&rest plist)
   (append
    plist
-   (list :messages (nreverse jedi--test-messages)
+   (list :messages (mapcar #'jedi--test-normalize-editor
+                           (nreverse jedi--test-messages))
          :calls (jedi--test-normalize
                  (if (file-exists-p jedi--test-log)
                      (jedi--test-read jedi--test-log)
