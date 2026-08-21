@@ -36,9 +36,19 @@
 //! declaration at the named site, which is where GNU's default and GNU's
 //! `declared_special` bit come from together.  The `UnboundHere` rows stay in
 //! the table because deleting them would lose the answer -- the next author
-//! would see `cus-start.el` mention `ns-antialias-text` and seed it again --
-//! and because [`is_name_gnu_leaves_unbound_here`] is what keeps
-//! `documentation-property` from answering for a variable no build declares.
+//! would see `cus-start.el` mention `ns-antialias-text` and seed it again.
+//!
+//! **This table no longer gates `documentation-property`**, corrected by entry
+//! 173 on 2026-08-21.  It used to, through
+//! [`is_name_gnu_leaves_unbound_here`], and that was a 25-name stand-in for
+//! GNU's actual rule, which is `Fboundp` at snarf time and has no table behind
+//! it (`src/doc.c:606-613`).  The stand-in covered 8 of the 130 names GNU
+//! leaves unbound in this build; `var_docs::SnarfedVariable` now asks the
+//! question GNU asks and covers all of them, including the ones no table could
+//! have listed -- `internal-interpreter-environment` is `DEFVAR_LISP`'d and
+//! then uninterned three lines later (`src/eval.c:4569-4578`).  The predicate
+//! is kept as the executable form of these rows' measurement, and its unit
+//! test is what would notice a row drifting away from GNU.
 
 /// Whether GNU Emacs binds a `cus-start.el` platform variable in a build like
 /// this one -- GNU/Linux, X, GTK, no MS-DOS, no NS, no Haiku, no w32, no
@@ -205,10 +215,14 @@ pub static CUS_START_PLATFORM_VARIABLES: &[CusStartPlatformVariable] = &[
 /// `DEFVAR_*` that binds it, so a name whose C file this build does not
 /// compile has no `variable-documentation` either: measured under GNU,
 /// `(documentation-property 'dos-hyper-key 'variable-documentation)` is `nil`.
-/// Neomacs's `var_docs::gnu_table` is generated from ALL of GNU's `src/*.c`,
-/// including the platform files, so it has to be filtered by the same answer
-/// that decides existence -- otherwise a variable that does not exist still
-/// documents itself.
+///
+/// This used to filter `var_docs::lookup`.  It no longer does: entry 173
+/// replaced it with `var_docs::SnarfedVariable`, which asks this build's
+/// obarray the same question GNU's `Fsnarf_documentation` asks its own
+/// (`src/doc.c:606-613`) and therefore needs no list.  What remains here is
+/// the executable form of the rows' measurement -- 25 names GNU leaves unbound
+/// in a build like this one -- which is what the unit tests below assert
+/// against and what a future author gets instead of re-deriving it.
 pub fn is_name_gnu_leaves_unbound_here(name: &str) -> bool {
     CUS_START_PLATFORM_VARIABLES
         .iter()

@@ -572,6 +572,19 @@ pub(crate) fn symbol_has_modifier_prefix(name: &str) -> bool {
 pub(crate) fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
     use crate::emacs_core::value::Value;
 
+    // keyboard.c:13991 DEFVAR_LISP at `13988',
+    // `XSETINT (menu_prompt_more_char, ' ')' -- the character code 32, not the
+    // string " ": `read_char_minibuf_menu_prompt' tests the event with `EQ'
+    // and then, via `FIXNUMP' + `Ctl (XFIXNUM (...))', accepts its control
+    // variant too (`keyboard.c:10370-10372'), so only a fixnum works.
+    obarray.define_special_variable("menu-prompt-more-char", Value::fixnum(32));
+    // keyboard.c:14147 DEFVAR_KBOARD, `kset_system_key_alist (kb, Qnil)' at
+    // `keyboard.c:13123' for every new kboard.  GNU gives it a separate binding
+    // per terminal device; this port has no per-kboard storage, so it is
+    // modelled as one global special the way `overriding-terminal-local-map'
+    // (the other `DEFVAR_KBOARD' in this file) already is.  The per-terminal
+    // half of the semantics is a known gap, not something a nil default hides.
+    obarray.define_special_variable("system-key-alist", Value::NIL);
     // GNU `src/keyboard.c` defines these with DEFVAR_LISP.
     obarray.set_symbol_value("help-char", Value::fixnum(8));
     obarray.make_special("help-char");

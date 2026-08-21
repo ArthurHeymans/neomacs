@@ -2,6 +2,20 @@
 use crate::emacs_core::value::Value;
 
 pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
+    // buffer.c:5987 DEFVAR_LISP, `Vclone_indirect_buffer_hook = Qnil'.
+    obarray.define_c_hook_variable("clone-indirect-buffer-hook");
+    // buffer.c:5994 DEFVAR_LISP, `XSETFASTINT (Vlong_line_threshold, 50000)'.
+    // A `DEFVAR_LISP' holding a fixnum, not a `DEFVAR_INT': `syms_of_buffer'
+    // gives it a Lisp value cell so Lisp can set it to nil, which is what
+    // turns the long-line optimizations off (`src/buffer.c:5994-6006' documents
+    // nil as the disabling value).  The three companions this port already
+    // declares -- `long-line-optimizations-region-size',
+    // `long-line-optimizations-bol-search-limit', `large-hscroll-threshold' --
+    // really are `DEFVAR_INT' and live in the `syms_of_buffer' block in
+    // `eval.rs'.  Neomacs's redisplay does not consult the threshold yet; the
+    // declaration is what GNU's `boundp', `special-variable-p' and
+    // `documentation-property' all answer from.
+    obarray.define_special_variable("long-line-threshold", Value::fixnum(50000));
     obarray.set_symbol_value("kill-buffer-query-functions", Value::NIL);
     obarray.set_symbol_value("kill-buffer-hook", Value::NIL);
     obarray.set_symbol_value("buffer-list-update-hook", Value::NIL);

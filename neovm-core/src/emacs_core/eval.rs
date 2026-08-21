@@ -5644,13 +5644,132 @@ impl Context {
             obarray.set_symbol_value(name, Value::NIL);
             obarray.make_special(name);
         }
+        // The rest of `syms_of_xterm', entry 173.  This port already declared
+        // 24 of `xterm.c''s 39 names before this block grew; the fifteen below
+        // are the remainder, each with GNU's own initializer.
+        //
+        // `xterm.c:33013' DEFVAR_LISP, `Vx_allow_focus_stealing = Qnewer_time'
+        // at `33037' -- a SYMBOL naming one of four policies, dispatched by
+        // `EQ' against `Qimitate_pager', `Qnewer_time' and `Qraise_and_focus'
+        // (`xterm.c:28876-28894', again at `29097').  nil is a fourth policy,
+        // not the absence of one, so a nil seed would have chosen differently
+        // rather than more weakly.
+        obarray.define_special_variable("x-allow-focus-stealing", Value::symbol("newer-time"));
+        // `xterm.c:33000' DEFVAR_LISP, `Vx_fast_selection_list = list1 (QCLIPBOARD)',
+        // with GNU's own comment saying the default is chosen so tool-bar
+        // updates need no `_XReply'.
+        obarray.define_special_variable(
+            "x-fast-selection-list",
+            Value::list(vec![Value::symbol("CLIPBOARD")]),
+        );
+        // `xterm.c:32797' DEFVAR_LISP, `make_float (0.1)' -- a float, like
+        // `polling-period' and `x-scroll-event-delta-factor'.
+        obarray.define_special_variable("x-wait-for-event-timeout", Value::make_float(0.1));
+        for name in [
+            // `xterm.c:33054', `33064', `33076', `32845', `33039' -- five
+            // policy flags, all `Qnil' in `syms_of_xterm'.
+            "x-detect-server-trust",
+            "x-lax-frame-positioning",
+            "x-quit-keysym",
+            "x-set-frame-visibility-more-laxly",
+            "x-use-fast-mouse-position",
+            // `xterm.c:32885', `32892', `32901', `32927', `32934' -- the
+            // drag-and-drop callbacks, all `Qnil' in C.  GNU reports function
+            // symbols for three of them only because `lisp/x-dnd.el' assigns
+            // them at load time, not because the declaration does.
+            "x-dnd-movement-function",
+            "x-dnd-wheel-function",
+            "x-dnd-unsupported-drop-function",
+            "x-dnd-targets-list",
+            "x-dnd-native-test-function",
+            // `xterm.c:32986', `32993' -- the X input-method coding pair.
+            "x-input-coding-system",
+            "x-input-coding-function",
+        ] {
+            obarray.define_special_variable(name, Value::NIL);
+        }
+        // --- src/xfns.c: syms_of_xfns ---
+        // The three `syms_of_xfns' names this port was short of; of the 23
+        // names GNU binds from that file it already declares 20.  All three
+        // are `Qnil' in C:
+        // `xfns.c:10479' (`x_gtk_resize_child_frames'), `10436'
+        // (`Vx_max_tooltip_size') and `10441' (`Vx_no_window_manager', whose
+        // own comment reads "We don't have any way to find this out, so set it
+        // to nil and maybe the user would like to set it to t").
+        for name in [
+            "x-gtk-resize-child-frames",
+            "x-max-tooltip-size",
+            "x-no-window-manager",
+        ] {
+            obarray.define_special_variable(name, Value::NIL);
+        }
         // --- src/xselect.c: syms_of_xselect ---
         // GNU exposes these X selection notification hooks as DEFVAR_LISP
         // globals with nil defaults.
-        for name in ["x-lost-selection-functions", "x-sent-selection-functions"] {
+        for name in [
+            "x-lost-selection-functions",
+            "x-sent-selection-functions",
+            // `xselect.c:3434' / `3442' DEFVAR_LISP, both `Qnil'.
+            "x-treat-local-requests-remotely",
+            "x-selection-alias-alist",
+        ] {
             obarray.set_symbol_value(name, Value::NIL);
             obarray.make_special(name);
         }
+        // --- src/xsettings.c: syms_of_xsettings ---
+        // `xsettings.c:1402' DEFVAR_LISP, `Vxft_settings = empty_unibyte_string'
+        // -- the empty STRING, not nil: `Fx_get_font_settings' concatenates it
+        // and `xsettings.el' passes it to `read'.  The other name in this file,
+        // `font-use-system-font', is already declared here.
+        obarray.define_special_variable("xft-settings", Value::unibyte_string(""));
+        // --- src/ccl.c: syms_of_ccl ---
+        // `ccl.c:2378' DEFVAR_LISP, `make_nil_vector (16)'.  A 16-slot vector,
+        // not nil: `Fregister_code_conversion_map' and `ccl.el' index into it
+        // and grow it, and `aset' on nil signals.
+        obarray.define_special_variable(
+            "code-conversion-map-vector",
+            Value::vector(vec![Value::NIL; 16]),
+        );
+        // --- src/doc.c: syms_of_doc ---
+        // `doc.c:691' / `695' DEFVAR_LISP, both `Qnil' at declaration time.
+        // `Fsnarf_documentation' is what gives either one a value, and it does
+        // so only when there is a DOC file: `Vbuild_files' is filled from
+        // `buildobj.h' (`doc.c:542-553') and `Vdoc_file_name = filename' is
+        // assigned *after* `doc_open' succeeds (`doc.c:555-566'), so a failed
+        // open signals and leaves the name alone.  This port has no
+        // `make-docfile', no `buildobj.h' and no `etc/DOC' -- `doc.rs''s
+        // `Snarf-documentation' is a shim that opens nothing -- so nil is what
+        // is true here as well as what GNU's declaration ships.  Writing "DOC"
+        // would name a file that does not exist.
+        obarray.define_special_variable("internal-doc-file-name", Value::NIL);
+        obarray.define_special_variable("build-files", Value::NIL);
+        // --- src/syntax.c: syms_of_syntax ---
+        // `syntax.c:3747' DEFVAR_LISP, `Vcomment_use_syntax_ppss = Qt' at
+        // `3749'.  t, not nil, and the two readers take opposite branches on
+        // it: `find_defun_start' calls out to `syntax-ppss' only while it is
+        // non-nil (`syntax.c:600'), and `back_comment' honours
+        // `open-paren-in-column-0-is-defun-start' only while it is nil
+        // (`syntax.c:889').  So nil is a different parser, not a disabled one.
+        // Neomacs's `forward-comment' does not read it yet.
+        obarray.define_special_variable("comment-use-syntax-ppss", Value::T);
+        // --- src/keymap.c: syms_of_keymap ---
+        // `keymap.c:3400' DEFVAR_LISP, `Qnil'.
+        obarray.define_special_variable("describe-bindings-check-shadowing-in-ranges", Value::NIL);
+        // --- src/textconv.c: syms_of_textconv ---
+        // `textconv.c:2593' DEFVAR_LISP `Qnil', and `2631' DEFVAR_LISP
+        // `Qunderline' -- a face NAME, so nil would mean "no face" rather than
+        // GNU's underline.  `overriding-text-conversion-style', the third name
+        // in this file, is declared above.
+        obarray.define_special_variable("text-conversion-edits", Value::NIL);
+        obarray.define_special_variable("text-conversion-face", Value::symbol("underline"));
+        // --- src/menu.c: syms_of_menu ---
+        // `menu.c:1629' DEFVAR_LISP, `Qnil'.  `x-pre-popup-menu-hook', the only
+        // other name in `menu.c', is already declared here.
+        obarray.define_special_variable("x-popup-menu-function", Value::NIL);
+        // --- src/dispnew.c: syms_of_display ---
+        // `dispnew.c:7567' DEFVAR_LISP, `make_fixnum (5)'.  Spelled `x-' but
+        // declared in `dispnew.o', which is in GNU's unconditional `base_obj'.
+        obarray.define_special_variable("x-show-tooltip-timeout", Value::fixnum(5));
     }
 
     fn new_inner(reset_thread_locals: bool) -> Self {

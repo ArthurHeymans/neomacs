@@ -6408,6 +6408,23 @@ pub(crate) fn builtin_window_right_divider_width(
 pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
     use crate::emacs_core::value::Value;
 
+    // window.c:9541 DEFVAR_LISP,
+    // `window_dead_windows_table = CALLN (Fmake_hash_table, QCweakness, Qvalue)'.
+    // The weakness is the point: `record_killed_window' puts every dead window
+    // in here so `window-restore-killed-buffer-windows' can find it again, and
+    // a strong table would keep every window ever killed alive.  An `eql' table
+    // with `:weakness value' is what GNU builds; nil would not be a weaker
+    // version of it, it would signal on the first `puthash'.
+    obarray.define_special_variable(
+        "window-dead-windows-table",
+        Value::hash_table_with_options(
+            crate::emacs_core::value::HashTableTest::Eql,
+            0,
+            Some(crate::emacs_core::value::HashTableWeakness::Value),
+            1.5,
+            0.8125,
+        ),
+    );
     // window.c:9483 — DEFVAR_LISP
     obarray.set_symbol_value(
         "window-persistent-parameters",

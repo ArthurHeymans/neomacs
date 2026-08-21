@@ -1222,6 +1222,9 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     // Neomacs that seeded the value and skipped the declaration matched GNU on
     // `symbol-value' and still bound it lexically under `let'.
     obarray.define_special_variable("vertical-centering-font-regexp", Value::NIL);
+    // fontset.c:2225 DEFVAR_LISP, `Valternate_fontname_alist = Qnil'.  The one
+    // name of `syms_of_fontset''s eight this port did not declare (entry 173).
+    obarray.define_special_variable("alternate-fontname-alist", Value::NIL);
 }
 
 #[cfg(test)]

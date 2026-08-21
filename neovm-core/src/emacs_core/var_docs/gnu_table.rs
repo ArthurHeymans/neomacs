@@ -77,8 +77,7 @@ The default is \+`inhibit' in NS builds and nil everywhere else."#),
     (r#"alternate-fontname-alist"#, r#"Alist of fontname vs list of the alternate fontnames.
 When a specified font name is not found, the corresponding
 alternate fontnames (if any) are tried instead."#),
-    (r#"ambiguous-width-chars"#, r#"
-A char-table for characters whose width (columns) can be 1 or 2.
+    (r#"ambiguous-width-chars"#, r#"A char-table for characters whose width (columns) can be 1 or 2.
 
 The actual width depends on the language-environment and on the
 value of `cjk-ambiguous-chars-are-wide'."#),
@@ -208,8 +207,7 @@ Use the command `auto-composition-mode' to change this variable.
 If this variable is a string, `auto-composition-mode' will be disabled in
 buffers displayed on a terminal whose type, as reported by `tty-type',
 compares equal to that string."#),
-    (r#"auto-fill-chars"#, r#"
-A char-table for characters which invoke auto-filling.
+    (r#"auto-fill-chars"#, r#"A char-table for characters which invoke auto-filling.
 Such characters have the value t in this table."#),
     (r#"auto-fill-function"#, r#"Function called (if non-nil) to perform auto-fill.
 It is called after self-inserting any character specified in
@@ -567,8 +565,7 @@ the first non-nil value from the associated alternative properties is
 returned."#),
     (r#"char-script-table"#, r#"Char table of script symbols.
 It has one extra slot whose value is a list of script symbols."#),
-    (r#"char-width-table"#, r#"
-A char-table for width (columns) of each character."#),
+    (r#"char-width-table"#, r#"A char-table for width (columns) of each character."#),
     (r#"charset-list"#, r#"List of all charsets ever defined."#),
     (r#"charset-map-path"#, r#"List of directories to search for charset map files."#),
     (r#"charset-revision-table"#, r#"Alist of charsets vs revision numbers.
@@ -1243,8 +1240,7 @@ Each element is a keymap alist just like `minor-mode-map-alist', or a
 symbol with a variable binding which is a keymap alist, and it is used
 the same way.  The "active" keymaps in each alist are used before
 `minor-mode-map-alist' and `minor-mode-overriding-map-alist'."#),
-    (r#"enable-character-translation"#, r#"
-Non-nil enables character translation while encoding and decoding."#),
+    (r#"enable-character-translation"#, r#"Non-nil enables character translation while encoding and decoding."#),
     (r#"enable-disabled-menus-and-buttons"#, r#"If non-nil, don't ignore events produced by disabled menu items and tool-bar.
 
 Help functions bind this to allow help on disabled menu items
@@ -1262,14 +1258,10 @@ See also Info node `(elisp)Text Representations'."#),
 This variable makes a difference whenever the minibuffer window is active.
 Also see `minibuffer-depth-indicate-mode', which may be handy if this
 variable is non-nil."#),
-    (r#"eol-mnemonic-dos"#, r#"
-String displayed in mode line for DOS-like (CRLF) end-of-line format."#),
-    (r#"eol-mnemonic-mac"#, r#"
-String displayed in mode line for MAC-like (CR) end-of-line format."#),
-    (r#"eol-mnemonic-undecided"#, r#"
-String displayed in mode line when end-of-line format is not yet determined."#),
-    (r#"eol-mnemonic-unix"#, r#"
-String displayed in mode line for UNIX-like (LF) end-of-line format."#),
+    (r#"eol-mnemonic-dos"#, r#"String displayed in mode line for DOS-like (CRLF) end-of-line format."#),
+    (r#"eol-mnemonic-mac"#, r#"String displayed in mode line for MAC-like (CR) end-of-line format."#),
+    (r#"eol-mnemonic-undecided"#, r#"String displayed in mode line when end-of-line format is not yet determined."#),
+    (r#"eol-mnemonic-unix"#, r#"String displayed in mode line for UNIX-like (LF) end-of-line format."#),
     (r#"etags-program-name"#, r#"Name of the `etags' program distributed with Emacs.
 Use this instead of calling `etags' directly, as `etags' may have been
 renamed to comply with executable naming restrictions on the system."#),
@@ -1436,8 +1428,7 @@ the Lisp string that would be used as its argument.  Only affects the
 case of asynchronous process with the default filter."#),
     (r#"features"#, r#"A list of symbols which are the features of the executing Emacs.
 Used by `featurep' and `require', and altered by `provide'."#),
-    (r#"file-coding-system-alist"#, r#"
-Alist to decide a coding system to use for a file I/O operation.
+    (r#"file-coding-system-alist"#, r#"Alist to decide a coding system to use for a file I/O operation.
 The format is ((PATTERN . VAL) ...),
 where PATTERN is a regular expression matching a file name,
 VAL is a coding system, a cons of coding systems, or a function symbol.
@@ -1484,8 +1475,7 @@ It is used by filling commands, such as `fill-region' and `fill-paragraph',
 and by `auto-fill-mode', which see.
 See also `current-fill-column'.
 Interactively, you can set the buffer local value using \[set-fill-column]."#),
-    (r#"find-word-boundary-function-table"#, r#"
-Char table of functions to search for the word boundary.
+    (r#"find-word-boundary-function-table"#, r#"Char table of functions to search for the word boundary.
 Each function is called with two arguments; POS and LIMIT.
 POS and LIMIT are character positions in the current buffer.
 
@@ -1559,8 +1549,7 @@ pointer).
 
 In order to extend a "focus follows mouse" policy to individual Emacs
 windows, customize the variable `mouse-autoselect-window'."#),
-    (r#"font-encoding-alist"#, r#"
-Alist of fontname patterns vs the corresponding encoding and repertory info.
+    (r#"font-encoding-alist"#, r#"Alist of fontname patterns vs the corresponding encoding and repertory info.
 Each element looks like (REGEXP . (ENCODING . REPERTORY)),
 where ENCODING is a charset or a char-table,
 and REPERTORY is a charset, a char-table, or nil.
@@ -1578,32 +1567,30 @@ If REPERTORY is a charset, all characters belonging to the charset are
 supported.  If REPERTORY is a char-table, all characters who have a
 non-nil value in the table are supported.  If REPERTORY is nil, Emacs
 gets the repertory information by an opened font and ENCODING."#),
-    (r#"font-encoding-charset-alist"#, r#"
-Alist of charsets vs the charsets to determine the preferred font encoding.
+    (r#"font-encoding-charset-alist"#, r#"Alist of charsets vs the charsets to determine the preferred font encoding.
 Each element looks like (CHARSET . ENCODING-CHARSET),
 where ENCODING-CHARSET is a charset registered in the variable
 `font-encoding-alist' as ENCODING.
 
 When a text has a property `charset' and the value is CHARSET, a font
 whose encoding corresponds to ENCODING-CHARSET is preferred."#),
-    (r#"font-log"#, r#"
-A list that logs font-related actions and results, for debugging.
+    (r#"font-log"#, r#"A list that logs font-related actions and results, for debugging.
 The default value is t, which means to suppress logging.
 Set it to nil to enable logging.  If the environment variable
 EMACS_FONT_LOG is set at startup, it defaults to nil."#),
-    (r#"font-slant-table"#, r#" Vector of font slant symbols vs the corresponding numeric values.
+    (r#"font-slant-table"#, r#"Vector of font slant symbols vs the corresponding numeric values.
 See `font-weight-table' for the format of the vector.
 This variable cannot be set; trying to do so will signal an error."#),
     (r#"font-use-system-font"#, r#"Non-nil means to apply the system defined font dynamically.
 When this is non-nil and the system defined fixed width font changes, we
 update frames dynamically.
 If this variable is nil, Emacs ignores system font changes."#),
-    (r#"font-weight-table"#, r#" Vector of valid font weight values.
+    (r#"font-weight-table"#, r#"Vector of valid font weight values.
 Each element has the form:
     [NUMERIC-VALUE SYMBOLIC-NAME ALIAS-NAME ...]
 NUMERIC-VALUE is an integer, and SYMBOLIC-NAME and ALIAS-NAME are symbols.
 This variable cannot be set; trying to do so will signal an error."#),
-    (r#"font-width-table"#, r#" Alist of font width symbols vs the corresponding numeric values.
+    (r#"font-width-table"#, r#"Alist of font width symbols vs the corresponding numeric values.
 See `font-weight-table' for the format of the vector.
 This variable cannot be set; trying to do so will signal an error."#),
     (r#"fontification-functions"#, r#"List of functions to call to fontify regions of text.
@@ -1935,8 +1922,7 @@ Any other value means to try iconifying the child frame on a graphical
 terminal.  Since such an attempt is not honored by all window managers
 and may even lead to making the child frame unresponsive to user
 actions, the default is to iconify the root frame instead."#),
-    (r#"ignore-relative-composition"#, r#"
-Char table of characters which are not composed relatively.
+    (r#"ignore-relative-composition"#, r#"Char table of characters which are not composed relatively.
 If an entry for a character is non-nil, a composition sequence
 which contains that character is displayed so that
 the glyph of that character is put without considering
@@ -1992,8 +1978,7 @@ fringe, but no arrow bitmaps, use ((top .  left) (bottom . left))."#),
 If non-nil, a bitmap is displayed in the left fringe of a window
 on graphical displays for each screen line that doesn't correspond
 to any buffer text."#),
-    (r#"inherit-process-coding-system"#, r#"
-Non-nil means process buffer inherits coding system of process output.
+    (r#"inherit-process-coding-system"#, r#"Non-nil means process buffer inherits coding system of process output.
 Bind it to t if the process output is to be treated as if it were a file
 read from some filesystem."#),
     (r#"inhibit--record-char"#, r#"If non-nil, don't record input events.
@@ -2008,8 +1993,7 @@ If non-nil, the primitive searching and matching functions
 such as `looking-at', `string-match', `re-search-forward', etc.,
 do not set the match data.  The proper way to use this variable
 is to bind it with `let' around a small expression."#),
-    (r#"inhibit-compacting-font-caches"#, r#"
-If non-nil, don't compact font caches during GC.
+    (r#"inhibit-compacting-font-caches"#, r#"If non-nil, don't compact font caches during GC.
 Some large fonts cause lots of consing and trigger GC.  If they
 are removed from the font caches, they will need to be opened
 again during redisplay, which slows down redisplay.  If you
@@ -2021,8 +2005,7 @@ footprint in sessions that use lots of different fonts."#),
     (r#"inhibit-debugger"#, r#"Non-nil means never enter the debugger.
 Normally set while the debugger is already active, to avoid recursive
 invocations."#),
-    (r#"inhibit-eol-conversion"#, r#"
-Non-nil means always inhibit code conversion of end-of-line format.
+    (r#"inhibit-eol-conversion"#, r#"Non-nil means always inhibit code conversion of end-of-line format.
 See info node `Coding Systems' and info node `Text and Binary' concerning
 such conversion."#),
     (r#"inhibit-eval-during-redisplay"#, r#"Non-nil means don't eval Lisp during redisplay."#),
@@ -2036,8 +2019,7 @@ This variable can be bound when user interaction can't be performed,
 for instance when running a headless Emacs server.  Functions like
 `read-from-minibuffer' (and the like) will signal `inhibited-interaction'
 instead."#),
-    (r#"inhibit-iso-escape-detection"#, r#"
-If non-nil, Emacs ignores ISO-2022 escape sequences during code detection.
+    (r#"inhibit-iso-escape-detection"#, r#"If non-nil, Emacs ignores ISO-2022 escape sequences during code detection.
 
 When Emacs reads text, it tries to detect how the text is encoded.
 This code detection is sensitive to escape sequences.  If Emacs sees
@@ -2062,6 +2044,13 @@ to explicitly specify some coding system that doesn't use ISO-2022
 escape sequence (e.g., `latin-1') on reading by \[universal-coding-system-argument]."#),
     (r#"inhibit-load-charset-map"#, r#"Inhibit loading of charset maps.  Used when dumping Emacs."#),
     (r#"inhibit-menubar-update"#, r#"Non-nil means don't update menu bars.  Internal use only."#),
+    (r#"inhibit-message"#, r#"Non-nil means calls to `message' are not displayed.
+They are still logged to the *Messages* buffer.
+
+Do NOT set this globally to a non-nil value, as doing that will
+disable messages everywhere, including in I-search and other
+places where they are necessary.  This variable is intended to
+be let-bound around code that needs to disable messages temporarily."#),
     (r#"inhibit-modification-hooks"#, r#"Non-nil means don't run any of the hooks that respond to buffer changes.
 This affects `before-change-functions' and `after-change-functions',
 as well as hooks attached to text properties and overlays.
@@ -2254,8 +2243,7 @@ To disable redisplay shortcuts for long truncated line, set this
 variable to `most-positive-fixnum'.
 
 There is no reason to change that value except for debugging purposes."#),
-    (r#"last-code-conversion-error"#, r#"
-Error status of the last code conversion.
+    (r#"last-code-conversion-error"#, r#"Error status of the last code conversion.
 
 When an error was detected in the last code conversion, this variable
 is set to one of the following symbols.
@@ -2268,8 +2256,7 @@ When no error was detected, the value doesn't change.  So, to check
 the error status of a code conversion by this variable, you must
 explicitly set this variable to nil before performing code
 conversion."#),
-    (r#"last-coding-system-used"#, r#"
-Coding system used in the latest file or process I/O."#),
+    (r#"last-coding-system-used"#, r#"Coding system used in the latest file or process I/O."#),
     (r#"last-command"#, r#"The last command executed.
 Normally a symbol with a function definition, but can be whatever was found
 in the keymap, or whatever the variable `this-command' was set to by that
@@ -2309,8 +2296,7 @@ See `prefix-arg' for the meaning of the value."#),
 The last command executed that was not bound to an input event.
 This is the command `repeat' will try to repeat.
 Taken from a previous value of `real-this-command'."#),
-    (r#"latin-extra-code-table"#, r#"
-Table of extra Latin codes in the range 128..159 (inclusive).
+    (r#"latin-extra-code-table"#, r#"Table of extra Latin codes in the range 128..159 (inclusive).
 This is a vector of length 256.
 If Nth element is non-nil, the existence of code N in a file
 (or output of subprocess) doesn't prevent it to be detected as
@@ -2535,6 +2521,8 @@ For internal use only."#),
     (r#"lucid--menu-grab-keyboard"#, r#"If non-nil, grab keyboard during menu operations.
 This is only relevant when using the Lucid X toolkit.  It can be
 convenient to disable this for debugging purposes."#),
+    (r#"macroexp--dynvars"#, r#"List of variables declared dynamic in the current scope.
+Only valid during macro-expansion.  Internal use only."#),
     (r#"main-thread"#, r#"The main thread of Emacs."#),
     (r#"major-mode"#, r#"Symbol for current buffer's major mode.
 The default value (normally `fundamental-mode') affects new buffers.
@@ -2888,8 +2876,7 @@ and advice."#),
 
 After compilation, each function definition is updated to use the
 natively compiled one."#),
-    (r#"network-coding-system-alist"#, r#"
-Alist to decide a coding system to use for a network I/O operation.
+    (r#"network-coding-system-alist"#, r#"Alist to decide a coding system to use for a network I/O operation.
 The format is ((PATTERN . VAL) ...),
 where PATTERN is a regular expression matching a network service name
 or is a port number to connect to,
@@ -3207,8 +3194,7 @@ allow them to produce more output before Emacs tries to read it.
 If the value is t, the delay is reset after each write to the process; any other
 non-nil value means that the delay is not reset on write.
 The variable takes effect when `start-process' is called."#),
-    (r#"process-coding-system-alist"#, r#"
-Alist to decide a coding system to use for a process I/O operation.
+    (r#"process-coding-system-alist"#, r#"Alist to decide a coding system to use for a process I/O operation.
 The format is ((PATTERN . VAL) ...),
 where PATTERN is a regular expression matching a program name,
 VAL is a coding system, a cons of coding systems, or a function symbol.
@@ -3266,8 +3252,7 @@ This used to mean that certain objects should be allocated in shared
 This flag is still used in a few places, not to decide where objects are
 allocated, but to know if we're in the preload phase of Emacs's
 build."#),
-    (r#"query-all-font-backends"#, r#"
-If non-nil, attempt to query all available font backends.
+    (r#"query-all-font-backends"#, r#"If non-nil, attempt to query all available font backends.
 By default Emacs will stop searching for a matching font at the first
 match."#),
     (r#"quit-flag"#, r#"Non-nil causes `eval' to abort, unless `inhibit-quit' is non-nil.
@@ -3494,8 +3479,7 @@ selection.
 
 If this variable causes the region to be set as the primary selection,
 `post-select-region-hook' is then run afterwards."#),
-    (r#"select-safe-coding-system-function"#, r#"
-Function to call to select safe coding system for encoding a text.
+    (r#"select-safe-coding-system-function"#, r#"Function to call to select safe coding system for encoding a text.
 
 If set, this function is called to force a user to select a proper
 coding system which can encode the text in the case that a default
@@ -3867,7 +3851,7 @@ started.  The value `drag-source' is like `dropping', but the
 `posn-window' will be nil in mouse position lists inside mouse
 movement events if there is no frame directly visible underneath the
 mouse pointer."#),
-    (r#"transient-mark-mode"#, r#" Non-nil if Transient Mark mode is enabled.
+    (r#"transient-mark-mode"#, r#"Non-nil if Transient Mark mode is enabled.
 See the command `transient-mark-mode' for a description of this minor mode.
 
 Non-nil also enables highlighting of the region whenever the mark is active.
@@ -3903,10 +3887,78 @@ See also `keyboard-translate-table'.
 Use of this variable for character code unification was rendered
 obsolete in Emacs 23.1 and later, since Unicode is now the basis of
 internal character representation."#),
-    (r#"translation-table-vector"#, r#"
-Vector recording all translation tables ever defined.
+    (r#"translation-table-vector"#, r#"Vector recording all translation tables ever defined.
 Each element is a pair (SYMBOL . TABLE) relating the table to the
 symbol naming it.  The ID of a translation table is an index into this vector."#),
+    (r#"treesit-extra-load-path"#, r#"Additional directories to look for tree-sitter language definitions.
+The value should be a list of directories.
+When trying to load a tree-sitter language definition,
+Emacs first looks in the directories mentioned in this variable,
+then in the `tree-sitter' subdirectory of `user-emacs-directory', and
+then in the system default locations for dynamic libraries, in that order.
+The first writeable directory in the list is special: it's used as the
+default directory when automatically installing the language grammar
+using `treesit-ensure-installed'."#),
+    (r#"treesit-language-remap-alist"#, r#"An alist remapping language symbols.
+
+The value should be an alist of (LANGUAGE-A . LANGUAGE-B).  When such
+pair exists in the alist, creating a parser for LANGUAGE-A actually
+creates a parser for LANGUAGE-B.  Basically, anything that requires or
+applies to LANGUAGE-A will be redirected to LANGUAGE-B instead."#),
+    (r#"treesit-languages-require-line-column-tracking"#, r#"A list of languages that need line-column tracking.
+
+Most tree-sitter language grammars don't require line and column
+tracking to work, but some languages do.  When creating a parser, if the
+language is in this list, Emacs enables line-column tracking for the
+buffer."#),
+    (r#"treesit-load-name-override-list"#, r#"An override list for unconventional tree-sitter libraries.
+
+By default, Emacs assumes the dynamic library for LANG is
+libtree-sitter-LANG.EXT, where EXT is the OS specific extension for
+dynamic libraries.  Emacs also assumes that the name of the C function
+the library provides is tree_sitter_LANG.  If that is not the case,
+you can add an entry
+
+    (LANG LIBRARY-BASE-NAME FUNCTION-NAME)
+
+to this list, where LIBRARY-BASE-NAME is the filename of the dynamic
+library without the file-name extension, and FUNCTION-NAME is the
+function provided by the library."#),
+    (r#"treesit-major-mode-remap-alist"#, r#"Alist mapping file-specified modes to ts-modes.
+
+The value should be an alist of (MODE . TS-MODE).
+This alist is used to modify the value of `major-mode-remap-alist'
+depending on customization of `treesit-enabled-modes'."#),
+    (r#"treesit-thing-settings"#, r#"A list defining things.
+
+The value should be defined by the major mode, and should be an alist
+of the form (LANGUAGE . DEFINITIONS), where LANGUAGE is a language
+symbol and DEFINITIONS is a list whose elements are of the form
+
+    (THING PRED)
+
+THING is a symbol representing the thing, like `defun', `defclass',
+`sexp', `sentence', `comment', or any other symbol that is meaningful
+for the major mode; PRED defines what kind of node can be qualified
+as THING.
+
+PRED can be a regexp string that matches the type of the node; it can
+be a predicate function that takes the node as the sole argument and
+returns t if the node is the thing, and nil otherwise; it can be a
+cons (REGEXP . FN), which is a combination of a regexp and a predicate
+function, and the node has to match both to qualify as the thing.
+
+PRED can also be recursively defined.  It can be:
+
+ (or PRED...), meaning satisfying any of the inner PREDs qualifies the node;
+ (and PRED...) meaning satisfying all of the inner PREDs qualifies the node;
+ (not PRED), meaning not satisfying the inner PRED qualifies the node.
+
+There are two pre-defined predicates, `named' and `anonymous'.  They
+match named nodes and anonymous nodes, respectively.
+
+Finally, PRED can refer to other THINGs defined in this list by using
+the symbol of that THING.  For example, (or sexp sentence)."#),
     (r#"truncate-lines"#, r#"Non-nil means do not display continuation lines.
 Instead, give each line of text just one screen line.
 
@@ -4019,15 +4071,13 @@ If there's an active input method, the events are given to
     (r#"unread-post-input-method-events"#, r#"List of events to be processed as input by input methods.
 These events are processed before `unread-command-events'
 and actual keyboard input, but are not given to `input-method-function'."#),
-    (r#"use-default-ascent"#, r#"
-Char table of characters whose ascent values should be ignored.
+    (r#"use-default-ascent"#, r#"Char table of characters whose ascent values should be ignored.
 If an entry for a character is non-nil, the ascent value of the glyph
 is assumed to be specified by _MULE_DEFAULT_ASCENT property of a font.
 
 This affects how a composite character which contains
 such a character is displayed on screen."#),
-    (r#"use-default-font-for-symbols"#, r#"
-If non-nil, use the default face's font for symbols and punctuation.
+    (r#"use-default-font-for-symbols"#, r#"If non-nil, use the default face's font for symbols and punctuation.
 
 By default, Emacs will try to use the default face's font for
 displaying symbol and punctuation characters, disregarding the
@@ -4510,7 +4560,7 @@ Parameters not saved by `current-window-configuration' or
 respectively are not installed by `window-state-put'."#),
     (r#"window-point-insertion-type"#, r#"Insertion type of marker to use for `window-point'.
 See `marker-insertion-type' for the meaning of the possible values."#),
-    (r#"window-resize-pixelwise"#, r#" Non-nil means resize windows pixelwise.
+    (r#"window-resize-pixelwise"#, r#"Non-nil means resize windows pixelwise.
 This currently affects the functions: `split-window', `maximize-window',
 `minimize-window', `fit-window-to-buffer' and `fit-frame-to-buffer', and
 all functions that symmetrically resize a parent window.
@@ -4710,8 +4760,7 @@ Visual Line mode.  Visual Line mode, when enabled, sets `word-wrap'
 to t, and additionally redefines simple editing commands to act on
 visual lines rather than logical lines.  See the documentation of
 `visual-line-mode'."#),
-    (r#"word-wrap-by-category"#, r#"
-    Non-nil means also wrap after characters of a certain category.
+    (r#"word-wrap-by-category"#, r#"Non-nil means also wrap after characters of a certain category.
 Normally when `word-wrap' is on, Emacs only breaks lines after
 whitespace characters.  When this option is turned on, Emacs also
 breaks lines after characters that have the "|" category (defined in
@@ -5212,8 +5261,9 @@ do not actually have glyphs with colors that can cause Xft crashes.
 
 The font families in this list will not be ignored when
 `xft-ignore-color-fonts' is non-nil."#),
-    (r#"xft-ignore-color-fonts"#, r#"
-Non-nil means don't query fontconfig for color fonts, since they often
+    (r#"xft-font-ascent-descent-override"#, r#"Non-nil means override the ascent and descent values for Xft font driver.
+This is needed with some fonts to correct vertical overlap of glyphs."#),
+    (r#"xft-ignore-color-fonts"#, r#"Non-nil means don't query fontconfig for color fonts, since they often
 cause Xft crashes.  Only has an effect in Xft builds."#),
     (r#"xft-settings"#, r#"Font settings applied to Xft."#),
     (r#"xwidget-list"#, r#"List of all xwidgets that have not been killed."#),

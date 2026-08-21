@@ -7990,11 +7990,20 @@ fn documentation_property_plan(
     let sym = resolve_sym(documentation_symbol_id);
     let raw = args.get(2).is_some_and(|v| v.is_truthy());
 
+    // `Fsnarf_documentation`'s `Fboundp` gate (`src/doc.c:606-613`), asked once
+    // here and passed to `var_docs::lookup` as the only key it accepts.  GNU
+    // asks it at dump time and stores the answer as a plist property; Neomacs
+    // has no DOC file to snarf, so the generated table is consulted lazily and
+    // the gate has to travel with the query.
+    let snarfed =
+        super::var_docs::SnarfedVariable::if_bound_in(obarray, documentation_symbol_id, sym);
+
     match property_value {
         Some(value)
             if startup_variable_doc_offset_symbol(sym, prop_is_variable_documentation, &value) =>
         {
-            let base_doc = super::var_docs::lookup(sym)
+            let base_doc = snarfed
+                .and_then(super::var_docs::lookup)
                 .or_else(|| startup_variable_doc_stub(sym))
                 .map(ToString::to_string)
                 .unwrap_or_else(|| format!("{sym} is a variable defined in `C source code`."));
@@ -8034,7 +8043,7 @@ fn documentation_property_plan(
         // Other property names fall through to nil (only
         // `variable-documentation' has a central source).
         _ if prop_is_variable_documentation => {
-            if let Some(text) = super::var_docs::lookup(sym) {
+            if let Some(text) = snarfed.and_then(super::var_docs::lookup) {
                 let doc = if raw {
                     startup_doc_quote_style_raw(text)
                 } else {

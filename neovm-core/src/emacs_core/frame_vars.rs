@@ -1,7 +1,62 @@
 //! Frame and startup bootstrap variables.
+use crate::emacs_core::symbol::LispVariableLocality;
 use crate::emacs_core::value::Value;
 
 pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray) {
+    // The seven `syms_of_frame' DEFVAR_LISPs entry 173's sweep found this port
+    // short of.  `frame.o' is in GNU's unconditional `base_obj'
+    // (`src/Makefile.in:450'), so no build gate is in play for any of them --
+    // including the two spelled `x-', which are `syms_of_frame' names rather
+    // than `syms_of_xfns' ones.
+    //
+    // frame.c:7748 DEFVAR_LISP, `expose_hidden_buffer = Qnil', followed by
+    // `Fmake_variable_buffer_local (Qexpose_hidden_buffer)' at `frame.c:7760'
+    // -- the only one of the 49 that becomes buffer-local, so the declaration
+    // is incomplete without it.
+    obarray.define_lisp_variable(
+        "expose-hidden-buffer",
+        Value::NIL,
+        LispVariableLocality::BufferLocalIfSet,
+    );
+    // frame.c:7762 DEFVAR_LISP.  A deny-list of parameters `frameset' must not
+    // restore, assembled by three `Fcons' calls over an `#ifdef'-selected tail
+    // (`frame.c:7764-7772'): `list4 (Qname, Qparent_id, Qwindow_id,
+    // Qouter_window_id)' under `HAVE_X_WINDOWS' and `list3' without the last
+    // element otherwise.  This port takes the four-element tail, the same
+    // branch its `syms_of_xterm'/`syms_of_xfns' counterparts already follow --
+    // and the choice is inert either way, because a deny-list naming a
+    // parameter no frame here carries excludes nothing.
+    obarray.define_special_variable(
+        "frame-internal-parameters",
+        Value::list(vec![
+            Value::symbol("undeleted"),
+            Value::symbol("cloned-from"),
+            Value::symbol("frame-id"),
+            Value::symbol("name"),
+            Value::symbol("parent-id"),
+            Value::symbol("window-id"),
+            Value::symbol("outer-window-id"),
+        ]),
+    );
+    // frame.c:7693 DEFVAR_LISP, `frame_size_history = Qnil'.  nil is not
+    // "unused": `frame_size_history_extra' only records when the value is a
+    // cons whose car is a positive fixnum, so nil is GNU's "off".
+    obarray.define_special_variable("frame-size-history", Value::NIL);
+    // frame.c:7502 DEFVAR_LISP, `Vmove_frame_functions = Qnil'.  GNU reports
+    // `(x-dnd-after-move-frame)' even in `--batch' because
+    // `lisp/x-dnd.el:625' runs `add-hook' at load time, not because the C
+    // initializer says so.
+    obarray.define_c_hook_variable("move-frame-functions");
+    // frame.c:7893 DEFVAR_LISP, `Vtoolkit_theme = Qnil'.
+    obarray.define_special_variable("toolkit-theme", Value::NIL);
+    // frame.c:7395 / 7407 DEFVAR_LISP: `Vx_resource_name = Qnil' and
+    // `Vx_resource_class = build_string (EMACS_CLASS)', where `EMACS_CLASS' is
+    // `"Emacs"' (`src/frame.h:1840').  The class is an X-resource lookup key,
+    // not a product string, so it is GNU's literal rather than this port's
+    // display branding; `x-resource-name' stays nil until a display connection
+    // sets it, which is also what GNU answers in `--batch'.
+    obarray.define_special_variable("x-resource-name", Value::NIL);
+    obarray.define_special_variable("x-resource-class", Value::string("Emacs"));
     obarray.set_symbol_value("default-frame-alist", Value::NIL);
     // GNU frame.c exposes this as a built-in variable. GUI builds default to a
     // concrete side instead of leaving scroll-bar.el to trip over an unbound var.
