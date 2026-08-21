@@ -440,6 +440,7 @@ mod general;
 mod ggtags;
 mod gh;
 mod gh_md;
+mod ghostel;
 mod ghub;
 mod gist;
 mod git;

@@ -3476,6 +3476,10 @@ pub const GIST_MELPA_PIN: (&str, &str) = ("gist", "20171128.406");
 /// `e721fd5e41e682f47f2dd4ce26ef2ba28c7fa0b5`.
 pub const GH_MD_MELPA_PIN: (&str, &str) = ("gh-md", "20220316.1432");
 
+/// The exact ghostel package pin for its MELPA parity corpus.
+/// MELPA built this archive from upstream commit `02d0e3743dbe1a8c607adcfdc526367d798f4c23`.
+pub const GHOSTEL_MELPA_PIN: (&str, &str) = ("ghostel", "20260820.1035");
+
 /// The exact Magit package containing the Git-Commit source selected by the
 /// comprehensive API parity corpus.
 pub const GIT_COMMIT_MELPA_PIN: (&str, &str) = ("magit", "20260724.2338");
