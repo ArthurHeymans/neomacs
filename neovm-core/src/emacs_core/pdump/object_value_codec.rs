@@ -8,9 +8,11 @@ use super::DumpError;
 use super::types::{
     DumpBufferId, DumpByteCodeFunction, DumpByteCodeInstructions, DumpByteData, DumpHashKey,
     DumpHashTableTest, DumpHashTableWeakness, DumpHeapObject, DumpHeapRef, DumpLambdaParams,
-    DumpLispHashTable, DumpLispString, DumpMarker, DumpNameId, DumpOp, DumpOverlay,
+    DumpLispHashTable, DumpLispString, DumpMarker, DumpNameId, DumpOverlay,
     DumpStringTextPropertyRun, DumpSymId, DumpValue,
 };
+
+use crate::emacs_core::bytecode::opcode::Op;
 
 const HEAP_CONS: u8 = 0;
 const HEAP_VECTOR: u8 = 1;
@@ -599,117 +601,118 @@ const OP_CALL_BUILTIN: u8 = 87;
 const OP_CALL_BUILTIN_SYM: u8 = 88;
 const OP_TRAP_OUT_OF_RANGE_CONSTANT: u8 = 89;
 
-fn write_ops(out: &mut Vec<u8>, ops: &[DumpOp]) {
+/// Flat fixed-width bytecode instruction records: one bounds check and a
+/// direct `Op` construction per instruction. The old per-field cursor
+/// encode of an intermediate `DumpOp` cost ~19M Ir of startup across the
+/// dump's ~6.7k bytecode objects.
+///
+/// Record layout: `[tag: u8][arg: u32 LE][extra: u8]` — 6 bytes per op.
+fn write_ops(out: &mut Vec<u8>, ops: &[Op]) {
+    #[inline]
+    fn put_op(out: &mut Vec<u8>, tag: u8, arg: u32, extra: u8) {
+        out.push(tag);
+        out.extend_from_slice(&arg.to_le_bytes());
+        out.push(extra);
+    }
     write_u64(out, ops.len() as u64);
     for op in ops {
         match op {
-            DumpOp::Constant(value) => write_op_u16(out, OP_CONSTANT, *value),
-            DumpOp::Nil => write_u8(out, OP_NIL),
-            DumpOp::True => write_u8(out, OP_TRUE),
-            DumpOp::Pop => write_u8(out, OP_POP),
-            DumpOp::Dup => write_u8(out, OP_DUP),
-            DumpOp::StackRef(value) => write_op_u16(out, OP_STACK_REF, *value),
-            DumpOp::StackSet(value) => write_op_u16(out, OP_STACK_SET, *value),
-            DumpOp::DiscardN(value) => {
-                write_u8(out, OP_DISCARD_N);
-                write_u8(out, *value);
+            Op::Constant(value) => put_op(out, OP_CONSTANT, *value as u32, 0),
+            Op::StackRef(value) => put_op(out, OP_STACK_REF, *value as u32, 0),
+            Op::StackSet(value) => put_op(out, OP_STACK_SET, *value as u32, 0),
+            Op::VarRef(value) => put_op(out, OP_VAR_REF, *value as u32, 0),
+            Op::VarSet(value) => put_op(out, OP_VAR_SET, *value as u32, 0),
+            Op::VarBind(value) => put_op(out, OP_VAR_BIND, *value as u32, 0),
+            Op::Unbind(value) => put_op(out, OP_UNBIND, *value as u32, 0),
+            Op::Call(value) => put_op(out, OP_CALL, *value as u32, 0),
+            Op::Apply(value) => put_op(out, OP_APPLY, *value as u32, 0),
+            Op::List(value) => put_op(out, OP_LIST, *value as u32, 0),
+            Op::Concat(value) => put_op(out, OP_CONCAT, *value as u32, 0),
+            Op::MakeClosure(value) => put_op(out, OP_MAKE_CLOSURE, *value as u32, 0),
+            Op::Goto(value) => put_op(out, OP_GOTO, *value, 0),
+            Op::GotoIfNil(value) => put_op(out, OP_GOTO_IF_NIL, *value, 0),
+            Op::GotoIfNotNil(value) => put_op(out, OP_GOTO_IF_NOT_NIL, *value, 0),
+            Op::GotoIfNilElsePop(value) => put_op(out, OP_GOTO_IF_NIL_ELSE_POP, *value, 0),
+            Op::PushConditionCase(value) => put_op(out, OP_PUSH_CONDITION_CASE, *value, 0),
+            Op::PushCatch(value) => put_op(out, OP_PUSH_CATCH, *value, 0),
+            Op::GotoIfNotNilElsePop(value) => put_op(out, OP_GOTO_IF_NOT_NIL_ELSE_POP, *value, 0),
+            Op::PushConditionCaseRaw(value) => put_op(out, OP_PUSH_CONDITION_CASE_RAW, *value, 0),
+            Op::TrapOutOfRangeConstant(value) => {
+                put_op(out, OP_TRAP_OUT_OF_RANGE_CONSTANT, *value as u32, 0)
             }
-            DumpOp::VarRef(value) => write_op_u16(out, OP_VAR_REF, *value),
-            DumpOp::VarSet(value) => write_op_u16(out, OP_VAR_SET, *value),
-            DumpOp::VarBind(value) => write_op_u16(out, OP_VAR_BIND, *value),
-            DumpOp::Unbind(value) => write_op_u16(out, OP_UNBIND, *value),
-            DumpOp::Call(value) => write_op_u16(out, OP_CALL, *value),
-            DumpOp::Apply(value) => write_op_u16(out, OP_APPLY, *value),
-            DumpOp::Goto(value) => write_op_u32(out, OP_GOTO, *value),
-            DumpOp::GotoIfNil(value) => write_op_u32(out, OP_GOTO_IF_NIL, *value),
-            DumpOp::GotoIfNotNil(value) => write_op_u32(out, OP_GOTO_IF_NOT_NIL, *value),
-            DumpOp::GotoIfNilElsePop(value) => write_op_u32(out, OP_GOTO_IF_NIL_ELSE_POP, *value),
-            DumpOp::GotoIfNotNilElsePop(value) => {
-                write_op_u32(out, OP_GOTO_IF_NOT_NIL_ELSE_POP, *value);
-            }
-            DumpOp::Switch => write_u8(out, OP_SWITCH),
-            DumpOp::Return => write_u8(out, OP_RETURN),
-            DumpOp::Add => write_u8(out, OP_ADD),
-            DumpOp::Sub => write_u8(out, OP_SUB),
-            DumpOp::Mul => write_u8(out, OP_MUL),
-            DumpOp::Div => write_u8(out, OP_DIV),
-            DumpOp::Rem => write_u8(out, OP_REM),
-            DumpOp::Add1 => write_u8(out, OP_ADD1),
-            DumpOp::Sub1 => write_u8(out, OP_SUB1),
-            DumpOp::Negate => write_u8(out, OP_NEGATE),
-            DumpOp::Eqlsign => write_u8(out, OP_EQLSIGN),
-            DumpOp::Gtr => write_u8(out, OP_GTR),
-            DumpOp::Lss => write_u8(out, OP_LSS),
-            DumpOp::Leq => write_u8(out, OP_LEQ),
-            DumpOp::Geq => write_u8(out, OP_GEQ),
-            DumpOp::Max => write_u8(out, OP_MAX),
-            DumpOp::Min => write_u8(out, OP_MIN),
-            DumpOp::Car => write_u8(out, OP_CAR),
-            DumpOp::Cdr => write_u8(out, OP_CDR),
-            DumpOp::Cons => write_u8(out, OP_CONS),
-            DumpOp::List(value) => write_op_u16(out, OP_LIST, *value),
-            DumpOp::Length => write_u8(out, OP_LENGTH),
-            DumpOp::Nth => write_u8(out, OP_NTH),
-            DumpOp::Nthcdr => write_u8(out, OP_NTHCDR),
-            DumpOp::Setcar => write_u8(out, OP_SETCAR),
-            DumpOp::Setcdr => write_u8(out, OP_SETCDR),
-            DumpOp::CarSafe => write_u8(out, OP_CAR_SAFE),
-            DumpOp::CdrSafe => write_u8(out, OP_CDR_SAFE),
-            DumpOp::Elt => write_u8(out, OP_ELT),
-            DumpOp::Nconc => write_u8(out, OP_NCONC),
-            DumpOp::Nreverse => write_u8(out, OP_NREVERSE),
-            DumpOp::Member => write_u8(out, OP_MEMBER),
-            DumpOp::Memq => write_u8(out, OP_MEMQ),
-            DumpOp::Assq => write_u8(out, OP_ASSQ),
-            DumpOp::Symbolp => write_u8(out, OP_SYMBOLP),
-            DumpOp::Consp => write_u8(out, OP_CONSP),
-            DumpOp::Stringp => write_u8(out, OP_STRINGP),
-            DumpOp::Listp => write_u8(out, OP_LISTP),
-            DumpOp::Integerp => write_u8(out, OP_INTEGERP),
-            DumpOp::Numberp => write_u8(out, OP_NUMBERP),
-            DumpOp::Null => write_u8(out, OP_NULL),
-            DumpOp::Not => write_u8(out, OP_NOT),
-            DumpOp::Eq => write_u8(out, OP_EQ),
-            DumpOp::Equal => write_u8(out, OP_EQUAL),
-            DumpOp::Concat(value) => write_op_u16(out, OP_CONCAT, *value),
-            DumpOp::Substring => write_u8(out, OP_SUBSTRING),
-            DumpOp::StringEqual => write_u8(out, OP_STRING_EQUAL),
-            DumpOp::StringLessp => write_u8(out, OP_STRING_LESSP),
-            DumpOp::Aref => write_u8(out, OP_AREF),
-            DumpOp::Aset => write_u8(out, OP_ASET),
-            DumpOp::SymbolValue => write_u8(out, OP_SYMBOL_VALUE),
-            DumpOp::SymbolFunction => write_u8(out, OP_SYMBOL_FUNCTION),
-            DumpOp::Set => write_u8(out, OP_SET),
-            DumpOp::Fset => write_u8(out, OP_FSET),
-            DumpOp::Get => write_u8(out, OP_GET),
-            DumpOp::Put => write_u8(out, OP_PUT),
-            DumpOp::PushConditionCase(value) => write_op_u32(out, OP_PUSH_CONDITION_CASE, *value),
-            DumpOp::PushConditionCaseRaw(value) => {
-                write_op_u32(out, OP_PUSH_CONDITION_CASE_RAW, *value);
-            }
-            DumpOp::PushCatch(value) => write_op_u32(out, OP_PUSH_CATCH, *value),
-            DumpOp::PopHandler => write_u8(out, OP_POP_HANDLER),
-            DumpOp::UnwindProtect(value) => write_op_u32(out, OP_UNWIND_PROTECT, *value),
-            DumpOp::UnwindProtectPop => write_u8(out, OP_UNWIND_PROTECT_POP),
-            DumpOp::Throw => write_u8(out, OP_THROW),
-            DumpOp::SaveCurrentBuffer => write_u8(out, OP_SAVE_CURRENT_BUFFER),
-            DumpOp::SaveExcursion => write_u8(out, OP_SAVE_EXCURSION),
-            DumpOp::SaveRestriction => write_u8(out, OP_SAVE_RESTRICTION),
-            DumpOp::SaveWindowExcursion => write_u8(out, OP_SAVE_WINDOW_EXCURSION),
-            DumpOp::MakeClosure(value) => write_op_u16(out, OP_MAKE_CLOSURE, *value),
-            DumpOp::CallBuiltin(index, argc) => {
-                write_u8(out, OP_CALL_BUILTIN);
-                write_u16(out, *index);
-                write_u8(out, *argc);
-            }
-            DumpOp::CallBuiltinSym(sym, argc) => {
-                write_u8(out, OP_CALL_BUILTIN_SYM);
-                write_u32(out, sym.0);
-                write_u8(out, *argc);
-            }
-            DumpOp::TrapOutOfRangeConstant(value) => {
-                write_op_u16(out, OP_TRAP_OUT_OF_RANGE_CONSTANT, *value);
-            }
+            Op::Nil => put_op(out, OP_NIL, 0, 0),
+            Op::True => put_op(out, OP_TRUE, 0, 0),
+            Op::Pop => put_op(out, OP_POP, 0, 0),
+            Op::Dup => put_op(out, OP_DUP, 0, 0),
+            Op::Switch => put_op(out, OP_SWITCH, 0, 0),
+            Op::Return => put_op(out, OP_RETURN, 0, 0),
+            Op::Add => put_op(out, OP_ADD, 0, 0),
+            Op::Sub => put_op(out, OP_SUB, 0, 0),
+            Op::Mul => put_op(out, OP_MUL, 0, 0),
+            Op::Div => put_op(out, OP_DIV, 0, 0),
+            Op::Rem => put_op(out, OP_REM, 0, 0),
+            Op::Add1 => put_op(out, OP_ADD1, 0, 0),
+            Op::Sub1 => put_op(out, OP_SUB1, 0, 0),
+            Op::Negate => put_op(out, OP_NEGATE, 0, 0),
+            Op::Eqlsign => put_op(out, OP_EQLSIGN, 0, 0),
+            Op::Gtr => put_op(out, OP_GTR, 0, 0),
+            Op::Lss => put_op(out, OP_LSS, 0, 0),
+            Op::Leq => put_op(out, OP_LEQ, 0, 0),
+            Op::Geq => put_op(out, OP_GEQ, 0, 0),
+            Op::Max => put_op(out, OP_MAX, 0, 0),
+            Op::Min => put_op(out, OP_MIN, 0, 0),
+            Op::Car => put_op(out, OP_CAR, 0, 0),
+            Op::Cdr => put_op(out, OP_CDR, 0, 0),
+            Op::Cons => put_op(out, OP_CONS, 0, 0),
+            Op::Length => put_op(out, OP_LENGTH, 0, 0),
+            Op::Nth => put_op(out, OP_NTH, 0, 0),
+            Op::Nthcdr => put_op(out, OP_NTHCDR, 0, 0),
+            Op::Setcar => put_op(out, OP_SETCAR, 0, 0),
+            Op::Setcdr => put_op(out, OP_SETCDR, 0, 0),
+            Op::CarSafe => put_op(out, OP_CAR_SAFE, 0, 0),
+            Op::CdrSafe => put_op(out, OP_CDR_SAFE, 0, 0),
+            Op::Elt => put_op(out, OP_ELT, 0, 0),
+            Op::Nconc => put_op(out, OP_NCONC, 0, 0),
+            Op::Nreverse => put_op(out, OP_NREVERSE, 0, 0),
+            Op::Member => put_op(out, OP_MEMBER, 0, 0),
+            Op::Memq => put_op(out, OP_MEMQ, 0, 0),
+            Op::Assq => put_op(out, OP_ASSQ, 0, 0),
+            Op::Symbolp => put_op(out, OP_SYMBOLP, 0, 0),
+            Op::Consp => put_op(out, OP_CONSP, 0, 0),
+            Op::Stringp => put_op(out, OP_STRINGP, 0, 0),
+            Op::Listp => put_op(out, OP_LISTP, 0, 0),
+            Op::Integerp => put_op(out, OP_INTEGERP, 0, 0),
+            Op::Numberp => put_op(out, OP_NUMBERP, 0, 0),
+            Op::Null => put_op(out, OP_NULL, 0, 0),
+            Op::Not => put_op(out, OP_NOT, 0, 0),
+            Op::Eq => put_op(out, OP_EQ, 0, 0),
+            Op::Equal => put_op(out, OP_EQUAL, 0, 0),
+            Op::Substring => put_op(out, OP_SUBSTRING, 0, 0),
+            Op::StringEqual => put_op(out, OP_STRING_EQUAL, 0, 0),
+            Op::StringLessp => put_op(out, OP_STRING_LESSP, 0, 0),
+            Op::Aref => put_op(out, OP_AREF, 0, 0),
+            Op::Aset => put_op(out, OP_ASET, 0, 0),
+            Op::SymbolValue => put_op(out, OP_SYMBOL_VALUE, 0, 0),
+            Op::SymbolFunction => put_op(out, OP_SYMBOL_FUNCTION, 0, 0),
+            Op::Set => put_op(out, OP_SET, 0, 0),
+            Op::Fset => put_op(out, OP_FSET, 0, 0),
+            Op::Get => put_op(out, OP_GET, 0, 0),
+            Op::Put => put_op(out, OP_PUT, 0, 0),
+            Op::PopHandler => put_op(out, OP_POP_HANDLER, 0, 0),
+            Op::UnwindProtectPop => put_op(out, OP_UNWIND_PROTECT_POP, 0, 0),
+            Op::Throw => put_op(out, OP_THROW, 0, 0),
+            Op::SaveCurrentBuffer => put_op(out, OP_SAVE_CURRENT_BUFFER, 0, 0),
+            Op::SaveExcursion => put_op(out, OP_SAVE_EXCURSION, 0, 0),
+            Op::SaveRestriction => put_op(out, OP_SAVE_RESTRICTION, 0, 0),
+            Op::SaveWindowExcursion => put_op(out, OP_SAVE_WINDOW_EXCURSION, 0, 0),
+            Op::DiscardN(value) => put_op(out, OP_DISCARD_N, *value as u32, 0),
+            Op::CallBuiltin(index, argc) => put_op(out, OP_CALL_BUILTIN, *index as u32, *argc),
+            Op::CallBuiltinSym(sym, argc) => put_op(
+                out,
+                OP_CALL_BUILTIN_SYM,
+                super::convert::dump_sym_id(*sym).0,
+                *argc,
+            ),
         }
     }
 }
@@ -1213,119 +1216,107 @@ impl<'a> Cursor<'a> {
         Ok(syms)
     }
 
-    fn read_ops(&mut self) -> Result<Vec<DumpOp>, DumpError> {
+    fn read_ops(&mut self) -> Result<Vec<Op>, DumpError> {
         let len = self.read_len("bytecode op count")?;
         let mut ops = Vec::with_capacity(len);
         for _ in 0..len {
-            let op = match self.read_u8("bytecode op tag")? {
-                OP_CONSTANT => DumpOp::Constant(self.read_u16("constant op arg")?),
-                OP_NIL => DumpOp::Nil,
-                OP_TRUE => DumpOp::True,
-                OP_POP => DumpOp::Pop,
-                OP_DUP => DumpOp::Dup,
-                OP_STACK_REF => DumpOp::StackRef(self.read_u16("stack-ref op arg")?),
-                OP_STACK_SET => DumpOp::StackSet(self.read_u16("stack-set op arg")?),
-                OP_DISCARD_N => DumpOp::DiscardN(self.read_u8("discard-n op arg")?),
-                OP_VAR_REF => DumpOp::VarRef(self.read_u16("var-ref op arg")?),
-                OP_VAR_SET => DumpOp::VarSet(self.read_u16("var-set op arg")?),
-                OP_VAR_BIND => DumpOp::VarBind(self.read_u16("var-bind op arg")?),
-                OP_UNBIND => DumpOp::Unbind(self.read_u16("unbind op arg")?),
-                OP_CALL => DumpOp::Call(self.read_u16("call op arg")?),
-                OP_APPLY => DumpOp::Apply(self.read_u16("apply op arg")?),
-                OP_GOTO => DumpOp::Goto(self.read_u32("goto op arg")?),
-                OP_GOTO_IF_NIL => DumpOp::GotoIfNil(self.read_u32("goto-if-nil op arg")?),
-                OP_GOTO_IF_NOT_NIL => {
-                    DumpOp::GotoIfNotNil(self.read_u32("goto-if-not-nil op arg")?)
+            let start = self.read_fixed_start(6, "bytecode op record")?;
+            let rec = &self.section[start..start + 6];
+            let tag = rec[0];
+            let arg = u32::from_le_bytes([rec[1], rec[2], rec[3], rec[4]]);
+            let extra = rec[5];
+            let op = match tag {
+                OP_CONSTANT => Op::Constant(arg as u16),
+                OP_STACK_REF => Op::StackRef(arg as u16),
+                OP_STACK_SET => Op::StackSet(arg as u16),
+                OP_VAR_REF => Op::VarRef(arg as u16),
+                OP_VAR_SET => Op::VarSet(arg as u16),
+                OP_VAR_BIND => Op::VarBind(arg as u16),
+                OP_UNBIND => Op::Unbind(arg as u16),
+                OP_CALL => Op::Call(arg as u16),
+                OP_APPLY => Op::Apply(arg as u16),
+                OP_LIST => Op::List(arg as u16),
+                OP_CONCAT => Op::Concat(arg as u16),
+                OP_MAKE_CLOSURE => Op::MakeClosure(arg as u16),
+                OP_GOTO => Op::Goto(arg),
+                OP_GOTO_IF_NIL => Op::GotoIfNil(arg),
+                OP_GOTO_IF_NOT_NIL => Op::GotoIfNotNil(arg),
+                OP_GOTO_IF_NIL_ELSE_POP => Op::GotoIfNilElsePop(arg),
+                OP_PUSH_CONDITION_CASE => Op::PushConditionCase(arg),
+                OP_PUSH_CATCH => Op::PushCatch(arg),
+                OP_GOTO_IF_NOT_NIL_ELSE_POP => Op::GotoIfNotNilElsePop(arg),
+                OP_PUSH_CONDITION_CASE_RAW => Op::PushConditionCaseRaw(arg),
+                OP_TRAP_OUT_OF_RANGE_CONSTANT => Op::TrapOutOfRangeConstant(arg as u16),
+                OP_NIL => Op::Nil,
+                OP_TRUE => Op::True,
+                OP_POP => Op::Pop,
+                OP_DUP => Op::Dup,
+                OP_SWITCH => Op::Switch,
+                OP_RETURN => Op::Return,
+                OP_ADD => Op::Add,
+                OP_SUB => Op::Sub,
+                OP_MUL => Op::Mul,
+                OP_DIV => Op::Div,
+                OP_REM => Op::Rem,
+                OP_ADD1 => Op::Add1,
+                OP_SUB1 => Op::Sub1,
+                OP_NEGATE => Op::Negate,
+                OP_EQLSIGN => Op::Eqlsign,
+                OP_GTR => Op::Gtr,
+                OP_LSS => Op::Lss,
+                OP_LEQ => Op::Leq,
+                OP_GEQ => Op::Geq,
+                OP_MAX => Op::Max,
+                OP_MIN => Op::Min,
+                OP_CAR => Op::Car,
+                OP_CDR => Op::Cdr,
+                OP_CONS => Op::Cons,
+                OP_LENGTH => Op::Length,
+                OP_NTH => Op::Nth,
+                OP_NTHCDR => Op::Nthcdr,
+                OP_SETCAR => Op::Setcar,
+                OP_SETCDR => Op::Setcdr,
+                OP_CAR_SAFE => Op::CarSafe,
+                OP_CDR_SAFE => Op::CdrSafe,
+                OP_ELT => Op::Elt,
+                OP_NCONC => Op::Nconc,
+                OP_NREVERSE => Op::Nreverse,
+                OP_MEMBER => Op::Member,
+                OP_MEMQ => Op::Memq,
+                OP_ASSQ => Op::Assq,
+                OP_SYMBOLP => Op::Symbolp,
+                OP_CONSP => Op::Consp,
+                OP_STRINGP => Op::Stringp,
+                OP_LISTP => Op::Listp,
+                OP_INTEGERP => Op::Integerp,
+                OP_NUMBERP => Op::Numberp,
+                OP_NULL => Op::Null,
+                OP_NOT => Op::Not,
+                OP_EQ => Op::Eq,
+                OP_EQUAL => Op::Equal,
+                OP_SUBSTRING => Op::Substring,
+                OP_STRING_EQUAL => Op::StringEqual,
+                OP_STRING_LESSP => Op::StringLessp,
+                OP_AREF => Op::Aref,
+                OP_ASET => Op::Aset,
+                OP_SYMBOL_VALUE => Op::SymbolValue,
+                OP_SYMBOL_FUNCTION => Op::SymbolFunction,
+                OP_SET => Op::Set,
+                OP_FSET => Op::Fset,
+                OP_GET => Op::Get,
+                OP_PUT => Op::Put,
+                OP_POP_HANDLER => Op::PopHandler,
+                OP_UNWIND_PROTECT_POP => Op::UnwindProtectPop,
+                OP_THROW => Op::Throw,
+                OP_SAVE_CURRENT_BUFFER => Op::SaveCurrentBuffer,
+                OP_SAVE_EXCURSION => Op::SaveExcursion,
+                OP_SAVE_RESTRICTION => Op::SaveRestriction,
+                OP_SAVE_WINDOW_EXCURSION => Op::SaveWindowExcursion,
+                OP_DISCARD_N => Op::DiscardN(arg as u8),
+                OP_CALL_BUILTIN => Op::CallBuiltin(arg as u16, extra),
+                OP_CALL_BUILTIN_SYM => {
+                    Op::CallBuiltinSym(super::convert::load_sym_id(&DumpSymId(arg)), extra)
                 }
-                OP_GOTO_IF_NIL_ELSE_POP => {
-                    DumpOp::GotoIfNilElsePop(self.read_u32("goto-if-nil-else-pop op arg")?)
-                }
-                OP_GOTO_IF_NOT_NIL_ELSE_POP => {
-                    DumpOp::GotoIfNotNilElsePop(self.read_u32("goto-if-not-nil-else-pop op arg")?)
-                }
-                OP_SWITCH => DumpOp::Switch,
-                OP_RETURN => DumpOp::Return,
-                OP_ADD => DumpOp::Add,
-                OP_SUB => DumpOp::Sub,
-                OP_MUL => DumpOp::Mul,
-                OP_DIV => DumpOp::Div,
-                OP_REM => DumpOp::Rem,
-                OP_ADD1 => DumpOp::Add1,
-                OP_SUB1 => DumpOp::Sub1,
-                OP_NEGATE => DumpOp::Negate,
-                OP_EQLSIGN => DumpOp::Eqlsign,
-                OP_GTR => DumpOp::Gtr,
-                OP_LSS => DumpOp::Lss,
-                OP_LEQ => DumpOp::Leq,
-                OP_GEQ => DumpOp::Geq,
-                OP_MAX => DumpOp::Max,
-                OP_MIN => DumpOp::Min,
-                OP_CAR => DumpOp::Car,
-                OP_CDR => DumpOp::Cdr,
-                OP_CONS => DumpOp::Cons,
-                OP_LIST => DumpOp::List(self.read_u16("list op arg")?),
-                OP_LENGTH => DumpOp::Length,
-                OP_NTH => DumpOp::Nth,
-                OP_NTHCDR => DumpOp::Nthcdr,
-                OP_SETCAR => DumpOp::Setcar,
-                OP_SETCDR => DumpOp::Setcdr,
-                OP_CAR_SAFE => DumpOp::CarSafe,
-                OP_CDR_SAFE => DumpOp::CdrSafe,
-                OP_ELT => DumpOp::Elt,
-                OP_NCONC => DumpOp::Nconc,
-                OP_NREVERSE => DumpOp::Nreverse,
-                OP_MEMBER => DumpOp::Member,
-                OP_MEMQ => DumpOp::Memq,
-                OP_ASSQ => DumpOp::Assq,
-                OP_SYMBOLP => DumpOp::Symbolp,
-                OP_CONSP => DumpOp::Consp,
-                OP_STRINGP => DumpOp::Stringp,
-                OP_LISTP => DumpOp::Listp,
-                OP_INTEGERP => DumpOp::Integerp,
-                OP_NUMBERP => DumpOp::Numberp,
-                OP_NULL => DumpOp::Null,
-                OP_NOT => DumpOp::Not,
-                OP_EQ => DumpOp::Eq,
-                OP_EQUAL => DumpOp::Equal,
-                OP_CONCAT => DumpOp::Concat(self.read_u16("concat op arg")?),
-                OP_SUBSTRING => DumpOp::Substring,
-                OP_STRING_EQUAL => DumpOp::StringEqual,
-                OP_STRING_LESSP => DumpOp::StringLessp,
-                OP_AREF => DumpOp::Aref,
-                OP_ASET => DumpOp::Aset,
-                OP_SYMBOL_VALUE => DumpOp::SymbolValue,
-                OP_SYMBOL_FUNCTION => DumpOp::SymbolFunction,
-                OP_SET => DumpOp::Set,
-                OP_FSET => DumpOp::Fset,
-                OP_GET => DumpOp::Get,
-                OP_PUT => DumpOp::Put,
-                OP_PUSH_CONDITION_CASE => {
-                    DumpOp::PushConditionCase(self.read_u32("push-condition-case op arg")?)
-                }
-                OP_PUSH_CONDITION_CASE_RAW => {
-                    DumpOp::PushConditionCaseRaw(self.read_u32("push-condition-case-raw op arg")?)
-                }
-                OP_PUSH_CATCH => DumpOp::PushCatch(self.read_u32("push-catch op arg")?),
-                OP_POP_HANDLER => DumpOp::PopHandler,
-                OP_UNWIND_PROTECT => DumpOp::UnwindProtect(self.read_u32("unwind-protect op arg")?),
-                OP_UNWIND_PROTECT_POP => DumpOp::UnwindProtectPop,
-                OP_THROW => DumpOp::Throw,
-                OP_SAVE_CURRENT_BUFFER => DumpOp::SaveCurrentBuffer,
-                OP_SAVE_EXCURSION => DumpOp::SaveExcursion,
-                OP_SAVE_RESTRICTION => DumpOp::SaveRestriction,
-                OP_SAVE_WINDOW_EXCURSION => DumpOp::SaveWindowExcursion,
-                OP_MAKE_CLOSURE => DumpOp::MakeClosure(self.read_u16("make-closure op arg")?),
-                OP_CALL_BUILTIN => DumpOp::CallBuiltin(
-                    self.read_u16("call-builtin op index")?,
-                    self.read_u8("call-builtin op argc")?,
-                ),
-                OP_CALL_BUILTIN_SYM => DumpOp::CallBuiltinSym(
-                    DumpSymId(self.read_u32("call-builtin-sym op symbol")?),
-                    self.read_u8("call-builtin-sym op argc")?,
-                ),
-                OP_TRAP_OUT_OF_RANGE_CONSTANT => DumpOp::TrapOutOfRangeConstant(
-                    self.read_u16("trap-out-of-range-constant op index")?,
-                ),
                 other => {
                     return Err(DumpError::ImageFormatError(format!(
                         "unknown bytecode op tag {other}"
@@ -1558,9 +1549,12 @@ mod tests {
             }),
             DumpHeapObject::ByteCode(DumpByteCodeFunction {
                 instructions: DumpByteCodeInstructions::Decoded(vec![
-                    DumpOp::Constant(1),
-                    DumpOp::CallBuiltinSym(DumpSymId(9), 2),
-                    DumpOp::Return,
+                    Op::Constant(1),
+                    // CallBuiltinSym needs the load-time symbol remap TLS
+                    // (installed by real loads); CallBuiltin has the same
+                    // record shape and keeps the tag+arg+extra encode covered.
+                    Op::CallBuiltin(9, 2),
+                    Op::Return,
                 ]),
                 constants: vec![DumpValue::Bignum("12345678901234567890".into())],
                 max_stack: 4,

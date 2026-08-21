@@ -24,7 +24,6 @@ use crate::emacs_core::advice::{VariableWatcher, VariableWatcherList};
 use crate::emacs_core::autoload::{AutoloadEntry, AutoloadManager, AutoloadType};
 use crate::emacs_core::bookmark::{Bookmark, BookmarkManager};
 use crate::emacs_core::bytecode::chunk::ByteCodeFunction;
-use crate::emacs_core::bytecode::opcode::Op;
 use crate::emacs_core::charset::{
     CharsetInfoSnapshot, CharsetMethodSnapshot, CharsetRegistrySnapshot, restore_charset_registry,
     snapshot_charset_registry,
@@ -2252,100 +2251,6 @@ fn load_lisp_string_owned(dump: DumpLispString) -> LispString {
 
 // --- Op ---
 
-pub(crate) fn dump_op(op: &Op) -> DumpOp {
-    match *op {
-        Op::Constant(n) => DumpOp::Constant(n),
-        Op::Nil => DumpOp::Nil,
-        Op::True => DumpOp::True,
-        Op::Pop => DumpOp::Pop,
-        Op::Dup => DumpOp::Dup,
-        Op::StackRef(n) => DumpOp::StackRef(n),
-        Op::StackSet(n) => DumpOp::StackSet(n),
-        Op::DiscardN(n) => DumpOp::DiscardN(n),
-        Op::VarRef(n) => DumpOp::VarRef(n),
-        Op::VarSet(n) => DumpOp::VarSet(n),
-        Op::VarBind(n) => DumpOp::VarBind(n),
-        Op::Unbind(n) => DumpOp::Unbind(n),
-        Op::Call(n) => DumpOp::Call(n),
-        Op::Apply(n) => DumpOp::Apply(n),
-        Op::Goto(n) => DumpOp::Goto(n),
-        Op::GotoIfNil(n) => DumpOp::GotoIfNil(n),
-        Op::GotoIfNotNil(n) => DumpOp::GotoIfNotNil(n),
-        Op::GotoIfNilElsePop(n) => DumpOp::GotoIfNilElsePop(n),
-        Op::GotoIfNotNilElsePop(n) => DumpOp::GotoIfNotNilElsePop(n),
-        Op::Switch => DumpOp::Switch,
-        Op::Return => DumpOp::Return,
-        Op::Add => DumpOp::Add,
-        Op::Sub => DumpOp::Sub,
-        Op::Mul => DumpOp::Mul,
-        Op::Div => DumpOp::Div,
-        Op::Rem => DumpOp::Rem,
-        Op::Add1 => DumpOp::Add1,
-        Op::Sub1 => DumpOp::Sub1,
-        Op::Negate => DumpOp::Negate,
-        Op::Eqlsign => DumpOp::Eqlsign,
-        Op::Gtr => DumpOp::Gtr,
-        Op::Lss => DumpOp::Lss,
-        Op::Leq => DumpOp::Leq,
-        Op::Geq => DumpOp::Geq,
-        Op::Max => DumpOp::Max,
-        Op::Min => DumpOp::Min,
-        Op::Car => DumpOp::Car,
-        Op::Cdr => DumpOp::Cdr,
-        Op::Cons => DumpOp::Cons,
-        Op::List(n) => DumpOp::List(n),
-        Op::Length => DumpOp::Length,
-        Op::Nth => DumpOp::Nth,
-        Op::Nthcdr => DumpOp::Nthcdr,
-        Op::Setcar => DumpOp::Setcar,
-        Op::Setcdr => DumpOp::Setcdr,
-        Op::CarSafe => DumpOp::CarSafe,
-        Op::CdrSafe => DumpOp::CdrSafe,
-        Op::Elt => DumpOp::Elt,
-        Op::Nconc => DumpOp::Nconc,
-        Op::Nreverse => DumpOp::Nreverse,
-        Op::Member => DumpOp::Member,
-        Op::Memq => DumpOp::Memq,
-        Op::Assq => DumpOp::Assq,
-        Op::Symbolp => DumpOp::Symbolp,
-        Op::Consp => DumpOp::Consp,
-        Op::Stringp => DumpOp::Stringp,
-        Op::Listp => DumpOp::Listp,
-        Op::Integerp => DumpOp::Integerp,
-        Op::Numberp => DumpOp::Numberp,
-        Op::Null => DumpOp::Null,
-        Op::Not => DumpOp::Not,
-        Op::Eq => DumpOp::Eq,
-        Op::Equal => DumpOp::Equal,
-        Op::Concat(n) => DumpOp::Concat(n),
-        Op::Substring => DumpOp::Substring,
-        Op::StringEqual => DumpOp::StringEqual,
-        Op::StringLessp => DumpOp::StringLessp,
-        Op::Aref => DumpOp::Aref,
-        Op::Aset => DumpOp::Aset,
-        Op::SymbolValue => DumpOp::SymbolValue,
-        Op::SymbolFunction => DumpOp::SymbolFunction,
-        Op::Set => DumpOp::Set,
-        Op::Fset => DumpOp::Fset,
-        Op::Get => DumpOp::Get,
-        Op::Put => DumpOp::Put,
-        Op::PushConditionCase(n) => DumpOp::PushConditionCase(n),
-        Op::PushConditionCaseRaw(n) => DumpOp::PushConditionCaseRaw(n),
-        Op::PushCatch(n) => DumpOp::PushCatch(n),
-        Op::PopHandler => DumpOp::PopHandler,
-        Op::UnwindProtectPop => DumpOp::UnwindProtectPop,
-        Op::Throw => DumpOp::Throw,
-        Op::SaveCurrentBuffer => DumpOp::SaveCurrentBuffer,
-        Op::SaveExcursion => DumpOp::SaveExcursion,
-        Op::SaveRestriction => DumpOp::SaveRestriction,
-        Op::SaveWindowExcursion => DumpOp::SaveWindowExcursion,
-        Op::MakeClosure(n) => DumpOp::MakeClosure(n),
-        Op::CallBuiltin(a, b) => DumpOp::CallBuiltin(a, b),
-        Op::CallBuiltinSym(sym, b) => DumpOp::CallBuiltinSym(dump_sym_id(sym), b),
-        Op::TrapOutOfRangeConstant(n) => DumpOp::TrapOutOfRangeConstant(n),
-    }
-}
-
 // --- Lambda / ByteCode ---
 
 pub(crate) fn dump_lambda_params(p: &LambdaParams) -> DumpLambdaParams {
@@ -2362,9 +2267,7 @@ pub(crate) fn dump_bytecode(
 ) -> DumpByteCodeFunction {
     let instructions = match &bc.gnu_bytecode_bytes {
         Some(bytes) => DumpByteCodeInstructions::Gnu(bytes.clone()),
-        None => {
-            DumpByteCodeInstructions::Decoded(bc.executable_ops().iter().map(dump_op).collect())
-        }
+        None => DumpByteCodeInstructions::Decoded(bc.executable_ops().to_vec()),
     };
     DumpByteCodeFunction {
         instructions,
@@ -3917,106 +3820,6 @@ pub(crate) fn load_name_id(id: &DumpNameId) -> NameId {
 
 // --- Op ---
 
-pub(crate) fn load_op(op: &DumpOp) -> Result<Op, DumpError> {
-    let op = match *op {
-        DumpOp::Constant(n) => Op::Constant(n),
-        DumpOp::Nil => Op::Nil,
-        DumpOp::True => Op::True,
-        DumpOp::Pop => Op::Pop,
-        DumpOp::Dup => Op::Dup,
-        DumpOp::StackRef(n) => Op::StackRef(n),
-        DumpOp::StackSet(n) => Op::StackSet(n),
-        DumpOp::DiscardN(n) => Op::DiscardN(n),
-        DumpOp::VarRef(n) => Op::VarRef(n),
-        DumpOp::VarSet(n) => Op::VarSet(n),
-        DumpOp::VarBind(n) => Op::VarBind(n),
-        DumpOp::Unbind(n) => Op::Unbind(n),
-        DumpOp::Call(n) => Op::Call(n),
-        DumpOp::Apply(n) => Op::Apply(n),
-        DumpOp::Goto(n) => Op::Goto(n),
-        DumpOp::GotoIfNil(n) => Op::GotoIfNil(n),
-        DumpOp::GotoIfNotNil(n) => Op::GotoIfNotNil(n),
-        DumpOp::GotoIfNilElsePop(n) => Op::GotoIfNilElsePop(n),
-        DumpOp::GotoIfNotNilElsePop(n) => Op::GotoIfNotNilElsePop(n),
-        DumpOp::Switch => Op::Switch,
-        DumpOp::Return => Op::Return,
-        DumpOp::Add => Op::Add,
-        DumpOp::Sub => Op::Sub,
-        DumpOp::Mul => Op::Mul,
-        DumpOp::Div => Op::Div,
-        DumpOp::Rem => Op::Rem,
-        DumpOp::Add1 => Op::Add1,
-        DumpOp::Sub1 => Op::Sub1,
-        DumpOp::Negate => Op::Negate,
-        DumpOp::Eqlsign => Op::Eqlsign,
-        DumpOp::Gtr => Op::Gtr,
-        DumpOp::Lss => Op::Lss,
-        DumpOp::Leq => Op::Leq,
-        DumpOp::Geq => Op::Geq,
-        DumpOp::Max => Op::Max,
-        DumpOp::Min => Op::Min,
-        DumpOp::Car => Op::Car,
-        DumpOp::Cdr => Op::Cdr,
-        DumpOp::Cons => Op::Cons,
-        DumpOp::List(n) => Op::List(n),
-        DumpOp::Length => Op::Length,
-        DumpOp::Nth => Op::Nth,
-        DumpOp::Nthcdr => Op::Nthcdr,
-        DumpOp::Setcar => Op::Setcar,
-        DumpOp::Setcdr => Op::Setcdr,
-        DumpOp::CarSafe => Op::CarSafe,
-        DumpOp::CdrSafe => Op::CdrSafe,
-        DumpOp::Elt => Op::Elt,
-        DumpOp::Nconc => Op::Nconc,
-        DumpOp::Nreverse => Op::Nreverse,
-        DumpOp::Member => Op::Member,
-        DumpOp::Memq => Op::Memq,
-        DumpOp::Assq => Op::Assq,
-        DumpOp::Symbolp => Op::Symbolp,
-        DumpOp::Consp => Op::Consp,
-        DumpOp::Stringp => Op::Stringp,
-        DumpOp::Listp => Op::Listp,
-        DumpOp::Integerp => Op::Integerp,
-        DumpOp::Numberp => Op::Numberp,
-        DumpOp::Null => Op::Null,
-        DumpOp::Not => Op::Not,
-        DumpOp::Eq => Op::Eq,
-        DumpOp::Equal => Op::Equal,
-        DumpOp::Concat(n) => Op::Concat(n),
-        DumpOp::Substring => Op::Substring,
-        DumpOp::StringEqual => Op::StringEqual,
-        DumpOp::StringLessp => Op::StringLessp,
-        DumpOp::Aref => Op::Aref,
-        DumpOp::Aset => Op::Aset,
-        DumpOp::SymbolValue => Op::SymbolValue,
-        DumpOp::SymbolFunction => Op::SymbolFunction,
-        DumpOp::Set => Op::Set,
-        DumpOp::Fset => Op::Fset,
-        DumpOp::Get => Op::Get,
-        DumpOp::Put => Op::Put,
-        DumpOp::PushConditionCase(n) => Op::PushConditionCase(n),
-        DumpOp::PushConditionCaseRaw(n) => Op::PushConditionCaseRaw(n),
-        DumpOp::PushCatch(n) => Op::PushCatch(n),
-        DumpOp::PopHandler => Op::PopHandler,
-        DumpOp::UnwindProtect(n) => {
-            return Err(DumpError::DeserializationError(format!(
-                "legacy neomacs unwind-protect opcode is unsupported in pdump snapshots; rebuild the dump or recompile this bytecode (target {n})"
-            )));
-        }
-        DumpOp::UnwindProtectPop => Op::UnwindProtectPop,
-        DumpOp::Throw => Op::Throw,
-        DumpOp::SaveCurrentBuffer => Op::SaveCurrentBuffer,
-        DumpOp::SaveExcursion => Op::SaveExcursion,
-        DumpOp::SaveRestriction => Op::SaveRestriction,
-        DumpOp::SaveWindowExcursion => Op::SaveWindowExcursion,
-        DumpOp::MakeClosure(n) => Op::MakeClosure(n),
-        DumpOp::CallBuiltin(a, b) => Op::CallBuiltin(a, b),
-        DumpOp::CallBuiltinSym(sym, b) => Op::CallBuiltinSym(load_sym_id(&sym), b),
-        DumpOp::TrapOutOfRangeConstant(n) => Op::TrapOutOfRangeConstant(n),
-    };
-    Ok(op)
-}
-
 // --- Lambda / ByteCode ---
 
 fn load_lambda_params_owned(p: DumpLambdaParams) -> LambdaParams {
@@ -4033,12 +3836,7 @@ fn load_bytecode_owned(
     mapped_constants: Option<LispValueVec>,
 ) -> Result<ByteCodeFunction, DumpError> {
     let (ops, gnu_bytecode_bytes) = match bc.instructions {
-        DumpByteCodeInstructions::Decoded(ops) => (
-            ops.into_iter()
-                .map(|op| load_op(&op))
-                .collect::<Result<Vec<_>, _>>()?,
-            None,
-        ),
+        DumpByteCodeInstructions::Decoded(ops) => (ops, None),
         DumpByteCodeInstructions::Gnu(bytes) => (Vec::new(), Some(bytes)),
     };
     let params = load_lambda_params_owned(bc.params);
