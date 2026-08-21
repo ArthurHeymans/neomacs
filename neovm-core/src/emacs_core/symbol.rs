@@ -733,10 +733,13 @@ pub struct Obarray {
     /// is a `Box::into_raw` pointer; freed in [`Obarray::drop`]. The
     /// pool is append-only — we never reuse a slot.
     blvs: Vec<*mut LispBufferLocalValue>,
-    /// Every `Lisp_Fwd_Int` descriptor installed in this obarray, so the GC
-    /// can trace the Lisp integers they hold (see [`Obarray::trace_roots`]).
-    /// Append-only and leaked, exactly like GNU's static `DEFVAR_INT` slots.
-    int_fwds: Vec<&'static crate::emacs_core::forward::LispIntFwd>,
+    /// Every forwarder descriptor installed in this obarray that OWNS a Lisp
+    /// value -- `Lisp_Fwd_Int`, `Lisp_Fwd_Obj`, `Lisp_Fwd_Kboard_Obj` -- so
+    /// the GC can trace what they hold (see [`Obarray::trace_roots`]).
+    /// Append-only and leaked, exactly like GNU's static `DEFVAR_*` slots,
+    /// which `staticpro` and `mark_kboards` root for the same reason.
+    /// Membership is decided by `LispFwd::owned_value`, not by the caller.
+    value_fwds: Vec<&'static crate::emacs_core::forward::LispFwd>,
 }
 
 /// One logical read of a symbol's complete function-cell state.
@@ -1182,7 +1185,7 @@ impl Clone for Obarray {
             usize,
             &'static crate::emacs_core::forward::LispFwd,
         > = rustc_hash::FxHashMap::default();
-        let mut int_fwds = Vec::with_capacity(self.int_fwds.len());
+        let mut value_fwds = Vec::with_capacity(self.value_fwds.len());
         for slot in symbols.iter_mut().filter(|s| s.is_present()) {
             if slot.flags.redirect() != SymbolRedirect::Forwarded {
                 continue;
@@ -1196,8 +1199,8 @@ impl Clone for Obarray {
                     let Some(copy) = orig_ref.clone_stateful() else {
                         continue;
                     };
-                    if let Some(int_fwd) = copy.as_int_fwd() {
-                        int_fwds.push(int_fwd);
+                    if copy.owned_value().is_some() {
+                        value_fwds.push(copy);
                     }
                     fwd_map.insert(orig as usize, copy);
                     copy
@@ -1228,7 +1231,7 @@ impl Clone for Obarray {
             members_epoch: self.members_epoch,
             completion_order_cache: std::sync::Mutex::new(None),
             blvs,
-            int_fwds,
+            value_fwds,
         }
     }
 }
@@ -1462,7 +1465,7 @@ impl Obarray {
             members_epoch: 0,
             completion_order_cache: std::sync::Mutex::new(None),
             blvs: Vec::new(),
-            int_fwds: Vec::new(),
+            value_fwds: Vec::new(),
         };
 
         // Pre-intern fundamental symbols. Both `t` and `nil` are
@@ -1948,6 +1951,17 @@ impl Obarray {
         Some(unsafe { &*sym.val.fwd })
     }
 
+    /// Which `Lisp_Fwd` variant a symbol forwards through, if it forwards.
+    ///
+    /// GNU spells this as a chain of `BUFFER_OBJFWDP` / `KBOARD_OBJFWDP`
+    /// predicates over `SYMBOL_FWD (sym)`; handing back the closed
+    /// [`LispFwdType`](crate::emacs_core::forward::LispFwdType) instead means a
+    /// caller that cares about one variant has to say what it does about the
+    /// others.
+    pub fn forward_type(&self, id: SymId) -> Option<crate::emacs_core::forward::LispFwdType> {
+        self.forwarder(id).map(|fwd| fwd.ty)
+    }
+
     /// Set the `local_if_set` flag on a LOCALIZED symbol's BLV. Used
     /// by `make-variable-buffer-local` (Phase 6) which differs from
     /// `make-local-variable` only in this flag. Phase 4 exposes the
@@ -2239,12 +2253,36 @@ impl Obarray {
                 };
                 (fwd, integer.value())
             }
+            // A `Lisp_Fwd_Obj` accepts anything and canonicalises nothing, so
+            // the BLV's default comes back unchanged; the descriptor exists
+            // for the redirect tag, which is what refuses an unbind through
+            // `blv->fwd` (`src/data.c:1723-1727`).
+            Kind::Obj => {
+                let fwd = crate::emacs_core::forward::alloc_objfwd(restored);
+                let fwd = unsafe {
+                    &*(fwd as *const crate::emacs_core::forward::LispObjFwd
+                        as *const crate::emacs_core::forward::LispFwd)
+                };
+                (fwd, restored)
+            }
+            Kind::Kboard => {
+                let fwd = crate::emacs_core::forward::alloc_kboard_objfwd(restored);
+                let fwd = unsafe {
+                    &*(fwd as *const crate::emacs_core::forward::LispKboardObjFwd
+                        as *const crate::emacs_core::forward::LispFwd)
+                };
+                (fwd, restored)
+            }
         };
         blv.fwd = Some(fwd);
         blv.defcell.set_cdr(canonical);
         if super::value::eq_value(&blv.valcell, &blv.defcell) {
             blv.valcell.set_cdr(canonical);
         }
+        // The descriptor just allocated owns the value it was seeded with, so
+        // it is a root like every other value-owning forwarder.  `blv` is
+        // dropped above; `register_value_fwd` needs `&mut self`.
+        self.register_value_fwd(fwd);
     }
 
     /// Install a GNU `Lisp_Intfwd`-equivalent descriptor on a symbol
@@ -2266,7 +2304,74 @@ impl Obarray {
             fwd: fwd as *const crate::emacs_core::forward::LispIntFwd
                 as *const crate::emacs_core::forward::LispFwd,
         };
-        self.int_fwds.push(fwd);
+        self.register_value_fwd(unsafe {
+            &*(fwd as *const crate::emacs_core::forward::LispIntFwd
+                as *const crate::emacs_core::forward::LispFwd)
+        });
+    }
+
+    /// Record a descriptor that owns a Lisp value as a GC root.
+    ///
+    /// The predicate lives in `LispFwd::owned_value`, so a new forward variant
+    /// cannot be added and silently left untraced by a registry that forgot
+    /// about it.
+    fn register_value_fwd(&mut self, fwd: &'static crate::emacs_core::forward::LispFwd) {
+        if fwd.owned_value().is_some() {
+            self.value_fwds.push(fwd);
+        }
+    }
+
+    /// Install a GNU `Lisp_Objfwd`-equivalent descriptor on a symbol
+    /// (`src/lread.c:5270-5277`, `defvar_lisp_nopro`).  The symbol becomes
+    /// `SYMBOL_FORWARDED`, which is what every refusal in GNU's redirect
+    /// switch keys on -- the unbind refusal in `set_internal`
+    /// (`src/data.c:1802-1809`) and the alias refusal in `Fdefvaralias`
+    /// (`src/eval.c:665-668`) both signal from the arm without ever reading
+    /// the value the descriptor points at.
+    pub fn install_objfwd(
+        &mut self,
+        id: SymId,
+        fwd: &'static crate::emacs_core::forward::LispObjFwd,
+    ) {
+        let _seq_guard = self.seqlock_guard(id);
+        let sym = self.ensure_symbol_id(id);
+        if sym.flags.redirect() == SymbolRedirect::Plainval {
+            crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
+        }
+        sym.flags.set_redirect(SymbolRedirect::Forwarded);
+        sym.flags.set_declared_special(true);
+        sym.val = SymbolVal {
+            fwd: fwd as *const crate::emacs_core::forward::LispObjFwd
+                as *const crate::emacs_core::forward::LispFwd,
+        };
+        self.register_value_fwd(unsafe {
+            &*(fwd as *const crate::emacs_core::forward::LispObjFwd
+                as *const crate::emacs_core::forward::LispFwd)
+        });
+    }
+
+    /// Install a GNU `Lisp_Kboard_Objfwd`-equivalent descriptor on a symbol
+    /// (`src/lread.c:5291-5298`, `defvar_kboard`).
+    pub fn install_kboard_objfwd(
+        &mut self,
+        id: SymId,
+        fwd: &'static crate::emacs_core::forward::LispKboardObjFwd,
+    ) {
+        let _seq_guard = self.seqlock_guard(id);
+        let sym = self.ensure_symbol_id(id);
+        if sym.flags.redirect() == SymbolRedirect::Plainval {
+            crate::tagged::gc::note_root_overwrite(unsafe { sym.val.plain });
+        }
+        sym.flags.set_redirect(SymbolRedirect::Forwarded);
+        sym.flags.set_declared_special(true);
+        sym.val = SymbolVal {
+            fwd: fwd as *const crate::emacs_core::forward::LispKboardObjFwd
+                as *const crate::emacs_core::forward::LispFwd,
+        };
+        self.register_value_fwd(unsafe {
+            &*(fwd as *const crate::emacs_core::forward::LispKboardObjFwd
+                as *const crate::emacs_core::forward::LispFwd)
+        });
     }
 
     /// Define a global Lisp variable with GNU `DEFVAR_INT` storage.
@@ -2497,10 +2602,15 @@ impl Obarray {
                                 _ => buf_fwd.default,
                             });
                         }
-                        _ => {
-                            // Phase 8a stub: other forwarder types
-                            // not yet implemented. Return the legacy
-                            // PLAINVAL fallback for now.
+                        // `Int`, `Bool`, `Obj` and `KboardObj` keep their
+                        // storage in the descriptor, so none of the buffer
+                        // context this function was handed applies to them;
+                        // the buffer-free walk reads them through
+                        // `do_symval_forwarding` and is the whole answer.
+                        LispFwdType::Int
+                        | LispFwdType::Bool
+                        | LispFwdType::Obj
+                        | LispFwdType::KboardObj => {
                             return self.find_symbol_value(current);
                         }
                     }
@@ -2949,15 +3059,17 @@ impl Obarray {
                         .is_some_and(|blv| blv.defcell.cons_cdr() != Value::UNBOUND);
                 }
                 SymbolRedirect::Forwarded => {
-                    // Native and per-buffer forwarded slots are never unbound:
-                    // GNU's C storage has no "unbound" representation, which
-                    // is also why `makunbound` refuses a built-in variable.
-                    use crate::emacs_core::forward::LispFwdType;
-                    let fwd = unsafe { &*s.val.fwd };
-                    return matches!(
-                        fwd.ty,
-                        LispFwdType::Int | LispFwdType::Bool | LispFwdType::BufferObj
-                    );
+                    // A forwarded slot is never unbound, whatever it forwards
+                    // to: GNU's C storage has no "unbound" representation for
+                    // any `Lisp_Fwd` variant, which is the same fact that
+                    // makes `set_internal` refuse `makunbound` from the arm
+                    // above (`src/data.c:1802-1809`).  `Fboundp` never even
+                    // reaches the descriptor -- its SYMBOL_FORWARDED arm is
+                    // `valid = true;` with no inner switch
+                    // (`src/data.c:733-736`).  Enumerating the variants here
+                    // was how `DEFVAR_LISP` and `DEFVAR_KBOARD` came back
+                    // unbound the moment they became forwarded (ledger 170).
+                    return true;
                 }
             }
         }
@@ -3350,16 +3462,40 @@ impl Obarray {
         new_alias: SymId,
         base: SymId,
     ) -> Result<(), MakeAliasError> {
-        // Check current state of new_alias.
-        if let Some(sym) = self.slot(new_alias) {
-            if sym.flags.trapped_write() == SymbolTrappedWrite::NoWrite {
-                return Err(MakeAliasError::Constant);
-            }
-            match sym.flags.redirect() {
-                SymbolRedirect::Forwarded => return Err(MakeAliasError::Forwarded),
-                SymbolRedirect::Localized => return Err(MakeAliasError::Localized),
-                _ => {}
-            }
+        self.check_variable_alias(new_alias, base)?;
+        // Install the alias edge. `make_alias` keeps both
+        // representations in sync.
+        self.make_alias(new_alias, base);
+        self.make_special_id(new_alias);
+        self.make_special_id(base);
+        Ok(())
+    }
+
+    /// Every reason GNU's `Fdefvaralias` refuses, in GNU's order, and nothing
+    /// else.
+    ///
+    /// Split out of [`Self::make_variable_alias`] so the Lisp-visible
+    /// `defvaralias` subr and this obarray-level helper cannot disagree about
+    /// the refusal set: `defvaralias` used to re-implement two of the four
+    /// checks and simply omit the redirect switch, which is why every
+    /// `DEFVAR_LISP` and `DEFVAR_KBOARD` name accepted an alias GNU refuses
+    /// (ledger 170).  Returning the closed [`MakeAliasError`] rather than a
+    /// pre-built signal keeps the obarray free of the evaluator's non-local
+    /// control flow, the same split [`crate::emacs_core::forward::ForwardStoreError`]
+    /// uses.
+    pub fn check_variable_alias(
+        &self,
+        new_alias: SymId,
+        base: SymId,
+    ) -> Result<(), MakeAliasError> {
+        // GNU checks the constant first (`src/eval.c:647-651`), then walks the
+        // base chain for a cycle (`:654-662`), then switches on `new_alias`'s
+        // redirect (`:665-679`).  The order is Lisp-visible: a constant that
+        // would also cycle reports the constant.
+        if let Some(sym) = self.slot(new_alias)
+            && sym.flags.trapped_write() == SymbolTrappedWrite::NoWrite
+        {
+            return Err(MakeAliasError::Constant);
         }
 
         // Walk the base chain looking for new_alias.
@@ -3377,11 +3513,13 @@ impl Obarray {
             current = unsafe { sym.val.alias };
         }
 
-        // Install the alias edge. `make_alias` keeps both
-        // representations in sync.
-        self.make_alias(new_alias, base);
-        self.make_special_id(new_alias);
-        self.make_special_id(base);
+        if let Some(sym) = self.slot(new_alias) {
+            match sym.flags.redirect() {
+                SymbolRedirect::Forwarded => return Err(MakeAliasError::Forwarded),
+                SymbolRedirect::Localized => return Err(MakeAliasError::Localized),
+                SymbolRedirect::Plainval | SymbolRedirect::Varalias => {}
+            }
+        }
         Ok(())
     }
 
@@ -3643,7 +3781,7 @@ impl Obarray {
             members_epoch: 0,
             completion_order_cache: std::sync::Mutex::new(None),
             blvs: Vec::new(),
-            int_fwds: Vec::new(),
+            value_fwds: Vec::new(),
         };
         for (id, mut sym) in symbols {
             sym.interned_global = false;
@@ -3714,16 +3852,22 @@ impl GcTrace for Obarray {
             roots.push(load_value_atomic(&blv.valcell));
             roots.push(load_value_atomic(&blv.where_buf));
         }
-        // `Lisp_Fwd_Int` slots. GNU's is an `intmax_t` and needs no marking;
-        // Neomacs stores the Lisp integer, which is a heap object once it
-        // leaves fixnum range, so the descriptor is a root. Traced from this
-        // list rather than from the symbol walk because a symbol that was
-        // later localized no longer points at its descriptor while the BLV
-        // still forwards through it. Like the BLV pool, this loop always runs
-        // -- the SATB barrier in `LispIntFwd::set` covers the mark window,
-        // and the start seed / STW collection need the full list.
-        for fwd in &self.int_fwds {
-            roots.push(fwd.get());
+        // Value-owning forwarder slots. GNU's `DEFVAR_INT` slot is an
+        // `intmax_t` and needs no marking, but Neomacs stores the Lisp integer
+        // (a heap object once it leaves fixnum range); GNU's `DEFVAR_LISP` and
+        // `DEFVAR_KBOARD` slots live in `struct emacs_globals` / `struct
+        // KBOARD`, which `staticpro` and `mark_kboards` root, and here they
+        // live in the descriptor -- so in all three cases the descriptor is
+        // the root. Traced from this list rather than from the symbol walk
+        // because a symbol that was later localized no longer points at its
+        // descriptor while the BLV still forwards through it. Like the BLV
+        // pool, this loop always runs -- the SATB barrier in each `set`
+        // covers the mark window, and the start seed / STW collection need
+        // the full list.
+        for fwd in &self.value_fwds {
+            if let Some(value) = fwd.owned_value() {
+                roots.push(value);
+            }
         }
     }
 }

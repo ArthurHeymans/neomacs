@@ -5375,6 +5375,22 @@ impl<'a> Vm<'a> {
                 return Ok(val);
             }
         }
+        // A forwarder whose storage IS the descriptor needs no buffer context,
+        // so the read is one indirection instead of `lookup_var_id`'s
+        // resolve-alias + gather-buffer-slots-and-defaults path.  This is the
+        // hot half of GNU's `Bvarref` for every `DEFVAR_INT`, `DEFVAR_BOOL`,
+        // `DEFVAR_LISP` and `DEFVAR_KBOARD` variable.  `LispFwd::load` answers
+        // `None` for exactly the one variant that does need the context
+        // (`BufferObj`), and the slow path's own non-`BufferObj` arm ends at
+        // the same call, so the two cannot drift.
+        if sym.redirect() == crate::emacs_core::symbol::SymbolRedirect::Forwarded {
+            // SAFETY: redirect() confirmed Forwarded, so val.fwd is active and
+            // points at a descriptor `install_*fwd` leaked.
+            let fwd = unsafe { &*sym.val.fwd };
+            if let Some(value) = fwd.load() {
+                return Ok(value);
+            }
+        }
         self.lookup_var_id(name_id)
     }
 

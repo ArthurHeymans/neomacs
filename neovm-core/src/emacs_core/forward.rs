@@ -31,56 +31,39 @@
 //!
 //! # Implementation status
 //!
-//! `Int` (GNU's `Lisp_Intfwd`), `Bool` (`Lisp_Boolfwd`) and `BufferObj`
-//! (`Lisp_Buffer_Objfwd`) are wired.  `Obj` and `KboardObj` are not: Neomacs
-//! backs `DEFVAR_LISP` and `DEFVAR_KBOARD` variables as ordinary `Plainval`
-//! obarray cells, and every Rust subsystem reads the obarray directly rather
-//! than a static C global, so there is no "C side reads a stale static" desync
-//! to fix.
+//! All five variants are wired.  `Int` (GNU's `Lisp_Intfwd`), `Bool`
+//! (`Lisp_Boolfwd`) and `BufferObj` (`Lisp_Buffer_Objfwd`) were wired by
+//! ledger entries 132 and the Phase 8/10 work; `Obj` (`Lisp_Objfwd`) and
+//! `KboardObj` (`Lisp_Kboard_Objfwd`) by ledger 170.
 //!
-//! **That is not observationally identical, and the earlier claim here that it
-//! was is withdrawn** (measured 2026-08-20, ledger 168).  Being
-//! `SYMBOL_FORWARDED` costs one thing beyond the store rule, and it is not in
-//! the table above: `set_internal` refuses an unbind for a forwarded symbol --
-//! `error ("Built-in variable may not be unbound : %s")` at `src/data.c:1805-1808`,
-//! and the localized-with-forwarder twin at `1725-1728` -- because there is no
-//! "unbound" bit pattern in a C slot.  Sweeping the 563 names
-//! `grep DEFVAR_LISP src/*.c` finds plus the 14 `DEFVAR_KBOARD` ones under GNU
-//! 31.0.90 `-Q --batch`: GNU binds 490 + 14 and refuses `makunbound` for 487 +
-//! 14 of them.  The three it allows are the three it does not actually declare
-//! in this build -- `selection-coding-system` and
-//! `next-selection-coding-system` (C only in `w16select.c`/`w32select.c`, so
-//! here they come from `lisp/select.el`) and `echo-area-clear-hook`, whose
-//! `DEFVAR_LISP` is inside `#if 0` (`src/keyboard.c:14058-14061`) and which
-//! `Fset (Qecho_area_clear_hook, Qnil)` binds instead (`src/keyboard.c:14076`).
-//! So GNU's rule has no exceptions.  Neomacs refuses 5 of the 447 it binds in
-//! common -- the five that are constants (`most-positive-fixnum`,
-//! `most-negative-fixnum`, `font-weight-table`, `font-slant-table`,
-//! `font-width-table`), which is a different check.  **447 names disagree.**
+//! # What being `SYMBOL_FORWARDED` costs beyond the store rule
 //!
-//! The residual is real; wiring `Lisp_Fwd_Obj` *storage* is nevertheless the
-//! wrong instrument for it, and that is a decision rather than an omission:
+//! The table above is not the whole of the difference, and entry 132's
+//! conclusion that `Lisp_Fwd_Obj` "enforces nothing, so no divergence
+//! follows" was wrong by 447 names (measured by entry 168, re-derived by
+//! entry 170).  GNU's redirect switch reaches three refusals BEFORE it ever
+//! looks at what the descriptor points to:
 //!
-//! - A `Lisp_Objfwd` owns a `Lisp_Object`, so the Rust counterpart would own a
-//!   [`Value`] inside a leaked `'static` descriptor for ~490 variables holding
-//!   lists, strings and keymaps.  The GC's symbol tracer is written against
-//!   the opposite invariant in as many words -- "Only `Plainval` holds a heap
-//!   value cell: ... forwarded = a raw fwd ptr -- none is a heap `Value` to
-//!   trace here" (`symbol.rs`, `read_symbol_children_consistent`) -- so this
-//!   would move 490 variables into the failure class ledger entries 161, 162
-//!   and 163 were spent on.
-//! - It buys nothing else.  `Lisp_Fwd_Obj`'s store arm is a plain assignment
-//!   plus a `buffer_defaults` fan-out (`src/data.c:1489-1516`) that Neomacs
-//!   already models through `BufferObj` and per-buffer defaults, and
-//!   `Lisp_Fwd_Kboard_Obj` checks nothing at all (`src/data.c:1529-1536`).
+//! - `set_internal` refuses an unbind: `error ("Built-in variable may not be
+//!   unbound : %s")` (`src/data.c:1802-1809`), and the localized twin at
+//!   `src/data.c:1723-1727`, which keys on the mere presence of `blv->fwd`.
+//!   There is no "unbound" bit pattern in a C slot.
+//! - `Fdefvaralias` refuses the symbol as a NEW-ALIAS: `error ("Cannot make a
+//!   built-in variable an alias: %s")` (`src/eval.c:665-668`).
+//! - For `Lisp_Fwd_Kboard_Obj` only, `Fmake_variable_buffer_local` and
+//!   `Fmake_local_variable` refuse it -- `error ("Symbol %s may not be
+//!   buffer-local")` (`src/data.c:2220-2223`, `src/data.c:2286-2288`) -- and
+//!   `variable-binding-locus` answers the terminal (`src/data.c:2519-2521`).
 //!
-//! What the 447 names actually need is the fact a `DEFVAR_*` records and a
-//! `define_special_variable` does not -- "GNU's C declares this one" -- which
-//! is a property of the declaration, not of where the bytes live, and which
-//! needs a measured name table of GNU's own answers in the shape entry 135's
-//! `GNU_BOOL_VARIABLES` and entry 141's `cus_start_platform_vars` already use.
-//! `check_forwarded_unbind` is already the single place that would consult it.
-//! Sized and handed over rather than half-built here.
+//! Every one keys on the symbol's redirect TAG, which is why entry 170's fix
+//! is the tag and the storage is only what the tag costs: a symbol's value
+//! cell is one word, so once it holds the descriptor pointer the value needs
+//! somewhere else to live.  See `emacs_core::defvar_object` for the
+//! declaration table and the adoption pass, and `Obarray::trace_roots` for
+//! why a leaked descriptor owning a heap [`Value`] is a rooted object here
+//! rather than the failure class entries 161-163 closed -- `Int` has worked
+//! that way since 132, and `LispFwd::owned_value` now decides membership so
+//! a new variant cannot be added and left untraced.
 
 use super::value::Value;
 use crate::buffer::buffer::BufferSlotPredicateError;
@@ -198,8 +181,9 @@ impl LispFwd {
     /// GNU `do_symval_forwarding` (`src/data.c:1337-1360`) for the variants
     /// whose storage lives in the descriptor itself.
     ///
-    /// `BufferObj` and `KboardObj` read out of the current buffer / keyboard,
-    /// so they need context this borrow does not have and return `None`.
+    /// `BufferObj` is the only variant that reads out of context this borrow
+    /// does not have (the current buffer's slot array), so it is the only one
+    /// that answers `None`.
     pub fn load(&self) -> Option<Value> {
         match self.ty {
             LispFwdType::Int => {
@@ -210,7 +194,33 @@ impl LispFwd {
                 let bool_fwd = unsafe { &*(self as *const Self as *const LispBoolFwd) };
                 Some(Value::bool_val(bool_fwd.get()))
             }
-            LispFwdType::Obj | LispFwdType::BufferObj | LispFwdType::KboardObj => None,
+            LispFwdType::Obj => {
+                let obj_fwd = unsafe { &*(self as *const Self as *const LispObjFwd) };
+                Some(obj_fwd.get())
+            }
+            LispFwdType::KboardObj => {
+                let kbd_fwd = unsafe { &*(self as *const Self as *const LispKboardObjFwd) };
+                Some(kbd_fwd.get())
+            }
+            LispFwdType::BufferObj => None,
+        }
+    }
+
+    /// The heap [`Value`] this descriptor OWNS, for the GC root scan.
+    ///
+    /// GNU needs no equivalent: its `Lisp_Intfwd` slot is an `intmax_t`, its
+    /// `Lisp_Boolfwd` slot a `bool`, and its `Lisp_Objfwd` /
+    /// `Lisp_Kboard_Objfwd` slots are inside `struct emacs_globals` and
+    /// `struct KBOARD`, which `staticpro` and `mark_kboards` already reach.
+    /// Here those slots live in the leaked descriptor, so the descriptor is
+    /// the root -- and this is the one place that decides which variants are
+    /// roots at all, rather than each registry deciding for itself.
+    pub fn owned_value(&self) -> Option<Value> {
+        match self.ty {
+            // `Bool` owns a native `bool`; `BufferObj`'s storage is the
+            // buffer's slot array, traced with the buffer.
+            LispFwdType::Bool | LispFwdType::BufferObj => None,
+            LispFwdType::Int | LispFwdType::Obj | LispFwdType::KboardObj => self.load(),
         }
     }
 
@@ -230,16 +240,25 @@ impl LispFwd {
                     &Value::NIL
                 })
             }
-            LispFwdType::Obj | LispFwdType::BufferObj | LispFwdType::KboardObj => None,
+            LispFwdType::Obj => {
+                let obj_fwd = unsafe { &*(self as *const Self as *const LispObjFwd) };
+                Some(obj_fwd.get_ref())
+            }
+            LispFwdType::KboardObj => {
+                let kbd_fwd = unsafe { &*(self as *const Self as *const LispKboardObjFwd) };
+                Some(kbd_fwd.get_ref())
+            }
+            LispFwdType::BufferObj => None,
         }
     }
 
     /// Duplicate a descriptor that OWNS mutable state, so two obarrays never
     /// share one slot.
     ///
-    /// `Int` and `Bool` hold the variable's value; `BufferObj` holds only
-    /// immutable registration metadata (offset, predicate, default) and is
-    /// safe to share, which is why it answers `None`.
+    /// `Int`, `Bool`, `Obj` and `KboardObj` hold the variable's value;
+    /// `BufferObj` holds only immutable registration metadata (offset,
+    /// predicate, default) and is safe to share, which is why it answers
+    /// `None`.
     pub fn clone_stateful(&'static self) -> Option<&'static Self> {
         match self.ty {
             LispFwdType::Int => {
@@ -255,7 +274,17 @@ impl LispFwd {
                 let copy = alloc_boolfwd(bool_fwd.get());
                 Some(unsafe { &*(copy as *const LispBoolFwd as *const Self) })
             }
-            LispFwdType::Obj | LispFwdType::BufferObj | LispFwdType::KboardObj => None,
+            LispFwdType::Obj => {
+                let obj_fwd = unsafe { &*(self as *const Self as *const LispObjFwd) };
+                let copy = alloc_objfwd(obj_fwd.get());
+                Some(unsafe { &*(copy as *const LispObjFwd as *const Self) })
+            }
+            LispFwdType::KboardObj => {
+                let kbd_fwd = unsafe { &*(self as *const Self as *const LispKboardObjFwd) };
+                let copy = alloc_kboard_objfwd(kbd_fwd.get());
+                Some(unsafe { &*(copy as *const LispKboardObjFwd as *const Self) })
+            }
+            LispFwdType::BufferObj => None,
         }
     }
 
@@ -269,6 +298,18 @@ impl LispFwd {
     pub fn as_bool_fwd(&'static self) -> Option<&'static LispBoolFwd> {
         (self.ty == LispFwdType::Bool)
             .then(|| unsafe { &*(self as *const Self as *const LispBoolFwd) })
+    }
+
+    /// The descriptor as a Lisp-object forwarder, if that is what it is.
+    pub fn as_obj_fwd(&'static self) -> Option<&'static LispObjFwd> {
+        (self.ty == LispFwdType::Obj)
+            .then(|| unsafe { &*(self as *const Self as *const LispObjFwd) })
+    }
+
+    /// The descriptor as a keyboard-object forwarder, if that is what it is.
+    pub fn as_kboard_obj_fwd(&'static self) -> Option<&'static LispKboardObjFwd> {
+        (self.ty == LispFwdType::KboardObj)
+            .then(|| unsafe { &*(self as *const Self as *const LispKboardObjFwd) })
     }
 
     /// Perform the store for the variants whose storage is the descriptor.
@@ -286,8 +327,22 @@ impl LispFwd {
                 let bool_fwd = unsafe { &*(self as *const Self as *const LispBoolFwd) };
                 bool_fwd.set(flag);
             }
-            // Obj / BufferObj / KboardObj storage lives outside the descriptor.
-            ForwardStore::Object(_) => {}
+            ForwardStore::Object(value) => match self.ty {
+                LispFwdType::Obj => {
+                    let obj_fwd = unsafe { &*(self as *const Self as *const LispObjFwd) };
+                    obj_fwd.set(value);
+                }
+                LispFwdType::KboardObj => {
+                    let kbd_fwd = unsafe { &*(self as *const Self as *const LispKboardObjFwd) };
+                    kbd_fwd.set(value);
+                }
+                // A per-buffer slot's storage is the buffer's slot array; the
+                // caller writes it.
+                LispFwdType::BufferObj => {}
+                LispFwdType::Int | LispFwdType::Bool => {
+                    debug_assert!(false, "{:?} cannot store a Lisp object", self.ty)
+                }
+            },
         }
         store.canonical_value()
     }
@@ -441,13 +496,50 @@ impl LispBoolFwd {
     }
 }
 
-/// `Lisp_Objfwd`: forward to a static `Value` global. Phase 8 wires this up.
+/// `Lisp_Objfwd`: forward to a `Value` global (`src/lisp.h:3479-3484`).
+///
+/// GNU's descriptor holds `&globals.f_Vfoo`, a slot inside `struct
+/// emacs_globals` that `staticpro` roots.  Neomacs's holds the slot itself,
+/// for the same reason [`LispIntFwd`] does: the descriptor is leaked at
+/// registration, so it is a stable address the `&Value`-returning symbol
+/// accessors can hand back, and the obarray's root scan roots it exactly the
+/// way `staticpro` roots GNU's.
 #[repr(C)]
-#[derive(Copy, Clone)]
 pub struct LispObjFwd {
     pub ty: LispFwdType,
-    pub get: fn() -> Value,
-    pub set: fn(Value),
+    /// `UnsafeCell` for the same reason as [`LispIntFwd`]'s slot: the
+    /// descriptor is shared as `&'static` while the single Lisp thread writes
+    /// through it, mirroring the `val.plain` symbol cell beside it.
+    value: UnsafeCell<Value>,
+}
+
+// Safety: identical to `LispIntFwd` -- mutated only from the Lisp thread that
+// owns its `Obarray`; `Sync` is needed solely so the descriptor can be the
+// `&'static` the GC root scan reads with `load_value_atomic`.
+unsafe impl Sync for LispObjFwd {}
+
+impl LispObjFwd {
+    /// GNU `do_symval_forwarding`'s `Lisp_Fwd_Obj` arm (`src/data.c:1343-1344`).
+    #[inline]
+    pub fn get(&self) -> Value {
+        crate::tagged::header::load_value_atomic(unsafe { &*self.value.get() })
+    }
+
+    /// Borrow the stored value.  The descriptor is leaked at registration, so
+    /// the borrow is genuinely `'static`.
+    #[inline]
+    pub fn get_ref(&'static self) -> &'static Value {
+        unsafe { &*self.value.get() }
+    }
+
+    /// The store half of GNU's `Lisp_Fwd_Obj` arm (`src/data.c:1489-1516`).
+    #[inline]
+    pub fn set(&self, value: Value) {
+        let slot = unsafe { &mut *self.value.get() };
+        // SATB: the slot holds a heap object about to be replaced.
+        crate::tagged::gc::note_root_overwrite(*slot);
+        crate::tagged::header::store_value_atomic(slot, value);
+    }
 }
 
 /// `Lisp_Buffer_Objfwd`: forward to a per-buffer slot. The `offset`
@@ -473,13 +565,49 @@ pub struct LispBufferObjFwd {
     pub default: Value,
 }
 
-/// `Lisp_Kboard_Objfwd`: forward to a per-keyboard slot. Phase 8 stubs
-/// this with a single global `KBoard`.
+/// `Lisp_Kboard_Objfwd`: forward to a per-keyboard slot (`src/lisp.h:3490-3495`).
+///
+/// GNU's descriptor holds `offsetof (KBOARD, vname_)` and
+/// `do_symval_forwarding` applies it to `current_kboard`
+/// (`src/data.c:1352-1356`).  Neomacs has one keyboard, so the offset would
+/// index a one-element array; the slot lives in the descriptor instead, which
+/// is the same storage with the indirection folded out.  What the variant
+/// really carries is the two refusals `Lisp_Fwd_Obj` does not have --
+/// `Fmake_variable_buffer_local` and `Fmake_local_variable` both signal
+/// "Symbol %s may not be buffer-local" for it (`src/data.c:2220-2223`,
+/// `src/data.c:2287-2288`) -- and those key on the TYPE, not on the offset.
 #[repr(C)]
-#[derive(Copy, Clone)]
 pub struct LispKboardObjFwd {
     pub ty: LispFwdType,
-    pub offset: u16,
+    /// See [`LispObjFwd`] for why this is an `UnsafeCell`.
+    value: UnsafeCell<Value>,
+}
+
+// Safety: see `LispObjFwd`.
+unsafe impl Sync for LispKboardObjFwd {}
+
+impl LispKboardObjFwd {
+    /// GNU `do_symval_forwarding`'s `Lisp_Fwd_Kboard_Obj` arm
+    /// (`src/data.c:1352-1356`).
+    #[inline]
+    pub fn get(&self) -> Value {
+        crate::tagged::header::load_value_atomic(unsafe { &*self.value.get() })
+    }
+
+    /// Borrow the stored value; the descriptor is leaked at registration.
+    #[inline]
+    pub fn get_ref(&'static self) -> &'static Value {
+        unsafe { &*self.value.get() }
+    }
+
+    /// GNU `store_symval_forwarding`'s `Lisp_Fwd_Kboard_Obj` arm
+    /// (`src/data.c:1529-1536`), which checks nothing.
+    #[inline]
+    pub fn set(&self, value: Value) {
+        let slot = unsafe { &mut *self.value.get() };
+        crate::tagged::gc::note_root_overwrite(*slot);
+        crate::tagged::header::store_value_atomic(slot, value);
+    }
 }
 
 // ===========================================================================
@@ -526,6 +654,31 @@ pub fn alloc_boolfwd(initial: bool) -> &'static LispBoolFwd {
     Box::leak(Box::new(LispBoolFwd {
         ty: LispFwdType::Bool,
         value: AtomicBool::new(initial),
+    }))
+}
+
+/// Allocate a process-lifetime Lisp-object forwarder, GNU's `DEFVAR_LISP`
+/// slot.
+///
+/// Leaked for the same reason as [`alloc_boolfwd`]: GNU's descriptors are
+/// static C objects, and the `&Value`-returning symbol accessors hand out
+/// borrows of the slot, so the descriptor must outlive every reader.  Unlike
+/// GNU's, this slot IS the storage, so whoever installs it must also register
+/// it as a GC root -- `Obarray::install_objfwd` is the only caller and does
+/// exactly that.
+pub fn alloc_objfwd(initial: Value) -> &'static LispObjFwd {
+    Box::leak(Box::new(LispObjFwd {
+        ty: LispFwdType::Obj,
+        value: UnsafeCell::new(initial),
+    }))
+}
+
+/// Allocate a process-lifetime keyboard-object forwarder, GNU's
+/// `DEFVAR_KBOARD` slot.  See [`alloc_objfwd`].
+pub fn alloc_kboard_objfwd(initial: Value) -> &'static LispKboardObjFwd {
+    Box::leak(Box::new(LispKboardObjFwd {
+        ty: LispFwdType::KboardObj,
+        value: UnsafeCell::new(initial),
     }))
 }
 

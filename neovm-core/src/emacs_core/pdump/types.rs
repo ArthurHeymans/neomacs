@@ -359,6 +359,16 @@ pub enum DumpSymbolVal {
     /// As with `BoolForwarded`, only the slot's current integer is portable;
     /// the descriptor is rebuilt on load.
     IntForwarded(DumpValue),
+    /// `SymbolRedirect::Forwarded` backed by GNU `Lisp_Objfwd` semantics --
+    /// every `DEFVAR_LISP` name.  GNU's dumper writes the forwarding pointer
+    /// itself plus the `Lisp_Object` it names (`src/pdumper.c:2461-2462`,
+    /// `dump_fwd_obj`); here the descriptor is a process-lifetime pointer, so
+    /// the image carries the value and the descriptor is rebuilt, exactly as
+    /// for `BoolForwarded` and `IntForwarded`.
+    ObjForwarded(DumpValue),
+    /// `SymbolRedirect::Forwarded` backed by GNU `Lisp_Kboard_Objfwd`
+    /// semantics -- every `DEFVAR_KBOARD` name.
+    KboardForwarded(DumpValue),
 }
 
 /// The forward types a `Localized` symbol's BLV can be carrying.
@@ -381,6 +391,15 @@ pub enum DumpLocalizedForwarder {
     Bool,
     /// GNU `Lisp_Fwd_Int` — `CHECK_INTEGER` then `integer_to_intmax`.
     Int,
+    /// GNU `Lisp_Fwd_Obj` — stores anything.  Carries no store rule at all;
+    /// what it carries is the symbol's redirect tag, which is what
+    /// `set_internal` consults to refuse an unbind through the BLV
+    /// (`src/data.c:1723-1727`).
+    Obj,
+    /// GNU `Lisp_Fwd_Kboard_Obj`.  `Fmake_local_variable` refuses to produce a
+    /// BLV for one of these (`src/data.c:2286-2288`), so a dump can only reach
+    /// this arm from an image older than that refusal.
+    Kboard,
 }
 
 /// Serialized per-symbol metadata.  Format v21: all legacy fields

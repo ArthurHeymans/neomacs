@@ -8107,6 +8107,25 @@ Status: FIXED.
 
 ## 132. Every `DEFVAR_INT' variable accepted values GNU refuses, because the forward type's rule lived at the assignment sites instead of below them -- FIXED
 
+> **Note added 2026-08-21 by entry 170.**  This entry's survey concluded that
+> `Lisp_Fwd_Obj` and `Lisp_Fwd_Kboard_Obj` "enforce nothing on assignment, so
+> no divergence follows from that", and entries 135, 138 and 141 carried the
+> sentence forward.  It is true of the ASSIGNMENT and false of the
+> DECLARATION: being `SYMBOL_FORWARDED` also decides whether `makunbound` is
+> refused (`src/data.c:1802-1809`), whether `defvaralias` will accept the name
+> as a NEW-ALIAS (`src/eval.c:665-668`), and -- for `Lisp_Fwd_Kboard_Obj` --
+> whether `make-local-variable` and `make-variable-buffer-local` will touch it
+> at all (`src/data.c:2220-2223`, `:2286-2288`).  Entry 168 measured the cost
+> at **447 names**; entry 170 re-derived it unchanged, found it spans **15
+> Lisp-visible entry points** rather than one, and fixed it.
+>
+> This entry's own machinery is what made the fix cheap, in a way 168 did not
+> see: `Obarray::trace_roots`'s `int_fwds` loop and the SATB barrier in
+> `LispIntFwd::set`, both shipped here, are the reason a `Lisp_Fwd_Obj` that
+> owns a heap `Value` is a rooted object rather than the failure class entries
+> 161-163 closed.  170 generalised the registry to `value_fwds` and moved the
+> decision into `LispFwd::owned_value`.
+
 Handed over by entry 123, which implemented GNU's undo-limit machinery and
 hit this at the boundary: `forward::LispIntFwd' was declared but unwired, so
 a string could sit in `undo-limit'.  Reproduced before touching anything,
@@ -22539,6 +22558,38 @@ is not four small patches and it is not this one.  `forward.rs`'s module header
 now carries the measurement and withdraws the "observationally identical"
 claim, so the next reader inherits the number rather than the sentence.
 
+> **Note added 2026-08-21 by entry 170.**  The 447 is right and was re-derived
+> unchanged.  Both halves of the reasoning above are not.
+>
+> *The first reason is refuted by the tracer it cites.*  `Obarray::trace_roots`
+> does not stop at the symbol walk: thirty lines below the quoted comment it
+> runs `for fwd in &self.int_fwds { roots.push(fwd.get()); }`.  A leaked
+> `'static` descriptor owning a heap `Value` is already how every `DEFVAR_INT`
+> variable works here -- entry **132** shipped it, with the SATB barrier in
+> `LispIntFwd::set` and a per-obarray registry `Obarray::clone` duplicates.
+> The comment's "none is a heap `Value` to trace *here*" was distinguishing the
+> symbol walk from that loop, not stating a global invariant.  Entry 170
+> generalises the loop rather than adding a second one, and membership is now
+> decided by `LispFwd::owned_value` so a new variant cannot be left untraced.
+>
+> *The proposed instrument would have fixed a third of it.*  A table consulted
+> by `check_forwarded_unbind` reaches only `makunbound`, which entry 170's
+> 35-entry-point audit measures at **5 of the 15 divergent rows**.
+> `defvaralias` refusing a built-in variable as a NEW-ALIAS
+> (`src/eval.c:665-668`), `make-local-variable` and
+> `make-variable-buffer-local` refusing a `DEFVAR_KBOARD` name
+> (`src/data.c:2220-2223`, `:2286-2288`) and `variable-binding-locus` answering
+> the terminal (`src/data.c:2519-2521`) never pass through it.
+>
+> *And the storage was never needed for the refusal.*  `set_internal` fetches
+> `SYMBOL_FWD (sym)` into `innercontents` and signals on the next line without
+> reading it (`src/data.c:1801-1809`); the localized twin tests `blv->fwd` for
+> null and never follows it (`:1723-1727`).  What had to be ported was the
+> redirect TAG.  The storage came along only because a symbol's value cell is
+> one word wide.  Item 3's second reason -- "it buys nothing else", the store
+> arm being a plain assignment -- stands, and is exactly why 170's fix is the
+> tag and not the store rule.  FIXED by entry 170.
+
 ### Item 4: `debug-on-next-call` is a debugger gap, and it is worth its own entry
 
 Re-measured, unchanged from 135:
@@ -23428,6 +23479,551 @@ introduced, caught by re-running the audit against the rebuilt binary** -- which
 is the argument for diffing the fix against the merge base as well as against
 GNU, rather than against GNU alone.
 
+## 170. Entry 168's largest measured gap: GNU's unbind refusal never reads the forwarded object, so the 447 names needed GNU's redirect TAG and not GNU's C global -- and 168's reason for declining does not survive contact with `Obarray::trace_roots`, which has rooted a value-owning leaked descriptor since entry 132 -- FIXED
+
+Entry 168 sized this and declined it: "a `Lisp_Objfwd` owns a `Lisp_Object`, so
+the Rust counterpart would own a [`Value`] inside a leaked `'static` descriptor
+for ~490 variables ... this would move 490 variables into the failure class
+ledger entries 161, 162 and 163 were spent on."  It handed over a name table
+consulted by `check_forwarded_unbind` instead.
+
+Both halves turn out to be wrong, and in opposite directions.  The refusal does
+not need the storage at all -- GNU signals from the redirect arm without ever
+dereferencing the descriptor -- and the storage was never the failure class 168
+named, because `DEFVAR_INT` descriptors have owned a heap `Value` and been
+traced from a per-obarray root list since entry 132 shipped them.  What was
+missing was one line of GNU that entry 132 read past.
+
+### 1. Reproduced first, in both editors, and the number has not moved
+
+Re-derived rather than inherited, GNU Emacs 31.0.90 (`0ee48ac4df20`) against
+`target/release/neomacs` at this branch's merge base (`a83f3785e`), both
+`-Q --batch`.  The name list is every `DEFVAR_LISP` and `DEFVAR_LISP_NOPRO`
+in `src/*.c` (563 unique -- 560 plus `font-weight-table`, `font-slant-table`
+and `font-width-table`, which are the three `_NOPRO`s) plus the 14
+`DEFVAR_KBOARD` names.  The probe asks `boundp`, then `makunbound`, then
+restores the old value so the sweep does not disturb the rest of the run
+(`tmp/l170-probe.el`).
+
+```
+                                     GNU     Neomacs (merge base)
+DEFVAR_LISP names bound              490     444
+  ... `makunbound' refused           487     5
+  ... `makunbound' allowed           3       439
+DEFVAR_KBOARD names bound            14      13
+  ... `makunbound' refused           14      0
+```
+
+Joined name by name, which is the table 168 did not print:
+
+| GNU -> Neomacs | count | what it is |
+|---|---|---|
+| refused -> allowed | **447** | the divergence |
+| unbound -> unbound | 71 | names neither build declares |
+| refused -> unbound | 49 | names GNU has and this port does not (entry 141's class) |
+| refused -> refused | 5 | the constants, caught by `SYMBOL_CONSTANT_P` (`src/data.c:780-781`) |
+| allowed -> allowed | 3 | the three GNU does not declare here |
+| unbound -> allowed | 2 | `xwidget-list`, `xwidget-view-list` -- this port binds, GNU does not |
+
+**447, unmoved from 168.**  168's "Neomacs binds 446" reads 444 here; the two
+names behind that are not identified, because 168 printed only the count.  The
+number that matters -- how many names the two editors disagree about -- is
+identical.
+
+One correction to 168's own list, found while writing the generator: the sweep
+above and 168's both say 563 `DEFVAR_LISP` names, and the true figure is **564**.
+A `grep` over `src/*.c` misses `dos-unsupported-char-glyph`
+(`src/msdos.c:4331`).  It changes nothing here -- `msdos.c` is not compiled in
+either build, so GNU leaves the name unbound too -- but the declaration table in
+§6 is generated by a parser and carries all 564.
+
+### 2. The question the brief asked: what does GNU consult at the moment it refuses?
+
+`Fmakunbound` does not decide anything.  It un-aliases a `SYMBOL_VARALIAS` in
+place and otherwise delegates to `Fset (symbol, Qunbound)`
+(`src/data.c:779-789`), and `set_internal` recognises the unbind at its first
+line -- `bool unbinding_p = BASE_EQ (newval, Qunbound);` (`src/data.c:1681`) --
+and then runs the redirect switch.  The forwarded arm is:
+
+```c
+    case SYMBOL_FORWARDED:
+      {
+	struct buffer *buf
+	  = BUFFERP (where) ? XBUFFER (where) : current_buffer;
+	lispfwd innercontents = SYMBOL_FWD (sym);
+
+	if (unbinding_p)
+	  /* Forbid unbinding built-in variables.  */
+	  error ("Built-in variable may not be unbound : %s",
+		 SDATA (SYMBOL_NAME (symbol)));
+```
+
+(`src/data.c:1796-1809`.)  `innercontents` is fetched on the line above and
+**not read**; the first thing done with it is the `BUFFER_OBJFWDP` test five
+lines later, after the refusal has already longjmp'd.  The localized twin is
+even plainer -- `if (unbinding_p && blv->fwd)` (`src/data.c:1723-1727`) -- it
+tests a pointer for null and never follows it.
+
+So the refusal keys on the symbol's **redirect kind**, exactly as the brief
+guessed, and the C global does not have to exist.  Two more consumers key on
+the same tag and were therefore also divergent for all 447 names:
+
+* `Fdefvaralias`'s switch on `sym->u.s.redirect` -- `SYMBOL_FORWARDED` gives
+  `error ("Cannot make a built-in variable an alias: %s")`, `SYMBOL_LOCALIZED`
+  gives `"Don't know how to make a buffer-local variable an alias: %s"`
+  (`src/eval.c:665-679`).
+* For `Lisp_Fwd_Kboard_Obj` only: `Fmake_variable_buffer_local`
+  (`src/data.c:2220-2223`) and `Fmake_local_variable` (`src/data.c:2286-2288`)
+  both `error ("Symbol %s may not be buffer-local")`, and
+  `variable-binding-locus` answers `Fframe_terminal (selected_frame)` instead
+  of nil (`src/data.c:2519-2521`).
+
+### 3. The audit: 35 entry points, three subjects, 15 divergent entry points
+
+Every Lisp-visible consumer of GNU's `sym->u.s.redirect` switch, one probe per
+fresh `-Q --batch` process so a mutating probe cannot contaminate the next
+(`tmp/l170-audit.sh`).  The GNU sites swept for are `Fboundp` (`data.c:727`),
+`Findirect_variable` (`:1303`), `find_symbol_value` (`:1627`), `set_internal`
+(`:1717`), `default_value` (`:1970`), `set_default_internal` (`:2051`, `:2064`),
+`Fmake_variable_buffer_local` (`:2209`), `Fmake_local_variable` (`:2277`),
+`Fkill_local_variable` (`:2364`), `Flocal_variable_p` (`:2431`),
+`Flocal_variable_if_set_p` (`:2481`), `Fvariable_binding_locus` (`:2516`,
+`:2534`), `Fdefvaralias` (`eval.c:661`, `:666`, `:718`),
+`Finternal_delete_indirect_variable` (`eval.c:736`), `specbind`/`do_specbind`
+(`eval.c:3597`, `:3643`, `:3664`), `do_one_unbind` (`eval.c:3833`) and the
+bytecode `varref`/`varset` fast paths (`bytecode.c:641`, `:713`).
+
+Three subjects: `after-load-alist` (a plain `DEFVAR_LISP`), `prefix-arg` (a
+`DEFVAR_KBOARD`) and `auto-mode-alist` (a plain Lisp `defvar`, the control).
+
+| subject | divergent rows, merge base |
+|---|---|
+| control, `auto-mode-alist` (a Lisp `defvar`) | **0 / 35** |
+| `DEFVAR_LISP`, `after-load-alist` | 6 / 35 |
+| `DEFVAR_KBOARD`, `prefix-arg` | 15 / 35 |
+
+**The control answering 0 out of 35 is what makes the other two columns
+readable**: every divergence is a property of GNU's declaration, not of the
+probe.
+
+There is no "after" column in this entry, and §10 says why: it needs a release
+binary built from this branch, and no build was run.  What stands in its place
+is ten Rust pins, red-verified twice -- **nine of the fifteen rows below are
+pinned directly and the other six are entailed by a pinned row**, being answers
+that `make-local-variable` used to produce and can no longer reach now that it
+signals.
+
+The 15 distinct divergent entry points.  The first six are the whole of the
+`DEFVAR_LISP` column; a `DEFVAR_KBOARD` variable diverges on all fifteen,
+because it carries the two refusals `Lisp_Fwd_Obj` does not:
+
+| row | merge base | GNU, and now | pinned |
+|---|---|---|---|
+| `makunbound` | returns the symbol | `error "Built-in variable may not be unbound : NAME"` | directly |
+| `makunbound` after `make-local-variable` | returns the symbol | same error, from `blv->fwd` | directly |
+| `makunbound` after `make-variable-buffer-local` | returns the symbol | same error | directly |
+| `makunbound` inside a `let` of the variable | returns the symbol | same error | directly |
+| `boundp` after a refused `makunbound` | `nil` | `t` | directly |
+| `defvaralias` with it as NEW-ALIAS | installs the alias | `error "Cannot make a built-in variable an alias: NAME"` | directly |
+| `make-variable-buffer-local` (kboard) | returns the symbol | `error "Symbol NAME may not be buffer-local"` | directly |
+| `make-local-variable` (kboard) | returns the symbol | same error | directly |
+| `variable-binding-locus`, global (kboard) | `nil` | a `terminal` | directly |
+| `local-variable-p` after make-local (kboard) | `t` | the error propagates | entailed |
+| `variable-binding-locus` after make-local (kboard) | a buffer | the error propagates | entailed |
+| `kill-local-variable` after make-local (kboard) | `nil` | the error propagates | entailed |
+| `kill-all-local-variables` after make-local (kboard) | `nil` | the error propagates | entailed |
+| `set` of a local binding, then the global (kboard) | `7` | the error propagates | entailed |
+| `kill-local-variable` after `setq-local` (kboard) | `(nil nil)` | the error propagates | entailed |
+
+Two probes of the 35 had to be rewritten before they could be read at all, and
+the reason is worth one sentence: they returned `after-load-alist` itself, whose
+printed form is several kilobytes of preloaded byte-code, and the two editors'
+printers disagree about escaping inside it.  Comparing that as a string
+manufactures a divergence that is about `prin1`, not about the variable; both
+now compare `(eq (symbol-value V) SAVED)` instead.
+
+### 4. Entry 168's reason for declining, checked against the code it cites
+
+168 wrote that wiring the storage "would move ~490 variables into the failure
+class entries 161, 162 and 163 were spent on", quoting the GC's symbol tracer:
+"Only `Plainval` holds a heap value cell: alias = a non-heap `SymId`, localized
+= a `*mut BLV`, forwarded = a raw fwd ptr -- none is a heap `Value` to trace
+here".
+
+The quotation is accurate and the conclusion does not follow, because the
+sentence is about the **symbol walk** and the tracer does not stop there.
+Thirty lines further down the same function:
+
+```rust
+        // `Lisp_Fwd_Int` slots. GNU's is an `intmax_t` and needs no marking;
+        // Neomacs stores the Lisp integer, which is a heap object once it
+        // leaves fixnum range, so the descriptor is a root. ...
+        for fwd in &self.int_fwds {
+            roots.push(fwd.get());
+        }
+```
+
+(`neovm-core/src/emacs_core/symbol.rs`, `Obarray::trace_roots`, at the merge
+base.)  **A leaked `'static` descriptor owning a heap `Value` is already how
+every `DEFVAR_INT` variable works here**, complete with the SATB barrier in
+`LispIntFwd::set` and a per-obarray registry that `Obarray::clone` duplicates.
+Entry 132 shipped that, and 168 read the invariant comment without reading the
+loop that the comment's own "here" was distinguishing itself from.
+
+That is the whole of the objection.  The second one -- "it buys nothing else",
+because the store arm is a plain assignment -- is *true* and is exactly why the
+fix is the tag rather than the store rule.
+
+### 5. The type-level fix
+
+Four moves, each one making a wrong state unconstructible rather than checked.
+
+**a. `LispFwdType` is a closed set of five and now every arm is inhabited.**
+`Obj` and `KboardObj` were declarations with no storage: `LispFwd::load`
+answered `None` for them, `commit` silently did nothing, `clone_stateful`
+refused to copy them.  Three separate "not implemented yet" holes shaped like
+data.  They now carry an `UnsafeCell<Value>` exactly as `LispIntFwd` does, with
+`get`/`get_ref`/`set`, the SATB barrier in `set`, and arms in all four
+dispatchers.  `LispKboardObjFwd` loses its unused `offset: u16` field: with one
+keyboard the offset would index a one-element array, and what the variant
+actually carries is the two refusals `Lisp_Fwd_Obj` does not have, which key on
+the type.
+
+**b. Which descriptors are GC roots is now a method, not a registry's opinion.**
+`int_fwds: Vec<&'static LispIntFwd>` becomes
+`value_fwds: Vec<&'static LispFwd>`, and membership is decided by
+
+```rust
+    pub fn owned_value(&self) -> Option<Value> {
+        match self.ty {
+            LispFwdType::Bool | LispFwdType::BufferObj => None,
+            LispFwdType::Int | LispFwdType::Obj | LispFwdType::KboardObj => self.load(),
+        }
+    }
+```
+
+A sixth forward variant cannot now be added and silently left untraced: the
+match is exhaustive and the registry has no other way in.
+
+**c. `boundp` stops enumerating.**  `Obarray::boundp_id`'s forwarded arm was
+
+```rust
+    return matches!(fwd.ty, LispFwdType::Int | LispFwdType::Bool | LispFwdType::BufferObj);
+```
+
+-- three of five, so the moment `DEFVAR_LISP` names became forwarded they all
+went **void**, which is how the first green run of the new pins failed.  GNU's
+`Fboundp` has no inner switch at all: its `SYMBOL_FORWARDED` arm is
+`valid = true;` (`src/data.c:733-736`), because no `Lisp_Fwd` variant has an
+unbound representation -- the same fact that makes `set_internal` refuse the
+unbind. The arm is now `return true;`.
+
+**d. `defvaralias`'s refusals come from one closed enum.**  `MakeAliasError`
+(Constant / Cycle / Forwarded / Localized) existed, mirroring four of GNU's five
+refusal sites, and `Obarray::make_variable_alias` implemented all four -- but
+**nothing outside `symbol_test.rs` called it**.  The `defvaralias` subr
+re-implemented two of the four inline and omitted the redirect switch entirely,
+which is why a `DEFVAR_LISP` name could become an alias.  The checks move into
+`Obarray::check_variable_alias`, in GNU's order (constant, then cycle, then
+redirect), and the subr maps the enum to GNU's signal data in one exhaustive
+match.  GNU's fifth refusal -- the let-bound one -- is measured in §9 and
+deliberately not implemented; when it is, the enum is where it goes and the
+exhaustive match is what will demand its message.
+
+### 6. Where the declaration lives, and why the pass runs where it does
+
+GNU's `DEFVAR_LISP` is one macro at the site that owns the variable.  This port
+has no such site: the 447 names are bound from ~60 `register_bootstrap_vars`
+functions plus several hundred bare `set_symbol_value` calls, and the fact being
+ported -- "GNU's C declares this one" -- is invisible at every one of them.  So
+it is a table, in the shape entry 135's `GNU_BOOL_VARIABLES` and entry 141's
+`cus_start_platform_vars` already use, but generated rather than hand-kept:
+`scripts/extract_gnu_defvar_object_names.py` walks GNU's `src/*.c` and emits 578
+rows (564 `Lisp_Objfwd`, 14 `Lisp_Kboard_Objfwd`) with the GNU `file:line` on
+each.
+
+**The table contains no measurement of this port.**  A name whose C file this
+build does not compile is still listed; the adoption pass finds no symbol and
+counts it `Absent`.  That is what keeps it refreshable from an updated mirror
+and stops it going stale as the port grows a variable -- the failure mode a
+hand-maintained "names that diverge" list would have had.
+
+The pass runs at the end of `finish_runtime_activation`, which is the last point
+before the evaluator is live.  It was first placed with the
+`register_bootstrap_vars` calls, mirroring GNU's `main`; a re-run then forwarded
+six more rows, because `main-thread`, `system-name`, `user-login-name`,
+`user-full-name`, `user-real-login-name` and `operating-system-release` are
+bound *after* that point by `runtime_identity::install` and
+`sync_thread_runtime_bindings`.  **That re-run is now a test**
+(`adoption_is_idempotent_and_leaves_no_alias_rows`): a pass that forwards
+anything on the second run is a pass that ran too early.
+
+Counts on a bare `Context`, which are the entry's measurement of this port
+against GNU's declaration list:
+
+```
+forwarded 419   absent 142   unbound 5   localized 12   alias 0
+re-run:   forwarded 0
+```
+
+The twelve `localized` rows are not a residual.  GNU reaches the same state for
+them -- `case-fold-search` is `DEFVAR_LISP` at `src/buffer.c:5981` and
+`Fmake_variable_buffer_local (Qcase_fold_search)` four lines later at `:5985` --
+and `make_blv` moves the descriptor into the BLV (`src/data.c:2112-2140`), where
+`set_internal` refuses the unbind from `blv->fwd` instead.  The pass puts an
+equivalent descriptor there, and a second test asserts that every localized
+GNU-declared name carries one.
+
+### 7. Two things the fix corrected that were not asked for
+
+**31 names became `special-variable-p`.**  Swept before the change: of the 577
+names, GNU answers `special` for 421 that this port also called special, and for
+**31 more that this port called plain while binding them** --
+`char-width-table`, `composition-function-table`, `region-extract-function`,
+`window-configuration-change-hook`, `menu-bar-final-items`, `printable-chars`
+and 25 others.  A `DEFVAR_*` sets `declared_special` and every `install_*fwd`
+already did too, so adopting them fixed this as a side effect.  It is a
+behaviour change, not just an answer change: those names now bind dynamically
+under `lexical-binding`, which is what GNU does.
+
+**Reads of the 419 stayed on a fast path.**  Making them `SYMBOL_FORWARDED`
+moved every bytecode `Bvarref` of them off the PLAINVAL fast path and into
+`lookup_var_id`, which resolves the alias chain and gathers the current buffer's
+value, `local_var_alist`, slot array and the buffer-defaults array before
+dispatching -- for a slot that needs none of it.  `fast_path_var_ref` now reads
+any descriptor-backed forwarder directly; `LispFwd::load` answers `None` for
+exactly the one variant that does need buffer context (`BufferObj`), and the
+slow path's own non-`BufferObj` arm ends at the same call, so the two cannot
+drift.  `Int` and `Bool` were paying the same toll and get the same win.
+
+### 8. Hypotheses eliminated
+
+**"The refusal needs the forwarded object, so the storage has to come first."**
+This is entry 168's framing and the reason it declined.  Eliminated by reading
+`set_internal` rather than the `Lisp_Objfwd` struct: `innercontents` is fetched
+on the line above the `error` and the first use of it is five lines below,
+after the refusal has longjmp'd (`src/data.c:1801-1809`).  The storage did come
+along in the end, but as a consequence of the value cell being one word wide --
+not as a prerequisite of the refusal.
+
+**"A leaked `'static` descriptor owning a heap `Value` is the failure class
+entries 161, 162 and 163 closed."**  Eliminated by `Obarray::trace_roots`,
+thirty lines below the comment 168 quoted: `for fwd in &self.int_fwds { roots.push(fwd.get()); }`.
+Entry 132 shipped that loop, and `LispIntFwd::set` has carried the SATB barrier
+since.  The comment 168 read -- "none is a heap `Value` to trace *here*" -- was
+distinguishing the symbol walk from that loop, not stating a global invariant.
+
+**"A table of measured answers consulted by `check_forwarded_unbind` is the
+fix."**  This is what 168 handed over, and it would have fixed **5 of the 15
+divergent entry points in §3**.  `defvaralias`, `make-local-variable`,
+`make-variable-buffer-local` and `variable-binding-locus` never call
+`check_forwarded_unbind` and could not have been reached from it.  Eliminated by
+building the audit before building the fix.
+
+**"`Obarray::make_variable_alias` implements GNU's four refusals, so
+`defvaralias` has them."**  It does implement all four, in GNU's order, with the
+right closed error type -- and outside `symbol_test.rs` it has **zero callers**.
+The subr re-implemented two of the four inline and omitted the redirect switch.
+Eliminated by grepping for callers instead of reading the function.
+
+**"`boundp` needs no change, since a forwarded symbol was already bound."**
+Eliminated the hard way: the first run of the new pins reported
+`after-load-alist` as void.  `Obarray::boundp_id`'s forwarded arm enumerated
+`Int | Bool | BufferObj` -- three of five -- so the 419 newly forwarded names
+all went unbound at once.  GNU's `Fboundp` has no inner switch to get wrong
+(`src/data.c:733-736`).
+
+**"The declaration list can be produced by a grep."**  It cannot, quite: a
+`grep 'DEFVAR_LISP *("'` over `src/*.c` misses `dos-unsupported-char-glyph`
+(`src/msdos.c:4331`), which entry 168's 563 also missed.  Harmless here, since
+neither build compiles `msdos.c`, but the table in §6 is produced by a parser
+that finds all 564.
+
+**"The adoption pass belongs with the `register_bootstrap_vars` calls, because
+that is where GNU's `main` finishes its `syms_of_*`."**  Eliminated by running
+the pass twice: the second run forwarded six more rows.  `main-thread`,
+`system-name`, `user-login-name`, `user-full-name`, `user-real-login-name` and
+`operating-system-release` are bound after that point, by
+`runtime_identity::install` and `sync_thread_runtime_bindings`.  GNU's boundary
+is not "after the last `syms_of_*`", it is "before any Lisp", and in this port
+those are not the same line.
+
+### 9. Found and NOT fixed
+
+**GNU also refuses a let-bound variable as a new alias, and this port does
+not.**  Measured, `-Q --batch`, on a variable that is neither forwarded nor
+localized so the earlier refusals do not fire first:
+
+```elisp
+(progn (defvar l170p 1) (defvar l170q 2)
+       (eval '(let ((l170p 9))
+                (condition-case e (progn (defvaralias 'l170p 'l170q) 'allowed)
+                  (error (list 'refused (cadr e))))) t))
+;; GNU     => (refused "Don’t know how to make a let-bound variable an alias: l170p")
+;; Neomacs => allowed
+```
+
+GNU scans the specpdl for any `kind >= SPECPDL_LET` binding of `new_alias`
+(`src/eval.c:704-711`), after the value migration and before installing the
+edge.  It is a fifth member of the same closed refusal set and it is **not**
+fixed here, for a reason worth stating: the check needs the specpdl, which
+`Obarray::check_variable_alias` deliberately cannot see, and a false positive
+would make a bootstrap-time `defvaralias` signal.  This port `let`-binds
+internal variables around operations that GNU does not, so "is this symbol on
+the specpdl" is not the same population in the two programs.  It needs its own
+red pin, its own sweep of the preloaded `defvaralias` calls, and its own oracle
+run.  Sized and recorded, not fixed.
+
+**49 names GNU binds here that this port does not have at all.**  Entry 141's
+class, re-counted: `alternate-fontname-alist`, `clone-indirect-buffer-hook`,
+`code-conversion-map-vector`, `compose-chars-after-function`,
+`display-pixels-per-inch`, `frame-size-history`, `debug-on-message` and 42
+others.  The adoption pass finds no symbol and counts them, and it deliberately
+does **not** bind them to nil: GNU has real values for them, so binding them
+would trade a `boundp` divergence for a value divergence.  Whether each is worth
+having is a per-name question, not this entry's.
+
+**2 names this port binds that GNU does not**: `xwidget-list` and
+`xwidget-view-list`, GNU's xwidgets not being compiled in this build.  Entry
+141's residual, still open, and now visible as the `unbound -> allowed` row of
+the §1 table.
+
+**`DEFVAR_KBOARD` is one keyboard.**  GNU's `Lisp_Kboard_Objfwd` holds
+`offsetof (KBOARD, vname_)` and `do_symval_forwarding` applies it to
+`current_kboard` (`src/data.c:1352-1356`); with one keyboard the offset would
+index a one-element array, so the slot lives in the descriptor.  Two consequences
+are recorded in the type's doc comment rather than fixed: a second terminal
+would need the offset back, and `specbind` of a keyboard variable records
+`where.kbd = kboard_for_bindings ()` in GNU (`src/eval.c:3676-3680`), which has
+no counterpart here.  Both are single-terminal limitations of this port, not of
+this entry.
+
+**The `special-variable-p` sweep was only over `DEFVAR_LISP`.**  Adopting the
+419 gave 31 names GNU's `declared_special` bit as a side effect (§7).  The same
+question for `DEFVAR_INT`, `DEFVAR_BOOL` and `DEFVAR_PER_BUFFER` names was **not
+asked**, and the probe to ask it is `tmp/l170-probe2.el` with a different name
+list.  If those tables have the same hole it is the same one-line fix at each
+declaration site, and it is measurable in one command.
+
+**A descriptor a BLV carries is written once and thereafter only read by the
+GC.**  `LispFwd::commit` has exactly one call site
+(`Obarray::set_symbol_value_id_inner`'s `Forwarded` arm), and that arm is
+reached only when the SYMBOL is forwarded -- a `LOCALIZED` symbol returns
+above it, writing `defcell`/`valcell` instead.  So the descriptor
+`reattach_localized_forwarder` puts into a BLV keeps the value it was seeded
+with for the rest of the session, and the GC retains that value through it.
+GNU has the same property for a different reason: its C global holds whatever
+`swap_in_symval_forwarding` last put there.  Harmless -- the live value is the
+BLV's and is traced -- but it is not obvious from either program, and a future
+reader who assumes `blv->fwd` is a live slot will be wrong here.
+
+**The image carries the slot value, not the descriptor.**  GNU's pdumper writes
+the forwarding pointer itself and relocates it (`src/pdumper.c:2461-2462`,
+`dump_fwd_obj`).  A `Box::leak`ed descriptor cannot travel, so pdump v59 carries
+the value and rebuilds the descriptor on load -- the contract v56 and v57
+already gave Boolean and integer slots.  Not a divergence, but it is a place
+where this port's dump is structurally unlike GNU's, and the next person to
+touch `dump_symbol_data` should know why.
+
+### 10. Gates
+
+Every figure carries the 1-minute load average at the moment it was taken.  The
+box ran between 34 and **1077** on 32 cores during this session, and a gate
+result without that figure is not attributable -- a concurrent suite does not
+add noise, it changes which tests fail.
+
+**Run, and green:**
+
+```
+cargo nextest run -p neovm-core -E 'test(/defvar_lisp_makunbound_is_refused_like_gnu|
+  defvar_lisp_makunbound_is_refused_through_a_buffer_local_binding_like_gnu|
+  defvar_lisp_cannot_become_a_variable_alias_like_gnu|defvar_kboard_is_forwarded_like_gnu|
+  defvar_kboard_binding_locus_is_the_terminal_like_gnu|defvar_object::tests::table_matches_gnu_counts|
+  defvar_object::tests::table_has_no_duplicate_rows|
+  defvar_object::tests::table_and_the_defvar_bool_table_are_disjoint|
+  adoption_is_idempotent_and_leaves_no_alias_rows|localized_rows_still_carry_a_forwarder/)'
+
+  => 10 tests run: 10 passed, 0 failed, 9195 skipped     (load 34.94)
+```
+
+Asserted on `10 passed`, never on the word `ok`, and spelled `test(/a|b/)`:
+`test(a) or test(b)` silently selects almost nothing and `test(a) + test(b)` is
+an intersection.  The same filter red first -- **0 passed, 4 failed** before any
+implementation existed.
+
+**Red-verified twice, by disabling the mechanism rather than by trusting the
+green:**
+
+* Adoption pass commented out at its one call site ->
+  **10 tests run: 3 passed, 7 failed** (load 38.04).  The three survivors are
+  the pure-table tests, which is correct: they check the generated declaration
+  list, not the mechanism that consumes it.
+* `boundp_id`'s forwarded arm restored to `Int | Bool | BufferObj` ->
+  **2 tests run: 1 passed, 1 failed** (load 350.15).  The failure is exactly
+  `after-load-alist lost its binding / left: "OK nil" / right: "OK t"`, and the
+  keyboard pin survives because it does not assert `boundp` -- so that
+  three-of-five enumeration is load-bearing and is pinned by name.
+
+`cargo check -p neovm-core --all-targets` exit 0 and
+`cargo fmt --all -- --check` exit 0, both re-run after the last edit (load 35).
+`cargo check --workspace --all-targets` exit 0 (load 52.35 at start, 43.75 at
+finish) -- it reports two warnings, `maybe_keymap_in_obarray` unused in
+`builtins/keymaps.rs` and an unused doc comment in `jit/aot.rs`, both in files
+this branch does not touch.  The GNU-side sweeps in §1, §3 and §7 are ~1200
+`-Q --batch` process launches against prebuilt binaries; they were taken at
+load 12-40, before the filesystem filled.
+
+The workspace check is the one gate here that was *scheduled* rather than run
+on demand: at the moment it was wanted the box was at load 742 on 32 cores, so
+it went behind a poller that waited for the 1-minute average to fall below 60
+and then ran once.  That is the cheap version of what §10's last paragraph
+argues for, and it is why this entry can report the figure at all.
+
+**NOT run, and the branch is handed over saying so:**
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine` (baseline
+  11117/11117, 11127 tests on this branch).
+* `cargo xtask fresh-build --release` and `cargo nextest run -p
+  neovm-oracle-tests` (baseline 38790/38790).  **This is the gate that matters
+  for this change** -- 38,790 pins observing symbol machinery -- and it has not
+  been run.
+* `cargo xtask gc-stress` (baseline 9/9).  It matters here specifically: 419
+  leaked descriptors now own heap `Value`s, and while `Obarray::trace_roots`
+  roots them through `owned_value` and `LispObjFwd::set` carries the SATB
+  barrier, **that has been reasoned about and not measured**.
+* The §3 audit's "after" column, which needs a release binary from this branch.
+
+All four were stopped at the coordinator's direction, to be run once on the
+merged tree in a quiet window rather than six times in six worktrees.
+
+**Discarded rather than reported:** one engine-suite run reached 7306/11126
+with zero failures before `timeout` killed it and another reached ~6300/11126
+with zero failures.  Both spanned a window in which the filesystem hit **0
+bytes free** and the load average was in the hundreds.  A partial pass is not a
+pass, and a log truncated by ENOSPC greps identically to a clean one.
+
+**One thing done wrong, recorded so it is not repeated:** killing a stale run of
+this branch's own suite with `pkill -f "cargo-nextest"` in a checkout shared by
+six agents killed a sibling's engine run as well.  Kill by PID, or use the
+harness's own stop.
+
+### 11. Corrections to earlier entries
+
+* **Entry 132**, "Both enforce nothing on assignment, so no divergence follows
+  from that": true of the assignment, false of the declaration.  Entry 168
+  measured the cost at 447 names; this entry adds that it is not only
+  `makunbound` -- `defvaralias` turns on the same tag, and a `DEFVAR_KBOARD`
+  name diverges on nine entry points more, for fifteen in all.  A dated note is
+  on 132.
+* **Entry 168**, item 3, "wiring `Lisp_Fwd_Obj` *storage* is nevertheless the
+  wrong instrument": the first of its two reasons is refuted by
+  `Obarray::trace_roots`, which 132 itself had already taught to root a
+  value-owning leaked descriptor.  The second reason -- "it buys nothing else",
+  the store arm being a plain assignment -- stands, and is why the fix is the
+  redirect tag rather than the store rule.  168's proposed instrument, a table
+  of measured answers consulted by `check_forwarded_unbind`, would have fixed
+  `makunbound` and left the `defvaralias` and `DEFVAR_KBOARD` rows in §3
+  standing.  A dated note is on 168.
 ## 171. The reported divergence is FOUR rows and not one, and the fourth is a signalled error rather than a coding difference: `(make-process :buffer B)` for a killed B errors where GNU returns a process, which is why GNU's `!BUFFER_LIVE_P` disjunct was unreachable here and why nothing that runs could have found it -- FIXED, four defects, and the mirrors 166 priced the untangling at have zero readers
 
 Entry 169 measured the GNU side so this entry would not have to (169 section 9
