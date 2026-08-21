@@ -148,7 +148,11 @@ use crate::emacs_core::value;
 // BLV (`src/data.c:2112-2140`), so a `DEFVAR_BOOL`/`DEFVAR_INT` variable Lisp
 // made buffer-local gets an equivalent descriptor back from the image instead
 // of from a hand-maintained name list.
-const FORMAT_VERSION: u32 = 58;
+// v59: `DEFVAR_LISP` and `DEFVAR_KBOARD` names are `SYMBOL_FORWARDED` too, so
+// the image carries their slot value and rebuilds the descriptor -- the same
+// contract v56 and v57 gave Boolean and integer slots, and the same two new
+// kinds for a BLV that `make_blv` copied one of them into.
+const FORMAT_VERSION: u32 = 59;
 
 const FINGERPRINT_PLACEHOLDER: [u8; 32] = *b"NEOMACS_PDUMP_FINGERPRINT_SLOT!!";
 

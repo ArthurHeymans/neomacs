@@ -169,6 +169,8 @@ const SYMBOL_VAL_LOCALIZED: u8 = 2;
 const SYMBOL_VAL_FORWARDED: u8 = 3;
 const SYMBOL_VAL_BOOL_FORWARDED: u8 = 4;
 const SYMBOL_VAL_INT_FORWARDED: u8 = 5;
+const SYMBOL_VAL_OBJ_FORWARDED: u8 = 6;
+const SYMBOL_VAL_KBOARD_FORWARDED: u8 = 7;
 
 fn write_symbol_data(out: &mut Vec<u8>, data: &DumpSymbolData) -> Result<(), DumpError> {
     write_u8(out, data.redirect);
@@ -202,12 +204,16 @@ fn read_symbol_data(cursor: &mut Cursor<'_>) -> Result<DumpSymbolData, DumpError
 const LOCALIZED_FWD_NONE: u8 = 0;
 const LOCALIZED_FWD_BOOL: u8 = 1;
 const LOCALIZED_FWD_INT: u8 = 2;
+const LOCALIZED_FWD_OBJ: u8 = 3;
+const LOCALIZED_FWD_KBOARD: u8 = 4;
 
 fn encode_localized_forwarder(kind: Option<DumpLocalizedForwarder>) -> u8 {
     match kind {
         None => LOCALIZED_FWD_NONE,
         Some(DumpLocalizedForwarder::Bool) => LOCALIZED_FWD_BOOL,
         Some(DumpLocalizedForwarder::Int) => LOCALIZED_FWD_INT,
+        Some(DumpLocalizedForwarder::Obj) => LOCALIZED_FWD_OBJ,
+        Some(DumpLocalizedForwarder::Kboard) => LOCALIZED_FWD_KBOARD,
     }
 }
 
@@ -216,6 +222,8 @@ fn decode_localized_forwarder(tag: u8) -> Result<Option<DumpLocalizedForwarder>,
         LOCALIZED_FWD_NONE => Ok(None),
         LOCALIZED_FWD_BOOL => Ok(Some(DumpLocalizedForwarder::Bool)),
         LOCALIZED_FWD_INT => Ok(Some(DumpLocalizedForwarder::Int)),
+        LOCALIZED_FWD_OBJ => Ok(Some(DumpLocalizedForwarder::Obj)),
+        LOCALIZED_FWD_KBOARD => Ok(Some(DumpLocalizedForwarder::Kboard)),
         other => Err(DumpError::ImageFormatError(format!(
             "unknown localized forwarder tag {other}"
         ))),
@@ -251,6 +259,14 @@ fn write_symbol_val(out: &mut Vec<u8>, val: &DumpSymbolVal) -> Result<(), DumpEr
             write_u8(out, SYMBOL_VAL_INT_FORWARDED);
             write_value(out, value)?;
         }
+        DumpSymbolVal::ObjForwarded(value) => {
+            write_u8(out, SYMBOL_VAL_OBJ_FORWARDED);
+            write_value(out, value)?;
+        }
+        DumpSymbolVal::KboardForwarded(value) => {
+            write_u8(out, SYMBOL_VAL_KBOARD_FORWARDED);
+            write_value(out, value)?;
+        }
     }
     Ok(())
 }
@@ -271,6 +287,8 @@ fn read_symbol_val(cursor: &mut Cursor<'_>) -> Result<DumpSymbolVal, DumpError> 
             cursor.read_bool("Boolean forwarder value")?,
         )),
         SYMBOL_VAL_INT_FORWARDED => Ok(DumpSymbolVal::IntForwarded(cursor.read_value()?)),
+        SYMBOL_VAL_OBJ_FORWARDED => Ok(DumpSymbolVal::ObjForwarded(cursor.read_value()?)),
+        SYMBOL_VAL_KBOARD_FORWARDED => Ok(DumpSymbolVal::KboardForwarded(cursor.read_value()?)),
         other => Err(DumpError::ImageFormatError(format!(
             "unknown symbol value-cell tag {other}"
         ))),

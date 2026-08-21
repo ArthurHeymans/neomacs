@@ -35,6 +35,33 @@ impl GcTrace for CustomManager {
 // Pure builtins (no evaluator needed)
 // ---------------------------------------------------------------------------
 
+/// GNU's `KBOARD_OBJFWDP` guard, shared by `Fmake_variable_buffer_local`
+/// (`src/data.c:2220-2223`) and `Fmake_local_variable` (`src/data.c:2286-2288`).
+///
+/// A `DEFVAR_KBOARD` variable's storage is a slot in `struct KBOARD`, which is
+/// per-terminal, not per-buffer; there is nowhere for a buffer-local binding
+/// of one to live, so both entry points refuse it by name rather than
+/// producing a binding that could not be read back.  This is the only
+/// Lisp-visible behaviour that separates `Lisp_Fwd_Kboard_Obj` from
+/// `Lisp_Fwd_Obj`, which is why the two are separate variants here.
+fn keyboard_variable_may_not_be_buffer_local(
+    obarray: &crate::emacs_core::symbol::Obarray,
+    resolved: crate::emacs_core::intern::SymId,
+    reported: Value,
+) -> Result<(), Flow> {
+    use crate::emacs_core::forward::LispFwdType;
+    if obarray.forward_type(resolved) != Some(LispFwdType::KboardObj) {
+        return Ok(());
+    }
+    let name = crate::emacs_core::intern::resolve_sym(reported.as_symbol_id().unwrap_or(resolved));
+    Err(signal(
+        "error",
+        vec![Value::string(format!(
+            "Symbol {name} may not be buffer-local"
+        ))],
+    ))
+}
+
 /// `(make-variable-buffer-local VARIABLE)` -- mark variable as automatically buffer-local.
 pub(crate) fn builtin_make_variable_buffer_local(
     eval: &mut super::eval::Context,
@@ -62,6 +89,9 @@ pub(crate) fn builtin_make_variable_buffer_local_with_state(
         }
     };
     let resolved_id = super::builtins::resolve_variable_alias_id_in_obarray(obarray, symbol)?;
+    // GNU signals from inside the redirect switch, BEFORE the constant check
+    // below (`src/data.c:2220-2223` then `:2230-2231`).
+    keyboard_variable_may_not_be_buffer_local(obarray, resolved_id, args[0])?;
     if obarray.is_constant_id(resolved_id) {
         return Err(signal(LispCondition::SettingConstant, vec![args[0]]));
     }
@@ -103,6 +133,9 @@ pub(crate) fn builtin_make_local_variable(
         }
     };
     let resolved = super::builtins::resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
+    // Same refusal, same place in the order (`src/data.c:2286-2288` then
+    // `:2293-2294`).
+    keyboard_variable_may_not_be_buffer_local(&ctx.obarray, resolved, args[0])?;
     if ctx.obarray.is_constant_id(resolved) {
         return Err(signal(LispCondition::SettingConstant, vec![args[0]]));
     }

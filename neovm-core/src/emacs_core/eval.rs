@@ -6575,6 +6575,20 @@ impl Context {
         }
         self.sync_thread_runtime_bindings();
         self.sync_current_thread_buffer_state();
+        // Every name GNU's C declares with `DEFVAR_LISP' or `DEFVAR_KBOARD'
+        // gets GNU's redirect tag here, at the last point before the evaluator
+        // is live: the same boundary GNU's `main' crosses when the last
+        // `syms_of_*'/`init_*' returns, reached from the other side.  GNU
+        // declares first and assigns after; this port assigns from several
+        // hundred scattered sites -- including `runtime_identity::install' and
+        // `sync_thread_runtime_bindings' just above, which is why this cannot
+        // sit with the `register_bootstrap_vars' calls -- and declares once,
+        // here.  Idempotent, so the pdump-restored path (whose image already
+        // carries the descriptors) finds every row settled and the six names
+        // an image cannot carry get theirs.  See `defvar_object' for what the
+        // tag buys and why the store rule -- the thing `DEFVAR_BOOL' and
+        // `DEFVAR_INT' are declared for -- is not it.
+        super::defvar_object::adopt(&mut self.obarray);
     }
 
     pub(crate) fn sync_current_thread_buffer_state(&mut self) {

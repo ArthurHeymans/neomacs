@@ -2623,7 +2623,11 @@ fn dump_localized_forwarder(
     match ty {
         LispFwdType::Bool => Some(Kind::Bool),
         LispFwdType::Int => Some(Kind::Int),
-        LispFwdType::Obj | LispFwdType::BufferObj | LispFwdType::KboardObj => None,
+        LispFwdType::Obj => Some(DumpLocalizedForwarder::Obj),
+        LispFwdType::KboardObj => Some(DumpLocalizedForwarder::Kboard),
+        // A per-buffer slot's descriptor is registration metadata rebuilt from
+        // `BUFFER_SLOT_INFO`, and `make_blv` never copies one into a BLV.
+        LispFwdType::BufferObj => None,
     }
 }
 
@@ -2687,8 +2691,19 @@ pub(crate) fn dump_symbol_data(
                     };
                     DumpSymbolVal::IntForwarded(encoder.dump_value(&int_fwd.get()))
                 }
+                crate::emacs_core::forward::LispFwdType::Obj => {
+                    let obj_fwd = unsafe {
+                        &*(fwd as *const _ as *const crate::emacs_core::forward::LispObjFwd)
+                    };
+                    DumpSymbolVal::ObjForwarded(encoder.dump_value(&obj_fwd.get()))
+                }
+                crate::emacs_core::forward::LispFwdType::KboardObj => {
+                    let kbd_fwd = unsafe {
+                        &*(fwd as *const _ as *const crate::emacs_core::forward::LispKboardObjFwd)
+                    };
+                    DumpSymbolVal::KboardForwarded(encoder.dump_value(&kbd_fwd.get()))
+                }
                 crate::emacs_core::forward::LispFwdType::BufferObj => DumpSymbolVal::Forwarded,
-                other => panic!("pdump does not yet encode {other:?} symbol forwarders"),
             }
         }
     };
@@ -4188,7 +4203,9 @@ pub(crate) fn load_symbol_data(
                 plain: crate::emacs_core::value::Value::bool_val(*value),
             };
         }
-        DumpSymbolVal::IntForwarded(value) => {
+        DumpSymbolVal::IntForwarded(value)
+        | DumpSymbolVal::ObjForwarded(value)
+        | DumpSymbolVal::KboardForwarded(value) => {
             symbol.flags.set_redirect(SymbolRedirect::Plainval);
             symbol.val = SymbolVal {
                 plain: decoder.load_value(value),
@@ -4210,6 +4227,8 @@ pub(crate) fn load_obarray(
     let mut localized_entries: Vec<(SymId, &DumpSymbolData)> = Vec::new();
     let mut bool_forwarded_entries: Vec<(SymId, bool)> = Vec::new();
     let mut int_forwarded_entries: Vec<(SymId, crate::emacs_core::value::Value)> = Vec::new();
+    let mut obj_forwarded_entries: Vec<(SymId, crate::emacs_core::value::Value)> = Vec::new();
+    let mut kboard_forwarded_entries: Vec<(SymId, crate::emacs_core::value::Value)> = Vec::new();
     let mut symbols = Vec::with_capacity(dob.symbols.len());
     for (id, sd) in &dob.symbols {
         let sym_id = load_sym_id(id);
@@ -4227,6 +4246,12 @@ pub(crate) fn load_obarray(
         }
         if let DumpSymbolVal::IntForwarded(value) = &sd.val {
             int_forwarded_entries.push((sym_id, decoder.load_value(value)));
+        }
+        if let DumpSymbolVal::ObjForwarded(value) = &sd.val {
+            obj_forwarded_entries.push((sym_id, decoder.load_value(value)));
+        }
+        if let DumpSymbolVal::KboardForwarded(value) = &sd.val {
+            kboard_forwarded_entries.push((sym_id, decoder.load_value(value)));
         }
         symbols.push((sym_id, load_symbol_data(decoder, sym_id, sd)));
     }
@@ -4325,6 +4350,19 @@ pub(crate) fn load_obarray(
             .unwrap_or_else(|_| crate::emacs_core::forward::LispInteger::from_i64(0));
         let fwd = crate::emacs_core::forward::alloc_intfwd(checked);
         obarray.install_intfwd(sym_id, fwd);
+    }
+
+    // `DEFVAR_LISP` and `DEFVAR_KBOARD` slots, same contract as the two above.
+    // GNU dumps the forwarding pointer itself and relocates it
+    // (`src/pdumper.c:2461-2462`); a process-lifetime `Box::leak` cannot
+    // travel, so the image carries the value and the descriptor is rebuilt.
+    for (sym_id, value) in obj_forwarded_entries {
+        let fwd = crate::emacs_core::forward::alloc_objfwd(value);
+        obarray.install_objfwd(sym_id, fwd);
+    }
+    for (sym_id, value) in kboard_forwarded_entries {
+        let fwd = crate::emacs_core::forward::alloc_kboard_objfwd(value);
+        obarray.install_kboard_objfwd(sym_id, fwd);
     }
 
     Ok(obarray)

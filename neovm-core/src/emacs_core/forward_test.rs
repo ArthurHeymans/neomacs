@@ -794,9 +794,10 @@ fn the_x_platform_variables_hold_gnus_defaults_and_bind_dynamically() {
 fn defvar_lisp_makunbound_is_refused_like_gnu() {
     let mut eval = ev();
 
+    // Names a bare [`Context`] already binds -- the sweep over all 578 GNU
+    // declarations lives in the oracle, where preloaded Lisp has run.
     for name in [
         "after-load-alist",
-        "auto-composition-function",
         "command-line-args",
         "features",
         "load-path",

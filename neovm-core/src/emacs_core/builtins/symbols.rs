@@ -474,6 +474,42 @@ pub(crate) fn builtin_defvaralias(eval: &mut super::eval::Context, args: Vec<Val
     Ok(state_change.result)
 }
 
+/// GNU's signal for each way `Fdefvaralias` can refuse (`src/eval.c:647-679`).
+///
+/// `Cycle` is the one arm whose data is the BASE variable rather than the new
+/// alias's name, which is why this is a match rather than one format string.
+fn make_alias_error_signal(
+    error: crate::emacs_core::symbol::MakeAliasError,
+    new_name: &str,
+    base_variable: Value,
+) -> Flow {
+    use crate::emacs_core::symbol::MakeAliasError;
+    match error {
+        MakeAliasError::Constant => signal(
+            "error",
+            vec![Value::string(format!(
+                "Cannot make a constant an alias: {new_name}"
+            ))],
+        ),
+        MakeAliasError::Cycle => signal(
+            LispCondition::CyclicVariableIndirection,
+            vec![base_variable],
+        ),
+        MakeAliasError::Forwarded => signal(
+            "error",
+            vec![Value::string(format!(
+                "Cannot make a built-in variable an alias: {new_name}"
+            ))],
+        ),
+        MakeAliasError::Localized => signal(
+            "error",
+            vec![Value::string(format!(
+                "Don't know how to make a buffer-local variable an alias: {new_name}"
+            ))],
+        ),
+    }
+}
+
 pub(crate) struct DefvaraliasStateChange {
     pub(crate) alias_id: SymId,
     pub(crate) base_id: SymId,
@@ -491,19 +527,12 @@ pub(crate) fn defvaralias_impl(
     let new_symbol = SymId::from_value(ctx, args[0])?;
     let old_symbol = SymId::from_value(ctx, args[1])?;
     let new_name = resolve_sym(new_symbol).to_string();
-    if ctx.obarray.is_constant_id(new_symbol) {
-        return Err(signal(
-            "error",
-            vec![Value::string(format!(
-                "Cannot make a constant an alias: {new_name}"
-            ))],
-        ));
-    }
-    if would_create_variable_alias_cycle_in_obarray(&ctx.obarray, new_symbol, old_symbol) {
-        return Err(signal(
-            LispCondition::CyclicVariableIndirection,
-            vec![args[1]],
-        ));
+    // GNU's four refusals, from the one place that spells them
+    // (`src/eval.c:647-679`).  Reaching them through the closed
+    // [`MakeAliasError`] is what stops this subr from validating a subset
+    // again: adding a fifth reason to the enum breaks this match.
+    if let Err(error) = ctx.obarray.check_variable_alias(new_symbol, old_symbol) {
+        return Err(make_alias_error_signal(error, &new_name, args[1]));
     }
     let previous_target_id = resolve_variable_alias_id_in_obarray(&ctx.obarray, new_symbol)?;
     if ctx.obarray.find_symbol_value(old_symbol).is_none()
@@ -4620,6 +4649,21 @@ pub(crate) fn builtin_variable_binding_locus(
                 }
             }
             SymbolRedirect::Forwarded => {
+                // GNU answers the TERMINAL, not a buffer, for a keyboard
+                // variable: `Fmake_local_variable`'s SYMBOL_FORWARDED arm
+                // returns `Fframe_terminal (selected_frame)`
+                // (`src/data.c:2519-2521`).  It is never nil and never a
+                // buffer, so it is checked before the per-buffer question.
+                {
+                    use crate::emacs_core::forward::LispFwdType;
+                    let fwd = unsafe { &*sym.val.fwd };
+                    if matches!(fwd.ty, LispFwdType::KboardObj) {
+                        return crate::emacs_core::terminal::pure::builtin_frame_terminal(
+                            ctx,
+                            vec![],
+                        );
+                    }
+                }
                 if let Some(buf) = ctx.buffers.current_buffer() {
                     let is_local = {
                         use crate::emacs_core::forward::{LispBufferObjFwd, LispFwdType};
