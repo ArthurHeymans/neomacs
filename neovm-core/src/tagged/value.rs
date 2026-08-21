@@ -1041,8 +1041,15 @@ impl TaggedValue {
     }
 
     /// Check if this symbol has the given name.
+    ///
+    /// Byte equality, not `as_symbol_name` — `name` is valid UTF-8, so
+    /// equal bytes imply the symbol's name is too, and the old
+    /// validate-then-compare paid a `from_utf8` walk per call (face
+    /// attribute merging asks `is_symbol_named("unspecified")` per
+    /// attribute per face).
     pub fn is_symbol_named(self, name: &str) -> bool {
-        self.as_symbol_name() == Some(name)
+        self.as_symbol_lisp_string()
+            .is_some_and(|s| s.as_bytes() == name.as_bytes())
     }
 }
 
