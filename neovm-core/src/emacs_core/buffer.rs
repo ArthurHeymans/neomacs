@@ -447,10 +447,10 @@ pub(crate) fn builtin_get_truename_buffer(
         let Some(truename_value) = buf.buffer_local_value("buffer-file-truename") else {
             continue;
         };
-        let Some(truename) = truename_value.as_lisp_string() else {
+        let Some(truename) = eval.lisp_string(truename_value) else {
             continue;
         };
-        let filename = expect_lisp_string(&args[0])?;
+        let filename = eval.expect_lisp_string(args[0])?;
         if truename.schars() == filename.schars()
             && truename.sbytes() == filename.sbytes()
             && truename.as_bytes() == filename.as_bytes()
@@ -4812,7 +4812,7 @@ pub(crate) fn builtin_get_byte(eval: &mut super::eval::Context, args: Vec<Value>
             expect_wholenump(&args[0])? as usize
         };
 
-        let string = args[1].as_lisp_string().expect("string");
+        let string = eval.lisp_string(args[1]).expect("string");
         let char_len = string.schars();
         if pos >= char_len && !args[0].is_nil() {
             return Err(signal(

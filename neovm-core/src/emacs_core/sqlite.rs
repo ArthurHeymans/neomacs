@@ -958,7 +958,7 @@ pub(crate) fn builtin_sqlite_load_extension(
     }
 
     let expanded = super::fileio::builtin_expand_file_name(eval, vec![args[1], Value::NIL])?;
-    let Some(expanded_ls) = expanded.as_lisp_string() else {
+    let Some(expanded_ls) = eval.lisp_string(expanded) else {
         return Err(signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), expanded],

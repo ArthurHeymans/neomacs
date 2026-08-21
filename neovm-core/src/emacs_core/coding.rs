@@ -2825,7 +2825,7 @@ pub(crate) fn builtin_unencodable_char_position(
     };
 
     let (text, base_pos) = if !string_arg.is_nil() {
-        let string = string_arg.as_lisp_string().ok_or_else(|| {
+        let string = eval.lisp_string(string_arg).ok_or_else(|| {
             signal(
                 LispCondition::WrongTypeArgument,
                 vec![Value::symbol("stringp"), string_arg],

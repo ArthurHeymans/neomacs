@@ -726,14 +726,14 @@ pub(crate) fn sync_modified_buffer_file_lock(
 
 pub(crate) fn builtin_lock_file(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("lock-file", &args, 1)?;
-    let filename = super::builtins::expect_lisp_string(&args[0])?;
+    let filename = eval.expect_lisp_string(args[0])?;
     let filename = filename.clone();
     lock_file(eval, &filename)
 }
 
 pub(crate) fn builtin_unlock_file(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("unlock-file", &args, 1)?;
-    let filename = super::builtins::expect_lisp_string(&args[0])?;
+    let filename = eval.expect_lisp_string(args[0])?;
     let filename = filename.clone();
     unlock_file(eval, &filename)
 }
@@ -743,7 +743,7 @@ pub(crate) fn builtin_file_locked_p(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("file-locked-p", &args, 1)?;
-    let filename = super::builtins::expect_lisp_string(&args[0])?;
+    let filename = eval.expect_lisp_string(args[0])?;
     let filename = filename.clone();
     file_locked_p(eval, &filename)
 }

@@ -973,7 +973,7 @@ fn read_from_active_load_cursor(
     let pos = cursor.pos;
     let shorthands = cursor.shorthands.clone();
 
-    let lisp_str = source.as_lisp_string().ok_or_else(|| {
+    let lisp_str = ctx.lisp_string(source).ok_or_else(|| {
         signal(
             "error",
             vec![Value::string("load-read stream source is not a string")],

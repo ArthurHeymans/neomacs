@@ -2025,7 +2025,7 @@ fn home_directory_for_expand_file_name(eval: &mut Context) -> Option<Vec<u8>> {
     // where GNU relies on `init_environment` having set HOME -- leaves `~`
     // unexpanded, so `directory-files "~"` fails at startup.
     if let Ok(value) = super::process::builtin_getenv_internal(eval, vec![Value::string("HOME")])
-        && let Some(ls) = value.as_lisp_string()
+        && let Some(ls) = eval.lisp_string(value)
     {
         return Some(ls.as_bytes().to_vec());
     }
@@ -2965,7 +2965,7 @@ fn implicit_default_directory_value_for_expand_file_name(eval: &mut Context) -> 
     if value.is_nil() {
         return Ok(Value::heap_string(fallback_root_default_directory()));
     }
-    let filename = value.as_lisp_string().ok_or_else(|| {
+    let filename = eval.lisp_string(value).ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,
             vec![Value::symbol("stringp"), value],
