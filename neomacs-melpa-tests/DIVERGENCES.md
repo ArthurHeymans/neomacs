@@ -25171,6 +25171,25 @@ worth its own entry and it is small") was accurate about the parts it named --
 three dispatch checks and `do_debug_on_call` -- and short by the JIT's three
 lowerings, `backtrace-debug`'s missing store, the `fixnump`/`wholenump` split and
 `call_debugger`'s absence as a shared function.
+
+> **2026-08-21, entry 176: the `backtrace-debug` pin recorded a print form
+> neither editor produces.**  Running the oracle gate on the merged 170-175 tree
+> failed `oracle_backtrace_debug_checks_level_with_two_different_predicates` on
+> the last row of its own probe list: the pin expects `((backtrace-debug 0 nil
+> (quote no-such-function)) nil)` and both editors produce `((backtrace-debug 0
+> nil 'no-such-function) nil)`, because `print-quoted` defaults to t and `prin1`
+> writes the reader shorthand.  Measured against GNU 31.0.90 and a release
+> binary of this tree, the row is byte-identical on both sides, so it was a
+> stale pin and not a divergence -- the two strings differ by exactly the seven
+> characters of `(quote )` against `'`, 498 bytes against 491.  176 corrects the
+> expect; nothing about this entry's finding changes.
+>
+> It survived this entry's own gates because the test opens with
+> `return_if_neovm_enable_oracle_proptest_not_set!()`: an oracle suite run
+> without `NEOVM_FORCE_ORACLE_PATH` returns before asserting anything and
+> nextest reports the test as passed.  A green oracle suite is evidence only
+> about the tests that ran, and `0 skipped` is the line that says they did.
+
 ## 173. Entry 168's handed-over clause: GNU decides a built-in variable's documentation by asking `Fboundp`, once, at dump time -- so the port of it is a question rather than a filter, and the 49 names it "would break" turn out to be 49 declarations missing from `syms_of_*` blocks this port already declares from, nought of which cannot be bound here -- FIXED
 
 Entry 168 sized this and deliberately stopped: gating on boundness "would fix
@@ -27364,6 +27383,82 @@ though it governed every query.
 Entry 170's `Adoption::Alias` and `Adoption::Localized` residual is untouched
 here.
 
+### 10. A third failure, found by running the gate the sweep had not run
+
+The brief noted the oracle suite was **not yet run on the merged tree** and
+might hold more.  It held one:
+`debug_on_next_call::oracle_backtrace_debug_checks_level_with_two_different_predicates`,
+entry 172's, failing on the last row of its own probe list.  Pinned:
+
+```
+((backtrace-debug 0 nil (quote no-such-function)) nil)
+```
+
+Produced, by BOTH editors, byte-identically:
+
+```
+((backtrace-debug 0 nil 'no-such-function) nil)
+```
+
+`print-quoted` defaults to t, so `prin1` writes a quote form with the reader
+shorthand.  The two strings differ by exactly seven characters -- the width of
+`(quote )` against `'` -- and by nothing else: 498 bytes against 491.  That is
+the arithmetic, not the `Diff:` block, which for this pin is the usual
+character-level merge and reads as though both spellings were present at once.
+
+**A failure whose value names both editors is a pin that was never right.**
+Measured directly against GNU 31.0.90 and this branch's release binary, the row
+is identical on both sides, so there is no divergence to fix and the expect
+string is simply wrong.
+
+How it survived its own branch is worth recording, because it is the false
+green in its purest form: the test opens with
+`return_if_neovm_enable_oracle_proptest_not_set!()`, so an oracle suite run
+**without** `NEOVM_FORCE_ORACLE_PATH` returns before asserting anything and
+nextest reports the test as passed.  A green oracle suite is only evidence
+about the tests that ran, and `0 skipped` is the line that says they did.
+
+### 11. Gates
+
+Taken on this branch, at `runnable` from `/proc/loadavg` rather than
+`uptime`'s lagging one-minute figure -- during this session the two read 4 and
+447 within the same second.
+
+| gate | result | load at start |
+| --- | --- | --- |
+| `cargo check --workspace --all-targets` | exit 0, 0 errors | -- |
+| `cargo fmt --all --check` | exit 0 | -- |
+| `cargo nextest run -p neovm-core -p neomacs-layout-engine` | **11152 run, 11152 passed, 0 failed, 54 skipped** (437.6 s) | runnable 6 |
+| `cargo nextest run -p neovm-oracle-tests --no-fail-fast` | **38799 run, 38799 passed, 0 failed, 0 skipped** (653.1 s) | runnable 7 |
+| `cargo xtask gc-stress --editor ./target/release/neomacs` | **9/9 probes passed** | runnable 5 |
+
+The unit gate's baseline was 11150 passed on the merged tree once the
+coordinator's `values` fix was in; the two extra are this entry's two new pins.
+The oracle gate's stated baseline of 38790 predates the merge -- 170-175 added
+nine tests of their own -- and it is quoted here at 38799 because that is what
+this tree contains.
+
+Both suites were run with `NEOVM_FORCE_ORACLE_PATH` set, and the oracle one
+with `--no-fail-fast`: its first run stopped at 1502/38799 on the failure in
+§10, which is a truncated run and not a gate.  `0 skipped` on the oracle line
+is the assertion that the `NEOVM_FORCE_ORACLE_PATH`-gated tests actually ran.
+
+`cargo xtask fresh-build --release` reported `finished successfully (release)`
+and `skip_build=false no_byte_compile=false`, and left a 15.33 MB
+`neomacs.pdump` written after the binary it belongs to.  The worktree
+oracle-validity check passes: `(with-current-buffer "*scratch*" (buffer-string))`
+is `""`, so the `.elc` are not the stale copies a plain `cargo build --release`
+in a worktree leaves behind.  Both bootstrap fingerprint memos -- the one in
+`target/` and the one in `~/.cache/neomacs/` that every worktree shares -- were
+deleted before the first suite ran, so no number above can have been served a
+stale image.
+
+The same release binary answers the four questions this entry turns on:
+`(special-variable-p 'features)` nil, `(let ((features '(cl-lib))) (featurep
+'cl-lib))` under `lexical-binding` nil, `(featurep 'pcase)` nil, and
+`(documentation-property 'native-comp-eln-load-path 'variable-documentation)`
+nil -- GNU's answers, all four.
+
 Status: FIXED -- two defects.  §1-§7 `features` was made special by a
 declaration table that could not see GNU un-declaring it, and §8 a test that
 had been pinning a divergence entry 173 removed.  The most useful thing in it
@@ -27372,3 +27467,8 @@ cases the correction came from measuring a surface rather than reasoning about
 a mechanism: three probe stages that were all clean killed the `Box::leak`
 story, and four questions put to the GNU binary settled the doc test without a
 bisect.
+
+Addendum, same day: running the oracle gate that the merged sweep had not
+run found a third failure, entry 172's `backtrace-debug` pin, stale rather
+than divergent.  §10 has it and a dated note is on 172.  Final gates in §11:
+11152/11152 unit, 38799/38799 oracle with `0 skipped`, gc-stress 9/9.
