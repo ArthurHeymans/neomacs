@@ -151,6 +151,8 @@ pub mod var_docs;
 pub(crate) mod w32;
 pub(crate) mod wait;
 pub mod window_cmds;
+#[cfg(test)]
+mod window_system_preload_test;
 pub mod xdisp;
 pub mod xfaces;
 pub mod xml;

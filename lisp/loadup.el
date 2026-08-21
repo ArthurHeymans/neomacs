@@ -313,6 +313,29 @@
 ;; relative position.
 (load "touch-screen")
 
+;; `term/common-win' is loaded by ALL SIX of GNU's window-system branches --
+;; x (:308), haiku (:313), android (:320), w32 (:326), ns (:349) and pgtk
+;; (:361) -- and skipped only by `ms-dos', which says why in a comment at
+;; :341: it "isn't appropriate for the `pc' ``window system'', which generally
+;; behaves like a terminal".  The file is window-system-INDEPENDENT, as its
+;; name says: `x-alternatives-map' and `x-setup-function-keys' are the GUI
+;; function-key translations `lisp/faces.el:2238' calls unguarded from
+;; `x-create-frame-with-faces', `x-handle-args' is the command-line handler
+;; every `term/FOO-win.el' delegates to, and `x-display-name', `x-colors' and
+;; `emacs-save-session-functions' are public display variables.
+;;
+;; So the condition is GNU's own "is there a window system at all" predicate,
+;; the same `(fboundp 'x-create-frame)' that guards the block above and GNU's
+;; `mwheel' load at :363 -- and not `(featurep 'x)', which asks WHICH window
+;; system.  Measured: a GNU built `--without-x' answers nil to it and leaves
+;; all of `common-win' unbound, while this build answers t and already takes
+;; the branch above, so it must carry the file too.  `term/neo-win.el'
+;; requires it anyway at GUI startup; this only puts it where GNU puts it, in
+;; the dump, so batch and TTY sessions see the same surface GNU's do.
+;; DIVERGENCES.md 179.
+(if (fboundp 'x-create-frame)
+    (load "term/common-win"))
+
 (if (featurep 'x)
     (progn
       (load "x-dnd")
