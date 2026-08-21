@@ -22996,6 +22996,19 @@ building, which is why the two suites took 964 s and 727 s against ledger 164's
   GNU, with `xwidget-webkit-disable-javascript`: a build-feature difference
   entry 138 already justified, re-confirmed by this entry's sweep, which found
   no other name Neomacs binds and GNU does not.
+
+  **The sweep's scope is why it found none, entry 178, 2026-08-21.**  It ran
+  over `var_docs::gnu_table`'s 894 C `DEFVAR` names.  The two hand-typed
+  `STARTUP_VARIABLE_DOC_*` tables in `doc.rs` held another 1972 names, mostly
+  Lisp variables, and were outside it -- so this entry's "the rule, not a
+  table" argument never reached them.  178 measured them and deleted both:
+  they seeded a `variable-documentation` onto 1972 symbols during bootstrap,
+  ahead of the `Fboundp` gate, 35 of which answered while unbound in the
+  shipped image.  Eight were for variables GNU Emacs 31 no longer has at all,
+  and two for names GNU spells as a docstring-less `(defvar NAME nil)`.  GNU
+  has no pre-seeding: four writers in `src/`, every one downstream of the
+  variable existing, and `src/doc.c:433-434` reserves the fixnum `0` -- the
+  value 70 of the seeded rows carried -- to mean "there is no doc".
 - `strings-consed` and the six allocation counters entry 132 left reading 0 are
   unchanged.
 - `Lisp_Fwd_Obj` and `Lisp_Fwd_Kboard_Obj` remain unwired -- deliberately, for
@@ -25776,6 +25789,29 @@ Two environmental notes, because both cost real time and both are recurrent:
   question about the plist/stub precedence order in
   `documentation_property_plan` rather than about the table.  One line, sized,
   not diagnosed.
+
+  **Diagnosed by entry 178, 2026-08-21, and it is not the stub half.**  178
+  deleted the stubs outright and this line did not move.  GNU and this port
+  have the *identical* `(define-minor-mode indent-tabs-mode)` at
+  `lisp/simple.el:7639`; the difference is ordering.  `lisp/loadup.el:251`
+  loads `simple.el`, which `Fput`s the minor mode's docstring, and
+  `lisp/loadup.el:476` calls `Snarf-documentation` **225 lines later**, which
+  `Fput`s `etc/DOC`'s offset over the top of it.  **`Fsnarf_documentation` is a
+  last writer, not a fallback**, so GNU's dumped image carries the C text for
+  every name that is both a `DEFVAR_*` and a preloaded Lisp `defvar`.  This
+  port consults `gnu_table` only when the plist is empty, which inverts that.
+  The fix is to call a real `Snarf-documentation` over `gnu_table` from this
+  port's `loadup.el` where GNU calls it -- which is a seeding, at the END of
+  loadup and gated on `Fboundp`, and therefore the opposite of the one 178
+  removed rather than a return to it.  Still open; 178 declined it as a change
+  to all 894 rows' provenance and to the dump.
+- **`STARTUP_VARIABLE_DOC_STUBS` and `STARTUP_VARIABLE_DOC_STRING_PROPERTIES`
+  are gone, entry 178, 2026-08-21.**  This entry's "the rule, not a table"
+  argument turned out to apply to two tables it did not look at: 1972 names
+  were seeded with a `variable-documentation` during bootstrap, ahead of the
+  `Fboundp` gate 173 added, 70 of them holding the fixnum `0` that
+  `src/doc.c:433-434` reserves to mean "no doc".  GNU has no pre-seeding at
+  all.
 - **`inhibit-try-cursor-movement` is seeded here and unbound in GNU, and the
   seed's own justification is refuted by GNU's answer.**  GNU declares three
   names inside `#ifdef GLYPH_DEBUG` -- `inhibit-try-window-id`,
@@ -27379,6 +27415,23 @@ Not fixed here for a reason and not for lack of time: `ctl-x-4-map` is a Lisp
 question rather than this entry's.  Recorded so that the gate's true scope is
 on the record rather than assumed from 173's entry, which describes it as
 though it governed every query.
+
+**Sized and FIXED by entry 178, 2026-08-21, and the objection above holds
+exactly as far as it was drawn.**  The bypass reaches **35** names in the
+shipped image and **1725** in a bare `Context`; `ctl-x-4-map` is one of the
+1725 and not one of the 35, because `subr.el`'s `defvar` runs during loadup and
+overwrites the seed with GNU's own text.  So the example was real on the
+surface it was taken from, and that surface is the one this entry agrees is not
+GNU-comparable for it -- the test named above now runs against the
+runtime-startup image instead, and pins what both editors answer there.
+
+The entry-168 question is answered by reading GNU rather than by weighing the
+port: `grep -rn Qvariable_documentation src/` yields four writers, all of them
+downstream of the variable existing, and `src/doc.c:433-434` reserves the
+fixnum `0` -- the value 70 of the seeded rows carried -- to mean "there is no
+doc".  **The seeding is the anomaly.**  Deleted, 7374 lines, and the `or_else`
+described above is now a type error: `var_docs::lookup` returns a
+proof-carrying `SnarfedDoc` that does not unify with `Option<&'static str>`.
 
 Entry 170's `Adoption::Alias` and `Adoption::Localized` residual is untouched
 here.
