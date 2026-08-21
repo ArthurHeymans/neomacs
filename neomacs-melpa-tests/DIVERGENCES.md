@@ -24158,6 +24158,31 @@ harness's own stop.
 > descriptor or the value it carries was involved -- see 176 §4, where that lead
 > is measured and eliminated.
 
+> **2026-08-21, entry 183: the let-bound refusal is fixed, the 49 are closed,
+> and the xwidget pair was never a divergence.**  This entry's "sized and
+> recorded, not fixed" reason for the fifth refusal was the right size but the
+> wrong obstacle.  GNU does not run the specpdl scan in the redirect switch at
+> all -- it runs it AFTER the value migration and the "Overwriting value"
+> warning (`src/eval.c:682-711`), which is measurable: GNU copies the LET-BOUND
+> value into an unbound BASE and only then refuses.  So the check never
+> belonged in `Obarray::check_variable_alias`, and putting it in
+> `defvaralias_impl`, which holds a `&mut Context`, costs the obarray nothing.
+> The feared bootstrap false positive did not occur: the refusal is about the
+> ONE symbol being aliased, not about the population of let-bindings this port
+> has and GNU does not.  Re-measured over the same 578 names, `refused ->
+> unbound` is now **0** -- ledger 173 closed the 49 -- and the two xwidget
+> names read `unbound -> refused`, which is what a GNU built `--with-xwidgets`
+> answers: this port compiles xwidgets and the reference build does not, so the
+> row is a build-configuration difference and not a gap.  What IS still open
+> from the same sweep is 24 names reading `refused -> allowed`, all of them
+> bound after `adopt` has run; they are listed by name and by origin in 183 §8.
+> Separately, this entry's §7 list of "things the fix corrected that were not
+> asked for" is one short: `defvaralias` still does not emit GNU's
+> "Overwriting value of X by aliasing to Y" warning (`src/eval.c:686-701`).
+> 183 measured it, wrote it, and then took it back out -- the arm calls
+> `display-warning`, which is Lisp, and 141 unit tests reach this primitive on
+> a bare `Context` with no Lisp loaded.  See 183 §11 item 1.
+
 ## 171. The reported divergence is FOUR rows and not one, and the fourth is a signalled error rather than a coding difference: `(make-process :buffer B)` for a killed B errors where GNU returns a process, which is why GNU's `!BUFFER_LIVE_P` disjunct was unreachable here and why nothing that runs could have found it -- FIXED, four defects, and the mirrors 166 priced the untangling at have zero readers
 
 Entry 169 measured the GNU side so this entry would not have to (169 section 9
@@ -25202,6 +25227,30 @@ lowerings, `backtrace-debug`'s missing store, the `fixnump`/`wholenump` split an
 > without `NEOVM_FORCE_ORACLE_PATH` returns before asserting anything and
 > nextest reports the test as passed.  A green oracle suite is evidence only
 > about the tests that ran, and `0 skipped` is the line that says they did.
+
+> **2026-08-21, entry 183: three of this entry's six residuals do not survive
+> being reproduced, and one of them was a live bug rather than a latent one.**
+> Residual 1 (the `when_entered_debugger` read-back) is fixed, and the reason
+> it could not have been the "four-line" change it looked like is that the
+> counter it compares against did not exist as one slot: this port had a `u64`
+> on `CommandLoop` that counted and a `DEFVAR_INT` initialised to 0 that
+> nothing ever wrote, where GNU has exactly one `intmax_t`
+> (`src/keyboard.c:13903`).  Residual 2's two `specbind`s are fixed and
+> batch-measurable; its `max_ensure_room (200)` is refuted -- the depth
+> headroom inside the debugger measures 0 on BOTH sides in batch, so it is not
+> a redisplay item and not a gap.  Residual 3's §7 argument ("today no flagged
+> frame can reach them") is **measured false**: `backtrace-debug` flags a frame
+> by index, so a byte-compiled caller already routed to the fast return can be
+> flagged from inside the call that is returning, and GNU called the exit
+> debugger where this port called it zero times.  Two of the three primitives
+> were already safe by TYPE (`BacktraceNative` has no `debug_on_exit` field at
+> all; the oversized release `panic!`s), so the class was one member, not
+> three.  Residual 4 is worse than recorded -- `SIGUSR2` KILLS this port
+> (exit 140) where GNU enters the debugger and exits 0, because no handler is
+> installed at all -- and is still open.  Residual 6's frame-by-frame
+> comparison is done: 20 rows, 19 already agreed, and the twentieth is that
+> GNU does not `CHECK_FIXNAT` the offset in `(OFFSET . FUNCTION)` the way it
+> does the LEVEL argument.  Nothing in this entry's own findings changes.
 
 ## 173. Entry 168's handed-over clause: GNU decides a built-in variable's documentation by asking `Fboundp`, once, at dump time -- so the port of it is a question rather than a filter, and the 49 names it "would break" turn out to be 49 declarations missing from `syms_of_*` blocks this port already declares from, nought of which cannot be bound here -- FIXED
 
@@ -28595,3 +28644,640 @@ clean tests is not a gate; it was re-run from scratch for the figure above.
 
 Status: FIXED (the seeding).  The 28 names it was masking are recorded in
 §9 and §12, attributed to one cause, and deliberately not fixed here.
+
+## 183. The read-back half of ledger 172's stamp was missing, and so was the counter it compares against -- `num-nonmacro-input-events` was a SECOND storage nothing ever wrote; plus the fast bytecode return silently ate a debugger entry `backtrace-debug` really can arm, a DEFVAR head scraped out of a dead preprocessor region, and GNU's fifth `defvaralias` refusal -- FIXED (7 defects), with 3 of the 7 handed-over items premise-refuted by measurement and one of my own measurements retracted
+
+Seven items were handed over: six from ledger 172 (the debugger arming
+mechanism) and three from ledger 170 (the `DEFVAR` forwarding pass).  Three of
+them do not survive being reproduced -- one is closed, one is not a divergence,
+and one is *worse* than it was recorded as -- and the sweeps run to check them
+found four defects nobody had asked about.  Every number below carries the
+1-minute runnable count from `/proc/loadavg` at the moment it was taken, on the
+32-core box, against GNU Emacs 31.0.90 and a `target/release/neomacs` whose
+provenance was checked by asking it a question only post-178 code answers
+(`(documentation-property 'dos-codepage 'variable-documentation)` => `nil`) --
+and, after §8, run in place so it finds its own image, because a correct
+provenance answer does not tell you which startup path produced it.
+
+### 1. `when_entered_debugger`: reproduced, and the guard had nothing to read
+
+172 wrote the stamp where GNU writes it and said so: "nothing reads it back".
+Reproduced first, `-Q --batch`, `tmp/l183-p2.el`, runnable 7 -- three handled
+errors with `debug-on-signal` t and a counting debugger:
+
+```text
+                     GNU            this port
+(start when -1 events 0)            (start when -1 events 0)
+(after1 n 1 when 0)                 (after1 n 1 when 0)
+(after2 n 1 when 0)                 (after2 n 2 when 0)
+(after3 n 1 when 0)                 (after3 n 3 when 0)
+```
+
+GNU enters once and never again; this port entered every time.  The guard is
+`when_entered_debugger < num_nonmacro_input_events` (`src/eval.c:2212`), the
+last conjunct of `maybe_call_debugger`, under a comment that points at the two
+slots' shared documentation (`src/eval.c:4544-4557`): the budget is one
+debugger entry per non-macro input event, which in batch -- where no such event
+ever arrives -- is one entry per session.
+
+**And it gates the SIGNAL debugger only.**  `tmp/l183-p5.el`, runnable 16,
+three rows, of which the editors already agreed on two:
+
+```text
+                                     GNU                          this port
+after-signal                         (error) when 0               same
+entry-debugger-with-guard-shut       (lambda exit lambda exit)    same
+signal-with-guard-shut               nil                          (error)
+```
+
+`do_debug_on_call` (`src/eval.c:335-341`) and the six `debug_on_exit` sites
+call `call_debugger` unconditionally, so `debug-on-next-call` keeps working
+after the guard has shut -- twice over.  Only row 3 diverged, and the pin
+`the_reentry_guard_gates_the_signal_debugger_only` is that whole table.
+
+### 2. The reason it could not have been one comparison: there were two counters
+
+`tmp/l183-p4.el`, runnable 21, is the probe that decides the design.  Both
+operands are `DEFVAR_INT` slots Lisp can `setq`, so writing either from Lisp
+has to move the gate:
+
+```text
+                          GNU                        this port
+A (one error)             n 1 when 0 events 0        n 1 when 0 events 0
+B (setq the stamp to -1)  n 2 when 0                 n 2 when 0
+C (setq events to 5)      n 3 when 5 events 5        n 3 when 0 events 5
+D (no change)             n 3 when 5                 n 4 when 0
+```
+
+Row C is the finding.  In GNU, `num-nonmacro-input-events` **is** the counter:
+`DEFVAR_INT ("num-nonmacro-input-events", num_nonmacro_input_events, ...)`
+(`src/keyboard.c:13903`) forwards to the very `intmax_t` that `record_char`
+increments (`src/keyboard.c:3576`) and that `call_debugger` stamps into
+`when_entered_debugger` (`src/eval.c:299`).  So a Lisp `setq` of 5 makes the
+next entry stamp 5.  Here it stamped 0, because there were **two** storages: a
+`u64` field on `CommandLoop` that counted, and a `DEFVAR_INT` initialised to 0
+(`neovm-core/src/emacs_core/keyboard/pure.rs:615`) that **nothing ever wrote**.
+The Lisp-visible variable was frozen at 0 for the life of every session.
+
+That is the same villain as ledger 174's `load-in-progress` and P6.1's invented
+Rust default, in its purest form: a Rust field beside a Lisp name, agreeing
+only by accident.  The fix is not a sync -- it is deleting the field.
+
+* `CommandLoop::num_nonmacro_input_events` is gone
+  (`neovm-core/src/keyboard.rs:2141-2146`).
+* `CommandLoop::record_input_event` now returns
+  `NonmacroInputEvent::{Counted, SuppressedByMacroPlayback}`, `#[must_use]`,
+  because dropping the answer is exactly the bug (`neovm-core/src/keyboard.rs`).
+  It cannot bump the counter itself: the slot lives in the obarray, which that
+  type cannot see, and that is why it reports rather than duplicates.
+* `Context::record_input_event` performs GNU's `num_nonmacro_input_events++`
+  through the forwarder, and `Context::num_nonmacro_input_events()` reads it
+  the same way.
+* `Obarray::int_forwarder` was added beside the existing `bool_forwarder`
+  (`neovm-core/src/emacs_core/symbol.rs`), handling both redirects GNU's
+  `make_blv` can leave the descriptor under; `LispIntFwd::get_i64` gives the
+  slot as the `intmax_t` GNU's C compares, so no caller re-derives the
+  invariant `LispInteger` already carries.
+* `last_auto_save_input_events` stays a Rust field and became `i64` -- GNU's
+  `last_auto_save` is `static intmax_t` with no `DEFVAR` (`src/keyboard.c:237`),
+  so it is right for it to live there.
+
+The guard itself is [`Context::debugger_reentry_is_permitted`]
+(`neovm-core/src/emacs_core/debug_on_call.rs`), one comparison over the two
+forwarders, called from `maybe_call_debugger_for_signal` as GNU's last
+conjunct.
+
+### 3. `call_debugger` bound two of GNU's four, and the two missing ones are batch-measurable
+
+`tmp/l183-p9.el`, runnable 8, reads all four bindings and their knock-on from
+*inside* the debugger, entered from within
+`(let ((inhibit-redisplay t) (inhibit-changing-match-data t)) ...)`:
+
+```text
+                              GNU    this port, before
+inhibit-redisplay             nil    t
+inhibit-changing-match-data   nil    t
+inhibit-debugger              t      t
+debugger-may-continue         t      t
+depth-headroom                0      0
+(string-match "b" "abc") =>   1      102   (stale)
+```
+
+GNU states the purpose of each in its own comments: the debugger must be able
+to draw when its caller had display switched off (`src/eval.c:301-308`), and it
+must be able to use match data when its caller was inside `string-match-p`
+(`src/eval.c:311-314`).  Both added, in GNU's order.  The last row is the
+knock-on and is the reason the second one is not cosmetic.
+
+**`max_ensure_room (200)` is refuted as a divergence, in batch.**  Row 5 is
+`0` on BOTH sides: GNU's 200-frame reserve produces no change in
+`max-lisp-eval-depth` because the limit is already above the reserve.  172
+listed it with the redisplay items; it is not one, and it is not a gap here
+either.  The three that ARE redisplay items -- `debugger-may-continue` computed
+as `debug_while_redisplaying ? Qnil : Qt` (`src/eval.c:306-307`),
+`cancel_hourglass` (`:296`), and the jump to `Ftop_level` when the debugger
+perturbed an in-flight redisplay (`:326-330`) -- are declined here, with the
+measurement that in batch GNU answers `t` for the first and never reaches the
+other two.  A GUI probe has to come first; see §10.
+
+### 4. The three pop primitives: two were already safe by TYPE, and the third was not latent
+
+172 recorded all three as "safe by reachability, not by type", and said "today
+no flagged frame can reach them".  Checked one at a time:
+
+* `pop_native_backtrace_frame` -- already safe **by type**.  It pops only
+  `SpecBinding::BacktraceNative`, a variant with **no `debug_on_exit` field at
+  all**; `set_backtrace_debug_on_exit` promotes it to the owned shape rather
+  than setting a flag on it (`neovm-core/src/emacs_core/eval.rs:14214-14222`).
+  Its `bool` return is about specpdl BALANCE, not about the flag.  172's
+  sentence is true of it and vacuous.
+* `release_oversized_bytecode_backtrace_frame` -- `panic!`s on a flagged frame
+  rather than dropping it, which 172 also said.  Loud, not silent.
+* `pop_fast_bytecode_backtrace_frame` -- **not latent.  A live, reproducible
+  bug.**
+
+`backtrace-debug` sets the flag on an arbitrary live frame *by index*
+(`src/eval.c:4016-4029`), so "the VM checked `debug-on-next-call` before
+choosing the fast path" does not hold: the flag can appear after the path was
+chosen, from inside the call that is returning.  `tmp/l183-p10.el`, runnable 14
+-- a byte-compiled `l183-outer` calling a byte-compiled `l183-inner` that runs
+`(backtrace-debug 1 t)` and returns normally:
+
+```text
+                GNU                 this port, before
+byte-compiled   log=(exit)          log=nil
+interpreted     log=(exit)          log=(exit)
+```
+
+The full form (`tmp/l183-p11.el`) is `(outer-done ((exit inner-done)))` in GNU
+and `(outer-done nil)` here.  The interpreted twin agreed in both editors,
+which is what makes it a fast-path bug and not a `backtrace-debug` bug.
+
+`unbind_to_with_result` carries a comment claiming "no fast path above can have
+skipped a flagged frame, and this is the only place one can be popped"
+(`neovm-core/src/emacs_core/eval.rs:14669-14675`).  It was wrong about this
+path; it is now true.
+
+**The type.**  `pop_fast_bytecode_backtrace_frame` makes GNU's own test --
+`if (backtrace_debug_on_exit (pdl))` *before* `specpdl_ptr--`
+(`src/bytecode.c:825-828`) -- and REFUSES, returning
+`FastBytecodePop::OwesDebugOnExit(BytecodeBacktraceFrame)`.  Handing the token
+back rather than a bare `bool` is what makes the refusal actionable: a caller
+cannot pop the frame another way without a token, cannot drop the token without
+tripping `BytecodeBacktraceFrame`'s own `#[must_use]`, and cannot ignore the
+outcome without tripping the enum's.  Two of the three call sites route the
+refusal into `pop_bytecode_backtrace_token_with_result`, which runs the exit
+debugger and lets its return value REPLACE the call's, as GNU does.
+
+The third, the iterative driver's `Breturn`
+(`neovm-core/src/emacs_core/bytecode/vm.rs`), has no way to carry a replaced
+value or a nonlocal exit out, so a flagged frame is part of its **eligibility
+gate** instead -- which is GNU's own shape, and the gate can be exact because
+the frame it will pop is always `cleanup.specpdl_base - 1`.  It then calls
+`pop_fast_bytecode_backtrace_frame_unchecked`, whose single caller names the
+proof three lines above it, in the same style as the
+`restore_current_unchecked` it sits beside.  Asking twice on the hottest return
+in the interpreter buys nothing; asking NOWHERE was the bug.
+
+### 5. `backtrace-debug`'s BASE resolution: 20 rows compared, 19 already agreed
+
+172 audited it "only at its edges".  `get_backtrace_starting_at`
+(`src/eval.c:3958-3980`) is shared by `backtrace-frame`, `backtrace-debug`,
+`mapbacktrace` and `backtrace--frames-from-thread`, so `tmp/l183-p13.el` probes
+all four through the first, from three frames down a known stack.  Runnable 14:
+
+| # | row | GNU | this port, before |
+|---|-----|-----|-------------------|
+| 1 | `(backtrace-frame 0)` | `(t backtrace-frame 0)` | same |
+| 2 | base = symbol | `(t l183-b2 l183-run)` | same |
+| 3 | base = function object | `(t l183-b2 l183-run)` | same |
+| 4 | base = `defalias` of it | `(t l183-b2 l183-run)` | same |
+| 5 | base absent from stack | `nil` | same |
+| 6 | base `(0 . f)` | `(t l183-b2 l183-run)` | same |
+| 7 | base `(1 . f)` | `(t l183-b1 l183-run)` | same |
+| 8 | base `(99 . f)` | `nil` | same |
+| **9** | **base `(-1 . f)`** | **`(t l183-b2 l183-run)`** | **`(wrong-type-argument wholenump -1)`** |
+| 10 | base `(nil . f)` | `nil` | same |
+| 11 | base `t` | `nil` | same |
+| 12 | LEVEL 1 + base | `(t l183-b1 l183-run)` | same |
+| 13 | LEVEL -1 | `(wrong-type-argument wholenump)` | same |
+| 14 | LEVEL 99 | `nil` | same |
+| 15 | `mapbacktrace` frame count | `8` | same |
+| 16 | `backtrace-debug` return | `t` | same |
+| 17 | flag read back | `nil` | same |
+| 18 | `backtrace-debug` FLAG nil | `nil` | same |
+| 19 | `backtrace-debug` absent base | `t` | same |
+| 20 | `backtrace-debug` LEVEL -1 | `(wrong-type-argument wholenump)` | same |
+
+One row of twenty.  GNU takes the offset out of `(OFFSET . FUNCTION)` with a
+bare `XFIXNUM` (`src/eval.c:3966`) -- there is no `CHECK_FIXNAT` there, unlike
+the LEVEL argument twenty lines down (`:3986`) -- and spends it in
+`while (backtrace_p (pdl) && offset-- > 0)` (`:3977`).  A negative offset is
+therefore not an error; it is a loop that does not run.  This port had copied
+the LEVEL check onto both numbers.  One line, and a pin
+(`a_negative_base_offset_is_not_an_error_like_gnu`).
+
+### 6. Ledger 170's fifth refusal, and the constraint that made it a design problem
+
+Reproduced, `tmp/l183-p6.el`, runnable 40, four rows:
+
+```text
+                     GNU                                          this port, before
+1 plain-let          (refused "...let-bound variable an alias: l183p")   allowed
+2 unwound-let        allowed                                       allowed
+3 base-let-bound     allowed                                       allowed
+4 let-local          (refused "...buffer-local variable an alias") same
+```
+
+Row 2 is what makes it a specpdl question and not a symbol-flag one: the same
+symbol, once the binding has unwound, is accepted.  Row 3 is what makes it a
+question about NEW-ALIAS only.
+
+170 declined it because "the check needs the specpdl, which
+`Obarray::check_variable_alias` deliberately cannot see", and feared a
+bootstrap-time false positive.  Both halves dissolve once the check is put
+where GNU puts it, which is **not** in the redirect switch:
+
+* GNU runs the scan **after** the value migration and the "Overwriting value"
+  warning (`src/eval.c:682-711`), not with the other four refusals.  That is
+  Lisp-visible and measured: `tmp/l183-p7.el` shows GNU copying the LET-BOUND
+  value 9 into an unbound BASE and *then* refusing, leaving the alias edge
+  uninstalled (`migration (t 9)`, `edge (l183x 1)`).  So the check could not
+  have gone into `check_variable_alias` even if the obarray could see the
+  specpdl.
+* Its home is therefore `defvaralias_impl`
+  (`neovm-core/src/emacs_core/builtins/symbols.rs`), which holds a `&mut
+  Context` and can ask `Context::symbol_is_let_bound`.  `Obarray` stays
+  specpdl-free; `MakeAliasError` keeps the whole refusal set and its messages
+  in one place, with the new arm's doc saying why it is raised elsewhere.
+* GNU's test is the ordinal `(--p)->kind >= SPECPDL_LET`, which works only
+  because the three LET subkinds are the last enumerators and a comment asks
+  the next person to keep it that way (`src/lisp.h:3563-3566`).
+  `SpecBinding::let_bound_symbol` is an **exhaustive match** over all fifteen
+  variants instead: a new binding kind cannot silently answer "not a
+  let-binding", because it will not compile until the match says which it is.
+
+**The false positive 170 feared did not happen.**  The check went in and the
+whole `neovm-core` suite -- bootstrap, loadup and pdump paths included -- ran
+with it; the count is in §9.  170's premise ("this port `let`-binds internal
+variables GNU does not") is true but was the wrong premise: the refusal is
+about the ONE symbol being aliased, not about the population of let-bindings.
+
+### 7. Four things the sweeps found that nobody asked about
+
+**7a. A `DEFVAR_LISP` head parked in a dead preprocessor region got scraped
+into the generated table.**  `echo-area-clear-hook` is declared at
+`src/keyboard.c:14059` -- inside `#if 0 ... #endif` (`:14057-14061`).  No build
+has ever compiled it; in GNU the name is an ordinary plain Lisp variable.
+`scripts/extract_gnu_defvar_object_names.py` scanned raw C text, so the row
+existed, `adopt` gave the symbol GNU's redirect tag, and two Lisp facts went
+wrong at once:
+
+```text
+                                              GNU        this port, before
+(boundp / symbol-value / special-variable-p)  (t nil nil) (t nil t)
+(makunbound 'echo-area-clear-hook)            the symbol  (error "Built-in variable may not be unbound : ...")
+```
+
+Audited: **632 `DEFVAR_LISP`/`_NOPRO`/`_KBOARD` heads in GNU's `src/*.c`, 7 of
+them inside `#if 0`**, of which 5 (`x-pointer-shape` and four cursor names in
+`w32fns.c`) are also declared in `xfns.c` and belong in the table anyway.  Two
+do not: `echo-area-clear-hook` and `w32-generate-fake-inodes`
+(`src/w32proc.c:4831`).  The extractor now blanks those regions before
+scanning, preserving every byte offset so the `file:line` comments stay true,
+and the table went 578 -> 576 rows.  It deliberately does **not** evaluate
+`#ifdef`/`#ifndef`: those guard platform files whose names belong in the table,
+and `adopt` reports a name this build lacks as `Absent`.  Same failure class as
+ledger 176's `features` and ledger 173's extractor bugs, and fixed in the same
+place -- the generator, not a list beside it.
+
+**7b. `defvaralias` never warns that it is throwing a value away.**  GNU's
+`else if` arm (`src/eval.c:686-701`) calls `display-warning` when NEW-ALIAS is
+bound and holds a different object from BASE.  Measured with `display-warning`
+advised to record its arguments (`tmp/l183-p15.el`):
+
+```text
+                   GNU                                                    this port
+differing values   ((defvaralias losing-value l183w1)                     nil
+                    "Overwriting value of ‘l183w1’ by aliasing to ‘l183w2’")
+equal values       nil                                                    nil
+BASE unbound       nil  (the migration arm ran instead)                   nil
+NEW-ALIAS unbound  nil                                                    nil
+```
+
+Implemented, measured, and then **reverted** -- see §11.  The comparison is
+`EQ` on the two CURRENT values, and in this crate `Value`'s `==` is Lisp
+`equal`, so it has to be spelled `eq_value` or the warning goes silent for
+every pair of structurally equal lists; that part is worth writing down even
+though the arm is not shipped.
+
+**7c. `SIGUSR2` kills this port where GNU enters the debugger.**  172 recorded
+`debug-on-event` as "cannot arm anything here" because `handle_user_signal`
+(`src/keyboard.c:8494-8508`) has no counterpart.  It is worse than that:
+`add_user_signal (SIGUSR1, ...)` / `add_user_signal (SIGUSR2, ...)` run from
+`init_signals`, and this port installs no handler at all.  `tmp/l183-p12.sh`,
+sending `SIGUSR2` to a batch editor sitting in `(sit-for 6)`:
+
+```text
+                 SIGUSR2                                            SIGUSR1
+GNU        rc=0   after log=(error) quit-flag=nil debug-on-quit=t    rc=0   after log=nil ... debug-on-quit=nil
+this port  rc=140 killed, no output after "start"                    rc=138 killed, no output after "start"
+```
+
+Both signals, and the `SIGUSR1` row is the plainer statement of the gap: GNU
+does not enter the debugger for it (it is not `debug-on-event`'s value) and
+still survives, because `add_user_signal` installed a handler that queues an
+event.  This port has no handler for either.
+
+Not fixed -- see §11.
+
+**7d. One GNU-declared name is still `refused -> allowed`, because `adopt` is
+a one-shot pass -- and the first measurement of it said 24.**  See §8, which
+also records how a binary with correct provenance answered the wrong
+question.
+
+### 8. The 578-name re-measurement -- and the measurement I got wrong first
+
+170's §1 table, regenerated name by name from GNU's `src/*.c`
+(`tmp/l183-gen-names.sh`, `tmp/l183-probe-names.el`, `tmp/l183-join.sh`).
+
+**The first run of it was wrong, and the reason is a trap worth its own
+sentence.**  The campaign's standing rule is "verify the binary's PROVENANCE,
+not its mtime", and the copy I checked provenance on answered the
+`dos-codepage` question correctly -- but I had copied it to a scratch
+directory, and `runtime_image_executable` finds the pdump beside
+`current_exe()`.  A neomacs that cannot find its image does not fail: it
+**silently bootstraps from source**, prints `Dump mode: nil` and a load-path
+line, and answers a different question.  On that path 24 names read
+`refused -> allowed`; on the image path -- the one the oracle gates -- **one**
+does.  A binary whose provenance is right can still be running the wrong
+startup, and the tell is on stderr, not in the answer.
+
+Both sides re-taken on the image path, GNU Emacs 31.0.90 against
+`target/release/neomacs` (before = main's, after = this branch's fresh build),
+runnable 30:
+
+| GNU -> Neomacs | ledger 170 | before | after | what it is |
+|---|---|---|---|---|
+| refused -> refused | 5 | **500** | **500** | 170's fix, landed |
+| unbound -> unbound | 71 | **72** | **72** | names neither build declares |
+| **refused -> unbound** | **49** | **0** | **0** | **ledger 173 closed it** |
+| refused -> allowed | **447** | **1** | **0** | `default-minibuffer-frame`, fixed below |
+| allowed -> refused | 0 | **3** | **2** | `echo-area-clear-hook` (§7a, fixed) + 2 |
+| allowed -> allowed | 3 | 0 | **1** | `echo-area-clear-hook`, now agreeing |
+| unbound -> refused | 0 | **2** | **2** | `xwidget-list`, `xwidget-view-list` |
+
+**Item 6 of the brief is closed by re-measurement: `refused -> unbound` is 0 of
+578, on both startup paths.**  Ledger 173 declared all 49 and none regressed.
+The brief was right to say "re-measure before assuming this is still open".
+
+**Item 7 of the brief is not a divergence.**  `xwidget-list` and
+`xwidget-view-list` read `unbound -> refused` rather than 170's
+`unbound -> allowed`, and the move is in the RIGHT direction: this port
+implements xwidgets (`neovm-core/src/emacs_core/xwidget.rs`, the WPE/WebKit
+render path) and the local GNU build does not compile them.  A GNU built
+`--with-xwidgets` declares both with `DEFVAR_LISP` (`src/xwidget.c:3988,3992`)
+and refuses `makunbound` on them exactly as this port does.  What 170 recorded
+as a residual is a build-configuration difference.
+
+`next-selection-coding-system` and `selection-coding-system` are the same shape
+inverted, and are the `allowed -> refused` pair that remains: GNU declares them
+in `xselect.c` under `HAVE_X_WINDOWS`, the reference build has no X, so there
+they are ordinary Lisp variables from `select.el`.  This port has them
+forwarded because the declaration table deliberately does **not** evaluate
+`#ifdef` (§7a explains why: `x-pointer-shape` is declared in four
+window-system files and belongs in the table).  A GNU built with X answers
+`refused` for both.  Left as it is, and recorded so the next reader does not
+"fix" it by teaching the extractor about `#ifdef` and losing five legitimate
+rows.
+
+**The one real residual, and it is fixed here.**  `default-minibuffer-frame` is
+`DEFVAR_KBOARD` (`src/frame.c:7555`), and this port bound it only from
+`post_image_init`'s reset table -- which runs AFTER `defvar_object::adopt`, the
+one-shot pass that can only tag names that already exist
+(`neovm-core/src/emacs_core/eval.rs:6716`).  Two Lisp facts followed:
+
+```text
+                                       GNU          this port, before
+(boundp / value / special-variable-p)  (t nil t)    (t nil nil)
+(makunbound ...)                       refused      the symbol
+(make-local-variable ...)              refused      -- (untested before)
+```
+
+Declared at the C-level bootstrap where GNU's `syms_of_frame` declares it, so
+`adopt` finds it; the post-image reset then writes nil through the forwarder.
+`a_defvar_kboard_name_bound_after_the_adoption_pass_still_gets_gnus_tag` pins
+all three rows.
+
+**What the one-shot pass costs in general is still open**, and is now sized
+honestly at one name rather than 24: any GNU-declared variable this port brings
+into existence after `adopt` stays `SYMBOL_PLAINVAL`.  Nothing structural
+prevents a second such name appearing; what would prevent it is either
+declaring every GNU name at the C boundary the way GNU does, or making the
+table consulted at bind time rather than once.  Both are bigger than this
+entry, and with the residual at one name neither is cost-justified today.
+
+### 9. Failing tests first -- and the first RED was a FALSE red
+
+Every fix here was pinned before it was made.  The first run of the four guard
+pins reported `4 tests run: 0 passed, 4 failed, 9249 skipped` (runnable 22) and
+that number is worthless: reading the failure text rather than the count shows
+
+```text
+probe should evaluate: Signal { symbol: SymId(1224 void-function),
+                                data: [Symbol(SymId(3321 ignore-errors))] }
+```
+
+-- `ignore-errors` is a macro from `subr.el` and a bare `Context::new()` has no
+Lisp loaded at all, so the pins failed before reaching a single assertion.  A
+seventh form of the false green, inverted: **a RED that is red for the wrong
+reason proves exactly as little as a green with `running 0 tests`.**  Three
+more pins had the same defect (`defun` and `byte-compile` are Lisp too), and
+one failed on `void-function display-warning` -- which is how §11 item 1 was
+decided.  Fixed by spelling the probes with `condition-case` (a special form)
+and by moving the two that genuinely need Lisp onto
+`test_utils::runtime_startup_context()` / `bootstrap_eval`.
+
+**The real red is a released binary on the image path, per defect, quoted in
+§1-§7 beside GNU's answer** -- main's `target/release/neomacs`, run in place so
+it finds its own pdump (see §8 for why that qualifier is load-bearing).  That
+is stronger evidence than a unit-test red -- it is the shipped editor, not a
+bare `Context` -- and every row was taken from a
+`tmp/l183-p*.el` file that can be re-run.  Each of the eleven pins names its
+probe file in its doc comment:
+
+| pin | probe | merge-base answer |
+|---|---|---|
+| `the_signal_debugger_fires_once_while_no_new_input_arrives` | `p2` | `n 1,2,3` vs GNU `1,1,1` |
+| `rewinding_the_stamp_from_lisp_reopens_the_signal_debugger_once` | `p4` B | agreed |
+| `num_nonmacro_input_events_is_the_slot_the_stamp_reads` | `p4` C | `when 0` vs GNU `when 5` |
+| `the_reentry_guard_gates_the_signal_debugger_only` | `p5` | `(error)` vs GNU `nil` |
+| `call_debugger_binds_gnus_four_variables` | `p9` | `t t` vs GNU `nil nil` |
+| `a_byte_compiled_frame_flagged_by_backtrace_debug_still_calls_the_exit_debugger` | `p10`/`p11` | `log=nil` vs GNU `log=(exit)` |
+| `a_let_bound_variable_cannot_become_an_alias_like_gnu` | `p6` | `allowed` vs GNU `refused` |
+| `the_let_bound_refusal_happens_after_the_value_migration` | `p7` | `edge (l183y 1)` vs GNU `(l183x 1)` |
+| `a_defvar_parked_in_a_dead_preprocessor_region_is_not_a_declaration` | direct | `(t nil t)` vs GNU `(t nil nil)` |
+| `a_negative_base_offset_is_not_an_error_like_gnu` | `p13`/`p14` | `wrong-type-argument` vs GNU the frame |
+| `a_defvar_kboard_name_bound_after_the_adoption_pass_still_gets_gnus_tag` | name sweep | `(t nil nil)` vs GNU `(t nil t)` |
+
+### 10. Gates
+
+Actual numbers, with the 1-minute runnable count from `/proc/loadavg` beside
+each, on the 32-core box.  Failures are enumerated by NAME.
+
+```
+cargo fmt --all --check                                    clean, 0 lines of diff
+cargo check --workspace --all-targets                      0 errors; the 4 warnings
+                                                           (maybe_keymap_in_obarray,
+                                                           FrameManager, an unused doc
+                                                           comment, a duplicated
+                                                           #[inline] in syntax.rs) are
+                                                           present in the pre-change log
+                                                           too                    (load 30)
+cargo xtask fresh-build --release                          finished successfully, twice
+                                                           (never piped)         (load 91, 14)
+cargo nextest run -p neovm-core -p neomacs-layout-engine   11187 tests run: 11187
+                                                           passed, 54 skipped    (load 5-14)
+cargo nextest run -p neovm-oracle-tests                    38801 tests run:
+   (NEOVM_FORCE_ORACLE_PATH set, else the pins return
+    before asserting -- ledger 176's lesson)                38798 passed, 3 failed,
+                                                            0 skipped            (load 14-41)
+cargo xtask gc-stress --editor ./target/release/neomacs    9/9 probes passed     (load 14)
+```
+
+The three oracle failures, by name, are the three the coordinator verified as
+**pre-existing at `origin/main`** and none of them is in this entry's area:
+
+```
+divergence_combo_general::core_subsystems_strict::div_core_divergence_surface_window_scroll_error_and_state_combo
+divergence_combo_general::core_subsystems_strict::div_core_divergence_surface_window_start_end_scroll_state
+divergence_combo_strict::process_adaptive_buffering_kill_buffer_proc_window_scroll_functions::div_u5_window_scroll_functions_hook
+```
+
+`0 skipped` is the line that says the oracle pins actually ran: an oracle suite
+run without `NEOVM_FORCE_ORACLE_PATH` returns from each pin before asserting
+anything and nextest reports them all as passed (ledger 176).
+
+**The end-to-end proof, and it is the one worth quoting.**  All ten probe files
+run against BOTH editors and diffed row by row (`tmp/l183-verify.sh`):
+
+```
+                       main's target/release/neomacs      this branch's, after fresh build
+                       (image path, provenance checked)
+l183-p2   4 rows       DIVERGE                            AGREE
+l183-p4   4 rows       DIVERGE                            AGREE
+l183-p5   3 rows       DIVERGE                            AGREE
+l183-p6   4 rows       DIVERGE                            AGREE
+l183-p7   2 rows       DIVERGE                            AGREE
+l183-p9   2 rows       DIVERGE                            AGREE
+l183-p11  3 rows       DIVERGE                            AGREE
+l183-p13 20 rows       DIVERGE                            AGREE
+l183-p14  1 row        DIVERGE                            AGREE
+l183-p16  1 row        DIVERGE                            AGREE
+                       divergent probes: 10               divergent probes: 0
+```
+
+44 rows, 10 of 10 probes divergent before and 0 after, against a GNU the same
+command ran in the same second.  And the 578-name sweep on the image path, the
+same before/after:
+
+```
+                     before   after
+refused -> refused     500      501
+unbound -> unbound      72       72
+refused -> unbound       0        0
+refused -> allowed       1        0
+allowed -> refused       3        2
+allowed -> allowed       0        1
+unbound -> refused       2        2
+```
+
+### 11. Found and NOT fixed
+
+1. **`defvaralias`'s "Overwriting value" warning: implemented, measured,
+   REVERTED.**  §7b.  GNU's `else if` arm calls `display-warning`
+   (`src/eval.c:686-701`), which is Lisp.  With the arm in place, four pins
+   failed on `void-function display-warning` in a bare `Context::new()`, and
+   **141 existing unit tests across 9 files reach `defvaralias` in exactly that
+   state** -- a context GNU has no counterpart for, because GNU always has
+   `warnings.el` autoloaded.  Guarding the call on `fboundp` would be a
+   deviation from GNU, which signals; loading Lisp into every bare `Context` is
+   not this entry's change.  The arm is deleted and the reason is written at
+   the migration site it belongs beside.  Whoever takes it needs to decide
+   where the guard lives first, and the decision is worth its own entry.
+2. **`SIGUSR1`/`SIGUSR2` have no handler, so `debug-on-event` cannot exist and
+   the editor dies instead.**  §7c.  GNU registers both from `init_signals`
+   (`add_user_signal (SIGUSR1, "sigusr1")`, `add_user_signal (SIGUSR2,
+   "sigusr2")`) and `handle_user_signal` (`src/keyboard.c:8494-8508`) either
+   arms the debugger four ways -- `debug_on_next_call = true; debug_on_quit =
+   true; Vquit_flag = Qt; Vinhibit_quit = Qnil;` -- or queues the named event
+   for `special-event-map`.  This port installs nothing, so the default
+   disposition terminates the process -- measured for BOTH signals: `SIGUSR2`
+   `rc=140` and `SIGUSR1` `rc=138` here, against `rc=0` for each in GNU.  The arming half is now four writes this
+   entry's mechanism already supports; the delivery half is a subsystem --
+   an `sigaction` install, an async-signal-safe flag or self-pipe, and event
+   delivery through the command loop -- and it lands in the process/signal PAL
+   where ledger 180 is working.  Not started; the coordinator should route it.
+3. **`adopt` is a one-shot pass, structurally.**  §8.  The residual it leaves
+   is one name today (`default-minibuffer-frame`, fixed here), but nothing
+   prevents the next GNU-declared variable this port creates after the pass
+   from landing in the same state.  The two fixes -- declare every GNU name at
+   the C boundary as GNU does, or consult the table at bind time rather than
+   once -- are both bigger than this entry, and at one name neither is
+   cost-justified.
+   Also recorded there: `next-selection-coding-system` and
+   `selection-coding-system` read `allowed -> refused` because the extractor
+   deliberately does not evaluate `#ifdef`; a GNU built with X agrees with this
+   port, and "fixing" it would lose five legitimate rows.
+4. **`call_debugger`'s three redisplay behaviours.**  §3.  `debugger-may-continue`
+   as `debug_while_redisplaying ? Qnil : Qt` (`src/eval.c:306-307`),
+   `cancel_hourglass` (`:296`), and the `Ftop_level` jump when the debugger
+   perturbed an in-flight redisplay (`:326-330`).  In batch GNU answers `t` for
+   the first and never reaches the other two, so a batch probe cannot tell a
+   correct port from an absent one -- this needs a GUI probe that enters the
+   debugger from inside redisplay, which is the same shape as the interactive-
+   only hangs ledger 174 could not clear with batch probes.
+5. **The menu back-ends' `specbind (Qdebug_on_next_call, Qnil)`**
+   (`src/xmenu.c:984`, `src/pgtkmenu.c:270`, `src/w32menu.c:516`,
+   `src/haikumenu.c:618`), under GNU's comment "Don't let the debugger step
+   into this code because it is not reentrant".  Still no counterpart, and
+   still gated on (1) plus a menu dispatch that can run with the flag armed.
+6. **`pop_fast_bytecode_backtrace_frame_unchecked` is proof-by-call-site, not
+   proof-by-type.**  §4.  Its one caller's eligibility gate asks
+   `backtrace_debug_on_exit` about the exact index three lines above, in the
+   same style as the `restore_current_unchecked` beside it, and a
+   `debug_assert!` restates it.  The type-level version needs
+   `InterpreterValueCompletion` to be able to carry a replaced value and a
+   nonlocal exit out of a `Breturn`, which is a VM-driver change and belongs in
+   its own entry.
+7. **`maybe_call_debugger`'s `! input_blocked_p ()` conjunct**
+   (`src/eval.c:2200-2202`), the first of the five.  This port has no
+   `interrupt_input_blocked` counter, so there is no state that could make the
+   test false and nothing to measure it with; recorded so the conjunct is not
+   assumed present.
+8. **`echo-area-clear-hook` is bound in both editors and neither `defvar`s
+   it.**  GNU answers `(boundp ...)` => `t` with `special-variable-p` => `nil`,
+   and this port now agrees, but where GNU's binding comes from was not traced
+   -- the `DEFVAR` that would explain it is the dead one in §7a.  The facts
+   match; the provenance is unexplained.
+
+### 12. Notes added to earlier entries
+
+172 and 170 each get a dated in-place note.  Neither is rewritten: 172's
+mechanism is what made the read-back implementable at all, and its sizing of
+residual 1 as "the biggest of the six" was right.  What its §7 got wrong is a
+reachability argument, and the lesson is the one this campaign keeps
+re-learning -- an argument that a bad state is unreachable is only as good as
+the enumeration of ways to reach it, and `backtrace-debug` is a way to reach an
+arbitrary frame by index that no enumeration of dispatch sites would have
+found.
+
+Status: FIXED -- seven defects: the signal debugger's re-entry guard and the
+single slot it needs, two of `call_debugger`'s four bindings, a fast bytecode
+return that dropped a debugger entry `backtrace-debug` really can arm, GNU's
+fifth `defvaralias` refusal, a spurious row in a generated declaration table,
+a `CHECK_FIXNAT` copied onto a number GNU does not check, and a `DEFVAR_KBOARD`
+name declared too late for the pass that tags it.  Three of the seven
+handed-over items were premise-refuted rather than fixed, and one of this
+entry's own measurements was retracted for the same kind of reason: the number
+was taken from a binary that had been copied away from its image.
