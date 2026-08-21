@@ -21764,6 +21764,25 @@ decoded text, so a unit fixture that reads `get_output` on a bufferless process
 would stop seeing anything.  It is a fix about the mirrors, not about coding,
 and it is not this entry's.
 
+> **Note added 2026-08-21 by entry 171, which closed this.**  The price above
+> is wrong in the reader's favour and the diagnosis is wrong in one place.
+>
+> The mirrors have **no readers**.  `get_output` occurs once in the workspace
+> and it is its own definition; the fixture this paragraph worries about does
+> not exist, and the one test that mentions `get_output` says in a comment that
+> it deliberately reads `undecoded_bytes()` instead.  Deleting the fields costs
+> exactly two rustc errors under `--all-targets`, both initialisers.  So the
+> untangling was not the work.
+>
+> The work was `make-process` REFUSING the state.  `!BUFFER_LIVE_P` was not
+> reachable at creation time in this port at all: `(make-process :buffer B)`
+> for a killed `B` signalled `Selecting deleted buffer`, where GNU's
+> `Fget_buffer_create` returns a buffer object "as given, even if it is dead"
+> (src/buffer.c:581-582).  That is why this paragraph reads as being about
+> `NILP (p->buffer)` only -- the other disjunct could not be measured.  Three
+> more divergences of the same shape came out of the audit that fixing it made
+> possible; see entry 171 sections 1 and 5.
+
 **`chinese-hz` decodes a `~}` this port's decoder eats.**  Found by the read
 boundary probe and not caused by it: `decode_via_hz` is a Rust reimplementation
 of a coding system GNU implements in Lisp (`decode-hz-region`,
@@ -23208,6 +23227,16 @@ pinned by `signal_process_reads_an_integer_as_an_os_pid_like_gnu`.
    untangling the `proc.stdout` diagnostic mirrors, which are fed from the
    decoded text.  Its own entry, and the measurement above means that entry does
    not have to re-derive the GNU side.
+
+   *Note added 2026-08-21 by entry 171, which closed it.*  The GNU measurement
+   above was used as given and did not need re-deriving, which is what it was
+   for.  Two things it under-counted, both because it was taken from GNU alone:
+   the divergence is **four** rows and not one (a killed process buffer
+   SIGNALLED here, and the `undecided` sticky rewrite is a third observable),
+   and 166's stated cost -- the `proc.stdout` mirrors -- was not a cost at all,
+   because nothing in the workspace reads them.  The expensive half was
+   `make-process` refusing a dead buffer, which made GNU's `!BUFFER_LIVE_P`
+   disjunct unreachable and hid three neighbours with it.
 3. **`stamp_process_for_delete` can retire a process with a NON-terminal
    status, and GNU cannot.**  Its middle arm adopts a staged `pending_status`,
    and `process_status_from_child_wait` maps `ChildWait::Continued` to `run`
