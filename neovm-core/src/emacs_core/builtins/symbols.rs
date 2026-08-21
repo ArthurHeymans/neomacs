@@ -5265,11 +5265,10 @@ pub(crate) fn builtin_internal_subr_documentation(args: Vec<Value>) -> EvalResul
     // `function-documentation' caller checks for `t' and signals
     // `invalid-function'.
     let func = args[0];
-    let Some(id) = func.as_subr_id() else {
+    let Some(subr) = super::super::subr_docs::SnarfedSubr::of(func) else {
         return Ok(Value::T);
     };
-    let name = resolve_sym(id);
-    Ok(super::super::subr_docs::lookup(name)
+    Ok(super::super::subr_docs::lookup(&subr)
         .map(Value::string)
         .unwrap_or(Value::NIL))
 }

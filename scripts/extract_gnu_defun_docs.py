@@ -1,28 +1,54 @@
 #!/usr/bin/env python3
 """Extract GNU Emacs DEFUN doc: text into a Rust source file.
 
-Walks every `.c` file in GNU Emacs's `src/` directory looking for
-DEFUN declarations of the form:
+The scan itself is `scripts/make_docfile.py`, a character-for-character port of
+GNU's `lib-src/make-docfile.c`.  This script is only the `Fsnarf_documentation`
+half: it takes make-docfile's `\\037F` records and decides which of them a GNU
+build would actually install on a symbol.
 
     DEFUN ("name", Fname, Sname, MIN, MAX, INTERACTIVE,
            doc: /* DOCSTRING TEXT
     POSSIBLY MULTI-LINE */)
       (ARG_DECLS)
 
-For each match, emits a `(name, doc)` tuple to a Rust file:
+becomes
 
+    #[rustfmt::skip]
     pub(crate) static GNU_SUBR_DOCS: &[(&str, &str)] = &[
-        ("name", "DOCSTRING TEXT\nPOSSIBLY MULTI-LINE"),
+        ("name", "DOCSTRING TEXT\\nPOSSIBLY MULTI-LINE\\n\\n(fn ARGS)"),
         ...
     ];
 
-Output is sorted alphabetically by name (so a future binary search
-can replace the linear scan).
+sorted alphabetically by name.
 
-The script is intentionally simple — it doesn't try to handle every
-GNU C corner case, just the canonical DEFUN shape that covers
-~99% of subrs. Edge cases (#ifdef-gated DEFUNs, manual doc strings
-set in syms_of_*) are left as TODO comments.
+## Why the scan is not a regular expression any more (ledger 181)
+
+It used to be three: one regex for the `DEFUN` head, one literal search for
+`"doc: /*"`, and a hand-written rule for leading whitespace.  Measured against
+GNU's own `make-docfile` binary over the same 152 files, that produced 1703
+rows where GNU produces 1733, and 55 of the 1703 were wrong:
+
+  * **30 heads never matched.**  The head regex required a line break after the
+    interactive spec, and GNU's sources put `doc:` on that line freely
+    (`data.c:1067`, `xwidget.c:483`, `dispnew.c:3442`, ...); two more spell
+    MIN as a C identifier rather than a literal (`charset_arg_max`,
+    `charset.c:845`; `coding_arg_max`, `coding.c:10988`).
+  * **7 docs were read out of a LATER function's comment**, because the literal
+    `"doc: /*"` search was unbounded: `window.c:2324`, `2351` and `2390` spell
+    the marker `doc:  /*` with two spaces, `charset.c:1885` and `font.c:5336`
+    put the `/*` on the next line, `xwidget.c:3374` has two spaces again, and
+    `treesit.c:1203` spells it `doc :` with a space before the colon.
+  * **12 further heads were dropped as collateral**, because the scan resumed
+    after the stolen comment and stepped over everything in between.
+  * **37 rows served GNU's own `SKIP` placeholder as documentation**, which is
+    the function half of the bug entry 168 fixed for variables.
+  * **10 rows carried leading whitespace GNU strips.**
+
+Every one of those is a disagreement between two approximations of one
+scanner.  In `make-docfile` the head and its doc are read by a single pass, so
+they cannot disagree; the port inherits that, and
+`make_docfile.verify_against_make_docfile` proves the inheritance by diffing
+this port's DOC stream against GNU's compiled binary byte for byte.
 
 Usage:
     scripts/extract_gnu_defun_docs.py \\
@@ -31,228 +57,13 @@ Usage:
 """
 
 import argparse
-import os
-import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# DEFUN ("name", Fname, Sname, MIN, MAX, INTERACTIVE,
-#        doc: /* docstring */)
-# We capture name and MAX args. MAX is either an integer (fixed
-# arity), `MANY' (variadic, expects usage: in doc), or `UNEVALLED'
-# (special form, no fn line emitted).
-DEFUN_HEAD = re.compile(
-    r'^\s*DEFUN\s*\(\s*"([^"]+)"\s*,'
-    r'\s*F[A-Za-z0-9_]+\s*,'
-    r'\s*S[A-Za-z0-9_]+\s*,'
-    r'\s*([A-Z0-9_]+)\s*,'  # MIN args
-    r'\s*([A-Z0-9_]+)\s*,'  # MAX args
-    r'\s*[^,]+\s*,'        # interactive spec
-    r'\s*$',
-    re.MULTILINE,
-)
+import make_docfile  # noqa: E402
 
-# usage: line at start of a doc-body line: `usage: (FUNCNAME ARG1 ARG2 ...)'.
-# GNU make-docfile rewrites this to `(fn ARG1 ARG2 ...)'.
-USAGE_LINE_RE = re.compile(
-    r'^[ \t]*usage:\s*\(\s*[^ \t)]*\s*([^)]*)\)',
-    re.MULTILINE,
-)
-
-
-def find_doc_block(text: str, start: int) -> tuple[str | None, int]:
-    """Find the `doc: /* ... */)` block starting at or after `start`.
-    Returns (doc_text, end_offset) or (None, start) on failure.
-    """
-    # Find the `doc:` marker
-    doc_marker = text.find("doc: /*", start)
-    if doc_marker == -1:
-        return None, start
-    # Look ahead for the closing `*/`
-    body_start = doc_marker + len("doc: /*")
-    body_end = text.find("*/", body_start)
-    if body_end == -1:
-        return None, start
-    body = text[body_start:body_end]
-    # GNU's `doc: /* TEXT` block has a single leading space after `/*`
-    # for readability (matching make-docfile.c's stripping). Drop it.
-    if body.startswith(" "):
-        body = body[1:]
-    # GNU make-docfile.c also strips a trailing space before `*/'.
-    if body.endswith(" "):
-        body = body[:-1]
-    doc = body.rstrip()
-    return doc, body_end + 2
-
-
-def decode_doc_escapes(doc: str) -> str:
-    """Decode GNU make-docfile comment escapes.
-
-    `make-docfile.c::read_c_string_or_comment` consumes a backslash and
-    then emits the following character, except that `\n` and `\t` become
-    newline/tab and backslash-newline is discarded.
-    """
-    out = []
-    i = 0
-    while i < len(doc):
-        c = doc[i]
-        if c != "\\":
-            out.append(c)
-            i += 1
-            continue
-
-        i += 1
-        if i >= len(doc):
-            break
-        c = doc[i]
-        if c in "\n\r":
-            i += 1
-            continue
-        if c == "n":
-            out.append("\n")
-        elif c == "t":
-            out.append("\t")
-        else:
-            out.append(c)
-        i += 1
-    return "".join(out)
-
-
-def parse_c_arglist(c_args: str) -> list[str]:
-    """Extract C parameter names from `(register Lisp_Object foo, ...)'.
-    Mirrors GNU make-docfile.c::write_c_args. Skips storage qualifiers
-    and `void'. Returns identifier names in declaration order.
-    """
-    # Strip outer parens
-    s = c_args.strip()
-    if s.startswith("("):
-        s = s[1:]
-    if s.endswith(")"):
-        s = s[:-1]
-    args = []
-    for arg_chunk in s.split(","):
-        arg_chunk = arg_chunk.strip()
-        if not arg_chunk or arg_chunk == "void":
-            continue
-        # The parameter NAME is the last identifier in the chunk
-        # (e.g. "register Lisp_Object foo" -> "foo").
-        # Tokenize on whitespace and pointer/array decorators.
-        toks = re.findall(r'[A-Za-z_][A-Za-z0-9_]*', arg_chunk)
-        if not toks:
-            continue
-        last = toks[-1]
-        if last == "void":
-            continue
-        args.append(last)
-    return args
-
-
-def format_fn_line(args: list[str], min_args: int = 0) -> str:
-    """Render `(fn ARG1 ARG2 ...)' GNU-style: uppercase, `_' -> `-',
-    `defalt' -> `DEFAULT'. Empty args list still emits `(fn)'.
-
-    Mirrors GNU make-docfile.c::write_c_args, which inserts `&optional'
-    before the argument at index MIN_ARGS (the first optional parameter).
-    """
-    parts = []
-    for i, a in enumerate(args):
-        if i == min_args:
-            parts.append("&optional")
-        if a == "defalt":
-            parts.append("DEFAULT")
-        else:
-            parts.append(a.upper().replace("_", "-"))
-    if parts:
-        return "(fn " + " ".join(parts) + ")"
-    return "(fn)"
-
-
-def find_c_arglist_after(text: str, start: int) -> tuple[str | None, int]:
-    """Find the C function arg list `(...)` starting at or after `start`.
-    Used after the `*/)` closing of a DEFUN to read the actual C
-    parameter declaration. Returns (raw_arglist_text, end_offset) or
-    (None, start).
-    """
-    # Skip past the closing `)` of DEFUN(...)
-    pos = text.find(")", start)
-    if pos == -1:
-        return None, start
-    pos += 1
-    # Skip whitespace and comments
-    while pos < len(text) and text[pos] in " \t\r\n":
-        pos += 1
-    if pos >= len(text) or text[pos] != "(":
-        return None, start
-    # Match balanced parens
-    depth = 0
-    open_pos = pos
-    while pos < len(text):
-        c = text[pos]
-        if c == "(":
-            depth += 1
-        elif c == ")":
-            depth -= 1
-            if depth == 0:
-                return text[open_pos:pos + 1], pos + 1
-        pos += 1
-    return None, start
-
-
-def rewrite_usage_line(doc: str) -> tuple[str, bool]:
-    """Replace a `usage: (FUNCNAME ARGS...)' line with `(fn ARGS...)'.
-    Returns the rewritten doc and a flag indicating whether a usage
-    line was found. Mirrors GNU make-docfile.c::scan_keyword_or_put_char.
-    """
-    m = USAGE_LINE_RE.search(doc)
-    if not m:
-        return doc, False
-    args = m.group(1).strip()
-    fn_line = "(fn " + args + ")" if args else "(fn)"
-    return doc[:m.start()].rstrip() + "\n\n" + fn_line + doc[m.end():], True
-
-
-def extract_defuns(src: str) -> list[tuple[str, str]]:
-    """Extract `(name, doc)' pairs from a single C source file."""
-    results = []
-    pos = 0
-    while True:
-        m = DEFUN_HEAD.search(src, pos)
-        if not m:
-            break
-        name = m.group(1)
-        min_args = m.group(2)
-        max_args = m.group(3)
-        # Look for doc: starting from end of the matched DEFUN head
-        doc, doc_end = find_doc_block(src, m.end())
-        if doc is None:
-            pos = m.end()
-            continue
-        doc = decode_doc_escapes(doc)
-
-        # Check for `usage:' line first; if present, rewrite it.
-        doc, saw_usage = rewrite_usage_line(doc)
-
-        # GNU make-docfile rules for the (fn ARGS) suffix:
-        #   - UNEVALLED: special form, no (fn) line.
-        #   - MANY: variadic, the doc must contain a `usage:' line
-        #     (already rewritten above). Don't auto-generate.
-        #   - Numeric (0-8): read the C arg list and append `(fn ARGS)'.
-        if max_args.isdigit() and not saw_usage:
-            c_arglist, next_pos = find_c_arglist_after(src, doc_end)
-            if c_arglist is not None:
-                args = parse_c_arglist(c_arglist)
-                min_args_n = int(min_args) if min_args.isdigit() else len(args)
-                fn_line = format_fn_line(args, min_args_n)
-                doc = doc.rstrip() + "\n\n" + fn_line
-                pos = next_pos
-            else:
-                pos = doc_end
-        else:
-            pos = doc_end
-
-        results.append((name, doc))
-    return results
 
 
 def rust_string_literal(s: str) -> str:
@@ -260,13 +71,10 @@ def rust_string_literal(s: str) -> str:
     Uses raw string syntax `r#"..."#` when possible to preserve grave
     quotes verbatim, falling back to escaped form if the raw delimiter
     appears in the body."""
-    # Try plain raw string first
     if '"#' not in s and not any(ord(c) < 32 and c != "\n" and c != "\t" for c in s):
-        # Use r#"..."# raw string. Need to find a hash count not in the body.
         for hashes in ["#", "##", "###"]:
             if f'"{hashes}' not in s:
                 return f'r{hashes}"{s}"{hashes}'
-    # Fall back to escaped form
     escaped = (
         s.replace("\\", "\\\\")
         .replace('"', '\\"')
@@ -281,21 +89,27 @@ def emit_rust(entries: list[tuple[str, str]], output: Path) -> None:
     lines = [
         "// AUTO-GENERATED by scripts/extract_gnu_defun_docs.py — DO NOT EDIT.",
         "//",
-        "// Source: GNU Emacs `src/*.c` DEFUN doc: text.",
+        "// Source: GNU Emacs `src/*.c` DEFUN doc: text, scanned by",
+        "// scripts/make_docfile.py -- a port of GNU's own lib-src/make-docfile.c",
+        "// whose DOC stream is verified byte-identical against the compiled",
+        "// binary whenever the GNU mirror has one.",
         "// Re-run the extractor against an updated GNU mirror to refresh.",
         "//",
-        "// Each entry is `(name, raw_grave_quoted_doc)' lifted verbatim",
-        "// from the corresponding `DEFUN (\"name\", ..., doc: /* TEXT */)'",
-        "// block. Strings preserve GNU's grave-quote convention so that",
-        "// `substitute-command-keys' can convert them per the user's",
-        "// `text-quoting-style' at display time.",
+        "// Each entry is `(name, raw_grave_quoted_doc)' as `make-docfile' would",
+        "// have written it into `etc/DOC', including the trailing `(fn ARGS)'",
+        "// line `write_c_args' appends. Strings preserve GNU's grave-quote",
+        "// convention so that `substitute-command-keys' can convert them per",
+        "// the user's `text-quoting-style' at display time.",
+        "//",
+        "// Rows whose doc is GNU's `SKIP' placeholder are not here:",
+        "// `Fsnarf_documentation' refuses to install one (`src/doc.c:617-621'),",
+        "// so no GNU build ever shows one to a user.",
         "",
+        "#[rustfmt::skip]",
         "pub(crate) static GNU_SUBR_DOCS: &[(&str, &str)] = &[",
     ]
     for name, doc in entries_sorted:
-        name_lit = rust_string_literal(name)
-        doc_lit = rust_string_literal(doc)
-        lines.append(f"    ({name_lit}, {doc_lit}),")
+        lines.append(f"    ({rust_string_literal(name)}, {rust_string_literal(doc)}),")
     lines.append("];")
     lines.append("")
     output.write_text("\n".join(lines))
@@ -321,34 +135,73 @@ def main() -> int:
         print(f"error: {args.gnu_src} is not a directory", file=sys.stderr)
         return 1
 
+    scan = make_docfile.scan_c_directory(args.gnu_src)
+
+    # Guard 1, the strongest one available and the only one that can see a row
+    # we never produced: our DOC stream against GNU's own binary's, byte for
+    # byte.  Skipped only when the mirror has never been built.
+    problem = make_docfile.verify_against_make_docfile(args.gnu_src, scan.doc_stream)
+    if problem is not None:
+        print(f"error: {problem}", file=sys.stderr)
+        return 1
+
+    # Guard 2, for the mirrors that have no compiled make-docfile: the set of
+    # heads with no doc block must be GNU's own two and nothing else.
+    unexpected = make_docfile.unexpected_heads_without_doc(scan)
+    if unexpected:
+        print(
+            f"error: {len(unexpected)} DEF* head(s) with no doc: block that GNU "
+            f"does not have; the scanner is out of step with make-docfile "
+            f"(lib-src/make-docfile.c:1139-1157):",
+            file=sys.stderr,
+        )
+        for head in unexpected:
+            print(f"  {head}", file=sys.stderr)
+        return 1
+
     all_entries: list[tuple[str, str]] = []
-    seen_names: set[str] = set()
-    for c_file in sorted(args.gnu_src.glob("*.c")):
-        try:
-            src = c_file.read_text(encoding="utf-8", errors="replace")
-        except OSError as e:
-            print(f"warning: cannot read {c_file}: {e}", file=sys.stderr)
+    first_site: dict[str, tuple[str, str]] = {}
+    conflicts = 0
+    skipped = 0
+    for record in scan.records:
+        if record.kind != "F":
             continue
-        entries = extract_defuns(src)
-        for name, doc in entries:
-            if name in seen_names:
-                # Multiple DEFUNs for the same name across files
-                # (e.g. xterm.c vs w32term.c). Keep the first one
-                # we see; warn but don't fail.
+        # `Fsnarf_documentation`'s own test, verbatim:
+        # `if (!NILP (Ffboundp (sym)) && strncmp (end, "\nSKIP", 5))`
+        # (`src/doc.c:617-621`).  The `Ffboundp` half needs no counterpart
+        # here: `subr_docs::lookup` is reached only from a `Value` that already
+        # IS a subr, so the question is answered by the type before the table
+        # is consulted.  See `subr_docs/mod.rs`.
+        if make_docfile.is_skip_placeholder(record.doc):
+            skipped += 1
+            continue
+        if record.name in first_site:
+            where, kept = first_site[record.name]
+            # After the SKIP filter, a second REAL doc for the same name is the
+            # case GNU's convention is meant to prevent -- it keeps the text in
+            # one file and marks every other copy SKIP (`src/doc.c:585-594`).
+            # Exactly one name in `src/*.c` escapes the convention today, and
+            # which copy a build shows depends on the object-file ORDER
+            # `src/Makefile.in:657-667` passes to make-docfile, which this
+            # table cannot know.  Say so out loud rather than picking silently.
+            if record.doc != kept:
+                conflicts += 1
                 print(
-                    f"note: duplicate DEFUN '{name}' in {c_file.name}, "
-                    f"keeping the earlier definition",
+                    f"note: '{record.name}' has DIFFERING real doc text in "
+                    f"{where} and {record.source_file}; keeping {where}",
                     file=sys.stderr,
                 )
-                continue
-            seen_names.add(name)
-            all_entries.append((name, doc))
+            continue
+        first_site[record.name] = (record.source_file, record.doc)
+        all_entries.append((record.name, record.doc))
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     emit_rust(all_entries, args.output)
     print(
         f"extracted {len(all_entries)} DEFUN docs from "
-        f"{args.gnu_src} -> {args.output}",
+        f"{args.gnu_src} -> {args.output} "
+        f"({skipped} SKIP placeholder(s) refused, "
+        f"{conflicts} name(s) with differing real text in two files)",
         file=sys.stderr,
     )
     return 0

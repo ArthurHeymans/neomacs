@@ -1,31 +1,49 @@
 #!/usr/bin/env python3
 """Extract GNU Emacs DEFVAR doc: text into a Rust source file.
 
-Walks every `.c` file in GNU Emacs's `src/` directory looking for
-DEFVAR declarations of the form:
+The scan itself is `scripts/make_docfile.py`, a character-for-character port of
+GNU's `lib-src/make-docfile.c` shared with `extract_gnu_defun_docs.py`.  This
+script is only the `Fsnarf_documentation` half: it takes make-docfile's
+`\\037V` records and decides which of them a GNU build would install.
 
     DEFVAR_LISP ("name", Vsymbol,
                  doc: /* DOCSTRING TEXT
     POSSIBLY MULTI-LINE */);
 
-    DEFVAR_INT ("name", c_var,
-                doc: /* DOCSTRING */);
+becomes
 
-    DEFVAR_BOOL ("name", c_var,
-                 doc: /* DOCSTRING */);
-
-    DEFVAR_KBOARD ("name", kboard_field,
-                   doc: /* DOCSTRING */);
-
-For each match, emits a `(name, doc)` tuple to a Rust file:
-
+    #[rustfmt::skip]
     pub(crate) static GNU_VAR_DOCS: &[(&str, &str)] = &[
         ("name", "DOCSTRING TEXT\\nPOSSIBLY MULTI-LINE"),
         ...
     ];
 
-Output is sorted alphabetically by name. Unlike DEFUN docs, DEFVAR
-docs do NOT get a `(fn ARGS)` suffix appended.
+sorted alphabetically by name.  Unlike DEFUN docs, DEFVAR docs do NOT get a
+`(fn ARGS)` suffix appended -- `write_c_args` runs only `if (defunflag ...)`.
+
+## Why the scan is not a regular expression any more (ledgers 173, 181)
+
+Entry 173 fixed two rules this script had written by hand and GNU has in
+`make-docfile`: the `doc:` marker is `doc:\\s*/\\*` and not the literal
+`"doc: /*"` (nine `DEFVAR` blocks were silently absent from the table), and
+leading whitespace inside the comment is stripped entirely rather than one
+space (35 rows carried a stray newline or space).  It also recorded what it
+could not reach: "it cannot catch a `DEFVAR` whose spelling `DEFVAR_HEAD`
+itself does not match -- one layer further up.  The complete check is diffing
+the generated name set against GNU's ... That diff wants to be a script run
+beside the generator; it is not one yet."
+
+Entry 181 found the same two bugs on the DEFUN side plus four more, all of
+them disagreements between a head regex and a separate doc search, and closed
+the class by replacing both with GNU's own state machine -- in which the head
+and its doc are read by one pass and *cannot* disagree.  The diff 173 wanted
+is now the generator's first guard:
+`make_docfile.verify_against_make_docfile` compares this port's whole DOC
+stream against GNU's compiled `make-docfile` byte for byte.
+
+The switch is measured, not asserted: over GNU 31.0.90 (`0ee48ac4df2`) the
+shared scanner reproduces entry 173's committed 894-row table exactly -- same
+names, same text, zero differences.
 
 Usage:
     scripts/extract_gnu_defvar_docs.py \\
@@ -34,166 +52,12 @@ Usage:
 """
 
 import argparse
-import os
-import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-# Match the start of a DEFVAR_* declaration.  DEFVAR_PER_BUFFER can use
-# expressions such as `&BVAR (current_buffer, fill_column)' for the C storage
-# argument, so don't try to parse the argument list here.  We only need the
-# Lisp variable name plus a bounded search for the following `doc: /* ... */`.
-DEFVAR_HEAD = re.compile(
-    r'\bDEFVAR_(LISP|BOOL|INT|KBOARD|LISP_NOPRO|PER_BUFFER)\s*\(\s*"([^"]+)"\s*,'
-)
-
-# `make-docfile' skips ALL whitespace between the `doc' keyword's colon and the
-# opening `/*', newlines included:
-#
-#     if (c == ':')
-#       {
-#         doc_keyword = true;
-#         do
-#           c = getc (infile);
-#         while (c_isspace (c));
-#       }
-#     bool comment = c == '/' && (c = getc (infile)) == '*';
-#
-# (`lib-src/make-docfile.c:1148-1157'.)  Searching for the literal `"doc: /*"'
-# instead silently dropped nine `DEFVAR' blocks from the generated table:
-# `inhibit-message' (`src/xdisp.c:38216', two spaces),
-# `xft-font-ascent-descent-override' (`src/xftfont.c:800', two spaces),
-# `macroexp--dynvars' (`src/lread.c:5931', three spaces), and the six
-# `treesit-*' names whose `/*' is on the NEXT line (`src/treesit.c:5355'
-# onward).  A dropped row is not a visible failure -- the name simply has no
-# documentation -- which is why this went unnoticed until entry 173 diffed the
-# generated table's name set against `src/*.c'.
-DOC_MARKER = re.compile(r"doc:\s*/\*")
-
-
-def find_doc_block(text: str, start: int) -> tuple[str | None, int]:
-    """Find the `doc: /* ... */)` block starting at or after `start`.
-    Returns (doc_text, end_offset) or (None, start) on failure.
-    """
-    match = DOC_MARKER.search(text, start)
-    if match is None:
-        return None, start
-    doc_marker = match.start()
-    # Bound the search: don't cross another DEFVAR boundary.
-    next_defvar = text.find("DEFVAR_", start + 1)
-    if next_defvar != -1 and next_defvar < doc_marker:
-        return None, start
-    body_start = match.end()
-    body_end = text.find("*/", body_start)
-    if body_end == -1:
-        return None, start
-    # `make-docfile' discards ALL leading whitespace inside a `doc:' comment,
-    # newlines included, before the first character of the doc string:
-    #
-    #     c = getc (infile);
-    #     if (comment)
-    #       while (c_isspace (c))
-    #         c = getc (infile);
-    #
-    # (`lib-src/make-docfile.c:416-419', in `read_c_string_or_comment'.)  This
-    # script stripped a single leading space, which is a different rule and
-    # differs from GNU's for two spellings GNU's sources use freely:
-    # `doc: /*' followed by a newline (`src/character.c:1113',
-    # `A char-table for width (columns) of each character.') left a leading
-    # newline in the stored text, so `C-h v char-width-table' opened with a
-    # blank line; and `doc: /*  Vector of valid font weight values.'
-    # (`src/font.c:5983', two spaces) left a leading space.  33 of the
-    # generated table's rows carried one or the other.
-    #
-    # Trailing whitespace needs no rule of its own: `make-docfile' holds
-    # spaces and newlines in `pending_spaces'/`pending_newlines' and only
-    # emits them when a non-space character follows (`put_char',
-    # `lib-src/make-docfile.c:282-311'), so whatever sits between the last
-    # real character and `*/' never reaches the DOC file.  `rstrip' is that.
-    return unescape_doc_comment(text[body_start:body_end]).strip(), body_end + 2
-
-
-def unescape_doc_comment(text: str) -> str:
-    r"""Mirror GNU make-docfile's `read_c_string_or_comment` escape handling.
-
-    For `doc: /* ... */` comments, make-docfile consumes a backslash and emits
-    the following character verbatim except for `\n`, `\t`, and escaped
-    newlines.  In particular, C source `\\[command]` becomes Emacs doc text
-    `\[command]` so `substitute-command-keys` can replace it.
-    """
-    out: list[str] = []
-    i = 0
-    while i < len(text):
-        ch = text[i]
-        i += 1
-        if ch != "\\" or i >= len(text):
-            out.append(ch)
-            continue
-
-        escaped = text[i]
-        i += 1
-        if escaped in "\n\r":
-            continue
-        if escaped == "n":
-            out.append("\n")
-        elif escaped == "t":
-            out.append("\t")
-        else:
-            out.append(escaped)
-    return "".join(out)
-
-
-def is_skip_placeholder(doc: str) -> bool:
-    """GNU's own test, verbatim: a DOC entry that starts with `SKIP` is not
-    documentation.
-
-    A variable that several window-system files declare -- `x-pointer-shape`
-    is in `xfns.c`, `w32fns.c`, `haikufns.c` and `androidfns.c` -- carries the
-    real text in exactly one of them and
-    `doc: /* SKIP: real doc in xfns.c.  */` in the rest, so the string never
-    has to be maintained four times.  `Fsnarf_documentation` refuses to install
-    such an entry -- `strncmp (end, "\\nSKIP", 5)` guarding the
-    `Fput (sym, Qvariable_documentation, ...)`, under the comment "Ignore docs
-    that start with SKIP.  These mark placeholders where the real doc is
-    elsewhere." (`src/doc.c:600-608`).  So no GNU build ever shows one to a
-    user, and a table row holding one is a generator bug rather than a value.
-
-    170 of GNU's `src/*.c` DEFVAR blocks carry the marker.
-    """
-    return doc.startswith("SKIP")
-
-
-def extract_defvars(src: str) -> tuple[list[tuple[str, str]], list[str]]:
-    """Extract `(name, doc)` pairs from a single C source file.
-
-    Declarations whose doc text is a `SKIP` placeholder contribute nothing:
-    the caller must be free to take the next file's copy, which is where the
-    real text lives.
-
-    Also returns the names of `DEFVAR` heads for which no `doc:` block could be
-    found at all.  Every `DEFVAR_*` in GNU's `src/*.c` has one -- `make-docfile`
-    would otherwise emit no `^_V` record for it -- so a non-empty second element
-    means the scanner is out of step with `make-docfile`, which is exactly the
-    failure entry 173 found and which is silent in the generated table.
-    """
-    results = []
-    undocumented: list[str] = []
-    pos = 0
-    while True:
-        m = DEFVAR_HEAD.search(src, pos)
-        if not m:
-            break
-        name = m.group(2)
-        doc, doc_end = find_doc_block(src, m.end())
-        if doc is not None:
-            if not is_skip_placeholder(doc):
-                results.append((name, doc))
-            pos = doc_end
-        else:
-            undocumented.append(name)
-            pos = m.end()
-    return results, undocumented
+import make_docfile  # noqa: E402
 
 
 def rust_string_literal(s: str) -> str:
@@ -234,9 +98,7 @@ def emit_rust(entries: list[tuple[str, str]], output: Path) -> None:
         "pub(crate) static GNU_VAR_DOCS: &[(&str, &str)] = &[",
     ]
     for name, doc in entries_sorted:
-        name_lit = rust_string_literal(name)
-        doc_lit = rust_string_literal(doc)
-        lines.append(f"    ({name_lit}, {doc_lit}),")
+        lines.append(f"    ({rust_string_literal(name)}, {rust_string_literal(doc)}),")
     lines.append("];")
     lines.append("")
     output.write_text("\n".join(lines))
@@ -252,61 +114,75 @@ def main() -> int:
         print(f"error: {args.gnu_src} is not a directory", file=sys.stderr)
         return 1
 
-    all_entries: list[tuple[str, str]] = []
-    first_site: dict[str, tuple[str, str]] = {}
-    undocumented_heads: list[str] = []
-    conflicts = 0
-    for c_file in sorted(args.gnu_src.glob("*.c")):
-        try:
-            src = c_file.read_text(encoding="utf-8", errors="replace")
-        except OSError as e:
-            print(f"warning: cannot read {c_file}: {e}", file=sys.stderr)
-            continue
-        entries, undocumented = extract_defvars(src)
-        for name in undocumented:
-            undocumented_heads.append(f"{c_file.name}:{name}")
-        for name, doc in entries:
-            if name in first_site:
-                where, kept = first_site[name]
-                # After the SKIP filter, a second REAL doc for the same name is
-                # the case GNU's convention is meant to prevent -- it keeps the
-                # text in one file, e.g. `xterm.c`, and marks every other copy
-                # SKIP (`src/doc.c:585-594`).  Where two real copies genuinely
-                # differ, which one this build would show depends on which file
-                # it compiles, and this table cannot know that; say so out loud
-                # rather than picking one silently.
-                if doc != kept:
-                    conflicts += 1
-                    print(
-                        f"note: '{name}' has DIFFERING real doc text in "
-                        f"{where} and {c_file.name}; keeping {where}",
-                        file=sys.stderr,
-                    )
-                continue
-            first_site[name] = (c_file.name, doc)
-            all_entries.append((name, doc))
+    scan = make_docfile.scan_c_directory(args.gnu_src)
 
-    if undocumented_heads:
-        # Refuse to write a table that is quietly smaller than GNU's source.
-        # A `DEFVAR_*` whose `doc:` block this scanner cannot find produces no
-        # row at all, and a missing row looks exactly like "GNU has no doc for
-        # that name" from every direction except this one.
+    # The guard entry 173 asked for and could not build: the whole DOC stream
+    # against GNU's own binary's, byte for byte.  Unlike a predicate over the
+    # rows we emitted, this one sees a row we failed to emit -- it is an
+    # equality against the authority rather than a property of the artifact.
+    problem = make_docfile.verify_against_make_docfile(args.gnu_src, scan.doc_stream)
+    if problem is not None:
+        print(f"error: {problem}", file=sys.stderr)
+        return 1
+
+    # And for mirrors with no compiled make-docfile: every `DEFVAR_*` head in
+    # GNU's `src/*.c` yields a `doc:` block, so a head without one means the
+    # scanner has drifted.  The two heads GNU itself cannot read are DEFUNs in
+    # `treesit.c`, and they are excluded by `(file, name)` rather than by a
+    # name prefix, so a treesit DEFVAR that lost its doc still fails closed.
+    undocumented = make_docfile.unexpected_heads_without_doc(scan)
+    if undocumented:
         print(
-            f"error: {len(undocumented_heads)} DEFVAR head(s) with no doc: block; "
-            f"the scanner is out of step with make-docfile "
-            f"(lib-src/make-docfile.c:1148-1157):",
+            f"error: {len(undocumented)} DEF* head(s) with no doc: block; the "
+            f"scanner is out of step with make-docfile "
+            f"(lib-src/make-docfile.c:1139-1157):",
             file=sys.stderr,
         )
-        for head in undocumented_heads:
+        for head in undocumented:
             print(f"  {head}", file=sys.stderr)
         return 1
+
+    all_entries: list[tuple[str, str]] = []
+    first_site: dict[str, tuple[str, str]] = {}
+    conflicts = 0
+    skipped = 0
+    for record in scan.records:
+        if record.kind != "V":
+            continue
+        # `Fsnarf_documentation`'s own test, verbatim:
+        # `strncmp (end, "\nSKIP", 5)` guarding the `Fput`
+        # (`src/doc.c:600-613`).  The `Fboundp` half of that `if` lives in
+        # `var_docs::SnarfedVariable`, entry 173.
+        if make_docfile.is_skip_placeholder(record.doc):
+            skipped += 1
+            continue
+        if record.name in first_site:
+            where, kept = first_site[record.name]
+            # After the SKIP filter, a second REAL doc for the same name is the
+            # case GNU's convention is meant to prevent -- it keeps the text in
+            # one file, e.g. `xterm.c`, and marks every other copy SKIP
+            # (`src/doc.c:585-594`).  Where two real copies genuinely differ,
+            # which one a build shows depends on the object-file ORDER
+            # `src/Makefile.in:657-667` hands make-docfile, and this table
+            # cannot know that; say so out loud rather than picking silently.
+            if record.doc != kept:
+                conflicts += 1
+                print(
+                    f"note: '{record.name}' has DIFFERING real doc text in "
+                    f"{where} and {record.source_file}; keeping {where}",
+                    file=sys.stderr,
+                )
+            continue
+        first_site[record.name] = (record.source_file, record.doc)
+        all_entries.append((record.name, record.doc))
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     emit_rust(all_entries, args.output)
     print(
         f"extracted {len(all_entries)} DEFVAR docs from "
         f"{args.gnu_src} -> {args.output} "
-        f"({conflicts} name(s) with differing real text in two files)",
+        f"({skipped} SKIP placeholder(s) refused, "
+        f"{conflicts} name(s) with differing real text in two files)",
         file=sys.stderr,
     )
     return 0

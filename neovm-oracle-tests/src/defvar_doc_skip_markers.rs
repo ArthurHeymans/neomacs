@@ -5,8 +5,17 @@
 //! one file and a placeholder in the rest: `x-pointer-shape` is `DEFVAR_LISP`
 //! in `src/xfns.c:10327`, `src/w32fns.c:11809`, `src/haikufns.c:3284` and
 //! `src/androidfns.c:3587`, and three of those four read
-//! `doc: /* SKIP: real doc in xfns.c.  */`.  170 `DEFVAR` blocks across GNU's
-//! `src/*.c` carry the marker.
+//! `doc: /* SKIP: real doc in xfns.c.  */`.
+//!
+//! **171 `DEF*` blocks across GNU's `src/*.c` carry the marker, and only 65 of
+//! them are `DEFVAR`s** -- corrected 2026-08-21, ledger 181.  Entry 168 wrote
+//! "170 `DEFVAR` blocks", which is the whole-tree count off by one and
+//! attributed to the wrong declaration form: the other **106 are `DEFUN`s**,
+//! and the function-side extractor had no `SKIP` filter at all, so 37 of them
+//! reached `subr_docs::gnu_table` and `(documentation 'x-display-list)`
+//! answered "SKIP: real doc in xfns.c.".  Both counts come from parsing
+//! `make-docfile`'s own output rather than from a grep; the function-side
+//! guards are in `subr_doc_snarf_rules.rs`.
 //!
 //! `Fsnarf_documentation` is where it is honoured, and the guard is explicit:
 //!
