@@ -141,13 +141,16 @@ fn oracle_defvar_bool_variables_that_gnu_also_makes_buffer_local() {
 /// (`src/eval.c:298`).  The third element is `t` in both because `progn` and
 /// `setq` are special forms, so no funcall intervenes before the read.
 ///
-/// Neomacs has the debugger this needs -- `call_debugger_for_signal` and the
-/// `debug_on_exit` flag on backtrace frames both exist -- and none of the three
-/// dispatch checks, so nothing ever disarms the flag.  That is a debugger gap
-/// worth its own entry (it is the same missing piece as `backtrace-debug`'s
-/// debug-on-exit, which `pop_bytecode_backtrace_frame_with_result` already
-/// leaves a landing site for), not a wrong value: the variable's declaration
-/// and its Boolean coercion are correct here.
+/// **Implemented 2026-08-21 (ledger 172).**  The three dispatch checks and
+/// `do_debug_on_call` now exist (`emacs_core::debug_on_call`), so this port
+/// answers `(nil nil t)` too and its own value is just as unstable under an
+/// assignment probe as GNU's.  The exclusion below therefore STAYS: the point
+/// was never that Neomacs lacked the mechanism, it is that a sweep which
+/// assigns to every `DEFVAR_BOOL` and reads it back cannot include a variable
+/// whose assignment arms a debugger that clears it before the read.  The
+/// handshake itself is pinned in `debug_on_next_call.rs`; what belongs here is
+/// only the reason for the hole in the list.  The variable's declaration and
+/// its Boolean coercion were correct all along and are untouched.
 #[test]
 fn oracle_every_defvar_bool_variable_is_bound_and_canonical() {
     return_if_neovm_enable_oracle_proptest_not_set!();

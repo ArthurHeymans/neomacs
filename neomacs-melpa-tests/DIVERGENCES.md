@@ -9199,6 +9199,21 @@ and_reads_back_canonically` now pins all 148 in one place.
     flag on backtrace frames, and `pop_bytecode_backtrace_frame_with_result`
     already documents the landing site.  `debug-on-exit`, missing for the same
     reason, belongs to the same entry.
+  - **FIXED 2026-08-21 (entry 172).**  Re-reproduced unchanged on a quiet box
+    (`(nil nil t)` + four backtrace blocks under GNU, `(nil t t)` + none here,
+    at a 1-minute load average of 52-56) and then closed.  The instinct in this
+    bullet -- "do not fix the variable" -- was right, and the reason is sharper
+    than "the value is unstable": the observation is what clears the flag, so no
+    assignment probe can ever see its real state.  Entry 172 builds
+    `do_debug_on_call`, arms GNU's three dispatch sites plus the four `Bcall`
+    lowerings this port has that GNU does not (the JIT is a default feature and
+    supplies three of them), makes `backtrace-debug` store the bit it had been
+    validating and discarding, and expresses the one-shot as a type whose only
+    constructor performs the disarm.  The variable's declaration and coercion
+    are unchanged, exactly as this bullet asked.  The exclusion of
+    `debug-on-next-call` from the `DEFVAR_BOOL` sweep stands: GNU's own value is
+    still unstable under an assignment probe, which is now true of this port
+    too.
 - `noninteractive` is seeded `t` in the table where GNU's C default is the
   parsed argv (`noninteractive1 = noninteractive`, `src/emacs.c:1953`).  That
   matches what Neomacs already did, and the binary still overwrites it from
@@ -22516,6 +22531,38 @@ is the other half of `Fbacktrace_debug` and is missing for the same reason.
 Sized and recorded, not fixed; the exclusion comment in
 `defvar_bool_byte_boolean_vars.rs` now carries the mechanism.
 
+**FIXED 2026-08-21 (entry 172).**  The measurement above was re-taken on a quiet
+box and is unchanged -- `(nil nil t)` with four backtrace blocks against
+`(nil t t)` with none, at a 1-minute load average of 52-56 rather than the 986
+the box reached later that day.  This item's sizing was accurate about the parts
+it named: the three dispatch checks, `do_debug_on_call`, the pieces this port
+already had (`call_debugger_for_signal`, the `debug_on_exit` frame flag,
+`pop_bytecode_backtrace_frame_with_result`'s landing site), and the insistence
+that `debug-on-exit` belongs to the same entry -- which turned out to be true for
+a stronger reason than adjacency: `do_debug_on_call`'s three lines set up *both*
+halves, so they are one function, not two features.
+
+It was short in four places, all found by auditing the entry points rather than
+by counting GNU's checks:
+
+* **the JIT is a fourth `Bcall`.**  `jit` is a DEFAULT feature here, and its
+  three lowerings of `Op::Call` (`call_for_jit`, `call_for_jit_stack`,
+  `call_spec_subr_stack`, plus the native-to-native `call_armed_callee_native`)
+  would each have skipped the debugger.
+* **`backtrace-debug` was a no-op**, not merely unreachable: it validated LEVEL
+  and BASE, dropped the result and returned FLAG, so the `:debug-on-exit` flag
+  could never appear even though the backtrace walker was written to emit it.
+* **`Fbacktrace_debug` checks LEVEL twice with two different predicates**
+  (`CHECK_FIXNUM` then `CHECK_FIXNAT`), which one `wholenump` check cannot
+  reproduce -- the same class as the resolved `fixnump` cluster.
+* **`call_debugger` did not exist as a function here**, only as a signal-shaped
+  wrapper, so GNU's own second disarm (`src/eval.c:298`) and its
+  `when_entered_debugger` stamp (`299`) had nowhere to live.
+
+Entry 172 also records what this item did not: the `Backtrace2` specpdl variant
+has no `debug_on_exit` field at all, so a two-argument call -- `(cons 1 2)` --
+needed frame promotion rather than a flag write.
+
 ### Item 5: the bug, which was next door -- GNU's `SKIP` marker is not documentation
 
 Checking whether the two names Neomacs binds and GNU does not
@@ -23332,3 +23379,490 @@ stop outrank an exit.  **Two of those four were regressions this branch itself
 introduced, caught by re-running the audit against the rebuilt binary** -- which
 is the argument for diffing the fix against the merge base as well as against
 GNU, rather than against GNU alone.
+
+## 172. `debug-on-next-call` was never a wrong value: setting it ARMS the debugger and entering the debugger CLEARS it, so 135's and 168's probes were reading the mechanism's exhaust -- the missing piece is `do_debug_on_call`, four lines that also arm `debug-on-exit`, and this port had none of the three dispatch checks and a `backtrace-debug` that returned its FLAG without storing it -- FIXED
+
+Two earlier entries reached this variable and both concluded, correctly, that the
+variable was not the bug.  135 could see that its probe "resets", 168 could see
+four debugger backtraces on GNU's stderr and named the three checks.  Neither
+could act on it because the thing that is missing has no name in this port: it is
+`do_debug_on_call`, and it is four lines.
+
+```c
+void
+do_debug_on_call (Lisp_Object code, specpdl_ref count)
+{
+  debug_on_next_call = 0;                                        /* eval.c:338 */
+  set_backtrace_debug_on_exit (specpdl_ref_to_ptr (count), true); /* eval.c:339 */
+  call_debugger (list1 (code));                                  /* eval.c:340 */
+}
+```
+
+Line 338 is why no assignment probe can ever see the flag's real state: the
+observation is what clears it.  Line 339 is why `debug-on-exit` is not a separate
+topic: the entry debugger and the exit debugger are set up by the same statement.
+168 said "the same entry should take `debug-on-exit`" and that was right for a
+better reason than it gave -- they are not two features that happen to be
+adjacent, they are two halves of one four-line function.
+
+### 1. Reproduced first, in both editors, on a quiet box
+
+The coordinator's standing rule applies with force here: an armed-then-cleared
+handshake measured under contention cannot be distinguished from one that never
+armed.  All of the following were taken with the 1-minute load average between
+**25 and 56** on the 32-core box (recorded per run below), against GNU Emacs
+31.0.90 and the merge-base (`a83f3785e`) `target/release/neomacs`.
+
+168's probe, unchanged, at load **56.02** (GNU) and **51.79** (Neomacs):
+
+```elisp
+(list (default-value 'debug-on-next-call)
+      (progn (set-default 'debug-on-next-call 5) (default-value 'debug-on-next-call))
+      (progn (setq debug-on-next-call t) debug-on-next-call))
+;; GNU     => (nil nil t)   + 4 "Debugger entered" blocks on stderr
+;; Neomacs => (nil t   t)   + 0
+```
+
+Unmoved from 168.  The four blocks are two pairs, not four events: entry and exit
+for each of two armed frames, which is already the whole design showing itself.
+
+Five probe programs, thirty-nine rows, at load **40.54**.  `LOG` is the list of
+argument lists a recorder bound to `debugger` was handed, oldest first, so
+`((t) (exit 1))` reads "entry debugger with `Qt`, then the SAME frame's exit
+debugger with the value 1".
+
+| probe | GNU | Neomacs (merge base) |
+|---|---|---|
+| `(setq debug-on-next-call t) (car '(1 2 3))` | `nil ((t) (exit 1)) nil` | `1 nil t` |
+| one arm, two calls | `(4) ((t) (exit 1)) nil` | `(4) nil t` |
+| `(if t 'yes 'no)` after arming | `nil ((t) (exit yes)) nil` | `yes nil t` |
+| `(apply #'car '((5 6)))` after arming | `nil ((t) (exit 5)) nil` | `5 nil t` |
+| `(cons 1 2)` after arming | `nil ((t) (exit (1 . 2))) nil` | `(1 . 2) nil t` |
+| `(mapcar #'1+ '(1 2 3))` after arming | `nil ((t) (exit (2 3 4))) nil` | `(2 3 4) nil t` |
+| `set-default` to 5, then `default-value` | `nil ((t) (exit nil)) nil` | `t nil t` |
+| signal out of an armed call | `after ((t)) nil` | `after nil t` |
+| armed under `inhibit-debugger` | `nil ((t) (exit 1)) nil` | `1 nil t` |
+| armed inside a byte-compiled body | `nil ((lambda) (exit 5)) nil` | `5 nil t` |
+| a debugger returning `'REPLACED` | `REPLACED ((t) (exit 1)) nil` | `1 nil t` |
+| `(backtrace-debug 1 t)` in a callee | `nil ((exit 21)) nil` | `21 nil nil` |
+| `(backtrace-debug 0 t)` in a callee | `21 ((exit t)) nil` | `21 nil nil` |
+| `(backtrace-debug 1 nil)` after `1 t` | `21 nil nil` | `21 nil nil` |
+| `:debug-on-exit` seen by the walker | `nil ((exit (F (:debug-on-exit t)))) nil` | `(F nil) nil nil` |
+| `throw` out of a flagged frame | `thrown nil nil` | `thrown nil nil` |
+| arm set by an ARGUMENT, subr callee | `1 ((t) (exit nil))` | `1 nil` |
+| arm set by an ARGUMENT, lambda callee | `nil ((t) (exit 2))` | `2 nil` |
+| arm set by an ARGUMENT, bytecode callee | `3 ((t) (exit nil))` | `3 nil` |
+| arm set by an ARGUMENT, MANY-arity subr | `(0 1) ((t) (exit nil))` | `(0 1) nil` |
+| `(backtrace-debug "x" nil)` | `(wrong-type-argument fixnump "x")` | `(wrong-type-argument wholenump "x")` |
+| `(backtrace-debug 1.0 nil)` | `(wrong-type-argument fixnump 1.0)` | `(wrong-type-argument wholenump 1.0)` |
+| `internal-when-entered-debugger` after one entry | `0` | `-1` |
+
+**Thirty-nine rows, thirty divergent.**  The two that matched -- `throw` out of a
+flagged frame, and `(backtrace-debug 1 nil)` -- matched for the wrong reason:
+nothing was ever flagged, so nothing could fire.  Both are now tests, because
+they have to keep matching once flagging works.
+
+### 2. GNU's handshake, read one line at a time
+
+**Who sets it.**  Lisp, by assignment -- the variable is an ordinary
+`DEFVAR_BOOL` (`src/eval.c:4496`) whose slot coerces through `Lisp_Fwd_Bool`
+(`src/data.c:1485-1487`), which is why `(set-default 'debug-on-next-call 5)`
+arms.  C sets it in exactly one place: `handle_user_signal`, when
+`debug-on-event`'s signal arrives (`src/keyboard.c:8502`), together with
+`debug_on_quit` and `Vquit_flag`.  Three menu back-ends `specbind` it to nil
+around menu dispatch (`src/xmenu.c:984`, `src/pgtkmenu.c:270`,
+`src/w32menu.c:516`, `src/haikumenu.c:618`).
+
+**Who tests it.**  Three sites, no more, and each tests it immediately after
+`record_in_backtrace` because line 339 needs a frame to flag:
+
+| site | GNU | `code` | debugger sees |
+|---|---|---|---|
+| `eval_sub`, on a cons form | `src/eval.c:2598-2602` | `Qt` | `(t)` |
+| `Ffuncall` | `src/eval.c:3185-3190` | `Qlambda` | `(lambda)` |
+| `exec_byte_code`, `Bcall` | `src/bytecode.c:795-799` | `Qlambda` | `(lambda)` |
+
+`Fapply` has **no check of its own**; `apply1`/`Fapply` funnel into `Ffuncall`
+(`src/eval.c:3192`), so `apply` is armed by the funcall site.  The inline
+bytecode opcodes -- `Bcar`, `Bpoint` and the rest at
+`src/bytecode.c:1412-1545` -- are not `Bcall` and are deliberately not gated.
+
+**Who clears it.**  `do_debug_on_call` on its first line (`src/eval.c:338`);
+`call_debugger` again on entry (`src/eval.c:298`), so entering the debugger for
+*any* reason disarms; and `init_eval` at startup (`src/eval.c:248`).  Nothing
+clears it on the way out of a call.  It is a one-shot spent at the moment it is
+observed, and the measured consequence is the `one-shot` row above: one arm, two
+calls, one entry.
+
+**At exactly which point in the call.**  Before the dispatch, not after.
+`eval_sub` records the frame at `2598`, tests at `2601`, and only reaches the
+`SUBRP` arm at `2621` -- so a special form is armed exactly like a function
+call, which is the `(if t 'yes 'no)` row.  And because the test precedes
+argument evaluation, an argument that arms the flag does NOT get its own call
+debugged: GNU invokes a subr directly (`src/eval.c:2666-2700`) and a lambda
+through `apply_lambda` (`src/eval.c:2771`), neither of which is `Ffuncall`.  The
+four "arm set by an ARGUMENT" rows measure exactly that, and the `lambda-callee`
+row is the exception that proves it -- an interpreted body is itself `eval_sub`,
+so `(* x 2)` is the next form and gets debugged.
+
+**What happens on a non-local exit out of an armed call.**  Nothing, twice over.
+The entry half already cleared the flag before the debugger ran, so a `signal`
+escaping an armed call leaves no residue -- the `signal out of an armed call` row
+shows `((t))` with no exit and the flag down.  The exit half is silent because
+`unbind_to` pops `SPECPDL_BACKTRACE` with a bare `break` (`src/eval.c:3818-3820`)
+and never consults `debug_on_exit`; the `throw` row measures zero debugger calls.
+GNU spends `debug_on_exit` only on the six normal-return paths:
+`src/eval.c:2658` (the MANY-arity subr arm, "while VALS still exists"),
+`src/eval.c:2777` (the `eval_sub` tail), `src/eval.c:3195` (`Ffuncall`),
+`src/eval.c:3318` (`apply_lambda`), `src/bytecode.c:827` (`Bcall`) and
+`src/bytecode.c:900` (`Breturn`).
+
+**And the exit debugger's return value is an assignment.**  Every one of those
+six sites is `val = call_debugger (list2 (Qexit, val))`.  That is not incidental
+-- it is how `debug.el`'s "return a value from this frame" works -- and it is why
+most GNU cells in the table above read `nil`: the recorder returns `nil`, so the
+debugged call returns `nil`.
+
+### 3. Failing tests first, red-verified
+
+`neovm-core/src/emacs_core/debug_on_call_test.rs` -- fifteen pins, each with the
+GNU probe that produced its constant in its doc comment.  Verified red by
+stubbing the mechanism out (`take_debug_on_call_arm` returning `None`,
+`builtin_backtrace_debug` dropping its frame index) and re-running:
+
+```
+before: 14 tests run: 2 passed, 12 failed
+after:  15 tests run: 15 passed
+```
+
+The two that passed red are the two silences -- `throw` out of a flagged frame,
+and `backtrace-debug` with a nil FLAG.  A pin set where nothing passes in the red
+state would have been a pin set that only tested "the debugger fires"; these two
+test "and here it must not".
+
+Six oracle pins in `neovm-oracle-tests/src/debug_on_next_call.rs` record the same
+handshake against GNU end to end, including the byte-compiled `Bcall` (`lambda`
+rather than `t`), the `:debug-on-exit` flag as the backtrace walker reports it,
+and the four "an argument armed it" rows that would catch an over-eager port
+re-testing the arm at its own funcall layer.
+
+### 4. The type: the disarm IS the constructor
+
+The bad state is precise and it is not "the flag has the wrong value".  It is
+**an arm that is still set after the call it armed** -- because then the next
+call enters the debugger, and the next, forever.  GNU avoids it with an ordering
+convention: clear on line 338, act on lines 339-340.  A convention is checkable,
+not enforceable.
+
+`neovm-core/src/emacs_core/debug_on_call.rs:111` makes the ordering the
+constructor, which is the shape 161, 162, 166 and 169 converged on (169:
+`ProcessStatusNotification`'s only constructors perform the retirement before
+returning the sentinel arguments):
+
+* `DebugOnCallArm` has private fields, and exactly one constructor --
+  `Context::take_debug_on_call_arm` (`debug_on_call.rs:178`), which performs
+  `cell.set(false)` **before** it returns the token.  Holding one is proof the
+  flag is already down.
+* The token has exactly one consumer -- `Context::do_debug_on_call`
+  (`debug_on_call.rs:240`), which takes it **by value**.
+* `#[must_use]` on the type, with the message that dropping an arm disarms
+  without entering, which loses a debugger entry GNU would have made.
+* There is no accessor that yields anything spendable.
+  `Context::debug_on_next_call_is_armed` (`debug_on_call.rs:163`) returns a bare
+  `bool` and exists only to steer a call off a zero-copy fast path; it cannot
+  construct a token, so it cannot enter the debugger and cannot leave the flag
+  set.
+* `DebugOnCallCode` (`debug_on_call.rs:83`) replaces GNU's two bare symbols with
+  a two-valued enum, so "which site armed this" survives to the debugger call
+  and the domain is closed by the compiler rather than by grep.
+
+The **frame** GNU's line 339 flags is captured by the constructor from the
+specpdl top rather than passed in (`arm_for_specpdl_top`,
+`debug_on_call.rs:192`), because GNU's `count` is the frame `record_in_backtrace`
+just returned at all three sites and nothing is pushed in between (`maybe_gc`
+does not push).  "Flagged the wrong frame" therefore stops being expressible
+too.
+
+The flag itself is reached the way GNU reaches it: through the `DEFVAR_BOOL`
+descriptor's cell (`Obarray::bool_forwarder`, `symbol.rs:1961`), not through a
+symbol-value lookup, because GNU's is `globals.f_debug_on_next_call`
+(`src/globals.h:1170-1171`) -- a `bool *`.  The accessor handles the `Localized`
+redirect as well, since `make_blv` moves the descriptor into the BLV
+(`src/data.c:2112-2140`) and GNU's swap-in leaves the current buffer's value in
+that same cell.
+
+### 5. Six exit sites in GNU, one here -- and the fast paths had already proved it
+
+GNU spends `debug_on_exit` at six places.  This port pops every backtrace frame
+through `unbind_to_with_result`, so the honest question was whether collapsing
+six into one loses any of them.  It does not, and the proof was already in the
+tree: `trivial_spec_binding_pop` (`eval.rs:990-1007`) treats a
+`debug_on_exit: true` frame as **non**-trivial, and every fast pop -- both
+`unbind_to_with_result` short-circuits, `pop_bytecode_backtrace_frame_with_result`'s
+`can_pop`, and `pop_fast_bytecode_backtrace_frame`'s assertion -- is written
+against that predicate.  A flagged frame cannot reach any of them.  168 noticed
+half of this: `pop_bytecode_backtrace_frame_with_result` carries a comment saying
+`debug_on_exit: false` is "load-bearing -- a future real `backtrace-debug`
+implementation must land in the `unbind_to_with_result` fallback below".  It
+does, and that is the hook (`eval.rs:14475`).
+
+Two details of GNU's ordering had to be preserved and both are observable.  The
+debugger runs **before** `specpdl_ptr--`, so the flagged frame is still in the
+backtrace it displays -- visible in GNU's own stderr, where
+`default-value(debug-on-next-call)` appears in the "returning value" block.  And
+`Err` returns without calling anything, which is the `throw` row.
+
+The one shape this port has and GNU does not is a backtrace frame with **no
+`debug_on_exit` field**: `SpecBinding::Backtrace2` and `BacktraceNative` drop it
+to stay inside the hot specpdl entry's size budget, and both are documented as
+"structurally false".  A two-argument call is completely ordinary -- `(cons 1 2)`
+-- so silently losing the flag there would have been a real hole.
+`set_backtrace_debug_on_exit` (`eval.rs:14006`) therefore **promotes** such a
+frame to the owned shape instead.  The subtlety is that `backtrace_args_stack`
+slots are pushed in specpdl order and released LIFO -- `release_backtrace_args_in_specpdl_suffix`
+asserts exactly that -- so a promotion in the middle of the stack inserts at the
+position the frame's slot would have occupied and shifts the frames above it,
+rather than pushing on top (`eval.rs:14037`).  For the entry-debugger path the
+frame is the specpdl top and the insert degenerates to a push.  The
+`(cons 1 2)` row is the pin.
+
+### 6. `backtrace-debug` returned its FLAG and stored nothing
+
+`builtin_backtrace_debug` validated its arguments, resolved BASE, threw the
+result away and returned `args[1]`.  That is why the four `backtrace-debug` rows
+diverged with no `debug-on-next-call` in sight, and why the `:debug-on-exit`
+flag never appeared in the walker's fourth slot even though
+`runtime_backtrace_frame_flags` was written to emit it.  It now sets the bit
+(`misc.rs:681`).
+
+Two GNU details that a re-implementation gets wrong by default:
+
+* **LEVEL 0 is `backtrace-debug`'s own frame.**  `get_backtrace_starting_at (Qnil)`
+  is `backtrace_top ()` (`src/eval.c:3988`), which is the running subr.  Measured:
+  `(backtrace-debug 0 t)` debugs `backtrace-debug`'s own exit with value `t` and
+  leaves the caller answering 21; `(backtrace-debug 1 t)` flags the caller and
+  the debugger replaces its 21.
+* **LEVEL is checked twice, by two different predicates.**  `CHECK_FIXNUM (level)`
+  runs first (`src/eval.c:4022`) and names `fixnump`; `get_backtrace_frame` then
+  runs `CHECK_FIXNAT (nframes)` (`src/eval.c:3987`) and names `wholenump`.  A
+  single `wholenump` check cannot produce both answers, and this port had one --
+  so `(backtrace-debug "x" nil)` said `wholenump` where GNU says `fixnump`.  This
+  is the same class as the resolved `fixnump` cluster; the fix is a second
+  helper (`expect_fixnum`, `misc.rs:61`) whose doc comment states why the two
+  checks exist rather than leaving the next reader to rediscover it.
+
+Also folded in here: `call_debugger` is now one function
+(`debug_on_call.rs:216`) shared by the signal path and both call paths.  It was
+previously only reachable in a signal-shaped wrapper with `Qerror` hardcoded, so
+the two things GNU does at its top -- `debug_on_next_call = 0`
+(`src/eval.c:298`) and `when_entered_debugger = num_nonmacro_input_events`
+(`src/eval.c:299`) -- had nowhere to live.  The second is Lisp-visible as
+`internal-when-entered-debugger` and read `-1` here where GNU reads `0`.
+
+### 7. The audit: 19 frame-recording entry points, 13 divergent, 0 after
+
+GNU has three armed checks, but they are three because GNU has three places that
+call `record_in_backtrace`.  This port has nineteen, so the audit question is not
+"did we port three checks" but "does every port site that stands for one of
+GNU's three carry the arm".
+
+| # | site | GNU role | before | after |
+|---|---|---|---|---|
+| 1 | `eval.rs:10693` `eval_sub_cons` | `eval_sub` 2601 | unarmed | **arms, `Qt`** |
+| 2 | `eval.rs:10844` macro-expansion frame | `apply1`→`Ffuncall` 3185 | unarmed | correctly unarmed (see below) |
+| 3 | `eval.rs:10864` cons-cell macro frame | same | unarmed | correctly unarmed |
+| 4 | `eval.rs:14706` `apply_internal` | `Ffuncall` 3189 | unarmed | **arms, `Qlambda`** |
+| 5 | `eval.rs:14841` `apply_with_frame_function` | `Ffuncall` | dead code | dead code |
+| 6 | `eval.rs:14858` `funcall_general` | `Ffuncall` (native→Lisp `calln`) | unarmed | **arms, `Qlambda`** |
+| 7 | `eval.rs:15632` `apply_named_callable_by_id` | `Ffuncall` | dead code | dead code |
+| 8 | `eval.rs:15653` `apply_named_callable` | `Ffuncall` | dead code | dead code |
+| 9 | `vm.rs:2975` interpreter-target `Bcall` | `bytecode.c:798` | unarmed | gated at `vm.rs:3798` |
+| 10 | `vm.rs:2988` bytecode-target `Bcall` | same | unarmed | gated at `vm.rs:3798` |
+| 11 | `vm.rs:3025` generic-target `Bcall` | same | unarmed | gated at `vm.rs:3798` |
+| 12 | `vm.rs:3848` iterative-driver `Bcall` | same | unarmed | gated at `vm.rs:3798` |
+| 13 | `vm.rs:6018` `call_function_debugged` | same | (new) | **the armed route** |
+| 14 | `vm.rs:6038` `call_function` | `Op::CallBuiltin`/`Op::Apply` | unarmed | correctly unarmed |
+| 15 | `vm.rs:6396` `call_spec_subr_stack` (jit) | `Bcall` | unarmed | gated at `vm.rs:6371` |
+| 16 | `vm.rs:6514` `call_armed_callee_native` (jit) | `Bcall` | unarmed | gated at `vm.rs:6471` (deopts) |
+| 17 | `vm.rs:6643` `call_function_from_stack_args`, bytecode arm | `Bcall` | unarmed | gated upstream |
+| 18 | `vm.rs:6672` `call_function_from_stack_args`, generic arm | `Bcall` | unarmed | gated upstream |
+| 19 | `vm.rs:6853` `call_resolved_builtin_from_stack_args` | `Bcall` | unarmed | gated upstream |
+
+**Nineteen audited.  Three are dead code.  Thirteen of the sixteen live sites
+stand for one of GNU's three checks, and all thirteen diverged: none of them
+armed anything.  All thirteen are covered now -- four take the arm directly, nine
+through five gates** (`Op::Call` at `vm.rs:3798`, `call_for_jit` at `6207`,
+`call_for_jit_stack` at `6278`, `call_spec_subr_stack` at `6371`,
+`call_armed_callee_native` at `6471`).
+
+The **three live sites that must NOT arm** are the interesting part of the audit,
+because arming them would have been the easy mistake:
+
+* `vm.rs:6038` `call_function` also serves `Op::CallBuiltin` and `Op::Apply`.
+  Those are not `Bcall`.  The decoder's evidence is direct: bytes `32..=37` and
+  `040`/`0100` become `Op::Call` (`decode.rs:543-550`) and every other call-shaped
+  opcode becomes `Op::CallBuiltinSym` -- **no decoder path emits `Op::CallBuiltin`
+  or `Op::Apply` at all**; they survive only as a pdump round-trip and in unit
+  tests.  GNU's inline opcodes are its `bytecode.c:1412-1545` block and it does
+  not gate them, so gating here would have made this port debug MORE calls than
+  GNU.
+* the two macro-expansion frames.  GNU records a second frame there (inside
+  `apply1`) and does test it -- but the outer `eval_sub` frame has already spent
+  the one-shot for the same form, and a macro's arguments are not evaluated, so
+  nothing can re-arm in between.  Arming here would double-fire.
+
+The **JIT was the finding of this audit**.  `jit` is a DEFAULT feature
+(`neovm-core/Cargo.toml:92`), so its three lowerings of `Bcall` are live code,
+and none of them would have carried the arm if the audit had stopped at the
+interpreter.  `call_armed_callee_native` cannot run Lisp mid-call, so it deopts
+exactly the way a wrong arg count already does -- returning `None` sends the call
+to the strict path, which arms it.
+
+**The exit side.**  Six pop primitives (`unbind_to_with_result`,
+`pop_bytecode_backtrace_frame_with_result`, `pop_bytecode_backtrace_token_with_result`,
+`pop_fast_bytecode_backtrace_frame`, `pop_native_backtrace_frame`,
+`release_oversized_bytecode_backtrace_frame`) with 35 call sites between them.
+Three funnel into `unbind_to_with_result`, which is the single hook.  The other
+three do not test the bit, and their safety is by reachability rather than by
+type: `pop_fast_bytecode_backtrace_frame` and
+`release_oversized_bytecode_backtrace_frame` are reached only from
+`call_resolved_builtin_from_stack_args`, and `pop_native_backtrace_frame` only
+from the native fast path -- all four routes to which are gated before any frame
+is pushed, and no Lisp runs between such a push and its pop, so
+`backtrace-debug` cannot flag one either.  Recorded below as the residual it is.
+
+### 8. Hypotheses eliminated
+
+* **"The variable's declaration or coercion is wrong."**  It is not, and 135
+  already proved it: `debug-on-next-call` is declared, `Lisp_Fwd_Bool`-coerced
+  and on `byte-boolean-vars` exactly as GNU has it.  Re-checked here; the entry
+  changes no part of the declaration.
+* **"`inhibit-debugger` should gate it."**  It should not.  `call_debugger`
+  *binds* `Qinhibit_debugger` to `Qt` (`src/eval.c:309`) and never tests it; only
+  `maybe_call_debugger` consults it (`src/eval.c:2204`), which is the signal
+  path.  Measured: GNU debugs an armed call inside
+  `(let ((inhibit-debugger t)) ...)`.  Pinned, because binding-versus-testing is
+  exactly the confusion that would produce a plausible wrong implementation.
+* **"`Fapply` needs its own check, since the docstring says `eval`, `apply` or
+  `funcall`."**  It does not; `Fapply` reaches `Ffuncall` (`src/eval.c:3192`).
+  The measured `apply` row shows code `t`, not `lambda`, because `eval_sub` gets
+  there first.
+* **"The arm should be re-tested at the dispatch layer, since this port has more
+  dispatch layers than GNU."**  Measured against GNU and refuted: an argument
+  that arms the flag does not get its own call debugged, because GNU invokes a
+  subr or a lambda without going through `Ffuncall`.  Four rows pin it.
+* **"A stale cached descriptor pointer would be a cheap way to read the flag."**
+  Rejected on inspection rather than measured: a portable dump rebuilds every
+  `LispBoolFwd` on load (`pdump/convert.rs:4340`, `load_obarray`'s
+  `bool_forwarded_entries` second pass), so a pointer cached at `Context`
+  construction is exactly the "state that can go stale" class this entry exists
+  to remove.  The read goes through the obarray slot each time -- a `Vec` index,
+  a redirect check and a relaxed load.
+* **"`Op::CallBuiltin` is this port's name for a `Bcall`."**  It is not; nothing
+  decodes to it (§7).
+
+### 9. Found and NOT fixed
+
+1. **`maybe_call_debugger`'s `when_entered_debugger` guard is not implemented.**
+   GNU refuses a second debugger entry within one command with
+   `when_entered_debugger < num_nonmacro_input_events` (`src/eval.c:2212`).  This
+   entry writes the slot where GNU writes it, so the variable now reads right,
+   but nothing reads it back.  Adding the guard changes which errors reach the
+   debugger in batch (where `num_nonmacro_input_events` is 0 and the slot becomes
+   0 after one entry, making the comparison false forever after), and that is an
+   oracle-sized behaviour change, not a four-line one.
+2. **`call_debugger` binds two things where GNU binds four**, and one of the two
+   unconditionally where GNU is conditional.  GNU adds
+   `specbind (Qinhibit_redisplay, Qnil)` (`src/eval.c:308`) and
+   `specbind (Qinhibit_changing_match_data, Qnil)` (`src/eval.c:314`), computes
+   `debugger-may-continue` as `debug_while_redisplaying ? Qnil : Qt`
+   (`src/eval.c:306-307`), reserves 200 frames of depth (`src/eval.c:291`),
+   cancels the hourglass, and jumps to `Ftop_level` if the debugger perturbed an
+   in-flight redisplay (`src/eval.c:326-330`).  Every one of those is about
+   interactive redisplay, none of them is the arming handshake, and all of them
+   want a GUI probe rather than a batch one.
+3. **Three pop primitives are safe by reachability, not by type.**
+   `pop_fast_bytecode_backtrace_frame`, `pop_native_backtrace_frame` and
+   `release_oversized_bytecode_backtrace_frame` do not test `debug_on_exit`; the
+   last would `panic!` on one.  Today no flagged frame can reach them (§7), but
+   that is an argument, and the argument would have to be re-made by anyone who
+   adds a fifth `Bcall` lowering.  The type-level version is to make the specpdl
+   index an unforgeable token returned by the four push helpers, which is a
+   19-call-site change and belongs in its own entry; `arm_for_specpdl_top`
+   currently asserts the invariant with a `debug_assert!` instead.
+4. **`debug-on-event` cannot arm anything here.**  GNU's `handle_user_signal`
+   sets `debug_on_next_call = true` from a signal handler
+   (`src/keyboard.c:8502`); this port has no equivalent, so the one C-side setter
+   of the flag is still missing.  The mechanism it would have driven now exists,
+   which is the prerequisite.
+5. **The menu back-ends' `specbind (Qdebug_on_next_call, Qnil)`** around menu
+   dispatch (`src/xmenu.c:984`, `src/pgtkmenu.c:270`, `src/w32menu.c:516`,
+   `src/haikumenu.c:618`) has no counterpart here.  It only matters once a menu
+   can run with the flag armed, which requires (4).
+6. **`backtrace-debug`'s BASE resolution was audited only at its edges.**
+   `(backtrace-debug 0 nil 'no-such-function)` and `(backtrace-debug 99999 nil)`
+   are both silent no-ops in both editors, and the cons `(NFRAMES . BASE)` form
+   is exercised by the existing `backtrace_helper_stubs_shape_and_errors` pin,
+   but GNU's `get_backtrace_starting_at` was not compared frame by frame against
+   `runtime_backtrace_frame_indices_from_base`.
+
+### 10. Gates
+
+The coordinator instructed that the heavy suites be skipped and re-run once on
+the merged tree, because the box was at a 1-minute load average of **986 on 32
+cores** while six agents ran suites concurrently.  What was run, and what was
+not, stated exactly:
+
+```
+RUN
+cargo fmt --all --check                                   clean                            (load 174)
+cargo check --workspace --all-targets                     clean                            (load 30)
+cargo nextest run -p neovm-core -E 'test(/debug_on_call|
+   vm_backtrace_and_recursion_builtins_use_shared_runtime_state|
+   backtrace_helper/)'                                    18 tests run: 18 passed          (load 25-77)
+the same 14 pins with the mechanism stubbed out           14 tests run: 2 passed, 12 failed
+39-row probe table, GNU vs merge-base binary              30 divergent                     (load 40-56)
+
+NOT RUN -- deferred to the coordinator's merged-tree gate
+cargo xtask fresh-build --release
+cargo nextest run -p neovm-core -p neomacs-layout-engine   (expect 11132 run, 54 skipped:
+                                                            merge base 11117 + 15 new pins)
+cargo nextest run -p neovm-oracle-tests                    (expect 38796: 38790 + 6 new pins)
+cargo xtask gc-stress --editor ./target/release/neomacs
+cargo nextest run -p neomacs-melpa-tests --no-fail-fast
+```
+
+**One run discarded, and why it is worth recording.**  A full
+`-p neovm-core -p neomacs-layout-engine` run reported
+`7543/11131 tests run: 7519 passed, 24 failed` -- and the 24 were **all
+`SIGKILL`/`SIGTERM` from the 600s watchdog** on bootstrap-heavy `load::tests`,
+at a load average of 999.  A second run reported `7439 passed, 4 failed` with
+**zero `FAIL` lines in the log** and `error: error reporting results: error
+writing to output`: the root filesystem had hit 0 bytes free, so nextest could
+not write its own failure report.  A log truncated by `ENOSPC` greps identically
+to a clean one.  Neither number is evidence of anything, and both are recorded
+here so they are not mistaken for a signal later.
+
+**Two things the worktree needed before any of it meant anything**, both known
+traps and both hit: 1,733 generated `lisp/` files were missing (the worktree had
+1,611 of main's 3,344) and `neovm-core/tests/test-module/target` was absent.
+Before copying them, 24 tests failed in ways that looked like real divergences --
+`casify_region_undo_restores_original_text_like_gnu`,
+`the_declared_symbol_properties_match_gnu`, a cluster of layout-engine chrome
+tests.  All 24 passed unchanged afterwards.  Diff the file trees; do not match
+patterns.
+
+Status: FIXED -- the entry/exit debugger mechanism now exists, at GNU's three
+sites plus the four lowerings this port has that GNU does not, with
+`backtrace-debug` actually storing what it is asked to store.  The audit's own
+finding is that the JIT is a fourth `Bcall` and would have been missed by a
+reading that stopped at GNU's count of three.
+
+### 11. Notes added to earlier entries
+
+135 and 168 both get a dated in-place note pointing here.  Neither is rewritten:
+both were right that the variable is not the bug, and 168's sizing ("that is
+worth its own entry and it is small") was accurate about the parts it named --
+three dispatch checks and `do_debug_on_call` -- and short by the JIT's three
+lowerings, `backtrace-debug`'s missing store, the `fixnump`/`wholenump` split and
+`call_debugger`'s absence as a shared function.
