@@ -3833,7 +3833,9 @@ pub(crate) fn builtin_forward_comment(
             // cursor, so a stop 2+ chars inside the window read only
             // propertized text.
             if window_end >= end_char || final_char.saturating_add(2) <= window_end {
-                let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, final_pos);
+                let _ = eval
+                    .buffers
+                    .goto_buffer_emacs_byte_pos(current_id, final_pos);
                 return Ok(if ok { Value::T } else { Value::NIL });
             }
             lookahead = lookahead.saturating_mul(4);

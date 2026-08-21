@@ -6438,10 +6438,9 @@ pub(crate) fn pattern_max_match_chars(pattern: &CompiledPattern) -> Option<usize
                 }
                 total += 1;
             }
-            RegexOp::Duplicate
-            | RegexOp::SucceedN
-            | RegexOp::JumpN
-            | RegexOp::SetNumberAt => return None,
+            RegexOp::Duplicate | RegexOp::SucceedN | RegexOp::JumpN | RegexOp::SetNumberAt => {
+                return None;
+            }
             RegexOp::Jump
             | RegexOp::OnFailureJump
             | RegexOp::OnFailureKeepStringJump

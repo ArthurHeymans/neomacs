@@ -846,7 +846,11 @@ fn propertize_window_for_forward_regexp(
     // Bounded searches come from region loops (newcomment et al.) whose
     // matches sit within a line or two; start them on a small window so a
     // per-edit retreat of `--done` re-propertizes only that much.
-    let base = if bound_byte.is_some() { 512usize } else { 4096usize };
+    let base = if bound_byte.is_some() {
+        512usize
+    } else {
+        4096usize
+    };
     let mut lookahead = base.max(margin_chars.saturating_mul(4));
     loop {
         let window_end = start_char.saturating_add(lookahead).min(region_end_char);

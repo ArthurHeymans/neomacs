@@ -292,7 +292,8 @@ fn engine_match_data_from_registers(regs: &MatchRegisters, offset: usize) -> Eng
     // `EngineMatchData::new` would re-map the whole Vec a second time, per
     // match, on the hottest search path.
     let num_groups = regs.num_regs();
-    let mut groups = smallvec::SmallVec::<[Option<EmacsByteRange>; GNU_SEARCH_REGS_BASE_CAPACITY]>::new();
+    let mut groups =
+        smallvec::SmallVec::<[Option<EmacsByteRange>; GNU_SEARCH_REGS_BASE_CAPACITY]>::new();
     groups.reserve(gnu_search_regs_capacity(num_groups));
     for i in 0..num_groups {
         if regs.start[i] >= 0 && regs.end[i] >= 0 {
@@ -326,14 +327,14 @@ fn gnu_search_regs_capacity(required: usize) -> usize {
     }
 }
 
-
 /// Inline-capacity group storage sized to GNU's base `search_regs`
 /// allocation: patterns with <= 7 groups (the overwhelming majority,
 /// and every literal search) publish match data with ZERO heap
 /// allocations. GNU reuses a global `search_regs` and never allocates
 /// per match; two mallocs per match showed up on single-char
 /// literal-search sweeps.
-pub(crate) type MatchGroupVec = smallvec::SmallVec<[Option<MatchGroup>; GNU_SEARCH_REGS_BASE_CAPACITY]>;
+pub(crate) type MatchGroupVec =
+    smallvec::SmallVec<[Option<MatchGroup>; GNU_SEARCH_REGS_BASE_CAPACITY]>;
 
 fn extend_to_gnu_search_regs_capacity(groups: &mut MatchGroupVec) {
     groups.resize(gnu_search_regs_capacity(groups.len()), None);
@@ -2159,8 +2160,7 @@ fn canon_fold_literal_find(
                 match hit {
                     Some(rel) => {
                         let cand = at + rel;
-                        if let Some(end) = canon_fold_match_at(text, cand, &pat, multibyte, trt)
-                        {
+                        if let Some(end) = canon_fold_match_at(text, cand, &pat, multibyte, trt) {
                             return Some(MatchGroup::new(cand, end));
                         }
                         at = cand + 1;
@@ -2854,7 +2854,10 @@ pub(crate) fn re_search_backward_with_posix(
 /// case-canon table (GNU's search `trt`) when a custom `set-case-syntax-pair`
 /// table is installed, else `None` so the engine's fast hardwired folding is
 /// used. Mirrors GNU search.c installing `BVAR (current_buffer, case_canon_table)`.
-fn buffer_search_translation(buf: &Buffer, case_fold: bool) -> Option<std::rc::Rc<CaseTranslation>> {
+fn buffer_search_translation(
+    buf: &Buffer,
+    case_fold: bool,
+) -> Option<std::rc::Rc<CaseTranslation>> {
     let table = buffer_search_translation_table(buf, case_fold)?;
     // One-entry per-thread cache keyed by table IDENTITY: rebuilding the
     // translation per search left its lazy 0..256 memo permanently cold, so
