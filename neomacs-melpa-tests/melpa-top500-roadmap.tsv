@@ -492,7 +492,7 @@ rank	package	downloads	status
 491	disaster	174773	covered
 492	jedi	172842	covered
 493	sublime-themes	172727	covered
-494	sphinx-doc	172522	todo
+494	sphinx-doc	172522	covered
 495	session	172485	covered
 496	ov	172364	covered
 497	company-lsp	172083	removed
