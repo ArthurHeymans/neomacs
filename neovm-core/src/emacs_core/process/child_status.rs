@@ -217,20 +217,39 @@ pub(crate) enum UpdateStatusSite {
     StatusNotify,
 }
 
-/// Whether a site has to run GNU's SIGCHLD sweep before it reads.
+/// Where the record this site reads was made.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Recording {
-    /// GNU reaches this site with the record already made, because the
-    /// SIGCHLD handler runs at any instant.  This port has to make it here,
-    /// so the sweep runs before the read.
-    Sweeps,
     /// GNU reaches this site with the record already made *and so does this
     /// port*, because the site is inside the wait/notification machinery
-    /// that has just done the discovery itself.  Sweeping again would be a
-    /// second `waitpid` on a child the same pass already harvested.
+    /// that has just done the discovery itself.
     AlreadyRecorded {
         /// Where this port made the record, so the claim is checkable.
         by: &'static str,
+    },
+    /// GNU reaches this site with the record already made because
+    /// `handle_child_signal` ran ASYNCHRONOUSLY, and this port does not,
+    /// because it has no asynchronous trigger to run
+    /// [`ProcessManager::record_child_status_changes`] from.
+    ///
+    /// **This is the open divergence, and the `why` says why the obvious
+    /// substitute is not one.**  Sweeping here -- running GNU's
+    /// `handle_child_signal` body on demand, at the observation -- gives the
+    /// right answer to the question and the wrong answer to the program:
+    /// GNU's record is late by the tens of microseconds a SIGCHLD takes to
+    /// be delivered and handled, and a `waitpid (WNOHANG)` at the
+    /// observation is ground truth.  Measured, ledger 180 §6b and §8:
+    /// `(while (process-live-p p) (accept-process-output p 1))` loses its
+    /// sentinel 0/60 in GNU and 4/60 with the sweep wired here, and
+    /// `treemacs-magit`'s `extending_a_real_commit_schedules_the_same_project
+    /// _refresh` fails DETERMINISTICALLY, because magit's post-commit hook is
+    /// keyed on `last-command` and the sentinel then runs after the `let`
+    /// that bound it has unwound.
+    AsynchronousInGnu {
+        /// GNU's line that makes the record for this site.
+        by: &'static str,
+        /// Why this port does not make it here.
+        why: &'static str,
     },
 }
 
@@ -285,7 +304,12 @@ impl UpdateStatusSite {
             Self::ProcessStatus
             | Self::ProcessExitStatus
             | Self::SendProcess
-            | Self::ProcessSendEof => Recording::Sweeps,
+            | Self::ProcessSendEof => Recording::AsynchronousInGnu {
+                by: "handle_child_signal, src/process.c:7734-7763",
+                why: "this port has no asynchronous trigger; sweeping at the \
+                      observation instead is measured to lose sentinels \
+                      (ledger 180 §6b, §8.1)",
+            },
             // The four sites that must not, or need not, sweep here.
             Self::DeleteProcess => Recording::AlreadyRecorded {
                 by: "src/process.c:1123 discards the record before this line reads it",
@@ -417,8 +441,13 @@ impl ProcessManager {
         id: ProcessId,
     ) -> Option<ObservedProcess<'_>> {
         match site.recording() {
-            Recording::Sweeps => self.record_child_status_changes(),
-            Recording::AlreadyRecorded { .. } => {}
+            // No arm sweeps today.  `AlreadyRecorded` needs nothing;
+            // `AsynchronousInGnu` is the open divergence, and the variant's
+            // docstring is where the reason lives rather than a comment here.
+            // When this port grows the trigger, those four arms become
+            // `self.record_child_status_changes()` and nothing else changes:
+            // every Lisp-visible status already comes through this function.
+            Recording::AlreadyRecorded { .. } | Recording::AsynchronousInGnu { .. } => {}
         }
         self.get_any(id).map(ObservedProcess::new)
     }

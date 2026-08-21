@@ -13215,30 +13215,27 @@ fn a_process_may_hold_a_buffer_that_is_not_live_like_gnu() {
     );
 }
 
-/// GNU records a changed child status ASYNCHRONOUSLY, so a child that has
-/// exited is already dead to Lisp with nobody having waited.
+/// GNU records a changed child status ASYNCHRONOUSLY, and this port does
+/// not -- the divergence, pinned as a divergence.
 ///
-/// `handle_child_signal` (src/process.c:7691) is the SIGCHLD handler.  It
+/// `handle_child_signal` (src/process.c:7691) is GNU's SIGCHLD handler.  It
 /// walks `FOR_EACH_PROCESS` itself (:7734) and, for every process that is
 /// `p->alive` and whose `child_status_changed (p->pid, &status,
 /// WUNTRACED | WCONTINUED)` reports a transition (:7741-7742), stamps
-/// `p->tick`, `p->raw_status` and `p->raw_status_new` (:7745-7747) and, on a
-/// terminal status, clears `p->alive` and `delete_read_fd (p->infd)`
-/// (:7750-7761).  Its own header states the contract: *"All we do is change
-/// the status; we do not run sentinels or print notifications"* (:7668-7671).
-///
-/// `Fprocess_status` (:1188-1189) and `Fprocess_exit_status` (:1212-1213)
-/// then decode that record with `update_status`, and `process-live-p` is
+/// `p->tick`, `p->raw_status` and `p->raw_status_new` (:7745-7747).  Its own
+/// header states the contract: *"All we do is change the status; we do not
+/// run sentinels or print notifications"* (:7669-7671).  `Fprocess_status`
+/// (:1188-1189) and `Fprocess_exit_status` (:1212-1213) then decode that
+/// record with `update_status`, and `process-live-p` is
 /// `(memq (process-status process) '(run open listen connect stop))`
-/// (lisp/subr.el:3538-3540).  So all three answer from the recording, and
-/// none of them waits.
+/// (lisp/subr.el:3538-3540).
 ///
-/// Measured, `-Q --batch`, GNU Emacs 31.0.90 against this port at the merge
-/// base, with the wait taken out of the probe entirely -- the spin is
-/// `float-time` and `process-attributes`, never `accept-process-output`:
+/// Measured, `-Q --batch`, GNU Emacs 31.0.90 against this port, with the
+/// wait taken out of the probe entirely -- the spin is `float-time` and
+/// `process-attributes`, never `accept-process-output`:
 ///
 /// ```text
-///                           GNU 31.0.90   Neomacs, merge base
+///                           GNU 31.0.90   this port
 ///   (process-status p)         exit       run
 ///   (process-exit-status p)    7          0
 ///   (process-live-p p)         nil        (run open listen connect stop)
@@ -13250,11 +13247,17 @@ fn a_process_may_hold_a_buffer_that_is_not_live_like_gnu() {
 /// rewrites `Vprocess_alist`.  Only `remove_process` (:957-966) does, and
 /// `status_notify` (:7926-7927) is what calls it -- which has not run here.
 ///
+/// **Why this is pinned rather than fixed, in one line:** the sweep exists
+/// and is unit-tested (`gnus_sigchld_sweep_records_an_exited_child_and_
+/// cannot_reach_a_pidless_process`), but running it AT THE OBSERVATION is
+/// measured to lose sentinels that GNU delivers -- ledger 180 §6b and §8.1.
+/// Closing this needs the asynchronous trigger, not a different placement.
+///
 /// `zombie-before` is asserted `t` so the pin cannot pass vacuously: it is
 /// the probe's own evidence that the child really had exited and really had
 /// not been waited for when the questions were asked.
 #[test]
-fn a_child_that_exited_with_nobody_waiting_is_already_dead_to_lisp_like_gnu() {
+fn a_child_that_exited_with_nobody_waiting_is_still_run_here_and_exit_in_gnu() {
     crate::test_utils::init_test_tracing();
     let sh = find_bin("sh");
     let result = eval_one(&format!(
@@ -13266,76 +13269,131 @@ fn a_child_that_exited_with_nobody_waiting_is_already_dead_to_lisp_like_gnu() {
                   (zp (lambda () (equal "Z" (cdr (assq 'state (process-attributes pid))))))
                   (deadline (+ (float-time) 20)))
              ;; A pure-Lisp spin: `wait_reading_process_output' is never
-             ;; entered, so only an asynchronous recording can have seen it.
+             ;; entered, so only an asynchronous recording could see it.
              (while (and (not (funcall zp)) (< (float-time) deadline)) nil)
              (list (cons 'zombie-before (funcall zp))
                    (cons 'status (process-status p))
                    (cons 'exit-status (process-exit-status p))
-                   (cons 'live-p (process-live-p p))
+                   (cons 'live-p (and (process-live-p p) t))
                    (cons 'get-process (and (get-process "pw180dead") t))
                    (cons 'in-process-list (and (memq p (process-list)) t))))"#
     ));
 
     assert_eq!(
         result,
-        "OK ((zombie-before . t) (status . exit) (exit-status . 7) (live-p) \
+        "OK ((zombie-before . t) (status . run) (exit-status . 0) (live-p . t) \
          (get-process . t) (in-process-list . t))"
     );
 }
 
-/// The same recording, for a child killed by a signal and for the pipe
-/// process that GNU's handler CANNOT reach.
+/// GNU's sweep, transcribed, exercised directly -- and the pidless process
+/// it cannot reach.
 ///
-/// `get_child_status` asserts `child > 0` (src/sysdep.c:461) and
-/// `handle_child_signal` passes it `p->pid` (:7742), so a process with no OS
-/// pid is never swept.  A pipe connection's status changes in exactly one
-/// other place -- `read_process_output` returning 0 (:6072-6079) -- which is
-/// inside the wait.  Ledger 165: `process-live-p` going nil means the
-/// OPPOSITE thing for a pipe, and a fix keyed on "the child exited" must
-/// leave the pipe alone.
+/// [`ProcessManager::record_child_status_changes`] is
+/// `handle_child_signal`'s `FOR_EACH_PROCESS` arm (src/process.c:7734-7763)
+/// as a function this port can call.  It is not wired to any Lisp entry
+/// point (see `UpdateStatusSite::recording` and the pin above), so this test
+/// is what keeps it honest: it drives a `ProcessManager` with no wait loop
+/// at all, waits until `/proc` says the child is a ZOMBIE -- exited and not
+/// reaped -- and asserts that the sweep, and only the sweep, turns `run`
+/// into `(exit . 7)`.
 ///
-/// Measured the same way (GNU 31.0.90 / this port at the merge base):
-///
-/// ```text
-///   signalled child, (process-status p)         signal / run
-///   signalled child, (process-exit-status p)    15     / 0
-///   pipe process,    (process-status p)         open   / open
-///   pipe process,    (process-live-p p)         t      / t
-/// ```
+/// The second half is ledger 165's inversion as a compile-time fact rather
+/// than a comment: `handle_child_signal` passes `p->pid` to
+/// `child_status_changed` and `get_child_status` opens with
+/// `eassert (child > 0)` (src/sysdep.c:462), so a pipe connection is not in
+/// the population.  [`SweepableChild::of`] is that membership test and there
+/// is no other constructor, so the sweep cannot touch one.
+#[cfg(unix)]
 #[test]
-fn the_async_child_recording_leaves_a_pidless_pipe_process_alone_like_gnu() {
+fn gnus_sigchld_sweep_records_an_exited_child_and_cannot_reach_a_pidless_process() {
+    use crate::emacs_core::process::child_status::SweepableChild;
+
     crate::test_utils::init_test_tracing();
     let sh = find_bin("sh");
-    let result = eval_one(&format!(
-        r#"(let* ((p (make-process
-                      :name "pw180sig" :noquery t :connection-type 'pipe
-                      :buffer (generate-new-buffer " *pw180sig*")
-                      :command '("{sh}" "-c" "kill -TERM $$")))
-                  (pid (process-id p))
-                  (zp (lambda () (equal "Z" (cdr (assq 'state (process-attributes pid))))))
-                  (deadline (+ (float-time) 20))
-                  (q (make-pipe-process :name "pw180pipe" :noquery t
-                                        :buffer (generate-new-buffer " *pw180pipe*"))))
-             (while (and (not (funcall zp)) (< (float-time) deadline)) nil)
-             (list (cons 'zombie-before (funcall zp))
-                   (cons 'child-status (process-status p))
-                   (cons 'child-exit (process-exit-status p))
-                   (cons 'child-live (and (process-live-p p) t))
-                   (cons 'pipe-id (process-id q))
-                   (cons 'pipe-status (process-status q))
-                   (cons 'pipe-exit (process-exit-status q))
-                   (cons 'pipe-live (and (process-live-p q) t))))"#
-    ));
+    let mut processes = ProcessManager::new();
+    let child = processes.create_process_lisp(
+        LispString::from_utf8("pw180-sweep"),
+        Value::NIL,
+        LispString::from_utf8(&sh),
+        vec![LispString::from_utf8("-c"), LispString::from_utf8("exit 7")],
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
+    processes.spawn_child(child, false).expect("spawn child");
+    let os_pid = processes
+        .get(child)
+        .and_then(|proc| proc.os_pid)
+        .expect("a spawned child has an OS pid");
 
+    // A pipe process: no child, no pid, so not a member of the population.
+    let pipe = processes.create_process_with_kind_lisp(
+        LispString::from_utf8("pw180-sweep-pipe"),
+        Value::NIL,
+        LispString::from_utf8(""),
+        Vec::new(),
+        crate::emacs_core::process::ProcessKindWithoutDevice::Pipe,
+        crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+    );
+
+    // Wait for the kernel, not for the clock: a zombie is exited-and-unreaped,
+    // which is the exact state GNU's handler would have found.
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let is_zombie = |pid: u32| {
+        std::fs::read_to_string(format!("/proc/{pid}/stat"))
+            .ok()
+            .and_then(|stat| {
+                // /proc/PID/stat field 3 is the state letter; the comm field
+                // may contain spaces and parens, so scan past its last ')'.
+                let after_comm = stat.rfind(')').map(|i| i + 1)?;
+                stat[after_comm..]
+                    .split_whitespace()
+                    .next()
+                    .map(str::to_string)
+            })
+            .is_some_and(|state| state == "Z")
+    };
+    while std::time::Instant::now() < deadline && !is_zombie(os_pid) {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert!(
+        is_zombie(os_pid),
+        "the child must be exited and unreaped before the sweep runs"
+    );
+
+    let before = process_effective_status(processes.get(child).expect("child is live"));
     assert_eq!(
-        result,
-        "OK ((zombie-before . t) (child-status . signal) (child-exit . 15) (child-live) \
-         (pipe-id) (pipe-status . open) (pipe-exit . 0) (pipe-live . t))"
+        ProcessStatusSymbol::from_status_value(before),
+        Some(ProcessStatusSymbol::Run),
+        "nothing but the sweep may have observed the exit"
+    );
+    assert_eq!(
+        SweepableChild::of(pipe, processes.get(pipe).expect("pipe is live")),
+        None,
+        "a pidless process is not in handle_child_signal's population"
+    );
+
+    processes.record_child_status_changes();
+
+    let after = process_effective_status(processes.get(child).expect("child is still listed"));
+    assert_eq!(
+        ProcessStatusSymbol::from_status_value(after),
+        Some(ProcessStatusSymbol::Exit)
+    );
+    assert_eq!(process_status_code_value(after), 7);
+    // GNU's handler does not remove anything from `Vprocess_alist`
+    // (:7734-7763 never touches it), so the process is still listed.
+    assert!(processes.list_processes().contains(&child));
+    // And the pipe is untouched.
+    assert_eq!(
+        ProcessStatusSymbol::from_status_value(process_effective_status(
+            processes.get(pipe).expect("pipe is still live")
+        )),
+        Some(ProcessStatusSymbol::Run)
     );
 }
 
-/// GNU's `update_status` call sites, enumerated, and the four of them a Lisp
-/// program can reach with no wait having run.
+/// GNU's `update_status` call sites, enumerated, and how each one gets its
+/// record.
 ///
 /// The population is mechanical -- `grep -n 'update_status ('
 /// src/process.c` gives the definition at :717 and exactly eight call sites
@@ -13344,14 +13402,14 @@ fn the_async_child_recording_leaves_a_pidless_pipe_process_alone_like_gnu() {
 /// counts, so a table that lost its rows fails rather than passing over an
 /// empty set (ledger 173's law, and 177's table).
 ///
-/// The 4/4 split is the entry's whole claim in one number: four of GNU's
-/// eight sites are Lisp entry points that answer from a record the SIGCHLD
-/// handler made asynchronously, and those four are where this port now makes
-/// the record; the other four are inside the wait/notification machinery, or
-/// -- for `Fdelete_process` -- deliberately DISCARD the record one line
-/// earlier (:1123).
+/// The 4/4 split is the entry's whole finding in one number: four of GNU's
+/// eight sites are inside the wait/notification machinery, which this port
+/// has too, and four are Lisp entry points that answer from a record GNU's
+/// SIGCHLD handler made asynchronously -- which this port has no trigger
+/// for.  Those four are the open divergence, and
+/// `Recording::AsynchronousInGnu` carries the reason.
 #[test]
-fn gnus_eight_update_status_sites_are_enumerated_and_four_of_them_sweep() {
+fn gnus_eight_update_status_sites_are_enumerated_and_four_are_the_asynchronous_ones() {
     use crate::emacs_core::process::child_status::Recording;
     use crate::emacs_core::process::{UnrecordedStatusRead, UpdateStatusSite};
 
@@ -13359,7 +13417,7 @@ fn gnus_eight_update_status_sites_are_enumerated_and_four_of_them_sweep() {
     assert_eq!(UpdateStatusSite::ALL.len(), 8);
 
     let mut seen = std::collections::BTreeSet::new();
-    let mut sweeps = Vec::new();
+    let mut asynchronous = Vec::new();
     let mut already = Vec::new();
     for site in UpdateStatusSite::ALL {
         assert!(seen.insert(site.gnu()), "duplicate GNU citation: {site:?}");
@@ -13368,7 +13426,10 @@ fn gnus_eight_update_status_sites_are_enumerated_and_four_of_them_sweep() {
             "{site:?} must cite the C line it ports"
         );
         match site.recording() {
-            Recording::Sweeps => sweeps.push(site),
+            Recording::AsynchronousInGnu { by, why } => {
+                assert!(!by.is_empty() && !why.is_empty());
+                asynchronous.push(site);
+            }
             Recording::AlreadyRecorded { by } => {
                 assert!(
                     !by.is_empty(),
@@ -13378,10 +13439,14 @@ fn gnus_eight_update_status_sites_are_enumerated_and_four_of_them_sweep() {
             }
         }
     }
-    assert_eq!(sweeps.len(), 4, "sweeping sites: {sweeps:?}");
+    assert_eq!(
+        asynchronous.len(),
+        4,
+        "asynchronous sites: {asynchronous:?}"
+    );
     assert_eq!(already.len(), 4, "already-recorded sites: {already:?}");
     assert_eq!(
-        sweeps,
+        asynchronous,
         vec![
             UpdateStatusSite::ProcessStatus,
             UpdateStatusSite::ProcessExitStatus,
@@ -13402,8 +13467,8 @@ fn gnus_eight_update_status_sites_are_enumerated_and_four_of_them_sweep() {
     assert_eq!(UpdateStatusSite::DeleteProcess.gnu(), "src/process.c:1143");
     assert_eq!(UpdateStatusSite::StatusNotify.gnu(), "src/process.c:7915");
 
-    // And the enumerated holes: reads this port cannot put the recording in
-    // front of.  One, with its reason.
+    // And the enumerated holes: Lisp-visible status reads this port cannot
+    // route through `observe` at all.  One, with its reason.
     assert_eq!(UnrecordedStatusRead::COUNT, 1);
     assert_eq!(UnrecordedStatusRead::ALL.len(), 1);
     for hole in UnrecordedStatusRead::ALL {
@@ -13416,68 +13481,54 @@ fn gnus_eight_update_status_sites_are_enumerated_and_four_of_them_sweep() {
     );
 }
 
-/// The send subrs are `update_status` consumers too, and answered `ok` where
-/// GNU raises.
+/// `process-send-eof` on a process that has finished but is still listed.
 ///
-/// `send_process` runs `update_status` at src/process.c:6725-6726 and then
-/// `if (! EQ (p->status, Qrun)) error ("Process %s not running: %s", ...,
-/// status_message (p))` at :6727-6728; `Fprocess_send_eof` has the identical
-/// pair at :7451-7455.  With the recording never made, this port's gate saw
-/// `run` and let all three through -- and `process-send-eof` had no gate at
-/// all on the non-pty path, so it answered `ok` even for a process whose
-/// status was already `exit`.
+/// GNU's `Fprocess_send_eof` gate is unconditional: `update_status`, then
+/// `if (! EQ (p->status, Qrun)) error ("Process %s not running: %s", ...)`
+/// (src/process.c:7451-7455), reached for every kind except a datagram
+/// connection, which returns at :7444-7445 before it.  This port had that
+/// gate only on the PTY-stdin path, so `process-send-eof` answered `ok` for
+/// a child whose status was already `exit`.
 ///
-/// Measured, `-Q --batch`, a child that exited with nobody waiting:
+/// `delete-exited-processes` nil is what makes the row reachable without
+/// depending on any recording: the sentinel has run, the status is settled,
+/// and GNU keeps the process in `Vprocess_alist` (:7926-7929).  Measured,
+/// `-Q --batch`, three runs each:
 ///
 /// ```text
-///                         GNU 31.0.90                          Neomacs, merge base
-///   process-send-string   error "... not running: finished"    error "... no longer connected to pipe; closed it"
-///   process-send-eof      error "... not running: finished"    ok
-///   process-send-region   error "... not running: finished"    error "... no longer connected to pipe; closed it"
+///                        GNU 31.0.90                          this port, before
+///   process-send-eof     error "... not running: finished"    ok
+///   process-send-string  error "... not running: finished"    same as GNU
 /// ```
-///
-/// The two `error` rows on the right are the same defect wearing a different
-/// message: the gate passed, the write was attempted, and the failure came
-/// from the closed pipe rather than from the status.
 #[test]
-fn the_send_subrs_reject_a_child_that_exited_with_nobody_waiting_like_gnu() {
+fn process_send_eof_rejects_a_finished_process_like_gnu() {
     crate::test_utils::init_test_tracing();
     let sh = find_bin("sh");
     let result = eval_one(&format!(
-        r#"(let* ((try (lambda (thunk) (condition-case e (funcall thunk) (error (cadr e)))))
-                  (mk (lambda (n)
-                        (let* ((p (make-process
-                                   :name n :noquery t :connection-type 'pipe
-                                   :buffer (generate-new-buffer (concat " *" n "*"))
-                                   :command '("{sh}" "-c" "exit 0")))
-                               (pid (process-id p))
-                               (zp (lambda () (equal "Z" (cdr (assq 'state (process-attributes pid))))))
-                               (deadline (+ (float-time) 20)))
-                          (while (and (not (funcall zp)) (< (float-time) deadline)) nil)
-                          (cons p (funcall zp))))))
-             (let* ((a (funcall mk "pw180sa"))
-                    (b (funcall mk "pw180sb"))
-                    (c (funcall mk "pw180sc")))
-               (list (cons 'zombies (list (cdr a) (cdr b) (cdr c)))
-                     (cons 'send-string
-                           (funcall try (lambda () (process-send-string (car a) "x") 'ok)))
+        r#"(let ((delete-exited-processes nil)
+                 (try (lambda (thunk)
+                        (condition-case e (funcall thunk) (error (cadr e))))))
+             (let* ((done nil)
+                    (p (make-process
+                        :name "pw180eof" :noquery t :connection-type 'pipe
+                        :buffer (generate-new-buffer " *pw180eof*")
+                        :sentinel (lambda (_p _m) (setq done t))
+                        :command '("{sh}" "-c" "exit 0"))))
+               (while (not done) (accept-process-output p 0.05))
+               (list (cons 'status (process-status p))
+                     (cons 'listed (and (memq p (process-list)) t))
                      (cons 'send-eof
-                           (funcall try (lambda () (process-send-eof (car b)) 'ok)))
-                     (cons 'send-region
-                           (funcall try (lambda ()
-                                          (with-temp-buffer
-                                            (insert "x")
-                                            (process-send-region (car c) (point-min) (point-max)))
-                                          'ok))))))"#
+                           (funcall try (lambda () (process-send-eof p) 'ok)))
+                     (cons 'send-string
+                           (funcall try (lambda () (process-send-string p "x") 'ok))))))"#
     ));
 
     assert_eq!(
         result,
         concat!(
-            "OK ((zombies t t t) ",
-            "(send-string . \"Process pw180sa not running: finished\n\") ",
-            "(send-eof . \"Process pw180sb not running: finished\n\") ",
-            "(send-region . \"Process pw180sc not running: finished\n\"))",
+            "OK ((status . exit) (listed . t) ",
+            "(send-eof . \"Process pw180eof not running: finished\n\") ",
+            "(send-string . \"Process pw180eof not running: finished\n\"))",
         )
     );
 }
