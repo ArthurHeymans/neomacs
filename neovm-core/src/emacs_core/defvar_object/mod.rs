@@ -226,12 +226,22 @@ pub fn adopt(obarray: &mut Obarray) -> AdoptionCounts {
     // the same generated table as the declarations, so the two halves are
     // refreshed from the mirror together and cannot drift -- see
     // [`GnuSpecialness`].
+    //
+    // Presence is tested exactly as [`adopt_one`] tests it, and for the same
+    // reason: a name this build does not have is left alone.  Clearing the flag
+    // through the name rather than the id would `intern` it and give the
+    // obarray a member for a variable that does not exist here.
     for var in gnu_table::GNU_OBJECT_VARIABLES {
-        if var.special == GnuSpecialness::NonSpecial
-            && super::intern::lookup_interned(var.name).is_some()
-        {
-            obarray.make_non_special(var.name);
+        if var.special != GnuSpecialness::NonSpecial {
+            continue;
         }
+        let Some(id) = super::intern::lookup_interned(var.name) else {
+            continue;
+        };
+        if obarray.get_by_id(id).is_none() {
+            continue;
+        }
+        obarray.make_non_special_id(id);
     }
     counts
 }
