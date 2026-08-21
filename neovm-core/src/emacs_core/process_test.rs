@@ -11927,7 +11927,7 @@ fn a_stopped_but_finished_connection_reports_closed_like_gnu() {
 /// coding system and the `:post-read-conversion' hook with it.
 ///
 /// `read_and_dispose_of_process_output` chooses between two branches
-/// (src/process.c:6556-6559):
+/// (src/process.c:6557-6559):
 ///
 /// ```c
 ///   if (fast_read_process_output
@@ -11944,9 +11944,9 @@ fn a_stopped_but_finished_connection_reports_closed_like_gnu() {
 ///     return;
 /// ```
 ///
-/// (:6463-6464).  Three disjuncts, one `if`, and it stands BEFORE
-/// `decode_coding_c_string` (:6491) and before
-/// `read_process_output_set_last_coding_system` (:6494).  Entry 166 closed the
+/// (:6464-6465).  Three disjuncts, one `if`, and it stands BEFORE
+/// `decode_coding_c_string` (:6502) and before
+/// `read_process_output_set_last_coding_system` (:6506).  Entry 166 closed the
 /// `!nread` disjunct; the other two are this entry's, and they are not a
 /// nicety: `read_process_output_set_last_coding_system` is the only writer of
 /// `Vlast_coding_system_used` on this path (:6421) and the only writer of
@@ -12042,7 +12042,7 @@ fn a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu() {
               (pw171-run nil t 'pipe 'pw171-hook-utf8 "printf abc")
               ;; `fast-read-process-output' nil sends the DEFAULT filter down
               ;; the filter branch, so the very same process decodes.  Both
-              ;; conjuncts of :6556-6558, not just the filter one.
+              ;; conjuncts of :6557-6558, not just the filter one.
               (let ((fast-read-process-output nil))
                 (pw171-run nil nil 'pipe 'pw171-hook-utf8 "printf abc"))
               ;; the sticky rewrite the skipped decode also skips: `undecided'

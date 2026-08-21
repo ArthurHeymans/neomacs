@@ -2025,9 +2025,9 @@ impl ProcessOutputSink {
 }
 
 /// What `read_and_dispose_of_process_output` does with one read
-/// (src/process.c:6519-6583).
+/// (src/process.c:6518-6585).
 ///
-/// GNU writes two branches (:6556-6559) and then splits the first one again
+/// GNU writes two branches (:6557-6559) and then splits the first one again
 /// with an early return, so there are three outcomes and this has three
 /// variants.  It is a DIFFERENT question from [`ProcessOutputSink`], and the
 /// two are answered from the same two facts in two different C functions,
@@ -2036,20 +2036,20 @@ impl ProcessOutputSink {
 /// `fast-read-process-output' at all), this says whether the decode happens.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProcessReadBranch {
-    /// `read_and_insert_process_output` (src/process.c:6458) reached with a
+    /// `read_and_insert_process_output` (src/process.c:6459-6460) reached with a
     /// LIVE buffer to insert into, which is where `fast-read-process-output'
-    /// and the default filter send a read (:6556-6558).
+    /// and the default filter send a read (:6557-6558).
     InsertIntoBuffer,
     /// The same function reached with no live buffer, where its first
-    /// statement returns before `decode_coding_c_string` (:6491) and before
-    /// `read_process_output_set_last_coding_system` (:6494):
+    /// statement returns before `decode_coding_c_string` (:6502) and before
+    /// `read_process_output_set_last_coding_system` (:6506):
     ///
     /// ```c
     ///   if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (XBUFFER (p->buffer)))
     ///     return;
     /// ```
     ///
-    /// (:6463-6464.)  The bytes were read -- `read_process_output` still
+    /// (:6464-6465.)  The bytes were read -- `read_process_output` still
     /// returns `nbytes` and its caller still counts it as activity (:6345,
     /// :6027) -- and are then dropped undecoded, so no `:post-read-conversion'
     /// runs, `last-coding-system-used' is not written and the process's own
@@ -2068,7 +2068,7 @@ impl ProcessReadBranch {
     /// (:1404) and asks `p->buffer` again inside the read itself.
     fn of(proc: &Process, buffers: &BufferManager, fast_read_process_output: bool) -> Self {
         // `fast_read_process_output && EQ (p->filter,
-        // Qinternal_default_process_filter)` (src/process.c:6556-6558): both
+        // Qinternal_default_process_filter)` (src/process.c:6557-6558): both
         // conjuncts, because a user who sets `fast-read-process-output' to nil
         // is asking for the filter branch even with the default filter.
         if !fast_read_process_output
@@ -2080,7 +2080,7 @@ impl ProcessReadBranch {
             return Self::CallFilter;
         }
         // `NILP (p->buffer) || !BUFFER_LIVE_P (XBUFFER (p->buffer))`, the two
-        // disjuncts of :6463 that are properties of the process rather than of
+        // disjuncts of :6464 that are properties of the process rather than of
         // the read.  A process whose buffer was killed answers the second one,
         // which is why this cannot be settled once at `make-process` time.
         match proc.buffer.as_buffer_id().and_then(|id| buffers.get(id)) {
@@ -2092,7 +2092,7 @@ impl ProcessReadBranch {
 
 /// Whether one read's bytes are converted at all -- GNU's
 /// `read_and_insert_process_output` first statement, whole
-/// (src/process.c:6463-6464).
+/// (src/process.c:6464-6465).
 ///
 /// It exists so that the three disjuncts of that one `if` are asked in one
 /// place.  Two of them are properties of the process and are already spent by
@@ -2102,9 +2102,9 @@ impl ProcessReadBranch {
 /// the read and left the other two unasked.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ProcessRunDisposition {
-    /// `decode_coding_c_string` runs (:6491 on the buffer branch, :6562 on the
+    /// `decode_coding_c_string` runs (:6502 on the buffer branch, :6562 on the
     /// filter branch), and `read_process_output_set_last_coding_system` with
-    /// it (:6494, :6565).
+    /// it (:6506, :6565).
     Decode,
     /// GNU returns before either, and the bytes are dropped where they lie.
     Discard,
@@ -2126,7 +2126,7 @@ pub struct ProcessOutputDestination {
 impl ProcessOutputDestination {
     /// GNU's two decisions for one read: `setup_process_coding_systems`
     /// (src/process.c:8380-8409) and `read_and_dispose_of_process_output`'s
-    /// branch (:6556-6559).  They are taken together because they are taken
+    /// branch (:6557-6559).  They are taken together because they are taken
     /// from the same two facts, and separately because GNU asks them in two
     /// functions with two different rules -- the sink ignores
     /// `fast-read-process-output' and the branch does not, so a unibyte
@@ -2152,7 +2152,7 @@ impl ProcessOutputDestination {
     }
 
     /// GNU's `if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (...)) return;`
-    /// (src/process.c:6463-6464), with `nbytes` supplying the disjunct the
+    /// (src/process.c:6464-6465), with `nbytes` supplying the disjunct the
     /// branch could not know.  `nbytes` is GNU's `nread`, i.e. this read's
     /// bytes plus the carryover it was prepended to (`nbytes += carryover`,
     /// :6331) -- not the raw `emacs_read` return.
@@ -2566,7 +2566,7 @@ fn discard_process_run_undecoded(proc: &mut Process) {
 }
 
 /// One non-final read's bytes, routed through GNU's
-/// `read_and_dispose_of_process_output` (src/process.c:6519-6583).
+/// `read_and_dispose_of_process_output` (src/process.c:6518-6585).
 ///
 /// Every door into that function goes through here: the `io::Result` one and
 /// the datagram one, which has to record the sender's address before it can
@@ -3842,7 +3842,7 @@ enum ProcessBytesRead {
         run: PendingProcessRun,
     },
     /// GNU's `read_and_insert_process_output` early return
-    /// (src/process.c:6463-6464) with bytes in hand: the read happened and its
+    /// (src/process.c:6464-6465) with bytes in hand: the read happened and its
     /// caller must count it (`read_process_output` returns `nbytes`, :6345),
     /// but nothing was converted, so there is no run to decode and nothing to
     /// report.  A variant rather than an empty [`PendingProcessRun`], because
@@ -8129,7 +8129,7 @@ impl super::eval::Context {
             {
                 ProcessBytesRead::Data { run, bytes_read } => (run, bytes_read, false),
                 ProcessBytesRead::EofAfterLastBlock { run } => (run, 0, true),
-                // `read_and_insert_process_output` returned at :6463 without
+                // `read_and_insert_process_output` returned at :6464 without
                 // decoding, so stages two and three below have nothing to do:
                 // no text for a filter, no `last-coding-system-used', no
                 // sticky rewrite of the process's coding system.  The count
@@ -10223,7 +10223,7 @@ fn parse_make_process_buffer(
 /// return it as given, even if it is dead.  The return value is never nil."
 /// (src/buffer.c:581-582.)  That is not an oversight of GNU's -- it is the
 /// state three later `BUFFER_LIVE_P` tests exist to handle:
-/// `read_and_insert_process_output` (:6463),
+/// `read_and_insert_process_output` (:6464),
 /// `internal-default-process-sentinel`, whose own comment is "Avoid error if
 /// buffer is deleted (probably that's why the process is dead, too)"
 /// (:7969-7971), and `setup_process_coding_systems` (:8395).  Refusing the
