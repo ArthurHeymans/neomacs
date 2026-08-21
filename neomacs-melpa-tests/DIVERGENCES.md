@@ -23810,6 +23810,18 @@ asked**, and the probe to ask it is `tmp/l170-probe2.el` with a different name
 list.  If those tables have the same hole it is the same one-line fix at each
 declaration site, and it is measurable in one command.
 
+**A descriptor a BLV carries is written once and thereafter only read by the
+GC.**  `LispFwd::commit` has exactly one call site
+(`Obarray::set_symbol_value_id_inner`'s `Forwarded` arm), and that arm is
+reached only when the SYMBOL is forwarded -- a `LOCALIZED` symbol returns
+above it, writing `defcell`/`valcell` instead.  So the descriptor
+`reattach_localized_forwarder` puts into a BLV keeps the value it was seeded
+with for the rest of the session, and the GC retains that value through it.
+GNU has the same property for a different reason: its C global holds whatever
+`swap_in_symval_forwarding` last put there.  Harmless -- the live value is the
+BLV's and is traced -- but it is not obvious from either program, and a future
+reader who assumes `blv->fwd` is a live slot will be wrong here.
+
 **The image carries the slot value, not the descriptor.**  GNU's pdumper writes
 the forwarding pointer itself and relocates it (`src/pdumper.c:2461-2462`,
 `dump_fwd_obj`).  A `Box::leak`ed descriptor cannot travel, so pdump v59 carries
