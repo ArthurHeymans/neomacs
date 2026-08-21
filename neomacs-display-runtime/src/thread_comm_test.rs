@@ -479,10 +479,14 @@ fn input_event_window_focus_construction() {
 
 #[test]
 fn input_event_image_terminal_state_changed_construction() {
-    let event = InputEvent::ImageStateChanged { id: 7 };
+    let event = InputEvent::ImageStateChanged {
+        id: 7,
+        change: ImageStateChange::Evicted,
+    };
     match event {
-        InputEvent::ImageStateChanged { id } => {
+        InputEvent::ImageStateChanged { id, change } => {
             assert_eq!(id, 7);
+            assert_eq!(change, ImageStateChange::Evicted);
         }
         _ => panic!("Wrong variant"),
     }

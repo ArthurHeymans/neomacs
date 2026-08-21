@@ -10,8 +10,8 @@ use std::time::Instant;
 use neomacs_display_protocol::SealedFramePresentation;
 use neomacs_display_protocol::{ImageRealization, ImageRotation, ImageSizeSpec};
 pub use neomacs_display_protocol::{
-    MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource, ToolBarItem, ToolBarItemType,
-    VisualConfig,
+    ImageStateChange, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource, ToolBarItem,
+    ToolBarItemType, VisualConfig,
 };
 use neovm_core::window::GuiFrameGeometryHints;
 
@@ -133,8 +133,8 @@ pub enum InputEvent {
     /// WebKit view finished loading
     #[cfg(feature = "wpe-webkit")]
     WebKitLoadFinished { id: u32 },
-    /// Image decoding reached a terminal state (ready or failed).
-    ImageStateChanged { id: u32 },
+    /// Image decoding completed or renderer residency was lost.
+    ImageStateChanged { id: u32, change: ImageStateChange },
     /// A shader surface failed to build on the render thread AFTER the Lisp
     /// thread's naga pre-validation accepted it (the naga-accepts /
     /// wgpu-rejects edge, e.g. a device limit). Carries the surface id and the

@@ -247,11 +247,14 @@ impl WorkerDecodeOutcome {
     }
 }
 
-/// A terminal async image decode result accepted for the current load generation.
+/// A renderer image-cache lifecycle event. Callers must handle eviction as
+/// well as terminal decode results so external catalogs cannot retain stale
+/// residency state.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ImageDecodeOutcome {
+pub enum ImageCacheEvent {
     Ready { id: u32, metadata: ImageMetadata },
     Failed { id: u32, error: String },
+    Evicted { id: u32 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1403,8 +1406,8 @@ impl ImageCache {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-    ) -> Vec<ImageDecodeOutcome> {
-        let mut completed = Vec::new();
+    ) -> Vec<ImageCacheEvent> {
+        let mut events = Vec::new();
         // Drain decoded images from channel
         while let Ok(outcome) = self.decoded_rx.try_recv() {
             let Some(outcome) = self.loads.take_current(outcome) else {
@@ -1412,7 +1415,7 @@ impl ImageCache {
             };
             match outcome {
                 WorkerDecodeOutcome::Ready(decoded) => {
-                    completed.push(ImageDecodeOutcome::Ready {
+                    events.push(ImageCacheEvent::Ready {
                         id: decoded.load.id,
                         metadata: decoded.metadata,
                     });
@@ -1423,14 +1426,14 @@ impl ImageCache {
                     self.states
                         .insert(load.id, ImageState::Failed(error.clone()));
                     self.pending_dimensions.remove(&load.id);
-                    completed.push(ImageDecodeOutcome::Failed { id: load.id, error });
+                    events.push(ImageCacheEvent::Failed { id: load.id, error });
                 }
             }
         }
 
         // Evict if over memory limit
-        self.evict_if_needed();
-        completed
+        self.evict_if_needed(&mut events);
+        events
     }
 
     /// Upload decoded image to GPU texture
@@ -1530,7 +1533,7 @@ impl ImageCache {
     }
 
     /// Evict least-recently-used textures until under the memory limit.
-    fn evict_if_needed(&mut self) {
+    fn evict_if_needed(&mut self, events: &mut Vec<ImageCacheEvent>) {
         while self.total_memory > MAX_CACHE_MEMORY && !self.textures.is_empty() {
             let victim = lru_victim(
                 self.textures
@@ -1547,6 +1550,7 @@ impl ImageCache {
                         media_type: crate::media_budget::MediaType::Image,
                         id,
                     });
+                events.push(ImageCacheEvent::Evicted { id });
                 tracing::debug!(
                     "Evicted image {} to free {}KB",
                     id,

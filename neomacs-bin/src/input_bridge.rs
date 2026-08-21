@@ -157,7 +157,10 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
         DisplayEvent::MenuSelection { index } => {
             Some(KbInputEvent::MenuSelection { index: *index })
         }
-        DisplayEvent::ImageStateChanged { .. } => Some(KbInputEvent::LayoutInvalidated),
+        DisplayEvent::ImageStateChanged { id, change } => Some(KbInputEvent::ImageStateChanged {
+            id: *id,
+            change: *change,
+        }),
         DisplayEvent::ToolBarClick {
             index,
             emacs_frame_id,

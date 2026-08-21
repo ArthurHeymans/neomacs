@@ -11,15 +11,15 @@
 
 use neomacs_display_protocol::frame_chrome::PresentationId;
 use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, DisplaySlotId, FrameGlyphBuffer, GlyphRowRole, PhysCursor,
+    CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, PhysCursor,
 };
 use neomacs_display_protocol::types::{Color, DisplayWindowId, FaceId};
 use neomacs_display_protocol::{
-    BoxType, DeviceScale, FaceAttributes, FrameRect, GeometrySize, LogicalPixels,
-    PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection, PointerDrawMode,
-    PointerImageRelief, PointerReliefCornerErase, PointerReliefEdges, PointerReliefMargins,
-    PresentMapping, PresentationExtent, PresentedPaintSpan, PresentedPointerAppearance,
-    PresentedPointerRegion, PresentedPrimitiveKind, SurfaceState,
+    BoxType, DeviceScale, FaceAttributes, FrameRect, GeometrySize, ImageId, ImageSourceRect,
+    LogicalPixels, PointerAppearanceId, PointerAppearancePhase, PointerAppearanceSelection,
+    PointerDrawMode, PointerImageRelief, PointerReliefCornerErase, PointerReliefEdges,
+    PointerReliefMargins, PresentMapping, PresentationExtent, PresentedPaintSpan,
+    PresentedPointerAppearance, PresentedPointerRegion, PresentedPrimitiveKind, SurfaceState,
 };
 use neomacs_renderer_wgpu::types::SubpixelRequest;
 use neomacs_renderer_wgpu::{WgpuGlyphAtlas, WgpuRenderer};
@@ -208,6 +208,82 @@ fn offscreen_frame_renders_background_and_cursor() {
         }
     }
     assert!(found_red, "expected the red bar cursor to be drawn");
+}
+
+#[test]
+fn primary_frame_inline_image_samples_only_its_source_slice() {
+    let Some(mut h) = try_harness() else {
+        eprintln!("SKIP: no GPU adapter");
+        return;
+    };
+
+    const IMAGE_ID: u32 = 701;
+    const IMAGE_WIDTH: u32 = 8;
+    const IMAGE_HEIGHT: u32 = 8;
+    let mut argb = Vec::with_capacity((IMAGE_WIDTH * IMAGE_HEIGHT * 4) as usize);
+    for y in 0..IMAGE_HEIGHT {
+        let pixel = if y < IMAGE_HEIGHT / 2 {
+            [255, 255, 0, 0]
+        } else {
+            [255, 0, 0, 255]
+        };
+        for _ in 0..IMAGE_WIDTH {
+            argb.extend_from_slice(&pixel);
+        }
+    }
+    h.renderer.load_image_argb32_with_id(
+        IMAGE_ID,
+        &argb,
+        IMAGE_WIDTH,
+        IMAGE_HEIGHT,
+        IMAGE_WIDTH * 4,
+    );
+    let decode_deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while std::time::Instant::now() < decode_deadline {
+        h.renderer.process_pending_images();
+        if h.renderer.is_image_ready(IMAGE_ID) {
+            break;
+        }
+        std::thread::yield_now();
+    }
+    assert!(
+        h.renderer.is_image_ready(IMAGE_ID),
+        "test image must decode"
+    );
+
+    let mut frame = FrameGlyphBuffer::with_size(W as f32, H as f32);
+    frame.background = Color::BLACK;
+    frame.glyphs.push(FrameGlyph::Image {
+        window_id: DisplayWindowId::new(1),
+        row_role: GlyphRowRole::Text,
+        clip_rect: None,
+        slot_id: None,
+        image_id: ImageId::new(IMAGE_ID),
+        source_rect: ImageSourceRect::new(0.0, 0.5, 1.0, 0.5).expect("bottom-half slice"),
+        x: 16.0,
+        y: 16.0,
+        width: 32.0,
+        height: 16.0,
+    });
+
+    h.renderer.render_frame_glyphs(
+        &h.view,
+        &frame,
+        &mut h.atlas,
+        mapping_for(&frame, W, H),
+        false,
+        None,
+        (0.0, 0.0),
+        None,
+        None,
+        None,
+    );
+    let rendered = read_back(&h);
+    let sampled = px(&rendered, 24, 20);
+    assert!(
+        sampled[2] > 180 && sampled[2] > sampled[0] + 80,
+        "the bottom-half slice must sample blue pixels, got {sampled:?}"
+    );
 }
 
 #[test]

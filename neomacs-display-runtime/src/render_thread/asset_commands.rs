@@ -152,6 +152,14 @@ impl RenderApp {
                 if let Some(ref mut renderer) = self.renderer {
                     renderer.free_image(id);
                 }
+                // GNU `uncache_image` garbages the frame because retained
+                // glyph matrices may still reference the freed image id.
+                // Preserve that invariant across our render/evaluator split.
+                self.comms
+                    .send_input(crate::thread_comm::InputEvent::ImageStateChanged {
+                        id,
+                        change: crate::thread_comm::ImageStateChange::Freed,
+                    });
             }
             AssetCommand::DebugSimulateDeviceLoss => {
                 tracing::warn!(

@@ -68,6 +68,9 @@ impl FrontendEventQueue {
                 InternalFrontendEvent::PresentationRetired { presentation }
             }
             InputEvent::LayoutInvalidated => InternalFrontendEvent::LayoutInvalidated,
+            InputEvent::ImageStateChanged { id, change } => {
+                InternalFrontendEvent::ImageStateChanged { id, change }
+            }
             _ => unreachable!("all internal frontend events require an explicit service action"),
         })
     }
@@ -98,6 +101,10 @@ pub(crate) enum InternalFrontendEvent {
         presentation: u64,
     },
     LayoutInvalidated,
+    ImageStateChanged {
+        id: u32,
+        change: crate::emacs_core::image_catalog::ImageStateChange,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -173,12 +180,14 @@ fn semantics(event: &InputEvent) -> FrontendEventSemantics {
         InputEvent::PresentedRegion { .. } => special(PendingPolicy::Never, false, false),
         InputEvent::MouseScroll { .. } => command(),
         InputEvent::PixelScroll { .. } => special(PendingPolicy::Always, true, false),
-        InputEvent::LayoutInvalidated => FrontendEventSemantics {
-            class: FrontendEventClass::Internal,
-            pending: PendingPolicy::Never,
-            interrupts: false,
-            wait_special: false,
-        },
+        InputEvent::LayoutInvalidated | InputEvent::ImageStateChanged { .. } => {
+            FrontendEventSemantics {
+                class: FrontendEventClass::Internal,
+                pending: PendingPolicy::Never,
+                interrupts: false,
+                wait_special: false,
+            }
+        }
         InputEvent::MenuSelection { .. } => command(),
         InputEvent::ToolBarClick { .. } => command(),
         InputEvent::PresentedPointer { .. } => command(),
@@ -424,6 +433,16 @@ mod tests {
             false,
         );
         assert_policy(
+            InputEvent::ImageStateChanged {
+                id: 7,
+                change: crate::emacs_core::image_catalog::ImageStateChange::Evicted,
+            },
+            FrontendEventClass::Internal,
+            PendingPolicy::Never,
+            false,
+            false,
+        );
+        assert_policy(
             InputEvent::PresentationRetired { presentation: 1 },
             FrontendEventClass::Internal,
             PendingPolicy::Never,
@@ -503,6 +522,23 @@ mod tests {
         assert_eq!(
             queue.take_leading_internal(),
             Some(InternalFrontendEvent::LayoutInvalidated)
+        );
+    }
+
+    #[test]
+    fn image_state_change_preserves_identity_and_reason_as_internal_input() {
+        let mut queue = FrontendEventQueue::default();
+        queue.push_back(InputEvent::ImageStateChanged {
+            id: 41,
+            change: crate::emacs_core::image_catalog::ImageStateChange::Freed,
+        });
+
+        assert_eq!(
+            queue.take_leading_internal(),
+            Some(InternalFrontendEvent::ImageStateChanged {
+                id: 41,
+                change: crate::emacs_core::image_catalog::ImageStateChange::Freed,
+            })
         );
     }
 }

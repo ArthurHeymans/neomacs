@@ -9,7 +9,7 @@ use crate::emacs_core::symbol::Obarray;
 use crate::heap_types::LispString;
 use crate::window::Frame;
 pub use neomacs_display_protocol::ImageRealization as ResolvedImageRealization;
-pub use neomacs_display_protocol::{AxisSize, ImageRotation, ImageSizeSpec};
+pub use neomacs_display_protocol::{AxisSize, ImageRotation, ImageSizeSpec, ImageStateChange};
 
 /// A finite, non-negative image scale stored by bits so image requests remain
 /// exact cache keys.
@@ -388,13 +388,13 @@ pub trait ImageCatalog {
         0
     }
 
-    /// After async decode reaches a terminal state, promote any `Pending`
-    /// entries whose metadata is already published so the media-generation
-    /// rebuild sees Ready geometry instead of re-baking the 1×1 placeholder.
+    /// Reconcile catalog lifecycle with renderer-published state before a
+    /// media-generation rebuild: promote completed `Pending` entries and mark
+    /// formerly ready images whose renderer residency disappeared as evicted.
     ///
     /// Redisplay `lookup` stays non-blocking (`try_lock`); this path may wait
-    /// briefly for the shared metadata map.
-    fn promote_ready_entries(&self) {}
+    /// briefly for the shared renderer-state map.
+    fn reconcile_renderer_state(&self, _image_id: u32, _change: ImageStateChange) {}
 }
 
 #[cfg(test)]

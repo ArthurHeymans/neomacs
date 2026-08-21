@@ -43,7 +43,7 @@ pub use glyph_atlas::{
     pages, types,
 };
 pub use image_cache::{
-    CachedImage, ImageCache, ImageDecodeOutcome, ImageDimensions, ImageMetadata, ImageState,
+    CachedImage, ImageCache, ImageCacheEvent, ImageDimensions, ImageMetadata, ImageState,
 };
 pub use overlay_state::{MenuPanel, PopupMenuState, TooltipState};
 pub use renderer::{

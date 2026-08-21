@@ -169,7 +169,7 @@ impl WgpuRenderer {
     }
 
     /// Process pending decoded images (call each frame before rendering)
-    pub fn process_pending_images(&mut self) -> Vec<crate::ImageDecodeOutcome> {
+    pub fn process_pending_images(&mut self) -> Vec<crate::ImageCacheEvent> {
         self.caches.image.process_pending(&self.device, &self.queue)
     }
 

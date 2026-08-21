@@ -13,7 +13,8 @@ use std::time::{Duration, Instant};
 use neomacs_display_runtime::render_thread::{ImageDecodeTerminal, SharedImageMetadata};
 use neomacs_display_runtime::thread_comm::{AssetCommand, RenderCommand};
 use neovm_core::emacs_core::image_catalog::{
-    ImageCatalog, ImageLookup, ImageResolveRequest, ImageResolveSource, PendingImage, ReadyImage,
+    FailedImage, ImageCatalog, ImageLookup, ImagePlacement, ImageResolveRequest,
+    ImageResolveSource, ImageStateChange, PendingImage, ReadyImage,
 };
 use neovm_core::emacs_core::image_path::ImageFileRequest;
 use neovm_core::emacs_core::load::image_data_directory;
@@ -28,13 +29,54 @@ fn next_host_image_id() -> u32 {
     HOST_IMAGE_ID_ALLOCATOR.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Catalog-owned lifecycle. `Evicted` is deliberately not exposed through
+/// [`ImageCatalog`]: the next lookup atomically schedules a reload and returns
+/// the ordinary `Pending` state to redisplay.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum CatalogEntry {
+    Pending(PendingImage),
+    Resident(ReadyImage),
+    Failed(FailedImage),
+    Evicted(ImagePlacement),
+}
+
+impl CatalogEntry {
+    fn from_lookup(state: ImageLookup) -> Self {
+        match state {
+            ImageLookup::Pending(image) => Self::Pending(image),
+            ImageLookup::Ready(image) => Self::Resident(image),
+            ImageLookup::Failed(image) => Self::Failed(image),
+        }
+    }
+
+    fn as_lookup(&self) -> Option<ImageLookup> {
+        match self {
+            Self::Pending(image) => Some(ImageLookup::Pending(image.clone())),
+            Self::Resident(image) => Some(ImageLookup::Ready(image.clone())),
+            Self::Failed(image) => Some(ImageLookup::Failed(image.clone())),
+            Self::Evicted(_) => None,
+        }
+    }
+
+    fn placement(&self) -> ImagePlacement {
+        match self {
+            Self::Pending(image) => image.placement(),
+            Self::Resident(image) => {
+                ImagePlacement::new(image.image_id, image.metadata.width, image.metadata.height)
+            }
+            Self::Failed(image) => image.placement(),
+            Self::Evicted(placement) => *placement,
+        }
+    }
+}
+
 /// Deep host-side module that owns image request identity, state transitions,
 /// renderer scheduling, and completion observation.
 pub(super) struct AsyncImageCatalog {
     cmd_tx: crossbeam_channel::Sender<RenderCommand>,
     render_waker: Option<GuiEventLoopWaker>,
     image_metadata: SharedImageMetadata,
-    entries: RefCell<HashMap<ImageResolveRequest, ImageLookup>>,
+    entries: RefCell<HashMap<ImageResolveRequest, CatalogEntry>>,
     home_directory: Option<String>,
     /// GNU `image_find_image_fd` search path (`data-directory/images`, then
     /// `x-bitmap-file-path`), used to resolve relative image `:file`s.
@@ -89,28 +131,32 @@ impl AsyncImageCatalog {
     /// exact original load command. Entries and their image ids are KEPT —
     /// published frames still reference those ids, so re-uploading under the
     /// same id re-textures the renderer's retained CPU frame as soon as the
-    /// decode lands, without waiting for a fresh redisplay. `Ready` metadata
-    /// stays valid (same source, same parameters); `Pending` entries
-    /// complete against the re-issued decode; `Failed` entries fail again
-    /// identically.
+    /// decode lands, without waiting for a fresh redisplay. Every entry moves
+    /// to `Pending` while its renderer residency is rebuilt.
     pub(super) fn invalidate_all(&self) {
-        let entries = self.entries.borrow();
-        for (request, state) in entries.iter() {
-            let image_id = state.placement().image_id();
+        let mut entries = self.entries.borrow_mut();
+        for (request, state) in entries.iter_mut() {
+            let placement = state.placement();
+            let image_id = placement.image_id();
             let (request, resolution) = self.classify_request(request.clone());
             let command = image_load_command(&request, image_id);
-            if let Err(error) = schedule_image_command(
+            let pending = PendingImage::new(image_id, placement.width(), placement.height());
+            *state = match schedule_image_command(
                 &self.cmd_tx,
                 self.render_waker.as_ref(),
                 command,
                 resolution.as_ref(),
             ) {
-                tracing::warn!(
-                    image_id,
-                    %error,
-                    "failed to re-queue image decode after display reset"
-                );
-            }
+                Ok(()) => CatalogEntry::Pending(pending),
+                Err(error) => {
+                    tracing::warn!(
+                        image_id,
+                        %error,
+                        "failed to re-queue image decode after display reset"
+                    );
+                    CatalogEntry::Failed(pending.failed(error))
+                }
+            };
         }
     }
 
@@ -118,6 +164,7 @@ impl AsyncImageCatalog {
         &self,
         request: ImageResolveRequest,
     ) -> Result<Option<ReadyImage>, String> {
+        let normalized_request = self.classify_request(request.clone()).0;
         let pending = match self.lookup(request.clone()) {
             ImageLookup::Ready(image) => return Ok(Some(image)),
             ImageLookup::Pending(image) => image,
@@ -138,7 +185,9 @@ impl AsyncImageCatalog {
             ));
         };
         let state = image_lookup_from_terminal(pending, terminal);
-        self.entries.borrow_mut().insert(request, state.clone());
+        self.entries
+            .borrow_mut()
+            .insert(normalized_request, CatalogEntry::from_lookup(state.clone()));
 
         match state {
             ImageLookup::Ready(image) => Ok(Some(image)),
@@ -163,8 +212,8 @@ impl ImageCatalog for AsyncImageCatalog {
                 command,
                 resolution.as_ref(),
             ) {
-                Ok(()) => ImageLookup::Pending(pending),
-                Err(error) => ImageLookup::Failed(pending.failed(error)),
+                Ok(()) => CatalogEntry::Pending(pending),
+                Err(error) => CatalogEntry::Failed(pending.failed(error)),
             };
             entries.insert(request.clone(), state);
         }
@@ -172,23 +221,43 @@ impl ImageCatalog for AsyncImageCatalog {
         let state = entries
             .get_mut(&request)
             .expect("image catalog entry inserted above");
-        let ImageLookup::Pending(pending) = state else {
-            return state.clone();
+        if let CatalogEntry::Evicted(placement) = state {
+            let pending =
+                PendingImage::new(placement.image_id(), placement.width(), placement.height());
+            let command = image_load_command(&request, placement.image_id());
+            *state = match schedule_image_command(
+                &self.cmd_tx,
+                self.render_waker.as_ref(),
+                command,
+                resolution.as_ref(),
+            ) {
+                Ok(()) => CatalogEntry::Pending(pending),
+                Err(error) => CatalogEntry::Failed(pending.failed(error)),
+            };
+        }
+        let CatalogEntry::Pending(pending) = state else {
+            return state
+                .as_lookup()
+                .expect("evicted entry was transitioned above");
         };
         let placement = pending.placement();
         let (lock, _) = &*self.image_metadata;
         let terminal = match lock.try_lock() {
             Ok(images) => images.get(&placement.image_id()).cloned(),
-            Err(std::sync::TryLockError::WouldBlock) => return state.clone(),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                return state.as_lookup().expect("pending state is observable");
+            }
             Err(std::sync::TryLockError::Poisoned(poisoned)) => {
                 poisoned.into_inner().get(&placement.image_id()).cloned()
             }
         };
         let Some(terminal) = terminal else {
-            return state.clone();
+            return state.as_lookup().expect("pending state is observable");
         };
-        *state = image_lookup_from_terminal(pending.clone(), terminal);
-        state.clone()
+        *state = CatalogEntry::from_lookup(image_lookup_from_terminal(pending.clone(), terminal));
+        state
+            .as_lookup()
+            .expect("terminal state is observable through the catalog")
     }
 
     fn invalidate(&self, source: &ImageResolveSource) {
@@ -246,23 +315,39 @@ impl ImageCatalog for AsyncImageCatalog {
             .sum()
     }
 
-    fn promote_ready_entries(&self) {
+    fn reconcile_renderer_state(&self, image_id: u32, change: ImageStateChange) {
         let (lock, _) = &*self.image_metadata;
         // Block: this runs only after ImageStateChanged, when redisplay is
-        // about to rebuild matrices and must observe Ready geometry.
+        // about to rebuild matrices and must observe the renderer's exact
+        // terminal/residency state.
         let images = match lock.lock() {
             Ok(images) => images,
             Err(poisoned) => poisoned.into_inner(),
         };
         let mut entries = self.entries.borrow_mut();
-        for state in entries.values_mut() {
-            let ImageLookup::Pending(pending) = state else {
-                continue;
-            };
-            let Some(terminal) = images.get(&pending.placement().image_id()).cloned() else {
-                continue;
-            };
-            *state = image_lookup_from_terminal(pending.clone(), terminal);
+        let Some(state) = entries
+            .values_mut()
+            .find(|state| state.placement().image_id() == image_id)
+        else {
+            return;
+        };
+        match change {
+            ImageStateChange::DecodeCompleted => {
+                let CatalogEntry::Pending(pending) = state else {
+                    return;
+                };
+                let Some(terminal) = images.get(&image_id).cloned() else {
+                    return;
+                };
+                *state = CatalogEntry::from_lookup(image_lookup_from_terminal(
+                    pending.clone(),
+                    terminal,
+                ));
+            }
+            ImageStateChange::Evicted | ImageStateChange::Freed => {
+                let placement = state.placement();
+                *state = CatalogEntry::Evicted(placement);
+            }
         }
     }
 }
@@ -620,7 +705,7 @@ mod tests {
     }
 
     #[test]
-    fn promote_ready_entries_upgrades_pending_to_ready_geometry() {
+    fn renderer_reconciliation_upgrades_pending_to_ready_geometry() {
         use neomacs_display_runtime::render_thread::ImageDecodeTerminal;
         use neovm_core::emacs_core::image_catalog::{ImageLookup, ResolvedImageMetadata};
 
@@ -648,12 +733,94 @@ mod tests {
             cvar.notify_all();
         }
 
-        catalog.promote_ready_entries();
+        catalog.reconcile_renderer_state(id, ImageStateChange::DecodeCompleted);
         let ImageLookup::Ready(ready) = catalog.lookup(request) else {
             panic!("promote must leave Ready geometry for rebuild");
         };
         assert_eq!(ready.metadata.width, 120);
         assert_eq!(ready.metadata.height, 80);
         assert_eq!(ready.image_id, id);
+    }
+
+    #[test]
+    fn renderer_eviction_requeues_ready_image_under_its_stable_id() {
+        use neomacs_display_runtime::render_thread::ImageDecodeTerminal;
+        use neovm_core::emacs_core::image_catalog::{ImageLookup, ResolvedImageMetadata};
+
+        let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let catalog = AsyncImageCatalog::new(cmd_tx, None, Arc::clone(&metadata));
+        let request = file_request("/tmp/room-avatar.png");
+
+        let ImageLookup::Pending(pending) = catalog.lookup(request.clone()) else {
+            panic!("new avatar should begin pending");
+        };
+        let id = pending.placement().image_id();
+        assert!(matches!(
+            cmd_rx.try_recv().expect("initial avatar load"),
+            RenderCommand::Asset(AssetCommand::ImageLoadFile { id: loaded, .. }) if loaded == id
+        ));
+
+        {
+            let (lock, cvar) = &*metadata;
+            lock.lock().expect("metadata lock").insert(
+                id,
+                ImageDecodeTerminal::Ready(ResolvedImageMetadata::layout_is_image_pixels(
+                    48, 48, 0, false,
+                )),
+            );
+            cvar.notify_all();
+        }
+        catalog.reconcile_renderer_state(id, ImageStateChange::DecodeCompleted);
+        assert!(matches!(
+            catalog.lookup(request.clone()),
+            ImageLookup::Ready(_)
+        ));
+
+        // The renderer's LRU dropped the texture. Its lifecycle notification
+        // removes residency metadata before asking the catalog to reconcile.
+        metadata.0.lock().expect("metadata lock").remove(&id);
+        catalog.reconcile_renderer_state(id, ImageStateChange::Evicted);
+
+        let ImageLookup::Pending(reloading) = catalog.lookup(request) else {
+            panic!("evicted avatar should remain pending until its reload completes");
+        };
+        assert!(matches!(
+            cmd_rx.try_recv().expect("evicted avatar reload"),
+            RenderCommand::Asset(AssetCommand::ImageLoadFile { id: loaded, .. }) if loaded == id
+        ));
+        assert_eq!(reloading.placement().image_id(), id);
+        assert_eq!(reloading.placement().width(), 48);
+        assert_eq!(reloading.placement().height(), 48);
+    }
+
+    #[test]
+    fn eviction_after_decode_but_before_evaluator_service_does_not_strand_pending_image() {
+        let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+        let metadata = Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let catalog = AsyncImageCatalog::new(cmd_tx, None, metadata);
+        let request = file_request("/tmp/large-chat-photo.png");
+
+        let ImageLookup::Pending(first_load) = catalog.lookup(request.clone()) else {
+            panic!("new image should begin pending");
+        };
+        let id = first_load.placement().image_id();
+        assert!(cmd_rx.try_recv().is_ok(), "initial load was queued");
+
+        // The renderer can publish Ready and then evict the same image in one
+        // batch. By the time the evaluator services both ordered events, the
+        // shared metadata map is already empty; the typed eviction reason must
+        // still move Pending -> Evicted instead of leaving it pending forever.
+        catalog.reconcile_renderer_state(id, ImageStateChange::DecodeCompleted);
+        catalog.reconcile_renderer_state(id, ImageStateChange::Evicted);
+
+        let ImageLookup::Pending(reload) = catalog.lookup(request) else {
+            panic!("visible evicted image should schedule another load");
+        };
+        assert_eq!(reload.placement().image_id(), id);
+        assert!(matches!(
+            cmd_rx.try_recv().expect("replacement load"),
+            RenderCommand::Asset(AssetCommand::ImageLoadFile { id: loaded, .. }) if loaded == id
+        ));
     }
 }

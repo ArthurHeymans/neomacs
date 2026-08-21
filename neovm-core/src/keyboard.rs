@@ -1102,6 +1102,11 @@ pub enum InputEvent {
     },
     /// A display dependency changed and evaluator layout must be republished.
     LayoutInvalidated,
+    /// Renderer image-cache lifecycle changed for a stable image identity.
+    ImageStateChanged {
+        id: u32,
+        change: crate::emacs_core::image_catalog::ImageStateChange,
+    },
     /// Popup menu selection.  The display layer reports the selected
     /// zero-based item index; -1 means the menu was cancelled.
     MenuSelection { index: i32 },
@@ -2634,13 +2639,17 @@ impl crate::emacs_core::eval::Context {
                     crate::frontend_events::InternalEventEffects::default()
                 }
                 crate::frontend_events::InternalFrontendEvent::LayoutInvalidated => {
-                    // Emitted for `DisplayEvent::ImageStateChanged`: async media
-                    // reached a terminal state, so the retained matrix that
-                    // captured its placeholder geometry must not be reused.
-                    // Promote Pending→Ready in the catalog *before* bumping
-                    // media_generation so the rebuild sees real dimensions.
+                    self.invalidate_media();
+                    crate::frontend_events::InternalEventEffects {
+                        redisplay_needed: true,
+                    }
+                }
+                crate::frontend_events::InternalFrontendEvent::ImageStateChanged { id, change } => {
+                    // Async media completed or lost renderer residency, so
+                    // retained image glyphs must not be reused. Reconcile the
+                    // exact identity before bumping media_generation.
                     if let Some(host) = self.display_host.as_ref() {
-                        host.prepare_image_catalog_for_media_rebuild();
+                        host.reconcile_image_catalog_for_media_rebuild(id, change);
                     }
                     self.invalidate_media();
                     crate::frontend_events::InternalEventEffects {
@@ -4824,7 +4833,7 @@ impl crate::emacs_core::eval::Context {
                 );
                 Ok(None)
             }
-            InputEvent::LayoutInvalidated => {
+            InputEvent::LayoutInvalidated | InputEvent::ImageStateChanged { .. } => {
                 unreachable!("internal frontend events are serviced before read_char")
             }
             InputEvent::MenuSelection { index } => {

@@ -1791,8 +1791,13 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         Some(self.image_catalog.clone())
     }
 
-    fn prepare_image_catalog_for_media_rebuild(&self) {
-        self.image_catalog.promote_ready_entries();
+    fn reconcile_image_catalog_for_media_rebuild(
+        &self,
+        image_id: u32,
+        change: neovm_core::emacs_core::image_catalog::ImageStateChange,
+    ) {
+        self.image_catalog
+            .reconcile_renderer_state(image_id, change);
     }
 
     fn request_video(&self, request: VideoResolveRequest) -> Result<Option<ResolvedVideo>, String> {

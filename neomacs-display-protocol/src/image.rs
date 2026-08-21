@@ -1,5 +1,16 @@
 //! Immutable image geometry shared by layout, async decoding, and rendering.
 
+/// Renderer-side lifecycle transition for a stable image identity.
+///
+/// Shared end-to-end so renderer, evaluator, and catalog cannot silently
+/// reinterpret or discard cache residency changes at transport seams.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImageStateChange {
+    DecodeCompleted,
+    Evicted,
+    Freed,
+}
+
 /// A normalized, non-empty rectangle sampled from an image texture.
 ///
 /// Layout resolves GNU's pixel/fraction `(slice …)` operands once it knows the

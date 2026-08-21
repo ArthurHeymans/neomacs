@@ -47,6 +47,51 @@ use crate::render_thread::state::WebKitImportPolicy;
 #[cfg(all(feature = "wpe-webkit", target_os = "linux"))]
 use neomacs_renderer_wgpu::WgpuRenderer;
 
+fn publish_image_cache_event(
+    shared: &super::SharedImageMetadata,
+    event: neomacs_renderer_wgpu::ImageCacheEvent,
+) -> (u32, crate::thread_comm::ImageStateChange) {
+    let (id, terminal, change) = match event {
+        neomacs_renderer_wgpu::ImageCacheEvent::Ready { id, metadata } => {
+            let metadata = neovm_core::emacs_core::image_catalog::ResolvedImageMetadata {
+                width: metadata.width,
+                height: metadata.height,
+                pixel_width: metadata.pixel_width,
+                pixel_height: metadata.pixel_height,
+                background: metadata.background,
+                background_transparent: metadata.background_transparent,
+            };
+            (
+                id,
+                Some(super::ImageDecodeTerminal::Ready(metadata)),
+                crate::thread_comm::ImageStateChange::DecodeCompleted,
+            )
+        }
+        neomacs_renderer_wgpu::ImageCacheEvent::Failed { id, error } => (
+            id,
+            Some(super::ImageDecodeTerminal::Failed(error)),
+            crate::thread_comm::ImageStateChange::DecodeCompleted,
+        ),
+        neomacs_renderer_wgpu::ImageCacheEvent::Evicted { id } => {
+            (id, None, crate::thread_comm::ImageStateChange::Evicted)
+        }
+    };
+
+    let (lock, cvar) = &**shared;
+    let mut images = match lock.lock() {
+        Ok(images) => images,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    if let Some(terminal) = terminal {
+        images.insert(id, terminal);
+    } else {
+        images.remove(&id);
+    }
+    drop(images);
+    cvar.notify_all();
+    (id, change)
+}
+
 impl RenderApp {
     #[cfg(feature = "neo-term")]
     fn expanded_terminal_glyphs_for_frame(
@@ -519,36 +564,10 @@ impl RenderApp {
     /// Process pending image uploads (decode → GPU texture)
     pub(super) fn process_pending_images(&mut self) {
         if let Some(ref mut renderer) = self.renderer {
-            for outcome in renderer.process_pending_images() {
-                let (id, terminal) = match outcome {
-                    neomacs_renderer_wgpu::ImageDecodeOutcome::Ready { id, metadata } => {
-                        let metadata =
-                            neovm_core::emacs_core::image_catalog::ResolvedImageMetadata {
-                                width: metadata.width,
-                                height: metadata.height,
-                                pixel_width: metadata.pixel_width,
-                                pixel_height: metadata.pixel_height,
-                                background: metadata.background,
-                                background_transparent: metadata.background_transparent,
-                            };
-                        (id, super::ImageDecodeTerminal::Ready(metadata))
-                    }
-                    neomacs_renderer_wgpu::ImageDecodeOutcome::Failed { id, error } => {
-                        (id, super::ImageDecodeTerminal::Failed(error))
-                    }
-                };
-                let (lock, cvar) = &*self.image_metadata;
-                match lock.lock() {
-                    Ok(mut images) => {
-                        images.insert(id, terminal.clone());
-                    }
-                    Err(poisoned) => {
-                        poisoned.into_inner().insert(id, terminal);
-                    }
-                }
-                cvar.notify_all();
+            for event in renderer.process_pending_images() {
+                let (id, change) = publish_image_cache_event(&self.image_metadata, event);
                 self.comms
-                    .send_input(crate::thread_comm::InputEvent::ImageStateChanged { id });
+                    .send_input(crate::thread_comm::InputEvent::ImageStateChanged { id, change });
             }
         }
     }
@@ -942,6 +961,46 @@ fn terminal_cell_face(
         lisp_name: None,
         default_resolved_font_id: None,
         stipple: None,
+    }
+}
+
+#[cfg(test)]
+mod image_cache_event_tests {
+    use super::*;
+    use std::collections::HashMap;
+    use std::sync::{Arc, Condvar, Mutex};
+
+    #[test]
+    fn renderer_eviction_removes_published_residency_metadata() {
+        let shared: super::super::SharedImageMetadata =
+            Arc::new((Mutex::new(HashMap::new()), Condvar::new()));
+        let metadata = neomacs_renderer_wgpu::ImageMetadata {
+            width: 48,
+            height: 48,
+            pixel_width: 48,
+            pixel_height: 48,
+            background: 0,
+            background_transparent: false,
+        };
+
+        let (id, change) = publish_image_cache_event(
+            &shared,
+            neomacs_renderer_wgpu::ImageCacheEvent::Ready { id: 91, metadata },
+        );
+        assert_eq!(id, 91);
+        assert_eq!(
+            change,
+            crate::thread_comm::ImageStateChange::DecodeCompleted
+        );
+        assert!(shared.0.lock().expect("metadata lock").contains_key(&91));
+
+        let (id, change) = publish_image_cache_event(
+            &shared,
+            neomacs_renderer_wgpu::ImageCacheEvent::Evicted { id: 91 },
+        );
+        assert_eq!(id, 91);
+        assert_eq!(change, crate::thread_comm::ImageStateChange::Evicted);
+        assert!(!shared.0.lock().expect("metadata lock").contains_key(&91));
     }
 }
 

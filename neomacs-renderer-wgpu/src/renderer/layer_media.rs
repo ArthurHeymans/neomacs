@@ -89,6 +89,7 @@ impl WgpuRenderer {
         for (glyph_index, glyph) in frame_glyphs.glyphs.iter().enumerate() {
             if let FrameGlyph::Image {
                 image_id,
+                source_rect,
                 x,
                 y,
                 width,
@@ -171,6 +172,8 @@ impl WgpuRenderer {
                 if clipped_width <= 0.0 || clipped_height <= 0.0 {
                     continue;
                 }
+                let (tex_u_min, tex_v_min) = source_rect.map_uv(tex_u_min, tex_v_min);
+                let (tex_u_max, tex_v_max) = source_rect.map_uv(tex_u_max, tex_v_max);
 
                 tracing::debug!(
                     "Rendering image {} at ({}, {}) size {}x{} (clipped to {})",
