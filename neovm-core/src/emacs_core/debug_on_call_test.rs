@@ -313,3 +313,32 @@ fn a_two_argument_frame_is_promoted_rather_than_losing_the_flag() {
         "(nil ((t) (exit (1 . 2))) nil)"
     );
 }
+
+/// GNU `call_debugger` records the input-event count it was entered at
+/// (`src/eval.c:299`) in the `DEFVAR_INT` `internal-when-entered-debugger`
+/// (`src/eval.c:4553-4554`).  Measured under `emacs -Q --batch`: `-1` at
+/// startup (`init_eval`, `src/eval.c:251`) and `0` after one entry, because
+/// batch never reads a non-macro input event.
+///
+/// Nothing here reads it back yet -- `maybe_call_debugger`'s
+/// `when_entered_debugger < num_nonmacro_input_events` guard
+/// (`src/eval.c:2212`) is a separate, behaviour-changing gap recorded in the
+/// ledger -- but the slot belongs to `call_debugger`, so it is written where
+/// GNU writes it.
+#[test]
+fn entering_the_debugger_stamps_internal_when_entered_debugger() {
+    let mut eval = recorder_context();
+    let before = eval
+        .eval_str("internal-when-entered-debugger")
+        .expect("startup value should read");
+    assert_eq!(print_value(&before), "-1");
+    let after = eval
+        .eval_str(
+            "(progn (setq debug-on-next-call t)
+                    (car '(1))
+                    (prog1 internal-when-entered-debugger
+                      (setq debug-on-next-call nil)))",
+        )
+        .expect("probe should evaluate");
+    assert_eq!(print_value(&after), "0");
+}

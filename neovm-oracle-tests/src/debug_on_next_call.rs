@@ -142,6 +142,30 @@ fn oracle_bytecode_bcall_and_backtrace_debug_reach_the_same_mechanism() {
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
+/// `call_debugger` stamps the input-event count it was entered at.
+///
+/// `when_entered_debugger = num_nonmacro_input_events` (`src/eval.c:299`) is
+/// the second thing `call_debugger` does, and GNU exposes the slot as the
+/// `DEFVAR_INT` `internal-when-entered-debugger` (`src/eval.c:4553-4554`).
+/// `init_eval` seeds it to `-1` (`src/eval.c:251`), so a batch process that
+/// has entered the debugger once reads `0` -- it never consumed a non-macro
+/// input event.  Before this entry the port never wrote the slot, because it
+/// had no `call_debugger` of its own to write it in.
+#[test]
+fn oracle_call_debugger_stamps_internal_when_entered_debugger() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(let ((before internal-when-entered-debugger))
+  (let ((debugger (lambda (&rest _args) nil)))
+    (setq debug-on-next-call t)
+    (car '(1)))
+  (prog1 (list before internal-when-entered-debugger num-nonmacro-input-events)
+    (setq debug-on-next-call nil)))"#;
+    let expect = expect_test::expect![[r#""OK (-1 0 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
 /// The arm must fire ONCE per call, and GNU's `eval_sub` is the only thing
 /// that tests it for a form -- the subr and lambda dispatch below it do not.
 ///

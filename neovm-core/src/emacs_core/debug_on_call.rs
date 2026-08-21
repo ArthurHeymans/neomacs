@@ -133,6 +133,11 @@ fn exit_code_symbol() -> SymId {
     *SYMBOL.get_or_init(|| intern("exit"))
 }
 
+fn when_entered_debugger_symbol() -> SymId {
+    static SYMBOL: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
+    *SYMBOL.get_or_init(|| intern("internal-when-entered-debugger"))
+}
+
 fn debugger_symbol() -> SymId {
     static SYMBOL: std::sync::OnceLock<SymId> = std::sync::OnceLock::new();
     *SYMBOL.get_or_init(|| intern("debugger"))
@@ -212,6 +217,15 @@ impl Context {
     pub(crate) fn call_debugger(&mut self, arg: Vec<Value>) -> Result<Value, Flow> {
         // eval.c:298, before anything the debugger runs can be dispatched.
         self.disarm_debug_on_next_call();
+        // eval.c:299 `when_entered_debugger = num_nonmacro_input_events`.
+        // GNU exposes the slot as the `DEFVAR_INT`
+        // `internal-when-entered-debugger` (`src/eval.c:4553-4554`) and reads
+        // it back in `maybe_call_debugger` (`src/eval.c:2212`) to refuse a
+        // second debugger entry within one command.  Measured under GNU
+        // `-Q --batch`: it reads `-1` at startup and `0` after one entry.
+        let events = self.command_loop.num_nonmacro_input_events as i64;
+        self.obarray
+            .set_symbol_value_id(when_entered_debugger_symbol(), Value::fixnum(events));
         let debugger = self
             .obarray
             .symbol_value_id(debugger_symbol())
