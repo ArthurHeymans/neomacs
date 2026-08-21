@@ -2133,19 +2133,7 @@ fn canon_fold_literal_find(
     // only at anchor bytes. A non-ASCII char can also canonicalize into
     // the anchor (e.g. U+212A KELVIN SIGN -> k), so any non-ASCII window
     // falls back to the per-char verify walk for its span.
-    let mut anchors = [0u8; 2];
-    let mut n_anchors = 0usize;
-    for b in 0..128u8 {
-        if trt.translate(b as u32) == pat[0] {
-            if n_anchors == 2 {
-                n_anchors = 3;
-                break;
-            }
-            anchors[n_anchors] = b;
-            n_anchors += 1;
-        }
-    }
-    if n_anchors <= 2 {
+    if let Some((n_anchors, anchors)) = ascii_canon_anchors(trt, pat[0]) {
         const WINDOW: usize = 512;
         let mut at = 0usize;
         while at < text.len() {
@@ -2202,6 +2190,24 @@ fn canon_fold_literal_find(
 }
 
 /// Backward analogue of `canon_fold_literal_find`: returns the rightmost match.
+/// The ASCII bytes that canonicalize to `canon` under `trt` — the anchor
+/// set for SIMD candidate scans. `None` when more than two do (odd table);
+/// callers fall back to the verify-every-char walk then.
+fn ascii_canon_anchors(trt: &CaseTranslation, canon: u32) -> Option<(usize, [u8; 2])> {
+    let mut anchors = [0u8; 2];
+    let mut n_anchors = 0usize;
+    for b in 0..128u8 {
+        if trt.translate(b as u32) == canon {
+            if n_anchors == 2 {
+                return None;
+            }
+            anchors[n_anchors] = b;
+            n_anchors += 1;
+        }
+    }
+    Some((n_anchors, anchors))
+}
+
 fn canon_fold_literal_rfind(
     text: &[u8],
     literal: &[u8],
@@ -2212,18 +2218,80 @@ fn canon_fold_literal_rfind(
     if pat.is_empty() {
         return Some(MatchGroup::new(text.len(), text.len()));
     }
-    let mut last = None;
-    let mut at = 0;
-    loop {
-        if let Some(end) = canon_fold_match_at(text, at, &pat, multibyte, trt) {
-            last = Some(MatchGroup::new(at, end));
+    let Some((n_anchors, anchors)) = ascii_canon_anchors(trt, pat[0]) else {
+        // Odd tables (3+ ASCII sources for one canonical char): the
+        // original verify-every-char walk, keeping the last hit.
+        let mut last = None;
+        let mut at = 0;
+        loop {
+            if let Some(end) = canon_fold_match_at(text, at, &pat, multibyte, trt) {
+                last = Some(MatchGroup::new(at, end));
+            }
+            if at >= text.len() {
+                return last;
+            }
+            let (_code, len) = next_char_at(text, at, multibyte);
+            at += len;
         }
-        if at >= text.len() {
-            return last;
+    };
+    // Reverse windows, candidates checked right-to-left: the first verified
+    // candidate is the rightmost match start, which is what the forward
+    // walk's keep-the-last produced. An ASCII window implies its start is a
+    // char boundary (a multibyte char reaching in would put a continuation
+    // byte >= 0x80 inside); mixed windows walk forward per char and check
+    // their collected candidates in reverse — a non-ASCII char can
+    // canonicalize into the anchor (e.g. U+212A -> k), so every one is a
+    // candidate.
+    const WINDOW: usize = 512;
+    let mut wend = text.len();
+    while wend > 0 {
+        let mut wstart = wend.saturating_sub(WINDOW);
+        if multibyte {
+            let mut steps = 0;
+            while wstart > 0 && steps < 4 && text[wstart] & 0xC0 == 0x80 {
+                wstart -= 1;
+                steps += 1;
+            }
         }
-        let (_code, len) = next_char_at(text, at, multibyte);
-        at += len;
+        let window = &text[wstart..wend];
+        if window.is_ascii() {
+            let mut upto = window.len();
+            while upto > 0 {
+                let rel = match n_anchors {
+                    0 => None,
+                    1 => memchr::memrchr(anchors[0], &window[..upto]),
+                    _ => memchr::memrchr2(anchors[0], anchors[1], &window[..upto]),
+                };
+                let Some(rel) = rel else { break };
+                let cand = wstart + rel;
+                if let Some(end) = canon_fold_match_at(text, cand, &pat, multibyte, trt) {
+                    return Some(MatchGroup::new(cand, end));
+                }
+                upto = rel;
+            }
+        } else {
+            let mut cands: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
+            let mut wat = wstart;
+            while wat < wend {
+                let b = text[wat];
+                if b >= 0x80
+                    || (n_anchors >= 1 && b == anchors[0])
+                    || (n_anchors == 2 && b == anchors[1])
+                {
+                    cands.push(wat);
+                }
+                let (_code, len) = next_char_at(text, wat, multibyte);
+                wat += len;
+            }
+            for &cand in cands.iter().rev() {
+                if let Some(end) = canon_fold_match_at(text, cand, &pat, multibyte, trt) {
+                    return Some(MatchGroup::new(cand, end));
+                }
+            }
+        }
+        wend = wstart;
     }
+    None
 }
 
 fn literal_find_emacs_bytes(
