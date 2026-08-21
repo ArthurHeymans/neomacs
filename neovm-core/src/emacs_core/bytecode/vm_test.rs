@@ -3658,7 +3658,7 @@ fn vm_scroll_and_recenter_builtins_use_shared_window_state() {
                        (progn (scroll-right 1) (window-hscroll w))
                        (progn (set-window-point w 9) (recenter 1) (window-start w))))"#
         ),
-        "OK (beginning-of-buffer 3 2 7)"
+        "OK (5 3 2 7)"
     );
 }
 

@@ -8237,7 +8237,10 @@ fn scroll_and_recenter_use_selected_window_state() {
                  (progn (scroll-right 1) (window-hscroll w))
                  (progn (set-window-point w 9) (recenter 1) (window-start w))))",
     );
-    assert_eq!(results[0], "OK (beginning-of-buffer 3 2 7)");
+    // GNU `window_scroll_line_based` performs the second scroll from the
+    // start forced by the first one. Point remains visible, so scrolling back
+    // one line succeeds instead of spuriously recentering at point-min.
+    assert_eq!(results[0], "OK (5 3 2 7)");
 }
 
 #[test]
@@ -8365,7 +8368,72 @@ fn scroll_up_down_updates_window_start_for_multibyte_content() {
                                       (window-start w)
                                       (window-point w))))))))",
     );
-    assert_eq!(results[0], "OK (t t (:err beginning-of-buffer 321 321))");
+    assert_eq!(results[0], "OK (t t (:ok t nil))");
+}
+
+/// Multiple wheel events can dispatch their `scroll-up` commands before the
+/// asynchronous GUI redisplay publishes a fresh window-end.  GNU keeps using
+/// the explicit window-start in that interval, so same-direction commands
+/// must advance monotonically rather than recentering around point.
+#[test]
+fn consecutive_scroll_up_before_redisplay_advances_from_window_start() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buffer_id = ev.buffers.create_buffer("*queued-scroll*");
+    ev.buffers.set_current(buffer_id);
+    ev.buffers
+        .insert_into_buffer(buffer_id, &"line\n".repeat(200));
+    let frame_id = ev.frames.create_frame("F1", 800, 600, buffer_id);
+    let window_id = ev
+        .frames
+        .get(frame_id)
+        .expect("scroll frame")
+        .selected_window;
+
+    // The last redisplay showed line 50 at the top with point on line 51.
+    // Each line occupies five chars/bytes, including its newline.
+    let start = LispCharPos1::new(246);
+    let point = LispCharPos1::new(251);
+    let displayed_end = LispCharPos1::new(421);
+    ev.buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, EmacsBytePos::new(250));
+    let (buffer_z_char, buffer_z_byte) = {
+        let buffer = ev.buffers.get(buffer_id).expect("scroll buffer");
+        (
+            buffer.point_max_char_pos().to_lisp(),
+            buffer.point_max_emacs_byte_pos(),
+        )
+    };
+    let window = ev
+        .frames
+        .get_mut(frame_id)
+        .expect("scroll frame")
+        .find_window_mut(window_id)
+        .expect("scroll window");
+    crate::window::window_markers::set_window_start_with_marker(&mut ev.buffers, window, start);
+    crate::window::window_markers::set_window_point_with_marker(&mut ev.buffers, window, point);
+    window.set_window_end_from_positions(
+        buffer_z_char,
+        buffer_z_byte,
+        displayed_end,
+        EmacsBytePos::new(420),
+        34,
+    );
+
+    let result = ev
+        .eval_str_each(
+            "(let ((w (selected-window)))
+               (scroll-up 1)
+               (let ((after-first (line-number-at-pos (window-start w))))
+                 (scroll-up 1)
+                 (list after-first
+                       (line-number-at-pos (window-start w)))))",
+        )
+        .into_iter()
+        .map(|result| format_eval_result(&result))
+        .collect::<Vec<_>>();
+
+    assert_eq!(result, ["OK (51 52)"]);
 }
 
 /// Reproduces the interactive `-nw` bug: `M-x view-hello-file`, `C-v` to the

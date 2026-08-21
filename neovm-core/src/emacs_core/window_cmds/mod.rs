@@ -5047,6 +5047,121 @@ pub(crate) fn builtin_scroll_down(eval: &mut super::eval::Context, args: Vec<Val
     result
 }
 
+/// Point's location relative to the screen-line viewport used by scrolling.
+///
+/// This is deliberately independent of [`crate::window::WindowEndState`]: a
+/// stale window-end record says only that redisplay has not refreshed a cache;
+/// it says nothing about whether point is visible from the current start.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use]
+enum PointViewportLocation {
+    Before,
+    Visible,
+    After,
+}
+
+/// The current viewport expressed in buffer positions.
+///
+/// `exclusive_end` is the first screen-line start below the viewport.  When it
+/// reaches `buffer_end`, the end-of-buffer insertion position remains visible.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use]
+struct ScreenLineViewport {
+    start: EmacsBytePos,
+    exclusive_end: EmacsBytePos,
+    buffer_end: EmacsBytePos,
+}
+
+impl ScreenLineViewport {
+    fn locate(self, point: EmacsBytePos) -> PointViewportLocation {
+        if point < self.start {
+            PointViewportLocation::Before
+        } else if point < self.exclusive_end
+            || (self.exclusive_end == self.buffer_end && point <= self.buffer_end)
+        {
+            PointViewportLocation::Visible
+        } else {
+            PointViewportLocation::After
+        }
+    }
+}
+
+/// Why a scroll operation chose its starting position.
+///
+/// Keeping the reason in the type makes the GNU-compatible recovery path an
+/// explicit consequence of point visibility, rather than a boolean cache
+/// heuristic hidden in the caller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use]
+enum ScrollOrigin {
+    WindowStart(EmacsBytePos),
+    RecoveredAroundPoint(EmacsBytePos),
+}
+
+impl ScrollOrigin {
+    const fn position(self) -> EmacsBytePos {
+        match self {
+            Self::WindowStart(position) | Self::RecoveredAroundPoint(position) => position,
+        }
+    }
+}
+
+fn screen_line_viewport(
+    eval: &mut super::eval::Context,
+    buffer_id: BufferId,
+    window_id: WindowId,
+    start: EmacsBytePos,
+    body_height: i64,
+    buffer_end: EmacsBytePos,
+) -> Result<ScreenLineViewport, Flow> {
+    let exclusive_end = crate::emacs_core::builtins::screen_line_motion_target(
+        eval,
+        buffer_id,
+        start,
+        Some(Value::make_window(window_id.0)),
+        body_height,
+    )?
+    .0;
+    Ok(ScreenLineViewport {
+        start,
+        exclusive_end,
+        buffer_end,
+    })
+}
+
+fn scroll_origin(
+    eval: &mut super::eval::Context,
+    buffer_id: BufferId,
+    window_id: WindowId,
+    window_start: EmacsBytePos,
+    point: EmacsBytePos,
+    body_height: i64,
+    buffer_end: EmacsBytePos,
+) -> Result<ScrollOrigin, Flow> {
+    let viewport = screen_line_viewport(
+        eval,
+        buffer_id,
+        window_id,
+        window_start,
+        body_height,
+        buffer_end,
+    )?;
+    match viewport.locate(point) {
+        PointViewportLocation::Visible => Ok(ScrollOrigin::WindowStart(window_start)),
+        PointViewportLocation::Before | PointViewportLocation::After => {
+            let recovered = crate::emacs_core::builtins::screen_line_motion_target(
+                eval,
+                buffer_id,
+                point,
+                Some(Value::make_window(window_id.0)),
+                -(body_height / 2),
+            )?
+            .0;
+            Ok(ScrollOrigin::RecoveredAroundPoint(recovered))
+        }
+    }
+}
+
 fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalResult {
     let _ = ensure_selected_frame_id_in_state(&mut eval.frames, &mut eval.buffers);
     let (fid, wid) = resolve_window_id_in_state(&mut eval.frames, &mut eval.buffers, None)?;
@@ -5055,17 +5170,15 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
         .and_then(|v| v.as_fixnum())
         .unwrap_or(24)
         .max(1);
-    let (buffer_id, window_point, window_start, window_end_valid) =
-        match get_leaf(&eval.frames, fid, wid)? {
-            Window::Leaf {
-                buffer_id,
-                point,
-                window_start,
-                window_end,
-                ..
-            } => (*buffer_id, *point, *window_start, window_end.is_current()),
-            _ => return Ok(Value::NIL),
-        };
+    let (buffer_id, window_point, window_start) = match get_leaf(&eval.frames, fid, wid)? {
+        Window::Leaf {
+            buffer_id,
+            point,
+            window_start,
+            ..
+        } => (*buffer_id, *point, *window_start),
+        _ => return Ok(Value::NIL),
+    };
     let Some(buf) = eval.buffers.get(buffer_id) else {
         return Ok(Value::NIL);
     };
@@ -5084,21 +5197,18 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
         .get();
     let begv = accessible.start().get();
     let zv = accessible.end().get();
-    let mut start = accessible
-        .clamp(buf.lisp_pos_to_emacs_byte_pos(window_start))
-        .get();
-
-    if !window_end_valid {
-        start = crate::emacs_core::builtins::screen_line_motion_target(
-            eval,
-            buffer_id,
-            EmacsBytePos::new(pt),
-            Some(Value::make_window(wid.0)),
-            -(body_height / 2),
-        )?
-        .0
-        .get();
-    }
+    let window_start = accessible.clamp(buf.lisp_pos_to_emacs_byte_pos(window_start));
+    let start = scroll_origin(
+        eval,
+        buffer_id,
+        wid,
+        window_start,
+        EmacsBytePos::new(pt),
+        body_height,
+        EmacsBytePos::new(zv),
+    )?
+    .position()
+    .get();
 
     let pos;
     let mut next_point = pt;
@@ -5136,25 +5246,27 @@ fn scroll_by_screen_lines(eval: &mut super::eval::Context, lines: i64) -> EvalRe
         // fully-visible line; a point still visible stays put. When the window
         // now reaches end-of-buffer, `bottom` clamps to ZV and everything up to
         // ZV (including point-max) is visible, so point must NOT be pulled.
-        let bottom = crate::emacs_core::builtins::screen_line_motion_target(
+        let viewport = screen_line_viewport(
             eval,
             buffer_id,
+            wid,
             EmacsBytePos::new(pos),
-            Some(Value::make_window(wid.0)),
             body_height,
-        )?
-        .0
-        .get();
-        if pt >= bottom && bottom < zv {
-            next_point = crate::emacs_core::builtins::screen_line_motion_target(
-                eval,
-                buffer_id,
-                EmacsBytePos::new(bottom),
-                Some(Value::make_window(wid.0)),
-                -1,
-            )?
-            .0
-            .get();
+            EmacsBytePos::new(zv),
+        )?;
+        match viewport.locate(EmacsBytePos::new(pt)) {
+            PointViewportLocation::After => {
+                next_point = crate::emacs_core::builtins::screen_line_motion_target(
+                    eval,
+                    buffer_id,
+                    viewport.exclusive_end,
+                    Some(Value::make_window(wid.0)),
+                    -1,
+                )?
+                .0
+                .get();
+            }
+            PointViewportLocation::Before | PointViewportLocation::Visible => {}
         }
     } else {
         pos = start;
