@@ -219,15 +219,14 @@ fn function_doc_or_error(func_val: Value) -> EvalResult {
                 .flatten()
                 .map_or(Value::NIL, |doc| Value::heap_string(doc.clone())))
         }
-        ValueKind::Subr(id) => {
-            let name = resolve_sym(id);
-            let doc = super::subr_docs::lookup(name).unwrap_or("Built-in function.");
-            Ok(Value::string(doc))
-        }
-        ValueKind::Veclike(VecLikeType::Subr) => {
-            let id = func_val.as_subr_id().unwrap();
-            let name = resolve_sym(id);
-            let doc = super::subr_docs::lookup(name).unwrap_or("Built-in function.");
+        ValueKind::Subr(_) | ValueKind::Veclike(VecLikeType::Subr) => {
+            // `SnarfedSubr::of` is `Fsnarf_documentation`'s `Ffboundp` clause
+            // (`src/doc.c:617-621`) carried by the type: it is the only key
+            // `subr_docs::lookup` accepts, and only a subr `Value` can make
+            // one.  Both subr representations reach here, and both are subrs.
+            let subr =
+                super::subr_docs::SnarfedSubr::of(func_val).expect("matched on a subr Value");
+            let doc = super::subr_docs::lookup(&subr).unwrap_or("Built-in function.");
             Ok(Value::string(doc))
         }
         ValueKind::String | ValueKind::Veclike(VecLikeType::Vector) => {
