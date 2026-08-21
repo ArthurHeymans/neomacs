@@ -21414,6 +21414,23 @@ engine divergence found, measured and deliberately left for its own entry.  No
 package behaviour changed, and every measurement above was reproduced by GNU
 Emacs 31.0.90 and Neomacs -- including the one where they disagree, which is the
 point of reporting it.
+
+> **2026-08-21, entry 174: the seven attributed, five of them resolved.**  The
+> set this entry recorded as "deterministic, also at BASE" was never one shape.
+> `importmagic`, `jedi`, `apple_container_tramp` and `gruvbox_theme` are OUR
+> bugs and are fixed in 174 -- a `load-in-progress` that never left `t` because
+> the dump is taken from inside `-l loadup`, a pty child that could not exec
+> and said nothing, a `verify-visited-file-modtime` that never asked the
+> file-name handler, and a terminal `background-mode` guessed from `COLORFGBG`.
+> `auto_save_buffers_enhanced` is a fixture defect of exactly the kind this
+> entry named, and it CANNOT fail in CI: it derives its expectation with
+> `locate-dominating-file` (the innermost checkout) where the package keeps the
+> outermost, so it only fails when the sandbox has two checkout ancestors --
+> which is true in a nested Git worktree and false in the main tree.  That is
+> why it looked deterministic at every merge base.  `quelpa` and
+> `leuven_theme` are recorded in 174 with their own verdicts.  This entry's own
+> screen is what caught the auto-save one: it named BOTH editors with the same
+> value.
 ## 166. Entry 159's two residuals: the read boundary was a table of byte lengths keyed on the coding system's NAME, and the EOF read that GNU decodes zero bytes in belongs to a PIPE and not to a pty -- FIXED, by giving the decoders GNU's cursor and the process GNU's `struct coding_system`
 
 Entry 159's hand-back, both halves, measured before anything was designed.
@@ -23332,3 +23349,678 @@ stop outrank an exit.  **Two of those four were regressions this branch itself
 introduced, caught by re-running the audit against the rebuilt binary** -- which
 is the argument for diffing the fix against the merge base as well as against
 GNU, rather than against GNU alone.
+
+> **2026-08-21, entry 174: `pipenv` resolved.**  The measurement above stands
+> exactly as recorded -- 8 passed / 4 failed on both binaries, failing text
+> byte-identical -- and the diagnosis was one level too shallow.  The pin is not
+> merely gated on a log line that precedes the output; it is decided INSIDE
+> `pipenv-shell`, between `comint-send-input` and `comint-clear-buffer`
+> (pipenv.el:322-323), before the fixture regains control at all, so no gate
+> could have fixed it.  What the fixture does own is what the child writes:
+> `ready\n` precedes the tty echo in the same stream and is therefore
+> deterministically erased, while the `ack:` line requires the child to be
+> scheduled after Emacs's write and is therefore a race.  174 removes `ack:`
+> from the stand-in's stdout; the pinned value is unchanged.
+
+## 174. The dump is written from inside `-l loadup`, so the image carries mid-load state -- `load-in-progress` never left `t`, and `f-this-file` is only the caller that had a test; plus the other seven standing melpa failures, attributed one by one -- FIXED (four engine defects, two fixtures), two left open with their measurement
+
+Every melpa run this week carried the same eight red suites, and because none of
+them had an attribution the whole gate was harder to read: a new failure could
+always be waved away as "one of the eight".  This entry is the attribution.
+Each package got its own reproduction before anything was changed, and each got
+one of four verdicts -- our bug, GNU is the buggy side, a harness/fixture
+defect, or environmental.
+
+**The finding that outgrew its package is first.**  `load-in-progress` was
+non-nil for the entire life of every Neomacs session:
+
+```text
+$ neomacs -Q --batch --eval '(princ (format "%S" load-in-progress))'   =>  t
+$ emacs   -Q --batch --eval '(princ (format "%S" load-in-progress))'   =>  nil
+```
+
+That is not a missing line.  It is a property of how this port builds its image:
+`lisp/loadup.el:564,596` calls `dump-emacs-portable` while loadup.el is itself
+being loaded, so the dump is taken from INSIDE `-l loadup` and captures mid-load
+state.  GNU is dumped the same way and copes by clearing that state on every
+startup, dumped image or not, in `init_lread` (src/lread.c:5522-5528) called
+from `main` (src/emacs.c:2220).  This port had no equivalent, and a wedged flag
+does not raise; it silently changes what ordinary Lisp decides.
+
+`importmagic` is simply the package that had a test for it.  Section 1 gives the
+blast radius; section 8 names the class the mechanism predicts and reports the
+ten neighbouring facts that were measured because of it.
+
+The other seven divide cleanly.  **Three more are ours**, and two of those three
+are the same disease as the first: a value this port invents where GNU derives
+one -- a terminal `background-mode` guessed from an environment variable GNU
+never reads, and a `verify-visited-file-modtime` that answered without asking the
+file-name handler.  **Two are fixture defects**, both of the kind entry 165
+named: a pin standing on a fact the fixture cannot establish.  **Two are left
+open with their measurement**, because the machine they must be measured on was
+not quiet enough to measure them honestly, and a guessed verdict is worse than
+none.
+
+The screen used throughout is entry 165's: **a failure that names BOTH editors
+with the same value is not a divergence.**  Two of the eight were exactly that,
+and one of them cannot fail in CI at all -- it only fails in a nested Git
+worktree, which is where this suite is developed.
+### 1. `importmagic` -- OUR BUG: `load-in-progress` never left `t`
+
+Neomacs issued no `add_path_to_index` at all and printed no
+`[importmagic] Indexed ...`, in six of the eight cases.  The reproduction is one
+line, and it needs no package:
+
+```text
+$ neomacs -Q --batch --eval '(princ (format "%S" load-in-progress))'   =>  t
+$ emacs   -Q --batch --eval '(princ (format "%S" load-in-progress))'   =>  nil
+```
+
+`importmagic--auto-update-index` (importmagic.el:242-246) is gated on
+`(f-this-file)`, and `f-this-file` (f.el:671-677) is
+
+```elisp
+  (cond
+   (load-in-progress load-file-name)      ; f.el:674
+   ((and (boundp 'byte-compile-current-file) byte-compile-current-file) ...)
+   (:else (buffer-file-name)))
+```
+
+With `load-in-progress` wedged at `t` and `load-file-name` correctly nil at top
+level, the first arm returns nil, the `when` fails, and the package silently
+does nothing.  GNU takes the third arm and indexes the project.
+
+The cause is a missing port, not a broken one.  GNU writes its dump from INSIDE
+`-l loadup` -- `lisp/loadup.el:564,596` calls `dump-emacs-portable` while
+loadup.el is still being loaded -- so the image is captured with
+`load-in-progress` at t and `load-file-name` naming loadup.el.  `init_lread`
+(src/lread.c:5522-5528), called from `main` on every startup whether or not the
+image came from a dump (src/emacs.c:2220), clears the lot:
+
+```c
+  Vvalues = Qnil;                 /* :5522 */
+  load_in_progress = 0;           /* :5524 */
+  Vload_file_name = Qnil;         /* :5525 */
+  Vload_true_file_name = Qnil;    /* :5526 */
+  Vstandard_input = Qt;           /* :5527 */
+  Vloads_in_progress = Qnil;      /* :5528 */
+```
+
+Neomacs restores through `finalize_cached_bootstrap_eval`, which called
+`clear_runtime_loader_state` -- and that function cleared only the two Rust-side
+stacks it was named for.  `Vloads_in_progress` is a static C variable and not a
+Lisp variable (src/lread.c:237), so the stack IS its counterpart; the other five
+are Lisp variables and nobody cleared them.  Four happened to be right anyway.
+The fifth was `load-in-progress`, and `specbind`/`unbind_to` around `load` were
+never the problem -- forcing it nil and then loading a file restores it
+correctly.  Only the dumped value was stale.
+
+The fix is a table whose value column is an enum with GNU's two constants, so a
+third is unrepresentable, plus the citation per row (`RUNTIME_LOADER_RESET`,
+neovm-core/src/emacs_core/load.rs).  Verified on the rebuilt binary:
+`lip=nil lfn=nil ltfn=nil values=nil stdin=t`, identical to GNU's answer.
+
+**Blast radius, because a wedged global is never one package's problem.**
+`load-in-progress` is read by six preloaded files and by sixteen packages in the
+cached MELPA corpus:
+
+```text
+lisp/server.el:97                 (unless load-in-progress (message ...))
+lisp/generic-x.el:261             (unless load-in-progress (load "generic-x"))  ; a defcustom :set
+lisp/progmodes/elisp-mode.el:789  (when (or (not load-in-progress) file) ...)
+lisp/progmodes/cc-bytecomp.el:103,126   answers 'loading whenever it is non-nil
+lisp/url/url-handlers.el:160
+lisp/international/mule.el:315    (binds it, does not read it)
+
+a  abs-mode  ac-php  ac-php-core  alectryon  biblio  biblio-core  epl  esup
+f  flycheck  lsp-mode  parseclj  pkg-info  projectile  undercover
+yasnippet-snippets  ytdl
+```
+
+`generic-x.el:261` is the sharpest of them: customizing
+`generic-extras-enable-list` silently did not reload the file, because the
+`:set` function believed a load was in progress.  `importmagic` is simply the
+one that had a test.
+
+### 2. `gruvbox_theme` (TUI) -- OUR BUG, and a NEW one: the mode that could never move
+
+**This is not ledger 108 or 153.**  The standing "Gruvbox -- CLOSED, do not
+re-open" note covers entry 108's 256-colour quantization and entry 153's
+8/16-colour arm of the same writer.  The mechanism here is different and it is
+not in the colour search at all; it is one frame-adjacent parameter.
+
+`gruvbox_theme_real_terminal_profiles_match_gnu` compares a seven-theme matrix in
+two profiles.  The diff is three lines out of 370 in each profile, and they are
+the three LIGHT themes, differing only in `MODE`: `light` in GNU, `dark` here.
+Measured on a real xterm-256color pty (`tmp/pw174/bgmode.el` driven through
+`tmp/pw174/tty-probe2.py`):
+
+```text
+              terminal-param   baseline   after :background #fbf1c7   after #282828
+GNU           nil              light      light                       dark
+neomacs       dark             dark       dark                        dark
+```
+
+GNU recomputes the mode on every background-color change: setting the `default`
+face's `:background` writes the frame's `background-color` parameter, and
+`update_face_from_frame_parameter` calls `frame-set-background-mode`
+(src/xfaces.c:3897-3905, lisp/frame.el:1526).  This port already had that wiring
+-- `font.rs` calls the same Lisp from the same place.  What defeated it is one
+value: `frame-terminal-default-bg-mode` (lisp/frame.el:1588-1599) is the FIRST
+clause of the `cond` in `frame--current-background-mode`
+(lisp/frame.el:1505-1524), so a non-nil terminal parameter wins over the
+background colour and over the tty type, permanently, for the life of the
+terminal.
+
+`seed_live_tty_frame_parameters` wrote one, guessed from `COLORFGBG`.
+`COLORFGBG` appears nowhere in GNU.  GNU's only writer of that slot is
+`xterm--set-background-mode` (lisp/term/xterm.el:1309-1316), from a real OSC-11
+reply; with no reply the slot stays nil and the mode is derived from the colour,
+defaulting to `light` for a tty type matching
+`"^\\(xterm\\|rxvt\\|dtterm\\|eterm\\)"` and `dark` otherwise.
+
+**This closes a residual entry 157 filed against itself.**  157 removed the
+pre-loadup seeding of the FRAME parameters and moved the detected value onto
+GNU's channel, and its own comment (neomacs-bin/src/tty_init.rs:225-234) recorded
+that the HEURISTIC still diverged -- "`COLORFGBG' appears nowhere in GNU ... but
+the heuristic itself still diverges and belongs to a later entry".  This is that
+entry, with a sharper account of the harm than 157 could give: the guessed value
+does not merely start the frame in the wrong mode, it outranks the actual
+background colour for the life of the terminal, so no theme can ever move it.
+The answer is that the value must not be invented at all.  The seed is deleted,
+`detect_tty_background_mode` no longer feeds the terminal parameter, and the
+guard in `main_test.rs` now asserts that the slot stays nil and names the GNU
+function that owns it.  157's residual is CLOSED.
+
+### 3. `apple_container_tramp` -- OUR BUG: the handler was never asked
+
+The suite failed with `ERR (error "Cannot resolve conflict in batch mode")` --
+lisp/userlock.el:178 -- in two of its four cases, on the first modification of a
+TRAMP-visited file.  Reproduced outside the harness with the fixture's own
+`container` stand-in (`tmp/pw174/tramp-modtime.el`), both editors:
+
+```text
+GNU  visited=(27272 1328 0 0)             attributes=(27272 1328 0 0)  verify=t
+     handler=tramp-file-name-handler      tramp-verify=t   diff=0.0
+neo  visited=(27272 1325 732892 671000)   attributes=(27272 1325 0 0)  verify=nil
+     handler=tramp-file-name-handler      tramp-verify=t   diff=-0.732892671
+```
+
+`tramp-handle-verify-visited-file-modtime` answers **t in both editors**, and the
+handler is found in both.  What differed is that this port never asked it.
+`verify-visited-file-modtime` stat'ed the visited name directly; for a remote
+buffer that name is not a path on this filesystem, so the stat can only fail and
+the buffer reports "changed" from the moment it is visited.
+`tramp-handle-lock-file` (lisp/net/tramp.el:5137-5149) then calls
+`ask-user-about-supersession-threat` on the first keystroke.
+
+GNU asks the handler BEFORE it stats, on the buffer's own `BVAR (b, filename)`
+rather than an expanded copy, and returns its answer verbatim
+(src/fileio.c:6138-6143).  That dispatch is now there, and the two early returns
+above it are in GNU's order as well (`:6135` filename, then `:6136` modtime).
+
+That fixed ONE of the suite's two failing cases.  The other,
+`apple_container_cleanup_refreshes_remote_identity_without_disrupting_open_edits`,
+kept failing with the same error -- and the cause was the row of the table above
+that this entry had already written off as harmless.
+
+`visited-file-modtime` for a remote file is the wall clock at visit time here,
+where GNU's is the file's own mtime with zero sub-second parts.  With an
+immediate visit the gap is under a second and TRAMP's two-second tolerance
+(`(< (abs (tramp-time-diff modtime mt)) 2)`, lisp/net/tramp.el:5962) absorbs it,
+which is exactly why the first case passed and why the difference looked
+cosmetic.  But the gap is not a constant: it is however long elapses between the
+file being written and the buffer visiting it, and the cleanup case opens TWO
+TRAMP connections first.  Reproduced by putting a three-second delay between the
+write and the visit:
+
+```text
+neo  visited=(27272 4246 30986 423000)  attrs=(27272 4242 0 0)  diff=-4.03
+     verify=nil  edit=ERR (error "Cannot resolve conflict in batch mode")
+gnu  visited=(27272 4247 0 0)           attrs=(27272 4247 0 0)  diff= 0.00
+     verify=t    edit succeeds
+```
+
+The cause is the same missing rule, one function over.  GNU's
+`Fset_visited_file_modtime` with no argument expands the buffer's file name and
+then asks the handler BEFORE it stats -- "the handler can find the file name the
+same way we did" (src/fileio.c:6209-6216).  This port stat'ed the visited name
+directly, the stat failed because that name is not a path here, and the branch
+that would have recorded a modtime was simply skipped, leaving whatever
+`insert-file-contents` had put there.  Both halves of GNU's rule are now
+present, and the case passes.
+
+**The general form is worth more than the bug.**  A residual filed as harmless
+is not an observation, it is a HYPOTHESIS about blast radius -- and this one was
+filed in this very entry, two paragraphs above where it was refuted.  What made
+it wrong was assuming a difference measured once is a difference bounded: the
+skew was small in the case that had been measured and unbounded in general.
+This week has now falsified three such residuals (159's EOF price, 163's
+byte-count measure, 166's mirrors), and this is the fourth.
+
+### 4. `jedi` -- OUR BUG: the child that could not exec said nothing
+
+`the_server_lifecycle_and_the_broken_command_warning` points
+`jedi:server-command` at a program that does not exist and pins the EPC failure
+report.  Both editors reported `exited abnormally with code 127`; only GNU
+reported why:
+
+```text
+GNU  *** EPC Error ***
+     <emacs>: [ORACLE-SANDBOX]/no-such-jedi-python: No such file or directory
+     Process epc:server:22 exited abnormally with code 127
+neo  *** EPC Error ***
+     Process epc:server:22 exited abnormally with code 127
+```
+
+In GNU the line is written by the CHILD.  `child_setup` runs after the fork;
+when `execvp` fails it calls `exec_failed` (src/callproc.c:1206-1216), which
+writes `emacs_perror`'s `"<argv0>: <program>: <strerror>\n"`
+(src/sysdep.c:2867-2887) to its own STDERR and `_exit`s with `EXIT_ENOENT` (127)
+for `ENOENT` and `EXIT_CANNOT_INVOKE` (126) otherwise (src/process.h:273-274).
+For a pty process that STDERR is the pty, so the parent reads the line as
+ordinary process output before the exit status arrives.
+
+This port had the exit code and none of the text -- and it recovered the exit
+code by searching the spawn error's MESSAGE for the substring `"os error 2"`.
+That is the tell: a failed exec was modelled as an `Err` of the launcher, when
+GNU's parent never learns of it at all.  It is a STATE of the process.  So
+`spawn_child_with_environment` now returns `ChildSpawnOutcome`, whose
+`ExecFailed` arm carries the errno, and the 127/126 split is GNU's comparison
+rather than a substring match on one platform's phrasing.  The parent writes the
+diagnostic to the pty slave under the same name the child's fd 2 would have had,
+with `O_NOCTTY` so the editor does not acquire a controlling terminal.
+
+The fixture had a second defect of its own, in the same case.  `:warnings`
+normalized the editor's own program path to `@@EMACS@@`; `:messages` did not, so
+the pinned snapshot contained
+`/home/exec/Projects/github.com/emacs-mirror/emacs/src/emacs` -- a path that can
+only ever match GNU, on this machine.  Both fields now share one rule
+(`jedi--test-normalize-editor`), and the pin moved from that raw path to
+`@@EMACS@@`.  That is the only pinned value this entry moves, and it is moved
+because it recorded the host rather than either editor.
+
+**Not fixed, and not reproduced:** the PIPE spawn path still reports a failed
+exec as an `Err` that becomes `file-missing "Doing vfork"`.  `pipenv`'s
+`public_open_resolves_owned_python_module_without_ambient_lookup` pins exactly
+that and passes on both editors, so the two paths disagree and only one of them
+has a reproduction.  Sized, not diagnosed.
+
+### 5. `auto_save_buffers_enhanced` -- HARNESS/FIXTURE DEFECT, and invisible in CI
+
+`checkout_only_mode_keeps_outermost_duplicate_rules_and_saves_sibling_files`
+failed with the same value in both editors:
+
+```text
+expected  (:shape "^<outermost-checkout>/" :inside t :sibling t)  x2
+actual    (:shape "^/home/exec/Projects/github\\.com/eval-exec/neomacs/" ...) x2
+```
+
+The fixture derived its expectation with `(locate-dominating-file root ".git")`
+-- the INNERMOST checkout ancestor.  The package walks the other way:
+`auto-save-buffers-enhanced-add-checkout-path-into-include-regexps`
+(auto-save-buffers-enhanced.el:288-305) starts at the visited buffer's
+`default-directory`, `cd ".."`s to `/`, and keeps the LAST marker it sees, so
+the rule it records names the OUTERMOST checkout.  The two agree only when the
+sandbox has exactly one checkout ancestor.
+
+A nested Git worktree has two, and this suite is run from one: the worktree root
+carries a `.git` FILE and the main checkout above it a `.git` DIRECTORY, and
+`file-exists-p` accepts both.  Measured under GNU Emacs 31.0.90 alone, with no
+Neomacs involved at all (`tmp/pw174/asbe-probe.el`):
+
+```text
+root                       <worktree>/tmp/pw174/asbe-sandbox/
+locate-dominating-file     <worktree>/
+package outermost (file)   /home/exec/Projects/github.com/eval-exec/neomacs/
+```
+
+So the pin recorded a fact about the host's directory layout, and it leaked a
+raw absolute path into the snapshot as well, because the oracle normalizer only
+rewrites paths at or below the workspace root and the main checkout is ABOVE it.
+In the main tree the two coincide and the case is green, which is why this has
+never been seen in CI and why it looked like one of "the seven deterministic at
+the merge base".
+
+Fixed by deriving the expectation the way the package does
+(`neomacs-asbe-test--outermost-checkout`, auto_save_buffers_enhanced/mod.rs),
+with the reason in its docstring, and by signalling rather than returning nil
+when no ancestor carries a marker -- the case's `:duplicate-rules` pin needs
+both visited files to resolve to the same root, which requires a marker at or
+above the sandbox.  No pinned value moved.
+
+### 6. `pipenv` -- HARNESS/FIXTURE DEFECT: the pin was decided inside the package
+
+Entry 169 measured this one honestly and stopped there: twelve solo runs on the
+merge-base binary and twelve on its own, `8 passed / 4 failed` on BOTH, failing
+text byte-identical, and it recorded the rate rather than a verdict.  The verdict
+is that the fixture cannot gate this pin at all.
+
+`pipenv-shell` (pipenv.el:314-323) ends:
+
+```elisp
+    (insert pipenv-shell-buffer-init-command)
+    (setq-local comint-process-echoes t)
+    (comint-send-input)
+    (comint-clear-buffer)
+```
+
+The clear happens INSIDE the package, before the fixture regains control, so
+there is no instant at which a wait could be inserted -- which is why entry 165
+rewrote this suite's other clock-gated pin and left this one.  What survives the
+clear is whatever the child wrote after Emacs's last read, and the only read the
+fixture can order against is the untimed `accept-process-output` in
+`comint-send-input`'s echo loop (lisp/comint.el:2065-2079), which exists only
+because `comint-process-echoes` was just set.
+
+That gives the boundary a direction.  `ready\n` is written at child startup, so
+it precedes the tty echo in the same stream, and any read that delivers the echo
+has already delivered it -- it is deterministically erased, and an empty
+pre-sentinel buffer is therefore a positive witness that the clear ran.  The
+`ack:` line is on the other side of the boundary: the child must be scheduled
+after Emacs's write, so whether Emacs has read it when the clear fires is a
+race.  The pin recorded the outcome of that race.
+
+Fixed in the stand-in rather than in the pin: the `ack:` line is no longer
+written to stdout.  The boundary log still proves the child read the init
+command on stdin, `ready\n` still proves the clear, and the pinned value is
+unchanged.
+
+### 7. `quelpa` -- ENVIRONMENTAL: a git pager waiting for a keypress, not a budget
+
+`quelpa` was the one failure on record as unconditional -- "its GNU-side leg
+hits a 300s harness timeout here" -- and it is the one where the recorded shape
+was furthest from the cause.  Nothing about either editor was involved.
+
+The 300s is the harness DEFAULT (`DEFAULT_PROCESS_TIMEOUT`,
+neomacs-melpa-test-support/src/lib.rs:33) rather than a number chosen for this
+suite, so the obvious reading was that the heaviest suite in the corpus had
+outgrown it.  That reading was wrong, and measuring it is what showed why.
+Raised to 1800s, the batch finished in **617.8s**, and the failure underneath
+the timeout was a snapshot mismatch naming **both editors** -- entry 165's
+screen again, so not a divergence.  Both produced:
+
+```text
+Failed to checkout ‘qpt-stable’: ‘Command ’(env LC_ALL=C timeout -k 60 600
+git tag)’ exited with non-zero status 124
+```
+
+124 is `timeout(1)`'s "the command timed out".  Quelpa's own
+`timeout -k 60 600` was killing a `git tag` after 600 seconds -- which is where
+600 of the 618 went.
+
+`quelpa--run` builds its processes with `make-process` and no
+`:connection-type` (quelpa.el:615-618), so they inherit
+`process-connection-type` -- a PTY.  Git turns its pager ON when stdout is a
+terminal, and sets `LESS=FRX` -- the `F` being quit-if-one-screen -- **only when
+`LESS` is unset**.  This shell exports `LESS=-R` for its own reasons, so `less`
+paged and waited for a keypress that nothing could send.  Proved directly, on a
+three-tag repository, `git tag` with stdout on a PTY
+(`tmp/pw174/git-tag-pty.py`):
+
+```text
+LESS='-R'  PAGER='less'
+as the fixture runs it       exit=124  elapsed=10.0s  (TIMED OUT)
+with LESS unset              exit=0    elapsed=0.0s   (returned)
+with GIT_PAGER=cat           exit=0    elapsed=0.0s   (returned)
+```
+
+The sandbox already refuses the system config, the global config, the terminal
+prompt and every protocol but `file`
+(`neomacs-quelpa-test-in-sandbox`, quelpa/mod.rs).  The pager was the one
+ambient channel left open, and `GIT_PAGER` outranks both `core.pager` and
+`PAGER`.  Closing it completes an isolation the fixture already declares; it is
+not a widened budget.
+
+**The timeout constant is unchanged at 300s and no pinned value moved.**  With
+the hang gone the case reaches the multi-tag failure it always meant to pin:
+
+```text
+before  FAIL [303.043s]  GNU Emacs baseline timed out during RestartProbe
+after   PASS [ 24.265s]  1 test run: 1 passed, 935 skipped
+```
+
+24.3 seconds against a 300-second budget.  The suite was never near it.
+
+This is the entry's clearest argument for reproducing before designing: the
+recorded symptom was "GNU is too slow for this budget", the plausible fix was
+"raise the budget", and both were wrong.  A budget raised to 1800s would have
+turned a ten-minute hang into a passing gate that nobody would ever look at
+again.
+
+**The 1800s run was diagnostic, not a fix,** and the distinction is the method.
+Widening a budget to SEE a failure is legitimate; keeping the wider budget would
+have converted a ten-minute hang into a passing gate nobody looks at again.  The
+constant went back to 300s the moment the mechanism was visible.
+
+**The hole is inherited from the developer's shell, so it is not quelpa's
+alone.**  `LESS` came from the interactive environment, which means any fixture
+that drives git over a PTY has the same exposure.  Sized, not diagnosed:
+
+```text
+suites naming git                                            41
+  of those, using make-process/start-process (PTY-capable)    8
+  of those, neutralizing the pager (GIT_PAGER/--no-pager/core.pager)  10
+  PTY-capable AND no pager neutralization                     5
+    agitjo/mod.rs  agitjo/publish.rs  aiken_mode/workflows.rs
+    bash_completion/mod.rs  git_commit_mode/mod.rs
+```
+
+Those five carry the shape and pass today -- git pages only for the subcommands
+it marks as paging, and none of theirs is one.  **Found and NOT fixed:** each
+needs its own reproduction before its environment is changed, which is entry
+165's discipline for exactly this situation, and a fixture that passes for a
+reason nobody has checked is a different entry's work.
+### 8. `leuven_theme` (TUI) -- ENVIRONMENTAL: a readiness deadline, not a defect
+
+`leuven_theme_real_color_lifecycle_matches_gnu` failed with
+
+```text
+NEO timed out waiting for neomacs-leuven-tui-use-light readiness marker
+";; Publish release Ω"
+```
+
+and the captured screen showed the previous step's report intact, with no error
+in the echo area -- the command simply had not finished.  The deadline is 12
+seconds (`invoke`, leuven_theme_test.rs:443-459), and `M-x
+neomacs-leuven-tui-use-light` loads `org`, `org-agenda` and `diff-mode`,
+exercises the theme's control variables and repopulates four buffers before the
+marker appears.
+
+Run on its own on an idle box it passes in **32.0 seconds** of test time, well
+inside its own budget.  The failure was the box: the earlier run was taken while
+five sibling agents were building, and an 8-to-12-second readiness deadline does
+not degrade under contention, it inverts -- it goes from green to red with
+nothing about the editor having changed.
+
+That makes it the fourth verdict, environmental, and it is worth stating plainly
+because it is the shape most likely to be mistaken for one of the other three:
+a red TUI test with a timeout message and a screen that looks fine is a load
+report, not a divergence.  Entry 165 measured the same hazard from the other
+direction -- its clock-gated pins produced FALSE DIVERGENCES naming GNU as the
+wrong side, 3 runs in 15.
+
+**Not fixed, and deliberately.**  Widening the deadline would hide the next real
+hang, and narrowing the corpus is not this entry's business.  What the suite
+actually needs is what the gates section below describes: a runnable-count gate
+rather than a load-average one, so a run is either taken on an idle machine or
+not taken at all.
+### 9. The engine fixes, re-measured against the rebuilt binary
+
+Every probe below was re-run after `cargo xtask fresh-build --release`
+(`no_byte_compile=false`, pdump newer than the binary), and every one of them was
+also discarded and re-taken once: the machine ran out of disk space mid-entry,
+and a log truncated by `ENOSPC` greps exactly like a passing one.
+
+```text
+load-in-progress
+  neo  lip=nil lfn=nil ltfn=nil values=nil stdin=t
+  gnu  lip=nil lfn=nil ltfn=nil values=nil stdin=t          identical
+
+background-mode, real xterm-256color pty, five rows each
+  neo  terminal-param=nil  baseline=light  #fbf1c7 -> light  #282828 -> dark
+  gnu  terminal-param=nil  baseline=light  #fbf1c7 -> light  #282828 -> dark   identical
+
+TRAMP verify-visited-file-modtime, fixture's own container stand-in
+  neo  verify=t  tramp-verify=t  edit succeeds
+  gnu  verify=t  tramp-verify=t  edit succeeds
+
+a pty child that cannot exec
+  neo  "./target/release/neomacs: /nonexistent/pw174-program: No such file or directory\n..."
+  gnu  "<gnu emacs path>: /nonexistent/pw174-program: No such file or directory\n..."
+```
+
+The last pair differs only in `argv[0]`, which is GNU's own rule
+(`emacs_perror` prefixes `initial_argv0`, src/sysdep.c:2870-2871) and exactly
+what the jedi fixture normalizes.
+
+The TRAMP row still carries the residual named in section 5: this port's
+`visited-file-modtime` for a remote file is the wall clock at visit time
+(`(27272 3007 633826 213000)` against GNU's `(27272 3008 0 0)`), inside TRAMP's
+two-second tolerance.  It is recorded, not fixed.
+### 10. The class the mechanism predicts, and the ten facts measured because of it
+
+The sentence worth keeping is structural: **the dump is written from inside
+`-l loadup`, so the image carries mid-load state.**  Every flag GNU clears in an
+`init_*` function after loadup is therefore a candidate for the same defect
+here, and `load-in-progress` cannot be the only one by luck.
+
+So the neighbours were measured rather than assumed.  GNU's `main`
+(src/emacs.c:2015-2220, :2545-2556) calls `init_eval`, `init_macros`,
+`init_keyboard` and `init_lread` after the image is loaded; their reset blocks
+were read and every Lisp-visible fact in them compared in `-Q --batch` on both
+editors:
+
+```text
+init_lread  (src/lread.c:5522-5528)  values load-in-progress load-file-name
+                                     load-true-file-name standard-input
+init_eval   (src/eval.c)             quit-flag debug-on-next-call
+init_macros (src/macros.c)           executing-kbd-macro
+init_keyboard (src/keyboard.c)       unread-command-events track-mouse
+                                     last-event-frame recent-keys
+```
+
+Ten facts across four functions.  **One diverged** -- `load-in-progress`, fixed
+here -- and the other nine were already identical:
+
+```text
+neo: quit-flag=nil executing-kbd-macro=nil defining-kbd-macro=nil debug-on-next-call=nil
+gnu: quit-flag=nil executing-kbd-macro=nil defining-kbd-macro=nil debug-on-next-call=nil
+neo: unread=nil track-mouse=nil last-event-frame=nil recent-keys=0
+gnu: unread=nil track-mouse=nil last-event-frame=nil recent-keys=0
+```
+
+**Found and NOT fixed:** that is a spot-check, not a screen.  `main` calls
+roughly thirty `init_*` functions and this entry read four of them; the rest --
+`init_buffer`, `init_callproc`, `init_fileio`, `init_editfns`, `init_charset`,
+`init_process_emacs`, `init_window`, `init_xdisp` and the display-specific ones
+-- were not compared.  A systematic screen of every post-loadup reset against
+this port's `finalize_cached_bootstrap_eval` is its own entry, and now has a
+named reason to exist and a table shape (`RUNTIME_LOADER_RESET`) to grow into.
+### 11. Gates, and why a load average is the wrong number to gate on
+
+```
+cargo fmt --all --check                                   clean
+cargo check --workspace --all-targets                     clean
+cargo nextest run -p neomacs-melpa-tests --no-fail-fast   934 run: 934 passed, 2 skipped
+cargo nextest run -p neovm-core -p neomacs-layout-engine  11120 run: 11113 passed, 7 failed, 54 skipped
+   the 7, re-run alone                                     7 run: 7 passed
+cargo nextest run -p neovm-oracle-tests                   38790 run: 38790 passed, 0 skipped
+```
+
+The seven engine failures are all socket tests -- six `make_network_process_*`
+and `process_send_string_waits_for_nowait_local_stream_connection` -- and every
+one of them **passes when the seven are run alone** (`7 tests run: 7 passed`).
+They fail together, at ~4.4s each, with
+`(file-error "Cannot bind server socket" "Input/output error")`, which is a bind
+losing a race under a parallel suite rather than a defect.  This entry's diff
+cannot reach them in any case: the only process code it changes is
+`spawn_child_*` and its one caller,
+`builtin_make_process_impl_with_environment`, which is `make-process`;
+`make-network-process` does not go through it.  Absolute numbers are reported
+rather than a delta, because the merged tree carries entries 170-173 and 175
+that this branch does not.
+
+**The engine suite also has a self-inflicted hang worth recording.**
+`compat_module_semantics` builds its dynamic module with a NESTED
+`cargo build --release` (compat_module_semantics.rs:29-40), and a nested cargo
+blocks on `~/.cargo/.package-cache` for as long as any other cargo holds it.
+Under an outer `cargo nextest` that is thirteen tests each waiting on the same
+lock: the first engine run sat at 11107/11120 for ten minutes with one test
+binary alive and no output.  With the machine idle the same build finishes in
+**0.32s**.  Pre-building the module once before the suite removes it entirely.
+This is the mechanism behind the standing "a fresh worktree makes 13 module
+tests HANG rather than fail" note, and the reason is not the missing artifact --
+it is that building the artifact needs a lock the outer run is holding.
+
+The melpa suite is FULLY GREEN, against a merge-base baseline of 923 passed /
+933.  The count is 934 rather than 933 because nextest counts the
+`melpa-infra-preflight` setup script; no melpa test was added or removed by this
+entry.
+
+Both editors ran against `./target/release/neomacs`, rebuilt by
+`cargo xtask fresh-build --release` after the last source change
+(`no_byte_compile=false`, pdump newer than the binary), and GNU Emacs 31.0.90.
+
+**The load figure this ledger should record is the RUNNABLE COUNT, not the
+1-minute average.**  The average is exponentially decayed: after a spike it
+takes many minutes to fall, and during that decay it describes history rather
+than contention.  Field 4 of `/proc/loadavg` is `running/total` and is
+instantaneous, so it neither lags a spike nor hides one.  Both are recorded
+above every run in `tmp/pw174/*.log`, and the difference is not academic -- the
+quelpa measurement that settled section 7 was started at **5 runnable while the
+1-minute average read 913**, and it was a perfectly good measurement.  A future
+reader who mistrusts that number for the wrong reason will re-run a
+twelve-minute suite for nothing.
+
+### 12. Two runs of the same suite, and why both are in this entry
+
+The first full melpa run gave **928 passed, 6 failed**, and both halves of that
+number are worth keeping.
+
+Two of the six were an artifact of THIS agent's setup.  A fresh worktree has no
+package cache, and rather than re-download 3.4G I symlinked
+`tmp/melpa/source-install-cache` at the main checkout.  `cyberpunk_theme` and
+`kaolin_themes` both compute their theme directory as
+`(file-truename (locate-library ...))` -- which RESOLVES symlinks -- and then
+compare it by string against `custom-theme-load-path`, which holds the
+UNRESOLVED path.  Through a symlink those differ, and both suites answered
+`:theme-load-path nil` in both editors.  Replacing the link with a real copy
+made both green.
+
+That is worth recording twice over.  Once as a rule -- **copy the melpa cache
+into a worktree, never link it** -- and once as a limit of the screen this entry
+leans on: "it names BOTH editors, so it is not a divergence" was correct and
+useful, and it still could not tell that the environment being reported on was
+one the agent had introduced ten minutes earlier.
+
+The other four -- `apheleia`, `embark_consult`, `pipenv`, `tide` -- all pass
+solo (`6 tests run: 6 passed`), and they are the parallelism-sensitive set
+entries 165 and 169 already characterised.  The clean run is the gate; the dirty
+run is the only reason anyone knows which four they are.  A full parallel run
+and a solo run answer different questions, and discarding the noisy one throws
+away the answer to the second.
+
+### 13. What this entry did not do
+
+* **The pipe spawn path still reports a failed exec as an `Err`** that becomes
+  `file-missing "Doing vfork"`, where the pty path now models it as a state.
+  `pipenv` pins the pipe behaviour and passes on both editors, so the two
+  disagree and only one has a reproduction.  Sized, not diagnosed.
+* **`visited-file-modtime` for a remote file is still the wall clock** in the
+  one place the handler does not reach it -- section 5 fixed the write path;
+  anything that records a modtime without going through
+  `set-visited-file-modtime` still records the clock.  No reproduction found.
+* **Five fixtures drive git over a PTY without neutralizing the pager**
+  (section 7).  They pass today for a reason nobody has checked.
+* **The post-loadup reset screen is four `init_*` functions deep out of about
+  thirty** (section 10).
+* **`leuven_theme`'s 12-second readiness deadline is unchanged** (section 8).
+  Widening it would hide the next real hang; what the suite needs is the gate
+  described in section 11.
+
+Status: FIXED -- four engine defects and two fixture defects, one environmental
+cause closed at the fixture's own isolation boundary, and one environmental
+verdict left standing with its measurement.  Eight packages, eight verdicts,
+every one reproduced before it was touched and re-measured against the rebuilt
+binary afterwards.
