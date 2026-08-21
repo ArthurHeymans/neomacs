@@ -88,13 +88,30 @@ def find_doc_block(text: str, start: int) -> tuple[str | None, int]:
     body_end = text.find("*/", body_start)
     if body_end == -1:
         return None, start
-    body = unescape_doc_comment(text[body_start:body_end])
-    # Strip leading/trailing single space (matches make-docfile.c).
-    if body.startswith(" "):
-        body = body[1:]
-    if body.endswith(" "):
-        body = body[:-1]
-    return body.rstrip(), body_end + 2
+    # `make-docfile' discards ALL leading whitespace inside a `doc:' comment,
+    # newlines included, before the first character of the doc string:
+    #
+    #     c = getc (infile);
+    #     if (comment)
+    #       while (c_isspace (c))
+    #         c = getc (infile);
+    #
+    # (`lib-src/make-docfile.c:416-419', in `read_c_string_or_comment'.)  This
+    # script stripped a single leading space, which is a different rule and
+    # differs from GNU's for two spellings GNU's sources use freely:
+    # `doc: /*' followed by a newline (`src/character.c:1113',
+    # `A char-table for width (columns) of each character.') left a leading
+    # newline in the stored text, so `C-h v char-width-table' opened with a
+    # blank line; and `doc: /*  Vector of valid font weight values.'
+    # (`src/font.c:5983', two spaces) left a leading space.  33 of the
+    # generated table's rows carried one or the other.
+    #
+    # Trailing whitespace needs no rule of its own: `make-docfile' holds
+    # spaces and newlines in `pending_spaces'/`pending_newlines' and only
+    # emits them when a non-space character follows (`put_char',
+    # `lib-src/make-docfile.c:282-311'), so whatever sits between the last
+    # real character and `*/' never reaches the DOC file.  `rstrip' is that.
+    return unescape_doc_comment(text[body_start:body_end]).strip(), body_end + 2
 
 
 def unescape_doc_comment(text: str) -> str:
