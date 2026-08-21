@@ -909,3 +909,38 @@ fn defvar_kboard_is_forwarded_like_gnu() {
         );
     }
 }
+
+/// The other side of the same tag: `Fmake_local_variable`'s SYMBOL_FORWARDED
+/// arm answers `Fframe_terminal (selected_frame)` for a `Lisp_Kboard_Objfwd`
+/// (`src/data.c:2519-2521`), which is what `variable-binding-locus` returns.
+/// A `DEFVAR_LISP` variable with no buffer-local binding answers nil from the
+/// PLAINVAL/FORWARDED fall-through.  Measured under GNU Emacs 31.0.90
+/// `-Q --batch`:
+///
+/// ```elisp
+/// (list (type-of (variable-binding-locus 'prefix-arg))
+///       (type-of (variable-binding-locus 'last-command))
+///       (variable-binding-locus 'after-load-alist))
+/// ;; => (terminal terminal nil)
+/// ```
+///
+/// Pinned as `type-of` rather than the printed form because the terminal's
+/// name is a property of the display this build opened, not of the tag.
+#[test]
+fn defvar_kboard_binding_locus_is_the_terminal_like_gnu() {
+    let mut eval = ev();
+
+    for name in ["prefix-arg", "last-command", "real-last-command"] {
+        assert_eq!(
+            format_eval_result(
+                &eval.eval_str(&format!("(type-of (variable-binding-locus '{name}))"))
+            ),
+            "OK terminal",
+            "{name}"
+        );
+    }
+    assert_eq!(
+        format_eval_result(&eval.eval_str("(variable-binding-locus 'after-load-alist)")),
+        "OK nil"
+    );
+}
