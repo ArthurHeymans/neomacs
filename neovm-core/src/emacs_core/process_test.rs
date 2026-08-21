@@ -11949,6 +11949,109 @@ fn signal_process_takes_a_negative_integer_as_a_process_group_like_gnu() {
     );
 }
 
+/// GNU's status-notification walk is NEWEST-FIRST, and it is observable.
+///
+/// `status_notify` iterates `FOR_EACH_PROCESS` (src/process.c:7885), which is
+/// `FOR_EACH_ALIST_VALUE (Vprocess_alist, ...)` (:343), and `make_process`
+/// conses each new process onto the FRONT of that alist (:953).  So when one
+/// pass finds two processes whose status has changed, the one created LAST
+/// gets its sentinel first.  `process-list` is the same list
+/// (`Fmapcar (Qcdr, Vprocess_alist)`, :1749), which this port already
+/// reproduces by sorting on descending `ProcessId` (`list_processes`).
+///
+/// This port took the poller's ready list instead, which is a `HashMap`
+/// iteration order -- so the order was not merely oldest-first, it was
+/// RANDOM.  Measured, `-Q --batch`, twelve runs of
+/// `tmp/pw175/notify-order5.el` (two children that have already exited when
+/// the first notification pass runs):
+///
+/// ```text
+///                      b-then-a    a-then-b
+/// GNU Emacs 31.0.90      12           0
+/// Neomacs, before         5           7
+/// ```
+///
+/// Six runs are pinned rather than one because the defect is a coin flip:
+/// one run reproduces it only 58% of the time.  Ledger 169 residual 1,
+/// ledger 175.
+#[test]
+fn two_processes_notified_in_one_pass_run_their_sentinels_newest_first_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let ((orders nil))
+             (dotimes (i 6)
+               (let* ((order nil)
+                      (sentinel (lambda (p _m)
+                                  (when (memq (process-status p) '(exit signal))
+                                    (push (substring (process-name p) 6 7) order))))
+                      (a (make-process :name (format "pw175-a-%d" i) :buffer nil
+                                       :noquery t :command '("{sh}" "-c" "exit 0")
+                                       :sentinel sentinel))
+                      (b (make-process :name (format "pw175-b-%d" i) :buffer nil
+                                       :noquery t :command '("{sh}" "-c" "exit 0")
+                                       :sentinel sentinel)))
+                 ;; A pure-Lisp spin runs no notification pass, so both children
+                 ;; are already dead when the first one does.
+                 (let ((deadline (+ (float-time) 0.5)))
+                   (while (< (float-time) deadline) nil))
+                 (accept-process-output nil 0.3)
+                 (accept-process-output nil 0.3)
+                 (ignore-errors (delete-process a))
+                 (ignore-errors (delete-process b))
+                 (push (mapconcat #'identity (nreverse order) "") orders)))
+             (nreverse orders))"#
+    ));
+
+    assert_eq!(result, r#"OK ("ba" "ba" "ba" "ba" "ba" "ba")"#);
+}
+
+/// The readiness-wake path takes the poller's list, not the process list, so
+/// its notification order is reconciled by permuting ONLY the entries that
+/// have a status to report -- newest-first among themselves, every other
+/// position left exactly where the poller put it.  That is GNU's split: the
+/// output/filter walk in `wait_reading_process_output` is in fd order while
+/// `status_notify` walks the alist (src/process.c:7885, :953).
+#[test]
+fn the_notification_walk_permutes_only_the_pending_entries() {
+    crate::test_utils::init_test_tracing();
+    let mut pm = ProcessManager::new();
+    let ids: Vec<ProcessId> = (0..4)
+        .map(|i| {
+            pm.create_process_with_kind(
+                format!("pw175-order-{i}").into(),
+                Value::NIL,
+                String::new(),
+                vec![],
+                ProcessKindWithoutDevice::Pipe,
+                crate::emacs_core::process::ProcessCodingSystems::gnu_make_process_initial(),
+            )
+        })
+        .collect();
+    for index in [0usize, 2] {
+        pm.get_mut(ids[index])
+            .expect("pipe process")
+            .status_notify_pending = true;
+    }
+
+    let mut walk = ids.clone();
+    super::order_pending_status_notifications_newest_first(&pm, &mut walk);
+
+    assert_eq!(
+        walk,
+        vec![ids[2], ids[1], ids[0], ids[3]],
+        "the two pending entries swap into newest-first order; the other two do not move"
+    );
+
+    // One pending process is already in GNU's order, so nothing moves.
+    pm.get_mut(ids[2])
+        .expect("pipe process")
+        .status_notify_pending = false;
+    let mut walk = ids.clone();
+    super::order_pending_status_notifications_newest_first(&pm, &mut walk);
+    assert_eq!(walk, ids);
+}
+
 /// `process-status`'s connection remapping is an `else if` chain, and its
 /// FIRST arm is `exit -> closed` (src/process.c:1195-1196); the
 /// `p->command == t` stop is the second (:1197-1198) and `run -> open` the

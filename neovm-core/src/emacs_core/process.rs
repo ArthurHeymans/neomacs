@@ -6721,8 +6721,19 @@ impl ProcessManager {
     /// a stopped child does not admit output, but GNU continues including it
     /// in `waitpid(WUNTRACED | WCONTINUED)` scans so a later `SIGCONT` can
     /// publish the `run` transition.
+    ///
+    /// The order is GNU's, and it is Lisp-visible.  This list drives the
+    /// service pass that both drains output and publishes status, which is
+    /// `status_notify`'s `FOR_EACH_PROCESS` walk (src/process.c:7885) -- over
+    /// `Vprocess_alist`, onto whose FRONT `make_process` conses each new
+    /// process (:953).  So the walk is NEWEST-FIRST, and two children that
+    /// exited together run their sentinels in reverse creation order.  A
+    /// `HashMap` iteration order made that a coin flip instead; sorting on
+    /// descending `ProcessId` is the same identity `list_processes` uses to
+    /// reproduce `process-list`.
     pub fn live_process_ids(&self) -> Vec<ProcessId> {
-        self.processes
+        let mut ids: Vec<ProcessId> = self
+            .processes
             .iter()
             .filter(|(_, p)| {
                 if p.status_notify_pending {
@@ -6750,7 +6761,9 @@ impl ProcessManager {
                 false
             })
             .map(|(id, _)| *id)
-            .collect()
+            .collect();
+        ids.sort_unstable_by(|a, b| b.cmp(a));
+        ids
     }
 
     /// Returns true if this id has been allocated at least once.
@@ -7703,6 +7716,51 @@ fn dedupe_process_ids(process_ids: impl IntoIterator<Item = ProcessId>) -> Vec<P
     unique
 }
 
+/// Put the processes whose STATUS is about to be reported into GNU's
+/// notification order, leaving every other position in the pass untouched.
+///
+/// GNU services one wake with two walks in two different orders, and this port
+/// has a single loop for both:
+///
+/// * the output/filter walk in `wait_reading_process_output` visits ready file
+///   descriptors, in whatever order the fd scan produced them;
+/// * the status walk in `status_notify` visits `FOR_EACH_PROCESS`
+///   (src/process.c:7885), which is `FOR_EACH_ALIST_VALUE (Vprocess_alist,
+///   ...)` (:343) -- and `make_process` conses each new process onto the FRONT
+///   of that alist (:953).  So a status pass is NEWEST-FIRST, and two
+///   processes whose status changed together run their sentinels in reverse
+///   creation order.
+///
+/// `ProcessId` is a monotonic counter, so descending id IS newest-first; that
+/// is the same identity `list_processes` uses to reproduce `process-list`.
+/// Only the notification-pending entries are permuted, and only among
+/// themselves, so the read order of every other process in the pass is
+/// exactly what the poller reported.
+fn order_pending_status_notifications_newest_first(
+    processes: &ProcessManager,
+    proc_ids: &mut [ProcessId],
+) {
+    let pending = |id: &ProcessId| {
+        processes
+            .get(*id)
+            .is_some_and(|process| process.status_notify_pending)
+    };
+    let mut newest_first: Vec<ProcessId> =
+        proc_ids.iter().filter(|id| pending(id)).copied().collect();
+    if newest_first.len() < 2 {
+        return;
+    }
+    newest_first.sort_unstable_by(|a, b| b.cmp(a));
+    let mut next = newest_first.into_iter();
+    for slot in proc_ids.iter_mut() {
+        if pending(slot) {
+            // One pending id is produced per pending slot, so the iterator
+            // cannot run dry.
+            *slot = next.next().expect("one notification per pending slot");
+        }
+    }
+}
+
 /// Which asynchronous callback an escaped error came from.
 ///
 /// GNU treats the classes DIFFERENTLY, so the kind decides the reporting, not
@@ -8475,6 +8533,7 @@ impl super::eval::Context {
         if proc_ids.is_empty() {
             return Ok(ProcessOutputServiceOutcome::default());
         }
+        order_pending_status_notifications_newest_first(&self.processes, &mut proc_ids);
         if let Some(target) = target_process
             && let Some(index) = proc_ids.iter().position(|pid| *pid == target)
         {
