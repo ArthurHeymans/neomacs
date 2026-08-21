@@ -22774,16 +22774,51 @@ building, which is why the two suites took 964 s and 727 s against ledger 164's
   `x-`/`xft-`; the other 24 include `long-line-threshold`,
   `frame-size-history`, `internal-doc-file-name`, `code-conversion-map-vector`
   and `menu-prompt-more-char`).  One entry, two halves, in that order.
+
+  **CLOSED by entry 173, 2026-08-21**, with two corrections to this paragraph.
+  The counts re-derive exactly -- 118 fixable, 49 breakable, 4 the other way --
+  but "BREAK the 46" is the wrong unit: those lines already differ on
+  boundness, so gating alone cannot raise the differing-LINE count; what it
+  breaks is the doc field of an already-differing line, and concretely the
+  three names this entry's own
+  `oracle_platform_duplicated_variables_carry_the_canonical_doc_text` asserts a
+  doc for.  And the 49 needed no adjudication in the end: of the 71 names GNU
+  declares only in X-only files and binds, this port already bound 50, and not
+  one of the 49 lacked a Neomacs-declared sibling from the same GNU
+  `syms_of_*`, so **nought of them "cannot and should not be bound here"**.
+  All 49 are declared with GNU's own initializers, and the differing-line count
+  over these 881 names is 5.
 - The 38 names where both editors have a real doc and the texts differ are not
   all one cause -- `use-short-answers` was table staleness and is fixed here,
   `transient-mark-mode` differs by a leading space, and `indent-tabs-mode`
   answers a `define-minor-mode`-shaped string here against `buffer.c`'s text.
   Sized, not diagnosed.
+
+  **Diagnosed by entry 173, 2026-08-21: 35 of the 36 that remained were ONE
+  cause**, and the leading space on `transient-mark-mode` was the visible edge
+  of it.  `make-docfile` discards ALL leading whitespace inside a `doc:`
+  comment, newlines included (`lib-src/make-docfile.c:416-419`), where
+  `extract_gnu_defvar_docs.py` stripped a single space -- so `doc: /*` followed
+  by a newline left a leading NEWLINE in the stored text and `doc: /*  Vector`
+  left a leading space.  `indent-tabs-mode` is the one exception and is still
+  open.
+- **The compile-time guard this entry added covers the wrong half, found by
+  entry 173, 2026-08-21.**  `const _: () = { ... }` walks `GNU_VAR_DOCS` and
+  tests each row's doc for a `SKIP` prefix: a predicate over rows that EXIST.
+  It cannot detect a row that was never emitted, and nine of GNU's `DEFVAR`
+  blocks were absent from this table for as long as the extractor has existed
+  while the guard stayed green -- the ones whose `doc:` keyword is not followed
+  by exactly one space, which `make-docfile` accepts
+  (`lib-src/make-docfile.c:1148-1157`) and the script did not.  Absence has to
+  be guarded where GNU's source is visible, which is the generator; 173 makes
+  it refuse to write the table at all rather than write a smaller one.
 - `x-mode-pointer-shape` and `x-nontext-pointer-shape` are now unbound in both
   editors, and their `variable-documentation` still differs: GNU answers nil
   and Neomacs answers `src/xfns.c`'s `#if false` text, because the generator
   reads the text and only the `Fboundp` clause above can reject it.  Two lines,
   moved from wrong-text to wrong-presence, and closable by the entry above.
+  **Closed by entry 173, 2026-08-21**: both are unbound here, so the gate
+  refuses the table and both editors answer nil.
 - `xwidget-list` and `xwidget-view-list` remain bound here and unbound under
   GNU, with `xwidget-webkit-disable-javascript`: a build-feature difference
   entry 138 already justified, re-confirmed by this entry's sweep, which found
@@ -23332,3 +23367,647 @@ stop outrank an exit.  **Two of those four were regressions this branch itself
 introduced, caught by re-running the audit against the rebuilt binary** -- which
 is the argument for diffing the fix against the merge base as well as against
 GNU, rather than against GNU alone.
+
+## 173. Entry 168's handed-over clause: GNU decides a built-in variable's documentation by asking `Fboundp`, once, at dump time -- so the port of it is a question rather than a filter, and the 49 names it "would break" turn out to be 49 declarations missing from `syms_of_*` blocks this port already declares from, nought of which cannot be bound here -- FIXED
+
+Entry 168 sized this and deliberately stopped: gating on boundness "would fix
+the 116 and BREAK the 46", so "the clause has to land with the 49 names, which
+is entry 141's X-only-surface residual measured one layer wider.  One entry,
+two halves, in that order."  Both halves land here.  A third bug of 168's own
+class turned up while re-deriving its numbers, and a fourth while writing this
+entry's residuals; the third is the one worth reading, because the compile-time
+guard 168 shipped **cannot see the failure it is** -- a row that was never
+emitted is not a row with bad content.
+
+Re-measured before anything was believed.  GNU Emacs 31.0.90 (`0ee48ac4df2`)
+against a `cargo xtask fresh-build --release` binary of `a83f3785e` -- ledger
+169's merge, reporting `finished successfully (release)`,
+`no_byte_compile=false`, a 15.32 MB pdump newer than its binary, and
+`(with-current-buffer "*scratch*" (buffer-string))` empty, which is the check
+that catches the stale-`.elc` mode a worktree build falls into.  Both editors
+`-Q --batch`, over exactly the 881 names entry 168 swept.
+
+| entry 168 reported | re-derived here |
+| --- | --- |
+| 237 -> 208 differing lines | **207** -- one line closed on its own; see corrections |
+| 118 both-unbound-GNU-nil (fixable) | **118**, exactly |
+| 49 GNU-bound/Neomacs-unbound (breakable) | **49**, exactly |
+| 4 Neomacs-bound/GNU-unbound | **4**, exactly |
+| 881 -> 885 rows in `GNU_VAR_DOCS` | **885**, exactly |
+
+168's residual paragraph quotes its *before* numbers (116 and 46) and its
+"Measured after" table quotes its *after* numbers (118 and 49); the brief's
+118/49 are the latter, and they are confirmed to the name.
+
+### 1. What the clause is, and the question the brief asks it
+
+`Snarf-documentation` runs **once**, from `lisp/loadup.el:476`, during the
+dump.  Its variable arm is one `if` and one `Fput`:
+
+```c
+          /* Ignore docs that start with SKIP.  These mark
+             placeholders where the real doc is elsewhere.  */
+	  if (SYMBOLP (sym))
+	    {
+	      /* Attach a docstring to a variable?  */
+	      if (p[1] == 'V')
+		{
+		  /* Install file-position as variable-documentation
+		     property.  */
+                  if ((!NILP (Fboundp (sym))
+                      || !NILP (Fmemq (sym, delayed_init)))
+                      && strncmp (end, "\nSKIP", 5))
+                    Fput (sym, Qvariable_documentation,
+                          make_fixnum (pos + end + 1 - buf));
+		}
+```
+
+(`src/doc.c:600-613`.)
+
+**The question that decides the design -- does GNU skip the doc for an unbound
+name, or record it differently?  It skips it.**  The `Fput` is the entire body
+of the branch: no `else`, no alternative property, no marker.  An unbound name
+never acquires `variable-documentation`, and `documentation-property` answers
+nil.
+
+That is a reading of the C.  The measurement is what makes it a rule rather
+than a tendency.  Over the 881 names of the committed table, GNU `-Q --batch`:
+
+```
+                                        GNU
+names bound                             751
+  ... with a `variable-documentation'   751
+  ... with nil                            0
+names unbound                           130
+  ... with a `variable-documentation'     0
+  ... with nil                          130
+```
+
+**Nothing on either diagonal.**  Doc presence and boundness are the same bit.
+Over the 894-name table this entry ends with, the same measurement is 762 and
+132, again with nothing on either diagonal.
+
+The comment fifteen lines above the clause says why it exists
+(`src/doc.c:585-594`): `make-docfile` is a text scanner that does not evaluate
+the preprocessor and does not know which files this build compiles, so
+`etc/DOC` is bigger than the build; GNU used to filter by `build_files` and
+"nowadays ... the (f)boundp checks below ensure we don't report docs for eg
+w32-specific items on X."  Both clauses of the filter are about one thing: in
+GNU a doc string and the declaration that owns it come from a single statement,
+and anything that separates them has to be undone at load time.
+
+The `Fmemq (sym, delayed_init)` half is a Lisp-level escape hatch, not a second
+rule.  `delayed_init` is `custom-delayed-init-variables`, and
+`custom-initialize-delay` pushes a preloaded defcustom onto it after
+`internal--define-uninitialized-variable` has marked the symbol special and
+deliberately left it unbound (`lisp/custom.el:138-161`).  It cannot reach a C
+`DEFVAR` table, which is exactly why the 751/130 split has no exceptions.
+
+**Only boundness can decide this.**  Four cases no generator reading the text
+can classify, and they do not fall the same way:
+
+- `internal-interpreter-environment` is `DEFVAR_LISP`'d at `src/eval.c:4569`
+  with a real doc string and **uninterned nine lines later**,
+  `Funintern (Qinternal_interpreter_environment, Qnil)` at `src/eval.c:4578`,
+  under the comment "Don't export this variable to Elisp, so no one can mess
+  with it (Just imagine if someone makes it buffer-local)."
+- `x-mode-pointer-shape`'s only declarations sit inside `#if false`
+  (`src/xfns.c:10333-10352`), so GNU binds nothing and answers nil -- entry
+  168's finding.
+- `echo-area-clear-hook`'s only `DEFVAR_LISP` is inside `#if 0`
+  (`src/keyboard.c:14058-14061`) and GNU answers its doc anyway, because
+  `Fset (Qecho_area_clear_hook, Qnil)` binds the symbol on the line after the
+  `#endif` (`src/keyboard.c:14076`).  Two `#if 0` cases, opposite answers.
+- `xft-font-ascent-descent-override` is real, documented, and compiled out
+  whenever Cairo beats Xft (`configure.ac:7228-7231` picks `ftcrfont.o` over
+  `xftfont.o`), which is this GNU build.
+
+### 2. The type: the question travels with the query, and replaces a 25-name table
+
+Neomacs has no `make-docfile` and no DOC file.  `var_docs::gnu_table` is
+generated from all of GNU's `src/*.c` and was read back for any name asked, so
+both of `Fsnarf_documentation`'s clauses had to be written down somewhere; 168
+wrote the `SKIP` one.
+
+`var_docs::lookup` no longer takes a `&str`.  It takes a `SnarfedVariable`,
+whose only constructor is the gate:
+
+```rust
+pub(crate) fn if_bound_in(obarray: &Obarray, id: SymId, name: &'a str) -> Option<Self> {
+    (obarray.boundp_id(id) || obarray.is_constant_id(id)).then_some(Self { name })
+}
+```
+
+There is no way to reach the table without having asked GNU's question first.
+The table is not a list of answers; it is a stand-in for `etc/DOC`, which is
+bigger than any one build, and reading a record out of it is only legal after
+the gate says yes.  The gate asks the **global/default** binding rather than
+the current buffer's, because GNU asks it once during loadup in a `*scratch*`
+with no buffer-local bindings and stores the answer on the symbol; constants
+count as bound for the same reason `Fboundp` says so -- `SYMBOL_CONSTANT_P` is
+a write barrier, not an unbound value cell, and
+`(documentation-property 'most-positive-fixnum 'variable-documentation)` still
+answers.
+
+**One question replaced a 25-name table.**  `var_docs::lookup` used to consult
+`cus_start_platform_vars::is_name_gnu_leaves_unbound_here`, entry 141's list of
+`cus-start.el` platform names GNU leaves unbound here.  That list covered **8**
+of the 130 names GNU leaves unbound in this build.  The other 122 -- every
+`w32-`, `dos-`, `haiku-`, `android-`, `pgtk-`, `sfnt-` and `comp-` name, plus
+`internal-interpreter-environment`, `byte-metering-on`, `motif-version-string`,
+`lucid--menu-grab-keyboard`, `debug-end-pos` and
+`print--unreadable-callback-buffer` -- were answered from the table.  No table
+would have listed them all; that is the point of GNU's design.  The predicate
+stays as the executable form of entry 141's measurement, with its module header
+corrected to say it no longer gates documentation.
+
+### 3. The bundle: nought of the 49 cannot and should not be bound here
+
+The 49 are names GNU binds and this port did not: 25 `x-`/`xft-`, and 24 others
+including `long-line-threshold`, `frame-size-history` and
+`internal-doc-file-name`, exactly as 168 said.
+
+The brief asks, for each, whether GNU binds it "in a build we can match".  Two
+measurements answer it, and neither is an argument.
+
+**Of the 71 names GNU declares ONLY in X-only files and binds, this port
+already binds 50.**  ("X-only" is `XOBJ`/`XMENU_OBJ`: `xterm.c`, `xfns.c`,
+`xselect.c`, `xsettings.c`, `xrdb.c`, `xsmfns.c`, `xmenu.c`, compiled only
+under `HAVE_X_WINDOWS`, `configure.ac:7219-7226`.)  So the 21 X names among the
+49 are the remainder of a decision made long ago, not a new one.  Whatever the
+right answer is, it is the same answer for all 71, and this port has answered
+"declare" fifty times; stopping now would mean `boundp` says t for
+`x-selection-timeout` and nil for `x-wait-for-event-timeout`, which is not a
+line anyone can defend.
+
+**And not one of the 49 lacks a Neomacs-declared sibling from the same GNU
+`syms_of_*`**, asked over all 49:
+
+| GNU file | names swept | GNU binds | this port bound | of the 49 |
+| --- | --- | --- | --- | --- |
+| `xdisp.c` | 96 | 92 | 88 | 5 |
+| `keyboard.c` | 84 | 83 | 81 | 2 |
+| `buffer.c` | 76 | 76 | 74 | 2 |
+| `xterm.c` | 39 | 39 | 24 | 15 |
+| `frame.c` | 29 | 29 | 22 | 7 |
+| `window.c` | 24 | 24 | 23 | 1 |
+| `xfns.c` | 24 | 23 | 20 | 3 |
+| `dispnew.c` | 12 | 12 | 11 | 1 |
+| `syntax.c` | 10 | 10 | 9 | 1 |
+| `fontset.c` | 8 | 8 | 7 | 1 |
+| `xselect.c` | 7 | 7 | 5 | 2 |
+| `keymap.c` | 6 | 6 | 5 | 1 |
+| `composite.c` | 5 | 5 | 4 | 1 |
+| `doc.c` | 5 | 5 | 3 | 2 |
+| `textconv.c` | 3 | 3 | 1 | 2 |
+| `ccl.c` | 2 | 2 | 1 | 1 |
+| `menu.c` | 2 | 2 | 1 | 1 |
+| `xsettings.c` | 2 | 2 | 1 | 1 |
+
+Every row has a non-zero "this port bound" column, `xsettings.c` and `menu.c`
+included.  So the honest answer to "N of the 49 cannot and should not be bound
+here, with evidence" is **N = 0**, and the evidence is that each completes a
+file this port already declares from rather than opening a new one.
+
+Six of the 49 are spelled `x-` and are not X-gated at all: `x-resource-name`
+and `x-resource-class` are `syms_of_frame` (`frame.c:7395`, `7407`),
+`x-popup-menu-function` is `syms_of_menu` (`menu.c:1629`),
+`x-show-tooltip-timeout` is `syms_of_display` (`dispnew.c:7567`), and all of
+`frame.o`, `menu.o` and `dispnew.o` are in GNU's unconditional `base_obj`
+(`src/Makefile.in:450`).  Sorting by prefix instead of by file would have
+mis-classified them.
+
+Each declaration carries GNU's own initializer, at the Neomacs counterpart of
+its `syms_of_*` -- `fontset.rs`, `buffer_vars.rs`, `composite.rs`, `xdisp.rs`,
+`frame_vars.rs`, `keyboard/pure.rs`, `window_cmds/mod.rs`, and the per-file
+`--- src/FILE.c: syms_of_X ---` sections of `eval.rs`'s bootstrap block for the
+nine GNU files with no counterpart module.  **Sixteen of the 49 have a non-nil
+initializer, and in each case a nil seed would be a different value rather than
+a milder one:**
+
+| name | GNU's initializer | why nil is not a weaker version of it |
+| --- | --- | --- |
+| `long-line-threshold` | `XSETFASTINT (..., 50000)` | nil is GNU's "optimizations off" |
+| `comment-use-syntax-ppss` | `Qt` | `find_defun_start` takes the `syntax-ppss` branch only while non-nil (`syntax.c:600`), `back_comment` honours `open-paren-in-column-0-is-defun-start` only while nil (`syntax.c:889`) -- a different parser, not a disabled one |
+| `compose-chars-after-function` | `intern_c_string ("compose-chars-after")` | the symbol that gets funcalled |
+| `display-pixels-per-inch` | `make_float (72.0)` | a float; readers divide by it |
+| `menu-prompt-more-char` | `XSETINT (..., ' ')` | fixnum 32; `EQ` plus the `Ctl (XFIXNUM ...)` variant (`keyboard.c:10370-10372`) |
+| `text-conversion-face` | `Qunderline` | a face name |
+| `frame-internal-parameters` | three `Fcons` over an `#ifdef`-selected `list4`/`list3` | a deny-list; empty means "restore everything" |
+| `x-resource-class` | `build_string (EMACS_CLASS)` = `"Emacs"` (`frame.h:1840`) | an X-resource lookup key, not a product string, so GNU's literal rather than this port's branding |
+| `x-show-tooltip-timeout` | `make_fixnum (5)` | seconds |
+| `x-wait-for-event-timeout` | `make_float (0.1)` | a float |
+| `x-allow-focus-stealing` | `Qnewer_time` | one of four `EQ`-dispatched policies (`xterm.c:28876-28894`, `29097`); nil is a fourth policy, not none |
+| `x-fast-selection-list` | `list1 (QCLIPBOARD)` | GNU's own comment: chosen so tool-bar updates need no `_XReply` |
+| `code-conversion-map-vector` | `make_nil_vector (16)` | `aset` on nil signals |
+| `redisplay--all-windows-cause` | `Fmake_hash_table (0, NULL)` | `puthash` on nil signals |
+| `redisplay--mode-lines-cause` | `Fmake_hash_table (0, NULL)` | likewise |
+| `window-dead-windows-table` | `CALLN (Fmake_hash_table, QCweakness, Qvalue)` | a strong table keeps every window ever killed alive |
+| `xft-settings` | `empty_unibyte_string` | the empty STRING; `xsettings.el` `read`s it |
+
+`expose-hidden-buffer` is the only one of the 49 GNU also makes buffer-local
+(`Fmake_variable_buffer_local (Qexpose_hidden_buffer)`, `frame.c:7760`), so the
+declaration would be incomplete without that half.
+
+Three are declared with GNU's nil and a note, because GNU's *runtime* value
+comes from somewhere this port does not have -- and writing that value in would
+be the invented default this ledger keeps finding:
+
+- `internal-doc-file-name` and `build-files` are both `Qnil` in `syms_of_doc`
+  (`doc.c:691`, `695`).  `Fsnarf_documentation` fills them: `Vbuild_files` from
+  `buildobj.h` (`doc.c:542-553`), and `Vdoc_file_name = filename` only **after**
+  `doc_open` succeeds (`doc.c:555-566`), so a failed open signals and leaves the
+  name alone.  This port has no `make-docfile`, no `buildobj.h` and no
+  `etc/DOC`; `doc.rs`'s `Snarf-documentation` is a shim that opens nothing.  nil
+  is both GNU's declared initializer and what is true here.  **Writing `"DOC"`
+  would name a file that does not exist.**
+- `move-frame-functions` is `Qnil` at `frame.c:7502`.  GNU reports
+  `(x-dnd-after-move-frame)` even in `--batch` because `lisp/x-dnd.el:625` runs
+  `add-hook` at load time, not because the declaration says so.
+
+`system-key-alist` is `DEFVAR_KBOARD` (`keyboard.c:14147`), `Qnil` per kboard
+(`keyboard.c:13123`).  This port has no per-kboard storage, so it is modelled as
+one global special the way `overriding-terminal-local-map` -- the other
+`DEFVAR_KBOARD` in that file -- already is.  The per-terminal half is recorded
+below rather than hidden behind a nil default.
+
+**What "breaks" is not what 168 thought.**  Those 49 lines already differed on
+boundness, so gating alone does not raise the differing-LINE count; it makes the
+*doc* field of an already-wrong line wrong too.  Concretely it breaks three
+assertions in entry 168's own
+`oracle_platform_duplicated_variables_carry_the_canonical_doc_text` --
+`x-max-tooltip-size`, `x-no-window-manager`, `x-wait-for-event-timeout` -- which
+is the coupling, and it is a coupling to a pin rather than to a count.
+
+### 4. The third bug: nine `DEFVAR`s the generator never saw, and a guard that is structurally unable to see them
+
+While diffing the generated table's name set against `src/*.c` to check 168's
+row count, nine GNU `DEFVAR` names came back that the table did not have at all.
+
+`make-docfile` skips **all** whitespace between the `doc` keyword's colon and
+the opening `/*`, newlines included:
+
+```c
+	  if (c == ':')
+	    {
+	      doc_keyword = true;
+	      do
+		c = getc (infile);
+	      while (c_isspace (c));
+	    }
+	}
+      bool comment = c == '/' && (c = getc (infile)) == '*';
+```
+
+(`lib-src/make-docfile.c:1148-1157`.)  `extract_gnu_defvar_docs.py` searched for
+the literal string `"doc: /*"`.  Nine `DEFVAR` blocks spell it otherwise --
+`xdisp.c:38216` and `xftfont.c:800` with two spaces, `lread.c:5931` with three,
+and the six `treesit.c` names from `5355` onward with the `/*` on the next line
+-- and every one was absent from the generated table.
+
+Three of the nine are bound here and answered nil where GNU answers text:
+`treesit-language-remap-alist`,
+`treesit-languages-require-line-column-tracking` and
+`treesit-major-mode-remap-alist`.  A fourth,
+`xft-font-ascent-descent-override`, is why this could not have been fixed
+before section 2: restoring its row without the boundness gate would have
+**created** a divergence, because GNU leaves it unbound in a Cairo build and
+Neomacs would then have answered its text.
+
+**Entry 168's `const _: () = { ... }` guard cannot catch this, and not for want
+of trying.**  It walks `GNU_VAR_DOCS` and tests each row's doc for a `SKIP`
+prefix: a predicate over rows that exist.  A row that was never emitted is not a
+row with bad content, and nothing satisfies every predicate.  The nine names sat
+outside the table for as long as the extractor has existed and the guard was
+green throughout.
+
+That is a general law rather than a fact about this table, and it is worth
+stating as one, because every standing check in this tree is a predicate over
+things that exist: a shadowed-subr count taken from a booted obarray cannot see
+a subr never registered; `gc-stress` runs the probes in its directory, and a
+probe nobody wrote is not a failing probe; an audit that classifies the call
+sites a grep finds cannot classify a site the grep does not match.  None of
+those is weak -- each is exactly as strong as its quantifier allows, universally
+quantified over a set the check derives from the artifact, and the artifact is
+downstream of the omission.  **The diagnostic is to ask what the check reports
+when the artifact is EMPTY.  If emptiness is green, the check cannot see
+absence, and the guard belongs upstream.**  (It unifies the other family too:
+`running 0 tests` / `test result: ok` is the same law wearing a different hat --
+an assertion over a selected set that cannot notice the set was empty.)
+
+So the two halves are now guarded in the two places they are visible from:
+
+- **Absence, at the source of truth.**  `extract_gnu_defvar_docs.py` now matches
+  `doc:\s*/\*` -- `make-docfile`'s own `c_isspace` rule -- and **refuses to
+  write the table at all** if any `DEFVAR_*` head yields no `doc:` block,
+  printing the offending `file:name` lines and exiting 1.  Fail closed,
+  deliberately: a generator that degrades silently is how nine names stayed
+  outside the table while the guard stayed green.
+- **Content, at the artifact.**  168's `const` walk is unchanged and still
+  refuses to compile a table holding a placeholder.
+
+The negative control, because a guard without a demonstrated red is a guard
+nobody has tested.  Reverting the marker to the literal `"doc: /*"`:
+
+```
+error: 9 DEFVAR head(s) with no doc: block; the scanner is out of step with
+make-docfile (lib-src/make-docfile.c:1148-1157):
+  lread.c:macroexp--dynvars
+  treesit.c:treesit-load-name-override-list
+  treesit.c:treesit-extra-load-path
+  treesit.c:treesit-thing-settings
+  treesit.c:treesit-language-remap-alist
+  treesit.c:treesit-languages-require-line-column-tracking
+  treesit.c:treesit-major-mode-remap-alist
+  xdisp.c:inhibit-message
+  xftfont.c:xft-font-ascent-descent-override
+```
+
+exit 1, naming exactly the nine.  With the fix the same check passes over all of
+`src/*.c`, which is what says the scanner is now in step with `make-docfile`
+rather than merely less wrong.
+
+The table is **894 rows, from 885**.  The only two `src/*.c` names still absent
+are `selection-coding-system` and `next-selection-coding-system`, whose every C
+copy is a `SKIP` placeholder (`w16select.c:681`/`685`, `w32select.c:1324`/`1330`)
+because their real doc lives in `lisp/select.el:42` and `:82` -- correct, and
+both editors answer that Lisp text today.
+
+One arithmetic note for whoever re-derives this: `grep -c '^    ('` over
+`gnu_table.rs` answers 890 for the 885-row table, because five doc strings
+contain a line beginning with four spaces and an open paren.  Every row count in
+this entry and in 168 comes from parsing the Rust literals, not from that grep.
+
+### 5. The fourth bug: `make-docfile` discards ALL leading whitespace, and entry 168's other bucket was one story rather than 38
+
+Entry 168 sized the "both editors have a real doc and the texts differ" bucket
+at 38 and wrote "Sized, not diagnosed."  Diagnosed here: **35 of the 36 that
+remained are one extractor bug**, and the same shape again.
+`read_c_string_or_comment` throws away all leading whitespace inside a `doc:`
+comment before the first character:
+
+```c
+  c = getc (infile);
+  if (comment)
+    while (c_isspace (c))
+      c = getc (infile);
+```
+
+(`lib-src/make-docfile.c:416-419`.)  The script stripped a single leading space,
+and GNU's sources use two other spellings freely: `doc: /*` followed by a
+newline (`src/character.c:1113`) left a leading NEWLINE in the stored text, so
+`C-h v char-width-table` opened with a blank line; `doc: /*  Vector of valid
+font weight values.` (`src/font.c:5983`, two spaces) left a leading space.
+Exactly 35 rows carried one or the other, every one a pure leading-whitespace
+difference and nothing else.
+
+Trailing whitespace needs no rule of its own: `make-docfile` holds spaces and
+newlines in `pending_spaces`/`pending_newlines` and emits them only when a
+non-space character follows (`put_char`, `lib-src/make-docfile.c:282-311`), so
+whatever sits between the last real character and `*/` never reaches the DOC
+file.
+
+It also closes a latent hole in 168's guard as a side effect: that guard tests
+whether a row's doc STARTS WITH `SKIP`, and a body stored as `"\nSKIP: ..."`
+would not have matched it.  The prefix test now runs on the stripped body.
+
+**Blast radius, bounded by inspection rather than by a gate, and the limit is
+stated as such.**  A doc-text change can only move a test whose expected output
+contains that doc text, so the first line of each of the 35 strings was searched
+across every `.rs` and `.el` file in `neovm-oracle-tests`,
+`neomacs-melpa-tests`, `neomacs-tui-tests` and `neovm-core` -- **5736 files, the
+generated tables excluded: zero occurrences.**  The reader-side net agrees and
+was widened once after a first attempt was too narrow: 124 files mention
+`documentation-property`, `describe-variable`, `variable-documentation`,
+`C-h v`, `*Help*`, `help-buffer`, `describe-symbol`, `describe-function` or
+`apropos`; four of those also name one of the 35, and all four are false
+positives on inspection -- `advice_hooks_deep.rs` matches
+`transient-mark-mode-hook` inside a symbol list from `apropos-internal "hook"`,
+`case_409.rs` reads `file-coding-system-alist` for its value in one test and
+calls `help-buffer` in a different one, `format_all/mod.rs` `setq`s
+`transient-mark-mode` and separately kills a buffer named `"*Help*"`, and
+`gitattributes_mode/workflows.rs` uses `help-buffer` as the name of a local
+variable in its own elisp.  The three most obviously doc-reading files in that
+union -- `defvar_doc_skip_markers.rs`,
+`divergence/face_documentation_matrix.rs` and
+`divergence/help_apropos_completion.rs` -- name none of the 35.
+
+The first attempt at this net was too narrow and is worth recording as the
+mistake it was: it enumerated only `documentation-property`,
+`describe-variable` and `variable-documentation`, which misses a test that
+renders a `*Help*` buffer through a keybinding and reads a doc string without
+naming any of the three.  That is the same law as section 4 one level up -- a
+check over the readers you thought of cannot see the reader you did not -- which
+is why the 5736-file search over expected OUTPUT is the argument that carries
+the weight and the reader net is the corroboration rather than the proof.
+
+**This is an inspection argument over the readers and expectations that could
+be enumerated; it is not a proof, and the merged-tree oracle run is what settles
+it.**  The fix is in its own commit (`f90a5c654`) so it can be reverted without
+touching the clause or the declarations.
+
+### 6. Measured after
+
+Same probes, `-Q --batch`, against a `cargo xtask fresh-build --release` binary
+of `f90a5c654` (`finished successfully (release)`, `no_byte_compile=false`,
+pdump 04:21 newer than the binary at 04:18, `*scratch*` empty), with both
+bootstrap fingerprint memos deleted first.  Load average 29.33 at the sweep.
+
+Over the 881 names entry 168 swept, so the numbers are directly comparable:
+
+```
+                                                    168    here   after
+lines differing from GNU                            208    207      5
+  ... same boundness, different doc                  155    154      1
+      ... a SKIP marker here                           0      0      0
+      ... both editors unbound, GNU nil               118    118      0
+      ... both have real text and the texts differ     37     36      1
+  ... GNU binds the name, Neomacs does not             49     49      0
+  ... Neomacs binds the name, GNU does not              4      4      4
+```
+
+Over the 894 names the table now holds, the answer is the same 5, so the 13
+names added by section 4 all match.  And the invariant GNU has, this port now
+has too:
+
+```
+                                        GNU    Neomacs
+names bound / with a doc                762      766
+names unbound / with nil                132      128
+names on either diagonal                  0        0
+```
+
+The four-name gap between 766 and 762 is the recorded
+Neomacs-bound/GNU-unbound residual, unchanged since 168.
+
+**What remains is five lines**: `indent-tabs-mode`, which answers a
+`define-minor-mode`-shaped string here against `buffer.c`'s text (168's own
+observation, and not a whitespace bug), plus `inhibit-try-cursor-movement`,
+`xwidget-list`, `xwidget-view-list` and
+`xwidget-webkit-disable-javascript`.
+
+### 7. Gates -- NOT RUN, deliberately
+
+The three suite gates were **not run for this branch**, at the coordinator's
+direction and with the reason on record: the machine reached a 1-minute load
+average of **1133 on 32 cores** with six agents building at once, at which point
+a suite result is not attributable -- a concurrent suite does not add noise, it
+changes which tests fail.  Six agents each waiting for a contiguous quiet window
+serializes to about twelve hours, and the coordinator re-runs all of them on the
+merged tree before anything is committed.  So:
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine` -- **NOT RUN**
+  (baseline 11117 + 54 skipped).
+* `cargo nextest run -p neovm-oracle-tests` -- **NOT RUN**
+  (baseline 38790, 0 failed).
+* `cargo xtask gc-stress --editor <release binary>` -- **NOT RUN**
+  (baseline 9/9).
+
+**And the instrument for "is the machine busy" is not the 1-minute load
+average.**  That number decays exponentially, so after a spike to 1000+ it
+spends many minutes falling through any threshold while saying nothing about
+current contention: measured here, `/proc/loadavg` read `43.41` for the 1-minute
+average with **29 processes actually runnable out of 3273**, on 32 cores -- i.e.
+idle.  The instantaneous figure is the fourth field,
+`awk '{split($4,a,"/"); print a[1]}' /proc/loadavg`, and it neither lags a spike
+nor hides one.  Both figures are given below, because a good measurement taken
+at "load 320" is otherwise indistinguishable from a bad one.
+
+What WAS run, all load-independent or cheap enough to attribute, with figures:
+
+* `cargo check --workspace --all-targets`: clean, 0 errors; started at
+  1-minute load 937.73 and finished at 53.93, which is exactly the reading the
+  runnable count would have corrected.
+* `cargo fmt --all --check`: clean.
+* **The three new pins in isolation, red before and green after, with the same
+  N on both sides** -- which is the only thing that distinguishes a working fix
+  from a filter that stopped selecting.  Selector
+  `-E 'test(/snarf_documentation_boundp_clause|defvar_doc_skip_markers/)'`, the
+  slash-alternation form, never `or`:
+  - at `75d1bba27` (pins only): **6 tests run: 3 passed, 3 failed**.
+  - at `f90a5c654`: **6 tests run: 6 passed, 38787 skipped**, load 23.12.
+  - the same six under `NEOVM_ORACLE_MODE=live`, where the harness runs both
+    editors and compares them to each other rather than to a recorded string --
+    a better check than the recorded-string one for a change that is entirely
+    about strings: **6 tests run: 6 passed**.
+  All three of entry 168's pins are in that six, including
+  `oracle_platform_duplicated_variables_carry_the_canonical_doc_text`, which
+  asserts a doc for three of the 49 and is exactly what the clause would have
+  broken on its own.
+* All three new pins' expectations were taken with `NEOVM_ORACLE_MODE=refresh`
+  -- so they are GNU's own answers, not hand-written ones -- and two of the
+  three matched what had been written by hand, which is the useful direction.
+  `UPDATE_EXPECT=1` under nextest cannot write them back (it resolves the source
+  path from nextest's working directory and fails `NotFound`); the answer was
+  taken from GNU directly instead.
+
+Two environmental notes, because both cost real time and both are recurrent:
+
+- **The root filesystem hit 0 bytes mid-build** with six worktree `target`
+  directories holding 156 GB, and the failure mode is the dangerous one: the
+  release build died during loadup with **no error message**, its log simply
+  truncated mid-line.  A log truncated by ENOSPC greps identically to a clean
+  run.  This worktree's `target` now lives on the roomy filesystem
+  (`/home/exec/mnt/rust-target/`) behind a symlink; everything measured while
+  the disk was full was discarded and re-measured.
+- **A fresh worktree is missing 1735 generated `lisp/` files and
+  `neovm-core/tests/test-module/target`.**  Both were copied from the main tree
+  by diffing the file trees before anything was built, per the standing note.
+
+### Corrections to earlier entries
+
+- Entry 168's "Gating `var_docs::lookup` on boundness would fix the 116 and
+  BREAK the 46" is **right about the mechanism and wrong about the unit**,
+  corrected 2026-08-21.  Those lines already differ on boundness, so gating
+  alone cannot raise the differing-line count; what it breaks is the doc field
+  of an already-differing line, and concretely three assertions in 168's own
+  `oracle_platform_duplicated_variables_carry_the_canonical_doc_text`.  The
+  coupling 168 identified is real and is a coupling to a pin, not to a count.
+- Entry 168's "lines differing from GNU ... 208" is **207 on 2026-08-21**, its
+  "both have real text and the texts differ" bucket 37 -> 36.  Nobody touched
+  those rows: the table is generated from a moving GNU mirror and one text
+  converged on its own.  A generated table drifts between entries, which is an
+  argument for machine-checking its invariants at both ends rather than
+  re-measuring by hand.
+- Entry 168's "`is_name_gnu_leaves_unbound_here` is what keeps
+  `documentation-property` from answering for a variable no build declares" is
+  **superseded 2026-08-21**: it covered 8 of the 130 names GNU leaves unbound
+  here, and `var_docs::SnarfedVariable` covers all 130 by asking the question
+  GNU asks.  The module header in `cus_start_platform_vars.rs` now says so.
+- Entry 168's "The 38 names where both editors have a real doc and the texts
+  differ are not all one cause ... Sized, not diagnosed" is **35/36 one cause,
+  diagnosed and fixed 2026-08-21**; see section 5.  `indent-tabs-mode` is the
+  exception and remains open.
+- Entry 141's "widening it needs the same name-by-name GNU probe run over the
+  rest of the generated table", which 168 called "partly superseded", is **fully
+  superseded 2026-08-21**: no probe and no table, only `Fboundp`.
+
+### Found and NOT fixed here
+
+- **The three suite gates.**  Named above, with baselines, deliberately unrun.
+  This is the one thing this entry hands over that is not a finding.
+- **`indent-tabs-mode`**, the last text difference of the 894: GNU answers
+  `buffer.c`'s "Indentation can insert tabs if this is non-nil." and this port
+  answers a `define-minor-mode`-shaped "Non-nil if Indent-Tabs mode is
+  enabled."  That is not an extractor bug -- the table has GNU's text and
+  something upstream of `var_docs::lookup` answers first, which makes it a
+  question about the plist/stub precedence order in
+  `documentation_property_plan` rather than about the table.  One line, sized,
+  not diagnosed.
+- **`inhibit-try-cursor-movement` is seeded here and unbound in GNU, and the
+  seed's own justification is refuted by GNU's answer.**  GNU declares three
+  names inside `#ifdef GLYPH_DEBUG` -- `inhibit-try-window-id`,
+  `inhibit-try-window-reusing`, `inhibit-try-cursor-movement`
+  (`src/xdisp.c:39071-39085`) -- and this port seeds exactly one of the three,
+  which is what says it is an accident rather than a policy.  The comment at
+  `xdisp.rs` justifies it with "the symbol must exist so Lisp code that does
+  `(boundp 'inhibit-try-cursor-movement)` ... does not raise void-variable", and
+  GNU answers nil to precisely that `boundp`; nothing in this tree's Rust or
+  `lisp/` reads the variable.  Removing it would close a fourth of the remaining
+  five lines and needs one row of `gnu_defvar_special_test.rs` updated with it.
+  Deliberately not done here: it is entry 138's class, not this entry's, and it
+  deserves to be decided together with the three `xwidget-` names below.
+- **`xwidget-list`, `xwidget-view-list` and `xwidget-webkit-disable-javascript`**
+  remain bound here and unbound under GNU: a build-feature difference entry 138
+  justified and 168 re-confirmed.  Unchanged.
+- **The head-regex layer is above this entry's guard.**  The generator now fails
+  closed when a `DEFVAR_*` head yields no `doc:` block, but it cannot catch a
+  `DEFVAR` whose spelling `DEFVAR_HEAD` itself does not match -- one layer
+  further up.  The complete check is diffing the generated name set against
+  GNU's, which was run by hand for this entry (894 rows against 896 distinct
+  `src/*.c` names, the two-name gap being the `SKIP`-only selection pair).  That
+  diff wants to be a script run beside the generator; it is not one yet, so the
+  class is narrowed rather than closed.
+- **`scripts/extract_gnu_defun_docs.py` has both of this entry's extractor
+  bugs.**  It searches for the literal `"doc: /*"` (`line 69`) and strips a
+  single leading space, exactly as the DEFVAR extractor did, and it feeds
+  `subr_docs/gnu_table.rs`.  Six of the nine odd-spaced `doc:` markers in
+  `src/*.c` belong to DEFUNs -- `window.c:2324`, `2351`, `2390` and
+  `xwidget.c:3374`, `3384`, `3395` -- so at least those six function docs are
+  missing or malformed by the same mechanism.  Sized, not fixed: it is a
+  different table with a different blast radius and wants its own entry, and it
+  should take the fail-closed absence guard with it.
+- **`(featurep 'x)` is nil here while this port declares 71 of GNU's X-only
+  names.**  `syms_of_xfns` does `Fprovide (Qx, Qnil)` in the same block as
+  `x-gtk-resize-child-frames` (`src/xfns.c:10498`), so a port that
+  declares that file's variables and does not provide `x` is inconsistent in the
+  other direction from the one this entry fixed.  Providing it would change
+  loadup paths and is far beyond a doc entry; recorded so the next reader finds
+  the asymmetry already measured.
+- **Several of the 49 are declared and not yet consulted by this port's
+  engine** -- `long-line-threshold`, `comment-use-syntax-ppss`,
+  `frame-size-history` and the drag-and-drop callbacks among them.  That is a
+  gap in the engine, not in the declaration: GNU's `boundp`,
+  `special-variable-p` and `documentation-property` all answer from the
+  declaration, and leaving the name unbound would have been wrong on three
+  counts to avoid being wrong on one.  Each site says so in its comment.
+- **`system-key-alist` has no per-terminal binding here.**  GNU gives it one per
+  kboard (`DEFVAR_KBOARD`, `keyboard.c:14147`); this port models it as a global
+  special, like the `overriding-terminal-local-map` beside it.  Unchanged by
+  this entry and recorded rather than hidden.
+- **`build-files` and `internal-doc-file-name` are bound to nil here and to
+  GNU's snarf-time values there** -- a list of `.o` names and `"DOC"`.  Both are
+  consequences of having no `etc/DOC`, and both were deliberately not invented;
+  see section 3.
+
+Status: FIXED.
