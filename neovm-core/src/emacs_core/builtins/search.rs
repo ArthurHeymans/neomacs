@@ -720,7 +720,7 @@ fn prepare_buffer_regexp_search(
         // accessible region (fontified buffer, no edits since), so neither
         // the ladder's probe search nor any propertize call is needed.
         let done = eval
-            .eval_symbol("syntax-propertize--done")
+            .eval_symbol_by_id(crate::emacs_core::syntax::syntax_propertize_done_sym())
             .unwrap_or(Value::fixnum(-1));
         let covered = eval
             .buffers

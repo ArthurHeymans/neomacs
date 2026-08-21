@@ -1036,6 +1036,30 @@ pub(crate) fn resolve_char_property_buffer_id_with_frames(
     resolve_char_property_target_in_state(frames, buffers, object).map(|(id, _wid)| id)
 }
 
+/// Interned-once ids for the read-only verification walk — it runs on
+/// every text-property mutation builtin and re-hashed these names per
+/// call.
+#[inline(always)]
+fn inhibit_read_only_sym() -> crate::emacs_core::intern::SymId {
+    static SYMBOL: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+        std::sync::OnceLock::new();
+    *SYMBOL.get_or_init(|| crate::emacs_core::intern::intern("inhibit-read-only"))
+}
+
+#[inline(always)]
+fn read_only_sym() -> crate::emacs_core::intern::SymId {
+    static SYMBOL: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+        std::sync::OnceLock::new();
+    *SYMBOL.get_or_init(|| crate::emacs_core::intern::intern("read-only"))
+}
+
+#[inline(always)]
+fn inhibit_modification_hooks_sym() -> crate::emacs_core::intern::SymId {
+    static SYMBOL: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+        std::sync::OnceLock::new();
+    *SYMBOL.get_or_init(|| crate::emacs_core::intern::intern("inhibit-modification-hooks"))
+}
+
 pub(crate) fn current_buffer_id_in_buffers(buffers: &BufferManager) -> Result<BufferId, Flow> {
     buffers
         .current_buffer_id()
@@ -1188,7 +1212,7 @@ pub(crate) fn verify_text_read_only_emacs_byte_range_in_state(
     let Some(buf) = buffers.get(buf_id) else {
         return Ok(());
     };
-    let iro = crate::emacs_core::intern::intern("inhibit-read-only");
+    let iro = inhibit_read_only_sym();
     let inhibit = buf
         .get_buffer_local_by_sym_id_gated(iro, obarray.is_localized(iro))
         .unwrap_or_else(|| {
@@ -1203,8 +1227,8 @@ pub(crate) fn verify_text_read_only_emacs_byte_range_in_state(
     if !inhibit.is_nil() && !inhibit.is_cons() {
         return Ok(());
     }
-    let read_only_sym = Value::symbol("read-only");
-    let inhibit_sym = Value::symbol("inhibit-read-only");
+    let read_only_sym = Value::from_sym_id(read_only_sym());
+    let inhibit_sym = Value::from_sym_id(inhibit_read_only_sym());
     buf.text_props_try_for_each_interval_in_emacs_byte_range(byte_range, |_range, plist| {
         let read_only = lookup_char_property_from_direct(
             obarray,
@@ -1288,7 +1312,7 @@ pub(crate) fn verify_text_read_only_for_insert_in_state(
     let Some(buf) = buffers.get(buf_id) else {
         return Ok(());
     };
-    let iro = crate::emacs_core::intern::intern("inhibit-read-only");
+    let iro = inhibit_read_only_sym();
     let inhibit = buf
         .get_buffer_local_by_sym_id_gated(iro, obarray.is_localized(iro))
         .unwrap_or_else(|| {
@@ -1462,10 +1486,7 @@ fn call_text_property_hook_lists(
     let start_v = Value::fixnum(lisp_start);
     let end_v = Value::fixnum(lisp_end);
     let specpdl_count = eval.specpdl.len();
-    eval.specbind(
-        super::intern::intern("inhibit-modification-hooks"),
-        Value::T,
-    );
+    eval.specbind(inhibit_modification_hooks_sym(), Value::T);
     // The collected hook chains live only in this Rust Vec, and each hook
     // can unlink its own chain from the interval plist (the one-shot-hook
     // idiom) and trigger GC — freeing the conses the walk still reads. Keep

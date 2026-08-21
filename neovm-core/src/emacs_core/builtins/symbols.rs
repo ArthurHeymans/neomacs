@@ -1601,8 +1601,14 @@ fn grow_obarray_vector_if_needed(obarray_val: Value) {
 }
 
 pub(crate) fn is_global_obarray_proxy(eval: &super::eval::Context, value: &Value) -> bool {
+    #[inline(always)]
+    fn neovm_obarray_object_sym() -> crate::emacs_core::intern::SymId {
+        static SYMBOL: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+            std::sync::OnceLock::new();
+        *SYMBOL.get_or_init(|| crate::emacs_core::intern::intern("neovm--obarray-object"))
+    }
     eval.obarray()
-        .symbol_value("neovm--obarray-object")
+        .symbol_value_id(neovm_obarray_object_sym())
         .is_some_and(|proxy| *proxy == *value)
 }
 

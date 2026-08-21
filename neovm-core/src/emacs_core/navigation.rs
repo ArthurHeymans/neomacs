@@ -17,6 +17,16 @@ use crate::emacs_core::error::{expect_args, expect_fixnum, expect_max_args, expe
 use malachite::integer::Integer;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
+/// `inhibit-point-motion-hooks` id, interned once — this check runs per
+/// point-motion primitive and the by-name lookup re-hashed the string
+/// every time.
+#[inline(always)]
+fn inhibit_point_motion_hooks_sym() -> crate::emacs_core::intern::SymId {
+    static SYMBOL: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+        std::sync::OnceLock::new();
+    *SYMBOL.get_or_init(|| crate::emacs_core::intern::intern("inhibit-point-motion-hooks"))
+}
+
 // ---------------------------------------------------------------------------
 // Argument helpers (duplicated from builtins.rs — they are not `pub`)
 // ---------------------------------------------------------------------------
@@ -247,7 +257,7 @@ pub(crate) fn check_point_motion_hooks(
     }
     let inhibit = eval
         .obarray
-        .symbol_value("inhibit-point-motion-hooks")
+        .symbol_value_id(inhibit_point_motion_hooks_sym())
         .cloned()
         .unwrap_or(Value::NIL);
     if inhibit.is_truthy() {
@@ -423,7 +433,7 @@ pub(crate) fn adjust_for_intangible(
 ) -> EmacsBytePos {
     let inhibit = eval
         .obarray
-        .symbol_value("inhibit-point-motion-hooks")
+        .symbol_value_id(inhibit_point_motion_hooks_sym())
         .cloned()
         .unwrap_or(Value::NIL);
     if inhibit.is_truthy() {

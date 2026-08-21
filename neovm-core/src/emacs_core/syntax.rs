@@ -3327,6 +3327,24 @@ fn parse_sexp_ignore_comments_enabled(ctx: &super::eval::Context) -> bool {
     SyntaxStateVariable::ParseSexpIgnoreComments.enabled(ctx)
 }
 
+/// Interned-once ids for the propertize-for-scan gate — it runs before
+/// every syntax-dependent search/scan and re-hashed both names per call.
+#[inline(always)]
+fn internal_syntax_propertize_sym() -> crate::emacs_core::intern::SymId {
+    static SYMBOL: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+        std::sync::OnceLock::new();
+    *SYMBOL.get_or_init(|| crate::emacs_core::intern::intern("internal--syntax-propertize"))
+}
+
+/// `syntax-propertize--done` id, shared with the search prep's warm
+/// precheck.
+#[inline(always)]
+pub(crate) fn syntax_propertize_done_sym() -> crate::emacs_core::intern::SymId {
+    static SYMBOL: std::sync::OnceLock<crate::emacs_core::intern::SymId> =
+        std::sync::OnceLock::new();
+    *SYMBOL.get_or_init(|| crate::emacs_core::intern::intern("syntax-propertize--done"))
+}
+
 pub(crate) fn maybe_syntax_propertize_for_scan(
     eval: &mut super::eval::Context,
     target_char_pos: usize,
@@ -3334,14 +3352,14 @@ pub(crate) fn maybe_syntax_propertize_for_scan(
     if !parse_sexp_lookup_properties_enabled(eval)
         || eval
             .obarray
-            .symbol_function("internal--syntax-propertize")
+            .symbol_function_id(internal_syntax_propertize_sym())
             .is_none()
     {
         return Ok(Value::NIL);
     }
 
     let done = eval
-        .eval_symbol("syntax-propertize--done")
+        .eval_symbol_by_id(syntax_propertize_done_sym())
         .unwrap_or(Value::fixnum(-1));
     if let ValueKind::Fixnum(done) = done.kind()
         && done >= target_char_pos as i64
@@ -3355,7 +3373,7 @@ pub(crate) fn maybe_syntax_propertize_for_scan(
         .map(|buf| buf.chars_modified_tick())
         .unwrap_or_default();
     eval.apply(
-        Value::symbol("internal--syntax-propertize"),
+        Value::from_sym_id(internal_syntax_propertize_sym()),
         vec![Value::fixnum(target_char_pos as i64)],
     )?;
     let after_modiff = eval
