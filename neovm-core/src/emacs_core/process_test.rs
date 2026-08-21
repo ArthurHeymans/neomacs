@@ -11877,6 +11877,78 @@ fn signal_process_reads_an_integer_as_an_os_pid_like_gnu() {
     );
 }
 
+/// GNU's PROCESS argument to `internal-default-signal-process` is a NUMBER
+/// domain, not a non-negative one.  `get_process` is called only for a
+/// non-number (src/process.c:7369-7370); every number goes to
+/// `CONS_TO_INTEGER (process, pid_t, pid)` (:7375-7376) and then to
+/// `kill (pid, signo)` (:7397).  `CONS_TO_INTEGER` is `cons_to_signed` over
+/// `pid_t`'s full signed range (src/lisp.h:4188-4191), so it accepts a
+/// fixnum, a bignum and an INTEGRAL float, negative ones included -- and a
+/// negative pid is a POSIX process GROUP, which is why GNU does not
+/// range-check it.
+///
+/// This port guarded the arm `pid >= 0`, so a negative integer fell through to
+/// the designator resolver and raised.  Measured, `-Q --batch`
+/// (`tmp/pw175/signal-negative.el`), GNU Emacs 31.0.90 against this port
+/// before the fix:
+///
+/// ```text
+///                                   GNU 31.0.90   Neomacs, before
+/// (signal-process -99999 0)         -1            (wrong-type-argument processp -99999)
+/// (signal-process (- child-pid) 0)  0             (wrong-type-argument processp -682594)
+/// (signal-process 99999999.0 0)     -1            (wrong-type-argument processp 99999999.0)
+/// (signal-process -99999999.9 0)    error         (wrong-type-argument processp -99999999.9)
+/// ```
+///
+/// `-1` is `kill` failing with ESRCH; the child's own group exists because
+/// every child is `setsid`-ed into one (`isolate_child_command`), which is
+/// also GNU's arrangement.  Signal 0 throughout, so nothing is signalled.
+/// Ledger 169 residual 5, ledger 175.
+#[test]
+fn signal_process_takes_a_negative_integer_as_a_process_group_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(let* ((p (make-process
+                      :name "pw175-siggroup"
+                      :buffer (generate-new-buffer " *pw175sig*")
+                      :command '("{sh}" "-c" "sleep 30")
+                      :noquery t
+                      :sentinel #'ignore))
+                  (try (lambda (thunk)
+                         (condition-case e (funcall thunk)
+                           (error (list 'error (car e) (cadr e)))))))
+             (prog1
+                 (list :absent-group (funcall try (lambda () (signal-process -99999 0)))
+                       :own-group    (funcall try (lambda ()
+                                                    (signal-process (- (process-id p)) 0)))
+                       :own-pid      (funcall try (lambda () (signal-process (process-id p) 0)))
+                       :integral-float (funcall try (lambda () (signal-process 99999999.0 0)))
+                       :fractional-float (funcall try (lambda () (signal-process -99999999.9 0)))
+                       :huge-float   (funcall try (lambda () (signal-process 1e300 0)))
+                       :bignum       (funcall try
+                                              (lambda ()
+                                                (signal-process 99999999999999999999999999 0)))
+                       :cons         (funcall try (lambda () (signal-process '(1 . 2) 0)))
+                       :still-live   (and (process-live-p p) t))
+               (delete-process p)))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (:absent-group -1 :own-group 0 :own-pid 0 :integral-float -1",
+            " :fractional-float (error error \"Not an in-range integer, integral float,",
+            " or cons of integers\")",
+            " :huge-float (error error \"Not an in-range integer, integral float,",
+            " or cons of integers\")",
+            " :bignum (error error \"Not an in-range integer, integral float,",
+            " or cons of integers\")",
+            " :cons (error wrong-type-argument processp) :still-live t)"
+        )
+    );
+}
+
 /// `process-status`'s connection remapping is an `else if` chain, and its
 /// FIRST arm is `exit -> closed` (src/process.c:1195-1196); the
 /// `p->command == t` stop is the second (:1197-1198) and `run -> open` the

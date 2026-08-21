@@ -9944,7 +9944,15 @@ fn resolve_signal_process_target_in_state(
             //
             // The comment above this arm already stated GNU's rule; the code
             // under it did not follow it.
-            ValueKind::Fixnum(pid) if pid >= 0 => Ok(SignalProcessTarget::Pid(pid)),
+            //
+            // The domain is `NUMBERP`, not "non-negative fixnum": GNU calls
+            // `get_process` only when `!NUMBERP (process)` (:7369-7370), so a
+            // bignum, an integral float and a NEGATIVE integer all reach
+            // `CONS_TO_INTEGER` and then `kill`.  A negative pid is a POSIX
+            // process GROUP -- ledger 175, and ledger 169's fifth residual.
+            ValueKind::Fixnum(_) | ValueKind::Float | ValueKind::Veclike(VecLikeType::Bignum) => {
+                Ok(SignalProcessTarget::Pid(cons_to_os_pid(*v)?))
+            }
             _ => Ok(SignalProcessTarget::Process(
                 resolve_get_process_designator_in_state(processes, buffers, v)?,
             )),
@@ -14590,7 +14598,7 @@ pub(crate) fn builtin_process_attributes(
 
 pub(crate) fn builtin_process_attributes_impl(args: Vec<Value>) -> EvalResult {
     expect_args("process-attributes", &args, 1)?;
-    let pid = process_attributes_pid_arg(args[0])?;
+    let pid = cons_to_os_pid(args[0])?;
     if !sys::process_is_alive(pid) {
         return Ok(Value::NIL);
     }
@@ -14737,7 +14745,18 @@ pub(crate) fn builtin_process_attributes_impl(args: Vec<Value>) -> EvalResult {
     Ok(Value::list(attrs))
 }
 
-fn process_attributes_pid_arg(value: Value) -> Result<i64, Flow> {
+/// GNU's `CONS_TO_INTEGER (x, pid_t, pid)` (src/lisp.h:4188-4191) -- the one
+/// conversion from a Lisp NUMBER to an OS pid, shared by `Fprocess_attributes`
+/// and `internal-default-signal-process` (src/process.c:7375-7376).
+///
+/// It is `cons_to_signed` over `pid_t`'s FULL signed range, so a NEGATIVE
+/// result is in domain: at the POSIX level `kill (-pgid, sig)` signals a
+/// process GROUP, and GNU relies on that rather than range-checking the
+/// argument.  Non-numbers are the caller's business -- `Fprocess_attributes`
+/// raises `numberp` here, while `internal-default-signal-process` sends them
+/// to `get_process` instead (:7369-7370) -- so the `numberp` arm below is only
+/// reachable from the former.
+fn cons_to_os_pid(value: Value) -> Result<i64, Flow> {
     let pid = match value.kind() {
         ValueKind::Fixnum(n) => n,
         ValueKind::Veclike(VecLikeType::Bignum) => i64::try_from(value.as_bignum().unwrap())
