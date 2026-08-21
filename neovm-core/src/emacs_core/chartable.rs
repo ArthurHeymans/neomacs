@@ -2986,6 +2986,27 @@ pub(crate) fn builtin_set_char_table_extra_slot(args: Vec<Value>) -> EvalResult 
 }
 
 /// `(char-table-subtype TABLE)` -- return the sub-type symbol.
+/// `char-table-p` + subtype check against a symbol name, without the
+/// builtin arg plumbing (two Vec allocs) or the purpose symbol's
+/// name-string parse the old callers paid per call.
+pub(crate) fn char_table_has_subtype_named(value: &Value, name: &str) -> bool {
+    if !is_char_table(value) {
+        return false;
+    }
+    let purpose = if value.is_char_table() {
+        match value.as_char_table_obj() {
+            Some(table) => table.purpose,
+            None => return false,
+        }
+    } else {
+        match value.as_vector_data() {
+            Some(vec) => vec[CT_SUBTYPE],
+            None => return false,
+        }
+    };
+    purpose.is_symbol_named(name)
+}
+
 pub(crate) fn builtin_char_table_subtype(args: Vec<Value>) -> EvalResult {
     expect_args("char-table-subtype", &args, 1)?;
     let table = &args[0];

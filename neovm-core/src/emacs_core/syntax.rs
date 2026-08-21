@@ -2538,7 +2538,6 @@ fn current_buffer_syntax_table_object_in_buffers(
     buffers: &mut BufferManager,
 ) -> Result<Value, Flow> {
     use crate::buffer::buffer::BUFFER_SLOT_SYNTAX_TABLE;
-    let fallback = ensure_standard_syntax_table_object()?;
     let current_id = buffers
         .current_buffer_id()
         .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
@@ -2549,9 +2548,12 @@ fn current_buffer_syntax_table_object_in_buffers(
     // Mirrors GNU `Fsyntax_table` (`syntax.c:987-993`):
     //     return BVAR (current_buffer, syntax_table);
     let value = buf.slots[BUFFER_SLOT_SYNTAX_TABLE.index()];
-    if !value.is_nil() && builtin_syntax_table_p(vec![value])?.is_truthy() {
+    if !value.is_nil() && super::chartable::char_table_has_subtype_named(&value, "syntax-table") {
         return Ok(value);
     }
+    // Slot invalid: only now is the standard-table fallback needed (its
+    // eager computation sat on every per-scan table fetch).
+    let fallback = ensure_standard_syntax_table_object()?;
 
     // Slot is unset (fresh buffer or never assigned). Seed it
     // from the standard syntax table — matches GNU's
@@ -3483,15 +3485,8 @@ pub(crate) fn builtin_syntax_table_p(args: Vec<Value>) -> EvalResult {
         ));
     }
 
-    let is_char_table = super::chartable::builtin_char_table_p(vec![args[0]])?;
-    if !is_char_table.is_truthy() {
-        return Ok(Value::NIL);
-    }
-
-    let subtype = super::chartable::builtin_char_table_subtype(vec![args[0]])?;
     Ok(
-        if SyntaxPurposeSymbol::from_lisp_value(&subtype) == Some(SyntaxPurposeSymbol::SyntaxTable)
-        {
+        if super::chartable::char_table_has_subtype_named(&args[0], "syntax-table") {
             Value::T
         } else {
             Value::NIL

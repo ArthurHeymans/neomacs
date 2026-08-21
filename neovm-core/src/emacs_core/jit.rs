@@ -26,15 +26,15 @@
 //! | Knob | Default | Meaning |
 //! |---|---|---|
 //! | `NEOVM_JIT` | on | Kill switch: `0`/`off`/`false`/`no` forces the pure interpreter (the A/B baseline). |
-//! | `NEOVM_JIT_THRESHOLD` | 256 | Tier-up heat threshold; `=1` compiles every compilable function — the differential soak and the strictest oracle configuration. |
+//! | `NEOVM_JIT_THRESHOLD` | 1000 | Tier-up heat threshold ([`Runtime::HOT_THRESHOLD`]); `=1` compiles every compilable function — the differential soak and the strictest oracle configuration. |
 //! | `NEOVM_JIT_LOOP_HEAT` | 8 | Heat credited per 256-iteration back-edge wrap (32 iterations ≈ one call; a hot loop tiers up near 32k iterations); `=0` disables loop heat — the pre-loop-heat baseline. |
 //! | `NEOVM_JIT_LEVER1` | on | Residual-rooting non-heap skip; `=off` reverts to an unconditional gc_push per residual (single-build A/B). |
+//! | `NEOVM_JIT_OSR` | on | Mid-loop interpreter→native transfer (on-stack replacement); `=off` disables. |
 //! | `NEOVM_JIT_PROFIT` | on | Profitability gate (calls ≤ arith); `=off` also compiles call-heavy bodies. |
 //!
 //! ## Opt-in features (default-OFF, pending a graduation decision)
 //! | Knob | Enable | Meaning / graduation blocker |
 //! |---|---|---|
-//! | `NEOVM_JIT_OSR` | `=on` | Mid-loop interpreter→native transfer (on-stack replacement). Blocker: soak the live-stack marshalling path under real workloads before default-on. |
 //! | `NEOVM_JIT_INLINE_ARITH` | `=on` | Level-B native bit-ops (logand/logior/logxor/lognot) with fixnum-guard deopt. Blocker: skips the compiler-macro bounce; a mixed-type loop falls back to the interpreter ungracefully. |
 //! | `NEOVM_JIT_GATE_RELAX` | `=on` | Relax the calls ≤ arith profit gate. Default-on was tried and REVERTED (regressed byte-compile 21%) — measure byte-compile before ever re-flipping. |
 //!
