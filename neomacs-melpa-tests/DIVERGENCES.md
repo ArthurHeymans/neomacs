@@ -25805,6 +25805,20 @@ Two environmental notes, because both cost real time and both are recurrent:
   loadup and gated on `Fboundp`, and therefore the opposite of the one 178
   removed rather than a return to it.  Still open; 178 declined it as a change
   to all 894 rows' provenance and to the dump.
+
+  **FIXED by entry 182, 2026-08-21, and 178's diagnosis was right in every
+  part.**  `lisp/loadup.el:448` now calls a real `Snarf-documentation` over an
+  `etc/DOC` image in `make-docfile`'s record format, so the C text is the last
+  writer for every name that is both a `DEFVAR_*` and a preloaded Lisp
+  `defvar`.  This entry's "five lines" are four, and the four that remain are
+  the Neomacs-bound/GNU-unbound residual this entry already records --
+  `inhibit-try-cursor-movement`, `xwidget-list`, `xwidget-view-list`,
+  `xwidget-webkit-disable-javascript`.  182 also measured **why this entry's
+  surface had only one text difference to find**: the collision set is one name
+  in GNU too, because GNU's `define-minor-mode`s over C variables pass
+  `:variable` to suppress the macro's `defvar` ("It's defined in C, this stops
+  the 'define-minor-mode' macro from defining it again", `lisp/abbrev.el:61-63`)
+  and `lisp/simple.el:7639` is the one that does not.
 - **`STARTUP_VARIABLE_DOC_STUBS` and `STARTUP_VARIABLE_DOC_STRING_PROPERTIES`
   are gone, entry 178, 2026-08-21.**  This entry's "the rule, not a table"
   argument turned out to apply to two tables it did not look at: 1972 names
@@ -28488,6 +28502,24 @@ runtime-load case decided too (a `defvar` loaded *after* the dump is a later
 writer than snarf, so GNU's order there is the other way round).  Handed over
 with the citation rather than attempted.
 
+**Done by entry 182, 2026-08-21, exactly as described, and the runtime-load
+case needed no decision** -- once the snarf is a writer at a point in time,
+"last write wins" covers both directions and a `defvar` after the dump beats it
+for free.  Two corrections to this section, neither of which changes its
+conclusion:
+
+- **The size is not "exactly one name".**  One is the size of the doc-TEXT
+  difference; the plist entry itself is read by GNU's Lisp --
+  `(integerp (get object 'variable-documentation))` is `find-lisp-object-file-name`'s
+  test for "this variable is defined in C" (`lisp/help-fns.el:531-538`) -- and
+  that answered `C-source` for 761 names in GNU and `nil` for 765 here.  A
+  fallback reproduces a last writer's answers and none of its state.
+- **The overwrite can be observed directly rather than inferred**, and 182 did:
+  `(get 'indent-tabs-mode 'variable-documentation)` is `641753` in GNU's
+  `-Q --batch` image, and over the whole 894-name surface GNU has 762 bound
+  names carrying an integer and **zero** carrying the string or cons their Lisp
+  `defvar` put there first.
+
 ### 12. Found and NOT fixed
 
 - **The 28 of section 9**, one root cause: this port's dump does not provide
@@ -28499,7 +28531,10 @@ with the citation rather than attempted.
 - **Entry 173's `indent-tabs-mode`**, re-diagnosed in section 11 and still one
   line: `Fsnarf_documentation` is a last writer in GNU and a fallback here.
   The fix is a real `Snarf-documentation` over `gnu_table`, called from this
-  port's `loadup.el` where GNU calls it.
+  port's `loadup.el` where GNU calls it.  **Done by entry 182, 2026-08-21**,
+  and the line count "one" is corrected there: one for the doc text, 765 for
+  `(integerp (get sym 'variable-documentation))`, which is what
+  `lisp/help-fns.el:531-538` asks to decide that a variable is defined in C.
 - **`completion--flex-score-last-md` is bound by `eval.rs:4661` and GNU Emacs
   31 has no such name.**  Invented *existence*, entry 138's class rather than
   this one.  Its documentation now matches GNU; its boundness does not.

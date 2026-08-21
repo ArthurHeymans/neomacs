@@ -129,6 +129,34 @@ fn oracle_the_dumped_image_documents_only_variables_it_binds() {
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
+/// The order in the OTHER direction, which is the half a lazy table cannot
+/// express at all.
+///
+/// `Fsnarf_documentation` runs once, during `loadup`.  A `defvar` evaluated
+/// *after* the dump is therefore a later writer than the snarf, and GNU's
+/// answer is the Lisp docstring -- `src/eval.c:911` `Fput`s it over the
+/// integer, and nothing re-snarfs.  So the two orderings are not a rule about
+/// which SOURCE wins; they are the same rule -- last write wins -- applied at
+/// two different times, and a port that decides by source rather than by time
+/// must get one of the two wrong.
+///
+/// Measured identical in both editors before ledger 182 as well: this is the
+/// direction the old code had right, and it is pinned so that making the other
+/// direction right does not silently invert this one.
+#[test]
+fn oracle_a_defvar_evaluated_after_the_dump_outranks_the_snarfed_doc() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let form = r#"
+(progn
+  (eval '(defvar indent-tabs-mode t "L182 runtime docstring.") t)
+  (list (get 'indent-tabs-mode 'variable-documentation)
+        (documentation-property 'indent-tabs-mode 'variable-documentation t)))"#;
+    let expect =
+        expect_test::expect![[r#""OK (\"L182 runtime docstring.\" \"L182 runtime docstring.\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
+}
+
 /// `get_doc_string`'s sanity check, which is why this port's DOC stand-in is a
 /// byte image rather than a table of rows.
 ///

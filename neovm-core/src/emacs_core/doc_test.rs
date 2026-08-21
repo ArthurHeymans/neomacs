@@ -9,6 +9,23 @@ fn bootstrap_eval_all(src: &str) -> Vec<String> {
     runtime_startup_eval_all(src)
 }
 
+/// A `Context` at the moment `lisp/loadup.el:448` calls `Snarf-documentation`:
+/// every C `DEFVAR` declared, and the `etc/DOC` stand-in installed onto the
+/// ones that are bound.
+///
+/// A **bare** `Context` is the moment before that, and GNU's answer there is
+/// nil for every built-in variable -- `Fsnarf_documentation` is what puts a
+/// `variable-documentation` on a `DEFVAR_*` name at all (`src/doc.c:613`), and
+/// in temacs it has not run.  So a test about a built-in's documentation has
+/// to snarf first.  Before ledger 182 these tests did not, because the port
+/// consulted its DOC stand-in lazily on every query, which is a fallback and
+/// therefore answered in a state where GNU answers nothing.
+fn snarfed_context() -> Context {
+    let mut eval = Context::new();
+    super::snarf_variable_documentation(&mut eval.obarray);
+    eval
+}
+
 #[test]
 fn raw_documentation_property_does_not_require_substitute_command_keys() {
     crate::test_utils::init_test_tracing();
@@ -1000,7 +1017,7 @@ fn documentation_property_eval_reads_compiled_doc_ref() {
 #[test]
 fn documentation_property_eval_load_path_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1019,7 +1036,7 @@ fn documentation_property_eval_load_path_integer_property_returns_string() {
 #[test]
 fn documentation_property_eval_fill_column_uses_full_gnu_per_buffer_doc() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1043,7 +1060,7 @@ fn documentation_property_eval_fill_column_uses_full_gnu_per_buffer_doc() {
 #[test]
 fn documentation_property_eval_load_path_raw_t_preserves_ascii_quotes() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let display = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1146,7 +1163,7 @@ fn documentation_property_eval_ctl_x_4_map_is_nil_before_subr_el_defines_it() {
 #[test]
 fn documentation_property_eval_case_fold_search_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1165,7 +1182,7 @@ fn documentation_property_eval_case_fold_search_integer_property_returns_string(
 #[test]
 fn documentation_property_eval_unread_command_events_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1184,7 +1201,7 @@ fn documentation_property_eval_unread_command_events_integer_property_returns_st
 #[test]
 fn documentation_property_eval_auto_hscroll_mode_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1203,7 +1220,7 @@ fn documentation_property_eval_auto_hscroll_mode_integer_property_returns_string
 #[test]
 fn documentation_property_eval_auto_composition_mode_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1222,7 +1239,7 @@ fn documentation_property_eval_auto_composition_mode_integer_property_returns_st
 #[test]
 fn documentation_property_eval_coding_system_alist_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1241,7 +1258,7 @@ fn documentation_property_eval_coding_system_alist_integer_property_returns_stri
 #[test]
 fn documentation_property_eval_debug_on_message_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1260,7 +1277,7 @@ fn documentation_property_eval_debug_on_message_integer_property_returns_string(
 #[test]
 fn documentation_property_eval_display_hourglass_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1279,7 +1296,7 @@ fn documentation_property_eval_display_hourglass_integer_property_returns_string
 #[test]
 fn documentation_property_eval_exec_directory_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1298,7 +1315,7 @@ fn documentation_property_eval_exec_directory_integer_property_returns_string() 
 #[test]
 fn documentation_property_eval_frame_title_format_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1317,7 +1334,7 @@ fn documentation_property_eval_frame_title_format_integer_property_returns_strin
 #[test]
 fn documentation_property_eval_header_line_format_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1336,7 +1353,7 @@ fn documentation_property_eval_header_line_format_integer_property_returns_strin
 #[test]
 fn documentation_property_eval_input_method_function_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1355,7 +1372,7 @@ fn documentation_property_eval_input_method_function_integer_property_returns_st
 #[test]
 fn documentation_property_eval_load_suffixes_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1446,7 +1463,7 @@ fn documentation_property_eval_native_comp_eln_load_path_is_nil_when_unbound() {
 #[test]
 fn documentation_property_eval_process_environment_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1465,7 +1482,7 @@ fn documentation_property_eval_process_environment_integer_property_returns_stri
 #[test]
 fn documentation_property_eval_scroll_margin_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1484,7 +1501,7 @@ fn documentation_property_eval_scroll_margin_integer_property_returns_string() {
 #[test]
 fn documentation_property_eval_truncate_partial_width_windows_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1503,7 +1520,7 @@ fn documentation_property_eval_truncate_partial_width_windows_integer_property_r
 #[test]
 fn documentation_property_eval_yes_or_no_prompt_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1522,7 +1539,7 @@ fn documentation_property_eval_yes_or_no_prompt_integer_property_returns_string(
 #[test]
 fn documentation_property_eval_debug_on_error_integer_property_returns_string() {
     crate::test_utils::init_test_tracing();
-    let mut evaluator = super::super::eval::Context::new();
+    let mut evaluator = snarfed_context();
     let result = builtin_documentation_property(
         &mut evaluator,
         vec![
@@ -1793,35 +1810,58 @@ fn every_variable_the_doc_image_documents_answers_out_of_the_doc_image() {
     assert_eq!(bound, installed);
 }
 
-/// And the same image from the obarray's side: the counts GNU's `-Q --batch`
-/// answers `0` for.
+/// And the same image from the obarray's side: what the snarf may not leave
+/// behind.
 ///
-/// `unbound with an entry` is ledger 178's diagonal, restated after the snarf
-/// has actually written to plists -- the state where it could regress.  The
-/// third is `src/doc.c:433-434`, the fixnum GNU reserves for "there is no
-/// doc"; `make-docfile` cannot emit it, and neither can the DOC image, whose
-/// every record's text starts after a `^_V<name>\n` header.
+/// `Fsnarf_documentation` writes a **fixnum** and only for a name `Fboundp`
+/// accepts (`src/doc.c:606-613`), so an unbound symbol carrying a fixnum
+/// `variable-documentation` is the state its gate exists to prevent, and a
+/// fixnum `0` is `src/doc.c:433-434`'s reserved "there is no doc" -- which
+/// `make-docfile` cannot emit and the DOC image cannot either, since every
+/// record's text starts after a `^_V<name>\n` header.
+///
+/// **The entry-agnostic form of this diagonal does NOT belong to this
+/// surface**, and finding that out is worth the test's existence.  Ledger 178
+/// asserted "no unbound symbol carries a `variable-documentation`" of a bare
+/// `Context`, where it is true because nothing has written one at all.  Asked
+/// of the image `loadup` leaves behind, it is false in both editors by design:
+/// fifteen names here carry a Lisp docstring while unbound --
+/// `user-mail-address` (`lisp/startup.el:401-407`), `abbrev-file-name`
+/// (`lisp/abbrev.el:45`), `compile-command`, `package-user-dir` and eleven
+/// more -- because they are `defcustom`s with `:initialize
+/// #'custom-initialize-delay`, which `lisp/custom.el:142-161` marks special
+/// and deliberately leaves unbound until `startup.el` re-evaluates them.  That
+/// is the very class GNU's snarf carves out with `!NILP (Fmemq (sym,
+/// delayed_init))`.  The whole-image version of the diagonal is pinned across
+/// editors instead, in
+/// `neovm-oracle-tests/src/snarf_documentation_last_writer.rs`, where both
+/// answer 0 because `startup.el` has run by then.
 #[test]
-fn the_dumped_image_has_no_documentation_for_a_variable_it_does_not_bind() {
+fn the_snarf_leaves_no_documentation_on_a_variable_the_image_does_not_bind() {
     crate::test_utils::init_test_tracing();
+    // Names, not counts: a count says a diagonal moved and a name says which
+    // row moved it, and this test's whole job is to be read by whoever breaks
+    // it.  The third element is the positive control -- an emptied DOC image
+    // or a `loadup.el` that stopped calling `Snarf-documentation` makes the
+    // first two nil for the wrong reason.
     let results = bootstrap_eval_all(
         "(list
+           (let (names)
+             (mapatoms (lambda (s)
+               (if (integerp (get s 'variable-documentation))
+                   (if (boundp s) nil (setq names (cons s names))))))
+             (sort names #'string<))
+           (let (names)
+             (mapatoms (lambda (s)
+               (if (eq (get s 'variable-documentation) 0)
+                   (setq names (cons s names)))))
+             (sort names #'string<))
            (let ((n 0))
              (mapatoms (lambda (s)
-               (if (get s 'variable-documentation)
-                   (if (boundp s) nil (setq n (1+ n))))))
-             n)
-           (let ((n 0))
-             (mapatoms (lambda (s)
-               (if (documentation-property s 'variable-documentation t)
-                   (if (boundp s) nil (setq n (1+ n))))))
-             n)
-           (let ((n 0))
-             (mapatoms (lambda (s)
-               (if (eq (get s 'variable-documentation) 0) (setq n (1+ n)))))
-             n))",
+               (if (integerp (get s 'variable-documentation)) (setq n (1+ n)))))
+             (> n 700)))",
     );
-    assert_eq!(results[0], "OK (0 0 0)");
+    assert_eq!(results[0], "OK (nil nil t)");
 }
 
 /// `oblookup` does not intern (`src/doc.c:596-600`): a DOC record whose name
