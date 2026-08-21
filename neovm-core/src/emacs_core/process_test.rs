@@ -11921,3 +11921,111 @@ fn a_stopped_but_finished_connection_reports_closed_like_gnu() {
         "OK (:before closed :after-stop closed :after-continue closed)"
     );
 }
+
+/// GNU decodes NOTHING for a default filter with no live buffer, and the
+/// skipped decode takes `last-coding-system-used', the process's own sticky
+/// coding system and the `:post-read-conversion' hook with it.
+///
+/// `read_and_dispose_of_process_output` chooses between two branches
+/// (src/process.c:6556-6559):
+///
+/// ```c
+///   if (fast_read_process_output
+///       && EQ (p->filter, Qinternal_default_process_filter))
+///     read_and_insert_process_output (p, chars, nbytes, coding);
+///   else
+///     { decode_coding_c_string (...); ... }
+/// ```
+///
+/// and `read_and_insert_process_output`'s first statement is
+///
+/// ```c
+///   if (!nread || NILP (p->buffer) || !BUFFER_LIVE_P (XBUFFER (p->buffer)))
+///     return;
+/// ```
+///
+/// (:6463-6464).  Three disjuncts, one `if`, and it stands BEFORE
+/// `decode_coding_c_string` (:6491) and before
+/// `read_process_output_set_last_coding_system` (:6494).  Entry 166 closed the
+/// `!nread` disjunct; the other two are this entry's, and they are not a
+/// nicety: `read_process_output_set_last_coding_system` is the only writer of
+/// `Vlast_coding_system_used` on this path (:6421) and the only writer of
+/// `p->decode_coding_system` (:6425), so a decode that never runs cannot
+/// report a coding system and cannot make one sticky.  That is why GNU loses
+/// no `last-coding-system-used` semantics by skipping the decode: the variable
+/// names the coding system the last CONVERSION used, and no conversion
+/// happened.
+///
+/// Each row is `(HOOK-CALLS LAST-CODING-SYSTEM-USED PROCESS-DECODE-CODING)`,
+/// and `last-coding-system-used` is pre-set to `pw171-untouched' so that "GNU
+/// wrote nothing" is a value rather than the absence of one.
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program.
+#[test]
+fn a_default_filter_with_no_live_buffer_decodes_nothing_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defvar pw171-hooks 0)
+             (defun pw171-prc (len) (setq pw171-hooks (1+ pw171-hooks)) len)
+             (define-coding-system 'pw171-hook-utf8
+               "utf-8 whose :post-read-conversion counts the decodes it is run for"
+               :mnemonic ?U :coding-type 'utf-8 :charset-list '(unicode)
+               :post-read-conversion #'pw171-prc)
+             (defun pw171-run (buffer filterp conn coding script)
+               (setq pw171-hooks 0 last-coding-system-used 'pw171-untouched)
+               (let* ((acc nil)
+                      (p (make-process :name "pw171" :buffer buffer :sentinel #'ignore
+                                       :connection-type conn
+                                       :coding (cons coding 'utf-8-unix)
+                                       :filter (when filterp (lambda (_p s) (push s acc)))
+                                       :command (list "{sh}" "-c" script))))
+                 (while (accept-process-output p 1))
+                 (while (process-live-p p) (accept-process-output p 0.05))
+                 (prog1 (list pw171-hooks last-coding-system-used
+                              (car (process-coding-system p)))
+                   (when (buffer-live-p buffer) (kill-buffer buffer)))))
+             (list
+              ;; `NILP (p->buffer)': the default filter with no buffer at all.
+              (pw171-run nil nil 'pipe 'pw171-hook-utf8 "printf abc")
+              ;; `!BUFFER_LIVE_P': a buffer that WAS one.  The same disjunct,
+              ;; and the reason the answer cannot be cached on the process.
+              (pw171-run (let ((b (generate-new-buffer " *pw171d*"))) (kill-buffer b) b)
+                         nil 'pipe 'pw171-hook-utf8 "printf abc")
+              ;; the same on a pty, where there is no last block to confuse it
+              (pw171-run nil nil 'pty 'pw171-hook-utf8 "printf abc")
+              ;; control: a LIVE buffer on the same branch decodes the data
+              ;; read -- and only that one, because entry 166's `!nread'
+              ;; disjunct still holds for the zero-byte last block.
+              (pw171-run (generate-new-buffer " *pw171a*") nil 'pipe 'pw171-hook-utf8 "printf abc")
+              ;; control: a Lisp filter has no buffer either and decodes BOTH
+              ;; reads, because it is the other branch entirely.
+              (pw171-run nil t 'pipe 'pw171-hook-utf8 "printf abc")
+              ;; `fast-read-process-output' nil sends the DEFAULT filter down
+              ;; the filter branch, so the very same process decodes.  Both
+              ;; conjuncts of :6556-6558, not just the filter one.
+              (let ((fast-read-process-output nil))
+                (pw171-run nil nil 'pipe 'pw171-hook-utf8 "printf abc"))
+              ;; the sticky rewrite the skipped decode also skips: `undecided'
+              ;; over UTF-8 bytes resolves to `utf-8-unix' on the filter branch
+              ;; and stays `undecided' when nothing decoded it.
+              (pw171-run nil nil 'pipe 'undecided "printf 'a\\303\\251\\n'")
+              (pw171-run nil t 'pipe 'undecided "printf 'a\\303\\251\\n'")))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(0 pw171-untouched pw171-hook-utf8) ",
+            "(0 pw171-untouched pw171-hook-utf8) ",
+            "(0 pw171-untouched pw171-hook-utf8) ",
+            "(1 pw171-hook-utf8 pw171-hook-utf8) ",
+            "(2 pw171-hook-utf8 pw171-hook-utf8) ",
+            "(2 pw171-hook-utf8 pw171-hook-utf8) ",
+            "(0 pw171-untouched undecided) ",
+            "(0 utf-8-unix utf-8-unix))",
+        )
+    );
+}
