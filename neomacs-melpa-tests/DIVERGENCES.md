@@ -28632,3 +28632,610 @@ clean tests is not a gate; it was re-run from scratch for the figure above.
 
 Status: FIXED (the seeding).  The 28 names it was masking are recorded in
 §9 and §12, attributed to one cause, and deliberately not fixed here.
+
+## 181. Entry 173's function-side residual, and why it is six bugs rather than two: the DEFUN table was built by three regular expressions where GNU has one state machine, so a head and its doc string could disagree -- 86 of 1733 rows differed, and the fix is `make-docfile` itself, ported, with GNU's own binary as the guard -- FIXED
+
+Entry 173 handed this over sized at "at least six": "`scripts/extract_gnu_defun_docs.py`
+has both of this entry's extractor bugs ... Six of the nine odd-spaced `doc:`
+markers in `src/*.c` belong to DEFUNs -- `window.c:2324`, `2351`, `2390` and
+`xwidget.c:3374`, `3384`, `3395` -- so at least those six function docs are
+missing or malformed by the same mechanism."  All six are real and all six are
+below.  The count is **86**, and only 17 of them are the two bugs 173 named.
+
+The difference is not that the DEFUN extractor was worse written.  A DEFUN head
+is longer than a DEFVAR head -- five commas, a MIN, a MAX and an interactive
+spec stand between the name and the `doc` keyword -- so a regular expression
+that matches it has four more places to be wrong, and each way it fails is a
+different bug with a different blast radius.
+
+**Measured against GNU's own tool rather than against a reading of it.**
+`lib-src/make-docfile` is a standalone C program.  The mirror at `0ee48ac4df2`
+has one compiled, but its `.c` is 11 minutes NEWER than the binary, which is
+exactly the provenance trap this campaign keeps hitting -- so `make-docfile.c`
+was recompiled with plain `gcc` and the two binaries' output over all 152
+`src/*.c` files compared: byte-identical, 1,025,983 bytes.  Every number below
+is a diff against that output.  Neomacs binary: `cargo xtask fresh-build
+--release` of `2733daaab`, reporting `finished successfully (release)`,
+`no_byte_compile=false`, pdump 15:09 newer than the binary at 15:07,
+`(with-current-buffer "*scratch*" (buffer-string))` empty, and
+`(documentation-property 'dos-codepage 'variable-documentation)` nil -- the
+question only post-173 code answers that way.
+
+### 1. The count, before
+
+Reference: `make-docfile` over `src/*.c`, then `Fsnarf_documentation`'s `SKIP`
+clause, keeping the first real copy of a duplicated name -- which is what both
+generators do and, for the single name where it matters, what GNU Emacs itself
+answers (§5).
+
+```
+                                              table    GNU
+rows                                           1703   1733
+identical                                      1649
+absent  (GNU has the row, the table has not)     32
+extra   (the table has a row GNU has not)         2
+differing by leading whitespace only             10
+differing in text                                42
+                                              -----
+TOTAL DIFFERING ROWS                             86
+```
+
+The brief asks for that split by cause, and the fourth bucket is the
+interesting one:
+
+* **absent rows: 32.**
+* **leading-whitespace rows: 10.**
+* **unbound-name rows: 0**, and not by luck -- §4.
+* **genuinely different text: 0.**  All 42 "text" differences have a mechanical
+  cause: 36 are GNU's `SKIP` placeholder served as documentation and 6 are a doc
+  string read out of a different function's comment.  Not one row of the 1703
+  held GNU's text for the right name and disagreed with it.
+
+By mechanism, which is the axis that decides the fix:
+
+```
+  30  DEFUN heads the head regex NEVER MATCHED
+   7  docs read out of a LATER function's comment
+  12  further heads dropped as COLLATERAL of those seven
+  37  rows serving GNU's own SKIP placeholder as documentation
+  10  rows carrying leading whitespace GNU strips
+```
+
+The two lists reconcile to the name.  Of the 30 never-matched heads, 29 are
+distinct names; 21 of those are absent from the table, 7 are present because
+another file's copy of the same name DID match (`menu-or-popup-active-p`,
+`x-open-connection`, `x-display-mm-height`, `x-display-mm-width`,
+`x-display-screens`, `xw-color-defined-p`, `xw-color-values` -- all as `SKIP`
+rows), and the 30th is `alloc.c:5011`'s `testme`, which GNU does not emit
+either.  Of the 12 collateral heads, 11 are absent and the 12th
+(`treesit-parser-tracking-line-column-p`) is a name GNU has no record for.
+21 + 11 = **32 absent**.  2 extra = one `SKIP`-only name
+(`frame-windows-min-size`) + one stolen row whose victim GNU cannot read
+(`treesit-tracking-line-column-p`).  42 text = 36 `SKIP` + 6 stolen rows GNU
+does have.  10 + 32 + 2 + 42 = **86**.
+
+### 2. The six mechanisms
+
+**(a) The head regex required a line break after the interactive spec.**
+`DEFUN_HEAD` ended `\s*[^,]+\s*,\s*$`, and GNU's sources put `doc:` on that
+line freely -- **27 of the 30 misses are this one alone**: `data.c:1067`
+(`native-comp-function-p`), `callint.c:239` (`funcall-interactively`),
+`dispnew.c:3442` (`frame--z-order-lessp`), `xwidget.c:483`, `xfns.c:8258`,
+`term.c:2602`, `w32fns.c:9882`, `xdisp.c:23620`, five in `androidfns.c`, four in
+the `haiku` files, and `xfaces.c:7335`, whose entire head *and* `doc: /* */` are
+one line.  `scan_c_stream` has no opinion about line breaks; it counts five
+commas and keeps reading the same stream.
+
+**(b) The head regex required MIN and MAX to be literals** -- two more of the
+30.  `[A-Z0-9_]+` does not match `charset_arg_max` (`charset.c:845`) or
+`coding_arg_max` (`coding.c:10988`).  GNU reads them with `fscanf (infile, "%d", &minargs)`,
+which **returns 0, not a negative, on a matching failure** -- so GNU's
+`if (scanned < 0) goto eof;` does not fire, `minargs` keeps the *previous*
+DEFUN's value, and the stream is not advanced.  `int commas, minargs, maxargs;`
+is function-scope in the C for exactly this reason.  Reproducing the quirk is
+what makes `define-charset-internal` and `define-coding-system-internal` come
+out right; treating the failure as an error drops both.
+
+(The thirtieth miss is `alloc.c:5011`'s `testme`, which is inside a comment and
+which GNU does not emit either -- see the column-0 rule in §3.)
+
+**(c) The `doc:` marker search was a literal -- 173's bug one -- and it was
+UNBOUNDED, which the variable side was not.**  `extract_gnu_defvar_docs.py`
+bounded its search with `text.find("DEFVAR_", start + 1)` and gave up on a
+miss; the DEFUN version walked forward to the next `doc: /*` anywhere in the
+file and took it.  So a missed marker did not merely lose a row, it *stole* one:
+
+| thief | its marker | doc taken from |
+| --- | --- | --- |
+| `window-prev-buffers` | `window.c:2324`, `doc:  /*` (two spaces) | `set-window-prev-buffers` |
+| `window-next-buffers` | `window.c:2351`, two spaces | `set-window-next-buffers` |
+| `window-parameter` | `window.c:2390`, two spaces | `set-window-parameter` |
+| `xwidget-view-model` | `xwidget.c:3374`, two spaces | `xwidget-view-lookup` |
+| `make-char` | `charset.c:1885`, `doc:` with the `/*` on the next line | `char-charset` |
+| `font-has-char-p` | `font.c:5336`, same | `font-match-p` |
+| `treesit-tracking-line-column-p` | `treesit.c:1203`, `doc :` -- a space **before** the colon | `treesit-parser-p` |
+
+`window.c:2324`, `2351`, `2390` and `xwidget.c:3374` are four of 173's six; its
+other two, `xwidget.c:3384` and `3395`, are the markers of two collateral names
+rather than thieves.
+
+What that looks like from Lisp, on the release binary of `2733daaab`:
+
+```
+(documentation 'window-parameter t)
+;; Neomacs => "Set WINDOW's value of PARAMETER to VALUE.\nWINDOW can be any
+;;             window and defaults to the selected one.\nReturn VALUE.\n\n
+;;             (fn WINDOW PARAMETER VALUE)"
+;; GNU     => "Return WINDOW's value for PARAMETER.\nWINDOW can be any window
+;;             and defaults to the selected one.\n\n(fn WINDOW PARAMETER)"
+```
+
+Note the `(fn ...)` line: the stolen row carries the *other* function's
+arglist, so a two-argument subr shipped a three-argument signature.  That is the
+one artifact-side signature a wrong-but-plausible doc leaves behind, and it is
+recorded in "Found and NOT fixed" as a guard that could exist and does not.
+
+**(d) Twelve more heads were dropped as collateral.**  Having taken a comment
+from further down the file, the scan resumed *past* it, so every head in between
+was never looked at: `split-char`, `char-charset` (`charset.c:2001`, `2032`),
+`font-get-glyphs`, `font-match-p` (`font.c:5362`, `5492`),
+`treesit-parser-tracking-line-column-p`, `treesit-parser-p` (`treesit.c:1218`,
+`2249`), `set-window-prev-buffers`, `set-window-next-buffers`,
+`set-window-parameter` (`window.c:2335`, `2358`, `2399`), `xwidget-view-window`,
+`delete-xwidget-view`, `xwidget-view-lookup` (`xwidget.c:3381`, `3392`, `3452`).
+**One odd-spaced marker costs three rows**: a wrong one, a missing victim, and
+the names it stepped over -- which is why 173's "at least six" was an
+underestimate by a factor of three even within its own mechanism.
+
+**(e) There was no `SKIP` filter at all.**  Entry 168 gave the variable table
+one and 173 kept it; the function table never had one, and 37 of its 1703 rows
+were GNU's placeholder.  `(documentation 'x-display-list t)` answered
+`"SKIP: real doc in xfns.c.\n\n(fn)"`, and so did 33 other `x-`/`xw-` names plus
+`file-system-info`, `font-get-system-font`, `font-get-system-normal-font`,
+`menu-or-popup-active-p` and `frame-windows-min-size`.  GNU's clause is in the
+same `if` as the variable one, three lines further down:
+
+```c
+	      /* Attach a docstring to a function?  */
+	      else if (p[1] == 'F')
+                {
+                  if (!NILP (Ffboundp (sym)) && strncmp (end, "\nSKIP", 5))
+                    store_function_docstring (sym, pos + end + 1 - buf);
+                }
+```
+
+(`src/doc.c:617-621`.)
+
+**(f) A single leading space was stripped where GNU strips all whitespace.**
+173's bug two, same ten-row shape: `char-table-subtype`, `charset-after`,
+`clear-charset-maps`, `forward-comment`, `get-unused-iso-final-char`,
+`iso-charset`, `set-fontset-font` and `string` opened with a NEWLINE,
+`draw-string` and `font-xlfd-name` with a SPACE:
+
+```
+(documentation 'string t)
+;; Neomacs => "\nConcatenate all the argument characters and make the result a
+;;             string.\n\n(fn &rest CHARACTERS)"
+;; GNU     => "Concatenate all the argument characters and make the result a
+;;             string.\n\n(fn &rest CHARACTERS)"
+```
+
+so `C-h f string` began with a blank line.
+
+### 3. The fix is one mechanism, and it is GNU's
+
+Six patches to three regular expressions would close six holes in a design
+whose failure mode is that there are three of them.  In `make-docfile` the head
+and its doc string are read by **one pass of one state machine**: `scan_c_stream`
+finds `DEFUN`, and the same character stream carries it through the commas, the
+interactive spec, the `doc` keyword and into `read_c_string_or_comment`.  There
+is no second search that can fall out of step with the first, and that is the
+class all six bugs belong to.
+
+So `scripts/make_docfile.py` **is** that state machine, transcribed --
+`scan_c_stream`, `read_c_string_or_comment`, `scan_keyword_or_put_char`,
+`put_char`, `write_c_args`, `put_filename` -- and both extractors are front ends
+over its records.  It is deliberately a transcription rather than a rewrite: the
+control flow, the variable names and the order of the tests follow the C so the
+two can be diffed by eye.  The same directive that says "don't reimplement elisp
+in Rust, load the .el" says this: don't reinvent GNU's scanner, run GNU's
+scanner.
+
+**And the guard is the authority itself.**  `verify_against_make_docfile` runs
+GNU's compiled `make-docfile` over the same files and refuses to write the table
+unless the two DOC streams are byte-identical.  This is what 173's own law asks
+for and what 173 could not build -- "it cannot catch a `DEFVAR` whose spelling
+`DEFVAR_HEAD` itself does not match -- one layer further up.  The complete check
+is diffing the generated name set against GNU's ... That diff wants to be a
+script run beside the generator; it is not one yet."  It is now the generator's
+first statement, and it is strictly stronger than a name-set diff: an equality
+against the authority sees a row we never emitted *and* a row we emitted
+wrongly, in one comparison, and because it is not a predicate over the artifact,
+emptiness is not green -- an empty DOC stream fails at byte 0.
+
+Two rules of GNU's that only became load-bearing once the head match was
+widened, and are in the port because of it:
+
+- **An indented `DEFUN` is not a defun.**  `scan_c_stream` accepts `DEFSYM` and
+  `DEFVAR_` after leading spaces and `DEFUN` only at column 0
+  (`lib-src/make-docfile.c:866-943`), which is why the
+  `DEFUN ("testme", Ftestme, Stestme, 0, 0, 0, "")` sitting inside
+  `alloc.c:5011`'s *comment* is in no `etc/DOC`.  The old `^\s*DEFUN` accepted
+  it and was saved only by the accident that its old-style `""` doc failed the
+  rest of the pattern.  Fixing (a) without this would have started emitting a
+  documentation record for a comment.
+- **`fscanf`'s zero return**, (b) above.
+
+### 4. The two clauses, and why only one of them needed writing down
+
+`Fsnarf_documentation`'s function arm has the same two clauses as its variable
+arm.  The `SKIP` one is the generator's -- a placeholder is never written into
+the table, and a `const` block refuses to compile one.  The `Ffboundp` one
+**needed no counterpart, and the reason is a type rather than a coincidence.**
+
+Entry 173 had to build `var_docs::SnarfedVariable` because
+`documentation-property` is asked about a *name*, and a name proves nothing
+about a build.  A function's documentation is asked about a *function value*:
+`function_doc_or_error` reaches this table only from `ValueKind::Subr(id)` or
+`ValueKind::Veclike(VecLikeType::Subr)`, and `internal-subr-documentation` only
+after `as_subr_id` has said yes.  A `Value` that is a subr already proves
+`Ffboundp` would answer t -- and proves more, because
+`store_function_docstring` goes on to require `SUBRP (fun)` before it writes the
+offset (`src/doc.c:471-475`), so a name fbound to something that is not a subr
+gets no C doc in GNU either.
+
+That is worth stating as the finding it is: **the function side does not have
+173's unbound-name bug, because the query is keyed on a proof instead of on a
+string.**  Entry 178 asked the same question one layer out and found 1972
+variables seeded with a doc ahead of 173's gate; there is no function analogue
+and nowhere to put one, because there is no name-keyed entry point to seed.
+
+`subr_docs::lookup` now takes a `SnarfedSubr` anyway.  Not to add a check -- the
+check is already unavoidable -- but to make it *stay* unavoidable.  178's
+correction to 173 is that a gate returning `Option<&'static str>` composes with
+`or_else`, so a second source of the same type can be spliced in behind it and
+the compiler will not object; a `lookup(&str)` invites exactly that.  There is
+now no `&str` to pass and no constructor that does not start from a `Value`.
+
+The `const` block checks four properties every record `make-docfile` writes has,
+each with the C line that makes it true: no `SKIP` prefix; no leading space or
+tab (`read_c_string_or_comment` strips all leading whitespace,
+`lib-src/make-docfile.c:416-419`); no leading newline unless the doc is *only*
+the `"\n\n(fn ...)"` that `write_c_args` appends to an empty `doc: /* */`
+comment (`1215-1218`, which is `dump-face`, `show-face-resources`,
+`internal-set-lisp-face-attribute-from-resource` and `lookup-image`); no
+trailing whitespace (`put_char` never flushes pending spaces or newlines,
+`279-310`).  These are predicates over rows that exist, so by 173's law they are
+only half the guard -- ask what they report when the table is EMPTY and the
+answer is green.  The absence half is upstream, in the generator, where GNU's
+source is visible, and the artifact's row count is pinned by a **floor**
+(`>= 1733`) rather than by `is_empty`.
+
+### 5. `x-select-font`, the one row this table cannot decide -- and GNU's answer is not the obvious one
+
+After the `SKIP` filter, exactly **one** name in all of `src/*.c` has two
+different real doc strings: `x-select-font`, in `haikufont.c:1242` ("Read a font
+using a native dialog"), `w32font.c:2748` ("a W32 font selection dialog") and
+`xfns.c:9733` ("a GTK dialog"), with `pgtkfns.c:3676` the `SKIP`.  GNU's
+convention exists to prevent this and holds for every other name.
+
+The generator prints a `note:` naming the conflict and keeps the first, as the
+DEFVAR generator has since 173.  What makes that the right answer here is a
+measurement, not the rule: **GNU Emacs answers `haikufont.c`'s text, in a build
+where `(featurep 'x)` is t.**  Its `etc/DOC` holds *three* `x-select-font`
+records, because `src/Makefile.in:657-667` hands `make-docfile`
+`$(SOME_MACHINE_OBJECTS)` -- which lists `nsfont.o` and `haikufont.o` -- before
+the build's own objects, and `Fsnarf_documentation` is a **last writer**, so the
+Haiku record overwrites the GTK one on an X build.  Alphabetical-first agrees
+with GNU's object order here by luck; nothing guarantees it for the next such
+name, which is why the note is printed rather than the choice being silent.
+
+### 6. Measured after
+
+Same probes, both editors `-Q --batch`, over the union of the two name sets
+(1735 names): `(fboundp NAME)`, `(subrp (indirect-function NAME))` and
+`(documentation NAME t)`, raw so no quote style is in the comparison.
+
+```
+                                                     before   after
+names swept                                            1735    1735
+  identical documentation                               1395    1460
+  both answer nil                                        224     225
+DIFFERING NAMES                                          116      50
+  GNU fbound, Neomacs not                                  9       9
+  Neomacs fbound, GNU not                                 41      41
+  both fbound, GNU has a doc and Neomacs nil              17       0
+  both fbound, Neomacs has a doc and GNU nil               1       0
+  both have a doc, differing by whitespace only            9       0
+  both have a doc, differing in text                      39       0
+```
+
+Before, the release binary of `2733daaab`; after, `cargo xtask fresh-build
+--release` of this branch reporting `finished successfully (release)`,
+`no_byte_compile=false`, pdump 16:51 newer than the binary at 16:49, `*scratch*`
+empty and `dos-codepage`'s variable doc nil.
+
+**Every doc-string difference is gone; the 50 that remain are the two
+fbound-mismatch buckets, which are not documentation bugs** -- they are entry
+138's class, sized in "Found and NOT fixed" below.
+
+And at the table level, against `make-docfile`'s own output:
+
+```
+                                              before   after
+rows                                            1703    1733
+identical                                       1649    1733
+absent / extra / whitespace / text            32/2/10/42   0/0/0/0
+rows serving a SKIP placeholder                   37       0
+TOTAL DIFFERING ROWS                              86       0
+```
+
+### 7. The DEFVAR table is unchanged, and that is a measurement
+
+`extract_gnu_defvar_docs.py` now uses the same scanner.  Over GNU 31.0.90
+(`0ee48ac4df2`) it regenerates entry 173's committed `var_docs/gnu_table.rs`
+**byte for byte** -- 894 rows, same names, same text, `diff -q` silent.  So the
+shared mechanism costs the variable side nothing and 173's five remaining
+differing lines are untouched.  It also gains 173's missing guard: the DEFVAR
+generator's absence check was `if any DEFVAR head yields no doc: block`, which
+is a hope; it is now `if the DOC stream differs from GNU's binary`, which is a
+fact, with the head check as the fallback for a mirror nobody has compiled.
+
+### 8. Negative controls
+
+A guard without a demonstrated red is a guard nobody has tested.  Three, each
+naming its own cause:
+
+```
+unperturbed              defun exit=0, 1733 rows; defvar exit=0, 894 rows
+
+pre-173 whitespace rule  exit=1, DOC stream differs at byte 75385
+reinstated                 ours:   ...^_Vtransient-mark-mode\n Non-nil if...
+                           theirs: ...^_Vtransient-mark-mode\nNon-nil if...
+
+pre-181 head rule        exit=1, DOC stream differs at byte 11
+reinstated                 ours:   ^_Salloc.c\n^_Sandroid-emacs.c\n...
+                           theirs: ^_Salloc.c\n^_Fmake-string\nReturn a...
+
+no compiled make-docfile exit=1, 1 DEF* head(s) with no doc: block that GNU
++ one head exception              does not have:
+removed                             treesit.c:treesit-parser-tracking-line-column-p
+```
+
+The third is the one that matters for a mirror nobody has built: with the
+byte-equality guard unavailable the generator still refuses, on the only
+evidence left to it.
+
+And the Rust guard's red, `cargo check -p neovm-core --all-targets` at
+`2733daaab`'s table:
+
+```
+error[E0080]: evaluation panicked: GNU_SUBR_DOCS holds a doc starting with a
+newline before real text; only an EMPTY doc: comment may begin with the
+"\n\n(fn" that write_c_args appends. Re-run scripts/extract_gnu_defun_docs.py.
+   --> neovm-core/src/emacs_core/subr_docs/mod.rs:225:9
+```
+
+const-eval stops at the first failing assert, so the `SKIP` one is reached only
+after that row shape is gone; both fire on the old table.  With the regenerated
+table: **0 errors, `Finished dev profile in 1m 42s`**.
+
+### 9. Blast radius
+
+Bounded by expected OUTPUT rather than by reader, which is the direction 173
+found carries the weight.  The first line of every doc string this change
+removes -- 54 rows, 17 of them with a line distinctive enough to search -- was
+searched across every `.rs` and `.el` in `neovm-oracle-tests`,
+`neomacs-melpa-tests`, `neomacs-tui-tests`, `neomacs-gui-tests` and
+`neovm-core`: **5808 files, the generated tables excluded, zero occurrences**
+outside this change's own prose.  The 37 `SKIP` strings were searched
+separately, by the marker text: four files mention `SKIP: real doc in`, all four
+in doc comments (168's pin, this entry's pin, and the two module headers).
+
+The reader-side net corroborates rather than proves.  353 files mention
+`documentation`, `describe-function`, `*Help*`, `apropos` or
+`internal-subr-documentation`, and 180 of those also name one of the 86 -- but
+naming a subr is not pinning its doc, and the four densest are all explained:
+`neovm-core/src/emacs_core/builtins/mod.rs` (72 of the 86) is the subr
+registration table, `subr_info_test.rs` (64) asserts *arities*,
+`bytecode/vm_test.rs` (52) calls the functions, and
+`neovm-oracle-tests/src/subr_doc_snarf_rules.rs` (67) is this entry's own pin.
+The one that looked most dangerous,
+`neovm-oracle-tests/src/snarf_documentation_boundp_clause.rs`, is a false
+positive: its `forward-comment` and `x-show-tip` are inside VARIABLE doc text.
+
+### 10. Gates
+
+**The first unit-gate run was not a gate, and the log says so in the one place
+that matters.**
+
+```
+Summary [ 859.615s] 8389/11179 tests run: 8388 passed, 1 failed, 54 skipped
+```
+
+`8389/11179` -- nextest fail-fasts by default, so 2790 tests never ran, and
+among them were **all three of this entry's own new unit tests**.  A run that
+stops at the first failure is one of the six false-green forms this campaign
+keeps re-learning, and it is the sneakiest, because the line reads like a
+result.  The number to look at is the ratio before the colon, not the words
+after it.
+
+The failure it stopped on is a wall-clock race, not a regression:
+
+```
+FAIL [ 80.805s] (8366/11179) neovm-core
+  emacs_core::lread::tests::read_event_echoes_invoking_keys_and_new_event_after_gnu_delay
+  left: None   right: Some("C-q 1- (C-h for help)")   lread_test.rs:814
+```
+
+`lread_test.rs:790-817` sets `echo-keystrokes` to **0.005 s** and races it
+against a sender thread that sleeps **30 ms**, and the 1-minute load average was
+**over 900** with 30-75 processes actually runnable on 32 cores, six other
+agents building.  In isolation, on the same commit and the same binary:
+
+```
+$ cargo nextest run -p neovm-core \
+    -E 'test(/read_event_echoes_invoking_keys_and_new_event_after_gnu_delay/)'
+PASS [ 0.080s] (1/1) ...
+Summary [ 0.109s] 1 test run: 1 passed, 9251 skipped
+```
+
+**0.080 s against 80.805 s** -- three orders of magnitude, which is the
+measurement that says "starved", not "wrong".
+
+**The five new oracle pins, red before and green after, with the same N on
+both sides** -- which is the only thing that distinguishes a working fix from a
+filter that stopped selecting.  Every form was evaluated in both editors
+directly, outside the harness, so the comparison is of answers rather than of
+recorded strings:
+
+```
+                                                          binary of  binary of
+                                                          2733daaab  this branch
+oracle_no_builtin_function_documentation_is_gnus_...       DISAGREE   agree
+oracle_platform_duplicated_functions_carry_the_...         DISAGREE   agree
+oracle_defun_heads_a_regex_cannot_parse_still_have_...     DISAGREE   agree
+oracle_odd_spaced_doc_markers_do_not_take_the_next_...     DISAGREE   agree
+oracle_function_docs_never_open_with_whitespace_...        DISAGREE   agree
+```
+
+and under nextest, selector `-E 'test(/subr_doc_snarf_rules/)'`:
+
+```
+default (snapshot) mode   Summary [0.227s] 5 tests run: 5 passed, 38801 skipped
+NEOVM_ORACLE_MODE=live    Summary [0.328s] 5 tests run: 5 passed, 38801 skipped
+```
+
+Live mode runs both editors and compares them to each other rather than to a
+recorded string, which is the better check for a change that is entirely about
+strings.  And because "5 passed" is only evidence if the assertions can fail,
+one expectation was deliberately corrupted:
+
+```
+Summary [0.230s] 5 tests run: 4 passed, 1 failed, 38801 skipped
+FAIL subr_doc_snarf_rules::oracle_no_builtin_function_documentation_is_gnus_skip_placeholder
+```
+
+The three new `neovm-core` unit tests are counted in the suite figures below.
+
+Suite gates.  **Both load figures are given, because the 1-minute average is
+not the instrument for "is the machine busy" -- it decays exponentially, so
+after a spike it spends many minutes falling through any threshold while saying
+nothing about current contention.**  The instantaneous figure is the fourth
+field of `/proc/loadavg`,
+`awk '{split($4,a,"/"); print a[1]}' /proc/loadavg`.  Across these runs the
+1-minute average moved between **34.78 and 939.91** while the runnable count
+moved between **7 and 75 of 32 cores**, five other agents building and testing
+throughout; the one run that suffered for it is the `read_event` race above, and
+it is the only one.
+
+* `cargo fmt --all --check` -- **clean, exit 0**.
+* `cargo check --workspace --all-targets` -- **0 errors, `Finished dev profile
+  in 3m 37s`**.
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast` --
+  **`Summary [810.342s] 11179 tests run: 11179 passed, 54 skipped`**, 0 failed.
+  Baseline 11176 + 54 skipped; the three added are this entry's, and each is
+  named in the log:
+  `subr_docs::tests::gnu_subr_docs_is_not_quietly_smaller_than_gnus_source`,
+  `subr_docs::tests::gnu_subr_docs_is_sorted_and_has_no_duplicate_names`,
+  `subr_docs::tests::the_six_mechanisms_ledger_181_found_are_each_represented`.
+  The `read_event` race that stopped the first attempt passed here.
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast` --
+  **`Summary [1557.966s] 38806 tests run: 38802 passed, 4 failed, 0 skipped`**.
+  `0 skipped` is the line that says the oracle tests actually asserted rather
+  than returning early on an unset `NEOVM_FORCE_ORACLE_PATH`; 38806 is 38801
+  plus this entry's five pins.  **Enumerated by name, and separated by what
+  they do in isolation:**
+  - `div_core_divergence_surface_window_start_end_scroll_state`
+  - `div_core_divergence_surface_window_scroll_error_and_state_combo`
+  - `div_u5_window_scroll_functions_hook`
+
+    the three PRE-EXISTING UPSTREAM failures, and they reproduce
+    deterministically -- the RED quoted beside the green:
+    `Summary [0.255s] 3 tests run: 0 passed, 3 failed, 38803 skipped`.
+  - `div_core_divergence_surface_process_attributes_running_child_combo`
+    is a **fourth, and it is a race rather than a regression.**  It asks
+    `process-attributes` for a child's command line and expects
+    `"/bin/sh -c sleep\\ 0.2"`; it got `"sleep 0.2"`, which is the same
+    process after `sh` has `exec`ed into `sleep`.  Whether the read lands
+    before or after that `exec` is a scheduling question, and the machine was
+    at 32 runnable.  In isolation, same commit, same binary:
+    `Summary [0.179s] 1 test run: 1 passed, 38805 skipped`, in **0.076 s
+    against 0.480 s**.  Nothing in this branch touches `process-attributes`,
+    `/proc` parsing or process spawning; the change is a documentation table
+    and two Python generators.
+* `cargo xtask gc-stress --editor target/release/neomacs` -- **9/9 probes
+  passed**, each named PASS: `01-condition-case-cl-defun` through
+  `09-insert-source-read-after-change-hooks`.
+
+### Corrections to earlier entries
+
+- Entry 168's "170 `DEFVAR` blocks across GNU's `src/*.c` carry the marker" is
+  **corrected 2026-08-21**: **171 `DEF*` blocks carry it, and only 65 are
+  `DEFVAR`s.**  The other **106 are `DEFUN`s** -- the size of the hole the
+  function extractor had, since it had no `SKIP` filter at all.  Both counts are
+  from parsing `make-docfile`'s own output rather than from a grep.  The claim
+  is repeated verbatim in `neovm-oracle-tests/src/defvar_doc_skip_markers.rs`
+  and is corrected in place there.
+- Entry 173's "at least those six function docs are missing or malformed" is
+  **86 rows, 2026-08-21**, of which its two named mechanisms account for 17.
+  The estimate was low for a structural reason worth keeping: 173 counted
+  *markers*, and on the DEFUN side one bad marker damages three rows, because
+  the doc search was unbounded.
+- Entry 173's "The head-regex layer is above this entry's guard ... That diff
+  wants to be a script run beside the generator; it is not one yet" is **closed
+  2026-08-21**: there is no head regex left in either generator, and the diff is
+  the generator's first statement.
+
+### Found and NOT fixed here
+
+- **50 names still differ between the two editors, and none of them is a
+  documentation bug.**  Nine are subrs GNU has and this port does not --
+  `dbus--fd-close`, `dbus--fd-open`, `dbus--registered-fds`, `x-file-dialog`,
+  `x-get-page-setup`, `x-gtk-debug`, `x-page-setup-dialog`,
+  `x-print-frames-dialog`, `x-select-font`.  Forty-one are subrs this port has
+  and GNU's build does not: twelve `comp--`/`comp-` names, twenty-three
+  `xwidget`-family names, `gpm-mouse-start`, `gpm-mouse-stop`, `overlay-tree`,
+  `fontset-list-all`, `native-elisp-load` and `x-load-color-file`.  That is
+  entry 138's class -- which build declares which name -- measured here for
+  functions for the first time, and it is a different entry's work.
+- **`x-select-font` is one row this table structurally cannot decide.**  §5.
+  Recording the reason rather than inventing a rule: which of three real doc
+  strings a build shows depends on `$(SOME_MACHINE_OBJECTS)` ordering that a
+  table built from `src/*.c` alone cannot see.  The generator says so on stderr
+  every run.
+- **`treesit-tracking-line-column-p` and
+  `treesit-parser-tracking-line-column-p` have no documentation in GNU either,
+  and that is a GNU typo.**  `src/treesit.c:1203` and `1221` spell the marker
+  `doc :` with a space before the colon; `scan_c_stream` does
+  `while (c_isalpha (c)) c = getc (infile); if (c == ':')`, so the space ends
+  the keyword scan, `doc_keyword` stays false, and the `/*` two characters later
+  is never reached.  `emacs -Q --batch` answers nil for both -- verified, not
+  inferred.  This port now reproduces the omission, and the two names are the
+  exhaustive `(file, name)` exception list in `make_docfile.py`, so a third
+  fails the build.  **Not reported upstream**; it is a one-character fix in
+  GNU's tree and belongs in a patch to emacs-devel, not in this table.
+- **An arity cross-check would have caught the stolen docs at the artifact, and
+  is not built.**  A stolen row carries the *other* function's `(fn ...)` line,
+  so `window-parameter` shipped `(fn WINDOW PARAMETER VALUE)` for a 2-argument
+  subr.  The table does not know arities but this port's subr registry does, so
+  comparing the `(fn ...)` shape against `func-arity` is a real invariant over
+  the artifact -- the only one found that can see a *plausible* wrong doc rather
+  than a malformed one.  Not built here: `MANY`, `UNEVALLED` and this port's own
+  arity divergences all need classifying first, and the byte-equality guard
+  already closes the class upstream.  Sized, not built.
+- **The fallback guard is weaker than the real one.**  When the GNU mirror has
+  no compiled `make-docfile`, the generator falls back to "every `DEF*` head
+  yields a `doc:` block, except GNU's own two" -- which catches (c) and (f) but
+  would not catch a head the scanner silently mis-parses into a *different*
+  valid record.  Control 3 above shows it firing; it is narrower than control 1
+  and 2 by construction, and the honest statement is that a mirror nobody has
+  built gets a weaker guarantee.
+- **Four rows are legitimately nothing but an arglist.**  `dump-face`,
+  `show-face-resources`, `internal-set-lisp-face-attribute-from-resource` and
+  `lookup-image` are `doc: /* */` in GNU, so `etc/DOC` holds
+  `"\n\n(fn ARGS)"` and `C-h f dump-face` shows an empty first line followed by
+  the signature.  Reproduced deliberately; the `const` guard carves out exactly
+  this shape rather than forbidding a leading newline outright.
+
+Status: FIXED.
