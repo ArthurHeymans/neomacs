@@ -1376,10 +1376,19 @@ fn mode_line_process_status_in_state(
     let Some(process_id) = processes.find_by_buffer_id(buffer_id) else {
         return "no process";
     };
-    let Some(process) = processes.get_any(process_id) else {
+    // GNU's `%s` is `Fsymbol_name (Fprocess_status (obj))`
+    // (src/xdisp.c:29717-29725), so in GNU it harvests the child status like
+    // every other `Fprocess_status` caller.  This frame holds
+    // `&ProcessManager`, so it cannot; the hole is enumerated rather than
+    // implicit -- see `process::UnrecordedStatusRead`.
+    let Some(observed) = processes.read_status_without_recording(
+        crate::emacs_core::process::UnrecordedStatusRead::ModeLinePercentS,
+        process_id,
+    ) else {
         return "no process";
     };
-    crate::emacs_core::process::process_public_status_symbol(process)
+    observed
+        .public_status_symbol()
         .as_symbol_name()
         .unwrap_or("no process")
 }
