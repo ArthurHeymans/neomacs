@@ -26424,6 +26424,32 @@ roughly thirty `init_*` functions and this entry read four of them; the rest --
 -- were not compared.  A systematic screen of every post-loadup reset against
 this port's `finalize_cached_bootstrap_eval` is its own entry, and now has a
 named reason to exist and a table shape (`RUNTIME_LOADER_RESET`) to grow into.
+
+> **2026-08-21, entry 177: the screen is done, and "roughly thirty" is exactly
+> 29.**  GNU's `main` makes **57** `init_*` calls; 1 is above `load_pdump`
+> (src/emacs.c:1436) and 16 sit in the `if (!initialized)` block that only
+> `temacs` reaches, leaving **40** post-image call sites -- 25 unconditional on
+> GNU/Linux, 4 behind a build option this build has, 11 behind a platform macro
+> it never defines.  All **29** reachable ones were read; **9** of them were
+> found to establish no Lisp-visible state at all (including `init_dbusbind`,
+> whose `xputenv` lands *after* `set_initial_environment` snapshots
+> `process-environment` at src/emacs.c:2177 and is therefore invisible to
+> `getenv-internal` -- measured nil in a GNU build whose
+> `system-configuration-features` names DBUS).  Across the other 20, **82
+> facts** were compared under `-Q --batch` with a control row.  **Three rows
+> diverged, covering two defects**, both of them this section's predicted class:
+> `exec-path` never got `exec-directory` appended (GNU src/callproc.c:1963's
+> `nconc2`, so `(executable-find "neomacsclient")` answered nil), and
+> `charset-map-path` was nil where GNU derives `(<data-directory>charsets)`.
+> Every one of this section's ten facts is in the 82 and all ten are still
+> identical.  `RUNTIME_LOADER_RESET` grew into
+> `neovm-core/src/emacs_core/post_image_init.rs`, whose `PostImageInit` enum
+> makes a missing call site a compile error and whose tests assert absolute
+> counts so an EMPTY table is red rather than vacuously green.  This section's
+> own list of unread functions was a good guess and not a complete one: it named
+> `init_buffer`, `init_callproc`, `init_fileio`, `init_editfns`, `init_charset`,
+> `init_process_emacs`, `init_window` and `init_xdisp` -- eight of the
+> twenty-five it had not read.
 ### 11. Gates, and why a load average is the wrong number to gate on
 
 ```
@@ -27472,3 +27498,563 @@ Addendum, same day: running the oracle gate that the merged sweep had not
 run found a third failure, entry 172's `backtrace-debug` pin, stale rather
 than divergent.  §10 has it and a dated note is on 172.  Final gates in §11:
 11152/11152 unit, 38799/38799 oracle with `0 skipped`, gc-stress 9/9.
+## 177. The systematic screen entry 174 left open: GNU's `main` makes 40 `init_*` calls after the image is in memory, 29 of them reachable here, and screening all 29 compared 82 facts and found 3 defects -- the GC counters were never zeroed, `exec-path` never got `exec-directory` appended, and `charset-map-path` was nil -- FIXED, with the enumeration turned into a table an empty row cannot hide in, and one of the three found by the RAW row after the normalized one had already said green
+
+Entry 174's structural finding is the premise of this one:
+
+> **The dump is written from inside `-l loadup`, so the image carries
+> mid-load state.**
+
+174 found `load-in-progress` wedged at `t` for the entire life of every
+session, ported GNU's `init_lread` reset, and then said plainly what it had
+not done: it read **four** `init_*` functions out of "roughly thirty",
+compared **ten** Lisp-visible facts, and called that a spot-check.  It named
+`RUNTIME_LOADER_RESET` as the table shape to grow into and left the screen as
+its own entry.  This is that entry.
+
+**The headline is the counts.**  GNU's `main` makes **57** `init_*` calls.
+**40** of them run after the image is in memory; **29** are reachable in a
+GNU/Linux `--batch` build; **9** of those 29 were read and establish no
+Lisp-visible state at all.  Across the other 20, **82 facts** were compared in
+both editors under `-Q --batch`, with a control row proving the differ fires.
+**3 audited rows diverged, covering 2 defects; a third defect was caught by a
+`raw/` row that the audited, normalized row beside it had already passed.**
+All three are the class 174 named -- *a value this port leaves where it fell
+rather than establishing it the way GNU does* -- and none had a reproduction
+before this entry, because nothing in this port was looking.
+
+### 1. The enumeration, from the source rather than from an estimate
+
+`load_pdump` is called at **src/emacs.c:1436**.  Everything below that line in
+`main` runs with the dumped image already mapped in, and GNU says so itself,
+in a comment nine lines later:
+
+```c
+  /* ... loading the pdumper file above assigns to those variables values
+     from the dump stage, which might be incorrect ... */   /* emacs.c:1438-1442 */
+```
+
+Scanning `main` (src/emacs.c:1321-2638) for `init_*` call sites, tracking the
+`#if` nesting and the `if (!initialized)` block, gives:
+
+```text
+ total init_* call sites in main()                                   57
+   above load_pdump  (init_heap, :1402, itself WINDOWSNT-only)         1
+   inside `if (!initialized)' (:1957-2013) -- temacs only             16
+   POST-IMAGE                                                         40
+     unconditional on GNU/Linux                                       25
+     behind a build option this build has                              4
+     behind a platform macro GNU/Linux never defines                  11
+```
+
+The 16 in the `!initialized` block are the `_once` family plus a second
+`init_bignum`; they run only in `temacs`, which by definition has no image to
+carry stale state out of, so they are excluded on purpose rather than
+overlooked.
+
+The 11 platform-only sites are `init_dosfns` and `init_environment` (MSDOS),
+`init_environment` and `init_ntproc` (WINDOWSNT), `init_haiku_select`,
+`init_crit` (HAVE_W32NOTIFY), and the five Android/sfntfont calls.  The 4
+build-option sites are `init_module_assertions` (HAVE_MODULES), `init_dbusbind`
+(HAVE_DBUS), `init_xterm` (HAVE_X_WINDOWS) and `init_fringe`
+(HAVE_WINDOW_SYSTEM); the reference GNU build has all four, confirmed from its
+own `system-configuration-features` (`... DBUS ... MODULES ... X11 ...`).
+
+**So: 29 screened, 11 excluded with the macro that excludes them.**  174's
+"roughly thirty" was right; the exact number is 29.
+
+### 2. The GNU source, read before anything was designed
+
+Every one of the 29 bodies was read.  Nine of them establish **no Lisp-visible
+state**, and that is a result with evidence, not a skipped row:
+
+```text
+init_standard_fds       sysdep.c:246-263    re-opens fds 0/1/2 the wrong way round
+init_signals            sysdep.c:2020-2118  sigaction only; no V-prefixed assignment
+init_random             sysdep.c:2225-2249  seeds the PRNG -- two startups are MEANT
+                                            to disagree, so there is nothing to compare
+init_module_assertions  emacs-module.c:1677 a static C bool with no DEFVAR
+init_atimer             atimer.c:596-627    timerfd + SIGALRM; the atimer chain is C
+init_dbusbind           dbusbind.c:1987     one xputenv -- see below
+init_xterm              xterm.c:32365-32381 empty in an XI2 build
+init_xdisp              xdisp.c:39327-39376 assigns no Lisp variable; the geometry arm
+                                            is `if (!noninteractive)'
+init_fringe             fringe.c:1810-1818  allocates C arrays; `fringe-bitmaps' is
+                                            built by syms_of_fringe, not here
+```
+
+**`init_dbusbind` is the interesting one, and the reading was wrong before the
+measurement corrected it.**  Its body is `xputenv ("DBUS_FATAL_WARNINGS=0")`,
+which reads like a Lisp-visible fact: `process-environment`.  It is not.
+`set_initial_environment` (src/callproc.c, called from **src/emacs.c:2177**)
+snapshots `environ` into `Vprocess_environment`, and `getenv-internal`
+(src/callproc.c) searches **only that list**.  :2177 is 356 lines above
+:2533, so the `putenv` lands after the snapshot and no Lisp ever sees it --
+which is exactly what the reference GNU build answers:
+
+```text
+$ emacs -Q --batch --eval '(princ (format "%S" (getenv "DBUS_FATAL_WARNINGS")))'   =>  nil
+```
+
+...on a build whose `system-configuration-features` names `DBUS`.  The same
+argument retires `init_xterm`'s `GDK_CORE_DEVICE_EVENTS`.  A screen that had
+trusted the reading over the measurement would have filed a divergence here
+and "fixed" it by adding an environment entry GNU does not have.
+
+The remaining 20 bodies establish facts.  27 of those facts are **assignments
+of a compile-time constant**:
+
+```text
+init_alloc          alloc.c:7391-7392    gc-elapsed=0.0  gcs-done=0
+init_bignum         bignum.c:55          integer-width=65536
+init_eval           eval.c:247-248       quit-flag=nil  debug-on-next-call=nil
+init_lread          lread.c:5522-5527    values load-in-progress load-file-name
+                                         load-true-file-name standard-input
+init_process_emacs  process.c:8761       internal--daemon-sockname=nil
+init_keyboard       keyboard.c:13206-13224 + init_kboard 13106-13129
+                                         unread-command-events track-mouse
+                                         last-event-device last-event-frame
+                                         overriding-terminal-local-map last-command
+                                         real-last-command keyboard-translate-table
+                                         last-repeatable-command prefix-arg
+                                         last-prefix-arg defining-kbd-macro
+                                         last-kbd-macro system-key-alist
+                                         default-minibuffer-frame
+init_macros         macros.c:395         executing-kbd-macro=nil
+```
+
+The rest are **derived** -- from `argv`, the environment, the filesystem or the
+terminal -- and a constant table cannot carry them: `exec-path` and
+`exec-directory` (callproc.c:1960-1963), `data-directory`/`doc-directory`
+(1952-1956), `shell-file-name` (2038-2044),
+`shared-game-score-directory` (2046-2066), `invocation-name`/
+`invocation-directory`/`installation-directory`/`command-line-args`
+(emacs.c:518-653), `load-path` (lread.c:5460-5520), `charset-map-path`
+(charset.c:2306,2326), the local time zone (timefns.c:345-349), the five
+identity variables (editfns.c:90-140), `font-log` (font.c:6090), the two fresh
+kboard keymaps (keyboard.c:13126-13128), and the caches behind `(window-list)`
+(window.c:9161) and `(process-list)` (process.c:8778).
+
+Two of the derived rows are worth their own sentence because they are the ones
+where GNU keeps dumped state deliberately:
+
+* **`init_xfaces` (xfaces.c:7398-7421) does not reset -- it RESTORES.**  It
+  rebuilds `lface_id_to_name[]` *from* the dumped `face--new-frame-defaults`,
+  so face ids survive the dump.  It is the only site in the sequence that
+  preserves dumped state on purpose.
+* **`initial-window-system` is assigned only on `init_display`'s interactive
+  arm (dispnew.c:7208).**  Under `--batch` the whole body is
+  `if (dumped_with_pdumper_p ()) init_faces_initial ();` (dispnew.c:7415-7419),
+  so `initial-window-system` keeps whatever the dump carried.  GNU relies on
+  that value being nil in the image rather than resetting it -- the one place
+  in the sequence where GNU trusts the dump.
+
+### 3. The screen: 82 audited, 3 divergent, control included
+
+`tmp/pw177/probe.el` prints one `KEY<TAB>VALUE` line per fact.  Values that are
+install-specific -- paths under two different trees, the executable's own name
+-- are normalized into the property GNU's body establishes, so a correct port
+produces a byte-identical line: `data-directory` compares as
+`(slash abs exists)`, `exec-path` as "does its prefix equal `$PATH` and its
+tail equal `exec-directory`", `invocation-name` as "is it argv[0]'s basename".
+Where no normalization is honest the raw value is printed with a `raw/` prefix
+and excluded from the count.
+
+Both editors were invoked **identically** -- bare name on `PATH`, same cwd,
+same environment -- because `init_cmdargs` derives `invocation-directory` from
+`argv[0]`, and an absolute path for one editor and a bare name for the other
+manufactures a divergence that is only the harness.  The five `init_lread`
+rows are captured by an `--eval` PREAMBLE **before** the probe file is loaded:
+reading them from inside a `-l` reports the load in flight and answers `t` in
+both editors, which is a false green with the exact shape of the bug 174 fixed.
+
+```text
+CONTROL  control/equal     gnu=42        neo=42         equal OK
+CONTROL  control/differs   gnu="emacs"   neo="neomacs"  differs OK
+```
+
+Per call site:
+
+```text
+function              audited  divergent
+init_alloc                  2          0
+init_bignum                 1          0
+init_threads                3          0
+init_eval                   3          0
+init_xfaces                 3          0
+init_buffer                 4          0
+init_callproc_1/_callproc   8          1   <-- exec-path
+init_cmdargs                6          0
+init_fileio                 1          0
+init_lread                  7          0
+init_charset                3          2   <-- charset-map-path
+init_timefns                2          0
+init_editfns                5          0
+init_process_emacs          2          0
+init_keyboard (+init_kboard) 21         0
+init_display                6          0
+init_xdisp                  1          0
+init_macros                 1          0
+init_window                 2          0
+init_font                   1          0
+TOTAL                      82          3
+```
+
+**Three rows, two defects** -- and a third defect the audited table does not
+contain, because the two `init_alloc` rows above were normalized into a
+predicate that both editors satisfied while their raw values disagreed.  That
+is section 4, and it is the most useful thing in this entry.
+
+Every one of 174's ten facts is in the 82 and all ten are still identical,
+including the one it fixed.
+
+### 4. The GC counters: the defect the normalization nearly hid
+
+Two rows of the screen were printed twice on purpose -- once normalized into
+the fact GNU's body establishes, once raw:
+
+```text
+audited  init_alloc/gcs-done-reset      gnu=t        neo=t        (gcs-done < 100)
+raw      raw/gcs-done                   gnu=0        neo=9
+audited  init_alloc/gc-elapsed-reset    gnu=t        neo=t        (gc-elapsed < 5.0)
+raw      raw/gc-elapsed                 gnu="0.000"  neo="0.026"
+```
+
+The normalized rows are green in both editors, and the reasoning behind them
+was wrong.  The argument was: GNU's dump is taken after loadup has collected
+hundreds of times, so a port that never reset would answer *hundreds*, and 9 is
+small enough to mean "reset happened, then startup collected a few".  It does
+not.  GNU answers **exactly 0**, because nothing collects between
+`init_alloc` (src/emacs.c:2015) and the first `--eval`; a port that resets
+answers exactly 0 too.  The 9 was nine collections this port had made and never
+cleared.
+
+The fix did not come out of the comparison.  It came out of **step 2** --
+reading `src/alloc.c:7389-7393` and writing its two constants into the table
+because GNU assigns them, before any measurement had an opinion.  After the
+rebuild, `raw/gcs-done` reads **0** in both editors and `raw/gc-elapsed`
+`"0.000"` in both.
+
+Two things are worth keeping from this.  **Normalizing a fact can hide a
+divergence, and printing the raw value beside it is what keeps that
+recoverable** -- an audit whose install-specific rows are all normalized and
+never shown raw cannot be re-read later.  And **front-loading the source
+reading is not a formality**: the screen would have shipped this row green.
+
+Pin: `runtime_gc_counters_are_zeroed_like_gnu_init_alloc`.
+
+### 5. `exec-path` never got `exec-directory` appended -- OUR BUG
+
+Reproduced without any package:
+
+```text
+$ neomacs -Q --batch --eval '(princ (format "%S" (executable-find "neomacsclient")))'  =>  nil
+$ emacs   -Q --batch --eval '(princ (format "%S" (executable-find "etags")))'
+      =>  "/home/exec/Projects/github.com/emacs-mirror/emacs/lib-src/etags"
+```
+
+Both editors run uninstalled from a build tree, and both have a directory of
+their own helper programs beside the binary.  GNU finds `etags` there; this
+port could not find `neomacsclient`, which is *in* `exec-directory`:
+
+```text
+neo exec-directory   ".../target/release/"
+neo last exec-path   ".../openai-codex/codex/1.0.6/bin"      exec-path length 117
+gnu exec-directory   ".../emacs-mirror/emacs/lib-src/"
+gnu last exec-path   ".../emacs-mirror/emacs/lib-src"        exec-path length 118
+```
+
+**GNU's source, read first.**  `init_callproc_1`, src/callproc.c:1960-1963:
+
+```c
+  Vexec_path = decode_env_path ("EMACSPATH", PATH_EXEC, 0);
+  Vexec_directory = Ffile_name_as_directory (Fcar (Vexec_path));
+  Vexec_path = nconc2 (decode_env_path ("PATH", NULL, 0), Vexec_path);
+```
+
+The shape is in the third line.  `exec-path` is `$PATH` with the
+EMACSPATH/PATH_EXEC list **appended**, and `exec-directory` is the `car` of
+that appended tail -- so *the last element of `exec-path` is always the
+directory `exec-directory` names*.  `init_callproc` (src/callproc.c:1984-1991)
+then swaps the tail for `<installation-directory>/lib-src` when Emacs runs
+uninstalled, which is the case this port is always in.
+
+This port set the two from different sources and never joined them.  The
+comment above the code even cited `callproc.c:1960-1963` and stopped one line
+short of what :1963 does:
+
+```rust
+// exec-path: list of dirs from runtime $PATH
+{ ... eval.set_variable("exec-path", Value::list(path_dirs)); }
+// exec-directory: directory containing the neomacs binary
+if let Ok(exe) = std::env::current_exe() ... { eval.set_variable("exec-directory", ...) }
+```
+
+The fix derives them together, `EMACSPATH` first as GNU does, with the running
+binary's own directory as this port's `PATH_EXEC`/`lib-src` -- it is where
+`neomacsclient` is installed
+(`post_image_init::derive_exec_path_and_exec_directory`).  After the rebuild:
+
+```text
+$ neomacs -Q --batch --eval '(princ (format "%S" (executable-find "neomacsclient")))'
+      =>  ".../target/release/neomacsclient"
+```
+
+Pin: `runtime_exec_path_ends_with_exec_directory_like_gnu_init_callproc`
+asserts the RELATION (last element of `exec-path` is `exec-directory`), not an
+absolute path, so it holds in a test binary under `target/debug/deps` as well
+as in a release image.
+
+### 6. `charset-map-path` was nil -- OUR BUG, and the table that looks like it should have caught it could not
+
+```text
+$ emacs   -Q --batch --eval '(princ (format "%S" charset-map-path))'
+      =>  ("/home/exec/Projects/github.com/emacs-mirror/emacs/etc/charsets")
+$ neomacs -Q --batch --eval '(princ (format "%S" charset-map-path))'   =>  nil
+```
+
+`init_charset`, src/charset.c:2303-2327:
+
+```c
+  tempdir = Fexpand_file_name (build_string ("charsets"), Vdata_directory);
+  if (! file_accessible_directory_p (tempdir))
+    { fprintf (stderr, ...); exit (1); }
+  Vcharset_map_path = list1 (tempdir);
+```
+
+Note `expand-file-name`, not `file-name-as-directory`: the single entry has
+**no** trailing slash.
+
+This port has the directory -- `etc/charsets`, 132 `.map` files -- and even has
+a Rust resolver for exactly that path (`load::charset_map_directory`, whose own
+doc comment calls itself "the neomacs equivalent of GNU's `charset-map-path`").
+It simply never published the Lisp variable.
+
+**And `ensure_startup_compat_variables` could not have covered it.**  That
+table carries a row `("charset-map-path", Value::NIL)`, but it is applied under
+
+```rust
+if eval.obarray().symbol_value(name).is_none() { eval.set_variable(name, value); }
+```
+
+-- *only when the variable is unset*.  After a dump nothing is unset.  A
+"defaults if absent" table and a "reset on every startup" sequence are
+different mechanisms, and GNU's `init_*` functions are unconditionally the
+second.  That distinction is why this entry is a separate module rather than
+more rows in the existing one.
+
+GNU `exit (1)`s when the directory is unreachable.  A library helper that ends
+the process is not a behaviour worth porting; the fix warns through `tracing`
+and still publishes the path GNU would have published.  After the rebuild both
+editors answer a one-element list naming their own `etc/charsets`.
+
+Pin:
+`runtime_charset_map_path_is_data_directory_charsets_like_gnu_init_charset`.
+
+### 7. The type-level answer, and what the check reports when the table is EMPTY
+
+174's `RUNTIME_LOADER_RESET` was five hand-written pairs.  Growing it to cover
+29 call sites is not a matter of adding rows, because **entry 173's law applies
+directly**: *a predicate over rows that exist cannot see a row that was never
+written.*  A test that iterates the table and checks each row is perfectly
+green over an empty table.  So the question the design has to answer is: what
+does the check report when the table is EMPTY?
+
+`neovm-core/src/emacs_core/post_image_init.rs` answers it three ways.
+
+1. **A missing call site does not compile.**  `PostImageInit` is a
+   `#[repr(usize)]` enum of all 40 post-image sites; `COUNT` is derived from the
+   *last* discriminant, and `ALL` is declared `[Self; Self::COUNT]`.  Add a
+   variant without adding it to `ALL` and the array literal's length is wrong --
+   a compile error, not an omission nobody notices.
+2. **A missing classification does not compile.**  `site()` is one exhaustive
+   `match` returning the GNU citation and the classification, so a variant with
+   no `emacs.c` line and no verdict cannot exist.
+3. **An empty table is RED, not green.**  The tests assert *absolute counts
+   taken from GNU's `main`* -- 40 sites, 25 unconditional, 4 build-option, 11
+   platform-only, 27 constant rows, 9 sites that establish nothing, 4 ported
+   derivations -- so an emptied table fails on `0 != 40` rather than iterating
+   over nothing.  The constant tests additionally name each variable and value
+   literally, the way 174's own pin does, so deleting a row fails a lookup
+   instead of shrinking a loop.
+
+The classification itself is typed, and that is what stops the table being
+decoration:
+
+```rust
+enum Establishes {
+    Facts { constants: &'static [ResetRow], derived: &'static [Derived] },
+    NoLispVisibleState(&'static str),   // screened and empty, WITH the evidence
+    NotInThisBuild(&'static str),       // compiled out, WITH the macro
+}
+
+enum Derived {
+    Ported       { what, gnu, apply: fn(&mut Context) },  // and the port does it HERE
+    Elsewhere    { what, gnu, by },                       // named site on the same path
+    NotApplicable{ what, gnu, why },                      // nothing here to derive
+}
+```
+
+`Derived::Ported` carries the function as a **field, not an `Option`**, so a
+derivation this port claims to perform but does not implement is
+unrepresentable.  `ResetValue` admits only `Nil`, `T`, `Fixnum` and `Float`, so
+a fact that is actually computed at startup cannot be smuggled in as a
+constant; it has to be declared as a `Derived` row and classified.  The
+tallies are 27 constants, 4 `Ported`, 21 `Elsewhere`, 1 `NotApplicable`.
+
+`apply_post_image_init` walks `ALL` **in `main`'s order**, and that ordering is
+load-bearing and free: `init_callproc_1`'s `data-directory` is in place before
+`init_charset` reads it, for the same reason it is in GNU.
+
+One row was deliberately left off.  `init_kboard` assigns **16** Lisp
+variables; the table carries **15**.  The sixteenth is `window-system`
+(keyboard.c:13125), which `init_kboard` sets to its `TYPE` argument -- `Qnil`
+for the initial kboard.  This port's GUI startup assigns `window-system` after
+this sequence runs, so a constant row would clobber a live window system; it is
+a `Derived::Elsewhere` naming `restore_cached_runtime_window_system_surface`,
+and the screen measured it equal (`nil`) in both editors under `--batch`
+anyway.  A row you must opt out of with a typed reason is better than one you
+can quietly omit.
+
+`RUNTIME_LOADER_RESET` is retired into `PostImageInit::Lread`.
+`clear_runtime_loader_state` still exists and still clears the two Rust stacks
+that stand in for GNU's one non-Lisp line (`Vloads_in_progress`,
+src/lread.c:5528, is a static C variable and not a Lisp variable --
+src/lread.c:237), and 174's pin still names its five variables literally and
+still passes.
+
+### 8. Hypotheses eliminated
+
+* **"`process-environment` should carry `DBUS_FATAL_WARNINGS=0`."**  Wrong;
+  section 2.  The snapshot at emacs.c:2177 predates the `putenv` at :2533, and
+  the reference GNU build -- which has DBUS -- answers nil.
+* **"`ensure_startup_compat_variables` already covers `charset-map-path`, so
+  the value must be getting clobbered later."**  Wrong; it never applied at
+  all, because the row is guarded on the variable being unset and a dumped
+  variable is never unset.  Checked by reading the guard before the fix rather
+  than assumed after it.
+* **"`face-id` ordering will differ, because the two editors define faces in
+  different orders during loadup."**  Wrong -- measured `(face-id 'default)=0`
+  and `(face-id 'mode-line)=25` in both, and the id set is dense in both.
+  `init_xfaces` is the one site in the sequence that RESTORES dumped state
+  rather than resetting it, and both editors restore the same ids.
+* **"`input-decode-map` and `local-function-key-map` are dumped with loadup's
+  bindings, because GNU replaces them with FRESH sparse keymaps
+  (keyboard.c:13126-13128) and this port has no `init_kboard`."**  The most
+  promising lead in the whole screen, and wrong: measured, both editors answer
+  an empty own-binding list for `input-decode-map` and for
+  `local-function-key-map`, with the latter parented on `function-key-map` in
+  both.  Reading a keymap's `cdr` reports the parent's bindings as its own, so
+  the probe walks to the parent instead -- a `(cdr map)` comparison here would
+  have printed 6 KB of `function-key-map` and called it a divergence.
+* **"`init_display` realizes faces from the dump, so the `--batch` default face
+  will differ."**  Wrong -- `unspecified-fg` / `unspecified-bg` in both, and the
+  frame parameters agree too.
+* **"The two melpa scroll failures are the `exec-path` change."**  Wrong, and
+  this one was measured rather than argued: with `NEOMACS_BIN` pointed at the
+  release binary built from the merge base, `smooth_scrolling` and `evil_ediff`
+  fail with byte-identical `:start-line` values (section 9).
+
+### 9. Gates, and the two melpa failures that are not this entry's
+
+Machine contention is recorded with the runnable count from `/proc/loadavg`
+field 4, per 174 section 11, because the 1-minute average lags by minutes: the
+`cargo check` gate ran at **runnable=5** while the 1-minute average still read
+**33.91** and the 15-minute average read **151.47**, and the melpa run started
+at **runnable=3**.  Two other agents ran their own suites in other checkouts
+during this window; one of them was the peer session in `neomacs-main` that
+174's trap list warns not to `pkill`.
+
+```text
+cargo fmt --all --check                                  clean (exit 0)
+cargo check --workspace --all-targets                    clean (exit 0)
+cargo nextest run -p neovm-core -p neomacs-layout-engine 11172 tests run: 11172 passed, 54 skipped
+cargo xtask gc-stress --editor target/release/neomacs    9/9 probes passed
+cargo nextest run -p neovm-oracle-tests                  38799 tests run: 38796 passed, 3 failed
+cargo nextest run -p neomacs-melpa-tests                 934 tests run: 931 passed, 3 failed, 2 skipped
+```
+
+The engine suite baseline was **11162 passed**; the +10 is exactly this entry's
+ten new tests (`post_image_init_test.rs`), and 174's
+`runtime_loader_state_reset_matches_gnu_init_lread` is unchanged and still in
+the count.
+
+**The oracle's 3 are the 3 named pre-existing upstream failures and there is no
+fourth** -- `div_u5_window_scroll_functions_hook`,
+`div_core_divergence_surface_window_start_end_scroll_state` and
+`div_core_divergence_surface_window_scroll_error_and_state_combo`.
+
+**The melpa 3 are attributed, and two of them mean the 934/934 baseline is
+stale.**
+
+* `git_gutter_fringe_real_gui_rows_match_gnu` -- **ENVIRONMENTAL.**  GNU's own
+  GUI editor exited (`GNU Emacs: ERROR ... GUI editor exited with sta...`).  It
+  PASSED in an earlier parallel run of the same suite (23.9 s) and passes solo:
+  `1 test run: 1 passed, 935 skipped`.
+* `smooth_scrolling_package_batch` and `evil_ediff_package_batch` --
+  **PRE-EXISTING UPSTREAM, and the same defect as the oracle's three.**  Both
+  are window-start divergences (`:start-line 6` expected, `:start-line 2`
+  actual; `:after-control-e (:a (4713 0))` expected, `(6084 0)` actual), which
+  is the shape of the three `window_scroll` oracle failures the baseline
+  already carries.  Attributed by measurement, not by resemblance: re-run with
+  `NEOMACS_BIN` pointing at the release binary built from the merge base, they
+  fail with **byte-identical** actual values -- `2 tests run: 0 passed, 2
+  failed, 934 skipped`.  Nothing in this entry's diff can move a window's
+  start line; it touches `exec-path`, `exec-directory`, `charset-map-path`,
+  `shell-file-name`, `font-log` and a set of constant resets.
+  **Neither package is mentioned anywhere in this ledger before now**, so the
+  upstream scroll change reaches melpa in two places nobody had recorded, and
+  a future reader should not spend the morning re-deriving that.
+
+**A killed run is not a gate.**  The first melpa attempt was SIGKILLed at
+`(933/934)` when a foreground timeout expired, with **no `Summary` line at
+all** -- exactly the shape 174's trap list warns about, because a log whose
+last twenty lines are all `PASS` and whose counter reads 933 of 934 looks
+finished.  It is not quoted above.  The run in the table is a detached re-run
+that printed its own `Summary`.  The killed run was still worth keeping for one
+thing: `git_gutter_fringe` PASSED in it, which is half the evidence that the
+same test's failure in the clean run is environmental.
+
+Both editors ran against `./target/release/neomacs`, rebuilt by
+`cargo xtask fresh-build --release` after the last source change
+(`finished successfully`, `no_byte_compile=false`, pdump 12:18 newer than the
+binary 12:15, `*scratch*` empty), and GNU Emacs 31.0.90.  The shared
+`~/.cache/neomacs/neovm-bootstrap-fingerprint-memo-v1` was deleted before each
+build.
+
+### 10. Found and NOT fixed
+
+* **The screen is `-Q --batch` only.**  `init_display`'s interactive arm
+  (dispnew.c:7194-7410) and `init_xdisp`'s `if (!noninteractive)` geometry block
+  (xdisp.c:39333-39363) were **not** compared, because a TTY or GUI screen is a
+  different harness with a different set of comparable facts.  That is the next
+  entry in this line, and it is where `init_kboard`'s two fresh keymaps and
+  `initial-window-system` stop being trivially equal.
+* **`charset-map-path` now has GNU's value, and nothing in this port reads it.**
+  The charset map loader resolves its directory from `runtime_project_root()`
+  through a memoized `OnceLock` (`charset.rs:48-59`) and never consults the Lisp
+  variable, where GNU's `load_charset_map_from_file` goes through
+  `Vcharset_map_path`.  Rebinding it in Lisp therefore still redirects nothing.
+  Sized, not diagnosed: the defect the screen found was the variable's value,
+  and wiring the loader to it is a separate change with its own reproduction,
+  which nobody has yet.
+* **This port has no configured `PATH_EXEC`.**  `EMACSPATH` is now honoured
+  exactly as GNU honours it, but when it is unset GNU falls back to a
+  compiled-in `PATH_EXEC` and this port falls back to the running binary's own
+  directory.  For an uninstalled tree those agree; for an installed release they
+  are a design decision nobody has written down.  A second-order consequence is
+  worth recording: GNU's `exec-directory` (`lib-src`, or
+  `libexec/emacs/VERSION/ARCH`) never contains the editor binary itself, and
+  this port's now does.
+* **GNU `exit (1)`s on an unreachable `etc/charsets`; this warns** (section 6).
+  A deliberate deviation, recorded so the next reader does not "fix" it.
+* **`init_random` is unscreenable by construction** and is recorded as such
+  rather than counted as audited: two startups are *meant* to disagree.
+* **The two upstream melpa scroll failures are attributed but not diagnosed**
+  (section 9).  They belong to whoever owns the three oracle `window_scroll`
+  failures; this entry only establishes that they are the same owner's.
+
+Status: FIXED -- three engine defects, each reproduced before it was touched
+and re-measured against the rebuilt binary afterwards.  Screen re-run on the
+rebuilt image: **82 audited, 0 divergent**, both control rows still behaving,
+and the two raw GC rows now byte-identical to GNU's.

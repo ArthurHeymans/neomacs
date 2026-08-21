@@ -4695,49 +4695,28 @@ pub(crate) fn exec_path_dirs_from_os(path: Option<std::ffi::OsString>) -> Vec<St
         .collect()
 }
 
-/// The value GNU's `init_lread` restores a loader variable to.
-///
-/// GNU assigns exactly two constants in that block (src/lread.c:5522-5528),
-/// so this enum makes a third unrepresentable in the table below.
-#[derive(Clone, Copy)]
-enum LoaderResetValue {
-    Nil,
-    T,
-}
-
-impl LoaderResetValue {
-    fn value(self) -> Value {
-        match self {
-            LoaderResetValue::Nil => Value::NIL,
-            LoaderResetValue::T => Value::T,
-        }
-    }
-}
-
-/// Every Lisp-visible loader variable GNU clears on EVERY startup.
+/// GNU's `init_lread` reset (src/lread.c:5522-5528), plus the two Rust-side
+/// stacks that stand in for its one non-Lisp line.
 ///
 /// GNU writes its dump from inside `-l loadup` -- `lisp/loadup.el` calls
 /// `dump-emacs-portable` while loadup.el is still being loaded -- so the image
 /// is captured with `load-in-progress` at t and `load-file-name` naming
-/// loadup.el.  `init_lread` (src/lread.c:5522-5528) is called from `main` on
-/// every startup, dumped image or not (src/emacs.c:2220), and resets that
-/// state before any Lisp runs.
+/// loadup.el.  `init_lread` is called from `main` on every startup, dumped
+/// image or not (src/emacs.c:2220), and resets that state before any Lisp runs.
 ///
-/// GNU's block also clears `Vloads_in_progress` (src/lread.c:5528), which is a
-/// static C variable and not a Lisp variable (src/lread.c:237); its Neomacs
-/// counterpart is the `loads_in_progress` stack cleared below.
-const RUNTIME_LOADER_RESET: &[(&str, LoaderResetValue)] = &[
-    ("values", LoaderResetValue::Nil),           // GNU src/lread.c:5522
-    ("load-in-progress", LoaderResetValue::Nil), // GNU src/lread.c:5524
-    ("load-file-name", LoaderResetValue::Nil),   // GNU src/lread.c:5525
-    ("load-true-file-name", LoaderResetValue::Nil), // GNU src/lread.c:5526
-    ("standard-input", LoaderResetValue::T),     // GNU src/lread.c:5527
-];
-
+/// The Lisp rows live in `post_image_init::PostImageInit::Lread`, alongside
+/// the other 39 post-image `init_*` call sites; ledger 177 moved them there so
+/// that this reset stopped being the only one anybody had written down.
+/// `apply_post_image_init` applies them again later in
+/// `finalize_cached_bootstrap_eval`; the assignment is idempotent, and doing it
+/// here as well keeps the loader state consistent for everything that runs in
+/// between.
 fn clear_runtime_loader_state(eval: &mut super::eval::Context) {
-    // These stacks only describe in-flight bootstrap loads/requires.
-    // Letting them leak into the runtime surface makes later `require`
-    // calls falsely look recursive/already-active.
+    // GNU's `Vloads_in_progress = Qnil` (src/lread.c:5528) is a STATIC C
+    // variable and not a Lisp variable (src/lread.c:237), so the stack IS its
+    // counterpart.  These stacks only describe in-flight bootstrap
+    // loads/requires; letting them leak into the runtime surface makes later
+    // `require` calls falsely look recursive/already-active.
     eval.require_stack.clear();
     eval.loads_in_progress.clear();
     // The Lisp half of the same fact.  Clearing only the stacks left
@@ -4745,8 +4724,8 @@ fn clear_runtime_loader_state(eval: &mut super::eval::Context) {
     // packages read: `f.el`'s `f-this-file' answers `load-file-name' whenever
     // `load-in-progress' is non-nil, so at top level it returned nil here
     // where GNU returns `(buffer-file-name)'.
-    for (name, reset) in RUNTIME_LOADER_RESET {
-        eval.set_variable(name, reset.value());
+    for row in super::post_image_init::PostImageInit::Lread.constants() {
+        eval.set_variable(row.name, row.value.value());
     }
 }
 
@@ -4853,40 +4832,16 @@ fn finalize_cached_bootstrap_eval(
     // let lisp/files.el repopulate its `home` plist entry.
     eval.set_variable("abbreviated-home-dir", Value::NIL);
 
-    // Mirror GNU `init_callproc` (src/callproc.c:1960-1963,2038-2044):
-    // re-initialize exec-path and shell-file-name from the RUNTIME
-    // environment so that CI-built release images don't bake in the
-    // build machine's $SHELL / $PATH.  The pdump carried build-time
-    // values; these must be overwritten after every pdump load.
-    //
-    // exec-path: list of dirs from runtime $PATH
-    // (GNU callproc.c: init_callproc_1 / init_callproc)
-    {
-        let path_dirs: Vec<Value> = exec_path_dirs_from_env()
-            .into_iter()
-            .map(Value::unibyte_string)
-            .collect();
-        eval.set_variable("exec-path", Value::list(path_dirs));
-    }
-
-    // exec-directory: directory containing the neomacs binary
-    // (GNU callproc.c:1961 — Ffile_name_as_directory of car of exec-path,
-    //  then overridden in init_callproc with lib-src dir)
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(dir) = exe.parent()
-    {
-        eval.set_variable(
-            "exec-directory",
-            Value::unibyte_string(lisp_directory_name_from_host_path(dir)),
-        );
-    }
-
-    // shell-file-name: $SHELL from runtime environment, or "/bin/sh"
-    // (GNU callproc.c:2038-2044)
-    {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-        eval.set_variable("shell-file-name", Value::unibyte_string(shell));
-    }
+    // GNU's post-image `init_*` sequence: every Lisp-visible fact the
+    // stretch of `main` below `load_pdump` (src/emacs.c:1436) establishes,
+    // walked in `main`'s order.  This is where exec-path, exec-directory,
+    // shell-file-name, charset-map-path and font-log are re-derived from the
+    // RUNTIME environment, so a CI-built release image cannot bake in the
+    // build machine's $PATH or $SHELL, and where the constant resets
+    // (`load-in-progress', `gcs-done', `quit-flag', the kboard block, ...)
+    // are re-applied.  See emacs_core::post_image_init for the table and the
+    // GNU citation behind every row.
+    super::post_image_init::apply_post_image_init(eval);
 
     restore_gnu_stale_preloaded_face_doc_refs(eval);
     eval.clear_top_level_eval_state();
