@@ -2831,6 +2831,12 @@ impl PropRunCells {
 /// scan, so neither the intervals nor the resolver's snapshot can move under it.
 pub(crate) struct SyntaxPropByteRun<'a> {
     run: PropRunCells,
+    /// Lazily-filled ASCII syntax-entry memo, same contract as
+    /// [`SyntaxPropRange::ascii`]: the byte-addressed scanners (regexp
+    /// syntax classes, `forward-comment`) previously paid the full
+    /// chartable walk for EVERY character examined.
+    ascii: [Cell<Option<SyntaxEntry>>; 128],
+    ascii_table: Cell<usize>,
     props: SyntaxProperties<'a>,
 }
 
@@ -2840,7 +2846,35 @@ impl<'a> SyntaxPropByteRun<'a> {
             SyntaxProperties::Ignore => PropRunCells::covering_everything(),
             SyntaxProperties::Honor(_) => PropRunCells::default(),
         };
-        Self { run, props }
+        Self {
+            run,
+            ascii: std::array::from_fn(|_| Cell::new(None)),
+            ascii_table: Cell::new(0),
+            props,
+        }
+    }
+
+    /// See [`SyntaxPropRange::ascii_entry`] — identical memo, byte-side.
+    #[inline]
+    fn ascii_entry(&self, table: &SyntaxTable, ch: char) -> Option<SyntaxEntry> {
+        let cp = ch as u32;
+        if cp >= 128 {
+            return None;
+        }
+        let id = table.chartable.bits();
+        if self.ascii_table.get() != id {
+            for slot in &self.ascii {
+                slot.set(None);
+            }
+            self.ascii_table.set(id);
+        }
+        let slot = &self.ascii[cp as usize];
+        if let Some(entry) = slot.get() {
+            return Some(entry);
+        }
+        let entry = syntax_entry_from_table(table, ch);
+        slot.set(Some(entry));
+        Some(entry)
     }
 
     /// The resolved `syntax-table` property at an Emacs byte position, served
@@ -3275,6 +3309,10 @@ fn effective_syntax_entry_for_char_at_byte(
     if let Some(prop) = prop_cache.syntax_table_prop_at_emacs_byte(buf, byte_pos)
         && let Some(entry) = syntax_entry_from_syntax_property(prop, ch)
     {
+        return entry;
+    }
+
+    if let Some(entry) = prop_cache.ascii_entry(table, ch) {
         return entry;
     }
 
