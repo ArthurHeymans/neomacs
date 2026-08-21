@@ -11966,40 +11966,66 @@ fn signal_process_takes_a_negative_integer_as_a_process_group_like_gnu() {
 /// the first notification pass runs):
 ///
 /// ```text
-///                      b-then-a    a-then-b
-/// GNU Emacs 31.0.90      12           0
-/// Neomacs, before         5           7
+///                             b-then-a    a-then-b
+/// GNU Emacs 31.0.90              12           0
+/// Neomacs, before                 5           7
+/// ```
+///
+/// And on the exact shape below (`tmp/pw175/notify-order6.el`, three runs of
+/// six on each editor, against the merge-base binary built in the main tree):
+///
+/// ```text
+///                             b-then-a    a-then-b
+/// GNU Emacs 31.0.90              18           0
+/// Neomacs at the merge base       7          11
 /// ```
 ///
 /// Six runs are pinned rather than one because the defect is a coin flip:
-/// one run reproduces it only 58% of the time.  Ledger 169 residual 1,
+/// one run reproduces it only 58% of the time.  Each child touches a marker
+/// file immediately before exiting, and the spin waits for BOTH markers rather
+/// than for the clock, so a loaded machine makes this test slower instead of
+/// splitting the two statuses across two passes -- which is the one condition
+/// under which GNU's own answer is not `b a` either.  Ledger 169 residual 1,
 /// ledger 175.
 #[test]
 fn two_processes_notified_in_one_pass_run_their_sentinels_newest_first_like_gnu() {
     crate::test_utils::init_test_tracing();
     let sh = find_bin("sh");
     let result = eval_one(&format!(
-        r#"(let ((orders nil))
+        r#"(let ((orders nil)
+                 (dir (file-name-as-directory (make-temp-file "pw175order" t))))
              (dotimes (i 6)
                (let* ((order nil)
+                      (marker (lambda (tag) (expand-file-name (format "%s-%d" tag i) dir)))
                       (sentinel (lambda (p _m)
                                   (when (memq (process-status p) '(exit signal))
                                     (push (substring (process-name p) 6 7) order))))
-                      (a (make-process :name (format "pw175-a-%d" i) :buffer nil
-                                       :noquery t :command '("{sh}" "-c" "exit 0")
-                                       :sentinel sentinel))
-                      (b (make-process :name (format "pw175-b-%d" i) :buffer nil
-                                       :noquery t :command '("{sh}" "-c" "exit 0")
-                                       :sentinel sentinel)))
-                 ;; A pure-Lisp spin runs no notification pass, so both children
-                 ;; are already dead when the first one does.
-                 (let ((deadline (+ (float-time) 0.5)))
+                      (spawn (lambda (tag)
+                               (make-process
+                                :name (format "pw175-%s-%d" tag i) :buffer nil :noquery t
+                                :command (list "{sh}" "-c"
+                                               (format ": > %s; exit 0"
+                                                       (funcall marker tag)))
+                                :sentinel sentinel)))
+                      (a (funcall spawn "a"))
+                      (b (funcall spawn "b")))
+                 ;; A pure-Lisp spin runs no notification pass, so no sentinel
+                 ;; can fire while it runs.  Spin until each child has said it
+                 ;; is about to exit, so a loaded machine delays the spin rather
+                 ;; than splitting the pass, then give both the exit itself.
+                 (let ((deadline (+ (float-time) 20)))
+                   (while (and (< (float-time) deadline)
+                               (not (and (file-exists-p (funcall marker "a"))
+                                         (file-exists-p (funcall marker "b")))))
+                     nil)
+                   (setq deadline (+ (float-time) 0.4))
                    (while (< (float-time) deadline) nil))
-                 (accept-process-output nil 0.3)
-                 (accept-process-output nil 0.3)
+                 (accept-process-output nil 1)
+                 (accept-process-output nil 1)
                  (ignore-errors (delete-process a))
                  (ignore-errors (delete-process b))
                  (push (mapconcat #'identity (nreverse order) "") orders)))
+             (delete-directory dir t)
              (nreverse orders))"#
     ));
 
