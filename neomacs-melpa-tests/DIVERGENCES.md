@@ -29198,6 +29198,11 @@ warnings and one `method block is never used` in `encoding.rs`, all four of
 which are present in this entry's own FIRST check, taken before it had edited
 `neovm-core` at all.  The display crates and `neomacs-bin` produce zero.
 
+Both unit suites the formatting pass touched were re-run after it, so the
+numbers above are not from before it: display-runtime + display-protocol
+**1491 run, 1491 passed, 1 skipped** and neomacs-bin's capability selection
+**26 run, 26 passed, 216 skipped**, unchanged.
+
 Status: FIXED, three defects -- a charset decoder that refused a leading byte
 one read too late, a terminal writer that spelled five capabilities the
 terminal's entry already spells, and an italic fallback carrying an `ncv` term
