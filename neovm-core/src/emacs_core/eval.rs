@@ -9324,7 +9324,9 @@ impl Context {
     pub(crate) fn debug_on_event_signal_name(&self) -> Option<String> {
         let value = self.obarray.symbol_value("debug-on-event").copied()?;
         let name = value.as_symbol_lisp_string()?;
-        Some(crate::emacs_core::emacs_char::to_utf8_lossy(name.as_bytes()))
+        Some(crate::emacs_core::emacs_char::to_utf8_lossy(
+            name.as_bytes(),
+        ))
     }
 
     /// GNU's `handle_user_signal` debugger arm, all four writes

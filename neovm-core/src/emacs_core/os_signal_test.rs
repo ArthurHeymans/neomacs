@@ -23,8 +23,8 @@
 //!   SIGUSR1    rc=0, nothing armed            rc=138, killed
 //! ```
 
-use super::os_signal::{
-    self, HandledSignal, InstalledDisposition, PreviousDisposition, UserSignalAction,
+use super::{
+    self as os_signal, HandledSignal, InstalledDisposition, PreviousDisposition, UserSignalAction,
 };
 
 /// Send SIG to this whole process, the way `kill -USR1 PID` does.
@@ -39,25 +39,55 @@ fn kill_self(sig: libc::c_int) {
     assert_eq!(rc, 0, "kill(getpid(), {sig}) failed");
 }
 
+/// `kill -SIG PID`, then WAIT until the delivery has been recorded.
+///
+/// **The wait is the design's claim under test, not a workaround.**  `strace`
+/// of this very test shows the `kill` issued from libtest's worker thread and
+/// the signal delivered to the MAIN thread:
+///
+/// ```text
+///   3682381 kill(3682377, SIGUSR1)  = 0
+///   3682377 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_USER, si_pid=3682377} ---
+/// ```
+///
+/// POSIX promises delivery before `kill` returns only when the signal goes to
+/// the CALLING thread, and here the kernel chose otherwise -- which is exactly
+/// the case `deliver_process_signal` (src/sysdep.c:1729-1751) exists for in
+/// GNU and that this port handles by making the handler correct on any thread.
+/// `raise`/`pthread_kill` would take the wait away and the question with it.
+fn kill_self_and_wait(signal: HandledSignal) {
+    let before = os_signal::pending_count(signal);
+    kill_self(signal.number());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while os_signal::pending_count(signal) == before && std::time::Instant::now() < deadline {
+        std::thread::yield_now();
+    }
+}
+
 /// The red this entry started from: with no handler installed, this test's
 /// process is TERMINATED by the signal and nextest reports it killed rather
 /// than failed.  It survives only because [`os_signal::install`] ran.
 #[test]
 fn a_user_signal_does_not_terminate_this_process_like_gnu() {
-    // RED RUN (ledger 184): the install is commented out, which is the tree
-    // as it stood before this entry.
-    // let report = os_signal::install();
-    kill_self(libc::SIGUSR1);
-    kill_self(libc::SIGUSR2);
+    let report = os_signal::install();
+    assert!(
+        report.installed_count() > 0,
+        "install() reported no dispositions: {report:?}"
+    );
+
+    kill_self_and_wait(HandledSignal::Sigusr1);
+    kill_self_and_wait(HandledSignal::Sigusr2);
 
     // Reaching this line at all is the assertion GNU's `rc=0` column makes.
     let pending = os_signal::take_pending();
     assert_eq!(
-        pending[HandledSignal::Sigusr1 as usize], 1,
+        pending[HandledSignal::Sigusr1 as usize],
+        1,
         "SIGUSR1 was survived but not recorded: {pending:?}"
     );
     assert_eq!(
-        pending[HandledSignal::Sigusr2 as usize], 1,
+        pending[HandledSignal::Sigusr2 as usize],
+        1,
         "SIGUSR2 was survived but not recorded: {pending:?}"
     );
 }
@@ -234,14 +264,16 @@ fn the_handler_has_gnus_self_pipe_and_it_carries_a_byte() {
         }
     }
 
-    kill_self(libc::SIGUSR1);
+    kill_self_and_wait(HandledSignal::Sigusr1);
     let _ = os_signal::take_pending();
 
     // SAFETY: as above.
     let n = unsafe { libc::read(read_fd, sink.as_mut_ptr().cast(), sink.len()) };
+    let errno = std::io::Error::last_os_error();
     assert!(
         n >= 1,
-        "the handler wrote no wake byte to the self-pipe (read returned {n})"
+        "the handler wrote no wake byte to the self-pipe \
+         (read fd {read_fd} returned {n}, errno {errno:?})"
     );
 }
 
@@ -255,12 +287,18 @@ fn the_handler_has_gnus_self_pipe_and_it_carries_a_byte() {
 /// signal context, which is exactly the state this module exists to exclude.
 #[test]
 fn the_pending_counters_are_lock_free() {
+    // `Atomic*::is_lock_free` is still unstable, and `target_has_atomic` is
+    // the stable spelling of the same fact: rustc sets it only for widths the
+    // target implements natively, and for any other width `core` would fall
+    // back to a lock -- which is the state this asserts against.
     assert!(
-        std::sync::atomic::AtomicU32::is_lock_free(),
-        "the pending-signal counter would take a lock in signal context"
+        cfg!(target_has_atomic = "32"),
+        "AtomicU32 is not native on this target, so the pending-signal counter \
+         would take a lock in signal context"
     );
     assert!(
-        std::sync::atomic::AtomicBool::is_lock_free(),
-        "the pending-signal flag would take a lock in signal context"
+        cfg!(target_has_atomic = "8"),
+        "AtomicBool is not native on this target, so the pending-signal flag \
+         would take a lock in signal context"
     );
 }

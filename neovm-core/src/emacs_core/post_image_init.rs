@@ -1030,7 +1030,9 @@ impl PostImageInit {
     pub(crate) const fn constants(self) -> &'static [ResetRow] {
         match self.site().establishes {
             Establishes::Facts { constants, .. } => constants,
-            Establishes::NoLispVisibleState(_) | Establishes::NotInThisBuild(_) => &[],
+            Establishes::NoLispVisibleState(_)
+            | Establishes::NotInThisBuild(_)
+            | Establishes::OsDispositions { .. } => &[],
         }
     }
 }

@@ -276,7 +276,9 @@ impl InstallReport {
 /// `AtomicU32` rather than `sig_atomic_t` because a lock-free atomic RMW is
 /// what makes the count correct when the signal lands on the render thread.
 /// `AtomicU32::fetch_add` compiles to `lock xadd` on this target and takes no
-/// lock -- `is_lock_free` is asserted in the tests.
+/// lock; `the_pending_counters_are_lock_free` asserts the stable spelling of
+/// that fact, `cfg!(target_has_atomic = "32")`, because an atomic that fell
+/// back to `core`'s lock would put a lock in signal context.
 static PENDING: [AtomicU32; HandledSignal::COUNT] =
     [const { AtomicU32::new(0) }; HandledSignal::COUNT];
 
@@ -413,7 +415,11 @@ fn install_once() -> InstallReport {
         // thread and the workers a spurious EINTR.
         action.sa_flags = libc::SA_RESTART;
 
+        // Seeded with a sentinel `sigaction` cannot produce, so
+        // "the previous disposition was SIG_DFL" is a reading and not the
+        // zero this struct would have had anyway.
         let mut old: libc::sigaction = unsafe { std::mem::zeroed() };
+        old.sa_sigaction = usize::MAX;
         // SAFETY: both pointers are to fully initialised locals.
         let rc = unsafe { libc::sigaction(signal.number(), &action, &mut old) };
         let index = signal as usize;
@@ -423,15 +429,38 @@ fn install_once() -> InstallReport {
         }
     }
 
-    InstallReport {
+    let report = InstallReport {
         previous,
         installed,
         self_pipe_read_fd,
+    };
+
+    // The install is the kind of fact that is invisible until it is wrong, so
+    // it says what it did once, with GNU's line for each disposition and the
+    // disposition it replaced.  `PreviousDisposition::Handler` here would mean
+    // something else in this process wanted the signal -- GNU has exactly one
+    // such case and works around it by hand (`lib_child_handler`,
+    // src/process.c:7654-7660).
+    for signal in HandledSignal::ALL {
+        tracing::debug!(
+            signal = ?signal,
+            number = signal.number(),
+            gnu = signal.gnu(),
+            previous = ?report.previous(signal),
+            self_pipe_read_fd = ?report.self_pipe_read_fd(),
+            "init_signals: installed an OS signal disposition"
+        );
     }
+
+    report
 }
 
 fn classify_previous(old: &libc::sigaction) -> PreviousDisposition {
     match old.sa_sigaction {
+        // The seed survived: `sigaction` reported success without writing the
+        // old action, which no implementation should do -- but if one does,
+        // the answer must not be the sentinel-shaped `SIG_DFL`.
+        handler if handler == usize::MAX => PreviousDisposition::Unknown,
         handler if handler == libc::SIG_DFL => PreviousDisposition::Default,
         handler if handler == libc::SIG_IGN => PreviousDisposition::Ignored,
         _ => PreviousDisposition::Handler,
@@ -463,8 +492,30 @@ pub(crate) fn pending() -> bool {
     PENDING_ANY.load(Ordering::Relaxed)
 }
 
+/// The pending count for one signal, without consuming it.
+///
+/// Exists because a delivery can land on a thread other than the one that
+/// asked for it: `kill (getpid (), sig)` only promises delivery before it
+/// returns when the kernel picks the CALLING thread, and it is free not to.
+/// That is the property this module is built around -- the handler is correct
+/// wherever it lands -- so the tests observe it rather than sidestepping it
+/// with `raise`.
+#[cfg(test)]
+pub(crate) fn pending_count(signal: HandledSignal) -> u32 {
+    PENDING[signal as usize].load(Ordering::Acquire)
+}
+
 /// GNU's `store_user_signal_events` drain (src/keyboard.c:8546-8570): take the
 /// pending counts and reset them, so a delivery is consumed exactly once.
+///
+/// `#[cfg(test)]` on purpose, and the reason is the entry's finding rather
+/// than an oversight: production does NOT take the counts wholesale.
+/// [`drain_pending_user_signals`] consumes only the deliveries whose action is
+/// the debugger arm and leaves the rest in `p->npending`, because the port of
+/// `store_user_signal_events` -- the half that would queue a
+/// `USER_SIGNAL_EVENT` for `special-event-map` -- is ledger 184's declared
+/// residual.  When that lands, this becomes its drain and the attribute goes.
+#[cfg(test)]
 pub(crate) fn take_pending() -> [u32; HandledSignal::COUNT] {
     PENDING_ANY.store(false, Ordering::Release);
     let mut taken = [0u32; HandledSignal::COUNT];
