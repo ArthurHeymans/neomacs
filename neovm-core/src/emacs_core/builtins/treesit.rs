@@ -3087,7 +3087,12 @@ pub(crate) fn builtin_treesit_parse_string(
     if language.is_nil() {
         return Err(query_type_error("treesit-parse-string", language));
     }
-    let text = expect_lisp_string(&args[0])?;
+    // Anchored on the heap rather than on the whole `Context`: the borrow
+    // still blocks every safepoint (all of them are `&mut Context`) while
+    // leaving the disjoint `eval.buffers` mutations below alone.  This is
+    // DIVERGENCES.md 175 §5's one measured false positive of
+    // `Context::lisp_string`, landed rather than reverted.
+    let text = args[0].expect_lisp_string_in(&eval.tagged_heap)?;
     let name = format!(" *treesit-parse-string-{}*", eval.treesit.roots().len() + 1);
     let buffer_id = eval.buffers.create_buffer_with_hook_inhibition(&name, true);
     let saved_current = eval.buffers.current_buffer_id();
