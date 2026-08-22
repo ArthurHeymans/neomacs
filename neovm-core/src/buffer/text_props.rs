@@ -2353,12 +2353,26 @@ impl TextPropertyTable {
         self.intervals.split_at(range.start());
         self.intervals.split_at(range.end());
 
+        // Walk the covered intervals in place: the loop body only replaces
+        // plist values (never splits or merges), so `(start, id)` cursor
+        // state stays valid and the `ids_overlapping` Vec — a per-put
+        // allocation that grows to the whole cover set — is not needed.
+        // On a 20k-interval whole-buffer put the collect + realloc traffic
+        // was ~19% of the workload.
         let mut changed = false;
-        for (_, id) in self.intervals.ids_overlapping(range) {
-            if plist_value_put_replace(&mut self.intervals.nodes[id.0].plist, name, value) {
+        let mut cursor = self.intervals.first_id_overlapping(range);
+        while let Some((node_start, id)) = cursor {
+            if node_start >= range.end() {
+                break;
+            }
+            let node_end = self.intervals.interval_end(node_start, id);
+            if node_end > range.start()
+                && plist_value_put_replace(&mut self.intervals.nodes[id.0].plist, name, value)
+            {
                 self.intervals.nodes[id.0].refresh_cache();
                 changed = true;
             }
+            cursor = self.intervals.next_id(id).map(|next| (node_end, next));
         }
         changed
     }
@@ -3384,6 +3398,23 @@ impl TextPropertyTable {
         f: impl FnMut(CharRange, &[(Value, Value)]) -> Result<(), E>,
     ) -> Result<(), E> {
         self.try_for_each_interval_in_range_raw(range, f)
+    }
+
+    /// Like [`Self::try_for_each_interval_in_char_range`] but hands the
+    /// closure each interval's plist VALUE instead of materializing a
+    /// `Vec<(Value, Value)>` pair slice per interval — that per-interval
+    /// allocation dominated read-only verification over large ranges.
+    pub(crate) fn try_for_each_interval_plist_in_char_range<E>(
+        &self,
+        range: CharRange,
+        mut f: impl FnMut(CharRange, Value) -> Result<(), E>,
+    ) -> Result<(), E> {
+        if range.is_empty() {
+            return Ok(());
+        }
+        self.try_for_each_interval_overlapping(range, |interval_range, node| {
+            f(interval_range, node.plist)
+        })
     }
 
     fn try_for_each_interval_in_range_raw<E>(

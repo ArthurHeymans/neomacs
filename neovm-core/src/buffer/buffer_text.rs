@@ -1663,6 +1663,20 @@ impl BufferText {
             .try_for_each_interval_in_char_range(range, f)
     }
 
+    /// Plist-Value twin of the above — no per-interval pair-slice
+    /// materialization (see `try_for_each_interval_plist_in_char_range`).
+    pub(crate) fn text_props_try_for_each_interval_plist_in_emacs_byte_range<E>(
+        &self,
+        byte_range: EmacsByteRange,
+        f: impl FnMut(CharRange, Value) -> Result<(), E>,
+    ) -> Result<(), E> {
+        let range = self.byte_range_to_char_range(byte_range);
+        self.storage
+            .borrow()
+            .text_props
+            .try_for_each_interval_plist_in_char_range(range, f)
+    }
+
     pub(crate) fn adjust_text_props_for_insert_at(&self, pos: CharPos0, len: CharLen) {
         Rc::make_mut(&mut self.storage.borrow_mut().text_props)
             .adjust_for_insert_at_char_pos(pos, len);

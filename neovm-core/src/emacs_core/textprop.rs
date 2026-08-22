@@ -529,9 +529,12 @@ impl<'a> CharPropertyResolver<'a> {
     /// this with `next_watched_property_change` to skip boundaries that only
     /// split other properties (font-lock `face` churn).
     pub(crate) fn watched_keys(&self) -> smallvec::SmallVec<[Value; 4]> {
+        // Interned-once `category` id: this runs per coalescing scan, and
+        // `Value::symbol(&str)` pays string compares plus a thread-local
+        // intern probe per call.
         let mut keys = smallvec::SmallVec::new();
         keys.push(self.prop);
-        keys.push(Value::symbol("category"));
+        keys.push(Value::symbol(category_sym_id()));
         let mut alias = self.aliases;
         while alias.is_cons() {
             keys.push(alias.cons_car());
@@ -1229,19 +1232,55 @@ pub(crate) fn verify_text_read_only_emacs_byte_range_in_state(
     }
     let read_only_sym = Value::from_sym_id(read_only_sym());
     let inhibit_sym = Value::from_sym_id(inhibit_read_only_sym());
-    buf.text_props_try_for_each_interval_in_emacs_byte_range(byte_range, |_range, plist| {
-        let read_only = lookup_char_property_from_direct(
-            obarray,
-            buffers,
-            |name| plist_slice_get_value(plist, name),
+    // GNU `textget`'s control variables, resolved ONCE for the walk instead
+    // of per interval: no Lisp runs between here and the last interval (the
+    // same invariant `CharPropertyResolver` documents), and each
+    // `current_textprop_variable_value` read pays a localized-gate probe —
+    // per interval it dominated large-range `put-text-property` (25% of the
+    // 20k-interval bench).
+    let read_only_aliases = current_textprop_variable_value(
+        obarray,
+        buffers,
+        TextPropertyControlVariable::CharPropertyAliasAlist,
+    )
+    .and_then(|value| assq_rest(value, read_only_sym))
+    .unwrap_or(Value::NIL);
+    let read_only_default = current_textprop_variable_value(
+        obarray,
+        buffers,
+        TextPropertyControlVariable::DefaultTextProperties,
+    )
+    .filter(|value| value.is_cons())
+    .and_then(|defaults| plist_get_value(defaults, read_only_sym));
+    buf.text_props_try_for_each_interval_plist_in_emacs_byte_range(byte_range, |_range, plist| {
+        let direct = DirectCharProperties::from_plist(plist, read_only_sym);
+        let mut alias_tail = read_only_aliases;
+        let alias_iter = std::iter::from_fn(move || {
+            if !alias_tail.is_cons() {
+                return None;
+            }
+            let alias = alias_tail.cons_car();
+            alias_tail = alias_tail.cons_cdr();
+            Some(alias)
+        });
+        let read_only = resolve_effective_char_property(
+            direct,
+            |category, property| {
+                let category_id = symbol_id_for_property_lookup(category)?;
+                let property_id = symbol_id_for_property_lookup(property)?;
+                obarray.get_property_id(category_id, property_id)
+            },
             read_only_sym,
-            true,
-        );
+            alias_iter,
+            |name| plist_get_value(plist, name),
+            read_only_default,
+        )
+        .unwrap_or(Value::NIL);
         if read_only.is_nil() {
             return Ok::<(), Flow>(());
         }
         // INTERVAL_EXPRESSLY_WRITABLE_P (intervals.h:217).
-        let express_inhibit = plist_slice_get_value(plist, inhibit_sym).unwrap_or(Value::NIL);
+        let express_inhibit = plist_get_value(plist, inhibit_sym).unwrap_or(Value::NIL);
         if !express_inhibit.is_nil() {
             return Ok(());
         }

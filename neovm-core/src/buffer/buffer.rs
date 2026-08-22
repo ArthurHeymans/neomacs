@@ -3287,6 +3287,19 @@ impl Buffer {
             )
     }
 
+    /// Plist-Value twin: no per-interval pair-slice materialization.
+    pub(crate) fn text_props_try_for_each_interval_plist_in_emacs_byte_range<E>(
+        &self,
+        range: EmacsByteRange,
+        f: impl FnMut(CharRange, Value) -> Result<(), E>,
+    ) -> Result<(), E> {
+        self.text
+            .text_props_try_for_each_interval_plist_in_emacs_byte_range(
+                self.clamped_emacs_byte_range(range),
+                f,
+            )
+    }
+
     pub fn try_for_each_emacs_byte_range_chunk<E>(
         &self,
         range: EmacsByteRange,
