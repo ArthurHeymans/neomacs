@@ -4331,9 +4331,9 @@ fn tty_frame_supports_the_attributes_the_terminal_can_render() {
             256,
         )
         .with_attribute_capabilities(TtyAttributeCapabilities {
-            italic: false,
-            strike_through: false,
-            underline_styled: false,
+            italic_sequence: None,
+            strike_through_sequence: None,
+            styled_underline: None,
             ..TtyAttributeCapabilities::full()
         }),
     );

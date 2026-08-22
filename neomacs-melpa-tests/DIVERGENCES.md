@@ -17631,6 +17631,33 @@ ncurses' shipped database is `\E[4:%p1%dm`, so this is invisible today.  The
 underline COLOUR has no such gap: GNU's string is a literal in `term.c`, not
 read from the entry at all, so emitting it literally is exactly what GNU does.
 
+> **2026-08-22 -- entry 186: this paragraph is right, and it is the smallest
+> member of its own class.  FIXED, and the class with it.**
+>
+> The count first, because the paragraph asserts it without one: `infocmp -x`
+> over every name `toe -a` lists here is 3,697 rows and 1,862 unique entries;
+> 25 of them carry `Smulx` and all 25 spell it `\E[4:%p1%dm`, so "invisible
+> today" is exact.  It is measurable only against an entry built for the
+> purpose, and 175's technique is the one that works: `tic -x` on
+> `tmp/pw186/ti/pw186.src` gives `pw186-smulx-semicolon`
+> (`Smulx=\E[4;%p1%dm`) and `pw186-smulx-private` (`Smulx=\E[>4%p1%dw`), for
+> which ncurses answers `tparm (Smulx, 3)` = `\E[4;3m` and `\E[>43w`
+> (`tmp/pw186/smulx_probe.c`) where this port wrote `\E[4:3m`.
+>
+> What the paragraph does not say is that the SAME shape is in the five lines
+> above it in `turn_on_face`, and there it is live.  GNU emits `md`, `mh`,
+> `ZH`, `us` and `smxx` as the ENTRY's own strings too -- `OUTPUT1_IF (tty,
+> tty->TS_enter_bold_mode)` -- and this port spelled all five itself while
+> asking the capability record only whether the terminal had them.  Of the
+> 1,862 entries: 448 of the 1,303 with `us` spell it something other than
+> `\E[4m`, 234 of 996 spell `md` something else, 281 of 616 spell `mh`
+> something else.  Restricted to entries this port would even start on (927
+> have ANSI `cup`; the rest are refused by `check_terminal_powerful_enough`),
+> 138 disagree about at least one -- `xterm-bold`, `xterm-pcolor`, `putty-m1b`
+> and `putty-m2` among them.  `so` was the ONE attribute already carried as
+> bytes, and 148 of the reachable 916 spell it non-ANSI, which is why inverse
+> video on `screen` was already right.  186 §2.
+
 ### Gates
 
 All against a `cargo xtask fresh-build --release` binary carrying the change,
@@ -21896,6 +21923,22 @@ been a 2-byte lead is held back until the next read tells it otherwise.  The
 text is identical either way -- the byte is emitted as an eight-bit character
 one chunk later, and at EOF the last block flushes it -- but a Lisp filter sees
 the run boundaries.
+
+> **Closed, 2026-08-22, by entry 186.**  Reproduced first, against this entry's
+> own kind of harness: `tmp/pw186/probe1.el`, twenty rows, the split forced by
+> a handshake.  Five diverge and all five are this paragraph --
+> `chinese-gbk` / `cp936` / `chinese-gb18030` with `0x80` or `0xFF` ending
+> read 1 -- and one of them is worse than recorded here: when the invalid byte
+> is the WHOLE of read 1, this port produced no characters at all, so the
+> filter was never called and the run count itself was wrong (GNU 2 chunks,
+> neomacs 1).  The other fifteen rows, all twelve of this entry's own included,
+> are byte-identical to GNU 31.0.90, so the residual the coordinator handed
+> over as still open -- "decoders do not report consumed, and the boundary is
+> only computed for UTF-8" -- was closed here and is refuted as a live
+> statement.  The fix is not a `valids` table either: a charset's leading-byte
+> range is `code_space[(dim - 1) * 4 .. + 1]`, which is what GNU BUILDS the
+> vector from, so `charset_leading_byte` asks the charset's own data one
+> question earlier.  186 §1.
 
 **A `:post-read-conversion` that calls `accept-process-output` on its own
 process sees the designations as of before its own run.**  GNU's decode and its
@@ -32185,3 +32228,576 @@ The other 2 are §9's `lookup-key` composition, diagnosed to the line and handed
 on.  Item 2 landed the accessor shape and its one false-positive site, declined
 the 20-row diff, and left the sizing script behind so the number can be
 re-derived.
+## 186. Two handed-over residuals, and neither one was where the bug was: the decoder residual was closed by entry 166 and the LIVE one next to it is a leading byte that no charset can start; the underline residual is invisible on every entry ncurses ships and the same shape five lines above it in GNU's own code is not -- FIXED, three defects, one measured decline
+
+Two independent items, both handed over with measurements, both reproduced
+before anything was designed.  Both premises turned out to be wrong in the same
+way -- right about the shape, wrong about which member of the shape's class is
+live -- so the entry is two sections and each carries its own verdict.
+
+### 1. The stateful decoder across a read boundary: the residual as stated is CLOSED, and the one it left behind is not
+
+The residual handed over was entry 166's own framing of what entry 159 asked
+for:
+
+> GNU keeps one `struct coding_system` per process for the process's whole
+> life; this port builds one per read.  Our decoders do not report `consumed` /
+> `carryover_bytes`, and the boundary is only computed for UTF-8.
+
+Every clause of that is false at this commit's merge base, and 166 is what made
+it false.  The five functions that were the "boundary computed for UTF-8" --
+`process_output_decode_prefix_len`, `process_coding_uses_utf8_carryover`,
+`utf8_expected_sequence_len`, `utf8_complete_prefix_len` and
+`process_coding_uses_dos_eol_carryover` -- occur ZERO times in the workspace.
+`ProcessCodingState { carryover, last_block, decoder }` is on the process and
+is GNU's per-process struct.  And `consumed` is not reported by a decoder at
+all: it comes off `UnitReader`, whose position is private, which is the
+mechanism 166 built precisely so that a decoder cannot report the wrong count.
+
+That is the reading.  The measurement is `tmp/pw186/probe1.el`: twenty rows
+over a subprocess whose read boundary is forced by a HANDSHAKE -- the child
+writes, blocks on `read`, and only the probe can unblock it -- run against GNU
+Emacs 31.0.90 and against this branch's own pre-fix
+`cargo xtask fresh-build --release` binary, kept with its own pdump at
+`tmp/pw186/refbin/`.  Twelve of the rows are entry 166's, verbatim.  All twelve
+are byte-identical to GNU.  So the item is REFUTED as stated, and the entry
+would be finished here if 166 had not also written down what it did NOT fix.
+
+It did, and one of the five things it listed is live:
+
+> **An invalid leading byte at a read boundary waits one read under a charset
+> coding.**  GNU's `decode_coding_charset` looks the byte up in
+> `AREF (valids, c)` BEFORE reading any more, so a byte no charset can start
+> goes to `invalid_code` immediately.  This port has no `valids` table and asks
+> each charset in the list, so a byte that could have been a 2-byte lead is
+> held back until the next read tells it otherwise.
+
+Reproduced, five rows red out of twenty:
+
+```elisp
+;; child writes read 1, blocks on `read', probe unblocks it, filter chunks
+;; printed one list of character codes per chunk
+;;                              GNU 31.0.90                    neomacs before
+;; chinese-gbk    a<80> / bLF   (2 ((97 4194176) (98 10)))     (2 ((97) (4194176 98 10)))
+;; chinese-gbk    a<ff> / bLF   (2 ((97 4194303) (98 10)))     (2 ((97) (4194303 98 10)))
+;; chinese-gbk    <80>  / bLF   (2 ((4194176) (98 10)))        (1 ((4194176 98 10)))
+;; cp936          a<80> / bLF   (2 ((97 4194176) (98 10)))     (2 ((97) (4194176 98 10)))
+;; chinese-gb18030 a<80>/ bLF   (2 ((97 4194176) (98 10)))     (2 ((97) (4194176 98 10)))
+;; -- controls, green before and after --
+;; chinese-gb18030 a<81><40>/bLF (2 ((97 19970) (98 10)))      same
+;; chinese-gbk    a<b0> / <a1>bLF (2 ((97) (21834 98 10)))     same
+;; iso-latin-1    a<e9> / <e8>LF (2 ((97 233) (232 10)))       same
+```
+
+The third row is worse than 166 priced it.  166 said "the text is identical
+either way ... but a Lisp filter sees the run boundaries"; when the invalid byte
+is the WHOLE of read 1 this port produced no characters at all, so the filter
+was never called, and the run COUNT is wrong and not just the split -- GNU 2,
+neomacs 1.  A `while (null acc) (accept-process-output ...)` around such a read
+does not terminate until the child is unblocked by something else, which is why
+the probe's wait is bounded and the pinned test's is too.
+
+#### GNU, read before anything was designed
+
+```c
+      ONE_MORE_BYTE (c);
+      if (eol_dos && c == '\r')
+	ONE_MORE_BYTE (byte_after_cr);
+      ...
+      val = AREF (valids, c);
+      if (! FIXNUMP (val) && ! CONSP (val))
+	goto invalid_code;
+      if (FIXNUMP (val))
+	{
+	  charset = CHARSET_FROM_ID (XFIXNAT (val));
+	  dim = CHARSET_DIMENSION (charset);
+	  while (len < dim)
+	    {
+	      ONE_MORE_BYTE (c);
+```
+
+(src/coding.c:5518-5537.)  The order is the rule: the lookup is between the
+first `ONE_MORE_BYTE` and the second, so a byte that begins nothing is refused
+without the source being consulted again.  `valids` is a 256-entry vector built
+once per coding system, each element the charsets that byte can begin, sorted
+by dimension with the smaller first, and it is built from each charset's own
+code space:
+
+```c
+	  int dim = CHARSET_DIMENSION (charset);
+	  int idx = (dim - 1) * 4;
+	  ...
+	  for (int i = charset->code_space[idx];
+	       i <= charset->code_space[idx + 1]; i++)
+```
+
+(src/coding.c:11125-11132.)
+
+#### The fix is the charset's own data, one question earlier
+
+`code_space[(dim - 1) * 4 .. + 1]` is what GNU BUILDS the vector from, so the
+answer does not need a vector and certainly does not need a table: this port's
+`code_space` is GNU's without the size and multiplier columns, and
+
+```rust
+pub(crate) struct CharsetLeadingByte {
+    pub dimension: usize,
+    first: u8,
+    last: u8,
+}
+```
+
+is `charset_leading_byte(charset)` reading it.  `first`/`last` are private and
+the only question the type answers is `accepts(byte)`, which is `AREF (valids,
+c)` being non-nil for that charset.  `decode_via_charset_list` builds the list
+once per decode, `sort_by_key(dimension)` -- a stable sort, which is exactly
+GNU's insertion rule, ascending by dimension with ties keeping `:charset-list`
+order -- and then filters by the leading byte BEFORE it asks whether the source
+is long enough:
+
+```rust
+let decoded = leads
+    .iter()
+    .filter(|(_, lead)| lead.accepts(leading))
+    .find_map(|&(charset, lead)| {
+        if rest.len() < lead.dimension {
+            short = true;
+            return None;
+        }
+        ...
+```
+
+This is the chain's own standing rule obeyed rather than tested: entries 134,
+139, 143, 156, 159 and 166 each deleted a second copy of a coding decision, and
+166 warned that "if your fix wants a per-decoder table of byte-length rules,
+that is the smell this chain keeps removing."  Nothing here is a byte-length
+rule.  The dimension and the code space are the charset's, `decode_char` still
+does the deciding, and the filter only changes WHEN the charset is asked --
+which is the divergence.
+
+### 2. The styled-underline sequence: the residual is real, invisible, and the smallest member of its class
+
+Entry 158's hand-back:
+
+> `write_sgr_with_capabilities` emits a fixed `ESC[4:Nm`; GNU emits
+> `tty->TF_set_underline_style` through `tparam`.  The two differ for a
+> terminal whose `Smulx` is not the kitty spelling, but every `Smulx` in
+> ncurses' shipped database is `\E[4:%p1%dm`, so this is invisible today.
+
+Measured rather than believed.  `infocmp -x -1` over every name `toe -a` lists
+here is 3,697 rows and **1,862 unique entries** (`tmp/pw186/cap_audit.tsv`,
+`tmp/pw186/cap_count2.py`).  Twenty-five carry `Smulx` and **all twenty-five**
+spell it `\E[4:%p1%dm`.  158 is exactly right.
+
+(A count correction to 158 and 175, which both say "the 3,697 entries `toe -a`
+lists here": 3,697 is the number of ROWS.  `toe -a` walks every directory on
+the terminfo path and this machine has three, so `alacritty` is listed three
+times; `sort -u` gives 1,862 names.  Neither entry's conclusion moves -- one
+`Su`, zero non-kitty `Smulx` -- but a denominator that is double-counted is
+the kind of thing the next measurement inherits.)
+
+So the only way to see it is 175's technique, and it works: `tic -x` on
+`tmp/pw186/ti/pw186.src` builds `pw186-smulx-semicolon`
+(`Smulx=\E[4;%p1%dm`) and `pw186-smulx-private` (`Smulx=\E[>4%p1%dw`), and
+ncurses answers, through the same two calls GNU makes:
+
+```text
+=== pw186-smulx-semicolon        === pw186-smulx-private
+tigetstr(Smulx) \E[4;%p1%dm      tigetstr(Smulx) \E[>4%p1%dw
+tparm(Smulx,2)  \E[4;2m          tparm(Smulx,2)  \E[>42w
+tparm(Smulx,3)  \E[4;3m          tparm(Smulx,3)  \E[>43w
+tparm(Smulx,4)  \E[4;4m          tparm(Smulx,4)  \E[>44w
+tparm(Smulx,5)  \E[4;5m          tparm(Smulx,5)  \E[>45w
+```
+
+(`tmp/pw186/smulx_probe.c`.)  This port wrote `\E[4:3m` for all of them.
+
+#### What the residual does not say, and what made it worth doing anyway
+
+`turn_on_face` emits `Smulx` through `tparam` on ONE line.  The five lines
+above it emit `md`, `ZH`/`mh`, `us` and `smxx` -- and they are the entry's own
+strings too:
+
+```c
+  if (face->tty_bold_p && MAY_USE_WITH_COLORS_P (tty, NC_BOLD))
+    OUTPUT1_IF (tty, tty->TS_enter_bold_mode);
+```
+
+(src/term.c:2061-2062, and :2063-2072, :2074-2086, :2088-2090.)  `OUTPUT1_IF`
+is one field answering both "does this terminal have bold?" and "what is bold
+spelled as here?".  This port carried a `bool` for each and spelled the
+sequence itself, which is two answers to one question -- the exact shape this
+chain of entries keeps removing, arrived at from the display side.
+
+The two answers disagree on the database ncurses ships:
+
+```text
+capability  entries having it   spelling != the ANSI literal this port wrote
+bold  (md)          996                     234
+dim   (mh)          616                     281
+sitm  (ZH)          117                       0
+smul  (us)         1303                     448
+smxx                109                       0
+Smulx                25                       0     <- 158's residual
+smso  (so)         1481                     657     <- already carried as BYTES
+```
+
+`so` is the control and it is the whole argument: it is the one attribute this
+port already carried as bytes, 657 entries spell it non-ANSI, and it is
+therefore the one attribute that was already right -- `screen`, whose standout
+is `\E[3m` and not `\E[7m`, included.
+
+Then the honest narrowing, because a count of entries is not a count of
+divergences.  `check_terminal_powerful_enough` refuses any TERM whose `cm` is
+not the ANSI form, so a Wyse `smul` on a Wyse terminal never reaches the SGR
+writer at all.  **927 of the 1,862 entries have ANSI `cup`**, and within those:
+smul differs on 55, bold on 77, dim on 55, sitm on 0, smxx on 0, smso on 148 --
+**138 distinct entries across 68 families disagree about at least one of
+`us`/`md`/`mh`** (`tmp/pw186/reachable_count.py`).  Named, because a family
+list is not evidence: `xterm-bold` (`smul=\E[1m`), `xterm-pcolor`
+(`smul=\E[4;42m`, `bold=\E[1;43m`), `putty-m1b` and `putty-m2`
+(`bold=\E[33m`), `linux-m1b` and `linux-m2` (`bold=\E[33m`), `ansi-emx`,
+`d230c`, `tvi955`, `cons25`.
+
+The narrowing is a measurement too, not an inference from the source: run with
+`TERM=wy350`, this port prints
+
+```text
+Terminal type "wy350" is not powerful enough to run Emacs.
+It lacks the ability to position the cursor (ANSI cursor addressing).
+```
+
+and exits, while `TERM=xterm-bold` -- whose `smul` is `\E[1m` -- enters the
+alternate screen and runs.  So the 448 is the size of the class and the 138 is
+the size of the divergence.
+
+#### A third finding, which is the one an ordinary user meets
+
+Directly inside the arm above, GNU's italic fallback:
+
+```c
+  if (face->tty_italic_p && MAY_USE_WITH_COLORS_P (tty, NC_ITALIC))
+    {
+      if (tty->TS_enter_italic_mode)
+	OUTPUT1 (tty, tty->TS_enter_italic_mode);
+      else
+	OUTPUT1 (tty, tty->TS_enter_dim_mode);
+    }
+```
+
+(src/term.c:2063-2072.)  ONE `MAY_USE_WITH_COLORS_P`, on `NC_ITALIC`, around
+both arms; the fallback is `OUTPUT1` and not `OUTPUT1_IF`, and it carries no
+`NC_DIM` term.  `tty_capable_p` does carry one for `TTY_CAP_DIM`
+(src/term.c:2194-2195) -- two different questions, and GNU asks them
+differently.  This port's `italic_rendition` asked `supports(Dim)` for the
+fallback, which is the `tty_capable_p` question, so on a terminal whose `ncv`
+forbids dim on a colour frame an italic face got NOTHING where GNU dims it.
+
+**TERM=linux is that terminal.**  `ncv#18` is `NC_UNDERLINE|NC_DIM`, there is
+no `sitm`, and `dim=\E[2m`.  Captured from GNU Emacs 31.0.90 in a pty
+(`tmp/pw186/italic_capture.sh`, `tmp/pw186/gnu-linux-italic.raw`), an italic
+face on TERM=linux:
+
+```text
+^[[2mPW186ITALIC^[[m^O
+```
+
+78 entries are in that state and **58 of them are reachable** -- `linux` and
+ten of its variants, `cons25` and its family, `teken` (FreeBSD),
+`screen.gnome`, `screen-bce.gnome`, `screen.teraterm`, `wy370`, `qansi`,
+`jfbterm`, `kon`, `uwin`.
+
+#### The type change
+
+`TtyAttributeCapabilities` stops carrying booleans for the things GNU carries
+strings for.  Six `Option<Vec<u8>>` fields named after GNU's six `TS_*` fields,
+plus
+
+```rust
+pub struct TtyStyledUnderline { double_line: Vec<u8>, wave: Vec<u8>, dots: Vec<u8>, dashes: Vec<u8> }
+impl TtyStyledUnderline {
+    pub fn expand_all(mut expand: impl FnMut(u8) -> Option<Vec<u8>>) -> Option<Self>;
+    pub fn sequence(&self, style: UnderlineStyle) -> Option<&[u8]>;
+}
+```
+
+for `TF_set_underline_style`.  There is no field-wise constructor, so a
+half-expanded set cannot exist; `expand_all` is the only way in, and the caller
+that has one supplies GNU's expander.  The domain is closed by
+`enum face_underline_type` itself -- "Note: order matches the order of the
+Smulx terminfo extension" (src/dispextern.h:1757-1765) -- and `turn_on_face`
+reaches the parameterized call only when `face->underline !=
+FACE_UNDERLINE_SINGLE`, so exactly four values can arrive and expanding all
+four when the terminal is resolved is the same answer GNU computes lazily.
+
+The expander is not written here.  In a terminfo build GNU's `tparam` IS
+ncurses' `tparm` (src/terminfo.c:43-55), the capability layer already links
+`ncursesw` for `tgetent`/`tigetstr`, and so `expand_capability_parameter` is
+one more `unsafe extern "C"` line -- reimplementing terminfo's stack language
+in Rust would have been the display-side spelling of the mistake section 1 is
+about.  `tparm` needs no `setupterm` to run, measured
+(`tmp/pw186/tparm_nosetup.c`), which is what lets the fake-database tests
+exercise the real expander.
+
+`presence` and `bytes` being one field deletes things as well as adding them:
+`write_sgr_with_capabilities` loses its `.expect("supported standout has a
+control sequence")`, because there is no longer a state in which the record
+says yes and has no bytes.  And `write_sgr` stops going through
+`pub fn capabilities()`, which CLONED the record -- six `Vec`s per SGR run in
+the TTY writer's inner loop -- and holds the read lock instead.  That left the
+getter with no caller anywhere in the workspace, and because it is `pub` the
+dead-code lint would never have said so.  This is entry 158's own finding met
+from the other side, so it is answered the way 158 answered it: the item is
+deleted, and rustc rather than grep is the witness.
+
+`TtyItalicRendition` grows a lifetime and carries the bytes it chose --
+`Italic(&[u8])`, `Dim(&[u8])`, `None` -- so a test can still assert WHICH arm
+fired, which is the whole content of the third finding.
+
+`rendition_sequence` is not `canonical_cap`.  `OUTPUT1` is `tputs`: it turns a
+`$<..>` padding marker into a DELAY and does no parameter expansion at all, so
+the bytes to keep are the entry's own with padding removed.  `canonical_cap`
+also strips `%pN`, which exists so the update planner can compare a terminfo
+spelling against its termcap translation -- a normalization that would corrupt
+a string being EMITTED rather than compared.  Three entries in the whole
+database carry a `%` in a rendition string (`ctrm`, `tek4107`, `tek4207-s`) and
+GNU passes all three through untouched, as this now does.
+
+### The pins
+
+`a_charset_decoder_refuses_a_leading_byte_no_charset_can_start` (neovm-core,
+`process_test.rs`) -- eight rows, five of them red before, three of them
+controls that must NOT move: a VALID leading byte whose character really is
+incomplete still waits for the next read, a complete two-byte gb18030
+character does not, and `iso-latin-1`, every byte of which is a character,
+never holds anything back.  The split is a handshake, not a sleep.
+
+`the_writer_emits_the_terminals_own_rendition_strings` (display-runtime) --
+one record carrying `xterm-pcolor`'s, `putty-m1b`'s and `wy350`'s real
+spellings, asserting both that the entry's bytes appear AND that the five ANSI
+literals this port used to write do not.
+
+`a_styled_underline_is_the_terminals_own_smulx_expansion` (display-runtime) --
+the four `Smulx` expansions of a non-kitty entry, plus the row that says
+`FACE_UNDERLINE_SINGLE` never reaches `Smulx` however the entry spells it.
+
+`the_dim_fallback_for_italic_ignores_the_ncv_dim_bit_like_gnu`
+(display-runtime) -- TERM=linux's `ncv#18`, asserting the fallback fires, that
+the gate GNU DOES have (`NC_ITALIC`) still silences the arm whole, and that
+`tty_capable_p` keeps its `NC_DIM` term, because those are three different
+questions and GNU answers them differently.
+
+`every_rendition_capability_carries_the_entrys_own_bytes` and
+`the_styled_underline_is_smulx_expanded_by_ncurses_tparm` (neomacs-bin) -- the
+resolver, the second of them running the REAL ncurses `tparm` over the kitty
+spelling, a semicolon spelling, a private-mode spelling and GNU's `Su`
+fallback literal.
+
+`styled_underline_and_strike_through_come_from_the_terminfo_database` and
+`two_letter_capability_names_still_come_from_termcap` grew byte assertions
+where they had presence assertions: they are the only two tests in the file
+that read a REAL terminfo entry, so they are where an entry's own spelling can
+be pinned against something that is not a fake table.
+
+### Found and NOT fixed
+
+**The reset that opens every SGR run is a literal, and GNU's is the entry's
+`sgr0`.**  `write_sgr_with_capabilities` begins with `\E[0m`; GNU's
+exit-attribute string is `TS_exit_attribute_mode` (src/term.c:2145).  1,386 of
+the 1,862 entries have `sgr0` and 1,326 spell it something other than `\E[0m` --
+but that number is the wrong one to act on, and it is recorded with its
+breakdown so the next entry does not act on it: 315 are `\E[m`, which is the
+same rendition; 263 are `\E[m\017` and 80 `\E[0m\017`, which add an SI; 71 are
+`\E(B\E[m` and 56 `\E[m\E(B`, which add a charset reset.  **493 are not a CSI
+reset at all.**  This is NOT the same defect as the five above it, because the
+emission POINT differs too: GNU's `turn_on_face` has no "reset first" step --
+it turns attributes on, and `turn_off_face` turns them off -- while this
+writer opens every run with a full reset.  Carrying `sgr0` into that literal
+would be a change to the writer's protocol and not a spelling fix, so it is
+recorded rather than made.
+
+**The colour capabilities are still spelled here, which is entry 155's
+residual and is untouched.**  `write_terminal_color` emits `\E[3Nm` /
+`\E[38;5;Nm` / `\E[38;2;R;G;Bm` where GNU emits `setaf`/`setab` through
+`tparam` and chooses between the one-argument and three-argument forms with
+`tty->TF_rgb_separate` (src/term.c:2096-2117).  This entry makes it cheaper
+rather than closing it: `expand_capability_parameter` now exists and is GNU's
+`tparam`, so what is missing is the record carrying `setaf`, `setab` and
+`TF_rgb_separate`.  It was left out deliberately -- the colour path is what
+entries 108, 153 and 155 have been converging on from the palette side, and
+folding a fourth change into it here would have merged two histories.
+
+**Carrying the rendition bytes does not make a Wyse terminal work.**  That is
+why the reachable count (138) is so much smaller than the raw one (448 + 234 +
+281): this writer's cursor motion, erase and scroll are ANSI by construction,
+and `check_terminal_powerful_enough` refuses any TERM whose `cm` is not
+`\E[%i%d;%dH` for exactly that reason.  `xterm-8bit`, whose renditions are the
+8-bit `\2334m` form, is among the refused.  The fix here is for the terminals
+this port DOES run on and that spell a rendition their own way.
+
+**The neomacs side of the TERM=linux capture could not be taken.**  GNU's is
+end-to-end, in a pty, quoted above.  Three attempts at the matching neomacs
+capture -- `--eval` with `redisplay`, with `sleep-for`, and with a
+`run-at-time` kill -- all produced the alt-screen enter and exit and nothing
+between, because under `script -c` with a non-tty stdin this port takes its
+EOF exit before the first frame reaches the terminal.  So the port's side of
+the third finding is measured at the writer and not at the pty, and that is
+what the pin asserts.
+
+**`chinese-big5` and `chinese-big5-hkscs` answer `U+FFFD` where GNU answers an
+eight-bit character, and produce a different NUMBER of characters.**  Found by
+the sweep this entry wrote after its own fix -- every `charset`-type coding
+system this editor defines, decoded from the same byte material, 244 rows -- and
+it is the only row of the 244 that diverges, before the fix and after it
+(`tmp/pw186/probe2.el`):
+
+```elisp
+;; (decode-coding-string "\x80..\x90" CS)
+;; chinese-big5-hkscs  GNU (4194176 4194177 ... 4194192)   17 characters
+;;                     neo (65533 65533 ... 4194192)        10 characters
+;; chinese-big5        the same, both editors
+;; chinese-gbk         (4194176 20119 20750 ...)            identical
+```
+
+Entry 166 took Big5's characters from `encoding_rs` while taking its BOUNDARY
+from GNU's own two `ONE_MORE_BYTE`s, and this is the seam that leaves: the
+boundary is GNU's and the error behaviour is `encoding_rs`'s, which substitutes
+`U+FFFD` where GNU's `invalid_code:` emits `BYTE8_TO_CHAR (c)`.  Note the
+second fact in the same rows: `chinese-big5-hkscs` is `:coding-type 'charset`
+in `lisp/language/chinese.el:161-166` and is nevertheless routed to the big5
+decoder here, so it never reaches the leading-byte rule this entry fixed.  Not
+this entry's -- it is an `encoding_rs`-vs-`invalid_code` question and belongs
+with the `decode_bytes` fall-through 166 listed next to it.
+
+**A CCL coding system still consumes its whole source** (entry 166's residual,
+unchanged) -- and it is MORE latent than 166 implies, measured: the only
+`:coding-type 'ccl` coding system in GNU's shipped Lisp is `android-jni`
+(lisp/term/android-win.el:610-619), which loads only on Android.  A user
+`define-ccl-program` can still reach it.  `chinese-hz`, the UTF-16 endianness
+and `emacs-mule` composition state in `CodingDecoderState`, and the
+`:post-read-conversion` re-entrancy are 166's other four and are unchanged.
+
+### Gates
+
+Absolute numbers, and a RED beside every green, because a capability change is
+exactly the kind that reports success by having nothing left to check.
+
+**The probes, diffed rather than read.**
+
+```text
+probe                              rows   before        after
+tmp/pw186/probe1.el                  20   5 divergent   0   (diff exit 0 vs GNU)
+tmp/pw186/probe2.el                 244   1 divergent   1   (chinese-big5*, not this entry's)
+tmp/pw186/probe3.el                   3   1 divergent   1   (the same row, isolated)
+```
+
+`probe1.el` is the read-boundary probe and its "before" is this branch's own
+pre-fix `fresh-build --release` binary, kept with its own pdump at
+`tmp/pw186/refbin/`; "after" is the rebuilt one, pdump 02:26 newer than the
+binary 02:24, and `(documentation-property 'dos-codepage
+'variable-documentation)` is `nil` on both, which is the question only current
+code answers.
+
+**Unit gates.**
+
+```text
+neomacs-display-runtime + display-protocol   1491 run, 1491 passed, 1 skipped
+neomacs -E test(/terminal_capabilities|tty_init/)   26 run,   26 passed, 216 skipped
+neovm-core -E test(/charset|coding|encoding|decode|
+                    a_process_decoder_carries|an_eof_read_decodes/)
+                                              541 run,  541 passed, 8709 skipped
+```
+
+The neovm-core selection is asserted by NAME and not by count: the log carries
+`PASS ... a_charset_decoder_refuses_a_leading_byte_no_charset_can_start`,
+`PASS ... a_process_decoder_carries_its_state_and_its_carryover_across_a_read`
+and `PASS ... an_eof_read_decodes_a_zero_byte_last_block_on_the_filter_branch`,
+so entry 166's two pins are still running and still green beside the new one.
+
+**The REDs.**  Each is the fix removed and nothing else, then put back.
+
+* Item 1, the leading-byte filter deleted from `decode_via_charset_list`:
+  `1 test run: 0 passed, 1 failed`, and the `left` is the pre-fix answer the
+  release binary gave --
+  `(2 ((97) (4194176 98 10)) ...) (1 ((4194176 98 10)) ...)` -- against a
+  `right` that is GNU's.  The three control rows are identical on both sides,
+  which is what says the pin is measuring the boundary and not the text.
+* Item 2, the bold arm put back to `\E[1m` + `supports(Bold)`:
+  `3 tests run: 2 passed, 1 failed`, `the entry's own "\u{1b}[1;43m" must be
+  emitted: "\u{1b}[0m\u{1b}[1m..."`.  The other two pins stayed green, which is
+  the point: they test different arms.
+* Item 2's third finding, the `NC_DIM` term put back into the dim fallback:
+  `1 test run: 0 passed, 1 failed`, `left: None`, `right: Dim([27, 91, 50,
+  109])`.
+
+**The MELPA process subset is 43 now, not 42.**  Entry 174 reconstructed the
+eight substrings entries 151, 156, 159 and 166 used and counted the union at
+exactly 42, and told the next runner to count the selection before running it
+rather than trusting the filter.  Counted here with `cargo nextest list`:
+**43**.  The extra one is not a mystery -- `rg` is a substring, so the set has
+always included every `*rg*` name (`org_roam`, `orgit`, `smeargle`,
+`org_bullets`, ...), and the corpus grew one such test since 174.  The number
+to assert on is therefore 43, and the list is in
+`tmp/pw186/melpa-selection.txt` so the next entry can diff it rather than
+re-derive it.
+
+**Release gates**, all against the `cargo xtask fresh-build --release` binary
+above (binary 02:24, pdump 02:26 -- pdump newer), never piped, output to files.
+
+```text
+cargo nextest run -p neovm-oracle-tests --no-fail-fast
+    38801 tests run: 38798 passed, 3 failed, 0 skipped   (712 s)
+cargo xtask gc-stress --editor ./target/release/neomacs
+    9/9 probes passed
+cargo nextest run -p neomacs-melpa-tests --release -j2
+      -E 'test(/diredfl|rg|slime|sly|ivy_rich|async_http_queue|auto_pause|git_rebase_mode/)'
+    43 tests run: 42 passed, 1 failed, 912 skipped
+    org_roam alone, -j1:  1 test run: 1 passed
+```
+
+The three oracle failures are enumerated by NAME, not by count, because a
+fourth would hide behind a count:
+
+```text
+divergence_combo_general::core_subsystems_strict::div_core_divergence_surface_window_scroll_error_and_state_combo
+divergence_combo_general::core_subsystems_strict::div_core_divergence_surface_window_start_end_scroll_state
+divergence_combo_strict::process_adaptive_buffering_kill_buffer_proc_window_scroll_functions::div_u5_window_scroll_functions_hook
+```
+
+which is the coordinator's pre-existing-upstream set exactly, and no other.
+38,801 is 15 more tests than entry 166 counted at its own merge base, and not
+one pin moved.
+
+The MELPA failure is `org_roam` and it is the recorded `sqlite3-api.o` race,
+identified the way entry 174 identified it rather than by re-running until
+green: the message is **`GNU Emacs baseline failed`** with
+`ld.bfd: cannot find sqlite3-api.o`, so GNU lost the race, which no neomacs
+defect can produce.  Alone at `-j1` it passes.  Zero MELPA failures are
+attributable to this branch.
+
+`cargo fmt --all --check` was RED first -- 14 `Diff in` hunks across three
+files, all in this entry's own edits -- and is clean after `cargo fmt --all`.
+The formatting pass and the deletion of `pub fn capabilities()` are the only
+changes to production source after the gated build; a function with no caller
+in the workspace cannot change what the binary does, which is the same reason
+`--all-targets` compiling after its removal is the whole proof.
+
+`cargo check --workspace --all-targets`: **0 errors, 72 warnings**, and none of
+them is in a file this entry touched except three `EolConversion`-privacy
+warnings and one `method block is never used` in `encoding.rs`, all four of
+which are present in this entry's own FIRST check, taken before it had edited
+`neovm-core` at all.  The display crates and `neomacs-bin` produce zero.
+
+Both unit suites the formatting pass touched were re-run after it, so the
+numbers above are not from before it: display-runtime + display-protocol
+**1491 run, 1491 passed, 1 skipped** and neomacs-bin's capability selection
+**26 run, 26 passed, 216 skipped**, unchanged.
+
+Status: FIXED, three defects -- a charset decoder that refused a leading byte
+one read too late, a terminal writer that spelled five capabilities the
+terminal's entry already spells, and an italic fallback carrying an `ncv` term
+GNU does not have.  One measured DECLINE: the styled-underline SEQUENCE named
+by 158 is now emitted from `Smulx` too, but it is the fix nobody can observe --
+0 of 25 entries, and a `tic`-built terminal is the only witness -- and it is
+recorded as such rather than as a win.  Both handed-over premises were refuted
+where they were pointed and true one line to the side.

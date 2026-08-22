@@ -8,13 +8,12 @@
 //! Runs on the evaluator thread (single-threaded, no channel needed).
 
 use neomacs_display_protocol::TerminalColor;
+use neomacs_display_protocol::face::UnderlineStyle;
 use neomacs_display_protocol::face::{Face, FaceAttributes};
 use neomacs_display_protocol::frame_chrome::FrameChromeContent;
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
 use neomacs_display_protocol::glyph_matrix::*;
-use neomacs_display_protocol::tty_capabilities::{
-    TtyAttributeCapabilities, TtyCapability, TtyItalicRendition,
-};
+use neomacs_display_protocol::tty_capabilities::{TtyAttributeCapabilities, TtyItalicRendition};
 use neomacs_display_protocol::types::FaceId;
 use std::collections::HashMap;
 
@@ -2385,14 +2384,6 @@ fn write_cursor_shape(buf: &mut Vec<u8>, shape: TerminalCursorShape) {
 static CAPABILITIES: std::sync::LazyLock<std::sync::RwLock<TtyAttributeCapabilities>> =
     std::sync::LazyLock::new(|| std::sync::RwLock::new(TtyAttributeCapabilities::full()));
 
-/// The capabilities registered for this terminal.
-pub fn capabilities() -> TtyAttributeCapabilities {
-    CAPABILITIES
-        .read()
-        .map(|caps| caps.clone())
-        .unwrap_or_else(|_| TtyAttributeCapabilities::full())
-}
-
 /// Register what this terminal can render — the terminfo answers GNU reads in
 /// `init_tty`. Called once at TTY init from the frontend.
 pub fn set_capabilities(caps: TtyAttributeCapabilities) {
@@ -2446,14 +2437,31 @@ fn write_terminal_color(buf: &mut Vec<u8>, color: TerminalColor, background: boo
 
 /// Write ANSI SGR (select graphic rendition) escape sequences for the given
 /// attributes, using the capabilities registered for this terminal.
+///
+/// The read lock is held across the write rather than cloned out of: every
+/// capability is now carried as its own bytes, so a getter that cloned the
+/// record would allocate six `Vec`s per call, and this is the TTY writer's
+/// inner loop.  The `pub fn capabilities()` that did exactly that had no
+/// caller left once the writer stopped needing an owned copy, and was deleted:
+/// it was `pub`, so the dead-code lint could never have said so (ledger 158's
+/// own finding, met again).
 fn write_sgr(buf: &mut Vec<u8>, attrs: &CellAttrs) {
-    write_sgr_with_capabilities(buf, attrs, &capabilities());
+    match CAPABILITIES.read() {
+        Ok(caps) => write_sgr_with_capabilities(buf, attrs, &caps),
+        Err(_) => write_sgr_with_capabilities(buf, attrs, &TtyAttributeCapabilities::full()),
+    }
 }
 
-/// GNU `turn_on_face` (src/term.c): emit each attribute only when the terminal
-/// has the capability for it, with GNU's fallbacks — a slant becomes `dim` where
-/// there is no `sitm`, and a styled underline becomes a plain one where there is
-/// no `Smulx`.
+/// GNU `turn_on_face` (src/term.c:2045-2127): emit each attribute's OWN control
+/// sequence, and only when the terminal has one, with GNU's fallbacks — a slant
+/// becomes `dim` where there is no `sitm`, and a styled underline becomes a
+/// plain one where there is no `Smulx`.
+///
+/// Every arm here used to spell its sequence as an ANSI literal while asking
+/// the capability record only whether the terminal HAD the attribute.  GNU has
+/// no such split: `OUTPUT1_IF (tty, tty->TS_enter_bold_mode)` is one field
+/// answering both questions, and the split disagreed with the terminal on the
+/// database ncurses ships (ledger 186).
 ///
 /// Always resets first, then enables the needed attributes.
 pub fn write_sgr_with_capabilities(
@@ -2464,38 +2472,47 @@ pub fn write_sgr_with_capabilities(
     // Reset all attributes first.
     buf.extend_from_slice(b"\x1b[0m");
 
-    if attrs.bold && caps.supports(TtyCapability::Bold) {
-        buf.extend_from_slice(b"\x1b[1m");
+    if attrs.bold {
+        if let Some(sequence) = caps.bold() {
+            buf.extend_from_slice(sequence);
+        }
     }
     if attrs.italic {
         match caps.italic_rendition() {
-            TtyItalicRendition::Italic => buf.extend_from_slice(b"\x1b[3m"),
+            TtyItalicRendition::Italic(sequence) => buf.extend_from_slice(sequence),
             // GNU: "Italics not supported, use dim instead."
-            TtyItalicRendition::Dim => buf.extend_from_slice(b"\x1b[2m"),
+            TtyItalicRendition::Dim(sequence) => buf.extend_from_slice(sequence),
             TtyItalicRendition::None => {}
         }
     }
-    if attrs.underline != 0 && caps.supports(TtyCapability::Underline) {
-        let styled = caps.supports(TtyCapability::UnderlineStyled);
-        match attrs.underline {
-            // A styled underline needs `Smulx`; without it GNU emits the plain
-            // `smul` sequence rather than a parameter the terminal cannot read.
-            2 if styled => buf.extend_from_slice(b"\x1b[4:2m"), // double underline
-            3 if styled => buf.extend_from_slice(b"\x1b[4:3m"), // curly/wave underline
-            4 if styled => buf.extend_from_slice(b"\x1b[4:4m"), // dotted underline
-            5 if styled => buf.extend_from_slice(b"\x1b[4:5m"), // dashed underline
-            _ => buf.extend_from_slice(b"\x1b[4m"),             // single underline
+    if attrs.underline != 0 {
+        // GNU: `if (face->underline == FACE_UNDERLINE_SINGLE
+        //           || !tty->TF_set_underline_style)
+        //         OUTPUT1_IF (tty, tty->TS_enter_underline_mode);
+        //       else ... tparam (tty->TF_set_underline_style, ..., face->underline)'
+        // (src/term.c:2076-2085).  The styled expansions come from `Smulx`
+        // itself; without it GNU emits the plain `smul` sequence rather than a
+        // parameter the terminal cannot read.
+        let styled = UnderlineStyle::from_gnu_code(attrs.underline)
+            .and_then(|style| caps.styled_underline_sequence(style));
+        match styled {
+            Some(sequence) => buf.extend_from_slice(sequence),
+            None => {
+                if let Some(sequence) = caps.underline() {
+                    buf.extend_from_slice(sequence);
+                }
+            }
         }
     }
-    if attrs.strikethrough && caps.supports(TtyCapability::StrikeThrough) {
-        buf.extend_from_slice(b"\x1b[9m");
+    if attrs.strikethrough {
+        if let Some(sequence) = caps.strike_through() {
+            buf.extend_from_slice(sequence);
+        }
     }
-    if attrs.inverse && caps.supports(TtyCapability::Inverse) {
-        buf.extend_from_slice(
-            caps.standout_sequence
-                .as_deref()
-                .expect("supported standout has a control sequence"),
-        );
+    if attrs.inverse {
+        if let Some(sequence) = caps.standout() {
+            buf.extend_from_slice(sequence);
+        }
     }
 
     // GNU term.c only emits color SGR for specified TTY colors.
@@ -2522,7 +2539,7 @@ pub fn write_sgr_with_capabilities(
     // No entry ncurses ships has both `Smulx` and an `ncv`, so the difference
     // is unobservable; the literal reading is kept because inventing the ncv
     // term here would be inventing a rule GNU does not have.
-    if colored && caps.underline_styled {
+    if colored && caps.styled_underline.is_some() {
         if let Some(color) = attrs.underline_color {
             write_underline_color(buf, color);
         }

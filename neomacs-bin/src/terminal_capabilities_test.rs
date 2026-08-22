@@ -1,6 +1,7 @@
 //! Tests for terminfo → [`TtyAttributeCapabilities`] resolution.
 
 use super::*;
+use neomacs_display_protocol::face::UnderlineStyle;
 use neomacs_display_protocol::tty_capabilities::{TtyCapability, TtyItalicRendition};
 use std::collections::HashMap;
 
@@ -122,17 +123,21 @@ fn screen_terminfo_reports_no_italics_but_keeps_bold_and_underline() {
     let mut database = FakeCapabilityDatabase::screen_256color();
     let caps = resolve_tty_attribute_capabilities(&mut database);
 
-    assert!(!caps.italic, "screen has no sitm");
-    assert!(caps.dim, "screen has mh, so italics fall back to dim");
-    assert_eq!(caps.italic_rendition(), TtyItalicRendition::Dim);
-    assert!(caps.bold);
-    assert!(caps.underline);
+    assert!(caps.italic_sequence.is_none(), "screen has no sitm");
+    assert_eq!(
+        caps.dim_sequence.as_deref(),
+        Some(b"\x1b[2m".as_slice()),
+        "screen has mh, so italics fall back to dim"
+    );
+    assert_eq!(caps.italic_rendition(), TtyItalicRendition::Dim(b"\x1b[2m"));
+    assert_eq!(caps.bold(), Some(b"\x1b[1m".as_slice()));
+    assert_eq!(caps.underline(), Some(b"\x1b[4m".as_slice()));
     assert_eq!(
         caps.standout_sequence.as_deref(),
         Some(b"\x1b[3m".as_slice())
     );
-    assert!(!caps.strike_through, "screen has no smxx");
-    assert!(!caps.underline_styled, "screen has no Smulx");
+    assert!(caps.strike_through_sequence.is_none(), "screen has no smxx");
+    assert!(caps.styled_underline.is_none(), "screen has no Smulx");
     assert_eq!(caps.color_cells, 256);
     // GNU: `if (TN_no_color_video == -1) TN_no_color_video = 0'.
     assert_eq!(caps.no_color_video, TtyNoColorVideo::NONE);
@@ -163,10 +168,16 @@ fn capability_names_match_the_ones_gnu_reads_in_init_tty() {
         .with_number("NC", 32);
     let caps = resolve_tty_attribute_capabilities(&mut database);
 
-    assert!(caps.italic);
-    assert_eq!(caps.italic_rendition(), TtyItalicRendition::Italic);
-    assert!(caps.strike_through);
-    assert!(caps.underline_styled);
+    assert_eq!(caps.italic_sequence.as_deref(), Some(b"\x1b[3m".as_slice()));
+    assert_eq!(
+        caps.italic_rendition(),
+        TtyItalicRendition::Italic(b"\x1b[3m")
+    );
+    assert_eq!(
+        caps.strike_through_sequence.as_deref(),
+        Some(b"\x1b[9m".as_slice())
+    );
+    assert!(caps.styled_underline.is_some());
     // ncv bit 1<<5 is GNU's NC_BOLD: bold cannot be combined with colors here.
     assert_eq!(caps.no_color_video, TtyNoColorVideo::BOLD);
     assert!(!caps.supports(TtyCapability::Bold));
@@ -203,7 +214,9 @@ fn capability_names_match_the_ones_gnu_reads_in_init_tty() {
 fn the_su_flag_is_a_styled_underline_where_smulx_is_absent_like_gnu() {
     let mut su_only = FakeCapabilityDatabase::screen_256color().with_flag("Su");
     assert!(
-        resolve_tty_attribute_capabilities(&mut su_only).underline_styled,
+        resolve_tty_attribute_capabilities(&mut su_only)
+            .styled_underline
+            .is_some(),
         "Su without Smulx is GNU's kitty-sequence fallback (term.c:4700-4703)"
     );
     assert!(
@@ -214,14 +227,129 @@ fn the_su_flag_is_a_styled_underline_where_smulx_is_absent_like_gnu() {
         .with_string("Smulx", "\x1b[4:%p1%dm")
         .with_flag("Su");
     assert!(
-        resolve_tty_attribute_capabilities(&mut both).underline_styled,
+        resolve_tty_attribute_capabilities(&mut both)
+            .styled_underline
+            .is_some(),
         "Smulx alone already answers; the flag is not consulted"
     );
 
     let mut neither = FakeCapabilityDatabase::screen_256color();
     assert!(
-        !resolve_tty_attribute_capabilities(&mut neither).underline_styled,
+        resolve_tty_attribute_capabilities(&mut neither)
+            .styled_underline
+            .is_none(),
         "neither source: no styled underline, and so no underline colour"
+    );
+}
+
+/// The capability record carries the entry's BYTES, not a flag, because that
+/// is what GNU emits: `OUTPUT1_IF (tty, tty->TS_enter_bold_mode)`
+/// (src/term.c:2061) is one field answering both "does this terminal have
+/// bold?" and "what is bold spelled as here?".
+///
+/// Terminfo padding is dropped and nothing else is: `OUTPUT1` is `tputs`,
+/// which turns `$<..>` into a DELAY and does no parameter expansion at all.
+/// That is a different rule from [`canonical_cap`], which also strips `%pN` so
+/// the update planner can compare a terminfo spelling with its termcap
+/// translation -- a normalization that would corrupt a string being EMITTED.
+#[test]
+fn every_rendition_capability_carries_the_entrys_own_bytes() {
+    let mut database = FakeCapabilityDatabase::bare()
+        .with_string("so", "\x1b[7;31m")
+        .with_string("us", "\x1bG8$<10>")
+        .with_string("md", "\x1b[1;43m")
+        .with_string("mh", "\x1bGp")
+        .with_string("ZH", "\x1b[3;44m")
+        .with_string("smxx", "\x1bG@")
+        .with_number("Co", 8);
+    let caps = resolve_tty_attribute_capabilities(&mut database);
+
+    assert_eq!(
+        caps.standout_sequence.as_deref(),
+        Some(b"\x1b[7;31m".as_slice())
+    );
+    assert_eq!(
+        caps.underline_sequence.as_deref(),
+        Some(b"\x1bG8".as_slice()),
+        "padding is a delay, not bytes"
+    );
+    assert_eq!(
+        caps.bold_sequence.as_deref(),
+        Some(b"\x1b[1;43m".as_slice())
+    );
+    assert_eq!(caps.dim_sequence.as_deref(), Some(b"\x1bGp".as_slice()));
+    assert_eq!(
+        caps.italic_sequence.as_deref(),
+        Some(b"\x1b[3;44m".as_slice())
+    );
+    assert_eq!(
+        caps.strike_through_sequence.as_deref(),
+        Some(b"\x1bG@".as_slice())
+    );
+}
+
+/// GNU runs `Smulx` through `tparam` (src/term.c:2083), which in a terminfo
+/// build IS ncurses' `tparm` (src/terminfo.c:43-55), so a terminal whose
+/// `Smulx` is not the kitty spelling gets its own sequence.  This port emitted
+/// a fixed `ESC [ 4 : N m`.
+///
+/// Ledger 158 recorded this as invisible and ledger 186 measured it: of the
+/// 1,862 unique entries `toe -a` lists here, 25 carry `Smulx` and all 25 spell
+/// it `\E[4:%p1%dm`.  So the divergence is only observable against an entry
+/// built for the purpose -- `tic -x tmp/pw186/ti/pw186.src`, whose
+/// `pw186-smulx-semicolon` answers `tparm ("\E[4;%p1%dm", 3)` = `\E[4;3m`
+/// (`tmp/pw186/smulx_probe.c`).  The expansion below runs through the SAME
+/// ncurses `tparm`, so what is pinned is the expander GNU uses and not a
+/// re-implementation of terminfo's format language.
+#[test]
+fn the_styled_underline_is_smulx_expanded_by_ncurses_tparm() {
+    let mut kitty = FakeCapabilityDatabase::screen_256color().with_string("Smulx", "\x1b[4:%p1%dm");
+    let styled = resolve_tty_attribute_capabilities(&mut kitty)
+        .styled_underline
+        .expect("Smulx present");
+    assert_eq!(
+        styled.sequence(UnderlineStyle::Wave),
+        Some(b"\x1b[4:3m".as_slice())
+    );
+
+    let mut semicolon =
+        FakeCapabilityDatabase::screen_256color().with_string("Smulx", "\x1b[4;%p1%dm");
+    let styled = resolve_tty_attribute_capabilities(&mut semicolon)
+        .styled_underline
+        .expect("Smulx present");
+    for (style, expected) in [
+        (UnderlineStyle::Double, b"\x1b[4;2m".as_slice()),
+        (UnderlineStyle::Wave, b"\x1b[4;3m".as_slice()),
+        (UnderlineStyle::Dotted, b"\x1b[4;4m".as_slice()),
+        (UnderlineStyle::Dashed, b"\x1b[4;5m".as_slice()),
+    ] {
+        assert_eq!(styled.sequence(style), Some(expected), "{style:?}");
+    }
+    // The two styles that never reach `Smulx` in GNU have no expansion here.
+    assert_eq!(styled.sequence(UnderlineStyle::Line), None);
+    assert_eq!(styled.sequence(UnderlineStyle::None), None);
+
+    // A private-mode spelling that shares no bytes at all with the rule this
+    // port used to emit (`pw186-smulx-private`).
+    let mut private =
+        FakeCapabilityDatabase::screen_256color().with_string("Smulx", "\x1b[>4%p1%dw");
+    let styled = resolve_tty_attribute_capabilities(&mut private)
+        .styled_underline
+        .expect("Smulx present");
+    assert_eq!(
+        styled.sequence(UnderlineStyle::Wave),
+        Some(b"\x1b[>43w".as_slice())
+    );
+
+    // GNU's `Su` fallback installs its own literal and expands THAT
+    // (src/term.c:4700-4703), so the kitty spelling comes back.
+    let mut su_only = FakeCapabilityDatabase::screen_256color().with_flag("Su");
+    let styled = resolve_tty_attribute_capabilities(&mut su_only)
+        .styled_underline
+        .expect("Su is the second source");
+    assert_eq!(
+        styled.sequence(UnderlineStyle::Dotted),
+        Some(b"\x1b[4:4m".as_slice())
     );
 }
 
@@ -380,24 +508,31 @@ fn styled_underline_and_strike_through_come_from_the_terminfo_database() {
     let Some(tmux) = tty_attribute_capabilities_for_term("tmux-256color") else {
         return;
     };
-    assert!(
-        tmux.underline_styled,
-        "tmux-256color has Smulx; tgetstr cannot see it and tigetstr can"
+    let styled = tmux
+        .styled_underline
+        .as_ref()
+        .expect("tmux-256color has Smulx; tgetstr cannot see it and tigetstr can");
+    assert_eq!(
+        styled.sequence(UnderlineStyle::Wave),
+        Some(b"\x1b[4:3m".as_slice()),
+        "and its own spelling, expanded through ncurses' tparm"
     );
-    assert!(
-        tmux.strike_through,
+    assert_eq!(
+        tmux.strike_through_sequence.as_deref(),
+        Some(b"\x1b[9m".as_slice()),
         "tmux-256color has smxx; tgetstr cannot see it and tigetstr can"
     );
 
     let Some(xterm) = tty_attribute_capabilities_for_term("xterm-256color") else {
         return;
     };
-    assert!(
-        xterm.strike_through,
+    assert_eq!(
+        xterm.strike_through_sequence.as_deref(),
+        Some(b"\x1b[9m".as_slice()),
         "xterm-256color has smxx even though it has no Smulx"
     );
     assert!(
-        !xterm.underline_styled,
+        xterm.styled_underline.is_none(),
         "xterm-256color has no Smulx, so a styled underline must fall back"
     );
 }
@@ -413,11 +548,27 @@ fn two_letter_capability_names_still_come_from_termcap() {
     let Some(xterm) = tty_attribute_capabilities_for_term("xterm-256color") else {
         return;
     };
-    assert!(xterm.underline, "xterm-256color has us");
-    assert!(xterm.bold, "xterm-256color has md");
-    assert!(xterm.italic, "xterm-256color has ZH");
-    assert!(
-        xterm.standout_sequence.is_some(),
+    // The bytes, not just the presence: this is the one test in the file that
+    // reads a REAL terminfo entry, so it is where the entry's own spelling can
+    // be pinned against something other than a fake table.
+    assert_eq!(
+        xterm.underline_sequence.as_deref(),
+        Some(b"\x1b[4m".as_slice()),
+        "xterm-256color has us"
+    );
+    assert_eq!(
+        xterm.bold_sequence.as_deref(),
+        Some(b"\x1b[1m".as_slice()),
+        "xterm-256color has md"
+    );
+    assert_eq!(
+        xterm.italic_sequence.as_deref(),
+        Some(b"\x1b[3m".as_slice()),
+        "xterm-256color has ZH"
+    );
+    assert_eq!(
+        xterm.standout_sequence.as_deref(),
+        Some(b"\x1b[7m".as_slice()),
         "xterm-256color has so, and the writer needs its bytes"
     );
     assert_eq!(xterm.color_cells, 256, "xterm-256color has Co#256");
