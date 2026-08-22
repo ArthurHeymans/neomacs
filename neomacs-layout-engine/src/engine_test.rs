@@ -23033,6 +23033,52 @@ fn layout_frame_rust_logs_invalid_named_face_references_like_gnu_emacs() {
 }
 
 #[test]
+fn layout_frame_rust_suppresses_invalid_references_inside_named_face_inheritance() {
+    let mut eval = Context::new();
+    eval.eval_str(
+        r#"(insert
+            (propertize "quoted inherit"
+                        'face 'neomacs-quoted-inherit-probe))"#,
+    )
+    .expect("insert the quoted-inherit face run");
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let frame_id = eval.frame_manager_mut().create_frame(
+        "layout-quoted-inherit-face-reference",
+        320,
+        120,
+        buffer_id,
+    );
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let face_results = eval.eval_str_each(
+        "(internal-make-lisp-face 'neomacs-quoted-inherit-probe)
+         (internal-set-lisp-face-attribute
+          'neomacs-quoted-inherit-probe :inherit
+          '(quote font-lock-comment-face) (selected-frame))",
+    );
+    assert!(
+        face_results.iter().all(Result::is_ok),
+        "install the runtime face definition, got {face_results:?}"
+    );
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let messages = eval
+        .buffer_manager()
+        .find_buffer_by_name("*Messages*")
+        .and_then(|id| eval.buffer_manager().get(id))
+        .map_or_else(String::new, |buffer| buffer.buffer_string());
+    assert!(
+        !messages.contains("Invalid face reference: quote"),
+        "GNU merge_face_vectors resolves inheritance with diagnostics disabled: {messages:?}"
+    );
+}
+
+#[test]
 fn layout_frame_rust_keeps_echo_message_in_minibuffer_window_for_tty() {
     assert_echo_message_renders_in_minibuffer_window(false);
 }

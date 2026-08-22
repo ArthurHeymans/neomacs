@@ -136,6 +136,12 @@ uses GNU Emacs's ASCII repertory default instead of treating the font as
 covering every character.  This prevents a broad fontset entry from
 capturing private-use icons that should use their face's icon font.
 
+---
+** NeoMacs no longer warns about invalid references inside named faces.
+Redisplay still reports an invalid face named directly by a display
+property.  Invalid references found while merging an existing named
+face's remapping or inheritance are now silent, matching GNU Emacs.
+
 +++
 ** Several font-lock face variables are now obsolete.
 The following variables are now obsolete: 'font-lock-builtin-face',

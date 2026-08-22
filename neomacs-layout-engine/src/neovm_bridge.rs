@@ -3585,6 +3585,15 @@ struct UnresolvedFaceComposition {
     attributes: Option<NeoFace>,
 }
 
+/// GNU's face merger reports invalid references only at the display-property
+/// boundary.  Once a valid named face has been entered, its remapping and
+/// stored `:inherit` graph are merged with `err_msgs=false`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FaceReferenceDiagnostics {
+    Report,
+    Suppress,
+}
+
 impl UnresolvedFaceComposition {
     fn merge(&mut self, contribution: NeoFace) {
         self.attributes = Some(match self.attributes.take() {
@@ -3984,7 +3993,12 @@ impl FaceResolver {
         rf
     }
 
-    fn resolve_named_face_overlay_spec(&self, name: &str, depth: usize) -> NeoFace {
+    fn resolve_named_face_overlay_spec(
+        &self,
+        name: &str,
+        depth: usize,
+        diagnostics: FaceReferenceDiagnostics,
+    ) -> NeoFace {
         if depth > 40 {
             return NeoFace::default();
         }
@@ -3993,40 +4007,59 @@ impl FaceResolver {
         }
 
         let Some(face) = self.face_table.get(name).cloned() else {
-            self.invalid_face_references
-                .borrow_mut()
-                .push(name.to_owned());
+            if diagnostics == FaceReferenceDiagnostics::Report {
+                self.invalid_face_references
+                    .borrow_mut()
+                    .push(name.to_owned());
+            }
             return NeoFace::default();
         };
-        self.resolve_face_overlay_spec(face, depth)
+        self.resolve_face_overlay_spec(face, depth, FaceReferenceDiagnostics::Suppress)
     }
 
-    fn resolve_face_overlay_spec(&self, mut face: NeoFace, depth: usize) -> NeoFace {
+    fn resolve_face_overlay_spec(
+        &self,
+        mut face: NeoFace,
+        depth: usize,
+        diagnostics: FaceReferenceDiagnostics,
+    ) -> NeoFace {
         if depth > 40 {
             return NeoFace::default();
         }
 
         let parent = match face.inherit.take() {
-            Some(inherit_ref) => self.resolve_face_ref_overlay_spec(inherit_ref, depth + 1),
+            Some(inherit_ref) => {
+                self.resolve_face_ref_overlay_spec(inherit_ref, depth + 1, diagnostics)
+            }
             None => NeoFace::default(),
         };
         parent.merge(&face)
     }
 
-    fn resolve_face_ref_overlay_spec(&self, face_ref: Value, depth: usize) -> NeoFace {
-        self.resolve_face_value_overlay_spec(face_ref, depth)
+    fn resolve_face_ref_overlay_spec(
+        &self,
+        face_ref: Value,
+        depth: usize,
+        diagnostics: FaceReferenceDiagnostics,
+    ) -> NeoFace {
+        self.resolve_face_value_overlay_spec(face_ref, depth, diagnostics)
             .unwrap_or_default()
     }
 
     /// Resolve one GNU face reference to logical attributes, without realizing
     /// it against a base face yet.
-    fn resolve_face_value_overlay_spec(&self, face_ref: Value, depth: usize) -> Option<NeoFace> {
+    fn resolve_face_value_overlay_spec(
+        &self,
+        face_ref: Value,
+        depth: usize,
+        diagnostics: FaceReferenceDiagnostics,
+    ) -> Option<NeoFace> {
         if depth > 40 || face_ref.is_nil() || face_ref.is_symbol_named("nil") {
             return None;
         }
 
         if let Some(name) = Self::face_name_from_value(&face_ref) {
-            return Some(self.resolve_named_face_overlay_spec(name, depth));
+            return Some(self.resolve_named_face_overlay_spec(name, depth, diagnostics));
         }
 
         let Some(items) = list_to_vec(&face_ref) else {
@@ -4038,7 +4071,11 @@ impl FaceResolver {
 
         match self.eval_filtered_face_spec(&items) {
             FilteredFaceSpec::Matched(filtered_spec) => {
-                return self.resolve_face_value_overlay_spec(Value::list(filtered_spec), depth + 1);
+                return self.resolve_face_value_overlay_spec(
+                    Value::list(filtered_spec),
+                    depth + 1,
+                    diagnostics,
+                );
             }
             // Filter didn't match → the wrapped spec contributes nothing.
             FilteredFaceSpec::Rejected => return None,
@@ -4046,12 +4083,16 @@ impl FaceResolver {
         }
         if Self::face_spec_is_plist(&items) {
             let face = NeoFace::from_plist_realized("--inline--", &items, self.plist_palette());
-            return Some(self.resolve_face_overlay_spec(face, depth + 1));
+            return Some(self.resolve_face_overlay_spec(face, depth + 1, diagnostics));
         }
 
         let mut composition = UnresolvedFaceComposition::default();
         for item in items.iter().rev() {
-            composition.merge_optional(self.resolve_face_value_overlay_spec(*item, depth + 1));
+            composition.merge_optional(self.resolve_face_value_overlay_spec(
+                *item,
+                depth + 1,
+                diagnostics,
+            ));
         }
         composition.attributes
     }
@@ -4211,6 +4252,7 @@ impl FaceResolver {
         name: &str,
         remap_stack: &mut Vec<String>,
         depth: usize,
+        diagnostics: FaceReferenceDiagnostics,
     ) -> Option<NeoFace> {
         if depth > 40 || name == "nil" {
             return None;
@@ -4227,6 +4269,7 @@ impl FaceResolver {
                 &specs,
                 remap_stack,
                 depth + 1,
+                FaceReferenceDiagnostics::Suppress,
             );
             remap_stack.pop();
             if remapped.is_some() {
@@ -4245,9 +4288,11 @@ impl FaceResolver {
         }
 
         let Some(mut face) = self.face_table.get(name).cloned() else {
-            self.invalid_face_references
-                .borrow_mut()
-                .push(name.to_owned());
+            if diagnostics == FaceReferenceDiagnostics::Report {
+                self.invalid_face_references
+                    .borrow_mut()
+                    .push(name.to_owned());
+            }
             return Some(NeoFace::default());
         };
         let parent = face.inherit.take().and_then(|inherit_ref| {
@@ -4256,6 +4301,7 @@ impl FaceResolver {
                 &inherit_ref,
                 remap_stack,
                 depth + 1,
+                FaceReferenceDiagnostics::Suppress,
             )
         });
         Some(match parent {
@@ -4270,6 +4316,7 @@ impl FaceResolver {
         val: &Value,
         remap_stack: &mut Vec<String>,
         depth: usize,
+        diagnostics: FaceReferenceDiagnostics,
     ) -> Option<NeoFace> {
         if depth > 40 {
             return None;
@@ -4286,6 +4333,7 @@ impl FaceResolver {
                     name,
                     remap_stack,
                     depth + 1,
+                    diagnostics,
                 )
             }
             ValueKind::Cons => {
@@ -4301,6 +4349,7 @@ impl FaceResolver {
                             &Value::list(filtered_spec),
                             remap_stack,
                             depth + 1,
+                            diagnostics,
                         );
                     }
                     // Filter didn't match → the remap contributes nothing.
@@ -4316,6 +4365,7 @@ impl FaceResolver {
                             &inherit_ref,
                             remap_stack,
                             depth + 1,
+                            diagnostics,
                         )
                     });
                     return Some(match parent {
@@ -4331,6 +4381,7 @@ impl FaceResolver {
                         item,
                         remap_stack,
                         depth + 1,
+                        diagnostics,
                     ));
                 }
                 composition.attributes
@@ -4346,8 +4397,14 @@ impl FaceResolver {
         val: &Value,
     ) -> Option<ResolvedFace> {
         let mut remap_stack = Vec::new();
-        self.resolve_buffer_face_value_overlay_spec_inner(buffer, val, &mut remap_stack, 0)
-            .map(|attributes| self.apply_specified_face_over(base, &attributes))
+        self.resolve_buffer_face_value_overlay_spec_inner(
+            buffer,
+            val,
+            &mut remap_stack,
+            0,
+            FaceReferenceDiagnostics::Report,
+        )
+        .map(|attributes| self.apply_specified_face_over(base, &attributes))
     }
 
     /// Merge all buffer face sources logically, then realize exactly once.
@@ -4365,6 +4422,7 @@ impl FaceResolver {
                 &value,
                 &mut remap_stack,
                 0,
+                FaceReferenceDiagnostics::Report,
             ));
         }
         composition.realize(self, base)
@@ -4380,6 +4438,7 @@ impl FaceResolver {
             &Value::symbol("default"),
             &mut remap_stack,
             0,
+            FaceReferenceDiagnostics::Report,
         )
         .map(|attributes| self.apply_specified_face_over(&self.default_face, &attributes))
         .unwrap_or_else(|| self.default_face.clone())
@@ -4390,7 +4449,7 @@ impl FaceResolver {
         base: &ResolvedFace,
         val: &Value,
     ) -> Option<ResolvedFace> {
-        self.resolve_face_value_overlay_spec(*val, 0)
+        self.resolve_face_value_overlay_spec(*val, 0, FaceReferenceDiagnostics::Report)
             .map(|attributes| self.apply_specified_face_over(base, &attributes))
     }
 
@@ -4401,7 +4460,11 @@ impl FaceResolver {
     ) -> Option<ResolvedFace> {
         let mut composition = UnresolvedFaceComposition::default();
         for value in sources.values() {
-            composition.merge_optional(self.resolve_face_value_overlay_spec(value, 0));
+            composition.merge_optional(self.resolve_face_value_overlay_spec(
+                value,
+                0,
+                FaceReferenceDiagnostics::Report,
+            ));
         }
         composition.realize(self, base)
     }
