@@ -1919,3 +1919,85 @@ fn pdump_round_trip_relinks_an_indirect_buffers_visited_file_modtime() {
         "the restored indirect buffer must record its base's CURRENT modtime"
     );
 }
+
+#[test]
+fn test_failed_load_after_symbol_table_leaves_interner_usable() {
+    crate::test_utils::init_test_tracing();
+    // A load that fails AFTER the symbol-table section has populated the
+    // global interner must (a) return Err instead of panicking, (b) leave
+    // the interner usable — cross-process, the mapping is deliberately
+    // LEAKED so the `borrowed_alias` name keys keep valid bytes (see
+    // `load_from_dump`'s error arm) — and (c) leave the thread-local load
+    // remaps cleared so a follow-up load of a good file succeeds.
+    let mut eval = Context::new();
+    eval.eval_str("(defvar pdleak-canary-var 7)")
+        .expect("defvar should evaluate");
+    let dir = tempfile::tempdir().unwrap();
+    let good = dir.path().join("good.pdump");
+    dump_to_file(&eval, &good).expect("dump should succeed");
+
+    // Rebuild the image with the object-starts payload flooded to 0xFF:
+    // that section parses right after the symbol table, so the failure
+    // lands exactly in the danger zone.
+    let image = mmap_image::load_image(&good).expect("good image should map");
+    use mmap_image::DumpSectionKind as K;
+    let kinds = [
+        K::Metadata,
+        K::HeapImage,
+        K::Roots,
+        K::Relocations,
+        K::ObjectStarts,
+        K::EmacsRelocations,
+        K::RuntimeState,
+        K::SymbolTable,
+        K::Obarray,
+        K::Autoloads,
+        K::CharsetRegistry,
+        K::CodingSystems,
+        K::FaceTable,
+        K::Buffers,
+        K::RuntimeManagers,
+        K::ObjectExtra,
+        K::ValueRelocations,
+    ];
+    let mut owned: Vec<(K, Vec<u8>)> = Vec::new();
+    for kind in kinds {
+        if let Some(bytes) = image.section(kind) {
+            let payload = if matches!(kind, K::ObjectStarts) {
+                vec![0xFF; bytes.len().max(16)]
+            } else {
+                bytes.to_vec()
+            };
+            owned.push((kind, payload));
+        }
+    }
+    drop(image);
+    let sections: Vec<mmap_image::ImageSection<'_>> = owned
+        .iter()
+        .map(|(kind, bytes)| mmap_image::ImageSection {
+            kind: *kind,
+            flags: 0,
+            bytes,
+        })
+        .collect();
+    let bad = dir.path().join("bad.pdump");
+    mmap_image::write_image(&bad, &sections).expect("bad image should write");
+
+    let err = load_from_dump(&bad);
+    assert!(err.is_err(), "corrupted object-starts must fail the load");
+
+    // The interner must still be fully usable after the failed load.
+    let fresh = intern("pdleak-post-failure-fresh-name");
+    assert_eq!(
+        crate::emacs_core::intern::resolve_sym(fresh),
+        "pdleak-post-failure-fresh-name"
+    );
+
+    // And a follow-up load of the GOOD file must succeed (the failed
+    // load's thread-local remaps were cleared by RestoreCleanup).
+    let mut restored = load_from_dump(&good).expect("good load after failed load");
+    assert_eq!(
+        format_eval_result(&restored.eval_str("pdleak-canary-var")),
+        "OK 7"
+    );
+}

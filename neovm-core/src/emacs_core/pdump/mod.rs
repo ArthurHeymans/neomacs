@@ -475,6 +475,30 @@ pub fn load_from_dump(path: &Path) -> Result<Context, DumpError> {
     let load_start = std::time::Instant::now();
     let mut image = mmap_image::load_image(path)?;
     image.apply_relocations()?;
+    let mut eval = match load_from_mapped_image(&mut image) {
+        Ok(eval) => eval,
+        Err(err) => {
+            // A failed load may already have installed process-lifetime
+            // `LispString::borrowed_alias` symbol names into the GLOBAL
+            // interner (`intern_dump_lisp_string`). Unmapping now would
+            // leave those registry keys dangling — the fallback loadup's
+            // very first `intern` memcmps freed memory and SEGVs. Leak the
+            // mapping instead: failure is rare (version mismatch or a
+            // corrupt file, once per process), and the aliases were
+            // promised the image's bytes for the process lifetime.
+            std::mem::forget(image);
+            return Err(err);
+        }
+    };
+    record_loaded_dump(path, load_start.elapsed());
+    mark_after_pdump_load_hook_pending(&mut eval);
+    eval.install_pdump_image(image);
+    Ok(eval)
+}
+
+fn load_from_mapped_image(
+    image: &mut mmap_image::LoadedMmapImage,
+) -> Result<Context, DumpError> {
     let mut state = empty_context_state();
 
     let _cleanup = RestoreCleanup;
@@ -547,7 +571,7 @@ pub fn load_from_dump(path: &Path) -> Result<Context, DumpError> {
 
     let value_fixups_section = image.section(DumpSectionKind::ValueRelocations);
 
-    let mut eval = reconstruct_evaluator_after_symbol_table_with_tagged_heap_parts(
+    let eval = reconstruct_evaluator_after_symbol_table_with_tagged_heap_parts(
         &state,
         object_descriptors,
         spans,
@@ -555,9 +579,6 @@ pub fn load_from_dump(path: &Path) -> Result<Context, DumpError> {
         value_fixups_section,
     )?;
     drop(_cleanup);
-    record_loaded_dump(path, load_start.elapsed());
-    mark_after_pdump_load_hook_pending(&mut eval);
-    eval.install_pdump_image(image);
     Ok(eval)
 }
 
