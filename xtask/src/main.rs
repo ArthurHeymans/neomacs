@@ -156,6 +156,11 @@ struct LeimGenerationJob {
 struct GeneratedLispJob {
     name: String,
     args: Vec<OsString>,
+    /// The file this job writes, when there is exactly one. A FAILED job's
+    /// output is deleted so a partial write can never mtime-pass as fresh
+    /// on the next build (generation overwrites in place; there is no
+    /// pre-deleting clean step to fall back on).
+    output: Option<PathBuf>,
 }
 
 const LEIM_GENERATION_RULES: &[LeimGenerationRule] = &[
@@ -696,7 +701,16 @@ fn run_fresh_build_inner(
     }
     remove_stale_generated_leim_sources(options, &paths)?;
     remove_stale_generated_custom_finder_sources(options, &paths)?;
-    remove_stale_generated_unidata_sources(options, &paths)?;
+    // Unidata outputs are NOT removed here. GNU's bootstrap-clean ritual
+    // deleted them long before regeneration (which needs the bootstrap
+    // binary), so ANY failure in between — a killed build, a crashed
+    // temacs — left the tree with charprop.el/uni-*.el missing: every
+    // unicode-property lookup silently degrades and previously-built
+    // binaries panic on loadup. The outputs are pure functions of tracked
+    // admin/unidata inputs, so the mtime checks in
+    // run_unidata_lisp_generation regenerate exactly when needed, and a
+    // FAILED generation job now deletes its own output rather than the
+    // clean step pre-deleting everything.
     // GNU admin/grammars/Makefile.in has an intentionally empty
     // bootstrap-clean (with a comment "IMO this should run gen-clean"),
     // so stale grammar outputs can survive across rebuilds and cause
@@ -1301,6 +1315,7 @@ fn unidata_gen_file_jobs(
         jobs.push(GeneratedLispJob {
             name: format!("{} (GNU unidata-gen-file)", output.display()),
             args: unidata_gen_file_args(paths, output, unidata_txt),
+            output: Some(output.clone()),
         });
     }
     Ok(jobs)
@@ -1320,6 +1335,7 @@ fn unidata_extra_jobs_to_run(
         jobs_to_run.push(GeneratedLispJob {
             name: format!("{} (GNU unidata)", job.output.display()),
             args: job.args,
+            output: Some(job.output),
         });
     }
     Ok(jobs_to_run)
@@ -1454,7 +1470,12 @@ fn run_unidata_generator_function(
     );
     args.push(output.as_os_str().to_os_string());
     args.extend(extra_args.iter().cloned());
-    run_command(options, &options.repo_root, &paths.bootstrap, &args, envs)
+    let result = run_command(options, &options.repo_root, &paths.bootstrap, &args, envs);
+    if result.is_err() && !options.dry_run {
+        // Same partial-output rule as `run_generated_lisp_jobs`.
+        let _ = fs::remove_file(output);
+    }
+    result
 }
 
 fn run_unidata_txt_generation(options: &FreshBuildOptions, paths: &PipelinePaths) -> Result<()> {
@@ -1562,6 +1583,7 @@ fn custom_dependencies_generation_job(paths: &PipelinePaths) -> Result<Option<Ge
     Ok(Some(GeneratedLispJob {
         name: "lisp/cus-load.el (GNU custom-deps)".to_string(),
         args,
+        output: Some(output),
     }))
 }
 
@@ -1578,6 +1600,7 @@ fn finder_data_generation_job(paths: &PipelinePaths) -> Result<Option<GeneratedL
     Ok(Some(GeneratedLispJob {
         name: "lisp/finder-inf.el (GNU finder-data)".to_string(),
         args,
+        output: Some(output),
     }))
 }
 
@@ -1618,7 +1641,15 @@ fn run_generated_lisp_jobs(
                     envs,
                 )
                 .err()
-                .map(|err| format!("{} ({err})", job.name))
+                .map(|err| {
+                    // Never leave a failed job's partial output with a
+                    // fresh mtime — the next build would skip regenerating
+                    // it (see `GeneratedLispJob::output`).
+                    if let Some(output) = &job.output {
+                        let _ = fs::remove_file(output);
+                    }
+                    format!("{} ({err})", job.name)
+                })
             })
             .collect()
     }))
@@ -2343,6 +2374,7 @@ fn remove_stale_semantic_grammar_outputs(
     Ok(())
 }
 
+#[cfg(test)]
 fn generated_unidata_source_files(paths: &PipelinePaths) -> Result<Vec<PathBuf>> {
     let mut files = vec![
         paths.lisp_root.join("international/charscript.el"),
@@ -2359,6 +2391,7 @@ fn generated_unidata_source_files(paths: &PipelinePaths) -> Result<Vec<PathBuf>>
     Ok(files)
 }
 
+#[cfg(test)]
 fn generated_unidata_admin_files(paths: &PipelinePaths) -> Vec<PathBuf> {
     vec![
         paths.admin_unidata_root.join("unidata.txt"),
@@ -2367,37 +2400,12 @@ fn generated_unidata_admin_files(paths: &PipelinePaths) -> Vec<PathBuf> {
     ]
 }
 
-fn remove_stale_generated_unidata_sources(
-    options: &FreshBuildOptions,
-    paths: &PipelinePaths,
-) -> Result<()> {
-    let mut files = generated_unidata_source_files(paths)?;
-    files.extend(generated_unidata_admin_files(paths));
-    let files = files
-        .into_iter()
-        .filter(|path| options.dry_run || path.exists())
-        .collect::<Vec<_>>();
-    if files.is_empty() {
-        return Ok(());
-    }
-
-    print_synthetic_step("remove stale generated Unicode data sources");
-    if options.dry_run {
-        for file in &files {
-            println!("  would remove: {}", file.display());
-        }
-        return Ok(());
-    }
-
-    let mut removed = 0usize;
-    for file in &files {
-        if remove_file_if_exists(file)? {
-            removed += 1;
-        }
-    }
-    println!("  INFO  removed {removed} stale generated Unicode data source files");
-    Ok(())
-}
+// The bootstrap-clean unidata removal is deliberately GONE: deleting
+// charprop.el/uni-*.el hours before the step that can regenerate them
+// turned every interrupted fresh-build into a tree-wide unicode-property
+// outage. Generation overwrites in place and failed jobs delete their
+// own output (see `GeneratedLispJob::output`); the file-set helpers
+// below survive as test-only pins of the GNU gen-clean shape.
 
 fn collect_lisp_bytecode_files(current: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     let entries = match fs::read_dir(current) {
