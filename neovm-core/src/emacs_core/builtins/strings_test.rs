@@ -255,6 +255,64 @@ fn concat_preserves_multibyte_text_properties_as_char_intervals() {
 }
 
 #[test]
+fn concat_applies_source_plists_in_gnu_add_properties_order() {
+    crate::test_utils::init_test_tracing();
+
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let result = eval
+        .eval_str(
+            r#"(let* ((source (propertize "a" 'face 'bold 'tag 'source))
+                      (result (concat source)))
+                 (text-properties-at 0 result))"#,
+        )
+        .expect("evaluation succeeds");
+
+    assert_eq!(
+        crate::emacs_core::print::print_value(&result),
+        "(tag source face bold)"
+    );
+}
+
+#[test]
+fn concat_builds_many_disjoint_property_runs_without_incremental_tree_balancing() {
+    crate::test_utils::init_test_tracing();
+
+    let sources = (0..128)
+        .map(|source_index| {
+            let source = Value::string("abcd");
+            let mut table = crate::buffer::text_props::TextPropertyTable::new();
+            for char_index in 0..4 {
+                put_string_property(
+                    &mut table,
+                    char_index,
+                    char_index + 1,
+                    Value::symbol("face"),
+                    Value::fixnum((source_index * 4 + char_index) as i64),
+                );
+            }
+            crate::emacs_core::value::set_string_text_properties_table_for_value(source, table);
+            source
+        })
+        .collect::<Vec<_>>();
+
+    crate::buffer::text_props::reset_interval_balance_calls_for_test();
+    let result = builtin_concat(sources).expect("concat should preserve all property runs");
+    let balance_calls = crate::buffer::text_props::interval_balance_calls_for_test();
+
+    assert_eq!(
+        result
+            .as_lisp_string()
+            .expect("concat returns a string")
+            .schars(),
+        512
+    );
+    assert_eq!(
+        balance_calls, 0,
+        "concat owns all shifted runs up front and should build one balanced tree"
+    );
+}
+
+#[test]
 fn concat_promotes_unibyte_high_bytes_when_result_is_multibyte_like_gnu() {
     crate::test_utils::init_test_tracing();
 

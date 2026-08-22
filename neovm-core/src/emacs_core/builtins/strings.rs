@@ -1,5 +1,7 @@
 use super::*;
-use crate::buffer::text_props::PropertyPlistApplication;
+use crate::buffer::text_props::{
+    PropertyPlistApplication, ShiftedTextPropertySource, TextPropertyTable,
+};
 use crate::buffer::{CharLen, CharPos0, CharRange};
 use crate::emacs_core::coding::TextQuotingStyle;
 use crate::emacs_core::error::{expect_args, expect_fixnum, expect_max_args, expect_min_args};
@@ -341,6 +343,21 @@ pub(crate) fn builtin_concat(args: Vec<Value>) -> EvalResult {
     builtin_concat_slice(&args)
 }
 
+fn concatenated_string_text_properties(
+    string_sources: &[(Value, usize)],
+) -> Option<TextPropertyTable> {
+    let sources = string_sources
+        .iter()
+        .filter_map(|(source, offset)| {
+            get_string_text_properties_table_for_value(*source)
+                .map(|table| ShiftedTextPropertySource::new(table, CharLen::new(*offset)))
+        })
+        .collect::<Vec<_>>();
+    (!sources.is_empty()).then(|| {
+        TextPropertyTable::from_shifted_sources(sources, PropertyPlistApplication::AddProperties)
+    })
+}
+
 pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
     crate::emacs_core::perf_trace::time_op(crate::emacs_core::perf_trace::HotpathOp::Concat, || {
         use crate::emacs_core::emacs_char;
@@ -449,20 +466,7 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
                 crate::heap_types::LispString::from_unibyte(combined)
             });
 
-            let mut combined_table = crate::buffer::text_props::TextPropertyTable::new();
-            let mut has_props = false;
-            for (src_val, offset) in &string_sources {
-                if let Some(src_table) = get_string_text_properties_table_for_value(*src_val)
-                    && !src_table.is_empty()
-                {
-                    combined_table.append_shifted_via_add_text_properties_at_char_offset(
-                        &src_table,
-                        CharLen::new(*offset),
-                    );
-                    has_props = true;
-                }
-            }
-            if has_props {
+            if let Some(combined_table) = concatenated_string_text_properties(&string_sources) {
                 set_string_text_properties_table_for_value(new_val, combined_table);
             }
             return Ok(new_val);
@@ -535,20 +539,7 @@ pub(crate) fn builtin_concat_slice(args: &[Value]) -> EvalResult {
 
         // Preserve text properties from string sources
         if new_val.is_string() {
-            let mut combined_table = crate::buffer::text_props::TextPropertyTable::new();
-            let mut has_props = false;
-            for (src_val, offset) in &string_sources {
-                if let Some(src_table) = get_string_text_properties_table_for_value(*src_val)
-                    && !src_table.is_empty()
-                {
-                    combined_table.append_shifted_via_add_text_properties_at_char_offset(
-                        &src_table,
-                        CharLen::new(*offset),
-                    );
-                    has_props = true;
-                }
-            }
-            if has_props {
+            if let Some(combined_table) = concatenated_string_text_properties(&string_sources) {
                 set_string_text_properties_table_for_value(new_val, combined_table);
             }
         }

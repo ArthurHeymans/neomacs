@@ -22,6 +22,21 @@ use crate::emacs_core::eval::{
 use crate::emacs_core::value::{Value, eq_value, equal_value};
 use crate::gc_trace::GcTrace;
 
+#[cfg(test)]
+thread_local! {
+    static INTERVAL_BALANCE_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_interval_balance_calls_for_test() {
+    INTERVAL_BALANCE_CALLS.with(|calls| calls.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn interval_balance_calls_for_test() -> usize {
+    INTERVAL_BALANCE_CALLS.with(std::cell::Cell::get)
+}
+
 // ---------------------------------------------------------------------------
 // PropertyInterval
 // ---------------------------------------------------------------------------
@@ -997,6 +1012,8 @@ impl IntervalTree {
     }
 
     fn balance_an_interval(&mut self, mut id: IntervalId) -> IntervalId {
+        #[cfg(test)]
+        INTERVAL_BALANCE_CALLS.with(|calls| calls.set(calls.get() + 1));
         loop {
             let left_len = self.subtree_len(self.nodes[id.0].left).get() as isize;
             let right_len = self.subtree_len(self.nodes[id.0].right).get() as isize;
@@ -1784,6 +1801,22 @@ pub(crate) enum PropertyPlistApplication {
     PreserveSuppliedOrder,
 }
 
+/// One property-bearing string participating in a concatenation.
+///
+/// The offset is a character length, not an untyped byte/character integer:
+/// interval storage and GNU's string-property positions are character based
+/// even when the destination string is multibyte.
+pub(crate) struct ShiftedTextPropertySource {
+    table: TextPropertyTable,
+    char_offset: CharLen,
+}
+
+impl ShiftedTextPropertySource {
+    pub(crate) fn new(table: TextPropertyTable, char_offset: CharLen) -> Self {
+        Self { table, char_offset }
+    }
+}
+
 /// Conservative answer to whether a text-property name can occur in a table.
 ///
 /// `DefinitelyAbsent` is proof and may be used to skip an interval-tree walk.
@@ -2124,6 +2157,71 @@ impl TextPropertyTable {
             syntax_prop_any: std::sync::atomic::AtomicU64::new(0),
             syntax_prop_ranges: std::sync::Mutex::new((0, Vec::new())),
         }
+    }
+
+    /// Compose disjoint, shifted source tables into one balanced interval tree.
+    ///
+    /// GNU `concat_to_string` first owns the complete result and then applies
+    /// each source interval through `add-text-properties`.  Replaying those
+    /// writes against a growing tree is unnecessarily quadratic in NeoMacs:
+    /// every property can split, search, and rebalance the interval tree.  This
+    /// constructor performs the same ordered-plist transformation in memory,
+    /// then builds the destination tree once from all known runs.
+    pub(crate) fn from_shifted_sources(
+        sources: Vec<ShiftedTextPropertySource>,
+        application: PropertyPlistApplication,
+    ) -> Self {
+        fn applied_to_empty_destination(
+            properties: Vec<(Value, Value)>,
+            application: PropertyPlistApplication,
+        ) -> Vec<(Value, Value)> {
+            let mut destination = Vec::with_capacity(properties.len());
+            let mut apply = |(name, value): (Value, Value)| {
+                if let Some((_, existing)) = destination
+                    .iter_mut()
+                    .find(|(existing_name, _)| eq_value(existing_name, &name))
+                {
+                    *existing = value;
+                } else {
+                    destination.insert(0, (name, value));
+                }
+            };
+
+            match application {
+                PropertyPlistApplication::AddProperties => {
+                    properties.into_iter().for_each(&mut apply);
+                }
+                PropertyPlistApplication::PreserveSuppliedOrder => {
+                    properties.into_iter().rev().for_each(&mut apply);
+                }
+            }
+            destination
+        }
+
+        let saved_roots = save_scratch_gc_roots();
+        let mut runs = Vec::new();
+        for source in sources {
+            for run in source.table.intervals.runs() {
+                if run.is_empty_plist() {
+                    continue;
+                }
+                let properties = applied_to_empty_destination(plist_pairs(run.plist), application);
+                let plist = plist_value_from_pairs(&properties);
+                // Later plist construction may collect.  Keep every fresh
+                // destination spine alive until the finished tree owns it.
+                push_scratch_gc_root(plist);
+                runs.push(IntervalRun::new_in_char_range(
+                    CharRange::new(
+                        run.start().add_len(source.char_offset),
+                        run.end().add_len(source.char_offset),
+                    ),
+                    plist,
+                ));
+            }
+        }
+        let table = Self::from_interval_runs_preserving_shape(runs);
+        restore_scratch_gc_roots(saved_roots);
+        table
     }
 
     fn replace_runs_preserving_shape(
@@ -3480,42 +3578,6 @@ impl TextPropertyTable {
                     break;
                 }
                 cursor = node_end;
-            }
-        }
-    }
-
-    pub fn append_shifted_via_add_text_properties_at_char_offset(
-        &mut self,
-        other: &TextPropertyTable,
-        offset: CharLen,
-    ) {
-        self.append_shifted_via_add_text_properties_raw(other, offset);
-    }
-
-    fn append_shifted_via_add_text_properties_raw(
-        &mut self,
-        other: &TextPropertyTable,
-        offset: CharLen,
-    ) {
-        self.mutation_tick += 1;
-        self.syntax_prop_tick += 1;
-        if other.has_any_syntax_prop_interval() {
-            if let Ok(mut guard) = self.syntax_prop_ranges.lock() {
-                *guard = (0, Vec::new());
-            }
-        } else {
-            self.syntax_ranges_revalidate();
-        }
-        for run in other.intervals.runs() {
-            if run.is_empty_plist() {
-                continue;
-            }
-            for (name, value) in plist_pairs(run.plist) {
-                self.put_property_in_char_range(
-                    CharRange::new(run.start().add_len(offset), run.end().add_len(offset)),
-                    name,
-                    value,
-                );
             }
         }
     }

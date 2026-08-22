@@ -149,6 +149,12 @@ a Lisp reader such as Edebug's advised 'read' function is installed.
 This prevents lexical functions loaded from source from retaining
 unexpanded compiler-macro calls.
 
+---
+** NeoMacs builds concatenated string text properties in one pass.
+Completion UIs that repeatedly concatenate many highlighted candidates
+no longer rebalance a growing text-property interval tree for every
+property, reducing text-property construction work in Consult results.
+
 +++
 ** Several font-lock face variables are now obsolete.
 The following variables are now obsolete: 'font-lock-builtin-face',
