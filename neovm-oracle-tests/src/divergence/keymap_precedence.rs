@@ -361,3 +361,98 @@ fn div_km_lookup_key_returns_keymap_for_prefix() {
         expect,
     );
 }
+
+// ---------------------------------------------------------------------
+// `:advertised-binding' (DIVERGENCES.md 185 §1)
+//
+// GNU `Fwhere_is_internal' (src/keymap.c:2669-2684) consults the symbol's
+// `:advertised-binding' property before the reverse search whenever FIRSTONLY
+// is non-nil.  `lisp/bindings.el:1331-1334' is the reason it matters: it binds
+// `set-mark-command' to both `C-@' (0) and `C-SPC' (67108896) and advertises
+// the latter, so every docstring that says \\[set-mark-command] reads `C-SPC'
+// in GNU.  These probes run against the bootstrapped `global-map', which the
+// unit tests in neovm-core cannot reach.
+// ---------------------------------------------------------------------
+
+#[test]
+fn div_km_where_is_advertised_binding_wins_over_the_ascii_binding() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ([67108896] [67108896] t)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(list (where-is-internal 'set-mark-command global-map t)
+      (get 'set-mark-command :advertised-binding)
+      ;; both bindings really are present -- the property picks between them,
+      ;; it does not invent one.
+      (and (memq 0 (mapcar (lambda (k) (aref k 0))
+                           (where-is-internal 'set-mark-command global-map)))
+           (memq 67108896 (mapcar (lambda (k) (aref k 0))
+                                  (where-is-internal 'set-mark-command global-map)))
+           t))
+"##,
+        expect,
+    );
+}
+
+#[test]
+fn div_km_where_is_advertised_binding_names_the_key_in_docstrings() {
+    // The user-visible consequence, and the symptom entry 178 handed over:
+    // `set-mark-command-repeat-pop' renders as `C-SPC' in GNU and rendered as
+    // `C-@' here.
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"C-SPC\" t)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(list (substring-no-properties (substitute-command-keys "\\[set-mark-command]"))
+      (and (string-match-p
+            "C-SPC"
+            (substitute-command-keys
+             (documentation-property 'set-mark-command-repeat-pop 'variable-documentation)))
+           t))
+"##,
+        expect,
+    );
+}
+
+#[test]
+fn div_km_where_is_advertised_binding_is_verified_before_it_is_trusted() {
+    // A property whose key no longer runs the command is ignored; one that
+    // does is returned VERBATIM, so a string property stays a string.
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ([120] \"m\" t [113])""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(let ((m (make-sparse-keymap)) (n (make-sparse-keymap)) (o (make-sparse-keymap)))
+  (define-key m "x" 'neo-adv-stale)
+  (put 'neo-adv-stale :advertised-binding [?y])
+  (define-key n "m" 'neo-adv-string)
+  (put 'neo-adv-string :advertised-binding "m")
+  (define-key o "p" 'neo-adv-list)
+  (define-key o "q" 'neo-adv-list)
+  (put 'neo-adv-list :advertised-binding (list [?z] [?q] [?p]))
+  (list (where-is-internal 'neo-adv-stale m t)
+        (where-is-internal 'neo-adv-string n t)
+        (stringp (where-is-internal 'neo-adv-string n t))
+        (where-is-internal 'neo-adv-list o t)))
+"##,
+        expect,
+    );
+}
+
+#[test]
+fn div_km_where_is_advertised_binding_list_that_matches_nothing_signals() {
+    // GNU offers the exhausted list's nil TAIL to `shadow_lookup' as one more
+    // candidate, and `Flookup_key' rejects nil as a key sequence.  Pinned
+    // because it is GNU's real answer and not an obvious one.
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (wrong-type-argument arrayp nil)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(let ((m (make-sparse-keymap)))
+  (define-key m "d" 'neo-adv-none)
+  (put 'neo-adv-none :advertised-binding (list [?z] [?y]))
+  (condition-case e (where-is-internal 'neo-adv-none m t) (error e)))
+"##,
+        expect,
+    );
+}

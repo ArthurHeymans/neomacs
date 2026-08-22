@@ -5143,6 +5143,233 @@ fn where_is_internal_finds_binding_in_explicit_map() {
     assert_eq!(result, "OK t");
 }
 
+// -------------------------------------------------------------------
+// where-is-internal: GNU's `:advertised-binding' short circuit
+//
+// GNU `Fwhere_is_internal' (src/keymap.c:2669-2684) consults the symbol's
+// `:advertised-binding' property BEFORE it runs the reverse search, whenever
+// FIRSTONLY is non-nil, and returns the advertised sequence VERBATIM if that
+// sequence still resolves to DEFINITION in the same keymaps.
+//
+// This is not a curiosity: `lisp/bindings.el:1331-1334' binds
+// `set-mark-command' to BOTH `C-@' (ASCII NUL, 0) and `C-SPC' (32 with the
+// 2**26 control bit, 67108896) and advertises the second, which is the only
+// reason GNU renders `\\[set-mark-command]' as `C-SPC' instead of `C-@'.
+//
+// Every expectation below is the answer measured from GNU Emacs 31.0.90
+// (tmp/l185-adv-probe.el), not a reading of the C.
+// -------------------------------------------------------------------
+
+#[test]
+fn where_is_internal_advertised_binding_outranks_the_reverse_search_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU: [67108896] -- the advertised C-SPC, not the C-@ the search finds.
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "\C-@" 'l185-adv-a)
+             (define-key m [67108896] 'l185-adv-a)
+             (put 'l185-adv-a :advertised-binding [67108896])
+             (where-is-internal 'l185-adv-a m t))"#,
+    );
+    assert_eq!(result, "OK [67108896]");
+}
+
+#[test]
+fn where_is_internal_advertised_binding_applies_to_non_ascii_firstonly_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU's guard is `!NILP (firstonly)', so the `non-ascii' spelling takes
+    // the short circuit too.  GNU: [67108896].
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "\C-@" 'l185-adv-na)
+             (define-key m [67108896] 'l185-adv-na)
+             (put 'l185-adv-na :advertised-binding [67108896])
+             (where-is-internal 'l185-adv-na m 'non-ascii))"#,
+    );
+    assert_eq!(result, "OK [67108896]");
+}
+
+#[test]
+fn where_is_internal_advertised_binding_is_ignored_when_it_no_longer_resolves_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU verifies the advertised sequence through `shadow_lookup' and falls
+    // back to the reverse search when it does not answer DEFINITION.
+    // GNU: [120].
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "x" 'l185-adv-b)
+             (put 'l185-adv-b :advertised-binding [?y])
+             (where-is-internal 'l185-adv-b m t))"#,
+    );
+    assert_eq!(result, "OK [120]");
+}
+
+#[test]
+fn where_is_internal_advertised_binding_pointing_at_another_command_is_ignored_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // The advertised key is bound, but to a DIFFERENT command; GNU's `EQ'
+    // check rejects it.  GNU: [102].
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "f" 'l185-adv-f)
+             (define-key m "g" 'l185-adv-g)
+             (put 'l185-adv-f :advertised-binding [?g])
+             (where-is-internal 'l185-adv-f m t))"#,
+    );
+    assert_eq!(result, "OK [102]");
+}
+
+#[test]
+fn where_is_internal_advertised_binding_list_takes_the_first_that_resolves_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // A LIST property is walked in order and the first element that resolves
+    // to DEFINITION wins -- [?z] is unbound, so [?q] answers.  GNU: [113].
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "p" 'l185-adv-c)
+             (define-key m "q" 'l185-adv-c)
+             (put 'l185-adv-c :advertised-binding (list [?z] [?q] [?p]))
+             (where-is-internal 'l185-adv-c m t))"#,
+    );
+    assert_eq!(result, "OK [113]");
+}
+
+#[test]
+fn where_is_internal_advertised_binding_list_that_matches_nothing_signals_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU's walk offers the exhausted list's nil TAIL to `shadow_lookup' as
+    // one more candidate, and `Flookup_key' rejects nil as a key sequence.
+    // That is GNU's real, measured answer -- not a fall-back to the reverse
+    // search.  GNU: (wrong-type-argument arrayp nil).
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "d" 'l185-adv-d)
+             (put 'l185-adv-d :advertised-binding (list [?z] [?y]))
+             (condition-case e (where-is-internal 'l185-adv-d m t) (error e)))"#,
+    );
+    assert_eq!(result, "OK (wrong-type-argument arrayp nil)");
+}
+
+#[test]
+fn where_is_internal_advertised_binding_is_returned_verbatim_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU returns the property object itself, so a STRING property yields a
+    // string where the reverse search would have yielded a vector.
+    // GNU: "m" and t.
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "m" 'l185-adv-e)
+             (put 'l185-adv-e :advertised-binding "m")
+             (list (where-is-internal 'l185-adv-e m t)
+                   (stringp (where-is-internal 'l185-adv-e m t))))"#,
+    );
+    assert_eq!(result, "OK (\"m\" t)");
+}
+
+#[test]
+fn where_is_internal_advertised_binding_is_read_from_the_remap_target_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU substitutes the remap target into DEFINITION first, so the property
+    // consulted belongs to the target and not to the asked-for command.
+    // GNU: [67108896].
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "i" 'l185-adv-i)
+             (define-key m [67108896] 'l185-adv-i)
+             (define-key m [remap l185-adv-h] 'l185-adv-i)
+             (put 'l185-adv-i :advertised-binding [67108896])
+             (where-is-internal 'l185-adv-h m t))"#,
+    );
+    assert_eq!(result, "OK [67108896]");
+}
+
+#[test]
+fn where_is_internal_without_firstonly_still_lists_every_binding_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU's guard is `!NILP (firstonly)': with FIRSTONLY nil the property is
+    // not consulted at all and the full list is returned.
+    // GNU: ([67108896] [0]).
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "\C-@" 'l185-adv-all)
+             (define-key m [67108896] 'l185-adv-all)
+             (put 'l185-adv-all :advertised-binding [67108896])
+             (where-is-internal 'l185-adv-all m))"#,
+    );
+    assert_eq!(result, "OK ([67108896] [0])");
+}
+
+#[test]
+fn set_mark_command_advertises_c_spc_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // The name entry 178 handed over, replayed at unit scale: this is exactly
+    // what `lisp/bindings.el:1331-1334' does, and that file is byte-identical
+    // in this tree, so the only missing piece was `Fwhere_is_internal'
+    // reading the property.  (The bootstrapped end of it -- the real
+    // `global-map' and the `\\[set-mark-command]' docstring -- is pinned in
+    // the oracle suite, which runs GNU beside this port.)  GNU: [67108896].
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (define-key m "\C-@" 'set-mark-command)
+             (define-key m [67108896] 'set-mark-command)
+             (put 'set-mark-command :advertised-binding [67108896])
+             (where-is-internal 'set-mark-command m t))"#,
+    );
+    assert_eq!(result, "OK [67108896]");
+}
+
+#[test]
+fn where_is_internal_filters_non_key_events_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU keymap.c:2745-2750 drops a one-element sequence naming a symbol with
+    // a non-nil `non-key-event' property -- `lisp/keymap.el:798's
+    // `make-non-key-event', used by `term/ns-win.el' for `ns-power-off' and
+    // friends.  It is delivered through a keymap but cannot be typed, so it is
+    // not a way to run the command.  GNU: (([107]) [107]).
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (put 'l185-nk-sig 'non-key-event t)
+             (define-key m [l185-nk-sig] 'l185-nk-cmd)
+             (define-key m "k" 'l185-nk-cmd)
+             (list (where-is-internal 'l185-nk-cmd m)
+                   (where-is-internal 'l185-nk-cmd m t)))"#,
+    );
+    assert_eq!(result, "OK (([107]) [107])");
+}
+
+#[test]
+fn where_is_internal_reports_nothing_when_only_a_non_key_event_is_bound_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // GNU: (nil nil) -- the filtered sequence is not a fallback either.
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (put 'l185-nk-only 'non-key-event t)
+             (define-key m [l185-nk-only] 'l185-nk-cmd2)
+             (list (where-is-internal 'l185-nk-cmd2 m)
+                   (where-is-internal 'l185-nk-cmd2 m t)))"#,
+    );
+    assert_eq!(result, "OK (nil nil)");
+}
+
+#[test]
+fn where_is_internal_non_ascii_bypasses_the_non_key_event_filter_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    // The asymmetry is GNU's, and it is structural rather than intentional:
+    // the `firstonly = non-ascii' early return (keymap.c:2756-2757) sits
+    // OUTSIDE the filter, so it hands back the sequence the filter had just
+    // rejected.  Measured, because no reading of the docstring predicts it.
+    // GNU: (nil nil [l185-nk-na]).
+    let result = eval_one(
+        r#"(let ((m (make-sparse-keymap)))
+             (put 'l185-nk-na 'non-key-event t)
+             (define-key m [l185-nk-na] 'l185-nk-cmd3)
+             (list (where-is-internal 'l185-nk-cmd3 m)
+                   (where-is-internal 'l185-nk-cmd3 m t)
+                   (where-is-internal 'l185-nk-cmd3 m 'non-ascii)))"#,
+    );
+    assert_eq!(result, "OK (nil nil [l185-nk-na])");
+}
+
 #[test]
 fn where_is_internal_reuses_one_reverse_index_for_many_definitions() {
     crate::test_utils::init_test_tracing();

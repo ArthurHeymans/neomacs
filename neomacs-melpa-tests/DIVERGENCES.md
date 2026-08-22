@@ -22250,6 +22250,18 @@ of this accessor, because the anchor is `&self` on the whole `Context` and so
 also rejects `&mut eval.buffers` calls that cannot reach a safepoint at all.
 175 §5.
 
+**2026-08-22 (185 §7):** that false positive is a landed conversion now rather
+than a reverted one, and the fix was the accessor's SHAPE rather than a looser
+rule.  `Value::expect_lisp_string_in(&heap)` (`value.rs:2117`) anchors on the
+`tagged_heap` FIELD instead of on `&self`: `&mut *ctx` is still `E0502`,
+because every safepoint in this engine is a `&mut Context` method and a field
+borrow conflicts with a whole-struct mutable borrow, while `&mut ctx.buffers`
+is now allowed because the borrow checker knows the fields are disjoint.
+`builtins/treesit.rs:3095` uses it.  The remainder is re-sized at **22**, of
+which **2** are in that same disjoint-field class, by
+`tools/gc-audit/tier1_remaining.py` -- 175's sizing script, committed this time
+so the arithmetic survives its worktree.
+
 ### 9. Hypotheses eliminated
 
 * **"They are shipped so the numbers in that entry can be re-measured rather
@@ -26943,6 +26955,20 @@ it: the anchor is `&self` on the whole `Context`, so it cannot distinguish "you
 may collect here" from "you touched a disjoint field".  Its false-positive rate
 in this sample is one site in 37.
 
+**2026-08-22 (185 §7):** the row is fixed, and by a MORE precise anchor rather
+than a looser one.  `Value::expect_lisp_string_in(&heap)` names the
+`tagged_heap` field: `&mut *ctx` remains `E0502` (a field borrow conflicts with
+a whole-struct mutable borrow, and every safepoint here is a `&mut Context`
+method), while `&mut ctx.buffers` is allowed.  `builtins/treesit.rs:3095` is
+converted with it -- this entry's one reverted site, landed -- and the fact
+that the workspace compiles is the gate, since an over-broad accessor would
+fail to build that line.  The sizing script this section used, which lived in
+`tmp/pw175/` and did not survive its worktree, is now
+`tools/gc-audit/tier1_remaining.py`; it reproduces the four "no `Context`"
+sites above name for name, and re-sizes the remainder at **22**, of which **2**
+are the same disjoint-field class -- so the one-in-37 rate above is one in
+eleven on what is left.  The other 20 are declined as a mechanical diff.
+
 ### 6. The `Su` styled-underline fallback: 158 called it unmeasurable, and `tic` measures it
 
 GNU's second source for styled underlines sits directly below the `Smulx`
@@ -27157,6 +27183,13 @@ test with a fake database can attest.
    ones, the closure-local ones, and the `.cloned()` ones the classifier calls
    BOUND (`fileio.rs:5661`, `builtins/symbols.rs:5233`).  Each is preventive by
    167's own argument; none is known to be wrong.
+
+   **2026-08-22 (185 §7):** re-measured at **22** by
+   `tools/gc-audit/tier1_remaining.py --list`, which is this section's sizing
+   script committed rather than left in `tmp/`.  Still declined as a mechanical
+   diff, and still for this entry's reason; what changed is that the number can
+   now be re-derived instead of believed, and that 2 of the 22 are flagged as
+   the disjoint-field class the new accessor serves.
 
 7. **The `compile_fail` doctest on `Value::as_lisp_string` is still NOT
    gated.**  167's residual, unchanged and re-checked: `cargo nextest` does not
@@ -28718,6 +28751,18 @@ conclusion:
   Confirmed pre-existing by asking the older pre-173 binary the same question,
   which answers `[0]` too.  Recorded rather than chased: it belongs to whoever
   owns `global-map`, not to `documentation-property`.
+
+  **2026-08-22 (185):** chased, and the attribution in that last sentence is
+  the only part of this bullet that was wrong.  `global-map` is byte-identical
+  in the two editors -- both bind `set-mark-command` to BOTH `C-@` (0) and
+  `C-SPC` (67108896) -- and the owner is `where-is-internal`, which never read
+  GNU's `:advertised-binding` property (`src/keymap.c:2669-2684`, put by
+  `lisp/bindings.el:1334`).  **The polarity recorded above is the correct one**;
+  the brief that later handed this over had it inverted, and a
+  provenance-checked binary settled it.  Swept: 3,154 commands against
+  `global-map` plus the 21 mode-map `:advertised-binding` sites, **15
+  divergent, 13 of them this one cause and all 13 fixed** -- including `undo`,
+  which this port named `C-_` where GNU names it `C-x u`.  185 §1-§6.
 - **The melpa `sqlite3-api` build race** of section 13's gates is a harness
   defect, not a divergence: `closql` and `org_roam` build the same module in
   the same directory and `nextest` runs them concurrently.  It is invisible
@@ -31704,3 +31749,439 @@ name declared too late for the pass that tags it.  Three of the seven
 handed-over items were premise-refuted rather than fixed, and one of this
 entry's own measurements was retracted for the same kind of reason: the number
 was taken from a binary that had been copied away from its image.
+## 185. `where-is-internal` never read `:advertised-binding`, which is GNU's own answer to "which key do I tell the user about" -- so every command GNU deliberately advertises under a second key was named by its first; 3,154 commands swept against GNU leave 6 divergent and the 21 mode-map sites leave 9, 13 of the 15 are this one cause, and the same function was also missing GNU's `non-key-event` filter -- FIXED, 2 handed on
+
+Two items.  §1-§6 are the keymap divergence entry 178 handed over, which is
+neither a documentation bug nor the event-representation bug the brief
+predicted; §7 is the Tier-1 `as_lisp_string` remainder, where the accessor's
+SHAPE turned out to be worth more than the rows.  §8-§10 are common.
+
+### 1. The handed-over polarity is backwards, and the binary is what says so
+
+The brief states the divergence as
+
+> **`set-mark-command-repeat-pop`** -- `where-is-internal` answers `[67108896]`
+> here against GNU's `[0]`.
+
+Entry 178 §12 states it the other way round.  They cannot both be right, and
+neither was taken on trust.  Both editors were asked, `-Q --batch`, against a
+release binary whose provenance was checked first --
+`(documentation-property 'dos-codepage 'variable-documentation)` is `nil`, the
+`*scratch*` buffer is empty, and the pdump (23:41) sits beside the binary
+(23:39) rather than away from it:
+
+```
+GNU 31.0.90   (where-is-internal 'set-mark-command global-map t)  ->  [67108896]
+neomacs       (where-is-internal 'set-mark-command global-map t)  ->  [0]
+```
+
+**178 is right and the brief is inverted.**  GNU answers `[67108896]` -- C-SPC
+-- and this port answers `[0]`, ASCII NUL, which `key-description` renders as
+`C-@`.  Everything below follows GNU's direction, not the brief's.
+
+### 2. GNU, read before anything was designed
+
+`lisp/bindings.el:1331-1334`, verbatim, and byte-identical in this tree:
+
+```elisp
+(define-key global-map "\C-@" 'set-mark-command)
+;; Many people are used to typing C-SPC and getting C-@.
+(define-key global-map [?\C- ] 'set-mark-command)
+(put 'set-mark-command :advertised-binding [?\C- ])
+```
+
+Both keys are bound, in GNU and here.  `?\C-@` is 0 and `?\C- ` is 67108896
+(`src/lread.c`'s `read_escape`: control of a character outside `0100..0137`
+cannot fold into an ASCII control code, so it keeps the 2**26 modifier bit).
+The third line is the part this port never read.  `src/keymap.c:2669-2684`,
+inside `Fwhere_is_internal` and BEFORE the reverse search runs:
+
+```c
+  if (SYMBOLP (definition)
+      && !NILP (firstonly)
+      && !NILP (tem = Fget (definition, QCadvertised_binding)))
+    {
+      /* We have a list of advertised bindings.  */
+      while (CONSP (tem))
+	if (EQ (shadow_lookup (keymaps, XCAR (tem), Qnil, 0), definition))
+	  return XCAR (tem);
+	else
+	  tem = XCDR (tem);
+      if (EQ (shadow_lookup (keymaps, tem, Qnil, 0), definition))
+	return tem;
+    }
+```
+
+Three properties of that block are load-bearing and none is obvious:
+
+* **It is verified, not trusted.**  `shadow_lookup` re-runs `lookup-key` over
+  the same keymaps, so an advertised key that has been rebound is ignored and
+  the reverse search answers instead.  The comparison is `EQ`, not `equal`.
+* **It returns the property object VERBATIM.**  `where-is-internal` therefore
+  answers a STRING for `(put 'proced-mark :advertised-binding "m")`, where the
+  reverse search would have answered `[109]`.
+* **It walks a DOTTED chain**, not a list: every `CONSP` car, then whatever the
+  chain ends in.  A plain `[?\C- ]` is its own only candidate; a proper LIST
+  that matches nothing ends by offering `nil` to `Flookup_key`, which is not an
+  array.  Measured rather than reasoned about: GNU signals
+  `(wrong-type-argument arrayp nil)` there.  It does not fall back.
+
+### 3. The brief's hypothesis, refuted with 20 measured facts
+
+> the question is where GNU collapses a control-modified `@`/space into ASCII
+> NUL and this port does not.
+
+GNU collapses nothing.  A 20-fact probe of the representation itself
+(`?\C-@`, `?\C-\s`, `kbd`, `key-description`, `single-key-description`,
+`listify-key-sequence`, `event-convert-list`, `event-modifiers`,
+`event-basic-type`, and four `define-key`/`lookup-key` round trips) is
+**byte-identical between the two editors**, including the two facts the
+hypothesis needs to be false:
+
+```
+?\C-@                              0            (both)
+?\C-\s                             67108896     (both)
+lookup [0] after C-SPC define      nil          (both)
+lookup [67108896] after C-@ def    nil          (both)
+```
+
+GNU keeps `0` and `67108896` as different keys, binds `set-mark-command` to
+both, and then picks between them with a property.  There is no collapse to
+port.  `key-description` already agreed before this entry, which is what 178
+had noticed and not followed through.
+
+### 4. The audit: 3,154 commands and 21 mode-map sites
+
+Two sweeps, both run against both editors and diffed.
+
+**(a) Every command, against `global-map`.**  `mapatoms` for `commandp`, then
+`(where-is-internal SYM global-map t)` and `(where-is-internal SYM global-map)`
+for each, sorted, in GNU and in neomacs.
+
+| | |
+|---|---|
+| commands in GNU | 3164 |
+| commands in neomacs | 3167 |
+| **commands in BOTH -- the audited set** | **3154** |
+| of those, bound in GNU (non-nil FIRSTONLY) | 495 |
+| **DIVERGENT on FIRSTONLY** | **6** |
+| DIVERGENT on the full list | 39 |
+
+The 6, in full:
+
+| name | GNU | neomacs | cause |
+|---|---|---|---|
+| `set-mark-command` | `[67108896]` | `[0]` | `:advertised-binding` |
+| `undo` | `[24 117]` | `[31]` | `:advertised-binding` |
+| `next-buffer` | `[24 right]` | `[XF86Forward]` | `:advertised-binding` |
+| `previous-buffer` | `[24 left]` | `[XF86Back]` | `:advertised-binding` |
+| `2C-command` | `nil` | `[24 54]` | prefix command -- NOT this entry's |
+| `kmacro-keymap` | `nil` | `[24 11]` | prefix command -- NOT this entry's |
+
+`undo` is the one worth pausing on: this port told the user `C-_` where GNU
+says `C-x u`, for the single most-documented command in the editor.
+
+The 39 full-list divergences split into **31 that are ORDER ONLY** -- the same
+set of sequences with `[menu-bar ...]` in a different position -- and 8 with a
+different set, of which 2 are the prefix-command pair above and 6 are the
+tool-bar menu cluster that entry 178 §12 already attributed to this dump not
+providing the `x` feature.  Both are recorded in §9 and neither is this
+entry's.
+
+**(b) The 21 `:advertised-binding` sites outside `global-map`.**  The sweep in
+(a) can only see `global-map`; every other `put` in GNU's tree is in a mode
+map.  Enumerated from `grep -rn ':advertised-binding' lisp/` in GNU 31.0.90
+(38 hits, minus ChangeLogs, minus the `loaddefs`/`ldefs-boot` copies of
+`wid-edit`'s, minus the `isearch.el:2147` macro that generates rows already
+listed) -- 21 rows, each `require`d and asked against the map that holds it:
+
+**9 of the 21 diverged**, every one of them this cause: `proced-mark`,
+`widget-backward`, `isearch-toggle-case-fold`, `isearch-toggle-regexp`,
+`isearch-edit-string`, `Electric-buffer-menu-select`,
+`Helper-describe-bindings`, `beginning-of-buffer` (Info), `dired-find-file`.
+The other 12 are controls and they are the reason the sweep is worth running:
+the seven `hi-lock` rows agree because there the advertised key is also what
+the reverse search finds; `Electric-buffer-menu-quit`'s property does NOT
+resolve, so both editors fall through to `[29]`; `Helper-help` is nil in both;
+three have no map after `require`.  A fix that broke the fall-through would
+have shown up in those 12.
+
+**Audit count: 3,175 sites compared, 15 divergent, 13 of them one cause.**
+
+### 5. The fix
+
+`neovm-core/src/emacs_core/interactive.rs:3815-3822` -- the block GNU has and
+this port did not, placed where GNU places it (AFTER the remap substitution, so the
+property consulted is the remap TARGET's, which is measurable and measured),
+plus two helpers that carry GNU's two quirks in their shape rather than in a
+special case:
+
+* `where_is_advertised_binding_candidates` (`interactive.rs:3699`) yields the
+  dotted-chain walk, so
+  "a non-list property is its own only candidate" and "an exhausted proper list
+  offers `nil`" are consequences of the iterator rather than branches.
+* `where_is_advertised_binding_sequence` (`interactive.rs:3721`) verifies each
+  candidate through the
+  port's `lookup-key` equivalent with `t_ok = false` (GNU's `accept_default =
+  Qnil`), maps a fixnum result to "unbound" (GNU `shadow_lookup`,
+  keymap.c:2470), and compares with `eq_value` -- **not** `Value`'s `==`, which
+  in this crate is `equal`.
+
+Twelve unit pins in `interactive_test.rs` and four oracle pins in
+`neovm-oracle-tests/src/divergence/keymap_precedence.rs`.  Every expected value
+in both sets was READ OFF GNU 31.0.90 before the fix was written, including the
+`(wrong-type-argument arrayp nil)` one, which no reading of the docstring
+predicts.
+
+### 6. The second gap in the same function, found by reading the rest of it
+
+`Fwhere_is_internal` has one more test this port did not: keymap.c:2745-2750
+drops a ONE-element sequence naming a symbol whose `non-key-event` property is
+non-nil -- `lisp/keymap.el:798`'s `make-non-key-event`, used by
+`lisp/term/ns-win.el:177-179` for events like `ns-power-off` that the system
+delivers through a keymap and no user can type.  Measured in GNU:
+
+```
+(where-is-internal CMD m)            -> nil        ; only a non-key-event bound
+(where-is-internal CMD m t)          -> nil
+(where-is-internal CMD m 'non-ascii) -> [SYM]      ; the filter is BYPASSED
+```
+
+The third line is the interesting one and it is structural rather than
+intended: GNU's `firstonly = non-ascii` early return (keymap.c:2756-2757) sits
+OUTSIDE the filter, so it hands back the sequence the filter has just rejected.
+`first_unshadowed` (`interactive.rs:3847`, `:3902`, `:3919-3923`) reproduces
+that asymmetry instead of tidying it away, since tidying it would be a
+divergence.  The filter itself is `interactive.rs:3747` and `:3911`.  Three
+pins.
+
+This gap could not have been found by the sweep -- no `non-key-event` symbol
+exists in a `-Q` batch on this platform -- which is why the whole function was
+read rather than only the part the symptom pointed at.  And it was documented
+here before it worked: `subr_docs/gnu_table.rs:19132` already shipped GNU's
+sentence, *"Keys that are represented as events that have a `non-key-event'
+non-nil symbol property are ignored"*, for a subr that ignored nothing.  The
+`:advertised-binding` half is the opposite case -- GNU's docstring does not
+mention it at all, so no doc audit could ever have found §1.
+
+### 7. Item 2: the accessor's SHAPE, which is worth more than the rows
+
+The brief's framing is the right one -- *"If the false positive above suggests
+a better accessor shape, that is worth more than converting rows"* -- and it
+does.
+
+175 §5 measured `Context::lisp_string`'s first false positive at
+`builtins/treesit.rs:3090`: `E0502` ×3 on `eval.buffers`, because the accessor
+takes `&self` on the WHOLE `Context` and so rejects a mutation of a DISJOINT
+field, which cannot reach a safepoint at all.  175 reverted the site and called
+the rate one in 37.
+
+The fix is not a looser anchor, it is a **more precise** one.
+`Value::expect_lisp_string_in(&heap)` (`emacs_core/value.rs:2117`) names the
+field the string actually lives in:
+
+* `&mut *ctx` -- still `E0502`.  A borrow of `ctx.tagged_heap` conflicts with a
+  mutable borrow of the whole struct, and every safepoint in this engine is a
+  `&mut Context` method.  **Nothing is given up.**
+* `&mut ctx.buffers` -- now allowed, because the borrow checker knows the two
+  fields are disjoint.
+
+So the guarantee 163 designed and 167 landed is unchanged and the false
+positive is gone.  `builtins/treesit.rs:3095` is converted with it -- 175's one
+reverted site, landed -- and the fact that the workspace compiles IS the
+gate: an over-broad accessor would fail to build that line.
+
+**And the remainder, re-sized with a script that will outlive its worktree.**
+175 sized this with `tmp/pw175/tier1_sites.py`, which died with the worktree,
+so its 63 -> 51 -> 24 arithmetic could not be re-run.  That script is now
+`tools/gc-audit/tier1_remaining.py`, beside the ones 163 shipped, and it
+reproduces 175's hand analysis exactly where that can be checked -- the four
+sites whose `&mut self` is not a `Context` come back as
+`value_reader.rs:1807`, `value_reader.rs:2072`, `xdisp.rs:1785`,
+`xdisp.rs:1820`, which is 175's list of four, name for name.
+
+```
+175 s5 table, re-measured
+  sites with a Context in reach : 140      (167/175: 160, before 175 landed 27)
+  INLINE                        : 88
+  OWNED                         : 10
+  BOUND                         : 42
+  of those, live range > 1 line : 38
+
+BOUND, not yet on a Context/heap accessor : 33
+  minus: enclosing &mut self is not a Context : 4
+  minus: goes through a local CLONING helper  : 7
+ELIGIBLE REMAINDER                        : 22
+  of those, live range touches a disjoint Context field : 2
+```
+
+**22, and 2 of them are the class the new accessor exists for**
+(`encoding.rs:4596`, `builtins/search.rs:871`) -- so the false-positive rate
+175 measured as one in 37 is one in eleven on what is left.  The other 20 are
+NOT converted here, deliberately: they are preventive by 167's own argument,
+none is known to be wrong, and a 20-row mechanical diff is exactly what the
+brief said it did not want twice.  **What is landed is the tool and the shape;
+what is declined is the diff, and the number is 20.**
+
+### 8. Hypotheses eliminated
+
+* **"`where-is-internal` answers `[67108896]` here against GNU's `[0]`"** (the
+  brief).  **Inverted.**  Measured both ways round on a provenance-checked
+  binary: GNU `[67108896]`, neomacs `[0]`.  §1.
+* **"GNU collapses a control-modified `@`/space into ASCII NUL and this port
+  does not"** (the brief).  **Refuted**, with 20 representation facts identical
+  in both editors, two of which show GNU keeping the two keys distinct.  §3.
+* **"It is not a documentation bug"** (178).  Upheld, and sharpened: it is not
+  a keymap CONTENT bug either.  Both editors bind both keys; only the choice
+  between them differed.  §2.
+* **"It belongs to whoever owns `global-map`"** (178 §12's reason for
+  recording rather than chasing).  Refuted: `global-map` is byte-identical, and
+  the owner is `where-is-internal`.
+* **"One name"** (the symptom handed over).  Refuted at 13, across two sweeps,
+  including `undo`.  §4.
+* **"`Context::lisp_string` makes holding a borrow across a safepoint a compile
+  error"** (163 (b), bounded by 175 to "and across a disjoint field too").
+  The bound is now removed rather than documented: the disjoint-field rejection
+  was a property of anchoring on `&self`, not of the technique.  §7.
+
+### 9. Found and NOT fixed
+
+1. **The prefix-command pair, `2C-command` and `kmacro-keymap`** -- diagnosed
+   to the line, and it is not a `where-is-internal` bug at all.  GNU answers
+   `nil` for both where this port answers `[24 54]` and `[24 11]`, and the
+   cause is `lookup-key` over a LIST of keymaps, which is how
+   `shadow_lookup` is called:
+
+   ```
+   (lookup-key global-map "\C-x6")                     -> 2C-command
+   (lookup-key (list global-map) "\C-x6")              -> 2C-command
+   (lookup-key (list global-map global-map) "\C-x6")   -> (keymap 2C-command 2C-command)
+   ```
+
+   GNU COMPOSES a prefix binding found in several maps of the list; the
+   composed keymap is not `equal` to the symbol, so `Fwhere_is_internal`'s
+   shadow check drops the candidate.  `(where-is-internal '2C-command KEYMAP)`
+   with an explicit `KEYMAP` therefore builds `(KEYMAP global-map)`, hits the
+   composition, and answers nil -- while `(where-is-internal '2C-command)`
+   against the active maps answers `([f2] [24 54])` in GNU, same as here.  This
+   port's list lookup returns the first non-nil binding instead of composing.
+   A real divergence in `lookup-key`, sized at 2 of 3,154 through this
+   entry's probe, and left for whoever owns `lookup-key`'s list case.
+2. **31 order-only divergences in the FULL `where-is-internal` list.**  Same
+   set of sequences, `[menu-bar ...]` in a different position: GNU puts the
+   menu-bar sequence LAST, this port puts it second.  FIRSTONLY is unaffected
+   (it prefers ASCII), which is why this has never surfaced.  Sized and left.
+3. **The 6 tool-bar menu rows** (`menu-bar-showhide-tool-bar-menu-customize-*`
+   and `toggle-tool-bar-mode-from-frame`) are entry 178 §12's recorded cause --
+   this dump does not provide the `x` feature -- re-confirmed here from a
+   different direction, and still not fixed.
+4. **The 20 remaining Tier-1 sites** of §7, listed by `file:line` in
+   `tools/gc-audit/tier1_remaining.py --list`.  Declined as a mechanical diff,
+   with 2 of them flagged as the disjoint-field class that
+   `Value::expect_lisp_string_in` now serves if anyone wants them.
+5. **The `compile_fail` doctest on `Value::as_lisp_string` is still not
+   gated.**  167's residual, carried by 175, unchanged: `cargo nextest` does
+   not run doctests and the repository's `cargo` wrapper refuses `cargo test`.
+   The new accessor inherits the same hole, and the same mitigation -- the
+   POSITIVE half is gated by construction, because `builtins/treesit.rs` does
+   not compile if the accessor is over-broad.
+
+### 10. Gates
+
+Every release-binary gate ran against a `cargo xtask fresh-build --release` of
+this branch in this worktree, with both fingerprint memos deleted first, the
+build reporting `xtask fresh-build finished successfully (release)` and
+`no_byte_compile=false`, the pdump (00:52) NEWER than the binary (00:50) and
+sitting beside it, `(documentation-property 'dos-codepage
+'variable-documentation)` `nil` and `(with-current-buffer "*scratch*"
+(buffer-string))` empty.  Load from `/proc/loadavg`'s runnable field beside
+`uptime`'s lagging one: **runnable 4-31 throughout, against `uptime`
+one-minute figures of 37.17 to 934.95** -- the two disagree by more than an
+order of magnitude on this machine tonight, and the runnable count is again the
+one that predicted whether a suite would finish.
+
+* `cargo nextest run -p neovm-core -p neomacs-layout-engine --no-fail-fast`:
+  **11189 tests run: 11189 passed, 54 skipped** in 477.635 s, **zero `FAIL`
+  lines**.  This entry adds exactly 13 `#[test]` functions (`git show --stat`),
+  and all 13 appear by name in the `PASS` lines.  178 quoted 11162 + 54 for the
+  same command; this branch's base therefore counts 14 higher than 178's own
+  gate did, which is not this entry's change and was not chased.
+* `cargo nextest run -p neovm-oracle-tests --no-fail-fast`, with
+  `NEOVM_FORCE_ORACLE_PATH` set to the GNU 31.0.90 binary:
+  **38805 tests run: 38802 passed, 3 failed, 0 skipped** in 752.783 s.  The
+  three, BY NAME, are exactly the three the brief records as pre-existing
+  upstream -- `div_core_divergence_surface_window_scroll_error_and_state_combo`,
+  `div_core_divergence_surface_window_start_end_scroll_state`,
+  `div_u5_window_scroll_functions_hook` -- and **there is no fourth**.  38801
+  + 4 = 38805: the four new pins, and all four appear by name in the `PASS`
+  lines rather than being inferred from the total.
+* `cargo xtask gc-stress`: **9/9 probes passed**, exit 0, including
+  `06-string-borrow-across-lisp-callback`,
+  `07-string-borrow-across-change-hooks`, `08-string-machinery-under-stress`
+  and `09-insert-source-read-after-change-hooks` -- the four §7 could break.
+* `cargo nextest run -p neomacs-melpa-tests --no-fail-fast`: **953 tests run:
+  945 passed, 8 failed, 2 skipped** in 568.566 s.  Two are the coordinator's
+  upstream pair (`smooth_scrolling_package_batch`, `evil_ediff_package_batch`).
+  The other six were each attributed rather than counted, and **five of them
+  pass on a serial re-run**: `cargo nextest run -E
+  'test(/closql_package_batch|org_roam_package_batch|biblio_package_batch|mwim_real_visual_and_logical_line_keys_match_gnu|beacon_real_truecolor_automated_display_and_timer_lifecycle_match_gnu|jedi_package_batch/)'
+  `-j1` gives **6 tests run: 5 passed, 1 failed**.  `closql`/`org_roam` are 178
+  §12's `sqlite3-api` build race (`ld.bfd: cannot find sqlite3-api.o`, and
+  `GNU Emacs baseline failed` on closql -- which no neomacs defect produces);
+  `mwim` and `beacon` are TUI deadlines (`NEO timed out waiting for M-x
+  prompt`) on a machine at `uptime` 900+; `biblio` is the network
+  (`ERR (gnutls-error -1 "TLS handshake: unexpected EOF")`).
+* `cargo check --workspace --all-targets`: **0 errors**, `Finished` in 3m 32s.
+* `cargo fmt --all --check`: clean, exit 0, empty output.
+
+**The sixth melpa failure is mine, and it is the brief's own advice.**
+`jedi_package_batch` fails deterministically -- serially too -- and the
+differing bytes are a PATH, not a behaviour:
+
+```
+NEO  ... full traceback:\n[ORACLE-WORKSPACE]/target/release/neomacs: ...
+GNU  ... full traceback:\n@@EMACS@@: ...
+```
+
+`jedi--test-normalize-editor` (`parity_tests/jedi/mod.rs:92-95`) rewrites
+`(expand-file-name invocation-name invocation-directory)` to `@@EMACS@@`, and
+this binary answers `invocation-directory` =
+`/home/exec/mnt/rust-target/l185-agent-.../release/` -- the RESOLVED path --
+while the `exec` diagnostic carries argv[0], which is the worktree path through
+the `target` SYMLINK the brief instructs you to create when the disk is full.
+The regexp therefore never matches, the substitution never happens, and the
+outer workspace normalisation prints the un-replaced path.  **The relocation
+trap has a second edge: it breaks any pin that normalises on
+`invocation-directory`.**  Not fixed here; it is a harness fact, and it would
+disappear on an unrelocated tree.
+
+**RED quoted beside every green.**
+
+* **The unit pins, with the fix disabled** (the `:advertised-binding` block,
+  the `non-key-event` filter and the `non-ascii` bypass each commented out):
+  **13 tests run: 5 passed, 8 failed**, headline
+  `assertion left == right failed / left: "OK [0]" / right: "OK [67108896]"`.
+  The 5 that still pass are the fall-through pins, which the fix does not
+  change -- said here rather than left to look like coverage.
+* **The binary before the fix**, provenance-checked the same way:
+  `(where-is-internal 'set-mark-command global-map t)` -> `[0]`, and the sweep
+  over 3,154 commands -> **6 divergent**.  After: `[67108896]`, and **2
+  divergent**.  The mode-map sweep goes from **9 divergent of 21** to a
+  byte-identical `diff` (exit 0), with all 12 controls unchanged.
+* **§7's type-level claim, measured rather than asserted.**  Adding
+  `eval.gc_safe_point();` immediately after the converted accessor gives
+  `error[E0502]: cannot borrow *eval as mutable because it is also borrowed as
+  immutable`, naming `&eval.tagged_heap` as the immutable borrow and
+  `insert_lisp_string_into_buffer(buffer_id, text)` as the later use.  So the
+  heap anchor blocks a safepoint exactly as the whole-`Context` anchor did; the
+  disjoint-field rejection is all that was given up.
+* **One run is NOT quoted as a gate.**  An earlier attempt at the RED unit run
+  was `Killed`, exit 137, with no `Summary` line -- `earlyoom` reaping it while
+  the machine was at `uptime` 200+.  That is the brief's fifth false green, and
+  it was re-run from scratch for the figure above.
+
+Status: FIXED -- 13 of the 15 divergences the two sweeps found, all one cause.
+The other 2 are §9's `lookup-key` composition, diagnosed to the line and handed
+on.  Item 2 landed the accessor shape and its one false-positive site, declined
+the 20-row diff, and left the sizing script behind so the number can be
+re-derived.

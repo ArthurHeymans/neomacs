@@ -3670,6 +3670,92 @@ pub(crate) fn builtin_minor_mode_key_binding_impl(
     minor_mode_key_binding_in_context(ctx, &emacs_events)
 }
 
+/// DEFINITION's non-nil `:advertised-binding` property, GNU's
+/// `Fget (definition, QCadvertised_binding)` (keymap.c:2672).
+///
+/// A property whose value is nil is indistinguishable from an absent one in
+/// GNU, whose guard is `!NILP (tem = Fget (...))`; both answer `None` here.
+fn where_is_advertised_binding_property(obarray: &Obarray, definition: Value) -> Option<Value> {
+    let name = definition.as_symbol_name()?;
+    obarray
+        .get_property(name, ":advertised-binding")
+        .filter(|property| !property.is_nil())
+}
+
+/// The candidate key sequences GNU offers to `shadow_lookup`, in GNU's order.
+///
+/// GNU walks the property as a DOTTED chain rather than as a list: every
+/// `CONSP` car in turn, and then whatever the chain ends in
+/// (keymap.c:2677-2683 -- `while (CONSP (tem)) ... XCAR (tem) ... tem = XCDR
+/// (tem);` followed by one more check on `tem` itself).  Two consequences fall
+/// straight out of that shape rather than needing special cases:
+///
+/// * a property that is not a list -- the usual `[?\C- ]` -- is its own only
+///   candidate, and
+/// * a proper LIST that matches nothing ends by offering `nil`, which is not
+///   an array, which is why GNU signals `(wrong-type-argument arrayp nil)`
+///   there instead of falling back to the reverse search.  Measured, not
+///   inferred: GNU 31.0.90 signals exactly that.
+fn where_is_advertised_binding_candidates(property: Value) -> impl Iterator<Item = Value> {
+    let mut cursor = Some(property);
+    std::iter::from_fn(move || {
+        let value = cursor?;
+        if value.is_cons() {
+            cursor = Some(value.cons_cdr());
+            Some(value.cons_car())
+        } else {
+            cursor = None;
+            Some(value)
+        }
+    })
+}
+
+/// The first advertised sequence that still resolves to DEFINITION, or `None`
+/// to fall through to the reverse search.
+///
+/// GNU verifies each candidate with `shadow_lookup (keymaps, KEY, Qnil, 0)`
+/// and compares with `EQ` (keymap.c:2678), so an advertised key that has since
+/// been rebound -- or that was never DEFINITION's -- is simply ignored.  A
+/// too-long sequence makes `lookup-key` answer a fixnum, which `shadow_lookup`
+/// maps to nil (keymap.c:2470) and which therefore cannot match.
+fn where_is_advertised_binding_sequence(
+    eval: &mut Context,
+    keymaps: &[Value],
+    property: Value,
+    definition: Value,
+) -> Result<Option<Value>, Flow> {
+    for candidate in where_is_advertised_binding_candidates(property) {
+        // GNU reaches `Flookup_key`'s `CHECK_VECTOR_OR_STRING` here, so a
+        // candidate that is not a key sequence SIGNALS rather than being
+        // skipped -- including the nil that ends an exhausted proper list.
+        let events = crate::emacs_core::builtins::keymaps::expect_key_events(&candidate)?;
+        let found = lookup_key_in_keymaps_in_obarray_runtime(eval, keymaps, &events, false)?;
+        if !found.is_fixnum() && eq_value(&found, &definition) {
+            return Ok(Some(candidate));
+        }
+    }
+    Ok(None)
+}
+
+/// GNU's "filter out non key events" test (keymap.c:2745-2750): a ONE-element
+/// sequence naming a symbol whose `non-key-event` property is non-nil.
+///
+/// `lisp/keymap.el:798`'s `make-non-key-event` sets that property, and
+/// `lisp/term/ns-win.el:177-179` uses it for events like `ns-power-off` that
+/// the system delivers through a keymap but that no user can type.  Reporting
+/// one as a binding would tell the user to press a key that does not exist.
+fn where_is_sequence_is_non_key_event(obarray: &Obarray, sequence: &[Value]) -> bool {
+    let [event] = sequence else {
+        return false;
+    };
+    let Some(name) = event.as_symbol_name() else {
+        return false;
+    };
+    obarray
+        .get_property(name, "non-key-event")
+        .is_some_and(|value| !value.is_nil())
+}
+
 /// `(where-is-internal DEFINITION &optional KEYMAP FIRSTONLY NOINDIRECT NO-REMAP)`
 /// Return list of key sequences that invoke DEFINITION.
 pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) -> EvalResult {
@@ -3715,6 +3801,29 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
         }
     }
 
+    // GNU `Fwhere_is_internal` answers from the symbol's `:advertised-binding`
+    // property before it ever runs the reverse search, whenever FIRSTONLY is
+    // non-nil (keymap.c:2669-2684).  This is what decides how a command is
+    // NAMED to the user: `lisp/bindings.el:1331-1334` binds `set-mark-command`
+    // to BOTH `C-@` (ASCII NUL, 0) and `C-SPC` (32 with the 2**26 control bit,
+    // 67108896) and advertises the second, so GNU renders
+    // `\\[set-mark-command]` as `C-SPC` while a port without this block
+    // renders `C-@`.
+    //
+    // Placement matters: it sits AFTER the remap substitution above, so the
+    // property consulted is the remap TARGET's.
+    let advertised = if first_only && definition.is_symbol() {
+        where_is_advertised_binding_property(eval.obarray(), definition)
+    } else {
+        None
+    };
+    if let Some(property) = advertised
+        && let Some(sequence) =
+            where_is_advertised_binding_sequence(eval, &keymaps, property, definition)?
+    {
+        return Ok(sequence);
+    }
+
     // Collect the raw candidate sequences (longest-to-shortest, possibly
     // including raw `[remap COMMAND]` pseudo-keys, matching GNU's
     // `where_is_internal`).
@@ -3732,6 +3841,10 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
     let mut remapped_sequences: Vec<Vec<Value>> = Vec::new();
     let mut work: std::collections::VecDeque<Vec<Value>> = sequences.into();
     let mut remapped = false;
+    // GNU's `sequence` at the moment of its `firstonly = non-ascii` early
+    // return: the first candidate that survived `shadow_lookup`, filtered or
+    // not.
+    let mut first_unshadowed: Option<Vec<Value>> = None;
     loop {
         if work.is_empty() {
             if remapped {
@@ -3781,9 +3894,33 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
         }
 
         let sequence = metize_key_sequence(&sequence);
+        // GNU records the first unshadowed match before any filtering, because
+        // its `firstonly = non-ascii` early return (keymap.c:2756-2757) sits
+        // OUTSIDE the `non-key-event` filter below and hands back whatever it
+        // is looking at.  Measured: with a `non-key-event` binding as the only
+        // one, GNU answers nil for FIRSTONLY t and `[SYM]` for `non-ascii`.
+        if first_unshadowed.is_none() {
+            first_unshadowed = Some(sequence.clone());
+        }
+        // "Filter out non key events" (keymap.c:2745-2750): a one-element
+        // sequence naming a symbol with a non-nil `non-key-event` property is
+        // a signal delivered through the keymap (`lisp/keymap.el:798`'s
+        // `make-non-key-event`, used by `term/ns-win.el` for `ns-power-off`
+        // and friends), not something a user can type, so it must never be
+        // reported as a way to run the command.
+        if where_is_sequence_is_non_key_event(eval.obarray(), &sequence) {
+            continue;
+        }
         if found_set.insert(sequence.clone()) {
             found.push(sequence);
         }
+    }
+
+    if first_only
+        && first_only_non_ascii
+        && let Some(sequence) = first_unshadowed
+    {
+        return Ok(Value::vector(sequence));
     }
 
     if found.is_empty() {

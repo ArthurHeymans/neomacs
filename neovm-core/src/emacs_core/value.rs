@@ -2090,6 +2090,42 @@ impl TaggedValue {
         unsafe { self.as_lisp_string_reanchored() }
     }
 
+    /// [`Value::lisp_string_in`] with GNU's `CHECK_STRING` signal — the
+    /// field-precise sibling of `Context::expect_lisp_string`, and the answer
+    /// to the one false positive that accessor is measured to have.
+    ///
+    /// `Context::expect_lisp_string` takes `&self` on the WHOLE `Context`, so
+    /// its borrow blocks a safepoint (which is the entire point — every
+    /// safepoint in this engine is a `&mut Context` method) but it also blocks
+    /// `&mut ctx.buffers`, `&mut ctx.treesit` and every other disjoint field,
+    /// none of which can reach a safepoint. Naming the heap directly is
+    /// strictly more precise and gives up nothing:
+    ///
+    /// * `&mut *ctx` — still `E0502`, because a borrow of `ctx.tagged_heap`
+    ///   conflicts with a mutable borrow of the whole struct. The collector
+    ///   still cannot run while this borrow lives.
+    /// * `&mut ctx.buffers` — now allowed, because the borrow checker knows
+    ///   the two fields are disjoint.
+    ///
+    /// Use this where a site must mutate one field while reading a string;
+    /// use `Context::expect_lisp_string` everywhere else, since it reads
+    /// better and the extra strictness costs nothing at a site that does not
+    /// need it. DIVERGENCES.md 175 §5 measured the false positive
+    /// (`builtins/treesit.rs`, `E0502` ×3 on `eval.buffers`), and 185 §2 is
+    /// this.
+    #[inline]
+    pub fn expect_lisp_string_in<'a>(
+        self,
+        heap: &'a crate::tagged::gc::TaggedHeap,
+    ) -> Result<&'a LispString, Flow> {
+        self.lisp_string_in(heap).ok_or_else(|| {
+            signal(
+                crate::emacs_core::error::LispCondition::WrongTypeArgument,
+                vec![Value::symbol("stringp"), self],
+            )
+        })
+    }
+
     /// Check if a string is multibyte.
     pub fn string_is_multibyte(self) -> bool {
         self.as_lisp_string().is_some_and(|s| s.is_multibyte())
