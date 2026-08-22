@@ -17631,6 +17631,33 @@ ncurses' shipped database is `\E[4:%p1%dm`, so this is invisible today.  The
 underline COLOUR has no such gap: GNU's string is a literal in `term.c`, not
 read from the entry at all, so emitting it literally is exactly what GNU does.
 
+> **2026-08-22 -- entry 186: this paragraph is right, and it is the smallest
+> member of its own class.  FIXED, and the class with it.**
+>
+> The count first, because the paragraph asserts it without one: `infocmp -x`
+> over every name `toe -a` lists here is 3,697 rows and 1,862 unique entries;
+> 25 of them carry `Smulx` and all 25 spell it `\E[4:%p1%dm`, so "invisible
+> today" is exact.  It is measurable only against an entry built for the
+> purpose, and 175's technique is the one that works: `tic -x` on
+> `tmp/pw186/ti/pw186.src` gives `pw186-smulx-semicolon`
+> (`Smulx=\E[4;%p1%dm`) and `pw186-smulx-private` (`Smulx=\E[>4%p1%dw`), for
+> which ncurses answers `tparm (Smulx, 3)` = `\E[4;3m` and `\E[>43w`
+> (`tmp/pw186/smulx_probe.c`) where this port wrote `\E[4:3m`.
+>
+> What the paragraph does not say is that the SAME shape is in the five lines
+> above it in `turn_on_face`, and there it is live.  GNU emits `md`, `mh`,
+> `ZH`, `us` and `smxx` as the ENTRY's own strings too -- `OUTPUT1_IF (tty,
+> tty->TS_enter_bold_mode)` -- and this port spelled all five itself while
+> asking the capability record only whether the terminal had them.  Of the
+> 1,862 entries: 448 of the 1,303 with `us` spell it something other than
+> `\E[4m`, 234 of 996 spell `md` something else, 281 of 616 spell `mh`
+> something else.  Restricted to entries this port would even start on (927
+> have ANSI `cup`; the rest are refused by `check_terminal_powerful_enough`),
+> 138 disagree about at least one -- `xterm-bold`, `xterm-pcolor`, `putty-m1b`
+> and `putty-m2` among them.  `so` was the ONE attribute already carried as
+> bytes, and 148 of the reachable 916 spell it non-ANSI, which is why inverse
+> video on `screen` was already right.  186 §2.
+
 ### Gates
 
 All against a `cargo xtask fresh-build --release` binary carrying the change,
@@ -21896,6 +21923,22 @@ been a 2-byte lead is held back until the next read tells it otherwise.  The
 text is identical either way -- the byte is emitted as an eight-bit character
 one chunk later, and at EOF the last block flushes it -- but a Lisp filter sees
 the run boundaries.
+
+> **Closed, 2026-08-22, by entry 186.**  Reproduced first, against this entry's
+> own kind of harness: `tmp/pw186/probe1.el`, twenty rows, the split forced by
+> a handshake.  Five diverge and all five are this paragraph --
+> `chinese-gbk` / `cp936` / `chinese-gb18030` with `0x80` or `0xFF` ending
+> read 1 -- and one of them is worse than recorded here: when the invalid byte
+> is the WHOLE of read 1, this port produced no characters at all, so the
+> filter was never called and the run count itself was wrong (GNU 2 chunks,
+> neomacs 1).  The other fifteen rows, all twelve of this entry's own included,
+> are byte-identical to GNU 31.0.90, so the residual the coordinator handed
+> over as still open -- "decoders do not report consumed, and the boundary is
+> only computed for UTF-8" -- was closed here and is refuted as a live
+> statement.  The fix is not a `valids` table either: a charset's leading-byte
+> range is `code_space[(dim - 1) * 4 .. + 1]`, which is what GNU BUILDS the
+> vector from, so `charset_leading_byte` asks the charset's own data one
+> question earlier.  186 §1.
 
 **A `:post-read-conversion` that calls `accept-process-output` on its own
 process sees the designations as of before its own run.**  GNU's decode and its

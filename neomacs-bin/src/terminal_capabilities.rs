@@ -18,7 +18,9 @@ use std::os::raw::c_char;
 #[cfg(not(windows))]
 use std::os::raw::c_int;
 
-use neomacs_display_protocol::tty_capabilities::{TtyAttributeCapabilities, TtyNoColorVideo};
+use neomacs_display_protocol::tty_capabilities::{
+    TtyAttributeCapabilities, TtyNoColorVideo, TtyStyledUnderline,
+};
 
 #[cfg(not(windows))]
 #[cfg_attr(target_os = "linux", link(name = "ncursesw"))]
@@ -29,6 +31,45 @@ unsafe extern "C" {
     fn tgetnum(capability: *const c_char) -> c_int;
     fn tgetflag(capability: *const c_char) -> c_int;
     fn tigetstr(capability: *const c_char) -> *mut c_char;
+    /// GNU's `tparam`.  In a terminfo build `src/terminfo.c:43-55` defines
+    /// `tparam` as a thin wrapper over ncurses' `tparm` with the same four
+    /// integer arguments, so calling `tparm` here is calling what GNU calls.
+    fn tparm(string: *const c_char, ...) -> *mut c_char;
+}
+
+/// GNU `tparam (STRING, NULL, 0, PARAMETER, 0, 0, 0)` — the one capability
+/// `turn_on_face` does not emit verbatim.
+///
+/// `tparm` does not need a terminal to have been set up: it is a function of
+/// the string, and measured so (`tmp/pw186/tparm_nosetup.c`).  `None` when the
+/// expansion fails, which for ncurses means the string is not a well-formed
+/// terminfo format.
+#[cfg(not(windows))]
+pub(crate) fn expand_capability_parameter(sequence: &[u8], parameter: u8) -> Option<Vec<u8>> {
+    let sequence = CString::new(sequence).ok()?;
+    let expanded = unsafe {
+        tparm(
+            sequence.as_ptr(),
+            c_int::from(parameter),
+            0 as c_int,
+            0 as c_int,
+            0 as c_int,
+            0 as c_int,
+            0 as c_int,
+            0 as c_int,
+            0 as c_int,
+        )
+    };
+    if expanded.is_null() {
+        return None;
+    }
+    let bytes = unsafe { CStr::from_ptr(expanded) }.to_bytes().to_vec();
+    (!bytes.is_empty()).then_some(bytes)
+}
+
+#[cfg(windows)]
+pub(crate) fn expand_capability_parameter(_sequence: &[u8], _parameter: u8) -> Option<Vec<u8>> {
+    None
 }
 
 /// Which of the two capability namespaces a string capability name lives in.
@@ -118,10 +159,14 @@ pub(crate) fn resolve_tty_attribute_capabilities(
 ) -> TtyAttributeCapabilities {
     use StringCapability::{Termcap, Terminfo};
 
-    let has = |database: &mut dyn TerminalCapabilityDatabase, cap: StringCapability<'_>| {
+    // GNU stores the capability's STRING and emits it (`OUTPUT1_IF`), so the
+    // record carries bytes rather than a flag: presence is `is_some`.
+    let sequence = |database: &mut dyn TerminalCapabilityDatabase, cap: StringCapability<'_>| {
         database
             .get_string(cap)
-            .is_some_and(|value| !value.is_empty())
+            .filter(|value| !value.is_empty())
+            .map(|value| rendition_sequence(&value))
+            .filter(|value| !value.is_empty())
     };
     let color_cells = database
         .get_termcap_number("Co")
@@ -132,30 +177,77 @@ pub(crate) fn resolve_tty_attribute_capabilities(
         .get_termcap_number("NC")
         .filter(|ncv| *ncv > 0)
         .map_or(TtyNoColorVideo::NONE, |ncv| TtyNoColorVideo(ncv as u16));
-    let standout = database
-        .get_string(Termcap("so"))
-        .filter(|sequence| !sequence.is_empty());
+    // GNU takes styled underlines from EITHER source, `Smulx` first:
+    // `if (!tty->TF_set_underline_style && tgetflag ("Su"))
+    //    tty->TF_set_underline_style = "\x1b[4:%p1%dm";`
+    // (src/term.c:4700-4703).  Because that field also gates
+    // `TF_set_underline_color` (:4705-4708), one answer carries both.
+    // `Su` is a flag, not a string, so it is read with `tgetflag` -- and
+    // unlike `tgetstr ("Smulx")`, `tgetflag` really does resolve an
+    // extended terminfo boolean (ledger 175, measured with a `tic`-built
+    // entry because no shipped entry has `Su` without `Smulx`).
+    //
+    // What the field holds is the ENTRY's own string, and `turn_on_face`
+    // expands it with `tparam` (src/term.c:2083); the `Su` arm expands the
+    // literal GNU installs for it.  Every `Smulx` ncurses ships is spelled
+    // `\E[4:%p1%dm`, so this is invisible on the shipped database and
+    // measurable only against a `tic`-built entry (ledger 186,
+    // `tmp/pw186/ti/pw186.src`).
+    let styled_underline_source = database
+        .get_string(Terminfo("Smulx"))
+        .filter(|value| !value.is_empty())
+        .or_else(|| {
+            database
+                .get_termcap_flag("Su")
+                .then(|| b"\x1b[4:%p1%dm".to_vec())
+        });
 
     TtyAttributeCapabilities {
-        standout_sequence: standout.map(|sequence| canonical_cap(&sequence)),
-        underline: has(database, Termcap("us")),
-        // GNU takes styled underlines from EITHER source, `Smulx` first:
-        // `if (!tty->TF_set_underline_style && tgetflag ("Su"))
-        //    tty->TF_set_underline_style = "\x1b[4:%p1%dm";`
-        // (src/term.c:4700-4703).  Because that field also gates
-        // `TF_set_underline_color` (:4705-4708), one boolean carries both.
-        // `Su` is a flag, not a string, so it is read with `tgetflag` -- and
-        // unlike `tgetstr ("Smulx")`, `tgetflag` really does resolve an
-        // extended terminfo boolean (ledger 175, measured with a `tic`-built
-        // entry because no shipped entry has `Su` without `Smulx`).
-        underline_styled: has(database, Terminfo("Smulx")) || database.get_termcap_flag("Su"),
-        bold: has(database, Termcap("md")),
-        dim: has(database, Termcap("mh")),
-        italic: has(database, Termcap("ZH")),
-        strike_through: has(database, Terminfo("smxx")),
+        standout_sequence: sequence(database, Termcap("so")),
+        underline_sequence: sequence(database, Termcap("us")),
+        bold_sequence: sequence(database, Termcap("md")),
+        dim_sequence: sequence(database, Termcap("mh")),
+        italic_sequence: sequence(database, Termcap("ZH")),
+        strike_through_sequence: sequence(database, Terminfo("smxx")),
+        styled_underline: styled_underline_source.and_then(|smulx| {
+            TtyStyledUnderline::expand_all(|style| expand_capability_parameter(&smulx, style))
+        }),
         color_cells: i64::from(color_cells),
         no_color_video,
     }
+}
+
+/// One rendition capability's bytes, as GNU emits them.
+///
+/// `turn_on_face` emits these with `OUTPUT1` / `OUTPUT1_IF`, which is `tputs`:
+/// it turns a `$<..>` padding marker into a DELAY rather than into bytes, and
+/// it does no parameter expansion at all -- `tparam` is a separate call GNU
+/// makes only for `cup`, `setaf`/`setab` and `Smulx`.  So the bytes to keep are
+/// the entry's own with padding removed, and a `%` construct (three entries in
+/// ncurses' database carry one in a rendition string) is passed through exactly
+/// as GNU passes it through.
+///
+/// This is deliberately NOT [`canonical_cap`], which also strips `%pN`: that
+/// normalization exists so the update planner can compare a terminfo spelling
+/// against its termcap translation, and it would corrupt a string that is
+/// emitted rather than compared.
+fn rendition_sequence(entry: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(entry.len());
+    let mut i = 0;
+    while i < entry.len() {
+        if entry[i] == b'$' && entry.get(i + 1) == Some(&b'<') {
+            match entry[i + 2..].iter().position(|byte| *byte == b'>') {
+                Some(close) => {
+                    i += close + 3;
+                    continue;
+                }
+                None => break,
+            }
+        }
+        out.push(entry[i]);
+        i += 1;
+    }
+    out
 }
 
 /// Resolve the capabilities of the terminal named by `TERM`, or `None` when the

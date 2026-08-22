@@ -11983,6 +11983,91 @@ fn a_process_decoder_carries_its_state_and_its_carryover_across_a_read() {
 }
 
 // ---------------------------------------------------------------------------
+// Ledger 186: a charset decoder refuses a leading byte before it reads another
+// ---------------------------------------------------------------------------
+
+/// GNU's `decode_coding_charset` looks the leading byte up in
+/// `AREF (valids, c)` BEFORE it reads any more of the source
+/// (src/coding.c:5526-5528), so a byte that no charset in the coding system's
+/// `:charset-list` can START goes to `invalid_code:` in the read it arrived
+/// in -- even when a longer charset in the same list would have needed bytes
+/// this read does not have.  Ledger 166 found this and left it open; the text
+/// is the same either way, but a Lisp filter sees the run boundaries.
+///
+/// The split is forced by a HANDSHAKE and not by a sleep: the child writes,
+/// blocks on `read', and only this test can unblock it.  Rows 1-5 are the
+/// divergence, rows 6-8 are the controls that stop the fix from becoming
+/// "never hold anything back": a VALID leading byte that really is incomplete
+/// must still wait for the next read, a complete two-byte character must not,
+/// and every byte of `iso-latin-1' is a character so nothing is ever held.
+///
+/// Measured under GNU Emacs 31.0.90 running this test's own program
+/// (`tmp/pw186/probe1.el`, `tmp/pw186/probe1-gnu.txt`).  Before this entry the
+/// first five rows read
+/// `(2 ((97) (4194176 98 10)))`, `(2 ((97) (4194303 98 10)))`,
+/// `(1 ((4194176 98 10)))` -- the third one being a read whose filter never
+/// ran at all -- `(2 ((97) (4194176 98 10)))` and `(2 ((97) (4194176 98 10)))`.
+#[test]
+fn a_charset_decoder_refuses_a_leading_byte_no_charset_can_start() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let result = eval_one(&format!(
+        r#"(progn
+             (defun pw186-run (coding cmd)
+               (let* ((acc nil)
+                      (p (make-process :name "pw186" :buffer nil :sentinel #'ignore
+                                       :connection-type 'pipe
+                                       :coding (cons coding 'binary)
+                                       :filter (lambda (_p s) (setq acc (append acc (list s))))
+                                       :command (list "{sh}" "-c" cmd))))
+                 ;; Bounded: a port that holds the whole of read 1 back never
+                 ;; calls the filter, and an unbounded wait would then deadlock
+                 ;; against a child blocked on `read'.
+                 (let ((tries 0))
+                   (while (and (null acc) (< tries 10))
+                     (setq tries (1+ tries))
+                     (accept-process-output p 1)))
+                 (process-send-string p "go\n")
+                 (while (accept-process-output p 1))
+                 (while (process-live-p p) (accept-process-output p 0.05))
+                 (list (length acc)
+                       (mapcar (lambda (s) (append s nil)) acc)
+                       last-coding-system-used)))
+             (list
+              ;; 0x80 and 0xFF begin no charset of `chinese-gbk': its list is
+              ;; (ascii chinese-gbk), whose leading byte ranges are 0-127 and
+              ;; 0x81-0xFE.
+              (pw186-run 'chinese-gbk "printf 'a\\200'; read x; printf 'b\\n'")
+              (pw186-run 'chinese-gbk "printf 'a\\377'; read x; printf 'b\\n'")
+              ;; the same byte as the WHOLE of read 1: GNU decodes it and runs
+              ;; the filter, so there are two chunks and not one
+              (pw186-run 'chinese-gbk "printf '\\200'; read x; printf 'b\\n'")
+              (pw186-run 'cp936 "printf 'a\\200'; read x; printf 'b\\n'")
+              ;; gb18030 has 2-byte AND 4-byte charsets in one list
+              (pw186-run 'chinese-gb18030 "printf 'a\\200'; read x; printf 'b\\n'")
+              ;; controls
+              (pw186-run 'chinese-gb18030 "printf 'a\\201\\100'; read x; printf 'b\\n'")
+              (pw186-run 'chinese-gbk "printf 'a\\260'; read x; printf '\\241b\\n'")
+              (pw186-run 'iso-latin-1 "printf 'a\\351'; read x; printf '\\350\\n'")))"#
+    ));
+
+    assert_eq!(
+        result,
+        concat!(
+            "OK (",
+            "(2 ((97 4194176) (98 10)) chinese-gbk-unix) ",
+            "(2 ((97 4194303) (98 10)) chinese-gbk-unix) ",
+            "(2 ((4194176) (98 10)) chinese-gbk-unix) ",
+            "(2 ((97 4194176) (98 10)) chinese-gbk-unix) ",
+            "(2 ((97 4194176) (98 10)) chinese-gb18030-unix) ",
+            "(2 ((97 19970) (98 10)) chinese-gb18030-unix) ",
+            "(2 ((97) (21834 98 10)) chinese-gbk-unix) ",
+            "(2 ((97 233) (232 10)) iso-latin-1-unix))",
+        )
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Ledger 169: the removal decision precedes the sentinel (GNU `status_notify`)
 // ---------------------------------------------------------------------------
 

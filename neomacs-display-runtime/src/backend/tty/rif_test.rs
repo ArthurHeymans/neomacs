@@ -8,7 +8,9 @@ use neomacs_display_protocol::glyph_matrix::{
     FaceFillItem, FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphProvenance, GlyphRow,
     RowDamage, WindowMatrixEntry,
 };
-use neomacs_display_protocol::tty_capabilities::TtyNoColorVideo;
+use neomacs_display_protocol::tty_capabilities::{
+    TtyCapability, TtyNoColorVideo, TtyStyledUnderline,
+};
 use neomacs_display_protocol::types::Px;
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 use std::collections::HashMap;
@@ -2560,8 +2562,8 @@ fn italic_falls_back_to_dim_when_the_terminal_has_no_sitm() {
     };
 
     let with_italics = TtyAttributeCapabilities {
-        italic: true,
-        dim: true,
+        italic_sequence: Some(b"\x1b[3m".to_vec()),
+        dim_sequence: Some(b"\x1b[2m".to_vec()),
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
@@ -2574,8 +2576,8 @@ fn italic_falls_back_to_dim_when_the_terminal_has_no_sitm() {
     );
 
     let no_italics = TtyAttributeCapabilities {
-        italic: false,
-        dim: true,
+        italic_sequence: None,
+        dim_sequence: Some(b"\x1b[2m".to_vec()),
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
@@ -2586,8 +2588,8 @@ fn italic_falls_back_to_dim_when_the_terminal_has_no_sitm() {
 
     // Neither capability: GNU emits nothing for the slant.
     let neither = TtyAttributeCapabilities {
-        italic: false,
-        dim: false,
+        italic_sequence: None,
+        dim_sequence: None,
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
@@ -2676,6 +2678,178 @@ fn attributes_the_terminal_lacks_are_not_emitted() {
     }
 }
 
+/// GNU `turn_on_face` emits the capability's OWN string --
+/// `OUTPUT1_IF (tty, tty->TS_enter_bold_mode)` and its five neighbours
+/// (src/term.c:2061-2090) -- never an ANSI literal of its own.
+///
+/// This port spelled all six itself while asking the capability record only
+/// whether the terminal HAD them, and the two answers disagree on the database
+/// ncurses ships.  Measured with `infocmp -x` over all 1,862 unique entries
+/// (ledger 186, `tmp/pw186/cap_audit.tsv`): 448 of the 1,303 entries that have
+/// `us` spell it something other than `ESC [ 4 m`, 234 of 996 spell `md`
+/// something other than `ESC [ 1 m`, and 281 of 616 spell `mh` something other
+/// than `ESC [ 2 m`.  Restricted to the entries this port would even start on
+/// -- `check_terminal_powerful_enough` refuses a TERM whose `cm` is not the
+/// ANSI form -- 138 of 927 disagree about at least one, `xterm-bold`
+/// (`smul=\E[1m`), `xterm-pcolor` (`smul=\E[4;42m`, `bold=\E[1;43m`) and
+/// `putty-m1b`/`putty-m2` (`bold=\E[33m`) among them.
+#[test]
+fn the_writer_emits_the_terminals_own_rendition_strings() {
+    let attrs = CellAttrs {
+        bold: true,
+        italic: true,
+        underline: UnderlineStyle::Line.gnu_code(),
+        strikethrough: true,
+        inverse: true,
+        ..CellAttrs::default()
+    };
+    // `xterm-pcolor`'s and `putty-m1b`'s real spellings, plus the Wyse ones
+    // `wy350` uses, on one record.
+    let own = TtyAttributeCapabilities {
+        bold_sequence: Some(b"\x1b[1;43m".to_vec()),
+        italic_sequence: Some(b"\x1b[3;44m".to_vec()),
+        underline_sequence: Some(b"\x1bG8".to_vec()),
+        strike_through_sequence: Some(b"\x1bG@".to_vec()),
+        standout_sequence: Some(b"\x1b[7;31m".to_vec()),
+        ..TtyAttributeCapabilities::full()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &own);
+    let out = String::from_utf8(buf).unwrap();
+
+    for sequence in ["\x1b[1;43m", "\x1b[3;44m", "\x1bG8", "\x1bG@", "\x1b[7;31m"] {
+        assert!(
+            out.contains(sequence),
+            "the entry's own {sequence:?} must be emitted: {out:?}"
+        );
+    }
+    // and not the ANSI spelling this port used to write instead
+    for invented in ["\x1b[1m", "\x1b[3m", "\x1b[4m", "\x1b[9m", "\x1b[7m"] {
+        assert!(
+            !out.contains(invented),
+            "{invented:?} is this port's invention, not the terminal's: {out:?}"
+        );
+    }
+}
+
+/// GNU's styled underline is `Smulx` run through `tparam`
+/// (`tparam (tty->TF_set_underline_style, NULL, 0, face->underline, 0, 0, 0)`,
+/// src/term.c:2083), so a terminal whose `Smulx` is not the kitty spelling
+/// gets its own sequence.  This port emitted a fixed `ESC [ 4 : N m`.
+///
+/// Every `Smulx` ncurses ships IS the kitty spelling -- 25 unique entries, 0
+/// of them different (ledger 186) -- so the only way to see the difference is
+/// a terminfo entry built for the purpose; `tmp/pw186/ti/pw186.src` is that
+/// entry and `tmp/pw186/smulx_probe.c` is ncurses answering
+/// `tparm ("\E[4;%p1%dm", 3)` = `\E[4;3m` for it.  Here the same four
+/// expansions are handed to the record directly, because the expander lives in
+/// the crate that links ncurses.
+#[test]
+fn a_styled_underline_is_the_terminals_own_smulx_expansion() {
+    let semicolon = TtyAttributeCapabilities {
+        styled_underline: TtyStyledUnderline::expand_all(|style| {
+            Some(format!("\x1b[4;{style}m").into_bytes())
+        }),
+        ..TtyAttributeCapabilities::full()
+    };
+    for (style, expected) in [
+        (UnderlineStyle::Double, "\x1b[4;2m"),
+        (UnderlineStyle::Wave, "\x1b[4;3m"),
+        (UnderlineStyle::Dotted, "\x1b[4;4m"),
+        (UnderlineStyle::Dashed, "\x1b[4;5m"),
+    ] {
+        let attrs = CellAttrs {
+            underline: style.gnu_code(),
+            ..CellAttrs::default()
+        };
+        let mut buf = Vec::new();
+        write_sgr_with_capabilities(&mut buf, &attrs, &semicolon);
+        let out = String::from_utf8(buf).unwrap();
+        assert!(
+            out.contains(expected),
+            "{style:?} must use the entry's own Smulx: {out:?}"
+        );
+        assert!(
+            !out.contains("\x1b[4:"),
+            "the kitty spelling is not this terminal's: {out:?}"
+        );
+    }
+
+    // `FACE_UNDERLINE_SINGLE` never reaches `Smulx` in GNU, however the entry
+    // spells it: it takes the `smul` arm above (src/term.c:2076-2078).
+    let attrs = CellAttrs {
+        underline: UnderlineStyle::Line.gnu_code(),
+        ..CellAttrs::default()
+    };
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &semicolon);
+    let out = String::from_utf8(buf).unwrap();
+    assert!(out.contains("\x1b[4m"), "single underline is `smul': {out:?}");
+    assert!(!out.contains("\x1b[4;1m"), "not a parameter: {out:?}");
+}
+
+/// GNU checks `MAY_USE_WITH_COLORS_P (tty, NC_ITALIC)` ONCE, around the whole
+/// slant arm, and then emits `TS_enter_dim_mode` with `OUTPUT1` -- no second
+/// `ncv` test (src/term.c:2063-2072).  This port asked `supports(Dim)` for the
+/// fallback, which carries the `NC_DIM` term, so a terminal whose `ncv`
+/// forbids dim on a colour frame got NOTHING for an italic face where GNU
+/// dims it.
+///
+/// TERM=linux is exactly that terminal: `ncv#18` is `NC_UNDERLINE|NC_DIM`,
+/// there is no `sitm`, and `dim=\E[2m`.  Captured from GNU Emacs 31.0.90 in a
+/// pty (`tmp/pw186/gnu-linux-italic.raw`, `tmp/pw186/italic_capture.sh`):
+///
+/// ```text
+///   ^[[2mPW186ITALIC^[[m^O
+/// ```
+///
+/// 58 of the 927 entries this port would start on are in that state, `linux`
+/// and its ten variants, `cons25`, `teken`, `screen.gnome` and `wy370` among
+/// them (ledger 186).
+#[test]
+fn the_dim_fallback_for_italic_ignores_the_ncv_dim_bit_like_gnu() {
+    let attrs = CellAttrs {
+        italic: true,
+        ..CellAttrs::default()
+    };
+    let linux_console = TtyAttributeCapabilities {
+        italic_sequence: None,
+        dim_sequence: Some(b"\x1b[2m".to_vec()),
+        color_cells: 8,
+        no_color_video: TtyNoColorVideo(18),
+        ..TtyAttributeCapabilities::full()
+    };
+
+    assert_eq!(
+        linux_console.italic_rendition(),
+        TtyItalicRendition::Dim(b"\x1b[2m"),
+        "GNU's fallback has no NC_DIM term"
+    );
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &linux_console);
+    let out = String::from_utf8(buf).unwrap();
+    assert!(out.contains("\x1b[2m"), "GNU writes ESC[2m here: {out:?}");
+
+    // The gate GNU DOES have is on the italic bit, and it silences the arm
+    // whole -- fallback included.
+    let ncv_italic = TtyAttributeCapabilities {
+        no_color_video: TtyNoColorVideo::ITALIC,
+        color_cells: 8,
+        italic_sequence: None,
+        dim_sequence: Some(b"\x1b[2m".to_vec()),
+        ..TtyAttributeCapabilities::full()
+    };
+    assert_eq!(ncv_italic.italic_rendition(), TtyItalicRendition::None);
+    let mut buf = Vec::new();
+    write_sgr_with_capabilities(&mut buf, &attrs, &ncv_italic);
+    assert!(!String::from_utf8(buf).unwrap().contains("\x1b[2m"));
+
+    // `tty_capable_p` is a different question and keeps its NC_DIM term:
+    // GNU's `TTY_CAP_DIM` arm really does test `MAY_USE_WITH_COLORS_P`
+    // (src/term.c:2194-2195).
+    assert!(!linux_console.supports(TtyCapability::Dim));
+}
+
 #[test]
 fn a_styled_underline_degrades_to_a_plain_one_without_smulx() {
     // GNU turn_on_face: the styled form is used only `if (tty->TF_set_underline_style)',
@@ -2685,7 +2859,7 @@ fn a_styled_underline_degrades_to_a_plain_one_without_smulx() {
         ..CellAttrs::default()
     };
     let no_smulx = TtyAttributeCapabilities {
-        underline_styled: false,
+        styled_underline: None,
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();
@@ -2741,7 +2915,7 @@ fn tty_capable_p_matches_gnu_capability_and_ncv_logic() {
     assert!(full.supports(TtyCapability::UnderlineStyled));
 
     let screen_like = TtyAttributeCapabilities {
-        italic: false,
+        italic_sequence: None,
         ..TtyAttributeCapabilities::full()
     };
     assert!(!screen_like.supports(TtyCapability::Italic));
@@ -3749,7 +3923,7 @@ fn underline_color_needs_smulx_and_colors() {
     };
 
     let no_smulx = TtyAttributeCapabilities {
-        underline_styled: false,
+        styled_underline: None,
         ..TtyAttributeCapabilities::full()
     };
     let mut buf = Vec::new();

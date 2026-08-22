@@ -2897,37 +2897,74 @@ fn decoded_string_with_charset_runs(bytes: Vec<u8>, runs: Vec<StringTextProperty
     value
 }
 
-/// GNU `decode_coding_charset` (src/coding.c:5420-5470).
+/// GNU `decode_coding_charset` (src/coding.c:5470-5590).
 ///
-/// Its loop reads the leading byte with `ONE_MORE_BYTE` and then, for a
-/// charset of dimension N, N-1 more of them (:5452-5462) -- so a source that
-/// ends inside a multi-byte charset character stops the decoder rather than
-/// producing a raw byte, and `coding->consumed` is the start of that
-/// character.  This is what makes a `chinese-gbk` or `cp936` subprocess pick
-/// up in the next read where the previous one left off.
+/// Its loop reads the leading byte with `ONE_MORE_BYTE`, LOOKS THAT BYTE UP,
+/// and only then reads the `dim - 1` bytes the charset it found needs
+/// (:5518-5545).  The order is the whole rule:
+///
+/// ```c
+///       ONE_MORE_BYTE (c);
+///       ...
+///       val = AREF (valids, c);
+///       if (! FIXNUMP (val) && ! CONSP (val))
+///         goto invalid_code;
+/// ```
+///
+/// so a byte no charset in the list can START becomes an eight-bit character
+/// in the read it arrived in, even when a longer charset in the same list
+/// would have needed bytes the source does not have yet.  A byte that CAN
+/// start a charset and then runs out of source does stop the decoder, and
+/// `coding->consumed` is the start of that character -- which is what makes a
+/// `chinese-gbk` or `cp936` subprocess pick up in the next read where the
+/// previous one left off.
+///
+/// `valids` is a 256-entry vector GNU builds once per coding system, each
+/// element the charsets that byte can begin, sorted by dimension with the
+/// smaller first (src/coding.c:11122-11165).  Here it is the same data asked
+/// per charset instead of per byte -- [`CharsetLeadingByte`] is built from the
+/// charset's own `code_space`, which is what GNU builds the vector FROM -- so
+/// nothing below is a second copy of a decoding rule.
 fn decode_via_charset_list(
     bytes: &[u8],
     charset_list: &[SymId],
     eol: DosEolLookahead,
 ) -> DecodedSource {
-    // The longest charset in the list decides how many bytes a unit may need;
-    // a source shorter than that at the end may still be a complete character
-    // in a shorter charset, which is why the width is tried per charset below.
+    let mut leads: Vec<(SymId, crate::emacs_core::charset::CharsetLeadingByte)> = charset_list
+        .iter()
+        .filter_map(|&charset| {
+            Some((
+                charset,
+                crate::emacs_core::charset::charset_leading_byte(charset)?,
+            ))
+        })
+        .collect();
+    // GNU inserts each charset ahead of the first entry with a LARGER
+    // dimension, so a byte's candidate list is ascending by dimension and ties
+    // keep `:charset-list` order.  `sort_by_key` is stable, so this is that.
+    leads.sort_by_key(|(_, lead)| lead.dimension);
+
     decode_units(bytes, eol, |unit, sink| {
         let start = unit.pos;
         let rest = &unit.bytes[start..];
+        let Some(&leading) = rest.first() else {
+            return Err(NoMoreSource);
+        };
         let mut short = false;
-        let decoded = charset_list.iter().find_map(|&charset| {
-            let dimension =
-                crate::emacs_core::charset::charset_dimension_by_sym(charset).unwrap_or(1) as usize;
-            if rest.len() < dimension {
-                // `ONE_MORE_BYTE` would have jumped to `no_more_source` here.
-                short = true;
-                return None;
-            }
-            crate::emacs_core::charset::charset_decode_char_from_bytes(charset, rest)
-                .map(|(ch, consumed)| (charset, ch, consumed))
-        });
+        let decoded = leads
+            .iter()
+            .filter(|(_, lead)| lead.accepts(leading))
+            .find_map(|&(charset, lead)| {
+                if rest.len() < lead.dimension {
+                    // `ONE_MORE_BYTE` would have jumped to `no_more_source`
+                    // here -- but only for a charset this byte can begin,
+                    // which is why the filter above comes first.
+                    short = true;
+                    return None;
+                }
+                crate::emacs_core::charset::charset_decode_char_from_bytes(charset, rest)
+                    .map(|(ch, consumed)| (charset, ch, consumed))
+            });
         match decoded {
             // GNU annotates a run with the charset that decoded it, but ASCII
             // characters (`charset->id == charset_ascii`) carry no property.

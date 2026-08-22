@@ -1172,6 +1172,51 @@ pub(crate) fn charset_is_ascii_compatible(charset: SymId) -> bool {
     })
 }
 
+/// Which bytes can BEGIN a character of a charset, and how many bytes that
+/// character has.
+///
+/// This is the data GNU builds `coding_attr_charset_valids` out of.  When a
+/// `charset`-type coding system is defined, GNU walks each charset in
+/// `:charset-list` and marks every byte from `code_space[(dim - 1) * 4]`
+/// through `code_space[(dim - 1) * 4 + 1]` as one that charset can start
+/// (src/coding.c:11122-11165); `decode_coding_charset` then consults the
+/// resulting 256-entry vector BEFORE it reads a second byte (:5526-5528).
+/// This port's `code_space` is GNU's table without the size and multiplier
+/// columns, so the same range is at `[(dim - 1) * 2]` and `[+ 1]`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct CharsetLeadingByte {
+    /// `CHARSET_DIMENSION`: how many bytes one character occupies.
+    pub dimension: usize,
+    first: u8,
+    last: u8,
+}
+
+impl CharsetLeadingByte {
+    /// GNU's `AREF (valids, c)` naming this charset.
+    pub(crate) fn accepts(self, byte: u8) -> bool {
+        (self.first..=self.last).contains(&byte)
+    }
+}
+
+/// [`CharsetLeadingByte`] for `charset`, or `None` when the charset is not
+/// registered or its leading byte range is not a byte range (which is the same
+/// thing GNU's vector says by leaving every element nil for it: no byte can
+/// start it, so it decodes nothing).
+pub(crate) fn charset_leading_byte(charset: SymId) -> Option<CharsetLeadingByte> {
+    CHARSET_REGISTRY.with(|slot| {
+        let reg = slot.borrow();
+        let info = reg.charsets.get(&reg.resolve_name(charset))?;
+        let dimension = charset_dimension(info);
+        let first = u8::try_from(charset_byte_min(info, dimension - 1)).ok()?;
+        let last = u8::try_from(charset_byte_max(info, dimension - 1)).ok()?;
+        (first <= last).then_some(CharsetLeadingByte {
+            dimension,
+            first,
+            last,
+        })
+    })
+}
+
 /// The dimension of `charset` (1 or 2), or `None` if unknown. Used by the
 /// ISO-2022 category computation.
 pub(crate) fn charset_dimension_by_sym(charset: SymId) -> Option<i64> {
