@@ -102,15 +102,15 @@ pub(crate) fn eval_forms_from_lisp_source(
     source: &crate::heap_types::LispString,
     eof_source: Option<Value>,
 ) -> EvalResult {
-    let macroexpand_fn = super::load::get_eager_macroexpand_fn(eval);
-    eval_forms_from_lisp_source_streaming(eval, source, eof_source, macroexpand_fn)
+    let form_evaluator = FormEvaluator::resolve(eval);
+    eval_forms_from_lisp_source_streaming(eval, source, eof_source, form_evaluator)
 }
 
 fn eval_forms_from_lisp_source_streaming(
     eval: &mut super::eval::Context,
     source: &crate::heap_types::LispString,
     eof_source: Option<Value>,
-    macroexpand_fn: Option<Value>,
+    form_evaluator: FormEvaluator,
 ) -> EvalResult {
     let (start_pos, shebang_only_line) = strip_reader_prefix_lisp_string(source);
     if shebang_only_line {
@@ -161,17 +161,7 @@ fn eval_forms_from_lisp_source_streaming(
                 cursor.pos = next_pos;
             }
 
-            let eval_roots = eval.save_specpdl_roots();
-            eval.push_specpdl_root(form);
-            let eval_result = if let Some(mexp_fn) = macroexpand_fn {
-                eval.push_specpdl_root(mexp_fn);
-                super::load::eager_expand_eval(eval, form, mexp_fn)
-                    .map_err(super::error::flow_from_eval_error)
-            } else {
-                eval.eval_sub(form)
-            };
-            eval.restore_specpdl_roots(eval_roots);
-            eval_result?;
+            form_evaluator.eval(eval, form)?;
         }
         Ok(())
     })();
@@ -523,6 +513,43 @@ enum FormReader {
     Lisp(Value),
 }
 
+/// How a form returned by `FormReader` is prepared and evaluated.
+///
+/// GNU's `readevalloop` chooses the reader and evaluator independently: a
+/// custom `load-read-function` changes only how the form is acquired, while
+/// source forms still pass through `internal-macroexpand-for-load`.  Keeping
+/// this as an exhaustive type prevents a reader branch from silently skipping
+/// compiler-macro and closure preparation.
+#[derive(Clone, Copy, Debug)]
+enum FormEvaluator {
+    Direct,
+    EagerMacroexpand { function: Value },
+}
+
+impl FormEvaluator {
+    fn resolve(eval: &super::eval::Context) -> Self {
+        match super::load::get_eager_macroexpand_fn(eval) {
+            Some(function) => Self::EagerMacroexpand { function },
+            None => Self::Direct,
+        }
+    }
+
+    fn eval(self, eval: &mut super::eval::Context, form: Value) -> EvalResult {
+        let roots = eval.save_specpdl_roots();
+        eval.push_specpdl_root(form);
+        let result = match self {
+            Self::Direct => eval.eval_value(&form),
+            Self::EagerMacroexpand { function } => {
+                eval.push_specpdl_root(function);
+                super::load::eager_expand_eval(eval, form, function)
+                    .map_err(super::error::flow_from_eval_error)
+            }
+        };
+        eval.restore_specpdl_roots(roots);
+        result
+    }
+}
+
 impl FormReader {
     fn resolve(eval: &super::eval::Context, explicit: Option<Value>) -> Self {
         if let Some(read_function) = explicit.filter(|value| !value.is_nil()) {
@@ -619,6 +646,7 @@ fn readevalloop_buffer_with_lisp_reader(
     region: BufferReadRegion,
 ) -> EvalResult {
     let buffer_value = Value::make_buffer(buffer_id);
+    let form_evaluator = FormEvaluator::resolve(eval);
 
     let gc_roots = eval.save_specpdl_roots();
     eval.push_specpdl_root(read_function);
@@ -744,11 +772,7 @@ fn readevalloop_buffer_with_lisp_reader(
             };
             next_start = after_read;
 
-            let form_roots = eval.save_specpdl_roots();
-            eval.push_specpdl_root(form);
-            let eval_result = eval.eval_value(&form);
-            eval.restore_specpdl_roots(form_roots);
-            eval_result?;
+            form_evaluator.eval(eval, form)?;
         }
     })();
 

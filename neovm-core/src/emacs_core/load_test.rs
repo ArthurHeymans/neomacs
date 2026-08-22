@@ -14565,6 +14565,50 @@ fn load_reads_each_form_through_load_read_function() {
 }
 
 #[test]
+fn load_read_function_path_still_expands_compiler_macros() {
+    // GNU's readevalloop chooses how to read a form independently from how it
+    // prepares that form for evaluation.  Edebug advises `load-read-function',
+    // so this is the path used after packages such as Helpful load Edebug.
+    // Compiler-macro expansion must still happen before a lexical defun is
+    // installed; otherwise the raw `add-to-list' function treats its quoted
+    // lexical local as a dynamic variable and later signals void-variable.
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let file = dir.path().join("hooked-compiler-macro.el");
+    std::fs::write(
+        &file,
+        ";;; hooked-compiler-macro.el --- fixture -*- lexical-binding: t; -*-\n\
+         (defun lrf-add-to-lexical-list ()\n\
+           (let ((items nil))\n\
+             (add-to-list 'items 'entry t)\n\
+             items))\n",
+    )
+    .expect("write compiler-macro fixture");
+
+    eval.eval_str(
+        "(defun lrf-forwarding-read (&optional stream)\n\
+           (read stream))",
+    )
+    .expect("define forwarding load reader");
+    let load = format!(
+        "(let ((load-read-function #'lrf-forwarding-read))\n\
+           (load {:?} nil t))",
+        file.to_str().expect("utf8 path")
+    );
+    eval.eval_str(&load)
+        .expect("load lexical source through load-read-function");
+
+    let result = eval
+        .eval_str(
+            "(progn (when (boundp 'items) (makunbound 'items))\n\
+                          (lrf-add-to-lexical-list))",
+        )
+        .expect("loaded lexical function must not look for a dynamic `items'");
+    assert_eq!(result.to_string(), "(entry)");
+}
+
+#[test]
 fn load_path_search_suffixes_match_gnu_per_operating_system() {
     // Test 1 for neomacs#193: `require` searches through
     // `default_load_suffixes`, and on darwin that list must carry BOTH module
