@@ -483,6 +483,11 @@ thread_local! {
 #[derive(Clone, Debug)]
 pub struct MatchData {
     kind: MatchDataKind,
+    /// Debug-only stats: bit N set once group N returned Some to a reader.
+    /// Sizes the DISTINCT conversion demand for the lazy-match-data
+    /// question (see `match_stats`); absent from optimized builds.
+    #[cfg(debug_assertions)]
+    read_mask: std::cell::Cell<u64>,
 }
 
 /// Lisp-visible provenance of published match positions.
@@ -713,6 +718,8 @@ impl MatchData {
                     .collect(),
                 searched,
             },
+            #[cfg(debug_assertions)]
+            read_mask: Default::default(),
         }
     }
 
@@ -725,6 +732,8 @@ impl MatchData {
                     .map(|group| group.map(LispCharMatchRange::from_match_group))
                     .collect(),
             },
+            #[cfg(debug_assertions)]
+            read_mask: Default::default(),
         }
     }
 
@@ -750,7 +759,9 @@ impl MatchData {
     }
 
     pub(crate) fn group(&self, index: usize) -> Option<MatchGroup> {
-        match &self.kind {
+        #[cfg(debug_assertions)]
+        match_stats::count_group_read(index);
+        let result = match &self.kind {
             MatchDataKind::StringChars { groups, .. } => groups
                 .get(index)
                 .copied()
@@ -761,7 +772,12 @@ impl MatchData {
                 .copied()
                 .flatten()
                 .map(LispCharMatchRange::into_match_group),
+        };
+        #[cfg(debug_assertions)]
+        if result.is_some() {
+            match_stats::count_first_some_read(&self.read_mask, index);
         }
+        result
     }
 
     /// Return a group's endpoints as zero-based character offsets into its
@@ -889,6 +905,8 @@ impl EngineMatchData {
     }
 
     fn publish_buffer(self, buf: &Buffer) -> MatchData {
+        #[cfg(debug_assertions)]
+        match_stats::count_publish(&self.groups);
         let groups = self
             .groups
             .into_iter()
@@ -905,6 +923,8 @@ impl EngineMatchData {
             .collect();
         MatchData {
             kind: MatchDataKind::Buffer { id: buf.id, groups },
+            #[cfg(debug_assertions)]
+            read_mask: Default::default(),
         }
     }
 }
@@ -3964,6 +3984,82 @@ fn apply_match_case_with_syntax(
         }
     };
     result.as_bytes().to_vec()
+}
+
+/// Debug-only publish/read counters sizing the lazy-match-data redesign:
+/// how many group endpoints are byte->char converted at publish vs how many
+/// are ever read back. Read by the ignored probe test
+/// `match_publish_read_stats_probe`; absent from optimized builds.
+#[cfg(debug_assertions)]
+pub(crate) mod match_stats {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    pub(crate) static PUBLISHES: AtomicUsize = AtomicUsize::new(0);
+    pub(crate) static PUBLISHED_GROUP0: AtomicUsize = AtomicUsize::new(0);
+    pub(crate) static PUBLISHED_SUB: AtomicUsize = AtomicUsize::new(0);
+    pub(crate) static READ_GROUP0: AtomicUsize = AtomicUsize::new(0);
+    pub(crate) static READ_SUB: AtomicUsize = AtomicUsize::new(0);
+    pub(crate) static FULL_EXPORTS: AtomicUsize = AtomicUsize::new(0);
+
+    pub(crate) fn count_publish(groups: &[Option<super::EmacsByteRange>]) {
+        PUBLISHES.fetch_add(1, Ordering::Relaxed);
+        let live = groups.iter().filter(|g| g.is_some()).count();
+        if !groups.is_empty() && groups[0].is_some() {
+            PUBLISHED_GROUP0.fetch_add(1, Ordering::Relaxed);
+            PUBLISHED_SUB.fetch_add(live - 1, Ordering::Relaxed);
+        } else {
+            PUBLISHED_SUB.fetch_add(live, Ordering::Relaxed);
+        }
+    }
+
+    pub(crate) fn count_group_read(index: usize) {
+        if index == 0 {
+            READ_GROUP0.fetch_add(1, Ordering::Relaxed);
+        } else {
+            READ_SUB.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    pub(crate) fn count_full_export() {
+        FULL_EXPORTS.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Distinct converted-group demand: bump once per (match-data, group)
+    /// pair whose Some value a reader actually saw. Under lazy conversion
+    /// exactly these groups would still convert.
+    pub(crate) static FIRST_SOME_G0: AtomicUsize = AtomicUsize::new(0);
+    pub(crate) static FIRST_SOME_SUB: AtomicUsize = AtomicUsize::new(0);
+
+    pub(crate) fn count_first_some_read(mask: &std::cell::Cell<u64>, index: usize) {
+        if index >= 64 {
+            return;
+        }
+        let bits = mask.get();
+        let bit = 1u64 << index;
+        if bits & bit == 0 {
+            mask.set(bits | bit);
+            if index == 0 {
+                FIRST_SOME_G0.fetch_add(1, Ordering::Relaxed);
+            } else {
+                FIRST_SOME_SUB.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    }
+
+    pub(crate) fn reset() {
+        for counter in [
+            &PUBLISHES,
+            &PUBLISHED_GROUP0,
+            &PUBLISHED_SUB,
+            &READ_GROUP0,
+            &READ_SUB,
+            &FULL_EXPORTS,
+            &FIRST_SOME_G0,
+            &FIRST_SOME_SUB,
+        ] {
+            counter.store(0, Ordering::Relaxed);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -1969,6 +1969,8 @@ pub(crate) fn builtin_match_data_with_state(
     match_data: &Option<super::regex::MatchData>,
     args: &[Value],
 ) -> EvalResult {
+    #[cfg(debug_assertions)]
+    super::regex::match_stats::count_full_export();
     if args.len() > 3 {
         return Err(signal(
             LispCondition::WrongNumberOfArguments,

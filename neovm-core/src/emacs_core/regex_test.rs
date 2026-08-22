@@ -4184,3 +4184,37 @@ mod literal_search_linear_equivalence {
         }
     }
 }
+
+/// Measurement probe for the lazy-match-data (Tier-2) sizing question: of
+/// the group endpoints eagerly byte->char converted at publish time, how
+/// many are ever read back by Lisp? Run explicitly:
+///   cargo nextest run -p neovm-core -E 'test(match_publish_read_stats_probe)' --run-ignored all --no-capture
+#[test]
+#[ignore = "measurement probe, not a correctness test"]
+fn match_publish_read_stats_probe() {
+    use std::sync::atomic::Ordering;
+    let mut eval = crate::test_utils::runtime_startup_context();
+    super::match_stats::reset();
+    eval.eval_str(
+        r#"(with-temp-buffer
+             (insert-file-contents (locate-library "bytecomp.el" t))
+             (emacs-lisp-mode)
+             (font-lock-ensure (point-min) (point-max))
+             t)"#,
+    )
+    .expect("fontify bytecomp.el");
+    let s = |c: &std::sync::atomic::AtomicUsize| c.load(Ordering::Relaxed);
+    println!(
+        "MATCH-STATS publishes={} published_g0={} published_sub={} \
+         read_g0={} read_sub={} full_exports={} \
+         distinct_some_g0={} distinct_some_sub={}",
+        s(&super::match_stats::PUBLISHES),
+        s(&super::match_stats::PUBLISHED_GROUP0),
+        s(&super::match_stats::PUBLISHED_SUB),
+        s(&super::match_stats::READ_GROUP0),
+        s(&super::match_stats::READ_SUB),
+        s(&super::match_stats::FULL_EXPORTS),
+        s(&super::match_stats::FIRST_SOME_G0),
+        s(&super::match_stats::FIRST_SOME_SUB),
+    );
+}
