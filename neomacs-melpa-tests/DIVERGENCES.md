@@ -32224,11 +32224,15 @@ Three things worth keeping:
    `special-event-map` can bind.  This port records the delivery in the
    counter that IS GNU's `p->npending` and stops there, because
    `InputEvent` has no `USER_SIGNAL_EVENT` variant and adding one is a
-   keyboard-subsystem change rather than a signal one.  Neither of ledger
-   184's `rc` rows depends on it, and no measurement in this entry is
-   affected; a Lisp program that binds `sigusr1` in `special-event-map` still
-   sees nothing.  The count is deliberately LEFT in the counter so the
-   delivery is pending rather than lost.
+   keyboard-subsystem change rather than a signal one -- `grep -rn
+   'InputEvent::'` over `neovm-core/src` and `neomacs-bin/src` is **143**
+   references, and the Lisp form of the event is `make_lispy_event`'s job in
+   `keyboard.rs`, not `os_signal.rs`'s.  Neither of ledger 184's `rc` rows
+   depends on it, and no measurement in this entry is affected; a Lisp program
+   that binds `sigusr1` in `special-event-map` still sees nothing.  The count
+   is deliberately LEFT in the counter so the delivery is pending rather than
+   lost, which is also why `take_pending` is `#[cfg(test)]` with the reason
+   written at the site.
 2. **The self-pipe read end is created and not registered with the wait
    poller.**  GNU's `child_signal_init` `add_read_fd`s it
    (src/process.c:7592).  Here the byte is written and the fd exists
