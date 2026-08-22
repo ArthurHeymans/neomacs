@@ -17,6 +17,7 @@ use super::frame_glyphs::{
     WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use super::image::{ImageMargins, ImageOpaqueBackground, ImageSourceRect};
+use super::presented_pointer::PresentedPrimitiveKind;
 use super::types::{
     Color, DisplayWindowId, FaceId, ImageId, Px, Rect, SurfaceId, VideoId, XwidgetId,
 };
@@ -742,6 +743,23 @@ impl Glyph {
             _ => 1,
         }
     }
+
+    /// Pointer-paint primitive produced when this glyph is materialized.
+    ///
+    /// Keep this exhaustive beside [`GlyphType`]: a pointer run may only name
+    /// a primitive class the presentation protocol can actually address.
+    /// Media/widget kinds without a pointer-paint protocol are deliberately
+    /// absent instead of being mislabeled as text glyphs.
+    pub const fn pointer_primitive_kind(&self) -> Option<PresentedPrimitiveKind> {
+        match self.glyph_type {
+            GlyphType::Char { .. }
+            | GlyphType::Composite { .. }
+            | GlyphType::Stretch { .. }
+            | GlyphType::Glyphless { .. } => Some(PresentedPrimitiveKind::Glyph),
+            GlyphType::Image { .. } => Some(PresentedPrimitiveKind::Image),
+            GlyphType::Video { .. } | GlyphType::Xwidget { .. } | GlyphType::Surface { .. } => None,
+        }
+    }
 }
 
 /// One screen row. Equivalent to GNU's `struct glyph_row`.
@@ -1116,9 +1134,12 @@ impl GlyphRow {
                 }
                 let width = glyph_pixel_width(glyph, char_width);
                 let col_width = u32::from(glyph.materialized_slot_span());
-                if let Some(appearance) = glyph.pointer_appearance {
+                if let Some(appearance) = glyph.pointer_appearance
+                    && let Some(kind) = glyph.pointer_primitive_kind()
+                {
                     if let Some(previous) = self.pointer_runs.last_mut()
                         && previous.appearance == appearance
+                        && previous.kind == kind
                         && previous.first_col + previous.col_len == col
                     {
                         previous.col_len = previous.col_len.saturating_add(col_width);
@@ -1127,6 +1148,7 @@ impl GlyphRow {
                     } else {
                         self.pointer_runs.push(GlyphPointerRun {
                             appearance,
+                            kind,
                             first_col: col,
                             col_len: col_width,
                             glyph_len: 1,
@@ -1215,6 +1237,7 @@ fn glyph_pixel_width(glyph: &Glyph, char_width: f32) -> f32 {
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GlyphPointerRun {
     pub appearance: GlyphPointerAppearanceId,
+    pub kind: PresentedPrimitiveKind,
     pub first_col: u32,
     pub col_len: u32,
     pub glyph_len: u32,

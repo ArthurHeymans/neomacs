@@ -1,9 +1,12 @@
 use neomacs_display_protocol::frame_chrome::FrameChromeKind;
-use neomacs_display_protocol::frame_glyphs::{PresentedCellOrigin, PresentedWindowGeometry};
-use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
+use neomacs_display_protocol::frame_glyphs::{
+    GlyphRowRole, PresentedCellOrigin, PresentedWindowGeometry,
+};
+use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, GlyphArea, GlyphProvenance};
 use neomacs_display_protocol::{
-    DisplayWindowId, FrameRect, PresentedHitError, PresentedHitIndex, PresentedHitRegion,
-    PresentedRegionKind, PresentedTextPosition,
+    DisplaySlotId, DisplayWindowId, FrameRect, PresentedHitError, PresentedHitIndex,
+    PresentedHitRegion, PresentedRegionKind, PresentedStringPosition, PresentedTextPosition,
+    PresentedWindowChromeArea,
 };
 use neovm_core::window::WindowDisplaySnapshot;
 
@@ -182,9 +185,16 @@ impl PresentationSpatialPlan {
             regions.push(PresentedHitRegion::new(None, kind, band.bounds(), i32::MAX));
         }
 
+        let string_positions = window_chrome_string_positions(state)?;
+
         Ok(Self {
             windows,
-            hit_index: PresentedHitIndex::from_parts(state.presentation_id, regions, positions)?,
+            hit_index: PresentedHitIndex::from_parts_with_strings(
+                state.presentation_id,
+                regions,
+                positions,
+                string_positions,
+            )?,
         })
     }
 
@@ -220,6 +230,74 @@ impl PresentationSpatialPlan {
         }
         state.presented_hit_index = self.hit_index;
         state.validate_spatial_projections()
+    }
+}
+
+fn window_chrome_string_positions(
+    state: &FrameDisplayState,
+) -> Result<Vec<PresentedStringPosition>, PresentedHitError> {
+    let mut sources = std::collections::HashMap::new();
+    for entry in &state.window_matrices {
+        for (row_index, row) in entry.matrix.rows.iter().enumerate() {
+            let Some(region) = window_chrome_region(row.role) else {
+                continue;
+            };
+            if !row.enabled {
+                continue;
+            }
+            let mut col = row.start_col;
+            for area in GlyphArea::ALL {
+                for glyph in &row.glyphs[area.index()] {
+                    if glyph.padding {
+                        continue;
+                    }
+                    let slot = DisplaySlotId {
+                        window_id: entry.window_id,
+                        row: row_index as u32,
+                        col,
+                    };
+                    if let GlyphProvenance::Str { source, index } = glyph.provenance
+                        && let Some(source) = row.string_source(source)
+                    {
+                        sources.insert(slot, (region, source.string(), index as u64));
+                    }
+                    col = col.saturating_add(glyph.materialized_slot_span());
+                }
+            }
+        }
+    }
+
+    let mut positions = Vec::with_capacity(sources.len());
+    state.for_each_glyph(|glyph| {
+        let Some(slot) = glyph.slot_id() else {
+            return;
+        };
+        let Some(&(region, string, char_index)) = sources.get(&slot) else {
+            return;
+        };
+        let Some(bounds) = glyph.geometry() else {
+            return;
+        };
+        let Ok(bounds) = FrameRect::new(bounds.x, bounds.y, bounds.width, bounds.height) else {
+            return;
+        };
+        positions.push(PresentedStringPosition::new(
+            slot.window_id,
+            region,
+            bounds,
+            string,
+            char_index,
+        ));
+    });
+    Ok(positions)
+}
+
+fn window_chrome_region(role: GlyphRowRole) -> Option<PresentedWindowChromeArea> {
+    match role {
+        GlyphRowRole::TabLine => Some(PresentedWindowChromeArea::TabLine),
+        GlyphRowRole::HeaderLine => Some(PresentedWindowChromeArea::HeaderLine),
+        GlyphRowRole::ModeLine => Some(PresentedWindowChromeArea::ModeLine),
+        GlyphRowRole::Text | GlyphRowRole::Minibuffer | GlyphRowRole::TabBar => None,
     }
 }
 

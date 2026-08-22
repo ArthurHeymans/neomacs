@@ -52,8 +52,9 @@ use neovm_core::buffer::{CharPos0, EmacsBytePos, LispCharPos1, TextPositionAncho
 use neovm_core::emacs_core::Context;
 use neovm_core::window::geometry::CellOrigin;
 use neovm_core::window::{
-    DisplayPointSnapshot, DisplayRowSnapshot, MatrixRow0, PresentedWindowRegions, WindowCursorKind,
-    WindowCursorPos, WindowCursorSnapshot, WindowDisplaySnapshot,
+    DisplayPointSnapshot, DisplayRowSnapshot, MatrixRow0, PresentedWindowChromeArea,
+    PresentedWindowChromeString, PresentedWindowRegions, WindowCursorKind, WindowCursorPos,
+    WindowCursorSnapshot, WindowDisplaySnapshot,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -565,6 +566,7 @@ pub(crate) fn install_retained_window_chrome(
         );
     }
     output_emitter.push_reused_chrome(chrome.row_snapshots.clone());
+    output_emitter.reuse_chrome_strings(chrome.chrome_strings.clone());
     chrome.metrics
 }
 
@@ -1078,6 +1080,7 @@ pub(crate) struct WindowOutputEmitter {
     phys_cursor: Option<WindowCursorSnapshot>,
     points: Vec<DisplayPointSnapshot>,
     rows: Vec<DisplayRowSnapshot>,
+    chrome_strings: Vec<PresentedWindowChromeString>,
     row_metrics: Vec<RowMetricsSnapshot>,
     current_row_first_display_pos: Option<LispCharPos1>,
     current_row_last_display_pos: Option<LispCharPos1>,
@@ -1185,6 +1188,7 @@ impl WindowOutputEmitter {
             phys_cursor: None,
             points: Vec::new(),
             rows: Vec::new(),
+            chrome_strings: Vec::new(),
             row_metrics: Vec::new(),
             current_row_first_display_pos: None,
             current_row_last_display_pos: None,
@@ -1603,6 +1607,20 @@ impl WindowOutputEmitter {
         self.rows.extend(rows);
     }
 
+    pub(crate) fn replace_chrome_area_strings(
+        &mut self,
+        area: PresentedWindowChromeArea,
+        sources: Vec<PresentedWindowChromeString>,
+    ) {
+        debug_assert!(sources.iter().all(|source| source.area() == area));
+        self.chrome_strings.retain(|current| current.area() != area);
+        self.chrome_strings.extend(sources);
+    }
+
+    pub(crate) fn reuse_chrome_strings(&mut self, sources: Vec<PresentedWindowChromeString>) {
+        self.chrome_strings = sources;
+    }
+
     fn push_chrome_row_progress(&mut self, progress: DisplayRowOutputProgress) {
         let row_progress = self
             .current_row_progress
@@ -1685,6 +1703,7 @@ impl WindowOutputEmitter {
             mode_line_height,
             header_line_height,
             tab_line_height,
+            chrome_strings: self.chrome_strings,
             logical_cursor,
             phys_cursor: phys_cursor.clone(),
             points: self.points,

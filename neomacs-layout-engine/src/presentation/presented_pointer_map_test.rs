@@ -2,7 +2,9 @@ use neomacs_display_protocol::glyph_matrix::{
     GlyphPointerAppearance, GlyphPointerOccurrenceIdentity, GlyphPointerSourceIdentity,
     GlyphPointerSourceKind,
 };
-use neomacs_display_protocol::{DisplayWindowId, FaceId, FrameRect, GlyphRowRole};
+use neomacs_display_protocol::{
+    DisplayWindowId, FaceId, FrameRect, GlyphRowRole, PresentedPrimitiveKind,
+};
 
 use super::{PresentedPointerMapBuildError, PresentedPointerMapBuilder};
 
@@ -34,6 +36,7 @@ fn production_builder_coalesces_adjacent_regions_and_source_spans() {
             0,
             col,
             2,
+            PresentedPrimitiveKind::Glyph,
             rect(x, 0.0, 20.0, 10.0),
             appearance(7, 9),
         );
@@ -57,6 +60,7 @@ fn production_builder_keeps_wrapped_rows_as_two_spans_of_one_appearance() {
             row,
             0,
             3,
+            PresentedPrimitiveKind::Glyph,
             rect(0.0, y, 30.0, 10.0),
             appearance(7, 9),
         );
@@ -77,6 +81,7 @@ fn production_builder_rejects_conflicting_modes_for_one_source() {
         0,
         0,
         1,
+        PresentedPrimitiveKind::Glyph,
         rect(0.0, 0.0, 10.0, 10.0),
         appearance(7, 9),
     );
@@ -86,6 +91,7 @@ fn production_builder_rejects_conflicting_modes_for_one_source() {
         0,
         0,
         1,
+        PresentedPrimitiveKind::Glyph,
         rect(0.0, 0.0, 10.0, 10.0),
         appearance(7, 10),
     );
@@ -106,6 +112,7 @@ fn production_builder_keeps_mixed_face_batches_in_one_logical_appearance() {
             0,
             col,
             1,
+            PresentedPrimitiveKind::Glyph,
             rect(f32::from(col) * 10.0, 0.0, 10.0, 10.0),
             appearance(7, face),
         );

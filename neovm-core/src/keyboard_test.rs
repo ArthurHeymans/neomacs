@@ -85,6 +85,102 @@ fn presented_pointer_preserves_phase_and_installs_snapshot_posn_string() {
 }
 
 #[test]
+fn presented_tab_line_hit_joins_renderer_string_index_with_rooted_lisp_value() {
+    use crate::window::{
+        PresentedWindowChromeArea, PresentedWindowChromeString, PresentedWindowRegions,
+        WindowDisplaySnapshot,
+    };
+    use neomacs_display_protocol::{
+        DisplayWindowId, FrameRect, GlyphStringId, PresentationId, PresentedHitIndex,
+        PresentedHitQuery, PresentedHitRegion, PresentedRegionKind, PresentedStringPosition, Rect,
+    };
+
+    let mut eval = crate::emacs_core::Context::new();
+    let buffer = eval
+        .buffer_manager_mut()
+        .create_buffer("presented-tab-line-hit");
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("presented-tab-line-hit", 200, 100, buffer);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let presentation = crate::window::geometry::PresentationId::new(7);
+    let protocol_presentation = PresentationId::new(7);
+    let string_id = GlyphStringId::new(1);
+    let text = Value::string("first second");
+    let tab_bounds = FrameRect::new(0.0, 0.0, 200.0, 16.0).unwrap();
+    let char_bounds = FrameRect::new(40.0, 0.0, 8.0, 16.0).unwrap();
+    let hit_index = PresentedHitIndex::from_parts_with_strings(
+        protocol_presentation,
+        vec![PresentedHitRegion::new(
+            Some(DisplayWindowId::new(window_id.0 as i64)),
+            PresentedRegionKind::TabLine,
+            tab_bounds,
+            20,
+        )],
+        Vec::new(),
+        vec![PresentedStringPosition::new(
+            DisplayWindowId::new(window_id.0 as i64),
+            PresentedWindowChromeArea::TabLine,
+            char_bounds,
+            string_id,
+            6,
+        )],
+    )
+    .unwrap();
+    let hit = hit_index
+        .resolve(PresentedHitQuery::new(protocol_presentation, 44.0, 8.0))
+        .unwrap()
+        .unwrap();
+    let regions = PresentedWindowRegions {
+        outer: Rect::new(0.0, 0.0, 200.0, 100.0),
+        text_body: Rect::new(0.0, 16.0, 200.0, 84.0),
+        tab_line: Some(Rect::new(0.0, 0.0, 200.0, 16.0)),
+        ..Default::default()
+    };
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).unwrap();
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame
+            .prepare_and_activate_display_presentation_for_test(
+                presentation,
+                vec![WindowDisplaySnapshot {
+                    window_id,
+                    regions,
+                    regions_materialized: true,
+                    tab_line_height: 16,
+                    chrome_strings: vec![PresentedWindowChromeString::new(
+                        PresentedWindowChromeArea::TabLine,
+                        string_id,
+                        text,
+                    )],
+                    ..Default::default()
+                }],
+            )
+            .unwrap();
+    }
+    eval.command_loop
+        .keyboard
+        .kboard
+        .presented_mouse_observation = Some(PresentedMouseObservation {
+        presentation: 7,
+        hit: Some(hit),
+        x: 44.0,
+        y: 8.0,
+        frame_id: frame_id.0,
+    });
+
+    let position = crate::emacs_core::Context::make_mouse_position(44.0, 8.0, frame_id.0, &eval);
+    let parts = crate::emacs_core::value::list_to_vec(&position).expect("position");
+    assert_eq!(parts[0], Value::make_window(window_id.0));
+    assert_eq!(parts[1].as_symbol_name(), Some("tab-line"));
+    assert_eq!(parts[4], Value::cons(text, Value::fixnum(6)));
+}
+
+#[test]
 fn presented_region_drives_exact_gnu_mouse_position_and_rejects_stale_observation() {
     let mut eval = crate::emacs_core::Context::new();
     let buffer = eval.buffer_manager_mut().create_buffer("presented-region");

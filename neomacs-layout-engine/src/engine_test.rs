@@ -1802,6 +1802,68 @@ fn assert_replacement_slot_between_neighbors(
 }
 
 #[test]
+fn tab_line_pointer_provenance_preserves_nested_source_string() {
+    let mut eval = Context::new();
+    let buffer_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let first_tab = Value::string(" tab-one ");
+    let second_tab = Value::string(" tab-two ");
+    eval.buffer_manager_mut()
+        .get_mut(buffer_id)
+        .expect("buffer")
+        .set_buffer_local("tab-line-format", Value::list(vec![first_tab, second_tab]));
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("nested-tab-line-source", 800, 600, buffer_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    eval.frame_manager_mut()
+        .get_mut(frame_id)
+        .expect("frame")
+        .set_window_system(Some(Value::symbol("neo")));
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    activate_last_engine_presentation(&mut eval, &engine, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .active_presentation_snapshot(window_id)
+        .expect("active window snapshot");
+    assert!(
+        snapshot
+            .chrome_strings
+            .iter()
+            .any(|source| source.value() == first_tab),
+        "every nested tab string must remain a presentation source"
+    );
+    let nested_source = snapshot
+        .chrome_strings
+        .iter()
+        .find(|source| source.value() == second_tab)
+        .expect("nested tab string must remain a presentation source");
+    let rendered = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("renderer presentation");
+    assert!(
+        rendered
+            .presented_hit_index
+            .string_positions()
+            .iter()
+            .any(|position| position.window().get() == window_id.0 as i64
+                && position.string() == nested_source.string_id()
+                && position.char_index() == 0)
+    );
+}
+
+#[test]
 fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regions() {
     let mut eval = Context::new();
     let buffer_id = eval
@@ -2030,6 +2092,33 @@ fn accepted_presentation_publishes_identical_evaluator_and_renderer_window_regio
             Some(selected.0 as i64)
         );
     }
+    let tab_string_position = hit_index
+        .string_positions()
+        .iter()
+        .find(|position| {
+            position.window().get() == selected.0 as i64
+                && position.region() == neomacs_display_protocol::PresentedRegionKind::TabLine
+                && position.char_index() == 0
+        })
+        .copied()
+        .expect("tab-line glyph retains its displayed string position");
+    let tab_hit = hit_index
+        .resolve(neomacs_display_protocol::PresentedHitQuery::new(
+            protocol_presentation,
+            tab_string_position.bounds().x() + tab_string_position.bounds().width() / 2.0,
+            tab_string_position.bounds().y() + tab_string_position.bounds().height() / 2.0,
+        ))
+        .unwrap()
+        .unwrap();
+    assert_eq!(tab_hit.string_position(), Some(tab_string_position));
+    let active_snapshot = frame
+        .active_presentation_snapshot(selected)
+        .expect("active window snapshot");
+    assert!(active_snapshot.chrome_strings.iter().any(|source| {
+        source.area() == neovm_core::window::PresentedWindowChromeArea::TabLine
+            && source.string_id() == tab_string_position.string()
+            && source.value().as_utf8_str() == Some("TAB")
+    }));
     let text_position = hit_index
         .text_positions()
         .iter()

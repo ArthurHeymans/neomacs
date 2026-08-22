@@ -11,9 +11,9 @@ use crate::glyph_row_writer;
 use neomacs_display_protocol::face::Face;
 #[cfg(test)]
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-#[cfg(test)]
-use neomacs_display_protocol::glyph_matrix::GlyphArea;
-use neomacs_display_protocol::glyph_matrix::GlyphRow;
+use neomacs_display_protocol::glyph_matrix::{
+    GlyphArea, GlyphProvenance, GlyphRow, GlyphStringId, GlyphStringSource, GlyphStringSourceId,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct DisplayRowOutputProgress {
@@ -82,6 +82,61 @@ impl RenderedDisplayRow {
 
     pub(crate) fn row(&self) -> &GlyphRow {
         &self.row
+    }
+
+    /// Restore GNU's `(glyph->object, glyph->charpos)` identity after chrome
+    /// formatting flattened several Lisp strings into one layout source.
+    pub(crate) fn remap_root_string_provenance(
+        &mut self,
+        root_string: GlyphStringId,
+        mut resolve: impl FnMut(usize) -> Option<(GlyphStringId, usize)>,
+    ) {
+        let mappings: [Vec<Option<(GlyphStringId, usize, GlyphStringSourceId)>>; GlyphArea::COUNT] =
+            std::array::from_fn(|area| {
+                self.row.glyphs[area]
+                    .iter()
+                    .map(|glyph| {
+                        let GlyphProvenance::Str { source, index } = glyph.provenance else {
+                            return None;
+                        };
+                        self.row
+                            .string_source(source)
+                            .filter(|entry| entry.string() == root_string)?;
+                        let (string, source_index) = resolve(index)?;
+                        Some((string, source_index, source))
+                    })
+                    .collect()
+            });
+
+        let mut remapped_tokens = std::collections::HashMap::new();
+        for (string, _, _) in mappings.iter().flatten().flatten().copied() {
+            if string == root_string || remapped_tokens.contains_key(&string) {
+                continue;
+            }
+            let Some(token) = self.row.push_string_source(GlyphStringSource::new(string)) else {
+                continue;
+            };
+            remapped_tokens.insert(string, token);
+        }
+
+        for area in GlyphArea::ALL {
+            for (glyph, mapping) in self.row.glyphs[area.index()]
+                .iter_mut()
+                .zip(&mappings[area.index()])
+            {
+                let Some((string, source_index, original_token)) = *mapping else {
+                    continue;
+                };
+                let token = if string == root_string {
+                    original_token
+                } else if let Some(token) = remapped_tokens.get(&string).copied() {
+                    token
+                } else {
+                    continue;
+                };
+                glyph.provenance = GlyphProvenance::string(token, source_index);
+            }
+        }
     }
 
     pub(crate) fn progress(&self) -> DisplayRowOutputProgress {

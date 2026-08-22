@@ -6351,13 +6351,39 @@ impl crate::emacs_core::eval::Context {
                 anchor_y: None,
             }
         };
-        Some(Self::mouse_posn_descriptor_value(MousePosnDescriptor {
+        let position = Self::mouse_posn_descriptor_value(MousePosnDescriptor {
             window_or_frame: Value::make_window(window_id.0),
             area,
             x: (x - coordinate_origin.x().get()).round() as i64,
             y: (y - coordinate_origin.y().get()).round() as i64,
             metrics,
-        }))
+        });
+        let Some(posn_string) = Self::presented_string_position_value(frame, window_id, hit) else {
+            return Some(position);
+        };
+        let Some(mut parts) = crate::emacs_core::value::list_to_vec(&position) else {
+            return Some(position);
+        };
+        parts[4] = posn_string;
+        Some(Value::list(parts))
+    }
+
+    fn presented_string_position_value(
+        frame: &crate::window::Frame,
+        window: crate::window::WindowId,
+        hit: neomacs_display_protocol::PresentedHit,
+    ) -> Option<Value> {
+        let position = hit.string_position()?;
+        let area = position.area();
+        let snapshot = frame.active_presentation_snapshot(window)?;
+        let source = snapshot
+            .chrome_strings
+            .iter()
+            .find(|source| source.area() == area && source.string_id() == position.string())?;
+        Some(Value::cons(
+            source.value(),
+            Value::fixnum(position.char_index().min(i64::MAX as u64) as i64),
+        ))
     }
 
     /// Append modifier prefix characters to a symbol name string.

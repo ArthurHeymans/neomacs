@@ -120,6 +120,7 @@ pub(crate) fn window_pointer_source_map(
                             .saturating_add(run.first_col)
                             .min(u32::from(u16::MAX)) as u16,
                         run.glyph_len,
+                        run.kind,
                         bounds,
                         pointer,
                     );

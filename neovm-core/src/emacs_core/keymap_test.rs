@@ -2,6 +2,103 @@ use super::*;
 use crate::emacs_core::intern::{intern, resolve_sym};
 
 #[test]
+fn displayed_string_keymap_precedes_buffer_position_maps() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let buffer_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("displayed-string-keymap", 800, 600, buffer_id);
+    let window_id = eval.frames.get(frame_id).expect("frame").selected_window;
+
+    let displayed = Value::string(" tab-one  tab-two ");
+    let string_keymap = make_sparse_list_keymap();
+    let command = Value::symbol("tab-line-select-tab");
+    list_keymap_define_seq(
+        string_keymap,
+        &[Value::symbol("tab-line"), Value::symbol("down-mouse-1")],
+        command,
+    )
+    .expect("define displayed string mouse binding");
+    crate::emacs_core::textprop::builtin_put_text_property(
+        &mut eval,
+        vec![
+            Value::fixnum(10),
+            Value::fixnum(17),
+            Value::symbol("keymap"),
+            string_keymap,
+            displayed,
+        ],
+    )
+    .expect("put displayed string keymap");
+
+    // GNU mouse positions carry the displayed string identity and its
+    // zero-based character offset in slot 4 as (STRING . CHARPOS).
+    let position = Value::list(vec![
+        Value::make_window(window_id.0),
+        Value::symbol("tab-line"),
+        Value::cons(Value::fixnum(82), Value::fixnum(9)),
+        Value::fixnum(0),
+        Value::cons(displayed, Value::fixnum(14)),
+        Value::NIL,
+    ]);
+
+    let maps = current_active_maps_for_position(&mut eval, true, Some(&position))
+        .expect("resolve active maps for displayed string");
+
+    assert_eq!(maps.first(), Some(&string_keymap));
+
+    let mouse_event = Value::list(vec![Value::symbol("down-mouse-1"), position]);
+    let resolved = resolve_active_key_binding(
+        &mut eval,
+        &[Value::symbol("tab-line"), mouse_event],
+        DefaultBindingMode::Accept,
+        true,
+        Some(&position),
+    )
+    .expect("resolve displayed string mouse binding");
+    assert_eq!(resolved.binding, command);
+}
+
+#[test]
+fn chrome_string_without_maps_preserves_tab_line_but_clears_mode_line_maps() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let buffer_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let buffer_local_map = make_sparse_list_keymap();
+    eval.buffers
+        .set_current_local_map(buffer_local_map)
+        .expect("set buffer local map");
+    let frame_id = eval
+        .frames
+        .create_frame("chrome-string-map-fallback", 800, 600, buffer_id);
+    let window_id = eval.frames.get(frame_id).expect("frame").selected_window;
+    let displayed = Value::string("caption");
+
+    let position_for = |area: &str| {
+        Value::list(vec![
+            Value::make_window(window_id.0),
+            Value::symbol(area),
+            Value::cons(Value::fixnum(1), Value::fixnum(1)),
+            Value::fixnum(0),
+            Value::cons(displayed, Value::fixnum(0)),
+            Value::NIL,
+        ])
+    };
+    let tab_line_position = position_for("tab-line");
+    let mode_line_position = position_for("mode-line");
+
+    let tab_line_maps = current_active_maps_for_position(&mut eval, true, Some(&tab_line_position))
+        .expect("resolve tab-line maps");
+    let mode_line_maps =
+        current_active_maps_for_position(&mut eval, true, Some(&mode_line_position))
+            .expect("resolve mode-line maps");
+
+    assert!(tab_line_maps.contains(&buffer_local_map));
+    assert!(!mode_line_maps.contains(&buffer_local_map));
+}
+
+#[test]
 fn keymap_marker_and_menu_item_property_domains_match_gnu_symbols() {
     assert_eq!(
         KeymapMarker::from_symbol_name("keymap"),

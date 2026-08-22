@@ -83,6 +83,7 @@ impl PresentedPointerMapBuilder {
         row: u32,
         first_col: u16,
         glyph_len: u32,
+        appearance_kind: PresentedPrimitiveKind,
         bounds: FrameRect,
         appearance: GlyphPointerAppearance,
     ) {
@@ -117,7 +118,7 @@ impl PresentedPointerMapBuilder {
         };
 
         let span = PresentedSourcePaintSpan::new_run(
-            PresentedPrimitiveKind::Glyph,
+            appearance_kind,
             row_role,
             DisplaySlotId {
                 window_id,

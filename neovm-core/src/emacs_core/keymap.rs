@@ -2273,6 +2273,102 @@ struct ActiveMapPosition {
     buffer_object: Value,
     buffer_local_map: Value,
     char_pos: Option<i64>,
+    displayed_string: Option<DisplayedStringPosition>,
+}
+
+/// The display area containing a string named by `POSN_STRING`.
+///
+/// GNU `current-active-maps` treats absent maps on mode/header-line strings
+/// differently from absent maps on tab-line and ordinary displayed strings.
+/// An enum keeps that semantic distinction out of raw symbol comparisons in
+/// the map-precedence code.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DisplayedStringArea {
+    ModeLine,
+    HeaderLine,
+    TabLine,
+    Other,
+}
+
+impl DisplayedStringArea {
+    fn from_position_area(value: Value) -> Self {
+        match value.as_symbol_name() {
+            Some("mode-line") => Self::ModeLine,
+            Some("header-line") => Self::HeaderLine,
+            Some("tab-line") => Self::TabLine,
+            _ => Self::Other,
+        }
+    }
+
+    fn replaces_position_maps_when_absent(self) -> bool {
+        matches!(self, Self::ModeLine | Self::HeaderLine)
+    }
+}
+
+/// A validated `(STRING . CHARPOS)` from the fourth slot of a mouse position.
+#[derive(Clone, Copy, Debug)]
+struct DisplayedStringPosition {
+    object: Value,
+    char_pos: i64,
+    area: DisplayedStringArea,
+}
+
+impl DisplayedStringPosition {
+    fn from_position_slots(slots: &[Value]) -> Option<Self> {
+        let string_position = *slots.get(4)?;
+        if !string_position.is_cons() {
+            return None;
+        }
+
+        let object = string_position.cons_car();
+        let string = object.as_lisp_string()?;
+        let char_pos = string_position.cons_cdr().as_int()?;
+        if char_pos < 0 || char_pos as usize >= string.schars() {
+            return None;
+        }
+
+        Some(Self {
+            object,
+            char_pos,
+            area: slots
+                .get(1)
+                .copied()
+                .map(DisplayedStringArea::from_position_area)
+                .unwrap_or(DisplayedStringArea::Other),
+        })
+    }
+}
+
+/// Whether a displayed string participates in one active-map layer.
+///
+/// `ReplaceWith(nil)` is intentionally distinct from `PreservePositionMap`:
+/// GNU clears point-derived maps for mode/header-line strings even when those
+/// strings have no corresponding property.
+#[derive(Clone, Copy, Debug)]
+enum DisplayedStringMapOverride {
+    PreservePositionMap,
+    ReplaceWith(Value),
+}
+
+impl DisplayedStringMapOverride {
+    fn apply(self, position_map: Value) -> Value {
+        match self {
+            Self::PreservePositionMap => position_map,
+            Self::ReplaceWith(string_map) => string_map,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct DisplayedStringMapOverrides {
+    local_map: DisplayedStringMapOverride,
+    keymap: DisplayedStringMapOverride,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PositionMapLayers {
+    local_map: Value,
+    keymap: Value,
 }
 
 fn active_map_position(
@@ -2289,6 +2385,7 @@ fn active_map_position(
         buffer_object: Value::make_buffer(buffer.id),
         buffer_local_map: buffer.local_map(),
         char_pos: Some(buffer.point_lisp_char_pos().as_i64()),
+        displayed_string: None,
     };
 
     let Some(position) = position else {
@@ -2316,6 +2413,7 @@ fn active_map_position(
                 buffer_object: Value::make_buffer(buffer_id),
                 buffer_local_map: target_buffer.local_map(),
                 char_pos: Some(target_buffer.point_lisp_char_pos().as_i64()),
+                displayed_string: None,
             }));
         }
 
@@ -2338,6 +2436,7 @@ fn active_map_position(
             buffer_object: Value::make_buffer(buffer.id),
             buffer_local_map: buffer.local_map(),
             char_pos: Some(char_pos),
+            displayed_string: None,
         }));
     }
 
@@ -2353,6 +2452,7 @@ fn active_map_position(
         None => return Ok(Some(default_position)),
     };
     let char_pos = slots[5].as_int().or_else(|| slots[1].as_int());
+    let displayed_string = DisplayedStringPosition::from_position_slots(&slots);
 
     for frame_id in frames.frame_list() {
         let Some(frame) = frames.get(frame_id) else {
@@ -2383,6 +2483,7 @@ fn active_map_position(
             buffer_object: Value::make_buffer(buffer_id),
             buffer_local_map: target_buffer.local_map(),
             char_pos,
+            displayed_string,
         }));
     }
 
@@ -2466,55 +2567,82 @@ pub(crate) fn local_map_property_at_buffer_point(
     Ok(maybe_keymap_in_obarray(obarray, &found).unwrap_or(fallback))
 }
 
-fn current_local_map_for_position(
+fn displayed_string_map_overrides(
     obarray: &Obarray,
-    frames: &crate::window::FrameManager,
     buffers: &crate::buffer::BufferManager,
-    fallback_local_map: Value,
-    position: Option<&Value>,
-) -> Result<Value, Flow> {
-    let Some(active_position) = active_map_position(frames, buffers, position)? else {
-        return Ok(fallback_local_map);
+    displayed: DisplayedStringPosition,
+) -> Result<DisplayedStringMapOverrides, Flow> {
+    let resolve = |property: LocalMapProperty| -> Result<DisplayedStringMapOverride, Flow> {
+        let found = super::textprop::builtin_get_text_property_in_state(
+            obarray,
+            buffers,
+            vec![
+                Value::fixnum(displayed.char_pos),
+                Value::from_sym_id(property.symbol_id()),
+                displayed.object,
+            ],
+        )?;
+        if found.is_nil() && !displayed.area.replaces_position_maps_when_absent() {
+            return Ok(DisplayedStringMapOverride::PreservePositionMap);
+        }
+
+        Ok(DisplayedStringMapOverride::ReplaceWith(
+            maybe_keymap_in_obarray(obarray, &found).unwrap_or(Value::NIL),
+        ))
     };
 
-    if let Some(char_pos) = active_position.char_pos {
-        let property = keymap_property_at_position(
+    Ok(DisplayedStringMapOverrides {
+        local_map: resolve(LocalMapProperty::LocalMap)?,
+        keymap: resolve(LocalMapProperty::Keymap)?,
+    })
+}
+
+fn position_map_layers(
+    obarray: &Obarray,
+    buffers: &crate::buffer::BufferManager,
+    active_position: Option<ActiveMapPosition>,
+    fallback_local_map: Value,
+) -> Result<PositionMapLayers, Flow> {
+    let Some(active_position) = active_position else {
+        return Ok(PositionMapLayers {
+            local_map: fallback_local_map,
+            keymap: Value::NIL,
+        });
+    };
+
+    let (mut local_map, mut keymap) = if let Some(char_pos) = active_position.char_pos {
+        let local_property = keymap_property_at_position(
             obarray,
             buffers,
             active_position.buffer_object,
             char_pos,
             LocalMapProperty::LocalMap,
         )?;
-        return Ok(
-            maybe_keymap_in_obarray(obarray, &property).unwrap_or(active_position.buffer_local_map)
-        );
+        let keymap_property = keymap_property_at_position(
+            obarray,
+            buffers,
+            active_position.buffer_object,
+            char_pos,
+            LocalMapProperty::Keymap,
+        )?;
+        (
+            maybe_keymap_in_obarray(obarray, &local_property)
+                .unwrap_or(active_position.buffer_local_map),
+            maybe_keymap_in_obarray(obarray, &keymap_property).unwrap_or(Value::NIL),
+        )
+    } else {
+        (active_position.buffer_local_map, Value::NIL)
+    };
+
+    if let Some(displayed_string) = active_position.displayed_string {
+        // Mirrors GNU keymap.c `current-active-maps`: a displayed string's
+        // maps override the maps derived from the clicked buffer position.
+        let overrides = displayed_string_map_overrides(obarray, buffers, displayed_string)?;
+        local_map = overrides.local_map.apply(local_map);
+        keymap = overrides.keymap.apply(keymap);
     }
 
-    Ok(active_position.buffer_local_map)
-}
-
-fn position_keymap(
-    obarray: &Obarray,
-    frames: &crate::window::FrameManager,
-    buffers: &crate::buffer::BufferManager,
-    position: Option<&Value>,
-) -> Result<Value, Flow> {
-    let Some(active_position) = active_map_position(frames, buffers, position)? else {
-        return Ok(Value::NIL);
-    };
-
-    let Some(char_pos) = active_position.char_pos else {
-        return Ok(Value::NIL);
-    };
-
-    let property = keymap_property_at_position(
-        obarray,
-        buffers,
-        active_position.buffer_object,
-        char_pos,
-        LocalMapProperty::Keymap,
-    )?;
-    Ok(maybe_keymap_in_obarray(obarray, &property).unwrap_or(Value::NIL))
+    Ok(PositionMapLayers { local_map, keymap })
 }
 
 #[allow(clippy::too_many_arguments)] // explicit keymap layers preserve GNU precedence ordering
@@ -2548,9 +2676,9 @@ fn current_active_maps_from_parts(
         maps.push(overriding_terminal_local_map);
     }
 
-    let property_keymap = position_keymap(obarray, frames, buffers, position)?;
-    if !property_keymap.is_nil() {
-        maps.push(property_keymap);
+    let position_maps = position_map_layers(obarray, buffers, active_position, current_local_map)?;
+    if !position_maps.keymap.is_nil() {
+        maps.push(position_maps.keymap);
     }
 
     if minor_maps.is_empty() {
@@ -2564,10 +2692,8 @@ fn current_active_maps_from_parts(
         maps.extend(minor_maps);
     }
 
-    let local_map =
-        current_local_map_for_position(obarray, frames, buffers, current_local_map, position)?;
-    if !local_map.is_nil() {
-        maps.push(local_map);
+    if !position_maps.local_map.is_nil() {
+        maps.push(position_maps.local_map);
     }
 
     maps.push(global_map);

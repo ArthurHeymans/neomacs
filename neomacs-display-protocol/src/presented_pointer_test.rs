@@ -817,6 +817,79 @@ fn presented_hit_index_resolves_every_window_region_and_exact_text_position() {
 }
 
 #[test]
+fn presented_hit_index_round_trips_exact_window_chrome_string_position() {
+    use crate::{
+        DisplayWindowId, GlyphStringId, PresentedHitIndex, PresentedHitQuery, PresentedHitRegion,
+        PresentedRegionKind, PresentedStringPosition, PresentedWindowChromeArea,
+        frame_chrome::PresentationId,
+    };
+
+    let presentation = PresentationId::new(42);
+    let window = DisplayWindowId::new(7);
+    let position = PresentedStringPosition::new(
+        window,
+        PresentedWindowChromeArea::TabLine,
+        rect(20.0, 0.0, 8.0, 16.0),
+        GlyphStringId::new(3),
+        11,
+    );
+    let index = PresentedHitIndex::from_parts_with_strings(
+        presentation,
+        vec![PresentedHitRegion::new(
+            Some(window),
+            PresentedRegionKind::TabLine,
+            rect(0.0, 0.0, 100.0, 16.0),
+            20,
+        )],
+        Vec::new(),
+        vec![position],
+    )
+    .unwrap();
+    let wire = serde_json::to_string(&index).unwrap();
+    let decoded: PresentedHitIndex = serde_json::from_str(&wire).unwrap();
+
+    let hit = decoded
+        .resolve(PresentedHitQuery::new(presentation, 24.0, 8.0))
+        .unwrap()
+        .unwrap();
+    assert_eq!(hit.string_position(), Some(position));
+}
+
+#[test]
+fn presented_hit_index_rejects_string_position_outside_its_typed_chrome_area() {
+    use crate::{
+        DisplayWindowId, GlyphStringId, PresentedHitError, PresentedHitIndex, PresentedHitRegion,
+        PresentedRegionKind, PresentedStringPosition, PresentedWindowChromeArea,
+        frame_chrome::PresentationId,
+    };
+
+    let presentation = PresentationId::new(43);
+    let window = DisplayWindowId::new(7);
+    let result = PresentedHitIndex::from_parts_with_strings(
+        presentation,
+        vec![PresentedHitRegion::new(
+            Some(window),
+            PresentedRegionKind::TabLine,
+            rect(0.0, 0.0, 100.0, 16.0),
+            20,
+        )],
+        Vec::new(),
+        vec![PresentedStringPosition::new(
+            window,
+            PresentedWindowChromeArea::TabLine,
+            rect(96.0, 0.0, 8.0, 16.0),
+            GlyphStringId::new(3),
+            11,
+        )],
+    );
+
+    assert_eq!(
+        result,
+        Err(PresentedHitError::StringPositionOutsideSemanticRegion)
+    );
+}
+
+#[test]
 fn presented_hit_index_uses_half_open_edges_z_order_and_rejects_stale_queries() {
     use crate::{
         DisplayWindowId, PresentedHitError, PresentedHitIndex, PresentedHitQuery,

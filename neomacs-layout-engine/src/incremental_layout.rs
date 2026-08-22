@@ -455,6 +455,7 @@ pub(crate) struct ChromeReuseContext {
 pub struct RetainedChrome {
     pub rows: Vec<(usize, MatrixRow)>,
     pub row_snapshots: Vec<DisplayRowSnapshot>,
+    pub chrome_strings: Vec<neovm_core::window::PresentedWindowChromeString>,
     pub(crate) metrics: crate::window_layout::WindowChromeMetrics,
 }
 
@@ -619,6 +620,7 @@ impl RetainedWindowMatrix {
         Some(RetainedChrome {
             rows,
             row_snapshots,
+            chrome_strings: self.display_snapshot.chrome_strings.clone(),
             metrics: crate::window_layout::WindowChromeMetrics::from_snapshot(
                 &self.display_snapshot,
             ),

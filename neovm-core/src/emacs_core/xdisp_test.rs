@@ -736,6 +736,37 @@ fn test_format_mode_line_percent_specs_preserve_source_string_text_properties() 
 }
 
 #[test]
+fn mode_line_display_preserves_nested_literal_string_sources() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buffer_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id = eval
+        .frames
+        .create_frame("mode-line-string-sources", 800, 600, buffer_id);
+    let window_id = eval.frames.get(frame_id).expect("frame").selected_window;
+    let first = Value::string(" first ");
+    let second = Value::string(" second ");
+
+    let output = format_mode_line_for_display_with_sources(
+        &mut eval,
+        Value::list(vec![first, second]),
+        Value::make_window(window_id.0),
+        Value::make_buffer(buffer_id),
+        80,
+    );
+
+    assert_eq!(output.value(), Value::string(" first  second "));
+    assert_eq!(
+        output.source_spans(),
+        &[
+            ModeLineDisplaySourceSpan::new(0, 7, first, 0),
+            ModeLineDisplaySourceSpan::new(7, 15, second, 0),
+        ]
+    );
+    assert_eq!(output.source_spans()[1].source_position(10), Some(3));
+}
+
+#[test]
 fn mode_line_percent_field_padding_inherits_the_format_string_face() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();

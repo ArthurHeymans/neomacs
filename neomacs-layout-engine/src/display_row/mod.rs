@@ -38,7 +38,7 @@ use crate::frame_face_arena::FrameFaceAttempt;
 use crate::neovm_bridge::FaceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
-use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
+use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphStringId};
 use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;
@@ -61,6 +61,10 @@ impl DisplayRowLispStringSourceId {
     fn raw(self) -> u64 {
         self.0
     }
+}
+
+pub(crate) const fn root_lisp_string_id() -> GlyphStringId {
+    GlyphStringId::new(DisplayRowLispStringSourceId::ROOT.0)
 }
 
 fn include_display_row_face_metrics(layout: &mut DisplayRowLayout, face: &DisplayRowFace) {

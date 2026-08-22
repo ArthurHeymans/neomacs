@@ -1089,19 +1089,32 @@ pub fn format_mode_line_for_display(
     buffer: Value,
     target_cols: usize,
 ) -> Value {
+    format_mode_line_for_display_with_sources(eval, format_val, window, buffer, target_cols)
+        .into_value()
+}
+
+/// [`format_mode_line_for_display`] with GNU's per-glyph Lisp string source
+/// identity retained for the layout/input pipeline.
+pub fn format_mode_line_for_display_with_sources(
+    eval: &mut super::eval::Context,
+    format_val: Value,
+    window: Value,
+    buffer: Value,
+    target_cols: usize,
+) -> ModeLineDisplayOutput {
     let args = [format_val, Value::NIL, window, buffer];
     if validate_optional_window_designator(eval, args.get(2), "windowp").is_err() {
-        return Value::string("");
+        return ModeLineDisplayOutput::from_root_string(Value::string(""));
     }
     if validate_optional_buffer_designator(eval, args.get(3)).is_err() {
-        return Value::string("");
+        return ModeLineDisplayOutput::from_root_string(Value::string(""));
     }
     let target_buffer = resolve_mode_line_buffer(eval, args.get(2), args.get(3));
     let saved_buffer = eval.buffers.current_buffer_id();
     if let Some(buffer_id) = target_buffer
         && eval.set_current_buffer_unrecorded(buffer_id).is_err()
     {
-        return Value::string("");
+        return ModeLineDisplayOutput::from_root_string(Value::string(""));
     }
 
     // GNU `display_mode_lines` (xdisp.c) makes the window being redisplayed the
@@ -1142,7 +1155,7 @@ pub fn format_mode_line_for_display(
     });
 
     let result_value = if format_val.is_nil() {
-        Value::string("")
+        ModeLineDisplayOutput::from_root_string(Value::string(""))
     } else {
         let face_spec = resolve_mode_line_face_spec(&args);
         let mut pctx = build_mode_line_percent_context(
@@ -1167,7 +1180,7 @@ pub fn format_mode_line_for_display(
             format_mode_line_recursive(eval, &pctx, &format_val, &mut rendered, 0, false);
             eval.restore_specpdl_roots(pctx_root_scope);
         }
-        rendered.into_value(face_spec)
+        rendered.into_display_output(face_spec)
     };
 
     if let Some((buffer_id, saved)) = saved_point
@@ -1702,6 +1715,100 @@ fn percent99(n: usize, d: usize) -> usize {
     pct.min(99)
 }
 
+/// One range of formatted mode-line output that still originates in an exact
+/// Lisp string object.
+///
+/// GNU keeps this association directly in every display glyph's `object` and
+/// `charpos` fields.  Neomacs formats chrome before layout, so the formatter
+/// returns this compact sidecar for layout to restore that provenance without
+/// exposing VM objects through the renderer protocol.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ModeLineDisplaySourceSpan {
+    output_start: usize,
+    output_end: usize,
+    source: Value,
+    source_start: usize,
+}
+
+impl ModeLineDisplaySourceSpan {
+    fn new(output_start: usize, output_end: usize, source: Value, source_start: usize) -> Self {
+        Self {
+            output_start,
+            output_end,
+            source,
+            source_start,
+        }
+    }
+
+    pub const fn output_start(self) -> usize {
+        self.output_start
+    }
+
+    pub const fn output_end(self) -> usize {
+        self.output_end
+    }
+
+    pub const fn source(self) -> Value {
+        self.source
+    }
+
+    pub const fn source_start(self) -> usize {
+        self.source_start
+    }
+
+    pub const fn source_position(self, output_position: usize) -> Option<usize> {
+        if output_position < self.output_start || output_position >= self.output_end {
+            return None;
+        }
+        Some(
+            self.source_start
+                .saturating_add(output_position - self.output_start),
+        )
+    }
+
+    fn shifted_output(self, offset: usize) -> Self {
+        Self::new(
+            self.output_start.saturating_add(offset),
+            self.output_end.saturating_add(offset),
+            self.source,
+            self.source_start,
+        )
+    }
+}
+
+/// Fully formatted chrome text plus the original string identity of each
+/// directly rendered segment.
+#[derive(Clone, Debug)]
+pub struct ModeLineDisplayOutput {
+    value: Value,
+    source_spans: Vec<ModeLineDisplaySourceSpan>,
+}
+
+impl ModeLineDisplayOutput {
+    pub fn from_root_string(value: Value) -> Self {
+        let source_spans = value
+            .as_lisp_string()
+            .map(|string| vec![ModeLineDisplaySourceSpan::new(0, string.schars(), value, 0)])
+            .unwrap_or_default();
+        Self {
+            value,
+            source_spans,
+        }
+    }
+
+    pub const fn value(&self) -> Value {
+        self.value
+    }
+
+    pub fn into_value(self) -> Value {
+        self.value
+    }
+
+    pub fn source_spans(&self) -> &[ModeLineDisplaySourceSpan] {
+        &self.source_spans
+    }
+}
+
 #[derive(Clone, Default)]
 struct ModeLineRendered {
     /// Accumulated Emacs character codes (one entry per character). Storing
@@ -1711,6 +1818,7 @@ struct ModeLineRendered {
     /// gap has been retired (issue #131).
     text: Vec<u32>,
     text_props: TextPropertyTable,
+    source_spans: Vec<ModeLineDisplaySourceSpan>,
 }
 
 /// Decode a `LispString` into its sequence of Emacs character codes. Multibyte
@@ -1771,6 +1879,7 @@ impl ModeLineRendered {
         Self {
             text: text.into().chars().map(|c| c as u32).collect(),
             text_props: TextPropertyTable::new(),
+            source_spans: Vec::new(),
         }
     }
 
@@ -1779,6 +1888,42 @@ impl ModeLineRendered {
         self.text.extend_from_slice(&other.text);
         self.text_props
             .append_shifted_at_char_offset(&other.text_props, CharLen::new(char_offset));
+        self.source_spans.extend(
+            other
+                .source_spans
+                .iter()
+                .copied()
+                .map(|span| span.shifted_output(char_offset)),
+        );
+    }
+
+    fn record_source_span(
+        &mut self,
+        output_start: usize,
+        output_end: usize,
+        source: Value,
+        source_start: usize,
+    ) {
+        if output_start >= output_end || !source.is_string() {
+            return;
+        }
+        if let Some(previous) = self.source_spans.last_mut()
+            && previous.source == source
+            && previous.output_end == output_start
+            && previous
+                .source_start
+                .saturating_add(previous.output_end - previous.output_start)
+                == source_start
+        {
+            previous.output_end = output_end;
+            return;
+        }
+        self.source_spans.push(ModeLineDisplaySourceSpan::new(
+            output_start,
+            output_end,
+            source,
+            source_start,
+        ));
     }
 
     fn append_string_value_preserving_props(&mut self, value: &Value) {
@@ -1786,6 +1931,7 @@ impl ModeLineRendered {
             Some(string) => {
                 let char_offset = self.char_len();
                 self.text.extend(mode_line_string_char_codes(string));
+                self.record_source_span(char_offset, self.char_len(), *value, 0);
                 if let Some(props) = get_string_text_properties_table_for_value(*value) {
                     self.text_props
                         .append_shifted_at_char_offset(&props, CharLen::new(char_offset));
@@ -1795,7 +1941,9 @@ impl ModeLineRendered {
                 let Some(text) = value.as_utf8_str() else {
                     return;
                 };
+                let char_offset = self.char_len();
                 self.text.extend(text.chars().map(|c| c as u32));
+                self.record_source_span(char_offset, self.char_len(), *value, 0);
             }
         }
     }
@@ -1826,6 +1974,7 @@ impl ModeLineRendered {
                         .skip(start_char)
                         .take(end_char - start_char),
                 );
+                self.record_source_span(char_offset, self.char_len(), *value, start_char);
                 if let Some(props) = get_string_text_properties_table_for_value(*value) {
                     self.text_props.append_shifted_at_char_offset(
                         &props.slice_char_range(display_char_range(start_char, end_char)),
@@ -1844,6 +1993,7 @@ impl ModeLineRendered {
                         .take(end_char - start_char)
                         .map(|c| c as u32),
                 );
+                self.record_source_span(char_offset, self.char_len(), *value, start_char);
                 if value.is_string()
                     && let Some(props) = get_string_text_properties_table_for_value(*value)
                 {
@@ -1870,6 +2020,16 @@ impl ModeLineRendered {
             text_props: self
                 .text_props
                 .slice_char_range(display_char_range(0, precision)),
+            source_spans: self
+                .source_spans
+                .iter()
+                .copied()
+                .filter(|span| span.output_start < precision)
+                .map(|span| ModeLineDisplaySourceSpan {
+                    output_end: span.output_end.min(precision),
+                    ..span
+                })
+                .collect(),
         }
     }
 
@@ -1973,13 +2133,16 @@ impl ModeLineRendered {
         }
     }
 
-    fn into_value(mut self, face_spec: ModeLineFaceSpec) -> Value {
+    fn into_display_output(mut self, face_spec: ModeLineFaceSpec) -> ModeLineDisplayOutput {
         // A multibyte result iff any accumulated character exceeds a single
         // byte; otherwise every code fits in a unibyte byte. Mirrors the old
         // storage path's `decode_storage_char_codes_auto(..).any(> 0xFF)`.
         let multibyte = self.text.iter().any(|&code| code > 0xFF);
         if face_spec.no_props {
-            return Value::heap_string(mode_line_lisp_string_from_codes(&self.text, multibyte));
+            return ModeLineDisplayOutput {
+                value: Value::heap_string(mode_line_lisp_string_from_codes(&self.text, multibyte)),
+                source_spans: self.source_spans,
+            };
         }
         if let Some(face) = face_spec.face {
             self.apply_default_face(face);
@@ -1988,7 +2151,14 @@ impl ModeLineRendered {
         if value.is_string() {
             set_string_text_properties_table_for_value(value, self.text_props);
         }
-        value
+        ModeLineDisplayOutput {
+            value,
+            source_spans: self.source_spans,
+        }
+    }
+
+    fn into_value(self, face_spec: ModeLineFaceSpec) -> Value {
+        self.into_display_output(face_spec).into_value()
     }
 }
 

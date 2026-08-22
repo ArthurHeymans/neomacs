@@ -50,7 +50,9 @@ use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_chrome::{
     BandRect, ChromeAction, ChromeHitRegion, InteractionId,
 };
-use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::glyph_matrix::{
+    Glyph, GlyphArea, GlyphRow, GlyphStringId, GlyphType,
+};
 use neomacs_display_protocol::types::{Color, FaceId, Rect};
 use neomacs_display_protocol::{
     FrameRect, PointerAppearanceId, PointerDrawMode, PointerImageRelief, PresentedPrimitiveKind,
@@ -62,8 +64,10 @@ use neovm_core::emacs_core::eval::DisplayHost;
 use neovm_core::emacs_core::image_catalog::ImageScaleEnvironment;
 use neovm_core::emacs_core::keymap::{KeymapMarker, MenuItemProperty, is_list_keymap};
 use neovm_core::emacs_core::value::list_to_vec;
+use neovm_core::emacs_core::xdisp::{ModeLineDisplayOutput, ModeLineDisplaySourceSpan};
 use neovm_core::keyboard::{PresentedMouseArea, PresentedMouseTarget};
 use neovm_core::window::{FrameId, WindowId};
+use neovm_core::window::{PresentedWindowChromeArea, PresentedWindowChromeString};
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use strum::{EnumString, IntoStaticStr};
@@ -528,7 +532,7 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) tab_policy: DisplayTabPolicy,
     pub(crate) base_face: &'face ResolvedFace,
     pub(crate) symbol_values: std::collections::HashMap<String, Value>,
-    pub(crate) text: Value,
+    pub(crate) formatted: ModeLineDisplayOutput,
     pub(crate) image_scale_environment: ImageScaleEnvironment,
 }
 
@@ -726,14 +730,14 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
 
         if params.tab_line_height > 0.0 {
             let tab_line_y = regions.tab_line.map_or(regions.outer.y, |bounds| bounds.y);
-            let tab_line_text = eval_status_line_format_value(
+            let tab_line_text = eval_status_line_format_output(
                 state.evaluator,
                 "tab-line-format",
                 params.window_id,
                 params.buffer_id,
                 target_cols,
             )
-            .unwrap_or_else(|| Value::string(""));
+            .unwrap_or_else(|| ModeLineDisplayOutput::from_root_string(Value::string("")));
             if let Some(height) = state.render_display_row(
                 WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
@@ -754,7 +758,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                         .tab_line_face
                         .expect("tab-line face should exist when tab-line height is positive"),
                     symbol_values: status_line_symbol_values.clone(),
-                    text: tab_line_text,
+                    formatted: tab_line_text,
                     image_scale_environment: params.image_scale_environment,
                 },
                 ChromeRowVerticalAnchor::Top,
@@ -766,14 +770,14 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
         if params.header_line_height > 0.0 {
             // The header line sits directly below the (measured) tab line.
             let header_line_y = regions.outer.y + measured.tab_line_height;
-            let header_line_text = eval_status_line_format_value(
+            let header_line_text = eval_status_line_format_output(
                 state.evaluator,
                 "header-line-format",
                 params.window_id,
                 params.buffer_id,
                 target_cols,
             )
-            .unwrap_or_else(|| Value::string(""));
+            .unwrap_or_else(|| ModeLineDisplayOutput::from_root_string(Value::string("")));
             if let Some(height) = state.render_display_row(
                 WindowChromeDisplayRowRequest {
                     window_id: params.window_id as u64,
@@ -797,7 +801,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                         "header-line face should exist when header-line height is positive",
                     ),
                     symbol_values: status_line_symbol_values.clone(),
-                    text: header_line_text,
+                    formatted: header_line_text,
                     image_scale_environment: params.image_scale_environment,
                 },
                 ChromeRowVerticalAnchor::Top,
@@ -815,21 +819,27 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             // real height.
             let mode_line_y = window_bottom - self.mode_line_height;
             let mode_line_text = {
-                let result = eval_status_line_format_value(
+                let result = eval_status_line_format_output(
                     state.evaluator,
                     "mode-line-format",
                     params.window_id,
                     params.buffer_id,
                     target_cols,
                 )
-                .unwrap_or_else(|| Value::string(format!(" {} ", self.buffer_name)));
+                .unwrap_or_else(|| {
+                    ModeLineDisplayOutput::from_root_string(Value::string(format!(
+                        " {} ",
+                        self.buffer_name
+                    )))
+                });
                 tracing::debug!(
                     "mode-line eval result: {:?} (len={})",
                     result
+                        .value()
                         .as_utf8_str()
                         .map(|s| &s[..s.len().min(120)])
                         .unwrap_or(""),
-                    result.as_utf8_str().map(str::len).unwrap_or(0)
+                    result.value().as_utf8_str().map(str::len).unwrap_or(0)
                 );
                 result
             };
@@ -853,7 +863,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                         .mode_line_face
                         .expect("mode-line face should exist when mode-line height is positive"),
                     symbol_values: status_line_symbol_values,
-                    text: mode_line_text,
+                    formatted: mode_line_text,
                     image_scale_environment: params.image_scale_environment,
                 },
                 ChromeRowVerticalAnchor::Bottom(window_bottom),
@@ -946,6 +956,84 @@ impl ChromeDisplayRowRenderedRequest {
 struct WindowChromeDisplayRowRenderRequest<'face> {
     output: ChromeRowOutput,
     row: ChromeDisplayRowRenderRequest<'face>,
+    chrome_strings: WindowChromeStringSources,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct WindowChromeSourceSpan {
+    output_start: usize,
+    output_end: usize,
+    source_start: usize,
+    string_id: GlyphStringId,
+}
+
+impl WindowChromeSourceSpan {
+    fn from_mode_line_span(span: ModeLineDisplaySourceSpan, string_id: GlyphStringId) -> Self {
+        Self {
+            output_start: span.output_start(),
+            output_end: span.output_end(),
+            source_start: span.source_start(),
+            string_id,
+        }
+    }
+
+    fn source_position(self, output_position: usize) -> Option<(GlyphStringId, usize)> {
+        if output_position < self.output_start || output_position >= self.output_end {
+            return None;
+        }
+        Some((
+            self.string_id,
+            self.source_start
+                .saturating_add(output_position - self.output_start),
+        ))
+    }
+}
+
+/// Joins formatter-owned Lisp sources to protocol-safe string ids for one
+/// chrome row. The root formatted string remains available for synthetic `%`
+/// expansions; direct leaf-string glyphs are remapped to their original
+/// objects, matching GNU's `glyph->object` contract.
+struct WindowChromeStringSources {
+    area: PresentedWindowChromeArea,
+    presented: Vec<PresentedWindowChromeString>,
+    spans: Vec<WindowChromeSourceSpan>,
+}
+
+impl WindowChromeStringSources {
+    fn new(area: PresentedWindowChromeArea, formatted: &ModeLineDisplayOutput) -> Self {
+        let root_id = crate::display_row::root_lisp_string_id();
+        let root_value = formatted.value();
+        let mut presented = vec![PresentedWindowChromeString::new(area, root_id, root_value)];
+        let mut source_ids: Vec<(Value, GlyphStringId)> = Vec::new();
+        let mut spans = Vec::with_capacity(formatted.source_spans().len());
+
+        for span in formatted.source_spans().iter().copied() {
+            let source = span.source();
+            let string_id = if source == root_value {
+                root_id
+            } else if let Some((_, id)) = source_ids.iter().find(|(value, _)| *value == source) {
+                *id
+            } else {
+                let id = GlyphStringId::new(source_ids.len().saturating_add(2) as u64);
+                source_ids.push((source, id));
+                presented.push(PresentedWindowChromeString::new(area, id, source));
+                id
+            };
+            spans.push(WindowChromeSourceSpan::from_mode_line_span(span, string_id));
+        }
+
+        Self {
+            area,
+            presented,
+            spans,
+        }
+    }
+
+    fn source_position(&self, output_position: usize) -> Option<(GlyphStringId, usize)> {
+        self.spans
+            .iter()
+            .find_map(|span| span.source_position(output_position))
+    }
 }
 
 /// How a chrome row is anchored vertically once its real (measured) height is
@@ -982,17 +1070,25 @@ impl<'face> WindowChromeDisplayRowRenderRequest<'face> {
     /// (mode line → window bottom), then install + emit. Returns the measured
     /// row height so the caller can report it as `window-mode-line-height` and
     /// position any rows below it. The single `format-mode-line` eval already
-    /// happened in `eval_status_line_format_value`; nothing is re-evaluated.
+    /// happened in `eval_status_line_format_output`; nothing is re-evaluated.
     fn render_and_apply(
         self,
         state: &mut WindowChromeRowsRenderState<'_, '_, 'face>,
         anchor: ChromeRowVerticalAnchor,
     ) -> Option<f32> {
         let output = self.output;
-        let rendered = self.row.render_row(
+        let chrome_strings = self.chrome_strings;
+        let mut rendered = self.row.render_row(
             &mut state.render_services,
             state.evaluator.display_host.as_deref(),
         )?;
+        rendered.rendered.remap_root_string_provenance(
+            crate::display_row::root_lisp_string_id(),
+            |output_position| chrome_strings.source_position(output_position),
+        );
+        state
+            .output_emitter
+            .replace_chrome_area_strings(chrome_strings.area, chrome_strings.presented);
         // Measure before owner-level width completion.  The fill is paint, not
         // content: letting its synthetic ascent/descent participate here can
         // combine maxima from different glyphs and spuriously grow a 16px row
@@ -1035,7 +1131,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
             self.tab_policy.clone(),
             window_chrome_display_origin(self.kind, self.selected),
             self.base_face,
-            self.text,
+            self.formatted.value(),
         )
         .with_image_scale_environment(self.image_scale_environment)
     }
@@ -1044,6 +1140,10 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
         self,
         face_ids: &mut FrameFaceAttempt,
     ) -> WindowChromeDisplayRowRenderRequest<'face> {
+        let chrome_strings = WindowChromeStringSources::new(
+            presented_window_chrome_area(self.kind),
+            &self.formatted,
+        );
         let render_request = self
             .lisp_string_row_request()
             .with_symbol_values(self.symbol_values)
@@ -1067,6 +1167,7 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
         WindowChromeDisplayRowRenderRequest {
             output: self.output,
             row,
+            chrome_strings,
         }
     }
 }
@@ -1098,12 +1199,22 @@ impl<'state, 'services, 'face> WindowChromeRowsRenderState<'state, 'services, 'f
         mut request: WindowChromeDisplayRowRequest<'face>,
         anchor: ChromeRowVerticalAnchor,
     ) -> Option<f32> {
+        // `:eval` chrome elements can return fresh strings held only by the
+        // formatter sidecar. Keep both the flattened text and every original
+        // source alive across display-property evaluation during row render.
+        let saved_roots = neovm_core::emacs_core::eval::save_scratch_gc_roots();
+        neovm_core::emacs_core::eval::push_scratch_gc_root(request.formatted.value());
+        for span in request.formatted.source_spans() {
+            neovm_core::emacs_core::eval::push_scratch_gc_root(span.source());
+        }
         request.metrics = self
             .render_services
             .intrinsic_metrics_for_face(request.base_face, request.metrics);
-        request
+        let rendered = request
             .into_render_request(self.render_services.face_ids())
-            .render_and_apply(self, anchor)
+            .render_and_apply(self, anchor);
+        neovm_core::emacs_core::eval::restore_scratch_gc_roots(saved_roots);
+        rendered
     }
 }
 
@@ -1167,6 +1278,7 @@ pub(crate) fn eval_status_line_format(
         .filter(|s| !s.is_empty())
 }
 
+#[cfg(test)]
 pub(crate) fn eval_status_line_format_value(
     evaluator: &mut Context,
     format_symbol: &str,
@@ -1174,6 +1286,17 @@ pub(crate) fn eval_status_line_format_value(
     buffer_id: u64,
     target_cols: usize,
 ) -> Option<Value> {
+    eval_status_line_format_output(evaluator, format_symbol, window_id, buffer_id, target_cols)
+        .map(ModeLineDisplayOutput::into_value)
+}
+
+fn eval_status_line_format_output(
+    evaluator: &mut Context,
+    format_symbol: &str,
+    window_id: i64,
+    buffer_id: u64,
+    target_cols: usize,
+) -> Option<ModeLineDisplayOutput> {
     evaluator.setup_thread_locals();
     // GNU Emacs (xdisp.c:28187): format-mode-line reads the format
     // variable from the TARGET buffer, not the caller's current
@@ -1218,7 +1341,7 @@ pub(crate) fn eval_status_line_format_value(
     // skip refuses whenever a column was displayed, because a column is the one
     // point-dependent construct its same-screen-row precondition does not pin.
     neovm_core::emacs_core::xdisp::reset_column_spec_consumed();
-    let rendered = neovm_core::emacs_core::xdisp::format_mode_line_for_display(
+    let rendered = neovm_core::emacs_core::xdisp::format_mode_line_for_display_with_sources(
         evaluator,
         format_value,
         Value::make_window(window_id as u64),
@@ -1230,6 +1353,7 @@ pub(crate) fn eval_status_line_format_value(
         neovm_core::emacs_core::xdisp::column_spec_consumed(),
     );
     if rendered
+        .value()
         .as_runtime_string_owned()
         .is_some_and(|s| !s.is_empty())
     {
@@ -2130,6 +2254,14 @@ fn window_chrome_display_origin(kind: WindowChromeKind, selected: bool) -> Displ
         WindowChromeKind::TabLine => DisplayOrigin::TabLine,
         WindowChromeKind::HeaderLine => DisplayOrigin::HeaderLine { selected },
         WindowChromeKind::ModeLine => DisplayOrigin::ModeLine { selected },
+    }
+}
+
+fn presented_window_chrome_area(kind: WindowChromeKind) -> PresentedWindowChromeArea {
+    match kind {
+        WindowChromeKind::TabLine => PresentedWindowChromeArea::TabLine,
+        WindowChromeKind::HeaderLine => PresentedWindowChromeArea::HeaderLine,
+        WindowChromeKind::ModeLine => PresentedWindowChromeArea::ModeLine,
     }
 }
 

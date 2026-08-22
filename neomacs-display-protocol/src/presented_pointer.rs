@@ -119,6 +119,88 @@ pub struct PresentedTextPosition {
     column: i64,
 }
 
+/// Exact position in a displayed Lisp string occupying one chrome rectangle.
+///
+/// GNU glyphs retain `(object, charpos)` directly.  The display protocol cannot
+/// transport a VM object, so it carries the row's stable string identity and
+/// character index; the evaluator pairs that identity with the rooted Lisp
+/// value retained in its window snapshot.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, serde::Deserialize, serde::Serialize)]
+pub enum PresentedWindowChromeArea {
+    TabLine,
+    HeaderLine,
+    ModeLine,
+}
+
+impl PresentedWindowChromeArea {
+    #[must_use]
+    pub const fn region_kind(self) -> PresentedRegionKind {
+        match self {
+            Self::TabLine => PresentedRegionKind::TabLine,
+            Self::HeaderLine => PresentedRegionKind::HeaderLine,
+            Self::ModeLine => PresentedRegionKind::ModeLine,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct PresentedStringPosition {
+    window: DisplayWindowId,
+    area: PresentedWindowChromeArea,
+    bounds: FrameRect,
+    string: crate::glyph_matrix::GlyphStringId,
+    char_index: u64,
+}
+
+impl PresentedStringPosition {
+    #[must_use]
+    pub const fn new(
+        window: DisplayWindowId,
+        area: PresentedWindowChromeArea,
+        bounds: FrameRect,
+        string: crate::glyph_matrix::GlyphStringId,
+        char_index: u64,
+    ) -> Self {
+        Self {
+            window,
+            area,
+            bounds,
+            string,
+            char_index,
+        }
+    }
+
+    #[must_use]
+    pub const fn window(self) -> DisplayWindowId {
+        self.window
+    }
+
+    #[must_use]
+    pub const fn area(self) -> PresentedWindowChromeArea {
+        self.area
+    }
+
+    #[must_use]
+    pub const fn region(self) -> PresentedRegionKind {
+        self.area.region_kind()
+    }
+
+    #[must_use]
+    pub const fn bounds(self) -> FrameRect {
+        self.bounds
+    }
+
+    #[must_use]
+    pub const fn string(self) -> crate::glyph_matrix::GlyphStringId {
+        self.string
+    }
+
+    #[must_use]
+    pub const fn char_index(self) -> u64 {
+        self.char_index
+    }
+}
+
 impl PresentedTextPosition {
     #[must_use]
     pub const fn new(
@@ -231,6 +313,7 @@ impl PresentedUnifiedHit {
 pub struct PresentedHit {
     region: PresentedHitRegion,
     text_position: Option<PresentedTextPosition>,
+    string_position: Option<PresentedStringPosition>,
 }
 
 impl PresentedHit {
@@ -243,6 +326,11 @@ impl PresentedHit {
     pub const fn text_position(self) -> Option<PresentedTextPosition> {
         self.text_position
     }
+
+    #[must_use]
+    pub const fn string_position(self) -> Option<PresentedStringPosition> {
+        self.string_position
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -253,6 +341,8 @@ pub enum PresentedHitError {
     },
     InvalidRegionGeometry,
     InvalidTextPositionGeometry,
+    InvalidStringPositionGeometry,
+    StringPositionOutsideSemanticRegion,
     MissingBodyRow {
         window: DisplayWindowId,
         output_row: i64,
@@ -281,6 +371,12 @@ impl std::fmt::Display for PresentedHitError {
             Self::InvalidRegionGeometry => formatter.write_str("invalid hit-region geometry"),
             Self::InvalidTextPositionGeometry => {
                 formatter.write_str("invalid text-position geometry")
+            }
+            Self::InvalidStringPositionGeometry => {
+                formatter.write_str("invalid string-position geometry")
+            }
+            Self::StringPositionOutsideSemanticRegion => {
+                formatter.write_str("string position is outside its window-chrome semantic region")
             }
             Self::MissingBodyRow { window, output_row } => write!(
                 formatter,
@@ -314,10 +410,14 @@ pub struct PresentedHitIndex {
     presentation: PresentationId,
     regions: Vec<PresentedHitRegion>,
     text_positions: Vec<PresentedTextPosition>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    string_positions: Vec<PresentedStringPosition>,
     #[serde(skip)]
     region_buckets: Vec<PresentedHitBucket>,
     #[serde(skip)]
     text_buckets: Vec<PresentedHitBucket>,
+    #[serde(skip)]
+    string_buckets: Vec<PresentedHitBucket>,
     #[serde(skip)]
     pointer_regions: Vec<PresentedPointerRegion>,
     #[serde(skip)]
@@ -338,6 +438,8 @@ struct RawPresentedHitIndex {
     presentation: PresentationId,
     regions: Vec<PresentedHitRegion>,
     text_positions: Vec<PresentedTextPosition>,
+    #[serde(default)]
+    string_positions: Vec<PresentedStringPosition>,
 }
 
 impl<'de> serde::Deserialize<'de> for PresentedHitIndex {
@@ -346,8 +448,13 @@ impl<'de> serde::Deserialize<'de> for PresentedHitIndex {
         D: serde::Deserializer<'de>,
     {
         let raw = RawPresentedHitIndex::deserialize(deserializer)?;
-        Self::from_parts(raw.presentation, raw.regions, raw.text_positions)
-            .map_err(serde::de::Error::custom)
+        Self::from_parts_with_strings(
+            raw.presentation,
+            raw.regions,
+            raw.text_positions,
+            raw.string_positions,
+        )
+        .map_err(serde::de::Error::custom)
     }
 }
 
@@ -364,8 +471,10 @@ impl PresentedHitIndex {
             presentation,
             regions: Vec::new(),
             text_positions: Vec::new(),
+            string_positions: Vec::new(),
             region_buckets: Vec::new(),
             text_buckets: Vec::new(),
+            string_buckets: Vec::new(),
             pointer_regions: Vec::new(),
             pointer_buckets: Vec::new(),
         }
@@ -375,6 +484,15 @@ impl PresentedHitIndex {
         presentation: PresentationId,
         regions: Vec<PresentedHitRegion>,
         text_positions: Vec<PresentedTextPosition>,
+    ) -> Result<Self, PresentedHitError> {
+        Self::from_parts_with_strings(presentation, regions, text_positions, Vec::new())
+    }
+
+    pub fn from_parts_with_strings(
+        presentation: PresentationId,
+        regions: Vec<PresentedHitRegion>,
+        text_positions: Vec<PresentedTextPosition>,
+        string_positions: Vec<PresentedStringPosition>,
     ) -> Result<Self, PresentedHitError> {
         if regions
             .iter()
@@ -388,6 +506,20 @@ impl PresentedHitIndex {
         {
             return Err(PresentedHitError::InvalidTextPositionGeometry);
         }
+        if string_positions
+            .iter()
+            .any(|position| !rect_has_valid_geometry(position.bounds))
+        {
+            return Err(PresentedHitError::InvalidStringPositionGeometry);
+        }
+        for position in &string_positions {
+            let owner = regions.iter().find(|region| {
+                region.window() == Some(position.window()) && region.kind() == position.region()
+            });
+            if !owner.is_some_and(|region| rect_contains_rect(region.bounds(), position.bounds())) {
+                return Err(PresentedHitError::StringPositionOutsideSemanticRegion);
+            }
+        }
         let region_buckets = build_presented_hit_buckets(
             regions
                 .iter()
@@ -400,12 +532,20 @@ impl PresentedHitIndex {
                 .enumerate()
                 .map(|(index, position)| (index, position.bounds)),
         );
+        let string_buckets = build_presented_hit_buckets(
+            string_positions
+                .iter()
+                .enumerate()
+                .map(|(index, position)| (index, position.bounds)),
+        );
         Ok(Self {
             presentation,
             regions,
             text_positions,
+            string_positions,
             region_buckets,
             text_buckets,
+            string_buckets,
             pointer_regions: Vec::new(),
             pointer_buckets: Vec::new(),
         })
@@ -468,6 +608,7 @@ impl PresentedHitIndex {
             Some(PresentedHit {
                 region,
                 text_position: self.resolve_text_position(region, query.x, query.y),
+                string_position: self.resolve_string_position(region, query.x, query.y),
             })
         } else {
             self.resolve(query)?
@@ -506,6 +647,29 @@ impl PresentedHitIndex {
         selected.map(|index| self.text_positions[index])
     }
 
+    fn resolve_string_position(
+        &self,
+        region: PresentedHitRegion,
+        x: f32,
+        y: f32,
+    ) -> Option<PresentedStringPosition> {
+        let window = region.window()?;
+        let mut selected = None;
+        for_each_presented_hit_candidate(
+            &self.string_buckets,
+            x,
+            y,
+            |index| self.string_positions[index].bounds,
+            |index| {
+                let candidate = self.string_positions[index];
+                if candidate.window == window && candidate.region() == region.kind {
+                    selected = Some(selected.map_or(index, |current: usize| current.min(index)));
+                }
+            },
+        );
+        selected.map(|index| self.string_positions[index])
+    }
+
     #[must_use]
     pub const fn presentation(&self) -> PresentationId {
         self.presentation
@@ -513,7 +677,9 @@ impl PresentedHitIndex {
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.regions.is_empty() && self.text_positions.is_empty()
+        self.regions.is_empty()
+            && self.text_positions.is_empty()
+            && self.string_positions.is_empty()
     }
 
     pub fn resolve(
@@ -557,6 +723,7 @@ impl PresentedHitIndex {
         Ok(Some(PresentedHit {
             region: *region,
             text_position,
+            string_position: self.resolve_string_position(*region, query.x, query.y),
         }))
     }
 
@@ -568,6 +735,11 @@ impl PresentedHitIndex {
     #[must_use]
     pub fn text_positions(&self) -> &[PresentedTextPosition] {
         &self.text_positions
+    }
+
+    #[must_use]
+    pub fn string_positions(&self) -> &[PresentedStringPosition] {
+        &self.string_positions
     }
 
     #[cfg(test)]
@@ -585,6 +757,13 @@ impl PresentedHitIndex {
             x,
             y,
             |index| self.text_positions[index].bounds,
+            |_| count += 1,
+        );
+        for_each_presented_hit_candidate(
+            &self.string_buckets,
+            x,
+            y,
+            |index| self.string_positions[index].bounds,
             |_| count += 1,
         );
         count

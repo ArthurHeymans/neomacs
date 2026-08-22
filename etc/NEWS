@@ -169,6 +169,12 @@ the process credentials directly from the host, as GNU Emacs does.  This
 removes repeated external 'id' invocations from file annotations in
 completion UIs such as Marginalia and Consult.
 
+---
+** NeoMacs tab-line tabs can now be selected with the mouse.
+Graphical mouse events now preserve the clicked tab's original displayed
+string and its local character position.  This lets the tab's text-property
+keymap dispatch 'tab-line-select-tab', matching GNU Emacs.
+
 +++
 ** Several font-lock face variables are now obsolete.
 The following variables are now obsolete: 'font-lock-builtin-face',

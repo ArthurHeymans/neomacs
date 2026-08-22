@@ -1920,6 +1920,48 @@ pub struct WindowCursorSnapshot {
 /// Last authoritative redisplay geometry for a live leaf window.
 pub use neomacs_display_protocol::frame_glyphs::PresentedWindowRegions;
 
+/// Window chrome whose displayed Lisp-string object participates in mouse
+/// position reporting.
+pub use neomacs_display_protocol::PresentedWindowChromeArea;
+
+/// Evaluator-owned half of GNU's `(glyph->object, glyph->charpos)` pair.
+///
+/// The renderer-safe presentation carries the string identity and character
+/// index.  This rooted value remains in the window snapshot so input can join
+/// the two halves without re-evaluating a mode/tab/header-line format.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PresentedWindowChromeString {
+    area: PresentedWindowChromeArea,
+    string_id: neomacs_display_protocol::glyph_matrix::GlyphStringId,
+    value: Value,
+}
+
+impl PresentedWindowChromeString {
+    pub const fn new(
+        area: PresentedWindowChromeArea,
+        string_id: neomacs_display_protocol::glyph_matrix::GlyphStringId,
+        value: Value,
+    ) -> Self {
+        Self {
+            area,
+            string_id,
+            value,
+        }
+    }
+
+    pub const fn area(self) -> PresentedWindowChromeArea {
+        self.area
+    }
+
+    pub const fn string_id(self) -> neomacs_display_protocol::glyph_matrix::GlyphStringId {
+        self.string_id
+    }
+
+    pub const fn value(self) -> Value {
+        self.value
+    }
+}
+
 /// Last authoritative redisplay geometry for a live leaf window.
 #[derive(Clone, Debug, PartialEq)]
 pub struct WindowDisplaySnapshot {
@@ -1942,6 +1984,8 @@ pub struct WindowDisplaySnapshot {
     pub header_line_height: i64,
     /// Last redisplay tab-line height in pixels.
     pub tab_line_height: i64,
+    /// Rooted displayed string objects used by window-chrome glyph rows.
+    pub chrome_strings: Vec<PresentedWindowChromeString>,
     /// Intended cursor position in the redisplay result, even when no physical
     /// cursor was emitted.
     pub logical_cursor: Option<WindowCursorPos>,
@@ -2228,6 +2272,7 @@ impl Default for WindowDisplaySnapshot {
             mode_line_height: 0,
             header_line_height: 0,
             tab_line_height: 0,
+            chrome_strings: Vec::new(),
             logical_cursor: None,
             phys_cursor: None,
             points: Vec::new(),
@@ -2286,6 +2331,7 @@ struct PreparedDisplayPresentation {
 struct FramePresentationState {
     prepared: HashMap<geometry::PresentationId, PreparedDisplayPresentation>,
     active: Option<geometry::PresentationGeometry>,
+    active_snapshots: Vec<WindowDisplaySnapshot>,
     last_identity: Option<geometry::PresentationId>,
 }
 
@@ -3366,11 +3412,16 @@ impl Frame {
             .ok_or(geometry::PresentationActivateError::UnknownPresentation(
                 presentation,
             ))?;
+        let PreparedDisplayPresentation {
+            geometry,
+            snapshots,
+        } = prepared;
         let replaced = self
             .presentation_state
             .active
-            .replace(prepared.geometry)
+            .replace(geometry)
             .map(|geometry| geometry.presentation());
+        self.presentation_state.active_snapshots = snapshots;
         Ok(replaced)
     }
 
@@ -3390,6 +3441,7 @@ impl Frame {
             .is_some_and(|active| active.presentation() == presentation)
         {
             self.presentation_state.active = None;
+            self.presentation_state.active_snapshots.clear();
             true
         } else {
             false
@@ -3415,6 +3467,13 @@ impl Frame {
     /// hit testing. Prepared geometry is deliberately inaccessible here.
     pub const fn active_presentation_geometry(&self) -> Option<&geometry::PresentationGeometry> {
         self.presentation_state.active.as_ref()
+    }
+
+    pub fn active_presentation_snapshot(&self, window: WindowId) -> Option<&WindowDisplaySnapshot> {
+        self.presentation_state
+            .active_snapshots
+            .iter()
+            .find(|snapshot| snapshot.window_id == window)
     }
 
     /// Resolve an exact visual anchor only from renderer-active geometry.
@@ -6146,6 +6205,17 @@ impl GcTrace for FrameManager {
                 roots.push(*v);
             }
             roots.push(frame.face_hash_table);
+            for snapshot in frame.redisplay_cache.values() {
+                roots.extend(snapshot.chrome_strings.iter().map(|source| source.value()));
+            }
+            for prepared in frame.presentation_state.prepared.values() {
+                for snapshot in &prepared.snapshots {
+                    roots.extend(snapshot.chrome_strings.iter().map(|source| source.value()));
+                }
+            }
+            for snapshot in &frame.presentation_state.active_snapshots {
+                roots.extend(snapshot.chrome_strings.iter().map(|source| source.value()));
+            }
             frame.root_window.trace_roots(roots);
             if let Some(mb) = &frame.minibuffer_leaf {
                 mb.trace_roots(roots);

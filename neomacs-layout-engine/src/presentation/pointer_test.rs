@@ -1,9 +1,12 @@
 use super::*;
 use neomacs_display_protocol::glyph_matrix::{
     Glyph, GlyphArea, GlyphMatrix, GlyphPointerAppearance, GlyphPointerOccurrenceIdentity,
-    GlyphPointerSourceIdentity, GlyphPointerSourceKind, GlyphRow, WindowMatrixEntry,
+    GlyphPointerSourceIdentity, GlyphPointerSourceKind, GlyphRow, GlyphType, WindowMatrixEntry,
 };
-use neomacs_display_protocol::{DisplayWindowId, FaceId, PresentedRegionKind, Rect};
+use neomacs_display_protocol::{
+    DisplayWindowId, FaceId, ImageMargins, ImageOpaqueBackground, ImageSourceRect,
+    PresentedPrimitiveKind, PresentedRegionKind, Rect,
+};
 
 fn pointer() -> GlyphPointerAppearance {
     GlyphPointerAppearance {
@@ -84,5 +87,42 @@ fn pointer_projection_supports_window_chrome_rows_from_the_same_matrix() {
     assert_eq!(
         source.appearances()[0].paint_spans()[0].row_role(),
         GlyphRowRole::HeaderLine
+    );
+}
+
+#[test]
+fn pointer_projection_preserves_image_primitive_kind_in_window_chrome() {
+    let mut row = GlyphRow::new(GlyphRowRole::TabLine);
+    row.height_px = 16.0;
+    let token = row.intern_pointer_appearance(pointer()).unwrap();
+    let mut image = Glyph::char(' ', FaceId::new(0), 0).with_pixel_width(16.0);
+    image.glyph_type = GlyphType::Image {
+        image_id: 7,
+        width_cols: 2,
+        source_rect: ImageSourceRect::FULL,
+        margins: ImageMargins::default(),
+        opaque_background: ImageOpaqueBackground::default(),
+    };
+    image.pointer_appearance = Some(token);
+    row.glyphs[GlyphArea::Text.index()].push(image);
+    row.rebuild_pointer_runs(8.0, 80.0);
+
+    let mut matrix = GlyphMatrix::new(1, 10);
+    matrix.rows[0] = neomacs_display_protocol::glyph_matrix::MatrixRow::new(row);
+    let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: DisplayWindowId::new(4),
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 80.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 16.0, 80.0, 0.0),
+        text_clip_bounds: None,
+        selected: true,
+    });
+
+    let source = window_pointer_source_map(&state).unwrap();
+
+    assert_eq!(
+        source.appearances()[0].paint_spans()[0].kind(),
+        PresentedPrimitiveKind::Image
     );
 }
