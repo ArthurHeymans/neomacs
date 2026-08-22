@@ -31752,3 +31752,615 @@ name declared too late for the pass that tags it.  Three of the seven
 handed-over items were premise-refuted rather than fixed, and one of this
 entry's own measurements was retracted for the same kind of reason: the number
 was taken from a binary that had been copied away from its image.
+
+## 184. The facility this port did not have: **zero OS signal handlers**, so `SIGUSR1` and `SIGUSR2` killed the editor where GNU exits 0 -- and the reason a handler is hard here dissolves once you take GNU's own rule for what a handler may contain seriously, because a handler restricted to that list needs no thread of its own -- FIXED for both user signals, and the REAPING half (rows 2 and 3) DECLINED with the hazard measured
+
+Ledger 180 §2 recorded the fact and ledger 183 §7c routed it: `grep -rn
+'sigaction|signal_hook|SIGWINCH|SIGINT'` over `neovm-core`, `neomacs-bin`,
+`neomacs-display-runtime` and `neovm-worker` returned **zero production
+hits**.  This port installed no OS signal handler at all, so every signal
+whose default disposition is `Term` simply killed it.
+
+Three rows were handed over, and they are not one problem.  Two of them are,
+and the third is not: rows 2 and 3 need a *reaper*, and row 1 needs a
+*handler*.  Row 1 is fixed here.  Rows 2 and 3 are declined, and §6 is the
+measurement that replaces 180's argument for declining them.
+
+### 1. Reproduced, all three rows, both editors, three runs each
+
+`-Q --batch`.  GNU Emacs 31.0.90 (`src/emacs` in the mirror checkout) against
+`target/release/neomacs` built in the MAIN tree at this branch's merge base,
+provenance checked the way ledger 178 requires and on its image path
+(`(documentation-property 'dos-codepage 'variable-documentation)` is `nil`,
+and the pdump sits beside the binary).
+
+**Rows 2 and 3** (`tmp/pw184/reap.el`), a child that `exit 7`s with nobody
+waiting.  The handshake is a marker file the child touches immediately before
+exiting, then a 0.6 s spin on `float-time` with no `accept-process-output`,
+no `sit-for` and no `sleep-for` anywhere:
+
+```text
+                                                   GNU 31.0.90   this port
+(cdr (assq 'state (process-attributes pid)))          nil          "Z"     ROW 2
+(signal-process p 0)                                  -1           0       ROW 3
+(process-status p)                     [180's row]    exit         run
+(process-exit-status p)                [180's row]    7            0
+(memq p (process-list))                [control]      t            t
+```
+
+Byte-identical across 3 runs on each side.  The last two lines are 180's, and
+they are here as the control: this tree still diverges exactly where 180 left
+it, so rows 2 and 3 are being measured on the tree 180 describes.
+
+**Row 1** (`tmp/pw184/sigusr2.el`, `tmp/pw184/sigusr.sh`), a batch editor
+spinning in pure Lisp, signalled once the child has written a marker file:
+
+```text
+              GNU 31.0.90                              this port
+SIGUSR2   rc=0, log=(quit) quit-flag=nil               rc=140, killed,
+          debug-on-quit=t, 0.34-0.38 s,                no output after "start"
+          debugger backtrace on stderr
+SIGUSR1   rc=0, nothing armed, ran the full 6 s        rc=138, killed
+```
+
+3/3 on each of the four cells.
+
+**One correction to 183's probe, and it is the reason the first run of mine
+said nothing happened.**  183 sent the signal to an editor sitting in
+`(sit-for 6)`.  In batch `sit-for` is `sleep-for` (lisp/subr.el), and GNU
+does not break out of it: my first GNU run answered `log=nil quit-flag=nil
+debug-on-quit=nil elapsed=6.01` -- the handler had run and eaten the event,
+and nothing was visible.  The arming is only observable from a spin that
+reaches a safe point.  A second slip in the same probe is worth one line
+because it inverts the answer completely: stdout redirected to a file is
+block-buffered, so "wait for the `start` line to appear" waited past the
+editor's own exit and measured `rc=0` for a signal that was never delivered.
+The probe now hands off through a marker file the Lisp writes.
+
+### 2. What GNU installs, what a handler may do, and the line that decides the design
+
+Read before designing, in this order.
+
+**The install.**  `init_signals` (src/sysdep.c) ends with
+
+```c
+  /* SIGUSR1 and SIGUSR2 are used internally by the android_select
+     function.  */
+  #if !defined HAVE_ANDROID
+  #ifdef SIGUSR1
+    add_user_signal (SIGUSR1, "sigusr1");
+  #endif
+  #ifdef SIGUSR2
+    add_user_signal (SIGUSR2, "sigusr2");
+  #endif
+  #endif
+```
+
+and `add_user_signal` (src/keyboard.c:8464-8483) ends with
+`emacs_sigaction_init (&action, deliver_user_signal); sigaction (sig, &action,
+0);`.  So the whole of row 1 is one `sigaction` per signal.
+
+**What the handler may contain.**  GNU states it above `handle_child_signal`
+(src/process.c:7666-7688) and enforces it with a bug report inlined into
+`child_signal_notify` (:7616-7650): the handler *"can be called during
+garbage collection"*, *"should never call malloc either directly or
+indirectly"*, and the `emacs_perror` that used to be at the bottom had to be
+**deleted** because `strerror_l` is not reentrant and reaches `malloc`
+through the locale machinery.  What survives is one `emacs_write (fd, &dummy,
+1)` to a self-pipe (:7648).  One file over, `deliver_process_signal`
+(src/sysdep.c:1729-1751) exists because *"POSIX says any thread can receive a
+signal that is associated with a process"*, and forwards to the main thread
+with `pthread_kill`.
+
+**How GNU routes a user signal to Lisp**, which is the part 183 sized as "a
+subsystem":
+
+| step | GNU | thread |
+|---|---|---|
+| `deliver_user_signal` (keyboard.c:8524-8531) | `deliver_process_signal (sig, handle_user_signal)` | any |
+| `handle_user_signal` (:8487-8521) | either arms the debugger four ways, or `p->npending++` and pokes `input_available_clear_time` | main, after forwarding |
+| `store_user_signal_events` (:8546-8570) | drains `npending` into `kbd_buffer_store_event (USER_SIGNAL_EVENT)` | main, from `gobble_input` (:8079) |
+| `make_lispy_event` (:7251-7258) | `USER_SIGNAL_EVENT` becomes `intern (name)` | main |
+
+**And what `debug-on-event` actually requires**, which is four writes and a
+`strcmp`, not a debugger:
+
+```c
+  if (SYMBOLP (Vdebug_on_event))                            /* :8492 */
+    special_event_name = SSDATA (SYMBOL_NAME (Vdebug_on_event));
+  ...
+      if (special_event_name
+          && strcmp (special_event_name, p->name) == 0)     /* :8497-8498 */
+        {
+          /* Enter the debugger in many ways.  */
+          debug_on_next_call = true;                        /* :8501 */
+          debug_on_quit = true;
+          Vquit_flag = Qt;
+          Vinhibit_quit = Qnil;
+          break;                    /* Eat the event.  */   /* :8506 */
+        }
+```
+
+with `Vdebug_on_event = Qsigusr2;` at :14367.  The comparison is on the
+PRINTED NAME against `add_user_signal`'s NAME argument, and a non-symbol
+selects no arm at all.
+
+**Two things follow, and together they are the design.**
+
+* GNU's own `handle_user_signal` is **not** on the async-signal-safe list --
+  it reads a Lisp global, calls `SSDATA (SYMBOL_NAME (...))` and writes four
+  more.  GNU can afford that only because `deliver_process_signal` has
+  already forwarded the signal to the thread that owns them.
+* This port cannot forward.  Its Lisp state is a `&mut Context` owned by the
+  Lisp thread, and there is no `pthread_kill`-shaped way to hand a `&mut` to
+  a handler; a handler reaching the interpreter from the render thread, a
+  worker or the WPE `GMainContext` is a data race and not a lock-order
+  problem.
+
+**So the split is drawn one step earlier than GNU draws it -- and the
+interesting part is that this makes the "which thread does it run on"
+question, the one 180 called the design problem, disappear.**  A handler
+restricted to what GNU's SIGCHLD handler has at its very bottom -- one atomic
+bump and one `write` -- is correct on *whatever* thread the kernel picked.
+This port therefore needs no analogue of `FORWARD_SIGNAL_TO_MAIN_THREAD` at
+all.  `handle_user_signal`'s body runs at the Lisp thread's next safe point,
+which is where GNU's own `maybe_quit` looks for it:
+
+```c
+  /* src/lisp.h:3879, 3896-3900 */
+  extern bool volatile pending_signals;
+  INLINE void
+  maybe_quit (void)
+  {
+    if (!NILP (Vquit_flag) || pending_signals)
+      probably_quit ();
+  }
+```
+
+and `probably_quit` (src/eval.c:1868-1876) is an **`else if`**, so a pending
+quit wins and a pending signal is handled only when there is none.  Both are
+reproduced exactly, including the `else if`.
+
+### 3. The failing test, red first
+
+`a_user_signal_does_not_terminate_this_process_like_gnu` with the install
+commented out -- which is this tree before the entry -- run against the
+engine suite:
+
+```text
+     Summary [   0.228s] 7 tests run: 5 passed, 2 failed, 9278 skipped
+        PASS [   0.026s] (1/7) debug_on_event_selects_the_debugger_arm_by_name_like_gnu
+        PASS [   0.028s] (2/7) every_handled_signal_carries_its_gnu_citation_and_disposition
+        PASS [   0.031s] (3/7) the_pending_counters_are_lock_free
+        PASS [   0.037s] (4/7) a_second_reaper_takes_the_exit_status_the_owner_would_have_reported
+  ABORT SIG 10 [   0.038s] (5/7) a_user_signal_does_not_terminate_this_process_like_gnu
+                              (test aborted with signal 10)
+        PASS [   0.040s] (6/7) the_two_user_signals_were_unclaimed_before_this_port_installed_them
+        FAIL [   0.112s] (7/7) the_handler_has_gnus_self_pipe_and_it_carries_a_byte
+```
+
+**Signal 10 is SIGUSR1 on this target, and `ABORT SIG` rather than `FAIL` is
+the shape of red this bug has:** not an assertion that failed but a test
+process the kernel terminated, because there is no code to fail in.  The five
+passes beside it are the control that the harness was working.
+
+**The green run cost two more findings, and the first is the better one.**
+
+*The handler ran on a thread the test was not on.*  The first green attempt
+still failed, with the counters at `[0, 0]` after surviving both signals --
+which reads exactly like a handler that was never installed.  `strace` said
+otherwise:
+
+```text
+3682381 rt_sigaction(SIGUSR1, {sa_handler=0x555558de2d00, sa_mask=[USR1 USR2],
+                               sa_flags=SA_RESTORER|SA_RESTART}, ...) = 0
+3682381 kill(3682377, SIGUSR1)  = 0
+3682377 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_USER, si_pid=3682377} ---
+```
+
+The `kill` was issued from libtest's worker thread (3682381) and the signal
+was delivered to the MAIN thread (3682377).  POSIX promises delivery before
+`kill` returns only when the signal goes to the *calling* thread, so the
+assertion raced the handler.  **That is the case this whole module is built
+for**, so the test now waits for the record rather than swapping `kill` for
+`raise` -- `raise` would have removed the race and the question with it.  The
+run is also the entry's own evidence for §2's claim: the handler was correct
+on a thread nobody chose.
+
+*And one control was vacuous.*  `the_two_user_signals_were_unclaimed...`
+passed by reading `old.sa_sigaction == SIG_DFL`, and `SIG_DFL` is `0` --
+which is also what `std::mem::zeroed()` leaves there, so the test would have
+passed had `sigaction` never written the old action at all.  `old` is now
+seeded with a sentinel `sigaction` cannot produce, and a surviving sentinel
+classifies as `Unknown` rather than `Default`.
+
+### 4. The type: there is nowhere to write handler code
+
+`neovm-core/src/emacs_core/os_signal.rs`.  The bad state is "a handler that
+can touch a non-async-signal-safe thing", and it is made unrepresentable by
+leaving the handler nothing to be extended by.
+
+* **`HandledSignal`** is a closed, `#[repr(usize)]` enum whose `ALL` is
+  declared with length `COUNT`, derived from the last discriminant, so a
+  variant missing from the table is a compile error -- ledger 177's
+  `post_image_init.rs` and ledger 180's `child_status.rs` shape, applied to a
+  set GNU defines by grep (`grep -n 'add_user_signal (' src/sysdep.c` gives
+  exactly two).
+* **`InstalledDisposition` is data, not code.**  It carries GNU's
+  `add_user_signal` NAME and nothing callable.  There is no per-signal hook,
+  no function pointer and no closure anywhere in the module, so **adding a
+  signal adds a citation and a name and never a line that runs in signal
+  context**.  A second disposition (SIGWINCH's `change_frame_size`, SIGCHLD's
+  sweep) is a variant plus one arm in the drain, which runs on the Lisp
+  thread where anything is allowed.
+* **The one `extern "C"` handler is private and total over `HandledSignal`,**
+  and its only capability is an `AsyncSignalScope`: `!Send`, `!Sync`, no
+  public constructor, and exactly two methods --
+  `record` (an `AtomicU32::fetch_add`, GNU's `p->npending++` at :8511) and
+  `wake` (a `libc::write` on the self-pipe, GNU's `child_signal_notify` at
+  :7648).  **No method on it takes or returns a `Value`,** so a handler body
+  that reached the interpreter would not type-check.
+* **The counters are asserted lock-free.**  GNU's `p->npending` is a plain
+  `int` reached only from the forwarded-to thread; this port's is reached
+  from whatever thread got the signal, so it has to be an atomic -- and an
+  atomic that fell back to a lock would put a lock in signal context, which
+  is the state the module exists to exclude.
+  `the_pending_counters_are_lock_free` asserts `AtomicU32::is_lock_free()`
+  and `AtomicBool::is_lock_free()`.
+
+**The honest limit of the guarantee, stated in the module docs rather than
+implied:** Rust lets any function reach a `static`, so this is not a proof
+that no future author could lock a mutex in signal context.  What it buys is
+that the per-signal surface is data and the handler is written once -- the
+unsafe spelling is absent from the type, the way `child_status.rs` keeps
+`waitpid` out of `SweepableChild`.
+
+**The drain is typed too, and it consumes only one of its two arms.**
+`UserSignalAction` is GNU's `strcmp` as a decision over data, and
+`drain_pending_user_signals` clears the pending flag first (GNU's
+`process_pending_signals` opens with `pending_signals = false;`,
+src/keyboard.c:8369) so one delivery cannot make every later safe point take
+the cold path.  It then takes the debugger arm and **leaves a `QueueEvent`
+delivery in the counter**, because that counter IS GNU's `p->npending`
+storage and not a second one -- `store_user_signal_events` is what consumes
+it, at the input-reading point, and that half is §8.1.  The alternative --
+draining into a new Rust-side queue -- would have been the recurring villain
+of ledgers 168, 183 and P6.1: a storage GNU does not have.
+
+One deliberate difference is recorded at the site: GNU decides between the
+two arms per DELIVERY, inside the handler; this decides per drain window,
+because the decision needs Lisp state a handler must not read.  The two
+differ only if `debug-on-event` changes between two deliveries of the same
+signal inside one window, which no arm of GNU's own code does.
+
+### 4b. What it answers now, measured against the same probe
+
+`cargo xtask fresh-build --release`, `finished successfully`,
+`no_byte_compile=false`, pdump 2 minutes newer than the binary, `*scratch*`
+empty, `dos-codepage` provenance `nil`.  Same probe, same three runs:
+
+```text
+              GNU 31.0.90                     before            after
+SIGUSR2   rc=0  log=(quit)                    rc=140 killed     rc=0  log=(quit)
+                quit-flag=nil                                         quit-flag=nil
+                debug-on-quit=t                                       debug-on-quit=t
+                0.34-0.38 s                                           0.33-0.40 s
+SIGUSR1   rc=0  log=nil, nothing armed        rc=138 killed     rc=0  log=nil, nothing armed
+                ran the full 6.00 s                                   ran the full 6.00 s
+```
+
+3/3 on every cell, and the `SIGUSR1` row is the one that shows the arming is
+selective rather than a blanket quit: GNU does not arm for it because it is
+not `debug-on-event`'s value, and neither does this port.
+
+**The stderr agrees too, which was not asked for.**  GNU prints a debugger
+backtrace, and so does this port now -- same two markers,
+`Debugger entered--beginning evaluation of function call form:` and
+`Debugger entered--returning value: (quit)`, around the same frames.  That is
+ledgers 172 and 183's machinery being reached for the first time by the event
+it was written for: 172 built `do_debug_on_call` and 183 the read-back half,
+and neither could be triggered by `debug-on-event` until there was a handler
+to arm it.
+
+### 5. Two things installing the first handler made reachable
+
+**5.1 `epoll_wait` returns `EINTR`, and this port read that as a broken
+poller.**  `ProcessWaitBackend::wait_for_events` had `Err(_) => return None`.
+signal(7) lists `epoll_wait` among the calls *"never restarted after being
+interrupted by a signal handler, regardless of the use of `SA_RESTART`"*, so
+that arm became reachable the moment the first `sigaction` was installed.
+GNU spells the answer in one line -- `if (xerrno == EINTR) no_avail = 1;`
+(src/process.c:5891-5892), i.e. an empty batch and re-check the deadline.
+Ported with the deadline check GNU's surrounding loop has.
+
+**5.2 `init_signals` was classified as establishing nothing.**  Ledger 177's
+screen read GNU's `main` for V-prefixed assignments and recorded
+`init_signals` as `NoLispVisibleState`, with the evidence *"sigaction/
+sigemptyset only; the body contains no assignment to any V-prefixed Lisp
+global."*  That is TRUE and it is the wrong question: what the body
+establishes is the OS dispositions that decide whether Lisp runs at all.  It
+now has its own `Establishes::OsDispositions` variant carrying both facts,
+and `apply_post_image_init` performs the install from it, so GNU's
+`init_signals` is a row in the same walk as every other `init_*` call rather
+than a startup path only one front end reaches.  177's screened count goes
+9 -> 8 and the new classification is asserted at 1.
+
+**`SA_RESTART` unconditionally, where GNU takes it only when
+`noninteractive`** (`emacs_sigaction_flags`, src/sysdep.c:1660-1673) -- a
+deliberate deviation with a reason.  GNU's interactive reason for omitting it
+is *"we need to poll for pending input so we need long-running syscalls to be
+interrupted"*; this port's wake is the self-pipe instead, and the wait it has
+to interrupt is `epoll_wait`, which is never restarted anyway.  So
+`SA_RESTART` costs nothing here and spares every other blocking call in the
+render thread and the workers a spurious `EINTR`.
+
+### 6. Rows 2 and 3: DECLINED, and the hazard measured rather than argued
+
+Both rows are the same fact seen twice.  GNU's handler REAPS --
+`child_status_changed` is `waitpid` (src/process.c:7741-7742) -- so GNU's
+exited child is gone from the OS within microseconds, `/proc` forgets it and
+`kill (pid, 0)` fails `ESRCH`.  Neither is an `update_status` consumer, which
+is why ledger 180's fully wired sweep still left both (`divergent=2` of 27).
+
+180 §9.1 declined them with an argument: *"`waitpid` must then have exactly
+ONE owner, and today every `try_wait`/`poll_child_status` path reaps on the
+Lisp thread, so a second reaper is a double-reap hazard across the whole
+file."*  This entry replaces the argument with a measurement --
+`a_second_reaper_takes_the_exit_status_the_owner_would_have_reported`:
+
+```text
+a child that exits 7, reaped first by a raw waitpid (the reaper GNU's
+handler is), then asked of its owning std::process::Child:
+
+  raw waitpid          pid, WIFEXITED, WEXITSTATUS = 7
+  child.try_wait()     NOT Ok(Some(_))  -- the owner has no status to report
+```
+
+and it adds the half 180's sentence does not name: one owner is *necessary*
+and not sufficient, because **three of the five reaping sites reach the OS
+through `std::process::Child`, whose own `try_wait` IS the reap**
+(`process.rs:975`, `:984`, `:6340`, `:6359`, and `sys::poll_child_status`).
+A reaper thread does not merely need to be the only caller of `waitpid`; it
+needs `std::process::Child` to stop being one, which means owning the child
+handle differently at every spawn site.
+
+Both rows are now PINNED as divergences by
+`an_exited_child_is_a_zombie_here_and_reaped_in_gnu`, with GNU's column in
+the docstring and `zombie-before` asserted `t` so the pin cannot pass
+vacuously -- 180's rule, and 176's failure mode (a pin outliving its
+divergence) is what it is for.
+
+**And the reason this is a decline and not a deferral:** an asynchronous
+reaper would ALSO close 180's `process-status` rows, and 180 measured that
+change costing `treemacs-magit` a deterministic failure and the commonest
+process idiom in Elisp its sentinel 4 times in 60.  A reaper that reaped
+without publishing would avoid that -- but "reap without publishing" is not
+available, because `waitpid` consumes the status: reaping and recording are
+the same call.  The two cannot be separated, which is why rows 2 and 3 cannot
+be taken without re-opening the change 180 withdrew.
+
+### 6b. A measurement of mine, retracted -- and the trap that produced it
+
+The first full engine run after the fix came back **11200 passed, 11 failed,
+1 timed out**, in four families that have nothing to do with signals: eight
+`bootstrap_*` tests in `load.rs`, a process coding test whose error was
+`("Recursive load" "lisp/language/viet-util.el" x5)`, a profiler test, and a
+file-notify test.  I did the right first thing -- checked the red against the
+merge base by reverting `neovm-core/src` to `5b98caf4e` and re-running -- and
+it failed there too, so I recorded it as pre-existing.
+
+**That conclusion was right about the blame and wrong about the cause, and it
+is retracted.**  The real cause was in my own working tree: `cargo xtask
+fresh-build --release` opens with `remove_stale_lisp_bytecode`
+(`xtask/src/main.rs:2206-2229`), which **deletes every generated `.elc` under
+`lisp/`** before rebuilding them.  I had killed a fresh-build midway to free
+the cargo lock, and that left the worktree short **1,515** generated files.
+Restoring them from the main tree turned all twelve green in one run
+(`12 tests run: 12 passed`), and the full suite went to
+`11212 tests run: 11212 passed, 54 skipped`.
+
+Three things worth keeping:
+
+* **Killing `cargo xtask fresh-build` is not a no-op.**  The documented
+  fresh-worktree trap is "a fresh worktree LACKS ~1,735 generated `lisp/`
+  files"; this is the same hole opened in a worktree that already had them,
+  by a command whose first step is a delete.  Diff the file trees after any
+  interrupted fresh-build, not just after `git worktree add`.
+* **A merge-base check controls for the CODE, not for the tree.**  Reverting
+  `neovm-core/src` and re-running proved my Rust was not the cause; it could
+  not prove what was, because the broken `lisp/` tree was in both arms.  A
+  check that holds the wrong variable fixed gives a true answer to a question
+  nobody asked.
+* **The bootstrap-memo reflex was the wrong reflex here.**  Both memo files
+  were cleared first, per the standing rule, and the twelve stayed red -- which
+  is the useful half of that rule: it is a cheap way to *eliminate* the memo,
+  not a fix.
+
+### 7. Hypotheses eliminated
+
+* **"A process-global handler must decide which thread it runs on, and that
+  is the design problem"** (the brief, and 180 §2).  **Dissolved rather than
+  solved.**  It is a design problem for GNU, which is why
+  `deliver_process_signal` exists -- but only because GNU's handler body
+  touches Lisp.  Restricted to the two operations GNU itself leaves at the
+  bottom of `handle_child_signal`, the handler is thread-agnostic and the
+  question does not arise.  The forwarding is what a handler needs when it is
+  allowed to do too much.
+* **"The delivery half is a subsystem -- an sigaction install, an
+  async-signal-safe flag or self-pipe, and event delivery through the command
+  loop"** (183 §9.2).  **Two thirds upheld, one third off the path.**  The
+  install and the flag/self-pipe are the whole of what a handler may contain
+  and they are what both measured `rc` rows needed.  Command-loop delivery is
+  needed for `special-event-map`, which is neither of the rows and is §8.1.
+* **"`debug-on-event` needs the debugger."**  It does not.  It needs four
+  writes and a `strcmp` on a symbol's printed name; the debugger is what
+  `debug-on-quit` and `debug-on-next-call` then cause, through machinery
+  ledgers 172 and 183 already landed.
+* **"Rows 2 and 3 need the same facility as row 1"** (180 §9.2's
+  classification, and the brief's framing).  **Refuted.**  They share a
+  sentence in GNU -- `handle_child_signal` both records and reaps -- and
+  nothing else.  Row 1 needs a handler and is 60 lines; rows 2 and 3 need
+  `waitpid` to have one owner across five sites, three of them owned by
+  `std::process::Child`, and no handler at all would help.
+* **"Installing a handler is invasive because of the render thread and the
+  WPE GMainContext"** (180 §2, and the brief).  **Half refuted, and the other
+  half was somewhere else.**  The threads are fine -- an async-signal-safe
+  handler is correct on all of them.  What installing the first handler DID
+  break was one line in the wait loop that had never had to be right, §5.1.
+* **"`sit-for` in batch is a place a signal can be observed"** (183 §7c's
+  probe).  Refuted by measurement: batch `sit-for` is `sleep-for`, GNU does
+  not break out of it, and the arming is invisible from there -- GNU answers
+  `log=nil ... elapsed=6.01`.  §1.
+* **"Twelve engine tests are failing at the merge base too, so they are
+  pre-existing"** -- MY OWN, and retracted.  §6b.  The merge-base arm shared
+  the broken `lisp/` tree with the branch arm, so it controlled for the code
+  and not for the cause.
+
+### 8. Found and NOT fixed
+
+1. **`store_user_signal_events`' `special-event-map` delivery.**  GNU queues
+   a `USER_SIGNAL_EVENT` from `gobble_input` (src/keyboard.c:8079) and
+   `make_lispy_event` turns it into `(intern "sigusr1")` (:7251-7258), which
+   `special-event-map` can bind.  This port records the delivery in the
+   counter that IS GNU's `p->npending` and stops there, because
+   `InputEvent` has no `USER_SIGNAL_EVENT` variant and adding one is a
+   keyboard-subsystem change rather than a signal one.  Neither of ledger
+   184's `rc` rows depends on it, and no measurement in this entry is
+   affected; a Lisp program that binds `sigusr1` in `special-event-map` still
+   sees nothing.  The count is deliberately LEFT in the counter so the
+   delivery is pending rather than lost.
+2. **The self-pipe read end is created and not registered with the wait
+   poller.**  GNU's `child_signal_init` `add_read_fd`s it
+   (src/process.c:7592).  Here the byte is written and the fd exists
+   (`InstallReport::self_pipe_read_fd`), but a signal delivered while the
+   Lisp thread is blocked in `poller.wait` is noticed through §5.1's `EINTR`
+   rather than through a readable fd.  That is correct on Linux, where
+   `epoll_wait` always returns `EINTR`; it is NOT correct on a backend whose
+   wait can be restarted, and it is the first thing to do if this port ever
+   waits on something else.
+3. **Rows 2 and 3, the reaping half.**  §6.  Measured, pinned, and declined
+   with the owner problem measured rather than asserted.
+4. **`SIGWINCH`, `SIGINT`, `SIGHUP`, `SIGPIPE` and `SIGCHLD` are still
+   unclaimed.**  180 §9.6's hole is narrower and not closed.  Each is a
+   different shape and only one of them is a user signal: `SIGWINCH` wants
+   `change_frame_size`, `SIGINT` wants `handle_interrupt` and GNU's
+   `maybe_fatal_sig`, `SIGPIPE` is `signal (SIGPIPE, SIG_IGN)` and only when
+   `! noninteractive` (src/sysdep.c), and `SIGCHLD` is §6.  The module is
+   built so each of them is a `HandledSignal` variant, an
+   `InstalledDisposition` variant and a drain arm -- and still no new code in
+   signal context.
+5. **`emacs_sigaction_init`'s blocked-signal set is reproduced only for the
+   signals this port installs.**  GNU blocks `SIGALRM`, `SIGCHLD`,
+   `SIGDANGER`, `SIGPROF`, `SIGWINCH` and, when interactive, `SIGINT`,
+   `SIGQUIT` and `SIGIO`/`SIGPOLL` while a handler runs (src/sysdep.c:
+   1678-1710).  Every one of those except the two installed here has no
+   disposition in this port, so adding it to the mask would block a handler
+   that does not exist.  The mask grows with item 4, and the site says so.
+
+### 9. Gates
+
+Every number is read out of a `./tmp/pw184/` log file rather than a pipe, and
+load is the runnable count from `/proc/loadavg` -- `uptime`'s 1-minute average
+read **480** on this box while 4 tasks were runnable, so both are given where
+they differ.
+
+```
+cargo fmt --all --check                    exit 0, 0 bytes of diff
+cargo check --workspace --all-targets      exit 0, 0 error lines,
+                                           "Finished dev profile ... in 1m 03s"
+cargo nextest run -p neovm-core
+  -p neomacs-layout-engine                 11212 tests run:
+                                           11212 passed, 54 skipped   549.7s
+                                                                      runnable 33 -> 3
+cargo xtask fresh-build --release          "finished successfully (release)",
+                                           no_byte_compile=false,
+                                           pdump 2 min newer than the binary,
+                                           *scratch* empty,
+                                           dos-codepage provenance nil
+cargo nextest run -p neovm-oracle-tests    38811 tests run:
+  --no-fail-fast                           38808 passed, 3 failed     646.3s
+                                                                      runnable 7 -> 4
+cargo xtask gc-stress
+  --editor ./target/release/neomacs        9/9 probes passed
+cargo nextest run -p neomacs-melpa-tests   953 tests run: 950 passed,
+  --no-fail-fast                           3 failed, 2 skipped        402.6s
+                                           (runs 3 and 4 of 4;        runnable 4 -> 8
+                                            see the four runs below)
+```
+
+**11212 is the brief's 11180 plus 181/182/183's tests plus this branch's
+eight** (seven in `os_signal_test.rs` and the rows-2-and-3 pin), and 54
+skipped is unchanged.  The oracle's three are the brief's known upstream reds,
+named rather than counted:
+
+```
+div_core_divergence_surface_window_scroll_error_and_state_combo
+div_core_divergence_surface_window_start_end_scroll_state
+div_u5_window_scroll_functions_hook
+```
+
+**The melpa suite was run four times and all four are quoted, because the
+first two were wrong for reasons worth more than the number.**
+
+```
+run 1  target/ via the symlink   runnable 13 -> 5   543.7s   947 passed, 6 failed
+run 2  NEOMACS_BIN=real path     runnable  4 -> 5   410.1s   949 passed, 4 failed
+run 3  NEOMACS_BIN=real path     runnable  7 -> 4   405.0s   950 passed, 3 failed
+run 4  NEOMACS_BIN=real path     runnable  4 -> 8   402.6s   950 passed, 3 failed
+```
+
+**Run 1's `jedi_package_batch` is the relocated `target/` biting, and it is a
+trap worth recording** because the relocation is the campaign's own
+prescribed workaround for a full disk.  With `target/` a symlink to
+`/home/exec/mnt/rust-target/l184-signals`, the editor's `invocation-directory`
+resolves through the link --
+`"/home/exec/mnt/rust-target/l184-signals/release/"` -- while the path the
+editor was *invoked* by, and therefore the path its exec-failure diagnostic
+prints, is `<workspace>/target/release/neomacs`.  `jedi--test-normalize-editor`
+(`parity_tests/jedi/mod.rs:92-95`) replaces the first spelling and the pin
+compares the second, so the pin fails on a path and nothing else.  Running the
+same binary through its real path passes it: `1 test run: 1 passed`.  That is
+the whole of run 1's difference from run 2.
+
+The remaining extras are load-dependent and each passes in isolation, which is
+ledger 180's finding restated: load is not noise here, it changes WHICH tests
+fail.  Named, with their isolated re-runs:
+
+```
+run 1 extras   closql_package_batch, helm_gitignore_public_workflows_match_gnu,
+               org_roam_package_batch          -> 3 of 4 passed in isolation
+run 2 extras   ada_ts_mode_package_batch,
+               git_gutter_fringe_real_gui_rows_match_gnu
+                                               -> 2 tests run: 2 passed
+run 3 extra    ada_ts_mode_package_batch       -> passes in isolation
+run 4 extra    git_gutter_fringe_real_gui_rows_match_gnu
+                                               -> passes in isolation
+```
+
+Across four runs the two upstream window pins -- `evil_ediff_package_batch`
+and `smooth_scrolling_package_batch` -- failed every time and everything else
+rotated, one or two per run, never the same set twice.
+
+`ada_ts_mode_package_batch` is the one that recurred twice, and its failure is worth
+naming precisely rather than filing as flake: the editor process aborts with
+`invalid symbol id SymId(4240562348)` from `resolve_sym_lisp_string`, reached
+from `prin1` -- **ledger 161's signature**, a garbage symbol id standing where a
+collected value used to be.  There is no signal frame anywhere in that
+backtrace and no signal is delivered to any melpa editor process, so this
+entry's code is not on the path; it is recorded here as a named, load-gated
+pre-existing fault rather than counted as green.
+
+Status: **FIXED for row 1, DECLINED for rows 2 and 3.**
+
+The single most useful thing in this entry is that the reason the facility
+had been avoided turned out to be a consequence of doing too much in the
+handler rather than a property of this port's threads.  180 refused to bolt a
+handler on because *"a process-global handler must decide which thread it
+runs on and what it may touch"*, and both halves of that are true of a
+handler that reads `Vdebug_on_event` -- GNU's does, and pays for it with
+`deliver_process_signal`.  Take GNU's own rule for the *other* handler, the
+one whose comment block says it must not reach `malloc`, and the second half
+of the sentence answers the first: a handler that may touch only an atomic
+and a pipe does not care which thread it is on.  What that cost instead was
+one line in the wait loop that had been unreachable for as long as this port
+had no signals.
