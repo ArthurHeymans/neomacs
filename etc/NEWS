@@ -142,6 +142,13 @@ Redisplay still reports an invalid face named directly by a display
 property.  Invalid references found while merging an existing named
 face's remapping or inheritance are now silent, matching GNU Emacs.
 
+---
+** NeoMacs eagerly expands forms read through 'load-read-function'.
+'eval-buffer' and 'eval-region' now preserve eager macro expansion when
+a Lisp reader such as Edebug's advised 'read' function is installed.
+This prevents lexical functions loaded from source from retaining
+unexpanded compiler-macro calls.
+
 +++
 ** Several font-lock face variables are now obsolete.
 The following variables are now obsolete: 'font-lock-builtin-face',

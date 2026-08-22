@@ -28,6 +28,32 @@ fn eval_buffer_evaluates_current_buffer_forms() {
 }
 
 #[test]
+fn eval_buffer_with_custom_reader_eagerly_expands_compiler_macros_in_lexical_functions() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::test_utils::runtime_startup_context();
+    eval.eval_str("(setq load-read-function (symbol-function 'read))")
+        .expect("install a custom Lisp form reader");
+    eval.buffers
+        .current_buffer_mut()
+        .expect("current buffer")
+        .insert(
+            ";;; -*- lexical-binding: t; -*-\n\
+             (defun lread-eager-compiler-macro-probe ()\n\
+               (let ((items nil))\n\
+                 (add-to-list 'items \"value\" t)\n\
+                 items))\n",
+        );
+
+    builtin_eval_buffer(&mut eval, vec![]).expect("evaluate lexical source buffer");
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&eval.eval_str("(lread-eager-compiler-macro-probe)"),),
+        "OK (\"value\")",
+        "source loading must expand add-to-list before its quoted target becomes lexical",
+    );
+}
+
+#[test]
 fn eval_buffer_incomplete_form_signals_source_buffer_like_gnu_emacs() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

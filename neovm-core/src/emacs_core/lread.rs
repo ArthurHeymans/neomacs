@@ -102,15 +102,15 @@ pub(crate) fn eval_forms_from_lisp_source(
     source: &crate::heap_types::LispString,
     eof_source: Option<Value>,
 ) -> EvalResult {
-    let macroexpand_fn = super::load::get_eager_macroexpand_fn(eval);
-    eval_forms_from_lisp_source_streaming(eval, source, eof_source, macroexpand_fn)
+    let evaluation = SourceFormEvaluation::resolve(eval);
+    eval_forms_from_lisp_source_streaming(eval, source, eof_source, evaluation)
 }
 
 fn eval_forms_from_lisp_source_streaming(
     eval: &mut super::eval::Context,
     source: &crate::heap_types::LispString,
     eof_source: Option<Value>,
-    macroexpand_fn: Option<Value>,
+    evaluation: SourceFormEvaluation,
 ) -> EvalResult {
     let (start_pos, shebang_only_line) = strip_reader_prefix_lisp_string(source);
     if shebang_only_line {
@@ -163,13 +163,8 @@ fn eval_forms_from_lisp_source_streaming(
 
             let eval_roots = eval.save_specpdl_roots();
             eval.push_specpdl_root(form);
-            let eval_result = if let Some(mexp_fn) = macroexpand_fn {
-                eval.push_specpdl_root(mexp_fn);
-                super::load::eager_expand_eval(eval, form, mexp_fn)
-                    .map_err(super::error::flow_from_eval_error)
-            } else {
-                eval.eval_sub(form)
-            };
+            evaluation.push_root(eval);
+            let eval_result = evaluation.evaluate(eval, form);
             eval.restore_specpdl_roots(eval_roots);
             eval_result?;
         }
@@ -540,6 +535,44 @@ impl FormReader {
     }
 }
 
+/// How a source form is evaluated after its reader has produced it.
+///
+/// GNU `readevalloop' chooses this independently from the form reader: a
+/// custom `load-read-function' (notably Edebug's advice around `read') still
+/// flows through `internal-macroexpand-for-load'.  Keeping the alternatives
+/// exhaustive prevents a new reader route from silently becoming a plain-eval
+/// route and skipping compiler macros.
+#[derive(Clone, Copy, Debug)]
+enum SourceFormEvaluation {
+    Direct,
+    EagerMacroexpand { function: Value },
+}
+
+impl SourceFormEvaluation {
+    fn resolve(eval: &super::eval::Context) -> Self {
+        match super::load::get_eager_macroexpand_fn(eval) {
+            Some(function) => Self::EagerMacroexpand { function },
+            None => Self::Direct,
+        }
+    }
+
+    fn push_root(self, eval: &mut super::eval::Context) {
+        if let Self::EagerMacroexpand { function } = self {
+            eval.push_specpdl_root(function);
+        }
+    }
+
+    fn evaluate(self, eval: &mut super::eval::Context, form: Value) -> EvalResult {
+        match self {
+            Self::Direct => eval.eval_sub(form),
+            Self::EagerMacroexpand { function } => {
+                super::load::eager_expand_eval(eval, form, function)
+                    .map_err(super::error::flow_from_eval_error)
+            }
+        }
+    }
+}
+
 /// The two shapes GNU `readevalloop' takes over a buffer, selected by whether
 /// its START argument is nil (src/lread.c:2237-2264).
 #[derive(Clone, Copy, Debug)]
@@ -619,10 +652,12 @@ fn readevalloop_buffer_with_lisp_reader(
     region: BufferReadRegion,
 ) -> EvalResult {
     let buffer_value = Value::make_buffer(buffer_id);
+    let evaluation = SourceFormEvaluation::resolve(eval);
 
     let gc_roots = eval.save_specpdl_roots();
     eval.push_specpdl_root(read_function);
     eval.push_specpdl_root(buffer_value);
+    evaluation.push_root(eval);
     let outer_specpdl = eval.specpdl.len();
     // GNU: `specbind (Qstandard_input, readcharfun);' (src/lread.c:2207), so a
     // bare `(read)' inside an evaluated form reads on from the same buffer.
@@ -746,7 +781,7 @@ fn readevalloop_buffer_with_lisp_reader(
 
             let form_roots = eval.save_specpdl_roots();
             eval.push_specpdl_root(form);
-            let eval_result = eval.eval_value(&form);
+            let eval_result = evaluation.evaluate(eval, form);
             eval.restore_specpdl_roots(form_roots);
             eval_result?;
         }
