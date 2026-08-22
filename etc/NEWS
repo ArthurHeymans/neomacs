@@ -116,6 +116,13 @@ The presence of child frame support on TTY frames can be checked with
 Recent versions of Posframe and Corfu are known to use child frames on
 TTYs if they are supported.
 
+---
+** NeoMacs expands home-relative subprocess program names.
+'make-process' and 'call-process' now resolve programs such as
+"~/bin/tool" through the Lisp-visible HOME value, matching GNU Emacs.
+This fixes commands such as 'consult-fd' when their executable is
+configured with a home-relative path.
+
 +++
 ** Several font-lock face variables are now obsolete.
 The following variables are now obsolete: 'font-lock-builtin-face',

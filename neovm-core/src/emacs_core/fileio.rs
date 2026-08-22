@@ -1998,6 +1998,21 @@ pub(crate) fn expand_file_name_lisp(
     name: &crate::heap_types::LispString,
     default_directory: Option<&crate::heap_types::LispString>,
 ) -> crate::heap_types::LispString {
+    expand_file_name_lisp_with_home(name, default_directory, None)
+}
+
+/// Byte-faithful file-name expansion with an explicit HOME snapshot.
+///
+/// Process executable lookup uses this form because GNU `openp` expands every
+/// search candidate through `Fexpand_file_name`, whose `~` resolution observes
+/// the dynamically bound Lisp `process-environment`, not Rust's host
+/// environment.  Keeping HOME explicit also prevents callers from growing
+/// their own partial tilde-expansion rules.
+pub(crate) fn expand_file_name_lisp_with_home(
+    name: &crate::heap_types::LispString,
+    default_directory: Option<&crate::heap_types::LispString>,
+    home_directory: Option<&[u8]>,
+) -> crate::heap_types::LispString {
     let default_directory = default_directory
         .cloned()
         .unwrap_or_else(fallback_root_default_directory);
@@ -2007,7 +2022,7 @@ pub(crate) fn expand_file_name_lisp(
     let result = expand_file_name_bytes_with_home(
         name.as_bytes(),
         Some(default_directory.as_bytes()),
-        None,
+        home_directory,
         true,
     );
     file_name_lisp_from_bytes(
@@ -2018,16 +2033,18 @@ pub(crate) fn expand_file_name_lisp(
 
 /// HOME for `expand-file-name`, as Emacs-internal-encoding bytes to feed the
 /// byte-native expansion core without a storage-String detour.
-fn home_directory_for_expand_file_name(eval: &mut Context) -> Option<Vec<u8>> {
+pub(crate) fn home_directory_for_expand_file_name(eval: &Context) -> Option<Vec<u8>> {
     // GNU `get_homedir`: the HOME environment variable, else the current user's
     // home directory (passwd entry on Unix, OS-derived on Windows). Without the
     // fallback, a session with HOME unset -- e.g. a minimal Windows build env,
     // where GNU relies on `init_environment` having set HOME -- leaves `~`
     // unexpanded, so `directory-files "~"` fails at startup.
-    if let Ok(value) = super::process::builtin_getenv_internal(eval, vec![Value::string("HOME")])
-        && let Some(ls) = eval.lisp_string(value)
+    let environment = eval.visible_variable_value_or_nil("process-environment");
+    if let super::environment::EnvironmentLookup::Value(value) =
+        super::environment::lookup_environment_list(&LispString::from_utf8("HOME"), environment)
+        && let Some(home) = eval.lisp_string(value)
     {
-        return Some(ls.as_bytes().to_vec());
+        return Some(home.as_bytes().to_vec());
     }
     current_user_home_bytes()
 }
