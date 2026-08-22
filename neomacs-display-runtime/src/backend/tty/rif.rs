@@ -8,11 +8,11 @@
 //! Runs on the evaluator thread (single-threaded, no channel needed).
 
 use neomacs_display_protocol::TerminalColor;
+use neomacs_display_protocol::face::UnderlineStyle;
 use neomacs_display_protocol::face::{Face, FaceAttributes};
 use neomacs_display_protocol::frame_chrome::FrameChromeContent;
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
 use neomacs_display_protocol::glyph_matrix::*;
-use neomacs_display_protocol::face::UnderlineStyle;
 use neomacs_display_protocol::tty_capabilities::{TtyAttributeCapabilities, TtyItalicRendition};
 use neomacs_display_protocol::types::FaceId;
 use std::collections::HashMap;
@@ -2384,14 +2384,6 @@ fn write_cursor_shape(buf: &mut Vec<u8>, shape: TerminalCursorShape) {
 static CAPABILITIES: std::sync::LazyLock<std::sync::RwLock<TtyAttributeCapabilities>> =
     std::sync::LazyLock::new(|| std::sync::RwLock::new(TtyAttributeCapabilities::full()));
 
-/// The capabilities registered for this terminal.
-pub fn capabilities() -> TtyAttributeCapabilities {
-    CAPABILITIES
-        .read()
-        .map(|caps| caps.clone())
-        .unwrap_or_else(|_| TtyAttributeCapabilities::full())
-}
-
 /// Register what this terminal can render — the terminfo answers GNU reads in
 /// `init_tty`. Called once at TTY init from the frontend.
 pub fn set_capabilities(caps: TtyAttributeCapabilities) {
@@ -2447,8 +2439,12 @@ fn write_terminal_color(buf: &mut Vec<u8>, color: TerminalColor, background: boo
 /// attributes, using the capabilities registered for this terminal.
 ///
 /// The read lock is held across the write rather than cloned out of: every
-/// capability is now carried as its own bytes, so `capabilities()` allocates
-/// six `Vec`s per call and this is the TTY writer's inner loop.
+/// capability is now carried as its own bytes, so a getter that cloned the
+/// record would allocate six `Vec`s per call, and this is the TTY writer's
+/// inner loop.  The `pub fn capabilities()` that did exactly that had no
+/// caller left once the writer stopped needing an owned copy, and was deleted:
+/// it was `pub`, so the dead-code lint could never have said so (ledger 158's
+/// own finding, met again).
 fn write_sgr(buf: &mut Vec<u8>, attrs: &CellAttrs) {
     match CAPABILITIES.read() {
         Ok(caps) => write_sgr_with_capabilities(buf, attrs, &caps),

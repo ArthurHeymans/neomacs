@@ -2784,7 +2784,10 @@ fn a_styled_underline_is_the_terminals_own_smulx_expansion() {
     let mut buf = Vec::new();
     write_sgr_with_capabilities(&mut buf, &attrs, &semicolon);
     let out = String::from_utf8(buf).unwrap();
-    assert!(out.contains("\x1b[4m"), "single underline is `smul': {out:?}");
+    assert!(
+        out.contains("\x1b[4m"),
+        "single underline is `smul': {out:?}"
+    );
     assert!(!out.contains("\x1b[4;1m"), "not a parameter: {out:?}");
 }
 

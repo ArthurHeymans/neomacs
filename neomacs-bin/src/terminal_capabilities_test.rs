@@ -129,20 +129,14 @@ fn screen_terminfo_reports_no_italics_but_keeps_bold_and_underline() {
         Some(b"\x1b[2m".as_slice()),
         "screen has mh, so italics fall back to dim"
     );
-    assert_eq!(
-        caps.italic_rendition(),
-        TtyItalicRendition::Dim(b"\x1b[2m")
-    );
+    assert_eq!(caps.italic_rendition(), TtyItalicRendition::Dim(b"\x1b[2m"));
     assert_eq!(caps.bold(), Some(b"\x1b[1m".as_slice()));
     assert_eq!(caps.underline(), Some(b"\x1b[4m".as_slice()));
     assert_eq!(
         caps.standout_sequence.as_deref(),
         Some(b"\x1b[3m".as_slice())
     );
-    assert!(
-        caps.strike_through_sequence.is_none(),
-        "screen has no smxx"
-    );
+    assert!(caps.strike_through_sequence.is_none(), "screen has no smxx");
     assert!(caps.styled_underline.is_none(), "screen has no Smulx");
     assert_eq!(caps.color_cells, 256);
     // GNU: `if (TN_no_color_video == -1) TN_no_color_video = 0'.
@@ -174,10 +168,7 @@ fn capability_names_match_the_ones_gnu_reads_in_init_tty() {
         .with_number("NC", 32);
     let caps = resolve_tty_attribute_capabilities(&mut database);
 
-    assert_eq!(
-        caps.italic_sequence.as_deref(),
-        Some(b"\x1b[3m".as_slice())
-    );
+    assert_eq!(caps.italic_sequence.as_deref(), Some(b"\x1b[3m".as_slice()));
     assert_eq!(
         caps.italic_rendition(),
         TtyItalicRendition::Italic(b"\x1b[3m")
@@ -312,8 +303,7 @@ fn every_rendition_capability_carries_the_entrys_own_bytes() {
 /// re-implementation of terminfo's format language.
 #[test]
 fn the_styled_underline_is_smulx_expanded_by_ncurses_tparm() {
-    let mut kitty =
-        FakeCapabilityDatabase::screen_256color().with_string("Smulx", "\x1b[4:%p1%dm");
+    let mut kitty = FakeCapabilityDatabase::screen_256color().with_string("Smulx", "\x1b[4:%p1%dm");
     let styled = resolve_tty_attribute_capabilities(&mut kitty)
         .styled_underline
         .expect("Smulx present");
