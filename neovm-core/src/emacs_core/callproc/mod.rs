@@ -6,7 +6,7 @@ use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::io::Write;
 #[cfg(unix)]
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::ffi::OsStringExt;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
@@ -15,7 +15,7 @@ use std::process::{Command, Stdio};
 use super::error::{EvalResult, Flow, signal};
 use super::intern::resolve_sym;
 use super::process::ProcessOutputDecoding;
-use super::value::{Value, ValueKind, VecLikeType, list_to_vec};
+use super::value::{Value, ValueKind, VecLikeType};
 use crate::buffer::BufferManager;
 use crate::heap_types::LispString;
 
@@ -183,111 +183,13 @@ fn lisp_string_to_output_path(string: &LispString) -> std::path::PathBuf {
     super::fileio::lisp_file_name_to_path_buf(string)
 }
 
-/// Signal the program-resolution failure with GNU's `report_file_errno` shape:
-/// `(SYMBOL "Searching for program" STRERROR PROGRAM)`, where SYMBOL and the
-/// libc `strerror` string are both derived from ERRNO (callproc.c:526 ->
-/// fileio.c `get_file_errno_data`). ENOENT yields `file-missing`, EACCES
-/// `permission-denied`, else `file-error`.
-fn call_process_lookup_error(program: &LispString, errno: libc::c_int) -> Flow {
-    super::process::signal_file_errno(
-        "Searching for program",
-        Value::heap_string(program.clone()),
-        errno,
-    )
-}
-
-fn exec_suffixes(eval: &super::eval::Context) -> Result<Vec<LispString>, Flow> {
-    let value = eval.visible_variable_value_or_nil("exec-suffixes");
-    if value.is_nil() {
-        return Ok(vec![LispString::from_unibyte(Vec::new())]);
-    }
-
-    let suffix_values = list_to_vec(&value).ok_or_else(|| signal_wrong_type_string(value))?;
-    suffix_values
-        .iter()
-        .map(|value| super::builtins::expect_lisp_string(value).cloned())
-        .collect()
-}
-
 fn resolve_call_process_program(
     eval: &super::eval::Context,
     program: &LispString,
 ) -> Result<OsString, Flow> {
-    let program_path = lisp_string_to_output_path(program);
-
-    // GNU `openp` (lread.c:1768) seeds `last_errno = ENOENT` and overwrites it
-    // with any more-informative errno (EISDIR for a directory, EACCES for an
-    // unrunnable file, ...) as it probes candidates, then on failure does
-    // `errno = last_errno` (lread.c:2031). callproc.c:526 then turns that errno
-    // into the `(SYMBOL "Searching for program" STRERROR PROG)` triple via
-    // `report_file_error`. We track the same accumulator so the signalled error
-    // matches GNU exactly instead of always claiming `file-missing`.
-    let mut last_errno = libc::ENOENT;
-
-    // Mirror resolve_async_process_program (process.rs:584-595) and GNU
-    // openp (lread.c:2026-2027): if the program is an absolute path,
-    // check it directly and return immediately — no exec-path search.
-    if program_path.is_absolute() {
-        match super::process::executable_path_access(&program_path) {
-            Ok(()) => return Ok(program_path.into_os_string()),
-            failure => {
-                super::process::record_executable_lookup_errno(&mut last_errno, failure);
-            }
-        }
-        return Err(call_process_lookup_error(program, last_errno));
-    }
-
-    // Relative program name — search exec-path with suffixes.
-    // Mirror GNU openp's just_use_str sentinel: when exec-path is nil,
-    // expand against default-directory and try the program directly.
-    let exec_path = eval.visible_variable_value_or_nil("exec-path");
-    let path_entries: Vec<Value> = if exec_path.is_nil() {
-        // GNU openp (lread.c:1797-1808): when path is nil, use a
-        // sentinel that causes filename=str to be tried directly,
-        // expanded against default-directory.
-        vec![Value::NIL]
-    } else {
-        list_to_vec(&exec_path).ok_or_else(|| call_process_lookup_error(program, last_errno))?
-    };
-    let suffixes = exec_suffixes(eval)?;
-
-    for entry in &path_entries {
-        let Some(directory) = (match entry.kind() {
-            ValueKind::Nil => subprocess_default_directory(eval),
-            ValueKind::String => entry
-                .as_lisp_string()
-                .map(super::fileio::lisp_file_name_to_path_buf),
-            _ => None,
-        }) else {
-            continue;
-        };
-
-        for suffix in &suffixes {
-            let mut candidate = directory.join(&program_path);
-            if !suffix.as_bytes().is_empty() {
-                let mut os = candidate.into_os_string();
-                #[cfg(unix)]
-                {
-                    os.push(std::ffi::OsStr::from_bytes(suffix.as_bytes()));
-                }
-                #[cfg(not(unix))]
-                {
-                    os.push(crate::emacs_core::emacs_char::to_utf8_lossy(
-                        suffix.as_bytes(),
-                    ));
-                }
-                candidate = PathBuf::from(os);
-            }
-            match super::process::executable_path_access(&candidate) {
-                Ok(()) => return Ok(candidate.into_os_string()),
-                failure => {
-                    super::process::record_executable_lookup_errno(&mut last_errno, failure);
-                }
-            }
-        }
-    }
-
-    Err(call_process_lookup_error(program, last_errno))
+    let search = super::process::ExecutableSearch::capture(eval);
+    let resolved = search.resolve(program, super::process::ExecutableLookupMode::CallProcess)?;
+    Ok(lisp_string_to_os_string(&resolved))
 }
 
 fn fallback_subprocess_directory() -> Option<PathBuf> {

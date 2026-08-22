@@ -483,6 +483,53 @@ fn async_process_lookup_uses_dynamic_default_directory_like_gnu() {
 
 #[cfg(unix)]
 #[test]
+fn async_process_lookup_expands_home_relative_program_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    use std::os::unix::fs::PermissionsExt;
+
+    let home = tmp_dir("async-home-relative-program");
+    let bin = format!("{home}/bin");
+    std::fs::create_dir_all(&bin).expect("create fake home bin directory");
+    let script = format!("{bin}/consult-fd-probe");
+    std::fs::write(&script, "#!/bin/sh\nprintf 'home-relative-ok\\n'\n")
+        .expect("write home-relative executable");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+        .expect("chmod executable");
+
+    // GNU `make-process` routes a program beginning with `~` through `openp`.
+    // `openp` calls `expand-file-name` for every search-path candidate, and
+    // `expand-file-name` resolves the tilde against HOME from the dynamically
+    // bound `process-environment`.  The unrelated `exec-path` entry proves that
+    // HOME-relative names are not joined underneath an exec-path directory.
+    let result = eval_one(&format!(
+        r#"(let ((process-environment (copy-sequence process-environment))
+                  (exec-path '("/neomacs-unrelated-exec-path")))
+             (setenv "HOME" "{home}")
+             (let ((buf (generate-new-buffer "home-relative-program-out")))
+               (unwind-protect
+                   (let ((p (make-process
+                             :name "home-relative-program"
+                             :buffer buf
+                             :connection-type 'pipe
+                             :command '("~/bin/consult-fd-probe"))))
+                     (while (process-live-p p)
+                       (accept-process-output p 0.1))
+                     (list (process-status p)
+                           (process-exit-status p)
+                           (with-current-buffer buf
+                             (not (null (string-match-p
+                                         "home-relative-ok"
+                                         (buffer-string)))))
+                           (process-command p)))
+                 (ignore-errors (kill-buffer buf)))))"#
+    ));
+
+    assert_eq!(result, "OK (exit 0 t (\"~/bin/consult-fd-probe\"))");
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[cfg(unix)]
+#[test]
 fn async_shell_command_wrappers_use_dynamic_shell_variables_like_gnu() {
     crate::test_utils::init_test_tracing();
     use std::os::unix::fs::PermissionsExt;
@@ -2093,6 +2140,37 @@ fn call_process_program_resolution_errors_match_gnu_report_file_error() {
 
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&noexec_dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn call_process_lookup_expands_home_relative_program_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    use std::os::unix::fs::PermissionsExt;
+
+    let home = tmp_dir("call-process-home-relative-program");
+    let bin = format!("{home}/bin");
+    std::fs::create_dir_all(&bin).expect("create fake home bin directory");
+    let script = format!("{bin}/consult-fd-probe");
+    std::fs::write(&script, "#!/bin/sh\nprintf 'home-relative-ok\\n'\n")
+        .expect("write home-relative executable");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
+        .expect("chmod executable");
+
+    let result = eval_one(&format!(
+        r#"(let ((process-environment (copy-sequence process-environment))
+                  (exec-path '("/neomacs-unrelated-exec-path")))
+             (setenv "HOME" "{home}")
+             (with-temp-buffer
+               (let ((status (call-process "~/bin/consult-fd-probe" nil t)))
+                 (list status
+                       (not (null (string-match-p
+                                   "home-relative-ok"
+                                   (buffer-string))))))))"#
+    ));
+
+    assert_eq!(result, "OK (0 t)");
+    let _ = std::fs::remove_dir_all(&home);
 }
 
 #[test]

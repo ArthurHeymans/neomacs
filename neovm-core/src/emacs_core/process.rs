@@ -77,6 +77,9 @@ pub enum NetworkSocket {
 pub(crate) mod sys;
 use sys::ChildStatusSource;
 
+mod executable;
+pub(super) use executable::{ExecutableLookupMode, ExecutableSearch};
+
 /// GNU `status_notify`'s "retire, then run the sentinel" ordering, as a type.
 /// See `process/status_notify.rs`.
 mod status_notify;
@@ -1441,126 +1444,6 @@ fn lisp_bytes_to_os_string(bytes: &[u8], _multibyte: bool) -> OsString {
 
 fn lisp_string_to_os_string(string: &LispString) -> OsString {
     lisp_bytes_to_os_string(string.as_bytes(), string.is_multibyte())
-}
-
-/// Probe one executable-search candidate without discarding GNU `openp`'s
-/// observable errno. This is the shared boundary for asynchronous processes
-/// and synchronous `call-process`.
-pub(super) fn executable_path_access(path: &Path) -> Result<(), libc::c_int> {
-    sys::executable_path_access(path)
-}
-
-/// Fold a failed candidate into GNU `openp`'s `last_errno` accumulator.
-///
-/// Missing path components mean "keep searching"; a more informative failure
-/// such as `EACCES` or `EISDIR` must survive to the eventual Lisp signal.
-pub(super) fn record_executable_lookup_errno(
-    last_errno: &mut libc::c_int,
-    result: Result<(), libc::c_int>,
-) {
-    if let Err(errno) = result
-        && errno != libc::ENOENT
-        && errno != libc::ENOTDIR
-    {
-        *last_errno = errno;
-    }
-}
-
-#[derive(Clone, Copy)]
-struct ProcessExecLookup<'a> {
-    exec_path: Value,
-    exec_suffixes: Value,
-    default_directory: Option<&'a LispString>,
-}
-
-fn process_lookup_error(program: &LispString, errno: libc::c_int) -> Flow {
-    signal_file_errno(
-        "Searching for program",
-        Value::heap_string(program.clone()),
-        errno,
-    )
-}
-
-fn process_exec_suffixes(lookup: ProcessExecLookup<'_>) -> Result<Vec<LispString>, Flow> {
-    if lookup.exec_suffixes.is_nil() {
-        return Ok(vec![LispString::from_unibyte(Vec::new())]);
-    }
-
-    let suffix_values = list_to_vec(&lookup.exec_suffixes)
-        .ok_or_else(|| signal_wrong_type_string(lookup.exec_suffixes))?;
-    suffix_values
-        .iter()
-        .map(|value| super::builtins::expect_lisp_string(value).cloned())
-        .collect()
-}
-
-fn process_program_is_absolute(program: &LispString) -> bool {
-    Path::new(&lisp_string_to_os_string(program)).is_absolute()
-}
-
-fn resolve_async_process_program(
-    lookup: ProcessExecLookup<'_>,
-    program: &LispString,
-) -> Result<LispString, Flow> {
-    if process_program_is_absolute(program) {
-        let path = PathBuf::from(lisp_string_to_os_string(program));
-        if path.is_dir() {
-            return Err(signal(
-                "error",
-                vec![Value::string(
-                    "Specified program for new process is a directory",
-                )],
-            ));
-        }
-        return Ok(program.clone());
-    }
-
-    let mut last_errno = libc::ENOENT;
-    let path_entries = if lookup.exec_path.is_nil() {
-        vec![Value::NIL]
-    } else {
-        list_to_vec(&lookup.exec_path).ok_or_else(|| process_lookup_error(program, last_errno))?
-    };
-    let suffixes = process_exec_suffixes(lookup)?;
-    let program_path = super::fileio::lisp_file_name_to_path_buf(program);
-
-    for entry in path_entries {
-        let Some(directory) = (match entry.kind() {
-            ValueKind::Nil => lookup
-                .default_directory
-                .map(super::fileio::lisp_file_name_to_path_buf),
-            ValueKind::String => entry
-                .as_lisp_string()
-                .map(super::fileio::lisp_file_name_to_path_buf),
-            _ => None,
-        }) else {
-            continue;
-        };
-
-        for suffix in &suffixes {
-            let mut candidate = directory.join(&program_path);
-            if !suffix.as_bytes().is_empty() {
-                let mut os = candidate.into_os_string();
-                #[cfg(unix)]
-                {
-                    os.push(std::ffi::OsStr::from_bytes(suffix.as_bytes()));
-                }
-                #[cfg(not(unix))]
-                {
-                    os.push(crate::emacs_core::emacs_char::to_utf8_lossy(
-                        suffix.as_bytes(),
-                    ));
-                }
-                candidate = PathBuf::from(os);
-            }
-            match executable_path_access(&candidate) {
-                Ok(()) => return Ok(os_str_to_lisp_string(candidate.as_os_str())),
-                failure => record_executable_lookup_errno(&mut last_errno, failure),
-            }
-        }
-    }
-
-    Err(process_lookup_error(program, last_errno))
 }
 
 fn visible_default_directory_lisp(eval: &super::eval::Context) -> Option<LispString> {
@@ -14802,12 +14685,7 @@ pub(crate) fn builtin_make_process(
     }
 
     let use_pty = process_connection_type_is_pty(&eval.obarray);
-    let default_directory = visible_default_directory_lisp(eval);
-    let lookup = ProcessExecLookup {
-        exec_path: eval.visible_variable_value_or_nil("exec-path"),
-        exec_suffixes: eval.visible_variable_value_or_nil("exec-suffixes"),
-        default_directory: default_directory.as_ref(),
-    };
+    let executable_search = ExecutableSearch::capture(eval);
     let subprocess_cwd = super::callproc::subprocess_default_directory(eval);
     let child_environment = Some(super::environment::ChildEnvironment::materialize(
         eval,
@@ -14829,7 +14707,7 @@ pub(crate) fn builtin_make_process(
         args,
         use_pty,
         child_environment,
-        Some(lookup),
+        Some(executable_search),
         subprocess_cwd,
         Some(&eval.coding_systems),
         coding_environment,
@@ -14945,7 +14823,7 @@ fn builtin_make_process_impl_with_environment(
     args: Vec<Value>,
     default_use_pty: bool,
     child_environment: Option<super::environment::ChildEnvironment>,
-    lookup: Option<ProcessExecLookup<'_>>,
+    executable_search: Option<ExecutableSearch>,
     subprocess_cwd: Option<PathBuf>,
     coding_systems: Option<&super::coding::CodingSystemManager>,
     coding_environment: MakeProcessCodingEnvironment,
@@ -15042,8 +14920,8 @@ fn builtin_make_process_impl_with_environment(
     };
     let executable = if program.is_empty() {
         None
-    } else if let Some(lookup) = lookup {
-        Some(resolve_async_process_program(lookup, &program)?)
+    } else if let Some(search) = executable_search {
+        Some(search.resolve(&program, ExecutableLookupMode::MakeProcess)?)
     } else {
         None
     };
